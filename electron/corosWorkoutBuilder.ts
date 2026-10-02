@@ -178,9 +178,9 @@ const DISTANCE_TARGET_TYPES = new Set([5]);
 const TIME_TARGET_TYPES = new Set([2]);
 
 // COROS targetDisplayUnit: 1=km, 2=m, 3=mi, 4=yd, 5=ft.
-const COROS_DISTANCE_UNIT_KILOMETERS = 1;
+export const COROS_DISTANCE_UNIT_KILOMETERS = 1;
 const COROS_DISTANCE_UNIT_METERS = 2;
-const COROS_DISTANCE_UNIT_MILES = 3;
+export const COROS_DISTANCE_UNIT_MILES = 3;
 const COROS_DISTANCE_UNIT_YARDS = 4;
 const COROS_DISTANCE_UNIT_FEET = 5;
 // COROS intensityDisplayUnit: 1=min/km, 2=min/mi.
@@ -1222,7 +1222,12 @@ function formatLegacyPaceForUnits(
 
 export function validatePlanDraft(
   draft: CorosTrainingPlanDraft,
-  options?: { todayDay?: string; existingSchedule?: Map<string, string[]> }
+  options?: {
+    todayDay?: string;
+    existingSchedule?: Map<string, string[]>;
+    /** Dates only set relative spacing (e.g. a library-only COROS Plan). */
+    allowPastDates?: boolean;
+  }
 ): PlanValidationResult {
   const errors: string[] = [];
   const todayDay =
@@ -1287,7 +1292,7 @@ export function validatePlanDraft(
         errors.push(
           `Workout "${entry.name}" schedule_date must be a valid YYYYMMDD date.`
         );
-      } else if (entry.schedule_date < todayDay) {
+      } else if (!options?.allowPastDates && entry.schedule_date < todayDay) {
         errors.push(
           `Workout "${entry.name}" cannot be scheduled in the past (${entry.schedule_date}).`
         );

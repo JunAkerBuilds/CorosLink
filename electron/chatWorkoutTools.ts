@@ -16,6 +16,7 @@ import {
   listScheduledWorkoutEntries,
   resolveTrainingPlanExercises,
   searchWorkoutExercises,
+  uploadNativeTrainingPlan,
   uploadTrainingPlan
 } from "./trainingHubService";
 import {
@@ -1107,12 +1108,6 @@ export async function uploadPlanDraftById(
     throw new Error("This training plan was already uploaded.");
   }
 
-  if (destination === "nativePlan" || destination === "nativePlanAndCalendar") {
-    throw new Error(
-      "Native COROS plan writes are unavailable because the create/update payload has not been live-verified safely. Choose Workout Library, Calendar, or Local template."
-    );
-  }
-
   let result: UploadPlanResult;
   if (destination === "localPlan") {
     const saved = saveLocalTrainingPlan(
@@ -1139,6 +1134,16 @@ export async function uploadPlanDraftById(
       localPlanId: saved.id,
       groupedPlanCreated: false,
       remoteWrites: []
+    };
+  } else if (destination === "nativePlan" || destination === "nativePlanAndCalendar") {
+    const input = buildTrainingPlanUploadInput(stored.plan);
+    const uploaded = await uploadNativeTrainingPlan(input, unitSystem, {
+      activate: destination === "nativePlanAndCalendar"
+    });
+    result = {
+      ...uploaded,
+      destination,
+      groupedPlanCreated: true
     };
   } else {
     if (scheduleDate && stored.preview.artifactType !== "workout") {

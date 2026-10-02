@@ -1432,7 +1432,9 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
                 const date = happenDayToDate(match.happenDay);
                 const activity = activities.find((item) => item.activityId === match.activityId);
                 const completedParts = [
-                  formatDuration(match.completedDurationSeconds),
+                  match.completedDurationSeconds
+                    ? formatDuration(match.completedDurationSeconds)
+                    : null,
                   match.completedDistanceMeters
                     ? formatDistanceValue(match.completedDistanceMeters, unitSystem, { digits: 1 })
                     : null,
