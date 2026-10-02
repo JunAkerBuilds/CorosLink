@@ -583,7 +583,9 @@ await assert.rejects(
   library.deleteTrainingLibraryWorkouts({ programIds: ["remote"], confirmed: false }),
   /confirmation/i
 );
-assert.equal(library.getNativePlanWriteCapabilities().create, false);
+assert.equal(library.getNativePlanWriteCapabilities().create, true);
+assert.equal(library.getNativePlanWriteCapabilities().activate, true);
+assert.equal(library.getNativePlanWriteCapabilities().delete, false);
 
 db.close();
 fs.rmSync(tempRoot, { recursive: true, force: true });
