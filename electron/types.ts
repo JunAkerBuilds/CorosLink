@@ -2166,12 +2166,42 @@ export interface FitIndexSyncOptions {
   sinceDays?: number;
 }
 
+/** Optional narrowing for a bulk backup; every field left out matches all. */
+export interface ActivityBackupFilters {
+  /** Sport family ids from ACTIVITY_BACKUP_SPORT_GROUPS. */
+  sportGroups?: string[];
+  /** Inclusive local start day, YYYY-MM-DD. */
+  startDay?: string;
+  /** Inclusive local end day, YYYY-MM-DD. */
+  endDay?: string;
+  minDistanceMeters?: number;
+  maxDistanceMeters?: number;
+  minDurationSeconds?: number;
+  maxDurationSeconds?: number;
+}
+
+/** What a backup with the given filters would download. */
+export interface ActivityBackupPreview {
+  /** Activities on the account. */
+  total: number;
+  /** Activities matching every filter. */
+  matched: number;
+  distanceMeters: number;
+  durationSeconds: number;
+  /** Per sport family, matching every filter except activity type. */
+  groupCounts: Record<string, number>;
+}
+
 export interface ActivityBackupProgress {
   state: ActivityBackupState;
+  /** True when the run was narrowed by ActivityBackupFilters. */
+  filtered?: boolean;
+  /** Activities on the account (or date window) before filters (0 while listing). */
+  scanned?: number;
   folder: string;
   fileType: TrainingHubActivityFileType;
   formatLabel: string;
-  /** Activities discovered on the COROS account (0 while listing). */
+  /** Activities to back up after filters (0 while listing). */
   total: number;
   /** Files downloaded during this run. */
   completed: number;
@@ -4093,11 +4123,70 @@ export interface Audiobook {
   durationSeconds: number;
   sizeBytes: number;
   parts: AudiobookPart[];
+  /** Where a downloaded book came from; absent for imported files. */
+  source?: AudiobookSource;
+}
+
+/** A chapter as the conversion would see it, before anything is converted. */
+export interface AudiobookDraftChapter {
+  title?: string;
+  startSeconds: number;
+  durationSeconds: number;
+}
+
+/**
+ * Files chosen for import, read but not converted. The paths stay in the main
+ * process; the renderer confirms a draft by id with the split it wants.
+ */
+export interface AudiobookDraft {
+  id: string;
+  title: string;
+  author?: string;
+  durationSeconds: number;
+  fileCount: number;
+  /** Where chapter cuts come from: the file's chapter marks, one per joined file, or nowhere. */
+  chapterSource: "marks" | "files" | "none";
+  chapters: AudiobookDraftChapter[];
+}
+
+export interface AudiobookSource {
+  kind: "librivox";
+  identifier: string;
+  pageUrl: string;
+  coverUrl: string;
+}
+
+/** A public-domain LibriVox recording, as listed or searched. */
+export interface FreeAudiobook {
+  /** Internet Archive identifier of the recording. */
+  identifier: string;
+  title: string;
+  author?: string;
+  language?: string;
+  runtimeSeconds?: number;
+  downloads?: number;
+  coverUrl: string;
+  pageUrl: string;
+}
+
+export interface FreeAudiobookSection {
+  name: string;
+  title: string;
+  url: string;
+  sizeBytes?: number;
+  durationSeconds?: number;
+  sha1?: string;
+}
+
+export interface FreeAudiobookDetail extends FreeAudiobook {
+  description?: string;
+  sections: FreeAudiobookSection[];
+  totalBytes: number;
 }
 
 export interface AudiobookProgress {
   id: string;
-  phase: "converting" | "transferring";
+  phase: "downloading" | "converting" | "transferring";
   /** 0..1 progress across the whole book. */
   progress: number;
   message: string;

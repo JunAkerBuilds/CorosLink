@@ -7,11 +7,16 @@ import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus
 import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "../electron/watchfaceAutomationTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "../electron/googleCalendarTypes";
 import type {
+  ActivityBackupFilters,
+  ActivityBackupPreview,
   ActivityBackupProgress,
   Audiobook,
+  AudiobookDraft,
   AudiobookProgress,
   AudiobookSplitOptions,
   AudiobookTransferResult,
+  FreeAudiobook,
+  FreeAudiobookDetail,
   BinaryStatus,
   CachedCorosMapPackage,
   CombinedDownloadProgressEvent,
@@ -357,11 +362,17 @@ export interface CorosLinkApi {
     callback: (progress: WatchTransferProgress) => void
   ) => () => void;
   listAudiobooks: () => Promise<Audiobook[]>;
-  importAudiobook: (split: AudiobookSplitOptions) => Promise<Audiobook | null>;
+  chooseAudiobookFiles: () => Promise<AudiobookDraft | null>;
+  convertAudiobookDraft: (draftId: string, split: AudiobookSplitOptions) => Promise<Audiobook>;
+  discardAudiobookDraft: (draftId: string) => Promise<void>;
   cancelAudiobookConversion: (id: string) => Promise<boolean>;
   deleteAudiobook: (id: string) => Promise<Audiobook[]>;
   transferAudiobook: (id: string) => Promise<AudiobookTransferResult>;
   removeAudiobookFromWatch: (id: string) => Promise<WatchStatus>;
+  listPopularFreeAudiobooks: () => Promise<FreeAudiobook[]>;
+  searchFreeAudiobooks: (query: string) => Promise<FreeAudiobook[]>;
+  loadFreeAudiobook: (identifier: string) => Promise<FreeAudiobookDetail>;
+  importFreeAudiobook: (identifier: string, split: AudiobookSplitOptions) => Promise<Audiobook>;
   onAudiobookProgress: (
     callback: (progress: AudiobookProgress) => void
   ) => () => void;
@@ -576,8 +587,12 @@ export interface CorosLinkApi {
   chooseActivityBackupFolder: () => Promise<string | null>;
   startActivityBackup: (
     folder: string,
-    fileType?: TrainingHubActivityFileType
+    fileType?: TrainingHubActivityFileType,
+    filters?: ActivityBackupFilters
   ) => Promise<ActivityBackupProgress>;
+  previewActivityBackup: (
+    filters?: ActivityBackupFilters
+  ) => Promise<ActivityBackupPreview>;
   cancelActivityBackup: () => Promise<ActivityBackupProgress | null>;
   getActivityBackupProgress: () => Promise<ActivityBackupProgress | null>;
   onActivityBackupProgress: (

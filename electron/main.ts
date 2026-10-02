@@ -52,10 +52,13 @@ import {
 } from "./spotifyService";
 import {
   cancelActivityBackup,
+  clearActivityBackupPreview,
   getActivityBackupProgress,
+  previewActivityBackup,
   setActivityBackupProgressListener,
   startActivityBackup
 } from "./activityBackupService";
+import { normalizeActivityBackupFilters } from "./activityBackupFilters";
 import { getAppInfo, openAppStorageLocation } from "./appInfoService";
 import {
   backfillFeelTypes,
@@ -271,14 +274,24 @@ import {
   audiobookPartsOnWatch,
   cancelAudiobookConversion,
   deleteAudiobook,
+  discardAudiobookDraft,
   getAudiobook,
   getAudiobookPartPaths,
   listAudiobooks,
+  findAudiobookBySource,
   normalizeSplitOptions,
-  startAudiobookImport
+  prepareAudiobookDraft,
+  startAudiobookImportFromDraft,
+  startFreeAudiobookImport
 } from "./audiobookService";
+import {
+  listPopularFreeAudiobooks,
+  loadFreeAudiobook,
+  searchFreeAudiobooks
+} from "./freeAudiobooksService";
 import type {
   Audiobook,
+  AudiobookDraft,
   AudiobookProgress,
   AudiobookSplitOptions,
   AudiobookTransferResult
@@ -1628,8 +1641,11 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "trainingHub:login",
-    (_event, email: string, password: string, remember?: boolean) =>
-      loginTrainingHub(email, password, remember)
+    (_event, email: string, password: string, remember?: boolean) => {
+      // The backup preview caches one account's listing.
+      clearActivityBackupPreview();
+      return loginTrainingHub(email, password, remember);
+    }
   );
 
   ipcMain.handle("trainingHub:verify2fa", (_event, code: string) =>
@@ -1644,7 +1660,10 @@ function registerIpcHandlers(): void {
     cancelTrainingHubTwoFactor()
   );
 
-  ipcMain.handle("trainingHub:logout", () => logoutTrainingHub());
+  ipcMain.handle("trainingHub:logout", () => {
+    clearActivityBackupPreview();
+    return logoutTrainingHub();
+  });
 
   ipcMain.handle("trainingHub:reconnect", () => reconnectTrainingHub());
 
@@ -1886,8 +1905,23 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "trainingHub:startActivityBackup",
-    (_event, folder: string, fileType: TrainingHubActivityFileType = 4) =>
-      startActivityBackup(folder, fileType)
+    (
+      _event,
+      folder: string,
+      fileType: TrainingHubActivityFileType = 4,
+      filters?: unknown
+    ) =>
+      startActivityBackup(
+        folder,
+        fileType,
+        normalizeActivityBackupFilters(filters)
+      )
+  );
+
+  ipcMain.handle(
+    "trainingHub:previewActivityBackup",
+    (_event, filters?: unknown) =>
+      previewActivityBackup(normalizeActivityBackupFilters(filters))
   );
 
   ipcMain.handle("trainingHub:cancelActivityBackup", () =>
@@ -2245,26 +2279,54 @@ function registerAudiobookIpcHandlers(): void {
     }
   };
   const watchTracks = async () => (await getWatchStatus()).tracks;
+  // One watch operation at a time across all books. The watch plays files in
+  // the order they were copied, so two transfers running together (a double
+  // click, or two books) would interleave their parts.
+  let watchOperation: { id: string; kind: "transfer" | "remove" } | undefined;
+  const withWatchLock = async <T>(
+    id: string,
+    kind: "transfer" | "remove",
+    run: () => Promise<T>
+  ): Promise<T> => {
+    if (watchOperation) {
+      throw new Error(
+        watchOperation.kind === "transfer"
+          ? "Another audiobook is being copied to the watch. Wait for it to finish."
+          : "An audiobook is being removed from the watch. Wait for it to finish."
+      );
+    }
+    watchOperation = { id, kind };
+    try {
+      return await run();
+    } finally {
+      watchOperation = undefined;
+    }
+  };
 
   ipcMain.handle("audiobooks:list", async () => listAudiobooks(await watchTracks()));
 
+  ipcMain.handle("freeAudiobooks:popular", () => listPopularFreeAudiobooks());
+
+  ipcMain.handle("freeAudiobooks:search", (_event, query: string) =>
+    searchFreeAudiobooks(String(query ?? ""))
+  );
+
+  ipcMain.handle("freeAudiobooks:load", (_event, identifier: string) =>
+    loadFreeAudiobook(String(identifier ?? ""))
+  );
+
   ipcMain.handle(
-    "audiobooks:import",
-    async (_event, split: AudiobookSplitOptions): Promise<Audiobook | null> => {
-      const options: OpenDialogOptions = {
-        title: "Choose an audiobook (select several files to join them)",
-        properties: ["openFile", "multiSelections"],
-        filters: [{ name: "Audiobook", extensions: AUDIOBOOK_EXTENSIONS }]
-      };
-      const result =
-        mainWindow && !mainWindow.isDestroyed()
-          ? await dialog.showOpenDialog(mainWindow, options)
-          : await dialog.showOpenDialog(options);
-      if (result.canceled || result.filePaths.length === 0) {
-        return null;
+    "audiobooks:importFree",
+    async (_event, identifier: string, split: AudiobookSplitOptions): Promise<Audiobook> => {
+      // Re-resolve the recording here: download URLs and checksums come from
+      // archive.org, never from the renderer.
+      const detail = await loadFreeAudiobook(String(identifier ?? ""));
+      const existing = findAudiobookBySource(detail.identifier);
+      if (existing) {
+        throw new Error(`"${existing.title}" is already in your audiobooks.`);
       }
-      return startAudiobookImport(
-        result.filePaths,
+      return startFreeAudiobookImport(
+        detail,
         normalizeSplitOptions(split),
         sendProgress,
         sendUpdated
@@ -2272,74 +2334,113 @@ function registerAudiobookIpcHandlers(): void {
     }
   );
 
+  // Choosing files only reads them; nothing converts until the renderer
+  // confirms the draft with a split.
+  ipcMain.handle("audiobooks:chooseFiles", async (): Promise<AudiobookDraft | null> => {
+    const options: OpenDialogOptions = {
+      title: "Choose an audiobook (select several files to join them)",
+      properties: ["openFile", "multiSelections"],
+      filters: [{ name: "Audiobook", extensions: AUDIOBOOK_EXTENSIONS }]
+    };
+    const result =
+      mainWindow && !mainWindow.isDestroyed()
+        ? await dialog.showOpenDialog(mainWindow, options)
+        : await dialog.showOpenDialog(options);
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+    return prepareAudiobookDraft(result.filePaths);
+  });
+
+  ipcMain.handle(
+    "audiobooks:convertDraft",
+    (_event, draftId: string, split: AudiobookSplitOptions): Audiobook =>
+      startAudiobookImportFromDraft(
+        String(draftId ?? ""),
+        normalizeSplitOptions(split),
+        sendProgress,
+        sendUpdated
+      )
+  );
+
+  ipcMain.handle("audiobooks:discardDraft", (_event, draftId: string) =>
+    discardAudiobookDraft(String(draftId ?? ""))
+  );
+
   ipcMain.handle("audiobooks:cancel", (_event, id: string) =>
     cancelAudiobookConversion(id)
   );
 
   ipcMain.handle("audiobooks:delete", async (_event, id: string) => {
+    if (watchOperation?.id === id) {
+      throw new Error("Wait for the watch to finish before deleting this book.");
+    }
     deleteAudiobook(id);
     return listAudiobooks(await watchTracks());
   });
 
   ipcMain.handle(
     "audiobooks:transfer",
-    async (_event, id: string): Promise<AudiobookTransferResult> => {
-      const status = await getWatchStatus();
-      if (!status.connected) {
-        throw new Error("No COROS watch is connected.");
-      }
-      const book = getAudiobook(id, status.tracks);
-      if (!book || book.status !== "ready") {
-        throw new Error("Audiobook is not ready to transfer.");
-      }
+    (_event, id: string): Promise<AudiobookTransferResult> =>
+      withWatchLock(id, "transfer", async () => {
+        const status = await getWatchStatus();
+        if (!status.connected) {
+          throw new Error("No COROS watch is connected.");
+        }
+        const book = getAudiobook(id, status.tracks);
+        if (!book || book.status !== "ready") {
+          throw new Error("Audiobook is not ready to transfer.");
+        }
 
-      const partPaths = getAudiobookPartPaths(id);
-      const pending = book.parts
-        .map((part, offset) => ({ part, filePath: partPaths[offset] }))
-        .filter(({ part }) => !part.onWatch);
-      const pendingBytes = pending.reduce((total, { part }) => total + part.sizeBytes, 0);
-      if (status.freeBytes !== undefined && pendingBytes > status.freeBytes) {
-        throw new Error(
-          `Not enough space on the watch: need ${Math.ceil(pendingBytes / 1_048_576)} MB, ` +
-            `${Math.floor(status.freeBytes / 1_048_576)} MB free.`
-        );
-      }
+        const partPaths = getAudiobookPartPaths(id);
+        const pending = book.parts
+          .map((part, offset) => ({ part, filePath: partPaths[offset] }))
+          .filter(({ part }) => !part.onWatch);
+        const pendingBytes = pending.reduce((total, { part }) => total + part.sizeBytes, 0);
+        if (status.freeBytes !== undefined && pendingBytes > status.freeBytes) {
+          throw new Error(
+            `Not enough space on the watch: need ${Math.ceil(pendingBytes / 1_048_576)} MB, ` +
+              `${Math.floor(status.freeBytes / 1_048_576)} MB free.`
+          );
+        }
 
-      // The watch plays in transfer order, so copy strictly one part at a
-      // time, in part order.
-      let copiedBytes = 0;
-      for (const [position, { part, filePath }] of pending.entries()) {
-        await transferFileToWatch(filePath, (fileProgress) => {
-          sendProgress({
-            id,
-            phase: "transferring",
-            progress:
-              pendingBytes > 0
-                ? Math.min((copiedBytes + fileProgress.copiedBytes) / pendingBytes, 1)
-                : 1,
-            message: `Copying part ${position + 1} of ${pending.length}`
+        // The watch plays in transfer order, so copy strictly one part at a
+        // time, in part order.
+        let copiedBytes = 0;
+        for (const [position, { part, filePath }] of pending.entries()) {
+          await transferFileToWatch(filePath, (fileProgress) => {
+            sendProgress({
+              id,
+              phase: "transferring",
+              progress:
+                pendingBytes > 0
+                  ? Math.min((copiedBytes + fileProgress.copiedBytes) / pendingBytes, 1)
+                  : 1,
+              message: `Copying part ${position + 1} of ${pending.length}`
+            });
           });
-        });
-        copiedBytes += part.sizeBytes;
-      }
+          copiedBytes += part.sizeBytes;
+        }
 
-      return {
-        copied: pending.length,
-        skipped: book.parts.length - pending.length,
-        watch: await getWatchStatus()
-      };
-    }
+        return {
+          copied: pending.length,
+          skipped: book.parts.length - pending.length,
+          watch: await getWatchStatus()
+        };
+      })
   );
 
-  ipcMain.handle("audiobooks:removeFromWatch", async (_event, id: string) => {
-    const status = await getWatchStatus();
-    const book = getAudiobook(id, status.tracks);
-    if (!book) {
-      throw new Error("Audiobook was not found.");
-    }
-    for (const track of audiobookPartsOnWatch(book, status.tracks)) {
-      await deleteWatchTrack(track.relativePath);
-    }
-    return getWatchStatus();
-  });
+  ipcMain.handle("audiobooks:removeFromWatch", (_event, id: string) =>
+    withWatchLock(id, "remove", async () => {
+      const status = await getWatchStatus();
+      const book = getAudiobook(id, status.tracks);
+      if (!book) {
+        throw new Error("Audiobook was not found.");
+      }
+      for (const track of audiobookPartsOnWatch(book, status.tracks)) {
+        await deleteWatchTrack(track.relativePath);
+      }
+      return getWatchStatus();
+    })
+  );
 }

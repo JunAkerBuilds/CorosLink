@@ -3,6 +3,7 @@
 // Run: npm run test:audiobooks
 const assert = require("node:assert/strict");
 const { execFileSync } = require("node:child_process");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -28,6 +29,14 @@ function makeTone(outputPath, seconds, tags = {}) {
     "-ac", "2", "-c:a", "aac", "-b:a", "96k",
     ...Object.entries(tags).flatMap(([key, value]) => ["-metadata", `${key}=${value}`]),
     outputPath
+  ]);
+}
+
+function makeMp3(outputPath, seconds) {
+  execFileSync(ffmpegPath(), [
+    "-hide_banner", "-loglevel", "error", "-y",
+    "-f", "lavfi", "-i", `sine=frequency=330:duration=${seconds}`,
+    "-c:a", "libmp3lame", "-b:a", "64k", outputPath
   ]);
 }
 
@@ -171,6 +180,44 @@ async function run() {
   assert.match(probe(chapterPaths[1]), /title\s+: 002 Chapter 1: The Start/);
   assert.ok(Math.abs(durationOf(probe(chapterPaths[1])) - 310) < 1);
 
+  // Choosing files only reads them: the draft reports the chapters the
+  // conversion would use, and nothing is converted until it is confirmed.
+  const booksBeforeDraft = service.listAudiobooks().length;
+  const markedDraft = await service.prepareAudiobookDraft([chaptered]);
+  assert.equal(service.listAudiobooks().length, booksBeforeDraft, "reading a file must not create a book");
+  assert.equal(markedDraft.chapterSource, "marks");
+  assert.deepEqual(markedDraft.chapters.map((chapter) => chapter.title), ["Opening Credits", "Chapter 1: The Start", "Chapter 2"]);
+  assert.deepEqual(markedDraft.chapters.map((chapter) => Math.round(chapter.durationSeconds)), [90, 310, 200]);
+  assert.equal(Math.round(markedDraft.durationSeconds), 600);
+  assert.equal("sourcePaths" in markedDraft, false, "paths stay in the main process");
+
+  const filesDraft = await service.prepareAudiobookDraft([
+    path.join(folder, "Chapter 10.m4a"),
+    path.join(folder, "Chapter 1.m4a"),
+    path.join(folder, "Chapter 2.m4a")
+  ]);
+  assert.equal(filesDraft.chapterSource, "files");
+  assert.equal(filesDraft.title, "Hobbit");
+  assert.deepEqual(filesDraft.chapters.map((chapter) => chapter.title), ["Chapter 1", "Chapter 2", "Chapter 10"]);
+  service.discardAudiobookDraft(filesDraft.id);
+  assert.throws(() => service.startAudiobookImportFromDraft(filesDraft.id, TEN_MINUTES, () => {}, () => {}), /expired/);
+
+  const plainDraft = await service.prepareAudiobookDraft([m4b]);
+  assert.equal(plainDraft.chapterSource, "none");
+  assert.equal(plainDraft.title, "Dune: Book One");
+  assert.equal(plainDraft.author, "Frank Herbert");
+
+  const fromDraft = await new Promise((resolve) => {
+    service.startAudiobookImportFromDraft(markedDraft.id, { mode: "chapters", minutes: 10 }, () => {}, resolve);
+  });
+  assert.equal(fromDraft.status, "ready", fromDraft.error);
+  assert.deepEqual(fromDraft.parts.map((part) => part.chapterTitle), ["Opening Credits", "Chapter 1: The Start", "Chapter 2"]);
+  assert.throws(
+    () => service.startAudiobookImportFromDraft(markedDraft.id, TEN_MINUTES, () => {}, () => {}),
+    /expired/,
+    "a draft converts once"
+  );
+
   // Chapter mode on a book without chapters falls back to the minutes value.
   const noChapters = await importAndWait(service, [m4b], { mode: "chapters", minutes: 15 });
   assert.equal(noChapters.book.status, "ready", noChapters.book.error);
@@ -215,6 +262,109 @@ async function run() {
   fs.writeFileSync(bogus, "not audio");
   const failed = await importAndWait(service, [bogus]);
   assert.equal(failed.book.status, "failed");
+
+  // A file named .m4b that is really an ffmpeg concat script must not be
+  // followed: it could pull other local files into the book.
+  const sectionOne = path.join(tempRoot, "section-1.mp3");
+  const sectionTwo = path.join(tempRoot, "section-2.mp3");
+  makeMp3(sectionOne, 200);
+  makeMp3(sectionTwo, 150);
+  const disguised = path.join(tempRoot, "disguised.m4b");
+  // A relative path, which ffmpeg's concat demuxer accepts even in safe mode,
+  // and a duration so the script passes the probe like a real book would.
+  fs.writeFileSync(
+    disguised,
+    `ffconcat version 1.0\nfile '${path.basename(sectionOne)}'\nduration 200\n`
+  );
+  const disguisedBook = await importAndWait(service, [disguised]);
+  assert.equal(disguisedBook.book.status, "failed");
+
+  // Only a part's exact name counts as that part on the watch; a "(1)" copy
+  // may be someone else's file and must never be removed with the book.
+  const joinedFirst = joined.book.parts[0].name;
+  fs.writeFileSync(
+    path.join(watchRoot, "Music", joinedFirst.replace(/\.mp3$/, " (1).mp3")),
+    fs.readFileSync(sectionOne)
+  );
+  const collisionStatus = await watch.getWatchStatus();
+  const joinedListed = service.getAudiobook(joined.book.id, collisionStatus.tracks);
+  assert.equal(joinedListed.parts[0].onWatch, false);
+  assert.equal(service.audiobookPartsOnWatch(joinedListed, collisionStatus.tracks).length, 0);
+
+  // LibriVox import, offline: fetch is stubbed with archive.org routes.
+  const sha1 = (file) => crypto.createHash("sha1").update(fs.readFileSync(file)).digest("hex");
+  const routes = new Map();
+  const realFetch = global.fetch;
+  global.fetch = async (url) => {
+    const route = routes.get(String(url));
+    if (!route) return new Response(null, { status: 404, statusText: "Not Found" });
+    if (route.redirect) return new Response(null, { status: 302, headers: { location: route.redirect } });
+    const data = fs.readFileSync(route.file);
+    return new Response(data, { status: 200, headers: { "content-length": String(data.length) } });
+  };
+  const freeDetail = (identifier, sections) => ({
+    identifier,
+    title: "The Test Stories",
+    author: "A. Writer",
+    pageUrl: `https://archive.org/details/${identifier}`,
+    coverUrl: `https://archive.org/services/img/${identifier}`,
+    runtimeSeconds: 350,
+    totalBytes: sections.reduce((total, section) => total + section.sizeBytes, 0),
+    sections
+  });
+  const section = (identifier, file, title, overrides = {}) => ({
+    name: path.basename(file),
+    title,
+    url: `https://archive.org/download/${identifier}/${path.basename(file)}`,
+    sizeBytes: fs.statSync(file).size,
+    durationSeconds: 0,
+    sha1: sha1(file),
+    ...overrides
+  });
+  const importFree = (detail, split) =>
+    new Promise((resolve) => {
+      const progress = [];
+      service.startFreeAudiobookImport(detail, split, (event) => progress.push(event), (done) =>
+        resolve({ book: done, progress })
+      );
+    });
+  try {
+    const goodId = "test_stories_librivox";
+    const goodSections = [
+      section(goodId, sectionOne, "The First Story"),
+      section(goodId, sectionTwo, "The Second Story")
+    ];
+    // The first section is served through an archive.org mirror redirect.
+    routes.set(goodSections[0].url, { redirect: "https://ia800.us.archive.org/7/items/test/section-1.mp3" });
+    routes.set("https://ia800.us.archive.org/7/items/test/section-1.mp3", { file: sectionOne });
+    routes.set(goodSections[1].url, { file: sectionTwo });
+    const free = await importFree(freeDetail(goodId, goodSections), { mode: "chapters", minutes: 10 });
+    assert.equal(free.book.status, "ready", free.book.error);
+    assert.equal(free.book.title, "The Test Stories");
+    assert.equal(free.book.author, "A. Writer");
+    assert.equal(free.book.source.identifier, goodId);
+    assert.deepEqual(free.book.parts.map((part) => part.chapterTitle), ["The First Story", "The Second Story"]);
+    assert.ok(free.progress.some((event) => event.phase === "downloading"));
+    assert.deepEqual(free.book.sourcePaths, [`https://archive.org/details/${goodId}`]);
+    assert.equal(fs.existsSync(path.join(path.dirname(service.getAudiobookPartPaths(free.book.id)[0]), ".download")), false);
+    assert.equal(service.findAudiobookBySource(goodId).id, free.book.id);
+
+    const tamperedId = "tampered_librivox";
+    const tampered = section(tamperedId, sectionOne, "Tampered", { sha1: "0".repeat(40) });
+    routes.set(tampered.url, { file: sectionOne });
+    const tamperedBook = await importFree(freeDetail(tamperedId, [tampered]), TEN_MINUTES);
+    assert.equal(tamperedBook.book.status, "failed");
+    assert.match(tamperedBook.book.error, /checksum/);
+
+    const offsiteId = "offsite_librivox";
+    const offsite = section(offsiteId, sectionOne, "Offsite");
+    routes.set(offsite.url, { redirect: "https://archive.org.example.com/section-1.mp3" });
+    const offsiteBook = await importFree(freeDetail(offsiteId, [offsite]), TEN_MINUTES);
+    assert.equal(offsiteBook.book.status, "failed");
+    assert.match(offsiteBook.book.error, /left archive\.org/);
+  } finally {
+    global.fetch = realFetch;
+  }
 
   service.deleteAudiobook(book.id);
   assert.equal(service.getAudiobook(book.id), undefined);

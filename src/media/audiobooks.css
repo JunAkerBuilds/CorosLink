@@ -1,0 +1,1772 @@
+/* Audiobooks: Media → Audiobooks. */
+
+/* The conversion dialog is portaled to <body>, so it needs the token too. */
+.audiobook-view,
+.audiobook-convert {
+  --audiobook-rule: color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+
+/* The scroller fills the whole panel, edge to edge, so books can slide up
+   under the floating heading and out past the panel's top edge. */
+.audiobook-view .audiobook-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+}
+
+/* One control height throughout. The global .primary-button and
+   .secondary-button (44px) come after .compact-button (36px) in styles.css,
+   so compact buttons would otherwise render 44px tall. */
+:is(.audiobook-view, .audiobook-convert) :is(.primary-button, .secondary-button).compact-button {
+  min-height: 36px;
+  padding: 0 14px;
+  gap: 7px;
+  font-size: 13px;
+}
+
+/* The library's narrow-window rule stretches every filter group full width;
+   here the switch shares a row with the import button. */
+.audiobook-view .library-filter-group {
+  width: auto;
+  min-height: 36px;
+}
+
+.audiobook-view .library-filter-option {
+  flex: none;
+}
+
+:is(.audiobook-view, .audiobook-convert) :is(.primary-button, .secondary-button, .library-filter-option) {
+  white-space: nowrap;
+}
+
+/* Title, search and actions: the search sits in the middle column, centred
+   on the panel whatever the widths of its neighbours. Scoped to the view so it
+   beats the global .section-heading flex rules, which load after this sheet. */
+.audiobook-view .audiobook-heading {
+  display: grid;
+  grid-template-areas: "title search actions";
+  grid-template-columns: minmax(max-content, 1fr) minmax(240px, 460px) minmax(max-content, 1fr);
+  align-items: center;
+  gap: 12px 20px;
+  position: sticky;
+  z-index: 5;
+  top: 10px;
+  flex-shrink: 0;
+  margin: 10px -10px 0;
+  padding: 10px 10px 18px;
+  border: 1px solid transparent;
+  border-radius: 18px;
+}
+
+/* At rest the heading sits flat on the panel over a hairline; over the first
+   few pixels of scrolling a frosted layer fades in behind it and the books
+   slide under. Only opacity animates, so nothing paints at rest. */
+.audiobook-view .audiobook-heading {
+  animation: audiobook-heading-float linear both;
+  animation-timeline: scroll(nearest block);
+  animation-range: 0 32px;
+}
+
+.audiobook-view .audiobook-heading::before {
+  position: absolute;
+  z-index: -1;
+  inset: -1px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+  backdrop-filter: blur(28px) saturate(1.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 12px 32px rgba(0, 0, 0, 0.34);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  animation: audiobook-heading-glass linear both;
+  animation-timeline: scroll(nearest block);
+  animation-range: 0 32px;
+}
+
+:root[data-theme="paper"] .audiobook-view .audiobook-heading::before {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 12px 32px rgba(24, 40, 32, 0.14);
+}
+
+.audiobook-view .audiobook-heading::after {
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 1px;
+  background: var(--audiobook-rule);
+  content: "";
+  animation: audiobook-heading-rule linear both;
+  animation-timeline: scroll(nearest block);
+  animation-range: 0 16px;
+}
+
+@keyframes audiobook-heading-float {
+  from {
+    padding-bottom: 18px;
+  }
+
+  to {
+    padding-bottom: 10px;
+  }
+}
+
+@keyframes audiobook-heading-glass {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes audiobook-heading-rule {
+  to {
+    opacity: 0;
+  }
+}
+
+.audiobook-view .audiobook-heading > div:first-child {
+  grid-area: title;
+  min-width: 0;
+}
+
+.audiobook-heading-actions {
+  grid-area: actions;
+  justify-self: end;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* The app's .section-heading svg rule greys every heading icon; icons inside
+   controls follow their control's text instead. */
+.audiobook-heading :is(button, a) svg {
+  color: currentColor;
+}
+
+/* The panel clips its overflow, so the books and the catalogue scroll here,
+   under the fixed heading. */
+.audiobook-scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0 20px 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 40%, transparent) transparent;
+}
+
+/* Covers ---------------------------------------------------------------- */
+
+.audiobook-cover {
+  position: relative;
+  display: block;
+  flex: none;
+  overflow: hidden;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  background: var(--glass-bg-elevated);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.25),
+    0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+.audiobook-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.audiobook-cover-small {
+  width: 76px;
+}
+
+.audiobook-cover-small.audiobook-cover-typeset {
+  padding: 12% 8% 12% 15%;
+}
+
+.audiobook-cover-medium {
+  width: 88px;
+}
+
+.audiobook-cover-large {
+  width: min(240px, 100%);
+}
+
+/* A typeset cover for books without artwork: a cloth-bound board with a
+   darker spine along the left edge. */
+.audiobook-cover-typeset {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 10% 10% 10% 16%;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.32) 0 7%, rgba(255, 255, 255, 0.07) 7% 8%, transparent 8%),
+    linear-gradient(160deg, hsl(var(--cover-hue) 34% 34%), hsl(var(--cover-hue) 40% 20%));
+  color: hsl(var(--cover-hue) 30% 94%);
+}
+
+.audiobook-cover-title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+/* Small covers are decorative (the empty shelf): plain boards, no type,
+   unless they stand for a specific book, as in the conversion dialog. */
+.audiobook-cover-small:not(.has-title) .audiobook-cover-title {
+  display: none;
+}
+
+.audiobook-cover-small.has-title .audiobook-cover-title {
+  font-size: 10px;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 4;
+}
+
+.audiobook-cover-large .audiobook-cover-title {
+  font-size: 22px;
+}
+
+.audiobook-cover-author {
+  overflow: hidden;
+  font-size: 10px;
+  opacity: 0.8;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audiobook-cover-large .audiobook-cover-author {
+  font-size: 14px;
+}
+
+/* Your books ------------------------------------------------------------- */
+
+.audiobook-shelf {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.audiobook-row + .audiobook-row {
+  border-top: 1px solid var(--audiobook-rule);
+}
+
+.audiobook-row-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 20px;
+  padding: 20px 0;
+}
+
+.audiobook-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.audiobook-row-heading h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.audiobook-author {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.audiobook-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 24px;
+  margin: 0;
+}
+
+.audiobook-facts div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.audiobook-facts dt {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.audiobook-facts dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.audiobook-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(420px, 100%);
+}
+
+.audiobook-meter-ticks {
+  display: flex;
+  gap: 3px;
+}
+
+.audiobook-meter-ticks span {
+  flex: 1;
+  min-width: 2px;
+  height: 6px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text-muted) 26%, transparent);
+}
+
+.audiobook-meter-ticks span.is-on {
+  background: var(--accent);
+}
+
+.audiobook-meter-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.audiobook-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(420px, 100%);
+}
+
+.audiobook-progress-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.audiobook-progress-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+
+.audiobook-progress-bar {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.audiobook-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.audiobook-error {
+  margin: 0;
+  color: var(--error-text);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.audiobook-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.audiobook-send {
+  min-width: 140px;
+}
+
+.audiobook-send.is-done:disabled {
+  opacity: 1;
+  color: var(--success-text);
+}
+
+.audiobook-row-tools {
+  display: flex;
+  gap: 2px;
+}
+
+/* Secondary row tools stay quiet until pointed at, so the send button leads. */
+.audiobook-row-tools .icon-button {
+  width: 32px;
+  height: 32px;
+  border-color: transparent;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  color: var(--text-secondary);
+}
+
+.audiobook-row-tools .icon-button:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+  box-shadow: none;
+  transform: none;
+}
+
+.audiobook-row-tools .audiobook-delete:hover:not(:disabled) {
+  color: var(--error-text);
+}
+
+.audiobook-row-tools .icon-button:disabled {
+  opacity: 0.35;
+}
+
+.audiobook-row-tools .icon-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.audiobook-chevron {
+  transition: transform 0.2s ease;
+}
+
+.audiobook-row.is-expanded .audiobook-chevron {
+  transform: rotate(180deg);
+}
+
+.audiobook-parts {
+  display: grid;
+  max-height: 320px;
+  margin: 0 0 18px 108px;
+  padding: 4px 0;
+  overflow-y: auto;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  list-style: none;
+}
+
+.audiobook-parts li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 64px 84px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px 8px 12px;
+  font-size: 12px;
+}
+
+.audiobook-parts li + li {
+  border-top: 1px solid var(--audiobook-rule);
+}
+
+.audiobook-part-number {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.audiobook-part-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--text-primary);
+}
+
+.audiobook-part-name > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audiobook-part-name small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.audiobook-part-length {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.audiobook-part-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  color: var(--text-muted);
+}
+
+.audiobook-parts li.is-on-watch .audiobook-part-state {
+  color: var(--success-text);
+}
+
+/* Empty shelf ------------------------------------------------------------ */
+
+.audiobook-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: auto;
+  padding: 48px 20px;
+  text-align: center;
+}
+
+.audiobook-empty-covers {
+  display: flex;
+  align-items: flex-end;
+  margin-bottom: 26px;
+}
+
+.audiobook-empty-covers .audiobook-cover:nth-child(1) {
+  transform: rotate(-7deg) translate(10px, 4px);
+}
+
+.audiobook-empty-covers .audiobook-cover:nth-child(2) {
+  z-index: 1;
+  width: 92px;
+}
+
+.audiobook-empty-covers .audiobook-cover:nth-child(3) {
+  transform: rotate(6deg) translate(-10px, 4px);
+}
+
+.audiobook-empty h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.audiobook-empty p {
+  max-width: 52ch;
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.audiobook-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.audiobook-empty p.audiobook-empty-formats {
+  margin-top: 18px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* Search: a pill in the middle of the heading --------------------------- */
+
+.audiobook-search {
+  grid-area: search;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 46px;
+  padding: 0 8px 0 16px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  color: var(--text-secondary);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.audiobook-search:hover {
+  border-color: color-mix(in srgb, var(--text-primary) 16%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  color: var(--text-primary);
+}
+
+/* The pill shows focus itself, so the input drops the app's focus outline. */
+.audiobook-search:focus-within {
+  border-color: color-mix(in srgb, var(--text-primary) 45%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--text-primary) 7%, transparent);
+  color: var(--text-primary);
+}
+
+.audiobook-search input:focus,
+.audiobook-search input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.audiobook-heading .audiobook-search svg {
+  color: currentColor;
+}
+
+.audiobook-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  outline: none;
+  appearance: none;
+}
+
+.audiobook-search input::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.audiobook-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.audiobook-search-clear {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-secondary);
+}
+
+.audiobook-search-clear:hover {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  color: var(--text-primary);
+}
+
+.audiobook-search-clear:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Free classics ---------------------------------------------------------- */
+
+.audiobook-free {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+.audiobook-free-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 20px;
+}
+
+.audiobook-free-credit {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.audiobook-free-credit a,
+.audiobook-source-link {
+  color: var(--accent-strong);
+  text-decoration: none;
+}
+
+.audiobook-free-credit a:hover,
+.audiobook-source-link:hover {
+  text-decoration: underline;
+}
+
+.audiobook-free-heading {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Cards carry their own padding, so the grid bleeds it back out to keep the
+   covers aligned with the heading. */
+.audiobook-free-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 4px;
+  margin: 0 -12px;
+  padding: 0;
+  list-style: none;
+  transition: opacity 0.2s ease;
+}
+
+.audiobook-free-grid.is-loading {
+  opacity: 0.5;
+}
+
+.audiobook-free-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  padding: 12px 12px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.audiobook-free-card:hover:not(:disabled),
+.audiobook-free-card:focus-visible {
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+}
+
+.audiobook-free-card:disabled {
+  cursor: progress;
+}
+
+.audiobook-free-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+.audiobook-free-card-art {
+  position: relative;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.audiobook-free-card .audiobook-cover {
+  width: 100%;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+}
+
+/* The round action rises into the cover's corner on hover. */
+.audiobook-free-card-fab {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #0d1f18;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease,
+    background 0.15s ease;
+}
+
+:root[data-theme="paper"] .audiobook-free-card-fab {
+  color: #ffffff;
+}
+
+.audiobook-free-card:hover:not(:disabled) .audiobook-free-card-fab,
+.audiobook-free-card:focus-visible .audiobook-free-card-fab {
+  opacity: 1;
+  transform: none;
+}
+
+.audiobook-free-card:hover:not(:disabled) .audiobook-free-card-fab:hover {
+  background: var(--accent-strong);
+  transform: scale(1.04);
+}
+
+.audiobook-free-card-title {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.audiobook-free-card-meta {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.audiobook-free-card-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #ffffff;
+}
+
+/* Below the text, never over the artwork's own lettering. */
+.audiobook-free-card-owned {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.audiobook-free-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 12px 16px;
+}
+
+.audiobook-free-skeleton span {
+  border-radius: 6px;
+  background: var(--glass-bg-hover);
+  animation: audiobook-pulse 1.4s ease-in-out infinite;
+}
+
+.audiobook-free-skeleton span:nth-child(1) {
+  aspect-ratio: 1;
+}
+
+.audiobook-free-skeleton span:nth-child(2) {
+  width: 80%;
+  height: 12px;
+}
+
+.audiobook-free-skeleton span:nth-child(3) {
+  width: 55%;
+  height: 10px;
+}
+
+@keyframes audiobook-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.audiobook-free-message {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 24px 0;
+}
+
+.audiobook-free-message p {
+  max-width: 60ch;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Free classic: detail -------------------------------------------------- */
+
+.audiobook-free-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* An album-style header washed with the cover's own colours: a blurred copy
+   of the artwork, or the typeset hue for books without one. */
+.audiobook-hero {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  overflow: hidden;
+  padding: 16px 28px 28px;
+  border-radius: 14px;
+  background: linear-gradient(160deg, hsl(var(--cover-hue) 34% 30%), hsl(var(--cover-hue) 30% 14%));
+}
+
+.audiobook-hero::after {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.5));
+  content: "";
+}
+
+.audiobook-hero-backdrop {
+  position: absolute;
+  z-index: -2;
+  inset: -20%;
+  width: 140%;
+  height: 140%;
+  object-fit: cover;
+  filter: blur(48px) saturate(1.3);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.audiobook-hero .audiobook-back {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.audiobook-hero .audiobook-back:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.audiobook-back {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 6px;
+  margin-left: -10px;
+  padding: 6px 12px 6px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.audiobook-back:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 1px;
+}
+
+.audiobook-hero-body {
+  display: flex;
+  align-items: flex-end;
+  gap: 28px;
+  min-width: 0;
+}
+
+.audiobook-hero .audiobook-cover-large {
+  width: clamp(150px, 22vw, 220px);
+  border-radius: 8px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+}
+
+.audiobook-hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  color: #ffffff;
+}
+
+.audiobook-hero-kind {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.audiobook-hero-copy h2 {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: #ffffff;
+  font-size: clamp(28px, 4.2vw, 52px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.audiobook-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 0;
+  margin: 4px 0 0;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.audiobook-hero-meta strong {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.audiobook-hero-meta > * + *::before {
+  margin: 0 8px;
+  content: "•";
+  opacity: 0.7;
+}
+
+.audiobook-free-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+
+:is(.primary-button, .secondary-button).audiobook-cta {
+  min-height: 48px;
+  padding: 0 24px 0 20px;
+  border-radius: 999px;
+  font-size: 15px;
+}
+
+.audiobook-source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.audiobook-free-hint {
+  flex-basis: 100%;
+  margin: -4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.audiobook-description {
+  max-width: 72ch;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+/* The sections as a track list. */
+.audiobook-tracks-head,
+.audiobook-tracks li {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 72px;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+}
+
+.audiobook-tracks-head {
+  height: 36px;
+  border-bottom: 1px solid var(--audiobook-rule);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.audiobook-tracks-head > :first-child {
+  text-align: right;
+}
+
+.audiobook-tracks-head svg {
+  justify-self: end;
+}
+
+.audiobook-tracks ol {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.audiobook-tracks li {
+  min-height: 44px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.audiobook-tracks li:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+.audiobook-track-number {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.audiobook-track-title {
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audiobook-track-length {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Conversion dialog ------------------------------------------------------ */
+
+/* Scoped through .audiobook-convert: the global modal rules load after this
+   sheet and would otherwise win ties. */
+.audiobook-convert-backdrop {
+  background: rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  backdrop-filter: blur(10px) saturate(1.2);
+  animation: audiobook-fade-in 0.18s ease both;
+}
+
+.calendar-modal.audiobook-convert {
+  position: relative;
+  width: min(840px, 100%);
+  max-height: min(860px, calc(100vh - 48px));
+  padding: 0;
+  /* Opaque, unlike a glass .panel, which lets the page show through. */
+  border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(0, 0, 0, 0.2);
+  animation: audiobook-dialog-in 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+}
+
+:root[data-theme="paper"] .calendar-modal.audiobook-convert {
+  box-shadow: 0 30px 80px rgba(24, 40, 32, 0.22);
+}
+
+@keyframes audiobook-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes audiobook-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+}
+
+/* Header: washed with the cover's own colours, like the book page. */
+.audiobook-convert .audiobook-convert-header {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  flex-shrink: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 22px 22px 22px 24px;
+  background: linear-gradient(150deg, hsl(var(--cover-hue) 34% 30%), hsl(var(--cover-hue) 30% 16%));
+  color: #ffffff;
+}
+
+.audiobook-convert-header::after {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.45));
+  content: "";
+}
+
+.audiobook-convert-wash {
+  position: absolute;
+  z-index: -2;
+  inset: -30%;
+  width: 160%;
+  height: 160%;
+  object-fit: cover;
+  filter: blur(40px) saturate(1.3);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.audiobook-convert-header .audiobook-cover-small {
+  width: 84px;
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+.audiobook-convert-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.audiobook-convert-kicker {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.audiobook-convert-heading h3 {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.audiobook-convert-meta {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 2px 0 0;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.audiobook-convert-meta > * + *::before {
+  margin: 0 7px;
+  content: "•";
+  opacity: 0.7;
+}
+
+.audiobook-convert-close {
+  display: grid;
+  place-items: center;
+  align-self: start;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.28);
+  color: #ffffff;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.audiobook-convert-close:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.audiobook-convert-close:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.audiobook-convert-body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-height: 0;
+  padding: 22px 24px 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+/* The body scrolls as a whole; its sections keep their natural height. */
+.audiobook-convert-body > * {
+  flex-shrink: 0;
+}
+
+.audiobook-convert-body h4,
+.audiobook-split-options legend {
+  margin: 0 0 10px;
+  padding: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Split choice: two tiles side by side. */
+.audiobook-split-options {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.audiobook-split-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.audiobook-split-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px 16px;
+  border: 1.5px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.audiobook-split-option:hover:not(.is-disabled) {
+  border-color: color-mix(in srgb, var(--text-primary) 22%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+.audiobook-split-option.is-selected,
+.audiobook-split-option.is-selected:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.audiobook-split-option.is-disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* The radio stays in the tab order but the tile shows the state. */
+.audiobook-split-option > input[type="radio"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.audiobook-split-option:has(> input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.audiobook-split-option-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.audiobook-split-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-secondary);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.audiobook-split-option.is-selected .audiobook-split-icon {
+  background: var(--accent);
+  color: #0d1f18;
+}
+
+:root[data-theme="paper"] .audiobook-split-option.is-selected .audiobook-split-icon,
+:root[data-theme="paper"] .audiobook-split-check {
+  color: #ffffff;
+}
+
+.audiobook-split-check {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid color-mix(in srgb, var(--text-primary) 22%, transparent);
+  border-radius: 50%;
+  color: transparent;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.audiobook-split-option.is-selected .audiobook-split-check {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #0d1f18;
+}
+
+.audiobook-split-option-title {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.audiobook-split-count {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.audiobook-split-count strong {
+  color: var(--text-primary);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.audiobook-split-option-hint {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Minutes stepper. */
+.audiobook-stepper {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 2px;
+  margin-top: 6px;
+  padding: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+.audiobook-stepper button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.audiobook-stepper button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+}
+
+.audiobook-stepper button:disabled {
+  opacity: 0.35;
+}
+
+.audiobook-convert .audiobook-split-minutes {
+  width: 34px;
+  min-height: 0;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  -moz-appearance: textfield;
+}
+
+.audiobook-split-minutes::-webkit-inner-spin-button,
+.audiobook-split-minutes::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.audiobook-convert .audiobook-split-minutes:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+.audiobook-stepper-unit {
+  margin: 0 6px 0 4px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.audiobook-convert-warning {
+  display: flex;
+  gap: 10px;
+  margin: -8px 0 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--warning-bg);
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.audiobook-convert-warning svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--warning-text);
+}
+
+/* Preview: a short track list. */
+.audiobook-convert-preview ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.audiobook-convert-preview li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 4px 10px 4px 6px;
+  border-radius: 10px;
+}
+
+.audiobook-convert-preview li:hover {
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+.audiobook-convert-index {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.audiobook-convert-names {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.audiobook-convert-file,
+.audiobook-convert-chapter {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audiobook-convert-chapter {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.audiobook-convert-file {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.audiobook-convert-length {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.audiobook-convert-more {
+  margin: 4px 0 0;
+  padding: 0 10px 0 46px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* What happens next: numbered steps. */
+.audiobook-how ol {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 16px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  list-style: none;
+  counter-reset: audiobook-step;
+}
+
+.audiobook-how li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  counter-increment: audiobook-step;
+}
+
+.audiobook-how li::before {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 700;
+  content: counter(audiobook-step);
+}
+
+.audiobook-convert-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 14px 20px 14px 24px;
+  border-top: 1px solid var(--audiobook-rule);
+  background: color-mix(in srgb, var(--text-primary) 3%, var(--surface));
+}
+
+.audiobook-convert-summary {
+  display: flex;
+  flex-direction: column;
+  margin: 0 auto 0 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.audiobook-convert-summary strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.audiobook-convert-summary span {
+  color: var(--text-secondary);
+}
+
+.audiobook-convert-footer :is(.primary-button, .secondary-button).compact-button {
+  min-height: 42px;
+  padding: 0 20px;
+  border-radius: 999px;
+  font-size: 14px;
+}
+
+.audiobook-convert-footer .audiobook-convert-go {
+  padding: 0 22px 0 18px;
+}
+
+@media (max-width: 600px) {
+  .audiobook-split-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .audiobook-convert-summary {
+    display: none;
+  }
+
+  .audiobook-convert-footer {
+    justify-content: flex-end;
+  }
+}
+
+/* Too narrow for three columns: the search drops to its own full row. The
+   app also stacks .section-heading at 860px; the grid keeps the title left. */
+@media (max-width: 1100px) {
+  .audiobook-view .audiobook-heading {
+    grid-template-areas:
+      "title actions"
+      "search search";
+    grid-template-columns: minmax(0, 1fr) auto;
+    text-align: left;
+  }
+
+  .audiobook-search {
+    justify-self: center;
+    max-width: 560px;
+  }
+}
+
+@media (max-width: 860px) {
+  .audiobook-row-main {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .audiobook-row-actions {
+    grid-column: 2;
+    justify-content: flex-start;
+    margin-top: -4px;
+  }
+
+  /* Optically align the first quiet icon with the text column above. */
+  .audiobook-row-tools {
+    margin-left: -8px;
+  }
+
+  .audiobook-parts {
+    margin-left: 0;
+  }
+
+  .audiobook-hero {
+    padding: 14px 20px 22px;
+  }
+
+  .audiobook-hero-body {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .audiobook-convert-backdrop,
+  .calendar-modal.audiobook-convert {
+    animation: none;
+  }
+
+  .audiobook-free-card,
+  .audiobook-free-card-fab,
+  .audiobook-chevron,
+  .audiobook-progress-bar {
+    transition: none;
+  }
+
+  .audiobook-free-skeleton span {
+    animation: none;
+  }
+}
+
+.calendar-modal.audiobook-convert:focus {
+  outline: none;
+}
+
+/* The catalogue starts below the heading rule with the same rhythm as a book row. */
+.audiobook-free,
+.audiobook-free-detail {
+  padding-top: 20px;
+}
+
+.audiobook-free {
+  padding-top: 24px;
+}

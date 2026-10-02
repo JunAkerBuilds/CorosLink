@@ -7,11 +7,16 @@ import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, Watc
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "./calendarSyncTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "./googleCalendarTypes";
 import type {
+  ActivityBackupFilters,
+  ActivityBackupPreview,
   ActivityBackupProgress,
   Audiobook,
+  AudiobookDraft,
   AudiobookProgress,
   AudiobookSplitOptions,
   AudiobookTransferResult,
+  FreeAudiobook,
+  FreeAudiobookDetail,
   BinaryStatus,
   CachedCorosMapPackage,
   CombinedDownloadProgressEvent,
@@ -450,8 +455,12 @@ const api = {
       ipcRenderer.removeListener("watch:transferProgress", listener);
   },
   listAudiobooks: (): Promise<Audiobook[]> => ipcRenderer.invoke("audiobooks:list"),
-  importAudiobook: (split: AudiobookSplitOptions): Promise<Audiobook | null> =>
-    ipcRenderer.invoke("audiobooks:import", split),
+  chooseAudiobookFiles: (): Promise<AudiobookDraft | null> =>
+    ipcRenderer.invoke("audiobooks:chooseFiles"),
+  convertAudiobookDraft: (draftId: string, split: AudiobookSplitOptions): Promise<Audiobook> =>
+    ipcRenderer.invoke("audiobooks:convertDraft", draftId, split),
+  discardAudiobookDraft: (draftId: string): Promise<void> =>
+    ipcRenderer.invoke("audiobooks:discardDraft", draftId),
   cancelAudiobookConversion: (id: string): Promise<boolean> =>
     ipcRenderer.invoke("audiobooks:cancel", id),
   deleteAudiobook: (id: string): Promise<Audiobook[]> =>
@@ -460,6 +469,17 @@ const api = {
     ipcRenderer.invoke("audiobooks:transfer", id),
   removeAudiobookFromWatch: (id: string): Promise<WatchStatus> =>
     ipcRenderer.invoke("audiobooks:removeFromWatch", id),
+  listPopularFreeAudiobooks: (): Promise<FreeAudiobook[]> =>
+    ipcRenderer.invoke("freeAudiobooks:popular"),
+  searchFreeAudiobooks: (query: string): Promise<FreeAudiobook[]> =>
+    ipcRenderer.invoke("freeAudiobooks:search", query),
+  loadFreeAudiobook: (identifier: string): Promise<FreeAudiobookDetail> =>
+    ipcRenderer.invoke("freeAudiobooks:load", identifier),
+  importFreeAudiobook: (
+    identifier: string,
+    split: AudiobookSplitOptions
+  ): Promise<Audiobook> =>
+    ipcRenderer.invoke("audiobooks:importFree", identifier, split),
   onAudiobookProgress: (
     callback: (progress: AudiobookProgress) => void
   ): (() => void) => {
@@ -837,9 +857,19 @@ const api = {
     ipcRenderer.invoke("trainingHub:chooseBackupFolder"),
   startActivityBackup: (
     folder: string,
-    fileType: TrainingHubActivityFileType = 4
+    fileType: TrainingHubActivityFileType = 4,
+    filters?: ActivityBackupFilters
   ): Promise<ActivityBackupProgress> =>
-    ipcRenderer.invoke("trainingHub:startActivityBackup", folder, fileType),
+    ipcRenderer.invoke(
+      "trainingHub:startActivityBackup",
+      folder,
+      fileType,
+      filters
+    ),
+  previewActivityBackup: (
+    filters?: ActivityBackupFilters
+  ): Promise<ActivityBackupPreview> =>
+    ipcRenderer.invoke("trainingHub:previewActivityBackup", filters),
   cancelActivityBackup: (): Promise<ActivityBackupProgress | null> =>
     ipcRenderer.invoke("trainingHub:cancelActivityBackup"),
   getActivityBackupProgress: (): Promise<ActivityBackupProgress | null> =>
