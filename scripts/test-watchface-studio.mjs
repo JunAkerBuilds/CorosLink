@@ -258,11 +258,13 @@ assert.equal(importTracker.pendingCount, 0);
 assert.equal(corosWeekdayIndex(0), 6);
 assert.equal(corosWeekdayIndex(1), 0);
 assert.equal(corosWeekdayIndex(6), 5);
-assert.equal(corosMonthSpriteIndex(0), 1);
-assert.equal(corosMonthSpriteIndex(6), 7);
-assert.equal(corosMonthSpriteIndex(11), 0);
-assert.equal(corosMonthLabelForSpriteIndex(0), "DEC");
-assert.equal(corosMonthLabelForSpriteIndex(7), "JUL");
+// Label months are JAN-first on the watch (October = frame 09).
+assert.equal(corosMonthSpriteIndex(0), 0);
+assert.equal(corosMonthSpriteIndex(9), 9);
+assert.equal(corosMonthSpriteIndex(11), 11);
+assert.equal(corosMonthLabelForSpriteIndex(0), "JAN");
+assert.equal(corosMonthLabelForSpriteIndex(9), "OCT");
+assert.equal(corosMonthLabelForSpriteIndex(11), "DEC");
 assert.equal(watchfaceEffectRenderScale(520 / 416, 416 / 800), 0.65);
 assert.deepEqual(
   [...sanitizeWatchfaceAodAlpha(
@@ -1158,9 +1160,9 @@ const monthLabelStyle = {
   }
 };
 assert.deepEqual(
-  dateSpriteCanvasSize(monthLabelResolution, "dateMonth", monthLabelStyle, 1),
+  dateSpriteCanvasSize(monthLabelResolution, "dateMonth", monthLabelStyle, 0),
   { width: 73, height: 29, native: true },
-  "12-sprite month folders should resolve JAN from firmware slot 01"
+  "12-sprite month folders should resolve JAN from firmware slot 00"
 );
 assert.equal(
   removeWatchfaceDateFontOverride({
@@ -4105,7 +4107,7 @@ assert.deepEqual(
     withMetrics.resolutions[1],
     "dateMonth",
     importedMonthLabelsOnDigitTemplate,
-    1
+    0
   ),
   { width: 73, height: 29, native: true },
   "importing JAN–DEC should switch a numeric-month template to label mode"
@@ -4115,7 +4117,7 @@ assert.deepEqual(
     withMetrics.resolutions[0],
     "dateMonth",
     importedMonthLabelsOnDigitTemplate,
-    1,
+    0,
     416 / 800
   ),
   { width: 38, height: 15, native: true },
@@ -4374,15 +4376,15 @@ try {
     rotatedMonthComposition.replacements.find(({ path }) =>
       path.endsWith("/cl_date_month/00.png")
     )?.dataUrl ?? "",
-    /TDEC/,
-    "firmware month slot 00 should wrap to December"
+    /TJAN/,
+    "firmware month slot 00 should contain January"
   );
   assert.match(
     rotatedMonthComposition.replacements.find(({ path }) =>
-      path.endsWith("/cl_date_month/07.png")
+      path.endsWith("/cl_date_month/09.png")
     )?.dataUrl ?? "",
-    /TJUL/,
-    "firmware month slot 07 should contain July, not August"
+    /TOCT/,
+    "firmware month slot 09 should contain October, not September"
   );
   const sizedWeekdayComposition = await buildDateSpriteComposition(
     { archiveId: "sized-weekdays", resolutions: [withMetrics.resolutions[1]] },

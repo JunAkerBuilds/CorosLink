@@ -3998,11 +3998,12 @@ export const WATCHFACE_MONTH_LABELS = [
 ];
 
 /**
- * COROS addresses label-month folders with calendar month numbers modulo 12:
- * 01=JAN through 11=NOV, while 00 wraps to DEC.
+ * COROS label-month folders are JAN-first: 00=JAN through 11=DEC (frame =
+ * month - 1, confirmed on a PACE Pro). They are only drawn as labels when the
+ * month rect is a point; see finalizeWatchfaceDeviceLayout.
  */
 export function corosMonthSpriteIndex(calendarMonthIndex: number): number {
-  return ((Math.trunc(calendarMonthIndex) + 1) % 12 + 12) % 12;
+  return ((Math.trunc(calendarMonthIndex) % 12) + 12) % 12;
 }
 
 /** Returns the calendar label stored at one COROS month-sprite file index. */
@@ -4010,7 +4011,7 @@ export function corosMonthLabelForSpriteIndex(
   spriteIndex: number
 ): string | null {
   const normalized = ((Math.trunc(spriteIndex) % 12) + 12) % 12;
-  return WATCHFACE_MONTH_LABELS[(normalized + 11) % 12] ?? null;
+  return WATCHFACE_MONTH_LABELS[normalized] ?? null;
 }
 
 /** COROS weekday sprites are indexed Monday=0 through Sunday=6. */

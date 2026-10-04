@@ -91,7 +91,7 @@ function monthLabelFor(fileName: string): string | null {
   const index = numericSpriteIndex(fileName, 11);
   return index === null
     ? null
-    : WATCHFACE_MONTH_LABELS[(index + 11) % 12] ?? null;
+    : WATCHFACE_MONTH_LABELS[index] ?? null;
 }
 
 function weekdayLabelFor(fileName: string): string | null {
@@ -633,7 +633,7 @@ export function CustomPngFontPanel({
         <ul>
           <li>Digits: <code>00.png</code> – <code>09.png</code>.</li>
           <li>Weekdays: <code>MON.png</code> – <code>SUN.png</code>, or <code>00.png</code> – <code>06.png</code>.</li>
-          <li>Months: <code>JAN.png</code> – <code>DEC.png</code>, or <code>00.png</code> – <code>11.png</code>. A 0–9 digit folder gives a numeric month instead.</li>
+          <li>Months: <code>JAN.png</code> – <code>DEC.png</code>, or <code>00.png</code> (JAN) – <code>11.png</code> (DEC). A 0–9 digit folder gives a numeric month instead.</li>
           <li>Individual files take priority over a sheet, so you can fix one glyph without re-importing everything.</li>
         </ul>
       </details>

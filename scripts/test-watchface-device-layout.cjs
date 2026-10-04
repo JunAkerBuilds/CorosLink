@@ -71,6 +71,30 @@ async function main() {
     assert.deepEqual(finalize(entries), entries, "incomplete or ambiguous pairs stay untouched");
   }
 
+  // A 12-frame month table is drawn as one label only from a point rect at its
+  // top-left (confirmed on a PACE Pro); a box makes the watch compose digits.
+  const labelConfig = config.replace("[english_date_month_font]=cl_date_month", "[english_date_month_font]=recovered\\group-09")
+    .replace("[french_date_month_rect]={96,52,114,66,hcenter|vcenter}", "[chinese_date_month_rect]={88,36,132,59,right|vcenter}\r\n[chinese_date_month_font]=recovered\\group-09");
+  const labelFrames = Array.from({ length: 12 }, (_, i) =>
+    ({ name: `watchface_240x240/recovered/group-09/${String(i).padStart(2, "0")}.png`, data: png(44, 23) }));
+  for (const name of ["watchface_240x240/config.txt", "watchface_240x240/AODconfig.txt"]) {
+    const labelEntries = [{ name, data: Buffer.from(labelConfig) }, ...labelFrames];
+    const [exported] = finalize(labelEntries);
+    const values = parse(exported.data.toString());
+    assert.equal(values.chinese_date_month_rect, "{88,36,88,36,right|vcenter}", "label month exports as its top-left point");
+    assert.equal(values.english_date_month_rect, "{84,48,84,48,hcenter|vcenter}", "a box wider than the label keeps the label centered");
+    assert.equal(values.english_date_day_rect, day, "digit fields keep their box");
+    assert.equal(restore(exported.data.toString()), labelConfig, "reopening restores the editable boxes");
+    assert.deepEqual(finalize([exported, ...labelFrames])[0].data, exported.data, "label collapse is idempotent");
+    const handEdited = exported.data.toString().replace("{88,36,88,36,", "{90,40,90,40,");
+    assert.equal(parse(restore(handEdited)).chinese_date_month_rect, "{90,40,90,40,right|vcenter}", "a hand-moved point stays as written");
+    const digitBox = labelConfig.replace("{88,36,132,59,right|vcenter}", "{88,36,176,59,right|vcenter}");
+    assert.equal(parse(finalize([{ name, data: Buffer.from(digitBox) }, ...labelFrames])[0].data.toString()).chinese_date_month_rect,
+      "{88,36,176,59,right|vcenter}", "a two-glyph box stays a digit month");
+    assert.deepEqual(finalize([{ name, data: Buffer.from(labelConfig) }, ...labelFrames.slice(0, 10)]).at(0).data,
+      Buffer.from(labelConfig), "a 10-frame digit font is never collapsed");
+  }
+
   // Real archive builds, including full-file edits followed by structured edits.
   const entries = [
     { name: "info.json", data: Buffer.from('{"o_template_id":260526,"o_diy_version":1,"o_wf_ver":3}') },
@@ -82,10 +106,10 @@ async function main() {
       { name: `${root}/background.png`, data: png(size, size) },
       { name: `${root}/thmb.png`, data: png(80, 80) },
       { name: `${root}/AODconfig.txt`, data: Buffer.from(config) });
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 10; i++) {
       const index = String(i).padStart(2, "0");
       entries.push({ name: `${root}/cl_date_month/${index}.png`, data: png(29, 17) });
-      if (i < 10) entries.push({ name: `${root}/cl_date_day/${index}.png`, data: png(22, 46) });
+      entries.push({ name: `${root}/cl_date_day/${index}.png`, data: png(22, 46) });
     }
   }
   const sourcePath = path.join(temp, "source.zip");

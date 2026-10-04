@@ -97,8 +97,8 @@ const completeDesign = { ...design, nativeData: {
 const inventory = watchfaceAutomationAssetContracts(completeTemplate, completeDesign);
 const component = id => { const match = inventory.find(c => c.id === id); assert.ok(match, `Missing contract ${id}`); return match; };
 assert.deepEqual(component("typography:weekday").orderedValues, ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]);
-assert.deepEqual(component("typography:dateMonth").orderedValues, ["DEC", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV"]);
-assert.equal(component("template:month").frames[0].meaning, "DEC");
+assert.deepEqual(component("typography:dateMonth").orderedValues, ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]);
+assert.equal(component("template:month").frames[0].meaning, "JAN");
 assert.equal(component("template:fixed").frames[0].meaning, "Charging", "battery folder inventory includes COROS meanings");
 assert.equal(component("template:selectable").frames[0].meaning, null, "nonstandard states must not inherit digit meanings");
 assert.equal(component("template:fixed").frames[0].file, "frame-20.png", "preserve importer array order instead of parsing file numbers");

@@ -760,7 +760,7 @@ assert.equal(controlIconConfigKey("heartRate"), "control_hr_icon");
 
 // Template font previews resolve the same folder export draws with, labelled
 // the way the firmware reads it: digits by value, weekdays Monday-first, and
-// month labels with COROS's 00=DEC wrap.
+// month labels JAN-first (00=JAN … 11=DEC).
 const digitFiles = (folder) => Array.from({ length: 10 }, (_, index) => ({
   path: `800/${folder}/${String(index).padStart(2, "0")}.png`, width: 20 + index, height: 40
 }));
@@ -810,7 +810,7 @@ assert.deepEqual(
 );
 const monthGlyphs = templateFontGlyphsForLayer(glyphFixtureResolution, "dateMonth");
 assert.equal(monthGlyphs?.kind, "month");
-assert.deepEqual(monthGlyphs?.glyphs.slice(0, 3).map((glyph) => glyph.label), ["DEC", "JAN", "FEB"]);
+assert.deepEqual(monthGlyphs?.glyphs.slice(0, 3).map((glyph) => glyph.label), ["JAN", "FEB", "MAR"]);
 assert.equal(templateFontGlyphsForLayer(glyphFixtureResolution, "dateDay"), null, "a date part without a template font shows no template glyphs");
 assert.equal(templateFontGlyphsForLayer(glyphFixtureResolution, "weather"), null);
 assert.deepEqual(

@@ -126,17 +126,14 @@ export function recoverCompiledCorosWatchface(bytes: Buffer, name: string, templ
   const { width, height } = layout.screen;
   const directory = `watchface_${width}x${height}`;
   const thumbnail = layout.modes[0].elements.find((e) => e.id === "thumbnail")?.asset?.group;
-  // Point-positioned official month tables start at JAN (frame 0). Editable
-  // COROS month folders use 00=DEC, 01=JAN ... 11=NOV. Normalize these recovered
-  // labels once, alongside their inferred rectangles; keep source.bin intact.
-  const pointMonthGroups = new Set(layout.modes.flatMap(mode => mode.elements
-    .filter(e => e.active && e.evidence === "inferred-from-official-month-labels")
-    .map(e => e.asset!.group)));
+  // Point-positioned official month tables are JAN-first (frame = month - 1),
+  // which is also what the watch expects from a DIY label table, so frames
+  // keep their source order. Export collapses their widened rects back to a
+  // point (finalizeWatchfaceDeviceLayout); a box makes the watch draw digits.
   let preview: Buffer | undefined;
   for (const block of blocks) {
     for (let frame = 0; frame < block.frameCount; frame++) {
-      const sourceFrame = pointMonthGroups.has(block.index) ? (frame + 11) % 12 : frame;
-      const png = encodeCorosRgbaPng(block.width, block.height, decodeCorosBitmapFrame(bytes, block, sourceFrame));
+      const png = encodeCorosRgbaPng(block.width, block.height, decodeCorosBitmapFrame(bytes, block, frame));
       entries.push({ name: `${directory}/recovered/group-${String(block.index).padStart(2, "0")}/${String(frame).padStart(2, "0")}.png`, data: png });
       if (frame === 0 && (block.index === thumbnail || !preview)) preview = png;
     }

@@ -155,7 +155,7 @@ export const WATCHFACE_COMPONENT_KIND_GUIDE: Record<string, string> = {
   "state-sprites": "Firmware picks one frame from an ordered state set as the live value changes (battery). Draw every frame as a distinct state with identical canvas size and alignment, install each under stateReplacementsPath/<index>, and preview each verification scenario. A single replacement image makes the indicator static.",
   "digit-font": "Live digits drawn from a font. Either set a fontFamily, or install a rasterFont (PNG atlas + glyphs order + columns) covering 0–9 and clear the fontFamily override so the atlas is used. Scale lives on the matching style object.",
   "weekday-labels": "Live weekday text in firmware order MON..SUN. A rasterFont must cover every glyph needed to compose all seven labels.",
-  "month-labels": "Live month labels in firmware order DEC, JAN..NOV. A rasterFont must cover every glyph needed for all twelve labels.",
+  "month-labels": "Live month labels in firmware order JAN..DEC. A rasterFont must cover every glyph needed for all twelve labels.",
   "weather-assets": "Weather icon/temperature sets at weatherIndicator.assets.<set>[index] = {assetId}. Day and night condition sets share indices 0–40 in COROS order; inspect the original images instead of guessing meanings. Missing indices fall back to bundled defaults.",
   "native-component-assets": "A native data field component (health, training, calendar, weather...). Per-index PNGs at assets[role][index]; style, text and chart parameters at their paths. get_schema section:nativeData ids:[field] explains roles, counts and ordering.",
   "native-graph": "Firmware-drawn graph or value with no sprites; styled through its numeric/color parameters only.",

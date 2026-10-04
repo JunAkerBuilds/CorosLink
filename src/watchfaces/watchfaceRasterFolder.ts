@@ -66,7 +66,7 @@ function monthLabelFor(fileName: string): string | null {
   const stem = fileName.replace(/\.png$/i, "").toUpperCase();
   if (MONTH_LABELS.includes(stem)) return stem;
   const index = numericSpriteIndex(fileName, 11);
-  return index === null ? null : MONTH_LABELS[(index + 11) % 12] ?? null;
+  return index === null ? null : MONTH_LABELS[index] ?? null;
 }
 
 function weekdayLabelFor(fileName: string): string | null {
@@ -119,7 +119,7 @@ export function classifyRasterSpriteFolder(
     )
   );
   // Month components accept two firmware formats: a 0–9 digit font the watch
-  // composes into 1–12, or one label sprite per month (00=DEC, 01–11=JAN–NOV).
+  // composes into 1–12, or one label sprite per month (00=JAN … 11=DEC).
   // A set consisting solely of 00.png–09.png (no 10/11, no JAN-style names)
   // can only be a digit font, so it must not be coerced into label slots.
   const monthDigitFont =

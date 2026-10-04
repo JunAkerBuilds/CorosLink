@@ -57,13 +57,16 @@ fields. Recovery expands such a point to one bitmap cell at the stored
 top-left position, for each language, and records the inference on the
 element. LIMA's `{141,57,141,57}` with 58×29 images becomes
 `{141,57,199,86}`. Raw headers and `source.bin` retain the original bytes.
-When building the editable starter, these point-positioned month tables are
-also reordered from the official JAN-first images to the editable format's
-`00=DEC, 01=JAN, …, 11=NOV` slots. Otherwise an August preview displays SEP.
-All-zero points, invalid/off-screen bounds, numeric fonts and other empty
-value rectangles remain inactive. This repairs newly recovered starters;
-existing saved projects are not rewritten. Reopen the official face to
-recover its month labels.
+The point is what makes the watch draw a single label. With any real box it
+composes the month from two digits, so October shows frames 1 and 0 (confirmed
+on a PACE Pro, V3.1908.0, 2026-10-03). The frames are JAN-first (frame = month
+− 1), the same order the watch expects from DIY label folders, so recovery keeps
+the source order. Export (`finalizeWatchfaceDeviceLayout`) collapses every
+`*_date_month_rect` whose font folder has 12 frames, and whose box is narrower
+than two frames, back to the label's top-left point. A `// CorosLink month
+labels:` line records the editable box so reopening restores it. Projects
+recovered before this change carry DEC-first frames and should be recovered
+again.
 
 The layout map comes from static disassembly of the Android ARM64
 `libw4-watchface.so` shipped in COROS 4.9.9, SHA-256

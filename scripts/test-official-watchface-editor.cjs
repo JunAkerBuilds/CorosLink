@@ -89,7 +89,7 @@ async function main() {
   const { decodeCorosBitmapFrame, findCorosBitmapBlocks } = require("../dist-electron/corosBinLayout.js");
   const monthBlock = findCorosBitmapBlocks(monthSource, 0x1164)[0];
   for (let calendarMonth = 1; calendarMonth <= 12; calendarMonth++) {
-    const frame = String(calendarMonth % 12).padStart(2, "0");
+    const frame = String(calendarMonth - 1).padStart(2, "0");
     const png = PNG.sync.read(await monthZip.files.find(f => f.path === `watchface_240x240/recovered/group-00/${frame}.png`).buffer());
     assert.deepEqual(png.data, decodeCorosBitmapFrame(monthSource, monthBlock, calendarMonth - 1), "Every recovered month maps to the correct editable calendar slot");
   }

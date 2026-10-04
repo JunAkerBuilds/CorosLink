@@ -45,7 +45,7 @@ export function watchfaceComponentAssetContracts(
         ...(!uniform ? { width: file.width, height: file.height } : {})
       })),
       ordering: isCorosBattery ? COROS_BATTERY_STATE_ORDER : folder.kind === "state" ? "Exact template file order. Meanings are unknown unless a specialized component contract defines them; inspect existing assets and preserve indices."
-        : folder.kind === "month" ? "00=DEC, 01=JAN through 11=NOV; retain the template language."
+        : folder.kind === "month" ? "00=JAN through 11=DEC; retain the template language."
         : folder.kind === "week" ? "00=Monday through 06=Sunday; retain the template language."
         : "Digit index 0–9; any extra frames have unknown firmware semantics.",
       installation: "Use the component-specific contract below. A source folder path is not a JSON edit path; arbitrary folders do not have a generic state replacement command."
@@ -64,7 +64,7 @@ export function watchfaceComponentAssetContracts(
       imageValueShape: "rasterFont.dataUrl is a PNG assetId; glyphs defines row-major atlas character order, columns defines the grid. sprites/labels can map exact characters or labels to individual PNG assetIds.",
       installation: "Fetch get_schema section:document for rasterFont. Include all required characters/labels, not just the preview reading. Clear the applicable fontFamily override so the renderer uses rasterFont. Atlas glyph order is declared by glyphs; do not confuse it with firmware label-file order.",
       ordering: kind === "weekday-labels" ? "Firmware order Monday through Sunday. Supply all seven labels or every glyph needed to compose them."
-        : kind === "month-labels" ? "Firmware order DEC, JAN, FEB, MAR, APR, MAY, JUN, JUL, AUG, SEP, OCT, NOV; an atlas may use a different declared glyph order."
+        : kind === "month-labels" ? "Firmware order JAN, FEB, MAR, APR, MAY, JUN, JUL, AUG, SEP, OCT, NOV, DEC; an atlas may use a different declared glyph order."
         : "Complete digits 0 through 9. Punctuation and units are separate components unless the selected raster font explicitly includes them.",
       referenceFrame: frame
     });
