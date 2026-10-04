@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.51] - 2026-10-03
+
+### Fixed
+
+- Recovered official faces with month names (JAN, FEB, …) no longer show two overlapping months from October on, such as "JAN DEC". Exports now keep the official month-label position, and month images run January to December the way the watch reads them. This also applies to month-name sets made or imported in Studio. Open an already-recovered face again from the catalog to pick up the fix.
+
 ## [0.1.50] - 2026-10-02
 
 ### Added
