@@ -572,7 +572,7 @@ export function ChatSettingsPanel({
                   onChange={(event) =>
                     onUpdateLocalDraft({ baseUrl: event.target.value })
                   }
-                  placeholder="http://localhost:11434/v1 or http://192.168.1.20:8000/v1"
+                  placeholder="http://localhost:11434/v1 or https://api.example.com/v1"
                   aria-label="Server URL"
                   spellCheck={false}
                 />

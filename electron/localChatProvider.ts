@@ -85,42 +85,50 @@ export type StreamOpenAiCompatibleChatOptions = Omit<
 
 export function normalizeLocalChatBaseUrl(input: string): string {
   const raw = input.trim() || DEFAULT_LOCAL_CHAT_BASE_URL;
-  const withProtocol = /^[a-z][a-z\d+\-.]*:\/\//i.test(raw)
-    ? raw
-    : `http://${raw}`;
+  const hasProtocol = /^[a-z][a-z\d+\-.]*:\/\//i.test(raw);
   let url: URL;
   try {
-    url = new URL(withProtocol);
+    url = new URL(hasProtocol ? raw : `http://${raw}`);
   } catch {
-    throw new Error("Local model URL is not valid.");
+    throw new Error("Server URL is not valid.");
   }
 
   if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("Local model URL must use http or https.");
+    throw new Error("Server URL must use http or https.");
   }
-  if (!isLocalNetworkHost(url.hostname)) {
-    throw new Error(
-      "Local model URL must point to this computer or a device on your local network (for example 192.168.1.20 or spark.local)."
-    );
+  // Hosted OpenAI-compatible APIs are allowed (the user chooses where their
+  // coaching context goes), but never in cleartext: the API key and training
+  // data would cross the internet unencrypted. Plain http stays limited to
+  // this computer and the local network (issue #126).
+  const localHost = isLocalNetworkHost(url.hostname);
+  if (!localHost && url.protocol !== "https:") {
+    if (hasProtocol) {
+      throw new Error(
+        "Hosted API URLs must use https://. Plain http only works for this computer or your local network."
+      );
+    }
+    url.protocol = "https:";
   }
 
-  const pathName = url.pathname.replace(/\/+$/, "");
-  if (!pathName || pathName === "/") {
-    url.pathname = "/v1";
-  } else if (pathName === "/v1") {
-    url.pathname = "/v1";
-  } else {
-    throw new Error("Local model URL must end at the server root or /v1.");
+  // Accept a pasted endpoint as well as the base URL.
+  const pathName = url.pathname
+    .replace(/\/+$/, "")
+    .replace(/\/(chat\/completions|models)$/i, "");
+  if (localHost && url.port === "11434" && pathName === "/api") {
+    throw new Error(
+      "That is Ollama's native API. Use the server root or /v1 for its OpenAI-compatible API."
+    );
   }
+  // Ollama and LM Studio serve the OpenAI-compatible API under /v1; hosted
+  // providers often use their own prefix (/openai/v1, /api/paas/v4, ...).
+  url.pathname = pathName || "/v1";
   url.search = "";
   url.hash = "";
   return url.toString().replace(/\/$/, "");
 }
 
-// Local runtimes may live on another machine on the LAN (issue #126), but the
-// "local" provider still must not become a way to ship health data to an
-// arbitrary internet host. Accept loopback, private/link-local/CGNAT (Tailscale)
-// addresses, and names that only resolve on a local network.
+// Accept loopback, private/link-local/CGNAT (Tailscale) addresses, and names
+// that only resolve on a local network. These may use plain http.
 const LOCAL_NETWORK_NAME_SUFFIXES = [
   ".localhost",
   ".local",

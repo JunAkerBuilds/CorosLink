@@ -42,7 +42,7 @@
 
 Sign in with your COROS account to see recovery, training load, HRV, sleep, EvoLab scores, race predictions, and full activity detail — then ask the **Coach** about it.
 
-- Coach runs on ChatGPT, Claude Code, OpenRouter, or local models (Ollama, LM Studio, or any OpenAI-compatible server on your network)
+- Coach runs on ChatGPT, Claude Code, OpenRouter, or any OpenAI-compatible API (Ollama, LM Studio, or a hosted provider)
 - Draws charts on request and pins them to the Training Hub, where they refresh with live data
 - Deep analysis from a local FIT-file index: splits, power curve, best efforts, route comparisons
 - Drafts workouts and multi-week plans — nothing is written to COROS until you confirm

@@ -2635,6 +2635,7 @@ export default function App() {
                 >
                   <LazyChatView
                     accountSetupRequest={coachAccountSetupRequest}
+                    visible={activeView === "coach"}
                     api={api}
                     onError={setError}
                     onPlanUploaded={() => {

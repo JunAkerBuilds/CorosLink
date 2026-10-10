@@ -244,6 +244,15 @@
   max-width: 65ch;
   font-size: 13px;
 }
+.account-setup > p[role="alert"] {
+  margin-top: 16px;
+  max-width: 520px;
+  padding: 10px 12px;
+  border: 1px solid var(--error-border);
+  border-radius: var(--radius-sm);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
 .account-setup form {
   display: grid;
   gap: 18px;

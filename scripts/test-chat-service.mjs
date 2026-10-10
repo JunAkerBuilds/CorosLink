@@ -246,22 +246,47 @@ for (const lanUrl of [
 ]) {
   assert.doesNotThrow(() => normalizeLocalChatBaseUrl(lanUrl), lanUrl);
 }
-for (const publicUrl of [
+// Hosted OpenAI-compatible APIs work over https, keeping their own path prefix.
+for (const [hostedUrl, expected] of [
+  ["https://api.example.com/v1", "https://api.example.com/v1"],
+  ["https://api.deepseek.com", "https://api.deepseek.com/v1"],
+  [
+    "https://dashscope.aliyuncs.com/compatible-mode/v1/",
+    "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  ],
+  ["https://api.groq.com/openai/v1", "https://api.groq.com/openai/v1"],
+  ["https://open.bigmodel.cn/api/paas/v4", "https://open.bigmodel.cn/api/paas/v4"],
+  ["https://8.8.8.8/v1", "https://8.8.8.8/v1"],
+  // A bare public host defaults to https rather than failing.
+  ["api.deepseek.com/v1", "https://api.deepseek.com/v1"],
+  // Pasted endpoint URLs are trimmed back to the base URL.
+  ["https://api.example.com/v1/chat/completions", "https://api.example.com/v1"],
+  ["http://localhost:1234/v1/models", "http://localhost:1234/v1"],
+  // Local servers may use their own prefix too (Open WebUI serves /api).
+  ["http://localhost:3000/api", "http://localhost:3000/api"]
+]) {
+  assert.equal(normalizeLocalChatBaseUrl(hostedUrl), expected, hostedUrl);
+}
+for (const cleartextPublicUrl of [
   "http://8.8.8.8:11434/v1",
-  "https://api.example.com/v1",
+  "http://api.example.com/v1",
   "http://172.32.0.1:8000",
   "http://[2001:db8::1]:8000",
   "http://[::ffff:8.8.8.8]:8000"
 ]) {
   assert.throws(
-    () => normalizeLocalChatBaseUrl(publicUrl),
-    /local network/,
-    publicUrl
+    () => normalizeLocalChatBaseUrl(cleartextPublicUrl),
+    /must use https/,
+    cleartextPublicUrl
   );
 }
 assert.throws(
   () => normalizeLocalChatBaseUrl("http://localhost:11434/api"),
   /server root or \/v1/
+);
+assert.throws(
+  () => normalizeLocalChatBaseUrl("ftp://localhost/v1"),
+  /http or https/
 );
 
 assert.equal(

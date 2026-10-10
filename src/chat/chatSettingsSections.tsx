@@ -63,7 +63,7 @@ export const CHAT_SETTINGS_SECTIONS: ReadonlyArray<{
   {
     id: "local",
     label: "Local model",
-    description: "An OpenAI-compatible server on your machine or network",
+    description: "Any OpenAI-compatible server, local or hosted",
     icon: Cpu,
     group: "Providers"
   },

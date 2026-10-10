@@ -7,7 +7,7 @@ const definitions = {
   strength: { title: "Hevy", description: "Connect strength workouts with a Hevy Pro API key.", link: "https://hevy.com/settings?developer" },
   intervals: { title: "intervals.icu", description: "Connect your API key and athlete ID to import activities.", link: "https://intervals.icu/settings" },
   openRouter: { title: "OpenRouter", description: "Configure the API key and model used by Coach. Leave the key blank to keep the saved key.", link: "https://openrouter.ai/settings/keys" },
-  local: { title: "Local / OpenAI-compatible API", description: "Connect Coach to Ollama, LM Studio, or another OpenAI-compatible endpoint. Leave the optional key blank to keep the saved key.", link: null },
+  local: { title: "Local / OpenAI-compatible API", description: "Connect Coach to Ollama, LM Studio, or any OpenAI-compatible API, local or hosted. Hosted APIs need https and receive your coaching context. Leave the optional key blank to keep the saved key.", link: null },
 } as const;
 
 /** Uses the same credential stores as the feature screens; no secrets are saved in browser storage. */
@@ -48,7 +48,7 @@ export function ApiAccountSettings({ api, service }: { api: CorosLinkApi; servic
   async function run(action: () => Promise<void>) {
     setBusy(true); setError(""); setMessage("");
     try { await action(); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Could not update connection."); }
+    catch (caught) { setError(caught instanceof Error ? caught.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : "Could not update connection."); }
     finally { setBusy(false); }
   }
   async function aiConfig(clear = false) {

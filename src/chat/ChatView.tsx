@@ -275,6 +275,8 @@ interface ChatViewProps {
   pendingPrompt?: string | null;
   onPendingPromptConsumed?: () => void;
   accountSetupRequest?: number;
+  /** False while Coach stays mounted behind another view. */
+  visible?: boolean;
 }
 
 function canonicalPlanDistanceMeters(source: PlanWorkoutEntryInput): number {
@@ -1828,7 +1830,8 @@ export function ChatView({
   onActivityChange,
   pendingPrompt,
   onPendingPromptConsumed,
-  accountSetupRequest = 0
+  accountSetupRequest = 0,
+  visible = true
 }: ChatViewProps) {
   const { unitSystem } = useUnitSystem();
   const [authStatus, setAuthStatus] = useState<ChatAuthStatus | null>(null);
@@ -2124,6 +2127,26 @@ export function ChatView({
       }
     };
   }, [api]);
+
+  // Coach stays mounted while hidden, and Settings → Accounts can save the
+  // Local/OpenRouter config meanwhile. Re-read on return, or the next Coach
+  // save would write this stale copy back over it.
+  const wasVisibleRef = useRef(visible);
+  useEffect(() => {
+    const returned = visible && !wasVisibleRef.current;
+    wasVisibleRef.current = visible;
+    if (!api || !returned) return;
+    let cancelled = false;
+    void api
+      .getChatSettings()
+      .then((settings) => {
+        if (!cancelled) setChatSettings(settings);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [api, visible]);
 
   useEffect(() => {
     if (!api || checkingAuth || streaming || !activeSessionId) return;
