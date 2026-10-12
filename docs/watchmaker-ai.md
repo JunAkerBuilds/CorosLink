@@ -241,13 +241,24 @@ The Studio AI panel uses **Codex CLI** as its only enabled engine. The composer
 shows a fixed engine label, and older saved engine preferences are ignored.
 The Electron request handler also forces Codex CLI for older callers.
 It uses the locally installed official `codex` executable,
-its sign-in and default model settings. It runs the CLI’s native app-server
+its sign-in and default model settings for both chat and image generation.
+Watchmaker does not require the separate ChatGPT sign-in in Training Coach.
+It runs the CLI’s native app-server
 harness; shell/file tools belong to Codex. A private, authenticated loopback MCP
 server exposes the same Watchmaker tools, including requirements, asset reviews,
 reference comparisons and editor commands. No external-automation setting or
 user Codex config file is changed. The connection and token are removed when the
 request ends. Shell status appears in the chat activity list; Stop interrupts
 and terminates the CLI process and closes its connection.
+
+Image generation uses Codex's native tool in the same turn, rather than the
+app's direct ChatGPT image endpoint. Completed `imageGeneration` events are
+copied into Studio's asset store at full resolution before the temporary
+workspace closes, and previews appear in the conversation. The agent calls
+`get_generated_images` for their persistent asset IDs, then uses `crop_image`
+and editor commands to size and place them. Generation failures stay in Codex;
+there is no fallback to another login. Disabling image generation also disables
+the native capability for that request.
 
 The built-in engine's 40–120-round progress budget does not apply to CLI mode.
 An MCP handoff is part of Codex's native turn, and shell analysis is not captured
@@ -271,15 +282,21 @@ Watchmaker request. The warning is not a promise of complete filesystem isolatio
 Chat continuity uses the saved Watchmaker conversation and design memory, with an
 ephemeral native CLI thread per user request. A missing or incompatible CLI gives
 an error rather than silently using another engine. Install the official CLI and
-run `codex login` separately if needed. Watchmaker’s `generate_image` tool still
-uses CorosLink’s ChatGPT connection; CLI sign-in alone does not sign in that tool.
+run `codex login` if needed. The same CLI login supplies native image generation.
 
 Validation: `npm run test:watchface-codex-cli` exercises an actual private MCP
 server with a scripted CLI process, native progress events, PNG/file handoff,
 tool failure propagation, continuation, missing executable and cancellation.
+It also covers native image events, duplicate notifications, saved PNG files,
+invalid output and cancellation during image handoff. The chat-loop suite checks
+that the CLI path never invokes CorosLink's image endpoint, and that captured
+assets remain available for cropping and placement.
 `node scripts/test-watchface-codex-cli.mjs --live` additionally runs a harmless
 shell command and a fixture MCP probe using the installed CLI (consumes a small
-model request). It does not connect to the live editor. The existing isolated
+model request). It does not connect to the live editor. The
+`--live-image` option generates one native image and verifies its full-resolution
+Studio asset survives CLI workspace cleanup, using a temporary asset store.
+The focused panel fixture checks the single-login notice. The isolated
 Electron E2E harness accepts `--cli-ui` to inspect the fixed engine label and warning without
 sending a request or changing a face. This integration does not itself establish
 better visual fidelity or on-watch correctness.

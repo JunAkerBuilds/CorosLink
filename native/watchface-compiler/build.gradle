@@ -1,0 +1,16 @@
+plugins { id 'com.android.application' version '8.7.3' }
+android {
+    namespace 'org.coroslink.watchfacecompiler'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'org.coroslink.watchfacecompiler'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+        ndk { abiFilters 'arm64-v8a' }
+    }
+    sourceSets { main { jniLibs.srcDirs = [providers.gradleProperty('compilerLibs').get()] } }
+    packaging { jniLibs { useLegacyPackaging true } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}

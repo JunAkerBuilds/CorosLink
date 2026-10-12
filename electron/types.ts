@@ -101,7 +101,7 @@ export interface WatchStatus {
 /** COROS account region, selecting the regional mobile API host. */
 export type CorosWatchfaceRegion = "eu" | "us" | "cn";
 
-/** A separate COROS mobile-app session used only for custom-watchface sharing. */
+/** COROS mobile-app session for catalogs, sharing, and watch authentication. */
 export interface CorosWatchfaceStatus {
   authenticated: boolean;
   secureStorageAvailable: boolean;
@@ -109,6 +109,9 @@ export interface CorosWatchfaceStatus {
   savedCredentialsAvailable: boolean;
   /** Account identifier only; the saved password digest never leaves the main process. */
   savedEmail?: string;
+  /** Saved Bluetooth key availability, independent of cloud sign-in; key material remains private. */
+  watchAuthenticationAvailable?: boolean;
+  watchAuthenticationError?: string;
   /** Region of the active mobile session, when signed in. */
   region?: CorosWatchfaceRegion;
   /** Best-guess region to preselect in the login form. */
@@ -1970,7 +1973,6 @@ export interface GpxImportSummary {
 
 export interface SpotifyConfig {
   clientId: string;
-  clientSecret: string;
   redirectUri: string;
 }
 
@@ -1980,6 +1982,7 @@ export interface SpotifyStatus {
   redirectUri: string;
   displayName?: string;
   userId?: string;
+  followedPlaylistsUnlocked: boolean;
   tokenExpiresAt?: string;
 }
 

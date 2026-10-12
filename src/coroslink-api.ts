@@ -1,4 +1,5 @@
 import type { CalendarEventTiming, CalendarWorkoutEventRef, CalendarWorkoutEventSaveResult } from "../electron/calendarSyncTypes";
+import type { CorosNativeBleSnapshot } from "../electron/corosNativeBleTypes";
 import type { ChatGptModelInfo } from "../electron/chatModels";
 import type { StrengthEditPreview } from "../electron/workoutEditTypes";
 import type { HealthInsightKind, HealthInsightResult } from "../electron/healthInsightsTypes";
@@ -252,8 +253,40 @@ export interface CorosLinkApi {
     region: CorosWatchfaceRegion
   ) => Promise<CorosWatchfaceStatus>;
   logoutCorosWatchfaces: () => Promise<CorosWatchfaceStatus>;
+  /** Asks to confirm, then removes the saved watch key; resolves with the status either way. */
+  forgetCorosWatchKey?: () => Promise<CorosWatchfaceStatus>;
   listCorosPairedDevices: () => Promise<CorosPairedDevice[]>;
   selectCorosBluetoothDevice: (deviceId: string) => Promise<void>;
+  getCorosNativeBleStatus: () => Promise<CorosNativeBleSnapshot>;
+  connectCorosNativeBle: (input?: import("../electron/corosNativeBleTypes").CorosNativeBleConnectOptions) => Promise<CorosNativeBleSnapshot>;
+  scanCorosNativeBle: () => Promise<CorosNativeBleSnapshot>;
+  refreshCorosNativeBle: () => Promise<CorosNativeBleSnapshot>;
+  getCorosMusicInventory: () => Promise<import("../electron/corosBleMusicTypes").CorosBleMusicInventory>;
+  getCorosWifiMusicStatus: () => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
+  sendCorosMusicOverWifi: () => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
+  sendCorosLibraryMusicOverWifi: (ids: string[]) => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
+  importCorosWifiMusicBackup: () => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
+  cancelCorosWifiMusicSync: () => Promise<void>;
+  restoreCorosWifiMusicSettings: () => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
+  deleteCorosMusicTrack: (target: import("../electron/corosBleMusicTypes").CorosBleMusicDeleteTarget) => Promise<import("../electron/corosBleMusicTypes").CorosBleMusicDeleteResult>;
+  disconnectCorosNativeBle: () => Promise<CorosNativeBleSnapshot>;
+  createCorosPhonePairingCode?: () => Promise<import("../electron/corosNativeBleTypes").CorosPhonePairingCode>;
+  sendCorosNotification: (input: import("../electron/corosBleNotificationProtocol").CorosNotificationInput) => Promise<{ sent: true; fragments: number }>;
+  chooseCorosDirectWatchface: () => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfacePreview | null>;
+  getCorosWatchfaceSyncStatus: () => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfaceStatus>;
+  getCorosWatchfaceSlots: () => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfaceInventory>;
+  syncCorosWatchface: (previewId: string, target?: import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfaceTarget) => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfaceStatus>;
+  cancelCorosWatchfaceSync: () => Promise<void>;
+  getCorosWatchfaceCompilerStatus: () => Promise<import("../electron/corosWatchfaceCompilerTypes").CorosWatchfaceCompilerStatus>;
+  compileCorosDirectWatchface: () => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfacePreview | null>;
+  compileCorosWatchfaceArchive: (input: { archiveId: string; name: string; firmwareType?: string }) => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfacePreview>;
+  saveCorosCompiledWatchface: (previewId: string) => Promise<{ saved: boolean }>;
+  getCorosWifiMapStatus: () => Promise<import("../electron/corosWifiMapTypes").CorosWifiMapStatus>;
+  previewCorosWifiMap: (tiles: import("../electron/corosWifiMapTypes").CorosWifiMapTile[]) => Promise<import("../electron/corosWifiMapTypes").CorosWifiMapPreview>;
+  downloadCorosWifiMap: (previewId: string) => Promise<{ taskId: string; status: import("../electron/corosWifiMapTypes").CorosWifiMapStatus }>;
+  getCorosRouteSyncStatus: () => Promise<import("../electron/corosBleRouteTypes").CorosRouteSyncStatus>;
+  syncCorosRoute: (routeId: string) => Promise<import("../electron/corosBleRouteTypes").CorosRouteSyncStatus>;
+  cancelCorosRouteSync: () => Promise<void>;
   cancelCorosBluetoothDeviceSelection: () => Promise<void>;
   onCorosBluetoothDevices: (
     callback: (devices: CorosBluetoothDeviceChoice[]) => void
@@ -445,6 +478,8 @@ export interface CorosLinkApi {
   getSpotifyStatus: () => Promise<SpotifyStatus>;
   loginSpotify: () => Promise<SpotifyStatus>;
   logoutSpotify: () => Promise<SpotifyStatus>;
+  unlockSpotifyFollowedPlaylists: () => Promise<SpotifyStatus>;
+  lockSpotifyFollowedPlaylists: () => Promise<SpotifyStatus>;
   listSpotifyPlaylists: () => Promise<SpotifyPlaylist[]>;
   listSpotifyPlaylistTracks: (
     playlistId: string

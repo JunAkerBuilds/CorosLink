@@ -4,6 +4,7 @@ import { WatchfaceAiPanel } from '../../src/watchfaces/WatchfaceAiPanel';
 window.saves = []; window.requests = []; window.cancelled = [];
 window.api = {
   listWatchfaceAiChats: async () => [],
+  listWatchfaceAiModels: async () => [],
   onWatchfaceAiEvent: listener => { window.emit = listener; return () => {}; },
   sendWatchfaceAi: async id => { requests.push(id); },
   cancelWatchfaceAi: async id => { cancelled.push(id); },

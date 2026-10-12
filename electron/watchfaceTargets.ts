@@ -27,3 +27,75 @@ export function getWatchfaceTarget(modelOrFirmware: string | undefined): Watchfa
     target.model === value || target.firmwareType.toLowerCase() === value
   );
 }
+
+/** The model number the watch reports over Bluetooth ("W332"): its firmware type without "COROS ". */
+export function watchfaceTargetHardware(target: WatchfaceTarget): string {
+  return target.firmwareType.replace(/^COROS\s+/i, "");
+}
+
+/**
+ * The target for a reported model number ("W332", "COROS W332", "W332-3.2008.0"). Longer
+ * hardware IDs are tried first so "B19S" is not read as "B19".
+ */
+export function watchfaceTargetForModelNumber(modelNumber: string | undefined): WatchfaceTarget | undefined {
+  const value = modelNumber?.trim().toUpperCase();
+  if (!value) return undefined;
+  return [...WATCHFACE_TARGETS].sort((a, b) => watchfaceTargetHardware(b).length - watchfaceTargetHardware(a).length)
+    .find(target => new RegExp(`\\b${watchfaceTargetHardware(target)}\\b`).test(value));
+}
+
+/** The target for an advertised name ("COROS APEX 4 81D0"); the hex suffix only tells watches apart. */
+export function watchfaceTargetForDeviceName(deviceName: string | undefined): WatchfaceTarget | undefined {
+  const model = deviceName?.trim().replace(/\s+[0-9A-F]{4,8}$/i, "").toUpperCase();
+  return model ? WATCHFACE_TARGETS.find(target => `COROS ${target.label}`.toUpperCase() === model) : undefined;
+}
+
+/**
+ * The connected watch's target: by model number, else by advertised name. Only PACE Pro's model
+ * number (W332) has been seen on a real watch; the name covers a model number CorosLink doesn't know.
+ */
+export function connectedWatchfaceTarget(watch: { modelNumber?: string; deviceName?: string } | null | undefined):
+  { target: WatchfaceTarget; source: "model-number" | "name" } | undefined {
+  const byModel = watchfaceTargetForModelNumber(watch?.modelNumber);
+  if (byModel) return { target: byModel, source: "model-number" };
+  const byName = watchfaceTargetForDeviceName(watch?.deviceName);
+  return byName ? { target: byName, source: "name" } : undefined;
+}
+
+/** PACE Pro on firmware 3.2008.0 is the only watch every Bluetooth feature was checked on. */
+export function isValidatedWatch(watch: { modelNumber?: string; deviceName?: string; firmwareRevision?: string; softwareRevision?: string } | null | undefined): boolean {
+  return connectedWatchfaceTarget(watch)?.target.model === "pace-pro" &&
+    /(^|[^0-9.])3\.2008\.0($|[^0-9])/.test([watch?.firmwareRevision, watch?.softwareRevision].filter(Boolean).join(" "));
+}
+
+/**
+ * What a compiled BIN looks like for a target: the layout it compiles, the magic (screen size
+ * reversed, then A for AMOLED or R for memory-in-pixel: "614A", "062R") and the picker thumbnail,
+ * about 0.757 of the screen (measured from COROS's compiler).
+ */
+export interface WatchfaceBinTarget {
+  model: WatchModelId;
+  label: string;
+  screen: number;
+  display: "amoled" | "mip";
+  layout: string;
+  magic: string;
+  thumbnail: number;
+}
+
+const THUMBNAILS: Record<number, number> = { 240: 182, 260: 197, 280: 212, 390: 295, 416: 315, 466: 353 };
+
+export function watchfaceBinTarget(target: WatchfaceTarget): WatchfaceBinTarget {
+  const screen = target.previewSize;
+  return {
+    model: target.model, label: target.label, screen, display: target.display,
+    layout: `watchface_${screen}x${screen}`,
+    magic: String(screen).split("").reverse().join("") + (target.display === "mip" ? "R" : "A"),
+    thumbnail: THUMBNAILS[screen] ?? Math.round(screen * 0.7572)
+  };
+}
+
+/** The targets a compiled BIN's magic fits; same-screen watches (APEX 4 and NOMAD) share one BIN. */
+export function watchfaceTargetsForMagic(magic: string): WatchfaceTarget[] {
+  return WATCHFACE_TARGETS.filter(target => watchfaceBinTarget(target).magic === magic);
+}

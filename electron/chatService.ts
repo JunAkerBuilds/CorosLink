@@ -500,8 +500,9 @@ function waitForAuthorizationCode(
         width: 520,
         height: 720,
         title: "Sign in with ChatGPT",
+        // Not modal: on macOS a modal child becomes a sheet with no close
+        // button, which traps the user if the sign-in page errors.
         parent: parentWindow,
-        modal: Boolean(parentWindow),
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,

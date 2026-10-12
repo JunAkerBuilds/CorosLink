@@ -1,10 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
-import { Check, CircleCheck, Languages, Loader2, Send, TriangleAlert, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Bluetooth, Check, CircleCheck, Download, Languages, Loader2, Send, TriangleAlert, Watch, X } from "lucide-react";
 import type { CorosWatchfaceArchive, CorosWatchfaceTemplateAsset, CorosWatchfaceTemplateDetails } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { renderCompiledWatchfacePreview, type CompiledWatchfacePreview } from "./compiledWatchfacePixels";
 import { pickWatchPreviewResolution, type WatchfaceComplicationId, type WatchfacePreviewMode } from "./watchfaceStudio";
 import { WATCH_LANGUAGE_NAMES, type WatchfaceWatchLanguages } from "./watchfaceLanguages";
+import type { CorosDirectWatchfacePreview } from "../../electron/corosBleWatchfaceTypes";
+import type { CorosWatchfaceCompilerStatus } from "../../electron/corosWatchfaceCompilerTypes";
+import { apiErrorMessage, compileSummary, connectedWatch, useCorosWatchLink, useWatchfaceInstaller, watchBetaNote, watchFaceSyncReady, watchLinkSupported } from "./watchLink";
+import { getWatchfaceTarget, watchfaceBinTarget } from "../../electron/watchfaceTargets";
+import { CompileWarnings, WatchInstallProgress, WatchSlotPicker, watchInstallResult } from "./WatchInstallParts";
+import "./watchLink.css";
+
+/** How long a compiled BIN is reused. Main keeps a prepared BIN for 15 minutes; reusing it after that fails the install. */
+const BIN_REUSE_MS = 10 * 60_000;
 
 /**
  * The Send to COROS panel renders archive sprites at 100%. Firmware-drawn
@@ -42,10 +51,33 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
   const [sample, setSample] = useState("normal");
   const [result, setResult] = useState<CompiledWatchfacePreview | null>(null);
   const [error, setError] = useState("");
+  const [compiler, setCompiler] = useState<CorosWatchfaceCompilerStatus | null>(null);
+  const [compiling, setCompiling] = useState(false);
+  /** The last BIN compiled from this dialog, keyed to the archive and name it came from, and reusable until `reusableUntil`. */
+  const [bin, setBin] = useState<{ preview: CorosDirectWatchfacePreview; archiveId: string; name: string; reusableUntil: number } | null>(null);
+  const [binMessage, setBinMessage] = useState("");
+  const [installCompile, setInstallCompile] = useState<{ state: "active" | "done" | "failed"; detail?: string } | null>(null);
+  const [installNote, setInstallNote] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const compileActive = useRef(false);
+  const currentArchive = useRef(archive.archiveId);
+  currentArchive.current = archive.archiveId;
+  const { snapshot: link, setSnapshot: setLink, error: linkError } = useCorosWatchLink(api);
+  const installReady = watchFaceSyncReady(link);
+  const installer = useWatchfaceInstaller(api, installReady);
   const cache = useMemo(() => new Map<string, CorosWatchfaceTemplateAsset>(), [archive.archiveId]);
-  const resolution = details.resolutions.find((item) => item.directory === directory)!;
+  const resolution = details.resolutions.find((item) => item.directory === directory) ?? details.resolutions[0]!;
   const supportsAod = Object.keys(resolution.aodConfig ?? {}).length > 0;
   const hasFirmwareChart = mode === "current" && Boolean(resolution.config.chart_rect);
+
+  useEffect(() => {
+    let disposed = false;
+    if (typeof api.getCorosWatchfaceCompilerStatus === "function") {
+      void api.getCorosWatchfaceCompilerStatus().then(status => { if (!disposed) setCompiler(status); }).catch(() => {});
+    }
+    setBinMessage("");
+    return () => { disposed = true; };
+  }, [api, archive.archiveId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -67,13 +99,14 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
     return () => { cancelled = true; };
   }, [api, archive.archiveId, cache, complication, details, mode, resolution, sample]);
 
+  const busyRef = useRef(false);
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
     const dialog = document.getElementById("wf-compiled-preview");
     const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>("button:not(:disabled), select:not(:disabled), input:not(:disabled)") ?? []);
     focusable()[0]?.focus();
     const keydown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { event.preventDefault(); onClose(); }
+      if (event.key === "Escape") { event.preventDefault(); if (!busyRef.current) onClose(); }
       if (event.key !== "Tab") return;
       const items = focusable(), first = items[0], last = items.at(-1);
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
@@ -86,6 +119,89 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
   const checks = result?.checks ?? [];
   const [sendName, setSendName] = useState(name);
   const trimmedName = sendName.trim();
+  // The compiler builds the layout of the watch Studio made this archive for (PACE Pro when unknown).
+  const faceTarget = getWatchfaceTarget(archive.firmwareType) ?? getWatchfaceTarget("pace-pro")!;
+  const faceBin = watchfaceBinTarget(faceTarget);
+  const hasTargetLayout = details.resolutions.some((item) => item.width === faceBin.screen && item.height === faceBin.screen);
+  const canCompile = Boolean(result) && !rebuilding && Boolean(trimmedName) && hasTargetLayout &&
+    Boolean(compiler?.available) && typeof api.compileCorosWatchfaceArchive === "function";
+  const compileBlocker = !hasTargetLayout ? `This face has no ${faceBin.screen} × ${faceBin.screen} ${faceTarget.label} layout to compile.`
+    : compiler && !compiler.available ? compiler.detail : null;
+  // A BIN only fits watches with the same screen; the watch would refuse another.
+  const watch = connectedWatch(link);
+  const watchMismatch = watch && watchfaceBinTarget(watch).magic !== faceBin.magic
+    ? `This face is built for ${faceTarget.label}, but ${watch.label} is connected. Convert it for ${watch.label} to install it.` : null;
+  const betaNote = watchBetaNote(link);
+
+  /** Compiles once per archive and name; Save BIN and Install reuse a recent result. */
+  async function compiled(): Promise<CorosDirectWatchfacePreview | null> {
+    if (bin && bin.archiveId === archive.archiveId && bin.name === trimmedName && Date.now() < bin.reusableUntil) return bin.preview;
+    const archiveId = archive.archiveId, name = trimmedName;
+    setCompiling(true);
+    try {
+      const next = await api.compileCorosWatchfaceArchive({ archiveId, name, firmwareType: faceTarget.firmwareType });
+      if (currentArchive.current !== archiveId) throw new Error("The face changed while compiling. Compile the updated archive.");
+      setBin({ preview: next, archiveId, name, reusableUntil: Date.now() + BIN_REUSE_MS });
+      return next;
+    } finally { setCompiling(false); }
+  }
+
+  async function saveBin() {
+    if (compileActive.current || !canCompile) return;
+    compileActive.current = true; busyRef.current = true; setBinMessage("");
+    try {
+      const preview = await compiled();
+      if (preview && (await api.saveCorosCompiledWatchface(preview.id)).saved) setBinMessage(`${preview.name} BIN saved.`);
+    } catch (caught) { setBinMessage(apiErrorMessage(caught, "Could not compile the watch face.")); }
+    finally { compileActive.current = false; busyRef.current = false; }
+  }
+
+  async function installOnWatch() {
+    if (compileActive.current || installer.busy() || !canCompile || !installReady || !installer.target || watchMismatch) return;
+    compileActive.current = true; busyRef.current = true; installer.begin();
+    setInstallNote(null); setBinMessage(""); installer.resetStatus(); installer.setError(null);
+    setInstallCompile({ state: "active" });
+    try {
+      const preview = await compiled();
+      if (!preview) return;
+      setInstallCompile({ state: "done" });
+      // After a failed install, the next attempt compiles afresh rather than retrying a BIN main may have dropped.
+      if (!(await installer.install(preview, true))) setBin(current => current && { ...current, reusableUntil: 0 });
+    } catch (caught) {
+      setInstallCompile({ state: "failed" });
+      setInstallNote(apiErrorMessage(caught, "Could not compile the watch face."));
+    } finally { compileActive.current = false; busyRef.current = false; installer.end(); }
+  }
+
+  async function connectWatch() {
+    if (connecting) return;
+    setConnecting(true); setInstallNote(null);
+    try { setLink(await api.connectCorosNativeBle({ backend: "system" })); }
+    catch (caught) { setInstallNote(apiErrorMessage(caught, "Could not connect the watch.")); }
+    finally { setConnecting(false); }
+  }
+
+  const installing = Boolean(installCompile?.state === "active") || installer.transferring;
+  const busy = compiling || installing;
+  const installResult = !installing && installCompile?.state === "done" ? watchInstallResult(installer.status) : null;
+  const target = installer.target;
+  // With a watch link the footer sends to the watch and Save BIN moves into the install card.
+  const watchInstall = watchLinkSupported(link) && typeof api.compileCorosWatchfaceArchive === "function";
+  // Hold the footer on Send to watch while the first link status loads, so it doesn't flip from Save BIN.
+  const watchFooter = watchInstall || (link === null && !linkError && typeof api.getCorosNativeBleStatus === "function" &&
+    typeof api.compileCorosWatchfaceArchive === "function");
+  const installHint = compileBlocker ?? (!link?.connected ? "Connect your watch to send this face"
+    : !installReady ? "Installing needs an authenticated COROS watch that CorosLink supports"
+    : watchMismatch ? watchMismatch
+    : installer.reading ? "Reading watch face slots…"
+    : !target ? "Choose a slot on the watch"
+    : target.faceId === null ? `Install in empty slot ${target.slot + 1}` : `Replace face ID ${target.faceId} in slot ${target.slot + 1}`);
+  const saveBinTitle = compileBlocker ?? `Compile this face to a ${faceTarget.label} BIN and save it`;
+  const linkLabel = !link ? "" : link.phase === "connecting" || connecting ? "Connecting…"
+    : link.phase === "scanning" ? "Finding watch…"
+    : link.connected ? `${link.deviceName ?? "COROS watch"}${installReady ? (betaNote ? " · beta" : "") : link.systemBind === "authenticated" ? " · unsupported watch" : " · not authenticated"}`
+    : "Watch not connected";
+  const linkTone = !link?.connected ? (connecting || link?.phase === "connecting" ? "busy" : "off") : installReady && !watchMismatch ? "ok" : "warn";
   const designed = customWeekday ? "your weekday labels" : "the weekday as designed";
   const languageNote = languageMode === "all"
     ? `Every language shows ${designed}.`
@@ -94,13 +210,13 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
       : `Tap a language to give it ${designed}; the rest keep their translations.`;
 
   return <div className="wf-modal-backdrop" role="presentation">
-    <section id="wf-compiled-preview" className="wf-modal wf-send-panel" role="dialog" aria-modal="true" aria-labelledby="wf-send-title" aria-busy={rebuilding}>
+    <section id="wf-compiled-preview" className="wf-modal wf-send-panel" role="dialog" aria-modal="true" aria-labelledby="wf-send-title" aria-busy={rebuilding || busy}>
       <header className="wf-send-header">
         <div>
           <h2 id="wf-send-title">Send to COROS</h2>
           <p>Archive artwork with sample live readings. Firmware-drawn charts may differ on your watch.</p>
         </div>
-        <button type="button" className="wf-send-dismiss" aria-label="Close" title="Close" onClick={onClose}><X size={16} /></button>
+        <button type="button" className="wf-send-dismiss" aria-label="Close" title="Close" disabled={busy} onClick={onClose}><X size={16} /></button>
       </header>
 
       <div className="wf-send-body">
@@ -123,7 +239,7 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
                 : <div className="wf-export-pixel-scroll"><img src={result.dataUrl} width={result.width} height={result.height} alt={`Compiled ${mode === "aod" ? "always-on" : "Current"} watch face at ${result.width} × ${result.height} pixels`} /></div>}
           </div>
           <p className="wf-send-caption">{resolution.width} × {resolution.height} · shown at 1:1, one image pixel per screen pixel</p>
-          {hasFirmwareChart ? <p className="wf-send-caption" role="note">Chart lines and bars are drawn by COROS after this preview. On PACE Pro, custom chart colors can appear blue on the watch even when they look orange or white here.</p> : null}
+          {hasFirmwareChart ? <p className="wf-send-caption" role="note">Chart lines and bars are drawn by the watch after this preview. Install on watch keeps their colors. Sent through the COROS app, they are packed to 6 bits and PACE Pro draws them dark blue.</p> : null}
         </div>
 
         <aside className="wf-send-side" aria-label="Send settings">
@@ -133,6 +249,41 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
               onChange={(event) => setSendName(event.target.value)} />
             <small>Shown in the COROS app and on your watch.</small>
           </label>
+          {watchInstall ? <section className="wf-send-card wf-send-install" aria-labelledby="wf-send-install-title" aria-busy={installing || undefined}>
+            <div className="wf-send-install-head">
+              <h3 id="wf-send-install-title"><Watch size={15} aria-hidden="true" />Install on watch</h3>
+              <button type="button" className="watch-link-icon-button" aria-label="Save BIN" title={saveBinTitle}
+                disabled={!canCompile || busy} onClick={() => void saveBin()}>
+                {compiling && !installing ? <Loader2 className="spin" size={14} aria-hidden="true" /> : <Download size={14} aria-hidden="true" />}
+              </button>
+            </div>
+            <div className="wf-send-install-link">
+              <span className={`watch-link-state is-${linkTone}`} role="status" title={linkLabel}>{linkLabel}</span>
+              {!link?.connected ? <button type="button" className="secondary-button watch-link-button" disabled={connecting || link?.phase === "connecting" || busy}
+                onClick={() => void connectWatch()}>
+                {connecting ? <Loader2 className="spin" size={14} aria-hidden="true" /> : <Bluetooth size={14} aria-hidden="true" />} Connect
+              </button> : null}
+            </div>
+            {installer.inventory ? <WatchSlotPicker installer={installer} compact disabled={busy || installer.reading} />
+              : <p>{!link?.connected ? `Connect your ${faceTarget.label} to choose a slot. To pair a new watch, use the watch menu in the toolbar.`
+                : !installReady ? "Installing needs an authenticated COROS watch that CorosLink supports."
+                : installer.reading ? "Reading watch face slots…" : "Couldn't read the watch face slots."}</p>}
+            {installing || installResult || installCompile?.state === "failed"
+              ? <WatchInstallProgress status={installer.status} compile={installCompile ?? undefined} />
+              : installer.inventory ? <p>{!target ? "Every slot is in use. Select the face to replace."
+                : target.faceId === null ? `Installs into empty slot ${target.slot + 1}.`
+                : `Replaces face ID ${target.faceId} in slot ${target.slot + 1}.`}</p> : null}
+            {installer.transferring ? <div className="wf-send-install-actions">
+              <button type="button" className="secondary-button watch-link-button" onClick={installer.cancel}>Cancel install</button>
+            </div> : null}
+            {watchMismatch ? <p className="watch-link-note is-error" role="alert">{watchMismatch}</p> : null}
+            {betaNote && !watchMismatch ? <p className="watch-link-note" role="note">{betaNote}</p> : null}
+            {bin?.archiveId === archive.archiveId ? <CompileWarnings warnings={bin.preview.compile?.warnings} /> : null}
+            {installResult ? <p className="watch-link-note is-success" role="status">{installResult}</p> : null}
+            {installNote || installer.error ? <p className="watch-link-note is-error" role="alert">{installNote ?? installer.error}</p> : null}
+            {compileBlocker ? <small>{compileBlocker}</small> : <small>{bin?.archiveId === archive.archiveId && bin.preview.compile ? `${compileSummary(bin.preview)}. `
+              : "Compiles on this computer. "}Sends over Bluetooth. Experimental.</small>}
+          </section> : null}
           <fieldset className="wf-send-card wf-send-languages" disabled={rebuilding}>
             <legend><Languages size={15} aria-hidden="true" />Watch languages</legend>
             <div className="wf-send-segmented is-full" role="radiogroup" aria-label="Weekday languages">
@@ -168,9 +319,20 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
         </aside>
       </div>
 
+      {binMessage ? <p className="wf-send-caption" role="status">{binMessage}</p> : null}
       <div className="wf-modal-actions wf-send-actions">
-        <button type="button" className="secondary-button" onClick={onClose}>Close</button>
-        <button type="button" className="primary-button" disabled={!result || rebuilding || !trimmedName} onClick={() => { onClose(); onPublish(archive, trimmedName); }}>
+        <button type="button" className="secondary-button" disabled={busy} onClick={onClose}>Close</button>
+        {watchFooter ? <button type="button" className={`secondary-button wf-send-watch${installing ? " is-busy" : ""}`}
+          disabled={!canCompile || !installReady || !target || busy || installer.reading || Boolean(watchMismatch)} title={installHint}
+          onClick={() => void installOnWatch()}>
+          {installing ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <Watch size={15} aria-hidden="true" />}
+          {installing ? (installCompile?.state === "active" ? "Compiling…" : "Installing…") : "Send to watch"}
+        </button>
+          : typeof api.compileCorosWatchfaceArchive === "function" ? <button type="button" className="secondary-button" disabled={!canCompile || busy}
+            title={saveBinTitle} onClick={() => void saveBin()}>
+            {compiling && !installing ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <Download size={15} aria-hidden="true" />} Save BIN
+          </button> : null}
+        <button type="button" className="primary-button" disabled={!result || rebuilding || busy || !trimmedName} onClick={() => { onClose(); onPublish(archive, trimmedName); }}>
           <Send size={15} aria-hidden="true" />Send to COROS
         </button>
       </div>

@@ -1,0 +1,930 @@
+/*
+ * Watch link: the On watch tab's card (identity row, slot strip, install
+ * row), Studio's "Install on watch" card in the Send dialog, and the
+ * controls inside the toolbar watch menu (src/watch/watchConnection.css).
+ * Hub glass comes from the --wf-faces-* family; the Send dialog supplies
+ * --send-*. Hairlines mix from --text-muted so they survive the paper theme.
+ */
+
+.watch-link,
+.wf-send-install,
+.watch-menu-panel {
+  --watch-link-rule: color-mix(in srgb, var(--text-muted) 26%, transparent);
+  --watch-link-control: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --watch-link-control-hover: color-mix(in srgb, var(--text-primary) 9%, transparent);
+  --watch-link-ok: var(--success-text);
+  --watch-link-ok-bg: var(--success-bg);
+  --watch-link-ok-line: var(--success-border);
+}
+
+:root[data-theme="paper"] :is(.watch-link, .wf-send-install, .watch-menu-panel) {
+  --watch-link-ok: #1d7a58;
+  --watch-link-ok-bg: color-mix(in srgb, #2fa77d 12%, transparent);
+  --watch-link-ok-line: color-mix(in srgb, #2fa77d 34%, transparent);
+}
+
+.watch-link {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--wf-faces-edge, var(--glass-border));
+  border-radius: var(--wf-faces-radius, 18px);
+  background: var(--wf-faces-panel, var(--glass-bg));
+  box-shadow: inset 0 1px 0 var(--wf-faces-highlight, transparent), var(--wf-faces-shadow, none);
+}
+
+/* Identity row ------------------------------------------------------------ */
+
+.watch-link-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px 20px;
+}
+
+.watch-link-identity {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 14px;
+}
+
+.watch-link-identity > div {
+  min-width: 0;
+}
+
+.watch-link-glyph {
+  position: relative;
+  display: grid;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 1px solid var(--watch-link-rule);
+  border-radius: 14px;
+  background: var(--watch-link-control);
+  color: var(--text-secondary);
+}
+
+.watch-link-glyph::after {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--wf-faces-ground, var(--surface));
+  border-radius: 50%;
+  background: var(--text-muted);
+  content: "";
+}
+
+.watch-link-glyph.is-ok {
+  border-color: var(--watch-link-ok-line);
+  background: var(--watch-link-ok-bg);
+  color: var(--watch-link-ok);
+}
+
+.watch-link-glyph.is-ok::after { background: var(--success-dot); }
+.watch-link-glyph.is-busy { color: var(--accent); }
+.watch-link-glyph.is-busy::after { background: var(--accent); animation: watch-link-pulse 1.4s ease-in-out infinite; }
+.watch-link-glyph.is-warn { color: var(--warning-text); }
+.watch-link-glyph.is-warn::after { background: var(--warning-text); }
+.watch-link-glyph.is-error { color: var(--error-text); }
+.watch-link-glyph.is-error::after { background: var(--error-dot); }
+
+@keyframes watch-link-pulse {
+  50% { opacity: 0.35; }
+}
+
+.watch-link-eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.watch-link h2 {
+  margin: 3px 0 7px;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-link-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.watch-link-state,
+.watch-link-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--watch-link-rule);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.watch-link-chip svg { color: var(--text-secondary); }
+
+.watch-link-state::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  content: "";
+}
+
+.watch-link-state.is-ok {
+  border-color: var(--watch-link-ok-line);
+  background: var(--watch-link-ok-bg);
+  color: var(--watch-link-ok);
+}
+
+.watch-link-state.is-ok::before { background: var(--success-dot); }
+.watch-link-state.is-busy { color: var(--text-primary); }
+.watch-link-state.is-busy::before { background: var(--accent); animation: watch-link-pulse 1.4s ease-in-out infinite; }
+
+.watch-link-state.is-warn {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.watch-link-state.is-warn::before { background: var(--warning-text); }
+
+.watch-link-state.is-error {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+.watch-link-state.is-error::before { background: var(--error-dot); }
+
+/* Paper's --warning-text is ~3.8:1 on grey cards; this amber keeps 4.5:1+. */
+:root[data-theme="paper"] .watch-link-state.is-warn,
+:root[data-theme="paper"] :is(.watch-link, .wf-send-install, .watch-menu-panel) .watch-compile-warnings .watch-compile-warnings-title { color: #8a5a00; }
+
+.watch-link-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Controls ---------------------------------------------------------------- */
+
+:is(.watch-link, .wf-send-install, .watch-menu-panel) .watch-link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+:is(.watch-link, .wf-send-install, .watch-menu-panel) .watch-link-button svg { color: currentColor; flex: none; }
+
+/* Busy, not unavailable: keep full contrast while compiling or sending. */
+:is(.watch-link, .wf-send-install, .watch-menu-panel) .watch-link-button.is-busy:disabled {
+  cursor: progress;
+  opacity: 1;
+}
+
+:is(.watch-link, .wf-send-install, .watch-menu-panel) .watch-link-icon-button {
+  display: inline-grid;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--watch-link-rule);
+  border-radius: 10px;
+  background: var(--watch-link-control);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+:is(.watch-link, .wf-send-install, .watch-menu-panel) .watch-link-icon-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--watch-link-rule));
+  background: var(--watch-link-control-hover);
+  color: var(--accent);
+}
+
+:is(.watch-link, .wf-send-install, .watch-menu-panel) .watch-link-icon-button:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.watch-link-hint {
+  flex: 1 1 260px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.watch-link-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.watch-link-note.is-success { color: var(--watch-link-ok); }
+.watch-link-note.is-error { color: var(--error-text); }
+
+/* On watch: hub tab, slots, source and install ---------------------------- */
+
+/* The device tab sits apart from the design tabs, with a connection lamp. */
+.watchface-shell--hub .watchface-dashboard-tabs > #watchface-watch-tab { margin-left: auto; }
+
+.watchface-shell--hub .watchface-dashboard-tabs > button > .watchface-tab-lamp {
+  display: block;
+  width: 7px;
+  min-width: 0;
+  height: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--text-muted);
+  box-shadow: none;
+}
+
+.watchface-shell--hub .watchface-dashboard-tabs > button > .watchface-tab-lamp.is-connected {
+  background: var(--success-dot);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--success-dot) 45%, transparent);
+}
+
+
+.watch-faces {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.watch-faces-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.watch-faces-head h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.watch-faces-head p {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.watch-slots,
+.watch-slots-placeholder {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.watch-slot {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 9px 10px 8px;
+  border: 1px solid var(--watch-link-rule);
+  border-radius: 10px;
+  background: var(--watch-link-control);
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+/* Visually hidden but focusable; the label is the hit target. */
+.watch-slot input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.watch-slot:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--watch-link-rule)); }
+.watch-slot:has(input:focus-visible) { outline: 2px solid var(--wf-focus, var(--accent)); outline-offset: 2px; }
+
+.watch-slot.is-empty {
+  border-style: dashed;
+  background: transparent;
+}
+
+.watch-slot.is-selected {
+  border-color: var(--accent);
+  border-style: solid;
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.watch-slot-number {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.watch-slot-state {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-slot.is-selected .watch-slot-state { color: var(--text-primary); }
+
+.watch-slots:disabled .watch-slot { cursor: default; opacity: 0.6; }
+.watch-slots:disabled .watch-slot:hover { border-color: var(--watch-link-rule); }
+.watch-slots:disabled .watch-slot.is-selected { border-color: var(--accent); opacity: 0.85; }
+
+.watch-slots-placeholder span {
+  height: 50px;
+  border: 1px dashed var(--watch-link-rule);
+  border-radius: 10px;
+}
+
+.watch-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--watch-link-rule);
+  border-radius: 12px;
+  background: var(--watch-link-control);
+}
+
+.watch-source-glyph {
+  display: grid;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.watch-source.is-empty .watch-source-glyph {
+  background: var(--watch-link-control-hover);
+  color: var(--text-secondary);
+}
+
+.watch-source-text {
+  display: grid;
+  flex: 1 1 220px;
+  min-width: 0;
+  gap: 2px;
+}
+
+.watch-source-text strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-source-text span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.watch-install {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.watch-install > :first-child { flex: 1 1 300px; min-width: 0; }
+
+.watch-install-destination {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.watch-install-destination strong { color: var(--text-primary); font-weight: 600; }
+
+.watch-install-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Compile warnings -------------------------------------------------------- */
+
+.watch-compile-warnings {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Outranks the Send dialog's `.watchface-shell .wf-send-card p` grey. */
+:is(.watch-link, .wf-send-install, .watch-menu-panel) .watch-compile-warnings .watch-compile-warnings-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--warning-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.watch-compile-warnings-title svg { flex: none; color: currentColor; }
+
+.watch-compile-warnings ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.watch-compile-warnings li.is-more { list-style: none; }
+
+/* Install progress -------------------------------------------------------- */
+
+.watch-install-progress {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.watch-install-progress ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.watch-install-progress li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.watch-install-progress li small {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-install-dot {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1.5px solid var(--watch-link-rule);
+  border-radius: 50%;
+  color: var(--text-secondary);
+}
+
+.watch-install-progress li.is-active { color: var(--text-primary); }
+.watch-install-progress li.is-active .watch-install-dot { border-color: var(--accent); color: var(--accent); }
+.watch-install-progress li.is-done { color: var(--text-primary); }
+
+.watch-install-progress li.is-done .watch-install-dot {
+  border-color: var(--success-dot);
+  background: var(--success-dot);
+  color: #062016;
+}
+
+.watch-install-progress li.is-failed { color: var(--error-text); }
+.watch-install-progress li.is-failed .watch-install-dot { border-color: var(--error-dot); color: var(--error-text); }
+
+.watch-install-bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--watch-link-control-hover);
+}
+
+.watch-install-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 300ms ease;
+}
+
+/* Message composer (watch menu) ------------------------------------------ */
+
+.watch-link-composer {
+  display: grid;
+  gap: 10px;
+}
+
+.watch-link-composer label {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.watch-link-composer textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: 12px;
+  resize: vertical;
+  border: 1px solid var(--watch-link-rule);
+  border-radius: 12px;
+  background: var(--watch-link-control);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.watch-link-composer textarea::placeholder { color: var(--text-secondary); }
+.watch-link-composer textarea[aria-invalid="true"] { border-color: var(--error-border); }
+
+.watch-link-composer-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.watch-link-composer-footer p {
+  flex: 1 1 240px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Connection details (watch menu) ------------------------------------------ */
+
+.watch-link-details {
+  display: grid;
+  gap: 14px;
+}
+
+.watch-link-details dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.watch-link-details dl > div {
+  min-width: 0;
+  padding: 9px 12px 10px;
+  border: 1px solid var(--watch-link-rule);
+  border-radius: 10px;
+  background: var(--watch-link-control);
+}
+
+.watch-link-details dt {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.watch-link-details dd {
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-link-events,
+.watch-link-key {
+  display: grid;
+  gap: 6px;
+}
+
+.watch-link-events h3,
+.watch-link-key h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.watch-link-key .watch-link-button { justify-self: start; }
+
+.watch-link-key p:not(.watch-link-note),
+.watch-link-events p,
+.watch-link-events li,
+.watch-link-channels p,
+.watch-link-channels li {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.watch-link-events ul,
+.watch-link-channels ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.watch-link-events time {
+  margin-right: 8px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-link-channels {
+  border-top: 1px solid var(--watch-link-rule);
+  padding-top: 10px;
+}
+
+.watch-link-channels summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  list-style: none;
+}
+
+.watch-link-channels summary::-webkit-details-marker { display: none; }
+
+.watch-link-channels summary::before {
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  content: "";
+  transform: rotate(-45deg);
+  transition: transform 140ms ease;
+}
+
+.watch-link-channels[open] summary::before { transform: rotate(45deg); }
+
+.watch-link-channels[open] summary { margin-bottom: 8px; color: var(--text-primary); }
+.watch-link-channels li strong { margin-right: 8px; color: var(--text-primary); text-transform: capitalize; }
+.watch-link-channels li.is-live strong { color: var(--watch-link-ok); }
+
+/* Studio Send dialog: Install on watch ------------------------------------ */
+
+.wf-send-install .wf-send-install-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wf-send-install .wf-send-install-head .watch-link-icon-button {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  margin: -4px -4px -4px 0;
+  border-radius: 8px;
+}
+
+.wf-send-install .wf-send-install-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wf-send-install .watch-link-state { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+.wf-send-install .watch-slots {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.wf-send-install .watch-slot {
+  padding: 6px 7px;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.wf-send-install .watch-slot-number { font-size: 13px; }
+.wf-send-install .watch-slot-state { font-size: 10.5px; }
+
+.wf-send-install .wf-send-install-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Send to watch sits in the dialog footer; busy is not unavailable. */
+.watchface-shell .wf-send-actions .wf-send-watch.is-busy:disabled {
+  cursor: progress;
+  opacity: 1;
+}
+
+.wf-send-install .watch-install-progress ol { gap: 6px 11px; }
+.wf-send-install .watch-install-progress li { gap: 5px; font-size: 12px; }
+.wf-send-install .watch-install-progress li small { font-size: 11.5px; }
+.wf-send-install .watch-install-dot { width: 16px; height: 16px; }
+
+@media (max-width: 1100px) {
+  .watch-slots,
+  .watch-slots-placeholder { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .watch-link { padding: 16px; }
+  .watch-link-actions { width: 100%; }
+  .watch-link-actions > .watch-link-button { flex: 1; }
+  .watch-install-actions { width: 100%; }
+  .watch-install-actions > .watch-link-button { flex: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .watch-link-glyph.is-busy::after,
+  .watch-link-state.is-busy::before { animation: none; }
+  .watch-install-bar span { transition: none; }
+}
+
+/* iPhone pairing ---------------------------------------------------------- */
+
+.watch-link-phone {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 20px 28px;
+}
+
+.watch-link-phone-copy {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.watch-link-phone-copy h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.watch-link-phone-copy p,
+.watch-link-phone-copy ol {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.watch-link-phone-copy ol {
+  display: grid;
+  gap: 4px;
+  padding-left: 20px;
+}
+
+.watch-link-phone-copy strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.watch-link-phone-copy .watch-link-phone-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 36%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-gold) 9%, transparent);
+  color: var(--text-primary);
+}
+
+.watch-link-phone-warning svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent-gold);
+}
+
+.watch-link-phone-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.watch-link-phone-code {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.watch-link-phone-code img {
+  display: block;
+  width: 260px;
+  height: 260px;
+  border-radius: 14px;
+  /* Quiet zone stays white on both themes so phones can read it. */
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  image-rendering: pixelated;
+}
+
+.watch-link-phone-code figcaption {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  max-width: 260px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.watch-link-phone-timer {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.watch-link-phone-placeholder {
+  display: grid;
+  place-items: center;
+  width: 260px;
+  height: 260px;
+  border: 1px dashed var(--watch-link-rule);
+  border-radius: 14px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 760px) {
+  .watch-link-phone {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .watch-link-phone-code {
+    justify-self: center;
+  }
+}

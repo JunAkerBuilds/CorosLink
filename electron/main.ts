@@ -13,6 +13,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { listLocalFontFamilies } from "./fontService";
+import { corosNativeBle } from "./corosNativeBleService";
+import { resolveWifiMusicLibraryFiles } from "./corosWifiMusicLibrary";
+import { getCorosWatchfaceCompiler } from "./corosWatchfaceCompiler";
+import { getWatchfaceTarget } from "./watchfaceTargets";
 import { isWebUrl } from "./externalLinks";
 import { registerWatchfaceAutomation } from "./watchfaceAutomation";
 import { onWatchfaceRendererNavigation } from "./watchfaceRendererLifecycle";
@@ -45,10 +49,12 @@ import {
   listSpotifyPlaylists,
   listSpotifyPlaylistTracks,
   listSpotifySyncState,
+  lockSpotifyFollowedPlaylists,
   loginSpotify,
   logoutSpotify,
   saveSpotifyConfig,
-  syncSpotifyPlaylist
+  syncSpotifyPlaylist,
+  unlockSpotifyFollowedPlaylists
 } from "./spotifyService";
 import {
   cancelActivityBackup,
@@ -139,6 +145,7 @@ import {
   downloadCorosWatchfaceTheme,
   exportCorosWatchfaceProject,
   exportCorosWatchfaceArchive,
+  forgetCorosWatchKey,
   getCorosBatteryReport,
   getCorosWatchfaceStatus,
   importCorosWatchfaceShareLink,
@@ -923,7 +930,20 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("before-quit", () => {
+let wifiMusicQuitPending = false;
+let wifiMusicQuitReady = false;
+app.on("before-quit", event => {
+  if (!wifiMusicQuitReady && corosNativeBle.isWifiMusicActive()) {
+    event.preventDefault();
+    if (!wifiMusicQuitPending) {
+      wifiMusicQuitPending = true;
+      // Bounded: an unfinished restore stays journaled and runs on the next connection.
+      void Promise.race([corosNativeBle.finishWifiMusicBeforeQuit(), new Promise(resolve => setTimeout(resolve, 30_000))])
+        .finally(() => { wifiMusicQuitReady = true; app.quit(); });
+    }
+    return;
+  }
+  void corosNativeBle.stop();
   void watchfaceAutomation?.stop();
   void workoutAutomation?.stop();
   stopGoogleCalendarSync();
@@ -932,6 +952,141 @@ app.on("before-quit", () => {
 });
 
 function registerIpcHandlers(): void {
+  ipcMain.handle("corosBle:status", () => corosNativeBle.status());
+  ipcMain.handle("corosBle:connect", (_event, input?: import("./corosNativeBleTypes").CorosNativeBleConnectOptions) => corosNativeBle.connect(input?.pair === true, input));
+  ipcMain.handle("corosBle:scan", () => corosNativeBle.scan());
+  ipcMain.handle("corosBle:refresh", () => corosNativeBle.refresh());
+  // Bluetooth music (library reads, deletes, Wi-Fi send) isn't supported in release builds yet.
+  const requireBleMusic = () => {
+    if (app.isPackaged) throw new Error("Bluetooth music sync isn't available in this version of CorosLink.");
+  };
+  ipcMain.handle("corosBle:musicInventory", () => { requireBleMusic(); return corosNativeBle.listMusic(); });
+  ipcMain.handle("corosBle:wifiMusicStatus", () => { requireBleMusic(); return corosNativeBle.wifiMusicStatus(); });
+  /** The main window, when it (not a subframe or another window) sent the request. */
+  const mainWindowSender = (event: Electron.IpcMainInvokeEvent, action: string) => {
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    if (!owner || owner !== mainWindow || owner.isDestroyed() || event.senderFrame !== event.sender.mainFrame) {
+      throw new Error(`Use ${action} from CorosLink's main window.`);
+    }
+    return owner;
+  };
+  const audioOwner = (event: Electron.IpcMainInvokeEvent) => {
+    requireBleMusic();
+    return mainWindowSender(event, "audio sync");
+  };
+  ipcMain.handle("corosBle:wifiMusicSend", event => {
+    const owner = audioOwner(event);
+    return corosNativeBle.sendMusicOverWifi(async () => {
+      const result = await dialog.showOpenDialog(owner, { title: "Send MP3s to watch podcasts over Wi-Fi", properties: ["openFile", "multiSelections"],
+        filters: [{ name: "MP3 audio", extensions: ["mp3"] }] });
+      return result.canceled ? null : result.filePaths;
+    });
+  });
+  ipcMain.handle("corosBle:wifiMusicLibrarySend", (event, ids: unknown) => {
+    audioOwner(event);
+    return corosNativeBle.sendMusicOverWifi(async () => resolveWifiMusicLibraryFiles(ids, getDownloadById));
+  });
+  ipcMain.handle("corosBle:wifiMusicBackup", event => {
+    const owner = audioOwner(event);
+    return corosNativeBle.importWifiMusicBackup(async () => {
+      const result = await dialog.showOpenDialog(owner, { title: "Choose a current watch download-settings backup", properties: ["openFile"],
+        filters: [{ name: "CorosLink encrypted Wi-Fi settings", extensions: ["enc"] }] });
+      return result.canceled ? null : result.filePaths[0] ?? null;
+    });
+  });
+  ipcMain.handle("corosBle:wifiMusicCancel", event => { audioOwner(event); corosNativeBle.cancelWifiMusicSync(); });
+  ipcMain.handle("corosBle:wifiMusicRestore", event => { audioOwner(event); return corosNativeBle.restoreWifiMusicSettings(); });
+  ipcMain.handle("corosBle:deleteMusic", (event, target: import("./corosBleMusicTypes").CorosBleMusicDeleteTarget) => {
+    requireBleMusic();
+    return corosNativeBle.deleteMusic(target, async track => {
+      const owner = BrowserWindow.fromWebContents(event.sender);
+      if (!owner || owner.isDestroyed()) return false;
+      const result = await dialog.showMessageBox(owner, {
+        type: "warning", buttons: ["Cancel", "Delete from watch"], defaultId: 0, cancelId: 0,
+        message: `Delete “${track.name}” from the watch?`,
+        detail: "This removes the MP3 from your watch over Bluetooth. It cannot be undone. Your local library is kept.",
+        noLink: true,
+      });
+      return result.response === 1;
+    });
+  });
+  ipcMain.handle("corosBle:disconnect", () => corosNativeBle.disconnect());
+  // The QR carries the watch account key itself, so only the main window may ask for it.
+  ipcMain.handle("corosBle:phonePairing", event => {
+    mainWindowSender(event, "iPhone pairing");
+    return corosNativeBle.phonePairingCode();
+  });
+  ipcMain.handle("watchfaces:forgetWatchKey", async event => {
+    const owner = mainWindowSender(event, "watch key removal");
+    const result = await dialog.showMessageBox(owner, {
+      type: "warning", buttons: ["Cancel", "Remove watch key"], defaultId: 0, cancelId: 0,
+      message: "Remove the COROS watch key from this computer?",
+      detail: "CorosLink won't authenticate with your watch again until you sign in to COROS. A watch that's connected now stays connected until you disconnect it. C-LINK keeps its own copy on your iPhone.",
+      noLink: true,
+    });
+    return result.response === 1 ? forgetCorosWatchKey() : getCorosWatchfaceStatus();
+  });
+  ipcMain.handle("corosBle:sendNotification", (_event, input: import("./corosBleNotificationProtocol").CorosNotificationInput) => corosNativeBle.sendNotification(input));
+  ipcMain.handle("corosBle:chooseWatchface", async () => {
+    const options: OpenDialogOptions = { title: "Choose a compiled COROS watch face", properties: ["openFile"],
+      filters: [{ name: "Compiled watch face", extensions: ["bin"] }] };
+    const result = mainWindow && !mainWindow.isDestroyed()
+      ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
+    return result.canceled || !result.filePaths[0] ? null : corosNativeBle.prepareWatchface(result.filePaths[0]);
+  });
+  ipcMain.handle("corosBle:watchfaceStatus", () => corosNativeBle.watchfaceSyncStatus());
+  ipcMain.handle("corosBle:watchfaceSlots", () => corosNativeBle.listWatchfaceSlots());
+  ipcMain.handle("corosBle:watchfaceSync", (_event, previewId: string, target?: import("./corosBleWatchfaceTypes").CorosDirectWatchfaceTarget) => corosNativeBle.syncWatchface(previewId, target));
+  ipcMain.handle("corosBle:watchfaceCancel", () => corosNativeBle.cancelWatchfaceSync());
+  ipcMain.handle("corosBle:compilerStatus", () => getCorosWatchfaceCompiler().status());
+  ipcMain.handle("corosBle:compileWatchface", async () => {
+    const options: OpenDialogOptions = { title: "Compile a custom watch face to BIN", properties: ["openFile"],
+      filters: [{ name: "Final watch face DAT/ZIP", extensions: ["dat", "zip"] }] };
+    const result = mainWindow && !mainWindow.isDestroyed() ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
+    if (result.canceled || !result.filePaths[0]) return null;
+    const compiler = getCorosWatchfaceCompiler();
+    // For the connected watch; with none, the archive's first supported layout (PACE Pro first).
+    const compiled = await compiler.compile(result.filePaths[0], path.basename(result.filePaths[0]), corosNativeBle.connectedWatchTarget());
+    const preview = await corosNativeBle.prepareWatchface(compiled.filePath, true);
+    compiler.remember(preview.id, compiled.filePath);
+    return { ...preview, compile: { durationMs: compiled.durationMs, warnings: compiled.warnings } };
+  });
+  ipcMain.handle("watchfaces:compileBin", async (_event, input: { archiveId: string; name: string; firmwareType?: string }) => {
+    if (!input || typeof input.archiveId !== "string" || typeof input.name !== "string") throw new Error("Build a final watch face archive before compiling.");
+    // Studio builds the archive for one watch; compile that watch's layout.
+    const target = typeof input.firmwareType === "string" ? getWatchfaceTarget(input.firmwareType) : undefined;
+    if (input.firmwareType !== undefined && !target) throw new Error("CorosLink can't compile faces for this watch yet.");
+    const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), "coroslink-compile-"));
+    try {
+      const filename = path.join(temporary, "source.dat");
+      await exportCorosWatchfaceArchive(input.archiveId, filename);
+      const compiler = getCorosWatchfaceCompiler();
+      const compiled = await compiler.compile(filename, input.name, target);
+      const preview = await corosNativeBle.prepareWatchface(compiled.filePath, true);
+      compiler.remember(preview.id, compiled.filePath);
+      return { ...preview, compile: { durationMs: compiled.durationMs, warnings: compiled.warnings } };
+    } finally { await fs.promises.rm(temporary, { recursive: true, force: true }); }
+  });
+  ipcMain.handle("corosBle:saveCompiledBin", async (_event, previewId: string) => {
+    const filename = getCorosWatchfaceCompiler().fileForPreview(previewId);
+    const options = { title: "Save compiled watch face BIN", defaultPath: path.basename(filename), filters: [{ name: "Compiled watch face BIN", extensions: ["bin"] }] };
+    const result = mainWindow && !mainWindow.isDestroyed() ? await dialog.showSaveDialog(mainWindow, options) : await dialog.showSaveDialog(options);
+    if (result.canceled || !result.filePath) return { saved: false };
+    const destination = result.filePath.toLowerCase().endsWith(".bin") ? result.filePath : result.filePath + ".bin";
+    await fs.promises.copyFile(filename, destination);
+    return { saved: true };
+  });
+  ipcMain.handle("corosBle:mapStatus", () => corosNativeBle.wifiMapStatus());
+  ipcMain.handle("corosBle:mapPreview", (_event, tiles: unknown) => corosNativeBle.previewWifiMap(tiles));
+  ipcMain.handle("corosBle:mapDownload", (_event, previewId: string) => corosNativeBle.downloadWifiMap(previewId));
+  ipcMain.handle("corosBle:routeStatus", () => corosNativeBle.routeSyncStatus());
+  ipcMain.handle("corosBle:routeCancel", () => corosNativeBle.cancelRouteSync());
+  ipcMain.handle("corosBle:routeSync", async (_event, routeId: unknown) => {
+    if (typeof routeId !== "string" || routeId.length > 128) throw new Error("Invalid saved route.");
+    const route = await getGeneratedRouteDetails(routeId);
+    if (!route) throw new Error("The saved route was not found.");
+    return corosNativeBle.syncRoute(route);
+  });
   ipcMain.handle("calendar:getWorkoutEvent", (_event, ref: CalendarWorkoutEventRef) => getCalendarWorkoutEvent(ref));
   ipcMain.handle("calendar:updateWorkoutEvent", (_event, input: { ref: CalendarWorkoutEventRef; timing: CalendarEventTiming }) => updateCalendarWorkoutEvent(input));
   ipcMain.handle("calendar:syncEditedWorkout", (_event, ref: CalendarWorkoutEventRef) => syncEditedCalendarWorkout(ref));
@@ -1618,6 +1773,12 @@ function registerIpcHandlers(): void {
   ipcMain.handle("spotify:login", () => loginSpotify(mainWindow));
 
   ipcMain.handle("spotify:logout", () => logoutSpotify());
+
+  ipcMain.handle("spotify:unlockFollowed", () =>
+    unlockSpotifyFollowedPlaylists(mainWindow)
+  );
+
+  ipcMain.handle("spotify:lockFollowed", () => lockSpotifyFollowedPlaylists());
 
   ipcMain.handle("spotify:listPlaylists", () => listSpotifyPlaylists());
 

@@ -423,11 +423,18 @@ const CHART_RESOURCES: [string, number, string][] = [
 // 0x1845xx writes the clock pointer group, whose second-hand icon lives at 0x308.
 const FISH = 0xd92;
 
-/** The 4.9.9 exporter stores rgb222 bytes; official NOMAD stores full 0xRRGGBB words. */
-export function expandChartColor(raw: number): number {
-  if (raw > 0xff) return raw & 0xffffff;
+/** An rgb222 byte (`r2 << 4 | g2 << 2 | b2`) as 0xRRGGBB. */
+export function expandRgb222(raw: number): number {
   const channel = (shift: number) => ((raw >> shift) & 3) * 85;
   return (channel(4) << 16) | (channel(2) << 8) | channel(0);
+}
+
+/**
+ * Chart color words: the 4.9.9 exporter stores rgb222 (0x00–0x3f); official NOMAD and CorosLink's compiler store
+ * full 0xRRGGBB. Words up to 0x3f are ambiguous and read as rgb222.
+ */
+export function expandChartColor(raw: number): number {
+  return raw > 0x3f ? raw & 0xffffff : expandRgb222(raw);
 }
 
 export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {

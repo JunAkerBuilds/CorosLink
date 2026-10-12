@@ -160,6 +160,8 @@ const TOOL_LABELS: Record<string, [running: string, done: string]> = {
   list_fonts: ["Listing fonts", "Listed fonts"],
   import_asset: ["Importing an image", "Imported an image"],
   generate_image: ["Generating an image", "Generated an image"],
+  codex_imageGeneration: ["Generating an image", "Generated an image"],
+  get_generated_images: ["Reading generated artwork", "Read generated artwork"],
   crop_image: ["Cropping an image", "Cropped an image"],
   save: ["Saving the project", "Saved the project"]
 };
@@ -883,7 +885,7 @@ export function WatchfaceAiPanel({
             <span className="wf-ai-harness-hint">Uses your local CLI sign-in</span>
           </div>
           {!cliWarningAcknowledged ? <div className="wf-ai-cli-warning" role="note">
-            <p>Codex CLI uses your local CLI sign-in, and its configured model unless you pick one below. It can run shell commands, read local files, write to its work folder and temporary files, and access the network. Shell changes are outside editor Undo. Editor tools connect through MCP. Image generation still needs CorosLink’s ChatGPT sign-in.</p>
+            <p>Codex CLI uses your local CLI sign-in for chat and image generation, and its configured model unless you pick one below. It can run shell commands, read local files, write to its work folder and temporary files, and access the network. Shell changes are outside editor Undo. Editor tools connect through MCP.</p>
             <button type="button" onClick={() => {
               setCliWarningAcknowledged(true);
               writePreference(CLI_WARNING_KEY, "true");

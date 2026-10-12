@@ -9,7 +9,7 @@ function VerificationApp() {
   const [opened, setOpened] = useState(false);
   useEffect(() => api.onWatchfaceAutomationActivate(() => setOpened(true)), [api]);
   return <div className="app"><div className="app-body"><main className="content">
-    {opened ? <WatchfacesView api={api} active showDevelopmentTools={false} watchStatus={null} communityOpenRequest={null} onCommunityOpenRequestHandled={() => undefined} /> : <WatchfaceAutomationSettings api={api} />}
+    {opened ? <WatchfacesView api={api} active showDevelopmentTools={false} watchStatus={null} watchLink={null} onOpenWatchMenu={() => undefined} navigationRequest={null} onNavigationRequestHandled={() => undefined} communityOpenRequest={null} onCommunityOpenRequestHandled={() => undefined} /> : <WatchfaceAutomationSettings api={api} />}
   </main></div></div>;
 }
 

@@ -1,0 +1,666 @@
+/* Wireless maps: map-first area picker with a download plan beside it. */
+
+.wifi-maps-panel {
+  --wifi-maps-rule: color-mix(in srgb, var(--text-muted) 24%, transparent);
+  --wifi-maps-row-rule: color-mix(in srgb, var(--text-muted) 16%, transparent);
+  --wifi-maps-card: color-mix(in srgb, var(--surface) 62%, transparent);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  container-type: inline-size;
+}
+
+.wifi-maps-panel h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+/* Stays a row at narrow widths, where the global .section-heading stacks. */
+.wifi-maps-panel > .wifi-maps-heading {
+  flex-flow: row wrap;
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+
+.wifi-maps-lede {
+  max-width: 76ch;
+  margin: 0 0 16px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Connection status pill */
+.wifi-maps-link {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.wifi-maps-link::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  content: "";
+}
+
+.wifi-maps-link.is-ok {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.wifi-maps-link.is-ok::before { background: var(--success-dot); }
+
+.wifi-maps-link.is-warn {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.wifi-maps-link.is-warn::before { background: var(--warning-text); }
+.wifi-maps-link.is-busy { color: var(--text-primary); }
+.wifi-maps-link.is-busy::before { background: var(--accent); animation: wifi-maps-pulse 1.4s ease-in-out infinite; }
+
+@keyframes wifi-maps-pulse {
+  50% { opacity: 0.35; }
+}
+
+/* Workspace: map + plan */
+.wifi-maps-workspace {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  min-height: 520px;
+}
+
+.wifi-maps-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: #e9ece8;
+  isolation: isolate;
+}
+
+.wifi-maps-canvas {
+  position: absolute;
+  inset: 0;
+  background: #e9ece8;
+  font: inherit;
+}
+
+.wifi-maps-canvas.is-picking.leaflet-grab { cursor: pointer; }
+.wifi-maps-canvas.is-zoomed-out.leaflet-grab { cursor: zoom-in; }
+.leaflet-dragging .wifi-maps-canvas.leaflet-grab { cursor: grabbing; }
+
+.wifi-maps-canvas .leaflet-bar {
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 14px rgba(15, 22, 27, 0.22);
+}
+
+.wifi-maps-canvas .leaflet-bar a {
+  width: 34px;
+  height: 34px;
+  border-bottom-color: #e3e7ea;
+  color: #22303a;
+  font-size: 18px;
+  line-height: 34px;
+}
+
+.wifi-maps-canvas .leaflet-bar a:hover { background: #f1f4f5; color: #0f8a66; }
+.wifi-maps-canvas .leaflet-control-zoom { margin: 0 12px 30px 0; }
+.wifi-maps-canvas .leaflet-control-attribution { border-top-left-radius: 6px; font-size: 10.5px; }
+
+/* Numbered area markers (the base map is light in both themes) */
+.wifi-maps-badge { display: grid; place-items: center; }
+
+.wifi-maps-badge span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #0f7a5c;
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 2px #ffffff, 0 2px 8px rgba(10, 30, 24, 0.35);
+  transition: transform 0.15s ease;
+}
+
+.wifi-maps-badge.is-highlighted span { background: #0a5c45; transform: scale(1.18); }
+
+/* Floating place search */
+.wifi-maps-search {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 800;
+  width: min(380px, calc(100% - 24px));
+}
+
+.wifi-maps-search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg-elevated);
+  color: var(--text-secondary);
+  padding: 0 5px 0 13px;
+  box-shadow: 0 6px 22px rgba(15, 22, 27, 0.22);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.wifi-maps-search-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 6px 22px rgba(15, 22, 27, 0.22), 0 0 0 3px var(--accent-glow);
+}
+
+.wifi-maps-search-field > svg { flex-shrink: 0; }
+
+.wifi-maps-search-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.wifi-maps-search-field input::placeholder { color: var(--text-muted); }
+.wifi-maps-search-spinner { margin-right: 6px; color: var(--text-secondary); }
+
+.wifi-maps-search-icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.wifi-maps-search-icon:hover { background: var(--wifi-maps-row-rule); color: var(--text-primary); }
+
+.wifi-maps-search-submit {
+  flex-shrink: 0;
+  height: 34px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #ffffff;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.wifi-maps-search-submit:hover:not(:disabled) { background: var(--accent-hover); }
+.wifi-maps-search-submit:disabled { opacity: 0.45; }
+
+.wifi-maps-results,
+.wifi-maps-search-message {
+  margin: 6px 0 0;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg-elevated);
+  box-shadow: 0 10px 30px rgba(15, 22, 27, 0.26);
+}
+
+.wifi-maps-results {
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 5px;
+  list-style: none;
+}
+
+.wifi-maps-result {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.wifi-maps-result > svg { margin-top: 2px; }
+.wifi-maps-result.is-active { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.wifi-maps-result span { display: grid; min-width: 0; gap: 1px; }
+.wifi-maps-result strong { color: var(--text-primary); font-size: 13.5px; font-weight: 600; }
+
+.wifi-maps-result small {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wifi-maps-search-message {
+  padding: 10px 13px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+/* Hint pill over the map */
+.wifi-maps-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  z-index: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: calc(100% - 150px);
+  border-radius: var(--radius-pill);
+  background: rgba(17, 23, 27, 0.84);
+  color: #f2f5f6;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(10, 16, 20, 0.28);
+  transform: translateX(-50%);
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.wifi-maps-hint svg { flex-shrink: 0; color: #7fe0bd; }
+.wifi-maps-hint span { overflow: hidden; text-overflow: ellipsis; }
+
+/* Plan sidebar */
+.wifi-maps-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  /* Last resort on short windows with several downloads running. */
+  overflow-y: auto;
+}
+
+.wifi-maps-plan,
+.wifi-maps-tasks {
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--wifi-maps-card);
+}
+
+.wifi-maps-plan {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 380px;
+}
+
+.wifi-maps-plan-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 12px 10px 16px;
+}
+
+.wifi-maps-count {
+  border-radius: var(--radius-pill);
+  background: var(--wifi-maps-row-rule);
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.wifi-maps-count.is-full { background: var(--warning-bg); color: var(--warning-text); }
+.wifi-maps-plan-head .wifi-maps-text-button:first-of-type { margin-left: auto; }
+
+.wifi-maps-text-button {
+  flex-shrink: 0;
+  min-height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.wifi-maps-text-button:hover:not(:disabled) { background: var(--wifi-maps-row-rule); color: var(--accent); }
+.wifi-maps-text-button:disabled { opacity: 0.5; }
+
+.wifi-maps-capacity {
+  height: 3px;
+  overflow: hidden;
+  margin: 0 16px;
+  border-radius: var(--radius-pill);
+  background: var(--wifi-maps-row-rule);
+}
+
+.wifi-maps-capacity span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+.wifi-maps-area-list {
+  flex: 1;
+  min-height: 116px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+}
+
+.wifi-maps-area {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s ease;
+}
+
+.wifi-maps-area.is-highlighted { background: color-mix(in srgb, var(--accent) 11%, transparent); }
+
+.wifi-maps-area-main {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  padding: 8px;
+  text-align: left;
+}
+
+.wifi-maps-area-badge {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--surface);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.wifi-maps-area-text { display: grid; min-width: 0; gap: 1px; }
+
+.wifi-maps-area-text strong,
+.wifi-maps-area-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wifi-maps-area-text strong { color: var(--text-primary); font-size: 13.5px; font-weight: 600; }
+.wifi-maps-area-text small { color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.wifi-maps-area-remove {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-right: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.wifi-maps-area:hover .wifi-maps-area-remove,
+.wifi-maps-area.is-highlighted .wifi-maps-area-remove,
+.wifi-maps-area-remove:focus-visible { opacity: 1; }
+
+.wifi-maps-area-remove:hover:not(:disabled) { background: var(--error-bg); color: var(--error-text); }
+
+.wifi-maps-empty {
+  display: grid;
+  flex: 1;
+  align-content: center;
+  justify-items: center;
+  gap: 6px;
+  padding: 24px 28px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.wifi-maps-empty svg { margin-bottom: 4px; color: var(--accent); }
+.wifi-maps-empty strong { color: var(--text-primary); font-size: 14px; font-weight: 600; }
+.wifi-maps-empty p { max-width: 30ch; margin: 0; font-size: 12.5px; line-height: 1.5; }
+
+.wifi-maps-plan-foot {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--wifi-maps-rule);
+  padding: 14px 16px 16px;
+}
+
+.wifi-maps-size {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+}
+
+.wifi-maps-size > span {
+  display: grid;
+  gap: 1px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wifi-maps-size small { color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+
+.wifi-maps-size strong {
+  color: var(--text-primary);
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.wifi-maps-size em {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-style: normal;
+}
+
+.wifi-maps-size-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.wifi-maps-size-error > svg { flex-shrink: 0; margin-top: 1px; color: var(--warning-text); }
+.wifi-maps-size-error > span { flex: 1; }
+.wifi-maps-size-error .wifi-maps-text-button { margin: -5px -8px 0 0; }
+
+.wifi-maps-panel .wifi-maps-download { width: 100%; }
+
+.wifi-maps-panel .wifi-maps-download:disabled {
+  opacity: 0.5;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.wifi-maps-connect {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 4px 10px;
+}
+
+.wifi-maps-connect > svg { margin-top: 1px; color: var(--accent); }
+.wifi-maps-connect strong { color: var(--text-primary); font-size: 13.5px; font-weight: 600; }
+.wifi-maps-connect p { margin: 2px 0 0; color: var(--text-secondary); font-size: 12.5px; line-height: 1.45; }
+
+.wifi-maps-foot-note,
+.wifi-maps-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.wifi-maps-foot-note { color: var(--text-secondary); }
+.wifi-maps-foot-note svg,
+.wifi-maps-notice svg { flex-shrink: 0; margin-top: 1px; }
+
+.wifi-maps-notice {
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 9px 11px;
+}
+
+.wifi-maps-notice.is-success { border-color: var(--success-border); background: var(--success-bg); }
+.wifi-maps-notice.is-success svg { color: var(--success-text); }
+.wifi-maps-notice.is-error { border-color: var(--error-border); background: var(--error-bg); }
+.wifi-maps-notice.is-error svg { color: var(--error-text); }
+.wifi-maps-notice.is-info { border-color: var(--warning-border); background: var(--warning-bg); }
+.wifi-maps-notice.is-info svg { color: var(--warning-text); }
+
+/* Downloads reported by the watch */
+.wifi-maps-tasks {
+  display: grid;
+  flex-shrink: 0;
+  gap: 14px;
+  padding: 14px 16px 16px;
+}
+
+.wifi-maps-tasks h3 { display: flex; align-items: center; gap: 8px; }
+.wifi-maps-tasks h3 svg { color: var(--accent); }
+.wifi-maps-task { display: grid; gap: 7px; }
+.wifi-maps-task + .wifi-maps-task { border-top: 1px solid var(--wifi-maps-row-rule); padding-top: 12px; }
+.wifi-maps-task-head { display: flex; align-items: center; gap: 10px; }
+
+.wifi-maps-task-head strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wifi-maps-task-state {
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  background: var(--wifi-maps-row-rule);
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.wifi-maps-task-state.is-ok { background: var(--success-bg); color: var(--success-text); }
+.wifi-maps-task-state.is-warn { background: var(--warning-bg); color: var(--warning-text); }
+.wifi-maps-task-state.is-busy { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.wifi-maps-task-state.is-error { background: var(--error-bg); color: var(--error-text); }
+
+.wifi-maps-task-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--wifi-maps-row-rule);
+}
+
+.wifi-maps-task-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.4s ease;
+}
+
+.wifi-maps-task-bar.is-error span { background: var(--error-text); }
+.wifi-maps-task small { color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.wifi-maps-tasks-done {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.wifi-maps-task + .wifi-maps-tasks-done { border-top: 1px solid var(--wifi-maps-row-rule); padding-top: 12px; }
+.wifi-maps-tasks-done svg { flex-shrink: 0; margin-top: 1px; color: var(--success-text); }
+
+/* Narrow windows: stack the plan under the map */
+@container (max-width: 860px) {
+  .wifi-maps-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .wifi-maps-stage { height: 440px; flex: none; }
+  .wifi-maps-aside { overflow: visible; }
+  .wifi-maps-plan { flex: none; min-height: 0; }
+  .wifi-maps-area-list { max-height: 260px; }
+  .wifi-maps-hint { max-width: calc(100% - 100px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wifi-maps-link.is-busy::before { animation: none; }
+  .wifi-maps-capacity span,
+  .wifi-maps-task-bar span,
+  .wifi-maps-badge span { transition: none; }
+}

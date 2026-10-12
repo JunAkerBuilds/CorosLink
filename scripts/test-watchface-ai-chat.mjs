@@ -16,7 +16,7 @@ const call = (name, args = {}, id = name) => ({
 });
 const text = (delta) => ({ type: "response.output_text.delta", delta });
 
-async function scenario(rounds, { failPreview = false, complete = true, history, stuck = false, failTool, autoRequirements = true, imageGeneration = false, imageFailure, harness, cancelCliAt } = {}) {
+async function scenario(rounds, { failPreview = false, complete = true, history, stuck = false, failTool, autoRequirements = true, imageGeneration = false, imageFailure, harness, cancelCliAt, nativeImageRounds = [] } = {}) {
   const events = [], requests = [], tools = [];
   let fakeService, cliOpens = 0, cliDisposed = false;
   let revision = 4;
@@ -65,6 +65,7 @@ async function scenario(rounds, { failPreview = false, complete = true, history,
           request.signal.throwIfAborted();
           return fakeService.openChatGptResponseStream(request);
         }
+        async takeGeneratedImages() { return nativeImageRounds[cliOpens - 1] ?? []; }
         async dispose() { cliDisposed = true; }
       } };
       if (name === "./chatResponsesProtocol") return protocol;
@@ -199,6 +200,23 @@ const nativeIncomplete = await scenario([
 // requirement-review gate (the built-in loop keeps that gate).
 assert.equal(nativeIncomplete.events.at(-1).type, "done");
 assert.ok(nativeIncomplete.events.some(event => event.type === "token" && event.delta === "Done"), "the CLI's own reply ends the turn");
+
+const nativeArtwork = await scenario([
+  [call("get_generated_images")],
+  [call("crop_image", { assetId: "generated-native", width: 32, height: 48 })],
+  [call("apply_commands", { commands: [{ op: "set", path: "/design/artwork", value: { dataUrl: { assetId: "generated-crop-image" }, width: 32, height: 48 } }] })],
+  [text("Placed the generated artwork.")]
+], { harness: "codex-cli", imageGeneration: true, nativeImageRounds: [[{ id: "native-image", base64Png: "native" }]] });
+assert.equal(nativeArtwork.events.at(-1).type, "done");
+assert.equal(nativeArtwork.imageRequests.length, 0, "CLI image generation never uses CorosLink's ChatGPT credentials");
+assert.ok(!nativeArtwork.requests[0].tools.some(tool => tool.name === "generate_image"), "the separate generation endpoint is not exposed to Codex");
+assert.ok(nativeArtwork.requests[0].tools.some(tool => tool.name === "get_generated_images"));
+const nativeAssets = JSON.parse(nativeArtwork.requests[1].input.find(item => item.type === "function_call_output" && item.call_id === "get_generated_images").output);
+assert.deepEqual(nativeAssets.images, [{ id: "native-image", assetId: "generated-native", width: 1024, height: 1024 }], "native output is stored before the CLI asks for its asset ID");
+assert.ok(nativeArtwork.events.some(event => event.type === "generated" && event.assetId === "generated-native"), "native artwork appears in the conversation");
+assert.ok(nativeArtwork.tools.some(tool => tool.name === "apply_commands" && JSON.stringify(tool.args).includes("generated-crop-image")), "native output remains croppable and placeable in the editor");
+const nativeImagesOff = await scenario([[text("Ready.")]], { harness: "codex-cli", imageGeneration: false });
+assert.ok(!nativeImagesOff.requests[0].tools.some(tool => tool.name === "get_generated_images"));
 
 const hardBudget = await scenario(Array.from({ length: 120 }, () => [edit]));
 assert.equal(hardBudget.events.at(-1).type, "error");

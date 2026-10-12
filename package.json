@@ -94,16 +94,25 @@
     "test:diagnostics": "npm run build:electron && node scripts/test-diagnostics.mjs",
     "test:diagnostics-ui": "npm run build:electron && electron scripts/test-diagnostics-ui.cjs",
     "test:coros-login": "npm run build:electron && node scripts/test-coros-login.mjs",
+    "test:coros-ble-login": "npm run build:electron && node scripts/test-coros-ble-login.mjs && node scripts/test-coros-system-ble.mjs",
     "test:activity-backup": "npm run build:electron && node scripts/test-activity-backup.mjs",
     "test:aws-sigv4": "npm run build:electron && node scripts/test-aws-sigv4.mjs",
     "test:zip-store": "npm run build:electron && node scripts/test-zip-store.mjs",
     "test:coros-upload-config": "npm run build:electron && node scripts/test-coros-upload-config.mjs",
     "test:coros-watchfaces": "npm run build:electron && node scripts/test-coros-watchface-service.mjs",
+    "test:coros-multi-watch": "npm run build:electron && node scripts/test-coros-multi-watch.mjs",
     "test:community-watchfaces": "npm run build:electron && node scripts/test-community-watchfaces.mjs",
     "test:community-scroll": "electron scripts/test-community-scroll.cjs",
     "test:community-handoff": "npm run build:electron && electron scripts/test-community-handoff.cjs",
     "test:legacy614a": "npm run build:electron && node scripts/test-legacy614a.mjs",
     "test:coros-device-info": "node --experimental-strip-types scripts/test-coros-bluetooth-device-info.mjs",
+    "test:coros-native-ble": "npm run build:electron && node scripts/test-coros-native-ble.mjs",
+    "test:coros-system-ble": "npm run build:electron && node scripts/test-coros-system-ble.mjs",
+    "test:coros-notification-ui": "electron scripts/test-coros-notification-ui.cjs",
+    "test:coros-wifi-maps": "npm run build:electron && node scripts/test-coros-wifi-maps.mjs",
+    "test:coros-ble-music": "npm run build:electron && node scripts/test-coros-ble-music.mjs && electron scripts/test-coros-music-ui.cjs",
+    "test:coros-wifi-music": "npm run build:electron && node scripts/test-coros-wifi-music.mjs && electron scripts/test-coros-wifi-music-ui.cjs",
+    "test:coros-ble-routes": "npm run build:electron && node scripts/test-coros-ble-routes.mjs && node scripts/test-coros-system-ble.mjs",
     "test:coros-system-bind": "node --experimental-strip-types scripts/test-coros-system-bind.mjs",
     "legacy614a:patch": "npm run build:electron && node scripts/patch-legacy614a.mjs",
     "legacy614a:slender": "npm run build:electron && node scripts/build-slender-multidata-legacy.mjs",
@@ -166,6 +175,7 @@
     },
     "icon": "build/icon.png",
     "afterPack": "scripts/after-pack.cjs",
+    "beforePack": "scripts/before-pack.cjs",
     "directories": {
       "output": "release"
     },
@@ -175,6 +185,30 @@
       "package.json"
     ],
     "extraResources": [
+      {
+        "from": "scripts/coros-native-ble.py",
+        "to": "ble/coros-native-ble.py"
+      },
+      {
+        "from": "scripts/coros_ble_auth.py",
+        "to": "ble/coros_ble_auth.py"
+      },
+      {
+        "from": "scripts/coros-system-ble.py",
+        "to": "ble/coros-system-ble.py"
+      },
+      {
+        "from": "scripts/coros_ble_protocol.py",
+        "to": "ble/coros_ble_protocol.py"
+      },
+      {
+        "from": "scripts/coros_ble_route.py",
+        "to": "ble/coros_ble_route.py"
+      },
+      {
+        "from": "scripts/coros_ble_music.py",
+        "to": "ble/coros_ble_music.py"
+      },
       {
         "from": "skills",
         "to": "skills",
@@ -186,12 +220,15 @@
         "from": "bin",
         "to": "bin",
         "filter": [
-          "**/*"
+          "**/*",
+          "!**/coros-watchface-compiler"
         ]
       }
     ],
     "asarUnpack": [
-      "node_modules/better-sqlite3/**/*"
+      "node_modules/better-sqlite3/**/*",
+      "dist-electron/watchfaceCompiler/**/*",
+      "dist-electron/watchfaceTargets.js"
     ],
     "dmg": {
       "background": "dmg-background.png",
@@ -227,6 +264,9 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
+        "NSBluetoothAlwaysUsageDescription": "CorosLink uses Bluetooth to connect to your COROS watch, read device information, and authenticate your watch session.",
+        "NSBluetoothPeripheralUsageDescription": "CorosLink uses Bluetooth to connect to your COROS watch.",
+        "NSLocalNetworkUsageDescription": "CorosLink sends your selected MP3 files to your COROS watch over the same Wi-Fi network.",
         "NSLocationUsageDescription": "CorosLink uses your location only when you choose Use my location to set a route starting point."
       },
       "notarize": true

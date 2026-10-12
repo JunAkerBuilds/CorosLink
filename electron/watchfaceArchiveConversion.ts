@@ -1,6 +1,9 @@
 import { nativeImage } from "electron";
 import type { WatchfaceTarget } from "./watchfaceTargets";
 import { restoreWatchfaceDateLayout } from "./watchfaceDeviceLayout";
+import { encodeCorosRgbaPng } from "./corosCompiledWatchface";
+import { decodePng } from "./watchfaceCompiler/png";
+import { scaleImage } from "./watchfaceCompiler/scale";
 
 export interface WatchfaceConversionEntry { name: string; data: Buffer }
 
@@ -56,6 +59,13 @@ function resizePng(data: Buffer, scale: number, name: string): Buffer {
   const w = Math.max(1, Math.round(width * scale));
   const h = Math.max(1, Math.round(height * scale));
   if (w > 4096 || h > 4096) throw new Error(`The converted image ${name} would be too large.`);
+  // nativeImage's "best" upscale smears small sprites (a 260px digit came out
+  // over half semi-transparent at 416px, reading as faded on the watch);
+  // bilinear keeps edges about one pixel wide.
+  if (scale > 1) {
+    const upscaled = scaleImage(decodePng(data), w, h);
+    return encodeCorosRgbaPng(w, h, Buffer.from(upscaled.data.buffer, upscaled.data.byteOffset, upscaled.data.byteLength));
+  }
   return image.resize({ width: w, height: h, quality: "best" }).toPNG();
 }
 

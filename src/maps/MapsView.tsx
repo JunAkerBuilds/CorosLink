@@ -32,6 +32,7 @@ import type { CorosLinkApi } from "../coroslink-api";
 import { SelectDropdown } from "../components/SelectDropdown";
 import { formatBytes } from "../media/libraryUtils";
 import { RouteStudio } from "./routes/RouteStudio";
+import { CorosWifiMapsPanel } from "./CorosWifiMapsPanel";
 import {
   defineSelectionPreference,
   selectionIsBoolean,
@@ -39,7 +40,7 @@ import {
   useSelectionPreference
 } from "../preferences/selectionPreferences";
 
-type MapsTab = "coros" | "routes";
+type MapsTab = "wifi" | "coros" | "routes";
 
 interface CorosMapFilterPreference {
   region: string;
@@ -50,7 +51,7 @@ interface CorosMapFilterPreference {
 const MAPS_TAB_PREFERENCE = defineSelectionPreference<MapsTab>({
   key: "maps.activeTab",
   defaultValue: "coros",
-  validate: selectionIsOneOf(["coros", "routes"])
+  validate: selectionIsOneOf(["wifi", "coros", "routes"])
 });
 
 const COROS_MAP_FILTER_PREFERENCE =
@@ -82,6 +83,8 @@ interface MapsViewProps {
   onWatchStatusChange: (status: WatchStatus) => void;
   onMessage: (message: string | null) => void;
   onError: (message: string | null) => void;
+  /** Opens the toolbar watch menu, where Bluetooth connections start. */
+  onOpenWatchMenu?: () => void;
 }
 
 export function MapsView({
@@ -89,7 +92,8 @@ export function MapsView({
   watchStatus,
   onWatchStatusChange,
   onMessage,
-  onError
+  onError,
+  onOpenWatchMenu
 }: MapsViewProps) {
   const [activeTab, setActiveTab] = useSelectionPreference(
     MAPS_TAB_PREFERENCE
@@ -99,6 +103,7 @@ export function MapsView({
     <div className="maps-view stack">
       <div className="media-tabs-shell">
         <nav className="media-tabs" aria-label="Maps sections">
+          <MapsTabButton active={activeTab === "wifi"} icon={<Download size={16} aria-hidden="true" />} label="Wireless maps" onClick={() => setActiveTab("wifi")} />
           <MapsTabButton
             active={activeTab === "coros"}
             icon={<MapIcon size={16} aria-hidden="true" />}
@@ -114,7 +119,7 @@ export function MapsView({
         </nav>
       </div>
 
-      {activeTab === "coros" ? (
+      {activeTab === "wifi" ? <CorosWifiMapsPanel api={api} onOpenWatchMenu={onOpenWatchMenu} /> : activeTab === "coros" ? (
         <CorosMapsTab
           api={api}
           watchStatus={watchStatus}

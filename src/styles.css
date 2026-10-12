@@ -6320,6 +6320,7 @@ td span {
 }
 
 .maps-view {
+  /* Wireless maps (src/maps/wifiMaps.css) keeps its own scrollable panel. */
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -22494,7 +22495,7 @@ tr.data-intervals-row-missing {
   left: 16px;
   width: var(--route-panel-w);
   max-width: calc(100% - 32px);
-  max-height: calc(100% - 190px);
+  max-height: max(0px, calc(100% - var(--route-footer-clearance, 190px)));
   overflow-y: auto;
   border-radius: var(--radius-lg);
   padding: 14px;
@@ -23242,8 +23243,36 @@ tr.data-intervals-row-missing {
   right: 16px;
   bottom: 16px;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
+.route-sync-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1180px;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-elevated);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-card);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.route-sync-status > svg { flex-shrink: 0; color: var(--accent-strong); }
+.route-sync-status.is-complete { border-color: var(--success-border); }
+.route-sync-status.is-complete > svg { color: var(--success-text); }
+.route-sync-status.is-failed > svg { color: #e77979; }
+.route-sync-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.route-sync-copy strong { color: var(--text-primary); font-size: 12px; font-weight: 600; }
+.route-sync-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.route-sync-status progress { flex: 0 1 160px; width: 160px; min-width: 80px; accent-color: var(--accent); }
+.route-sync-status .button, .route-sync-dismiss { flex-shrink: 0; }
 .route-statsbar {
   display: flex;
   align-items: center;
@@ -23496,7 +23525,7 @@ tr.data-intervals-row-missing {
 @media (max-width: 900px) {
   .route-panel {
     width: calc(100% - 32px);
-    max-height: 46%;
+    max-height: max(0px, min(46%, calc(100% - var(--route-footer-clearance, 190px))));
   }
   .route-statsbar-metrics {
     gap: 14px;
@@ -32193,3 +32222,33 @@ body.is-backgrounded .training-backup-progress-track.is-indeterminate span {
     width: 100%;
   }
 }
+.watch-music-source { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; }
+.watch-music-source > .library-panel { flex: 1; }
+.watch-music-source-options { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; flex-shrink: 0; }
+.watch-music-source-options > span { font-size: 12px; color: var(--text-muted); }
+.ble-music-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 12px 16px; flex-wrap: wrap;
+}
+.ble-music-toolbar > span { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+.ble-music-list { list-style: none; margin: 0; padding: 0 16px; overflow: auto; }
+.ble-music-list li { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--glass-border); }
+.ble-music-list li > svg { flex-shrink: 0; color: var(--text-muted); }
+.ble-music-list li > span { min-width: 0; flex: 1; overflow-wrap: anywhere; font-size: 13px; }
+.ble-music-list li > em { flex-shrink: 0; font-size: 12px; font-style: normal; color: var(--text-muted); }
+.ble-music-empty, .ble-music-note, .ble-music-error { padding: 12px 16px; margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-muted); }
+.ble-music-error { color: var(--danger, #d9534f); }
+.ble-music-delete { flex-shrink: 0; }
+.ble-wifi-music { border-top: 1px solid var(--glass-border); padding: 14px 16px; font-size: 12px; line-height: 1.6; }
+.ble-wifi-music-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.ble-wifi-music-heading > span { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.ble-wifi-music p { color: var(--text-muted); margin: 8px 0; overflow-wrap: anywhere; }
+.ble-wifi-music .ble-music-error { color: var(--danger, #d9534f); padding: 0; }
+.ble-wifi-music-progress { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 12px; }
+.ble-wifi-music-progress progress { width: 100%; accent-color: var(--accent); height: 7px; }
+.ble-wifi-music-progress small { color: var(--text-muted); }
+.ble-wifi-music-backup { margin-top: 10px; color: var(--text-muted); }
+.ble-wifi-music-backup summary { cursor: pointer; }
+.ble-wifi-music .ble-wifi-music-success { color: var(--accent); }
+.ble-wifi-music-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ble-wifi-music-actions button { max-width: 100%; white-space: normal; text-align: left; }

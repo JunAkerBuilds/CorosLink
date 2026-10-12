@@ -332,6 +332,7 @@ interface LocalLibraryPanelProps {
   onTransferDownloads: (tracks: LocalTrack[]) => void;
   onDeleteDownload: (track: LocalTrack) => void;
   onDeleteDownloads: (tracks: LocalTrack[]) => void;
+  wifiSyncPanel?: ReactNode;
 }
 
 export function LocalLibraryPanel({
@@ -350,6 +351,7 @@ export function LocalLibraryPanel({
   onTransferDownloads,
   onDeleteDownload,
   onDeleteDownloads,
+  wifiSyncPanel,
 }: LocalLibraryPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [trackFilter, setTrackFilter] = useSelectionPreference(
@@ -504,6 +506,7 @@ export function LocalLibraryPanel({
         </em>
       </header>
 
+      {wifiSyncPanel}
       {transferProgress ? (
         <div
           className="library-transfer-progress"

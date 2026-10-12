@@ -17,7 +17,7 @@ const { Client } = require(${JSON.stringify(sdk)});
 const { StreamableHTTPClientTransport } = require(${JSON.stringify(transport)});
 const read = require('node:readline').createInterface({ input: process.stdin });
 const send = value => process.stdout.write(JSON.stringify(value) + '\\n');
-let client, turns = 0, mode;
+let client, turns = 0, mode, directory;
 read.on('line', async line => {
  try {
   const message = JSON.parse(line), p = message.params;
@@ -26,7 +26,10 @@ read.on('line', async line => {
    assert.equal(p.sandbox, 'workspace-write'); assert.equal(p.approvalPolicy, 'never'); assert.equal(p.ephemeral, true);
    assert.ok(!JSON.stringify(p).includes(process.env.COROSLINK_WATCHMAKER_TOKEN));
    const config = p.config['mcp_servers.watchmaker'];
-   mode = p.developerInstructions.includes('CANCEL_TEST') ? 'cancel' : 'normal';
+   assert.equal(typeof p.config['features.image_generation'], 'boolean');
+   assert.equal(p.config['features.image_generation'], !p.developerInstructions.includes('IMAGES_DISABLED_TEST'));
+   directory = p.cwd;
+   mode = p.developerInstructions.includes('CANCEL_TEST') ? 'cancel' : p.developerInstructions.includes('IMAGE_INVALID_TEST') ? 'invalid-image' : p.developerInstructions.includes('IMAGE_NATIVE_TEST') ? 'images' : 'normal';
    client = new Client({ name: 'fake-codex', version: '1' });
    await client.connect(new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers: { Authorization: 'Bearer ' + process.env[config.bearer_token_env_var] } } }));
    const tools = await client.listTools(); assert.equal(tools.tools.length, 1); assert.equal(tools.tools[0].name, 'probe');
@@ -37,6 +40,19 @@ read.on('line', async line => {
    send({ method: 'turn/started', params: { turn: { id: turn } } });
    send({ id: message.id, result: { turn: { id: turn } } });
    if (mode === 'cancel') return;
+   if (mode === 'images' || mode === 'invalid-image') {
+    const encoded = ${JSON.stringify(png)};
+    const image = { id: 'native-image', type: 'imageGeneration', status: 'completed', result: mode === 'images' ? encoded : 'not-a-png', failure: null };
+    send({ method: 'item/started', params: { item: { ...image, status: 'inProgress', result: '' } } });
+    send({ method: 'item/completed', params: { item: image } });
+    send({ method: 'item/completed', params: { item: image } });
+    const savedPath = require('node:path').join(directory, 'native-output.png');
+    fs.writeFileSync(savedPath, Buffer.from(encoded, 'base64'));
+    send({ method: 'item/completed', params: { item: { id: 'native-file', type: 'imageGeneration', status: 'completed', result: '', savedPath, failure: null } } });
+    send({ method: 'item/completed', params: { item: { id: 'failed-image', type: 'imageGeneration', status: 'failed', result: '', failure: { type: 'usageLimitExceeded' } } } });
+    send({ method: 'turn/completed', params: { turn: { id: turn, status: 'completed' } } });
+    return;
+   }
    for (const image of p.input.filter(v => v.type === 'localImage')) assert.ok(fs.existsSync(image.path));
    send({ method: 'item/started', params: { item: { id: 'shell', type: 'commandExecution', command: 'printf fixture', status: 'inProgress' } } });
    send({ method: 'item/completed', params: { item: { id: 'shell', type: 'commandExecution', command: 'printf fixture', status: 'completed', exitCode: 0 } } });
@@ -92,6 +108,8 @@ const cli = new WatchfaceCodexCli(event => progress.push(event), fake);
 let cwd;
 try {
  const input = options(controller);
+ input.imageGeneration = false;
+ input.instructions += ' IMAGES_DISABLED_TEST';
  let frames = await events(await cli.open(input));
  cwd = cli.directory;
  const call = frames.find(frame => frame.item?.type === 'function_call').item;
@@ -107,6 +125,23 @@ try {
  assert.equal(frames[0].delta, 'Tool failure received.');
 } finally { await cli.dispose(); }
 await assert.rejects(access(cwd), /ENOENT/);
+const nativeProgress = [], nativeController = new AbortController();
+const nativeCli = new WatchfaceCodexCli(event => nativeProgress.push(event), fake);
+try {
+ await nativeCli.open({ ...options(nativeController), instructions: 'IMAGE_NATIVE_TEST', imageGeneration: true });
+ const images = await nativeCli.takeGeneratedImages();
+ assert.deepEqual(images, [{ id: 'native-image', base64Png: png }, { id: 'native-file', base64Png: png }], 'Native PNG pixels and saved files are captured once, excluding failed jobs');
+ assert.deepEqual(await nativeCli.takeGeneratedImages(), [], 'Completed images are handed off once');
+ assert.ok(nativeProgress.some(event => event.tool === 'codex_imageGeneration' && event.status === 'call'));
+ assert.ok(nativeProgress.some(event => event.tool === 'codex_imageGeneration' && event.status === 'failed'));
+ nativeController.abort();
+ await assert.rejects(nativeCli.takeGeneratedImages(), /aborted/);
+} finally { await nativeCli.dispose(); }
+const invalidImageCli = new WatchfaceCodexCli(() => {}, fake);
+try {
+ await invalidImageCli.open({ ...options(new AbortController()), instructions: 'IMAGE_INVALID_TEST' });
+ await assert.rejects(invalidImageCli.takeGeneratedImages(), /invalid.*image data/);
+} finally { await invalidImageCli.dispose(); }
 const aborter = new AbortController();
 const cancelled = new WatchfaceCodexCli(() => {}, fake);
 try {
@@ -141,4 +176,56 @@ if (process.argv.includes('--live')) {
   assert.ok(finished);
   console.log('Installed Codex CLI live shell + MCP smoke test passed in a temporary workspace.');
  } finally { clearTimeout(timer); await cli.dispose(); }
+}
+
+if (process.argv.includes('--live-image')) {
+ const { WatchfaceAutomationAssetStore } = require('../dist-electron/watchfaceAutomationAssets.js');
+ const directory = await mkdtemp(path.join(os.tmpdir(), 'watchmaker-native-image-test-'));
+ const store = new WatchfaceAutomationAssetStore(directory);
+ const assets = [], originals = [];
+ const cli = new WatchfaceCodexCli(event => { if (event.type === 'tool') console.log(event.tool, event.status); });
+ const controller = new AbortController();
+ const timer = setTimeout(() => controller.abort(), 180_000);
+ try {
+  const input = {
+   instructions: 'This is an isolated image connection test. Use the native Codex image generation tool exactly once to generate a plain white circle icon on a transparent background. Do not draw or rasterize it with shell, SVG or code. Then call the watchmaker get_generated_images tool to obtain its stored Studio asset. Do not use other MCP servers or access the live CorosLink app. After the tool returns an image asset, reply exactly Image connected.',
+   input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Generate the test icon with native image generation and retrieve its Studio asset ID.' }] }],
+   tools: [{ name: 'get_generated_images', description: 'Get native image outputs stored in Studio.', parameters: { type: 'object', properties: {}, additionalProperties: false } }],
+   imageGeneration: true, signal: controller.signal
+  };
+  let fetched = false, completed = false;
+  for (let round = 0; round < 8; round++) {
+   const opened = await cli.open(input);
+   for (const image of await cli.takeGeneratedImages()) {
+    const asset = await store.importImageDataUrl('data:image/png;base64,' + image.base64Png);
+    assert.ok(asset.width > 0 && asset.height > 0);
+    assets.push({ id: image.id, assetId: asset.assetId, width: asset.width, height: asset.height });
+    originals.push(image.base64Png);
+   }
+   const frames = await events(opened);
+   const calls = frames.filter(frame => frame.item?.type === 'function_call');
+   if (!calls.length) {
+    assert.ok(fetched && assets.length, 'native generation reaches the Studio asset tool');
+    assert.ok(frames.some(frame => frame.delta?.includes('Image connected')));
+    completed = true; break;
+   }
+   for (const { item } of calls) {
+    assert.equal(item.name, 'get_generated_images');
+    assert.ok(assets.length, 'native PNG output arrives before its asset ID is requested');
+    fetched = true;
+    input.input.push({ type: 'function_call_output', call_id: item.call_id, output: JSON.stringify({ images: assets }) });
+   }
+  }
+  assert.ok(completed);
+  const workspace = cli.directory;
+  await cli.dispose();
+  await assert.rejects(access(workspace), /ENOENT/);
+  for (const [index, asset] of assets.entries()) {
+   assert.equal(await store.hydrateAssetRefs({ assetId: asset.assetId }), 'data:image/png;base64,' + originals[index], 'Studio retains the full-resolution PNG after CLI cleanup');
+  }
+  console.log('Native Codex image generation → Studio asset import passed:', assets.map(asset => `${asset.width}×${asset.height}`).join(', '));
+ } finally {
+  clearTimeout(timer); await cli.dispose();
+  await rm(directory, { recursive: true, force: true });
+ }
 }

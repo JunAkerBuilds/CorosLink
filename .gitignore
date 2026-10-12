@@ -19,3 +19,10 @@ bin/*/
 /video
 /docs
 *.tsbuildinfo
+
+# Local firmware and Bluetooth reverse engineering
+/analysis/
+# COROS map packages (PMTiles, e.g. S0302302V00.t); keep downloads in analysis/
+*.t
+__pycache__/
+.pytest_cache/

@@ -1,0 +1,124 @@
+const assert=require('node:assert/strict');
+const path=require('node:path');
+const os=require('node:os');
+const fs=require('node:fs/promises');
+const {app,BrowserWindow}=require('electron');
+const temp=path.join(os.tmpdir(),`coros-wifi-music-ui-${process.pid}`);
+app.setPath('userData',path.join(temp,'user-data'));app.on('window-all-closed',()=>{});
+app.whenReady().then(async()=>{
+ const {createServer}=await import('vite');const react=(await import('@vitejs/plugin-react')).default;
+ const vite=await createServer({root:path.resolve(__dirname,'..'),configFile:false,plugins:[react()],cacheDir:path.join(temp,'vite'),
+  optimizeDeps:{noDiscovery:true,include:['react','react-dom/client','react/jsx-dev-runtime','lucide-react']},
+  server:{host:'127.0.0.1',port:0,hmr:false},logLevel:'error'});
+ await vite.listen();const win=new BrowserWindow({show:false,width:500,height:720});const errors=[];
+ win.webContents.on('console-message',event=>{if(event.level==='error')errors.push(event.message);});
+ const js=async expression=>{try{return await win.webContents.executeJavaScript(expression,true);}catch(error){console.error('Failed UI expression:',expression);throw error;}};
+ async function until(expression){for(let i=0;i<120;i++){if(await js(`!!(${expression})`))return;await new Promise(r=>setTimeout(r,50));}throw Error(`Timed out: ${expression}`);}
+ async function click(text){await js(`(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(text)});if(!b)throw Error('Missing button');b.click();})()`);}
+ const connected={connected:true,deviceId:'watch-one',deviceName:'COROS PACE Pro TEST'};
+ const idle={supported:true,ready:true,phase:'idle',completedFiles:0,totalFiles:0,downloadedBytes:0,totalBytes:0,restorePending:false,backupSavedAt:Date.now()};
+ async function connection(value){await js(`window.setMusicConnection(${JSON.stringify(value)});void 0`);}
+ async function status(value){await js(`window.wifiStatus=${JSON.stringify({...idle,...value})};void 0`);}
+ async function bluetooth(){await click('Bluetooth');await until("document.querySelector('.ble-wifi-music')");}
+ async function finish(){await js('window.completeWifiSend();window.completeWifiSend=null;void 0');await until("!document.querySelector('.ble-music-toolbar button').disabled");}
+ try{
+  await win.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/scripts/fixtures/coros-wifi-music.html`);
+  await until("document.querySelector('.library-panel-header')");
+  assert.equal(await js("document.querySelector('.ble-wifi-music')"),null,'Wi-Fi control is hidden without BLE');
+  await connection(connected);await until("document.querySelector('[aria-label=\"Watch music connection\"]')");
+  assert.ok(await js("document.body.textContent.includes('USB library')"),'USB remains default');
+  assert.equal(await js("document.querySelector('.ble-wifi-music')"),null,'Wi-Fi is opt-in');
+  await bluetooth();assert.deepEqual(await js('window.wifiCalls'),[],'opening view sends no commands');
+  assert.ok(await js("document.querySelector('.ble-wifi-music').textContent.includes('Podcasts')"));
+  await click('Read music');await until('window.completeMusicRead');
+  assert.equal(await js("[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Send MP3s').disabled"),true,'reading serializes against Wi-Fi sending');
+  await js('window.completeMusicRead();void 0');await until("document.querySelector('.ble-music-delete')");
+  await click('Send MP3s');await until('window.completeWifiSend');
+  await status({phase:'downloading',restorePending:true,fileName:'One.mp3',totalFiles:1,totalBytes:100,downloadedBytes:25});
+  await until("document.querySelector('progress')");
+  assert.equal(await js("document.querySelector('progress').value"),25);
+  assert.equal(await js("document.querySelector('.ble-music-delete').disabled"),true);
+  assert.ok(await js("[...document.querySelectorAll('[aria-label=\"Watch music connection\"] button')].every(b=>b.disabled)"),'source switching waits for restoration');
+  await click('Cancel sync');assert.equal((await js('window.wifiCalls')).at(-1),'cancel');
+  await status({phase:'cancelled'});await finish();
+  assert.ok(await js("document.querySelector('.ble-wifi-music').textContent.includes('Audio sync cancelled')"));
+  assert.equal(await js("document.querySelector('.ble-wifi-music-success')"),null,'cancel is not success');
+  await click('Send MP3s');await until('window.completeWifiSend');
+  await status({phase:'restoring',restorePending:true});await until("document.querySelector('.ble-wifi-music-progress').textContent.includes('Restoring')");
+  assert.equal(await js("[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='Cancel sync')"),false,'restoration runs to completion');
+  await status({phase:'complete',totalFiles:1,completedFiles:1,totalBytes:100,downloadedBytes:100});await finish();
+  assert.ok(await js("document.querySelector('.ble-wifi-music-success').textContent.includes('Download settings restored')"));
+  await click('Send MP3s');await until('window.completeWifiSend');
+  await status({ready:false,phase:'restore-required',restorePending:true,error:'Reconnect the same watch.'});await finish();
+  assert.equal(await js("[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='Send MP3s')"),false);
+  assert.ok(await js("document.querySelector('.ble-wifi-music [role=alert]').textContent.includes('Reconnect')"));
+  await status({});await click('Restore watch settings');await until("document.querySelector('.ble-wifi-music-heading button')");
+  assert.equal((await js('window.wifiCalls')).at(-1),'restore');
+  await status({ready:false});await until("document.querySelector('.ble-wifi-music-setup')");
+  await status({});await click('Import settings backup');await until("document.querySelector('.ble-wifi-music-heading button')");
+  assert.equal((await js('window.wifiCalls')).at(-1),'backup');
+  await click('Send MP3s');await until('window.completeWifiSend');
+  await js('window.wifiError="Error invoking remote method \'corosBle:wifiMusicSend\': Error: Watch disconnected";void 0');
+  await finish();assert.equal(await js("document.querySelector('.ble-wifi-music [role=alert]').textContent"),'Watch disconnected');
+  await js('window.wifiError="";void 0');await click('Send MP3s');await until('window.completeWifiSend');
+  await connection({connected:false});await until("!document.querySelector('[aria-label=\"Watch music connection\"]')");
+  assert.equal(await js("document.querySelector('.ble-wifi-music')"),null,'disconnect immediately hides send controls');
+  await status({phase:'complete',completedFiles:1,totalFiles:1});await js('window.completeWifiSend();window.completeWifiSend=null;void 0');
+  await connection(connected);await until("document.querySelector('[aria-label=\"Watch music connection\"]')");
+  assert.ok(await js("document.body.textContent.includes('USB library')"),'late transfer result does not reopen Bluetooth');
+  await status({supported:false});await click('Bluetooth');await until("document.querySelector('.ble-music-toolbar')");
+  await new Promise(r=>setTimeout(r,100));assert.equal(await js("document.querySelector('.ble-wifi-music')"),null,'unsupported watch/backend has no send control');
+  await click('USB');await status({});await bluetooth();
+  win.setSize(320,720);await new Promise(r=>setTimeout(r,100));
+  assert.ok(await js('document.documentElement.scrollWidth<=window.innerWidth'),'320px layout fits');
+  win.setSize(500,900);
+  await win.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/scripts/fixtures/coros-wifi-music.html?library`);
+  await until("document.querySelector('.library-track-row')");
+  assert.equal(await js("document.querySelector('.ble-wifi-music')"),null,'library Wi-Fi actions require connected BLE');
+  await connection(connected);await until("document.querySelector('.ble-wifi-music-library')");
+  assert.equal(await js("document.querySelector('[aria-label=\"Watch music connection\"] button:first-child').getAttribute('aria-pressed')"),'true','direct Wi-Fi sending keeps USB as the default watch view');
+  assert.equal(await js("document.querySelectorAll('.ble-wifi-music').length"),1,'one controller handles progress for both panels');
+  const selectedButton="[...document.querySelectorAll('button')].find(b=>b.textContent.trim().startsWith('Send selected over Wi-Fi'))";
+  const allButton="[...document.querySelectorAll('button')].find(b=>b.textContent.trim().startsWith('Send all over Wi-Fi'))";
+  assert.equal(await js(`${selectedButton}.disabled`),true);
+  assert.equal(await js(`${allButton}.disabled`),false);
+  await js("document.querySelector('[aria-label=\"Select One\"]').click();void 0");
+  await until(`${selectedButton}.textContent.includes('(1)')`);
+  await click('Send selected over Wi-Fi (1)');await until('window.completeWifiSend');
+  assert.deepEqual((await js('window.wifiCalls')).at(-1),{operation:'library',ids:['library-one']},'library sends IDs directly without a file picker or renderer paths');
+  assert.ok(await js("[...document.querySelectorAll('button[title=\"Delete local track\"]')].every(b=>b.disabled)"),'source deletions wait for audio restoration');
+  await status({phase:'downloading',restorePending:true,totalFiles:1,totalBytes:100,downloadedBytes:50});
+  await until("document.querySelector('progress')?.value===50");
+  await click('Cancel sync');await status({phase:'cancelled'});
+  await js('window.completeWifiSend();window.completeWifiSend=null;void 0');await until(`${selectedButton}.disabled===false`);
+  assert.equal(await js("document.querySelectorAll('.library-status.is-synced').length"),0,'podcast transfer does not mark the separate USB music inventory synced');
+  await click('Send all over Wi-Fi (2)');await until('window.completeWifiSend');
+  assert.deepEqual((await js('window.wifiCalls')).at(-1),{operation:'library',ids:['library-one','library-two']});
+  await status({phase:'complete',completedFiles:2,totalFiles:2,totalBytes:300,downloadedBytes:300});
+  await js('window.completeWifiSend();window.completeWifiSend=null;void 0');await until("document.querySelector('.ble-wifi-music-success')");
+  assert.equal(await js("document.querySelectorAll('.library-status.is-synced').length"),0);
+  await click('Bluetooth');await until("document.querySelector('.ble-music-toolbar')");
+  await click('Read music');await until('window.completeMusicRead');
+  assert.equal(await js(`${selectedButton}.disabled`),true,'Bluetooth inventory serializes against direct library sending');
+  await js('window.completeMusicRead();void 0');await until(`${selectedButton}.disabled===false`);
+  await js('window.setLibraryTracks(window.libraryTracks.filter(t=>t.id!=="library-one"));void 0');
+  await until(`${selectedButton}.textContent.includes('(0)')`);
+  await js('window.setLibraryTracks(Array.from({length:21},(_,i)=>({id:`track-${i}`,title:`Track ${i}`,filePath:`/private/library/${i}.mp3`,url:`test:${i}`,sizeBytes:100,createdAt:"2026-10-10T12:00:00Z"})));void 0');
+  await until(`${allButton}.textContent.includes('(21)')`);
+  assert.equal(await js(`${allButton}.disabled`),true,'over-limit batches require selecting up to 20 tracks');
+  await js("document.querySelector('[aria-label=\"Select visible local tracks\"]').click();void 0");
+  await until(`${selectedButton}.textContent.includes('(21)')`);assert.equal(await js(`${selectedButton}.disabled`),true);
+  await js('window.setLibraryTracks(window.libraryTracks.slice(0,1));void 0');
+  await until(`${selectedButton}.textContent.includes('(1)')`);
+  win.setSize(320,900);await new Promise(r=>setTimeout(r,100));
+  assert.ok(await js('document.documentElement.scrollWidth<=window.innerWidth'),'direct library controls fit at 320px');
+  await click('Send selected over Wi-Fi (1)');await until('window.completeWifiSend');
+  await connection({connected:false});await until("!document.querySelector('.ble-wifi-music')");
+  await js('window.completeWifiSend();window.completeWifiSend=null;void 0');
+  await connection({...connected,deviceId:'watch-two'});await until("document.querySelector('.ble-wifi-music')");
+  assert.equal(await js(`${selectedButton}.disabled`),false,'late completion cannot retain a busy state after disconnect/watch change');
+  assert.deepEqual(errors,[]);
+  console.log('Wi-Fi music UI: direct selected/all library sends without paths/pickers, batch limits, separate USB sync status, serialized read/delete/source actions, BLE-only controls, progress, cancellation, restoration, backup import, disconnect cleanup and narrow layout passed.');
+ }finally{if(errors.length)console.error(errors.join('\n'));win.destroy();await vite.close();await fs.rm(temp,{recursive:true,force:true});}
+ app.exit(0);
+}).catch(error=>{console.error(error);app.exit(1);});

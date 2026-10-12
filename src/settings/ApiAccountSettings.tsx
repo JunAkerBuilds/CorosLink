@@ -61,7 +61,7 @@ export function ApiAccountSettings({ api, service }: { api: CorosLinkApi; servic
   }
   async function save() {
     if (service === "spotify") {
-      const status = await api.saveSpotifyConfig({ clientId: draft.clientId.trim(), clientSecret: draft.clientSecret.trim(), redirectUri: draft.redirectUri.trim() });
+      const status = await api.saveSpotifyConfig({ clientId: draft.clientId.trim(), redirectUri: draft.redirectUri.trim() });
       setConnected(status.authenticated);
     } else if (service === "strength") {
       const status = await api.connectHevy(draft.apiKey.trim()); setConnected(status.connected);
@@ -83,7 +83,7 @@ export function ApiAccountSettings({ api, service }: { api: CorosLinkApi; servic
     {!ready && !error && <p role="status">Loading settings…</p>}
     {ready && <form onSubmit={event => { event.preventDefault(); void run(save); }}>
       <p>{service === "local" || service === "openRouter" ? (hasKey ? "API key saved" : "No API key saved") : connected ? "Connected" : "Not connected"}</p>
-      {service === "spotify" ? <>{field("clientId", "Client ID")}{field("clientSecret", "Client secret", true)}{field("redirectUri", "Redirect URI")}</>
+      {service === "spotify" ? <>{field("clientId", "Client ID")}{field("redirectUri", "Redirect URI")}</>
         : <>{field("apiKey", service === "local" ? "API key (optional)" : "API key", true, service === "strength" || service === "intervals")}
           {service === "intervals" && field("athleteId", "Athlete ID")}
           {service === "local" && field("baseUrl", "API base URL")}

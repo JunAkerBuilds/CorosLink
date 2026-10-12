@@ -1,5 +1,5 @@
 import { spawn, execFile, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { access, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import os from "node:os";
 import { promisify, stripVTControlCharacters } from "node:util";
@@ -16,7 +16,11 @@ interface RoundOptions {
   signal: AbortSignal;
   model?: string;
   reasoningEffort?: string;
+  imageGeneration?: boolean;
 }
+interface NativeGeneratedImage { id: string; result?: string; savedPath?: string }
+const MAX_GENERATED_IMAGE_BYTES = 10 * 1024 * 1024;
+const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 interface Progress { type: "thinking" | "tool"; delta?: string; callId?: string; tool?: string; status?: "call" | "done" | "failed"; message?: string }
 interface Request { resolve(result: CallToolResult): void; callId: string; tool: string; arguments: unknown }
 
@@ -144,6 +148,8 @@ export class WatchfaceCodexCli {
   private signal?: AbortSignal;
   private idle?: ReturnType<typeof setTimeout>;
   private stderr = "";
+  private generatedImages: NativeGeneratedImage[] = [];
+  private generatedImageIds = new Set<string>();
 
   constructor(private readonly progress: (event: Progress) => void, private readonly executable?: string) {}
 
@@ -192,6 +198,18 @@ export class WatchfaceCodexCli {
     if (message.method === "item/reasoning/summaryTextDelta") this.progress({ type: "thinking", delta: String(params.delta ?? "") });
     if (message.method === "item/started" || message.method === "item/completed") {
       const item = params.item ?? {};
+      if (item.type === "imageGeneration") {
+        const completed = message.method === "item/completed";
+        const failed = item.status === "failed" || Boolean(item.failure);
+        this.progress({ type: "tool", callId: `codex-${item.id}`, tool: "codex_imageGeneration",
+          status: completed ? failed ? "failed" : "done" : "call" });
+        if (completed && !failed && typeof item.id === "string" && !this.generatedImageIds.has(item.id)) {
+          this.generatedImageIds.add(item.id);
+          this.generatedImages.push({ id: item.id,
+            ...(typeof item.result === "string" ? { result: item.result } : {}),
+            ...(typeof item.savedPath === "string" ? { savedPath: item.savedPath } : {}) });
+        }
+      }
       if (["commandExecution", "fileChange", "webSearch", "mcpToolCall"].includes(item.type) && item.server !== "watchmaker") this.progress({ type: "tool", callId: `codex-${item.id}`, tool: `codex_${item.type}`,
         status: message.method === "item/started" ? "call" : item.status === "failed" || item.exitCode && item.exitCode !== 0 ? "failed" : "done",
         message: typeof item.command === "string" ? item.command.slice(0, 400) : undefined });
@@ -201,6 +219,35 @@ export class WatchfaceCodexCli {
       else { this.completed = true; this.turnId = undefined; this.wake?.(); }
     }
     if (message.method === "error" && !params.willRetry) this.fail(new Error(params.error?.message ?? "Codex CLI failed."));
+  }
+  /** Copy native image outputs into Studio before the CLI workspace is removed. */
+  async takeGeneratedImages(): Promise<Array<{ id: string; base64Png: string }>> {
+    this.signal?.throwIfAborted();
+    const images = this.generatedImages.splice(0);
+    const result = [];
+    for (const image of images) {
+      this.signal?.throwIfAborted();
+      let bytes: Buffer;
+      if (image.result) {
+        const encoded = image.result.replace(/^data:image\/png;base64,/, "");
+        if (encoded.length > Math.ceil(MAX_GENERATED_IMAGE_BYTES / 3) * 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+          throw new Error("Codex returned invalid or oversized image data.");
+        }
+        bytes = Buffer.from(encoded, "base64");
+      } else if (image.savedPath) {
+        const info = await stat(image.savedPath);
+        if (!info.isFile() || info.size > MAX_GENERATED_IMAGE_BYTES) throw new Error("Codex returned an invalid or oversized image file.");
+        bytes = await readFile(image.savedPath);
+      } else {
+        throw new Error("Codex did not return a generated image. Update the Codex CLI and retry.");
+      }
+      if (bytes.length > MAX_GENERATED_IMAGE_BYTES || !bytes.subarray(0, 8).equals(PNG_SIGNATURE)) {
+        throw new Error("Codex did not return a valid PNG image.");
+      }
+      this.signal?.throwIfAborted();
+      result.push({ id: image.id, base64Png: bytes.toString("base64") });
+    }
+    return result;
   }
   private async saveImage(data: string, mimeType: string): Promise<string> {
     const extension = ({ "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" } as Record<string, string>)[mimeType];
@@ -257,7 +304,7 @@ export class WatchfaceCodexCli {
     this.write({ method: "initialized", params: {} });
     const thread = await this.request("thread/start", {
       cwd: this.directory, approvalPolicy: "never", sandbox: "workspace-write", ephemeral: true,
-      config: { "sandbox_workspace_write.network_access": true,
+      config: { "sandbox_workspace_write.network_access": true, "features.image_generation": options.imageGeneration !== false,
         "mcp_servers.watchmaker": { url: connection.url, bearer_token_env_var: "COROSLINK_WATCHMAKER_TOKEN", required: true, tool_timeout_sec: 600 } },
       ...(options.model ? { model: options.model } : {}),
       developerInstructions: options.instructions + "\nYou are running as the Codex CLI with your full native toolset. Work however you see fit. The watchmaker MCP tools change the live editor; import_asset brings files from your working folder into the face. Shell files are outside editor Undo."

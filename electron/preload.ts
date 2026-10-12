@@ -2,6 +2,7 @@ import type { CalendarEventTiming, CalendarWorkoutEventRef, CalendarWorkoutEvent
 import type { ChatGptModelInfo } from "./chatModels";
 import type { HealthInsightKind, HealthInsightResult } from "./healthInsightsTypes";
 import { contextBridge, ipcRenderer } from "electron";
+import type { CorosNativeBleSnapshot } from "./corosNativeBleTypes";
 import type { DiagnosticsSnapshot, RendererDiagnosticError } from "./diagnosticsTypes";
 import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "./watchfaceAutomationTypes";
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "./calendarSyncTypes";
@@ -273,10 +274,42 @@ const api = {
     ipcRenderer.invoke("watchfaces:loginSaved", region),
   logoutCorosWatchfaces: (): Promise<CorosWatchfaceStatus> =>
     ipcRenderer.invoke("watchfaces:logout"),
+  forgetCorosWatchKey: (): Promise<CorosWatchfaceStatus> =>
+    ipcRenderer.invoke("watchfaces:forgetWatchKey"),
   listCorosPairedDevices: (): Promise<CorosPairedDevice[]> =>
     ipcRenderer.invoke("watchfaces:listPairedDevices"),
   selectCorosBluetoothDevice: (deviceId: string): Promise<void> =>
     ipcRenderer.invoke("watchfaces:selectBluetoothDevice", deviceId),
+  getCorosNativeBleStatus: (): Promise<CorosNativeBleSnapshot> => ipcRenderer.invoke("corosBle:status"),
+  connectCorosNativeBle: (input?: import("./corosNativeBleTypes").CorosNativeBleConnectOptions): Promise<CorosNativeBleSnapshot> => ipcRenderer.invoke("corosBle:connect", input),
+  scanCorosNativeBle: (): Promise<CorosNativeBleSnapshot> => ipcRenderer.invoke("corosBle:scan"),
+  refreshCorosNativeBle: (): Promise<CorosNativeBleSnapshot> => ipcRenderer.invoke("corosBle:refresh"),
+  getCorosMusicInventory: (): Promise<import("./corosBleMusicTypes").CorosBleMusicInventory> => ipcRenderer.invoke("corosBle:musicInventory"),
+  getCorosWifiMusicStatus: (): Promise<import("./corosWifiMusicTypes").CorosWifiMusicStatus> => ipcRenderer.invoke("corosBle:wifiMusicStatus"),
+  sendCorosMusicOverWifi: (): Promise<import("./corosWifiMusicTypes").CorosWifiMusicStatus> => ipcRenderer.invoke("corosBle:wifiMusicSend"),
+  sendCorosLibraryMusicOverWifi: (ids: string[]): Promise<import("./corosWifiMusicTypes").CorosWifiMusicStatus> => ipcRenderer.invoke("corosBle:wifiMusicLibrarySend", ids),
+  importCorosWifiMusicBackup: (): Promise<import("./corosWifiMusicTypes").CorosWifiMusicStatus> => ipcRenderer.invoke("corosBle:wifiMusicBackup"),
+  cancelCorosWifiMusicSync: (): Promise<void> => ipcRenderer.invoke("corosBle:wifiMusicCancel"),
+  restoreCorosWifiMusicSettings: (): Promise<import("./corosWifiMusicTypes").CorosWifiMusicStatus> => ipcRenderer.invoke("corosBle:wifiMusicRestore"),
+  deleteCorosMusicTrack: (target: import("./corosBleMusicTypes").CorosBleMusicDeleteTarget): Promise<import("./corosBleMusicTypes").CorosBleMusicDeleteResult> => ipcRenderer.invoke("corosBle:deleteMusic", target),
+  disconnectCorosNativeBle: (): Promise<CorosNativeBleSnapshot> => ipcRenderer.invoke("corosBle:disconnect"),
+  createCorosPhonePairingCode: (): Promise<import("./corosNativeBleTypes").CorosPhonePairingCode> => ipcRenderer.invoke("corosBle:phonePairing"),
+  sendCorosNotification: (input: import("./corosBleNotificationProtocol").CorosNotificationInput): Promise<{ sent: true; fragments: number }> => ipcRenderer.invoke("corosBle:sendNotification", input),
+  chooseCorosDirectWatchface: (): Promise<import("./corosBleWatchfaceTypes").CorosDirectWatchfacePreview | null> => ipcRenderer.invoke("corosBle:chooseWatchface"),
+  getCorosWatchfaceSyncStatus: (): Promise<import("./corosBleWatchfaceTypes").CorosDirectWatchfaceStatus> => ipcRenderer.invoke("corosBle:watchfaceStatus"),
+  getCorosWatchfaceSlots: (): Promise<import("./corosBleWatchfaceTypes").CorosDirectWatchfaceInventory> => ipcRenderer.invoke("corosBle:watchfaceSlots"),
+  syncCorosWatchface: (previewId: string, target?: import("./corosBleWatchfaceTypes").CorosDirectWatchfaceTarget): Promise<import("./corosBleWatchfaceTypes").CorosDirectWatchfaceStatus> => ipcRenderer.invoke("corosBle:watchfaceSync", previewId, target),
+  cancelCorosWatchfaceSync: (): Promise<void> => ipcRenderer.invoke("corosBle:watchfaceCancel"),
+  getCorosWatchfaceCompilerStatus: (): Promise<import("./corosWatchfaceCompilerTypes").CorosWatchfaceCompilerStatus> => ipcRenderer.invoke("corosBle:compilerStatus"),
+  compileCorosDirectWatchface: (): Promise<import("./corosBleWatchfaceTypes").CorosDirectWatchfacePreview | null> => ipcRenderer.invoke("corosBle:compileWatchface"),
+  compileCorosWatchfaceArchive: (input: { archiveId: string; name: string; firmwareType?: string }): Promise<import("./corosBleWatchfaceTypes").CorosDirectWatchfacePreview> => ipcRenderer.invoke("watchfaces:compileBin", input),
+  saveCorosCompiledWatchface: (previewId: string): Promise<{ saved: boolean }> => ipcRenderer.invoke("corosBle:saveCompiledBin", previewId),
+  getCorosWifiMapStatus: (): Promise<import("./corosWifiMapTypes").CorosWifiMapStatus> => ipcRenderer.invoke("corosBle:mapStatus"),
+  previewCorosWifiMap: (tiles: import("./corosWifiMapTypes").CorosWifiMapTile[]): Promise<import("./corosWifiMapTypes").CorosWifiMapPreview> => ipcRenderer.invoke("corosBle:mapPreview", tiles),
+  downloadCorosWifiMap: (previewId: string): Promise<{ taskId: string; status: import("./corosWifiMapTypes").CorosWifiMapStatus }> => ipcRenderer.invoke("corosBle:mapDownload", previewId),
+  getCorosRouteSyncStatus: (): Promise<import("./corosBleRouteTypes").CorosRouteSyncStatus> => ipcRenderer.invoke("corosBle:routeStatus"),
+  syncCorosRoute: (routeId: string): Promise<import("./corosBleRouteTypes").CorosRouteSyncStatus> => ipcRenderer.invoke("corosBle:routeSync", routeId),
+  cancelCorosRouteSync: (): Promise<void> => ipcRenderer.invoke("corosBle:routeCancel"),
   cancelCorosBluetoothDeviceSelection: (): Promise<void> =>
     ipcRenderer.invoke("watchfaces:cancelBluetoothDevice"),
   onCorosBluetoothDevices: (
@@ -642,6 +675,10 @@ const api = {
     ipcRenderer.invoke("spotify:login"),
   logoutSpotify: (): Promise<SpotifyStatus> =>
     ipcRenderer.invoke("spotify:logout"),
+  unlockSpotifyFollowedPlaylists: (): Promise<SpotifyStatus> =>
+    ipcRenderer.invoke("spotify:unlockFollowed"),
+  lockSpotifyFollowedPlaylists: (): Promise<SpotifyStatus> =>
+    ipcRenderer.invoke("spotify:lockFollowed"),
   listSpotifyPlaylists: (): Promise<SpotifyPlaylist[]> =>
     ipcRenderer.invoke("spotify:listPlaylists"),
   listSpotifyPlaylistTracks: (

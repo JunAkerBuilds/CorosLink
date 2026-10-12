@@ -1,4 +1,6 @@
 import {
+  AlertCircle,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
   FileUp,
@@ -27,6 +29,7 @@ import type {
   RouteWaypoint
 } from "../../../electron/types";
 import type { CorosLinkApi } from "../../coroslink-api";
+import type { CorosRouteSyncStatus } from "../../../electron/corosBleRouteTypes";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import type { RouteBaseLayer, RouteOverlayId } from "./constants";
 import { RouteMapCanvas, type RouteStudioMode } from "./RouteMapCanvas";
@@ -152,6 +155,33 @@ export function RouteStudio({
   }, [api]);
   const [activeSavedId, setActiveSavedId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<CorosRouteSyncStatus | null>(null);
+  const [cancelPending, setCancelPending] = useState(false);
+  const syncing = syncStatus !== null && ["connecting", "preparing", "transferring", "verifying"].includes(syncStatus.phase);
+  const footerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const footer = footerRef.current;
+    const studio = footer?.parentElement;
+    if (!footer || !studio) return;
+    const update = () => studio.style.setProperty("--route-footer-clearance", `${Math.ceil(footer.getBoundingClientRect().height) + 104}px`);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(footer);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const state = await api.getCorosRouteSyncStatus();
+        if (!stopped && state && state.phase !== "idle") setSyncStatus(state);
+      } catch { /* The send operation reports actionable errors. */ }
+      if (!stopped && syncing) timer = setTimeout(() => void poll(), 700);
+    };
+    void poll();
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [api, syncing]);
   const [savingDraw, setSavingDraw] = useState(false);
   const [importing, setImporting] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -502,6 +532,29 @@ export function RouteStudio({
     }
   }
 
+  async function handleSync(route: GeneratedRouteSummary) {
+    if (syncing) return;
+    setBusyId(route.id); setCancelPending(false);
+    setSyncStatus({ phase: "connecting", routeId: route.id, routeName: route.name, sentBytes: 0, totalBytes: 0 });
+    onError(null);
+    try {
+      const result = await api.syncCorosRoute(route.id);
+      setSyncStatus(result);
+      if (result.phase === "complete") onMessage(`"${result.routeName}" synced and verified on your watch.`);
+      else if (result.phase === "cancelled") onMessage("Route sync cancelled.");
+    } catch (caught) {
+      const message = toErrorMessage(caught);
+      setSyncStatus(current => ({ ...current!, phase: "failed", error: message }));
+      onError(message);
+    } finally { setBusyId(null); setCancelPending(false); }
+  }
+
+  async function handleCancelSync() {
+    setCancelPending(true);
+    try { await api.cancelCorosRouteSync(); }
+    catch (caught) { setCancelPending(false); onError(toErrorMessage(caught)); }
+  }
+
   async function handleShare(route: GeneratedRouteSummary) {
     onError(null);
     try {
@@ -737,7 +790,26 @@ export function RouteStudio({
         }
       />
 
-      <div className="route-statsbar-wrap">
+      <div className="route-statsbar-wrap" ref={footerRef}>
+        {syncStatus ? (
+          <div className={`route-sync-status is-${syncStatus.phase}`} role="status" aria-live="polite">
+            {syncStatus.phase === "complete" ? <CheckCircle2 size={18} aria-hidden="true" /> :
+              syncStatus.phase === "failed" ? <AlertCircle size={18} aria-hidden="true" /> :
+              syncing ? <Loader2 size={18} className="spin" aria-hidden="true" /> : <X size={18} aria-hidden="true" />}
+            <div className="route-sync-copy">
+              <strong>{syncStatus.phase === "complete" ? "Synced to watch" :
+                syncStatus.phase === "failed" ? "Route sync failed" : syncStatus.phase === "cancelled" ? "Route sync cancelled" :
+                syncStatus.phase === "connecting" ? "Connecting to your watch…" : syncStatus.phase === "preparing" ? "Preparing route…" :
+                syncStatus.phase === "verifying" ? "Verifying route…" : "Syncing route…"}</strong>
+              <span title={syncStatus.error ?? syncStatus.routeName}>{syncStatus.error ?? syncStatus.routeName}</span>
+            </div>
+            {syncing && syncStatus.totalBytes > 0 ? <progress aria-label="Route sync progress" max={syncStatus.totalBytes} value={syncStatus.sentBytes} /> : null}
+            {syncing ? <button type="button" className="button ghost" disabled={cancelPending} onClick={() => void handleCancelSync()}>
+              {cancelPending ? "Cancelling…" : "Cancel sync"}
+            </button> : <button type="button" className="icon-button route-sync-dismiss" aria-label="Dismiss route sync message"
+              title="Dismiss route sync message" onClick={() => setSyncStatus(null)}><X size={16} aria-hidden="true" /></button>}
+          </div>
+        ) : null}
         <RouteStatsBar
           summary={summary}
           paceBaselines={paceBaselines}
@@ -754,6 +826,8 @@ export function RouteStudio({
               ? () => void handleShare(previewRoute)
               : undefined
           }
+          onSync={mode === "generate" && previewRoute ? () => void handleSync(previewRoute) : undefined}
+          syncing={syncing}
           exporting={busyId !== null}
           busy={
             mode === "draw"
@@ -777,6 +851,8 @@ export function RouteStudio({
         onSelect={(route) => void handleSelectSaved(route)}
         onExport={(route) => void handleExport(route)}
         onShare={(route) => void handleShare(route)}
+        onSync={(route) => void handleSync(route)}
+        syncing={syncing}
         onDelete={(route) => void handleDelete(route)}
       />
 

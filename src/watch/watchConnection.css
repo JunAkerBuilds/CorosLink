@@ -1,0 +1,580 @@
+/*
+ * Toolbar watch menu: one trigger (watch name + status lamp) and a popover
+ * that holds connecting, messages, iPhone pairing and diagnostics. Surfaces
+ * come from the toolbar's --toolbar-* tokens; controls reuse watchLink.css.
+ */
+
+.watch-menu {
+  position: relative;
+  display: flex;
+}
+
+/* Trigger ------------------------------------------------------------------ */
+
+.app .app-header .watch-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 3px 0 0;
+  border: 1px solid var(--toolbar-edge);
+  border-radius: 19px;
+  background: var(--toolbar-face);
+  box-shadow: var(--toolbar-depth);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+  -webkit-app-region: no-drag;
+}
+
+.app .app-header .watch-menu-trigger:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--toolbar-depth), 0 0 0 2px var(--surface-highlight);
+}
+
+.app .app-header .watch-menu-trigger[aria-expanded="true"] {
+  background: var(--toolbar-well);
+  box-shadow: inset 0 2px 4px var(--toolbar-shadow), 0 1px 0 var(--toolbar-highlight);
+}
+
+.watch-menu-trigger-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 150px;
+  padding: 0 10px 0 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.watch-menu-trigger-name > svg {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.watch-menu-trigger-name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-menu-trigger-status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 9px 0 11px;
+  border: 1px solid var(--toolbar-edge);
+  border-radius: 15px;
+  background: var(--toolbar-well);
+  box-shadow: inset 0 1px 2px var(--toolbar-shadow);
+  color: var(--text-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.watch-menu-trigger-status > svg {
+  color: var(--text-secondary);
+  transition: transform 140ms ease;
+}
+
+.watch-menu-trigger[aria-expanded="true"] .watch-menu-trigger-status > svg { transform: rotate(180deg); }
+
+.watch-menu-lamp {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-muted);
+  box-shadow: inset 0 1px 1px var(--toolbar-highlight);
+}
+
+.watch-menu-trigger.is-ok .watch-menu-trigger-status {
+  border-color: color-mix(in srgb, var(--toolbar-lamp) 35%, var(--toolbar-edge));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--toolbar-lamp) 12%, transparent), transparent), var(--toolbar-well);
+  color: var(--toolbar-lamp);
+}
+
+.watch-menu-trigger.is-ok .watch-menu-trigger-status > svg { color: currentColor; }
+
+.watch-menu-trigger.is-ok .watch-menu-lamp {
+  background: var(--toolbar-lamp);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4), 0 0 7px color-mix(in srgb, var(--toolbar-lamp) 38%, transparent);
+}
+
+.watch-menu-trigger.is-busy .watch-menu-trigger-status { color: var(--text-primary); }
+.watch-menu-trigger.is-busy .watch-menu-lamp { background: var(--accent); animation: watch-link-pulse 1.4s ease-in-out infinite; }
+
+.watch-menu-trigger:is(.is-warn, .is-error) .watch-menu-trigger-status {
+  border-color: var(--warning-border);
+  color: var(--warning-text);
+}
+
+.watch-menu-trigger:is(.is-warn, .is-error) .watch-menu-trigger-status > svg { color: currentColor; }
+.watch-menu-trigger:is(.is-warn, .is-error) .watch-menu-lamp { background: var(--warning-text); }
+
+/* Paper's --warning-text is ~3.8:1 on the toolbar well; this amber keeps 4.5:1+. */
+:root[data-theme="paper"] .watch-menu-trigger:is(.is-warn, .is-error) .watch-menu-trigger-status { color: #8a5a00; }
+
+/* Panel -------------------------------------------------------------------- */
+
+.watch-menu-panel {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  gap: 14px;
+  width: 372px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 86px);
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid var(--toolbar-edge);
+  border-radius: 18px;
+  background: var(--toolbar-panel);
+  box-shadow: inset 0 1px 0 var(--toolbar-highlight), 0 18px 44px var(--toolbar-shadow), 0 2px 6px var(--toolbar-shadow);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+.watch-menu-panel:focus { outline: none; }
+
+.watch-menu-panel h2 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-menu-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.watch-menu-identity .watch-link-glyph {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+}
+
+.watch-menu-identity .watch-link-glyph::after { border-color: var(--toolbar-panel); }
+
+.watch-menu-identity-text {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+}
+
+.watch-menu-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0;
+}
+
+.watch-menu-meta :is(.watch-link-state, .watch-link-chip) {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11.5px;
+}
+
+.watch-menu-hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Connect ------------------------------------------------------------------ */
+
+.watch-menu-connect {
+  display: grid;
+  gap: 8px;
+}
+
+.watch-menu-panel .watch-menu-connect-button {
+  width: 100%;
+  height: 40px;
+  min-height: 40px;
+  min-width: 0;
+}
+
+.watch-menu-panel .watch-menu-connect-button:disabled:not(.is-busy) { opacity: 0.6; }
+
+.watch-menu-devices {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.watch-menu-devices legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.watch-menu-devices label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 11px;
+  border: 1px solid var(--watch-link-rule);
+  border-radius: 10px;
+  background: var(--watch-link-control);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.watch-menu-devices label:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--watch-link-rule)); }
+.watch-menu-devices label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.watch-menu-devices label.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.watch-menu-devices input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.watch-menu-devices label > span {
+  display: grid;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.watch-menu-devices small {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sign-in callout ---------------------------------------------------------- */
+
+.watch-menu-callout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--warning-border);
+  border-radius: 12px;
+  background: var(--warning-bg);
+}
+
+.watch-menu-callout > svg {
+  align-self: start;
+  margin-top: 1px;
+  color: var(--warning-text);
+}
+
+:root[data-theme="paper"] .watch-menu-callout > svg { color: #8a5a00; }
+
+.watch-menu-callout strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.watch-menu-callout p {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.watch-menu-panel .watch-menu-callout .watch-link-button {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px;
+}
+
+/* Feature list ------------------------------------------------------------- */
+
+.watch-menu-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid var(--watch-link-rule);
+  border-radius: 14px;
+  background: var(--watch-link-control);
+  list-style: none;
+}
+
+.watch-menu-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 50px;
+  padding: 7px 8px 7px 7px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+.watch-menu-row:hover { background: var(--watch-link-control-hover); }
+.watch-menu-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.watch-menu-row-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.watch-menu-row-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.watch-menu-row-text strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.watch-menu-row-text small {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-menu-row > svg:last-child {
+  color: var(--text-secondary);
+  transition: transform 140ms ease, color 140ms ease;
+}
+
+.watch-menu-row:hover > svg:last-child {
+  color: var(--text-primary);
+  transform: translateX(2px);
+}
+
+/* USB storage -------------------------------------------------------------- */
+
+.watch-menu-usb {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  padding: 0 4px;
+}
+
+.watch-menu-usb-icon {
+  display: grid;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--watch-link-rule);
+  border-radius: 9px;
+  color: var(--text-secondary);
+}
+
+.watch-menu-usb > div {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.watch-menu-usb strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-menu-usb span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* Footer ------------------------------------------------------------------- */
+
+.watch-menu-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--watch-link-rule);
+}
+
+.watch-menu-text-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.watch-menu-text-button:hover:not(:disabled) { background: var(--watch-link-control-hover); }
+.watch-menu-text-button:disabled { color: var(--text-muted); cursor: not-allowed; }
+
+.watch-menu-panel .watch-menu-footer .watch-link-button {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px;
+}
+
+/* Sub-pages ---------------------------------------------------------------- */
+
+.watch-menu-page {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.watch-menu-page-head {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.watch-menu-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 28px;
+  margin-left: -6px;
+  padding: 0 8px 0 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.watch-menu-back:hover { background: var(--watch-link-control-hover); }
+
+/* Pairing stacks in the narrow popover: the code, once shown, comes first. */
+.watch-menu-panel .watch-link-phone { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.watch-menu-panel .watch-link-phone-copy h3 { display: none; }
+.watch-menu-panel .watch-link-phone-code { justify-self: center; }
+.watch-menu-panel .watch-link-phone-code:not(.is-visible) { display: none; }
+.watch-menu-panel .watch-link-phone-code.is-visible { order: -1; }
+.watch-menu-panel .watch-link-phone-code img { width: 240px; height: 240px; }
+.watch-menu-panel .watch-link-phone-copy p,
+.watch-menu-panel .watch-link-phone-copy ol { font-size: 12.5px; }
+.watch-menu-panel .watch-link-phone-actions .watch-link-button { width: 100%; }
+
+/* Details read as a settings list rather than tiles. */
+.watch-menu-panel .watch-link-details dl {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--watch-link-rule);
+  border-radius: 12px;
+  background: var(--watch-link-control);
+}
+
+.watch-menu-panel .watch-link-details dl > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.watch-menu-panel .watch-link-details dl > div + div { border-top: 1px solid var(--watch-link-rule); }
+.watch-menu-panel .watch-link-details dt { flex: none; font-size: 12.5px; }
+.watch-menu-panel .watch-link-details dd { margin: 0; text-align: right; }
+/* The page title names the composer; keep the label for assistive tech. */
+.watch-menu-panel .watch-link-composer label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .watch-menu-panel {
+    position: fixed;
+    top: 62px;
+    right: 12px;
+    width: min(372px, calc(100vw - 24px));
+  }
+}
+
+@media (max-width: 560px) {
+  .app .app-header .watch-menu-trigger { height: 34px; min-height: 34px; padding: 0 2px; }
+  .watch-menu-trigger-name { display: none; }
+  .watch-menu-trigger-label { display: none; }
+  .watch-menu-trigger-status { height: 28px; padding: 0 8px 0 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .watch-menu-trigger.is-busy .watch-menu-lamp { animation: none; }
+  .watch-menu-row > svg:last-child,
+  .watch-menu-trigger-status > svg { transition: none; }
+}

@@ -1,5 +1,6 @@
 import {
   Activity,
+  Bluetooth,
   Clock,
   Download,
   Gauge,
@@ -49,6 +50,8 @@ export function RouteStatsBar({
   routeName,
   onExport,
   onShare,
+  onSync,
+  syncing,
   exporting,
   busy
 }: {
@@ -59,6 +62,8 @@ export function RouteStatsBar({
   /** Quick actions for the previewed route (Generate mode only). */
   onExport?: () => void;
   onShare?: () => void;
+  onSync?: () => void;
+  syncing?: boolean;
   exporting?: boolean;
   busy?: boolean;
 }) {
@@ -144,8 +149,14 @@ export function RouteStatsBar({
         </div>
       ) : null}
 
-      {onExport || onShare ? (
+      {onExport || onShare || onSync ? (
         <div className="route-statsbar-actions">
+          {onSync ? (
+            <button type="button" className="button" onClick={onSync} disabled={syncing || exporting}>
+              {syncing ? <Loader2 size={14} className="spin" aria-hidden="true" /> : <Bluetooth size={14} aria-hidden="true" />}
+              {syncing ? "Syncing…" : "Sync to watch"}
+            </button>
+          ) : null}
           {onExport ? (
             <button
               type="button"

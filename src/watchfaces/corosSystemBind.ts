@@ -4,9 +4,9 @@
  * The PACE Pro requires an `A5` SystemBind exchange before it will accept an
  * SFT watch-face transfer.  This module models the deterministic first
  * request and the protocol-v2 framing used by the Android client.  It does
- * not open Bluetooth connections or send a packet; the still-unmapped
- * follow-up A5 configuration exchange must be verified before it is wired
- * into the direct installer.
+ * not open Bluetooth connections or send a packet. The native Bumble worker
+ * implements the verified RSA challenge exchange in scripts/coros_ble_auth.py.
+ * Watchface transfer remains separate from session authentication.
  */
 
 export const COROS_SYSTEM_BIND_OPCODE = 0xa5;
@@ -55,9 +55,10 @@ export interface CorosV2ControlFrameOptions {
 
 export interface CorosSystemBindAuth {
   /**
-   * Per-account/device data produced by a live official-session provider.
-   * This is not an archive asset and must never be captured, persisted, or
-   * replayed by CorosLink.
+   * Legacy field name for signature[256] + account ID[8] + fresh nonce[4].
+   * These live authentication bytes must never be persisted or replayed.
+   * The native worker retains only the account credential in OS-encrypted
+   * storage, and signs the watch's new challenge on each connection.
    */
   compressedData: Uint8Array;
 }

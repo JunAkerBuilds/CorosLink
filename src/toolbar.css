@@ -183,68 +183,6 @@
   box-shadow: inset 0 2px 4px var(--toolbar-shadow), 0 1px 0 var(--toolbar-highlight);
 }
 
-.app-toolbar-watch-name {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  max-width: 170px;
-  height: 38px;
-  padding: 0 13px;
-  border: 1px solid var(--toolbar-edge);
-  border-radius: 13px;
-  background: var(--toolbar-face);
-  box-shadow: var(--toolbar-depth);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 550;
-}
-
-.app-toolbar-watch-name > svg {
-  flex-shrink: 0;
-  color: var(--text-muted);
-}
-
-.app-toolbar-watch-name > span {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.app .app-header .watch-status-chip {
-  height: 38px;
-  min-height: 38px;
-  gap: 9px;
-  padding: 0 14px;
-  border: 1px solid var(--toolbar-edge);
-  border-radius: 18px;
-  background: var(--toolbar-well);
-  box-shadow: inset 0 1px 2px var(--toolbar-shadow), 0 1px 0 var(--toolbar-highlight);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 550;
-}
-
-.app .app-header .watch-status-chip.connected {
-  border-color: color-mix(in srgb, var(--toolbar-lamp) 35%, var(--toolbar-edge));
-  background: linear-gradient(180deg, color-mix(in srgb, var(--toolbar-lamp) 12%, transparent), transparent), var(--toolbar-well);
-  color: var(--toolbar-lamp);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--toolbar-lamp) 13%, transparent), 0 2px 4px var(--toolbar-shadow);
-}
-
-.app .app-header .status-dot {
-  display: block;
-  width: 7px;
-  height: 7px;
-  background: var(--text-muted);
-  box-shadow: inset 0 1px 1px var(--toolbar-highlight);
-}
-
-.app .app-header .connected .status-dot {
-  background: var(--toolbar-lamp);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4), 0 0 7px color-mix(in srgb, var(--toolbar-lamp) 38%, transparent);
-}
-
 .toolbar-more {
   position: relative;
 }
@@ -400,18 +338,6 @@
     width: 34px;
     height: 34px;
     min-height: 34px;
-  }
-
-  .app-toolbar-watch-name {
-    display: none;
-  }
-
-  .app .app-header .watch-status-chip {
-    width: 34px;
-    height: 34px;
-    min-height: 34px;
-    justify-content: center;
-    padding: 0;
   }
 }
 

@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { gunzip } from "node:zlib";
 import { promisify } from "node:util";
+import { prepareSystemBluetooth } from "./prepare-system-bluetooth.mjs";
 
 const require = createRequire(import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -39,6 +40,7 @@ await installPythonRuntime(
   targetArch
 );
 await installPythonPackages(path.join(outputDir, "python"));
+await prepareSystemBluetooth(targetPlatform, targetArch);
 
 console.log(`Prepared bundled binaries in ${path.relative(repoRoot, outputDir)}`);
 

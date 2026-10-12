@@ -24,7 +24,10 @@ async function main() {
   try {
     await vite.listen();
     window = new BrowserWindow({ show: false, webPreferences: { backgroundThrottling: false } });
-    const js = code => window.webContents.executeJavaScript(code, true);
+    const js = async code => {
+      try { return await window.webContents.executeJavaScript(code, true); }
+      catch (cause) { throw new Error(`Panel fixture failed: ${code}`, { cause }); }
+    };
     const until = async (code, label) => {
       const deadline = Date.now() + 10000;
       while (Date.now() < deadline) {
@@ -36,6 +39,9 @@ async function main() {
     await window.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/panel-test`);
     await js(`import('/scripts/fixtures/watchface-ai-panel.js').then(() => undefined)`);
     await until('!!document.querySelector(".wf-ai-suggestions button")', 'panel ready');
+    const notice = await js('document.querySelector(".wf-ai-cli-warning").textContent');
+    assert.match(notice, /CLI sign-in for chat and image generation/);
+    assert.doesNotMatch(notice, /Image generation still needs/);
     await js('document.querySelector(".wf-ai-suggestions button").click()');
     await until('requests.length === 1', 'first request');
     await js('complete()');

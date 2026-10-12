@@ -18,6 +18,8 @@ import {
   LogIn,
   LogOut,
   Loader2,
+  Lock,
+  LockOpen,
   Music,
   PanelLeft,
   Podcast,
@@ -99,6 +101,7 @@ import { StartupViewMenu } from "./components/StartupViewMenu";
 import { ToolbarMoreMenu } from "./components/ToolbarMoreMenu";
 import { ThemeToggle } from "./theme/ThemeToggle";
 import { WatchConnectionSmokeControls } from "./components/WatchConnectionSmokeControls";
+import type { CorosNativeBleSnapshot } from "../electron/corosNativeBleTypes";
 import type { PrimaryView } from "./navigation/primaryNav";
 import {
   getPrimaryViewLabel,
@@ -115,6 +118,10 @@ import {
   type TrackTransferProgress,
 } from "./media/LibraryPanels";
 import { AudiobooksView } from "./media/AudiobooksView";
+import { WatchMusicSourcePanel } from "./media/WatchMusicSourcePanel";
+import { WatchConnectionMenu } from "./watch/WatchConnectionMenu";
+import type { WatchfacesNavigationRequest } from "./watchfaces/WatchfacesView";
+import { CorosWifiMusicPanel } from "./media/CorosWifiMusicPanel";
 import {
   countPendingTransfers,
   isLocalTrackOnWatch,
@@ -367,15 +374,41 @@ export default function App() {
     MEDIA_TAB_PREFERENCE,
   );
   const [watchStatus, setWatchStatus] = useState<WatchStatus | null>(null);
+  const [nativeBleStatus, setNativeBleStatus] = useState<CorosNativeBleSnapshot | null>(null);
+  useEffect(() => {
+    if (!api?.getCorosNativeBleStatus) return;
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      try {
+        const status = await api!.getCorosNativeBleStatus();
+        if (!disposed) setNativeBleStatus(status);
+      } catch {
+        if (!disposed) setNativeBleStatus(null);
+      } finally {
+        if (!disposed) timer = setTimeout(() => void poll(), 2000);
+      }
+    }
+    void poll();
+    return () => { disposed = true; clearTimeout(timer); };
+  }, [api]);
   const [transferProgress, setTransferProgress] =
     useState<TrackTransferProgress | null>(null);
   const [communityWatchfaceOpenRequest, setCommunityWatchfaceOpenRequest] =
     useState<(CommunityWatchfaceOpenRequest & { requestId: number }) | null>(null);
   const communityWatchfaceRequestSequence = useRef(0);
+  const [watchMenuOpen, setWatchMenuOpen] = useState(false);
+  const [watchfacesNavigation, setWatchfacesNavigation] =
+    useState<WatchfacesNavigationRequest | null>(null);
+  const watchfacesNavigationSequence = useRef(0);
+  const openWatchfacesTarget = useCallback((target: WatchfacesNavigationRequest["target"]) => {
+    watchfacesNavigationSequence.current += 1;
+    setWatchfacesNavigation({ target, requestId: watchfacesNavigationSequence.current });
+    setActiveView("watchfaces");
+  }, []);
   const [downloads, setDownloads] = useState<LocalTrack[]>([]);
   const [spotifyConfig, setSpotifyConfig] = useState<SpotifyConfig>({
     clientId: "",
-    clientSecret: "",
     redirectUri: "",
   });
   const [spotifyStatus, setSpotifyStatus] = useState<SpotifyStatus | null>(
@@ -1302,6 +1335,35 @@ export default function App() {
       const status = await api.loginSpotify();
       setSpotifyStatus(status);
       setMessage("Spotify account connected.");
+      await refreshSpotify();
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleSpotifyFollowedToggle() {
+    if (!api || !spotifyStatus) {
+      return;
+    }
+
+    const unlocking = !spotifyStatus.followedPlaylistsUnlocked;
+    setBusy("spotify-followed");
+    setError(null);
+    setMessage(null);
+
+    try {
+      setSpotifyStatus(
+        unlocking
+          ? await api.unlockSpotifyFollowedPlaylists()
+          : await api.lockSpotifyFollowedPlaylists(),
+      );
+      setMessage(
+        unlocking
+          ? "Followed playlists unlocked."
+          : "Followed playlists locked.",
+      );
       await refreshSpotify();
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -2283,19 +2345,16 @@ export default function App() {
             ) : null}
           </div>
           <div className="app-toolbar-watch">
-            <span className="app-toolbar-watch-name">
-              <Watch size={16} aria-hidden="true" />
-              <span>{watchStatus?.connected ? (watchStatus.name ?? "Watch") : "Watch"}</span>
-            </span>
-            <div
-              className={`watch-status-chip${watchStatus?.connected ? " connected" : ""}`}
-              title={watchStatus?.rootPath ?? "No watch volume found"}
-              role="status"
-              aria-label={watchStatus?.connected ? "Watch connected" : "No watch connected"}
-            >
-              <StatusDot connected={Boolean(watchStatus?.connected)} />
-              <span>{watchStatus?.connected ? "Connected" : "Offline"}</span>
-            </div>
+            <WatchConnectionMenu
+              api={api}
+              snapshot={nativeBleStatus}
+              onSnapshotChange={setNativeBleStatus}
+              usbWatch={watchStatus}
+              open={watchMenuOpen}
+              onOpenChange={setWatchMenuOpen}
+              onOpenWatchFaces={() => openWatchfacesTarget("watch")}
+              onSignIn={() => openWatchfacesTarget("sign-in")}
+            />
             <button
               className="icon-button app-toolbar-refresh"
               type="button"
@@ -2387,6 +2446,8 @@ export default function App() {
               >
                 {activeMediaTab === "library" ? (
                   <MediaLibraryTab
+                    api={api}
+                    nativeBleStatus={nativeBleStatus}
                     downloads={downloads}
                     watchStatus={watchStatus}
                     watchConnected={Boolean(watchStatus?.connected)}
@@ -2400,6 +2461,7 @@ export default function App() {
                     onDeleteDownloads={handleDeleteDownloads}
                     onDeleteWatchTrack={handleDeleteWatchTrack}
                     onDeleteWatchTracks={handleDeleteWatchTracks}
+                    bluetoothMusic={IS_DEVELOPMENT_BUILD && showDevelopmentTools}
                   />
                 ) : activeMediaTab === "youtube" ? (
                   <YouTubeBrowserView
@@ -2452,6 +2514,7 @@ export default function App() {
                     onConfigSubmit={handleSpotifyConfigSubmit}
                     onLogin={handleSpotifyLogin}
                     onLogout={handleSpotifyLogout}
+                    onToggleFollowed={handleSpotifyFollowedToggle}
                     onSelectPlaylist={setSelectedSpotifyPlaylistId}
                     onRefresh={refreshSpotify}
                     onMessage={setMessage}
@@ -2491,6 +2554,7 @@ export default function App() {
                   onWatchStatusChange={setWatchStatus}
                   onMessage={setMessage}
                   onError={setError}
+                  onOpenWatchMenu={() => setWatchMenuOpen(true)}
                 />
               </Suspense>
             ) : null}
@@ -2503,6 +2567,10 @@ export default function App() {
                   active={activeView === "watchfaces"}
                   showDevelopmentTools={showDevelopmentTools}
                   watchStatus={watchStatus}
+                  watchLink={nativeBleStatus}
+                  onOpenWatchMenu={() => setWatchMenuOpen(true)}
+                  navigationRequest={watchfacesNavigation}
+                  onNavigationRequestHandled={() => setWatchfacesNavigation(null)}
                   communityOpenRequest={communityWatchfaceOpenRequest}
                   onCommunityOpenRequestHandled={() =>
                     setCommunityWatchfaceOpenRequest(null)
@@ -3163,6 +3231,8 @@ function MediaOverviewTab({
 }
 
 interface MediaLibraryTabProps {
+  api: CorosLinkApi | undefined;
+  nativeBleStatus: CorosNativeBleSnapshot | null;
   downloads: LocalTrack[];
   watchStatus: WatchStatus | null;
   watchConnected: boolean;
@@ -3176,9 +3246,13 @@ interface MediaLibraryTabProps {
   onDeleteDownloads: (tracks: LocalTrack[]) => void;
   onDeleteWatchTrack: (track: WatchTrack) => void;
   onDeleteWatchTracks: (tracks: WatchTrack[]) => void;
+  /** Bluetooth library and Wi-Fi send; development builds only for now. */
+  bluetoothMusic: boolean;
 }
 
 function MediaLibraryTab({
+  api,
+  nativeBleStatus,
   downloads,
   watchStatus,
   watchConnected,
@@ -3192,8 +3266,11 @@ function MediaLibraryTab({
   onDeleteDownloads,
   onDeleteWatchTrack,
   onDeleteWatchTracks,
+  bluetoothMusic,
 }: MediaLibraryTabProps) {
   const watchTracks = watchStatus?.tracks ?? [];
+  const [wifiSyncBusy, setWifiSyncBusy] = useState(false);
+  const [bleMusicBusy, setBleMusicBusy] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [selectedWatchPaths, setSelectedWatchPaths] = useState<Set<string>>(
     () => new Set(),
@@ -3299,6 +3376,20 @@ function MediaLibraryTab({
     setSelectedWatchPaths(new Set());
   }
 
+  const usbWatchPanel = (
+    <WatchLibraryPanel
+      watchStatus={watchStatus}
+      watchConnected={watchConnected}
+      busy={wifiSyncBusy ? "transfer-wifi" : busy}
+      selectedPaths={selectedWatchPaths}
+      onToggleSelect={toggleSelectWatch}
+      onSelectTracks={setWatchTracksSelected}
+      onClearSelection={clearWatchSelection}
+      onDeleteWatchTrack={onDeleteWatchTrack}
+      onDeleteWatchTracks={handleWatchBulkDelete}
+    />
+  );
+
   return (
     <div className="stack stack-fill">
       <section className="panel panel-flex library-sync-panel">
@@ -3307,14 +3398,14 @@ function MediaLibraryTab({
           localCount={downloads.length}
           watchConnected={watchConnected}
           syncing={
-            transferProgress != null || Boolean(busy?.startsWith("transfer"))
+            wifiSyncBusy || transferProgress != null || Boolean(busy?.startsWith("transfer"))
           }
           localPanel={
             <LocalLibraryPanel
               downloads={downloads}
               watchTracks={watchTracks}
               watchConnected={watchConnected}
-              busy={busy}
+              busy={wifiSyncBusy ? "transfer-wifi" : busy}
               transferProgress={transferProgress}
               selectedIds={selectedIds}
               canTransferAll={canTransferAll}
@@ -3326,20 +3417,23 @@ function MediaLibraryTab({
               onTransferDownloads={handleLocalBulkTransfer}
               onDeleteDownload={onDeleteDownload}
               onDeleteDownloads={handleLocalBulkDelete}
+              wifiSyncPanel={bluetoothMusic && nativeBleStatus?.connected && api && typeof api.sendCorosLibraryMusicOverWifi === "function" ?
+                <CorosWifiMusicPanel key={nativeBleStatus.deviceId ?? nativeBleStatus.watchAddress ?? nativeBleStatus.deviceName}
+                  api={api} otherBusy={Boolean(busy) || bleMusicBusy} onBusyChange={setWifiSyncBusy}
+                  library={{ allIds: downloads.map(track => track.id), selectedIds: downloads.filter(track => selectedIds.has(track.id)).map(track => track.id) }} /> : null}
             />
           }
           watchPanel={
-            <WatchLibraryPanel
-              watchStatus={watchStatus}
-              watchConnected={watchConnected}
-              busy={busy}
-              selectedPaths={selectedWatchPaths}
-              onToggleSelect={toggleSelectWatch}
-              onSelectTracks={setWatchTracksSelected}
-              onClearSelection={clearWatchSelection}
-              onDeleteWatchTrack={onDeleteWatchTrack}
-              onDeleteWatchTracks={handleWatchBulkDelete}
-            />
+            bluetoothMusic ? (
+              <WatchMusicSourcePanel
+                api={api}
+                connection={nativeBleStatus}
+                showWifiMusic={false}
+                wifiSyncBusy={wifiSyncBusy}
+                onBluetoothBusyChange={setBleMusicBusy}
+                usbPanel={usbWatchPanel}
+              />
+            ) : usbWatchPanel
           }
         />
       </section>
@@ -4016,6 +4110,7 @@ interface SpotifySyncViewProps {
   onConfigSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onLogin: () => void;
   onLogout: () => void;
+  onToggleFollowed: () => void;
   onSelectPlaylist: (playlistId: string) => void;
   onRefresh: () => void | Promise<void>;
   onMessage: (message: string) => void;
@@ -5050,6 +5145,7 @@ function SpotifySyncView({
   onConfigSubmit,
   onLogin,
   onLogout,
+  onToggleFollowed,
   onSelectPlaylist,
   onRefresh,
   onMessage,
@@ -5186,6 +5282,28 @@ function SpotifySyncView({
               <button
                 className="secondary-button"
                 type="button"
+                disabled={busy === "spotify-followed"}
+                onClick={onToggleFollowed}
+                title={
+                  status.followedPlaylistsUnlocked
+                    ? "Stop reading playlists you only follow"
+                    : "Read playlists you follow but don't own. Signs in once more as the Spotify desktop app, which Spotify doesn't officially support for other apps and may block."
+                }
+              >
+                {busy === "spotify-followed" ? (
+                  <Loader2 className="spin" size={17} aria-hidden="true" />
+                ) : status.followedPlaylistsUnlocked ? (
+                  <Lock size={17} aria-hidden="true" />
+                ) : (
+                  <LockOpen size={17} aria-hidden="true" />
+                )}
+                {status.followedPlaylistsUnlocked
+                  ? "Lock followed playlists"
+                  : "Unlock followed playlists"}
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
                 disabled={busy === "spotify-logout"}
                 onClick={onLogout}
               >
@@ -5211,8 +5329,8 @@ function SpotifySyncView({
                 <p className="eyebrow">Spotify</p>
                 <h2>Connect Spotify</h2>
                 <span>
-                  Create a free Spotify Developer app, then add its
-                  credentials here.
+                  Create a free Spotify Developer app, then add its Client
+                  ID here.
                 </span>
               </div>
               <span className="badge">Not connected</span>
@@ -5258,10 +5376,10 @@ function SpotifySyncView({
                   </li>
                   <li>
                     <div className="spotify-connect-step-copy">
-                      <strong>Paste your credentials</strong>
+                      <strong>Paste your Client ID</strong>
                       <span>
-                        Open Settings in the new app, copy the Client ID and
-                        Client secret, then save and log in here.
+                        Open Settings in the new app, copy the Client ID, then
+                        save and log in here. No Client secret is needed.
                       </span>
                     </div>
                   </li>
@@ -5270,7 +5388,7 @@ function SpotifySyncView({
 
               <form className="spotify-connect-form" onSubmit={onConfigSubmit}>
                 <div className="spotify-credentials-heading">
-                  <h3>Add app credentials</h3>
+                  <h3>Add your Client ID</h3>
                   <span>Use the values from your Spotify app Settings page.</span>
                 </div>
 
@@ -5303,26 +5421,10 @@ function SpotifySyncView({
                     autoComplete="off"
                   />
                 </label>
-                <label className="field">
-                  <span>Client Secret</span>
-                  <input
-                    value={config.clientSecret}
-                    onChange={(event) =>
-                      onConfigChange({
-                        ...config,
-                        clientSecret: event.target.value,
-                      })
-                    }
-                    placeholder="Spotify app client secret"
-                    type="password"
-                    disabled={busy === "spotify-config"}
-                    autoComplete="off"
-                  />
-                </label>
 
                 <div className="settings-actions spotify-connect-actions">
                   <span className="spotify-connect-action-hint">
-                    Save your credentials before logging in.
+                    Save your Client ID before logging in.
                   </span>
                   <button
                     className="secondary-button"
@@ -5330,7 +5432,7 @@ function SpotifySyncView({
                     disabled={busy === "spotify-config"}
                   >
                     <Settings size={17} aria-hidden="true" />
-                    Save credentials
+                    Save Client ID
                   </button>
                   <button
                     className="primary-button"
@@ -5348,7 +5450,8 @@ function SpotifySyncView({
                 </div>
 
                 <p className="spotify-connect-note">
-                  Credentials stay on this device and are only used for Spotify.
+                  Your Client ID and sign-in stay on this device and are only
+                  used for Spotify.
                   CorosLink reads playlists you own or collaborate on, then
                   matches tracks through YouTube search.
                 </p>
@@ -5390,7 +5493,7 @@ function SpotifySyncView({
                       <span>
                         {playlist.totalTracks} track
                         {playlist.totalTracks === 1 ? "" : "s"} ·{" "}
-                        {playlist.syncable ? "Ready" : "Unavailable"}
+                        {playlist.syncable ? "Ready" : "Followed · unlock to sync"}
                       </span>
                     </span>
                   </button>

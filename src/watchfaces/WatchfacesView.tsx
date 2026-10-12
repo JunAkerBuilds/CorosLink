@@ -71,13 +71,14 @@ import type {
 import { WATCHFACE_AUTOMATION_SCENE_SCHEMA } from "../../electron/watchfaceAutomationTypes";
 import type { CorosLinkApi } from "../coroslink-api";
 import { SelectDropdown } from "../components/SelectDropdown";
+import type { CorosNativeBleSnapshot } from "../../electron/corosNativeBleTypes";
 import {
-  getWatchPresentation,
   getWatchfaceDeviceProfile,
   getWatchfaceDeviceProfileByFirmware
 } from "../watchModels";
 import { BatteryHistoryPanel } from "./BatteryHistoryPanel";
-import { DeviceInfoPanel } from "./DeviceInfoPanel";
+import { OnWatchPanel } from "./OnWatchPanel";
+import { watchLinkSupported } from "./watchLink";
 import { carriedWatchfacePreferences, WatchfaceEditor, type WatchfaceCarriedPreferences } from "./WatchfaceEditor";
 import { renderDesignBackground } from "./watchfaceBackground";
 import { deriveDesignDetails, toStudioOptions } from "./watchfaceCompose";
@@ -167,11 +168,22 @@ const AUTH_WATCH_FACE_PREVIEWS = [
   snowingFace
 ] as const;
 
+/** Asks the hub to show its On watch tab or the COROS sign-in, e.g. from the toolbar watch menu. */
+export interface WatchfacesNavigationRequest {
+  target: "watch" | "sign-in";
+  requestId: number;
+}
+
 interface WatchfacesViewProps {
   api: CorosLinkApi;
   active: boolean;
   showDevelopmentTools: boolean;
   watchStatus: WatchStatus | null;
+  /** The app-wide Bluetooth link, polled by App. */
+  watchLink: CorosNativeBleSnapshot | null;
+  onOpenWatchMenu: () => void;
+  navigationRequest: WatchfacesNavigationRequest | null;
+  onNavigationRequestHandled: () => void;
   communityOpenRequest:
     | (CommunityWatchfaceOpenRequest & { requestId: number })
     | null;
@@ -179,12 +191,12 @@ interface WatchfacesViewProps {
 }
 
 type WatchfaceSurface = "sign-in" | "hub" | "studio";
-type HubTab = "browse" | "projects" | "templates";
+type HubTab = "browse" | "projects" | "templates" | "watch";
 
 const WATCHFACE_HUB_TAB_PREFERENCE = defineSelectionPreference<HubTab>({
   key: "watchfaces.hubTab",
   defaultValue: "templates",
-  validate: selectionIsOneOf(["browse", "projects", "templates"])
+  validate: selectionIsOneOf(["browse", "projects", "templates", "watch"])
 });
 
 const WATCHFACE_CATALOG_PREFERENCE =
@@ -294,6 +306,10 @@ export function WatchfacesView({
   active,
   showDevelopmentTools,
   watchStatus,
+  watchLink,
+  onOpenWatchMenu,
+  navigationRequest,
+  onNavigationRequestHandled,
   communityOpenRequest,
   onCommunityOpenRequestHandled
 }: WatchfacesViewProps) {
@@ -469,6 +485,26 @@ export function WatchfacesView({
     [api]
   );
 
+  const handledNavigationRequestRef = useRef(0);
+  useEffect(() => {
+    if (
+      !navigationRequest ||
+      handledNavigationRequestRef.current === navigationRequest.requestId
+    ) {
+      return;
+    }
+    handledNavigationRequestRef.current = navigationRequest.requestId;
+    onNavigationRequestHandled();
+    // The editor keeps its session; the hub shows the request when it closes.
+    if (navigationRequest.target === "watch") {
+      setHubTab("watch");
+      if (surface === "sign-in") setSurface("hub");
+    } else if (surface !== "studio") {
+      clearMessages();
+      setSurface("sign-in");
+    }
+  }, [navigationRequest, onNavigationRequestHandled, surface]);
+
   useEffect(() => {
     if (
       !communityOpenRequest ||
@@ -511,15 +547,9 @@ export function WatchfacesView({
   }, [api]);
 
   const connected = Boolean(status?.authenticated);
-  const watchPresentation = useMemo(
-    () => getWatchPresentation(watchStatus),
-    [watchStatus]
-  );
-  const connectedWatchName = watchStatus?.connected
-    ? watchPresentation.productName ??
-      watchStatus.name?.replace(/^COROS\s+/i, "") ??
-      watchPresentation.displayName.replace(/^COROS\s+/i, "")
-    : null;
+  // Keep a remembered On watch tab while the first link status loads.
+  const showOnWatch = watchLinkSupported(watchLink) || (watchLink === null && hubTab === "watch");
+  const activeHubTab: HubTab = hubTab === "watch" && !showOnWatch ? "templates" : hubTab;
   const featuredProject = useMemo(
     () =>
       projects.reduce<CorosWatchfaceProjectSummary | null>((latest, project) => {
@@ -561,7 +591,9 @@ export function WatchfacesView({
       setStatus(nextStatus);
       setPassword("");
       if (destination === "hub") setSurface("hub");
-      setNotice("COROS mobile session connected.");
+      setNotice(nextStatus.watchAuthenticationError ?? (nextStatus.watchAuthenticationAvailable
+        ? "COROS account connected. Reconnect your watch to authenticate over Bluetooth."
+        : "COROS mobile session connected."));
       if (destination === "conversion") await resumeConversionAfterLogin();
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -581,7 +613,9 @@ export function WatchfacesView({
       setEmail(nextStatus.savedEmail ?? email);
       setPassword("");
       if (destination === "hub") setSurface("hub");
-      setNotice("COROS mobile session connected with your saved account.");
+      setNotice(nextStatus.watchAuthenticationError ?? (nextStatus.watchAuthenticationAvailable
+        ? "COROS account connected. Reconnect your watch to authenticate over Bluetooth."
+        : "COROS mobile session connected with your saved account."));
       if (destination === "conversion") await resumeConversionAfterLogin();
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -606,7 +640,9 @@ export function WatchfacesView({
       setThemesLoaded(false);
       setThemesSavedAt(null);
       themeListMemory.clear();
-      setNotice("COROS disconnected. You can keep working locally.");
+      setNotice(nextStatus.watchAuthenticationAvailable
+        ? "Signed out of COROS. Your watch can still connect over Bluetooth. To remove its key, open Connection details in the watch menu."
+        : "Signed out of COROS. You can keep working locally.");
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -1454,8 +1490,6 @@ export function WatchfacesView({
         <WatchFacesHeader
           accountConnected={connected}
           accountEmail={email.trim() || status?.savedEmail || null}
-          connectedWatchName={connectedWatchName}
-          watchStatus={watchStatus}
           statusLoading={status === null}
           busy={busy !== null}
           importing={busy === "archive"}
@@ -1497,7 +1531,7 @@ export function WatchfacesView({
             </span>
             <h2 id="watchface-login-title">Sign in to COROS</h2>
             <p>
-              Sign in to choose a template and create a watch face.
+              Sign in to choose a template, create a watch face, and authenticate your PACE Pro over Bluetooth.
             </p>
             <form
               className="watchface-auth-form"
@@ -1619,17 +1653,17 @@ export function WatchfacesView({
         </main>
       ) : (
         <main className="watchface-hub-main">
-          {IS_DEVELOPMENT_BUILD && showDevelopmentTools ? (
-            <DeviceInfoPanel api={api} />
-          ) : null}
-
           <WatchFacesTabs
-            activeTab={hubTab}
+            activeTab={activeHubTab}
             projectCount={projects.length}
+            showOnWatch={showOnWatch}
+            watchConnected={Boolean(watchLink?.connected)}
             onChange={setHubTab}
           />
 
-          {hubTab === "browse" ? (
+          {activeHubTab === "watch" ? (
+            <OnWatchPanel api={api} snapshot={watchLink} onOpenWatchMenu={onOpenWatchMenu} />
+          ) : activeHubTab === "browse" ? (
             <CommunityWatchfaceBrowser
               api={api}
               connectedModel={
@@ -1641,7 +1675,7 @@ export function WatchfacesView({
               progress={communityProgress}
               onOpen={(face, model) => void prepareCommunityImport(face.slug, false, model)}
             />
-          ) : hubTab === "projects" ? (
+          ) : activeHubTab === "projects" ? (
             <ProjectsDashboard
               api={api}
               projects={projects}
@@ -1779,8 +1813,6 @@ export function WatchfacesView({
 interface WatchFacesHeaderProps {
   accountConnected: boolean;
   accountEmail: string | null;
-  connectedWatchName: string | null;
-  watchStatus: WatchStatus | null;
   statusLoading: boolean;
   busy: boolean;
   importing: boolean;
@@ -1793,8 +1825,6 @@ interface WatchFacesHeaderProps {
 function WatchFacesHeader({
   accountConnected,
   accountEmail,
-  connectedWatchName,
-  watchStatus,
   statusLoading,
   busy,
   importing,
@@ -1818,8 +1848,6 @@ function WatchFacesHeader({
         <AccountStatusMenu
           accountConnected={accountConnected}
           accountEmail={accountEmail}
-          connectedWatchName={connectedWatchName}
-          watchStatus={watchStatus}
           statusLoading={statusLoading}
           busy={busy}
           onConnect={onConnect}
@@ -1855,8 +1883,6 @@ function WatchFacesHeader({
 interface AccountStatusMenuProps {
   accountConnected: boolean;
   accountEmail: string | null;
-  connectedWatchName: string | null;
-  watchStatus: WatchStatus | null;
   statusLoading: boolean;
   busy: boolean;
   onConnect: () => void;
@@ -1866,8 +1892,6 @@ interface AccountStatusMenuProps {
 function AccountStatusMenu({
   accountConnected,
   accountEmail,
-  connectedWatchName,
-  watchStatus,
   statusLoading,
   busy,
   onConnect,
@@ -1937,7 +1961,7 @@ function AccountStatusMenu({
         <div
           className="watchface-device-popover"
           role="dialog"
-          aria-label="COROS account and transfer status"
+          aria-label="COROS account"
         >
           <div className="watchface-device-popover-heading">
             <span className={`watchface-device-icon${accountConnected ? " is-connected" : ""}`}>
@@ -1954,7 +1978,7 @@ function AccountStatusMenu({
               </strong>
               <span>
                 {accountConnected
-                  ? "Ready to publish and send watch faces"
+                  ? "Templates, publishing and watch sign-in"
                   : "Sign in to create a new watch face"}
               </span>
             </div>
@@ -1967,23 +1991,7 @@ function AccountStatusMenu({
                 {accountConnected ? "Connected" : "Not signed in"}
               </dd>
             </div>
-            <div>
-              <dt>Transfer watch</dt>
-              <dd className={connectedWatchName ? "is-online" : "is-offline"}>
-                <span aria-hidden="true" />
-                {connectedWatchName ?? "Not connected"}
-              </dd>
-            </div>
-            {watchStatus?.rootPath ? (
-              <div>
-                <dt>Connection</dt>
-                <dd title={watchStatus.rootPath}>USB storage</dd>
-              </div>
-            ) : null}
           </dl>
-          {watchStatus?.error ? (
-            <p className="watchface-device-error">{watchStatus.error}</p>
-          ) : null}
           {accountConnected ? (
             <button
               className="watchface-device-account-action is-disconnect"
@@ -2026,10 +2034,14 @@ function AccountStatusMenu({
 function WatchFacesTabs({
   activeTab,
   projectCount,
+  showOnWatch,
+  watchConnected,
   onChange
 }: {
   activeTab: HubTab;
   projectCount: number;
+  showOnWatch: boolean;
+  watchConnected: boolean;
   onChange: (tab: HubTab) => void;
 }) {
   const activeIndicator = (tab: HubTab) =>
@@ -2045,7 +2057,9 @@ function WatchFacesTabs({
       onKeyDown={(event) => {
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
         event.preventDefault();
-        const tabs: HubTab[] = ["templates", "projects", "browse"];
+        const tabs: HubTab[] = showOnWatch
+          ? ["templates", "projects", "browse", "watch"]
+          : ["templates", "projects", "browse"];
         const currentIndex = tabs.indexOf(activeTab);
         const direction = event.key === "ArrowRight" ? 1 : -1;
         const nextTab =
@@ -2095,6 +2109,26 @@ function WatchFacesTabs({
         Community
         {activeIndicator("browse")}
       </button>
+      {showOnWatch ? (
+        <button
+          id="watchface-watch-tab"
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "watch"}
+          aria-controls="watchface-watch-panel"
+          tabIndex={activeTab === "watch" ? 0 : -1}
+          className={activeTab === "watch" ? "is-active" : ""}
+          title={watchConnected ? "Watch connected" : "Watch not connected"}
+          onClick={() => onChange("watch")}
+        >
+          On watch
+          <span
+            className={`watchface-tab-lamp${watchConnected ? " is-connected" : ""}`}
+            aria-hidden="true"
+          />
+          {activeIndicator("watch")}
+        </button>
+      ) : null}
     </div>
   );
 }

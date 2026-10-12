@@ -11,7 +11,7 @@ function VerificationApp() {
     return () => window.removeEventListener("test:community-open", receive);
   }, []);
   return <WatchfacesView api={window.corosLink!} active showDevelopmentTools={false}
-    watchStatus={null} communityOpenRequest={request}
+    watchStatus={null} watchLink={null} onOpenWatchMenu={() => undefined} navigationRequest={null} onNavigationRequestHandled={() => undefined} communityOpenRequest={request}
     onCommunityOpenRequestHandled={() => setRequest(null)} />;
 }
 

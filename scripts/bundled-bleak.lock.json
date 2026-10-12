@@ -1,0 +1,152 @@
+{
+  "pythonVersion": "3.10",
+  "bleakVersion": "3.0.2",
+  "targets": {
+    "linux-arm64": [
+      {
+        "name": "async-timeout",
+        "version": "5.0.1",
+        "filename": "async_timeout-5.0.1-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/fe/ba/e2081de779ca30d473f21f5b30e0e737c438205440784c7dfc81efc2b029/async_timeout-5.0.1-py3-none-any.whl",
+        "sha256": "39e3809566ff85354557ec2398b55e096c8364bacac9405a7a1fa429e77fe76c"
+      },
+      {
+        "name": "bleak",
+        "version": "3.0.2",
+        "filename": "bleak-3.0.2-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/26/54/05aceb9cd80073805b3ed8522e3196e8cb22f70e741873fa51406c31f4e7/bleak-3.0.2-py3-none-any.whl",
+        "sha256": "39092feb9e83f1df5ad2f88e837723c7211c982ce9e9cda6235104bc2ebe0d0d"
+      },
+      {
+        "name": "dbus-fast",
+        "version": "5.0.26",
+        "filename": "dbus_fast-5.0.26-cp310-cp310-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl",
+        "url": "https://files.pythonhosted.org/packages/4c/a3/0bbc601cd9960dce8e17597f312abb93f2e0e8f5c7a8a5af8ecd374e20a8/dbus_fast-5.0.26-cp310-cp310-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl",
+        "sha256": "973a02188ce9417e87b4067bfb9f4a1d5b358b27685a9ee1065b9e60d9fcb20f"
+      },
+      {
+        "name": "typing-extensions",
+        "version": "4.16.0",
+        "filename": "typing_extensions-4.16.0-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
+        "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+      }
+    ],
+    "win32-x64": [
+      {
+        "name": "async-timeout",
+        "version": "5.0.1",
+        "filename": "async_timeout-5.0.1-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/fe/ba/e2081de779ca30d473f21f5b30e0e737c438205440784c7dfc81efc2b029/async_timeout-5.0.1-py3-none-any.whl",
+        "sha256": "39e3809566ff85354557ec2398b55e096c8364bacac9405a7a1fa429e77fe76c"
+      },
+      {
+        "name": "bleak",
+        "version": "3.0.2",
+        "filename": "bleak-3.0.2-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/26/54/05aceb9cd80073805b3ed8522e3196e8cb22f70e741873fa51406c31f4e7/bleak-3.0.2-py3-none-any.whl",
+        "sha256": "39092feb9e83f1df5ad2f88e837723c7211c982ce9e9cda6235104bc2ebe0d0d"
+      },
+      {
+        "name": "typing-extensions",
+        "version": "4.16.0",
+        "filename": "typing_extensions-4.16.0-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
+        "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+      },
+      {
+        "name": "winrt-runtime",
+        "version": "3.2.1",
+        "filename": "winrt_runtime-3.2.1-cp310-cp310-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/46/a4/f096687e0d1877d206bc5d1f5f07ff90e00b0772d69d4559ab2b6b37090b/winrt_runtime-3.2.1-cp310-cp310-win_amd64.whl",
+        "sha256": "dc81d5fb736bf1ddecf743928622253dce4d0aac9a57faad776d7a3834e13257"
+      },
+      {
+        "name": "winrt-windows-devices-bluetooth",
+        "version": "3.2.1",
+        "filename": "winrt_windows_devices_bluetooth-3.2.1-cp310-cp310-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/68/46/696893d3bae80751e35fb0fb8fae5e7fc94a5354dfb5e19167d415e27c66/winrt_windows_devices_bluetooth-3.2.1-cp310-cp310-win_amd64.whl",
+        "sha256": "20f6a21029034c18ea6a6b6df399671813b071102a0d6d8355bb78cf4f547cdb"
+      },
+      {
+        "name": "winrt-windows-devices-bluetooth-advertisement",
+        "version": "3.2.1",
+        "filename": "winrt_windows_devices_bluetooth_advertisement-3.2.1-cp310-cp310-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/56/f9/f086c3ac17745a71d8384e1831cab0d5a7c737e1fe5cb84d7584f6c14bbf/winrt_windows_devices_bluetooth_advertisement-3.2.1-cp310-cp310-win_amd64.whl",
+        "sha256": "f982ef72e729ddd60cdb975293866e84bb838798828933012a57ee4bf12b0ea1"
+      },
+      {
+        "name": "winrt-windows-devices-bluetooth-genericattributeprofile",
+        "version": "3.2.1",
+        "filename": "winrt_windows_devices_bluetooth_genericattributeprofile-3.2.1-cp310-cp310-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/50/d9/6ea88731df569f5c1b086daf4c3496c8d43281588e3a578ea623fef6bc43/winrt_windows_devices_bluetooth_genericattributeprofile-3.2.1-cp310-cp310-win_amd64.whl",
+        "sha256": "0e557dd52fc80392b8bd7c237e1153a50a164b3983838b4ac674551072efc9ed"
+      },
+      {
+        "name": "winrt-windows-devices-enumeration",
+        "version": "3.2.1",
+        "filename": "winrt_windows_devices_enumeration-3.2.1-cp310-cp310-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/7a/f9/881b7ee8acdf3c9fe6c79d8ccd90f9246b397fc78420d55014c4ac05b822/winrt_windows_devices_enumeration-3.2.1-cp310-cp310-win_amd64.whl",
+        "sha256": "a101ec3e0ad0a0783032fdcd5dc48e7cd68ee034cbde4f903a8c7b391532c71a"
+      },
+      {
+        "name": "winrt-windows-devices-radios",
+        "version": "3.2.1",
+        "filename": "winrt_windows_devices_radios-3.2.1-cp310-cp310-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/29/fd/67c6db8a3244ecc95f85970a7b0e749cda28e26563db1274c3db36a8fbe4/winrt_windows_devices_radios-3.2.1-cp310-cp310-win_amd64.whl",
+        "sha256": "104b737fa1279a3b6a88ba3c6236157afc1de03c472657c45e5176ad7a209e23"
+      },
+      {
+        "name": "winrt-windows-foundation",
+        "version": "3.2.1",
+        "filename": "winrt_windows_foundation-3.2.1-cp310-cp310-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/52/71/046c1e2424627c3db66d764871186de4d26936e8a138d6bf04dc143e4606/winrt_windows_foundation-3.2.1-cp310-cp310-win_amd64.whl",
+        "sha256": "a8f27b4f0fdb73ccc4a3e24bc8010a6607b2bdd722fa799eafce7daa87d19d39"
+      },
+      {
+        "name": "winrt-windows-foundation-collections",
+        "version": "3.2.1",
+        "filename": "winrt_windows_foundation_collections-3.2.1-cp310-cp310-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/cb/39/b4a1aeba2d13c1f2ad3d851d5092b8397c05f34fb318d6a7d499f5b5720b/winrt_windows_foundation_collections-3.2.1-cp310-cp310-win_amd64.whl",
+        "sha256": "899eaa3a93c35bfb1857d649e8dd60c38b978dda7cedd9725fcdbcebba156fd6"
+      },
+      {
+        "name": "winrt-windows-storage-streams",
+        "version": "3.2.1",
+        "filename": "winrt_windows_storage_streams-3.2.1-cp310-cp310-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/99/2c/00baa87041a3d92a3cc5230d4033e995a52740e9c08fcd9f7bde93cb979f/winrt_windows_storage_streams-3.2.1-cp310-cp310-win_amd64.whl",
+        "sha256": "48a78e5dc7d3488eb77e449c278bc6d6ac28abcdda7df298462c4112d7635d00"
+      }
+    ],
+    "linux-x64": [
+      {
+        "name": "async-timeout",
+        "version": "5.0.1",
+        "filename": "async_timeout-5.0.1-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/fe/ba/e2081de779ca30d473f21f5b30e0e737c438205440784c7dfc81efc2b029/async_timeout-5.0.1-py3-none-any.whl",
+        "sha256": "39e3809566ff85354557ec2398b55e096c8364bacac9405a7a1fa429e77fe76c"
+      },
+      {
+        "name": "bleak",
+        "version": "3.0.2",
+        "filename": "bleak-3.0.2-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/26/54/05aceb9cd80073805b3ed8522e3196e8cb22f70e741873fa51406c31f4e7/bleak-3.0.2-py3-none-any.whl",
+        "sha256": "39092feb9e83f1df5ad2f88e837723c7211c982ce9e9cda6235104bc2ebe0d0d"
+      },
+      {
+        "name": "dbus-fast",
+        "version": "5.0.26",
+        "filename": "dbus_fast-5.0.26-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/f5/ea/174204823c8f7067282f20eed028ccfda4ce892897dad766cecaf8166c86/dbus_fast-5.0.26-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "sha256": "2ed8cd03d81d05cc83d778ba19b1c9a4e786da0a227473802ab1dcc033d7d30b"
+      },
+      {
+        "name": "typing-extensions",
+        "version": "4.16.0",
+        "filename": "typing_extensions-4.16.0-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
+        "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+      }
+    ]
+  }
+}

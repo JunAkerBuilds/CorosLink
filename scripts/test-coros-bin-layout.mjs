@@ -88,6 +88,8 @@ const chart = result.modes[0].chart;
 assert.deepEqual([chart.rect.x0, chart.rect.y1, chart.barWidth, chart.barInterval, chart.curvesWidth], [89, 325, 7, 3, 4]);
 assert.deepEqual([chart.selectedBarColor, chart.unselectedBarColor, chart.curvesUpperColor, chart.curvesLowerColor], [0xaaaaaa, 0x555555, 0x555555, 0xffffff]);
 assert.equal(expandChartColor(0x2a), 0xaaaaaa);
+assert.equal(expandChartColor(0x00ffaa00), 0xffaa00, "official and CorosLink-compiled chart words are full RGB");
+assert.equal(expandChartColor(0x40), 0x000040);
 assert.equal(Object.fromEntries(chartConfigValues(chart)).chart_curves_lower_color, "0xffffff");
 assert.equal(Object.fromEntries(chartConfigValues(chart)).chart_rect, "{89,273,323,325,hcenter|vcenter}");
 assert.deepEqual(get("normal", "chart.sunrise.icon").config, { position: "chart_sunrise_icon_pos", asset: "chart_sunrise_icon" });

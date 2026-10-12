@@ -20,6 +20,7 @@ import { finalizeWatchfaceDeviceLayout, restoreWatchfaceDateLayout } from "./wat
 import { convertWatchfaceEntries, type WatchfaceConversionEntry, prepareRecoveredWatchfaceExport, normalizeConversionPath, RETAINED_AOD_CONFIG } from "./watchfaceArchiveConversion";
 import { standardizeWatchfacePackage } from "./watchfaceDistribution";
 import { getWatchfaceTarget, type WatchfaceTarget } from "./watchfaceTargets";
+import { COROS_BLE_LOGIN_KEY_SETTING, COROS_BLE_IMPORTED_KEY_SETTING, decodeCorosBleLoginKey } from "./corosBleLoginKey";
 import type {
   CorosWatchfaceArchive,
   CorosWatchfaceConversionInput,
@@ -251,6 +252,10 @@ const selectedArchives = new Map<string, SelectedArchive>();
 // limited to these so the renderer can never request an arbitrary URL.
 const knownThemePackageUrls = new Set<string>();
 let inMemorySession: StoredMobileSession | null = null;
+let watchAuthenticationError: string | undefined;
+let mobileLoginRevision = 0;
+/** The saved watch account key and the legacy imported one. */
+const WATCH_KEY_SETTINGS = [COROS_BLE_LOGIN_KEY_SETTING, COROS_BLE_IMPORTED_KEY_SETTING];
 
 /**
  * The Android client obfuscates each login field before sending it. This is a
@@ -283,6 +288,8 @@ export function getCorosWatchfaceStatus(): CorosWatchfaceStatus {
     secureStorageAvailable: safeStorage.isEncryptionAvailable(),
     savedCredentialsAvailable: Boolean(credentials),
     savedEmail: credentials?.account,
+    watchAuthenticationAvailable: Boolean(safeStorage.isEncryptionAvailable() && getSetting(COROS_BLE_LOGIN_KEY_SETTING)),
+    watchAuthenticationError,
     region: session?.region,
     suggestedRegion: session?.region ?? suggestWatchfaceRegion()
   };
@@ -331,6 +338,7 @@ async function establishCorosWatchfaceSession(
   pwdHash: string,
   region?: CorosWatchfaceRegion
 ): Promise<CorosWatchfaceStatus> {
+  const revision = ++mobileLoginRevision;
   const resolvedRegion = normalizeWatchfaceRegion(region);
   const baseUrl = mobileApiBaseUrl(resolvedRegion);
 
@@ -359,18 +367,63 @@ async function establishCorosWatchfaceSession(
   if (!accessToken) {
     throw new Error("COROS login did not return a session token.");
   }
+  if (revision !== mobileLoginRevision) throw new Error("COROS sign-in changed while this login was running. Sign in again.");
 
+  const userId = extractDecimalProperty(envelope.raw, "userId") ??
+    (typeof (envelope.data as Record<string, unknown>)?.userId === "string"
+      ? String((envelope.data as Record<string, unknown>).userId) : undefined);
   writeStoredSession({
     accessToken,
-    userId: extractDecimalProperty(envelope.raw, "userId"),
+    userId,
     region: resolvedRegion
   });
+  watchAuthenticationError = undefined;
+  try {
+    const key = decodeCorosBleLoginKey(envelope.data, userId ?? "");
+    if (!safeStorage.isEncryptionAvailable()) throw new Error("OS secure storage is required to save your COROS watch account key.");
+    deleteSettings(WATCH_KEY_SETTINGS);
+    setSetting(COROS_BLE_LOGIN_KEY_SETTING, safeStorage.encryptString(JSON.stringify(key)).toString("base64"));
+  } catch (error) {
+    // Keep catalog access available if the server omits/changes watch auth.
+    // A successful account switch must never keep another account's BLE key;
+    // this same account's working key stays.
+    deleteSettings(WATCH_KEY_SETTINGS.filter(setting => !userId || savedWatchKeyAccount(setting) !== userId));
+    if (!getSetting(COROS_BLE_LOGIN_KEY_SETTING)) {
+      watchAuthenticationError = error instanceof Error ? error.message : "Sign in again to enable COROS watch authentication.";
+    }
+  }
   return getCorosWatchfaceStatus();
 }
 
+/** The COROS account a saved Bluetooth key belongs to, if it can be read. */
+function savedWatchKeyAccount(setting: string): string | undefined {
+  const saved = getSetting(setting);
+  if (!saved || !safeStorage.isEncryptionAvailable()) return undefined;
+  try {
+    const accountUserId = (JSON.parse(safeStorage.decryptString(Buffer.from(saved, "base64"))) as { accountUserId?: unknown }).accountUserId;
+    return typeof accountUserId === "string" ? accountUserId : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function logoutCorosWatchfaces(): CorosWatchfaceStatus {
+  mobileLoginRevision++;
   inMemorySession = null;
+  watchAuthenticationError = undefined;
+  // Cloud sign-out must not remove the independently saved Bluetooth key;
+  // forgetCorosWatchKey or a sign-in with another account does.
   deleteSettings([SETTINGS.session]);
+  return getCorosWatchfaceStatus();
+}
+
+/**
+ * Removes the saved watch account key (and a legacy imported one). The COROS
+ * session stays signed in; the next sign-in saves a key again.
+ */
+export function forgetCorosWatchKey(): CorosWatchfaceStatus {
+  watchAuthenticationError = undefined;
+  deleteSettings(WATCH_KEY_SETTINGS);
   return getCorosWatchfaceStatus();
 }
 
@@ -2003,8 +2056,45 @@ async function conversionCarrier(target: WatchfaceTarget, wanted: Set<string> = 
   } catch (error) {
     // Offline, or COROS refused the catalog: a cached carrier still converts.
     if (cached) return cached;
+    // Signed out with nothing cached: the built-in compiler installs over
+    // Bluetooth without a COROS template identity, so a local carrier will do.
+    if (!readStoredSession()) return localConversionCarrier(target);
     throw error;
   }
+}
+
+/** True for the template ID of a face converted on a local carrier (see localConversionCarrier). */
+export function isLocalTemplateId(templateId: string): boolean {
+  return /^0+$/.test(templateId);
+}
+
+const LOCAL_TEMPLATE_PUBLISH_ERROR =
+  "This face was converted without a COROS account, so it has no COROS template to publish. Install it over Bluetooth, or sign in to COROS and convert it again to publish it.";
+
+/**
+ * A minimal carrier for exporting without a COROS account. It has no catalog
+ * template ID (0), so a face built on it installs directly on the watch but is
+ * not recognized as a DIY template by the COROS app. It is rebuilt on each use
+ * and never cached, so the first signed-in export still fetches the real one.
+ */
+async function localConversionCarrier(target: WatchfaceTarget): Promise<SelectedArchive> {
+  const blank = (size: number) => nativeImage.createFromBitmap(Buffer.alloc(size * size * 4), { width: size, height: size }).toPNG();
+  const info = { m_name: target.label, m_app: "watchface_800x800", m_preview: "watchface_customize.png", m_style: { m_color: "" },
+    o_author: "CorosLink", o_default_language: "en", o_wf_ver: 0, o_template_id: 0, o_diy_version: 1 };
+  const entries: WatchfaceConversionEntry[] = [
+    { name: "info.json", data: Buffer.from(JSON.stringify(info)) },
+    { name: "watchface_customize.png", data: blank(800) }
+  ];
+  for (const size of target.sizes) {
+    // Official carriers ship device thumbnails at about 76% of the screen (315 px on 416).
+    entries.push({ name: `watchface_${size}x${size}/thmb.png`, data: blank(size === 800 ? 800 : Math.round(size * 315 / 416)) });
+    entries.push({ name: `watchface_${size}x${size}/config.txt`, data: Buffer.from("[watchface_thmb_icon]=thmb.png\r\n") });
+  }
+  const directory = path.join(app.getPath("userData"), "watchface-conversion-carriers");
+  await fs.promises.mkdir(directory, { recursive: true });
+  const carrierPath = path.join(directory, `${target.model}.local.zip`);
+  await fs.promises.writeFile(carrierPath, createStoreZip(entries));
+  return { ...(await inspectArchive(carrierPath)), firmwareType: target.firmwareType };
 }
 
 async function prepareRecoveredExportZip(bytes: Buffer, target: WatchfaceTarget, preview: Electron.NativeImage): Promise<Buffer> {
@@ -3163,6 +3253,9 @@ export async function publishCorosWatchface(
   if (!/^\d+$/.test(freshArchive.sourceTemplateId)) {
     throw new Error("Invalid COROS source template ID.");
   }
+  if (isLocalTemplateId(freshArchive.sourceTemplateId)) {
+    throw new Error(LOCAL_TEMPLATE_PUBLISH_ERROR);
+  }
   const saveBody = {
     accessToken: session.accessToken,
     backgroundImageId: input.backgroundImageId,
@@ -3235,6 +3328,9 @@ export async function createCorosWatchfaceShareLink(
   const sourceTemplateId = input.sourceTemplateId.trim();
   if (!/^\d{1,20}$/.test(templateId) || !/^\d{1,20}$/.test(sourceTemplateId)) {
     throw new Error("This custom face does not include valid COROS template IDs.");
+  }
+  if (isLocalTemplateId(sourceTemplateId)) {
+    throw new Error(LOCAL_TEMPLATE_PUBLISH_ERROR);
   }
 
   return requestCorosWatchfaceShareLink(session, {
@@ -4483,11 +4579,10 @@ async function inspectArchive(
       : undefined);
   const diyVersion = Number(manifest.o_diy_version ?? 1);
   const watchFaceVersion = Number(manifest.o_wf_ver ?? 0);
-  if (
-    !sourceTemplateId ||
-    !/^\d{1,20}$/.test(sourceTemplateId) ||
-    /^0+$/.test(sourceTemplateId)
-  ) {
+  // 0 marks a face built on a local conversion carrier (no COROS account): it
+  // installs over Bluetooth but has no COROS template, so publishing and share
+  // links refuse it (isLocalTemplateId).
+  if (!sourceTemplateId || !/^\d{1,20}$/.test(sourceTemplateId)) {
     throw new Error("info.json must include a valid o_template_id.");
   }
   if (!Number.isSafeInteger(diyVersion) || diyVersion < 1) {

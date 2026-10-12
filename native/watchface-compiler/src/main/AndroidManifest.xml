@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application android:label="CorosLink local compiler" android:allowBackup="false">
+    <activity android:name=".CompilerActivity" android:exported="true" android:excludeFromRecents="true" />
+  </application>
+</manifest>

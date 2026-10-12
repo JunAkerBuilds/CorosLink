@@ -1,6 +1,6 @@
 import { deflateSync } from "node:zlib";
 import { createHash } from "node:crypto";
-import { chartConfigValues, progressArcConfigValues, decodeCorosBitmapFrame, expandChartColor, decodeCorosLayout, findCorosBitmapBlocks, formatConfigPos, formatConfigRect, parseCorosFaceMagic, readLayoutHeaders, type CorosBinLayout, type CorosBitmapBlock } from "./corosBinLayout";
+import { chartConfigValues, progressArcConfigValues, decodeCorosBitmapFrame, expandRgb222, decodeCorosLayout, findCorosBitmapBlocks, formatConfigPos, formatConfigRect, parseCorosFaceMagic, readLayoutHeaders, type CorosBinLayout, type CorosBitmapBlock } from "./corosBinLayout";
 import { createStoreZip } from "./zipStore";
 
 type BitmapBlock = CorosBitmapBlock;
@@ -54,7 +54,7 @@ function recoveredConfig(mode: CorosBinLayout["modes"][number], blocks: BitmapBl
     // Header 0x22 is the rgb222 fill behind the background image. Only light
     // faces set it: SATISFY's dial is transparent over 0x2a (grey 170), and
     // its small fonts carry that grey as an opaque backing.
-    ["bg_color", `0x${expandChartColor(mode.backgroundColorPacked ?? 0).toString(16).padStart(6, "0")}`]
+    ["bg_color", `0x${expandRgb222(mode.backgroundColorPacked ?? 0).toString(16).padStart(6, "0")}`]
   ]);
   for (const element of mode.elements) {
     if (!element.active || !element.config || element.asset?.group == null) continue;

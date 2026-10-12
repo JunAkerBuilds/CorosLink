@@ -1,4 +1,5 @@
 import {
+  Bluetooth,
   Download,
   Loader2,
   QrCode,
@@ -29,6 +30,8 @@ export function SavedRoutesDrawer({
   onSelect,
   onExport,
   onShare,
+  onSync,
+  syncing,
   onDelete
 }: {
   open: boolean;
@@ -42,6 +45,8 @@ export function SavedRoutesDrawer({
   onSelect: (route: GeneratedRouteSummary) => void;
   onExport: (route: GeneratedRouteSummary) => void;
   onShare: (route: GeneratedRouteSummary) => void;
+  onSync?: (route: GeneratedRouteSummary) => void;
+  syncing?: boolean;
   onDelete: (route: GeneratedRouteSummary) => void;
 }) {
   const { routes, total, offset, pageSize } = page;
@@ -115,6 +120,12 @@ export function SavedRoutesDrawer({
                   </small>
                 </button>
                 <div className="route-card-actions">
+                  {onSync ? (
+                    <button type="button" className="icon-button" title="Sync to watch"
+                      aria-label={`Sync ${route.name} to watch`} disabled={syncing || busy} onClick={() => onSync(route)}>
+                      <Bluetooth size={15} aria-hidden="true" />
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="icon-button"

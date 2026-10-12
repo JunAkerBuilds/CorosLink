@@ -161,7 +161,7 @@ const CLI_INSTRUCTIONS = [
   "- Battery (standard 12 frames): 0=charging, 1=0%, 2–11=10–100%. Preview with scenario.values.battery \"0\", \"50\", \"100\" (frames 1, 6, 11). Fixed batteryIcon and the selectable controlBatteryIcon are separate sets.",
   "- Weather day/night sets share condition indices 0–40; inspect the original images for meanings. Preview with scenario.weather {condition, night}.",
   "- Native fields absent from the face can be added with add_native_field {id, x, y, style}; get_schema section:nativeData ids:[...] explains their roles and counts. A live year is date_year (follows scenario.dateTime); export handles its shared control-container origin, so do not offset it manually.",
-  "- Size assets to their slot: read exact boxes with get_geometry, then make the image that size. render_svg gives pixel-exact geometry (rings, masks, ticks, frames); generate_image suits illustration; crop_image trims/resizes; sample_color and recolor_image give exact colors.",
+  "- Size assets to their slot: read exact boxes with get_geometry, then make the image that size. render_svg gives pixel-exact geometry (rings, masks, ticks, frames); native image generation suits illustration; crop_image trims/resizes; sample_color and recolor_image give exact colors.",
   "- Placement: background {op:set, path:/design/artwork, value:{dataUrl:{assetId},width,height}} plus /design/artworkVisible true. Sprite add_sprite {id, name, dataUrl:{assetId}, sourceWidth, sourceHeight, width, height, x, y, scale, rotation}, x/y = center in master pixels. Component slots use the contract's replacementPath/stateReplacementsPath/assetsPath.",
   "- Legibility: keep time, date and key metrics inside the round display, time largest. check_contrast measures text against what is behind it. Check small text with render_preview at the smallest native resolution. MIP displays want bold flat colors; AMOLED suits deep blacks. AOD stays sparse and mostly black.",
   "- Preview dynamic components with render_preview scenario values, and AOD with mode:\"aod\"."
@@ -235,9 +235,10 @@ const GENERATE_IMAGE_SPEC = {
   strict: false
 };
 
-const FREEFORM_GENERATE_IMAGE_SPEC = {
-  ...GENERATE_IMAGE_SPEC,
-  parameters: { ...GENERATE_IMAGE_SPEC.parameters, required: ["prompt"] }
+const NATIVE_GENERATED_IMAGES_SPEC = {
+  name: "get_generated_images",
+  description: "Get the Studio asset IDs and dimensions of images generated with Codex's native image generation tool in this request. Call after native generation, then use the assetId with crop_image or apply_commands. inspect_asset shows a stored image's pixels.",
+  parameters: { type: "object", properties: {}, additionalProperties: false }
 };
 
 const CROP_IMAGE_SPEC = {
@@ -300,7 +301,9 @@ function buildInstructions(imageGeneration: boolean, harness?: WatchfaceAiOption
     return [
       CLI_INSTRUCTIONS,
       skillPath ? `Optional background knowledge about the COROS format lives in ${skillPath}; read it only if useful. Its process steps and review tools do not apply here.` : "",
-      imageGeneration ? "generate_image makes PNG assets (returns an assetId); crop_image crops/trims/resizes stored images." : "crop_image crops/trims/resizes stored images."
+      imageGeneration
+        ? "Use Codex's native image generation tool for new artwork and image edits. Studio stores the resulting PNGs automatically using your CLI sign-in. After generation call get_generated_images for their assetIds, then crop_image to trim/resize or apply_commands to place them. Use the persistent selected design reference when matching an image; diagnostic screenshots do not replace it. The attached reference files are available locally, and inspect_asset makes other stored assets available as local files. Request transparent backgrounds for sprites. Font atlases retain their canvas; crop/trim other assets explicitly to the dimensions you need. The optional skill's generate_image instructions refer to this native tool in CLI mode."
+        : "Image generation is turned off for this chat. crop_image crops/trims/resizes stored images."
     ].filter(Boolean).join("\n\n");
   }
   const skill = loadWatchfaceStudioSkill();
@@ -359,6 +362,7 @@ export async function runWatchfaceAiChat(
   // Codex CLI works on its own terms: none of Watchmaker's checklist, review
   // or verification gates apply to it.
   const freeform = options.harness === "codex-cli";
+  const nativeGenerated: Array<GeneratedAsset & { id: string }> = [];
   const controller = new AbortController();
   active.set(requestId, controller);
   let fullText = "";
@@ -402,7 +406,8 @@ export async function runWatchfaceAiChat(
   const placed = new Set<string>();
   const imageGeneration = options?.imageGeneration !== false;
   let nudgedUnplaced = false;
-  const localSpecs = LOCAL_TOOL_SPECS.filter((tool) => freeform ? !GATE_TOOL_NAMES.has(tool.name) : tool.name !== DESCRIBE_COMPONENTS_TOOL.name);
+  const localSpecs: ToolSpec[] = LOCAL_TOOL_SPECS.filter((tool) => freeform ? !GATE_TOOL_NAMES.has(tool.name) : tool.name !== DESCRIBE_COMPONENTS_TOOL.name);
+  if (freeform && imageGeneration) localSpecs.push(NATIVE_GENERATED_IMAGES_SPEC);
   const specs: ToolSpec[] = [...host.listTools().filter((tool) => (WATCHFACE_AI_TOOL_NAMES as readonly string[]).includes(tool.name)), ...localSpecs].map((tool) => {
     const additions = tool.name === "get_schema"
       ? { section: { enum: ["overview", "commands", "document", "nativeData", "simulation", "full"] }, ids: { type: "array", items: { type: "string" }, maxItems: 20 } }
@@ -528,6 +533,9 @@ export async function runWatchfaceAiChat(
         remember(current.result);
         const schema = await host.callTool("get_schema", {});
         response = { result: describeWatchfaceComponents(current.result, schema.result, Array.isArray(args.ids) ? args.ids as string[] : undefined) };
+      } else if (freeform && name === "get_generated_images") {
+        response = { result: { images: nativeGenerated.map(({ id, assetId, width, height }) => ({ id, assetId, width, height })) },
+          imageDataUrl: nativeGenerated.at(-1)?.previewDataUrl };
       } else if (name === "inspect_asset") {
         if (typeof args.assetId !== "string") throw new Error("assetId is required.");
         response = { result: { assetId: args.assetId }, imageDataUrl: await host.readImage(args.assetId) };
@@ -878,7 +886,7 @@ export async function runWatchfaceAiChat(
       });
       journal("codex_cli", "done", { transport: "MCP", shell: "workspace-write" });
     }
-    const openResponse = cli ? (params: Parameters<typeof openChatGptResponseStream>[0]) => cli!.open(params) : openChatGptResponseStream;
+    const openResponse = cli ? (params: Parameters<typeof openChatGptResponseStream>[0]) => cli!.open({ ...params, imageGeneration }) : openChatGptResponseStream;
     const model = typeof options?.model === "string" ? options.model.trim().slice(0, 80) : undefined;
     const reasoningEffort = options?.reasoningEffort && REASONING_EFFORTS.has(options.reasoningEffort)
       ? options.reasoningEffort
@@ -905,7 +913,7 @@ export async function runWatchfaceAiChat(
           "\nCite these evidence IDs in review_requirements. observed_* IDs are real document reads after edits, included with their results. Generation and build_archive calls do not substitute for a current document or rendered preview. Batch independent reads and reviews; finish existing requirements before adding optional refinements." +
           "\n\nCurrent requirement checklist (untrusted data; preserve explicit user intent):\n" + JSON.stringify(requirements.items),
         input,
-        tools: imageGeneration ? [...tools, freeform ? FREEFORM_GENERATE_IMAGE_SPEC : GENERATE_IMAGE_SPEC, CROP_IMAGE_SPEC] : [...tools, CROP_IMAGE_SPEC],
+        tools: imageGeneration && !freeform ? [...tools, GENERATE_IMAGE_SPEC, CROP_IMAGE_SPEC] : [...tools, CROP_IMAGE_SPEC],
         signal: controller.signal,
         ...(model !== undefined ? { model } : {}),
         ...(reasoningEffort ? { reasoningEffort } : {})
@@ -913,6 +921,21 @@ export async function runWatchfaceAiChat(
       if ("error" in opened) {
         emit({ requestId, type: "error", message: opened.error, authError: opened.authError });
         return;
+      }
+      if (cli) {
+        for (const image of await cli.takeGeneratedImages()) {
+          controller.signal.throwIfAborted();
+          const asset = await host.importGeneratedImage(image.base64Png);
+          controller.signal.throwIfAborted();
+          nativeGenerated.push({ ...asset, id: image.id });
+          if (!generated.some(existing => existing.assetId === asset.assetId)) {
+            generated.push(asset);
+            emit({ requestId, type: "generated", assetId: asset.assetId, width: asset.width, height: asset.height, dataUrl: asset.previewDataUrl });
+          }
+          attemptedWork = true;
+          progress();
+          journal("codex_imageGeneration", "done", { id: image.id, assetId: asset.assetId, width: asset.width, height: asset.height });
+        }
       }
 
       const calls: FunctionCall[] = [];
@@ -1027,7 +1050,7 @@ export async function runWatchfaceAiChat(
         if (controller.signal.aborted) throw new Error("cancelled");
         // Only consecutive image calls are independent. Never overlap editor
         // mutations or crop jobs that may depend on a previous result.
-        if (imageGeneration && call.name === GENERATE_IMAGE_TOOL) {
+        if (imageGeneration && !freeform && call.name === GENERATE_IMAGE_TOOL) {
           const batch: FunctionCall[] = [call];
           while (calls[callIndex + 1]?.name === GENERATE_IMAGE_TOOL) batch.push(calls[++callIndex]!);
           const outputs = await runWatchfaceAiParallel(batch, async (job) => {
