@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.52] - 2026-10-12
+
+### Added
+
+- **Connect your watch over Bluetooth.** The watch button in the toolbar is now a menu that finds and connects your COROS watch with this computer's own Bluetooth, no cable or adapter needed. CorosLink authenticates with the watch using the account key from your COROS sign-in in **Watch Faces**; if you were already signed in, sign in once more to save it. Signing out keeps the key, and **Connection details** in the watch menu has a button to remove it. Tested on PACE Pro firmware 3.2008.0; other watches are in beta.
+- **Install watch faces over Bluetooth** (Mac). Studio's **Send to COROS** dialog adds **Send to watch** and **Save BIN**, and Watch Faces has a new **On watch** tab that shows the watch's face slots. Install into an empty slot or replace a face, from a final DAT/ZIP that CorosLink compiles itself or from a compiled BIN.
+- **Sync saved routes to the watch** over Bluetooth from Maps → Routes. CorosLink checks that the watch stored the route.
+- **Wireless maps** in Maps: pick map areas on a grid, check their size, and the watch downloads them over its own Wi-Fi.
+- **Send a message** to the watch from the watch menu; it appears as a notification (Mac).
+- **Unlock followed playlists** in Spotify reads playlists you follow but don't own. It signs in once more as the Spotify desktop app, which Spotify doesn't officially support for other apps and may block.
+
+### Changed
+
+- Spotify now needs only your Spotify app's Client ID, no Client secret. Sign in to Spotify once more after updating.
+- Watchmaker in Codex CLI mode makes images with Codex's own image generation and your CLI sign-in, so it no longer needs CorosLink's ChatGPT sign-in.
+- Faces can be converted for another watch while signed out of COROS, to install over Bluetooth. Publishing or sharing a face still needs one converted while signed in.
+- The ChatGPT and Spotify sign-in windows can be closed if the sign-in page shows an error, and a Spotify redirect URI error now says which URI to add to your Spotify app.
+
+### Fixed
+
+- The Local / OpenAI-compatible API settings now save hosted https endpoints, including ones with their own path prefix, and trim pasted `/chat/completions` or `/models` suffixes. Coach also picks up settings saved while it was in the background instead of writing the old ones back.
+- Faces converted to a larger watch keep crisp digits and artwork instead of looking faded.
+
+### Security
+
+- Updated dependencies with known vulnerabilities, including the MCP SDK that Watchmaker and Coach use.
+
 ## [0.1.51] - 2026-10-03
 
 ### Fixed
