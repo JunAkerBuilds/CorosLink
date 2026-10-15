@@ -52,7 +52,7 @@
   --map-accent-gradient: var(--accent-gradient);
   --map-on-accent: var(--text-on-accent);
   --map-globe-background: transparent;
-  --map-globe-radial: color-mix(in srgb, var(--map-accent) 8%, transparent);
+  --map-globe-radial: color-mix(in srgb, #2b3a32 6%, transparent);
   --map-globe-rim-light: color-mix(in srgb, var(--text-primary) 2%, transparent);
   --map-globe-star: rgba(65, 91, 108, 0.14);
   --map-globe-star-dim: rgba(65, 91, 108, 0.07);

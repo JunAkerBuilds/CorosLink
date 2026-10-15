@@ -142,7 +142,7 @@ function createGeographyPoints(
     blending: NormalBlending,
     uniforms: {
       uColor: {
-        value: new Color(paperTheme ? "#667179" : "#c4d5e1"),
+        value: new Color(paperTheme ? "#6f7f74" : "#c4d5e1"),
       },
       uOpacity: { value: paperTheme ? 0.5 : 0.32 },
       uPointSize: { value: paperTheme ? 1.9 : 1.78 },
@@ -239,12 +239,14 @@ const ActivityGlobeRendererComponent = forwardRef<
     landGeometryCache,
   );
 
+  // Paper: a matte off-white ball under a near-white hemisphere, so the limb
+  // shades softly toward the well instead of the whole sphere going grey.
   const globeMaterial = useMemo(
     () =>
       new MeshStandardMaterial({
-        color: paperTheme ? "#cfd7dc" : "#121e28",
-        roughness: paperTheme ? 0.78 : 0.8,
-        metalness: paperTheme ? 0.12 : 0.18,
+        color: paperTheme ? "#f6f7f4" : "#121e28",
+        roughness: paperTheme ? 0.92 : 0.8,
+        metalness: paperTheme ? 0 : 0.18,
         emissive: new Color(paperTheme ? "#000000" : "#061018"),
         emissiveIntensity: paperTheme ? 0 : 0.08,
         dithering: true,
@@ -257,12 +259,12 @@ const ActivityGlobeRendererComponent = forwardRef<
   const lights = useMemo(() => {
     const hemisphere = new HemisphereLight(
       paperTheme ? "#ffffff" : "#a9c6db",
-      paperTheme ? "#687681" : "#03080c",
-      (paperTheme ? 0.54 : 0.72) * Math.PI,
+      paperTheme ? "#e6ebe4" : "#03080c",
+      (paperTheme ? 0.8 : 0.72) * Math.PI,
     );
     const directional = new DirectionalLight(
-      paperTheme ? "#f8fbff" : "#d7e7f2",
-      (paperTheme ? 0.33 : 0.62) * Math.PI,
+      paperTheme ? "#ffffff" : "#d7e7f2",
+      (paperTheme ? 0.26 : 0.62) * Math.PI,
     );
     directional.position.set(-3.5, 4.5, 5.5);
     return [hemisphere, directional];
@@ -702,7 +704,9 @@ const ActivityGlobeRendererComponent = forwardRef<
         globeMaterial={globeMaterial}
         globeCurvatureResolution={3}
         showAtmosphere
-        atmosphereColor={paperTheme ? "#477f9f" : "#73b4e2"}
+        // The atmosphere shell is alpha-blended, so on the light well a dark
+        // grey-green reads as a soft contact shade rather than a glow.
+        atmosphereColor={paperTheme ? "#4c5d53" : "#73b4e2"}
         atmosphereAltitude={0.08}
         customLayerData={landLayerData}
         customThreeObject={customThreeObject}
