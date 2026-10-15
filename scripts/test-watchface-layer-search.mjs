@@ -32,6 +32,13 @@ try {
   frenchCollapsed.delete("Template assets");
   assert.equal(createCollapsedWatchfaceLayerSections().has("Template assets"), true);
 
+  setLanguage("zh-CN");
+  assert.equal(watchfaceLayerMatchesSearch("Hours", "小时"), true);
+  assert.equal(watchfaceLayerMatchesSearch("Hours", "hours"), true);
+  assert.equal(watchfaceLayerMatchesSearch("Weather", "天气"), true);
+  assert.equal(watchfaceLayerMatchesSearch("Weekday", "星期"), true);
+  assert.equal(watchfaceLayerMatchesSearch("我的夏天 2026", "夏天"), true);
+  assert.deepEqual(createCollapsedWatchfaceLayerSections(), englishCollapsed);
   setLanguage("en");
   assert.equal(watchfaceLayerMatchesSearch("Hours", "heures"), false);
   assert.equal(watchfaceLayerMatchesSearch("Hours", "hours"), true);

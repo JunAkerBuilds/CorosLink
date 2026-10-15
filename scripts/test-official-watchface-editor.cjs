@@ -165,7 +165,11 @@ async function main() {
   await service.loginCorosWatchfaces("test@example.test", "test", "us", false);
   const requests = [];
   const handlers = {
+    "app:setLanguage": () => undefined,
+    "watchfaceAi:listChats": () => [],
+    "watchfaceAi:models": () => [],
     "watchfaces:getStatus": () => service.getCorosWatchfaceStatus(),
+    "watchfaces:readCachedThemes": () => null,
     "watchfaces:listThemes": (_, input) => service.listCorosWatchfaceThemes(input),
     "watchfaces:downloadTheme": async (_, input) => { requests.push(input); return service.downloadCorosWatchfaceTheme(input); },
     "watchfaces:listProjects": () => service.listCorosWatchfaceProjects(),
@@ -195,32 +199,40 @@ async function main() {
     await win.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/scripts/fixtures/watchface-official-import.html`);
     await until('Boolean(document.querySelector("#watchface-templates-tab"))');
     await js('document.querySelector("#watchface-templates-tab").click()');
-    await until('Boolean(document.querySelector("#watchface-template-catalog"))');
-    await js(`(() => { const s=document.querySelector('#watchface-template-catalog'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(s,'official'); s.dispatchEvent(new Event('change',{bubbles:true})); document.querySelector('.watchface-template-controls').requestSubmit(); })()`);
-    await until('document.querySelectorAll(".watchface-template-card").length === 2');
-    // A submit in the same tick as the catalog change can use the prior state.
-    await js('document.querySelector(".watchface-template-controls").requestSubmit()');
-    await until('[...document.querySelectorAll(".watchface-template-card button")].some(b=>b.textContent === "Open in editor" && !b.disabled)');
-    assert.deepEqual(await js('[...document.querySelector(".watchface-template-card").querySelectorAll("button")].map(b=>b.textContent)'), ["Download", "Open in editor"]);
-    await js('document.querySelector(".watchface-template-card button").click()');
-    await until('!document.querySelector(".watchface-template-card button").disabled');
+    await until(`[...document.querySelectorAll('.wf-hub-filter-chip')].some(button => button.textContent === 'Official faces')`);
+    await js(`[...document.querySelectorAll('.wf-hub-filter-chip')].find(button => button.textContent === 'Official faces').click()`);
+    await until(`document.querySelector('.wf-hub-filter-chip[aria-pressed="true"]')?.textContent === 'Official faces'`);
+    await js(`document.querySelector('.wf-hub-toolbar-form').requestSubmit()`);
+    await until('document.querySelectorAll(".wf-hub-card--template").length === 2');
+    await until(`[...document.querySelectorAll('.wf-hub-card--template .wf-hub-card-actions button')].some(button => button.textContent === 'Open in editor' && !button.disabled)`);
+    assert.deepEqual(await js(`[...document.querySelector('.wf-hub-card--template .wf-hub-card-actions').querySelectorAll('button')].map(button => button.textContent)`), ["Open in editor", "Download"]);
+    await js(`document.querySelector('.wf-hub-card--template .wf-hub-card-actions button:last-child').click()`);
+    await until(`!document.querySelector('.wf-hub-card--template .wf-hub-card-actions button').disabled`);
     assert.equal(requests[0].openInEditor, undefined);
     assert.equal(await js('Boolean(document.querySelector(".watchface-editor"))'), false, "Download must stay in the catalog");
     assert((await fs.readdir(path.join(temp, "COROS watchfaces"))).some(n => n.endsWith(".bin")));
-    await js('document.querySelectorAll(".watchface-template-card")[1].querySelectorAll("button")[1].click()');
+    await js(`document.querySelectorAll('.wf-hub-card--template')[1].querySelector('.wf-hub-card-actions button').click()`);
     await until('document.body.innerText.includes("cannot be opened in the editor yet")');
     assert.equal(await js('Boolean(document.querySelector(".watchface-editor"))'), false);
-    await until('!document.querySelector(".watchface-template-card button").disabled');
-    await js('document.querySelector(".watchface-template-card button").scrollIntoView({block:"center"})');
+    await until(`!document.querySelector('.wf-hub-card--template .wf-hub-card-actions button').disabled`);
+    await js(`document.querySelector('.wf-hub-card--template .wf-hub-card-actions button').scrollIntoView({ block: 'center' })`);
     await new Promise(r => setTimeout(r, 150));
     await fs.writeFile(path.join(temp, "official-actions.png"), (await win.webContents.capturePage()).toPNG());
-    await js('document.querySelector(".watchface-template-card").querySelectorAll("button")[1].click()');
+    await js(`document.querySelector('.wf-hub-card--template .wf-hub-card-actions button').click()`);
     await until('document.body.innerText.includes("Opening…")');
-    assert(await js('[...document.querySelectorAll(".watchface-template-card button")].every(b=>b.disabled)'));
+    assert(await js(`[...document.querySelectorAll('.wf-hub-card--template button')].every(button => button.disabled)`));
     await until('Boolean(document.querySelector(".watchface-editor"))');
     assert.equal(requests.at(-1).openInEditor, true);
     const getDoc = `import('/src/watchfaces/watchfaceAutomation.ts').then(m=>m.getWatchfaceAutomationEditor()?.request('get_document',{}))`;
     const doc = await until(getDoc, value => value?.capabilities?.layers?.length > 0);
+    await js(`import('/src/i18n/locale.ts').then(module => module.setLanguage('zh-CN'))`);
+    await until(`document.documentElement.lang === 'zh-CN' && document.body.innerText.includes('图层')`);
+    const chineseDoc = await js(getDoc);
+    assert.equal(chineseDoc.sessionId, doc.sessionId, 'switching language preserves the watchface editor session');
+    assert.equal(chineseDoc.revision, doc.revision, 'switching language does not edit the watchface');
+    assert.deepEqual(chineseDoc.design, doc.design, 'artwork, custom labels and native values stay literal');
+    await js(`import('/src/i18n/locale.ts').then(module => module.setLanguage('en'))`);
+    await until(`document.documentElement.lang === 'en'`);
     assert(doc.capabilities.layers.some(layer => layer.id === "hours"), "Recovered clock is editable, not a flattened thumbnail");
     const request = (method, params) => js(`import('/src/watchfaces/watchfaceAutomation.ts').then(m=>m.getWatchfaceAutomationEditor().request(${JSON.stringify(method)},${JSON.stringify(params)}))`);
     const faceId = source.readUInt32LE(4);

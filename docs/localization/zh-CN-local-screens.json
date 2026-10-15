@@ -1,0 +1,253 @@
+{
+  "baseCommit": "80b9f465226703df72aedd1935c539b3ad69b480",
+  "localizationBranch": "codex/simplified-chinese",
+  "appliesAfter": "The localization changes on this branch, in a checkout containing the newer local features.",
+  "source": "Read-only snapshot of the original checkout. Concurrent source edits were detected; source hashes identify the reviewed snapshot.",
+  "fileCount": 50,
+  "catalogMessages": {
+    "training": 2017,
+    "core": 915,
+    "tools": 1457,
+    "watchfaces": 1867
+  },
+  "uniqueChineseKeys": 5866,
+  "auditedLiteralCalls": {
+    "main": 5760,
+    "localSnapshot": 6371
+  },
+  "validation": {
+    "mainBuild": "npm run build — passed",
+    "localization": "npm run test:localization — passed",
+    "existingMainUi": [
+      "accounts settings",
+      "training activities",
+      "calendar workout events",
+      "strength Training Hub boundary",
+      "saved routes",
+      "official watchface editor"
+    ],
+    "existingMainHelpers": [
+      "training formatters",
+      "unit system",
+      "greetings",
+      "strength detail",
+      "scheduled structure"
+    ],
+    "localBuild": "npm run build — passed in isolated newer-source snapshot",
+    "localUi": [
+      "Chinese race drafts and feedback",
+      "onboarding chapter preservation",
+      "open route breakdown",
+      "active phone QR preservation",
+      "existing phone-send UI",
+      "activity screens: real preload/IPC/settings service with simulated BLE"
+    ],
+    "localHelpers": [
+      "route engine",
+      "Chinese catalog and source-call audit"
+    ],
+    "physicalHardware": "BLE, watch display, phone handoff and macOS permission prompts were not exercised on physical devices."
+  },
+  "files": {
+    "electron/main.ts": {
+      "sourceSha256": "023162e664558c1ba64aa1e46e27984ec59e8266df459b777019d2dad92d50ff",
+      "localizedSha256": "86284e5c5f7132f3ffa17cd09da5d5fe0ef341a9d72af815571fcf287f095af8"
+    },
+    "scripts/fixtures/chinese-local-screens.html": {
+      "sourceSha256": null,
+      "localizedSha256": "bbd271b7b29f8c22b5f89a9c385718a20232a5949c111cd4ef9867b7f3607737"
+    },
+    "scripts/fixtures/chinese-local-screens.tsx": {
+      "sourceSha256": null,
+      "localizedSha256": "78c8909bd0cdc046427cc1993a3cd58419f0b88834d1945d2727643b250ebc75"
+    },
+    "scripts/fixtures/coros-activity-screens.jsx": {
+      "sourceSha256": "f856b2370f4f721d9a0e63fb5e3414369fc4d1d9cc95c5bacfcd27830cb6865d",
+      "localizedSha256": "91e383ba4d16e2fccf67d35f793e2c5261f617a613ac0840caa2eb4eaea89138"
+    },
+    "scripts/test-chinese-local-screens.cjs": {
+      "sourceSha256": null,
+      "localizedSha256": "67a07c750686c6e7b7a35b3372d93cc25fb93950c73ab2380833a67b887d2384"
+    },
+    "scripts/test-coros-activity-screens-ui.cjs": {
+      "sourceSha256": "d4730abfc563ee348412f4de174ee01046f84716fd82f0069a309a33600328e9",
+      "localizedSha256": "66ccdf21e5ea77bba04f13977f14f453824822e3f80003c7d739ecfd39a97943"
+    },
+    "src/App.tsx": {
+      "sourceSha256": "32a59612aea3709a2595cf8c742d8805d54d143d00500214fdae14ff76ed88b3",
+      "localizedSha256": "1511a32304db1e464dbf240d875b9a2389c01c70891e6172dc7987ebb9097e80"
+    },
+    "src/calendar/WeekStatsCell.tsx": {
+      "sourceSha256": "d49d380eab70692d751c6d2287f0100f4ebcd36cd6f71d01516befd7ef634500",
+      "localizedSha256": "6c7c14632189dd23a149dd959043c234f5754857a1386adf7e792489c6c8a255"
+    },
+    "src/calendar/weekSportBreakdown.ts": {
+      "sourceSha256": "aaea1d67934785628dcee6a2084d80cf3fe0b44d4e6c16a58bc7d4bf644df316",
+      "localizedSha256": "815c1d385d8065512fcddfb0d490c25bdba550611436954ce79086c3fc5b5b4d"
+    },
+    "src/maps/routes/LoopOptions.tsx": {
+      "sourceSha256": "3ede14d83d35435f1709599333eadfb29dd861f367d9bcd619bfdf0f59f6e5a2",
+      "localizedSha256": "bb008446a547701e92e5d778bfed35ef0c26ba24b2b578d54692253f6ee691b5"
+    },
+    "src/maps/routes/RouteMakeup.tsx": {
+      "sourceSha256": "d976ab793a3a6b773f385c83d36e339a174bf3bba45a4f880474fdba5587d50b",
+      "localizedSha256": "2be52a8fdc20be876bf1b404c0d2539ca0292e8212b470d9433499d56656cdde"
+    },
+    "src/maps/routes/RouteMapCanvas.tsx": {
+      "sourceSha256": "e835975f3556b677e458af4efbb0b348e0d80040ce69ece8c837b3b30f415d50",
+      "localizedSha256": "2a57e032a5518d2b2982eb7903c30c53401d795b5afcb54db75896eab90cffcf"
+    },
+    "src/maps/routes/RouteStatsBar.tsx": {
+      "sourceSha256": "78ea4d485f64c03c7000da9be07cfab3b82c3315802f538fc04565f6fadb76dc",
+      "localizedSha256": "0a2dcfd0d0e0b06f75dad46119cf8d7352ccab8ea6cd91cad2ade33f8528c828"
+    },
+    "src/maps/routes/RouteStudio.tsx": {
+      "sourceSha256": "7ba1ff08b91c12e31e9cd27a740ab07747aa3ad60c1e88fb705a4c0c40ca466b",
+      "localizedSha256": "e4a338737f6e3a1e6665bb368d6b60e6ab2cf83fbefeb65f27a89d9706d2d934"
+    },
+    "src/maps/routes/loopOptionsModel.ts": {
+      "sourceSha256": "deee67e679944a71f686e0d91ebd1d45f71b924bb0e77566a6bf3150d5a6e174",
+      "localizedSha256": "1aafce4ec50c3ead25253c979b1dca897169e33470c8fe65790ce559ea02fc48"
+    },
+    "src/maps/routes/panels.tsx": {
+      "sourceSha256": "7805ed5c54bcefe0410ce7f7c7097688f16911ca2177adcb661411d969ad3f13",
+      "localizedSha256": "3ae051f79a6581181006c74d066a6f3e793277307c63ad4199977d209247f8a2"
+    },
+    "src/maps/routes/routeMakeupModel.ts": {
+      "sourceSha256": "4010b31ed3ca7c544c4197b5e9a6db32b91fe37c480dd88a0778c8628f132729",
+      "localizedSha256": "eb5d2e20d988a44b2b18bd0d4d98323f379ba9c45ad812527413284c42eeed3f"
+    },
+    "src/onboarding/OnboardingTour.tsx": {
+      "sourceSha256": "55faf080b7fb5ba5a26260fec1d24195cc42d8a035b6a8b10b1b1eaf99ed3c9a",
+      "localizedSha256": "0893e3d4f4cfb616fd26ea077ba2d026ba6a1adabc61390db25afd4a803b04c1"
+    },
+    "src/onboarding/OnboardingVignettes.tsx": {
+      "sourceSha256": "541b84f1f156c232d3201375186f2b02ebe3c58b6e96a4b50382dc7bde0e11a0",
+      "localizedSha256": "f8d7c16b07f896b261d674580c1b3136d36660e15880f3179d5e31d58a1220f7"
+    },
+    "src/overview/ActivityGlobeRenderer.tsx": {
+      "sourceSha256": "89d00e92263d67a42cdfb8e904ee8a7f9b6c52af594a8425ee10df9d32abd35a",
+      "localizedSha256": "788f036e4de7368a851c62f1926d8e43d246e8964dc4562759cee2bea58f796f"
+    },
+    "src/overview/OverviewBriefing.tsx": {
+      "sourceSha256": "331b28e877e58587b7e1ce2a154440d42dd9ac568464b1552420718284bc37cb",
+      "localizedSha256": "37845392eea309abc8849781042e53d2573e71b313febca81365e98685769b15"
+    },
+    "src/overview/overviewBriefingModel.ts": {
+      "sourceSha256": "8418ca2964873b0e3008d5848e818edb86a08e6484ef4ea88ab371fa56b07b5e",
+      "localizedSha256": "d01a811fdac5de5d33cdd4b5418f5feef508d5c96063f92737372878448ba155"
+    },
+    "src/settings/AccountsSettings.tsx": {
+      "sourceSha256": "c3f0f9ae7394385d555f3eb53b5e12c8eb1c9345e509d0a55ab8b4d52dcc2360",
+      "localizedSha256": "c013241708d893562f92f9db9f5f8698edfd5e41b12d71ebbeaa2b5a90991d64"
+    },
+    "src/strength/StravaConnection.tsx": {
+      "sourceSha256": "8631c0396d92e87b21ee28b9bffd16fa19a414f4713b0755c2b176e76d725a4c",
+      "localizedSha256": "d3e7867688cd87d552a434f4558f8dbea36f269daef26af7ebb06e8f5574aa07"
+    },
+    "src/strength/StrengthView.tsx": {
+      "sourceSha256": "b37a0f5cb1a8f0489c04371a67e5e7c1b81ca3188972e86b2eb2a812321ad791",
+      "localizedSha256": "33ef673fc72df154c6af93a85b4627559a467c8fc38c57783aa90fa95619ac8f"
+    },
+    "src/training/TrainingHubView.tsx": {
+      "sourceSha256": "c945fb57fe697eb6ca51e0382ea9c584b1c8dab73314a29685ac13e6bcc916cc",
+      "localizedSha256": "116e2abe4a4972c67e06b814afb4fd6384b37765cf1fe46c27e849065de065c3"
+    },
+    "src/training/components/ActivityChannels.tsx": {
+      "sourceSha256": "b0f4a65987abb85dccd711fb2167afd62b1515b0dc32a2480667fbfd146b7cc4",
+      "localizedSha256": "5ff15fc0b6daeef1481843b91804449f5ea5d82bb2d7b47110c98ed6c311521a"
+    },
+    "src/training/components/ActivityDetailPanel.tsx": {
+      "sourceSha256": "6519a3c99817d1751b6d4c4dbc0c0c8e4ebadaa7667416cdecdc4c66f0d1e42e",
+      "localizedSha256": "5090a291d05225a2cb60b2ac9846f3ed545f78862271255dfd7ae25c6e4a8f5a"
+    },
+    "src/training/components/ActivityTimeInZones.tsx": {
+      "sourceSha256": "920a84c4947078c9a89864b26d4bed6b0ed8f0b430e7ae5b6ab6e4b2cb4bed1f",
+      "localizedSha256": "a7f774f28fe1430896a2440a44f4aea4fd492a256d4bfa1190426f7101292d52"
+    },
+    "src/training/components/HealthInsightsPanel.tsx": {
+      "sourceSha256": "922a23111191c4c3b13ec1e011b1d9c877b573ae628d1fb2d0b77a3aa01cf309",
+      "localizedSha256": "57191e7ebd73dda73893e9da290c46bf5d00f41e47ca3ee9be330effa93549cb"
+    },
+    "src/training/components/PersonalRecordsPanel.tsx": {
+      "sourceSha256": "20d4caedf8941005d1df30fed58d10eb1071ed9411967ea17f76de15fcdacddd",
+      "localizedSha256": "d1f50f93f3f13a09ae08dfa95983daf008ccf5f49dc82c26b8b2fc0988cfac3c"
+    },
+    "src/training/components/RaceComparison.tsx": {
+      "sourceSha256": "5f2e3434e195dc8b07237e9598fd070597166f50f7a44d06ffa56962f897b02e",
+      "localizedSha256": "6340320bcfa5398f69d82e066b747cd82598dfd0463b3fbc19e2dd65aaeecf99"
+    },
+    "src/training/components/RaceEditorDialog.tsx": {
+      "sourceSha256": "475168cadd361e1333162a080e29d05e63a469fe12fe2276236379576b2498ca",
+      "localizedSha256": "a682c571dd78b12124c672605827401671c92f119fe9b01fe16a6fc12f60fba5"
+    },
+    "src/training/components/RacePlaques.tsx": {
+      "sourceSha256": "8dae81a4547cf4357ce43469706d52f32095f5ca34d051ca060cd506296abfd4",
+      "localizedSha256": "43f12306d0f371f80d605832fbd32af46fa3cbe7f2f5d5b939404e451dfaddfd"
+    },
+    "src/training/components/RaceProgressChart.tsx": {
+      "sourceSha256": "5b0f4f5465c8dfc9b2f3a8aafe64a2fa4abb00d112bb8904b3e2c199d712135c",
+      "localizedSha256": "188d13234e9b252f669e3482c28016a1250f2c82725d4e36e36c3586d3efe123"
+    },
+    "src/training/components/RacesPanel.tsx": {
+      "sourceSha256": "a19f7de3ad23b05e11cd4c31f0883706c3bd2cf41825661eca6dab6d876c6afb",
+      "localizedSha256": "4a3f81f05ad1ada38939bf05e8279777326b9a3b7612a8f93e2e2304efee2afd"
+    },
+    "src/training/components/RecordWorkChart.tsx": {
+      "sourceSha256": "defc102e1644d18768ad6251a18db9f8e40f81c4b0e1d6546216cd490e24bda4",
+      "localizedSha256": "cf4b86ce08f0102ea6b7fb5c6c40a6d468b51c51de6bd67412233927df9d3e66"
+    },
+    "src/training/components/SleepHrvSummary.tsx": {
+      "sourceSha256": "3149513f5d72f183393664c754e02dafe14004e02f40133970f767d97f4ffdf7",
+      "localizedSha256": "1790cddf27f3e3b67e88cae5a0f16457e4b96073f794a05d0970d7422d62887f"
+    },
+    "src/training/components/TrainingActivities.tsx": {
+      "sourceSha256": "38ea39bf1767df3de31255a1b649f5a703c557e9beae55f0fd9d5f982cbdfecb",
+      "localizedSha256": "7ef8311da0bb67b8b8427d4f4da212d5c54a68506fd268ebf2d08a33dcf813c6"
+    },
+    "src/training/hallOfBests.ts": {
+      "sourceSha256": "9b2838478e7eca32e492e39649ed9cb9d11783b55e73d41f0f36592c428fd836",
+      "localizedSha256": "bd4e3db558ef3412f9ba761894401872334f0c9dc3eb3c8bfd31969fd62f8dd3"
+    },
+    "src/training/raceFormat.ts": {
+      "sourceSha256": "6a28d6e2bbeeeecdb22625a8d9093d2afa8e0b2452d4a907716d486556b943e6",
+      "localizedSha256": "bc54d64d7cb2b59bba9df3472b273ac5d9cf12c9fbc72d35c6430de27e3a4dec"
+    },
+    "src/training/useRaceJournal.ts": {
+      "sourceSha256": "337ac3bece8118fccb9e8bc1ac90f86557ba22bf317880c5f1ad1facf752f794",
+      "localizedSha256": "c182d59a0e8a425086ba67cbb552b5f5fe3dfb456eafaef03d9c1035c1c5c330"
+    },
+    "src/watchfaces/CorosActivityScreenPanel.tsx": {
+      "sourceSha256": "fbe58d75584a2a6eb37281c556c8f6fa805564986cc40e646214509f2937a112",
+      "localizedSha256": "0311762417c68a1f271f458d8477df39c7dd5e17470a0a2b1bc2e0da73972921"
+    },
+    "src/watchfaces/NativeDataInspector.tsx": {
+      "sourceSha256": "58d3d530797143d4e756adaa50991eda09608da7787c44853374dbd9d16116c3",
+      "localizedSha256": "81f8fc56b55352faf7e804242a45941ee2668fec91ea5d3bacee86f183c64bc6"
+    },
+    "src/watchfaces/OnWatchPanel.tsx": {
+      "sourceSha256": "cd51159cc9db95534ba0d0c93ca6e9f2312ae4584fc58ae05918f906d43f940c",
+      "localizedSha256": "cb5d6c2eda217abbfd68e69bfa88f7a31648df5d219e3a434ebbb196daea3631"
+    },
+    "src/watchfaces/WatchfaceEditor.tsx": {
+      "sourceSha256": "c0fde18f5ad948abefa8fa8a36b3987728a0c4ac812e4b20efc52d4b42cf7da8",
+      "localizedSha256": "827c2d6b227c265df3453dcce8397d11a580a28af27697a2d0e5ff1675f8dc50"
+    },
+    "src/watchfaces/WatchfaceExportPreview.tsx": {
+      "sourceSha256": "586da28257305c4a9cb0db6549963370907492ea8088a3e3d197c2c68c5f7479",
+      "localizedSha256": "455c9e92efa601782e74b3e4f1a96e10ea0f8dba30f356a71cd97c4153098a38"
+    },
+    "src/watchfaces/WatchfacePhoneSendCard.tsx": {
+      "sourceSha256": "e088721be822edf2f7a8d4dfa00a0231fad8db692c3df60dc25c5c2d2c884906",
+      "localizedSha256": "c0e19b215ed3ea3acae130a05f977504916dcaf97642741ac93e296bff7153fb"
+    },
+    "src/watchfaces/WatchfaceQuickStart.tsx": {
+      "sourceSha256": "2e7e2b15b464221ca00e3fafe8c925951de49679f961006b8c80773e4698fb5c",
+      "localizedSha256": "9b376a56af2d53b4ae04ef6b1d34925f9ad6320df8bb007e199697c6d2a5a191"
+    },
+    "src/watchfaces/WatchfacesView.tsx": {
+      "sourceSha256": "94eb09c190da05271a4e83b35a649b0abdec62a9eeec533105bf08b8c2da8396",
+      "localizedSha256": "e3a2bd48c71b306e74c8ee8961c5527010f3b1093ec86d1f85a71010d35e6d0b"
+    }
+  }
+}

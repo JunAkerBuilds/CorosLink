@@ -156,7 +156,7 @@
     "website:build": "npm run build --prefix website",
     "test:strength-workout-edits": "npm run build:electron && node --test scripts/test-strength-workout-edits.mjs && node scripts/test-workout-automation.mjs && electron scripts/test-strength-training-hub.cjs",
     "test:strength-review-ui": "npm run build:electron && electron scripts/test-strength-review-ui.cjs",
-    "test:localization": "npm run build:electron && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-localization.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-watchface-layer-search.mjs && electron scripts/test-localization-ui.cjs && electron scripts/test-calendar-language-drafts.cjs"
+    "test:localization": "npm run build:electron && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-localization.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-chinese-localization.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-watchface-layer-search.mjs && electron scripts/test-localization-ui.cjs && electron scripts/test-calendar-language-drafts.cjs"
   },
   "build": {
     "appId": "app.coroslink",
@@ -270,7 +270,13 @@
         "NSLocalNetworkUsageDescription": "CorosLink sends your selected MP3 files to your COROS watch over the same Wi-Fi network.",
         "NSLocationUsageDescription": "CorosLink uses your location only when you choose Use my location to set a route starting point."
       },
-      "notarize": true
+      "notarize": true,
+      "extraResources": [
+        {
+          "from": "build/zh-Hans.lproj",
+          "to": "zh-Hans.lproj"
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
