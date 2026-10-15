@@ -2017,4 +2017,5 @@ export const trainingChinese: Readonly<Record<string, string>> = {
   "faster": "更快",
   "slower": "更慢",
   " as a 5K": "（折算为 5K）",
+  " You can also revoke the app-specific password at account.apple.com.": " 您也可以在 account.apple.com 撤销应用专用密码。",
 };

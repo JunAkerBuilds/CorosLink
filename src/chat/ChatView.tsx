@@ -1323,7 +1323,7 @@ function PlanPreviewCard({
                 <strong>{t("Calendar")}</strong>
                 <small>
                   {unscheduledWorkoutCount > 0
-                    ? t("{{p0}} {{p1}} a date.", { p0: unscheduledWorkoutCount, p1: unscheduledWorkoutCount === 1 ? "workout needs" : "workouts need" })
+                    ? t("{{p0}} {{p1}} a date.", { p0: unscheduledWorkoutCount, p1: t(unscheduledWorkoutCount === 1 ? "workout needs" : "workouts need") })
                     : t("Schedule workouts on the dates shown above.")}
                 </small>
               </span>
@@ -1380,7 +1380,7 @@ function PlanPreviewCard({
                 <strong>{t("COROS Plan on Calendar")}</strong>
                 <small>
                   {unscheduledWorkoutCount > 0
-                    ? t("{{p0}} {{p1}} a date.", { p0: unscheduledWorkoutCount, p1: unscheduledWorkoutCount === 1 ? "workout needs" : "workouts need" })
+                    ? t("{{p0}} {{p1}} a date.", { p0: unscheduledWorkoutCount, p1: t(unscheduledWorkoutCount === 1 ? "workout needs" : "workouts need") })
                     : t("Bundle into one COROS Plan and put it on your Calendar.")}
                 </small>
               </span>

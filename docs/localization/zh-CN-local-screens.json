@@ -5,15 +5,15 @@
   "source": "Read-only snapshot of the original checkout. Concurrent source edits were detected; source hashes identify the reviewed snapshot.",
   "fileCount": 50,
   "catalogMessages": {
-    "training": 2017,
+    "training": 2018,
     "core": 915,
-    "tools": 1457,
-    "watchfaces": 1867
+    "tools": 1461,
+    "watchfaces": 1877
   },
-  "uniqueChineseKeys": 5866,
+  "uniqueChineseKeys": 5880,
   "auditedLiteralCalls": {
-    "main": 5760,
-    "localSnapshot": 6371
+    "main": 5770,
+    "localSnapshot": 6381
   },
   "validation": {
     "mainBuild": "npm run build — passed",
@@ -110,8 +110,8 @@
       "localizedSha256": "1aafce4ec50c3ead25253c979b1dca897169e33470c8fe65790ce559ea02fc48"
     },
     "src/maps/routes/panels.tsx": {
-      "sourceSha256": "7805ed5c54bcefe0410ce7f7c7097688f16911ca2177adcb661411d969ad3f13",
-      "localizedSha256": "3ae051f79a6581181006c74d066a6f3e793277307c63ad4199977d209247f8a2"
+      "sourceSha256": "3f74b2192d51ac85116de49d05b90a97dc071dafe3e7d3a3bee3970279725a98",
+      "localizedSha256": "e7d9fda2d8d7c362e3ba655f49bd33d7bf785544c889e44ca4c99c0b7a04ea3a"
     },
     "src/maps/routes/routeMakeupModel.ts": {
       "sourceSha256": "4010b31ed3ca7c544c4197b5e9a6db32b91fe37c480dd88a0778c8628f132729",
@@ -246,8 +246,8 @@
       "localizedSha256": "9b376a56af2d53b4ae04ef6b1d34925f9ad6320df8bb007e199697c6d2a5a191"
     },
     "src/watchfaces/WatchfacesView.tsx": {
-      "sourceSha256": "94eb09c190da05271a4e83b35a649b0abdec62a9eeec533105bf08b8c2da8396",
-      "localizedSha256": "e3a2bd48c71b306e74c8ee8961c5527010f3b1093ec86d1f85a71010d35e6d0b"
+      "sourceSha256": "ce7812d963264d97aa9dc993d4dd82b37348a6dc1ed9819783254489dd5d132c",
+      "localizedSha256": "e3dbd49bc52657e9c46fd1a57ebe0a9536341f24cf56d81da11268d4ec820a2f"
     }
   }
 }

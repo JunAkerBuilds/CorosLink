@@ -784,9 +784,9 @@ export function WatchfacesView({
       openStudio(converted.archive, convertedName, undefined, prepared.design, true,
         { firmwareType: target.firmwareType, watchModel: target.model });
       setNotice(localizedText(() => t("Converted to {{value1}}. {{value2}}", { value1: t(target.label), value2: target.display === "mip"
-        ? "Current stays visible on MIP; your separate AOD design is retained for AMOLED."
-        : converted.generatedAod ? "An editable Always-on layout was created from Current. Review it before sending."
-        : "Current and Always-on layouts are preserved." })));
+        ? t("Current stays visible on MIP; your separate AOD design is retained for AMOLED.")
+        : converted.generatedAod ? t("An editable Always-on layout was created from Current. Review it before sending.")
+        : t("Current and Always-on layouts are preserved.") })));
       return { opened: true, name: convertedName, targetFirmwareType: target.firmwareType,
         omittedRawConfigEditCount: 0, appliedRawConfigEditCount: converted.appliedRawConfigEditCount };
     } finally {

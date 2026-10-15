@@ -79,7 +79,7 @@ export function CorosDirectWatchfacePanel({ api, ready, connected, watch, betaNo
   // A BIN only fits watches with its screen; the watch would refuse another.
   const builtFor = preview?.models?.map(model => getWatchfaceTarget(model)?.label).filter(Boolean).join(" or ");
   const mismatch = watch && preview?.models && !preview.models.includes(watch.model)
-    ? t("{{value1}} is built for {{value2}}. Compile it again with your {{value3}} connected.", { value1: preview.name, value2: builtFor || "another watch", value3: t(watch.label) }) : null;
+    ? t("{{value1}} is built for {{value2}}. Compile it again with your {{value3}} connected.", { value1: preview.name, value2: builtFor || t("another watch"), value3: t(watch.label) }) : null;
   const occupied = inventory?.slots.filter(item => item.faceId !== null).length ?? 0;
   const summary = preview ? compileSummary(preview) : null;
   const result = showResult && !transferring ? watchInstallResult(status) : null;

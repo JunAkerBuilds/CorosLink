@@ -1761,4 +1761,5 @@ export const trainingFrench: Record<string, string> = {
   "bodyweight": "poids du corps",
   "load not set": "charge non définie",
   ", {{rest}} rest": ", {{rest}} de repos",
+  " You can also revoke the app-specific password at account.apple.com.": " Vous pouvez aussi révoquer le mot de passe spécifique à l’application sur account.apple.com.",
 };

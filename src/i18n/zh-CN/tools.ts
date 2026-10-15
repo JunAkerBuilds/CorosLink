@@ -1457,4 +1457,8 @@ export const toolsChinese: Readonly<Record<string, string>> = {
   "{{p0}} {{p1}} in the next two weeks": "{{p0}} {{p1}} 未来两周",
   "Plan your next block": "规划你的下一个街区",
   "Load music for your runs": "为您的跑步加载音乐",
+  "workout needs": "次训练需要",
+  "workouts need": "次训练需要",
+  "start point": "起点",
+  "destination": "目的地",
 };
