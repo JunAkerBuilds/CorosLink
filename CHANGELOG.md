@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- In the paper theme, the training globe on Overview is a softly shaded off-white sphere instead of a flat grey ball.
+
 ## [0.1.53] - 2026-10-15
 
 ### Added
