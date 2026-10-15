@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **A welcome tour for new installs.** The first time CorosLink opens, a short tour walks through each part of the app, from Training Hub and Coach to planning, Strength, Watch Faces, Maps and Music, with a picture of each and where to find it in the sidebar. The last step picks dark or paper and your units, and offers to sign in to COROS or connect your watch. Leave with **Skip tour** or Esc at any point, and open it again from **Help & links → Take the tour**. Updating from an earlier version doesn't show it.
+- **A welcome tour for new installs.** The first time CorosLink opens, a short tour says hello and asks for your language (English, French or Simplified Chinese, switching the whole tour as you pick), then walks through each part of the app, from Training Hub and Coach to planning, Strength, Watch Faces, Maps and Music, with a picture of each and where to find it in the sidebar. The last step picks dark or paper and your units, and offers to sign in to COROS or connect your watch. Leave with **Skip tour** or Esc at any point, and open it again from **Help & links → Take the tour**. Updating from an earlier version doesn't show it.
 
 ### Fixed
 

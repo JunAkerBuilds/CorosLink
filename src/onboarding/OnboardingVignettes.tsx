@@ -37,6 +37,7 @@ import {
 } from "@phosphor-icons/react";
 import logoBase from "../../build/icon-base.svg";
 import logoSync from "../../build/icon-sync.svg";
+import { LANGUAGES, type Language } from "../i18n";
 import {
   distanceUnit,
   elevationUnit,
@@ -124,6 +125,66 @@ function VHead({
   );
 }
 
+/* -------------------------------------------------------------------- Hello */
+
+/** Each UI language says hello in its own words. Never translated: the point is
+    that every reader finds their own greeting. */
+export const GREETINGS: Record<Language, string> = { en: "Hello", fr: "Bonjour", "zh-CN": "你好" };
+
+const RING_RADIUS = 182;
+
+/** Card centres spread evenly round the outer ring, starting top-left. */
+function helloSlot(index: number, count: number): Point {
+  const angle = ((-90 - 180 / count + (index * 360) / count) * Math.PI) / 180;
+  return [
+    round(VIGNETTE_WIDTH / 2 + RING_RADIUS * Math.cos(angle)),
+    round(VIGNETTE_HEIGHT / 2 + RING_RADIUS * Math.sin(angle))
+  ];
+}
+
+/** Rings, glow and the spinning logo that both opening pictures share. */
+function OrbitBackdrop() {
+  return (
+    <>
+      <svg className="onb-orbit-rings" viewBox="0 0 560 470" aria-hidden="true">
+        <circle cx="280" cy="235" r={RING_RADIUS} className="is-outer" />
+        <circle cx="280" cy="235" r="122" className="is-inner" />
+      </svg>
+      <div className="onb-orbit-glow" />
+      {/* Base and arrows are separate images so only the arrows' cached texture spins. */}
+      <div className="onb-orbit-icon">
+        <img src={logoBase} alt="" />
+        <img className="is-sync" src={logoSync} alt="" />
+      </div>
+    </>
+  );
+}
+
+export function HelloVignette({ language }: { language: Language }) {
+  return (
+    <div className="onb-vignette">
+      <OrbitBackdrop />
+      {LANGUAGES.map((option, index) => {
+        const [left, top] = helloSlot(index, LANGUAGES.length);
+        return (
+          <div key={option.value} className="onb-hello-slot" style={{ left, top, "--i": index } as CSSProperties}>
+            <div
+              className={["onb-hello-card", option.value === language && "is-selected"].filter(Boolean).join(" ")}
+              lang={option.value}
+            >
+              <strong>{GREETINGS[option.value]}</strong>
+              <span className="onb-hello-name">{option.label}</span>
+              <span className="onb-hello-check">
+                <Check size={11} weight="bold" aria-hidden="true" />
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ Welcome */
 
 const ORBIT: Array<{ icon: Icon; hue: string }> = [
@@ -138,16 +199,7 @@ const ORBIT: Array<{ icon: Icon; hue: string }> = [
 export function WelcomeVignette() {
   return (
     <div className="onb-vignette onb-v-welcome">
-      <svg className="onb-orbit-rings" viewBox="0 0 560 470" aria-hidden="true">
-        <circle cx="280" cy="235" r="182" className="is-outer" />
-        <circle cx="280" cy="235" r="122" className="is-inner" />
-      </svg>
-      <div className="onb-orbit-glow" />
-      {/* Base and arrows are separate images so only the arrows' cached texture spins. */}
-      <div className="onb-orbit-icon">
-        <img src={logoBase} alt="" />
-        <img className="is-sync" src={logoSync} alt="" />
-      </div>
+      <OrbitBackdrop />
       <div className="onb-orbit">
         {ORBIT.map(({ icon: Glyph, hue }, index) => (
           <div

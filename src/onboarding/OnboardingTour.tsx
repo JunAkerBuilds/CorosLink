@@ -1,7 +1,8 @@
 /* First-run tour. App.tsx shows it once after a new install (the main process
    decides, see electron/onboardingState.ts) and again from Help → Take the
-   tour. One chapter per area of the app, each with its own hue and picture,
-   ending with appearance, units and the two connections worth making. */
+   tour. It opens on a language choice, then one chapter per area of the app,
+   each with its own hue and picture, ending with appearance, units and the
+   two connections worth making. */
 
 import {
   useCallback,
@@ -22,6 +23,7 @@ import {
   ChartLineUp,
   ChatCircleDots,
   Check,
+  HandWaving,
   MapTrifold,
   MusicNotes,
   ShieldCheck,
@@ -30,12 +32,15 @@ import {
 } from "@phosphor-icons/react";
 import logoBase from "../../build/icon-base.svg";
 import logoSync from "../../build/icon-sync.svg";
+import { LANGUAGES, useLanguage } from "../i18n";
 import { useTheme } from "../theme/ThemeProvider";
 import type { Theme } from "../theme/theme";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import type { UnitSystem } from "../units/units";
 import {
   ConnectedBadge,
+  GREETINGS,
+  HelloVignette,
   MapsVignette,
   MusicVignette,
   PlanVignette,
@@ -50,7 +55,7 @@ import "./onboarding.css";
 
 export type OnboardingExit = "explore" | "skip" | "sign-in" | "connect-watch";
 
-type ChapterId = "welcome" | "training" | "plan" | "strength" | "watchfaces" | "maps" | "music" | "ready";
+type ChapterId = "hello" | "welcome" | "training" | "plan" | "strength" | "watchfaces" | "maps" | "music" | "ready";
 
 type Hue = "mint" | "cyan" | "violet" | "amber" | "pink" | "blue" | "rose";
 
@@ -70,10 +75,19 @@ interface Chapter {
 
 const CHAPTERS: Chapter[] = [
   {
+    id: "hello",
+    label: "Language",
+    hue: "mint",
+    icon: HandWaving,
+    eyebrow: "Hello",
+    title: "Welcome to CorosLink.",
+    lede: "First, select your language. You can change it any time in Settings."
+  },
+  {
     id: "welcome",
     label: "Welcome",
     hue: "mint",
-    eyebrow: "Welcome to CorosLink",
+    eyebrow: "What’s inside",
     title: "Your COROS watch, with a desktop to match.",
     lede: "Training, plans, watch faces, maps and music, together in one app. Here’s a one-minute look around.",
     points: [
@@ -274,7 +288,10 @@ function useStageScale() {
 }
 
 function Vignette({ chapter, unitSystem }: { chapter: ChapterId; unitSystem: UnitSystem }) {
+  const { language } = useLanguage();
   switch (chapter) {
+    case "hello":
+      return <HelloVignette language={language} />;
     case "welcome":
       return <WelcomeVignette />;
     case "training":
@@ -298,18 +315,25 @@ function ChoiceTile({
   selected,
   onSelect,
   children,
-  label
+  label,
+  lang,
+  row = false
 }: {
   selected: boolean;
   onSelect: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   children: ReactNode;
   label: string;
+  /** The label's own language, so a screen reader says it in that voice. */
+  lang?: string;
+  /** Picture, label and check side by side instead of stacked. */
+  row?: boolean;
 }) {
   return (
     <button
       type="button"
-      className={["onb-choice", selected && "is-selected"].filter(Boolean).join(" ")}
+      className={["onb-choice", row && "is-row", selected && "is-selected"].filter(Boolean).join(" ")}
       aria-pressed={selected}
+      lang={lang}
       onClick={onSelect}
     >
       {children}
@@ -329,6 +353,30 @@ function ThemePreview({ theme }: { theme: Theme }) {
       <i className="is-card is-wide" />
       <i className="is-accent" />
     </span>
+  );
+}
+
+/** The app's languages, each greeting you in its own words. Picking one
+    switches the whole tour at once, so the choice shows itself. */
+function LanguagePicker() {
+  const { language, setLanguage } = useLanguage();
+  return (
+    <div className="onb-languages" role="group" aria-label="App language">
+      {LANGUAGES.map((option) => (
+        <ChoiceTile
+          key={option.value}
+          row
+          lang={option.value}
+          label={option.label}
+          selected={language === option.value}
+          onSelect={() => setLanguage(option.value)}
+        >
+          <span className="onb-greeting" aria-hidden="true">
+            {GREETINGS[option.value]}
+          </span>
+        </ChoiceTile>
+      ))}
+    </div>
   );
 }
 
@@ -582,6 +630,7 @@ export function OnboardingTour({ trainingConnected, watchConnected, onClose }: O
               </ul>
             ) : null}
 
+            {chapter.id === "hello" ? <LanguagePicker /> : null}
             {chapter.id === "ready" ? <Preferences /> : null}
 
             {chapter.places ? (
@@ -636,7 +685,13 @@ export function OnboardingTour({ trainingConnected, watchConnected, onClose }: O
                 className="onb-button is-primary"
                 onClick={() => (isLast ? close("explore") : goTo(index + 1))}
               >
-                {isFirst ? "Show me around" : isLast ? "Start exploring" : `Next: ${nextChapter.label}`}
+                {chapter.id === "hello"
+                  ? "Let’s get started"
+                  : chapter.id === "welcome"
+                    ? "Show me around"
+                    : isLast
+                      ? "Start exploring"
+                      : `Next: ${nextChapter.label}`}
                 <ArrowRight size={15} weight="bold" aria-hidden="true" />
               </button>
             </div>

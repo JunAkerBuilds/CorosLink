@@ -634,5 +634,10 @@ export const coreFrench: Record<string, string> = {
   "Built for the Extreme": "Conçue pour l’extrême",
   "Built for the Long Run": "Conçue pour les longues distances",
   "Built for the Trail": "Conçue pour le trail",
-  "Storage unavailable": "Stockage indisponible"
+  "Storage unavailable": "Stockage indisponible",
+  "Hello": "Bonjour",
+  "Welcome to CorosLink.": "Bienvenue dans CorosLink.",
+  "First, select your language. You can change it any time in Settings.": "Commencez par choisir votre langue. Vous pourrez la modifier à tout moment dans les paramètres.",
+  "Let’s get started": "Allons-y",
+  "What’s inside": "Au programme"
 };

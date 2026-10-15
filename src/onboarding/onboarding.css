@@ -613,6 +613,50 @@
   letter-spacing: 0;
 }
 
+/* ------------------------------------------------------------- Language */
+
+.onb-languages {
+  display: grid;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.onb-choice.is-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 12px 7px 7px;
+}
+
+.onb-choice.is-row .onb-choice-label {
+  padding-left: 0;
+  font-size: 13.5px;
+}
+
+.onb-choice.is-row .onb-choice-check {
+  position: static;
+}
+
+.onb-greeting {
+  display: grid;
+  width: 88px;
+  height: 44px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--onb-well);
+  box-shadow: var(--onb-well-rim);
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  transition: color 0.2s ease;
+}
+
+.onb-choice.is-selected .onb-greeting {
+  color: var(--onb-hue);
+}
+
 /* ------------------------------------------------------------------ Stage */
 
 .onb-stage {
@@ -1876,6 +1920,91 @@ span.onb-track-state.is-copying {
   font-weight: 600;
 }
 
+/* ------------------------------------------------------------------ Hello */
+
+/* The slot rises in once; the card inside moves on its own when the choice
+   changes, so the entrance animation never fights the selection transition. */
+.onb-hello-slot {
+  position: absolute;
+  width: 0;
+  height: 0;
+  animation: onb-rise 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(0.45s + var(--i, 0) * 90ms);
+}
+
+.onb-hello-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  min-width: 152px;
+  padding: 13px 22px 12px;
+  border-radius: 18px;
+  background:
+    radial-gradient(80% 90% at 100% 0%, color-mix(in srgb, var(--onb-hue) 9%, transparent), transparent 70%),
+    var(--onb-card);
+  box-shadow: var(--onb-card-rim), var(--onb-card-shadow);
+  color: var(--text-primary);
+  text-align: center;
+  white-space: nowrap;
+  opacity: 0.78;
+  transform: translate(-50%, -50%) scale(0.94);
+  transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease, opacity 0.3s ease;
+}
+
+.onb-hello-card strong {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  transition: color 0.3s ease;
+}
+
+.onb-hello-name {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.onb-hello-card.is-selected {
+  box-shadow:
+    var(--onb-card-rim),
+    var(--onb-card-shadow),
+    0 0 0 2px var(--onb-hue),
+    0 14px 32px -12px color-mix(in srgb, var(--onb-hue) 70%, transparent);
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.08);
+}
+
+.onb-hello-card.is-selected strong {
+  color: var(--onb-hue);
+}
+
+.onb-hello-check {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--onb-hue);
+  box-shadow: 0 0 0 3px var(--onb-card-solid);
+  color: var(--onb-on-hue);
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.onb-hello-card.is-selected .onb-hello-check {
+  opacity: 1;
+  transform: none;
+}
+
 /* ---------------------------------------------------------------- Welcome */
 
 .onb-orbit-rings {
@@ -2131,6 +2260,10 @@ span.onb-track-state.is-copying {
     gap: 16px;
     margin-top: 20px;
   }
+
+  .onb-languages {
+    margin-top: 18px;
+  }
 }
 
 /* The smallest windows (CorosLink's minimum is 900×640). */
@@ -2172,6 +2305,15 @@ span.onb-track-state.is-copying {
   .onb-theme-preview,
   .onb-units {
     height: 46px;
+  }
+
+  .onb-languages {
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .onb-greeting {
+    height: 38px;
   }
 }
 
