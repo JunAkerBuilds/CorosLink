@@ -1,3 +1,5 @@
+import { formatWorkoutSport } from "../calendar/workoutLabels";
+import { useLanguage, getLocale, t } from "../i18n/training";
 import {
   AlertTriangle,
   ArrowRight,
@@ -21,7 +23,7 @@ import type {
   WorkoutSport
 } from "../../electron/types";
 import { trainingPlanFromDraftPreview } from "../../electron/trainingPlanDomain";
-import { formatWorkoutSport, WORKOUT_SPORTS } from "../../electron/workoutCapabilities";
+import { WORKOUT_SPORTS } from "../../electron/workoutCapabilities";
 import type { CorosLinkApi } from "../coroslink-api";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import { sportTheme } from "./sportTheme";
@@ -81,7 +83,7 @@ function isValidStartDate(value: string): boolean {
 }
 
 function generationPrompt(request: TrainingPlanGenerationRequest): string {
-  const available = request.availableDayIndexes.map((day) => DAY_NAMES[day]).join(", ");
+  const available = request.availableDayIndexes.map((day) => t(DAY_NAMES[day]!)).join(", ");
   return [
     "Create a complete structured training plan for the athlete using the current Training Coach context, recovery metrics, recent activities, upcoming schedule, units, and privacy permissions.",
     "Do not ask a follow-up question. Do not upload, schedule, save, delete, or otherwise write anything remotely.",
@@ -111,6 +113,7 @@ interface StepperProps {
 }
 
 function Stepper({ value, min, max, disabled, decreaseLabel, increaseLabel, onChange }: StepperProps) {
+  useLanguage();
   return (
     <span className="plan-generator-stepper">
       <button type="button" aria-label={decreaseLabel} disabled={disabled || value <= min} onClick={() => onChange(Math.max(min, value - 1))}>
@@ -124,6 +127,7 @@ function Stepper({ value, min, max, disabled, decreaseLabel, increaseLabel, onCh
   );
 }
 export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }: TrainingPlanGeneratorProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const [goal, setGoal] = useState("");
   const [sports, setSports] = useState<WorkoutSport[]>(["run"]);
@@ -153,7 +157,7 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
     availableDayIndexes: [...availableDays].sort(),
     maxSessionMinutes: maxSessionMinutes ? Number(maxSessionMinutes) : undefined,
     constraints: constraints.trim() || undefined
-  }), [availableDays, constraints, difficulty, goal, maxSessionMinutes, sessionsPerWeek, sports, startDate, weeks]);
+  }), [availableDays, constraints, difficulty, goal, maxSessionMinutes, sessionsPerWeek, sports, startDate, weeks, getLocale()]);
 
   const formValid = Boolean(
     request.goal && request.sports.length && request.availableDayIndexes.length &&
@@ -176,20 +180,20 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
     const validStart = !Number.isNaN(start.valueOf());
     const end = validStart ? new Date(start) : null;
     if (end) end.setDate(end.getDate() + Math.max(1, weeks) * 7 - 1);
-    const dayFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
-    const fullFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
+    const dayFmt = new Intl.DateTimeFormat(getLocale(), { month: "short", day: "numeric" });
+    const fullFmt = new Intl.DateTimeFormat(getLocale(), { month: "short", day: "numeric", year: "numeric" });
     const total = Number.isFinite(weeks * sessionsPerWeek) ? weeks * sessionsPerWeek : 0;
     return {
       total,
       range: end ? `${dayFmt.format(start)} – ${fullFmt.format(end)}` : "Pick a plan start date"
     };
-  }, [sessionsPerWeek, startDate, weeks]);
+  }, [sessionsPerWeek, startDate, weeks, getLocale()]);
 
   const daysSummary = useMemo(() => {
     if (!availableDays.length) return "—";
-    if (availableDays.length === 7) return "Every day";
-    return [...availableDays].sort().map((day) => DAY_NAMES[day]).join(" · ");
-  }, [availableDays]);
+    if (availableDays.length === 7) return t("Every day");
+    return [...availableDays].sort().map((day) => t(DAY_NAMES[day]!)).join(" · ");
+  }, [availableDays, getLocale()]);
 
   useEffect(() => {
     let active = true;
@@ -204,7 +208,7 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
       } else {
         const configured = Boolean(settings.local.baseUrl.trim() && settings.local.model.trim());
         let ready = configured;
-        let detail = configured ? `Configured for ${settings.local.model}.` : "Choose a local endpoint and model in Training Coach settings.";
+        let detail = configured ? t("Configured for {{value1}}.", { value1: String(settings.local.model) }) : "Choose a local endpoint and model in Training Coach settings.";
         if (configured) {
           const tested = await api.testLocalChatConnection(settings.local);
           ready = tested.ok;
@@ -322,7 +326,7 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
     if (!request.goal) return "Describe your goal to continue.";
     if (!request.sports.length) return "Pick at least one sport.";
     if (!request.availableDayIndexes.length) return "Pick at least one available day.";
-    if (request.sessionsPerWeek > request.availableDayIndexes.length) return `Choose at least ${request.sessionsPerWeek} available days.`;
+    if (request.sessionsPerWeek > request.availableDayIndexes.length) return t("Choose at least {{value1}} available days.", { value1: String(request.sessionsPerWeek) });
     if (!isValidStartDate(request.startDate)) return "Choose today or a future start date.";
     return "Check the highlighted fields above.";
   })();
@@ -331,25 +335,24 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
       <section className="plan-generator" role="dialog" aria-modal="true" aria-labelledby="plan-generator-title">
         <header>
           <div>
-            <p className="tl-eyebrow">Training Coach</p>
+            <p className="tl-eyebrow">{t("Training Coach")}</p>
             <h2 id="plan-generator-title">
               <span className="plan-generator-title-icon"><Sparkles size={16} /></span>
-              Generate a training plan
-            </h2>
-            <p>Build a structured draft from your current training and recovery context. Nothing is sent to COROS until you install the saved plan.</p>
+              {t("Generate a training plan")} </h2>
+            <p>{t("Build a structured draft from your current training and recovery context. Nothing is sent to COROS until you install the saved plan.")}</p>
           </div>
-          <button type="button" className="icon-button" aria-label="Close plan generator" disabled={generating} onClick={close}><X size={17} /></button>
+          <button type="button" className="icon-button" aria-label={t("Close plan generator")} disabled={generating} onClick={close}><X size={17} /></button>
         </header>
 
         <div className="plan-generator-body">
           <div className="plan-generator-form">
             <label className="plan-generator-goal">
-              <span>What are you training for?</span>
-              <input autoFocus value={goal} maxLength={180} placeholder="Example: Finish my first trail 50K comfortably" disabled={generating} onChange={(event) => setGoal(event.target.value)} />
+              <span>{t("What are you training for?")}</span>
+              <input autoFocus value={goal} maxLength={180} placeholder={t("Example: Finish my first trail 50K comfortably")} disabled={generating} onChange={(event) => setGoal(event.target.value)} />
             </label>
             {!goal.trim() ? (
               <div className="plan-generator-examples">
-                <span>Try</span>
+                <span>{t("Try")}</span>
                 {EXAMPLE_GOALS.map((example) => (
                   <button type="button" key={example} disabled={generating} onClick={() => setGoal(example)}>{example}</button>
                 ))}
@@ -357,7 +360,7 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
             ) : null}
 
             <fieldset>
-              <legend>Sports</legend>
+              <legend>{t("Sports")}</legend>
               <div className="plan-generator-sports">
                 {WORKOUT_SPORTS.map((sport) => {
                   const theme = sportTheme(sport);
@@ -382,7 +385,7 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
             </fieldset>
 
             <fieldset>
-              <legend>Difficulty</legend>
+              <legend>{t("Difficulty")}</legend>
               <div className="plan-generator-segmented">
                 {DIFFICULTY_OPTIONS.map((option) => (
                   <button
@@ -393,8 +396,8 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
                     disabled={generating}
                     onClick={() => setDifficulty(option.value)}
                   >
-                    <strong>{option.label}</strong>
-                    <small>{option.hint}</small>
+                    <strong>{t(option.label)}</strong>
+                    <small>{t(option.hint)}</small>
                   </button>
                 ))}
               </div>
@@ -402,15 +405,15 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
 
             <div className="plan-generator-grid">
               <label>
-                <span>Weeks</span>
+                <span>{t("Weeks")}</span>
                 <Stepper value={weeks} min={1} max={24} disabled={generating} decreaseLabel="Fewer weeks" increaseLabel="More weeks" onChange={setWeeks} />
               </label>
               <label>
-                <span>Sessions / week</span>
+                <span>{t("Sessions / week")}</span>
                 <Stepper value={sessionsPerWeek} min={1} max={Math.min(7, availableDays.length || 1)} disabled={generating} decreaseLabel="Fewer sessions per week" increaseLabel="More sessions per week" onChange={setSessionsPerWeek} />
               </label>
               <label>
-                <span>Plan start date</span>
+                <span>{t("Plan start date")}</span>
                 <span className="plan-generator-date">
                   <CalendarDays size={14} />
                   <input type="date" value={startDate} min={calendarDay()} disabled={generating} onChange={(event) => setStartDate(event.target.value)} />
@@ -419,13 +422,13 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
             </div>
 
             <fieldset>
-              <legend>Available days</legend>
+              <legend>{t("Available days")}</legend>
               <div className="plan-generator-days">
                 {DAY_NAMES.map((day, index) => (
                   <button
                     type="button"
                     key={day}
-                    title={DAY_NAMES_FULL[index]}
+                    title={t(DAY_NAMES_FULL[index]!)}
                     aria-pressed={availableDays.includes(index)}
                     className={availableDays.includes(index) ? "is-selected" : ""}
                     disabled={generating}
@@ -436,43 +439,43 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
                 ))}
               </div>
             </fieldset>
-            {sessionsPerWeek > availableDays.length ? <p className="plan-generator-inline-error" role="alert">Choose at least {sessionsPerWeek} available days.</p> : null}
-            {!isValidStartDate(startDate) ? <p className="plan-generator-inline-error" role="alert">Choose today or a future start date.</p> : null}
+            {sessionsPerWeek > availableDays.length ? <p className="plan-generator-inline-error" role="alert">{t("Choose at least")} {sessionsPerWeek} {t("available days.")}</p> : null}
+            {!isValidStartDate(startDate) ? <p className="plan-generator-inline-error" role="alert">{t("Choose today or a future start date.")}</p> : null}
 
             <div className="plan-generator-grid is-bottom">
               <label>
-                <span>Session limit <small>optional</small></span>
+                <span>{t("Session limit")} <small>{t("optional")}</small></span>
                 <span className="plan-generator-duration">
-                  <input type="number" min="10" max="600" value={maxSessionMinutes} placeholder="No limit" disabled={generating} onChange={(event) => setMaxSessionMinutes(event.target.value)} />
+                  <input type="number" min="10" max="600" value={maxSessionMinutes} placeholder={t("No limit")} disabled={generating} onChange={(event) => setMaxSessionMinutes(event.target.value)} />
                   <em>min</em>
                 </span>
               </label>
               <label className="plan-generator-constraints">
-                <span>Constraints <small>optional</small></span>
-                <textarea rows={3} value={constraints} maxLength={600} placeholder="Injuries, equipment, travel, preferred long day..." disabled={generating} onChange={(event) => setConstraints(event.target.value)} />
+                <span>{t("Constraints")} <small>{t("optional")}</small></span>
+                <textarea rows={3} value={constraints} maxLength={600} placeholder={t("Injuries, equipment, travel, preferred long day...")} disabled={generating} onChange={(event) => setConstraints(event.target.value)} />
               </label>
             </div>
           </div>
 
           <aside className="plan-generator-status">
-            <p className="tl-eyebrow">Provider</p>
+            <p className="tl-eyebrow">{t("Provider")}</p>
             {checkingProvider ? (
               <div className="plan-generator-provider">
                 <span className="plan-generator-provider-icon"><LoaderCircle className="is-spinning" size={15} /></span>
-                <span><strong>Checking Training Coach</strong><small>Using your configured provider</small></span>
+                <span><strong>{t("Checking Training Coach")}</strong><small>{t("Using your configured provider")}</small></span>
               </div>
             ) : availability ? (
               <div className={`plan-generator-provider${availability.ready ? " is-ready" : " is-blocked"}`}>
                 <span className="plan-generator-provider-icon">{availability.ready ? <Check size={15} /> : <AlertTriangle size={15} />}</span>
-                <span><strong>{availability.label}</strong><small>{availability.detail}</small></span>
+                <span><strong>{t(availability.label)}</strong><small>{t(availability.detail)}</small></span>
               </div>
             ) : null}
-            {!checkingProvider && !availability?.ready ? <button type="button" className="ghost-button" onClick={() => onOpenCoach()}>Open Coach setup <ArrowRight size={14} /></button> : null}
+            {!checkingProvider && !availability?.ready ? <button type="button" className="ghost-button" onClick={() => onOpenCoach()}>{t("Open Coach setup")} <ArrowRight size={14} /></button> : null}
 
-            <p className="tl-eyebrow plan-generator-aside-eyebrow">Plan snapshot</p>
+            <p className="tl-eyebrow plan-generator-aside-eyebrow">{t("Plan snapshot")}</p>
             <ul className="plan-generator-snapshot">
               <li>
-                <span>Sports</span>
+                <span>{t("Sports")}</span>
                 {sports.length ? (
                   <span className="plan-generator-snapshot-sports">
                     {sports.map((sport) => {
@@ -487,44 +490,44 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
                   </span>
                 ) : <strong>—</strong>}
               </li>
-              <li><span>Structure</span><strong>{weeks} weeks · {sessionsPerWeek} / week</strong></li>
-              <li><span>Total sessions</span><strong>{snapshot.total}</strong></li>
-              <li><span>Dates</span><strong>{snapshot.range}</strong></li>
-              <li><span>Days</span><strong>{daysSummary}</strong></li>
-              {maxSessionMinutes ? <li><span>Session cap</span><strong>{maxSessionMinutes} min</strong></li> : null}
+              <li><span>{t("Structure")}</span><strong>{weeks} {t("weeks ·")} {sessionsPerWeek} {t("/ week")}</strong></li>
+              <li><span>{t("Total sessions")}</span><strong>{snapshot.total}</strong></li>
+              <li><span>{t("Dates")}</span><strong>{snapshot.range}</strong></li>
+              <li><span>{t("Days")}</span><strong>{daysSummary}</strong></li>
+              {maxSessionMinutes ? <li><span>{t("Session cap")}</span><strong>{maxSessionMinutes} min</strong></li> : null}
             </ul>
 
             {generating ? (
               <div className="plan-generator-progress" aria-live="polite">
                 <span className="plan-generator-pulse"><Sparkles size={18} /></span>
-                <strong>Generating your plan</strong>
+                <strong>{t("Generating your plan")}</strong>
                 <ol className="plan-generator-stages">
                   {STAGE_STEPS.map((step, index) => (
                     <li key={step.id} className={index < stageIndex ? "is-done" : index === stageIndex ? "is-active" : ""}>
                       <span className="plan-generator-stage-dot">{index < stageIndex ? <Check size={10} /> : null}</span>
-                      {step.label}
+                      {t(step.label)}
                     </li>
                   ))}
                 </ol>
                 {!STAGE_STEPS.some((step) => step.id === stage) ? <p>{stage}</p> : null}
-                <button type="button" className="ghost-button" onClick={close}>Cancel</button>
+                <button type="button" className="ghost-button" onClick={close}>{t("Cancel")}</button>
               </div>
             ) : null}
             {failure ? (
               <div className="plan-generator-failure" role="alert">
                 <AlertTriangle size={17} />
-                <strong>Draft needs another pass</strong>
+                <strong>{t("Draft needs another pass")}</strong>
                 <p>{failure}</p>
                 <div>
-                  <button type="button" className="ghost-button" disabled={!formValid || !availability?.ready} onClick={() => void generate()}><RotateCw size={14} /> Retry</button>
-                  <button type="button" className="ghost-button" onClick={() => onOpenCoach(handoffPrompt)}>Continue in Coach <ArrowRight size={14} /></button>
+                  <button type="button" className="ghost-button" disabled={!formValid || !availability?.ready} onClick={() => void generate()}><RotateCw size={14} /> {t("Retry")}</button>
+                  <button type="button" className="ghost-button" onClick={() => onOpenCoach(handoffPrompt)}>{t("Continue in Coach")} <ArrowRight size={14} /></button>
                 </div>
               </div>
             ) : null}
             {!generating && !failure ? (
               <div className="plan-generator-privacy">
-                <strong>Review before saving</strong>
-                <p>The result opens as an unsaved local Coach plan. You can edit every workout before saving or adding it to your calendar.</p>
+                <strong>{t("Review before saving")}</strong>
+                <p>{t("The result opens as an unsaved local Coach plan. You can edit every workout before saving or adding it to your calendar.")}</p>
               </div>
             ) : null}
           </aside>
@@ -532,10 +535,10 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
 
         <footer>
           {formHint ? <p className="plan-generator-footer-hint"><Info size={13} />{formHint}</p> : null}
-          <button type="button" className="ghost-button" disabled={generating} onClick={close}>Cancel</button>
+          <button type="button" className="ghost-button" disabled={generating} onClick={close}>{t("Cancel")}</button>
           <button type="button" className="primary-button" disabled={!formValid || !availability?.ready || generating} onClick={() => void generate()}>
             {generating ? <LoaderCircle className="is-spinning" size={15} /> : <Sparkles size={15} />}
-            {generating ? "Generating..." : "Generate plan"}
+            {generating ? t("Generating...") : t("Generate plan")}
           </button>
         </footer>
       </section>

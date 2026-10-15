@@ -1,3 +1,4 @@
+import { useLanguage, t, getLocale } from "../../i18n/training";
 import { useId, type ReactNode } from "react";
 import { ChevronRight, Flame, Footprints, Heart, Zap } from "lucide-react";
 import type { TrainingHubDailyHealthRecord } from "../../../electron/types";
@@ -25,10 +26,11 @@ interface StatReading {
 }
 
 function StatChart({ readings, bars }: { readings: StatReading[]; bars: boolean }) {
+  useLanguage();
   const gradientId = useId();
   const values = readings.flatMap(({ value }) => value === undefined ? [] : [value]);
   if (values.length === 0) {
-    return <span className="training-stat-card__chart-empty">No history</span>;
+    return <span className="training-stat-card__chart-empty">{t("No history")}</span>;
   }
 
   const min = bars ? 0 : Math.min(...values);
@@ -106,15 +108,16 @@ function StatCard({
   variant = "bar",
   tone = "load"
 }: StatCardProps) {
+  useLanguage();
   if (variant === "widget") {
     return (
       <details className={`training-stat-card is-widget tone-${tone}`}>
-        <summary className="training-stat-card__summary" aria-label={`${label}: ${value} ${detail}. Recent readings`}>
+        <summary className="training-stat-card__summary" aria-label={t("{{value1}}: {{value2}} {{value3}}. Recent readings", { value1: String(label), value2: String(value), value3: String(detail) })}>
           <span className="training-stat-card__header">
             <span className="training-stat-card__icon" aria-hidden="true">
               {icon}
             </span>
-            <span className="training-stat-card__label">{label}</span>
+            <span className="training-stat-card__label">{t(label)}</span>
             <ChevronRight className="training-stat-card__chevron" size={16} aria-hidden="true" />
           </span>
           <span className="training-stat-card__reading">
@@ -135,7 +138,7 @@ function StatCard({
           {context ? <p>{context}</p> : null}
           {readings.some((reading) => reading.value !== undefined) ? (
             <>
-              <p className="training-stat-card__history-label">Recent readings</p>
+              <p className="training-stat-card__history-label">{t("Recent readings")}</p>
               <dl>
                 {readings.map((reading) => (
                   <div key={reading.date}>
@@ -145,7 +148,7 @@ function StatCard({
                 ))}
               </dl>
             </>
-          ) : <p>Recent history will appear after syncing.</p>}
+          ) : <p>{t("Recent history will appear after syncing.")}</p>}
         </div>
       </details>
     );
@@ -156,7 +159,7 @@ function StatCard({
       <div className="training-stat-card__icon" aria-hidden="true">
         {icon}
       </div>
-      <p className="training-stat-card__label">{label}</p>
+      <p className="training-stat-card__label">{t(label)}</p>
       <span className="training-stat-card__detail">{detail}</span>
       <strong className="training-stat-card__value">{value}</strong>
     </section>
@@ -168,7 +171,7 @@ function formatWholeNumber(value?: number): string {
     return "–";
   }
 
-  return Math.round(value).toLocaleString();
+  return Math.round(value).toLocaleString(getLocale());
 }
 
 export function TrainingSummaryTiles({
@@ -179,6 +182,7 @@ export function TrainingSummaryTiles({
   metrics = ["load", "heart"],
   className
 }: TrainingSummaryTilesProps) {
+  useLanguage();
   const variant = layout === "stack" ? "widget" : "bar";
   const iconSize = variant === "widget" ? 17 : 16;
   const tilesClassName = [
@@ -194,13 +198,13 @@ export function TrainingSummaryTiles({
       {metrics.includes("load") ? (
         <StatCard
           icon={<Flame size={iconSize} />}
-          label={variant === "widget" ? "Load" : "Training Load"}
+          label={variant === "widget" ? t("Load") : t("Training Load")}
           value={formatOptionalNumber(summary.todayLoad)}
           detail={
             variant === "widget" ? "today" : summary.weekLoadTotal !== undefined
-              ? `${Math.round(summary.weekLoadTotal)} load over 7 days` : "today's load"
+              ? t("{{value1}} load over 7 days", { value1: String(Math.round(summary.weekLoadTotal)) }) : "today's load"
           }
-          context={summary.weekLoadTotal !== undefined ? `${Math.round(summary.weekLoadTotal)} load over 7 days` : undefined}
+          context={summary.weekLoadTotal !== undefined ? t("{{value1}} load over 7 days", { value1: String(Math.round(summary.weekLoadTotal)) }) : undefined}
           readings={recentReadings(trendPoints.map((point) => ({ date: point.date, value: point.trainingLoad })))}
           variant={variant}
           tone="load"
@@ -210,15 +214,15 @@ export function TrainingSummaryTiles({
       {metrics.includes("heart") ? (
         <StatCard
           icon={<Heart size={iconSize} />}
-          label="Resting HR"
+          label={t("Resting HR")}
           value={
             summary.latestRhr !== undefined ? `${Math.round(summary.latestRhr)}` : "–"
           }
           detail={
             variant === "widget" ? "bpm" : summary.rhrDelta !== undefined
-              ? `${formatSignedDelta(summary.rhrDelta, " bpm")} vs 7-day avg` : "beats per minute"
+              ? t("{{value1}} vs 7-day avg", { value1: String(formatSignedDelta(summary.rhrDelta, " bpm")) }) : "beats per minute"
           }
-          context={summary.rhrDelta !== undefined ? `${formatSignedDelta(summary.rhrDelta, " bpm")} vs 7-day avg` : undefined}
+          context={summary.rhrDelta !== undefined ? t("{{value1}} vs 7-day avg", { value1: String(formatSignedDelta(summary.rhrDelta, " bpm")) }) : undefined}
           readings={recentReadings(trendPoints.map((point) => ({ date: point.date, value: point.rhr !== undefined && point.rhr > 0 ? point.rhr : undefined })))}
           variant={variant}
           tone="heart"
@@ -228,7 +232,7 @@ export function TrainingSummaryTiles({
       {metrics.includes("steps") ? (
         <StatCard
           icon={<Footprints size={iconSize} />}
-          label="Steps"
+          label={t("Steps")}
           value={formatWholeNumber(summary.steps)}
           detail={variant === "widget" ? "today" : "daily step count"}
           readings={recentReadings(healthRecords.map((record) => ({ date: record.happenDay, value: record.steps })))}
@@ -240,7 +244,7 @@ export function TrainingSummaryTiles({
       {metrics.includes("calories") ? (
         <StatCard
           icon={<Zap size={iconSize} />}
-          label="Calories"
+          label={t("Calories")}
           value={formatWholeNumber(summary.calories)}
           detail={variant === "widget" ? "kcal" : "total calories"}
           readings={recentReadings(healthRecords.map((record) => ({ date: record.happenDay, value: record.calories })))}

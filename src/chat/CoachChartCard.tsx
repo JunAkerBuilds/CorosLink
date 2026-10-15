@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/tools";
 import { useMemo } from "react";
 import { Pin, PinOff, RefreshCw } from "lucide-react";
 import {
@@ -71,7 +72,7 @@ function formatWindow(preview: CoachChartPreview): string {
   const first = preview.labels[0];
   const last = preview.labels[count - 1];
   if (preview.dates) {
-    return `Last ${count} days · ${first} – ${last}`;
+    return t("Last {{p0}} days · {{p1}} – {{p2}}", { p0: count, p1: first, p2: last });
   }
   return `${first} – ${last}`;
 }
@@ -79,7 +80,7 @@ function formatWindow(preview: CoachChartPreview): string {
 function formatResolvedAt(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return date.toLocaleDateString(getLocale(), { month: "short", day: "numeric" });
 }
 
 function CoachChartTooltip({
@@ -94,6 +95,7 @@ function CoachChartTooltip({
   series: CoachChartResolvedSeries[];
   palette: (color: CoachChartColor) => SeriesPalette;
 }) {
+  const { language } = useLanguage();
   if (!active || !payload?.length) {
     return null;
   }
@@ -128,6 +130,7 @@ export function CoachChartCard({
   onUnpin,
   onRefresh
 }: CoachChartCardProps) {
+  const { language } = useLanguage();
   const { colors, activeDot } = useChartColors();
   const palette = useSeriesPalette();
 
@@ -140,7 +143,7 @@ export function CoachChartCard({
         }
         return row;
       }),
-    [preview]
+    [preview, language]
   );
 
   const hasRightAxis = preview.series.some((entry) => entry.axis === "right");
@@ -162,7 +165,7 @@ export function CoachChartCard({
   const subtitle = preview.spec.subtitle ?? formatWindow(preview);
   const stamp =
     variant === "panel" && preview.resolvedAt
-      ? `${preview.live ? "Updated" : "Pinned"} ${formatResolvedAt(preview.resolvedAt)}`
+      ? `${preview.live ? t("Updated") : t("Pinned")} ${formatResolvedAt(preview.resolvedAt)}`
       : null;
 
   return (
@@ -183,14 +186,14 @@ export function CoachChartCard({
                 className="coach-chart-action"
                 onClick={onRefresh}
                 disabled={busy}
-                title="Refresh with the latest data"
+                title={t("Refresh with the latest data")}
               >
                 <RefreshCw
                   size={13}
                   aria-hidden="true"
                   className={busy ? "is-spinning" : undefined}
                 />
-                <span>Refresh</span>
+                <span>{t("Refresh")}</span>
               </button>
             ) : null}
             {pinned && onUnpin ? (
@@ -199,10 +202,10 @@ export function CoachChartCard({
                 className="coach-chart-action is-pinned"
                 onClick={onUnpin}
                 disabled={busy}
-                title="Remove from Training Hub"
+                title={t("Remove from Training Hub")}
               >
                 <PinOff size={13} aria-hidden="true" />
-                <span>{variant === "panel" ? "Unpin" : "Pinned"}</span>
+                <span>{variant === "panel" ? t("Unpin") : t("Pinned")}</span>
               </button>
             ) : onPin ? (
               <button
@@ -210,10 +213,10 @@ export function CoachChartCard({
                 className="coach-chart-action"
                 onClick={onPin}
                 disabled={busy}
-                title="Keep this chart on the Training Hub"
+                title={t("Keep this chart on the Training Hub")}
               >
                 <Pin size={13} aria-hidden="true" />
-                <span>Pin to Training Hub</span>
+                <span>{t("Pin to Training Hub")}</span>
               </button>
             ) : null}
           </div>
@@ -255,7 +258,7 @@ export function CoachChartCard({
             <i className="coach-chart-legend-swatch is-range" aria-hidden="true" />
             {preview.ranges.length === 1 && preview.ranges[0].label
               ? preview.ranges[0].label
-              : "Highlighted block"}
+              : t("Highlighted block")}
           </li>
         ) : null}
       </ul>
@@ -435,7 +438,7 @@ export function CoachChartCard({
           </ResponsiveContainer>
         </div>
       ) : (
-        <p className="chat-visual-empty">No data in this window.</p>
+        <p className="chat-visual-empty">{t("No data in this window.")}</p>
       )}
 
       {preview.spec.note ? (

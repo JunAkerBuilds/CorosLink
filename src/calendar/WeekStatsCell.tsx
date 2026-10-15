@@ -1,3 +1,4 @@
+import { formatNumber, useLanguage, t } from "../i18n/training";
 import { MessageCircle } from "lucide-react";
 import {
   formatDistanceMeters,
@@ -26,9 +27,10 @@ function StatRow({
   value: string;
   tone?: "accent" | "gold" | "warn";
 }) {
+  useLanguage();
   return (
     <div className="calendar-weekstats-row">
-      <span className="calendar-weekstats-label">{label}</span>
+      <span className="calendar-weekstats-label">{t(label)}</span>
       <span className={`calendar-weekstats-value ${tone ? `tone-${tone}` : ""}`}>
         {value}
       </span>
@@ -37,6 +39,7 @@ function StatRow({
 }
 
 export function WeekStatsCell({ stats, onAskCoach }: WeekStatsCellProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const hasAny =
     stats.actualLoad > 0 ||
@@ -47,20 +50,20 @@ export function WeekStatsCell({ stats, onAskCoach }: WeekStatsCellProps) {
   return (
     <div className="calendar-weekstats">
       {stats.baseFitness !== undefined ? (
-        <StatRow label="Base Fitness" value={String(Math.round(stats.baseFitness))} tone="accent" />
+        <StatRow label={t("Base Fitness")} value={String(Math.round(stats.baseFitness))} tone="accent" />
       ) : null}
       {stats.loadImpact !== undefined ? (
-        <StatRow label="Load Impact" value={String(Math.round(stats.loadImpact))} tone="gold" />
+        <StatRow label={t("Load Impact")} value={String(Math.round(stats.loadImpact))} tone="gold" />
       ) : null}
       {stats.loadRatio !== undefined ? (
         <StatRow
-          label="Load Ratio"
-          value={stats.loadRatio.toFixed(2)}
+          label={t("Load Ratio")}
+          value={formatNumber(stats.loadRatio, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           tone="warn"
         />
       ) : null}
       <StatRow
-        label="Training Load"
+        label={t("Training Load")}
         value={
           stats.plannedLoad > 0
             ? `${stats.actualLoad} / ${stats.plannedLoad} TL`
@@ -69,26 +72,26 @@ export function WeekStatsCell({ stats, onAskCoach }: WeekStatsCellProps) {
       />
       {stats.recommendedLoadMin !== undefined && stats.recommendedLoadMax !== undefined ? (
         <StatRow
-          label="Target Range"
+          label={t("Target Range")}
           value={`${stats.recommendedLoadMin}–${stats.recommendedLoadMax} TL`}
         />
       ) : null}
       <StatRow
-        label="Activity Time"
+        label={t("Activity Time")}
         value={stats.activityTimeSeconds > 0 ? formatDurationSeconds(stats.activityTimeSeconds) : "--"}
       />
       <StatRow
-        label="Distance"
+        label={t("Distance")}
         value={
           stats.plannedDistanceKm > 0
-            ? `${metersToDisplayDistance(stats.distanceMeters, unitSystem).toFixed(1)} / ${metersToDisplayDistance(stats.plannedDistanceKm * 1_000, unitSystem).toFixed(1)} ${distanceUnit(unitSystem)}`
+            ? `${formatNumber(metersToDisplayDistance(stats.distanceMeters, unitSystem), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} / ${formatNumber(metersToDisplayDistance(stats.plannedDistanceKm * 1_000, unitSystem), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ${distanceUnit(unitSystem)}`
             : stats.distanceMeters > 0
               ? formatDistanceMeters(stats.distanceMeters, unitSystem)
               : "--"
         }
       />
       <StatRow
-        label="Elev. Gain"
+        label={t("Elev. Gain")}
         value={
           stats.elevationGain > 0
             ? `${Math.round(metersToElevation(stats.elevationGain, unitSystem))} ${elevationUnit(unitSystem)}`
@@ -100,11 +103,10 @@ export function WeekStatsCell({ stats, onAskCoach }: WeekStatsCellProps) {
           type="button"
           className="calendar-weekstats-coach"
           onClick={onAskCoach}
-          title="Ask Coach about this week"
+          title={t("Ask Coach about this week")}
         >
           <MessageCircle size={13} aria-hidden="true" />
-          Ask Coach
-        </button>
+          {t("Ask Coach")} </button>
       ) : null}
     </div>
   );

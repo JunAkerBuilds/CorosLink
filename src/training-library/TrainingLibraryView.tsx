@@ -1,3 +1,5 @@
+import { formatWorkoutSport } from "../calendar/workoutLabels";
+import { getLocale, t, useLanguage } from "../i18n/training";
 import {
   AlertTriangle,
   BookOpen,
@@ -43,7 +45,7 @@ import {
   workoutSportFromType
 } from "../../electron/trainingPlanDomain";
 import type { CorosLinkApi } from "../coroslink-api";
-import { formatWorkoutSport } from "../../electron/workoutCapabilities";
+
 import {
   PlanSourceBadge,
   SportMixDots,
@@ -116,13 +118,13 @@ function happenDayToDate(value: string): Date {
 function shortDate(date: Date): string {
   return Number.isNaN(date.valueOf())
     ? "Unknown"
-    : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    : date.toLocaleDateString(getLocale(), { month: "short", day: "numeric" });
 }
 
 function weekdayLabel(date: Date): string {
   return Number.isNaN(date.valueOf())
     ? ""
-    : date.toLocaleDateString(undefined, { weekday: "short" });
+    : date.toLocaleDateString(getLocale(), { weekday: "short" });
 }
 
 function activityDate(activity: TrainingHubActivity): string {
@@ -142,8 +144,8 @@ function elapsedLabel(iso: string): string {
   const then = new Date(iso).valueOf();
   if (Number.isNaN(then)) return "—";
   const days = Math.round((Date.now() - then) / 86_400_000);
-  if (days <= 0) return "today";
-  if (days === 1) return "1 day";
+  if (days <= 0) return t("today");
+  if (days === 1) return t("1 day");
   if (days < 7) return `${days} days`;
   const weeks = Math.round(days / 7);
   if (weeks < 6) return `${weeks} wk`;
@@ -152,9 +154,9 @@ function elapsedLabel(iso: string): string {
 }
 
 function planStartLabel(plan: TrainingPlanDocument): string {
-  if (!plan.startDate) return "Unscheduled";
+  if (!plan.startDate) return t("Unscheduled");
   const date = new Date(`${plan.startDate}T12:00:00`);
-  return Number.isNaN(date.valueOf()) ? "Unscheduled" : `Starts ${shortDate(date)}`;
+  return Number.isNaN(date.valueOf()) ? t("Unscheduled") : `Starts ${shortDate(date)}`;
 }
 
 function sourceLabel(source: TrainingPlanDocument["source"]): string {
@@ -171,6 +173,7 @@ export function TrainingLibraryView({
   onMessage,
   onError
 }: TrainingLibraryViewProps) {
+  useLanguage();
   const [section, setSection] = useSelectionPreference(
     LIBRARY_SECTION_PREFERENCE
   );
@@ -213,11 +216,10 @@ export function TrainingLibraryView({
     return (
       <section className="training-library-gate">
         <BookOpen size={30} strokeWidth={1.5} />
-        <h1>Training Library</h1>
-        <p>Connect COROS Training Hub to load your workouts, plans, and completed activities.</p>
+        <h1>{t("Training Library")}</h1>
+        <p>{t("Connect COROS Training Hub to load your workouts, plans, and completed activities.")}</p>
         <button type="button" className="primary-button" onClick={onOpenTraining}>
-          Connect Training Hub
-        </button>
+          {t("Connect Training Hub")} </button>
       </section>
     );
   }
@@ -226,9 +228,9 @@ export function TrainingLibraryView({
     return (
       <section className="training-library-view">
         <header className="tl-masthead">
-          <h1>Training Library</h1>
+          <h1>{t("Training Library")}</h1>
         </header>
-        <div className="tl-skeleton" aria-label="Loading the training library">
+        <div className="tl-skeleton" aria-label={t("Loading the training library")}>
           {Array.from({ length: 7 }, (_, index) => (
             <span key={index} style={{ "--tl-row-index": index } as React.CSSProperties} />
           ))}
@@ -241,11 +243,10 @@ export function TrainingLibraryView({
     return (
       <section className="training-library-gate">
         <AlertTriangle size={30} strokeWidth={1.5} />
-        <h1>The library didn&rsquo;t load</h1>
+        <h1>{t("The library didn&rsquo;t load")}</h1>
         <p>{fatalError}</p>
         <button type="button" className="primary-button" onClick={() => void load()}>
-          Try again
-        </button>
+          {t("Try again")} </button>
       </section>
     );
   }
@@ -264,7 +265,7 @@ export function TrainingLibraryView({
     try {
       const saved = await api.saveLocalTrainingPlan(plan);
       setEditingPlan(null);
-      onMessage(`Saved "${saved.name}" as a local ${saved.source === "template" ? "template" : "plan"}.`);
+      onMessage(t("Saved \"{{value1}}\" as a local {{value2}}.", { value1: String(saved.name), value2: String(saved.source === "template" ? "template" : "plan") }));
       await load();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : String(cause));
@@ -333,12 +334,12 @@ export function TrainingLibraryView({
     <section className="training-library-view">
       <header className="tl-masthead">
         <div>
-          <h1>Training Library</h1>
+          <h1>{t("Training Library")}</h1>
         </div>
         <div className="tl-masthead-actions">
           {current.stale || current.offline ? <span className="tl-state is-stale">
             {current.offline ? <CloudOff size={13} /> : null}
-            {stateLabel}
+            {t(stateLabel)}
           </span> : null}
           <button
             type="button"
@@ -346,8 +347,7 @@ export function TrainingLibraryView({
             disabled={loading}
             onClick={() => void load()}
           >
-            <RefreshCw size={14} className={loading ? "is-spinning" : ""} /> Refresh
-          </button>
+            <RefreshCw size={14} className={loading ? "is-spinning" : ""} /> {t("Refresh")} </button>
         </div>
       </header>
 
@@ -355,15 +355,14 @@ export function TrainingLibraryView({
         <details className="tl-notice">
           <summary>
             <AlertTriangle size={14} />
-            Some COROS data didn&rsquo;t refresh. Cached items are still shown.
-          </summary>
+            {t("Some COROS data didn&rsquo;t refresh. Cached items are still shown.")} </summary>
           {current.partialFailures.map((failure) => (
             <p key={failure}>{failure}</p>
           ))}
         </details>
       ) : null}
 
-      <nav className="tl-sections" aria-label="Library sections">
+      <nav className="tl-sections" aria-label={t("Library sections")}>
         {SECTIONS.map(({ id, label, icon: Icon }) => (
           <button
             type="button"
@@ -373,7 +372,7 @@ export function TrainingLibraryView({
             onClick={() => setSection(id)}
           >
             <Icon aria-hidden="true" />
-            {label}
+            {t(label)}
             <span>{counts[id]}</span>
           </button>
         ))}
@@ -467,9 +466,9 @@ export function TrainingLibraryView({
       {calendarTarget ? <TrainingPlanCalendarDialog api={api} plan={calendarTarget.plan} requestedOperation={calendarTarget.operation} offline={current.offline} onClose={() => setCalendarTarget(null)} onComplete={(result) => {
         setCalendarTarget(null);
         if (editingPlan?.id === result.plan.id) setEditingPlan(result.plan);
-        if (result.failures.length) onMessage(`Updated ${result.scheduledCount + result.removedCount} calendar workout${result.scheduledCount + result.removedCount === 1 ? "" : "s"}; ${result.failures.length} need retry.`);
-        else if (result.scheduledCount) onMessage(`Added ${result.scheduledCount} workouts from "${result.plan.name}" to the COROS calendar.`);
-        else onMessage(`Removed ${result.removedCount} future workouts owned by "${result.plan.name}".`);
+        if (result.failures.length) onMessage(t("Updated {{value1}} calendar workout{{value2}}; {{value3}} need retry.", { value1: String(result.scheduledCount + result.removedCount), value2: String(result.scheduledCount + result.removedCount === 1 ? "" : "s"), value3: String(result.failures.length) }));
+        else if (result.scheduledCount) onMessage(t("Added {{value1}} workouts from \"{{value2}}\" to the COROS calendar.", { value1: String(result.scheduledCount), value2: String(result.plan.name) }));
+        else onMessage(t("Removed {{value1}} future workouts owned by \"{{value2}}\".", { value1: String(result.removedCount), value2: String(result.plan.name) }));
         void load();
       }} /> : null}
 
@@ -482,20 +481,15 @@ export function TrainingLibraryView({
             aria-labelledby="plan-delete-title"
           >
             <h2 id="plan-delete-title">
-              Delete &ldquo;{pendingPlanDelete.name}&rdquo;?
+              {t("Delete “")}{pendingPlanDelete.name}&rdquo;?
             </h2>
             <p>
-              This removes the local copy and its {pendingPlanDelete.entries.length} item
-              {pendingPlanDelete.entries.length === 1 ? "" : "s"}. Plans stored on COROS are not
-              touched.
-            </p>
+              {t("This removes the local copy and its")} {pendingPlanDelete.entries.length} {t("item")} {pendingPlanDelete.entries.length === 1 ? "" : "s"}{t(". Plans stored on COROS are not touched.")} </p>
             <footer>
               <button type="button" className="ghost-button" onClick={() => setPendingPlanDelete(null)}>
-                Cancel
-              </button>
+                {t("Cancel")} </button>
               <button type="button" className="primary-button danger" onClick={() => void deletePlan()}>
-                Delete plan
-              </button>
+                {t("Delete plan")} </button>
             </footer>
           </section>
         </div>
@@ -647,6 +641,7 @@ function PlanIndex({
   onError,
   onCompare
 }: PlanIndexProps) {
+  useLanguage();
   const [query, setQuery] = useState("");
   const [scope, setScope] = useSelectionPreference(
     PLAN_SCOPE_PREFERENCES[noun]
@@ -659,7 +654,7 @@ function PlanIndex({
 
   const summaries = useMemo(
     () => new Map(plans.map((plan) => [plan.id, summarizeTrainingPlan(plan)])),
-    [plans]
+    [plans, getLocale()]
   );
 
   const scopes = useMemo(() => {
@@ -675,7 +670,7 @@ function PlanIndex({
     }
     if (plans.some((plan) => plan.archived)) options.push({ id: "archived", label: "Archived" });
     return options;
-  }, [plans]);
+  }, [plans, getLocale()]);
 
   const scopeAvailable = scopes.some((option) => option.id === scope);
   useEffect(() => {
@@ -710,7 +705,7 @@ function PlanIndex({
       }
       return left.updatedAt.localeCompare(right.updatedAt) * direction;
     });
-  }, [plans, query, scope, sort, summaries]);
+  }, [plans, query, scope, sort, summaries, getLocale()]);
 
   const update = async (planId: string, patch: TrainingPlanMetadataPatch) => {
     try {
@@ -747,7 +742,7 @@ function PlanIndex({
       className="tl-mark"
       role="checkbox"
       aria-checked={isSelected}
-      aria-label={`Select ${plan.name}`}
+      aria-label={t("Select {{value1}}", { value1: String(plan.name) })}
       onClick={() =>
         setSelected((current) =>
           current.includes(plan.id)
@@ -766,34 +761,34 @@ function PlanIndex({
     return <>
       <button
         type="button"
-        title={plan.favorite ? "Remove from favorites" : "Add to favorites"}
-        aria-label={plan.favorite ? "Remove from favorites" : "Add to favorites"}
+        title={plan.favorite ? t("Remove from favorites") : t("Add to favorites")}
+        aria-label={plan.favorite ? t("Remove from favorites") : t("Add to favorites")}
         onClick={() => void update(plan.id, { favorite: !plan.favorite })}
       >
         <Heart size={14} fill={plan.favorite ? "currentColor" : "none"} />
       </button>
-      <button type="button" title="Duplicate" aria-label={`Duplicate ${plan.name}`} onClick={() => onDuplicate(plan)}>
+      <button type="button" title={t("Duplicate")} aria-label={t("Duplicate {{value1}}", { value1: String(plan.name) })} onClick={() => onDuplicate(plan)}>
         <Copy size={14} />
       </button>
       {noun === "plan" && plan.source !== "coros" && onCalendar ? (
         <button
           type="button"
           disabled={offline}
-          title={offline ? "Reconnect to COROS to change the calendar" : undefined}
-          aria-label={`${install && !retryingInstall ? "Remove" : retryingInstall ? "Retry adding" : "Add"} ${plan.name} ${install && !retryingInstall ? "from" : "to"} calendar`}
+          title={offline ? t("Reconnect to COROS to change the calendar") : undefined}
+          aria-label={t("{{value1}} {{value2}} {{value3}} calendar", { value1: String(install && !retryingInstall ? t("Remove") : retryingInstall ? t("Retry adding") : t("Add")), value2: String(plan.name), value3: String(install && !retryingInstall ? t("from") : t("to")) })}
           onClick={() => onCalendar(plan, retryingInstall ? "install" : undefined)}
         >
           {install && !retryingInstall ? <CalendarX size={14} /> : <CalendarPlus size={14} />}
         </button>
       ) : null}
-      {noun === "plan" && plan.source !== "coros" && onCalendar && retryingInstall ? <button type="button" disabled={offline} aria-label={`Remove partial installation of ${plan.name} from calendar`} onClick={() => onCalendar(plan, "remove")}><CalendarX size={14} /></button> : null}
+      {noun === "plan" && plan.source !== "coros" && onCalendar && retryingInstall ? <button type="button" disabled={offline} aria-label={t("Remove partial installation of {{value1}} from calendar", { value1: String(plan.name) })} onClick={() => onCalendar(plan, "remove")}><CalendarX size={14} /></button> : null}
       {plan.source !== "coros" ? (
         <button
           type="button"
           className="danger"
           disabled={Boolean(activeTrainingPlanCalendarInstall(plan))}
-          title={activeTrainingPlanCalendarInstall(plan) ? "Remove future plan-owned calendar workouts before deleting this plan" : undefined}
-          aria-label={`Delete ${plan.name}`}
+          title={activeTrainingPlanCalendarInstall(plan) ? t("Remove future plan-owned calendar workouts before deleting this plan") : undefined}
+          aria-label={t("Delete {{value1}}", { value1: String(plan.name) })}
           onClick={() => onDelete(plan)}
         >
           <Trash2 size={14} />
@@ -807,16 +802,16 @@ function PlanIndex({
       <div className="tl-filters">
         <label className="tl-search">
           <Search size={15} />
-          <span className="sr-only">Search {noun}s</span>
+          <span className="sr-only">{t("Search")} {noun}s</span>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={`Search ${noun}s`}
+            placeholder={t("Search {{value1}}s", { value1: String(noun) })}
           />
         </label>
-        <SelectDropdown
+        <SelectDropdown translateLabel={t}
           className="tl-quiet-select tl-plan-scope"
-          label={`Filter ${noun}s`}
+          label={t("Filter {{value1}}s", { value1: String(noun) })}
           value={scope}
           options={scopes.map((option) => ({
             value: option.id,
@@ -825,20 +820,20 @@ function PlanIndex({
           onChange={setScope}
         />
         <div className="tl-filters-tail">
-          <SelectDropdown
+          <SelectDropdown translateLabel={t}
             className="tl-quiet-select"
-            label={`Sort ${noun}s`}
+            label={t("Sort {{value1}}s", { value1: String(noun) })}
             value={sort.column}
             options={PLAN_SORT_OPTIONS}
             onChange={(value) =>
               setSort({ column: value, descending: value !== "name" })
             }
           />
-          <div className="tl-layout-switch" role="group" aria-label={`${noun} layout`}>
+          <div className="tl-layout-switch" role="group" aria-label={t("{{value1}} layout", { value1: String(noun) })}>
             <button
               type="button"
               aria-pressed={layout === "grid"}
-              aria-label="Show tiles"
+              aria-label={t("Show tiles")}
               onClick={() => setLayout("grid")}
             >
               <LayoutGrid size={14} />
@@ -846,7 +841,7 @@ function PlanIndex({
             <button
               type="button"
               aria-pressed={layout === "list"}
-              aria-label="Show list"
+              aria-label={t("Show list")}
               onClick={() => setLayout("list")}
             >
               <List size={14} />
@@ -854,29 +849,28 @@ function PlanIndex({
           </div>
           <div className="tl-plan-create">
             <button type="button" className={noun === "plan" && onGenerate ? "ghost-button" : "primary-button"} onClick={onCreate}>
-              <Plus size={15} /> New {noun}
+              <Plus size={15} /> {t("New")} {noun}
             </button>
-            {noun === "plan" && onGenerate ? <button type="button" className="primary-button tl-generate-button" onClick={onGenerate}><Sparkles size={15} /> Generate plan</button> : null}
+            {noun === "plan" && onGenerate ? <button type="button" className="primary-button tl-generate-button" onClick={onGenerate}><Sparkles size={15} /> {t("Generate plan")}</button> : null}
           </div>
         </div>
       </div>
 
       {query || scope !== "all" ? <div className="tl-plan-results">
-        <span role="status"><strong>{visible.length}</strong> {noun}{visible.length === 1 ? "" : "s"} found</span>
-        <button type="button" className="ghost-button" onClick={() => { setQuery(""); setScope("all"); }}>Clear filters</button>
+        <span role="status"><strong>{visible.length}</strong> {noun}{visible.length === 1 ? "" : "s"} {t("found")}</span>
+        <button type="button" className="ghost-button" onClick={() => { setQuery(""); setScope("all"); }}>{t("Clear filters")}</button>
       </div> : null}
       {selected.length ? (
-        <div className="tl-bulk" role="toolbar" aria-label={`Actions for selected ${noun}s`}>
-          <strong>{selected.length} selected</strong>
-          {onCompare ? <span className="tl-selection-hint">Select 2–3 plans to compare</span> : null}
+        <div className="tl-bulk" role="toolbar" aria-label={t("Actions for selected {{value1}}s", { value1: String(noun) })}>
+          <strong>{selected.length} {t("selected")}</strong>
+          {onCompare ? <span className="tl-selection-hint">{t("Select 2–3 plans to compare")}</span> : null}
           {onCompare ? (
             <button
               type="button"
               disabled={selected.length < 2 || selected.length > 3}
               onClick={() => onCompare(selected)}
             >
-              <Scale size={13} /> Compare
-            </button>
+              <Scale size={13} /> {t("Compare")} </button>
           ) : null}
           <button
             type="button"
@@ -891,12 +885,11 @@ function PlanIndex({
               });
             }}
           >
-            <Tag size={13} /> Tag
-          </button>
+            <Tag size={13} /> {t("Tag")} </button>
           {collections.length ? (
-            <SelectDropdown
+            <SelectDropdown translateLabel={t}
               className="tl-quiet-select"
-              label={`Move selected ${noun}s to a collection`}
+              label={t("Move selected {{value1}}s to a collection", { value1: String(noun) })}
               value=""
               options={[
                 { value: "", label: "Move to collection" },
@@ -910,7 +903,7 @@ function PlanIndex({
               }}
             />
           ) : null}
-          <button type="button" aria-label="Clear selection" onClick={() => setSelected([])}>
+          <button type="button" aria-label={t("Clear selection")} onClick={() => setSelected([])}>
             <X size={13} />
           </button>
         </div>
@@ -918,13 +911,13 @@ function PlanIndex({
 
       {visible.length === 0 ? (
         <div className="tl-empty">
-          <h3>{query || scope !== "all" ? `No ${noun}s match` : `No ${noun}s yet`}</h3>
+          <h3>{query || scope !== "all" ? t("No {{value1}}s match", { value1: String(noun) }) : t("No {{value1}}s yet", { value1: String(noun) })}</h3>
           <p>
             {query || scope !== "all"
-              ? "Clear the search or choose another filter."
+              ? t("Clear the search or choose another filter.")
               : noun === "plan"
-                ? "Build a plan here, or refresh to pull plans from COROS."
-                : "Save a plan as a template, or turn a completed activity into one."}
+                ? t("Build a plan here, or refresh to pull plans from COROS.")
+                : t("Save a plan as a template, or turn a completed activity into one.")}
           </p>
         </div>
       ) : layout === "grid" ? (
@@ -944,36 +937,36 @@ function PlanIndex({
                 <button type="button" className="tl-card-open" onClick={() => onOpen(plan)}>
                   <span className="tl-card-top">
                     {plan.favorite ? (
-                      <Heart size={11} fill="currentColor" strokeWidth={0} aria-label="Favorite" />
+                      <Heart size={11} fill="currentColor" strokeWidth={0} aria-label={t("Favorite")} />
                     ) : null}
                     <PlanSourceBadge source={plan.source} />
                     {UNSETTLED_SYNC.has(plan.syncState) ? (
                       <i className="tl-flag">{plan.syncState}</i>
                     ) : null}
-                    {activeTrainingPlanCalendarInstall(plan) && activeTrainingPlanCalendarInstall(plan)?.planRevision !== trainingPlanCalendarRevision(plan) ? <i className="tl-flag">Calendar differs</i> : null}
+                    {activeTrainingPlanCalendarInstall(plan) && activeTrainingPlanCalendarInstall(plan)?.planRevision !== trainingPlanCalendarRevision(plan) ? <i className="tl-flag">{t("Calendar differs")}</i> : null}
                   </span>
                   <span className="tl-card-name" title={plan.name}>{plan.name}</span>
                   <span className="tl-card-note" title={view.context}>{view.context}</span>
                   <span className="tl-plan-sports">
                     {plan.sportMix.slice(0, 3).map((sport) => <SportBadge key={sport} sport={sport} compact />)}
-                    {plan.sportMix.length > 3 ? <span title={plan.sportMix.slice(3).map(formatWorkoutSport).join(", ")}>+{plan.sportMix.length - 3} more</span> : null}
+                    {plan.sportMix.length > 3 ? <span title={plan.sportMix.slice(3).map(formatWorkoutSport).join(", ")}>+{plan.sportMix.length - 3} {t("more")}</span> : null}
                   </span>
                   <span className="tl-plan-profile">
-                    <span className="tl-plan-profile-label">{view.ridge.variant === "load" ? "Weekly training load" : "Sessions per week"}<span>{plan.weekCount} {plan.weekCount === 1 ? "week" : "weeks"}</span></span>
+                    <span className="tl-plan-profile-label">{view.ridge.variant === "load" ? t("Weekly training load") : t("Sessions per week")}<span>{plan.weekCount} {plan.weekCount === 1 ? t("week") : t("weeks")}</span></span>
                     <Ridge {...view.ridge} />
                   </span>
                   <span className="tl-card-figs">
                     <span>
                       <b>{plan.weekCount}</b>
-                      <small>{plan.weekCount === 1 ? "week" : "weeks"}</small>
+                      <small>{plan.weekCount === 1 ? t("week") : t("weeks")}</small>
                     </span>
                     <span>
                       <b className={view.sessions ? "" : "is-nil"}>{view.sessions || "—"}</b>
-                      <small>{view.sessions === 1 ? "session" : "sessions"}</small>
+                      <small>{view.sessions === 1 ? t("session") : t("sessions")}</small>
                     </span>
                     {view.load > 0 ? <span>
                       <b>{view.load}</b>
-                      <small>training load</small>
+                      <small>{t("training load")}</small>
                     </span> : null}
                   </span>
                 </button>
@@ -1006,11 +999,11 @@ function PlanIndex({
                 aria-pressed={sort.column === column.id}
                 onClick={() => toggleSort(column.id)}
               >
-                {column.label}
+                {t(column.label)}
                 {sortIndicator(column.id)}
               </button>
             ))}
-            <span className="tl-column-label">Weekly load</span>
+            <span className="tl-column-label">{t("Weekly load")}</span>
             <span />
           </div>
 
@@ -1030,7 +1023,7 @@ function PlanIndex({
                   <button type="button" className="tl-row-open" onClick={() => onOpen(plan)}>
                     <span className="tl-row-name">
                       {plan.favorite ? (
-                        <Heart size={12} fill="currentColor" strokeWidth={0} aria-label="Favorite" />
+                        <Heart size={12} fill="currentColor" strokeWidth={0} aria-label={t("Favorite")} />
                       ) : null}
                       {plan.name}
                     </span>
@@ -1043,7 +1036,7 @@ function PlanIndex({
                       {UNSETTLED_SYNC.has(plan.syncState) ? (
                         <i className="tl-flag">{plan.syncState}</i>
                       ) : null}
-                      {activeTrainingPlanCalendarInstall(plan) && activeTrainingPlanCalendarInstall(plan)?.planRevision !== trainingPlanCalendarRevision(plan) ? <i className="tl-flag">Calendar differs</i> : null}
+                      {activeTrainingPlanCalendarInstall(plan) && activeTrainingPlanCalendarInstall(plan)?.planRevision !== trainingPlanCalendarRevision(plan) ? <i className="tl-flag">{t("Calendar differs")}</i> : null}
                     </span>
                   </button>
                   <span className="tl-fig">{plan.weekCount}</span>
@@ -1089,6 +1082,7 @@ function TemplateSection({
   onMessage,
   onError
 }: TemplateSectionProps) {
+  useLanguage();
   const [newCollection, setNewCollection] = useState("");
 
   const saveCollection = async () => {
@@ -1096,7 +1090,7 @@ function TemplateSection({
     try {
       await api.saveTrainingCollection({ id: "", name: newCollection.trim() });
       setNewCollection("");
-      onMessage(`Created the collection "${newCollection.trim()}".`);
+      onMessage(t("Created the collection \"{{value1}}\".", { value1: String(newCollection.trim()) }));
       await onRefresh();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : String(cause));
@@ -1120,8 +1114,8 @@ function TemplateSection({
 
       <aside className="tl-panel tl-collections">
         <header>
-          <h2>Collections</h2>
-          <p>Local grouping. Nothing here changes a COROS record.</p>
+          <h2>{t("Collections")}</h2>
+          <p>{t("Local grouping. Nothing here changes a COROS record.")}</p>
         </header>
         <form
           className="tl-collection-create"
@@ -1131,14 +1125,13 @@ function TemplateSection({
           }}
         >
           <input
-            aria-label="New collection name"
+            aria-label={t("New collection name")}
             value={newCollection}
             onChange={(event) => setNewCollection(event.target.value)}
-            placeholder="Collection name"
+            placeholder={t("Collection name")}
           />
           <button type="submit" className="ghost-button" disabled={!newCollection.trim()}>
-            <FolderPlus size={14} /> Create
-          </button>
+            <FolderPlus size={14} /> {t("Create")} </button>
         </form>
         {collections.length ? (
           <ul role="list">
@@ -1147,16 +1140,15 @@ function TemplateSection({
                 <span>
                   <strong>{collection.name}</strong>
                   <small>
-                    {templates.filter((plan) => plan.collectionId === collection.id).length} templates
-                  </small>
+                    {templates.filter((plan) => plan.collectionId === collection.id).length} {t("templates")} </small>
                 </span>
                 <button
                   type="button"
-                  aria-label={`Delete the collection ${collection.name}`}
+                  aria-label={t("Delete the collection {{value1}}", { value1: String(collection.name) })}
                   onClick={() => {
                     if (
                       !window.confirm(
-                        `Delete the collection "${collection.name}"? Its templates stay in the library.`
+                        t("Delete the collection \"{{value1}}\"? Its templates stay in the library.", { value1: String(collection.name) })
                       )
                     ) {
                       return;
@@ -1176,8 +1168,7 @@ function TemplateSection({
           </ul>
         ) : (
           <p className="tl-collections-empty">
-            No collections yet. Name one above to start grouping templates.
-          </p>
+            {t("No collections yet. Name one above to start grouping templates.")} </p>
         )}
       </aside>
     </div>
@@ -1211,6 +1202,7 @@ interface AdherenceSectionProps {
 }
 
 function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: AdherenceSectionProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const [activities, setActivities] = useState<TrainingHubActivity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1240,7 +1232,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
 
   const ordered = useMemo(
     () => [...matches].sort((left, right) => right.happenDay.localeCompare(left.happenDay)),
-    [matches]
+    [matches, getLocale()]
   );
   const visible = ordered.filter((match) => state === "all" || match.status === state);
   const settled = matches.filter((match) => match.status !== "upcoming");
@@ -1259,7 +1251,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
       monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
       const key = monday.toISOString().slice(0, 10);
       const bucket = buckets.get(key) ?? {
-        weekLabel: `Week of ${shortDate(monday)}`,
+        weekLabel: t("Week of {{value1}}", { value1: String(shortDate(monday)) }),
         planned: 0,
         completed: 0
       };
@@ -1268,7 +1260,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
       buckets.set(key, bucket);
     }
     return [...buckets.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, week]) => week);
-  }, [matches]);
+  }, [matches, getLocale()]);
 
   const statesPresent = ADHERENCE_STATES.filter(
     (option) => option.id === "all" || matches.some((match) => match.status === option.id)
@@ -1287,7 +1279,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
         label: `${activity.name ?? activity.sportName ?? "Activity"} · ${activityDate(activity)}`
       }))
     ],
-    [activities]
+    [activities, getLocale()]
   );
 
   const createTemplate = async (activity: TrainingHubActivity) => {
@@ -1298,7 +1290,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
     plan.weekCount = 1;
     const sport = workoutSportFromType(activity.sportType) ?? "run";
     plan.sportMix = [sport];
-    plan.description = `Created from a completed activity on ${activityDate(activity)}.`;
+    plan.description = t("Created from a completed activity on {{value1}}.", { value1: String(activityDate(activity)) });
     plan.entries = [
       planEntryFromWorkout(
         {
@@ -1324,7 +1316,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
     ];
     try {
       await api.saveLocalTrainingPlan(plan);
-      onMessage(`Saved "${plan.name}" to Templates.`);
+      onMessage(t("Saved \"{{value1}}\" to Templates.", { value1: String(plan.name) }));
       await onRefresh();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : String(cause));
@@ -1356,29 +1348,26 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
       <section className="tl-panel tl-adherence-lede">
         <header>
           <div>
-            <h2>Planned against done</h2>
+            <h2>{t("Planned against done")}</h2>
             <p>
               {settled.length
-                ? `${completion}% of ${settled.length} past sessions were matched to a completed activity.`
-                : "No past planned sessions in this range yet."}
+                ? t("{{value1}}% of {{value2}} past sessions were matched to a completed activity.", { value1: String(completion), value2: String(settled.length) })
+                : t("No past planned sessions in this range yet.")}
             </p>
           </div>
           <button type="button" className="ghost-button" disabled={loading} onClick={() => void refresh()}>
-            <RefreshCw size={14} className={loading ? "is-spinning" : ""} /> Refresh matches
-          </button>
+            <RefreshCw size={14} className={loading ? "is-spinning" : ""} /> {t("Refresh matches")} </button>
         </header>
 
         {weeks.length ? (
           <figure className="tl-adherence-chart">
-            <BulletRidge weeks={weeks} label="Planned and completed training load by week" />
+            <BulletRidge weeks={weeks} label={t("Planned and completed training load by week")} />
             <figcaption>
               <span>
                 {weeks[0]?.weekLabel} &ndash; {weeks[weeks.length - 1]?.weekLabel}
               </span>
               <span className="tl-legend">
-                <em className="is-planned" /> planned
-                <em className="is-done" /> done
-              </span>
+                <em className="is-planned" /> {t("planned")} <em className="is-done" /> {t("done")} </span>
             </figcaption>
           </figure>
         ) : null}
@@ -1395,7 +1384,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
 
       <div className="tl-panel">
         <div className="tl-filters">
-          <div className="tl-chips" role="group" aria-label="Filter planned sessions">
+          <div className="tl-chips" role="group" aria-label={t("Filter planned sessions")}>
             {statesPresent.map((option) => (
               <button
                 type="button"
@@ -1403,7 +1392,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
                 aria-pressed={state === option.id}
                 onClick={() => setState(option.id)}
               >
-                {option.label}
+                {t(option.label)}
               </button>
             ))}
           </div>
@@ -1411,20 +1400,20 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
 
         {visible.length === 0 ? (
           <div className="tl-empty">
-            <h3>{matches.length ? "Nothing in this filter" : "Nothing to compare yet"}</h3>
+            <h3>{matches.length ? t("Nothing in this filter") : t("Nothing to compare yet")}</h3>
             <p>
               {matches.length
-                ? "Choose another filter to see planned sessions."
-                : "Schedule workouts on the calendar, then refresh here after you finish them."}
+                ? t("Choose another filter to see planned sessions.")
+                : t("Schedule workouts on the calendar, then refresh here after you finish them.")}
             </p>
           </div>
         ) : (
           <div className="tl-index">
             <div className="tl-index-head tl-match-row">
-              <span className="tl-column-label">Day</span>
-              <span className="tl-column-label">Planned</span>
-              <span className="tl-column-label">Completed</span>
-              <span className="tl-column-label is-numeric">Match</span>
+              <span className="tl-column-label">{t("Day")}</span>
+              <span className="tl-column-label">{t("Planned")}</span>
+              <span className="tl-column-label">{t("Completed")}</span>
+              <span className="tl-column-label is-numeric">{t("Match")}</span>
               <span />
             </div>
             <ul role="list">
@@ -1438,7 +1427,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
                   match.completedDistanceMeters
                     ? formatDistanceValue(match.completedDistanceMeters, unitSystem, { digits: 1 })
                     : null,
-                  match.completedTrainingLoad ? `${Math.round(match.completedTrainingLoad)} load` : null
+                  match.completedTrainingLoad ? t("{{value1}} load", { value1: String(Math.round(match.completedTrainingLoad)) }) : null
                 ].filter(Boolean);
 
                 return (
@@ -1450,8 +1439,8 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
                     <span className="tl-match-planned">
                       <b>
                         {match.plannedTrainingLoad
-                          ? `${Math.round(match.plannedTrainingLoad)} load`
-                          : "Structured workout"}
+                          ? t("{{value1}} load", { value1: String(Math.round(match.plannedTrainingLoad)) })
+                          : t("Structured workout")}
                       </b>
                       <small>
                         {match.plannedDurationSeconds
@@ -1460,9 +1449,9 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
                       </small>
                     </span>
                     <span className="tl-match-done">
-                      <SelectDropdown
+                      <SelectDropdown translateLabel={t}
                         className="tl-quiet-select is-wide"
-                        label={`Completed activity for ${shortDate(date)}`}
+                        label={t("Completed activity for {{value1}}", { value1: String(shortDate(date)) })}
                         value={match.activityId ?? ""}
                         options={activityOptions}
                         onChange={(value) => void linkActivity(match, value || undefined)}
@@ -1471,7 +1460,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
                     </span>
                     <span className={`tl-fig${match.activityId ? "" : " is-nil"}`}>
                       {match.manual
-                        ? "manual"
+                        ? t("manual")
                         : match.confidence
                           ? `${Math.round(match.confidence * 100)}%`
                           : "—"}
@@ -1480,7 +1469,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
                       {match.status === "missed" ? (
                         <button
                           type="button"
-                          aria-label="Reschedule this session"
+                          aria-label={t("Reschedule this session")}
                           onClick={() => {
                             const value = window.prompt("New date (YYYY-MM-DD)");
                             if (!value) return;
@@ -1507,7 +1496,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
                       ) : null}
                       <button
                         type="button"
-                        aria-label="Skip this session"
+                        aria-label={t("Skip this session")}
                         onClick={() =>
                           void api
                             .saveManualActivityMatch({
@@ -1527,7 +1516,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
                       {activity && (activity.duration || activity.distance) ? (
                         <button
                           type="button"
-                          aria-label="Save this activity as a template"
+                          aria-label={t("Save this activity as a template")}
                           onClick={() => void createTemplate(activity)}
                         >
                           <Copy size={14} />
@@ -1544,15 +1533,15 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
 
       <section className="tl-panel tl-recent">
         <header>
-          <h2>Recent activities</h2>
-          <p>Open Training Hub for charts, laps, route, and strength detail.</p>
+          <h2>{t("Recent activities")}</h2>
+          <p>{t("Open Training Hub for charts, laps, route, and strength detail.")}</p>
         </header>
         <div className="tl-index">
           <div className="tl-index-head tl-activity-row">
-            <span className="tl-column-label">Activity</span>
-            <span className="tl-column-label is-numeric">Time</span>
-            <span className="tl-column-label is-numeric">Distance</span>
-            <span className="tl-column-label is-numeric">Load</span>
+            <span className="tl-column-label">{t("Activity")}</span>
+            <span className="tl-column-label is-numeric">{t("Time")}</span>
+            <span className="tl-column-label is-numeric">{t("Distance")}</span>
+            <span className="tl-column-label is-numeric">{t("Load")}</span>
             <span />
           </div>
           <ul role="list">
@@ -1560,11 +1549,11 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
               <li className="tl-activity-row tl-row" key={activity.activityId}>
                 <span className="tl-row-open is-static">
                   <span className="tl-row-name">
-                    {activity.name ?? activity.sportName ?? "Activity"}
+                    {activity.name ?? (activity.sportName == null ? activity.sportName : t(String(activity.sportName))) ?? t("Activity")}
                   </span>
                   <span className="tl-row-sub">
                     <em>{activityDate(activity)}</em>
-                    {activity.sportName ? <em>{activity.sportName}</em> : null}
+                    {activity.sportName ? <em>{t(activity.sportName)}</em> : null}
                   </span>
                 </span>
                 <span className="tl-fig">{formatDuration(activity.duration)}</span>
@@ -1580,7 +1569,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
                   {activity.duration || activity.distance ? (
                     <button
                       type="button"
-                      aria-label={`Save ${activity.name ?? "this activity"} as a template`}
+                      aria-label={t("Save {{value1}} as a template", { value1: String(activity.name ?? t("this activity")) })}
                       onClick={() => void createTemplate(activity)}
                     >
                       <Copy size={14} />

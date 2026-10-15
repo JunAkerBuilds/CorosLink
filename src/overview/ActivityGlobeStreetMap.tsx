@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import { useCartoApiKey } from "../maps/routes/useCartoApiKey";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -293,6 +294,7 @@ export function ActivityGlobeStreetMap({
   routes,
   onRequestExit,
 }: ActivityGlobeStreetMapProps) {
+  useLanguage();
   const { theme } = useTheme();
   const cartoApiKey = useCartoApiKey();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -411,7 +413,7 @@ export function ActivityGlobeStreetMap({
       ref={containerRef}
       className="activity-globe-street-map"
       role="img"
-      aria-label="Street map with activity routes. Zoom out or reset to return to the globe."
+      aria-label={t("Street map with activity routes. Zoom out or reset to return to the globe.")}
     />
   );
 }

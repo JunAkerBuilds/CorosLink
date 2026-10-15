@@ -1,4 +1,5 @@
 import { app, dialog, shell, safeStorage } from "electron";
+import { localizeDialogOptions } from "./localization";
 import crypto from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
@@ -781,10 +782,10 @@ export async function downloadCorosMapPackageToCache(
 export async function chooseCorosMapFolder(): Promise<
   CorosMapLocalSelection | undefined
 > {
-  const result = await dialog.showOpenDialog({
+  const result = await dialog.showOpenDialog(localizeDialogOptions({
     title: "Choose extracted COROS map folder",
     properties: ["openDirectory"]
-  });
+  }));
 
   if (result.canceled || result.filePaths.length === 0) {
     return undefined;
@@ -1396,11 +1397,11 @@ export async function exportGeneratedRoute(id: string): Promise<string | null> {
     throw new Error("Generated route GPX file is missing.");
   }
 
-  const result = await dialog.showSaveDialog({
+  const result = await dialog.showSaveDialog(localizeDialogOptions({
     title: "Export GPX",
     defaultPath: sanitizeFileName(`${route.name}.gpx`),
     filters: [{ name: "GPX", extensions: ["gpx"] }]
-  });
+  }));
 
   if (result.canceled || !result.filePath) {
     return null;
@@ -1590,11 +1591,11 @@ export async function readGpxRouteFiles(
 export async function importRouteFromGpx(
   activityType: RouteActivityType = "running"
 ): Promise<GpxImportSummary | null> {
-  const result = await dialog.showOpenDialog({
+  const result = await dialog.showOpenDialog(localizeDialogOptions({
     title: "Import GPX route",
     filters: [{ name: "GPX", extensions: ["gpx"] }],
     properties: ["openFile", "multiSelections"]
-  });
+  }));
   if (result.canceled || result.filePaths.length === 0) {
     return null;
   }

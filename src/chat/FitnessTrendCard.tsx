@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import {
   Area,
   AreaChart,
@@ -22,6 +23,7 @@ interface FitnessTrendCardProps {
 }
 
 function TrendTooltip({ active, payload, label }: TooltipContentProps) {
+  useLanguage();
   if (!active || !payload?.length) {
     return null;
   }
@@ -39,6 +41,7 @@ function TrendTooltip({ active, payload, label }: TooltipContentProps) {
 }
 
 export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
+  useLanguage();
   const { colors, activeDot } = useChartColors();
   const loadPoints = preview.trendPoints.filter(
     (point) => point.trainingLoad !== undefined
@@ -52,16 +55,15 @@ export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
     <div className="chat-visual-card">
       <div className="chat-visual-card-header">
         <div>
-          <h4>Fitness trends</h4>
+          <h4>{t("Fitness trends")}</h4>
           <span className="chat-visual-card-subtitle">
-            Last {preview.trendPoints.length} days
-          </span>
+            {t("Last")} {preview.trendPoints.length}  {t("days")}</span>
         </div>
       </div>
 
       {loadPoints.length > 0 ? (
         <section className="chat-visual-section">
-          <h5>Training load</h5>
+          <h5>{t("Training load")}</h5>
           <div className="chat-visual-chart-shell">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={loadPoints} margin={trainingChartMargin}>
@@ -87,7 +89,7 @@ export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
                 <Area
                   type="monotone"
                   dataKey="trainingLoad"
-                  name="Load"
+                  name={t("Load")}
                   stroke={colors.accentBright}
                   fill={`url(#chatLoadFill-${preview.previewId})`}
                   strokeWidth={2}
@@ -103,7 +105,7 @@ export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
 
       {hrvPoints.length > 0 ? (
         <section className="chat-visual-section">
-          <h5>HRV vs baseline</h5>
+          <h5>{t("HRV vs baseline")}</h5>
           <div className="chat-visual-chart-shell">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={hrvPoints} margin={trainingChartMargin}>
@@ -129,7 +131,7 @@ export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
                 <Area
                   type="monotone"
                   dataKey="avgSleepHrv"
-                  name="HRV"
+                  name={t("HRV")}
                   stroke={colors.accentBright}
                   fill={`url(#chatHrvFill-${preview.previewId})`}
                   strokeWidth={2}
@@ -141,7 +143,7 @@ export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
                 <Line
                   type="monotone"
                   dataKey="sleepHrvBase"
-                  name="Baseline"
+                  name={t("Baseline")}
                   stroke={colors.gold}
                   strokeWidth={2}
                   strokeDasharray="5 4"
@@ -157,7 +159,7 @@ export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
 
       {rhrPoints.length > 0 ? (
         <section className="chat-visual-section">
-          <h5>Resting heart rate</h5>
+          <h5>{t("Resting heart rate")}</h5>
           <div className="chat-visual-chart-shell">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={rhrPoints} margin={trainingChartMargin}>
@@ -183,7 +185,7 @@ export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
                 <Area
                   type="monotone"
                   dataKey="rhr"
-                  name="RHR"
+                  name={t("RHR")}
                   stroke={colors.accentBright}
                   fill={`url(#chatRhrFill-${preview.previewId})`}
                   strokeWidth={2}
@@ -201,7 +203,7 @@ export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
       {loadPoints.length === 0 &&
       hrvPoints.length === 0 &&
       rhrPoints.length === 0 ? (
-        <p className="chat-visual-empty">No fitness trend data available.</p>
+        <p className="chat-visual-empty">{t("No fitness trend data available.")}</p>
       ) : null}
     </div>
   );

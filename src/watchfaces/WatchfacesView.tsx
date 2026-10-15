@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { WATCHFACE_TARGETS, getWatchfaceTarget } from "../../electron/watchfaceTargets";
 import { drawNativeDataPreview } from "./nativeData";
 import {
@@ -313,6 +314,7 @@ export function WatchfacesView({
   communityOpenRequest,
   onCommunityOpenRequestHandled
 }: WatchfacesViewProps) {
+  useLanguage();
   const [status, setStatus] = useState<CorosWatchfaceStatus | null>(null);
   const [surface, setSurface] = useState<WatchfaceSurface>("hub");
   const [hubTab, setHubTab] = useSelectionPreference(
@@ -335,7 +337,7 @@ export function WatchfacesView({
   const automationRequestHandlerRef = useRef<
     (request: WatchfaceAutomationRequest) => Promise<unknown>
   >(async () => {
-    throw new Error("The watch-face hub is still loading.");
+    throw new Error(t("The watch-face hub is still loading."));
   });
 
   useEffect(() => {
@@ -592,8 +594,8 @@ export function WatchfacesView({
       setPassword("");
       if (destination === "hub") setSurface("hub");
       setNotice(nextStatus.watchAuthenticationError ?? (nextStatus.watchAuthenticationAvailable
-        ? "COROS account connected. Reconnect your watch to authenticate over Bluetooth."
-        : "COROS mobile session connected."));
+        ? t("COROS account connected. Reconnect your watch to authenticate over Bluetooth.")
+        : t("COROS mobile session connected.")));
       if (destination === "conversion") await resumeConversionAfterLogin();
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -614,8 +616,8 @@ export function WatchfacesView({
       setPassword("");
       if (destination === "hub") setSurface("hub");
       setNotice(nextStatus.watchAuthenticationError ?? (nextStatus.watchAuthenticationAvailable
-        ? "COROS account connected. Reconnect your watch to authenticate over Bluetooth."
-        : "COROS mobile session connected with your saved account."));
+        ? t("COROS account connected. Reconnect your watch to authenticate over Bluetooth.")
+        : t("COROS mobile session connected with your saved account.")));
       if (destination === "conversion") await resumeConversionAfterLogin();
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -641,8 +643,8 @@ export function WatchfacesView({
       setThemesSavedAt(null);
       themeListMemory.clear();
       setNotice(nextStatus.watchAuthenticationAvailable
-        ? "Signed out of COROS. Your watch can still connect over Bluetooth. To remove its key, open Connection details in the watch menu."
-        : "Signed out of COROS. You can keep working locally.");
+        ? t("Signed out of COROS. Your watch can still connect over Bluetooth. To remove its key, open Connection details in the watch menu.")
+        : t("Signed out of COROS. You can keep working locally."));
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -687,7 +689,7 @@ export function WatchfacesView({
         (transferredDesign
           ? initialName
           : project?.name ?? archive.editableProject?.name ?? initialName
-        ).trim() || "Untitled watch face",
+        ).trim() || t("Untitled watch face"),
       targetFirmwareType,
       ...(targetWatchModel ? { targetWatchModel } : {}),
       ...(initiallyDirty ? { initiallyDirty: true } : {}),
@@ -714,7 +716,7 @@ export function WatchfacesView({
     setConversionSignInWatch(null);
     setConversionDraft({
       design: structuredClone(design),
-      name: name.trim() || "Custom watch face",
+      name: name.trim() || t("Custom watch face"),
       sourceDirty,
       sourceFirmwareType: studioSession.targetFirmwareType,
       ...(bakeForWatch ? { bakeForWatch } : {})
@@ -743,14 +745,14 @@ export function WatchfacesView({
   async function openAutomatedConversion({
     design, name, targetArchive, firmwareType: requestedFirmwareType, watchModel, bakeForWatch
   }: WatchfaceAutomationConversionInput) {
-    if (!studioSession || conversionBusyRef.current) throw new Error("A conversion is already in progress.");
+    if (!studioSession || conversionBusyRef.current) throw new Error(t("A conversion is already in progress."));
     const target = getWatchfaceTarget(watchModel ?? requestedFirmwareType ?? targetArchive?.firmwareType);
-    if (!target) throw new Error("Choose a supported destination watch.");
+    if (!target) throw new Error(t("Choose a supported destination watch."));
     if (requestedFirmwareType && target.firmwareType.toUpperCase() !== requestedFirmwareType.trim().toUpperCase()) {
-      throw new Error("The destination watch and firmware do not match.");
+      throw new Error(t("The destination watch and firmware do not match."));
     }
     if (target.firmwareType.toUpperCase() === studioSession.targetFirmwareType.toUpperCase()) {
-      throw new Error("Choose a different destination watch.");
+      throw new Error(t("Choose a different destination watch."));
     }
     conversionBusyRef.current = true;
     setConversionBusy(true);
@@ -758,14 +760,14 @@ export function WatchfacesView({
       if (bakeForWatch) {
         // Recovered official faces are rebuilt from their native tree for the
         // destination; the finished archive becomes the new project's starter.
-        if (targetArchive) throw new Error("Recovered official faces convert with the destination watch's own COROS template.");
+        if (targetArchive) throw new Error(t("Recovered official faces convert with the destination watch's own COROS template."));
         const baked = await bakeForWatch({ firmwareType: target.firmwareType, watchModel: target.model }, name);
         const bakedName = convertedProjectName(name, target.firmwareType);
         clearWatchfaceAutomationEditor();
         api.setWatchfaceAutomationReady("editor", false);
         openStudio(baked, bakedName, undefined, undefined, true,
           { firmwareType: target.firmwareType, watchModel: target.model }, carriedWatchfacePreferences(design));
-        setNotice(`Converted to ${target.label}. Your edits are baked into this new starter; keep editing and save it as a project.`);
+        setNotice(t("Converted to {{value1}}. Your edits are baked into this new starter; keep editing and save it as a project.", { value1: t(target.label) }));
         return { opened: true, name: bakedName, targetFirmwareType: target.firmwareType,
           omittedRawConfigEditCount: 0, appliedRawConfigEditCount: 0 };
       }
@@ -781,10 +783,10 @@ export function WatchfacesView({
       api.setWatchfaceAutomationReady("editor", false);
       openStudio(converted.archive, convertedName, undefined, prepared.design, true,
         { firmwareType: target.firmwareType, watchModel: target.model });
-      setNotice(`Converted to ${target.label}. ${target.display === "mip"
+      setNotice(t("Converted to {{value1}}. {{value2}}", { value1: t(target.label), value2: target.display === "mip"
         ? "Current stays visible on MIP; your separate AOD design is retained for AMOLED."
         : converted.generatedAod ? "An editable Always-on layout was created from Current. Review it before sending."
-        : "Current and Always-on layouts are preserved."}`);
+        : "Current and Always-on layouts are preserved." }));
       return { opened: true, name: convertedName, targetFirmwareType: target.firmwareType,
         omittedRawConfigEditCount: 0, appliedRawConfigEditCount: converted.appliedRawConfigEditCount };
     } finally {
@@ -876,7 +878,7 @@ export function WatchfacesView({
         selected,
         selected.editableProject?.name ??
           (selected.fileName.replace(/\.(zip|dat)$/i, "") ||
-            "Custom watch face")
+            t("Custom watch face"))
       );
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -889,7 +891,7 @@ export function WatchfacesView({
     event.preventDefault();
     const shareUrl = importShareUrl.trim();
     if (!shareUrl) {
-      setError("Paste a COROS watch-face share link.");
+      setError(t("Paste a COROS watch-face share link."));
       setNotice(null);
       return;
     }
@@ -928,7 +930,7 @@ export function WatchfacesView({
         current.filter((project) => project.projectId !== deleteTarget.projectId)
       );
       setDeleteTarget(null);
-      setNotice("Watch-face project deleted.");
+      setNotice(t("Watch-face project deleted."));
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -942,7 +944,7 @@ export function WatchfacesView({
     try {
       const duplicated = await api.duplicateCorosWatchfaceProject(projectId);
       handleProjectSaved(duplicated);
-      setNotice(`Duplicated as “${duplicated.name}”.`);
+      setNotice(t("Duplicated as “{{value1}}”.", { value1: duplicated.name }));
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -999,7 +1001,7 @@ export function WatchfacesView({
   ) {
     event?.preventDefault();
     if (!connected) {
-      setError("Sign in to your COROS account before creating a watch face.");
+      setError(t("Sign in to your COROS account before creating a watch face."));
       setNotice(null);
       setSurface("sign-in");
       return;
@@ -1030,9 +1032,7 @@ export function WatchfacesView({
       showThemeList(key, entry);
       if (options.force) {
         setNotice(
-          `${nextThemes.length} ${watchfaceCatalogLabel(query.catalog)}${
-            nextThemes.length === 1 ? "" : "s"
-          } refreshed.`
+          t("{{value1}} {{value2}}{{value3}} refreshed.", { value1: nextThemes.length, value2: watchfaceCatalogLabel(query.catalog), value3: nextThemes.length === 1 ? "" : "s" })
         );
       }
     } catch (caught) {
@@ -1084,9 +1084,7 @@ export function WatchfacesView({
       } else {
         setNotice(
           download.entries?.length
-            ? `${download.message} Contents: ${download.entries.slice(0, 8).join(", ")}${
-                download.entries.length > 8 ? ", …" : ""
-              }`
+            ? t("{{value1}} Contents: {{value2}}{{value3}}", { value1: t(download.message), value2: download.entries.slice(0, 8).join(", "), value3: download.entries.length > 8 ? ", …" : "" })
             : download.message
         );
       }
@@ -1121,7 +1119,7 @@ export function WatchfacesView({
 
   async function handleShareTheme(theme: CorosWatchfaceTheme) {
     if (!connected) {
-      setError("Connect your COROS account before creating a share link.");
+      setError(t("Connect your COROS account before creating a share link."));
       setNotice(null);
       return;
     }
@@ -1130,7 +1128,7 @@ export function WatchfacesView({
     const sourceTemplateId = theme.sourceTemplateId?.trim();
     if (!templateId || !sourceTemplateId) {
       setError(
-        "COROS did not return the source template ID for this face. Refresh My watch faces and try again."
+        t("COROS did not return the source template ID for this face. Refresh My watch faces and try again.")
       );
       setNotice(null);
       return;
@@ -1154,7 +1152,7 @@ export function WatchfacesView({
       setPublishName(theme.name);
       setShareLink(nextLink);
       setPublishOpen(true);
-      setNotice("Your COROS share link is ready.");
+      setNotice(t("Your COROS share link is ready."));
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -1170,7 +1168,7 @@ export function WatchfacesView({
    * (or sign-in first, when the account is not connected).
    */
   function openPublish(archive: CorosWatchfaceArchive, currentName: string, options?: { sendNow?: boolean }) {
-    const name = currentName.trim() || studioSession?.initialName || "Untitled watch face";
+    const name = currentName.trim() || studioSession?.initialName || t("Untitled watch face");
     setBuiltArchive(archive);
     if (archive.firmwareType) {
       setFirmwareType(archive.firmwareType);
@@ -1192,12 +1190,12 @@ export function WatchfacesView({
 
   async function publishArchive(archive: CorosWatchfaceArchive, name: string, archiveFirmwareType: string) {
     if (!connected) {
-      setError("Connect your COROS account before sending this watch face.");
+      setError(t("Connect your COROS account before sending this watch face."));
       setNotice(null);
       return;
     }
     if (!name.trim()) {
-      setError("Enter a watch-face name before sending.");
+      setError(t("Enter a watch-face name before sending."));
       setNotice(null);
       return;
     }
@@ -1212,7 +1210,7 @@ export function WatchfacesView({
         language
       });
       setShareLink(nextLink);
-      setNotice("Your COROS share link is ready.");
+      setNotice(t("Your COROS share link is ready."));
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -1225,9 +1223,9 @@ export function WatchfacesView({
     if (!shareLink) return;
     try {
       await navigator.clipboard.writeText(shareLink.url);
-      setNotice("Share link copied.");
+      setNotice(t("Share link copied."));
     } catch {
-      setError("Could not copy the link. Select and copy it from the field.");
+      setError(t("Could not copy the link. Select and copy it from the field."));
     }
   }
 
@@ -1512,27 +1510,18 @@ export function WatchfacesView({
           <WatchFaceStudioShowcase />
           <section className="watchface-auth-intro">
             <div className="watchface-auth-kicker">
-              <Watch size={17} aria-hidden="true" />
-              Watch Face Studio
-            </div>
-            <h2>
-              Design it.{" "}
-              <span className="watchface-auth-highlight">
-                Wear it.
-              </span>
+              <Watch size={17} aria-hidden="true" />{t("Watch Face Studio")}</div>
+            <h2>{t("Design it.")}{" "}
+              <span className="watchface-auth-highlight">{t("Wear it.")}</span>
             </h2>
-            <p>
-              Choose a face, edit every detail, and preview it before sending.
-            </p>
+            <p>{t("Choose a face, edit every detail, and preview it before sending.")}</p>
           </section>
           <section className="watchface-auth-card" aria-labelledby="watchface-login-title">
             <span className="watchface-auth-icon" aria-hidden="true">
               <KeyRound size={20} />
             </span>
-            <h2 id="watchface-login-title">Sign in to COROS</h2>
-            <p>
-              Sign in to choose a template, create a watch face, and authenticate your PACE Pro over Bluetooth.
-            </p>
+            <h2 id="watchface-login-title">{t("Sign in to COROS")}</h2>
+            <p>{t("Sign in to choose a template, create a watch face, and authenticate your PACE Pro over Bluetooth.")}</p>
             <form
               className="watchface-auth-form"
               onSubmit={(event) => void handleLogin(event)}
@@ -1541,12 +1530,9 @@ export function WatchfacesView({
                 <>
                   <div className="watchface-saved-login">
                     <div>
-                      <span>Saved COROS account</span>
+                      <span>{t("Saved COROS account")}</span>
                       <strong>{status.savedEmail}</strong>
-                      <small>
-                        Creates a separate Watch Face Studio session without
-                        asking for your password again.
-                      </small>
+                      <small>{t("Creates a separate Watch Face Studio session without asking for your password again.")}</small>
                     </div>
                     <button
                       className="secondary-button"
@@ -1558,19 +1544,17 @@ export function WatchfacesView({
                         <Loader2 className="spin" size={16} aria-hidden="true" />
                       ) : (
                         <KeyRound size={16} aria-hidden="true" />
-                      )}
-                      Use saved account
-                    </button>
+                      )}{t("Use saved account")}</button>
                   </div>
                   <div className="watchface-auth-divider">
-                    <span>or use another account</span>
+                    <span>{t("or use another account")}</span>
                   </div>
                 </>
               ) : null}
               <div className="field">
-                <span>Region</span>
-                <SelectDropdown
-                  label="Account region"
+                <span>{t("Region")}</span>
+                <SelectDropdown translateLabel={t}
+                  label={t("Account region")}
                   className="watchface-region-select"
                   options={REGION_OPTIONS}
                   portal
@@ -1582,9 +1566,7 @@ export function WatchfacesView({
                   }}
                 />
               </div>
-              <label className="field">
-                Email
-                <input
+              <label className="field">{t("Email")}<input
                   type="email"
                   autoComplete="username"
                   value={email}
@@ -1592,9 +1574,7 @@ export function WatchfacesView({
                   required
                 />
               </label>
-              <label className="field">
-                Password
-                <input
+              <label className="field">{t("Password")}<input
                   type="password"
                   autoComplete="current-password"
                   value={password}
@@ -1612,12 +1592,7 @@ export function WatchfacesView({
                     }
                     disabled={busy !== null}
                   />
-                  <span>
-                    Save this COROS account
-                    <small>
-                      Stores an encrypted password digest so Training Hub and
-                      Watch Face Studio can each create their own session.
-                    </small>
+                  <span>{t("Save this COROS account")}<small>{t("Stores an encrypted password digest so Training Hub and Watch Face Studio can each create their own session.")}</small>
                   </span>
                 </label>
               ) : null}
@@ -1626,9 +1601,7 @@ export function WatchfacesView({
                   <Loader2 className="spin" size={16} aria-hidden="true" />
                 ) : (
                   <KeyRound size={16} aria-hidden="true" />
-                )}
-                Sign in
-              </button>
+                )}{t("Sign in")}</button>
               <button
                 className="secondary-button watchface-auth-skip"
                 type="button"
@@ -1637,17 +1610,11 @@ export function WatchfacesView({
                   setSurface("hub");
                   clearMessages();
                 }}
-              >
-                Browse without signing in
-              </button>
+              >{t("Browse without signing in")}</button>
             </form>
-            <p className="watchface-auth-local-note">
-              You can browse community faces and manage saved projects without signing in.
-            </p>
+            <p className="watchface-auth-local-note">{t("You can browse community faces and manage saved projects without signing in.")}</p>
             {!status.secureStorageAvailable ? (
-              <p className="watchface-auth-warning">
-                Your sign-in will be removed when you close CorosLink.
-              </p>
+              <p className="watchface-auth-warning">{t("Your sign-in will be removed when you close CorosLink.")}</p>
             ) : null}
           </section>
         </main>
@@ -1833,6 +1800,7 @@ function WatchFacesHeader({
   onImport,
   onCreate
 }: WatchFacesHeaderProps) {
+  useLanguage();
   return (
     <header className="watchface-hub-header watchface-dashboard-header">
       <div className="watchface-hub-brand">
@@ -1840,8 +1808,8 @@ function WatchFacesHeader({
           <Watch size={21} />
         </span>
         <div className="watchface-hub-brand-copy">
-          <h1>Watch Face Studio</h1>
-          <p>Build a face that feels at home on your COROS watch.</p>
+          <h1>{t("Watch Face Studio")}</h1>
+          <p>{t("Build a face that feels at home on your COROS watch.")}</p>
         </div>
       </div>
       <div className="watchface-hub-actions">
@@ -1863,18 +1831,14 @@ function WatchFacesHeader({
             <Loader2 className="spin" size={16} aria-hidden="true" />
           ) : (
             <Upload size={16} aria-hidden="true" />
-          )}
-          Import
-        </button>
+          )}{t("Import")}</button>
         <button
           className="primary-button watchface-header-action"
           type="button"
           disabled={busy}
           onClick={onCreate}
         >
-          <Plus size={17} aria-hidden="true" />
-          New watch face
-        </button>
+          <Plus size={17} aria-hidden="true" />{t("New watch face")}</button>
       </div>
     </header>
   );
@@ -1897,6 +1861,7 @@ function AccountStatusMenu({
   onConnect,
   onDisconnect
 }: AccountStatusMenuProps) {
+  useLanguage();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -1917,10 +1882,10 @@ function AccountStatusMenu({
   }, [open]);
 
   const label = statusLoading
-    ? "Checking account"
+    ? t("Checking account")
     : accountConnected
       ? accountEmail ?? "COROS account"
-      : "Sign in to COROS";
+      : t("Sign in to COROS");
 
   return (
     <div className="watchface-device-menu" ref={containerRef}>
@@ -1929,7 +1894,7 @@ function AccountStatusMenu({
           accountConnected ? " is-connected" : " is-sign-in"
         }`}
         type="button"
-        aria-label={accountConnected ? `${label}. Open account details` : label}
+        aria-label={accountConnected ? t("{{label}}. Open account details", { label: t(label) }) : t(label)}
         aria-haspopup={accountConnected ? "dialog" : undefined}
         aria-expanded={accountConnected ? open : undefined}
         disabled={statusLoading}
@@ -1949,7 +1914,7 @@ function AccountStatusMenu({
         {statusLoading ? (
           <span className="watchface-device-label-skeleton" aria-hidden="true" />
         ) : (
-          <span title={label}>{label}</span>
+          <span title={t(label)}>{t(label)}</span>
         )}
         {accountConnected ? (
           <ChevronDown size={14} aria-hidden="true" />
@@ -1961,7 +1926,7 @@ function AccountStatusMenu({
         <div
           className="watchface-device-popover"
           role="dialog"
-          aria-label="COROS account"
+          aria-label={t("COROS account")}
         >
           <div className="watchface-device-popover-heading">
             <span className={`watchface-device-icon${accountConnected ? " is-connected" : ""}`}>
@@ -1972,23 +1937,23 @@ function AccountStatusMenu({
               )}
             </span>
             <div className="watchface-device-heading-copy">
-              <small>COROS account</small>
+              <small>{t("COROS account")}</small>
               <strong>
-                {accountConnected ? accountEmail ?? "Connected" : "Sign in to COROS"}
+                {accountConnected ? accountEmail ?? t("Connected") : t("Sign in to COROS")}
               </strong>
               <span>
                 {accountConnected
-                  ? "Templates, publishing and watch sign-in"
-                  : "Sign in to create a new watch face"}
+                  ? t("Templates, publishing and watch sign-in")
+                  : t("Sign in to create a new watch face")}
               </span>
             </div>
           </div>
           <dl className="watchface-device-details">
             <div>
-              <dt>Account</dt>
+              <dt>{t("Account")}</dt>
               <dd className={accountConnected ? "is-online" : "is-local"}>
                 <span aria-hidden="true" />
-                {accountConnected ? "Connected" : "Not signed in"}
+                {accountConnected ? t("Connected") : t("Not signed in")}
               </dd>
             </div>
           </dl>
@@ -2004,8 +1969,8 @@ function AccountStatusMenu({
             >
               <LogOut size={15} aria-hidden="true" />
               <span>
-                <strong>Disconnect account</strong>
-                <small>Your local projects stay available</small>
+                <strong>{t("Disconnect account")}</strong>
+                <small>{t("Your local projects stay available")}</small>
               </span>
             </button>
           ) : (
@@ -2020,8 +1985,8 @@ function AccountStatusMenu({
             >
               <KeyRound size={15} aria-hidden="true" />
               <span>
-                <strong>Sign in to COROS</strong>
-                <small>Required to create a new watch face</small>
+                <strong>{t("Sign in to COROS")}</strong>
+                <small>{t("Required to create a new watch face")}</small>
               </span>
             </button>
           )}
@@ -2044,6 +2009,7 @@ function WatchFacesTabs({
   watchConnected: boolean;
   onChange: (tab: HubTab) => void;
 }) {
+  useLanguage();
   const activeIndicator = (tab: HubTab) =>
     activeTab === tab ? (
       <span className="watchface-tab-indicator" aria-hidden="true" />
@@ -2053,7 +2019,7 @@ function WatchFacesTabs({
     <div
       className="watchface-hub-tabs watchface-dashboard-tabs"
       role="tablist"
-      aria-label="Watch-face hub"
+      aria-label={t("Watch-face hub")}
       onKeyDown={(event) => {
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
         event.preventDefault();
@@ -2079,9 +2045,7 @@ function WatchFacesTabs({
         tabIndex={activeTab === "templates" ? 0 : -1}
         className={activeTab === "templates" ? "is-active" : ""}
         onClick={() => onChange("templates")}
-      >
-        Create
-        {activeIndicator("templates")}
+      >{t("Create")}{activeIndicator("templates")}
       </button>
       <button
         id="watchface-projects-tab"
@@ -2092,8 +2056,7 @@ function WatchFacesTabs({
         tabIndex={activeTab === "projects" ? 0 : -1}
         className={activeTab === "projects" ? "is-active" : ""}
         onClick={() => onChange("projects")}
-      >
-        My projects <span className="watchface-tab-count">{projectCount}</span>
+      >{t("My projects")}{" "}<span className="watchface-tab-count">{projectCount}</span>
         {activeIndicator("projects")}
       </button>
       <button
@@ -2105,9 +2068,7 @@ function WatchFacesTabs({
         tabIndex={activeTab === "browse" ? 0 : -1}
         className={activeTab === "browse" ? "is-active" : ""}
         onClick={() => onChange("browse")}
-      >
-        Community
-        {activeIndicator("browse")}
+      >{t("Community")}{activeIndicator("browse")}
       </button>
       {showOnWatch ? (
         <button
@@ -2118,11 +2079,9 @@ function WatchFacesTabs({
           aria-controls="watchface-watch-panel"
           tabIndex={activeTab === "watch" ? 0 : -1}
           className={activeTab === "watch" ? "is-active" : ""}
-          title={watchConnected ? "Watch connected" : "Watch not connected"}
+          title={watchConnected ? t("Watch connected") : t("Watch not connected")}
           onClick={() => onChange("watch")}
-        >
-          On watch
-          <span
+        >{t("On watch")}<span
             className={`watchface-tab-lamp${watchConnected ? " is-connected" : ""}`}
             aria-hidden="true"
           />
@@ -2169,6 +2128,7 @@ export function CommunityWatchfaceBrowser({
   progress: CommunityWatchfaceDownloadProgress | null;
   onOpen: (face: CommunityWatchface, model: string) => void;
 }) {
+  useLanguage();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [model, setModel, modelPreference] = useSelectionPreference(
@@ -2201,9 +2161,9 @@ export function CommunityWatchfaceBrowser({
   function modelSelector(face: CommunityWatchface) {
     return (
       <label className="watchface-community-model">
-        <span>Watch type</span>
+        <span>{t("Watch type")}</span>
         <select
-          aria-label={`Watch type for ${face.title}`}
+          aria-label={t("Watch type for {{value1}}", { value1: t(face.title) })}
           value={selectedModel(face)}
           disabled={disabled}
           onChange={(event) => setFaceModels((current) => ({
@@ -2283,14 +2243,14 @@ export function CommunityWatchfaceBrowser({
   const styleLabel = catalog?.facets.styles.find((item) => item.value === style)?.label;
   const filtered = Boolean(debouncedSearch || model || style || sort !== "newest");
   const heading = styleLabel
-    ? `${styleLabel} faces`
+    ? t("{{styleLabel}} faces", { styleLabel: t(styleLabel) })
     : sort === "trending"
-      ? "Trending faces"
+      ? t("Trending faces")
       : sort === "downloads"
-        ? "Most downloaded faces"
+        ? t("Most downloaded faces")
         : debouncedSearch || model
-          ? "Matching faces"
-          : "Published faces";
+          ? t("Matching faces")
+          : t("Published faces");
   const sortFallback = sort !== effectiveSort;
   const showGroup = (next: CommunityWatchfaceGroup | null) => {
     setOpenGroup(next);
@@ -2312,10 +2272,10 @@ export function CommunityWatchfaceBrowser({
         <Loader2 className="spin" size={16} aria-hidden="true" />
         <span>
           {progress.stage === "downloading"
-            ? `Downloading${percent === null ? "…" : ` ${percent}%`}`
+            ? t("Downloading{{value1}}", { value1: percent === null ? "…" : ` ${percent}%` })
             : progress.stage === "verifying"
-              ? "Verifying reviewed package…"
-              : "Opening in Studio…"}
+              ? t("Verifying reviewed package…")
+              : t("Opening in Studio…")}
         </span>
       </div>
       <span className="watchface-community-progress-track" aria-hidden="true">
@@ -2348,44 +2308,36 @@ export function CommunityWatchfaceBrowser({
       <>
       <section className="wf-hub-gallery-hero" aria-labelledby="community-hero-title">
         <div className="wf-hub-gallery-hero-copy">
-          <p className="wf-hub-gallery-eyebrow">The library</p>
-          <h2 id="community-hero-title" className="wf-hub-hand">
-            Browse{" "}
-            <span>
-              watch faces.
-              <HubHeadingUnderline />
+          <p className="wf-hub-gallery-eyebrow">{t("The library")}</p>
+          <h2 id="community-hero-title" className="wf-hub-hand">{t("Browse")}{" "}
+            <span>{t("watch faces.")}<HubHeadingUnderline />
             </span>
           </h2>
-          <p className="wf-hub-gallery-lead">
-            Free, community-made designs for every COROS watch — open any of them in Studio.
-          </p>
+          <p className="wf-hub-gallery-lead">{t("Free, community-made designs for every COROS watch — open any of them in Studio.")}</p>
           <a
             className="wf-hub-text-link wf-hub-gallery-site"
             href="https://watchfaces.coroslink.com/gallery"
             target="_blank"
             rel="noreferrer"
-          >
-            Open the website <ExternalLink size={14} aria-hidden="true" />
+          >{t("Open the website")}{" "}<ExternalLink size={14} aria-hidden="true" />
           </a>
         </div>
-        <p className="wf-hub-gallery-note wf-hub-hand" aria-hidden="true">
-          Pick one.<br />Make it yours.
-        </p>
+        <p className="wf-hub-gallery-note wf-hub-hand" aria-hidden="true">{t("Pick one.")}<br />{t("Make it yours.")}</p>
         <span className="wf-hub-gallery-art" aria-hidden="true">
           <img className="is-dark" src={facesHeroDark} alt="" draggable={false} />
           <img className="is-light" src={facesHeroLight} alt="" draggable={false} />
         </span>
       </section>
 
-      <HubToolbar label="Filter community faces">
+      <HubToolbar label={t("Filter community faces")}>
         <HubSearchField
-          label="Search faces"
+          label={t("Search faces")}
           value={search}
-          placeholder="Face, creator, or watch model"
+          placeholder={t("Face, creator, or watch model")}
           onChange={setSearch}
         />
         <HubSelectField
-          label="Watch model"
+          label={t("Watch model")}
           icon={Watch}
           value={model}
           onChange={(value) => {
@@ -2393,18 +2345,18 @@ export function CommunityWatchfaceBrowser({
             setModel(value);
           }}
         >
-          <option value="">All watches</option>
+          <option value="">{t("All watches")}</option>
           {(catalog?.facets.models ?? (connectedModel ? [connectedModel] : []))
             .map((item) => <option key={item} value={item}>{item}</option>)}
         </HubSelectField>
-        <HubSelectField label="Style" icon={Palette} value={style} onChange={setStyle}>
-          <option value="">All styles</option>
+        <HubSelectField label={t("Style")} icon={Palette} value={style} onChange={setStyle}>
+          <option value="">{t("All styles")}</option>
           {(catalog?.facets.styles ?? []).map((item) => (
-            <option key={item.value} value={item.value}>{item.label}</option>
+            <option key={item.value} value={item.value}>{t(item.label)}</option>
           ))}
         </HubSelectField>
         <HubSelectField
-          label="Sort"
+          label={t("Sort")}
           icon={ArrowDownUp}
           value={sort}
           onChange={(value) => setSort(value as CommunityWatchfaceSort)}
@@ -2429,7 +2381,7 @@ export function CommunityWatchfaceBrowser({
           }
         >
           <HubQuickFilters
-            label="Quick face filters"
+            label={t("Quick face filters")}
             chips={COMMUNITY_QUICK_FILTERS}
             active={quickFilter}
             onChange={(value) => {
@@ -2461,23 +2413,20 @@ export function CommunityWatchfaceBrowser({
         ) : null}
         {sortFallback ? (
           <p className="wf-hub-inline-note" role="status">
-            {COMMUNITY_SORT_LABELS[sort]} isn’t available from the catalog yet, so faces are shown newest first.
-          </p>
+            {COMMUNITY_SORT_LABELS[sort]}{" "}{t("isn’t available from the catalog yet, so faces are shown newest first.")}</p>
         ) : null}
 
         {loading && !catalog ? (
-          <div className="wf-hub-grid" aria-label="Loading community watch faces" aria-busy="true">
+          <div className="wf-hub-grid" aria-label={t("Loading community watch faces")} aria-busy="true">
             {Array.from({ length: 8 }, (_, index) => (
               <div className="wf-hub-card wf-hub-card--skeleton" key={index} />
             ))}
           </div>
         ) : loadError && !catalog ? (
           <section className="watchface-community-empty" role="alert">
-            <h3>Community faces are unavailable</h3>
+            <h3>{t("Community faces are unavailable")}</h3>
             <p>{loadError}</p>
-            <button className="primary-button" type="button" onClick={loadMore}>
-              Try again
-            </button>
+            <button className="primary-button" type="button" onClick={loadMore}>{t("Try again")}</button>
           </section>
         ) : catalog?.items.length ? (
           <>
@@ -2485,16 +2434,15 @@ export function CommunityWatchfaceBrowser({
             <div className="watchface-community-load-more" ref={loadMoreRef}>
               {loadError ? (
                 <>
-                  <span role="alert">Couldn’t load more faces. {loadError}</span>
-                  <button className="secondary-button" type="button" onClick={loadMore}>Try again</button>
+                  <span role="alert">{t("Couldn’t load more faces.")}{" "}{loadError}</span>
+                  <button className="secondary-button" type="button" onClick={loadMore}>{t("Try again")}</button>
                 </>
               ) : loading ? (
-                <span role="status"><Loader2 className="spin" size={16} aria-hidden="true" /> Loading more faces…</span>
+                <span role="status"><Loader2 className="spin" size={16} aria-hidden="true" />{" "}{t("Loading more faces…")}</span>
               ) : hasMore ? (
-                <button className="secondary-button" type="button" onClick={loadMore}>Load more faces</button>
+                <button className="secondary-button" type="button" onClick={loadMore}>{t("Load more faces")}</button>
               ) : (
-                <span role="status">
-                  You’ve seen all {catalog.items.length} {catalog.items.length === 1 ? "design" : "designs"}
+                <span role="status">{t("You’ve seen all")}{" "}{catalog.items.length} {catalog.items.length === 1 ? t("design") : t("designs")}
                 </span>
               )}
             </div>
@@ -2502,8 +2450,8 @@ export function CommunityWatchfaceBrowser({
         ) : (
           <section className="watchface-community-empty">
             <Watch size={28} aria-hidden="true" />
-            <h3>{sort === "trending" ? "No recent downloads for these faces" : "No faces match these filters"}</h3>
-            <p>Try another watch model, style, or search.</p>
+            <h3>{sort === "trending" ? t("No recent downloads for these faces") : t("No faces match these filters")}</h3>
+            <p>{t("Try another watch model, style, or search.")}</p>
             <button
               className="secondary-button"
               type="button"
@@ -2514,9 +2462,7 @@ export function CommunityWatchfaceBrowser({
                 setStyle("");
                 setSort("newest");
               }}
-            >
-              Clear filters
-            </button>
+            >{t("Clear filters")}</button>
           </section>
         )}
       </section>
@@ -2534,22 +2480,21 @@ export function CommunityWatchfaceBrowser({
             <button
               className="icon-button watchface-modal-close"
               type="button"
-              aria-label="Close watch-face details"
+              aria-label={t("Close watch-face details")}
               onClick={() => setSelected(null)}
             >
               <X size={17} aria-hidden="true" />
             </button>
-            <img src={selected.previewUrl} alt={`Preview of ${selected.title}`} />
+            <img src={selected.previewUrl} alt={t("Preview of {{value1}}", { value1: t(selected.title) })} />
             <div>
               <span className="watchface-section-kicker">{selected.tags.join(" / ")}</span>
-              <h2 id="community-face-title">{selected.title}</h2>
-              <p>by {selected.creatorName}</p>
-              <p>{selected.description}</p>
+              <h2 id="community-face-title">{t(selected.title)}</h2>
+              <p>{t("by")}{" "}{selected.creatorName}</p>
+              <p>{t(selected.description)}</p>
               {modelSelector(selected)}
               <small>
-                {formatCommunityBytes(selected.packageBytes)} reviewed package
-                {selected.downloadCount !== undefined
-                  ? ` · ${formatDownloadCount(selected.downloadCount)} downloads`
+                {formatCommunityBytes(selected.packageBytes)}{" "}{t("reviewed package")}{selected.downloadCount !== undefined
+                  ? t(" · {{value1}} downloads", { value1: formatDownloadCount(selected.downloadCount) })
                   : ""}
               </small>
               <button
@@ -2558,10 +2503,8 @@ export function CommunityWatchfaceBrowser({
                 disabled={disabled}
                 onClick={() => onOpen(selected, selectedModel(selected))}
               >
-                <Download size={16} aria-hidden="true" /> Open in Studio
-              </button>
-              <a href={selected.detailUrl} target="_blank" rel="noreferrer">
-                View on website <ExternalLink size={14} aria-hidden="true" />
+                <Download size={16} aria-hidden="true" />{" "}{t("Open in Studio")}</button>
+              <a href={selected.detailUrl} target="_blank" rel="noreferrer">{t("View on website")}{" "}<ExternalLink size={14} aria-hidden="true" />
               </a>
             </div>
           </section>
@@ -2602,6 +2545,7 @@ function CommunityVariantsView({
   onView: (face: CommunityWatchface) => void;
   onOpen: (face: CommunityWatchface, model: string) => void;
 }) {
+  useLanguage();
   const [model, setModel] = useState(initialModel);
   const { catalog, loading, loadError, hasMore, loadMore } = useCommunityWatchfaceCatalog(
     api, { group: group.slug, model }
@@ -2612,25 +2556,22 @@ function CommunityVariantsView({
   return (
     <section className="wf-hub-variants" aria-labelledby="community-variants-title">
       <button className="wf-hub-text-link wf-hub-variants-back" type="button" onClick={onBack}>
-        <ArrowLeft size={15} aria-hidden="true" /> Browse all designs
-      </button>
+        <ArrowLeft size={15} aria-hidden="true" />{" "}{t("Browse all designs")}</button>
       <header className="wf-hub-gallery-hero wf-hub-gallery-hero--group">
         <div className="wf-hub-gallery-hero-copy">
-          <p className="wf-hub-gallery-eyebrow">Watch-face group</p>
+          <p className="wf-hub-gallery-eyebrow">{t("Watch-face group")}</p>
           <h2 id="community-variants-title" className="wf-hub-hand">
             <span>
               {group.name}
               <HubHeadingUnderline />
             </span>
           </h2>
-          <p className="wf-hub-gallery-lead">
-            Explore the variants and choose a version for your watch. Each face is credited to its contributor.
-          </p>
+          <p className="wf-hub-gallery-lead">{t("Explore the variants and choose a version for your watch. Each face is credited to its contributor.")}</p>
         </div>
       </header>
-      <HubToolbar label="Filter variants">
-        <HubSelectField label="Watch model" icon={Watch} value={model} onChange={setModel}>
-          <option value="">All watches</option>
+      <HubToolbar label={t("Filter variants")}>
+        <HubSelectField label={t("Watch model")} icon={Watch} value={model} onChange={setModel}>
+          <option value="">{t("All watches")}</option>
           {models.map((item) => <option key={item} value={item}>{item}</option>)}
         </HubSelectField>
       </HubToolbar>
@@ -2639,19 +2580,19 @@ function CommunityVariantsView({
         <HubResultsHeading
           id="community-variants-count"
           icon={Layers}
-          title={`${pluralize(total, "variant")}${model ? ` for ${model}` : ""}`}
+          title={t("{{value1}}{{value2}}", { value1: pluralize(total, "variant"), value2: model ? ` for ${model}` : "" })}
         />
         {loading && !catalog ? (
-          <div className="wf-hub-grid wf-hub-grid--faces" aria-busy="true" aria-label="Loading variants">
+          <div className="wf-hub-grid wf-hub-grid--faces" aria-busy="true" aria-label={t("Loading variants")}>
             {Array.from({ length: Math.min(8, Math.max(2, group.variantCount)) }, (_, index) => (
               <div className="wf-hub-card wf-hub-card--skeleton" key={index} />
             ))}
           </div>
         ) : loadError && !catalog ? (
           <section className="watchface-community-empty" role="alert">
-            <h3>Variants are unavailable</h3>
+            <h3>{t("Variants are unavailable")}</h3>
             <p>{loadError}</p>
-            <button className="primary-button" type="button" onClick={loadMore}>Try again</button>
+            <button className="primary-button" type="button" onClick={loadMore}>{t("Try again")}</button>
           </section>
         ) : catalog?.items.length ? (
           <>
@@ -2670,10 +2611,10 @@ function CommunityVariantsView({
             </div>
             {hasMore || loadError ? (
               <div className="watchface-community-load-more">
-                {loadError ? <span role="alert">Couldn’t load more variants. {loadError}</span> : null}
+                {loadError ? <span role="alert">{t("Couldn’t load more variants.")}{" "}{loadError}</span> : null}
                 <button className="secondary-button" type="button" disabled={loading} onClick={loadMore}>
                   {loading ? <Loader2 className="spin" size={15} aria-hidden="true" /> : null}
-                  {loadError ? "Try again" : "Load more variants"}
+                  {loadError ? t("Try again") : t("Load more variants")}
                 </button>
               </div>
             ) : null}
@@ -2681,10 +2622,8 @@ function CommunityVariantsView({
         ) : (
           <section className="watchface-community-empty">
             <Watch size={28} aria-hidden="true" />
-            <h3>No variants for this watch yet.</h3>
-            <button className="secondary-button" type="button" onClick={() => setModel("")}>
-              View all variants
-            </button>
+            <h3>{t("No variants for this watch yet.")}</h3>
+            <button className="secondary-button" type="button" onClick={() => setModel("")}>{t("View all variants")}</button>
           </section>
         )}
       </section>
@@ -2708,13 +2647,14 @@ function CommunityFaceCard({
   onView: () => void;
   onOpen: () => void;
 }) {
+  useLanguage();
   const grouped = !showTitle && isVariantGroup(face);
   return (
     <article className={`wf-hub-card wf-hub-card--community${grouped ? " is-group" : ""}`}>
       <button
         className="wf-hub-card-open"
         type="button"
-        aria-label={grouped ? `View ${face.title} variants` : `View ${face.title}`}
+        aria-label={grouped ? t("View {{value1}} variants", { value1: t(face.title) }) : t("View {{value1}}", { value1: t(face.title) })}
         onClick={onView}
       >
         <span className="wf-hub-card-visual">
@@ -2734,19 +2674,19 @@ function CommunityFaceCard({
           ) : null}
         </span>
         <span className="wf-hub-card-meta">
-          <strong title={face.title}>{face.title}</strong>
+          <strong title={t(face.title)}>{t(face.title)}</strong>
           <span title={face.models.join(" / ")}>
-            {face.models[0] ?? "Any watch"}
-            {face.models.length > 1 ? ` +${face.models.length - 1}` : ""}
+            {face.models[0] ?? t("Any watch")}
+            {face.models.length > 1 ? t(" +{{value1}}", { value1: face.models.length - 1 }) : ""}
           </span>
         </span>
         <span className="wf-hub-card-footer">
-          <span title={`Creator: ${face.creatorName}`}>
+          <span title={t("Creator: {{value1}}", { value1: face.creatorName })}>
             <UserRound size={13} aria-hidden="true" />
             {face.creatorName}
           </span>
           {face.downloadCount !== undefined ? (
-            <span className="wf-hub-card-template" title={`${face.downloadCount} downloads`}>
+            <span className="wf-hub-card-template" title={t("{{value1}} downloads", { value1: face.downloadCount })}>
               <Download size={12} aria-hidden="true" /> {formatDownloadCount(face.downloadCount)}
             </span>
           ) : face.tags[0] ? (
@@ -2760,18 +2700,14 @@ function CommunityFaceCard({
       <div className="wf-hub-card-actions">
         {grouped ? (
           <button className="wf-hub-text-link wf-hub-card-primary" type="button" onClick={onView}>
-            <Layers size={14} aria-hidden="true" />
-            View variants
-          </button>
+            <Layers size={14} aria-hidden="true" />{t("View variants")}</button>
         ) : (
           <button className="wf-hub-text-link" type="button" disabled={disabled} onClick={onOpen}>
             {opening ? (
               <Loader2 className="spin" size={14} aria-hidden="true" />
             ) : (
               <Pencil size={14} aria-hidden="true" />
-            )}
-            Open in Studio
-          </button>
+            )}{t("Open in Studio")}</button>
         )}
       </div>
     </article>
@@ -2791,6 +2727,7 @@ function CommunityCompatibilityDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  useLanguage();
   return (
     <div className="watchface-modal-backdrop" role="presentation">
       <section
@@ -2799,19 +2736,13 @@ function CommunityCompatibilityDialog({
         aria-modal="true"
         aria-labelledby="community-compatibility-title"
       >
-        <h2 id="community-compatibility-title">Compatibility not listed</h2>
+        <h2 id="community-compatibility-title">{t("Compatibility not listed")}</h2>
         <p>
-          “{face.title}” lists {face.models.join(", ")}, not {connectedModel ?? "your connected watch"}.
-          You can still inspect and edit it in Studio, but it may not work on this watch.
-        </p>
+          “{t(face.title)}{t("” lists")}{" "}{face.models.join(", ")}{t(", not")}{" "}{connectedModel ?? t("your connected watch")}{t(". You can still inspect and edit it in Studio, but it may not work on this watch.")}</p>
         <div className="watchface-modal-actions">
-          <button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>
-            Cancel
-          </button>
+          <button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>{t("Cancel")}</button>
           <button className="primary-button" type="button" disabled={busy} onClick={onConfirm}>
-            {busy ? <Loader2 className="spin" size={16} aria-hidden="true" /> : null}
-            Open anyway
-          </button>
+            {busy ? <Loader2 className="spin" size={16} aria-hidden="true" /> : null}{t("Open anyway")}</button>
         </div>
       </section>
     </div>
@@ -2819,8 +2750,8 @@ function CommunityCompatibilityDialog({
 }
 
 function formatCommunityBytes(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+  if (bytes < 1024 * 1024) return t("{{value1}} KB", { value1: Math.max(1, Math.round(bytes / 1024)) });
+  return t("{{value1}} MB", { value1: (bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1) });
 }
 
 interface ProjectsDashboardProps {
@@ -2856,6 +2787,7 @@ function ProjectsDashboard({
   onCreate,
   onImport
 }: ProjectsDashboardProps) {
+  useLanguage();
   const [search, setSearch] = useState("");
   const [modelFilter, setModelFilter] = useState("");
   const [sort, setSort] = useSelectionPreference(PROJECT_SORT_PREFERENCE);
@@ -2885,7 +2817,7 @@ function ProjectsDashboard({
     });
     return filtered.sort((left, right) =>
       sort === "name"
-        ? left.name.localeCompare(right.name, undefined, { sensitivity: "base", numeric: true })
+        ? left.name.localeCompare(right.name, getLocale(), { sensitivity: "base", numeric: true })
         : sort === "oldest"
           ? updatedAtValue(left.updatedAt) - updatedAtValue(right.updatedAt)
           : updatedAtValue(right.updatedAt) - updatedAtValue(left.updatedAt)
@@ -2929,35 +2861,35 @@ function ProjectsDashboard({
               />
             </>
           ) : null}
-          <HubToolbar label="Filter projects">
+          <HubToolbar label={t("Filter projects")}>
             <HubSearchField
-              label="Search projects"
+              label={t("Search projects")}
               value={search}
-              placeholder="Project name, watch, or template"
+              placeholder={t("Project name, watch, or template")}
               onChange={setSearch}
             />
             <HubSelectField
-              label="Watch model"
+              label={t("Watch model")}
               icon={Watch}
               value={activeModel}
               onChange={setModelFilter}
             >
-              <option value="">All watches</option>
+              <option value="">{t("All watches")}</option>
               {modelChips.map((chip) => (
                 <option key={chip.value} value={chip.value}>
-                  {chip.label}
+                  {t(chip.label)}
                 </option>
               ))}
             </HubSelectField>
             <HubSelectField
-              label="Sort projects"
+              label={t("Sort projects")}
               icon={ArrowDownUp}
               value={sort}
               onChange={(value) => setSort(value as ProjectSortMode)}
             >
-              <option value="recent">Last edited</option>
-              <option value="name">Name A–Z</option>
-              <option value="oldest">Oldest first</option>
+              <option value="recent">{t("Last edited")}</option>
+              <option value="name">{t("Name A–Z")}</option>
+              <option value="oldest">{t("Oldest first")}</option>
             </HubSelectField>
             <button
               className="primary-button wf-hub-toolbar-action"
@@ -2965,8 +2897,7 @@ function ProjectsDashboard({
               disabled={disabled}
               onClick={onCreate}
             >
-              <Plus size={16} aria-hidden="true" /> New face
-            </button>
+              <Plus size={16} aria-hidden="true" />{" "}{t("New face")}</button>
           </HubToolbar>
           <section className="wf-hub-results" aria-labelledby="projects-title">
             <HubResultsHeading
@@ -2974,13 +2905,13 @@ function ProjectsDashboard({
               icon={History}
               title={
                 activeModel ||
-                (query ? "Matching projects" : sort === "name" ? "All projects" : "Recent projects")
+                (query ? t("Matching projects") : sort === "name" ? t("All projects") : t("Recent projects"))
               }
               note={`${shownProjects.length} ${shownProjects.length === 1 ? "project" : "projects"}`}
             >
               {modelChips.length > 1 ? (
                 <HubQuickFilters
-                  label="Filter by watch"
+                  label={t("Filter by watch")}
                   chips={[
                     { value: "", label: "All", icon: LayoutGrid, count: projects.length },
                     ...modelChips.slice(0, 6)
@@ -3002,8 +2933,8 @@ function ProjectsDashboard({
             {shownProjects.length === 0 ? (
               <div className="watchface-hub-empty">
                 <span aria-hidden="true"><Search size={24} /></span>
-                <h4>No projects match</h4>
-                <p>Try another name or watch model.</p>
+                <h4>{t("No projects match")}</h4>
+                <p>{t("Try another name or watch model.")}</p>
               </div>
             ) : (
               <div className="wf-hub-grid">
@@ -3018,17 +2949,13 @@ function ProjectsDashboard({
           <span className="watchface-project-empty-icon" aria-hidden="true">
             <Watch size={26} />
           </span>
-          <h2 id="watchface-empty-title">Your watch faces will appear here</h2>
-          <p>
-            Start with an official template or import an existing project archive.
-          </p>
+          <h2 id="watchface-empty-title">{t("Your watch faces will appear here")}</h2>
+          <p>{t("Start with an official template or import an existing project archive.")}</p>
           <div className="watchface-project-empty-actions">
             <button className="primary-button" type="button" disabled={disabled} onClick={onCreate}>
-              <Plus size={16} aria-hidden="true" /> Create watch face
-            </button>
+              <Plus size={16} aria-hidden="true" />{" "}{t("Create watch face")}</button>
             <button className="secondary-button" type="button" disabled={disabled} onClick={onImport}>
-              <Upload size={16} aria-hidden="true" /> Import archive
-            </button>
+              <Upload size={16} aria-hidden="true" />{" "}{t("Import archive")}</button>
           </div>
         </section>
       )}
@@ -3061,11 +2988,12 @@ function ContinueDesigningCard({
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
+  useLanguage();
   const model = projectWatchModelLabel(project);
   return (
     <article className="wf-hub-hero wf-hub-hero--faces" aria-labelledby="featured-project-title">
       <div className="wf-hub-hero-copy">
-        <p className="wf-hub-eyebrow">Continue designing</p>
+        <p className="wf-hub-eyebrow">{t("Continue designing")}</p>
         <h2 id="featured-project-title" className="wf-hub-hero-title wf-hub-hand" title={project.name}>
           {project.name}
         </h2>
@@ -3075,11 +3003,11 @@ function ContinueDesigningCard({
               <Watch size={14} aria-hidden="true" /> {model}
             </span>
           ) : null}
-          <span className="wf-hub-chip" title={`Template ${project.sourceTemplateId}`}>
-            <Layers size={14} aria-hidden="true" /> Template {project.sourceTemplateId}
+          <span className="wf-hub-chip" title={t("Template {{value1}}", { value1: project.sourceTemplateId })}>
+            <Layers size={14} aria-hidden="true" />{" "}{t("Template")}{" "}{project.sourceTemplateId}
           </span>
           <span className="wf-hub-chip" title={formatExactUpdatedAt(project.updatedAt)}>
-            <Clock size={14} aria-hidden="true" /> Updated {formatRelativeUpdatedAt(project.updatedAt)}
+            <Clock size={14} aria-hidden="true" />{" "}{t("Updated")}{" "}{formatRelativeUpdatedAt(project.updatedAt)}
           </span>
         </div>
         <div className="wf-hub-hero-actions">
@@ -3091,8 +3019,7 @@ function ContinueDesigningCard({
           >
             {opening ? (
               <Loader2 className="spin" size={16} aria-hidden="true" />
-            ) : null}
-            Open editor <ArrowRight size={16} aria-hidden="true" />
+            ) : null}{t("Open editor")}{" "}<ArrowRight size={16} aria-hidden="true" />
           </button>
           <button
             className="wf-hub-text-link"
@@ -3100,14 +3027,11 @@ function ContinueDesigningCard({
             disabled={disabled}
             onClick={onDuplicate}
           >
-            <Copy size={15} aria-hidden="true" /> Duplicate
-          </button>
+            <Copy size={15} aria-hidden="true" />{" "}{t("Duplicate")}</button>
         </div>
         <ProjectsLibraryFacts projects={projects} />
       </div>
-      <p className="wf-hub-hero-note wf-hub-hand" aria-hidden="true">
-        Right where<br />you left off.
-        <svg viewBox="0 0 64 34" className="wf-hub-hero-note-arrow">
+      <p className="wf-hub-hero-note wf-hub-hand" aria-hidden="true">{t("Right where")}<br />{t("you left off.")}<svg viewBox="0 0 64 34" className="wf-hub-hero-note-arrow">
           <path d="M3 6 C18 2 36 4 46 14 S57 26 58 30" />
           <path d="M50 25 L58 31 L61 21" />
         </svg>
@@ -3138,15 +3062,16 @@ function projectWatchModelLabel(project: CorosWatchfaceProjectSummary): string |
 
 /** The site's hero facts row: bold value, muted label. */
 function ProjectsLibraryFacts({ projects }: { projects: CorosWatchfaceProjectSummary[] }) {
+  useLanguage();
   const models = new Set(
     projects.map(projectWatchModelLabel).filter((label): label is string => label !== null)
   );
   return (
-    <ul className="wf-hub-hero-facts" aria-label="About your library">
+    <ul className="wf-hub-hero-facts" aria-label={t("About your library")}>
       <li>
         <Layers size={16} aria-hidden="true" />
         <strong>{projects.length}</strong>
-        <span>{projects.length === 1 ? "project" : "projects"}</span>
+        <span>{projects.length === 1 ? t("project") : t("projects")}</span>
       </li>
       {models.size > 0 ? (
         <li>
@@ -3156,7 +3081,7 @@ function ProjectsLibraryFacts({ projects }: { projects: CorosWatchfaceProjectSum
           ) : (
             <>
               <strong>{models.size}</strong>
-              <span>watch models</span>
+              <span>{t("watch models")}</span>
             </>
           )}
         </li>
@@ -3180,13 +3105,14 @@ function ProjectCard({
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
+  useLanguage();
   const model = projectWatchModelLabel(project);
   return (
     <article className="wf-hub-card">
       <button
         className="wf-hub-card-open"
         type="button"
-        aria-label={`Open ${project.name}`}
+        aria-label={t("Open {{value1}}", { value1: project.name })}
         disabled={disabled}
         onClick={onOpen}
       >
@@ -3195,14 +3121,14 @@ function ProjectCard({
         </span>
         <span className="wf-hub-card-meta">
           <strong title={project.name}>{project.name}</strong>
-          <span>{model ?? "COROS watch face"}</span>
+          <span>{model ?? t("COROS watch face")}</span>
         </span>
         <span className="wf-hub-card-footer">
           <span title={formatExactUpdatedAt(project.updatedAt)}>
             <Clock size={13} aria-hidden="true" />
             {formatRelativeUpdatedAt(project.updatedAt)}
           </span>
-          <span className="wf-hub-card-template" title={`Template ${project.sourceTemplateId}`}>
+          <span className="wf-hub-card-template" title={t("Template {{value1}}", { value1: project.sourceTemplateId })}>
             #{project.sourceTemplateId}
           </span>
         </span>
@@ -3228,6 +3154,7 @@ function CreateProjectCard({
   disabled: boolean;
   onCreate: () => void;
 }) {
+  useLanguage();
   return (
     <button
       className="wf-hub-create"
@@ -3236,8 +3163,8 @@ function CreateProjectCard({
       onClick={onCreate}
     >
       <span className="wf-hub-create-icon" aria-hidden="true"><Plus size={22} /></span>
-      <strong>Create watch face</strong>
-      <span>Start from an official template</span>
+      <strong>{t("Create watch face")}</strong>
+      <span>{t("Start from an official template")}</span>
     </button>
   );
 }
@@ -3255,6 +3182,7 @@ function ProjectOverflowMenu({
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
+  useLanguage();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -3279,7 +3207,7 @@ function ProjectOverflowMenu({
       <button
         className="watchface-project-menu-trigger"
         type="button"
-        aria-label={`Project actions for ${projectName}`}
+        aria-label={t("Project actions for {{projectName}}", { projectName: projectName })}
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled}
@@ -3301,8 +3229,7 @@ function ProjectOverflowMenu({
               onOpen();
             }}
           >
-            <ArrowRight size={15} aria-hidden="true" /> Open
-          </button>
+            <ArrowRight size={15} aria-hidden="true" />{" "}{t("Open")}</button>
           <button
             type="button"
             role="menuitem"
@@ -3312,8 +3239,7 @@ function ProjectOverflowMenu({
               onDuplicate();
             }}
           >
-            <Copy size={15} aria-hidden="true" /> Duplicate
-          </button>
+            <Copy size={15} aria-hidden="true" />{" "}{t("Duplicate")}</button>
           <button
             className="is-danger"
             type="button"
@@ -3324,8 +3250,7 @@ function ProjectOverflowMenu({
               onDelete();
             }}
           >
-            <Trash2 size={15} aria-hidden="true" /> Delete
-          </button>
+            <Trash2 size={15} aria-hidden="true" />{" "}{t("Delete")}</button>
         </div>
       ) : null}
     </div>
@@ -3333,8 +3258,9 @@ function ProjectOverflowMenu({
 }
 
 function ProjectsDashboardSkeleton() {
+  useLanguage();
   return (
-    <div className="watchface-dashboard-skeleton" aria-label="Loading projects" aria-busy="true">
+    <div className="watchface-dashboard-skeleton" aria-label={t("Loading projects")} aria-busy="true">
       <div className="watchface-featured-skeleton">
         <div />
         <span />
@@ -3478,7 +3404,7 @@ function renderProjectPreview(
     const resolution = pickPreviewResolution(previewDetails);
     const watchResolution = pickWatchPreviewResolution(previewDetails);
     if (!resolution || !watchResolution) {
-      throw new Error("This project has no preview resolution.");
+      throw new Error(t("This project has no preview resolution."));
     }
     const backgroundDataUrl = await renderDesignBackground(
       loadedProject.design,
@@ -3555,6 +3481,7 @@ function WatchFacePreview({
   api: CorosLinkApi;
   project: CorosWatchfaceProjectSummary;
 }) {
+  useLanguage();
   const containerRef = useRef<HTMLSpanElement>(null);
   const known = project.previewDataUrl ?? peekProjectThumbnail(api, project);
   const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(known);
@@ -3598,7 +3525,7 @@ function WatchFacePreview({
       {previewDataUrl ? (
         <img
           src={previewDataUrl}
-          alt={`${project.name} watch-face preview`}
+          alt={t("{{value1}} watch-face preview", { value1: project.name })}
           decoding="async"
           draggable={false}
         />
@@ -3613,7 +3540,7 @@ function WatchFacePreview({
           ) : (
             <>
               <Watch size={29} aria-hidden="true" />
-              <small>Preview unavailable</small>
+              <small>{t("Preview unavailable")}</small>
             </>
           )}
         </span>
@@ -3676,6 +3603,7 @@ function templateCategory(theme: CorosWatchfaceTheme): string {
 }
 
 function TemplatesPanel(props: TemplatesPanelProps) {
+  useLanguage();
   const [category, setCategory] = useState("");
   const [sort, setSort] = useSelectionPreference(TEMPLATE_SORT_PREFERENCE);
   const categories = useMemo(() => {
@@ -3698,7 +3626,7 @@ function TemplatesPanel(props: TemplatesPanelProps) {
     if (sort === "catalog") return filtered;
     return [...filtered].sort((left, right) =>
       sort === "name"
-        ? left.name.localeCompare(right.name, undefined, { sensitivity: "base", numeric: true })
+        ? left.name.localeCompare(right.name, getLocale(), { sensitivity: "base", numeric: true })
         : (right.watchFaceVersion ?? -1) - (left.watchFaceVersion ?? -1)
     );
   }, [activeCategory, props.visibleThemes, sort]);
@@ -3733,40 +3661,35 @@ function TemplatesPanel(props: TemplatesPanelProps) {
         aria-labelledby="watchface-create-title"
       >
         <div className="wf-hub-gallery-hero-copy">
-          <p className="wf-hub-gallery-eyebrow">Watch Face Studio</p>
-          <h2 id="watchface-create-title" className="wf-hub-hand">
-            Start with a face.{" "}
-            <span>
-              Make it yours.
-              <HubHeadingUnderline />
+          <p className="wf-hub-gallery-eyebrow">{t("Watch Face Studio")}</p>
+          <h2 id="watchface-create-title" className="wf-hub-hand">{t("Start with a face.")}{" "}
+            <span>{t("Make it yours.")}<HubHeadingUnderline />
             </span>
           </h2>
           <p className="wf-hub-gallery-lead">
             {props.accountConnected
-              ? "Choose a compatible design, customize every layer, then export it to your watch."
-              : "Sign in to your COROS account to choose a template and start creating."}
+              ? t("Choose a compatible design, customize every layer, then export it to your watch.")
+              : t("Sign in to your COROS account to choose a template and start creating.")}
           </p>
-          <ol className="wf-hub-hero-facts wf-hub-create-steps" aria-label="Watch face creation steps">
+          <ol className="wf-hub-hero-facts wf-hub-create-steps" aria-label={t("Watch face creation steps")}>
             <li>
               <Watch size={16} aria-hidden="true" />
-              <strong>Choose</strong>
-              <span>a compatible base</span>
+              <strong>{t("Choose")}</strong>
+              <span>{t("a compatible base")}</span>
             </li>
             <li>
               <Pencil size={16} aria-hidden="true" />
-              <strong>Customize</strong>
-              <span>in Studio</span>
+              <strong>{t("Customize")}</strong>
+              <span>{t("in Studio")}</span>
             </li>
             <li>
               <Upload size={16} aria-hidden="true" />
-              <strong>Export</strong>
-              <span>to your watch</span>
+              <strong>{t("Export")}</strong>
+              <span>{t("to your watch")}</span>
             </li>
           </ol>
         </div>
-        <p className="wf-hub-gallery-note wf-hub-create-note wf-hub-hand" aria-hidden="true">
-          Three steps.<br />No code needed.
-        </p>
+        <p className="wf-hub-gallery-note wf-hub-create-note wf-hub-hand" aria-hidden="true">{t("Three steps.")}<br />{t("No code needed.")}</p>
         <div className="wf-hub-create-stage" aria-hidden="true">
           <span className="wf-hub-hero-spark is-one">✦</span>
           <span className="wf-hub-hero-spark is-two">✦</span>
@@ -3782,52 +3705,46 @@ function TemplatesPanel(props: TemplatesPanelProps) {
         >
           <span aria-hidden="true"><KeyRound size={24} /></span>
           <div>
-            <h3 id="watchface-signin-required-title">Sign in before you create</h3>
-            <p>
-              Your COROS account is required to browse starter templates and create a new watch face.
-            </p>
+            <h3 id="watchface-signin-required-title">{t("Sign in before you create")}</h3>
+            <p>{t("Your COROS account is required to browse starter templates and create a new watch face.")}</p>
           </div>
           <button className="primary-button" type="button" onClick={props.onSignIn}>
-            <KeyRound size={16} aria-hidden="true" />
-            Sign in to COROS
-          </button>
+            <KeyRound size={16} aria-hidden="true" />{t("Sign in to COROS")}</button>
         </section>
       ) : (
         <>
           <HubQuickFilters
-            label="Template catalog"
+            label={t("Template catalog")}
             chips={TEMPLATE_CATALOG_CHIPS}
             active={props.catalog}
             onChange={props.onCatalogChange}
           />
           <form className="wf-hub-toolbar-form" onSubmit={props.onSubmit}>
-            <HubToolbar label="Filter templates">
+            <HubToolbar label={t("Filter templates")}>
               <HubSearchField
-                label="Search templates"
+                label={t("Search templates")}
                 value={props.search}
-                placeholder="Template name, ID, or category"
+                placeholder={t("Template name, ID, or category")}
                 onChange={props.onSearchChange}
               />
               <HubSelectField
-                label="Watch model"
+                label={t("Watch model")}
                 icon={Watch}
                 value={props.watchModel}
                 onChange={(value) => props.onWatchModelChange(value as WatchModelId)}
               >
                 {props.watchModel === "" ? (
-                  <option value="" disabled>
-                    Custom firmware
-                  </option>
+                  <option value="" disabled>{t("Custom firmware")}</option>
                 ) : null}
                 {TEMPLATE_WATCH_OPTIONS.map((option) => (
                   <option key={option.model} value={option.model}>
-                    {option.label}
+                    {t(option.label)}
                   </option>
                 ))}
               </HubSelectField>
               {props.catalog !== "editable" ? (
                 <HubSelectField
-                  label="Watch serial preset"
+                  label={t("Watch serial preset")}
                   icon={KeyRound}
                   value={
                     TEMPLATE_WATCH_PRESETS.find(
@@ -3843,25 +3760,23 @@ function TemplatesPanel(props: TemplatesPanelProps) {
                     props.onWatchSerialChange(preset.serial);
                   }}
                 >
-                  <option value="" disabled>
-                    Custom serial
-                  </option>
+                  <option value="" disabled>{t("Custom serial")}</option>
                   {TEMPLATE_WATCH_PRESETS.map((preset) => (
                     <option key={preset.id} value={preset.id}>
-                      {preset.label}
+                      {t(preset.label)}
                     </option>
                   ))}
                 </HubSelectField>
               ) : null}
               <HubSelectField
-                label="Sort templates"
+                label={t("Sort templates")}
                 icon={ArrowDownUp}
                 value={sort}
                 onChange={(value) => setSort(value as TemplateSortMode)}
               >
-                <option value="catalog">COROS order</option>
-                <option value="name">Name A–Z</option>
-                <option value="version">Newest format</option>
+                <option value="catalog">{t("COROS order")}</option>
+                <option value="name">{t("Name A–Z")}</option>
+                <option value="version">{t("Newest format")}</option>
               </HubSelectField>
               <button
                 className="primary-button wf-hub-toolbar-action"
@@ -3874,32 +3789,26 @@ function TemplatesPanel(props: TemplatesPanelProps) {
                 ) : (
                   <RefreshCw size={16} aria-hidden="true" />
                 )}
-                {props.busy === "themes" ? "Loading" : props.refreshing ? "Refreshing" : "Refresh"}
+                {props.busy === "themes" ? t("Loading") : props.refreshing ? t("Refreshing") : t("Refresh")}
               </button>
             </HubToolbar>
             <details className="watchface-template-advanced">
-              <summary>Advanced filters</summary>
+              <summary>{t("Advanced filters")}</summary>
               <div className="watchface-template-advanced-grid">
-                <label className="field">
-                  Firmware type
-                  <input
+                <label className="field">{t("Firmware type")}<input
                     value={props.firmwareType}
                     onChange={(event) => props.onFirmwareTypeChange(event.target.value)}
                     required
                   />
                 </label>
-                <label className="field">
-                  Language
-                  <input
+                <label className="field">{t("Language")}<input
                     value={props.language}
                     pattern="[a-z]{2,3}-[A-Z]{2}"
                     onChange={(event) => props.onLanguageChange(event.target.value)}
                     required
                   />
                 </label>
-                <label className="field">
-                  Maximum version
-                  <input
+                <label className="field">{t("Maximum version")}<input
                     type="number"
                     min="0"
                     max="999"
@@ -3911,17 +3820,13 @@ function TemplatesPanel(props: TemplatesPanelProps) {
                 </label>
                 {props.catalog !== "editable" ? (
                   <>
-                    <label className="field">
-                      Watch serial number
-                      <input
+                    <label className="field">{t("Watch serial number")}<input
                         value={props.watchSerial}
                         onChange={(event) => props.onWatchSerialChange(event.target.value)}
                         autoComplete="off"
                       />
                     </label>
-                    <label className="field">
-                      Model version
-                      <input
+                    <label className="field">{t("Model version")}<input
                         value={props.modelVersion}
                         onChange={(event) => props.onModelVersionChange(event.target.value)}
                       />
@@ -3933,7 +3838,7 @@ function TemplatesPanel(props: TemplatesPanelProps) {
           </form>
 
           {props.busy === "themes" && !props.themesLoaded ? (
-            <div className="wf-hub-grid" aria-label="Loading templates" aria-busy="true">
+            <div className="wf-hub-grid" aria-label={t("Loading templates")} aria-busy="true">
               {Array.from({ length: 8 }, (_, index) => (
                 <div className="wf-hub-card wf-hub-card--skeleton" key={index} />
               ))}
@@ -3945,20 +3850,20 @@ function TemplatesPanel(props: TemplatesPanelProps) {
                 icon={LayoutGrid}
                 title={
                   activeCategory ||
-                  (filtered ? "Matching templates" : watchfaceCatalogTitle(props.catalog))
+                  (filtered ? t("Matching templates") : watchfaceCatalogTitle(props.catalog))
                 }
                 note={
                   <>
                     {shownThemes.length}{" "}
-                    {shownThemes.length === 1 ? "design" : "designs"}
+                    {shownThemes.length === 1 ? t("design") : t("designs")}
                     {props.savedAt ? (
                       <span
                         className="wf-hub-cache-note"
-                        title={`Saved ${formatExactUpdatedAt(props.savedAt)}`}
+                        title={t("Saved {{value1}}", { value1: formatExactUpdatedAt(props.savedAt) })}
                       >
                         {props.refreshing
-                          ? " · refreshing…"
-                          : ` · updated ${formatCachedAge(props.savedAt)}`}
+                          ? t(" · refreshing…")
+                          : t(" · updated {{value1}}", { value1: formatCachedAge(props.savedAt) })}
                       </span>
                     ) : null}
                   </>
@@ -3966,7 +3871,7 @@ function TemplatesPanel(props: TemplatesPanelProps) {
               >
                 {categories.length > 1 ? (
                   <HubQuickFilters
-                    label="Template categories"
+                    label={t("Template categories")}
                     chips={[
                       { value: "", label: "All", icon: LayoutGrid, count: props.visibleThemes.length },
                       ...categories.slice(0, 7).map(({ name, count }) => ({
@@ -3994,11 +3899,11 @@ function TemplatesPanel(props: TemplatesPanelProps) {
               {shownThemes.length === 0 ? (
                 <div className="watchface-hub-empty">
                   <span aria-hidden="true"><Search size={24} /></span>
-                  <h4>{props.themes.length === 0 ? "No templates found" : "No matches"}</h4>
+                  <h4>{props.themes.length === 0 ? t("No templates found") : t("No matches")}</h4>
                   <p>
                     {props.themes.length === 0
-                      ? "Try a different catalog or update the advanced filters."
-                      : "Try a different search term or category."}
+                      ? t("Try a different catalog or update the advanced filters.")
+                      : t("Try a different search term or category.")}
                   </p>
                 </div>
               ) : (
@@ -4008,8 +3913,8 @@ function TemplatesPanel(props: TemplatesPanelProps) {
           ) : (
             <div className="watchface-template-welcome">
               <span aria-hidden="true"><LayoutGrid size={26} /></span>
-              <h4>Find a starting point</h4>
-              <p>Browse COROS templates compatible with your watch and firmware.</p>
+              <h4>{t("Find a starting point")}</h4>
+              <p>{t("Browse COROS templates compatible with your watch and firmware.")}</p>
             </div>
           )}
         </>
@@ -4041,10 +3946,11 @@ function TemplateCard({
   onOpenOfficial: () => void;
   onShare: () => void;
 }) {
+  useLanguage();
   const [imageFailed, setImageFailed] = useState(false);
   const primary =
     catalog === "official" && theme.packageUrl
-      ? { label: opening ? "Opening…" : "Open in editor", icon: Pencil, run: onOpenOfficial, active: opening }
+      ? { label: opening ? "Opening…" : t("Open in editor"), icon: Pencil, run: onOpenOfficial, active: opening }
       : catalog === "editable" && theme.packageUrl
         ? { label: "Use template", icon: ArrowRight, run: onUse, active: downloading }
         : null;
@@ -4054,7 +3960,7 @@ function TemplateCard({
         className="wf-hub-card-open"
         type="button"
         disabled={!primary || actionsBusy}
-        aria-label={primary ? `${primary.label}: ${theme.name}` : theme.name}
+        aria-label={primary ? t("{{value1}}: {{value2}}", { value1: t(primary.label), value2: theme.name }) : theme.name}
         onClick={primary?.run}
       >
         <span className="wf-hub-card-visual">
@@ -4086,7 +3992,7 @@ function TemplateCard({
           <span>{theme.category ?? watchfaceCatalogLabel(catalog)}</span>
         </span>
         <span className="wf-hub-card-footer">
-          <span>{theme.id ? `#${theme.id}` : "COROS"}</span>
+          <span>{theme.id ? t("#{{value1}}", { value1: theme.id }) : t("COROS")}</span>
           {theme.watchFaceVersion !== undefined ? (
             <span className="wf-hub-card-template">v{theme.watchFaceVersion}</span>
           ) : null}
@@ -4110,7 +4016,7 @@ function TemplateCard({
             ) : (
               <Pencil size={14} aria-hidden="true" />
             )}
-            {downloading ? "Opening…" : "Use this template"}
+            {downloading ? t("Opening…") : t("Use this template")}
           </button>
         </div>
       ) : catalog === "official" && theme.packageUrl ? (
@@ -4126,16 +4032,14 @@ function TemplateCard({
             ) : (
               <Pencil size={14} aria-hidden="true" />
             )}
-            {opening ? "Opening…" : "Open in editor"}
+            {opening ? t("Opening…") : t("Open in editor")}
           </button>
           <button className="wf-hub-text-link" type="button" disabled={actionsBusy} onClick={onUse}>
             {downloading ? (
               <Loader2 className="spin" size={14} aria-hidden="true" />
             ) : (
               <Download size={14} aria-hidden="true" />
-            )}
-            Download
-          </button>
+            )}{t("Download")}</button>
         </div>
       ) : catalog === "custom" ? (
         <div className="wf-hub-card-actions">
@@ -4145,22 +4049,18 @@ function TemplateCard({
                 <Loader2 className="spin" size={14} aria-hidden="true" />
               ) : (
                 <Download size={14} aria-hidden="true" />
-              )}
-              Download
-            </button>
+              )}{t("Download")}</button>
           ) : null}
           <button className="wf-hub-text-link" type="button" disabled={busy !== null} onClick={onShare}>
             {sharing ? (
               <Loader2 className="spin" size={14} aria-hidden="true" />
             ) : (
               <Share2 size={14} aria-hidden="true" />
-            )}
-            Share
-          </button>
+            )}{t("Share")}</button>
         </div>
       ) : !theme.packageUrl ? (
         <div className="wf-hub-card-actions">
-          <span className="watchface-template-unavailable">Unavailable</span>
+          <span className="watchface-template-unavailable">{t("Unavailable")}</span>
         </div>
       ) : null}
     </article>
@@ -4169,10 +4069,10 @@ function TemplateCard({
 
 function watchfaceCatalogTitle(catalog: CorosWatchfaceThemeCatalog): string {
   return catalog === "official"
-    ? "Official watch faces"
+    ? t("Official watch faces")
     : catalog === "custom"
-      ? "My COROS faces"
-      : "Editable templates";
+      ? t("My COROS faces")
+      : t("Editable templates");
 }
 
 interface WatchfaceSignInFormProps {
@@ -4193,6 +4093,7 @@ interface WatchfaceSignInFormProps {
 }
 
 function WatchfaceSignInForm(props: WatchfaceSignInFormProps) {
+  useLanguage();
   return (
     <form
       className="watchface-publish-form watchface-publish-login"
@@ -4202,11 +4103,9 @@ function WatchfaceSignInForm(props: WatchfaceSignInFormProps) {
         <>
           <div className="watchface-saved-login">
             <div>
-              <span>Saved COROS account</span>
+              <span>{t("Saved COROS account")}</span>
               <strong>{props.savedEmail}</strong>
-              <small>
-                Sign in with the account saved on this computer.
-              </small>
+              <small>{t("Sign in with the account saved on this computer.")}</small>
             </div>
             <button
               className="secondary-button"
@@ -4218,19 +4117,17 @@ function WatchfaceSignInForm(props: WatchfaceSignInFormProps) {
                 <Loader2 className="spin" size={16} aria-hidden="true" />
               ) : (
                 <KeyRound size={16} aria-hidden="true" />
-              )}
-              Use saved account
-            </button>
+              )}{t("Use saved account")}</button>
           </div>
           <div className="watchface-auth-divider">
-            <span>or use another account</span>
+            <span>{t("or use another account")}</span>
           </div>
         </>
       ) : null}
       <div className="field">
-        <span>Account region</span>
-        <SelectDropdown
-          label="Account region"
+        <span>{t("Account region")}</span>
+        <SelectDropdown translateLabel={t}
+          label={t("Account region")}
           className="watchface-region-select"
           options={REGION_OPTIONS}
           portal
@@ -4240,9 +4137,7 @@ function WatchfaceSignInForm(props: WatchfaceSignInFormProps) {
           onChange={props.onRegionChange}
         />
       </div>
-      <label className="field">
-        Email
-        <input
+      <label className="field">{t("Email")}<input
           type="email"
           disabled={props.loginBusy}
           autoComplete="username"
@@ -4251,9 +4146,7 @@ function WatchfaceSignInForm(props: WatchfaceSignInFormProps) {
           required
         />
       </label>
-      <label className="field">
-        Password
-        <input
+      <label className="field">{t("Password")}<input
           type="password"
           disabled={props.loginBusy}
           autoComplete="current-password"
@@ -4272,11 +4165,7 @@ function WatchfaceSignInForm(props: WatchfaceSignInFormProps) {
             }
             disabled={props.loginBusy}
           />
-          <span>
-            Save this COROS account
-            <small>
-              Reuse it for Training Hub or future watch-face sign-ins.
-            </small>
+          <span>{t("Save this COROS account")}<small>{t("Reuse it for Training Hub or future watch-face sign-ins.")}</small>
           </span>
         </label>
       ) : null}
@@ -4289,9 +4178,7 @@ function WatchfaceSignInForm(props: WatchfaceSignInFormProps) {
           <Loader2 className="spin" size={16} aria-hidden="true" />
         ) : (
           <KeyRound size={16} aria-hidden="true" />
-        )}
-        Connect and continue
-      </button>
+        )}{t("Connect and continue")}</button>
     </form>
   );
 }
@@ -4315,6 +4202,7 @@ interface PublishDialogProps extends WatchfaceSignInFormProps {
 }
 
 function PublishDialog(props: PublishDialogProps) {
+  useLanguage();
   return (
     <div className="watchface-modal-backdrop" role="presentation">
       <section
@@ -4329,7 +4217,7 @@ function PublishDialog(props: PublishDialogProps) {
         <button
           className="icon-button watchface-modal-close"
           type="button"
-          aria-label="Close Send to COROS"
+          aria-label={t("Close Send to COROS")}
           disabled={props.busy}
           onClick={props.onClose}
         >
@@ -4342,42 +4230,36 @@ function PublishDialog(props: PublishDialogProps) {
                 <Check size={20} />
               </span>
               <h2 id="watchface-publish-title">{props.name}</h2>
-              <p>Scan with the iPhone that has your COROS app.</p>
+              <p>{t("Scan with the iPhone that has your COROS app.")}</p>
             </div>
             <div className="watchface-share-result">
               <img
                 className="watchface-share-qr"
                 src={props.shareLink.qrDataUrl}
-                alt="QR code for the official COROS watch-face link"
+                alt={t("QR code for the official COROS watch-face link")}
                 width={260}
                 height={260}
               />
               <div className="watchface-share-details">
-                <p>
-                  In COROS, save this face and send it to the watch paired with
-                  your iPhone.
-                </p>
-                <p className="watchface-share-expiry">
-                  Link expires {formatExpiry(props.shareLink.expiresAt)}.
+                <p>{t("In COROS, save this face and send it to the watch paired with your iPhone.")}</p>
+                <p className="watchface-share-expiry">{t("Link expires")}{" "}{formatExpiry(props.shareLink.expiresAt)}.
                 </p>
                 <div className="watchface-share-actions">
                   <button className="secondary-button" type="button" onClick={props.onCopy}>
-                    <Clipboard size={16} aria-hidden="true" /> Copy link
-                  </button>
+                    <Clipboard size={16} aria-hidden="true" />{" "}{t("Copy link")}</button>
                   <a
                     className="primary-button"
                     href={props.shareLink.url}
                     target="_blank"
                     rel="noreferrer"
                   >
-                    <ExternalLink size={16} aria-hidden="true" /> Open link
-                  </a>
+                    <ExternalLink size={16} aria-hidden="true" />{" "}{t("Open link")}</a>
                 </div>
                 <input
                   className="watchface-share-link"
                   value={props.shareLink.url}
                   readOnly
-                  aria-label="Official COROS share link"
+                  aria-label={t("Official COROS share link")}
                 />
               </div>
             </div>
@@ -4389,18 +4271,12 @@ function PublishDialog(props: PublishDialogProps) {
                 <KeyRound size={20} />
               </span>
               <h2 id="watchface-publish-title">{props.name}</h2>
-              <p>Connect your COROS account to send this watch face.</p>
+              <p>{t("Connect your COROS account to send this watch face.")}</p>
             </div>
             <WatchfaceSignInForm {...props} />
-            <p className="watchface-publish-auth-note">
-              The archive is already built and stays open if you close this window.
-              Your password is only used to create the COROS upload session.
-            </p>
+            <p className="watchface-publish-auth-note">{t("The archive is already built and stays open if you close this window. Your password is only used to create the COROS upload session.")}</p>
             {!props.secureStorageAvailable ? (
-              <p className="watchface-auth-warning">
-                Secure storage is unavailable. This session will be cleared when
-                CorosLink closes.
-              </p>
+              <p className="watchface-auth-warning">{t("Secure storage is unavailable. This session will be cleared when CorosLink closes.")}</p>
             ) : null}
           </>
         ) : (
@@ -4410,12 +4286,10 @@ function PublishDialog(props: PublishDialogProps) {
                 <Send size={20} />
               </span>
               <h2 id="watchface-publish-title">{props.name}</h2>
-              <p>Upload the current design and create its official COROS link.</p>
+              <p>{t("Upload the current design and create its official COROS link.")}</p>
             </div>
             <form className="watchface-publish-form" onSubmit={props.onSubmit}>
-              <label className="field">
-                Watch-face name
-                <input
+              <label className="field">{t("Watch-face name")}<input
                   autoFocus
                   value={props.name}
                   minLength={1}
@@ -4425,19 +4299,15 @@ function PublishDialog(props: PublishDialogProps) {
                 />
               </label>
               <details className="watchface-publish-settings">
-                <summary>Upload settings</summary>
+                <summary>{t("Upload settings")}</summary>
                 <div className="watchface-publish-settings-grid">
-                  <label className="field">
-                    Firmware type
-                    <input
+                  <label className="field">{t("Firmware type")}<input
                       value={props.firmwareType}
                       onChange={(event) => props.onFirmwareTypeChange(event.target.value)}
                       required
                     />
                   </label>
-                  <label className="field">
-                    Background ID
-                    <input
+                  <label className="field">{t("Background ID")}<input
                       type="number"
                       min="0"
                       step="1"
@@ -4446,9 +4316,7 @@ function PublishDialog(props: PublishDialogProps) {
                       required
                     />
                   </label>
-                  <label className="field">
-                    Language
-                    <input
+                  <label className="field">{t("Language")}<input
                       value={props.language}
                       pattern="[a-z]{2,3}-[A-Z]{2}"
                       onChange={(event) => props.onLanguageChange(event.target.value)}
@@ -4466,9 +4334,7 @@ function PublishDialog(props: PublishDialogProps) {
                   <Loader2 className="spin" size={16} aria-hidden="true" />
                 ) : (
                   <Send size={16} aria-hidden="true" />
-                )}
-                Send to COROS
-              </button>
+                )}{t("Send to COROS")}</button>
             </form>
           </>
         )}
@@ -4482,6 +4348,7 @@ function WatchfaceConversionDialog({ name, sourceFirmwareType, bakes, busy, erro
   signIn?: WatchfaceSignInFormProps;
   onCancel: () => void; onConvert: (model: WatchModelId) => void;
 }) {
+  useLanguage();
   const options = WATCHFACE_TARGETS.filter(target => target.firmwareType.toUpperCase() !== sourceFirmwareType.toUpperCase());
   const [model, setModel] = useState<WatchModelId>(options[0]!.model);
   const target = getWatchfaceTarget(model)!;
@@ -4510,39 +4377,38 @@ function WatchfaceConversionDialog({ name, sourceFirmwareType, bakes, busy, erro
       }
     }}>
       <div ref={dialog} className="watchface-modal watchface-convert-dialog" role="dialog" aria-modal="true" aria-labelledby="watchface-convert-title" aria-busy={busy}>
-        <h2 id="watchface-convert-title">{signIn ? "Sign in to COROS" : "Change watch"}</h2>
+        <h2 id="watchface-convert-title">{signIn ? t("Sign in to COROS") : t("Change watch")}</h2>
         {signIn ? (
           <>
-            <p>Sign in to download support for {target.label}. Your design stays open, and conversion continues automatically.</p>
-            {error ? <p role="alert">{error}</p> : null}
+            <p>{t("Sign in to download support for")}{" "}{t(target.label)}{t(". Your design stays open, and conversion continues automatically.")}</p>
+            {error ? <p role="alert">{t(error)}</p> : null}
             <WatchfaceSignInForm {...signIn} />
             {!signIn.secureStorageAvailable ? (
-              <p className="watchface-auth-warning">Secure storage is unavailable. This session will be cleared when CorosLink closes.</p>
+              <p className="watchface-auth-warning">{t("Secure storage is unavailable. This session will be cleared when CorosLink closes.")}</p>
             ) : null}
             <div className="watchface-modal-actions">
-              <button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>Back to watch selection</button>
+              <button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>{t("Back to watch selection")}</button>
             </div>
           </>
         ) : (
           <>
             <p>{bakes
-              ? `Bring “${name}” to another watch. This recovered official face is rebuilt from its native layout with your edits applied, then opens as a new starter you can keep editing.`
-              : `Bring “${name}” to another watch. Your layout, fonts, artwork and data fields stay editable.`}</p>
-            <label className="field">Destination watch
-              <select value={model} disabled={busy} onChange={event => setModel(event.target.value as WatchModelId)}>
-                {options.map(option => <option key={option.model} value={option.model}>{option.label}</option>)}
+              ? t("Bring “{{name}}” to another watch. This recovered official face is rebuilt from its native layout with your edits applied, then opens as a new starter you can keep editing.", { name: name })
+              : t("Bring “{{name}}” to another watch. Your layout, fonts, artwork and data fields stay editable.", { name: name })}</p>
+            <label className="field">{t("Destination watch")}<select value={model} disabled={busy} onChange={event => setModel(event.target.value as WatchModelId)}>
+                {options.map(option => <option key={option.model} value={option.model}>{t(option.label)}</option>)}
               </select>
             </label>
             <p className="watchface-convert-detail">{target.display === "mip"
-              ? "MIP keeps Current visible at all times. Your separate Always-on design is retained for switching back to AMOLED. Colors and fine detail may look different on the watch."
-              : "Current and Always-on remain separate. If your face has no Always-on layout, one is created from Current for you to edit."}</p>
-            <p className="watchface-convert-detail">{target.previewSize} × {target.previewSize} preview{target.model === "apex-4" ? " · Includes 42 mm and 46 mm sizes" : ""}. First use downloads device support from COROS.</p>
-            {error ? <p role="alert">{error}</p> : null}
+              ? t("MIP keeps Current visible at all times. Your separate Always-on design is retained for switching back to AMOLED. Colors and fine detail may look different on the watch.")
+              : t("Current and Always-on remain separate. If your face has no Always-on layout, one is created from Current for you to edit.")}</p>
+            <p className="watchface-convert-detail">{target.previewSize} × {target.previewSize}{" "}{t("preview")}{target.model === "apex-4" ? t(" · Includes 42 mm and 46 mm sizes") : ""}{t(". First use downloads device support from COROS.")}</p>
+            {error ? <p role="alert">{t(error)}</p> : null}
             <div className="watchface-modal-actions">
-              <button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>Cancel</button>
+              <button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>{t("Cancel")}</button>
               <button className="primary-button" type="button" disabled={busy} onClick={() => onConvert(model)}>
                 {busy ? <Loader2 className="spin" size={16} /> : <Repeat2 size={16} />}
-                {busy ? "Converting…" : `Convert to ${target.label}`}
+                {busy ? t("Converting…") : t("Convert to {{value1}}", { value1: t(target.label) })}
               </button>
             </div>
           </>
@@ -4563,6 +4429,7 @@ function ConfirmDeleteDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  useLanguage();
   return (
     <div className="watchface-modal-backdrop" role="presentation">
       <section
@@ -4578,18 +4445,12 @@ function ConfirmDeleteDialog({
         <span className="watchface-delete-icon" aria-hidden="true">
           <Trash2 size={20} />
         </span>
-        <h2 id="watchface-delete-title">Delete “{project.name}”?</h2>
-        <p id="watchface-delete-description">
-          This removes the locally saved project. It cannot be undone.
-        </p>
+        <h2 id="watchface-delete-title">{t("Delete “")}{project.name}”?</h2>
+        <p id="watchface-delete-description">{t("This removes the locally saved project. It cannot be undone.")}</p>
         <div className="watchface-modal-actions">
-          <button className="secondary-button" type="button" disabled={busy} onClick={onCancel} autoFocus>
-            Cancel
-          </button>
+          <button className="secondary-button" type="button" disabled={busy} onClick={onCancel} autoFocus>{t("Cancel")}</button>
           <button className="secondary-button danger-button" type="button" disabled={busy} onClick={onConfirm}>
-            {busy ? <Loader2 className="spin" size={16} aria-hidden="true" /> : <Trash2 size={16} aria-hidden="true" />}
-            Delete project
-          </button>
+            {busy ? <Loader2 className="spin" size={16} aria-hidden="true" /> : <Trash2 size={16} aria-hidden="true" />}{t("Delete project")}</button>
         </div>
       </section>
     </div>
@@ -4611,6 +4472,7 @@ function ImportWatchfaceDialog({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
 }) {
+  useLanguage();
   return (
     <div className="watchface-modal-backdrop" role="presentation">
       <section
@@ -4626,16 +4488,14 @@ function ImportWatchfaceDialog({
         <button
           className="icon-button watchface-modal-close"
           type="button"
-          aria-label="Close import dialog"
+          aria-label={t("Close import dialog")}
           disabled={busy}
           onClick={onClose}
         >
           <X size={17} aria-hidden="true" />
         </button>
-        <h2 id="watchface-import-title">Import watch face</h2>
-        <p id="watchface-import-description">
-          Open a local DIY archive or paste an official COROS watch-face share link.
-        </p>
+        <h2 id="watchface-import-title">{t("Import watch face")}</h2>
+        <p id="watchface-import-description">{t("Open a local DIY archive or paste an official COROS watch-face share link.")}</p>
 
         <button
           className="secondary-button watchface-import-file"
@@ -4643,18 +4503,14 @@ function ImportWatchfaceDialog({
           disabled={busy}
           onClick={onChooseArchive}
         >
-          <Upload size={16} aria-hidden="true" />
-          Choose ZIP or DAT archive
-        </button>
+          <Upload size={16} aria-hidden="true" />{t("Choose ZIP or DAT archive")}</button>
 
         <div className="watchface-import-divider" aria-hidden="true">
-          <span>or import from COROS</span>
+          <span>{t("or import from COROS")}</span>
         </div>
 
         <form className="watchface-import-link-form" onSubmit={onSubmit}>
-          <label className="field">
-            COROS share link
-            <input
+          <label className="field">{t("COROS share link")}<input
               type="url"
               value={shareUrl}
               placeholder="https://faq.coros.com/share/watchface?..."
@@ -4672,9 +4528,7 @@ function ImportWatchfaceDialog({
               <Loader2 className="spin" size={16} aria-hidden="true" />
             ) : (
               <Download size={16} aria-hidden="true" />
-            )}
-            Import into Studio
-          </button>
+            )}{t("Import into Studio")}</button>
         </form>
       </section>
     </div>
@@ -4682,6 +4536,7 @@ function ImportWatchfaceDialog({
 }
 
 function WatchFaceStudioShowcase() {
+  useLanguage();
   return (
     <div className="watchface-auth-gallery" aria-hidden="true">
       {AUTH_WATCH_FACE_PREVIEWS.map((src, index) => (
@@ -4713,6 +4568,7 @@ function ToastRegion({
   notice: string | null;
   onDismiss: () => void;
 }) {
+  useLanguage();
   if (!error && !notice) return null;
   return (
     <div
@@ -4725,7 +4581,7 @@ function ToastRegion({
         {error ? <X size={16} /> : <Check size={16} />}
       </span>
       <p>{error ?? notice}</p>
-      <button className="icon-button" type="button" aria-label="Dismiss message" onClick={onDismiss}>
+      <button className="icon-button" type="button" aria-label={t("Dismiss message")} onClick={onDismiss}>
         <X size={15} aria-hidden="true" />
       </button>
     </div>
@@ -4739,17 +4595,17 @@ function updatedAtValue(value: string): number {
 
 function formatRelativeUpdatedAt(value: string, now = Date.now()): string {
   const timestamp = updatedAtValue(value);
-  if (timestamp === 0) return "recently";
+  if (timestamp === 0) return t("recently");
   const elapsed = Math.max(0, now - timestamp);
   const minutes = Math.floor(elapsed / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return t("just now");
+  if (minutes < 60) return t("{{minutes}}m ago", { minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  if (hours < 48) return "yesterday";
+  if (hours < 24) return t("{{hours}}h ago", { hours });
+  if (hours < 48) return t("yesterday");
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(timestamp).toLocaleDateString(undefined, {
+  if (days < 7) return t("{{days}}d ago", { days });
+  return new Date(timestamp).toLocaleDateString(getLocale(), {
     month: "short",
     day: "numeric",
     year: new Date(timestamp).getFullYear() === new Date(now).getFullYear()
@@ -4761,31 +4617,28 @@ function formatRelativeUpdatedAt(value: string, now = Date.now()): string {
 function formatExactUpdatedAt(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.valueOf())
-    ? "Update time unavailable"
-    : `Updated ${date.toLocaleString(undefined, {
-        dateStyle: "medium",
-        timeStyle: "short"
-      })}`;
+    ? t("Update time unavailable")
+    : t("Updated {{date}}", { date: date.toLocaleString(getLocale(), { dateStyle: "medium", timeStyle: "short" }) });
 }
 
 function watchfaceCatalogLabel(catalog: CorosWatchfaceThemeCatalog): string {
   switch (catalog) {
     case "official":
-      return "official watch face";
+      return t("official watch face");
     case "custom":
-      return "custom watch face";
+      return t("custom watch face");
     default:
-      return "editable template";
+      return t("editable template");
   }
 }
 
 function formatExpiry(value: string): string {
   const date = new Date(value);
-  return Number.isNaN(date.valueOf()) ? "soon" : date.toLocaleString();
+  return Number.isNaN(date.valueOf()) ? t("soon") : date.toLocaleString(getLocale());
 }
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error
     ? error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "")
-    : "Watch-face request failed.";
+    : t("Watch-face request failed.");
 }

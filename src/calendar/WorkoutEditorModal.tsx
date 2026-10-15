@@ -1,3 +1,5 @@
+import { formatIntensityType, formatWorkoutSport } from "./workoutLabels";
+import { getLocale, t, useLanguage } from "../i18n/training";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   AlertTriangle,
@@ -50,21 +52,7 @@ import {
 } from "../units/units";
 import { ExerciseCombobox } from "./ExerciseCombobox";
 import { ExercisePreview } from "./ExercisePreview";
-import {
-  CLIMB_GRADES,
-  CLIMB_SYSTEM_IDS,
-  FTP_PRESETS,
-  HEART_RATE_PRESETS,
-  PACE_PRESETS,
-  RUNNING_POWER_PRESETS,
-  SWIM_STROKE_IDS,
-  WORKOUT_SPORT_CAPABILITIES,
-  formatIntensityType,
-  formatWorkoutSport,
-  validateWorkoutDraftShared,
-  workoutIntensitiesForStep,
-  workoutTargetsForStep
-} from "../../electron/workoutCapabilities";
+import { CLIMB_GRADES, CLIMB_SYSTEM_IDS, FTP_PRESETS, HEART_RATE_PRESETS, PACE_PRESETS, RUNNING_POWER_PRESETS, SWIM_STROKE_IDS, WORKOUT_SPORT_CAPABILITIES, validateWorkoutDraftShared, workoutIntensitiesForStep, workoutTargetsForStep } from "../../electron/workoutCapabilities";
 
 interface WorkoutEditorModalProps {
   api: CorosLinkApi;
@@ -162,14 +150,14 @@ function secondsFromClock(value: string): number {
 
 function stepTitle(kind: RunWorkoutEditorStepKind): string {
   return kind === "warmup"
-    ? "Warm Up"
+    ? t("Warm Up")
     : kind === "cooldown"
-      ? "Cool Down"
+      ? t("Cool Down")
       : kind === "rest"
-        ? "Rest"
+        ? t("Rest")
         : kind === "sendOff"
-          ? "Send-off"
-        : "Training";
+          ? t("Send-off")
+        : t("Training");
 }
 
 const STRENGTH_REST_PRESETS = [0, 30, 45, 60, 90, 120, 180] as const;
@@ -182,7 +170,7 @@ function strengthLoadMode(intensity: RunWorkoutEditorIntensity): StrengthLoadMod
 }
 
 function strengthRestLabel(seconds: number): string {
-  if (seconds === 0) return "None";
+  if (seconds === 0) return t("None");
   if (seconds < 60) return `${seconds}s`;
   const minutes = seconds / 60;
   return Number.isInteger(minutes) ? `${minutes}m` : `${minutes.toFixed(1)}m`;
@@ -191,7 +179,7 @@ function strengthRestLabel(seconds: number): string {
 function strengthTargetSummary(target: RunWorkoutEditorTarget): string {
   if (target.type === "reps") return `${target.count} reps`;
   if (target.type === "time") return clockFromSeconds(target.seconds);
-  if (target.type === "open") return "Open";
+  if (target.type === "open") return t("Open");
   return target.type;
 }
 
@@ -206,7 +194,7 @@ function strengthStepSummary(
       : `${step.intensity.value} ${step.intensity.unit}`
     : "load not set";
   const rest = step.restValue ?? 0;
-  return `${sets} ${sets === 1 ? "set" : "sets"} × ${target} @ ${load}${sets > 1 ? `, ${strengthRestLabel(rest)} rest` : ""}`;
+  return `${sets} ${sets === 1 ? t("set") : t("sets")} × ${target} @ ${load}${sets > 1 ? `, ${strengthRestLabel(rest)} rest` : ""}`;
 }
 
 function targetForType(
@@ -270,6 +258,7 @@ export function WorkoutEditorModal({
   onSavedToPlan,
   onError
 }: WorkoutEditorModalProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const reducedMotion = useReducedMotion();
   const [document, setDocument] = useState<WorkoutEditorDocument | null>(null);
@@ -292,7 +281,7 @@ export function WorkoutEditorModal({
       sport: "run",
       save_to_library: false
     };
-  }, [planEntry]);
+  }, [planEntry, getLocale()]);
 
   useEffect(() => {
     let cancelled = false;
@@ -301,7 +290,7 @@ export function WorkoutEditorModal({
     setLoadError(null);
     const load = async (): Promise<WorkoutEditorDocument> => {
       if (!planEntry) {
-        if (!editRef) throw new Error("No workout was selected.");
+        if (!editRef) throw new Error(t("No workout was selected."));
         return api.getWorkoutForEdit(editRef, unitSystem);
       }
       if (planEntry.programId) {
@@ -317,7 +306,7 @@ export function WorkoutEditorModal({
           unsupportedReason: undefined
         };
       }
-      if (!planWorkout) throw new Error("This plan entry has no editable workout definition.");
+      if (!planWorkout) throw new Error(t("This plan entry has no editable workout definition."));
       const context = await api.getWorkoutEditorContext(unitSystem);
       return {
         ref: { kind: "library", programId: `plan:${planEntry.id}` },
@@ -357,7 +346,7 @@ export function WorkoutEditorModal({
   const dirty = Boolean(document && draft && JSON.stringify(document.draft) !== JSON.stringify(draft));
   const validation = useMemo(
     () => draft ? validateWorkoutDraftShared(draft) : { valid: false, errors: {} },
-    [draft]
+    [draft, getLocale()]
   );
 
   useEffect(() => {
@@ -529,11 +518,11 @@ export function WorkoutEditorModal({
     setSaving(true);
     try {
       if (planMode) {
-        if (!planWorkout || !onSavedToPlan) throw new Error("The plan workout cannot be updated.");
+        if (!planWorkout || !onSavedToPlan) throw new Error(t("The plan workout cannot be updated."));
         onSavedToPlan(editorDraftToPlanWorkoutInput(draft, planWorkout));
         return;
       }
-      if (!editRef || !onSaved) throw new Error("The workout editor is missing its save target.");
+      if (!editRef || !onSaved) throw new Error(t("The workout editor is missing its save target."));
       const result = await api.saveWorkoutEdit(
         editRef,
         document.revision,
@@ -563,10 +552,10 @@ export function WorkoutEditorModal({
         >
           <header className="workout-editor-header">
             <div>
-              <p className="eyebrow">{planMode ? "Training plan copy" : editRef?.kind === "scheduled" ? "Scheduled occurrence" : "Workout library"}</p>
-              <h2 id="workout-editor-title">Edit {draft ? formatWorkoutSport(draft.sport) : "workout"}</h2>
+              <p className="eyebrow">{planMode ? t("Training plan copy") : editRef?.kind === "scheduled" ? t("Scheduled occurrence") : t("Workout library")}</p>
+              <h2 id="workout-editor-title">{t("Edit")} {draft ? formatWorkoutSport(draft.sport) : t("workout")}</h2>
             </div>
-            <button type="button" className="icon-button" aria-label="Close workout editor" onClick={requestClose} disabled={saving}>
+            <button type="button" className="icon-button" aria-label={t("Close workout editor")} onClick={requestClose} disabled={saving}>
               <X size={18} aria-hidden="true" />
             </button>
           </header>
@@ -575,8 +564,8 @@ export function WorkoutEditorModal({
           {loadError ? (
             <div className="workout-editor-state is-error">
               <AlertTriangle size={22} aria-hidden="true" />
-              <h3>Workout could not be loaded</h3><p>{loadError}</p>
-              <button type="button" className="ghost-button" onClick={onClose}>Close</button>
+              <h3>{t("Workout could not be loaded")}</h3><p>{loadError}</p>
+              <button type="button" className="ghost-button" onClick={onClose}>{t("Close")}</button>
             </div>
           ) : null}
 
@@ -586,19 +575,19 @@ export function WorkoutEditorModal({
                 {!document.canEdit ? <div className="workout-editor-notice"><AlertTriangle size={16} aria-hidden="true" />{document.unsupportedReason}</div> : null}
                 <div className="workout-editor-basics">
                   <label className="calendar-field">
-                    <span>Sport</span>
-                    <SelectDropdown
-                      label="Sport"
+                    <span>{t("Sport")}</span>
+                    <SelectDropdown translateLabel={t}
+                      label={t("Sport")}
                       value={draft.sport}
                       options={[{ value: draft.sport, label: formatWorkoutSport(draft.sport) }]}
                       disabled
-                      title="An existing COROS workout cannot change sport in place."
+                      title={t("An existing COROS workout cannot change sport in place.")}
                       onChange={() => undefined}
                     />
                   </label>
                   {draft.sport === "swim" ? (
                     <label className="calendar-field">
-                      <span>Pool length ({document.context.defaultPoolLength.unit})</span>
+                      <span>{t("Pool length (")}{document.context.defaultPoolLength.unit})</span>
                       <div className="workout-range-inputs">
                         <input
                           type="number"
@@ -624,9 +613,9 @@ export function WorkoutEditorModal({
                   ) : null}
                   {(draft.sport === "indoorClimb" || draft.sport === "bouldering") ? (
                     <label className="calendar-field">
-                      <span>Grading system</span>
-                      <SelectDropdown<keyof typeof CLIMB_SYSTEM_IDS>
-                        label="Grading system"
+                      <span>{t("Grading system")}</span>
+                      <SelectDropdown<keyof typeof CLIMB_SYSTEM_IDS> translateLabel={t}
+                        label={t("Grading system")}
                         value={draft.sportOptions?.gradingSystem ?? document.context.climbSystems[draft.sport] ?? (draft.sport === "bouldering" ? "vScale" : "yds")}
                         disabled={!document.canEdit || saving}
                         options={(Object.keys(CLIMB_SYSTEM_IDS) as Array<keyof typeof CLIMB_SYSTEM_IDS>).map((system) => ({ value: system, label: system }))}
@@ -636,13 +625,13 @@ export function WorkoutEditorModal({
                     </label>
                   ) : null}
                   <label className="calendar-field">
-                    <span>Name</span>
+                    <span>{t("Name")}</span>
                     <input maxLength={90} value={draft.name} disabled={!document.canEdit || saving} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
                     <small>{draft.name.length}/90</small>
                     {validation.errors.name ? <em>{validation.errors.name}</em> : null}
                   </label>
                   <label className="calendar-field">
-                    <span>Description</span>
+                    <span>{t("Description")}</span>
                     <textarea maxLength={300} rows={3} value={draft.overview} disabled={!document.canEdit || saving} onChange={(event) => setDraft({ ...draft, overview: event.target.value })} />
                     <small>{draft.overview.length}/300</small>
                     {validation.errors.overview ? <em>{validation.errors.overview}</em> : null}
@@ -651,13 +640,13 @@ export function WorkoutEditorModal({
 
                 <div className="workout-editor-structure-header">
                   <div>
-                    <h3>{draft.sport === "strength" ? "Strength session" : "Workout structure"}</h3>
+                    <h3>{draft.sport === "strength" ? t("Strength session") : t("Workout structure")}</h3>
                     <p>{draft.sport === "strength"
-                      ? "Each exercise saves its own sets, per-set target, load, and recovery."
-                      : "Drag between cards to reorder. Drop one step on another to create a repeat."}</p>
+                      ? t("Each exercise saves its own sets, per-set target, load, and recovery.")
+                      : t("Drag between cards to reorder. Drop one step on another to create a repeat.")}</p>
                   </div>
                   {draft.sport === "strength" ? (
-                    <div className="workout-editor-add-actions" aria-label="Add strength session step">
+                    <div className="workout-editor-add-actions" aria-label={t("Add strength session step")}>
                       {([
                         ["warmup", "Warm-up"],
                         ["training", "Exercise"],
@@ -674,19 +663,18 @@ export function WorkoutEditorModal({
                             nodes: [...draft.nodes, emptyStep(kind, draft.sport)]
                           })}
                         >
-                          <Plus size={14} aria-hidden="true" /> {label}
+                          <Plus size={14} aria-hidden="true" /> {t(label)}
                         </button>
                       ))}
                     </div>
                   ) : (
                     <button type="button" className="ghost-button" disabled={!document.canEdit || saving} onClick={() => setDraft({ ...draft, nodes: [...draft.nodes, emptyStep("training", draft.sport)] })}>
-                      <Plus size={15} aria-hidden="true" /> Add step
-                    </button>
+                      <Plus size={15} aria-hidden="true" /> {t("Add step")} </button>
                   )}
                 </div>
 
                 {draft.nodes.length === 0 ? (
-                  <div className="workout-editor-empty"><p>No workout steps yet.</p><button type="button" className="primary-button" onClick={() => setDraft({ ...draft, nodes: [emptyStep("training", draft.sport)] })}>{draft.sport === "strength" ? "Add first exercise" : "Add first step"}</button></div>
+                  <div className="workout-editor-empty"><p>{t("No workout steps yet.")}</p><button type="button" className="primary-button" onClick={() => setDraft({ ...draft, nodes: [emptyStep("training", draft.sport)] })}>{draft.sport === "strength" ? t("Add first exercise") : t("Add first step")}</button></div>
                 ) : (
                   <div className="workout-editor-nodes">
                     {draft.nodes.map((node, index) => (
@@ -743,10 +731,10 @@ export function WorkoutEditorModal({
                   <EstimateFooter preview={preview} loading={previewing} error={previewError} context={document.context} />
                 )}
                 <div className="workout-editor-footer-actions">
-                  <button type="button" className="ghost-button" onClick={requestClose} disabled={saving}>Cancel</button>
+                  <button type="button" className="ghost-button" onClick={requestClose} disabled={saving}>{t("Cancel")}</button>
                   <button type="button" className="primary-button" disabled={!document.canEdit || !dirty || !validation.valid || saving} onClick={() => void save()}>
                     {saving ? <LoaderCircle className="is-spinning" size={15} aria-hidden="true" /> : <Save size={15} aria-hidden="true" />}
-                    {saving ? (planMode ? "Applying..." : "Saving and verifying...") : (planMode ? "Apply to plan" : "Save")}
+                    {saving ? (planMode ? t("Applying...") : t("Saving and verifying...")) : (planMode ? t("Apply to plan") : t("Save"))}
                   </button>
                 </div>
               </footer>
@@ -754,10 +742,10 @@ export function WorkoutEditorModal({
           ) : null}
 
           {confirmClose ? (
-            <div className="workout-editor-confirm" role="alertdialog" aria-label="Discard workout changes">
-              <div><strong>Discard unsaved changes?</strong><span>{planMode ? "Your edits have not been applied to the plan." : "Your edits have not been sent to COROS."}</span></div>
-              <button type="button" className="ghost-button" onClick={() => setConfirmClose(false)}>Keep editing</button>
-              <button type="button" className="danger-button" onClick={onClose}>Discard</button>
+            <div className="workout-editor-confirm" role="alertdialog" aria-label={t("Discard workout changes")}>
+              <div><strong>{t("Discard unsaved changes?")}</strong><span>{planMode ? t("Your edits have not been applied to the plan.") : t("Your edits have not been sent to COROS.")}</span></div>
+              <button type="button" className="ghost-button" onClick={() => setConfirmClose(false)}>{t("Keep editing")}</button>
+              <button type="button" className="danger-button" onClick={onClose}>{t("Discard")}</button>
             </div>
           ) : null}
         </motion.section>
@@ -768,7 +756,8 @@ export function WorkoutEditorModal({
 }
 
 function EditorSkeleton() {
-  return <div className="workout-editor-skeleton" aria-label="Loading workout"><div /><div /><div /><div /></div>;
+  useLanguage();
+  return <div className="workout-editor-skeleton" aria-label={t("Loading workout")}><div /><div /><div /><div /></div>;
 }
 
 interface StepCardProps {
@@ -792,6 +781,7 @@ interface StepCardProps {
 }
 
 function StepCard({ step, context, sport, exerciseOptions, exerciseOptionsLoading, error, disabled, draggable, onDragStart, onDropCard, onChange, onMove, onDuplicate, onDelete, onGroup, onUngroup }: StepCardProps) {
+  useLanguage();
   const locked = disabled || !step.editable;
   const capability = WORKOUT_SPORT_CAPABILITIES[sport];
   const strengthExercise = sport === "strength" && step.kind === "training";
@@ -832,9 +822,9 @@ function StepCard({ step, context, sport, exerciseOptions, exerciseOptionsLoadin
     <motion.article layout className={`workout-step-card is-${step.kind} ${!step.editable ? "is-locked" : ""}`} draggable={draggable && !disabled} onDragStartCapture={onDragStart} onDragOver={(event) => { if (onDropCard) event.preventDefault(); }} onDrop={(event) => { if (!onDropCard) return; event.preventDefault(); onDropCard(event.dataTransfer.getData("text/workout-node")); }}>
       <header className="workout-step-header">
         <GripVertical className="workout-drag-handle" size={18} aria-hidden="true" />
-        <SelectDropdown<RunWorkoutEditorStepKind>
+        <SelectDropdown<RunWorkoutEditorStepKind> translateLabel={t}
           className="workout-step-kind-select"
-          label="Step kind"
+          label={t("Step kind")}
           value={step.kind}
           options={capability.stepKinds.map((kind) => ({ value: kind, label: stepTitle(kind) }))}
           disabled={locked}
@@ -843,19 +833,19 @@ function StepCard({ step, context, sport, exerciseOptions, exerciseOptionsLoadin
         />
         {strengthExercise ? (
           <div className="workout-strength-step-heading">
-            <strong>{step.exerciseName?.trim() || "Choose an exercise"}</strong>
+            <strong>{step.exerciseName?.trim() || t("Choose an exercise")}</strong>
             <span>{strengthStepSummary(step)}</span>
           </div>
         ) : (
-          <input aria-label="Step name" value={step.name} disabled={locked} maxLength={90} onChange={(event) => onChange({ ...step, name: event.target.value })} />
+          <input aria-label={t("Step name")} value={step.name} disabled={locked} maxLength={90} onChange={(event) => onChange({ ...step, name: event.target.value })} />
         )}
         <div className="workout-step-actions">
-          <IconAction label="Move up" onClick={() => onMove(-1)} disabled={disabled}><ChevronUp /></IconAction>
-          <IconAction label="Move down" onClick={() => onMove(1)} disabled={disabled}><ChevronDown /></IconAction>
-          {onGroup ? <IconAction label="Group with previous step" onClick={onGroup} disabled={disabled}><GripVertical /></IconAction> : null}
-          {onUngroup && step.editable ? <IconAction label="Remove from repeat" onClick={onUngroup} disabled={disabled}><Ungroup /></IconAction> : null}
-          <IconAction label="Duplicate step" onClick={onDuplicate} disabled={disabled || !step.editable}><Copy /></IconAction>
-          <IconAction label="Delete step" onClick={onDelete} disabled={disabled}><Trash2 /></IconAction>
+          <IconAction label={t("Move up")} onClick={() => onMove(-1)} disabled={disabled}><ChevronUp /></IconAction>
+          <IconAction label={t("Move down")} onClick={() => onMove(1)} disabled={disabled}><ChevronDown /></IconAction>
+          {onGroup ? <IconAction label={t("Group with previous step")} onClick={onGroup} disabled={disabled}><GripVertical /></IconAction> : null}
+          {onUngroup && step.editable ? <IconAction label={t("Remove from repeat")} onClick={onUngroup} disabled={disabled}><Ungroup /></IconAction> : null}
+          <IconAction label={t("Duplicate step")} onClick={onDuplicate} disabled={disabled || !step.editable}><Copy /></IconAction>
+          <IconAction label={t("Delete step")} onClick={onDelete} disabled={disabled}><Trash2 /></IconAction>
         </div>
       </header>
       {step.unsupportedReason ? <div className="workout-step-warning"><AlertTriangle size={14} aria-hidden="true" />{step.unsupportedReason}</div> : null}
@@ -872,8 +862,8 @@ function StepCard({ step, context, sport, exerciseOptions, exerciseOptionsLoadin
         <div className="workout-step-fields">
           <TargetFields step={step} context={context} sport={sport} disabled={locked} onChange={onChange} />
           <IntensityFields step={step} context={context} sport={sport} disabled={locked} onChange={onChange} />
-          {step.kind === "sendOff" ? <label className="workout-control-group"><span>Send-off interval</span><ClockInput label="Send-off interval" seconds={step.sendOffSeconds ?? 120} disabled={locked} onChange={(seconds) => onChange({ ...step, sendOffSeconds: seconds })} /></label> : null}
-          {capability.requiresExercise && step.kind === "training" ? <div className="workout-control-group workout-exercise-control"><span>Exercise</span><ExerciseCombobox value={step.exerciseName ?? ""} selectedId={step.exerciseId} options={exerciseOptions} placeholder="Search by COROS exercise name" label="Exercise" loading={exerciseOptionsLoading} disabled={locked} onChange={(selection) => onChange({ ...step, exerciseName: selection.name, exerciseId: selection.id, exerciseKind: selection.exerciseKind })} />{step.exerciseId ? <small>COROS exercise selected</small> : <small>Select one exact COROS exercise before saving.</small>}</div> : null}
+          {step.kind === "sendOff" ? <label className="workout-control-group"><span>{t("Send-off interval")}</span><ClockInput label={t("Send-off interval")} seconds={step.sendOffSeconds ?? 120} disabled={locked} onChange={(seconds) => onChange({ ...step, sendOffSeconds: seconds })} /></label> : null}
+          {capability.requiresExercise && step.kind === "training" ? <div className="workout-control-group workout-exercise-control"><span>{t("Exercise")}</span><ExerciseCombobox value={step.exerciseName ?? ""} selectedId={step.exerciseId} options={exerciseOptions} placeholder={t("Search by COROS exercise name")} label={t("Exercise")} loading={exerciseOptionsLoading} disabled={locked} onChange={(selection) => onChange({ ...step, exerciseName: selection.name, exerciseId: selection.id, exerciseKind: selection.exerciseKind })} />{step.exerciseId ? <small>{t("COROS exercise selected")}</small> : <small>{t("Select one exact COROS exercise before saving.")}</small>}</div> : null}
         </div>
       )}
       {error ? <p className="workout-field-error">{error}</p> : null}
@@ -896,6 +886,7 @@ function StrengthStepFields({
   disabled: boolean;
   onChange: (step: RunWorkoutEditorStep) => void;
 }) {
+  useLanguage();
   const selectedExercise = step.exerciseId
     ? exerciseOptions.find((option) => option.id === step.exerciseId)
     : undefined;
@@ -917,9 +908,9 @@ function StrengthStepFields({
     : { type: "open" as const };
   const totalRest = sets > 1 ? restSeconds * (sets - 1) : 0;
   const totalSummary = sets > 1 && step.target.type === "reps"
-    ? `${sets * step.target.count} total reps${totalRest ? `, ${clockFromSeconds(totalRest)} total rest` : ""}`
+    ? t("{{value1}} total reps{{value2}}", { value1: String(sets * step.target.count), value2: String(totalRest ? t(", {{value1}} total rest", { value1: String(clockFromSeconds(totalRest)) }) : "") })
     : sets > 1 && step.target.type === "time"
-      ? `${clockFromSeconds(sets * step.target.seconds + totalRest)} including rest`
+      ? t("{{value1}} including rest", { value1: String(clockFromSeconds(sets * step.target.seconds + totalRest)) })
       : undefined;
 
   const changeTargetType = (type: "reps" | "time" | "open") => {
@@ -938,13 +929,13 @@ function StrengthStepFields({
     <div className={`workout-strength-fields${hasExercisePreview ? " has-preview" : ""}`}>
       <div className="workout-strength-form">
         <section className="strength-block">
-          <h4>Movement</h4>
+          <h4>{t("Movement")}</h4>
           <ExerciseCombobox
             value={step.exerciseName ?? ""}
             selectedId={step.exerciseId}
             options={exerciseOptions}
-            placeholder="Search the COROS exercise library"
-            label="Exercise"
+            placeholder={t("Search the COROS exercise library")}
+            label={t("Exercise")}
             loading={exerciseOptionsLoading}
             disabled={disabled}
             hidePreview
@@ -957,19 +948,19 @@ function StrengthStepFields({
             })}
           />
           {exerciseOptionsLoading ? (
-            <p className="strength-block-note">Loading the COROS exercise library.</p>
+            <p className="strength-block-note">{t("Loading the COROS exercise library.")}</p>
           ) : exerciseOptions.length === 0 ? (
-            <p className="strength-block-note">Reconnect COROS to load the exercise library.</p>
+            <p className="strength-block-note">{t("Reconnect COROS to load the exercise library.")}</p>
           ) : !step.exerciseId ? (
-            <p className="strength-block-note">Select one exact exercise. The watch needs its COROS ID.</p>
+            <p className="strength-block-note">{t("Select one exact exercise. The watch needs its COROS ID.")}</p>
           ) : null}
         </section>
 
         <section className="strength-block">
-          <h4>Prescription</h4>
+          <h4>{t("Prescription")}</h4>
           <div className="set-line">
             <label className="set-line-cell">
-              <span>Sets</span>
+              <span>{t("Sets")}</span>
               <input
                 type="number"
                 min="1"
@@ -981,16 +972,16 @@ function StrengthStepFields({
             </label>
             <span className="set-line-operator" aria-hidden="true">×</span>
             <div className="set-line-cell">
-              <span>Per set</span>
+              <span>{t("Per set")}</span>
               <div className="set-line-compound">
                 {editableTarget.type === "open" ? (
-                  <span className="set-line-open">Ends with the lap button</span>
+                  <span className="set-line-open">{t("Ends with the lap button")}</span>
                 ) : (
                   <input
                     type="number"
                     min="1"
                     max={editableTarget.type === "reps" ? 500 : 86_399}
-                    aria-label={editableTarget.type === "reps" ? "Repetitions per set" : "Seconds per set"}
+                    aria-label={editableTarget.type === "reps" ? t("Repetitions per set") : t("Seconds per set")}
                     value={editableTarget.type === "reps" ? editableTarget.count : editableTarget.seconds}
                     disabled={disabled}
                     onChange={(event) => onChange({
@@ -1001,9 +992,9 @@ function StrengthStepFields({
                     })}
                   />
                 )}
-                <SelectDropdown<"reps" | "time" | "open">
+                <SelectDropdown<"reps" | "time" | "open"> translateLabel={t}
                   className="set-line-select"
-                  label="Measure each set by"
+                  label={t("Measure each set by")}
                   value={editableTarget.type}
                   disabled={disabled}
                   options={targetTypes.map((type) => ({
@@ -1017,11 +1008,11 @@ function StrengthStepFields({
             </div>
             <span className="set-line-operator" aria-hidden="true">@</span>
             <div className="set-line-cell is-load">
-              <span>Load</span>
+              <span>{t("Load")}</span>
               <div className="set-line-compound">
-                <SelectDropdown<StrengthLoadMode>
+                <SelectDropdown<StrengthLoadMode> translateLabel={t}
                   className="set-line-select"
-                  label="Load"
+                  label={t("Load")}
                   value={loadMode}
                   disabled={disabled}
                   options={[
@@ -1038,7 +1029,7 @@ function StrengthStepFields({
                       type="number"
                       min="0"
                       step="0.5"
-                      aria-label={`Added weight in ${step.intensity.unit}`}
+                      aria-label={t("Added weight in {{value1}}", { value1: String(step.intensity.unit) })}
                       value={step.intensity.value}
                       disabled={disabled}
                       onChange={(event) => onChange({
@@ -1063,7 +1054,7 @@ function StrengthStepFields({
         </section>
 
         <section className="strength-block">
-          <h4>Rest between sets</h4>
+          <h4>{t("Rest between sets")}</h4>
           <div className="rest-picker">
             {STRENGTH_REST_PRESETS.map((preset) => (
               <button
@@ -1083,7 +1074,7 @@ function StrengthStepFields({
                 min="0"
                 max="3600"
                 step="5"
-                aria-label="Rest between sets in seconds"
+                aria-label={t("Rest between sets in seconds")}
                 value={restSeconds}
                 disabled={disabled}
                 onChange={(event) => onChange({
@@ -1092,17 +1083,17 @@ function StrengthStepFields({
                   restValue: Number(event.target.value)
                 })}
               />
-              <em>sec</em>
+              <em>{t("sec")}</em>
             </label>
           </div>
         </section>
 
         <label className="workout-strength-instructions">
-          <span>Exercise instructions</span>
+          <span>{t("Exercise instructions")}</span>
           <textarea
             rows={2}
             maxLength={300}
-            placeholder="Optional cues or setup notes"
+            placeholder={t("Optional cues or setup notes")}
             value={step.overview ?? ""}
             disabled={disabled}
             onChange={(event) => onChange({ ...step, overview: event.target.value })}
@@ -1125,10 +1116,12 @@ function StrengthStepFields({
 }
 
 function IconAction({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled: boolean; children: ReactElement<{ size?: number; "aria-hidden"?: string }> }) {
-  return <button type="button" className="workout-icon-action" title={label} aria-label={label} onClick={onClick} disabled={disabled}>{children && <>{children}</>}</button>;
+  useLanguage();
+  return <button type="button" className="workout-icon-action" title={t(label)} aria-label={t(label)} onClick={onClick} disabled={disabled}>{children && <>{children}</>}</button>;
 }
 
 function ClockInput({ seconds, disabled, label, onChange }: { seconds: number; disabled: boolean; label: string; onChange: (seconds: number) => void }) {
+  useLanguage();
   const [value, setValue] = useState(() => clockFromSeconds(seconds));
   useEffect(() => setValue(clockFromSeconds(seconds)), [seconds]);
   const commit = () => {
@@ -1136,10 +1129,11 @@ function ClockInput({ seconds, disabled, label, onChange }: { seconds: number; d
     onChange(parsed);
     setValue(clockFromSeconds(parsed));
   };
-  return <input aria-label={label} value={value} disabled={disabled} inputMode="numeric" placeholder="05:00" onChange={(event) => setValue(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />;
+  return <input aria-label={t(label)} value={value} disabled={disabled} inputMode="numeric" placeholder="05:00" onChange={(event) => setValue(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />;
 }
 
 function TargetFields({ step, context, sport, disabled, onChange }: { step: RunWorkoutEditorStep; context: WorkoutEditorContext; sport: WorkoutSport; disabled: boolean; onChange: (step: RunWorkoutEditorStep) => void }) {
+  useLanguage();
   const target = step.target;
   const targetTypes = workoutTargetsForStep(sport, step.kind, step.exerciseKind);
   const distanceMultiplier = sport === "swim"
@@ -1149,15 +1143,15 @@ function TargetFields({ step, context, sport, disabled, onChange }: { step: RunW
     ? swimDistanceUnit(context.distanceUnit)
     : context.distanceUnit === "imperial" ? "mi" : "km";
   return <div className="workout-control-group">
-    <label><span>Target</span><SelectDropdown<RunWorkoutEditorTarget["type"]> label="Target" value={target.type} options={targetTypes.map((type) => ({ value: type, label: type === "load" ? "Training Load" : type === "hrRecovery" ? "HR Recovery" : type === "elevationGain" ? "Elevation Gain" : type[0]!.toUpperCase() + type.slice(1) }))} disabled={disabled} portal onChange={(type) => onChange({ ...step, target: targetForType(type, step.kind) })} /></label>
-    {target.type === "time" ? <label><span>Duration</span><ClockInput label="Duration" seconds={target.seconds} disabled={disabled} onChange={(seconds) => onChange({ ...step, target: { type: "time", seconds } })} /></label> : null}
-    {target.type === "distance" ? <label><span>Distance ({targetDistanceUnit})</span><input type="number" min="0" step="0.1" value={Number((target.meters / distanceMultiplier).toFixed(3))} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "distance", meters: Number(event.target.value) * distanceMultiplier } })} /></label> : null}
-    {target.type === "load" ? <label><span>Training Load</span><input type="number" min="0" max="999" step="1" value={target.load} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "load", load: Number(event.target.value) } })} /></label> : null}
-    {target.type === "hrRecovery" ? <label><span>Return to bpm</span><input type="number" min="30" max="180" value={target.bpm} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "hrRecovery", bpm: Number(event.target.value) } })} /></label> : null}
-    {target.type === "reps" ? <label><span>Repetitions</span><input type="number" min="1" max="500" value={target.count} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "reps", count: Number(event.target.value) } })} /></label> : null}
-    {target.type === "routes" ? <label><span>Routes</span><input type="number" min="1" max="20" value={target.count} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "routes", count: Number(event.target.value) } })} /></label> : null}
-    {target.type === "elevationGain" ? <label><span>Gain ({elevationUnit(context.distanceUnit)})</span><input type="number" min="20" max={context.distanceUnit === "imperial" ? 32808 : 10000} value={Number(metersToElevation(target.meters, context.distanceUnit).toFixed(1))} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "elevationGain", meters: elevationToMeters(Number(event.target.value), context.distanceUnit) } })} /></label> : null}
-    {target.type === "open" ? <p className="workout-control-hint">Ends when you press the lap button.</p> : null}
+    <label><span>{t("Target")}</span><SelectDropdown<RunWorkoutEditorTarget["type"]> translateLabel={t} label={t("Target")} value={target.type} options={targetTypes.map((type) => ({ value: type, label: type === "load" ? "Training Load" : type === "hrRecovery" ? "HR Recovery" : type === "elevationGain" ? "Elevation Gain" : type[0]!.toUpperCase() + type.slice(1) }))} disabled={disabled} portal onChange={(type) => onChange({ ...step, target: targetForType(type, step.kind) })} /></label>
+    {target.type === "time" ? <label><span>{t("Duration")}</span><ClockInput label={t("Duration")} seconds={target.seconds} disabled={disabled} onChange={(seconds) => onChange({ ...step, target: { type: "time", seconds } })} /></label> : null}
+    {target.type === "distance" ? <label><span>{t("Distance (")}{targetDistanceUnit})</span><input type="number" min="0" step="0.1" value={Number((target.meters / distanceMultiplier).toFixed(3))} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "distance", meters: Number(event.target.value) * distanceMultiplier } })} /></label> : null}
+    {target.type === "load" ? <label><span>{t("Training Load")}</span><input type="number" min="0" max="999" step="1" value={target.load} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "load", load: Number(event.target.value) } })} /></label> : null}
+    {target.type === "hrRecovery" ? <label><span>{t("Return to bpm")}</span><input type="number" min="30" max="180" value={target.bpm} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "hrRecovery", bpm: Number(event.target.value) } })} /></label> : null}
+    {target.type === "reps" ? <label><span>{t("Repetitions")}</span><input type="number" min="1" max="500" value={target.count} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "reps", count: Number(event.target.value) } })} /></label> : null}
+    {target.type === "routes" ? <label><span>{t("Routes")}</span><input type="number" min="1" max="20" value={target.count} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "routes", count: Number(event.target.value) } })} /></label> : null}
+    {target.type === "elevationGain" ? <label><span>{t("Gain (")}{elevationUnit(context.distanceUnit)})</span><input type="number" min="20" max={context.distanceUnit === "imperial" ? 32808 : 10000} value={Number(metersToElevation(target.meters, context.distanceUnit).toFixed(1))} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "elevationGain", meters: elevationToMeters(Number(event.target.value), context.distanceUnit) } })} /></label> : null}
+    {target.type === "open" ? <p className="workout-control-hint">{t("Ends when you press the lap button.")}</p> : null}
   </div>;
 }
 
@@ -1178,100 +1172,104 @@ function derivedPaceLabel(secondsPerKm: number, context: WorkoutEditorContext): 
 }
 
 function IntensityFields({ step, context, sport, disabled, onChange }: { step: RunWorkoutEditorStep; context: WorkoutEditorContext; sport: WorkoutSport; disabled: boolean; onChange: (step: RunWorkoutEditorStep) => void }) {
+  useLanguage();
   const intensity = step.intensity;
   const intensityTypes = workoutIntensitiesForStep(sport, step.kind, step.exerciseKind);
   const paceFactor = context.paceUnit === "mi" ? 1.609344 : 1;
   const setIntensity = (next: RunWorkoutEditorIntensity) => onChange({ ...step, intensity: next });
   const numberRange = (low: number, high: number, lowLabel: string, highLabel: string, update: (low: number, high: number) => WorkoutIntensityInput, min = 0, max = 3000) => (
-    <div className="workout-range-inputs"><label><span>{lowLabel}</span><input type="number" min={min} max={max} value={low} disabled={disabled} onChange={(event) => setIntensity(update(Number(event.target.value), high))} /></label><span>to</span><label><span>{highLabel}</span><input type="number" min={min} max={max} value={high} disabled={disabled} onChange={(event) => setIntensity(update(low, Number(event.target.value)))} /></label></div>
+    <div className="workout-range-inputs"><label><span>{lowLabel}</span><input type="number" min={min} max={max} value={low} disabled={disabled} onChange={(event) => setIntensity(update(Number(event.target.value), high))} /></label><span>{t("to")}</span><label><span>{highLabel}</span><input type="number" min={min} max={max} value={high} disabled={disabled} onChange={(event) => setIntensity(update(low, Number(event.target.value)))} /></label></div>
   );
   const percentRange = (value: { lowPercent: number; highPercent: number }, update: (low: number, high: number) => WorkoutIntensityInput) => numberRange(value.lowPercent, value.highPercent, "Low %", "High %", update, 1, 300);
   return <div className="workout-control-group">
-    <label><span>Intensity</span><SelectDropdown<RunWorkoutEditorIntensity["type"]> label="Intensity" value={intensity.type === "lthrPercent" ? "heartRatePercent" : intensity.type} options={intensityTypes.map((type) => ({ value: type, label: formatIntensityType(type) }))} disabled={disabled} portal onChange={(type) => setIntensity(intensityForType(type, context))} /></label>
+    <label><span>{t("Intensity")}</span><SelectDropdown<RunWorkoutEditorIntensity["type"]> translateLabel={t} label={t("Intensity")} value={intensity.type === "lthrPercent" ? "heartRatePercent" : intensity.type} options={intensityTypes.map((type) => ({ value: type, label: formatIntensityType(type) }))} disabled={disabled} portal onChange={(type) => setIntensity(intensityForType(type, context))} /></label>
 
-    {(intensity.type === "pace" || intensity.type === "effortPace") ? <div className="workout-range-inputs"><label><span>Fast ({context.paceUnit})</span><ClockInput label={`Fast pace per ${context.paceUnit}`} seconds={intensity.lowSecondsPerKm * paceFactor} disabled={disabled} onChange={(seconds) => setIntensity({ ...intensity, lowSecondsPerKm: seconds / paceFactor, displayUnit: context.paceUnit })} /></label><span>to</span><label><span>Slow ({context.paceUnit})</span><ClockInput label={`Slow pace per ${context.paceUnit}`} seconds={intensity.highSecondsPerKm * paceFactor} disabled={disabled} onChange={(seconds) => setIntensity({ ...intensity, highSecondsPerKm: seconds / paceFactor, displayUnit: context.paceUnit })} /></label></div> : null}
+    {(intensity.type === "pace" || intensity.type === "effortPace") ? <div className="workout-range-inputs"><label><span>{t("Fast (")}{context.paceUnit})</span><ClockInput label={t("Fast pace per {{value1}}", { value1: String(context.paceUnit) })} seconds={intensity.lowSecondsPerKm * paceFactor} disabled={disabled} onChange={(seconds) => setIntensity({ ...intensity, lowSecondsPerKm: seconds / paceFactor, displayUnit: context.paceUnit })} /></label><span>{t("to")}</span><label><span>{t("Slow (")}{context.paceUnit})</span><ClockInput label={t("Slow pace per {{value1}}", { value1: String(context.paceUnit) })} seconds={intensity.highSecondsPerKm * paceFactor} disabled={disabled} onChange={(seconds) => setIntensity({ ...intensity, highSecondsPerKm: seconds / paceFactor, displayUnit: context.paceUnit })} /></label></div> : null}
 
     {intensity.type === "heartRate" ? numberRange(intensity.lowBpm, intensity.highBpm, "Low bpm", "High bpm", (lowBpm, highBpm) => ({ type: "heartRate", lowBpm, highBpm }), 30, 250) : null}
 
     {intensity.type === "heartRatePercent" ? <>
-      <label><span>Basis</span><SelectDropdown<WorkoutHeartRateBasis> label="Heart-rate basis" value={intensity.basis} options={[{ value: "maxHr", label: "% Max Heart Rate" }, { value: "reserve", label: "% Heart Rate Reserve" }, { value: "lthr", label: "% Lactate Threshold HR" }]} disabled={disabled} portal onChange={(basis) => setIntensity({ type: "heartRatePercent", basis, preset: "aerobicEndurance" })} /></label>
-      <label><span>Zone or custom</span><SelectDropdown label="Heart-rate zone" value={intensity.preset ?? "custom"} options={[{ value: "custom", label: "Custom range" }, ...HEART_RATE_PRESETS[intensity.basis].map((zone) => { const configured = profileZone(context, intensity.basis, zone.preset, zone.id); return { value: zone.preset, label: `${configured?.label ?? zone.label} · ${configured?.lowPercent ?? zone.low}-${configured?.highPercent ?? zone.high}%` }; })]} disabled={disabled} portal onChange={(preset) => { const definition = HEART_RATE_PRESETS[intensity.basis].find((zone) => zone.preset === preset); const configured = profileZone(context, intensity.basis, preset, definition?.id); setIntensity(preset === "custom" ? { type: "heartRatePercent", basis: intensity.basis, lowPercent: 80, highPercent: 90 } : { type: "heartRatePercent", basis: intensity.basis, preset: preset as never, ...(configured ? { zoneId: configured.id } : {}) }); }} /></label>
+      <label><span>{t("Basis")}</span><SelectDropdown<WorkoutHeartRateBasis> translateLabel={t} label={t("Heart-rate basis")} value={intensity.basis} options={[{ value: "maxHr", label: "% Max Heart Rate" }, { value: "reserve", label: "% Heart Rate Reserve" }, { value: "lthr", label: "% Lactate Threshold HR" }]} disabled={disabled} portal onChange={(basis) => setIntensity({ type: "heartRatePercent", basis, preset: "aerobicEndurance" })} /></label>
+      <label><span>{t("Zone or custom")}</span><SelectDropdown translateLabel={t} label={t("Heart-rate zone")} value={intensity.preset ?? "custom"} options={[{ value: "custom", label: "Custom range" }, ...HEART_RATE_PRESETS[intensity.basis].map((zone) => { const configured = profileZone(context, intensity.basis, zone.preset, zone.id); return { value: zone.preset, label: `${configured?.label ?? zone.label} · ${configured?.lowPercent ?? zone.low}-${configured?.highPercent ?? zone.high}%` }; })]} disabled={disabled} portal onChange={(preset) => { const definition = HEART_RATE_PRESETS[intensity.basis].find((zone) => zone.preset === preset); const configured = profileZone(context, intensity.basis, preset, definition?.id); setIntensity(preset === "custom" ? { type: "heartRatePercent", basis: intensity.basis, lowPercent: 80, highPercent: 90 } : { type: "heartRatePercent", basis: intensity.basis, preset: preset as never, ...(configured ? { zoneId: configured.id } : {}) }); }} /></label>
       {!intensity.preset ? percentRange(intensity, (lowPercent, highPercent) => ({ type: "heartRatePercent", basis: intensity.basis, lowPercent, highPercent })) : null}
       <HeartRatePreview intensity={intensity} context={context} />
     </> : null}
 
     {(intensity.type === "thresholdPacePercent" || intensity.type === "effortPacePercent") ? <>
-      <label><span>Zone or custom</span><SelectDropdown label="Pace zone" value={intensity.preset ?? "custom"} options={[{ value: "custom", label: "Custom range" }, ...PACE_PRESETS.map((zone) => { const configured = profileZone(context, "thresholdPace", zone.preset, zone.id); return { value: zone.preset, label: `${configured?.label ?? zone.label} · ${configured?.lowPercent ?? zone.low}-${configured?.highPercent ?? zone.high}%` }; })]} disabled={disabled} portal onChange={(preset) => { const definition = PACE_PRESETS.find((zone) => zone.preset === preset); const configured = profileZone(context, "thresholdPace", preset, definition?.id); setIntensity((preset === "custom" ? { type: intensity.type, lowPercent: 90, highPercent: 100 } : { type: intensity.type, preset, ...(configured ? { zoneId: configured.id } : {}) }) as WorkoutIntensityInput); }} /></label>
+      <label><span>{t("Zone or custom")}</span><SelectDropdown translateLabel={t} label={t("Pace zone")} value={intensity.preset ?? "custom"} options={[{ value: "custom", label: "Custom range" }, ...PACE_PRESETS.map((zone) => { const configured = profileZone(context, "thresholdPace", zone.preset, zone.id); return { value: zone.preset, label: `${configured?.label ?? zone.label} · ${configured?.lowPercent ?? zone.low}-${configured?.highPercent ?? zone.high}%` }; })]} disabled={disabled} portal onChange={(preset) => { const definition = PACE_PRESETS.find((zone) => zone.preset === preset); const configured = profileZone(context, "thresholdPace", preset, definition?.id); setIntensity((preset === "custom" ? { type: intensity.type, lowPercent: 90, highPercent: 100 } : { type: intensity.type, preset, ...(configured ? { zoneId: configured.id } : {}) }) as WorkoutIntensityInput); }} /></label>
       {!intensity.preset ? percentRange(intensity, (lowPercent, highPercent) => ({ type: intensity.type, lowPercent, highPercent })) : null}
       <PacePercentPreview intensity={intensity} context={context} />
     </> : null}
 
     {intensity.type === "ftpPercent" ? <>
-      <label><span>Zone or custom</span><SelectDropdown label="Cycling power zone" value={intensity.preset ?? "custom"} options={[{ value: "custom", label: "Custom range" }, ...FTP_PRESETS.map((zone) => { const configured = profileZone(context, "ftp", zone.preset, zone.id); return { value: zone.preset, label: `${configured?.label ?? zone.label} · ${configured?.lowPercent ?? zone.low}-${configured?.highPercent ?? zone.high}%` }; })]} disabled={disabled} portal onChange={(preset) => { const definition = FTP_PRESETS.find((zone) => zone.preset === preset); const configured = profileZone(context, "ftp", preset, definition?.id); setIntensity(preset === "custom" ? { type: "ftpPercent", lowPercent: 90, highPercent: 100 } : { type: "ftpPercent", preset: preset as never, ...(configured ? { zoneId: configured.id } : {}) }); }} /></label>
+      <label><span>{t("Zone or custom")}</span><SelectDropdown translateLabel={t} label={t("Cycling power zone")} value={intensity.preset ?? "custom"} options={[{ value: "custom", label: "Custom range" }, ...FTP_PRESETS.map((zone) => { const configured = profileZone(context, "ftp", zone.preset, zone.id); return { value: zone.preset, label: `${configured?.label ?? zone.label} · ${configured?.lowPercent ?? zone.low}-${configured?.highPercent ?? zone.high}%` }; })]} disabled={disabled} portal onChange={(preset) => { const definition = FTP_PRESETS.find((zone) => zone.preset === preset); const configured = profileZone(context, "ftp", preset, definition?.id); setIntensity(preset === "custom" ? { type: "ftpPercent", lowPercent: 90, highPercent: 100 } : { type: "ftpPercent", preset: preset as never, ...(configured ? { zoneId: configured.id } : {}) }); }} /></label>
       {!intensity.preset ? percentRange(intensity, (lowPercent, highPercent) => ({ type: "ftpPercent", lowPercent, highPercent })) : null}
       <PowerPercentPreview intensity={intensity} context={context} reference={context.ftp} zoneKey="ftp" />
     </> : null}
 
     {intensity.type === "power" ? <>
-      <label><span>Zone or custom</span><SelectDropdown label="Running power zone" value={intensity.preset ?? "custom"} options={[{ value: "custom", label: "Custom watts" }, ...RUNNING_POWER_PRESETS.map((zone) => { const configured = profileZone(context, "runningPower", zone.preset, zone.id); return { value: zone.preset, label: `${configured?.label ?? zone.label} · ${configured?.lowPercent ?? zone.low}-${configured?.highPercent ?? zone.high}%` }; })]} disabled={disabled} portal onChange={(preset) => { const definition = RUNNING_POWER_PRESETS.find((zone) => zone.preset === preset); const configured = profileZone(context, "runningPower", preset, definition?.id); setIntensity(preset === "custom" ? { type: "power", lowWatts: 180, highWatts: 220 } : { type: "power", preset: preset as never, ...(configured ? { zoneId: configured.id } : {}) }); }} /></label>
+      <label><span>{t("Zone or custom")}</span><SelectDropdown translateLabel={t} label={t("Running power zone")} value={intensity.preset ?? "custom"} options={[{ value: "custom", label: "Custom watts" }, ...RUNNING_POWER_PRESETS.map((zone) => { const configured = profileZone(context, "runningPower", zone.preset, zone.id); return { value: zone.preset, label: `${configured?.label ?? zone.label} · ${configured?.lowPercent ?? zone.low}-${configured?.highPercent ?? zone.high}%` }; })]} disabled={disabled} portal onChange={(preset) => { const definition = RUNNING_POWER_PRESETS.find((zone) => zone.preset === preset); const configured = profileZone(context, "runningPower", preset, definition?.id); setIntensity(preset === "custom" ? { type: "power", lowWatts: 180, highWatts: 220 } : { type: "power", preset: preset as never, ...(configured ? { zoneId: configured.id } : {}) }); }} /></label>
       {!intensity.preset ? numberRange(intensity.lowWatts, intensity.highWatts, "Low W", "High W", (lowWatts, highWatts) => ({ type: "power", lowWatts, highWatts }), 0, 3000) : <PowerPercentPreview intensity={intensity} context={context} reference={context.criticalPower} zoneKey="runningPower" />}
     </> : null}
 
     {intensity.type === "speed" ? numberRange(intensity.low, intensity.high, `Low ${intensity.unit}`, `High ${intensity.unit}`, (low, high) => ({ ...intensity, low, high }), 0, 200) : null}
     {intensity.type === "cadence" ? numberRange(intensity.low, intensity.high, `Low ${intensity.unit}`, `High ${intensity.unit}`, (low, high) => ({ ...intensity, low, high }), 0, 300) : null}
 
-    {intensity.type === "swimStroke" ? <label><span>Stroke</span><SelectDropdown label="Swim stroke" value={intensity.stroke} options={(Object.keys(SWIM_STROKE_IDS) as Array<keyof typeof SWIM_STROKE_IDS>).map((stroke) => ({ value: stroke, label: stroke }))} disabled={disabled} portal onChange={(stroke) => setIntensity({ type: "swimStroke", stroke })} /></label> : null}
+    {intensity.type === "swimStroke" ? <label><span>{t("Stroke")}</span><SelectDropdown translateLabel={t} label={t("Swim stroke")} value={intensity.stroke} options={(Object.keys(SWIM_STROKE_IDS) as Array<keyof typeof SWIM_STROKE_IDS>).map((stroke) => ({ value: stroke, label: stroke }))} disabled={disabled} portal onChange={(stroke) => setIntensity({ type: "swimStroke", stroke })} /></label> : null}
 
-    {intensity.type === "weight" ? <><label><span>Load</span><SelectDropdown label="Load" value={intensity.mode} options={[{ value: "bodyweight", label: "Bodyweight" }, { value: "weight", label: "Weight" }]} disabled={disabled} portal onChange={(mode) => setIntensity(mode === "bodyweight" ? { type: "weight", mode: "bodyweight" } : { type: "weight", mode: "weight", value: 10, unit: context.distanceUnit === "imperial" ? "lb" : "kg" })} /></label>{intensity.mode === "weight" ? <label><span>Weight ({context.distanceUnit === "imperial" ? "lb" : "kg"})</span><input type="number" min="0" max="2000" value={intensity.value} disabled={disabled} onChange={(event) => setIntensity({ ...intensity, value: Number(event.target.value), unit: context.distanceUnit === "imperial" ? "lb" : "kg" })} /></label> : null}</> : null}
+    {intensity.type === "weight" ? <><label><span>{t("Load")}</span><SelectDropdown translateLabel={t} label={t("Load")} value={intensity.mode} options={[{ value: "bodyweight", label: "Bodyweight" }, { value: "weight", label: "Weight" }]} disabled={disabled} portal onChange={(mode) => setIntensity(mode === "bodyweight" ? { type: "weight", mode: "bodyweight" } : { type: "weight", mode: "weight", value: 10, unit: context.distanceUnit === "imperial" ? "lb" : "kg" })} /></label>{intensity.mode === "weight" ? <label><span>{t("Weight (")}{context.distanceUnit === "imperial" ? "lb" : "kg"})</span><input type="number" min="0" max="2000" value={intensity.value} disabled={disabled} onChange={(event) => setIntensity({ ...intensity, value: Number(event.target.value), unit: context.distanceUnit === "imperial" ? "lb" : "kg" })} /></label> : null}</> : null}
 
-    {intensity.type === "rpe" ? <label><span>RPE</span><SelectDropdown label="RPE" value={String(intensity.value)} options={Array.from({ length: 10 }, (_, index) => String(index + 1)).map((value) => ({ value, label: value }))} disabled={disabled} portal onChange={(value) => setIntensity({ type: "rpe", value: Number(value) })} /></label> : null}
+    {intensity.type === "rpe" ? <label><span>{t("RPE")}</span><SelectDropdown translateLabel={t} label={t("RPE")} value={String(intensity.value)} options={Array.from({ length: 10 }, (_, index) => String(index + 1)).map((value) => ({ value, label: value }))} disabled={disabled} portal onChange={(value) => setIntensity({ type: "rpe", value: Number(value) })} /></label> : null}
 
     {intensity.type === "climbGrade" ? <>
-      <label><span>System</span><SelectDropdown<keyof typeof CLIMB_SYSTEM_IDS> label="Climbing system" value={intensity.system} options={(Object.keys(CLIMB_SYSTEM_IDS) as Array<keyof typeof CLIMB_SYSTEM_IDS>).map((system) => ({ value: system, label: system }))} disabled={disabled} portal onChange={(system) => setIntensity({ type: "climbGrade", system, relativeToOnsight: 0 })} /></label>
-      <label><span>Grade mode</span><SelectDropdown label="Grade mode" value={"relativeToOnsight" in intensity ? "relative" : "absolute"} options={[{ value: "relative", label: "Relative to onsight" }, { value: "absolute", label: "Absolute grade" }]} disabled={disabled} portal onChange={(mode) => setIntensity(mode === "relative" ? { type: "climbGrade", system: intensity.system, relativeToOnsight: 0 } : { type: "climbGrade", system: intensity.system, absoluteGrade: CLIMB_GRADES[intensity.system][0]! })} /></label>
-      {"relativeToOnsight" in intensity && intensity.relativeToOnsight !== undefined ? <label><span>Relative level</span><SelectDropdown label="Relative climbing level" value={String(intensity.relativeToOnsight)} options={Array.from({ length: 13 }, (_, index) => index - 8).map((value) => ({ value: String(value), label: value === 0 ? "Onsight" : `${value > 0 ? "+" : ""}${value}` }))} disabled={disabled} portal onChange={(value) => setIntensity({ ...intensity, relativeToOnsight: Number(value) })} /></label> : null}
-      {"absoluteGrade" in intensity && intensity.absoluteGrade !== undefined ? <label><span>Grade</span><SelectDropdown label="Climbing grade" value={intensity.absoluteGrade} options={CLIMB_GRADES[intensity.system].map((grade) => ({ value: grade, label: grade }))} disabled={disabled} portal onChange={(absoluteGrade) => setIntensity({ ...intensity, absoluteGrade })} /></label> : null}
+      <label><span>{t("System")}</span><SelectDropdown<keyof typeof CLIMB_SYSTEM_IDS> translateLabel={t} label={t("Climbing system")} value={intensity.system} options={(Object.keys(CLIMB_SYSTEM_IDS) as Array<keyof typeof CLIMB_SYSTEM_IDS>).map((system) => ({ value: system, label: system }))} disabled={disabled} portal onChange={(system) => setIntensity({ type: "climbGrade", system, relativeToOnsight: 0 })} /></label>
+      <label><span>{t("Grade mode")}</span><SelectDropdown translateLabel={t} label={t("Grade mode")} value={"relativeToOnsight" in intensity ? "relative" : "absolute"} options={[{ value: "relative", label: "Relative to onsight" }, { value: "absolute", label: "Absolute grade" }]} disabled={disabled} portal onChange={(mode) => setIntensity(mode === "relative" ? { type: "climbGrade", system: intensity.system, relativeToOnsight: 0 } : { type: "climbGrade", system: intensity.system, absoluteGrade: CLIMB_GRADES[intensity.system][0]! })} /></label>
+      {"relativeToOnsight" in intensity && intensity.relativeToOnsight !== undefined ? <label><span>{t("Relative level")}</span><SelectDropdown translateLabel={t} label={t("Relative climbing level")} value={String(intensity.relativeToOnsight)} options={Array.from({ length: 13 }, (_, index) => index - 8).map((value) => ({ value: String(value), label: value === 0 ? "Onsight" : `${value > 0 ? "+" : ""}${value}` }))} disabled={disabled} portal onChange={(value) => setIntensity({ ...intensity, relativeToOnsight: Number(value) })} /></label> : null}
+      {"absoluteGrade" in intensity && intensity.absoluteGrade !== undefined ? <label><span>{t("Grade")}</span><SelectDropdown translateLabel={t} label={t("Climbing grade")} value={intensity.absoluteGrade} options={CLIMB_GRADES[intensity.system].map((grade) => ({ value: grade, label: grade }))} disabled={disabled} portal onChange={(absoluteGrade) => setIntensity({ ...intensity, absoluteGrade })} /></label> : null}
     </> : null}
   </div>;
 }
 
 function HeartRatePreview({ intensity, context }: { intensity: Extract<WorkoutIntensityInput, { type: "heartRatePercent" }>; context: WorkoutEditorContext }) {
+  useLanguage();
   const definition = HEART_RATE_PRESETS[intensity.basis].find((zone) => zone.preset === intensity.preset);
   const configured = profileZone(context, intensity.basis, intensity.preset, intensity.zoneId ?? definition?.id);
   const low = intensity.lowPercent ?? configured?.lowPercent ?? definition?.low;
   const high = intensity.highPercent ?? configured?.highPercent ?? definition?.high;
   const reference = intensity.basis === "lthr" ? context.lthrBpm : context.maxHr;
-  if (low === undefined || high === undefined || !reference) return <p className="workout-control-hint">Profile reference is unavailable; COROS will still receive the percentage target.</p>;
+  if (low === undefined || high === undefined || !reference) return <p className="workout-control-hint">{t("Profile reference is unavailable; COROS will still receive the percentage target.")}</p>;
   const lowBpm = intensity.basis === "reserve" && context.restingHr
     ? context.restingHr + (reference - context.restingHr) * low / 100
     : reference * low / 100;
   const highBpm = intensity.basis === "reserve" && context.restingHr
     ? context.restingHr + (reference - context.restingHr) * high / 100
     : reference * high / 100;
-  return <p className="workout-control-hint">Derived preview: {Math.round(lowBpm)}–{Math.round(highBpm)} bpm.</p>;
+  return <p className="workout-control-hint">{t("Derived preview:")} {Math.round(lowBpm)}–{Math.round(highBpm)} bpm.</p>;
 }
 
 function PacePercentPreview({ intensity, context }: { intensity: Extract<WorkoutIntensityInput, { type: "thresholdPacePercent" | "effortPacePercent" }>; context: WorkoutEditorContext }) {
+  useLanguage();
   const definition = PACE_PRESETS.find((zone) => zone.preset === intensity.preset);
   const configured = profileZone(context, "thresholdPace", intensity.preset, intensity.zoneId ?? definition?.id);
   const low = intensity.lowPercent ?? configured?.lowPercent ?? definition?.low;
   const high = intensity.highPercent ?? configured?.highPercent ?? definition?.high;
   if (!context.thresholdPaceSecondsPerKm || !low || !high) {
-    return <p className="workout-control-hint">Threshold pace is unavailable; the percentage target will still be saved.</p>;
+    return <p className="workout-control-hint">{t("Threshold pace is unavailable; the percentage target will still be saved.")}</p>;
   }
-  return <p className="workout-control-hint">Derived preview: {derivedPaceLabel(context.thresholdPaceSecondsPerKm * 100 / high, context)}–{derivedPaceLabel(context.thresholdPaceSecondsPerKm * 100 / low, context)}.</p>;
+  return <p className="workout-control-hint">{t("Derived preview:")} {derivedPaceLabel(context.thresholdPaceSecondsPerKm * 100 / high, context)}–{derivedPaceLabel(context.thresholdPaceSecondsPerKm * 100 / low, context)}.</p>;
 }
 
 function PowerPercentPreview({ intensity, context, reference, zoneKey }: { intensity: Extract<WorkoutIntensityInput, { type: "ftpPercent" }> | Extract<WorkoutIntensityInput, { type: "power" }> & { preset: string }; context: WorkoutEditorContext; reference?: number; zoneKey: "ftp" | "runningPower" }) {
+  useLanguage();
   const definitions = zoneKey === "ftp" ? FTP_PRESETS : RUNNING_POWER_PRESETS;
   const definition = definitions.find((zone) => zone.preset === intensity.preset);
   const configured = profileZone(context, zoneKey, intensity.preset, intensity.zoneId ?? definition?.id);
   const low = "lowPercent" in intensity && intensity.lowPercent !== undefined ? intensity.lowPercent : configured?.lowPercent ?? definition?.low;
   const high = "highPercent" in intensity && intensity.highPercent !== undefined ? intensity.highPercent : configured?.highPercent ?? definition?.high;
   if (!reference || low === undefined || high === undefined) {
-    return <p className="workout-control-hint">Profile reference is unavailable; the percentage zone will still be saved.</p>;
+    return <p className="workout-control-hint">{t("Profile reference is unavailable; the percentage zone will still be saved.")}</p>;
   }
-  return <p className="workout-control-hint">Derived preview: {Math.round(reference * low / 100)}–{Math.round(reference * high / 100)} W.</p>;
+  return <p className="workout-control-hint">{t("Derived preview:")} {Math.round(reference * low / 100)}–{Math.round(reference * high / 100)} W.</p>;
 }
 
 function RepeatCard({ group, nodeIndex, context, sport, exerciseOptions, exerciseOptionsLoading, errors, disabled, onDragStart, onChange, onMove, onDuplicate, onDelete, onStepChange, onStepMove, onStepDuplicate, onStepDelete, onStepUngroup }: {
@@ -1279,32 +1277,35 @@ function RepeatCard({ group, nodeIndex, context, sport, exerciseOptions, exercis
   onDragStart: (event: DragEvent) => void; onChange: (group: RunWorkoutEditorRepeatGroup) => void; onMove: (direction: -1 | 1) => void; onDuplicate: () => void; onDelete: () => void;
   onStepChange: (id: string, step: RunWorkoutEditorStep) => void; onStepMove: (id: string, direction: -1 | 1) => void; onStepDuplicate: (id: string) => void; onStepDelete: (id: string) => void; onStepUngroup: (id: string) => void;
 }) {
+  useLanguage();
   const locked = disabled || !group.editable;
   const duplicateLocked = locked || group.steps.some((step) => !step.editable);
   return <motion.section layout className="workout-repeat-card" draggable={!disabled} onDragStartCapture={onDragStart}>
-    <header className="workout-repeat-header"><GripVertical size={18} aria-hidden="true" /><input aria-label="Repeat group name" value={group.name} disabled={locked} onChange={(event) => onChange({ ...group, name: event.target.value })} /><div className="workout-repeat-count"><span>Repeat</span><button type="button" disabled={locked || group.repeat <= 1} onClick={() => onChange({ ...group, repeat: group.repeat - 1 })}>−</button><input aria-label="Repeat count" type="number" min="1" max="99" value={group.repeat} disabled={locked} onChange={(event) => onChange({ ...group, repeat: Number(event.target.value) })} /><button type="button" disabled={locked || group.repeat >= 99} onClick={() => onChange({ ...group, repeat: group.repeat + 1 })}>+</button></div><div className="workout-step-actions"><IconAction label="Move group up" onClick={() => onMove(-1)} disabled={disabled}><ChevronUp /></IconAction><IconAction label="Move group down" onClick={() => onMove(1)} disabled={disabled}><ChevronDown /></IconAction><IconAction label="Duplicate group" onClick={onDuplicate} disabled={duplicateLocked}><Copy /></IconAction><IconAction label="Delete group" onClick={onDelete} disabled={disabled}><Trash2 /></IconAction></div></header>
+    <header className="workout-repeat-header"><GripVertical size={18} aria-hidden="true" /><input aria-label={t("Repeat group name")} value={group.name} disabled={locked} onChange={(event) => onChange({ ...group, name: event.target.value })} /><div className="workout-repeat-count"><span>{t("Repeat")}</span><button type="button" disabled={locked || group.repeat <= 1} onClick={() => onChange({ ...group, repeat: group.repeat - 1 })}>−</button><input aria-label={t("Repeat count")} type="number" min="1" max="99" value={group.repeat} disabled={locked} onChange={(event) => onChange({ ...group, repeat: Number(event.target.value) })} /><button type="button" disabled={locked || group.repeat >= 99} onClick={() => onChange({ ...group, repeat: group.repeat + 1 })}>+</button></div><div className="workout-step-actions"><IconAction label={t("Move group up")} onClick={() => onMove(-1)} disabled={disabled}><ChevronUp /></IconAction><IconAction label={t("Move group down")} onClick={() => onMove(1)} disabled={disabled}><ChevronDown /></IconAction><IconAction label={t("Duplicate group")} onClick={onDuplicate} disabled={duplicateLocked}><Copy /></IconAction><IconAction label={t("Delete group")} onClick={onDelete} disabled={disabled}><Trash2 /></IconAction></div></header>
     {errors[`nodes.${nodeIndex}.repeat`] ? <p className="workout-field-error">{errors[`nodes.${nodeIndex}.repeat`]}</p> : null}
     <div className="workout-repeat-steps">{group.steps.map((step, childIndex) => <StepCard key={step.id} step={step} location={{ nodeId: group.id, childId: step.id }} context={context} sport={sport} exerciseOptions={exerciseOptions} exerciseOptionsLoading={exerciseOptionsLoading} disabled={disabled} draggable error={errors[`nodes.${nodeIndex}.steps.${childIndex}.target`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.intensity`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.exercise`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.sets`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.rest`]} onDragStart={(event) => event.dataTransfer.setData("text/workout-node", step.id)} onDropCard={(sourceId) => { const from = group.steps.findIndex((candidate) => candidate.id === sourceId); const to = group.steps.findIndex((candidate) => candidate.id === step.id); if (from >= 0 && to >= 0) onChange({ ...group, steps: moveItem(group.steps, from, to) }); }} onChange={(next) => onStepChange(step.id, next)} onMove={(direction) => onStepMove(step.id, direction)} onDuplicate={() => onStepDuplicate(step.id)} onDelete={() => onStepDelete(step.id)} onUngroup={() => onStepUngroup(step.id)} />)}</div>
-    <button type="button" className="ghost-button workout-repeat-add" disabled={locked} onClick={() => onChange({ ...group, steps: [...group.steps, emptyStep("rest", sport)] })}><Plus size={14} aria-hidden="true" /> Add step to repeat</button>
+    <button type="button" className="ghost-button workout-repeat-add" disabled={locked} onClick={() => onChange({ ...group, steps: [...group.steps, emptyStep("rest", sport)] })}><Plus size={14} aria-hidden="true" /> {t("Add step to repeat")}</button>
   </motion.section>;
 }
 
 function EstimateFooter({ preview, loading, error, context }: { preview: WorkoutEditPreview | null; loading: boolean; error: string | null; context: WorkoutEditorContext }) {
+  useLanguage();
   const distance = preview?.distanceMeters;
   const displayDistance = distance === undefined ? "--" : context.distanceUnit === "imperial" ? `${(distance / 1609.344).toFixed(2)} mi` : `${(distance / 1000).toFixed(2)} km`;
   return <div className="workout-estimate" aria-live="polite">
-    {loading ? <span><LoaderCircle className="is-spinning" size={14} aria-hidden="true" /> Calculating...</span> : error ? <span className="is-error"><AlertTriangle size={14} aria-hidden="true" /> {error}</span> : <>
-      <span><small>Duration</small><strong>{preview?.durationSeconds !== undefined ? clockFromSeconds(preview.durationSeconds) : "--"}</strong></span>
-      <span><small>Distance</small><strong>{displayDistance}</strong></span>
-      <span><small>Training Load</small><strong>{preview?.trainingLoad !== undefined ? Math.round(preview.trainingLoad) : "--"}</strong></span>
-      {preview?.baseFitness !== undefined ? <span><small>Base Fitness</small><strong>{Math.round(preview.baseFitness)}</strong></span> : null}
-      {preview?.loadImpact !== undefined ? <span><small>Load Impact</small><strong>{Math.round(preview.loadImpact)}</strong></span> : null}
-      {preview?.intensityTrendPercent !== undefined ? <span><small>Intensity Trend</small><strong>{Math.round(preview.intensityTrendPercent)}%</strong></span> : null}
+    {loading ? <span><LoaderCircle className="is-spinning" size={14} aria-hidden="true" /> {t("Calculating...")}</span> : error ? <span className="is-error"><AlertTriangle size={14} aria-hidden="true" /> {error}</span> : <>
+      <span><small>{t("Duration")}</small><strong>{preview?.durationSeconds !== undefined ? clockFromSeconds(preview.durationSeconds) : "--"}</strong></span>
+      <span><small>{t("Distance")}</small><strong>{displayDistance}</strong></span>
+      <span><small>{t("Training Load")}</small><strong>{preview?.trainingLoad !== undefined ? Math.round(preview.trainingLoad) : "--"}</strong></span>
+      {preview?.baseFitness !== undefined ? <span><small>{t("Base Fitness")}</small><strong>{Math.round(preview.baseFitness)}</strong></span> : null}
+      {preview?.loadImpact !== undefined ? <span><small>{t("Load Impact")}</small><strong>{Math.round(preview.loadImpact)}</strong></span> : null}
+      {preview?.intensityTrendPercent !== undefined ? <span><small>{t("Intensity Trend")}</small><strong>{Math.round(preview.intensityTrendPercent)}%</strong></span> : null}
     </>}
   </div>;
 }
 
 function StrengthEstimateFooter({ draft }: { draft: RunWorkoutEditorDraft }) {
+  useLanguage();
   let exercises = 0;
   let sets = 0;
   let reps = 0;
@@ -1324,11 +1325,11 @@ function StrengthEstimateFooter({ draft }: { draft: RunWorkoutEditorDraft }) {
     else node.steps.forEach((step) => countStep(step, Math.max(1, node.repeat)));
   }
   return (
-    <div className="workout-estimate" aria-label="Strength session totals">
-      <span><small>Exercises</small><strong>{exercises}</strong></span>
-      <span><small>Sets</small><strong>{sets}</strong></span>
-      <span><small>Reps</small><strong>{reps || "--"}</strong></span>
-      <span><small>Set rest</small><strong>{restSeconds ? clockFromSeconds(restSeconds) : "--"}</strong></span>
+    <div className="workout-estimate" aria-label={t("Strength session totals")}>
+      <span><small>{t("Exercises")}</small><strong>{exercises}</strong></span>
+      <span><small>{t("Sets")}</small><strong>{sets}</strong></span>
+      <span><small>{t("Reps")}</small><strong>{reps || "--"}</strong></span>
+      <span><small>{t("Set rest")}</small><strong>{restSeconds ? clockFromSeconds(restSeconds) : "--"}</strong></span>
     </div>
   );
 }

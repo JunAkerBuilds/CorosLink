@@ -1,3 +1,4 @@
+import { useLanguage, t } from "../i18n/training";
 import { Check, ClipboardPaste, Copy, GripVertical, Plus } from "lucide-react";
 import { useState, type DragEvent } from "react";
 import type {
@@ -127,6 +128,7 @@ function PairChip({
   onSelectActivity: (activity: TrainingHubActivity) => void;
   onToggleScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
 }) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const { scheduled, activity } = pair;
   const selectable = selectionMode && !day.isPast;
@@ -167,8 +169,8 @@ function PairChip({
         aria-pressed={selectable ? selected : undefined}
         title={
           selectable
-            ? `${selected ? "Deselect" : "Select"} ${scheduled.name}`
-            : `${scheduled.name} — planned vs actual. Drag to a day to schedule it again.`
+            ? `${selected ? t("Deselect") : t("Select")} ${scheduled.name}`
+            : t("{{value1}} — planned vs actual. Drag to a day to schedule it again.", { value1: String(scheduled.name) })
         }
       >
         {selectable ? (
@@ -189,8 +191,7 @@ function PairChip({
         <span className="calendar-chip-meta">{activityStatsLine(activity, unitSystem)}</span>
         {actualLoad !== undefined || plannedLoad !== undefined ? (
           <span className="calendar-chip-meta calendar-chip-load">
-            {Math.round(actualLoad ?? 0)} TL
-            {plannedLoad !== undefined ? ` / ${Math.round(plannedLoad)} TL planned` : ""}
+            {Math.round(actualLoad ?? 0)} {t("TL")} {plannedLoad !== undefined ? t(" / {{value1}} TL planned", { value1: String(Math.round(plannedLoad)) }) : ""}
           </span>
         ) : null}
       </button>
@@ -231,20 +232,20 @@ function PairChip({
       aria-pressed={selectable ? selected : undefined}
       title={
         selectable
-          ? `${selected ? "Deselect" : "Select"} ${scheduled.name}`
+          ? `${selected ? t("Deselect") : t("Select")} ${scheduled.name}`
           : canDrag
             ? copyOnly
-              ? `${scheduled.name} — drag to a day to schedule it again`
-              : `${scheduled.name} — drag to reschedule, hold Option to copy`
+              ? t("{{value1}} — drag to a day to schedule it again", { value1: String(scheduled.name) })
+              : t("{{value1}} — drag to reschedule, hold Option to copy", { value1: String(scheduled.name) })
             : scheduled.name
       }
       aria-label={
         selectable
-          ? `${selected ? "Deselect" : "Select"} ${scheduled.name}`
+          ? `${selected ? t("Deselect") : t("Select")} ${scheduled.name}`
           : canDrag
           ? copyOnly
-            ? `${scheduled.name}. Drag to a day to schedule it again.`
-            : `${scheduled.name}. Drag to another day to reschedule, or hold Option to copy.`
+            ? t("{{value1}}. Drag to a day to schedule it again.", { value1: String(scheduled.name) })
+            : t("{{value1}}. Drag to another day to reschedule, or hold Option to copy.", { value1: String(scheduled.name) })
           : scheduled.name
       }
     >
@@ -257,14 +258,14 @@ function PairChip({
         <span className="calendar-chip-name">{scheduled.name}</span>
       </span>
       {scheduled.calendarEvent ? <span className="calendar-chip-meta">
-        {scheduled.calendarEvent.timing.mode === "all-day" ? "All day" : `${scheduled.calendarEvent.timing.startTime}–${scheduled.calendarEvent.timing.endTime}${scheduled.calendarEvent.timing.endTime <= scheduled.calendarEvent.timing.startTime ? " (+1 day)" : ""}`}
+        {scheduled.calendarEvent.timing.mode === "all-day" ? t("All day") : `${scheduled.calendarEvent.timing.startTime}–${scheduled.calendarEvent.timing.endTime}${scheduled.calendarEvent.timing.endTime <= scheduled.calendarEvent.timing.startTime ? t(" (+1 day)") : ""}`}
       </span> : null}
       <span className="calendar-chip-meta">
         {formatUpcomingWorkoutVolumeDisplay(scheduled.volume, unitSystem)}
         {scheduled.trainingLoad !== undefined
           ? missed
-            ? ` · ${Math.round(scheduled.trainingLoad)} TL / 0 TL`
-            : ` · ${Math.round(scheduled.trainingLoad)} TL`
+            ? t(" · {{value1}} TL / 0 TL", { value1: String(Math.round(scheduled.trainingLoad)) })
+            : t(" · {{value1}} TL", { value1: String(Math.round(scheduled.trainingLoad)) })
           : ""}
       </span>
       {canDrag ? (
@@ -294,6 +295,7 @@ export function DayCell({
   selectionMode,
   busy
 }: DayCellProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const [dropTarget, setDropTarget] = useState(false);
   const canReceiveDrop = !day.isPast && !busy && !selectionMode;
@@ -314,7 +316,7 @@ export function DayCell({
         .join(" ")}
       data-calendar-day={day.dateKey}
       tabIndex={day.isToday ? 0 : -1}
-      aria-label={`${day.dateKey}${day.scheduled.length ? `, ${day.scheduled.length} scheduled` : ""}`}
+      aria-label={`${day.dateKey}${day.scheduled.length ? t(", {{value1}} scheduled", { value1: String(day.scheduled.length) }) : ""}`}
       onMouseDown={(event) => {
         // Clicking empty space in a day makes it the ⌘C / ⌘V target.
         if (event.target === event.currentTarget || !(event.target as Element).closest("button, a, input")) {
@@ -359,7 +361,7 @@ export function DayCell({
     >
       <div className="calendar-day-head">
         <span className="calendar-day-number">
-          {day.isToday ? `Today ${String(dayNumber(day.dateKey)).padStart(2, "0")}` : dayNumber(day.dateKey)}
+          {day.isToday ? t("Today {{value1}}", { value1: String(String(dayNumber(day.dateKey)).padStart(2, "0")) }) : dayNumber(day.dateKey)}
         </span>
         <div className="calendar-day-actions">
           {hasScheduledWorkouts ? (
@@ -368,8 +370,8 @@ export function DayCell({
               className={`calendar-day-action calendar-day-copy${isDayCopied ? " is-copied" : ""}`}
               onClick={() => onCopyDay(day)}
               disabled={busy || selectionMode}
-              title={isDayCopied ? "Workouts copied" : "Copy day's workouts"}
-              aria-label={`Copy ${day.scheduled.length} workout${day.scheduled.length === 1 ? "" : "s"} from ${day.dateKey}`}
+              title={isDayCopied ? t("Workouts copied") : t("Copy day's workouts")}
+              aria-label={t("Copy {{value1}} workout{{value2}} from {{value3}}", { value1: String(day.scheduled.length), value2: String(day.scheduled.length === 1 ? "" : "s"), value3: String(day.dateKey) })}
             >
               {isDayCopied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
             </button>
@@ -380,8 +382,8 @@ export function DayCell({
               className="calendar-day-action calendar-day-paste"
               onClick={() => onPasteDay(day.dateKey)}
               disabled={busy || selectionMode}
-              title={clipboardCount === 1 ? "Paste workout" : `Paste ${clipboardCount} workouts`}
-              aria-label={`Paste ${clipboardCount} workout${clipboardCount === 1 ? "" : "s"} on ${day.dateKey}`}
+              title={clipboardCount === 1 ? t("Paste workout") : t("Paste {{value1}} workouts", { value1: String(clipboardCount) })}
+              aria-label={t("Paste {{value1}} workout{{value2}} on {{value3}}", { value1: String(clipboardCount), value2: String(clipboardCount === 1 ? "" : "s"), value3: String(day.dateKey) })}
             >
               <ClipboardPaste size={14} aria-hidden="true" />
             </button>
@@ -391,8 +393,8 @@ export function DayCell({
             className="calendar-day-action calendar-day-add"
             onClick={() => onAdd(day.dateKey)}
             disabled={busy || selectionMode}
-            title={day.isPast ? "Log activity" : "Add workout"}
-            aria-label={`${day.isPast ? "Log activity" : "Add workout"} on ${day.dateKey}`}
+            title={day.isPast ? t("Log activity") : t("Add workout")}
+            aria-label={t("{{value1}} on {{value2}}", { value1: String(day.isPast ? t("Log activity") : t("Add workout")), value2: String(day.dateKey) })}
           >
             <Plus size={14} aria-hidden="true" />
           </button>
@@ -428,18 +430,17 @@ export function DayCell({
               .join(" ")}
             onClick={() => onSelectActivity(activity)}
             disabled={selectionMode}
-            title={activity.name ?? activity.sportName ?? "Activity"}
+            title={activity.name ?? (activity.sportName == null ? activity.sportName : t(String(activity.sportName))) ?? t("Activity")}
           >
             <span className="calendar-chip-title">
               <span className="calendar-chip-name">
-                {activity.name ?? activity.sportName ?? "Activity"}
+                {activity.name ?? (activity.sportName == null ? activity.sportName : t(String(activity.sportName))) ?? t("Activity")}
               </span>
             </span>
             <span className="calendar-chip-meta">{activityStatsLine(activity, unitSystem)}</span>
             {activity.trainingLoad !== undefined ? (
               <span className="calendar-chip-meta calendar-chip-load">
-                {Math.round(activity.trainingLoad)} TL
-              </span>
+                {Math.round(activity.trainingLoad)} {t("TL")} </span>
             ) : null}
           </button>
         ))}

@@ -6,6 +6,7 @@ import { ThemeProvider } from "./theme/ThemeProvider";
 import { applyTheme, readStoredTheme } from "./theme/theme";
 import { applySportColors, readStoredSportColors } from "./training/sportColors";
 import { UnitSystemProvider } from "./units/UnitSystemProvider";
+import { initializeLanguage } from "./i18n";
 import "./styles.css";
 import "./desktop.css";
 import "./chat/coach.css";
@@ -13,6 +14,7 @@ import "./native-sidebar.css";
 import "./toolbar.css";
 
 installRendererDiagnostics(window.corosLink);
+initializeLanguage();
 
 // Older running preload builds and non-macOS windows retain the opaque fallback.
 if (window.corosLink?.nativeSidebarGlass) {

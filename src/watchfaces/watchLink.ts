@@ -1,3 +1,4 @@
+import { t, formatNumber } from "../i18n/watchfacesLocale";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CorosNativeBleSnapshot } from "../../electron/corosNativeBleTypes";
 import type {
@@ -40,11 +41,11 @@ export function watchBetaNote(snapshot: CorosNativeBleSnapshot | null): string |
   // Transfers were checked over Mac Bluetooth; the Windows and Linux worker sends the same bytes.
   const platform = snapshot?.transport === "winrt" ? "Windows" : snapshot?.transport === "bluez" ? "Linux" : null;
   if (snapshot?.watchValidated ?? isValidatedWatch(snapshot)) {
-    return platform ? `Watch transfers over ${platform} Bluetooth are in beta: they were tested over Mac Bluetooth. Check the result on the watch.` : null;
+    return platform ? t("Watch transfers over {{platform}} Bluetooth are in beta: they were tested over Mac Bluetooth. Check the result on the watch.", { platform }) : null;
   }
   return watch.model === "pace-pro"
-    ? `CorosLink was tested on PACE Pro firmware 3.2008.0. On firmware ${watchFirmware(snapshot) ?? "this version"} it is in beta, so check the result on the watch.`
-    : `${watch.label} support is in beta: CorosLink was tested on PACE Pro. Check the result on the watch, and tell us what you see.`;
+    ? t("CorosLink was tested on PACE Pro firmware 3.2008.0. On firmware {{firmware}} it is in beta, so check the result on the watch.", { firmware: watchFirmware(snapshot) ?? t("this version") })
+    : t("{{watch}} support is in beta: CorosLink was tested on PACE Pro. Check the result on the watch, and tell us what you see.", { watch: watch.label });
 }
 
 /** Whether this computer's own Bluetooth can reach a COROS watch. */
@@ -57,20 +58,20 @@ export type WatchLinkTone = "ok" | "busy" | "warn" | "off" | "error";
 
 /** One status label for the link, shared by the toolbar watch menu and the On watch tab. */
 export function watchConnectionState(snapshot: CorosNativeBleSnapshot | null): { tone: WatchLinkTone; label: string } {
-  if (!snapshot) return { tone: "off", label: "Not connected" };
-  if (snapshot.phase === "scanning") return { tone: "busy", label: "Finding watch…" };
-  if (snapshot.phase === "connecting") return { tone: "busy", label: "Connecting…" };
+  if (!snapshot) return { tone: "off", label: t("Not connected") };
+  if (snapshot.phase === "scanning") return { tone: "busy", label: t("Finding watch…") };
+  if (snapshot.phase === "connecting") return { tone: "busy", label: t("Connecting…") };
   if (snapshot.connected) {
-    if (snapshot.systemBind === "authenticated") return { tone: "ok", label: "Connected" };
-    if (snapshot.systemBind === "authenticating") return { tone: "busy", label: "Authenticating…" };
-    return { tone: "warn", label: snapshot.systemBind === "failed" ? "Authentication failed" : "Sign-in needed" };
+    if (snapshot.systemBind === "authenticated") return { tone: "ok", label: t("Connected") };
+    if (snapshot.systemBind === "authenticating") return { tone: "busy", label: t("Authenticating…") };
+    return { tone: "warn", label: snapshot.systemBind === "failed" ? t("Authentication failed") : t("Sign-in needed") };
   }
-  return snapshot.phase === "failed" ? { tone: "error", label: "Connection failed" } : { tone: "off", label: "Not connected" };
+  return snapshot.phase === "failed" ? { tone: "error", label: t("Connection failed") } : { tone: "off", label: t("Not connected") };
 }
 
 /** "COROS PACE Pro 2F1A6C" → "COROS PACE Pro": the advertised suffix only tells watches apart. */
 export function watchDisplayName(deviceName: string | undefined, fallback = "COROS watch"): string {
-  return deviceName?.trim().replace(/\s+[0-9A-F]{4,8}$/i, "") || fallback;
+  return deviceName?.trim().replace(/\s+[0-9A-F]{4,8}$/i, "") || t(fallback);
 }
 
 /** Firmware without the watch's "V " prefix. */
@@ -79,19 +80,19 @@ export function watchFirmware(snapshot: CorosNativeBleSnapshot | null): string |
 }
 
 export function apiErrorMessage(error: unknown, fallback: string): string {
-  return (error instanceof Error ? error.message : fallback).replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "");
+  return t((error instanceof Error ? error.message : fallback).replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ""));
 }
 
 export function formatBytes(bytes: number): string {
-  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return bytes >= 1024 * 1024 ? t("{{size}} MB", { size: formatNumber(bytes / 1024 / 1024, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) }) : t("{{size}} KB", { size: formatNumber(Math.max(1, Math.round(bytes / 1024))) });
 }
 
 /** "Compiled in 0.3 s": how long CorosLink's compiler took for this BIN. */
 export function compileSummary(preview: CorosDirectWatchfacePreview): string | null {
   if (!preview.compile) return null;
   const seconds = preview.compile.durationMs / 1000;
-  const time = seconds < 10 ? `${seconds.toFixed(1)} s` : `${Math.round(seconds)} s`;
-  return `Compiled in ${time}`;
+  const time = seconds < 10 ? `${formatNumber(seconds, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} s` : `${formatNumber(Math.round(seconds))} s`;
+  return t("Compiled in {{time}}", { time });
 }
 
 /** Polls the Bluetooth link while mounted. */

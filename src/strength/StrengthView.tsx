@@ -1,3 +1,4 @@
+import { formatNumber, t, getLocale, useLanguage } from "../i18n/training";
 import {
   useCallback,
   useEffect,
@@ -166,11 +167,11 @@ function toErrorMessage(error: unknown): string {
 
 function formatSessionDate(startTime?: number): string {
   if (!startTime) {
-    return "Unknown date";
+    return t("Unknown date");
   }
   const date = new Date(startTime * 1000);
   const sameYear = date.getFullYear() === new Date().getFullYear();
-  return date.toLocaleDateString(undefined, {
+  return date.toLocaleDateString(getLocale(), {
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -179,16 +180,16 @@ function formatSessionDate(startTime?: number): string {
 }
 
 function formatSyncTime(value?: string): string {
-  if (!value) return "Not synced yet";
+  if (!value) return t("Not synced yet");
   const date = new Date(value);
   return Number.isNaN(date.getTime())
-    ? "Not synced yet"
-    : `Last synced ${date.toLocaleString(undefined, {
+    ? t("Not synced yet")
+    : t("Last synced {{value1}}", { value1: String(date.toLocaleString(getLocale(), {
         month: "short",
         day: "numeric",
         hour: "numeric",
         minute: "2-digit"
-      })}`;
+      })) });
 }
 
 function sessionSourceLabel(session: StrengthSession): string | undefined {
@@ -212,13 +213,13 @@ function totalWeightParts(kg: number, unitSystem: UnitSystem): FigurePart[] {
     const tonnes = kg / 1000;
     return [
       {
-        value: tonnes >= 10 ? Math.round(tonnes).toLocaleString() : tonnes.toFixed(1),
+        value: tonnes >= 10 ? Math.round(tonnes).toLocaleString(getLocale()) : formatNumber(tonnes, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
         unit: "tonnes"
       }
     ];
   }
   const display = kilogramsToDisplayWeight(kg, unitSystem);
-  return [{ value: Math.round(display).toLocaleString(), unit: weightUnit(unitSystem) }];
+  return [{ value: Math.round(display).toLocaleString(getLocale()), unit: weightUnit(unitSystem) }];
 }
 
 /** A single lift keeps its half-kilo; a season's tonnage does not. */
@@ -227,8 +228,8 @@ function liftWeightParts(kg: number, unitSystem: UnitSystem): FigurePart[] {
   return [
     {
       value: Number.isInteger(display)
-        ? display.toLocaleString()
-        : display.toFixed(1),
+        ? display.toLocaleString(getLocale())
+        : formatNumber(display, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
       unit: weightUnit(unitSystem)
     }
   ];
@@ -280,9 +281,9 @@ function cadencePhrase(sessionsPerWeek: number): string {
     return "";
   }
   if (sessionsPerWeek >= 1) {
-    return `About ${sessionsPerWeek.toFixed(1).replace(/\.0$/, "")} a week`;
+    return t("About {{value1}} a week", { value1: String(formatNumber(sessionsPerWeek, { minimumFractionDigits: 1, maximumFractionDigits: 1 })) });
   }
-  return `About one every ${Math.round(7 / sessionsPerWeek)} days`;
+  return t("About one every {{value1}} days", { value1: String(Math.round(7 / sessionsPerWeek)) });
 }
 
 interface WeekPoint {
@@ -308,7 +309,7 @@ function buildWeekSeries(weeks: WeekBucket[], windowDays: number): WeekPoint[] {
     const bucket = byWeekStart.get(Math.floor(at / 1000));
     points.push({
       weekStart: Math.floor(at / 1000),
-      label: new Date(at).toLocaleDateString(undefined, {
+      label: new Date(at).toLocaleDateString(getLocale(), {
         month: "short",
         day: "numeric"
       }),
@@ -351,6 +352,7 @@ function compareRecentWeeks(
 }
 
 function Figure({ parts }: { parts: FigurePart[] }) {
+  useLanguage();
   return (
     <p className="strength-figure">
       {parts.map((part) => (
@@ -374,6 +376,7 @@ function Sparkline({
   /** True when the newest point is also the lift's best — that dot earns gold. */
   record?: boolean;
 }) {
+  useLanguage();
   const width = 112;
   const height = 34;
   const pad = 5;
@@ -390,7 +393,7 @@ function Sparkline({
       x: pad + index * step,
       y: height - pad - ((value - min) / span) * (height - pad * 2)
     }));
-  }, [values]);
+  }, [values, getLocale()]);
 
   if (!path) {
     return <span className="strength-spark is-empty" aria-hidden="true" />;
@@ -433,6 +436,7 @@ export function StrengthView({
   showDevelopmentTools = false,
   initialAccountSetup = false
 }: StrengthViewProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const corosConnected = Boolean(status?.authenticated);
   const { colors } = useChartColors();
@@ -706,12 +710,12 @@ export function StrengthView({
   // without a populated account; nothing about it touches the API or the cache.
   const sessions = useMemo(
     () => (sampleMode ? buildSampleStrengthSessions(days) : loadedSessions),
-    [sampleMode, days, loadedSessions]
+    [sampleMode, days, loadedSessions, getLocale()]
   );
 
   const analytics = useMemo(
     () => buildStrengthAnalytics(sessions, days),
-    [sessions, days]
+    [sessions, days, getLocale()]
   );
 
   const selectedExercise = selectedExerciseName
@@ -739,7 +743,7 @@ export function StrengthView({
 
   const weekSeries = useMemo(
     () => buildWeekSeries(analytics.weeks, days),
-    [analytics.weeks, days]
+    [analytics.weeks, days, getLocale()]
   );
 
   const chartData = useMemo(
@@ -753,7 +757,7 @@ export function StrengthView({
         sets: Math.round(week.sets),
         sessions: week.sessions
       })),
-    [weekSeries, unitSystem, usesWeights]
+    [weekSeries, unitSystem, usesWeights, getLocale()]
   );
 
   /**
@@ -771,7 +775,7 @@ export function StrengthView({
       kg: active.reduce((total, week) => total + week.volumeKg, 0) / active.length,
       sets: active.reduce((total, week) => total + week.sets, 0) / active.length
     };
-  }, [weekSeries, usesWeights]);
+  }, [weekSeries, usesWeights, getLocale()]);
 
   const averageValue = usesWeights
     ? Math.round(kilogramsToDisplayWeight(average.kg, unitSystem))
@@ -782,7 +786,7 @@ export function StrengthView({
       compareRecentWeeks(weekSeries, (week) =>
         usesWeights ? week.volumeKg : week.sets
       ),
-    [weekSeries, usesWeights]
+    [weekSeries, usesWeights, getLocale()]
   );
 
   /**
@@ -796,7 +800,7 @@ export function StrengthView({
         .filter((exercise: ExerciseStat) => exercise.bestE1rmKg > 0)
         .sort((a, b) => b.volumeKg - a.volumeKg)
         .slice(0, MAX_MAIN_LIFTS),
-    [analytics.exercises]
+    [analytics.exercises, getLocale()]
   );
 
   const recentSessions = useMemo(
@@ -804,7 +808,7 @@ export function StrengthView({
       [...sessions]
         .sort((a, b) => (b.startTime ?? 0) - (a.startTime ?? 0))
         .slice(0, MAX_RECENT_SESSIONS),
-    [sessions]
+    [sessions, getLocale()]
   );
 
   const balanceTotal =
@@ -838,13 +842,13 @@ export function StrengthView({
           key: "lifted",
           label: "Weight lifted",
           parts: totalWeightParts(summary.volumeKg, unitSystem),
-          caption: `Across ${Math.round(summary.sets).toLocaleString()} sets`
+          caption: `Across ${Math.round(summary.sets).toLocaleString(getLocale())} sets`
         }
       : {
           key: "sets",
           label: "Sets",
-          parts: [{ value: Math.round(summary.sets).toLocaleString() }],
-          caption: `${Math.round(summary.reps).toLocaleString()} reps`
+          parts: [{ value: Math.round(summary.sets).toLocaleString(getLocale()) }],
+          caption: `${Math.round(summary.reps).toLocaleString(getLocale())} reps`
         },
     {
       key: "time",
@@ -879,7 +883,7 @@ export function StrengthView({
 
   const averageLabel = usesWeights
     ? formatTotalWeight(average.kg, unitSystem)
-    : `${Math.round(average.sets)} sets`;
+    : t("{{value1}} sets", { value1: String(Math.round(average.sets)) });
 
   const sampleButton = showDevelopmentTools ? (
     <button
@@ -888,8 +892,7 @@ export function StrengthView({
       onClick={() => setSampleMode(true)}
     >
       <FlaskConical size={14} aria-hidden="true" />
-      Preview with sample data
-    </button>
+      {t("Preview with sample data")} </button>
   ) : null;
 
   const hevyDialog = hevyDialogOpen ? (
@@ -910,15 +913,15 @@ export function StrengthView({
       >
         <header>
           <div>
-            <p className="eyebrow">Strength source</p>
+            <p className="eyebrow">{t("Strength source")}</p>
             <h2 id="strength-hevy-title">
-              {hevyConnected ? "Hevy connected" : "Connect Hevy"}
+              {hevyConnected ? t("Hevy connected") : t("Connect Hevy")}
             </h2>
           </div>
           <button
             type="button"
             className="strength-hevy-close"
-            aria-label="Close Hevy settings"
+            aria-label={t("Close Hevy settings")}
             disabled={hevyBusy}
             onClick={() => setHevyDialogOpen(false)}
           >
@@ -931,12 +934,12 @@ export function StrengthView({
             <div className="strength-hevy-account">
               <span className="strength-hevy-mark" aria-hidden="true">H</span>
               <div>
-                <strong>{hevyStatus?.displayName || "Hevy account"}</strong>
+                <strong>{hevyStatus?.displayName || t("Hevy account")}</strong>
                 <span>{formatSyncTime(hevyStatus?.lastSyncedAt)}</span>
               </div>
               {hevyStatus?.profileUrl ? (
                 <a href={hevyStatus.profileUrl} target="_blank" rel="noreferrer">
-                  Profile <ExternalLink size={13} aria-hidden="true" />
+                  {t("Profile")} <ExternalLink size={13} aria-hidden="true" />
                 </a>
               ) : null}
             </div>
@@ -948,14 +951,12 @@ export function StrengthView({
                 onChange={(event) => void changeWarmupSetting(event.target.checked)}
               />
               <span>
-                <strong>Include warm-up sets</strong>
-                <small>Count warm-ups in sets, volume, and lift records.</small>
+                <strong>{t("Include warm-up sets")}</strong>
+                <small>{t("Count warm-ups in sets, volume, and lift records.")}</small>
               </span>
             </label>
             <p className="strength-hevy-privacy">
-              CorosLink reads completed workouts only. It never writes to Hevy or
-              sends Hevy workouts to COROS.
-            </p>
+              {t("CorosLink reads completed workouts only. It never writes to Hevy or sends Hevy workouts to COROS.")} </p>
             <footer>
               <button
                 type="button"
@@ -963,57 +964,49 @@ export function StrengthView({
                 disabled={hevyBusy}
                 onClick={() => void disconnectHevyAccount()}
               >
-                Disconnect and erase cache
-              </button>
+                {t("Disconnect and erase cache")} </button>
               <button
                 type="button"
                 className="primary-button"
                 disabled={hevyBusy}
                 onClick={() => setHevyDialogOpen(false)}
               >
-                Done
-              </button>
+                {t("Done")} </button>
             </footer>
           </>
         ) : (
           <form onSubmit={connectHevyAccount}>
             <p>
-              Hevy&apos;s developer API requires Hevy Pro. Create a key in your
-              Hevy web settings, then paste it below.
-            </p>
+              {t("Hevy's developer API requires Hevy Pro. Create a key in your Hevy web settings, then paste it below.")} </p>
             <a
               className="strength-hevy-developer-link"
               href="https://hevy.com/settings?developer"
               target="_blank"
               rel="noreferrer"
             >
-              Open Hevy developer settings
-              <ExternalLink size={14} aria-hidden="true" />
+              {t("Open Hevy developer settings")} <ExternalLink size={14} aria-hidden="true" />
             </a>
             <label className="field">
-              <span>Hevy API key</span>
+              <span>{t("Hevy API key")}</span>
               <input
                 type="password"
                 value={hevyApiKey}
                 autoComplete="off"
                 spellCheck={false}
-                placeholder="Paste API key"
+                placeholder={t("Paste API key")}
                 disabled={hevyBusy}
                 onChange={(event) => setHevyApiKey(event.target.value)}
               />
             </label>
             <p className="strength-hevy-privacy">
-              The key is encrypted with your operating system&apos;s credential
-              storage and is never exposed to the page after connection.
-            </p>
+              {t("The key is encrypted with your operating system's credential storage and is never exposed to the page after connection.")} </p>
             <button
               type="submit"
               className="primary-button"
               disabled={hevyBusy || !hevyApiKey.trim()}
             >
               {hevyBusy ? <Loader2 className="spin" size={16} aria-hidden="true" /> : <Link2 size={16} aria-hidden="true" />}
-              Connect Hevy
-            </button>
+              {t("Connect Hevy")} </button>
           </form>
         )}
 
@@ -1029,21 +1022,19 @@ export function StrengthView({
   const renderHeader = (withControls: boolean) => (
     <header className="strength-header">
       <div className="strength-title">
-        <h2>Strength</h2>
+        <h2>{t("Strength")}</h2>
         <p>
           {!withControls
-            ? "Your lifting, muscle by muscle."
+            ? t("Your lifting, muscle by muscle.")
             : hasSessions
-              ? `You trained ${summary.sessions} ${
-                  summary.sessions === 1 ? "time" : "times"
-                } in ${activeWindow.phrase}.`
-              : `Your lifting from ${activeWindow.phrase}, muscle by muscle.`}
+              ? t("You trained {{value1}} {{value2}} in {{value3}}.", { value1: String(summary.sessions), value2: String(summary.sessions === 1 ? t("time") : t("times")), value3: String(activeWindow.phrase) })
+              : t("Your lifting from {{value1}}, muscle by muscle.", { value1: String(activeWindow.phrase) })}
         </p>
       </div>
       <div className="strength-header-controls">
         {withControls ? (
           <>
-          <div className="strength-segment strength-source" role="group" aria-label="Strength source">
+          <div className="strength-segment strength-source" role="group" aria-label={t("Strength source")}>
             {(
               [
                 ["combined", "Combined", !(corosConnected && hevyConnected)],
@@ -1059,11 +1050,11 @@ export function StrengthView({
                 aria-pressed={source === id}
                 onClick={() => setSource(id)}
               >
-                <span className="strength-segment-label">{label}</span>
+                <span className="strength-segment-label">{t(label)}</span>
               </button>
             ))}
           </div>
-          <div className="strength-segment strength-window" role="group" aria-label="Time covered">
+          <div className="strength-segment strength-window" role="group" aria-label={t("Time covered")}>
             {WINDOW_OPTIONS.map((option) => (
               <button
                 key={option.days}
@@ -1072,7 +1063,7 @@ export function StrengthView({
                 aria-pressed={days === option.days}
                 onClick={() => setDays(option.days)}
               >
-                <span className="strength-segment-label">{option.label}</span>
+                <span className="strength-segment-label">{t(option.label)}</span>
               </button>
             ))}
           </div>
@@ -1091,8 +1082,7 @@ export function StrengthView({
               ) : (
                 <RefreshCw size={14} aria-hidden="true" />
               )}
-              Refresh
-            </button>
+              {t("Refresh")} </button>
           ) : null}
           <button
             type="button"
@@ -1111,8 +1101,7 @@ export function StrengthView({
             ) : (
               <>
                 <Link2 size={14} aria-hidden="true" />
-                Connect Hevy
-              </>
+                {t("Connect Hevy")} </>
             )}
           </button>
         </div>
@@ -1126,8 +1115,7 @@ export function StrengthView({
         {renderHeader(false)}
         <p className="strength-notice" role="status">
           <Loader2 className="spin" size={14} aria-hidden="true" />
-          Checking strength connections…
-        </p>
+          {t("Checking strength connections…")} </p>
         {hevyDialog}
       </section>
     );
@@ -1142,11 +1130,9 @@ export function StrengthView({
           <span className="strength-connect-icon" aria-hidden="true">
             <LockKeyhole size={22} />
           </span>
-          <h3>Connect a strength source</h3>
+          <h3>{t("Connect a strength source")}</h3>
           <p>
-            Import completed workouts from Hevy, read sessions from COROS
-            Training Hub, or connect both for one combined history.
-          </p>
+            {t("Import completed workouts from Hevy, read sessions from COROS Training Hub, or connect both for one combined history.")} </p>
           <div className="strength-connect-actions">
             <button
               type="button"
@@ -1154,11 +1140,9 @@ export function StrengthView({
               onClick={() => setHevyDialogOpen(true)}
             >
               <Link2 size={16} aria-hidden="true" />
-              Connect Hevy
-            </button>
+              {t("Connect Hevy")} </button>
             <button type="button" className="secondary-button" onClick={onOpenTraining}>
-              Open Training Hub
-            </button>
+              {t("Open Training Hub")} </button>
           </div>
         </section>
 
@@ -1178,10 +1162,8 @@ export function StrengthView({
       {sampleMode ? (
         <p className="strength-notice is-sample" role="status">
           <FlaskConical size={14} aria-hidden="true" />
-          Showing generated sample data, not your training.
-          <button type="button" onClick={() => setSampleMode(false)}>
-            Exit preview
-          </button>
+          {t("Showing generated sample data, not your training.")} <button type="button" onClick={() => setSampleMode(false)}>
+            {t("Exit preview")} </button>
         </p>
       ) : null}
 
@@ -1194,26 +1176,21 @@ export function StrengthView({
       {!sampleMode
         ? warnings.map((warning) => (
             <p className="strength-notice is-warning" role="status" key={warning}>
-              {warning} Showing the most recent cached workouts instead.
-            </p>
+              {warning} {t("Showing the most recent cached workouts instead.")} </p>
           ))
         : null}
 
       {pending > 0 && !sampleMode ? (
         <p className="strength-notice" role="status">
           <Loader2 className="spin" size={14} aria-hidden="true" />
-          Reading {pending} more session{pending === 1 ? "" : "s"} from COROS.
-          The map fills in as they arrive.
-        </p>
+          {t("Reading")} {pending} {t("more session")}{pending === 1 ? "" : "s"} {t("from COROS. The map fills in as they arrive.")} </p>
       ) : null}
 
       {hasSessions && genericSetCount > 0 ? (
         <p className="strength-notice is-attribution" role="note">
           <Info size={15} aria-hidden="true" />
           <span>
-            {`COROS recorded ${genericSetCount.toLocaleString()} working ${
-              genericSetCount === 1 ? "set" : "sets"
-            } only as Full Body, so ${genericSetCount === 1 ? "it is" : "they are"} excluded from the map. Specific attribution is available for ${attributedSetCount.toLocaleString()} of ${workingSetCount.toLocaleString()} working sets.`}
+            {t("COROS recorded {{value1}} working {{value2}} only as Full Body, so {{value3}} excluded from the map. Specific attribution is available for {{value4}} of {{value5}} working sets.", { value1: String(genericSetCount.toLocaleString()), value2: String(genericSetCount === 1 ? t("set") : t("sets")), value3: String(genericSetCount === 1 ? t("it is") : t("they are")), value4: String(attributedSetCount.toLocaleString()), value5: String(workingSetCount.toLocaleString()) })}
           </span>
         </p>
       ) : null}
@@ -1233,33 +1210,31 @@ export function StrengthView({
       >
         <section className="panel strength-body-panel">
           <div className="strength-body-controls">
-            <div className="strength-segmented" role="group" aria-label="Body view">
+            <div className="strength-segmented" role="group" aria-label={t("Body view")}>
               <button
                 type="button"
                 className={view === "front" ? "is-active" : ""}
                 aria-pressed={view === "front"}
                 onClick={() => requestView("front")}
               >
-                Front
-              </button>
+                {t("Front")} </button>
               <button
                 type="button"
                 className={view === "back" ? "is-active" : ""}
                 aria-pressed={view === "back"}
                 onClick={() => requestView("back")}
               >
-                Back
-              </button>
+                {t("Back")} </button>
             </div>
             <button
               type="button"
               className="strength-flip"
-              aria-label="Flip the figure"
+              aria-label={t("Flip the figure")}
               onClick={() => requestView(view === "front" ? "back" : "front")}
             >
               <RotateCw size={15} aria-hidden="true" />
             </button>
-            <div className="strength-segmented is-quiet" role="group" aria-label="Heat metric">
+            <div className="strength-segmented is-quiet" role="group" aria-label={t("Heat metric")}>
               {METRIC_OPTIONS.filter(
                 (option) => source === "coros" || option.id !== "time"
               ).map((option) => (
@@ -1270,7 +1245,7 @@ export function StrengthView({
                   aria-pressed={metric === option.id}
                   onClick={() => setMetric(option.id)}
                 >
-                  {option.label}
+                  {t(option.label)}
                 </button>
               ))}
             </div>
@@ -1291,13 +1266,13 @@ export function StrengthView({
           />
 
           <div className="strength-legend" aria-hidden="true">
-            <span>Light</span>
+            <span>{t("Light")}</span>
             <span className="strength-legend-ramp">
               {[1, 2, 3, 4, 5].map((level) => (
                 <i key={level} data-level={level} />
               ))}
             </span>
-            <span>Hammered</span>
+            <span>{t("Hammered")}</span>
           </div>
         </section>
 
@@ -1307,14 +1282,12 @@ export function StrengthView({
               <span className="muscle-panel-unattributed-icon" aria-hidden="true">
                 <Info size={22} />
               </span>
-              <p className="eyebrow">Muscle attribution</p>
-              <h3>No specific muscle data</h3>
+              <p className="eyebrow">{t("Muscle attribution")}</p>
+              <h3>{t("No specific muscle data")}</h3>
               <p>
                 {genericSetCount > 0
-                  ? `COROS recorded ${genericSetCount.toLocaleString()} working ${
-                      genericSetCount === 1 ? "set" : "sets"
-                    } only as Full Body. Session totals remain available, but the map stays neutral because no specific muscles were identified.`
-                  : "None of the exercises in this window could be matched to specific muscles. Session totals remain available, but the map stays neutral."}
+                  ? t("COROS recorded {{value1}} working {{value2}} only as Full Body. Session totals remain available, but the map stays neutral because no specific muscles were identified.", { value1: String(genericSetCount.toLocaleString()), value2: String(genericSetCount === 1 ? t("set") : t("sets")) })
+                  : t("None of the exercises in this window could be matched to specific muscles. Session totals remain available, but the map stays neutral.")}
               </p>
             </div>
           ) : (
@@ -1334,20 +1307,18 @@ export function StrengthView({
 
       {!hasSessions ? (
         <section className="panel strength-card strength-blank">
-          <h3>No strength sessions in {activeWindow.phrase}</h3>
+          <h3>{t("No strength sessions in")} {activeWindow.phrase}</h3>
           <p>
-            Sessions appear here a few minutes after they sync from your watch.
-            Try a longer stretch of time if you know you&apos;ve been lifting.
-          </p>
+            {t("Sessions appear here a few minutes after they sync from your watch. Try a longer stretch of time if you know you've been lifting.")} </p>
         </section>
       ) : (
         <>
-          <section className="strength-summary" aria-label="Your training so far">
+          <section className="strength-summary" aria-label={t("Your training so far")}>
             {summaryItems.map((item) => (
               <div key={item.key} className="strength-summary-item">
-                <p className="strength-summary-label">{item.label}</p>
+                <p className="strength-summary-label">{t(item.label)}</p>
                 <Figure parts={item.parts} />
-                <p className="strength-summary-caption">{item.caption}</p>
+                <p className="strength-summary-caption">{t(item.caption)}</p>
               </div>
             ))}
           </section>
@@ -1355,11 +1326,11 @@ export function StrengthView({
           <section className="panel strength-card strength-week-card">
             <div className="strength-card-head">
               <div>
-                <h3>{usesWeights ? "Weight lifted and sets each week" : "Sets each week"}</h3>
+                <h3>{usesWeights ? t("Weight lifted and sets each week") : t("Sets each week")}</h3>
                 <p>
                   {usesWeights
-                    ? "Bars show total weight lifted; the line tracks your sets."
-                    : "Every bar is every set you did that week."}
+                    ? t("Bars show total weight lifted; the line tracks your sets.")
+                    : t("Every bar is every set you did that week.")}
                 </p>
               </div>
               {change ? (
@@ -1381,10 +1352,8 @@ export function StrengthView({
                     <ArrowDownRight size={13} aria-hidden="true" />
                   )}
                   {Math.abs(change.percent) < 5
-                    ? `About the same as the ${change.weeks} weeks before`
-                    : `${Math.abs(Math.round(change.percent))}% ${
-                        change.percent > 0 ? "more" : "less"
-                      } than the ${change.weeks} weeks before`}
+                    ? t("About the same as the {{value1}} weeks before", { value1: String(change.weeks) })
+                    : t("{{value1}}% {{value2}} than the {{value3}} weeks before", { value1: String(Math.abs(Math.round(change.percent))), value2: String(change.percent > 0 ? t("more") : t("less")), value3: String(change.weeks) })}
                 </span>
               ) : null}
             </div>
@@ -1456,19 +1425,18 @@ export function StrengthView({
                       const point = props.payload[0].payload as (typeof chartData)[number];
                       return (
                         <div className="strength-tooltip">
-                          <span>Week of {props.label}</span>
+                          <span>{t("Week of")} {(props.label == null ? props.label : t(String(props.label)))}</span>
                           <strong>
                             {point.sessions === 0
-                              ? "No sessions"
+                              ? t("No sessions")
                               : usesWeights
                                 ? formatTotalWeight(point.volumeKg, unitSystem)
-                                : `${point.sets} sets`}
+                                : t("{{value1}} sets", { value1: String(point.sets) })}
                           </strong>
                           {point.sessions > 0 ? (
                             <span>
-                              {point.sessions} session
-                              {point.sessions === 1 ? "" : "s"}
-                              {usesWeights ? ` · ${point.sets} sets` : ""}
+                              {point.sessions} {t("session")} {point.sessions === 1 ? "" : "s"}
+                              {usesWeights ? t(" · {{value1}} sets", { value1: String(point.sets) }) : ""}
                             </span>
                           ) : null}
                         </div>
@@ -1519,7 +1487,7 @@ export function StrengthView({
             {averageValue > 0 ? (
               <p className="strength-chart-note">
                 <span className="strength-chart-dash" aria-hidden="true" />
-                Your average week: {averageLabel}
+                {t("Your average week:")} {averageLabel}
               </p>
             ) : null}
           </section>
@@ -1528,11 +1496,9 @@ export function StrengthView({
             <section className="panel strength-card strength-lifts-card">
               <div className="strength-card-head">
                 <div>
-                  <h3>Your main lifts</h3>
+                  <h3>{t("Your main lifts")}</h3>
                   <p>
-                    The most you could lift for one rep, estimated from your best
-                    set.
-                  </p>
+                    {t("The most you could lift for one rep, estimated from your best set.")} </p>
                 </div>
                 {analytics.exercises.length > 0 ? (
                   <button
@@ -1543,15 +1509,13 @@ export function StrengthView({
                     }
                   >
                     <Search size={13} aria-hidden="true" />
-                    Explore all
-                  </button>
+                    {t("Explore all")} </button>
                 ) : null}
               </div>
 
               {mainLifts.length === 0 ? (
                 <p className="strength-empty">
-                  Nothing to estimate yet — this needs sets with weight on them.
-                </p>
+                  {t("Nothing to estimate yet — this needs sets with weight on them.")} </p>
               ) : (
                 <ul className="strength-lift-list">
                   {mainLifts.map((lift) => {
@@ -1577,16 +1541,14 @@ export function StrengthView({
                         <button
                           type="button"
                           className="strength-lift-button"
-                          aria-label={`Explore ${lift.name}`}
+                          aria-label={t("Explore {{value1}}", { value1: String(lift.name) })}
                           onClick={() => openExercise(lift.name)}
                         >
                           <div className="strength-lift-main">
                             <span className="strength-lift-name">{lift.name}</span>
                             <span className="strength-lift-meta">
-                              {lift.sessions} session
-                              {lift.sessions === 1 ? "" : "s"} ·{" "}
-                              {formatSets(lift.sets)} sets
-                            </span>
+                              {lift.sessions} {t("session")} {lift.sessions === 1 ? "" : "s"} ·{" "}
+                              {formatSets(lift.sets)} {t("sets")} </span>
                           </div>
                           <Sparkline
                             values={loaded.map((point) => point.e1rmKg)}
@@ -1600,9 +1562,9 @@ export function StrengthView({
                             </strong>
                             <span className="strength-lift-change" data-tone={tone}>
                               {trend === undefined ? (
-                                "One session"
+                                t("One session")
                               ) : tone === "flat" ? (
-                                "No change"
+                                t("No change")
                               ) : (
                                 <>
                                   {tone === "up" ? (
@@ -1631,16 +1593,14 @@ export function StrengthView({
             <section className="panel strength-card strength-mix-card">
               <div className="strength-card-head">
                 <div>
-                  <h3>Where the work went</h3>
-                  <p>Share of your working sets.</p>
+                  <h3>{t("Where the work went")}</h3>
+                  <p>{t("Share of your working sets.")}</p>
                 </div>
               </div>
 
               {balanceTotal <= 0 ? (
                 <p className="strength-empty">
-                  Nothing to sort yet — sets appear here once we recognise the
-                  exercise.
-                </p>
+                  {t("Nothing to sort yet — sets appear here once we recognise the exercise.")} </p>
               ) : (
                 <>
                   <div className="strength-mix-bar" aria-hidden="true">
@@ -1658,19 +1618,17 @@ export function StrengthView({
                     {balanceSegments.map((segment) => (
                       <li key={segment.key}>
                         <i data-pattern={segment.key} aria-hidden="true" />
-                        <span>{segment.label}</span>
+                        <span>{t(segment.label)}</span>
                         <strong>{Math.round(segment.share * 100)}%</strong>
                       </li>
                     ))}
                   </ul>
                   <p className="strength-mix-note">
-                    Helper muscles count for part of a set, so a bench press
-                    mostly counts as pushing.
-                    {analytics.genericSets > 0
-                      ? " COROS Full Body sets are left out because they do not identify a specific muscle."
+                    {t("Helper muscles count for part of a set, so a bench press mostly counts as pushing.")} {analytics.genericSets > 0
+                      ? t(" COROS Full Body sets are left out because they do not identify a specific muscle.")
                       : ""}
                     {analytics.mobilitySets > 0 || analytics.unmappedSets > 0
-                      ? " Warm-ups, stretching and moves we don't recognise are left out."
+                      ? t(" Warm-ups, stretching and moves we don't recognise are left out.")
                       : ""}
                   </p>
                 </>
@@ -1681,8 +1639,8 @@ export function StrengthView({
           <section className="panel strength-card strength-sessions-card">
             <div className="strength-card-head">
               <div>
-                <h3>Recent sessions</h3>
-                <p>Your last few times in the gym.</p>
+                <h3>{t("Recent sessions")}</h3>
+                <p>{t("Your last few times in the gym.")}</p>
               </div>
             </div>
 
@@ -1701,7 +1659,7 @@ export function StrengthView({
                 return (
                   <li key={session.activityId}>
                     <div className="strength-session-head">
-                      <strong>{session.name?.trim() || "Strength session"}</strong>
+                      <strong>{session.name?.trim() || t("Strength session")}</strong>
                       <div className="strength-session-meta">
                         {sessionSourceLabel(session) ? (
                           <span className="strength-session-source">
@@ -1712,11 +1670,11 @@ export function StrengthView({
                       </div>
                     </div>
                     <p className="strength-session-facts">
-                      <span>{detail.sets} sets</span>
+                      <span>{detail.sets} {t("sets")}</span>
                       <span>
                         {volume > 0
                           ? formatTotalWeight(volume, unitSystem)
-                          : "Bodyweight"}
+                          : t("Bodyweight")}
                       </span>
                       <span>{formatSpan(detail.durationSec)}</span>
                     </p>
@@ -1739,8 +1697,7 @@ export function StrengthView({
                       })}
                       {session.detail.exercises.length > 3 ? (
                         <span className="is-more">
-                          +{session.detail.exercises.length - 3} more
-                        </span>
+                          +{session.detail.exercises.length - 3} {t("more")} </span>
                       ) : null}
                     </div>
                   </li>

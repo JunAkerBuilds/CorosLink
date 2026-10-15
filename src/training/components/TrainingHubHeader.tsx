@@ -1,3 +1,4 @@
+import { useLanguage, t } from "../../i18n/training";
 import { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown, FlaskConical, Loader2, LogOut, RefreshCw, Trophy } from "lucide-react";
 import type { TrainingHubStatus } from "../../../electron/types";
@@ -31,6 +32,7 @@ export function TrainingHubHeader({
   connected, status, busy, sampleMode, activeTab, tabIdPrefix, activityCount,
   onTabChange, onRefresh, onLogout, onToggleSample, onTestPrCelebration, dashboardToolbarRef
 }: TrainingHubHeaderProps) {
+  useLanguage();
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
   const accountButtonRef = useRef<HTMLButtonElement>(null);
@@ -64,35 +66,33 @@ export function TrainingHubHeader({
     <header className="training-hub-header">
       <div className="training-hub-heading-row">
         <div className="training-hub-heading">
-          <h1>Training <span>Hub</span></h1>
+          <h1>{t("Training Hub")}</h1>
           <p>{sampleMode
-            ? "Exploring sample training data."
-            : "Your training, progress and personal bests."}</p>
+            ? t("Exploring sample training data.")
+            : t("Your training, progress and personal bests.")}</p>
         </div>
-        <p className="training-hub-motto">explore <span>prefection</span></p>
+        <p className="training-hub-motto">{t("explore")} <span>{t("prefection")}</span></p>
         <div className="training-hub-actions">
           {onToggleSample ? (
             <button
               type="button"
               className="training-hub-sample-button"
               aria-pressed={sampleMode}
-              title={sampleMode ? "Return to your training data" : "Preview with sample data"}
+              title={sampleMode ? t("Return to your training data") : t("Preview with sample data")}
               onClick={onToggleSample}
             >
               <FlaskConical size={14} aria-hidden="true" />
-              Sample data
-            </button>
+              {t("Sample data")} </button>
           ) : null}
           {onTestPrCelebration ? (
             <button
               type="button"
               className="training-hub-sample-button"
-              title="Dev: play the new personal record celebration"
+              title={t("Dev: play the new personal record celebration")}
               onClick={onTestPrCelebration}
             >
               <Trophy size={14} aria-hidden="true" />
-              Test PR
-            </button>
+              {t("Test PR")} </button>
           ) : null}
           {connected && !sampleMode ? (
             <>
@@ -106,19 +106,18 @@ export function TrainingHubHeader({
                   onClick={() => setAccountOpen(open => !open)}
                 >
                   <span className="training-hub-connected-dot" aria-hidden="true" />
-                  COROS connected
-                  <ChevronDown size={14} aria-hidden="true" />
+                  {t("COROS connected")} <ChevronDown size={14} aria-hidden="true" />
                 </button>
                 {accountOpen ? (
-                  <div id={accountId} className="training-hub-account-popover" role="region" aria-label="COROS account">
+                  <div id={accountId} className="training-hub-account-popover" role="region" aria-label={t("COROS account")}>
                     <div className="training-hub-account-summary">
-                      <strong>COROS account</strong>
-                      <span>{status?.email || "Connected to Training Hub"}</span>
+                      <strong>{t("COROS account")}</strong>
+                      <span>{status?.email || t("Connected to Training Hub")}</span>
                     </div>
                     <dl className="training-hub-account-details">
-                      <div><dt>User ID</dt><dd>{status?.userId ?? "Unknown"}</dd></div>
-                      <div><dt>Region</dt><dd>{status?.regionId ?? "Unknown"}</dd></div>
-                      <div><dt>API host</dt><dd>{status?.baseUrl ?? "Unknown"}</dd></div>
+                      <div><dt>{t("User ID")}</dt><dd>{status?.userId ?? t("Unknown")}</dd></div>
+                      <div><dt>{t("Region")}</dt><dd>{status?.regionId ?? t("Unknown")}</dd></div>
+                      <div><dt>{t("API host")}</dt><dd>{status?.baseUrl ?? t("Unknown")}</dd></div>
                     </dl>
                     <button
                       type="button"
@@ -127,7 +126,7 @@ export function TrainingHubHeader({
                       onClick={onLogout}
                     >
                       {loggingOut ? <Loader2 size={15} className="spin" aria-hidden="true" /> : <LogOut size={15} aria-hidden="true" />}
-                      {loggingOut ? "Disconnecting…" : "Disconnect account"}
+                      {loggingOut ? t("Disconnecting…") : t("Disconnect account")}
                     </button>
                   </div>
                 ) : null}
@@ -135,12 +134,12 @@ export function TrainingHubHeader({
               <button
                 className="training-hub-refresh-button"
                 type="button"
-                aria-label={refreshing ? "Refreshing training data" : "Refresh training data"}
+                aria-label={refreshing ? t("Refreshing training data") : t("Refresh training data")}
                 disabled={refreshing || loggingOut}
                 onClick={onRefresh}
               >
                 <RefreshCw size={15} className={refreshing ? "spin" : undefined} aria-hidden="true" />
-                <span role="status">{refreshing ? "Refreshing…" : "Refresh"}</span>
+                <span role="status">{refreshing ? t("Refreshing…") : t("Refresh")}</span>
               </button>
             </>
           ) : null}
@@ -148,7 +147,7 @@ export function TrainingHubHeader({
       </div>
       {connected ? (
         <div className="training-hub-navigation-row">
-        <div className="training-hub-tabs" role="tablist" aria-label="Training Hub sections">
+        <div className="training-hub-tabs" role="tablist" aria-label={t("Training Hub sections")}>
           {trainingHubTabs.map((tab, index) => (
             <button
               key={tab.id}
@@ -173,7 +172,7 @@ export function TrainingHubHeader({
                 tabRefs.current[next]?.focus();
               }}
             >
-              {tab.label}
+              {t(tab.label)}
               {tab.id === "activities" && activityCount > 0 ? (
                 <span className="training-hub-tab-count">{activityCount}</span>
               ) : null}

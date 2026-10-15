@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import { useEffect, useRef, useState } from "react";
 import { Settings2, X } from "lucide-react";
 import type {
@@ -112,6 +113,7 @@ export function ChatSettingsModal({
   onMcpServersChange: () => void | Promise<void>;
   onUpdateChatSettings: (patch: Partial<ChatSettings>) => Promise<boolean>;
 }) {
+  useLanguage();
   const modalRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeSection, setActiveSection] =
@@ -219,14 +221,14 @@ export function ChatSettingsModal({
               <Settings2 size={17} strokeWidth={1.8} />
             </span>
             <div>
-              <h2 id="chat-settings-title">Settings</h2>
-              <span>Training Coach</span>
+              <h2 id="chat-settings-title">{t("Settings")}</h2>
+              <span>{t("Training Coach")}</span>
             </div>
           </div>
-          <nav className="chat-settings-nav" aria-label="Settings sections">
+          <nav className="chat-settings-nav" aria-label={t("Settings sections")}>
             {SECTION_GROUPS.map((group) => (
               <div key={group} className="chat-settings-nav-group">
-                <span className="chat-settings-nav-label">{group}</span>
+                <span className="chat-settings-nav-label">{t(group)}</span>
                 {CHAT_SETTINGS_SECTIONS.filter(
                   (section) => section.group === group
                 ).map(({ id, label, icon: Icon }) => (
@@ -242,20 +244,19 @@ export function ChatSettingsModal({
                     onClick={() => jumpTo(id)}
                   >
                     <Icon size={15} strokeWidth={1.8} aria-hidden="true" />
-                    {label}
+                    {t(label)}
                   </button>
                 ))}
               </div>
             ))}
           </nav>
           <p className="chat-settings-rail-note">
-            <kbd>Esc</kbd> to close
-          </p>
+            <kbd>{t("Esc")}</kbd>  {t("to close")}</p>
         </aside>
         <button
           type="button"
           className="icon-button chat-settings-close"
-          aria-label="Close settings"
+          aria-label={t("Close settings")}
           onClick={onClose}
         >
           <X size={18} aria-hidden="true" />

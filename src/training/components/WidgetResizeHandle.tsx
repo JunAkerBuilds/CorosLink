@@ -1,3 +1,4 @@
+import { useLanguage, t } from "../../i18n/training";
 import { useEffect, useId, useRef, useState, type PointerEvent } from 'react';
 import { nearestSizePreset, sizePresetHeight, sizePresetWidth, type WidgetSizePreset } from '../widgetSizing';
 
@@ -29,6 +30,7 @@ interface Gesture {
 }
 
 export function WidgetResizeHandle({ title, preset, presets, onPreview, onCommit }: Props) {
+  useLanguage();
   const glassId = useId();
   const gesture = useRef<Gesture | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -139,7 +141,7 @@ export function WidgetResizeHandle({ title, preset, presets, onPreview, onCommit
     callbacks.current.onPreview(preset);
   }
   return <button ref={buttonRef} type="button" className={`hub-widget-resize ${active ? 'is-active' : ''}`}
-    aria-label={`Resize ${title}`} title="Drag to resize. Arrow keys adjust width and height. Escape cancels."
+    aria-label={t("Resize {{value1}}", { value1: String(title) })} title={t("Drag to resize. Arrow keys adjust width and height. Escape cancels.")}
     onPointerDown={start}
     onPointerCancel={() => finish(false)} onLostPointerCapture={() => { if (gesture.current) finish(false); }}
     onKeyDown={event => {

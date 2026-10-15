@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n";
 import { useEffect, useRef, useState } from "react";
 import {
   BookOpen,
@@ -85,6 +86,7 @@ const LINK_GROUPS: ResourceGroup[] = [
 ];
 
 export function ResourcesMenu({ showLabel = false }: { showLabel?: boolean }) {
+  useLanguage();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -126,21 +128,21 @@ export function ResourcesMenu({ showLabel = false }: { showLabel?: boolean }) {
       <button
         className="update-settings-trigger resources-menu-trigger"
         type="button"
-        aria-label="Help & links"
+        aria-label={t("Help & links")}
         aria-haspopup="menu"
         aria-expanded={open}
-        title="Help & links"
+        title={t("Help & links")}
         onClick={() => setOpen((value) => !value)}
       >
         <HelpCircle size={18} aria-hidden="true" />
-        {showLabel ? <span>Help & links</span> : null}
+        {showLabel ? <span>{t("Help & links")}</span> : null}
       </button>
 
       {open ? (
         <div className="resources-popover" role="menu">
           {LINK_GROUPS.map((group) => (
             <div className="resources-group" key={group.heading}>
-              <p className="update-settings-heading">{group.heading}</p>
+              <p className="update-settings-heading">{t(group.heading)}</p>
               {group.links.map(({ label, href, icon: Icon }) => (
                 <a
                   key={href}
@@ -155,7 +157,7 @@ export function ResourcesMenu({ showLabel = false }: { showLabel?: boolean }) {
                   }}
                 >
                   <Icon size={15} aria-hidden="true" />
-                  <span className="resources-link-label">{label}</span>
+                  <span className="resources-link-label">{t(label)}</span>
                   <ExternalLink
                     size={13}
                     aria-hidden="true"

@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { Loader2 } from "lucide-react";
 import { type CSSProperties, useEffect, useState } from "react";
 import { isWatchfaceFontInstalled } from "./watchfaceFontSnapshots";
@@ -53,22 +54,22 @@ export function WatchfaceSpriteStrip({
   emptyText,
   className
 }: WatchfaceSpriteStripProps) {
+  useLanguage();
   if (cells.length === 0 && !loading) {
     return emptyText ? (
-      <p className="wf-sprite-strip-empty">{emptyText}</p>
+      <p className="wf-sprite-strip-empty">{t(emptyText)}</p>
     ) : null;
   }
   return (
     <div
       className={`wf-sprite-preview${className ? ` ${className}` : ""}`}
-      aria-label={label}
+      aria-label={t(label)}
       aria-busy={loading}
     >
       <div className="wf-sprite-strip">
         {loading && cells.length === 0 ? (
           <span className="wf-sprite-strip-loading">
-            <Loader2 className="spin" size={14} aria-hidden="true" /> Reading sprites
-          </span>
+            <Loader2 className="spin" size={14} aria-hidden="true" />{" "}{t("Reading sprites")}</span>
         ) : null}
         {cells.map((cell) => (
           <span
@@ -81,9 +82,9 @@ export function WatchfaceSpriteStrip({
             title={
               cell.title ??
               (cell.missing
-                ? `No PNG for ${cell.label} yet`
+                ? t("No PNG for {{value1}} yet", { value1: t(cell.label) })
                 : cell.replaced
-                  ? `${cell.label} · imported`
+                  ? t("{{value1}} · imported", { value1: t(cell.label) })
                   : cell.label)
             }
           >
@@ -94,11 +95,11 @@ export function WatchfaceSpriteStrip({
             ) : (
               <i className="wf-sprite-cell-empty" aria-hidden="true" />
             )}
-            <small>{cell.label}</small>
+            <small>{t(cell.label)}</small>
           </span>
         ))}
       </div>
-      {summary ? <span className="wf-sprite-strip-summary" title={summary}>{summary}</span> : null}
+      {summary ? <span className="wf-sprite-strip-summary" title={t(summary)}>{t(summary)}</span> : null}
     </div>
   );
 }
@@ -168,16 +169,17 @@ export function TemplateSpriteStrip({
   label,
   emptyText
 }: TemplateSpriteStripProps) {
+  useLanguage();
   const { sprites, loading } = useTemplateSprites(
     loadAssets,
     glyphs.filter((glyph) => !replacements?.[glyph.label]).map((glyph) => glyph.path)
   );
   return (
     <WatchfaceSpriteStrip
-      label={label}
+      label={t(label)}
       loading={loading}
       summary={summary}
-      emptyText={emptyText}
+      emptyText={emptyText ? t(emptyText) : undefined}
       cells={[
         ...glyphs.map((glyph) => {
           const replacement = replacements?.[glyph.label];
@@ -206,8 +208,8 @@ export function describeTemplateGlyphSet(
     ? `${Math.max(...widths)} × ${Math.max(...heights)} px`
     : null;
   return [
-    `Template · ${folder}`,
-    `${glyphs.length} sprite${glyphs.length === 1 ? "" : "s"}`,
+    t("Template · {{folder}}", { folder }),
+    t("{{value1}} sprite{{value2}}", { value1: glyphs.length, value2: glyphs.length === 1 ? "" : "s" }),
     size
   ].filter(Boolean).join(" · ");
 }
@@ -219,13 +221,13 @@ export function describeRasterFontSource(font: CorosWatchfaceRasterFont): string
   const parts: string[] = [];
   if (glyphCount > 0 && font.dataUrl) {
     parts.push(
-      `Sheet · ${glyphCount} glyph${glyphCount === 1 ? "" : "s"} in ${font.columns} column${font.columns === 1 ? "" : "s"}` +
+      t("Sheet · {{glyphCount}} glyphs in {{columns}} columns", { glyphCount, columns: font.columns }) +
         (font.atlasSize ? ` · ${font.atlasSize.width} × ${font.atlasSize.height} px` : "")
     );
   }
-  if (spriteCount > 0) parts.push(`${spriteCount} individual PNG${spriteCount === 1 ? "" : "s"}`);
-  if (labelCount > 0) parts.push(`${labelCount} label${labelCount === 1 ? "" : "s"}`);
-  return parts.join(" · ") || "PNG set";
+  if (spriteCount > 0) parts.push(t("{{spriteCount}} individual PNG{{value2}}", { spriteCount: spriteCount, value2: spriteCount === 1 ? "" : "s" }));
+  if (labelCount > 0) parts.push(t("{{labelCount}} label{{value2}}", { labelCount: labelCount, value2: labelCount === 1 ? "" : "s" }));
+  return parts.join(" · ") || t("PNG set");
 }
 
 /** Cells for an imported PNG set, dashed where a digit is still missing. */
@@ -269,6 +271,7 @@ export function WatchfaceFontPreview({
   loadAssets,
   sampleText = "0123456789"
 }: WatchfaceFontPreviewProps) {
+  useLanguage();
   const rasterActive = Boolean(
     rasterFont &&
       (!rasterFontRequiredText ||
@@ -277,7 +280,7 @@ export function WatchfaceFontPreview({
   if (rasterActive && rasterFont) {
     return (
       <WatchfaceSpriteStrip
-        label="PNG set glyphs"
+        label={t("PNG set glyphs")}
         cells={rasterFontStripCells(rasterFont)}
         summary={`${rasterFont.label} · ${describeRasterFontSource(rasterFont)}`}
       />
@@ -285,10 +288,10 @@ export function WatchfaceFontPreview({
   }
   if (fontFamily) {
     const summary = isWatchfaceFontInstalled(fontFamily)
-      ? `${fontFamily} · rasterized to PNG digits on export`
-      : `${fontFamily} is missing · sample shown in a substitute font`;
+      ? t("{{fontFamily}} · rasterized to PNG digits on export", { fontFamily })
+      : t("{{fontFamily}} is missing · sample shown in a substitute font", { fontFamily: fontFamily });
     return (
-      <div className="wf-sprite-preview wf-sprite-preview--font" aria-label="Font sample">
+      <div className="wf-sprite-preview wf-sprite-preview--font" aria-label={t("Font sample")}>
         <div
           className="wf-sprite-strip wf-sprite-strip--sample"
           style={{
@@ -299,8 +302,8 @@ export function WatchfaceFontPreview({
         >
           {sampleText}
         </div>
-        <span className="wf-sprite-strip-summary" title={summary}>
-          {summary}
+        <span className="wf-sprite-strip-summary" title={t(summary)}>
+          {t(summary)}
         </span>
       </div>
     );
@@ -308,7 +311,7 @@ export function WatchfaceFontPreview({
   if (templateGlyphs && loadAssets && templateGlyphs.glyphs.length > 0) {
     return (
       <TemplateSpriteStrip
-        label="Template glyphs"
+        label={t("Template glyphs")}
         glyphs={templateGlyphs.glyphs}
         loadAssets={loadAssets}
         summary={describeTemplateGlyphSet(templateGlyphs.folder, templateGlyphs.glyphs)}

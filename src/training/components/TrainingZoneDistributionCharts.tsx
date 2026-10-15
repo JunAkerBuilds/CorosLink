@@ -1,3 +1,4 @@
+import { getLocale, useLanguage, t } from "../../i18n/training";
 import type { ChartCardSize } from "../widgetSizing";
 import "../chartSizing.css";
 import "../profileSizing.css";
@@ -658,6 +659,7 @@ function ZoneDistributionTooltip({
   active,
   payload
 }: TooltipContentProps) {
+  useLanguage();
   if (!active || !payload.length) {
     return null;
   }
@@ -670,9 +672,9 @@ function ZoneDistributionTooltip({
 
   return (
     <div className="training-zone-tooltip">
-      <span>{datum.label}</span>
+      <span>{t(datum.label)}</span>
       <strong>{formatPercent(datum.percent)}</strong>
-      <em>{datum.detail}</em>
+      <em>{t(datum.detail)}</em>
     </div>
   );
 }
@@ -690,6 +692,7 @@ function ZoneDistributionPanel({
   getCaption,
   size
 }: ZoneDistributionPanelProps) {
+  useLanguage();
   const reducedMotion = usePrefersReducedMotion();
   const chartData = data.filter((datum) => datum.percent > 0);
   const topZone = useMemo(() => {
@@ -698,21 +701,21 @@ function ZoneDistributionPanel({
     }
 
     return [...data].sort((left, right) => right.percent - left.percent)[0];
-  }, [data]);
+  }, [data, getLocale()]);
 
   const breakdown = (
           <div className="training-zone-table">
             <div className="training-zone-table-head">
               <span>
                 {variant === "heart"
-                  ? "Zone"
+                  ? t("Zone")
                   : variant === "rpe"
-                    ? "RPE"
-                    : "Distance"}
+                    ? t("RPE")
+                    : t("Distance")}
               </span>
               <span aria-hidden="true" />
               <span>%</span>
-              <span>{metricColumnLabel}</span>
+              <span>{t(metricColumnLabel)}</span>
             </div>
             <div className="training-zone-list">
               {data.map((datum, index) => (
@@ -740,7 +743,7 @@ function ZoneDistributionPanel({
                   <span className="training-zone-percent">
                     {formatPercent(datum.percent)}
                   </span>
-                  <strong className="training-zone-detail">{datum.detail}</strong>
+                  <strong className="training-zone-detail">{t(datum.detail)}</strong>
                 </div>
               ))}
             </div>
@@ -753,12 +756,12 @@ function ZoneDistributionPanel({
     >
       <div className="training-zone-header">
         <div className="training-zone-heading">
-          <p className="eyebrow">{title}</p>
+          <p className="eyebrow">{t(title)}</p>
           <h2>
-            {subtitle} <span>(4 Weeks)</span>
+            {t(subtitle)} <span>{t("(4 Weeks)")}</span>
           </h2>
           {coverageNote ? (
-            <p className="training-zone-coverage">{coverageNote}</p>
+            <p className="training-zone-coverage">{t(coverageNote)}</p>
           ) : null}
         </div>
         <div className="training-zone-header-actions">{metricControl}</div>
@@ -807,12 +810,12 @@ function ZoneDistributionPanel({
 
           {topZone ? (
             <div className="training-zone-hero">
-              <p className="training-zone-hero-kicker">{heroKicker}</p>
+              <p className="training-zone-hero-kicker">{t(heroKicker)}</p>
               <h3>{formatDisplayLabel(topZone.label)}</h3>
               <p className="training-zone-hero-percent">
                 {formatPercent(topZone.percent)}
               </p>
-              <p className="training-zone-hero-detail">{topZone.detail}</p>
+              <p className="training-zone-hero-detail">{t(topZone.detail)}</p>
               <p className="training-zone-hero-caption">
                 {getCaption(topZone)}
               </p>
@@ -823,10 +826,10 @@ function ZoneDistributionPanel({
         </div>
       ) : (
         <div className="training-zone-body training-zone-body-empty">
-          <p className="training-empty-chart">{emptyMessage}</p>
+          <p className="training-empty-chart">{t(emptyMessage)}</p>
         </div>
       )}
-      {size === "mini" && data.length > 0 && <details className="chart-card-details"><summary>View breakdown</summary>{breakdown}</details>}
+      {size === "mini" && data.length > 0 && <details className="chart-card-details"><summary>{t("View breakdown")}</summary>{breakdown}</details>}
     </section>
   );
 }
@@ -837,6 +840,7 @@ function MetricDropdown<TValue extends string>({
   options,
   onChange
 }: MetricDropdownProps<TValue>) {
+  useLanguage();
   const dropdownId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -922,7 +926,7 @@ function MetricDropdown<TValue extends string>({
   return (
     <div className="training-zone-select" ref={rootRef}>
       <span className="sr-only" id={labelId}>
-        {label}
+        {t(label)}
       </span>
       <button
         type="button"
@@ -950,7 +954,7 @@ function MetricDropdown<TValue extends string>({
           className="training-zone-select-menu"
           id={menuId}
           role="listbox"
-          aria-label={label}
+          aria-label={t(label)}
         >
           {options.map((option) => {
             const isSelected = option.value === value;
@@ -972,7 +976,7 @@ function MetricDropdown<TValue extends string>({
                 onClick={() => selectOption(option.value)}
                 onMouseEnter={() => setHighlightedValue(option.value)}
               >
-                <span>{option.label}</span>
+                <span>{t(option.label)}</span>
                 {isSelected ? (
                   <Check size={15} strokeWidth={2.6} aria-hidden="true" />
                 ) : null}
@@ -992,6 +996,7 @@ export function TrainingZoneDistributionCharts({
   variant,
   size
 }: TrainingZoneDistributionChartsProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const [heartRateMetric, setHeartRateMetric] = useSelectionPreference(
     HEART_RATE_METRIC_PREFERENCE
@@ -1004,7 +1009,7 @@ export function TrainingZoneDistributionCharts({
     <section className="training-load-profile">
       <div className={variant ? "training-zone-single" : "training-zone-grid"}>
         {(!variant || variant === "heart") && <ZoneDistributionPanel size={size}
-          title="Threshold Heart Rate"
+          title={t("Threshold Heart Rate")}
           subtitle="Training Load"
           emptyMessage="No threshold heart rate zone distribution data loaded."
           variant="heart"
@@ -1020,7 +1025,7 @@ export function TrainingZoneDistributionCharts({
           getCaption={(datum) => heartRateZoneCaption(datum.zoneIndex)}
           metricControl={
             <MetricDropdown
-              label="Heart rate distribution metric"
+              label={t("Heart rate distribution metric")}
               value={heartRateMetric}
               options={HEART_RATE_METRIC_OPTIONS}
               onChange={setHeartRateMetric}
@@ -1028,7 +1033,7 @@ export function TrainingZoneDistributionCharts({
           }
         />}
         {(!variant || variant === "distance") && <ZoneDistributionPanel size={size}
-          title="Distance Zones"
+          title={t("Distance Zones")}
           subtitle="Distribution"
           emptyMessage="No distance zone distribution data loaded."
           variant="distance"
@@ -1042,7 +1047,7 @@ export function TrainingZoneDistributionCharts({
           getCaption={(datum) => distanceZoneCaption(datum.zoneIndex)}
           metricControl={
             <MetricDropdown
-              label="Distance distribution metric"
+              label={t("Distance distribution metric")}
               value={distanceMetric}
               options={DISTANCE_METRIC_OPTIONS}
               onChange={setDistanceMetric}
@@ -1058,6 +1063,7 @@ export function PerceivedEffortPanel({
   distribution,
   size
 }: PerceivedEffortPanelProps) {
+  useLanguage();
   const [rpeMetric, setRpeMetric] = useSelectionPreference(
     RPE_METRIC_PREFERENCE
   );
@@ -1069,7 +1075,7 @@ export function PerceivedEffortPanel({
 
   return (
     <ZoneDistributionPanel size={size}
-      title="Perceived Effort"
+      title={t("Perceived Effort")}
       subtitle="RPE"
       emptyMessage="No RPE-rated sessions in the last 4 weeks."
       variant="rpe"
@@ -1077,12 +1083,12 @@ export function PerceivedEffortPanel({
       metricColumnLabel={
         rpeMetric === "frequency" ? "Sessions" : RPE_METRIC_LABELS[rpeMetric]
       }
-      coverageNote={coverageNote}
+      coverageNote={coverageNote ? t(coverageNote) : undefined}
       data={buildRpeData(distribution, rpeMetric)}
       getCaption={(datum) => rpeLevelCaption(datum.zoneIndex)}
       metricControl={
         <MetricDropdown
-          label="RPE distribution metric"
+          label={t("RPE distribution metric")}
           value={rpeMetric}
           options={RPE_METRIC_OPTIONS}
           onChange={setRpeMetric}

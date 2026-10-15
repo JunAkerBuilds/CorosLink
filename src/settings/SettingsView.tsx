@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n";
 import {
   ArrowLeft,
   Bike,
@@ -40,6 +41,7 @@ import appLogo from "../../build/icon-animated.svg";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import { AccountsSettings, type AccountDestination } from "./AccountsSettings";
 import { DiagnosticsSettings } from "./DiagnosticsSettings";
+import { LanguageSettings } from "./LanguageSettings";
 
 const ABOUT_LINKS = [
   {
@@ -120,6 +122,7 @@ export function SettingsView({
   onOpenAccount,
   initialAccountScreen = false,
 }: SettingsViewProps) {
+  useLanguage();
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [openingLocationId, setOpeningLocationId] = useState<string | null>(
@@ -151,7 +154,7 @@ export function SettingsView({
       setAppInfo(await api.getAppInfo());
     } catch (caught) {
       onError(
-        caught instanceof Error ? caught.message : "Could not load app info.",
+        caught instanceof Error ? caught.message : t("Could not load app info."),
       );
     } finally {
       setLoading(false);
@@ -170,7 +173,7 @@ export function SettingsView({
       onError(
         caught instanceof Error
           ? caught.message
-          : "Could not open that folder.",
+          : t("Could not open that folder."),
       );
     } finally {
       setOpeningLocationId(null);
@@ -180,11 +183,11 @@ export function SettingsView({
   const updateStatusText =
     updateSnapshot.status === "available" ||
     updateSnapshot.status === "downloading"
-      ? `Version ${updateSnapshot.availableVersion} is available.`
+      ? t("Version {{version}} is available.", { version: updateSnapshot.availableVersion })
       : updateSnapshot.status === "downloaded"
-        ? `Version ${updateSnapshot.availableVersion} is ready to install.`
+        ? t("Version {{version}} is ready to install.", { version: updateSnapshot.availableVersion })
         : updateSnapshot.status === "not-available"
-          ? "You're on the latest version."
+          ? t("You're on the latest version.")
           : null;
 
   if (settingsPage === "accounts" && onOpenAccount) {
@@ -204,23 +207,21 @@ export function SettingsView({
           onClick={() => setSettingsPage("main")}
         >
           <ArrowLeft size={16} strokeWidth={2} aria-hidden="true" />
-          Settings
-        </button>
+          {t("Settings")} </button>
 
         <div className="panel settings-storage-detail-panel">
           <div className="section-heading settings-storage-detail-heading">
             <div>
-              <p className="eyebrow">Storage</p>
-              <h2>On this computer</h2>
+              <p className="eyebrow">{t("Storage")}</p>
+              <h2>{t("On this computer")}</h2>
               <p className="settings-subpage-description">
-                Review storage use or open an app location on your computer.
-              </p>
+                {t("Review storage use or open an app location on your computer.")} </p>
             </div>
             <button
               className="icon-button"
               type="button"
-              title="Refresh storage sizes"
-              aria-label="Refresh storage sizes"
+              title={t("Refresh storage sizes")}
+              aria-label={t("Refresh storage sizes")}
               onClick={() => void loadAppInfo()}
               disabled={loading}
             >
@@ -238,16 +239,16 @@ export function SettingsView({
                 <li className="settings-storage-row" key={location.id}>
                   <div className="settings-storage-info">
                     <div className="settings-storage-title">
-                      <strong>{location.label}</strong>
+                      <strong>{t(location.label)}</strong>
                       <span className="settings-storage-size">
                         {location.exists
                           ? location.sizeBytes !== null
                             ? formatBytes(location.sizeBytes)
-                            : "Size unavailable"
-                          : "Not created yet"}
+                            : t("Size unavailable")
+                          : t("Not created yet")}
                       </span>
                     </div>
-                    <p>{location.description}</p>
+                    <p>{t(location.description)}</p>
                     <code className="settings-storage-path">
                       {location.path}
                     </code>
@@ -266,16 +267,14 @@ export function SettingsView({
                     ) : (
                       <FolderOpen size={15} aria-hidden="true" />
                     )}
-                    Open in Folder
-                  </button>
+                    {t("Open in Folder")} </button>
                 </li>
               ))}
             </ul>
           ) : (
             <p className="settings-storage-loading">
               <Loader2 size={16} aria-hidden="true" className="spin" />
-              Loading storage locations…
-            </p>
+              {t("Loading storage locations…")} </p>
           )}
         </div>
       </section>
@@ -295,9 +294,7 @@ export function SettingsView({
           <div className="settings-about-copy">
             <h3>CorosLink</h3>
             <p>
-              Unofficial COROS companion for media, watch sync, and training
-              analytics.
-            </p>
+              {t("Unofficial COROS companion for media, watch sync, and training analytics.")} </p>
             {updateStatusText ? (
               <p className="settings-update-status">{updateStatusText}</p>
             ) : null}
@@ -313,30 +310,29 @@ export function SettingsView({
               aria-hidden="true"
               className={updateBusy ? "spin" : ""}
             />
-            Check for updates
-          </button>
+            {t("Check for updates")} </button>
         </div>
 
         <dl className="settings-version-grid">
           <div>
-            <dt>App version</dt>
+            <dt>{t("App version")}</dt>
             <dd>{appInfo?.version ?? updateSnapshot.currentVersion}</dd>
           </div>
           <div>
-            <dt>Platform</dt>
-            <dd>{appInfo ? platformLabel(appInfo) : "Not available"}</dd>
+            <dt>{t("Platform")}</dt>
+            <dd>{appInfo ? platformLabel(appInfo) : t("Not available")}</dd>
           </div>
           <div>
             <dt>Electron</dt>
-            <dd>{appInfo?.electronVersion ?? "Not available"}</dd>
+            <dd>{appInfo?.electronVersion ?? t("Not available")}</dd>
           </div>
           <div>
             <dt>Chromium</dt>
-            <dd>{appInfo?.chromeVersion ?? "Not available"}</dd>
+            <dd>{appInfo?.chromeVersion ?? t("Not available")}</dd>
           </div>
           <div>
             <dt>Node.js</dt>
-            <dd>{appInfo?.nodeVersion ?? "Not available"}</dd>
+            <dd>{appInfo?.nodeVersion ?? t("Not available")}</dd>
           </div>
         </dl>
 
@@ -350,7 +346,7 @@ export function SettingsView({
               rel="noreferrer"
             >
               <Icon size={15} aria-hidden="true" />
-              <span>{label}</span>
+              <span>{t(label)}</span>
               <ExternalLink size={12} aria-hidden="true" />
             </a>
           ))}
@@ -360,12 +356,14 @@ export function SettingsView({
       {onOpenAccount ? (
         <button className="settings-account-entry" type="button" onClick={() => setSettingsPage("accounts")}>
           <span className="settings-account-entry-icon"><UserRound size={26} aria-hidden="true" /></span>
-          <span className="settings-account-entry-copy"><strong>Accounts &amp; API</strong><span>Manage accounts, API keys, and connected services</span></span>
+          <span className="settings-account-entry-copy"><strong>{t("Accounts & API")}</strong><span>{t("Manage accounts, API keys, and connected services")}</span></span>
           <span className="settings-account-entry-services" aria-hidden="true"><Music size={18} /><CalendarDays size={18} /><Sparkles size={18} /></span>
           <ChevronRight size={20} aria-hidden="true" />
         </button>
       ) : null}
 
+
+      <LanguageSettings />
 
       <div className="panel settings-units-panel">
         <div className="settings-units-heading">
@@ -373,25 +371,23 @@ export function SettingsView({
             <Ruler size={22} strokeWidth={1.9} />
           </span>
           <div>
-            <p className="eyebrow">Measurements</p>
-            <h2>Units</h2>
+            <p className="eyebrow">{t("Measurements")}</p>
+            <h2>{t("Units")}</h2>
             <p>
-              Choose how distance, pace, elevation, swimming, and strength
-              values appear throughout CorosLink.
-            </p>
+              {t("Choose how distance, pace, elevation, swimming, and strength values appear throughout CorosLink.")} </p>
           </div>
         </div>
-        <div className="settings-unit-options" role="radiogroup" aria-label="Unit system">
+        <div className="settings-unit-options" role="radiogroup" aria-label={t("Unit system")}>
           {([
             {
               value: "metric" as const,
-              label: "Metric",
-              detail: "Kilometres, metres, min/km, kilograms"
+              label: t("Metric"),
+              detail: t("Kilometres, metres, min/km, kilograms")
             },
             {
               value: "imperial" as const,
-              label: "Imperial",
-              detail: "Miles, feet, min/mi, pounds, yards"
+              label: t("Imperial"),
+              detail: t("Miles, feet, min/mi, pounds, yards")
             }
           ]).map((option) => (
             <button
@@ -404,7 +400,7 @@ export function SettingsView({
             >
               <span className="settings-unit-radio" aria-hidden="true" />
               <span>
-                <strong>{option.label}</strong>
+                <strong>{t(option.label)}</strong>
                 <small>{option.detail}</small>
               </span>
             </button>
@@ -415,8 +411,8 @@ export function SettingsView({
       <div className="panel settings-sport-panel">
         <div className="section-heading settings-sport-heading">
           <div>
-            <p className="eyebrow">Appearance</p>
-            <h2>Activity colors</h2>
+            <p className="eyebrow">{t("Appearance")}</p>
+            <h2>{t("Activity colors")}</h2>
           </div>
           <button
             className="secondary-button"
@@ -424,14 +420,10 @@ export function SettingsView({
             onClick={resetSportColors}
           >
             <RefreshCw size={15} aria-hidden="true" />
-            Reset to defaults
-          </button>
+            {t("Reset to defaults")} </button>
         </div>
         <p className="settings-sport-hint">
-          Color activities by sport across the training load heatmap and
-          calendar. A day with one sport uses a solid color; days with several
-          sports are split into a color wheel.
-        </p>
+          {t("Color activities by sport across the training load heatmap and calendar. A day with one sport uses a solid color; days with several sports are split into a color wheel.")} </p>
         <ul className="settings-sport-list">
           {SPORT_COLOR_CATEGORIES.map((cat) => {
             const { description, icon: SportIcon } = SPORT_COLOR_DETAILS[cat];
@@ -449,8 +441,8 @@ export function SettingsView({
                   <SportIcon size={21} strokeWidth={2.1} />
                 </span>
                 <span className="settings-sport-copy">
-                  <strong>{SPORT_COLOR_LABELS[cat]}</strong>
-                  <span>{description}</span>
+                  <strong>{t(SPORT_COLOR_LABELS[cat])}</strong>
+                  <span>{t(description)}</span>
                 </span>
                 <label className="settings-sport-picker">
                   <input
@@ -460,7 +452,7 @@ export function SettingsView({
                     onChange={(event) =>
                       updateSportColor(cat, event.target.value)
                     }
-                    aria-label={`${SPORT_COLOR_LABELS[cat]} color`}
+                    aria-label={t("{{value0}} color", { value0: t(SPORT_COLOR_LABELS[cat]) })}
                   />
                   <span className="settings-sport-swatch" aria-hidden="true" />
                   <span className="settings-sport-hex">
@@ -475,14 +467,12 @@ export function SettingsView({
         <div className="settings-sport-tip">
           <Sparkles size={18} strokeWidth={1.8} aria-hidden="true" />
           <p>
-            <strong>Tip:</strong> These colors are used in your training load
-            heatmap and calendar.
-          </p>
+            <strong>{t("Tip:")}</strong> {t("These colors are used in your training load heatmap and calendar.")} </p>
         </div>
       </div>
 
       <div className="panel settings-storage-panel">
-        <p className="eyebrow">Storage</p>
+        <p className="eyebrow">{t("Storage")}</p>
         <button
           className="settings-storage-link"
           type="button"
@@ -492,11 +482,11 @@ export function SettingsView({
             <HardDrive size={22} strokeWidth={1.9} />
           </span>
           <span className="settings-storage-link-copy">
-            <strong>On this computer</strong>
+            <strong>{t("On this computer")}</strong>
             <span>
               {appInfo
-                ? `${appInfo.storageLocations.length} storage locations`
-                : "Downloads, projects, caches, and app data"}
+                ? t("{{value0}} storage locations", { value0: appInfo.storageLocations.length })
+                : t("Downloads, projects, caches, and app data")}
             </span>
           </span>
           <ChevronRight

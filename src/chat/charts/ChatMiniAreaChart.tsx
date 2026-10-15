@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n/tools";
 import {
   Area,
   AreaChart,
@@ -42,6 +43,7 @@ function MiniAreaTooltip({
   label,
   formatValue
 }: TooltipContentProps & { formatValue: (value: number) => string }) {
+  useLanguage();
   if (!active || !payload?.length) {
     return null;
   }
@@ -65,6 +67,7 @@ export function ChatMiniAreaChart({
   formatValue,
   yAxisFormatter = (value) => `${value}`
 }: ChatMiniAreaChartProps) {
+  useLanguage();
   const { colors, activeDot } = useChartColors();
 
   if (data.length < 2) {
@@ -148,7 +151,7 @@ export function buildDistanceSeriesData(
     return {
       label: useDistance
         ? `${displayDistance.toFixed(swim ? 0 : 1)} ${swim ? swimDistanceUnit(unitSystem) : distanceUnit(unitSystem)}`
-        : `Point ${index + 1}`,
+        : t("Point {{p0}}", { p0: index + 1 }),
       value:
         valueKey === "pace" && paceAsSpeed
           ? kmhToDisplaySpeed(3600 / (point.pace as number), unitSystem)
@@ -182,7 +185,7 @@ export function buildElevationSeriesData(
     return {
       label: useDistance
         ? `${displayDistance.toFixed(1)} ${distanceUnit(unitSystem)}`
-        : `Point ${index + 1}`,
+        : t("Point {{p0}}", { p0: index + 1 }),
       value: metersToElevation(point.elevation!, unitSystem)
     };
   });

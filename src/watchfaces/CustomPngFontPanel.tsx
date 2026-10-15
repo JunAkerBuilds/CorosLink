@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { CircleAlert, Files, FolderOpen, LayoutGrid, Sparkles, Trash2 } from "lucide-react";
 import { OfficialAssetBrowser, officialAssetToSpriteFolder } from "./OfficialAssetBrowser";
 import { useEffect, useRef, useState } from "react";
@@ -51,25 +52,25 @@ const WEEKDAY_LABELS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error("The PNG font could not be read."));
+    reader.onerror = () => reject(new Error(t("The PNG font could not be read.")));
     reader.onload = () => {
       typeof reader.result === "string"
         ? resolve(reader.result)
-        : reject(new Error("The PNG font could not be read."));
+        : reject(new Error(t("The PNG font could not be read.")));
     };
     reader.readAsDataURL(file);
   });
 }
 
 function labelFromFileName(name: string): string {
-  return name.replace(/\.png$/i, "").trim() || "Custom PNG font";
+  return name.replace(/\.png$/i, "").trim() || t("Custom PNG font");
 }
 
 function loadImage(dataUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("A PNG sprite could not be decoded."));
+    image.onerror = () => reject(new Error(t("A PNG sprite could not be decoded.")));
     image.src = dataUrl;
   });
 }
@@ -108,7 +109,7 @@ async function createAtlasFromSprites(
 ): Promise<Pick<CorosWatchfaceRasterFont, "dataUrl" | "glyphs" | "columns" | "atlasSize">> {
   const glyphs = [...digitSprites.keys()].sort();
   if (glyphs.length === 0) {
-    throw new Error("Choose at least one digit PNG named 00.png through 09.png.");
+    throw new Error(t("Choose at least one digit PNG named 00.png through 09.png."));
   }
   const sprites = await Promise.all(
     glyphs.map(async (glyph) => ({
@@ -123,7 +124,7 @@ async function createAtlasFromSprites(
   canvas.height = cellHeight;
   const context = canvas.getContext("2d");
   if (!context) {
-    throw new Error("PNG font atlas creation is unavailable in this window.");
+    throw new Error(t("PNG font atlas creation is unavailable in this window."));
   }
   sprites.forEach((sprite, index) => {
     context.drawImage(
@@ -171,6 +172,7 @@ export function CustomPngFontPanel({
   onImportFinish,
   isImportCurrent
 }: CustomPngFontPanelProps) {
+  useLanguage();
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [officialBrowserOpen, setOfficialBrowserOpen] = useState(false);
@@ -246,11 +248,11 @@ export function CustomPngFontPanel({
       return;
     }
     if (file.type !== "image/png") {
-      setError("Choose a PNG file for the custom raster font.");
+      setError(t("Choose a PNG file for the custom raster font."));
       return;
     }
     if (file.size > MAX_RASTER_FONT_BYTES) {
-      setError("PNG font files must be 5 MB or smaller.");
+      setError(t("PNG font files must be 5 MB or smaller."));
       return;
     }
     const request = beginImport();
@@ -268,11 +270,11 @@ export function CustomPngFontPanel({
         atlasSize: { width: image.naturalWidth, height: image.naturalHeight },
         tint: activeRasterFont?.tint ?? false
       });
-      setStatus(`Loaded ${file.name}.`);
+      setStatus(t("Loaded {{file}}.", { file: file.name }));
       setError(null);
     } catch (caught) {
       if (importCanCommit(request.importId, request.revision)) {
-        setError(caught instanceof Error ? caught.message : "The PNG font could not be read.");
+        setError(caught instanceof Error ? caught.message : t("The PNG font could not be read."));
       }
     } finally {
       finishImport(request.importId, request.revision);
@@ -283,7 +285,7 @@ export function CustomPngFontPanel({
     const request = beginImport();
     if (!request) return;
     try {
-      setStatus(preset ? "Importing official font…" : "Reading PNG sprite folder…");
+      setStatus(preset ? t("Importing official font…") : t("Reading PNG sprite folder…"));
       setError(null);
       const folder = preset ?? await api.chooseCorosWatchfaceRasterFontFolder();
       if (!folder) {
@@ -305,28 +307,28 @@ export function CustomPngFontPanel({
       const importSummary = [
         replacement.importedDigitCount > 0
           ? String(replacement.importedDigitCount) +
-            " digit sprite" +
+            t(" digit sprite") +
             (replacement.importedDigitCount === 1 ? "" : "s")
           : null,
         replacement.importedWeekdayCount > 0
           ? String(replacement.importedWeekdayCount) +
-            " weekday label" +
+            t(" weekday label") +
             (replacement.importedWeekdayCount === 1 ? "" : "s")
           : null,
         replacement.importedMonthCount > 0
           ? String(replacement.importedMonthCount) +
-            " month label" +
+            t(" month label") +
             (replacement.importedMonthCount === 1 ? "" : "s")
           : null
-      ].filter(Boolean).join(" and ");
-      setStatus("Imported " + importSummary + ".");
+      ].filter(Boolean).join(t(" and "));
+      setStatus(t("Imported {{summary}}.", { summary: importSummary }));
       setError(null);
     } catch (caught) {
       if (importCanCommit(request.importId, request.revision)) {
         setError(
           caught instanceof Error
             ? caught.message
-            : "The PNG sprite folder could not be imported."
+            : t("The PNG sprite folder could not be imported.")
         );
         setStatus(null);
       }
@@ -344,7 +346,7 @@ export function CustomPngFontPanel({
     try {
       for (const file of Array.from(files)) {
         if (file.type !== "image/png" || file.size > MAX_RASTER_FONT_BYTES) {
-          throw new Error("Each individual sprite must be a PNG no larger than 5 MB.");
+          throw new Error(t("Each individual sprite must be a PNG no larger than 5 MB."));
         }
         const isWeekdayComponent =
           scope === "component" && componentLabel === "Weekday";
@@ -358,7 +360,7 @@ export function CustomPngFontPanel({
         const key = weekday ?? month ?? (digit === null ? file.name.replace(/\.png$/i, "").trim().toUpperCase() : String(digit));
         if (!key) {
           throw new Error(
-            "Name each sprite 00.png–09.png, month sprites 00.png–11.png, or use labels such as MON.png or JAN.png."
+            t("Name each sprite 00.png–09.png, month sprites 00.png–11.png, or use labels such as MON.png or JAN.png.")
           );
         }
         const dataUrl = await fileToDataUrl(file);
@@ -372,7 +374,7 @@ export function CustomPngFontPanel({
       if (!importCanCommit(request.importId, request.revision)) return;
       onActivate?.();
       setActiveRasterFont({
-        label: activeRasterFont?.label || "Individual PNG sprites",
+        label: activeRasterFont?.label || t("Individual PNG sprites"),
         dataUrl: activeRasterFont?.dataUrl || Object.values(nextSprites)[0]!,
         // Do not claim that a single imported PNG represents every digit.
         // Direct sprites opt in one glyph/label at a time; an existing atlas
@@ -385,11 +387,11 @@ export function CustomPngFontPanel({
         atlasSize: activeRasterFont?.atlasSize,
         tint: activeRasterFont?.tint ?? false
       });
-      setStatus(`Imported ${files.length} independent PNG sprite${files.length === 1 ? "" : "s"}.`);
+      setStatus(t("Imported {{count}} independent PNG sprites.", { count: files.length }));
       setError(null);
     } catch (caught) {
       if (importCanCommit(request.importId, request.revision)) {
-        setError(caught instanceof Error ? caught.message : "The PNG sprites could not be imported.");
+        setError(caught instanceof Error ? caught.message : t("The PNG sprites could not be imported."));
       }
     } finally {
       finishImport(request.importId, request.revision);
@@ -406,10 +408,10 @@ export function CustomPngFontPanel({
   const isMonthComponent = scope === "component" && componentLabel === "Date month";
   const isWeekdayComponent = scope === "component" && componentLabel === "Weekday";
   const namingHint = isMonthComponent
-    ? "Name files 00.png–11.png or JAN.png–DEC.png"
+    ? t("Name files 00.png–11.png or JAN.png–DEC.png")
     : isWeekdayComponent
-      ? "Name files MON.png–SUN.png (or 00.png–06.png)"
-      : "Name files 00.png–09.png";
+      ? t("Name files MON.png–SUN.png (or 00.png–06.png)")
+      : t("Name files 00.png–09.png");
 
   const sourceButtons = (compact: boolean) => (
     <div className={`wf-png-font-sources${compact ? " is-compact" : ""}`}>
@@ -421,8 +423,8 @@ export function CustomPngFontPanel({
       >
         <span className="wf-png-font-source-icon" aria-hidden="true"><Sparkles size={16} /></span>
         <span className="wf-png-font-source-copy">
-          <strong>{compact ? "Official…" : "Official COROS font"}</strong>
-          {!compact ? <span>Digit sets unpacked from the official face catalog.</span> : null}
+          <strong>{compact ? t("Official…") : t("Official COROS font")}</strong>
+          {!compact ? <span>{t("Digit sets unpacked from the official face catalog.")}</span> : null}
         </span>
       </button>
       <button
@@ -433,15 +435,15 @@ export function CustomPngFontPanel({
       >
         <span className="wf-png-font-source-icon" aria-hidden="true"><FolderOpen size={16} /></span>
         <span className="wf-png-font-source-copy">
-          <strong>{compact ? "Folder…" : "Folder of PNGs"}{!compact ? <em>Recommended</em> : null}</strong>
-          {!compact ? <span>One file per glyph. {namingHint}.</span> : null}
+          <strong>{compact ? t("Folder…") : t("Folder of PNGs")}{!compact ? <em>{t("Recommended")}</em> : null}</strong>
+          {!compact ? <span>{t("One file per glyph.")}{" "}{t(namingHint)}.</span> : null}
         </span>
       </button>
       <label className={`wf-png-font-source${controlsDisabled ? " is-disabled" : ""}`}>
         <span className="wf-png-font-source-icon" aria-hidden="true"><LayoutGrid size={16} /></span>
         <span className="wf-png-font-source-copy">
-          <strong>{compact ? "Sheet…" : "Sprite sheet"}</strong>
-          {!compact ? <span>All glyphs in one PNG grid. You set the column count and glyph order next.</span> : null}
+          <strong>{compact ? t("Sheet…") : t("Sprite sheet")}</strong>
+          {!compact ? <span>{t("All glyphs in one PNG grid. You set the column count and glyph order next.")}</span> : null}
         </span>
         <input
           type="file"
@@ -453,8 +455,8 @@ export function CustomPngFontPanel({
       <label className={`wf-png-font-source${controlsDisabled ? " is-disabled" : ""}`}>
         <span className="wf-png-font-source-icon" aria-hidden="true"><Files size={16} /></span>
         <span className="wf-png-font-source-copy">
-          <strong>{compact ? "Files…" : "Individual files"}</strong>
-          {!compact ? <span>Pick a few PNGs to add or replace single glyphs. Same names as a folder.</span> : null}
+          <strong>{compact ? t("Files…") : t("Individual files")}</strong>
+          {!compact ? <span>{t("Pick a few PNGs to add or replace single glyphs. Same names as a folder.")}</span> : null}
         </span>
         <input
           type="file"
@@ -468,40 +470,37 @@ export function CustomPngFontPanel({
   );
 
   return (
-    <section className="wf-png-font" aria-label="Custom PNG font">
+    <section className="wf-png-font" aria-label={t("Custom PNG font")}>
       <div className="wf-png-font-head">
-        <strong>Custom PNG font</strong>
+        <strong>{t("Custom PNG font")}</strong>
         {activeRasterFont
           ? null
-          : <span>Draw the digits yourself and use the PNGs instead of a font.</span>}
+          : <span>{t("Draw the digits yourself and use the PNGs instead of a font.")}</span>}
       </div>
 
       {supportsComponentScope ? (
         <div className="wf-png-font-scope">
-          <div className="wf-png-font-segmented" role="group" aria-label="Where this PNG set applies">
+          <div className="wf-png-font-segmented" role="group" aria-label={t("Where this PNG set applies")}>
             <button
               type="button"
               aria-pressed={scope === "component"}
               disabled={controlsDisabled}
               onClick={() => setScope("component")}
             >
-              {componentLabel ?? "This layer"} only
-            </button>
+              {componentLabel ?? t("This layer")}{" "}{t("only")}</button>
             <button
               type="button"
               aria-pressed={scope === "all"}
               disabled={controlsDisabled}
               onClick={() => setScope("all")}
-            >
-              Whole face
-            </button>
+            >{t("Whole face")}</button>
           </div>
           <span>
             {scope === "component"
-              ? `Only ${componentLabel ?? "this layer"} uses this set. Other layers keep their fonts.`
-              : "Every text layer on the face shares this one set."}
-            {scope === "component" && rasterFont ? " A whole-face set is also installed." : ""}
-            {scope === "all" && componentRasterFont ? ` ${componentLabel ?? "This layer"} has its own set that takes priority.` : ""}
+              ? t("Only {{value1}} uses this set. Other layers keep their fonts.", { value1: componentLabel ? t(componentLabel) : t("this layer") })
+              : t("Every text layer on the face shares this one set.")}
+            {scope === "component" && rasterFont ? t(" A whole-face set is also installed.") : ""}
+            {scope === "all" && componentRasterFont ? t(" {{value1}} has its own set that takes priority.", { value1: componentLabel ?? "This layer" }) : ""}
           </span>
         </div>
       ) : null}
@@ -512,7 +511,7 @@ export function CustomPngFontPanel({
         <>
           {activeRasterFont === previewedFont ? null : (
             <WatchfaceSpriteStrip
-              label="Imported glyphs"
+              label={t("Imported glyphs")}
               cells={previewCells}
               summary={describeRasterFontSource(activeRasterFont)}
             />
@@ -522,25 +521,25 @@ export function CustomPngFontPanel({
             <p className="wf-png-font-note is-warning">
               <CircleAlert size={13} aria-hidden="true" />
               {missingDigits === 10
-                ? "No digits yet. Add PNGs for 0–9 before this set can replace the live digits."
-                : `${missingDigits} digit${missingDigits === 1 ? "" : "s"} missing. Add the dashed ones with “Files…” below.`}
+                ? t("No digits yet. Add PNGs for 0–9 before this set can replace the live digits.")
+                : t("{{missingDigits}} digit{{value2}} missing. Add the dashed ones with “Files…” below.", { missingDigits: missingDigits, value2: missingDigits === 1 ? "" : "s" })}
             </p>
           ) : null}
 
           <div className="wf-png-font-fields">
             <label className="wf-png-font-row">
-              <span>Name</span>
+              <span>{t("Name")}</span>
               <input
                 disabled={controlsDisabled}
                 value={activeRasterFont.label}
                 onChange={(event) => updateRasterFont({ label: event.target.value })}
-                placeholder="My pixel font"
+                placeholder={t("My pixel font")}
               />
             </label>
             {hasAtlasLayout ? (
               <>
                 <label className="wf-png-font-row">
-                  <span>Columns</span>
+                  <span>{t("Columns")}</span>
                   <input
                     className="wf-png-font-number"
                     disabled={controlsDisabled}
@@ -556,7 +555,7 @@ export function CustomPngFontPanel({
                   />
                 </label>
                 <label className="wf-png-font-row">
-                  <span title="One character per cell, left to right, then top to bottom">Glyph order</span>
+                  <span title={t("One character per cell, left to right, then top to bottom")}>{t("Glyph order")}</span>
                   <input
                     className="wf-png-font-mono"
                     disabled={controlsDisabled}
@@ -567,11 +566,11 @@ export function CustomPngFontPanel({
                     placeholder="0123456789"
                   />
                 </label>
-                <p className="wf-png-font-note">Order matches the sheet: left to right, then the next row.</p>
+                <p className="wf-png-font-note">{t("Order matches the sheet: left to right, then the next row.")}</p>
               </>
             ) : null}
             <label className="wf-png-font-row wf-png-font-row--toggle">
-              <span>Use layer color</span>
+              <span>{t("Use layer color")}</span>
               <input
                 type="checkbox"
                 disabled={controlsDisabled}
@@ -581,13 +580,13 @@ export function CustomPngFontPanel({
             </label>
             <p className="wf-png-font-note">
               {activeRasterFont.tint
-                ? "The PNGs are recolored to match the digit color."
-                : "The PNGs keep their own colors. Turn on to recolor them with the digit color."}
+                ? t("The PNGs are recolored to match the digit color.")
+                : t("The PNGs keep their own colors. Turn on to recolor them with the digit color.")}
             </p>
           </div>
 
           <div className="wf-png-font-replace">
-            <span>Replace with</span>
+            <span>{t("Replace with")}</span>
             {sourceButtons(true)}
             <button
               className="wf-png-font-remove"
@@ -595,46 +594,39 @@ export function CustomPngFontPanel({
               disabled={controlsDisabled}
               onClick={() => setActiveRasterFont(undefined)}
             >
-              <Trash2 size={13} aria-hidden="true" /> Remove
-            </button>
+              <Trash2 size={13} aria-hidden="true" />{" "}{t("Remove")}</button>
           </div>
         </>
       )}
 
       {activeRasterFont && rasterFontHasDigits && isMonthComponent ? (
-        <p className="wf-png-font-note">
-          This set has 0–9, so the month shows as a number (1–12).
-        </p>
+        <p className="wf-png-font-note">{t("This set has 0–9, so the month shows as a number (1–12).")}</p>
       ) : null}
       {activeRasterFont && !rasterFontHasDigits ? (
         rasterFontHasMonth && componentLabel === "Date month" ? (
-          <p className="wf-png-font-note">
-            This set has JAN–DEC labels, so the month shows as a 12-image set.
-          </p>
+          <p className="wf-png-font-note">{t("This set has JAN–DEC labels, so the month shows as a 12-image set.")}</p>
         ) : rasterFontHasWeekday || rasterFontHasMonth ? (
-          <p className="wf-png-font-note">
-            This set provides date labels and leaves numeric fields unchanged.
-          </p>
+          <p className="wf-png-font-note">{t("This set provides date labels and leaves numeric fields unchanged.")}</p>
         ) : null
       ) : null}
       {error ? (
         <p className="wf-png-font-note is-warning" role="alert">
-          <CircleAlert size={13} aria-hidden="true" /> {error}
+          <CircleAlert size={13} aria-hidden="true" /> {t(error)}
         </p>
       ) : null}
       {importing ? (
-        <p className="wf-png-font-note is-status" role="status">Importing…</p>
+        <p className="wf-png-font-note is-status" role="status">{t("Importing…")}</p>
       ) : status ? (
-        <p className="wf-png-font-note is-status" role="status">{status}</p>
+        <p className="wf-png-font-note is-status" role="status">{t(status)}</p>
       ) : null}
 
       <details className="wf-png-font-rules">
-        <summary>File naming rules</summary>
+        <summary>{t("File naming rules")}</summary>
         <ul>
-          <li>Digits: <code>00.png</code> – <code>09.png</code>.</li>
-          <li>Weekdays: <code>MON.png</code> – <code>SUN.png</code>, or <code>00.png</code> – <code>06.png</code>.</li>
-          <li>Months: <code>JAN.png</code> – <code>DEC.png</code>, or <code>00.png</code> (JAN) – <code>11.png</code> (DEC). A 0–9 digit folder gives a numeric month instead.</li>
-          <li>Individual files take priority over a sheet, so you can fix one glyph without re-importing everything.</li>
+          <li>{t("Digits:")}{" "}<code>{t("00.png")}</code> – <code>{t("09.png")}</code>.</li>
+          <li>{t("Weekdays:")}{" "}<code>{t("MON.png")}</code> – <code>{t("SUN.png")}</code>{t(", or")}{" "}<code>{t("00.png")}</code> – <code>{t("06.png")}</code>.</li>
+          <li>{t("Months:")}{" "}<code>{t("JAN.png")}</code> – <code>{t("DEC.png")}</code>{t(", or")}{" "}<code>{t("00.png")}</code>{" "}{t("(JAN) –")}{" "}<code>{t("11.png")}</code>{" "}{t("(DEC). A 0–9 digit folder gives a numeric month instead.")}</li>
+          <li>{t("Individual files take priority over a sheet, so you can fix one glyph without re-importing everything.")}</li>
         </ul>
       </details>
       {officialBrowserOpen ? (
@@ -644,7 +636,7 @@ export function CustomPngFontPanel({
           mode="font"
           fontKind={scope === "component" && componentLabel === "Weekday" ? "weekday" : scope === "component" && componentLabel === "Date month" ? "month" : "digits"}
           defaultRole={scope !== "component" || /hour|minute|second/i.test(componentLabel ?? "") ? "time" : /battery/i.test(componentLabel ?? "") ? "battery" : /temp|weather/i.test(componentLabel ?? "") ? "weather" : ""}
-          title={componentLabel ? `Official font for ${componentLabel}` : "Official COROS fonts"}
+          title={componentLabel ? t("Official font for {{componentLabel}}", { componentLabel: componentLabel }) : t("Official COROS fonts")}
           onClose={() => setOfficialBrowserOpen(false)}
           onPick={(frames) => chooseRasterSpriteFolder(officialAssetToSpriteFolder(frames))}
         />

@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import {
   forwardRef,
   memo,
@@ -112,7 +113,7 @@ function loadLandGeometry(): Promise<LandGeometryData> {
     worker.onerror = (event) => {
       landGeometryPromise = null;
       worker.terminate();
-      reject(new Error(event.message || "Unable to prepare globe geography."));
+      reject(new Error(event.message || t("Unable to prepare globe geography.")));
     };
   });
   return landGeometryPromise;
@@ -217,6 +218,7 @@ const ActivityGlobeRendererComponent = forwardRef<
   },
   forwardedRef,
 ) {
+  const { language } = useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const baselineRef = useRef<GlobeView>(DEFAULT_VIEW);
@@ -246,7 +248,7 @@ const ActivityGlobeRendererComponent = forwardRef<
         emissiveIntensity: paperTheme ? 0 : 0.08,
         dithering: true,
       }),
-    [paperTheme],
+    [paperTheme, language],
   );
 
   const lights = useMemo(() => {
@@ -261,18 +263,18 @@ const ActivityGlobeRendererComponent = forwardRef<
     );
     directional.position.set(-3.5, 4.5, 5.5);
     return [hemisphere, directional];
-  }, [paperTheme]);
+  }, [paperTheme, language]);
 
   const landLayer = useMemo(
     () =>
       landGeometry
         ? createGeographyPoints(paperTheme, landGeometry)
         : null,
-    [landGeometry, paperTheme],
+    [landGeometry, paperTheme, language],
   );
   const landLayerData = useMemo(
     () => (landLayer ? [landLayer] : []),
-    [landLayer],
+    [landLayer, language],
   );
 
   const activityPoints = useMemo<ActivityPoint[]>(() => {
@@ -281,19 +283,19 @@ const ActivityGlobeRendererComponent = forwardRef<
       ...location,
       intensity: Math.sqrt(location.count / maxCount),
     }));
-  }, [locations]);
+  }, [locations, language]);
 
   const pathsData = useMemo<RouteLayerData[]>(
     () => (routePoints.length >= 2 ? [{ points: routePoints }] : []),
-    [routePoints],
+    [routePoints, language],
   );
   const selectedData = useMemo(
     () => (selectedLocation ? [selectedLocation] : []),
-    [selectedLocation],
+    [selectedLocation, language],
   );
   const ringData = useMemo(
     () => (!reducedMotion && selectedLocation ? [selectedLocation] : []),
-    [reducedMotion, selectedLocation],
+    [reducedMotion, selectedLocation, language],
   );
 
   const stopIdleRotation = useCallback(() => {

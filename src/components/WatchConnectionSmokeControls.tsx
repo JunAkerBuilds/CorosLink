@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n";
 import { useEffect, useState } from "react";
 import type { WatchConnectionSmokeOptionId, WatchStatus } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
@@ -34,6 +35,7 @@ export function WatchConnectionSmokeControls({
   onWatchStatusChange,
   onError,
 }: WatchConnectionSmokeControlsProps) {
+  useLanguage();
   const [value, setValue] = useState<WatchConnectionSmokeOptionId>("auto");
   const [busy, setBusy] = useState(false);
 
@@ -69,7 +71,7 @@ export function WatchConnectionSmokeControls({
   return (
     <SelectDropdown
       className="app-select--pill app-select--watch-smoke"
-      label="Watch connection fixture"
+      label={t("Watch connection fixture")}
       value={value}
       options={WATCH_SMOKE_OPTIONS}
       disabled={!api || busy}

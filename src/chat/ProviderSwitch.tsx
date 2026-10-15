@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import { Bot, Network, Sparkles, Terminal } from "lucide-react";
 import type { ChatProvider } from "../../electron/types";
 import { SelectDropdown } from "../components/SelectDropdown";
@@ -38,20 +39,21 @@ export function ProviderSwitch({
   disabled?: boolean;
   onChange: (provider: ChatProvider) => void;
 }) {
+  useLanguage();
   const selectedLabel =
     OPTIONS.find((option) => option.value === provider)?.label ?? provider;
   const tone = getProviderTone(provider);
 
   return (
-    <SelectDropdown
+    <SelectDropdown translateLabel={t}
       className={`app-select--pill chat-provider-select chat-select--${tone}`}
       menuClassName={`chat-select-menu chat-provider-menu chat-select-menu--${tone}`}
       value={provider}
-      options={OPTIONS}
+      options={OPTIONS.map(option => ({ ...option, label: t(option.label) }))}
       onChange={onChange}
       renderIcon={renderProviderIcon}
-      label="Coach provider"
-      title={`Coach provider: ${selectedLabel}`}
+      label={t("Coach provider")}
+      title={t("Coach provider: {{p0}}", { p0: selectedLabel })}
       disabled={disabled}
       portal
     />

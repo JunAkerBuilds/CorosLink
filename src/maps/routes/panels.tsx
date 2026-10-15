@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n/tools";
 import {
   Compass,
   Layers,
@@ -72,6 +73,7 @@ export function LocationSearchField({
   onClear?: () => void;
   accent: "start" | "end";
 }) {
+  useLanguage();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<RouteGeocodeResult[]>([]);
   const [open, setOpen] = useState(false);
@@ -131,8 +133,8 @@ export function LocationSearchField({
           <button
             type="button"
             className="route-search-icon route-search-clear"
-            title={`Clear ${accent === "start" ? "start point" : "destination"}`}
-            aria-label={`Clear ${accent === "start" ? "start point" : "destination"}`}
+            title={t("Clear {{p0}}", { p0: accent === "start" ? "start point" : "destination" })}
+            aria-label={t("Clear {{p0}}", { p0: accent === "start" ? "start point" : "destination" })}
             onClick={onClear}
           >
             <X size={14} aria-hidden="true" />
@@ -142,8 +144,8 @@ export function LocationSearchField({
           <button
             type="button"
             className="route-search-icon"
-            title="Use my location"
-            aria-label="Use my location"
+            title={t("Use my location")}
+            aria-label={t("Use my location")}
             onClick={onUseCurrent}
           >
             <LocateFixed size={15} aria-hidden="true" />
@@ -152,8 +154,8 @@ export function LocationSearchField({
         <button
           type="button"
           className={`route-search-icon${pinActive ? " is-active" : ""}`}
-          title={pinActive ? "Click the map to place (Esc to cancel)" : "Pick on map"}
-          aria-label={pinActive ? "Cancel map pin" : "Pick on map"}
+          title={pinActive ? t("Click the map to place (Esc to cancel)") : t("Pick on map")}
+          aria-label={pinActive ? t("Cancel map pin") : t("Pick on map")}
           aria-pressed={pinActive}
           onClick={onTogglePin}
         >
@@ -198,8 +200,9 @@ export function SportPicker({
   value: RouteActivityType;
   onChange: (activity: RouteActivityType) => void;
 }) {
+  useLanguage();
   return (
-    <div className="route-sport-picker" role="group" aria-label="Activity">
+    <div className="route-sport-picker" role="group" aria-label={t("Activity")}>
       {ROUTE_ACTIVITY_OPTIONS.map((option) => {
         const Icon = option.icon;
         return (
@@ -208,11 +211,11 @@ export function SportPicker({
             type="button"
             className={option.value === value ? "is-active" : ""}
             onClick={() => onChange(option.value)}
-            title={option.label}
+            title={t(option.label)}
             aria-pressed={option.value === value}
           >
             <Icon size={16} aria-hidden="true" />
-            <em>{option.shortLabel}</em>
+            <em>{t(option.shortLabel)}</em>
           </button>
         );
       })}
@@ -243,11 +246,12 @@ const IMPERIAL_DISTANCE_PRESETS: Record<
   "foot" | "bike",
   Array<{ value: number; label: string }>
 > = {
-  foot: [3, 6, 13.1, 26.2].map((value) => ({ value, label: `${value} mi` })),
-  bike: [10, 25, 50, 100].map((value) => ({ value, label: `${value} mi` }))
+  foot: [3, 6, 13.1, 26.2].map((value) => ({ value, label: t("{{p0}} mi", { p0: value }) })),
+  bike: [10, 25, 50, 100].map((value) => ({ value, label: t("{{p0}} mi", { p0: value }) }))
 };
 
 function StepTitle({ index, children }: { index: number; children: string }) {
+  useLanguage();
   return (
     <h3 className="route-step-title">
       <span className="route-step-num" aria-hidden="true">
@@ -307,6 +311,7 @@ export function GeneratePanel({
   busy: boolean;
   hasResult: boolean;
 }) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const maxDistance = maxDistanceForActivity(activityType);
   const displayDistance = metersToDisplayDistance(distanceKm * 1_000, unitSystem);
@@ -322,26 +327,25 @@ export function GeneratePanel({
     isCyclingActivity(activityType) ? presetFamily.bike : presetFamily.foot
   ).filter((preset) => preset.value <= displayMaxDistance);
   const ctaHint = !start
-    ? "Pick a start point — search above, use your location, or drop a pin on the map."
+    ? t("Pick a start point — search above, use your location, or drop a pin on the map.")
     : mode === "point-to-point" && !destination
-      ? "Add a destination to route from A to B."
+      ? t("Add a destination to route from A to B.")
       : null;
 
   return (
     <div className="route-panel-body">
       <section className="route-step">
-        <StepTitle index={1}>Sport &amp; route type</StepTitle>
+        <StepTitle index={1}>{t("Sport &amp; route type")}</StepTitle>
         <SportPicker value={activityType} onChange={onActivityChange} />
 
-        <div className="route-mode-switch" role="group" aria-label="Route type">
+        <div className="route-mode-switch" role="group" aria-label={t("Route type")}>
           <button
             type="button"
             className={mode === "loop" ? "is-active" : ""}
             aria-pressed={mode === "loop"}
             onClick={() => onModeChange("loop")}
           >
-            Loop
-          </button>
+            {t("Loop")}</button>
           <button
             type="button"
             className={mode === "point-to-point" ? "is-active" : ""}
@@ -355,13 +359,13 @@ export function GeneratePanel({
 
       <section className="route-step">
         <StepTitle index={2}>
-          {mode === "loop" ? "Where to start?" : "Start & destination"}
+          {mode === "loop" ? t("Where to start?") : t("Start & destination")}
         </StepTitle>
         <div className="route-search-stack">
           <LocationSearchField
             api={api}
             value={start}
-            placeholder="Start location"
+            placeholder={t("Start location")}
             onSelect={onSelectStart}
             onError={onError}
             pinActive={pinTarget === "start"}
@@ -376,7 +380,7 @@ export function GeneratePanel({
             <LocationSearchField
               api={api}
               value={destination}
-              placeholder="Destination"
+              placeholder={t("Destination")}
               onSelect={onSelectDestination}
               onError={onError}
               pinActive={pinTarget === "destination"}
@@ -394,12 +398,12 @@ export function GeneratePanel({
 
       <section className="route-step">
         <StepTitle index={3}>
-          {mode === "loop" ? "Distance & terrain" : "Terrain"}
+          {mode === "loop" ? t("Distance & terrain") : t("Terrain")}
         </StepTitle>
         {mode === "loop" ? (
           <div className="route-distance">
             <div className="route-distance-head">
-              <span>Distance</span>
+              <span>{t("Distance")}</span>
               <strong>{displayDistance.toFixed(1)} {distanceUnit(unitSystem)}</strong>
             </div>
             <input
@@ -408,7 +412,7 @@ export function GeneratePanel({
               max={displayMaxDistance}
               step={0.5}
               value={Math.min(displayDistance, displayMaxDistance)}
-              aria-label={`Distance in ${unitSystem === "imperial" ? "miles" : "kilometres"}`}
+              aria-label={t("Distance in {{p0}}", { p0: unitSystem === "imperial" ? "miles" : "kilometres" })}
               onChange={(event) =>
                 onDistanceChange(
                   displayDistanceToMeters(Number(event.target.value), unitSystem) / 1_000
@@ -418,7 +422,7 @@ export function GeneratePanel({
             <div
               className="route-distance-presets"
               role="group"
-              aria-label="Distance presets"
+              aria-label={t("Distance presets")}
             >
               {presets.map((preset) => (
                 <button
@@ -435,7 +439,7 @@ export function GeneratePanel({
                     )
                   }
                 >
-                  {preset.label}
+                  {t(preset.label)}
                 </button>
               ))}
             </div>
@@ -443,8 +447,8 @@ export function GeneratePanel({
         ) : null}
 
         <div className="route-field-inline">
-          <label>Elevation</label>
-          <div className="route-chip-group" role="group" aria-label="Elevation preference">
+          <label>{t("Elevation")}</label>
+          <div className="route-chip-group" role="group" aria-label={t("Elevation preference")}>
             {ROUTE_ELEVATION_OPTIONS.map((option) => (
               <button
                 key={option.value}
@@ -453,7 +457,7 @@ export function GeneratePanel({
                 aria-pressed={option.value === elevationPreference}
                 onClick={() => onElevationChange(option.value)}
               >
-                {option.label}
+                {t(option.label)}
               </button>
             ))}
           </div>
@@ -472,7 +476,7 @@ export function GeneratePanel({
           ) : (
             <Sparkles size={16} aria-hidden="true" />
           )}
-          {busy ? "Building…" : "Generate route"}
+          {busy ? t("Building…") : t("Generate route")}
         </button>
         {mode === "loop" && hasResult ? (
           <button
@@ -480,11 +484,10 @@ export function GeneratePanel({
             className="button ghost route-variation"
             disabled={busy}
             onClick={onRegenerate}
-            title="Try a different loop with the same settings"
+            title={t("Try a different loop with the same settings")}
           >
             <RefreshCw size={14} aria-hidden="true" />
-            New variation
-          </button>
+            {t("New variation")}</button>
         ) : null}
       </div>
       {ctaHint && !busy ? <p className="route-cta-hint">{ctaHint}</p> : null}
@@ -507,6 +510,7 @@ export function DrawPanel({
   saving: boolean;
   canSave: boolean;
 }) {
+  useLanguage();
   return (
     <div className="route-panel-body">
       <SportPicker value={activityType} onChange={onActivityChange} />
@@ -514,30 +518,26 @@ export function DrawPanel({
       <div className="route-draw-hint">
         <MousePointerClick size={15} aria-hidden="true" />
         <span>
-          Click the map to drop points. Drag any point to reshape, click a point
-          to remove it.
-        </span>
+          {t("Click the map to drop points. Drag any point to reshape, click a point to remove it.")}</span>
       </div>
 
       <div className="route-field-inline">
-        <label>Follow paths</label>
-        <div className="route-toggle" role="group" aria-label="Snap to paths">
+        <label>{t("Follow paths")}</label>
+        <div className="route-toggle" role="group" aria-label={t("Snap to paths")}>
           <button
             type="button"
             className={draw.snap ? "is-active" : ""}
             aria-pressed={draw.snap}
             onClick={() => draw.setSnap(true)}
           >
-            Snap to roads
-          </button>
+            {t("Snap to roads")}</button>
           <button
             type="button"
             className={!draw.snap ? "is-active" : ""}
             aria-pressed={!draw.snap}
             onClick={() => draw.setSnap(false)}
           >
-            Freehand
-          </button>
+            {t("Freehand")}</button>
         </div>
       </div>
 
@@ -548,24 +548,21 @@ export function DrawPanel({
           onClick={draw.undo}
           disabled={!draw.canUndo}
         >
-          <Undo2 size={15} aria-hidden="true" /> Undo
-        </button>
+          <Undo2 size={15} aria-hidden="true" />  {t("Undo")}</button>
         <button
           type="button"
           className="button ghost"
           onClick={draw.closeLoop}
           disabled={draw.waypoints.length < 3 || draw.closed}
         >
-          <Compass size={15} aria-hidden="true" /> Close loop
-        </button>
+          <Compass size={15} aria-hidden="true" />  {t("Close loop")}</button>
         <button
           type="button"
           className="button ghost danger"
           onClick={draw.clear}
           disabled={draw.waypoints.length === 0}
         >
-          <Trash2 size={15} aria-hidden="true" /> Clear
-        </button>
+          <Trash2 size={15} aria-hidden="true" />  {t("Clear")}</button>
       </div>
 
       {draw.error ? <p className="route-inline-error">{draw.error}</p> : null}
@@ -582,7 +579,7 @@ export function DrawPanel({
           ) : (
             <Save size={16} aria-hidden="true" />
           )}
-          {saving ? "Saving…" : "Save route"}
+          {saving ? t("Saving…") : t("Save route")}
         </button>
       </div>
     </div>
@@ -596,13 +593,12 @@ export function ExplorePanel({
   overlays: RouteOverlayId[];
   onToggleOverlay: (id: RouteOverlayId) => void;
 }) {
+  useLanguage();
   return (
     <div className="route-panel-body">
       <p className="route-explore-lead">
         <PenLine size={14} aria-hidden="true" />
-        Discover routes people actually use — official marked trails and cycle
-        networks from OpenStreetMap.
-      </p>
+        {t("Discover routes people actually use — official marked trails and cycle networks from OpenStreetMap.")}</p>
       <div className="route-overlay-list">
         {ROUTE_OVERLAY_ORDER.map((id) => {
           const config = ROUTE_OVERLAY_LAYERS[id];
@@ -621,8 +617,8 @@ export function ExplorePanel({
                 aria-hidden="true"
               />
               <span className="route-overlay-text">
-                <strong>{config.label}</strong>
-                <em>{config.description}</em>
+                <strong>{t(config.label)}</strong>
+                <em>{t(config.description)}</em>
               </span>
               <span className={`route-overlay-check${active ? " is-on" : ""}`} />
             </button>
@@ -630,9 +626,7 @@ export function ExplorePanel({
         })}
       </div>
       <small className="route-explore-note">
-        Tip: zoom in to reveal more local trails. Overlay data © Waymarked Trails
-        &amp; OpenStreetMap contributors.
-      </small>
+        {t("Tip: zoom in to reveal more local trails. Overlay data © Waymarked Trails &amp; OpenStreetMap contributors.")}</small>
     </div>
   );
 }
@@ -651,18 +645,19 @@ export function MapLayerControl({
   overlays?: RouteOverlayId[];
   onToggleOverlay?: (overlay: RouteOverlayId) => void;
 }) {
+  useLanguage();
   const [open, setOpen] = useState(false);
   return (
     <div className={`route-basemap${open ? " is-open" : ""}`}>
       {open ? (
         <div className="route-basemap-menu">
           <div className="route-basemap-head">
-            <span>Base map</span>
+            <span>{t("Base map")}</span>
             <button
               type="button"
               className="icon-button"
               onClick={() => setOpen(false)}
-              aria-label="Close"
+              aria-label={t("Close")}
             >
               <X size={15} aria-hidden="true" />
             </button>
@@ -679,8 +674,8 @@ export function MapLayerControl({
                   setOpen(false);
                 }}
               >
-                <strong>{config.label}</strong>
-                <em>{config.description}</em>
+                <strong>{t(config.label)}</strong>
+                <em>{t(config.description)}</em>
               </button>
             );
           })}
@@ -688,7 +683,7 @@ export function MapLayerControl({
             <>
               <div className="route-basemap-divider" />
               <div className="route-basemap-head">
-                <span>Trail overlays</span>
+                <span>{t("Trail overlays")}</span>
               </div>
               {ROUTE_OVERLAY_ORDER.map((id) => {
                 const config = ROUTE_OVERLAY_LAYERS[id];
@@ -707,9 +702,9 @@ export function MapLayerControl({
                         style={{ background: config.swatch }}
                         aria-hidden="true"
                       />
-                      {config.label}
+                      {t(config.label)}
                     </strong>
-                    <em>{config.description}</em>
+                    <em>{t(config.description)}</em>
                   </button>
                 );
               })}
@@ -721,8 +716,8 @@ export function MapLayerControl({
           type="button"
           className="route-basemap-toggle"
           onClick={() => setOpen(true)}
-          title="Change base map"
-          aria-label="Change base map"
+          title={t("Change base map")}
+          aria-label={t("Change base map")}
         >
           <Layers size={18} aria-hidden="true" />
         </button>

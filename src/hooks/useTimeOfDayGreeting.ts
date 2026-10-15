@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { t, useLanguage } from "../i18n";
 import {
   getTimeOfDayGreeting,
   msUntilNextGreetingChange,
 } from "../greetings";
 
 export function useTimeOfDayGreeting(): string {
+  useLanguage();
   const [greeting, setGreeting] = useState(() => getTimeOfDayGreeting());
 
   useEffect(() => {
@@ -21,5 +23,5 @@ export function useTimeOfDayGreeting(): string {
     return () => window.clearTimeout(timeoutId);
   }, []);
 
-  return greeting;
+  return t(greeting);
 }

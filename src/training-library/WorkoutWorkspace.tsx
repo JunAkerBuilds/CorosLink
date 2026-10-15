@@ -1,3 +1,5 @@
+import { formatWorkoutSport } from "../calendar/workoutLabels";
+import { getLocale, t, useLanguage } from "../i18n/training";
 import {
   CalendarPlus,
   Copy,
@@ -29,7 +31,7 @@ import type {
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { formatHappenDayLabel } from "../training/formatters";
-import { formatWorkoutSport } from "../../electron/workoutCapabilities";
+
 import { workoutSportFromType } from "../../electron/trainingPlanDomain";
 import { SportBadge, sportAccentStyle, sportChipStyle, sportTheme } from "./sportTheme";
 import { SelectDropdown } from "../components/SelectDropdown";
@@ -167,11 +169,11 @@ function sinceLabel(iso: string | undefined): string | null {
   const then = new Date(iso).valueOf();
   if (Number.isNaN(then)) return null;
   const days = Math.max(0, Math.round((Date.now() - then) / 86_400_000));
-  if (days === 0) return "today";
-  if (days === 1) return "yesterday";
+  if (days === 0) return t("today");
+  if (days === 1) return t("yesterday");
   if (days < 7) return `${days}d ago`;
   if (days < 60) return `${Math.round(days / 7)}w ago`;
-  if (days < 365) return `${Math.round(days / 30)}mo ago`;
+  if (days < 365) return t("{{value1}}mo ago", { value1: String(Math.round(days / 30)) });
   return `${Math.round(days / 365)}y ago`;
 }
 
@@ -197,12 +199,12 @@ function targetLabel(
       ...(swim ? { digits: 0 } : {})
     });
   }
-  if (target.type === "load") return `${target.load} load`;
+  if (target.type === "load") return t("{{value1}} load", { value1: String(target.load) });
   if (target.type === "reps") return `${target.count} reps`;
   if (target.type === "routes") return `${target.count} routes`;
   if (target.type === "elevationGain") return `${formatElevationValue(target.meters, unitSystem)} gain`;
-  if (target.type === "hrRecovery") return `${target.bpm} bpm recovery`;
-  return "Open";
+  if (target.type === "hrRecovery") return t("{{value1}} bpm recovery", { value1: String(target.bpm) });
+  return t("Open");
 }
 
 /** Repeat groups carry no kind of their own; they borrow their first child's. */
@@ -299,6 +301,7 @@ export function WorkoutWorkspace({
   onMessage,
   onError
 }: WorkoutWorkspaceProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const [query, setQuery] = useState("");
   const [scope, setScope] = useSelectionPreference(
@@ -345,7 +348,7 @@ export function WorkoutWorkspace({
       options.push({ id: "unsettled", label: "Needs attention" });
     }
     return options;
-  }, [workouts]);
+  }, [workouts, getLocale()]);
 
   const scopeAvailable = scopes.some((option) => option.id === scope);
   useEffect(() => {
@@ -380,7 +383,7 @@ export function WorkoutWorkspace({
         (metricFromVolume(left.volume, "duration") - metricFromVolume(right.volume, "duration")) * direction
       );
     });
-  }, [workouts, query, scope, sort]);
+  }, [workouts, query, scope, sort, getLocale()]);
 
   /*
    * The tile meter is self-referential: a bar reads as a share of the heaviest
@@ -390,7 +393,7 @@ export function WorkoutWorkspace({
    */
   const heaviestLoad = useMemo(
     () => workouts.reduce((most, workout) => Math.max(most, workout.trainingLoad ?? 0), 0),
-    [workouts]
+    [workouts, getLocale()]
   );
 
   /*
@@ -474,12 +477,12 @@ export function WorkoutWorkspace({
     () => previewDocument
       ? workoutShape(previewDocument.draft.nodes, unitSystem, previewDocument.draft.sport === "swim")
       : [],
-    [previewDocument, unitSystem]
+    [previewDocument, unitSystem, getLocale()]
   );
   /** Kinds actually drawn, in session order, so the legend never lists a ghost. */
   const shapeKinds = useMemo(
     () => STEP_KIND_ORDER.filter((kind) => shape.some((segment) => segment.kind === kind)),
-    [shape]
+    [shape, getLocale()]
   );
 
   useEffect(() => {
@@ -565,7 +568,7 @@ export function WorkoutWorkspace({
         name.trim(),
         duplicateSport ?? active.sportType
       );
-      onMessage(`Created "${result.name}" in the workout library.`);
+      onMessage(t("Created \"{{value1}}\" in the workout library.", { value1: String(result.name) }));
       await onRefresh();
       setActiveId(result.id);
     } catch (cause) {
@@ -590,7 +593,7 @@ export function WorkoutWorkspace({
     setBusy("delete");
     try {
       await api.deleteTrainingLibraryWorkouts({ programIds: pendingDelete, confirmed: true });
-      onMessage(`Deleted ${pendingDelete.length} workout${pendingDelete.length === 1 ? "" : "s"} from COROS.`);
+      onMessage(t("Deleted {{value1}} workout{{value2}} from COROS.", { value1: String(pendingDelete.length), value2: String(pendingDelete.length === 1 ? "" : "s") }));
       setSelected([]);
       setPendingDelete([]);
       setActiveId(null);
@@ -609,7 +612,7 @@ export function WorkoutWorkspace({
       className="tl-mark"
       role="checkbox"
       aria-checked={isSelected}
-      aria-label={`Select ${name}`}
+      aria-label={t("Select {{value1}}", { value1: String(name) })}
       onClick={() =>
         setSelected((current) =>
           current.includes(id) ? current.filter((value) => value !== id) : [...current, id]
@@ -655,18 +658,18 @@ export function WorkoutWorkspace({
 
   return (
     <div className="tl-panel tl-split">
-      <section className="tl-catalog" aria-label={`${filtered.length} workouts`}>
+      <section className="tl-catalog" aria-label={t("{{value1}} workouts", { value1: String(filtered.length) })}>
         <div className="tl-filters">
           <label className="tl-search">
             <Search size={15} />
-            <span className="sr-only">Search workouts</span>
+            <span className="sr-only">{t("Search workouts")}</span>
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search workouts and tags"
+              placeholder={t("Search workouts and tags")}
             />
           </label>
-          <div className="tl-chips" role="group" aria-label="Filter workouts">
+          <div className="tl-chips" role="group" aria-label={t("Filter workouts")}>
             {scopes.map((option) => (
               <button
                 type="button"
@@ -674,23 +677,23 @@ export function WorkoutWorkspace({
                 aria-pressed={scope === option.id}
                 onClick={() => setScope(option.id)}
               >
-                {option.label}
+                {t(option.label)}
               </button>
             ))}
           </div>
           <div className="tl-filters-tail">
-            <SelectDropdown
+            <SelectDropdown translateLabel={t}
               className="tl-quiet-select"
-              label="Sort workouts"
+              label={t("Sort workouts")}
               value={sort.column}
               options={WORKOUT_SORT_OPTIONS}
               onChange={(value) => setSort({ column: value, descending: value !== "name" })}
             />
-            <div className="tl-layout-switch" role="group" aria-label="Workout layout">
+            <div className="tl-layout-switch" role="group" aria-label={t("Workout layout")}>
               <button
                 type="button"
                 aria-pressed={layout === "grid"}
-                aria-label="Show tiles"
+                aria-label={t("Show tiles")}
                 onClick={() => setLayout("grid")}
               >
                 <LayoutGrid size={14} />
@@ -698,28 +701,26 @@ export function WorkoutWorkspace({
               <button
                 type="button"
                 aria-pressed={layout === "list"}
-                aria-label="Show list"
+                aria-label={t("Show list")}
                 onClick={() => setLayout("list")}
               >
                 <List size={14} />
               </button>
             </div>
             <button type="button" className="primary-button" onClick={() => setCreating(true)}>
-              <Plus size={14} /> New workout
-            </button>
+              <Plus size={14} /> {t("New workout")} </button>
           </div>
         </div>
 
         {selected.length ? (
-          <div className="tl-bulk" role="toolbar" aria-label="Actions for selected workouts">
-            <strong>{selected.length} selected</strong>
+          <div className="tl-bulk" role="toolbar" aria-label={t("Actions for selected workouts")}>
+            <strong>{selected.length} {t("selected")}</strong>
             <button type="button" onClick={applyTags}>
-              <Tag size={13} /> Tag
-            </button>
+              <Tag size={13} /> {t("Tag")} </button>
             {collections.length ? (
-              <SelectDropdown
+              <SelectDropdown translateLabel={t}
                 className="tl-quiet-select"
-                label="Move selected workouts to a collection"
+                label={t("Move selected workouts to a collection")}
                 value=""
                 options={[
                   { value: "", label: "Move to collection" },
@@ -731,12 +732,10 @@ export function WorkoutWorkspace({
               />
             ) : null}
             <button type="button" onClick={() => downloadSelection(exportTargets)}>
-              <Download size={13} /> Export
-            </button>
+              <Download size={13} /> {t("Export")} </button>
             <button type="button" className="danger" onClick={() => setPendingDelete(selected)}>
-              <Trash2 size={13} /> Delete
-            </button>
-            <button type="button" aria-label="Clear selection" onClick={() => setSelected([])}>
+              <Trash2 size={13} /> {t("Delete")} </button>
+            <button type="button" aria-label={t("Clear selection")} onClick={() => setSelected([])}>
               <X size={13} />
             </button>
           </div>
@@ -744,8 +743,8 @@ export function WorkoutWorkspace({
 
         {filtered.length === 0 ? (
           <div className="tl-empty">
-            <h3>No workouts match</h3>
-            <p>Clear the search or choose another filter.</p>
+            <h3>{t("No workouts match")}</h3>
+            <p>{t("Clear the search or choose another filter.")}</p>
           </div>
         ) : layout === "grid" ? (
           <ul className="tl-grid" role="list">
@@ -783,7 +782,7 @@ export function WorkoutWorkspace({
                     <SportGlyph className="tl-wk-glyph" size={132} strokeWidth={1} aria-hidden="true" />
                     <span className="tl-card-top">
                       {workout.favorite ? (
-                        <Heart size={11} fill="currentColor" strokeWidth={0} aria-label="Favorite" />
+                        <Heart size={11} fill="currentColor" strokeWidth={0} aria-label={t("Favorite")} />
                       ) : null}
                       <SportBadge sport={sport ?? "run"} />
                       {UNSETTLED_SYNC.has(workout.syncState) ? (
@@ -803,10 +802,10 @@ export function WorkoutWorkspace({
                     ) : null}
                     <span className="tl-wk-meter">
                       <span className="tl-wk-meter-head">
-                        <small>{hasShape ? "Session shape" : "Training load"}</small>
+                        <small>{hasShape ? t("Session shape") : t("Training load")}</small>
                         <span className="tl-wk-load">
                           <b className={load ? "" : "is-nil"}>{load ?? "—"}</b>
-                          <em>load</em>
+                          <em>{t("load")}</em>
                         </span>
                       </span>
                       {hasShape ? (
@@ -814,16 +813,16 @@ export function WorkoutWorkspace({
                           className="tl-wk-shape"
                           data-dense={tileShape.length > COMB_DENSE_AT ? "true" : undefined}
                           role="img"
-                          aria-label={`Workout structure: ${tileShape
+                          aria-label={t("Workout structure: {{value1}}", { value1: String(tileShape
                             .map((segment) => segment.label)
-                            .join(", ")}`}
+                            .join(", ")) })}
                         >
                           {combGrow(tileShape).map((grow, index) => (
                             <i
                               key={index}
                               className={`is-${tileShape[index].kind}`}
                               style={{ flexGrow: grow }}
-                              title={tileShape[index].label}
+                              title={t(tileShape[index].label)}
                             />
                           ))}
                         </span>
@@ -833,8 +832,8 @@ export function WorkoutWorkspace({
                           aria-hidden="true"
                           title={
                             load
-                              ? `${load} training load — ${Math.round((load / heaviestLoad) * 100)}% of the heaviest workout in your library`
-                              : "COROS has not reported a training load for this workout"
+                              ? t("{{value1}} training load — {{value2}}% of the heaviest workout in your library", { value1: String(load), value2: String(Math.round((load / heaviestLoad) * 100)) })
+                              : t("COROS has not reported a training load for this workout")
                           }
                         >
                           {load ? <i style={{ width: `${loadShare}%` }} /> : null}
@@ -844,16 +843,16 @@ export function WorkoutWorkspace({
                     <span className="tl-wk-foot">
                       <span>
                         <VolumeIcon size={11} aria-hidden="true" />
-                        <b>{formatWorkoutVolume(workout.volume, unitSystem, workoutSportFromType(workout.sportType) === "swim") ?? "No volume"}</b>
+                        <b>{formatWorkoutVolume(workout.volume, unitSystem, workoutSportFromType(workout.sportType) === "swim") ?? t("No volume")}</b>
                       </span>
                       <span>
                         <Link2 size={11} aria-hidden="true" />
                         {references ? (
                           <>
-                            <b>{references}</b> {references === 1 ? "use" : "uses"}
+                            <b>{references}</b> {references === 1 ? t("use") : t("uses")}
                           </>
                         ) : (
-                          "Unused"
+                          t("Unused")
                         )}
                       </span>
                       {lastUsed ? (
@@ -874,7 +873,7 @@ export function WorkoutWorkspace({
                   className="tl-load-more"
                   onClick={() => setVisibleCount((value) => value + 60)}
                 >
-                  Show 60 more of {filtered.length}
+                  {t("Show 60 more of")} {filtered.length}
                 </button>
               </li>
             ) : null}
@@ -889,7 +888,7 @@ export function WorkoutWorkspace({
                 aria-pressed={sort.column === "name"}
                 onClick={() => toggleSort("name")}
               >
-                workout{sortIndicator("name")}
+                {t("workout")}{sortIndicator("name")}
               </button>
               {WORKOUT_COLUMNS.map((column) => (
                 <button
@@ -899,7 +898,7 @@ export function WorkoutWorkspace({
                   aria-pressed={sort.column === column.id}
                   onClick={() => toggleSort(column.id)}
                 >
-                  {column.label}
+                  {t(column.label)}
                   {sortIndicator(column.id)}
                 </button>
               ))}
@@ -925,7 +924,7 @@ export function WorkoutWorkspace({
                     <button type="button" className="tl-row-open" onClick={() => setActiveId(workout.id)}>
                       <span className="tl-row-name">
                         {workout.favorite ? (
-                          <Heart size={12} fill="currentColor" strokeWidth={0} aria-label="Favorite" />
+                          <Heart size={12} fill="currentColor" strokeWidth={0} aria-label={t("Favorite")} />
                         ) : null}
                         {workout.name}
                       </span>
@@ -957,7 +956,7 @@ export function WorkoutWorkspace({
                 className="tl-load-more"
                 onClick={() => setVisibleCount((value) => value + 60)}
               >
-                Show 60 more of {filtered.length}
+                {t("Show 60 more of")} {filtered.length}
               </button>
             ) : null}
           </div>
@@ -967,8 +966,8 @@ export function WorkoutWorkspace({
       <aside className="tl-reader" aria-live="polite">
         {!active ? (
           <div className="tl-empty">
-            <h3>Pick a workout</h3>
-            <p>Its full step structure and references appear here.</p>
+            <h3>{t("Pick a workout")}</h3>
+            <p>{t("Its full step structure and references appear here.")}</p>
           </div>
         ) : (
           <>
@@ -980,17 +979,17 @@ export function WorkoutWorkspace({
                 </p>
                 <h2>{active.name}</h2>
                 {active.tags.length ? (
-                  <ul className="tl-reader-tags" aria-label="Workout tags">
+                  <ul className="tl-reader-tags" aria-label={t("Workout tags")}>
                     {active.tags.slice(0, 8).map((tag) => (
                       <li key={tag}>{tag}</li>
                     ))}
-                    {active.tags.length > 8 ? <li>+{active.tags.length - 8} more</li> : null}
+                    {active.tags.length > 8 ? <li>+{active.tags.length - 8} {t("more")}</li> : null}
                   </ul>
                 ) : null}
                 <button
                   type="button"
                   className={`tl-reader-favorite${active.favorite ? " is-active" : ""}`}
-                  aria-label={active.favorite ? "Remove from favorites" : "Add to favorites"}
+                  aria-label={active.favorite ? t("Remove from favorites") : t("Add to favorites")}
                   onClick={() => void updateMetadata([active.id], { favorite: !active.favorite })}
                 >
                   <Heart size={16} fill={active.favorite ? "currentColor" : "none"} />
@@ -999,25 +998,25 @@ export function WorkoutWorkspace({
 
               <dl className="tl-reader-metrics">
               <div>
-                <dt>Time</dt>
+                <dt>{t("Time")}</dt>
                 <dd className={readerTime ? "" : "is-nil"} title={readerTime ?? undefined}>
                   {readerTime ?? "—"}
                 </dd>
               </div>
               <div>
-                <dt>Distance</dt>
+                <dt>{t("Distance")}</dt>
                 <dd className={readerDistance ? "" : "is-nil"} title={readerDistance ?? undefined}>
                   {readerDistance ?? "—"}
                 </dd>
               </div>
               <div>
-                <dt>Load</dt>
+                <dt>{t("Load")}</dt>
                 <dd className={readerLoad ? "" : "is-nil"} title={readerLoad ? String(readerLoad) : undefined}>
                   {readerLoad ?? "—"}
                 </dd>
               </div>
               <div>
-                <dt>Steps</dt>
+                <dt>{t("Steps")}</dt>
                 <dd className={readerSteps ? "" : "is-nil"}>{readerSteps ?? "—"}</dd>
               </div>
             </dl>
@@ -1027,25 +1026,25 @@ export function WorkoutWorkspace({
                 <div
                   role="img"
                   data-dense={shape.length > COMB_DENSE_AT ? "true" : undefined}
-                  aria-label={`Step structure of ${active.name}, ${shape.length} steps`}
+                  aria-label={t("Step structure of {{value1}}, {{value2}} steps", { value1: String(active.name), value2: String(shape.length) })}
                 >
                   {combGrow(shape).map((grow, index) => (
                     <span
                       key={index}
                       className={`is-${shape[index].kind}`}
                       style={{ flexGrow: grow }}
-                      title={shape[index].label}
+                      title={t(shape[index].label)}
                     />
                   ))}
                 </div>
                 <figcaption>
-                  <span>Step structure, by share of the session</span>
+                  <span>{t("Step structure, by share of the session")}</span>
                   {shapeKinds.length ? (
                     <span className="tl-shape-legend" aria-hidden="true">
                       {shapeKinds.map((kind) => (
                         <span key={kind}>
                           <em className={`is-${kind}`} />
-                          {STEP_KIND_LABELS[kind]}
+                          {t(STEP_KIND_LABELS[kind])}
                         </span>
                       ))}
                     </span>
@@ -1056,12 +1055,11 @@ export function WorkoutWorkspace({
 
             {previewLoading ? (
               <p className="tl-reader-loading">
-                <LoaderCircle className="is-spinning" size={16} /> Loading the full structure
-              </p>
+                <LoaderCircle className="is-spinning" size={16} /> {t("Loading the full structure")} </p>
             ) : previewDocument ? (
               <div className="tl-steps-block">
                 <p className="tl-steps-label">
-                  Session steps <span>{previewDocument.draft.nodes.length}</span>
+                  {t("Session steps")} <span>{previewDocument.draft.nodes.length}</span>
                 </p>
                 <ol className="tl-steps">
                   {previewDocument.draft.nodes.map((node) => (
@@ -1083,8 +1081,7 @@ export function WorkoutWorkspace({
                       ) : null}
                       {!node.editable ? (
                         <i className="tl-flag" title={node.unsupportedReason}>
-                          read only
-                        </i>
+                          {t("read only")} </i>
                       ) : null}
                     </li>
                   ))}
@@ -1100,15 +1097,12 @@ export function WorkoutWorkspace({
               {active.usedByPlanIds.length || active.scheduledCount ? (
                 <>
                   <Link2 size={13} />
-                  {`Used by ${active.usedByPlanIds.length} plan${
-                    active.usedByPlanIds.length === 1 ? "" : "s"
-                  } and scheduled ${active.scheduledCount} time${active.scheduledCount === 1 ? "" : "s"}.`}
+                  {t("Used by {{value1}} plan{{value2}} and scheduled {{value3}} time{{value4}}.", { value1: String(active.usedByPlanIds.length), value2: String(active.usedByPlanIds.length === 1 ? "" : "s"), value3: String(active.scheduledCount), value4: String(active.scheduledCount === 1 ? "" : "s") })}
                 </>
               ) : (
                 <>
                   <Unlink size={13} />
-                  Not referenced by a plan or a calendar day.
-                </>
+                  {t("Not referenced by a plan or a calendar day.")} </>
               )}
             </p>
             </div>
@@ -1126,13 +1120,13 @@ export function WorkoutWorkspace({
                     <CalendarPlus size={15} />
                   </span>
                   <span>
-                    <strong>Schedule workout</strong>
-                    <small>Add it to your COROS calendar</small>
+                    <strong>{t("Schedule workout")}</strong>
+                    <small>{t("Add it to your COROS calendar")}</small>
                   </span>
                 </div>
                 <div className="tl-reader-schedule-controls">
                   <label>
-                    <span className="sr-only">Schedule date</span>
+                    <span className="sr-only">{t("Schedule date")}</span>
                     <input
                       type="date"
                       value={scheduleDate}
@@ -1145,7 +1139,7 @@ export function WorkoutWorkspace({
                     className="primary-button"
                     disabled={!scheduleDate || busy === "schedule"}
                   >
-                    {busy === "schedule" ? "Scheduling" : "Schedule"}
+                    {busy === "schedule" ? t("Scheduling") : t("Schedule")}
                   </button>
                 </div>
               </form>
@@ -1158,8 +1152,7 @@ export function WorkoutWorkspace({
                     disabled={!previewDocument?.canEdit}
                     onClick={() => setEditId(active.id)}
                   >
-                    <Pencil size={14} /> Edit
-                  </button>
+                    <Pencil size={14} /> {t("Edit")} </button>
                   <div className="tl-reader-duplicate">
                     <button
                       type="button"
@@ -1167,11 +1160,10 @@ export function WorkoutWorkspace({
                       disabled={busy === "duplicate"}
                       onClick={() => void duplicate()}
                     >
-                      <Copy size={14} /> Duplicate as
-                    </button>
-                    <SelectDropdown
+                      <Copy size={14} /> {t("Duplicate as")} </button>
+                    <SelectDropdown translateLabel={t}
                       className="tl-quiet-select"
-                      label="Sport for the duplicate"
+                      label={t("Sport for the duplicate")}
                       value={String(duplicateSport ?? active.sportType ?? 1)}
                       options={Array.from({ length: 9 }, (_, index) => ({
                         value: String(index + 1),
@@ -1183,15 +1175,13 @@ export function WorkoutWorkspace({
                 </div>
                 <div className="tl-reader-actions-meta">
                   <button type="button" className="ghost-button" onClick={applyTags}>
-                    <Tag size={14} /> Tags
-                  </button>
+                    <Tag size={14} /> {t("Tags")} </button>
                   <button
                     type="button"
                     className="ghost-button danger"
                     onClick={() => setPendingDelete([active.id])}
                   >
-                    <Trash2 size={14} /> Delete
-                  </button>
+                    <Trash2 size={14} /> {t("Delete")} </button>
                 </div>
               </div>
             </footer>
@@ -1208,12 +1198,9 @@ export function WorkoutWorkspace({
             aria-labelledby="workout-delete-title"
           >
             <h2 id="workout-delete-title">
-              Delete {pendingDelete.length} workout{pendingDelete.length === 1 ? "" : "s"} from COROS?
-            </h2>
+              {t("Delete")} {pendingDelete.length} {t("workout")}{pendingDelete.length === 1 ? "" : "s"} {t("from COROS?")} </h2>
             <p>
-              This cannot be undone. Calendar copies stay in place, and plan references will remain but
-              point at nothing.
-            </p>
+              {t("This cannot be undone. Calendar copies stay in place, and plan references will remain but point at nothing.")} </p>
             <ul>
               {workouts
                 .filter((workout) => pendingDelete.includes(workout.id))
@@ -1221,22 +1208,20 @@ export function WorkoutWorkspace({
                   <li key={workout.id}>
                     <strong>{workout.name}</strong>
                     <span>
-                      {workout.usedByPlanIds.length} plan references · {workout.scheduledCount} scheduled
-                    </span>
+                      {workout.usedByPlanIds.length} {t("plan references ·")} {workout.scheduledCount} {t("scheduled")} </span>
                   </li>
                 ))}
             </ul>
             <footer>
               <button type="button" className="ghost-button" onClick={() => setPendingDelete([])}>
-                Cancel
-              </button>
+                {t("Cancel")} </button>
               <button
                 type="button"
                 className="primary-button danger"
                 disabled={busy === "delete"}
                 onClick={() => void deleteConfirmed()}
               >
-                {busy === "delete" ? "Deleting" : "Delete"}
+                {busy === "delete" ? t("Deleting") : t("Delete")}
               </button>
             </footer>
           </section>

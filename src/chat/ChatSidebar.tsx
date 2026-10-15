@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import { useEffect } from "react";
 import { PanelLeft } from "lucide-react";
 import { ChatHistoryPanel } from "./ChatHistoryPanel";
@@ -26,6 +27,7 @@ export function ChatSidebar({
   onSelectSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
 }) {
+  useLanguage();
   useEffect(() => {
     if (!overlay || !open) {
       return;
@@ -52,7 +54,7 @@ export function ChatSidebar({
           ]
             .filter(Boolean)
             .join(" ")}
-          aria-label="Close sidebar"
+          aria-label={t("Close sidebar")}
           aria-hidden={!open}
           tabIndex={open ? 0 : -1}
           onClick={onClose}
@@ -100,8 +102,8 @@ export function ChatSidebar({
           onClick={onOpen}
           aria-expanded="false"
           aria-controls="chat-conversation-sidebar"
-          aria-label="Expand conversations"
-          title="Expand conversations"
+          aria-label={t("Expand conversations")}
+          title={t("Expand conversations")}
         >
           <PanelLeft size={17} aria-hidden="true" />
         </button>

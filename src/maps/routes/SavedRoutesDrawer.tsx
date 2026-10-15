@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n/tools";
 import {
   Bluetooth,
   Download,
@@ -49,6 +50,7 @@ export function SavedRoutesDrawer({
   syncing?: boolean;
   onDelete: (route: GeneratedRouteSummary) => void;
 }) {
+  useLanguage();
   const { routes, total, offset, pageSize } = page;
   const { unitSystem } = useUnitSystem();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -66,24 +68,24 @@ export function SavedRoutesDrawer({
     <aside className={`route-drawer${open ? " is-open" : ""}`} aria-hidden={!open}>
       <div className="route-drawer-head">
         <div>
-          <p className="eyebrow">Saved routes</p>
-          <h3>{total} route{total === 1 ? "" : "s"}</h3>
+          <p className="eyebrow">{t("Saved routes")}</p>
+          <h3>{total}  {t("route")}{total === 1 ? "" : "s"}</h3>
         </div>
         <button
           type="button"
           className="icon-button"
           onClick={onClose}
-          aria-label="Close saved routes"
+          aria-label={t("Close saved routes")}
         >
           <X size={18} aria-hidden="true" />
         </button>
       </div>
 
-      {loading && routes.length === 0 ? <p role="status">Loading saved routes…</p> : routes.length === 0 ? (
+      {loading && routes.length === 0 ? <p role="status">{t("Loading saved routes…")}</p> : routes.length === 0 ? (
         <div className="route-drawer-empty">
           <RouteIcon size={28} aria-hidden="true" />
-          <p>No saved routes yet.</p>
-          <small>Generate or draw a route, then save it to see it here.</small>
+          <p>{t("No saved routes yet.")}</p>
+          <small>{t("Generate or draw a route, then save it to see it here.")}</small>
         </div>
       ) : (
         <ul key={offset} className="route-drawer-list" aria-busy={loading}>
@@ -109,11 +111,11 @@ export function SavedRoutesDrawer({
                   onClick={() => onSelect(route)}
                 >
                   <strong className="route-card-name">{route.name}</strong>
-                  {selectingId === route.id ? <span role="status">Loading preview…</span> : null}
+                  {selectingId === route.id ? <span role="status">{t("Loading preview…")}</span> : null}
                   <span className="route-card-meta">
                     {formatDistance(route.distanceMeters, unitSystem)} {distanceUnit(unitSystem)} ·{" "}
                     {activityTypeLabel(route.activityType)} ·{" "}
-                    {route.mode === "loop" ? "Loop" : "A → B"}
+                    {route.mode === "loop" ? t("Loop") : "A → B"}
                   </span>
                   <small className="route-card-date">
                     {formatDate(route.createdAt)}
@@ -121,16 +123,16 @@ export function SavedRoutesDrawer({
                 </button>
                 <div className="route-card-actions">
                   {onSync ? (
-                    <button type="button" className="icon-button" title="Sync to watch"
-                      aria-label={`Sync ${route.name} to watch`} disabled={syncing || busy} onClick={() => onSync(route)}>
+                    <button type="button" className="icon-button" title={t("Sync to watch")}
+                      aria-label={t("Sync {{p0}} to watch", { p0: route.name })} disabled={syncing || busy} onClick={() => onSync(route)}>
                       <Bluetooth size={15} aria-hidden="true" />
                     </button>
                   ) : null}
                   <button
                     type="button"
                     className="icon-button"
-                    title="Export GPX"
-                    aria-label={`Export ${route.name} as GPX`}
+                    title={t("Export GPX")}
+                    aria-label={t("Export {{p0}} as GPX", { p0: route.name })}
                     disabled={busy}
                     onClick={() => onExport(route)}
                   >
@@ -143,8 +145,8 @@ export function SavedRoutesDrawer({
                   <button
                     type="button"
                     className="icon-button"
-                    title="Share to phone"
-                    aria-label={`Share ${route.name} to phone`}
+                    title={t("Share to phone")}
+                    aria-label={t("Share {{p0}} to phone", { p0: route.name })}
                     onClick={() => onShare(route)}
                   >
                     <QrCode size={15} aria-hidden="true" />
@@ -158,14 +160,13 @@ export function SavedRoutesDrawer({
                         onDelete(route);
                       }}
                     >
-                      Delete?
-                    </button>
+                      {t("Delete?")}</button>
                   ) : (
                     <button
                       type="button"
                       className="icon-button danger"
-                      title="Delete route"
-                      aria-label={`Delete ${route.name}`}
+                      title={t("Delete route")}
+                      aria-label={t("Delete {{p0}}", { p0: route.name })}
                       onClick={() => setConfirmDeleteId(route.id)}
                     >
                       <Trash2 size={15} aria-hidden="true" />
@@ -178,12 +179,12 @@ export function SavedRoutesDrawer({
         </ul>
       )}
       {total > 0 ? (
-        <nav className="route-drawer-pagination" aria-label="Saved route pages">
+        <nav className="route-drawer-pagination" aria-label={t("Saved route pages")}>
           <button type="button" className="button ghost" disabled={loading || offset === 0}
-            onClick={() => onPageChange(offset - pageSize)}>Previous</button>
-          <span role="status">{loading ? "Loading…" : `${offset + 1}–${offset + routes.length} of ${total}`}</span>
+            onClick={() => onPageChange(offset - pageSize)}>{t("Previous")}</button>
+          <span role="status">{loading ? t("Loading…") : t("{{p0}}–{{p1}} of {{p2}}", { p0: offset + 1, p1: offset + routes.length, p2: total })}</span>
           <button type="button" className="button ghost" disabled={loading || offset + routes.length >= total}
-            onClick={() => onPageChange(offset + pageSize)}>Next</button>
+            onClick={() => onPageChange(offset + pageSize)}>{t("Next")}</button>
         </nav>
       ) : null}
     </aside>

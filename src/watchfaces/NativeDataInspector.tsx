@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { WatchfaceColorInput } from "./WatchfaceColorInput";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { FolderInput, ImagePlus, RotateCcw, Trash2 } from "lucide-react";
@@ -20,16 +21,17 @@ const SPRITE_LABELS: Partial<Record<Role, string[]>> = {
   separator: ["Separator"]
 };
 
-const chartSourceLabel = (source: string) => NATIVE_CHART_SOURCES.find(item => item.id === source)?.label ?? source;
+const chartSourceLabel = (source: string) => t(NATIVE_CHART_SOURCES.find(item => item.id === source)?.label ?? source);
 
 /** Keep a draft so typing a minus sign or clearing the field is not reset. */
 function ComponentOffsetInput({ label, value, coordinateScale, onChange }: {
   label: string; value: number; coordinateScale: number; onChange: (value: number) => void;
 }) {
+  useLanguage();
   const displayed = Math.round(value * coordinateScale);
   const [draft, setDraft] = useState<string | null>(null);
   const limit = Math.floor(1600 * coordinateScale);
-  return <label>{label}<input aria-label={label} type="number" min={-limit} max={limit} step={1}
+  return <label>{t(label)}<input aria-label={t(label)} type="number" min={-limit} max={limit} step={1}
     value={draft ?? displayed}
     onFocus={() => setDraft(String(displayed))}
     onChange={event => {
@@ -44,13 +46,14 @@ function ComponentOffsetInput({ label, value, coordinateScale, onChange }: {
 }
 
 function SpritePreview({ id, style, role, index }: { id: string; style: Style; role: Role; index: number }) {
+  useLanguage();
   const [url, setUrl] = useState("");
   useEffect(() => {
     let active = true;
     void nativeDataAsset(id, style, role, index).then(image => { if (active) setUrl(image); }).catch(() => { if (active) setUrl(""); });
     return () => { active = false; };
   }, [id, style, role, index]);
-  return <span className="wf-native-artwork-stage">{url ? <img src={url} alt="Selected component artwork" /> : null}</span>;
+  return <span className="wf-native-artwork-stage">{url ? <img src={url} alt={t("Selected component artwork")} /> : null}</span>;
 }
 
 type RenderSection = (
@@ -75,6 +78,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   onPatch: (patch: Partial<Style>) => void; onError: (message: string) => void;
   onImportStart: (target: string) => number | null; onImportFinish: (token: number) => void; isImportCurrent: (token: number) => boolean;
 }) {
+  useLanguage();
   const definition = NATIVE_DATA_BY_ID.get(id)!;
   const [busy, setBusy] = useState(false);
   const [selectedPart, setSelectedPart] = useState<Part>("icon");
@@ -111,8 +115,8 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
           const match = /^(\d{1,2})\.png$/i.exec(sprite.name);
           if (!match) continue;
           const state = Number(match[1]);
-          if (!indices.includes(state)) throw new Error(`Use these numbered PNGs: ${indices.map(i=>String(i).padStart(2,"0")).join(", ")}.`);
-          if (states[state]) throw new Error(`Duplicate sprite ${state}.`);
+          if (!indices.includes(state)) throw new Error(t("Use these numbered PNGs: {{value1}}.", { value1: indices.map(i=>String(i).padStart(2,"0")).join(", ") }));
+          if (states[state]) throw new Error(t("Duplicate sprite {{state}}.", { state: state }));
           await loadStudioImage(sprite.dataUrl);
           states[state] = sprite.dataUrl;
         }
@@ -123,13 +127,13 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
         const ratio = Math.min(1, 1024 / Math.max(artwork.width, artwork.height));
         states[index] = await resizeAndTintSprite(artwork.dataUrl, Math.max(1,Math.round(artwork.width * ratio)), Math.max(1,Math.round(artwork.height * ratio)));
       }
-      if (!Object.keys(states).length) throw new Error("Select a folder containing numbered PNGs.");
+      if (!Object.keys(states).length) throw new Error(t("Select a folder containing numbered PNGs."));
       if (token === importToken.current && isImportCurrent(editorToken)) {
         const current = latestStyle.current;
         onPatch({assets:{...current.assets,[role]:{...current.assets?.[role],...states}}});
       }
     } catch (error) {
-      if (token === importToken.current && isImportCurrent(editorToken)) onError(error instanceof Error ? error.message : "Could not import artwork.");
+      if (token === importToken.current && isImportCurrent(editorToken)) onError(error instanceof Error ? error.message : t("Could not import artwork."));
     } finally {
       onImportFinish(editorToken);
       if (token === importToken.current) setBusy(false);
@@ -150,113 +154,113 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   }
   const numberControl = (label: string, value: number, change: (value: number) => void, min = 0, max = 1600, physical = false) => {
     const factor = physical ? coordinateScale : 1;
-    return <label>{label}<input aria-label={label} type="number" min={Math.ceil(min * factor)} max={Math.floor(max * factor)} step={physical ? 1 : 0.1} value={physical ? Math.round(value * factor) : Math.round(value * 100) / 100} onChange={event => {
+    return <label>{t(label)}<input aria-label={t(label)} type="number" min={Math.ceil(min * factor)} max={Math.floor(max * factor)} step={physical ? 1 : 0.1} value={physical ? Math.round(value * factor) : Math.round(value * 100) / 100} onChange={event => {
       if (event.target.value === "") return;
       change(Math.max(min,Math.min(max,Number(event.target.value) / factor)));
     }} /></label>;
   };
-  const colorControl = (label: string, value: string, change: (color: string) => void) => <label className="field">{label}<span className="watchface-color-control"><WatchfaceColorInput key={`${id}:${style.chartSource ?? ""}:${partKey}:${label}`} aria-label={label} value={value} onValueChange={(color) => change(color)} /><code>{value}</code></span></label>;
+  const colorControl = (label: string, value: string, change: (color: string) => void) => <label className="field">{t(label)}<span className="watchface-color-control"><WatchfaceColorInput key={`${id}:${style.chartSource ?? ""}:${partKey}:${label}`} aria-label={t(label)} value={value} onValueChange={(color) => change(color)} /><code>{value}</code></span></label>;
 
   const notes = [
-    definition.kind === "chart" ? <p key="chart" className="watchface-studio-summary" role="note"><strong>Experimental charts.</strong> This preview uses sample data. {style.chartSource !== "chart_moon" && "Line graphs are not available right now."}</p> : null,
-    definition.kind === "chart" && chartGroups.length > 1 ? <p key="chart-groups" className="watchface-studio-summary" role="note"><strong>Selectable on the watch.</strong> Back cycles this graph through its chart groups. This face has readouts for {chartGroups.map(chartSourceLabel).join(", ")}. Choose one under Chart data to preview and edit it. The layer exports the group shown; the others keep the face&apos;s original readouts and don&apos;t follow a moved graph.</p> : null,
-    definition.kind === "chart" && style.chartSource !== "chart_moon" ? <p key="chart-pace" className="watchface-studio-summary" role="note">Chart numbers may stay blank on PACE Pro even when Back changes the graph. The sample number here does not confirm watch support. A separate metric layer can show a value, but will not follow chart changes.</p> : null,
-    definition.availability ? <p key="availability" className="watchface-studio-summary" role="note"><strong>AQI — {definition.availability.label}.</strong> {definition.availability.message}</p> : null,
-    definition.note ? <p key="note" className="watchface-studio-summary" role="note">{definition.note}</p> : null
+    definition.kind === "chart" ? <p key="chart" className="watchface-studio-summary" role="note"><strong>{t("Experimental charts.")}</strong>{" "}{t("This preview uses sample data.")}{" "}{style.chartSource !== "chart_moon" && t("Line graphs are not available right now.")}</p> : null,
+    definition.kind === "chart" && chartGroups.length > 1 ? <p key="chart-groups" className="watchface-studio-summary" role="note"><strong>{t("Selectable on the watch.")}</strong>{" "}{t("Back cycles this graph through its chart groups. This face has readouts for")}{" "}{chartGroups.map(chartSourceLabel).join(", ")}{t(". Choose one under Chart data to preview and edit it. The layer exports the group shown; the others keep the face's original readouts and don't follow a moved graph.")}</p> : null,
+    definition.kind === "chart" && style.chartSource !== "chart_moon" ? <p key="chart-pace" className="watchface-studio-summary" role="note">{t("Chart numbers may stay blank on PACE Pro even when Back changes the graph. The sample number here does not confirm watch support. A separate metric layer can show a value, but will not follow chart changes.")}</p> : null,
+    definition.availability ? <p key="availability" className="watchface-studio-summary" role="note"><strong>{t("AQI —")}{" "}{t(definition.availability.label)}.</strong> {t(definition.availability.message)}</p> : null,
+    definition.note ? <p key="note" className="watchface-studio-summary" role="note">{t(definition.note)}</p> : null
   ].filter(Boolean);
 
-  const artworkStateLabel = (i: number) => SPRITE_LABELS[role!]?.[i] ?? (role === "digits" ? `Digit ${i}` : `State ${i}`);
+  const artworkStateLabel = (i: number) => { const label = SPRITE_LABELS[role!]?.[i]; return label ? t(label) : role === "digits" ? t("Digit {{i}}", { i }) : t("State {{i}}", { i }); };
 
   return <>
     {renderSection("appearance", "Appearance", <div className="wf-property-stack">
       {notes}
       {colorControl("Color",style.color,color=>onPatch({color}))}
-      <LocalFontPicker api={api} label="Font" value={style.fontFamily ?? ""} emptyLabel="Default" disabled={locked} onChange={fontFamily=>onPatch({fontFamily})} />
-      {definition.kind === "chart" && <label className="field">Chart data<select aria-label="Chart data field" value={style.chartSource ?? "chart_stress"} onChange={event=>{ const source = event.target.value; if (onChartGroup && chartGroups.includes(source)) onChartGroup(source); else onPatch({chartSource:source}); }}>
+      <LocalFontPicker api={api} label={t("Font")} value={style.fontFamily ?? ""} emptyLabel={t("Default")} disabled={locked} onChange={fontFamily=>onPatch({fontFamily})} />
+      {definition.kind === "chart" && <label className="field">{t("Chart data")}<select aria-label={t("Chart data field")} value={style.chartSource ?? "chart_stress"} onChange={event=>{ const source = event.target.value; if (onChartGroup && chartGroups.includes(source)) onChartGroup(source); else onPatch({chartSource:source}); }}>
         {chartGroups.length > 1 ? <>
-          <optgroup label="On this face">{chartGroups.map(source=><option key={source} value={source}>{chartSourceLabel(source)}</option>)}</optgroup>
-          <optgroup label="Other data">{NATIVE_CHART_SOURCES.filter(source=>!chartGroups.includes(source.id)).map(source=><option key={source.id} value={source.id}>{source.category} · {source.label}</option>)}</optgroup>
-        </> : NATIVE_CHART_SOURCES.map(source=><option key={source.id} value={source.id}>{source.category} · {source.label}</option>)}
+          <optgroup label={t("On this face")}>{chartGroups.map(source=><option key={source} value={source}>{chartSourceLabel(source)}</option>)}</optgroup>
+          <optgroup label={t("Other data")}>{NATIVE_CHART_SOURCES.filter(source=>!chartGroups.includes(source.id)).map(source=><option key={source.id} value={source.id}>{t(source.category)} · {t(source.label)}</option>)}</optgroup>
+        </> : NATIVE_CHART_SOURCES.map(source=><option key={source.id} value={source.id}>{t(source.category)} · {t(source.label)}</option>)}
       </select></label>}
-      <p className="watchface-studio-summary">Every component uses this color and font unless it sets its own below.</p>
+      <p className="watchface-studio-summary">{t("Every component uses this color and font unless it sets its own below.")}</p>
     </div>, { disabled: locked })}
 
     {renderSection("specific", "Components", <div className="wf-property-stack wf-native-components">
-      <div className="wf-native-parts" role="tablist" aria-label="Component">
+      <div className="wf-native-parts" role="tablist" aria-label={t("Component")}>
         {available.map(part => {
           const enabled = nativePart(id, style, part).enabled;
-          return <button key={part} type="button" role="tab" aria-selected={part === partKey} className={`wf-native-part${part === partKey ? " is-active" : ""}${enabled ? "" : " is-off"}`} title={enabled ? PART_LABELS[part] : `${PART_LABELS[part]} · hidden`} onClick={()=>{setSelectedPart(part);setSelectedIndex(0);}}>{PART_LABELS[part]}</button>;
+          return <button key={part} type="button" role="tab" aria-selected={part === partKey} className={`wf-native-part${part === partKey ? " is-active" : ""}${enabled ? "" : " is-off"}`} title={enabled ? t(PART_LABELS[part]) : t("{{value1}} · hidden", { value1: t(PART_LABELS[part]) })} onClick={()=>{setSelectedPart(part);setSelectedIndex(0);}}>{t(PART_LABELS[part])}</button>;
         })}
       </div>
-      <section className="wf-native-part-card" aria-label={`${partLabel} settings`}>
+      <section className="wf-native-part-card" aria-label={t("{{partLabel}} settings", { partLabel: t(partLabel) })}>
         <div className="wf-native-part-head">
-          <strong>{partLabel}</strong>
-          {customized ? <span className="wf-native-part-badge">Custom</span> : null}
+          <strong>{t(partLabel)}</strong>
+          {customized ? <span className="wf-native-part-badge">{t("Custom")}</span> : null}
           <label className="watchface-studio-toggle">
-            <input aria-label={`Show ${partLabel}`} type="checkbox" checked={component.enabled} onChange={event=>patchPart({enabled:event.target.checked})} />
-            <span>Show</span>
+            <input aria-label={t("Show {{partLabel}}", { partLabel: t(partLabel) })} type="checkbox" checked={component.enabled} onChange={event=>patchPart({enabled:event.target.checked})} />
+            <span>{t("Show")}</span>
           </label>
         </div>
-        {!nativePartHasPosition(partKey) && <p className="watchface-studio-summary">The watch places this beside the number; only its size and artwork change.</p>}
+        {!nativePartHasPosition(partKey) && <p className="watchface-studio-summary">{t("The watch places this beside the number; only its size and artwork change.")}</p>}
         <div className="watchface-position-inputs">
           {nativePartHasPosition(partKey) && <>
-            <ComponentOffsetInput key={`${id}:${partKey}:x`} label="Offset X" value={component.x} coordinateScale={coordinateScale} onChange={x=>patchPart({x})} />
-            <ComponentOffsetInput key={`${id}:${partKey}:y`} label="Offset Y" value={component.y} coordinateScale={coordinateScale} onChange={y=>patchPart({y})} />
+            <ComponentOffsetInput key={`${id}:${partKey}:x`} label={t("Offset X")} value={component.x} coordinateScale={coordinateScale} onChange={x=>patchPart({x})} />
+            <ComponentOffsetInput key={`${id}:${partKey}:y`} label={t("Offset Y")} value={component.y} coordinateScale={coordinateScale} onChange={y=>patchPart({y})} />
           </>}
           {numberControl("Width",component.width,width=>patchPart({width}),4,800,true)}
           {numberControl("Height",component.height,height=>patchPart({height}),4,800,true)}
-          {partKey === "value" && numberControl("Digit width",component.digitWidth,digitWidth=>patchPart({digitWidth}),1,800,true)}
+          {partKey === "value" && numberControl(t("Digit width"),component.digitWidth,digitWidth=>patchPart({digitWidth}),1,800,true)}
         </div>
         {partKey === "value" && <WatchfaceNumberAlignControl value={component.align} disabled={locked} onChange={align=>patchPart({align:align ?? "left"})} />}
         {colorControl("Color",component.color,color=>patchPart({color}))}
-        {role && <LocalFontPicker api={api} label="Font" value={style.parts?.[partKey]?.fontFamily ?? ""} emptyLabel="Layer font" disabled={locked} onChange={fontFamily=>patchPart({fontFamily:fontFamily || undefined})} />}
+        {role && <LocalFontPicker api={api} label={t("Font")} value={style.parts?.[partKey]?.fontFamily ?? ""} emptyLabel={t("Layer font")} disabled={locked} onChange={fontFamily=>patchPart({fontFamily:fontFamily || undefined})} />}
 
         {partKey === "plot" && <>
-          <label className="field">Graph type<select aria-label="Graph type" value={style.chartStyle?.previewType ?? "bars"} onChange={event=>patchChart({previewType:event.target.value as "curve" | "bars"})}><option value="bars">Bar graph</option><option value="curve">Line graph</option></select></label>
+          <label className="field">{t("Graph type")}<select aria-label={t("Graph type")} value={style.chartStyle?.previewType ?? "bars"} onChange={event=>patchChart({previewType:event.target.value as "curve" | "bars"})}><option value="bars">{t("Bar graph")}</option><option value="curve">{t("Line graph")}</option></select></label>
           {(style.chartStyle?.previewType ?? "bars") === "curve" ? <>
-            <div className="watchface-position-inputs">{numberControl("Line thickness",style.chartStyle?.lineWidth ?? 2,lineWidth=>patchChart({lineWidth}),0,40,true)}</div>
-            {colorControl("Upper curve",style.chartStyle?.upperColor ?? component.color,upperColor=>patchChart({upperColor}))}
-            {colorControl("Lower curve",style.chartStyle?.lowerColor ?? "#555555",lowerColor=>patchChart({lowerColor}))}
+            <div className="watchface-position-inputs">{numberControl(t("Line thickness"),style.chartStyle?.lineWidth ?? 2,lineWidth=>patchChart({lineWidth}),0,40,true)}</div>
+            {colorControl(t("Upper curve"),style.chartStyle?.upperColor ?? component.color,upperColor=>patchChart({upperColor}))}
+            {colorControl(t("Lower curve"),style.chartStyle?.lowerColor ?? "#555555",lowerColor=>patchChart({lowerColor}))}
           </> : <>
             <div className="watchface-position-inputs">
-              {numberControl("Bar width",style.chartStyle?.barWidth ?? 8,barWidth=>patchChart({barWidth}),0,80,true)}
-              {numberControl("Bar gap",style.chartStyle?.barGap ?? 4,barGap=>patchChart({barGap}),0,80,true)}
+              {numberControl(t("Bar width"),style.chartStyle?.barWidth ?? 8,barWidth=>patchChart({barWidth}),0,80,true)}
+              {numberControl(t("Bar gap"),style.chartStyle?.barGap ?? 4,barGap=>patchChart({barGap}),0,80,true)}
             </div>
-            {colorControl("Selected bar",style.chartStyle?.selectedBarColor ?? component.color,selectedBarColor=>patchChart({selectedBarColor}))}
-            {colorControl("Other bars",style.chartStyle?.unselectedBarColor ?? "#555555",unselectedBarColor=>patchChart({unselectedBarColor}))}
+            {colorControl(t("Selected bar"),style.chartStyle?.selectedBarColor ?? component.color,selectedBarColor=>patchChart({selectedBarColor}))}
+            {colorControl(t("Other bars"),style.chartStyle?.unselectedBarColor ?? "#555555",unselectedBarColor=>patchChart({unselectedBarColor}))}
           </>}
-          <p className="watchface-studio-summary">Graph type only changes this preview. Bar and line appearance are both exported; the watch draws each chart group's live history in its own representation. A width of 0 turns that style off, so groups drawn that way show no graph.</p>
+          <p className="watchface-studio-summary">{t("Graph type only changes this preview. Bar and line appearance are both exported; the watch draws each chart group's live history in its own representation. A width of 0 turns that style off, so groups drawn that way show no graph.")}</p>
         </>}
 
         {role && <div className="wf-native-artwork">
           <div className="wf-native-artwork-head">
-            <span>Artwork</span>
-            {indices.length > 1 && <select aria-label="Artwork state" value={index} onChange={event=>setSelectedIndex(Number(event.target.value))}>{indices.map(i=><option key={i} value={i}>{String(i).padStart(2,"0")} · {artworkStateLabel(i)}</option>)}</select>}
+            <span>{t("Artwork")}</span>
+            {indices.length > 1 && <select aria-label={t("Artwork state")} value={index} onChange={event=>setSelectedIndex(Number(event.target.value))}>{indices.map(i=><option key={i} value={i}>{String(i).padStart(2,"0")} · {artworkStateLabel(i)}</option>)}</select>}
           </div>
           <div className="wf-native-artwork-row">
             <SpritePreview id={id} style={style} role={role} index={index} />
             <div className="wf-native-artwork-copy">
-              <label className="field">Text<input aria-label="Artwork text" maxLength={32} value={nativeAssetText(id,style,role,index) ?? ""} placeholder="Generated artwork" onChange={event=>onPatch({assetTexts:{...style.assetTexts,[role]:{...style.assetTexts?.[role],[index]:event.target.value}}})} /></label>
-              <span className="watchface-studio-summary">{replacement ? "Custom image in use. Remove it to draw the text again." : "Drawn from the text in the component color and font, or replaced by an image."}</span>
+              <label className="field">{t("Text")}<input aria-label={t("Artwork text")} maxLength={32} value={nativeAssetText(id,style,role,index) ?? ""} placeholder={t("Generated artwork")} onChange={event=>onPatch({assetTexts:{...style.assetTexts,[role]:{...style.assetTexts?.[role],[index]:event.target.value}}})} /></label>
+              <span className="watchface-studio-summary">{replacement ? t("Custom image in use. Remove it to draw the text again.") : t("Drawn from the text in the component color and font, or replaced by an image.")}</span>
             </div>
           </div>
           <div className="wf-native-artwork-actions">
-            <button type="button" className="secondary-button" onClick={()=>void importArtwork(false)}><ImagePlus size={14} /> {replacement ? "Replace image" : "Use an image"}</button>
-            {indices.length > 1 && <button type="button" className="secondary-button" onClick={()=>void importArtwork(true)}><FolderInput size={14} /> Import numbered PNGs</button>}
-            {replacement && <button type="button" className="secondary-button wf-native-artwork-remove" onClick={removeImage}><Trash2 size={14} /> Remove image</button>}
+            <button type="button" className="secondary-button" onClick={()=>void importArtwork(false)}><ImagePlus size={14} /> {replacement ? t("Replace image") : t("Use an image")}</button>
+            {indices.length > 1 && <button type="button" className="secondary-button" onClick={()=>void importArtwork(true)}><FolderInput size={14} />{" "}{t("Import numbered PNGs")}</button>}
+            {replacement && <button type="button" className="secondary-button wf-native-artwork-remove" onClick={removeImage}><Trash2 size={14} />{" "}{t("Remove image")}</button>}
           </div>
         </div>}
 
-        <button type="button" className="wf-native-part-reset" disabled={!customized} onClick={restoreComponent}><RotateCcw size={13} /> Reset {partLabel.toLowerCase()}</button>
+        <button type="button" className="wf-native-part-reset" disabled={!customized} onClick={restoreComponent}><RotateCcw size={13} />{" "}{t("Reset")}{" "}{t(partLabel).toLocaleLowerCase(getLocale())}</button>
       </section>
-      {id.startsWith("weather_temp_") && <p className="watchface-studio-summary">Minimum and maximum temperature share the separator, unit and minus artwork. When both are enabled, the minimum-temperature settings supply these shared assets.</p>}
-    </div>, { disabled: locked, status: `${available.filter(part => nativePart(id, style, part).enabled).length} of ${available.length} shown` })}
+      {id.startsWith("weather_temp_") && <p className="watchface-studio-summary">{t("Minimum and maximum temperature share the separator, unit and minus artwork. When both are enabled, the minimum-temperature settings supply these shared assets.")}</p>}
+    </div>, { disabled: locked, status: t("{{shown}} of {{total}} shown", { shown: available.filter(part => nativePart(id, style, part).enabled).length, total: available.length }) })}
 
     {renderSection("advanced", "Advanced", <div className="wf-property-stack">
-      {id !== "date_year" && <label className="field">Preview sample<input aria-label="Preview sample" value={nativeDataPreviewValue(id,style)} maxLength={6} onChange={event=>onPatch({previewValue:event.target.value.replace(/[^0-9.:%−-]/g,"")})} /></label>}
-      {id === "date_year" && <p className="field-hint">Year follows the date in Preview simulation.</p>}
-      <p className="watchface-studio-summary">The sample only feeds this preview; the watch supplies live values. Firmware support and state ordering still need an on-watch test.</p>
-      <button type="button" className="secondary-button wf-native-restore-all" onClick={()=>onPatch({parts:undefined,assets:undefined,assetTexts:undefined,chartStyle:undefined,color:"#ffffff",fontFamily:undefined,scale:1,chartWidth:240,chartHeight:120})}><RotateCcw size={14} /> Restore all appearance defaults</button>
+      {id !== "date_year" && <label className="field">{t("Preview sample")}<input aria-label={t("Preview sample")} value={nativeDataPreviewValue(id,style)} maxLength={6} onChange={event=>onPatch({previewValue:event.target.value.replace(/[^0-9.:%−-]/g,"")})} /></label>}
+      {id === "date_year" && <p className="field-hint">{t("Year follows the date in Preview simulation.")}</p>}
+      <p className="watchface-studio-summary">{t("The sample only feeds this preview; the watch supplies live values. Firmware support and state ordering still need an on-watch test.")}</p>
+      <button type="button" className="secondary-button wf-native-restore-all" onClick={()=>onPatch({parts:undefined,assets:undefined,assetTexts:undefined,chartStyle:undefined,color:"#ffffff",fontFamily:undefined,scale:1,chartWidth:240,chartHeight:120})}><RotateCcw size={14} />{" "}{t("Restore all appearance defaults")}</button>
     </div>, { disabled: locked })}
   </>;
 }

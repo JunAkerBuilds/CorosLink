@@ -1,3 +1,4 @@
+import { useLanguage, t } from "../../i18n/training";
 import { useEffect, useState } from "react";
 import { Activity } from "lucide-react";
 import { formatHappenDayLabel, formatSignedDelta } from "../formatters";
@@ -108,6 +109,7 @@ function latestVo2Readings(snapshot: TrainingHubSnapshot | null): Vo2Reading[] {
 }
 
 export function Vo2MaxWidget({ snapshot }: Vo2MaxWidgetProps) {
+  useLanguage();
   const [isReady, setIsReady] = useState(false);
   const readings = latestVo2Readings(snapshot);
   const latest = readings.at(-1);
@@ -134,14 +136,14 @@ export function Vo2MaxWidget({ snapshot }: Vo2MaxWidgetProps) {
       <div className="vo2-widget-header">
         <div>
           <p className="eyebrow">VO2 Max</p>
-          <h2>Running engine</h2>
+          <h2>{t("Running engine")}</h2>
         </div>
         <span className="vo2-widget-icon" aria-hidden="true">
           <Activity size={16} />
         </span>
       </div>
 
-      <div className="vo2-gauge" aria-label="VO2 max gauge">
+      <div className="vo2-gauge" aria-label={t("VO2 max gauge")}>
         <svg viewBox="0 0 240 144" aria-hidden="true">
           <path
             className="vo2-gauge-track"
@@ -182,15 +184,15 @@ export function Vo2MaxWidget({ snapshot }: Vo2MaxWidgetProps) {
 
       <div className="vo2-widget-footer">
         <div>
-          <span>Level</span>
-          <strong>{status.label}</strong>
+          <span>{t("Level")}</span>
+          <strong>{t(status.label)}</strong>
         </div>
         <div>
-          <span>Change</span>
+          <span>{t("Change")}</span>
           <strong>{formatSignedDelta(delta)}</strong>
         </div>
         <div>
-          <span>Updated</span>
+          <span>{t("Updated")}</span>
           <strong>
             {latest ? formatHappenDayLabel(latest.happenDay) : "-"}
           </strong>

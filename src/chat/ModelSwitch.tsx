@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import { Network, Sparkles, Terminal } from "lucide-react";
 import type { ChatProvider } from "../../electron/types";
 import {
@@ -29,6 +30,7 @@ export function ModelSwitch({
   disabled?: boolean;
   onChange: (model: string) => void;
 }) {
+  useLanguage();
   if (provider === "local") {
     return null;
   }
@@ -61,15 +63,15 @@ export function ModelSwitch({
     options.find((option) => option.value === model)?.label ?? model;
 
   return (
-    <SelectDropdown
+    <SelectDropdown translateLabel={t}
       className={`app-select--pill chat-model-select chat-select--${tone}`}
       menuClassName={`chat-select-menu chat-select-menu--${tone}`}
       value={model}
-      options={options}
+      options={options.map(option => ({ ...option, label: t(option.label) }))}
       onChange={onChange}
       renderIcon={renderIcon}
-      label={`${providerLabel} model`}
-      title={`${providerLabel} model: ${selectedLabel}`}
+      label={t("{{p0}} model", { p0: providerLabel })}
+      title={t("{{p0}} model: {{p1}}", { p0: providerLabel, p1: selectedLabel })}
       disabled={disabled}
       portal
     />

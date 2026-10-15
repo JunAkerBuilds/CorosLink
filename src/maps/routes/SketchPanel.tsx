@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n/tools";
 import {
   Brush,
   Loader2,
@@ -44,14 +45,14 @@ function matchPercent(score: number): number {
 function describeAutoFit(result: { scale: number; rotationDeg: number }): string {
   const parts: string[] = [];
   if (result.scale !== 1) {
-    parts.push(`×${result.scale} size`);
+    parts.push(t("×{{p0}} size", { p0: result.scale }));
   }
   if (result.rotationDeg !== 0) {
     parts.push(
-      `${result.rotationDeg > 0 ? "+" : ""}${result.rotationDeg}° rotation`
+      t("{{p0}}{{p1}}° rotation", { p0: result.rotationDeg > 0 ? "+" : "", p1: result.rotationDeg })
     );
   }
-  return parts.length > 0 ? parts.join(", ") : "kept as placed";
+  return parts.length > 0 ? parts.join(", ") : t("kept as placed");
 }
 
 export function SketchPanel({
@@ -69,6 +70,7 @@ export function SketchPanel({
   saving: boolean;
   canSave: boolean;
 }) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const needsCenter = sketch.tool !== "freehand" && !sketch.center;
   const busyFitting = sketch.autoFitProgress !== null;
@@ -81,7 +83,7 @@ export function SketchPanel({
     <div className="route-panel-body">
       <SportPicker value={activityType} onChange={onActivityChange} />
 
-      <div className="route-toggle route-sketch-tools" role="group" aria-label="Sketch tool">
+      <div className="route-toggle route-sketch-tools" role="group" aria-label={t("Sketch tool")}>
         {TOOL_OPTIONS.map((option) => {
           const Icon = option.icon;
           return (
@@ -92,7 +94,7 @@ export function SketchPanel({
               onClick={() => sketch.setTool(option.id)}
             >
               <Icon size={14} aria-hidden="true" />
-              {option.label}
+              {t(option.label)}
             </button>
           );
         })}
@@ -102,15 +104,13 @@ export function SketchPanel({
         <div className="route-draw-hint">
           <MousePointerClick size={15} aria-hidden="true" />
           <span>
-            Drag on the map to draw your shape. Each stroke snaps to real
-            streets a moment after you let go.
-          </span>
+            {t("Drag on the map to draw your shape. Each stroke snaps to real streets a moment after you let go.")}</span>
         </div>
       ) : null}
 
       {sketch.tool === "template" ? (
         <>
-          <div className="route-template-grid" role="group" aria-label="Shape">
+          <div className="route-template-grid" role="group" aria-label={t("Shape")}>
             {SKETCH_TEMPLATES.map((template) => (
               <button
                 key={template.id}
@@ -119,7 +119,7 @@ export function SketchPanel({
                   template.id === sketch.templateId ? "is-active" : ""
                 }
                 onClick={() => sketch.setTemplateId(template.id)}
-                title={template.label}
+                title={t(template.label)}
                 aria-pressed={template.id === sketch.templateId}
               >
                 <svg
@@ -133,14 +133,14 @@ export function SketchPanel({
                       .join(" ")}
                   />
                 </svg>
-                <em>{template.label}</em>
+                <em>{t(template.label)}</em>
               </button>
             ))}
           </div>
           {needsCenter ? (
             <div className="route-draw-hint">
               <MousePointerClick size={15} aria-hidden="true" />
-              <span>Click the map to place the shape, then drag to move it.</span>
+              <span>{t("Click the map to place the shape, then drag to move it.")}</span>
             </div>
           ) : null}
         </>
@@ -151,20 +151,19 @@ export function SketchPanel({
           <input
             type="text"
             className="route-sketch-text"
-            placeholder="Write something… (A–Z, 0–9)"
+            placeholder={t("Write something… (A–Z, 0–9)")}
             value={sketch.text}
             maxLength={16}
             onChange={(event) => sketch.setText(event.target.value)}
           />
           {textUnsupported ? (
             <p className="route-inline-error">
-              Only letters, numbers and spaces can be drawn.
-            </p>
+              {t("Only letters, numbers and spaces can be drawn.")}</p>
           ) : null}
           {needsCenter && sketch.text.trim() ? (
             <div className="route-draw-hint">
               <MousePointerClick size={15} aria-hidden="true" />
-              <span>Click the map to place the text, then drag to move it.</span>
+              <span>{t("Click the map to place the text, then drag to move it.")}</span>
             </div>
           ) : null}
         </>
@@ -174,7 +173,7 @@ export function SketchPanel({
         <>
           <div className="route-distance">
             <div className="route-distance-head">
-              <span>Size</span>
+              <span>{t("Size")}</span>
               <strong>{formatDistance(sketch.sizeMeters, unitSystem)} {distanceUnit(unitSystem)}</strong>
             </div>
             <input
@@ -190,7 +189,7 @@ export function SketchPanel({
           </div>
           <div className="route-distance">
             <div className="route-distance-head">
-              <span>Rotation</span>
+              <span>{t("Rotation")}</span>
               <strong>{sketch.rotationDeg}°</strong>
             </div>
             <input
@@ -208,8 +207,8 @@ export function SketchPanel({
       ) : null}
 
       <div className="route-field-inline">
-        <label>Fidelity</label>
-        <div className="route-chip-group" role="group" aria-label="Shape fidelity">
+        <label>{t("Fidelity")}</label>
+        <div className="route-chip-group" role="group" aria-label={t("Shape fidelity")}>
           {FIDELITY_OPTIONS.map((option) => (
             <button
               key={option.value}
@@ -217,7 +216,7 @@ export function SketchPanel({
               className={option.value === sketch.fidelity ? "is-active" : ""}
               onClick={() => sketch.setFidelity(option.value)}
             >
-              {option.label}
+              {t(option.label)}
             </button>
           ))}
         </div>
@@ -225,9 +224,8 @@ export function SketchPanel({
 
       {sketch.ghost.length >= 2 ? (
         <p className="route-sketch-readout">
-          Sketch outline ≈ {formatDistance(sketch.ghostDistanceMeters, unitSystem)} {distanceUnit(unitSystem)}
-          before snapping.
-        </p>
+          {t("Sketch outline ≈")} {formatDistance(sketch.ghostDistanceMeters, unitSystem)} {distanceUnit(unitSystem)}
+          {t("before snapping.")}</p>
       ) : null}
 
       <div className="route-draw-tools route-sketch-actions">
@@ -242,14 +240,13 @@ export function SketchPanel({
           ) : (
             <Route size={15} aria-hidden="true" />
           )}
-          Snap to streets
-        </button>
+          {t("Snap to streets")}</button>
         <button
           type="button"
           className="button ghost"
           onClick={sketch.autoFit}
           disabled={!sketch.canSnap || sketch.routing || busyFitting}
-          title="Try nearby sizes and rotations, keep the best-matching route"
+          title={t("Try nearby sizes and rotations, keep the best-matching route")}
         >
           {busyFitting ? (
             <Loader2 size={15} className="spin" aria-hidden="true" />
@@ -257,8 +254,8 @@ export function SketchPanel({
             <Wand2 size={15} aria-hidden="true" />
           )}
           {busyFitting
-            ? `Fit ${sketch.autoFitProgress!.step}/${sketch.autoFitProgress!.total}…`
-            : "Auto fit"}
+            ? t("Fit {{p0}}/{{p1}}…", { p0: sketch.autoFitProgress!.step, p1: sketch.autoFitProgress!.total })
+            : t("Auto fit")}
         </button>
         {sketch.tool === "freehand" ? (
           <button
@@ -267,8 +264,7 @@ export function SketchPanel({
             onClick={sketch.undoStroke}
             disabled={!sketch.canUndoStroke}
           >
-            <Undo2 size={15} aria-hidden="true" /> Undo
-          </button>
+            <Undo2 size={15} aria-hidden="true" />  {t("Undo")}</button>
         ) : null}
         <button
           type="button"
@@ -276,18 +272,16 @@ export function SketchPanel({
           onClick={sketch.clear}
           disabled={sketch.ghost.length === 0 && sketch.waypoints.length === 0}
         >
-          <Trash2 size={15} aria-hidden="true" /> Clear
-        </button>
+          <Trash2 size={15} aria-hidden="true" />  {t("Clear")}</button>
       </div>
 
       {sketch.hasRoute && sketch.match ? (
         <p className="route-sketch-readout">
-          Shape match ≈ <strong>{matchPercent(sketch.match.score)}%</strong>
+          {t("Shape match ≈")} <strong>{matchPercent(sketch.match.score)}%</strong>
           {sketch.autoFitResult
-            ? ` · best fit: ${describeAutoFit(sketch.autoFitResult)}`
+            ? t(" · best fit: {{p0}}", { p0: describeAutoFit(sketch.autoFitResult) })
             : ""}
-          . Drag a waypoint to nudge the route; click one to remove it.
-        </p>
+          {t(". Drag a waypoint to nudge the route; click one to remove it.")}</p>
       ) : null}
 
       {sketch.error ? <p className="route-inline-error">{sketch.error}</p> : null}
@@ -304,7 +298,7 @@ export function SketchPanel({
           ) : (
             <Save size={16} aria-hidden="true" />
           )}
-          {saving ? "Saving…" : "Save route"}
+          {saving ? t("Saving…") : t("Save route")}
         </button>
       </div>
     </div>

@@ -1,3 +1,4 @@
+import { useLanguage, t } from "../../i18n/training";
 import type { ChartCardSize } from "../widgetSizing";
 import "../chartSizing.css";
 import "../profileSizing.css";
@@ -36,6 +37,7 @@ function hasValue(value?: number): value is number {
 }
 
 function ScoreBar({ label, value, paceLabel }: ScoreItem) {
+  useLanguage();
   const percent =
     value !== undefined ? Math.max(0, Math.min(100, value)) : undefined;
 
@@ -43,7 +45,7 @@ function ScoreBar({ label, value, paceLabel }: ScoreItem) {
     <div className="score-bar">
       <div className="score-bar-header">
         <div className="score-bar-label-group">
-          <span>{label}</span>
+          <span>{t(label)}</span>
           {paceLabel ? <span className="score-bar-pace">{paceLabel}</span> : null}
         </div>
         <strong>{formatOptionalNumber(value)}</strong>
@@ -67,6 +69,7 @@ export function FitnessScoresPanel({
   racePredictor,
   size
 }: FitnessScoresPanelProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const predictor = racePredictor ?? dashboard?.racePredictor ?? null;
 
@@ -75,14 +78,14 @@ export function FitnessScoresPanel({
       <section className="panel training-scores-panel" data-chart-size={size}>
         <header className="training-scores-header">
           <div className="training-scores-heading">
-            <p className="eyebrow">Fitness Scores</p>
-            <h2>Not loaded</h2>
+            <p className="eyebrow">{t("Fitness Scores")}</p>
+            <h2>{t("Not loaded")}</h2>
           </div>
           <span className="training-panel-icon" aria-hidden="true">
           <BarChart3 />
         </span>
         </header>
-        <p className="training-empty-chart">Fitness scores could not be loaded.</p>
+        <p className="training-empty-chart">{t("Fitness scores could not be loaded.")}</p>
       </section>
     );
   }
@@ -129,8 +132,8 @@ export function FitnessScoresPanel({
     <section className="panel training-scores-panel" data-chart-size={size}>
       <header className="training-scores-header">
         <div className="training-scores-heading">
-          <p className="eyebrow">Fitness Scores</p>
-          <h2>{scores.length > 0 ? "Running fitness" : "Threshold profile"}</h2>
+          <p className="eyebrow">{t("Fitness Scores")}</p>
+          <h2>{scores.length > 0 ? t("Running fitness") : t("Threshold profile")}</h2>
         </div>
         <span className="training-panel-icon" aria-hidden="true">
           <BarChart3 />
@@ -140,15 +143,15 @@ export function FitnessScoresPanel({
       {scores.length > 0 ? (
         <div className="score-bar-list">
           {scores.map((score) => (
-            <ScoreBar key={score.label} label={score.label} value={score.value} />
+            <ScoreBar key={score.label} label={t(score.label)} value={score.value} />
           ))}
         </div>
       ) : null}
 
-      {size === "mini" ? <details className="chart-card-details"><summary>Threshold measurements</summary>      <div className="training-threshold-grid">
+      {size === "mini" ? <details className="chart-card-details"><summary>{t("Threshold measurements")}</summary>      <div className="training-threshold-grid">
         {metrics.map((metric) => (
           <div key={metric.label}>
-            <span>{metric.label}</span>
+            <span>{t(metric.label)}</span>
             <strong>{metric.format(metric.value)}</strong>
           </div>
         ))}
@@ -156,7 +159,7 @@ export function FitnessScoresPanel({
       </details> : (      <div className="training-threshold-grid">
         {metrics.map((metric) => (
           <div key={metric.label}>
-            <span>{metric.label}</span>
+            <span>{t(metric.label)}</span>
             <strong>{metric.format(metric.value)}</strong>
           </div>
         ))}

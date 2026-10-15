@@ -1,3 +1,4 @@
+import { getLocale, useLanguage, t } from "../i18n/training";
 import {
   BookOpen,
   CalendarDays,
@@ -137,7 +138,7 @@ interface CalendarContextTarget {
 }
 
 function workoutCountLabel(count: number): string {
-  return count === 1 ? "workout" : `${count} workouts`;
+  return count === 1 ? t("workout") : t("{{value1}} workouts", { value1: String(count) });
 }
 
 const ARROW_DAY_STEPS: Record<string, number | undefined> = {
@@ -189,6 +190,7 @@ export function CalendarView({
   onOpenTraining,
   onOpenCoach
 }: CalendarViewProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const [mode, setMode] = useSelectionPreference(CALENDAR_MODE_PREFERENCE);
   const [anchor, setAnchor] = useState(() => new Date());
@@ -236,9 +238,9 @@ export function CalendarView({
     setCalendarSyncing(true);
     try {
       const result = await api.syncEditedCalendarWorkout({ userId: status.userId, ...entry });
-      if (result.errors.length) onError(`Saved in CorosLink. ${result.errors.join(" ")}`);
+      if (result.errors.length) onError(t("Saved in CorosLink. {{value1}}", { value1: String(result.errors.join(" ")) }));
     } catch (cause) {
-      onError(`Saved in CorosLink. Calendar sync failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+      onError(t("Saved in CorosLink. Calendar sync failed: {{value1}}", { value1: String(cause instanceof Error ? cause.message : String(cause)) }));
     } finally {
       setCalendarSyncing(false);
     }
@@ -258,9 +260,9 @@ export function CalendarView({
         const connection = await provider.getStatus();
         if (!connection.connected || !connection.calendar) return null;
         if (!connection.accountMatches)
-          throw new Error(`${provider.name} sync is paused. Sign in to the linked COROS account or reconnect the calendar in Settings.`);
+          throw new Error(t("{{value1}} sync is paused. Sign in to the linked COROS account or reconnect the calendar in Settings.", { value1: String(provider.name) }));
         if (connection.syncing || connection.connecting)
-          return `${provider.name} sync is already running.`;
+          return t("{{value1}} sync is already running.", { value1: String(provider.name) });
         const result = await provider.sync();
         return `${provider.name} synced: ${result.created} added, ${result.updated} updated, ${result.deleted} removed.`;
       }));
@@ -291,7 +293,7 @@ export function CalendarView({
       mode === "month"
         ? monthGridWeeks(anchorYear, anchorMonth)
         : [weekRow(anchor)],
-    [mode, anchor, anchorYear, anchorMonth]
+    [mode, anchor, anchorYear, anchorMonth, getLocale()]
   );
 
   const isInMonth = useCallback(
@@ -324,7 +326,7 @@ export function CalendarView({
       }
     }
     return [...entries.values()];
-  }, [weeks]);
+  }, [weeks, getLocale()]);
 
   const allSelectableSelected =
     selectableWorkouts.length > 0 &&
@@ -452,9 +454,7 @@ export function CalendarView({
       setClipboard(entries.map(createCalendarClipboardEntry));
       onError(null);
       onMessage(
-        `Copied ${
-          entries.length === 1 ? `"${entries[0]!.name}"` : `${entries.length} workouts`
-        }${sourceLabel ? ` from ${sourceLabel}` : ""}. Right-click a day to paste, or press ${MOD_KEY_LABEL}V.`
+        t("Copied {{value1}}{{value2}}. Right-click a day to paste, or press {{value3}}V.", { value1: String(entries.length === 1 ? `"${entries[0]!.name}"` : t("{{value1}} workouts", { value1: String(entries.length) })), value2: String(sourceLabel ? ` from ${sourceLabel}` : ""), value3: String(MOD_KEY_LABEL) })
       );
     },
     [onError, onMessage]
@@ -501,7 +501,7 @@ export function CalendarView({
       void api
         .removeScheduledWorkout(scheduledWorkoutRemovalRef(target.entry))
         .then(async () => {
-          onMessage(`Removed "${target.entry.name}" from the calendar.`);
+          onMessage(t("Removed \"{{value1}}\" from the calendar.", { value1: String(target.entry.name) }));
           setSelection(null);
           await syncCalendarEdit(target.entry);
         })
@@ -540,7 +540,7 @@ export function CalendarView({
 
         if (removedCount > 0) {
           onMessage(
-            `Removed ${removedCount} workout${removedCount === 1 ? "" : "s"} from the calendar.`
+            t("Removed {{value1}} workout{{value2}} from the calendar.", { value1: String(removedCount), value2: String(removedCount === 1 ? "" : "s") })
           );
         }
 
@@ -561,7 +561,7 @@ export function CalendarView({
               ? String(firstCause)
               : "Unknown error";
         onError(
-          `${failures.length} workout${failures.length === 1 ? "" : "s"} could not be removed: ${detail}`
+          t("{{value1}} workout{{value2}} could not be removed: {{value3}}", { value1: String(failures.length), value2: String(failures.length === 1 ? "" : "s"), value3: String(detail) })
         );
       })
       .finally(() => {
@@ -586,7 +586,7 @@ export function CalendarView({
       for (const day of week.days) map.set(day.dateKey, day);
     }
     return map;
-  }, [weeks]);
+  }, [weeks, getLocale()]);
 
   const findScheduled = useCallback(
     (dayKey: string, workoutKey: string) =>
@@ -598,7 +598,7 @@ export function CalendarView({
 
   const copiedWorkoutKeys = useMemo(
     () => new Set((clipboard ?? []).map(scheduledWorkoutKey)),
-    [clipboard]
+    [clipboard, getLocale()]
   );
 
   const modalOpen = addTarget !== null || editRef !== null || libraryOpen;
@@ -739,7 +739,7 @@ export function CalendarView({
         id: "copy-day",
         label:
           day.scheduled.length > 0
-            ? `Copy day (${workoutCountLabel(day.scheduled.length)})`
+            ? t("Copy day ({{value1}})", { value1: String(workoutCountLabel(day.scheduled.length)) })
             : "Copy day",
         icon: "copy-day",
         shortcut: workout ? undefined : `${MOD_KEY_LABEL}C`,
@@ -764,7 +764,7 @@ export function CalendarView({
       }
     });
     return items;
-  }, [clipboard, contextMenu, copyEntries, daysByKey, findScheduled, mutating, pasteEntries]);
+  }, [clipboard, contextMenu, copyEntries, daysByKey, findScheduled, mutating, pasteEntries, getLocale()]);
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
@@ -775,7 +775,7 @@ export function CalendarView({
         .filter((line): line is string => Boolean(line));
       const stats = week.stats;
       const summary = [
-        `training load ${stats.actualLoad}${stats.plannedLoad ? ` of ${stats.plannedLoad} planned` : ""} TL`,
+        t("training load {{value1}}{{value2}} TL", { value1: String(stats.actualLoad), value2: String(stats.plannedLoad ? ` of ${stats.plannedLoad} planned` : "") }),
         stats.distanceMeters > 0
           ? formatDistanceMeters(stats.distanceMeters, unitSystem)
           : null,
@@ -830,14 +830,11 @@ export function CalendarView({
       <section className="calendar-view">
         <div className="panel calendar-connect">
           <CalendarDays size={28} aria-hidden="true" />
-          <h2>Training Calendar</h2>
+          <h2>{t("Training Calendar")}</h2>
           <p>
-            Connect your COROS account to see scheduled workouts, completed
-            activities, and weekly stats in one calendar.
-          </p>
+            {t("Connect your COROS account to see scheduled workouts, completed activities, and weekly stats in one calendar.")} </p>
           <button type="button" className="primary-button" onClick={onOpenTraining}>
-            Connect in Training Hub
-          </button>
+            {t("Connect in Training Hub")} </button>
         </div>
       </section>
     );
@@ -855,14 +852,13 @@ export function CalendarView({
               setAnchor(new Date());
             }}
           >
-            Today
-          </button>
+            {t("Today")} </button>
           <div className="calendar-nav-arrows">
             <button
               type="button"
               className="calendar-nav-button calendar-nav-arrow"
               onClick={() => navigate(-1)}
-              aria-label={mode === "month" ? "Previous month" : "Previous week"}
+              aria-label={mode === "month" ? t("Previous month") : t("Previous week")}
             >
               <ChevronLeft size={16} aria-hidden="true" />
             </button>
@@ -870,13 +866,13 @@ export function CalendarView({
               type="button"
               className="calendar-nav-button calendar-nav-arrow"
               onClick={() => navigate(1)}
-              aria-label={mode === "month" ? "Next month" : "Next week"}
+              aria-label={mode === "month" ? t("Next month") : t("Next week")}
             >
               <ChevronRight size={16} aria-hidden="true" />
             </button>
           </div>
           <h2 className="calendar-headline">{headline}</h2>
-          {loading ? <span className="calendar-loading">Loading…</span> : null}
+          {loading ? <span className="calendar-loading">{t("Loading…")}</span> : null}
         </div>
         <div className="calendar-header-actions">
           <button
@@ -891,7 +887,7 @@ export function CalendarView({
             ) : (
               <RefreshCw size={14} className={calendarSyncState === "syncing" ? "spin" : undefined} aria-hidden="true" />
             )}
-            {calendarSyncState === "syncing" ? "Syncing…" : calendarSyncState === "synced" && !mutating ? "Synced" : "Sync now"}
+            {calendarSyncState === "syncing" ? t("Syncing…") : calendarSyncState === "synced" && !mutating ? t("Synced") : t("Sync now")}
           </button>
           <button
             type="button"
@@ -903,10 +899,10 @@ export function CalendarView({
             aria-pressed={selectionMode}
             title={
               selectionMode
-                ? "Cancel workout selection"
+                ? t("Cancel workout selection")
                 : selectableWorkouts.length === 0
-                  ? "No upcoming workouts to select"
-                  : "Select multiple workouts"
+                  ? t("No upcoming workouts to select")
+                  : t("Select multiple workouts")
             }
           >
             {selectionMode ? (
@@ -914,7 +910,7 @@ export function CalendarView({
             ) : (
               <ListChecks size={14} aria-hidden="true" />
             )}
-            {selectionMode ? "Cancel" : "Select"}
+            {selectionMode ? t("Cancel") : t("Select")}
           </button>
           <button
             type="button"
@@ -923,14 +919,13 @@ export function CalendarView({
             disabled={selectionMode}
           >
             <BookOpen size={14} aria-hidden="true" />
-            Workout Library
-          </button>
+            {t("Workout Library")} </button>
           <button
             type="button"
             className="calendar-nav-button calendar-nav-arrow"
             onClick={reload}
-            title="Refresh"
-            aria-label="Refresh calendar"
+            title={t("Refresh")}
+            aria-label={t("Refresh calendar")}
           >
             <RefreshCw size={14} aria-hidden="true" />
           </button>
@@ -945,8 +940,7 @@ export function CalendarView({
                 setMode("month");
               }}
             >
-              Month
-            </button>
+              {t("Month")} </button>
             <button
               type="button"
               role="tab"
@@ -957,8 +951,7 @@ export function CalendarView({
                 setMode("week");
               }}
             >
-              Week
-            </button>
+              {t("Week")} </button>
           </div>
         </div>
       </header>
@@ -969,17 +962,15 @@ export function CalendarView({
         <div
           className="calendar-selection-bar"
           role="toolbar"
-          aria-label="Selected calendar workouts"
+          aria-label={t("Selected calendar workouts")}
         >
           <div className="calendar-selection-summary" aria-live="polite">
             <span className="calendar-selection-icon" aria-hidden="true">
               <ListChecks size={15} />
             </span>
             <strong>
-              {selectedWorkoutKeys.size} workout
-              {selectedWorkoutKeys.size === 1 ? "" : "s"} selected
-            </strong>
-            <span>Select upcoming workouts in the calendar to remove them.</span>
+              {selectedWorkoutKeys.size} {t("workout")} {selectedWorkoutKeys.size === 1 ? "" : "s"} {t("selected")} </strong>
+            <span>{t("Select upcoming workouts in the calendar to remove them.")}</span>
           </div>
           <div className="calendar-selection-actions">
             <button
@@ -988,7 +979,7 @@ export function CalendarView({
               onClick={toggleSelectAll}
               disabled={mutating || selectableWorkouts.length === 0}
             >
-              {allSelectableSelected ? "Deselect all" : "Select all"}
+              {allSelectableSelected ? t("Deselect all") : t("Select all")}
             </button>
             {selectedWorkoutKeys.size > 0 ? (
               <button
@@ -1000,8 +991,7 @@ export function CalendarView({
                 }}
                 disabled={mutating}
               >
-                Clear
-              </button>
+                {t("Clear")} </button>
             ) : null}
             <button
               type="button"
@@ -1011,10 +1001,10 @@ export function CalendarView({
             >
               <Trash2 size={14} aria-hidden="true" />
               {mutating
-                ? "Removing…"
+                ? t("Removing…")
                 : confirmBulkDelete
-                  ? `Confirm remove ${selectedWorkoutKeys.size}`
-                  : `Remove ${selectedWorkoutKeys.size || ""}`.trim()}
+                  ? t("Confirm remove {{value1}}", { value1: String(selectedWorkoutKeys.size) })
+                  : t("Remove {{value1}}", { value1: String(selectedWorkoutKeys.size || "") }).trim()}
             </button>
           </div>
         </div>
@@ -1129,7 +1119,7 @@ export function CalendarView({
           onClose={() => setEditRef(null)}
           onSaved={(result) => {
             const scope = editRef.kind === "scheduled" ? "scheduled occurrence" : "library workout";
-            onMessage(result.verified ? `Updated ${scope} in COROS.` : result.warning ?? `Updated ${scope}, but verification is still pending.`);
+            onMessage(result.verified ? t("Updated {{value1}} in COROS.", { value1: String(scope) }) : result.warning ?? t("Updated {{value1}}, but verification is still pending.", { value1: String(scope) }));
             setEditRef(null);
             reload();
             if (editRef.kind === "scheduled") void syncCalendarEdit(editRef);

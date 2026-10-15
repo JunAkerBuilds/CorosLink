@@ -1,21 +1,23 @@
+import { t, useLanguage } from "../i18n";
 import { Coffee } from "lucide-react";
 
 const DONATE_URL = "https://www.buymeacoffee.com/addridoa";
 
 export function DonateButton() {
+  useLanguage();
   return (
     <a
       className="donate-button"
       href={DONATE_URL}
       target="_blank"
       rel="noreferrer"
-      aria-label="Buy me a coffee"
-      title="Buy me a coffee"
+      aria-label={t("Buy me a coffee")}
+      title={t("Buy me a coffee")}
     >
       <span className="donate-button-art" aria-hidden="true">
         <Coffee className="donate-button-cup" size={17} strokeWidth={2.6} />
       </span>
-      <span className="donate-button-label">Buy me a coffee</span>
+      <span className="donate-button-label">{t("Buy me a coffee")}</span>
     </a>
   );
 }

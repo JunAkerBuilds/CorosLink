@@ -1,3 +1,4 @@
+import { getLocale } from "../i18n/trainingLocale";
 import { getLocalHappenDayKey } from "../training/formatters";
 
 export function dateFromKey(key: string): Date {
@@ -58,7 +59,7 @@ export function weekRow(referenceDate: Date): string[] {
 }
 
 export function monthLabel(year: number, monthIndex: number): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(getLocale(), {
     month: "long",
     year: "numeric"
   }).format(new Date(year, monthIndex, 1));
@@ -67,11 +68,11 @@ export function monthLabel(year: number, monthIndex: number): string {
 export function weekRangeLabel(weekKeys: string[]): string {
   const first = dateFromKey(weekKeys[0]!);
   const last = dateFromKey(weekKeys[weekKeys.length - 1]!);
-  const startLabel = new Intl.DateTimeFormat(undefined, {
+  const startLabel = new Intl.DateTimeFormat(getLocale(), {
     month: "short",
     day: "numeric"
   }).format(first);
-  const endLabel = new Intl.DateTimeFormat(undefined, {
+  const endLabel = new Intl.DateTimeFormat(getLocale(), {
     month: "short",
     day: "numeric",
     year: "numeric"

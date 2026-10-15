@@ -1,5 +1,7 @@
 import type { UnitSystem } from "../../electron/types";
 import { parsePersistedUnitSystem } from "../../electron/unitSystem";
+import * as sharedUnits from "../../electron/unitSystem";
+import { getLocale } from "../i18n/locale";
 export { parsePersistedUnitSystem };
 export {
   FEET_PER_METER,
@@ -13,11 +15,7 @@ export {
   distanceUnit,
   elevationToMeters,
   elevationUnit,
-  formatDistanceValue,
-  formatElevationValue,
   formatPaceValue,
-  formatSpeedValue,
-  formatWeightValue,
   kilogramsToDisplayWeight,
   kmhToDisplaySpeed,
   metersToDisplayDistance,
@@ -31,6 +29,30 @@ export {
   weightUnit
 } from "../../electron/unitSystem";
 export type { UnitSystem } from "../../electron/types";
+
+// Keep the shared conversion rules and precision, while using the app's locale
+// for display. Machine-readable values and pace clocks never pass through here.
+function localizedUnitValue(value: string): string {
+  return value.replace(/^(-?\d+)(?:\.(\d+))?(?= )/, (number, _integer, fraction: string | undefined) =>
+    new Intl.NumberFormat(getLocale(), {
+      useGrouping: false,
+      minimumFractionDigits: fraction?.length ?? 0,
+      maximumFractionDigits: fraction?.length ?? 0,
+    }).format(Number(number)));
+}
+
+export function formatDistanceValue(...args: Parameters<typeof sharedUnits.formatDistanceValue>): string {
+  return localizedUnitValue(sharedUnits.formatDistanceValue(...args));
+}
+export function formatElevationValue(...args: Parameters<typeof sharedUnits.formatElevationValue>): string {
+  return localizedUnitValue(sharedUnits.formatElevationValue(...args));
+}
+export function formatSpeedValue(...args: Parameters<typeof sharedUnits.formatSpeedValue>): string {
+  return localizedUnitValue(sharedUnits.formatSpeedValue(...args));
+}
+export function formatWeightValue(...args: Parameters<typeof sharedUnits.formatWeightValue>): string {
+  return localizedUnitValue(sharedUnits.formatWeightValue(...args));
+}
 
 export const UNIT_SYSTEM_STORAGE_KEY = "coroslink.unitSystem";
 

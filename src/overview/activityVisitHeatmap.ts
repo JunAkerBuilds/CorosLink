@@ -1,3 +1,4 @@
+import { t } from "../i18n/toolsLocale";
 import type {
   TrainingHubActivity,
   TrainingHubActivityDetail,
@@ -390,7 +391,7 @@ export function formatOverallDuration(totalSeconds: number): {
   const seconds = Math.max(0, Math.round(totalSeconds));
   if (seconds < 3600) {
     const minutes = Math.floor(seconds / 60);
-    return { value: String(minutes), unit: "min" };
+    return { value: String(minutes), unit: t("min") };
   }
 
   const hours = seconds / 3600;

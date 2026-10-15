@@ -1,3 +1,4 @@
+import { t, formatNumber } from "../../i18n/toolsLocale";
 import type {
   ActivityPaceBaseline,
   GeneratedRoute,
@@ -26,8 +27,8 @@ export function isCyclingActivity(activityType: RouteActivityType): boolean {
 
 export function activityTypeLabel(activityType: RouteActivityType): string {
   return (
-    ROUTE_ACTIVITY_OPTIONS.find((option) => option.value === activityType)
-      ?.label ?? activityType
+    t(ROUTE_ACTIVITY_OPTIONS.find((option) => option.value === activityType)
+      ?.label ?? activityType)
   );
 }
 
@@ -50,7 +51,7 @@ export function formatDistance(
   if (meters === undefined || !Number.isFinite(meters)) {
     return "—";
   }
-  return metersToDisplayDistance(meters, unitSystem).toFixed(1);
+  return formatNumber(metersToDisplayDistance(meters, unitSystem), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
 export function formatDuration(value?: number): string {
@@ -60,7 +61,7 @@ export function formatDuration(value?: number): string {
   const minutes = Math.round(value / 60);
   const hours = Math.floor(minutes / 60);
   const remainder = minutes % 60;
-  return hours > 0 ? `${hours}h ${remainder}m` : `${minutes}m`;
+  return hours > 0 ? t("{{hours}}h {{minutes}}m", { hours, minutes: remainder }) : t("{{minutes}}m", { minutes });
 }
 
 export function formatMeters(
@@ -78,11 +79,11 @@ export function formatElevationPreference(
 ): string {
   switch (preference) {
     case "flatter":
-      return "Prefer flatter";
+      return t("Prefer flatter");
     case "hilly":
-      return "Prefer hilly";
+      return t("Prefer hilly");
     default:
-      return "Any elevation";
+      return t("Any elevation");
   }
 }
 
@@ -134,7 +135,7 @@ export function formatPaceOrSpeed(
   if (isCyclingActivity(route.activityType)) {
     const speed = distanceKm / (durationSeconds / 3600);
     const displaySpeed = unitSystem === "imperial" ? speed / 1.609344 : speed;
-    return `${displaySpeed.toFixed(1)} ${speedUnit(unitSystem)}`;
+    return `${formatNumber(displaySpeed, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ${speedUnit(unitSystem)}`;
   }
   const rounded = Math.round(
     secondsPerKmToDisplayPace(durationSeconds / distanceKm, unitSystem)
@@ -155,10 +156,10 @@ export function climbRatePerKm(
 }
 
 export function difficultyFromClimbRate(metersPerKm: number): string {
-  if (metersPerKm < 10) return "Flat";
-  if (metersPerKm < 25) return "Rolling";
-  if (metersPerKm < 50) return "Hilly";
-  return "Steep";
+  if (metersPerKm < 10) return t("Flat");
+  if (metersPerKm < 25) return t("Rolling");
+  if (metersPerKm < 50) return t("Hilly");
+  return t("Steep");
 }
 
 export function haversineMeters(

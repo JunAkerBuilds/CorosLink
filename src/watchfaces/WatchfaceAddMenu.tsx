@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Activity, CalendarDays, ChartNoAxesCombined, Check, ChevronDown, Circle, Clock3, CloudSun, Image, Minus, MoonStar, Plus, Search, Smartphone, Sparkles, Square, TrendingUp, Type, X } from "lucide-react";
 import type { CorosWatchfaceBackgroundElement, CorosWatchfaceDesignState } from "../../electron/types";
@@ -35,6 +36,7 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
   onAddData: (id: string) => void;
   faceOptions?: WatchfaceAddFaceOption[];
 }) {
+  useLanguage();
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -115,55 +117,55 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
     options[(index + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length]?.focus();
   };
   const normalized = query.trim().toLocaleLowerCase();
-  const matches = (label: string, group: string, keywords: string) => (category === "All" || category === group) && `${label} ${group} ${keywords}`.toLocaleLowerCase().includes(normalized);
+  const matches = (label: string, group: string, keywords: string) => (category === "All" || category === group) && `${label} ${t(label)} ${group} ${t(group)} ${keywords}`.toLocaleLowerCase(getLocale()).includes(normalized);
   const visible = dataOptions.filter(option => matches(option.label, option.category, option.keywords));
-  const visibleFace = faceOptions.filter(option => matches(option.label, option.category, `${option.category === "Time" ? "time clock " : ""}${option.id}`));
+  const visibleFace = faceOptions.filter(option => matches(option.label, option.category, `${option.category === "Time" ? t("time clock ") : ""}${option.id}`));
   return <div className="wf-add-menu">
     <button ref={trigger} type="button" className="watchface-add-sprite" aria-haspopup="dialog" aria-expanded={open} aria-controls={id}
-      popoverTarget={id} onClick={place}><Plus size={15} aria-hidden="true" /><span>Add</span><ChevronDown size={12} aria-hidden="true" /></button>
-    <div ref={panel} id={id} className="wf-add-popover wf-layer-picker" popover="auto" role="dialog" aria-label="Add a layer" style={position}
+      popoverTarget={id} onClick={place}><Plus size={15} aria-hidden="true" /><span>{t("Add")}</span><ChevronDown size={12} aria-hidden="true" /></button>
+    <div ref={panel} id={id} className="wf-add-popover wf-layer-picker" popover="auto" role="dialog" aria-label={t("Add a layer")} style={position}
       onKeyDown={onKeyDown}
       onToggle={event => {
         const isOpen = event.newState === "open";
         setOpen(isOpen);
         if (!isOpen) { setQuery(""); setCategory("All"); }
       }}>
-      <div className="wf-layer-picker-heading"><strong>Add a layer</strong><button type="button" aria-label="Close add menu" onClick={close}><X size={15} /></button></div>
-      <div className="wf-layer-picker-artwork" role="group" aria-label="Artwork">
-        <button type="button" data-add-option className="wf-add-image" disabled={imageDisabled} onClick={() => choose(onAddImage)}><Image size={18} /><span>Image</span></button>
-        {onAddOfficialImage ? <button type="button" data-add-option className="wf-add-official" disabled={imageDisabled} onClick={() => choose(onAddOfficialImage)}><Sparkles size={17} /><span>Official</span></button> : null}
-        <button type="button" data-add-option onClick={() => choose(() => onAddElement("text"))}><Type size={18} /><span>Text</span></button>
-        <button type="button" data-add-option onClick={() => choose(() => onAddElement("rect"))}><Square size={17} /><span>Rectangle</span></button>
-        <button type="button" data-add-option onClick={() => choose(() => onAddElement("ellipse"))}><Circle size={17} /><span>Ellipse</span></button>
-        <button type="button" data-add-option onClick={() => choose(() => onAddElement("line"))}><Minus size={18} /><span>Line</span></button>
+      <div className="wf-layer-picker-heading"><strong>{t("Add a layer")}</strong><button type="button" aria-label={t("Close add menu")} onClick={close}><X size={15} /></button></div>
+      <div className="wf-layer-picker-artwork" role="group" aria-label={t("Artwork")}>
+        <button type="button" data-add-option className="wf-add-image" disabled={imageDisabled} onClick={() => choose(onAddImage)}><Image size={18} /><span>{t("Image")}</span></button>
+        {onAddOfficialImage ? <button type="button" data-add-option className="wf-add-official" disabled={imageDisabled} onClick={() => choose(onAddOfficialImage)}><Sparkles size={17} /><span>{t("Official")}</span></button> : null}
+        <button type="button" data-add-option onClick={() => choose(() => onAddElement("text"))}><Type size={18} /><span>{t("Text")}</span></button>
+        <button type="button" data-add-option onClick={() => choose(() => onAddElement("rect"))}><Square size={17} /><span>{t("Rectangle")}</span></button>
+        <button type="button" data-add-option onClick={() => choose(() => onAddElement("ellipse"))}><Circle size={17} /><span>{t("Ellipse")}</span></button>
+        <button type="button" data-add-option onClick={() => choose(() => onAddElement("line"))}><Minus size={18} /><span>{t("Line")}</span></button>
       </div>
-      <div className="wf-layer-picker-data-heading"><strong>Live data</strong><span>Updates on your watch</span></div>
-      <label className="wf-layer-picker-search"><Search size={15} aria-hidden="true" /><input ref={search} type="search" aria-label="Search data fields" placeholder="Search weather, health, charts…" value={query} onChange={event => setQuery(event.target.value)} spellCheck={false} />{query && <button type="button" aria-label="Clear data search" onClick={() => { setQuery(""); search.current?.focus(); }}><X size={13} /></button>}</label>
-      <div ref={tabs} className="wf-layer-picker-filters" role="tablist" aria-label="Data categories">{categories.map(item => <button key={item} id={`${id}-tab-${item}`} type="button" role="tab" aria-selected={category === item} aria-controls={`${id}-data-panel`} tabIndex={category === item ? 0 : -1} onClick={() => setCategory(item)} onKeyDown={event => onTabKeyDown(event, item)}>{item}</button>)}</div>
+      <div className="wf-layer-picker-data-heading"><strong>{t("Live data")}</strong><span>{t("Updates on your watch")}</span></div>
+      <label className="wf-layer-picker-search"><Search size={15} aria-hidden="true" /><input ref={search} type="search" aria-label={t("Search data fields")} placeholder={t("Search weather, health, charts…")} value={query} onChange={event => setQuery(event.target.value)} spellCheck={false} />{query && <button type="button" aria-label={t("Clear data search")} onClick={() => { setQuery(""); search.current?.focus(); }}><X size={13} /></button>}</label>
+      <div ref={tabs} className="wf-layer-picker-filters" role="tablist" aria-label={t("Data categories")}>{categories.map(item => <button key={item} id={`${id}-tab-${item}`} type="button" role="tab" aria-selected={category === item} aria-controls={`${id}-data-panel`} tabIndex={category === item ? 0 : -1} onClick={() => setCategory(item)} onKeyDown={event => onTabKeyDown(event, item)}>{t(item)}</button>)}</div>
       <div id={`${id}-data-panel`} className="wf-layer-picker-results" ref={results} role="tabpanel" aria-labelledby={`${id}-tab-${category}`} tabIndex={0}>
         {categories.filter(item => item !== "All").map(group => {
           const options = visible.filter(option => option.category === group);
           const faceRows = visibleFace.filter(option => option.category === group);
           if (!options.length && !faceRows.length) return null;
           const Icon = categoryIcons[group];
-          return <section key={group} aria-label={group}>
-            <h3><Icon size={13} aria-hidden="true" />{group}{group === "Charts" && " · Experimental"}<span>{options.length + faceRows.length}</span></h3>
-            {faceRows.map(option => <button type="button" key={`face:${option.id}`} data-add-option data-face-option={option.id} aria-label={`${option.added ? "Select" : "Add"} ${option.label}`} onClick={() => choose(option.onAdd)}>
-              <span className="wf-layer-picker-option-label">{option.label}</span>{option.added ? <span className="wf-layer-picker-added"><Check size={12} />On face</span> : <Plus size={13} className="wf-layer-picker-plus" aria-hidden="true" />}
+          return <section key={group} aria-label={t(group)}>
+            <h3><Icon size={13} aria-hidden="true" />{t(group)}{group === "Charts" && t(" · Experimental")}<span>{options.length + faceRows.length}</span></h3>
+            {faceRows.map(option => <button type="button" key={`face:${option.id}`} data-add-option data-face-option={option.id} aria-label={t("{{value1}} {{value2}}", { value1: t(option.added ? "Select" : "Add"), value2: t(option.label) })} onClick={() => choose(option.onAdd)}>
+              <span className="wf-layer-picker-option-label">{t(option.label)}</span>{option.added ? <span className="wf-layer-picker-added"><Check size={12} />{t("On face")}</span> : <Plus size={13} className="wf-layer-picker-plus" aria-hidden="true" />}
             </button>)}
             {options.map(option => {
               const [field, source] = option.id.split(":");
               const existing = design.nativeData?.[field];
               const added = existing?.enabled && (!source || (existing.chartSource ?? "chart_stress") === source);
-              return <button type="button" key={option.id} data-add-option data-native-data={option.id} aria-label={`${added ? "Select" : "Add"} ${option.label}${group === "Charts" ? " chart" : ""}`} aria-describedby={option.availability ? `${id}-${option.id}-availability` : undefined} onClick={() => choose(() => onAddData(option.id))}>
-                <span className="wf-layer-picker-option-label">{option.label}{option.availability && <small id={`${id}-${option.id}-availability`} className="wf-layer-picker-availability">{option.availability.label}</small>}</span>{added ? <span className="wf-layer-picker-added"><Check size={12} />On face</span> : <Plus size={13} className="wf-layer-picker-plus" aria-hidden="true" />}
+              return <button type="button" key={option.id} data-add-option data-native-data={option.id} aria-label={t("{{value1}} {{value2}}{{value3}}", { value1: t(added ? "Select" : "Add"), value2: t(option.label), value3: group === "Charts" ? t(" chart") : "" })} aria-describedby={option.availability ? `${id}-${option.id}-availability` : undefined} onClick={() => choose(() => onAddData(option.id))}>
+                <span className="wf-layer-picker-option-label">{t(option.label)}{option.availability && <small id={`${id}-${option.id}-availability`} className="wf-layer-picker-availability">{t(option.availability.label)}</small>}</span>{added ? <span className="wf-layer-picker-added"><Check size={12} />{t("On face")}</span> : <Plus size={13} className="wf-layer-picker-plus" aria-hidden="true" />}
               </button>;
             })}
           </section>;
         })}
-        {!visible.length && !visibleFace.length && <div className="wf-layer-picker-empty"><Search size={22} aria-hidden="true" /><strong>No matching data fields</strong><span>Try another name or category.</span><button type="button" onClick={() => { setQuery(""); setCategory("All"); search.current?.focus(); }}>Clear filters</button></div>}
+        {!visible.length && !visibleFace.length && <div className="wf-layer-picker-empty"><Search size={22} aria-hidden="true" /><strong>{t("No matching data fields")}</strong><span>{t("Try another name or category.")}</span><button type="button" onClick={() => { setQuery(""); setCategory("All"); search.current?.focus(); }}>{t("Clear filters")}</button></div>}
       </div>
-      <div className="wf-layer-picker-footer">{design.nativeData?.chart?.enabled && (category === "Charts" || normalized.includes("chart")) ? "Choosing another chart replaces the current one." : "Add a layer, then customize it in the inspector."}</div>
+      <div className="wf-layer-picker-footer">{design.nativeData?.chart?.enabled && (category === "Charts" || normalized.includes("chart")) ? t("Choosing another chart replaces the current one.") : t("Add a layer, then customize it in the inspector.")}</div>
     </div>
   </div>;
 }

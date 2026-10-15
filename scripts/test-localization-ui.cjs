@@ -1,0 +1,90 @@
+const assert = require('node:assert/strict');
+const os = require('node:os');
+const path = require('node:path');
+const { app, BrowserWindow, Menu, ipcMain } = require('electron');
+app.setPath('userData', path.join(os.tmpdir(), `coroslink-localization-${process.pid}`));
+app.on('window-all-closed', () => {});
+async function main() {
+  await app.whenReady();
+  const database = require('../dist-electron/database.js');
+  database.initializeDatabase(app.getPath('userData'));
+  const native = require('../dist-electron/localization.js');
+  native.initializeNativeLanguage();
+  native.setNativeLanguage('fr');
+  assert.ok(Menu.getApplicationMenu().items.some(item => item.label === 'Édition'));
+  assert.equal(database.getSetting('app.language'), 'fr');
+  const options = { title: 'Choose a backup folder', defaultPath: '/tmp/My Original Workout.fit', properties: ['openDirectory'], filters: [{ name: 'Images', extensions: ['png'] }] };
+  const localized = native.localizeDialogOptions(options);
+  assert.equal(localized.title, 'Choisir un dossier de sauvegarde');
+  assert.equal(localized.defaultPath, options.defaultPath);
+  assert.deepEqual(localized.properties, options.properties);
+  assert.equal(options.title, 'Choose a backup folder', 'dialog localization never mutates caller data');
+  assert.equal(native.localizeDialogOptions({ buttons: ['Cancel', 'Delete from watch'], message: 'Delete “Élodie” from the watch?' }).message, 'Supprimer « Élodie » de la montre ?');
+  assert.throws(() => native.setNativeLanguage('de'), /Unsupported/);
+  native.setNativeLanguage('en');
+  assert.ok(Menu.getApplicationMenu().items.some(item => item.label === 'Edit'));
+  ipcMain.handle('app:setLanguage', (_event, value) => native.setNativeLanguage(value));
+  const { createServer } = await import('vite');
+  const react = (await import('@vitejs/plugin-react')).default;
+  let vite, win;
+  const errors = [];
+  const watchdog = setTimeout(() => { console.error('Localization UI timed out'); app.exit(1); }, 60000);
+  try {
+    vite = await createServer({ root: path.resolve(__dirname, '..'), configFile: false, plugins: [react()], server: { host: '127.0.0.1', port: 0, hmr: false }, logLevel: 'error' });
+    await vite.listen();
+    win = new BrowserWindow({ show: false, width: 1440, height: 1200, webPreferences: { preload: path.resolve(__dirname, '../dist-electron/preload.js') } });
+    win.webContents.on('console-message', event => { if (event.level === 'error') errors.push(event.message); });
+    const js = code => win.webContents.executeJavaScript(code, true);
+    const click = selector => js(`document.querySelector(${JSON.stringify(selector)}).click(); void 0`);
+    async function until(code) {
+      const end = Date.now() + 12000;
+      while (Date.now() < end) { if (await js(code)) return; await new Promise(resolve => setTimeout(resolve, 50)); }
+      throw new Error(`Timed out: ${code}\n${await js('document.body.innerText')}`);
+    }
+    await win.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/scripts/fixtures/localization.html`);
+    await until(`Boolean(document.querySelector('input[name=clientId]'))`);
+    await js(`window.setTestLanguage('en'); void 0`);
+    await until(`document.querySelector('.settings-language-panel h2').textContent === 'App language'`);
+    await js(`{ const input = document.querySelector('input[name=clientId]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'My Client Élodie'); input.dispatchEvent(new Event('input', { bubbles: true })); } void 0`);
+    await click('.settings-language-panel button[lang=fr]');
+    await until(`document.querySelector('.settings-language-panel h2').textContent === 'Langue de l’application'`);
+    assert.equal(await js('document.documentElement.lang'), 'fr');
+    assert.equal(await js('localStorage.getItem("coroslink.language")'), 'fr');
+    assert.equal(await js('window.localizationTest.mounts'), 1);
+    assert.equal(await js('document.querySelector("input[name=clientId]").value'), 'My Client Élodie');
+    assert.ok((await js('document.querySelector(".app-sidebar").innerText')).includes('Paramètres'));
+    assert.ok((await js('document.querySelector(".app-sidebar").innerText')).includes('Calendrier'));
+    assert.ok((await js('document.querySelector(".training-hub-header").innerText')).includes('Activités'));
+    assert.ok((await js('document.querySelector("#fixture-values").innerText')).includes('octobre'));
+    assert.equal(await js('document.querySelector("#fixture-fallback").textContent'), 'Untranslated custom data: Élodie');
+    await click('.app-select-trigger');
+    await until(`document.querySelectorAll('.app-select-option').length === 2`);
+    assert.equal(await js('document.querySelectorAll(".app-select-option-label")[1].textContent'), 'Calendrier');
+    await click('.app-select-option[data-value=calendar]');
+    await js(`Promise.all([import('/@id/react'), import('/@id/react-dom/client'), import('/src/watchfaces/WatchfaceAddMenu.tsx')]).then(([React, dom, picker]) => { const mount = document.createElement('div'); document.body.append(mount); window.nativeFieldCalls = []; window.pickerRoot = (dom.createRoot ?? dom.default.createRoot)(mount); pickerRoot.render((React.createElement ?? React.default.createElement)(picker.WatchfaceAddMenu, { design: { nativeData: {} }, imageDisabled: false, onAddImage() {}, onAddElement() {}, onAddData(id) { window.nativeFieldCalls.push(id); } })); })`);
+    await until(`Boolean(document.querySelector('.watchface-add-sprite'))`);
+    await click('.watchface-add-sprite');
+    await until(`Boolean(document.querySelector('.wf-layer-picker-filters'))`);
+    await js(`[...document.querySelectorAll('.wf-layer-picker-filters button')].find(button => button.textContent === 'Météo').click(); void 0`);
+    await until(`Boolean(document.querySelector('[data-native-data=weather_temp]'))`);
+    await click('[data-native-data=weather_temp]');
+    assert.deepEqual(await js('window.nativeFieldCalls'), ['weather_temp']);
+    await js('window.pickerRoot.unmount(); void 0');
+    await click('.account-setup button[type=submit]');
+    await until(`window.localizationTest.saves.length === 1`);
+    assert.equal(await js('window.localizationTest.saves[0].clientId'), 'My Client Élodie');
+    await win.reload();
+    await until(`document.querySelector('.settings-language-panel h2')?.textContent === 'Langue de l’application'`);
+    await click('.settings-language-panel button[lang=en]');
+    await until(`document.querySelector('.settings-language-panel h2').textContent === 'App language'`);
+    assert.equal(await js('document.querySelector(".app-select-value-label").textContent'), 'Overview');
+    assert.equal(database.getSetting('app.language'), 'en');
+    assert.equal(errors.length, 0, errors.join('\n'));
+    console.log('Desktop localization UI passed: native menu/dialog persistence, live French/English switching, sidebar, training tabs, dropdowns, locale formatting, reload and unchanged form payloads.');
+  } finally {
+    clearTimeout(watchdog);
+    win?.destroy();
+    if (vite) await vite.close();
+  }
+}
+main().then(() => app.exit(0)).catch(error => { console.error(error); app.exit(1); });

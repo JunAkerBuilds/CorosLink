@@ -1,3 +1,4 @@
+import { useLanguage, t } from "../i18n/training";
 import { useEffect, useRef, useState } from "react";
 import {
   ACESFilmicToneMapping,
@@ -998,6 +999,7 @@ export function BodyMap({
   onSelect,
   onViewChange
 }: BodyMapProps) {
+  useLanguage();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const worldRef = useRef<World | null>(null);
   const [failed, setFailed] = useState(false);
@@ -1072,16 +1074,13 @@ export function BodyMap({
     <div className="body-map" ref={containerRef}>
       {failed ? (
         <p className="body-map-fallback">
-          The 3D muscle map needs hardware graphics, which this window could not
-          start. The muscle list beside it still covers every group.
-        </p>
+          {t("The 3D muscle map needs hardware graphics, which this window could not start. The muscle list beside it still covers every group.")} </p>
       ) : (
         <p className="body-map-hint" aria-hidden="true">
-          Drag to turn
-        </p>
+          {t("Drag to turn")} </p>
       )}
       <span className="sr-only" aria-live="polite">
-        {hovered ? MUSCLE_BY_ID[hovered].label : ""}
+        {hovered ? t(MUSCLE_BY_ID[hovered].label) : ""}
       </span>
     </div>
   );

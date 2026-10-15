@@ -1,3 +1,4 @@
+import { t, useLanguage, formatNumber } from "../i18n/tools";
 import { useMemo } from "react";
 import { Heart } from "lucide-react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
@@ -42,21 +43,21 @@ interface ZoneRow {
 function heartRateZoneCaption(zoneIndex: number): string {
   switch (zoneIndex) {
     case 0:
-      return "Below aerobic threshold";
+      return t("Below aerobic threshold");
     case 1:
-      return "Recovery & warm-up";
+      return t("Recovery & warm-up");
     case 2:
-      return "Aerobic base building";
+      return t("Aerobic base building");
     case 3:
-      return "Steady aerobic effort";
+      return t("Steady aerobic effort");
     case 4:
-      return "Lactate threshold work";
+      return t("Lactate threshold work");
     case 5:
-      return "High aerobic / anaerobic load";
+      return t("High aerobic / anaerobic load");
     case 6:
-      return "Max effort intervals";
+      return t("Max effort intervals");
     default:
-      return "Training intensity zone";
+      return t("Training intensity zone");
   }
 }
 
@@ -77,11 +78,11 @@ function formatHrZoneRange(
   const previous = zonePosition > 0 ? sorted[zonePosition - 1] : undefined;
 
   if (zone.hr !== undefined && previous?.hr !== undefined) {
-    return `${previous.hr + 1}–${zone.hr} bpm`;
+    return t("{{p0}}–{{p1}} bpm", { p0: previous.hr + 1, p1: zone.hr });
   }
 
   if (zone.hr !== undefined) {
-    return `≤ ${zone.hr} bpm`;
+    return t("≤ {{p0}} bpm", { p0: zone.hr });
   }
 
   return "—";
@@ -101,17 +102,18 @@ function formatZoneMetricValue(
       return formatDurationSeconds(value);
     }
 
-    return `${Math.round(value / 60)} min`;
+    return t("{{p0}} min", { p0: Math.round(value / 60) });
   }
 
   return String(Math.round(value));
 }
 
 function formatPercent(value: number): string {
-  return `${value.toFixed(1)}%`;
+  return formatNumber(value / 100, { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
 function ZoneTooltip({ active, payload }: TooltipContentProps) {
+  const { language } = useLanguage();
   if (!active || !payload?.length) {
     return null;
   }
@@ -132,6 +134,7 @@ function ZoneTooltip({ active, payload }: TooltipContentProps) {
 }
 
 export function HrZoneCard({ preview }: HrZoneCardProps) {
+  const { language } = useLanguage();
   const { unitSystem } = useUnitSystem();
   const rows = useMemo((): ZoneRow[] => {
     return preview.zones.map((zone, index) => ({
@@ -144,7 +147,7 @@ export function HrZoneCard({ preview }: HrZoneCardProps) {
       hrRange: formatHrZoneRange(zone.index, preview.lthrZones),
       color: HEART_RATE_ZONE_COLORS[index % HEART_RATE_ZONE_COLORS.length]
     }));
-  }, [preview, unitSystem]);
+  }, [preview, unitSystem, language]);
 
   const chartData = rows.filter((row) => row.percent > 0);
   const topZone = useMemo(() => {
@@ -153,7 +156,7 @@ export function HrZoneCard({ preview }: HrZoneCardProps) {
     }
 
     return [...rows].sort((left, right) => right.percent - left.percent)[0];
-  }, [rows]);
+  }, [rows, language]);
 
   const activeZones = rows.filter((row) => row.percent > 0).length;
 
@@ -161,18 +164,17 @@ export function HrZoneCard({ preview }: HrZoneCardProps) {
     <div className="chat-visual-card chat-zone-card">
       <div className="chat-visual-card-header">
         <div>
-          <h4>Heart rate zones</h4>
+          <h4>{t("Heart rate zones")}</h4>
           <span className="chat-visual-card-subtitle">
-            {METRIC_LABELS[preview.metric]} · last 4 weeks
-          </span>
+            {t(METRIC_LABELS[preview.metric])}  {t("· last 4 weeks")}</span>
         </div>
         {topZone ? (
           <div className="chat-visual-stats">
             <span className="chat-visual-stat">
-              Primary <strong>{topZone.label}</strong>
+              {t("Primary")} <strong>{topZone.label}</strong>
             </span>
             <span className="chat-visual-stat">
-              Active zones <strong>{activeZones}</strong>
+              {t("Active zones")} <strong>{activeZones}</strong>
             </span>
           </div>
         ) : null}
@@ -217,7 +219,7 @@ export function HrZoneCard({ preview }: HrZoneCardProps) {
 
             {topZone ? (
               <div className="chat-zone-hero">
-                <p className="chat-zone-hero-kicker">Primary zone</p>
+                <p className="chat-zone-hero-kicker">{t("Primary zone")}</p>
                 <h3>{topZone.label}</h3>
                 <p className="chat-zone-hero-percent">
                   {formatPercent(topZone.percent)}
@@ -233,11 +235,11 @@ export function HrZoneCard({ preview }: HrZoneCardProps) {
 
           <div className="chat-zone-table">
             <div className="chat-zone-table-head">
-              <span>Zone</span>
-              <span>HR range</span>
+              <span>{t("Zone")}</span>
+              <span>{t("HR range")}</span>
               <span aria-hidden="true" />
               <span>%</span>
-              <span>{METRIC_COLUMN_LABELS[preview.metric]}</span>
+              <span>{t(METRIC_COLUMN_LABELS[preview.metric])}</span>
             </div>
             <div className="chat-zone-list">
               {rows.map((row) => (
@@ -263,7 +265,7 @@ export function HrZoneCard({ preview }: HrZoneCardProps) {
           </div>
         </div>
       ) : (
-        <p className="chat-visual-empty">No zone distribution data available.</p>
+        <p className="chat-visual-empty">{t("No zone distribution data available.")}</p>
       )}
     </div>
   );

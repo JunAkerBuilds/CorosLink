@@ -1,3 +1,4 @@
+import { getLocale, useLanguage, t } from "../i18n/training";
 import { Check, ChevronDown, Search } from "lucide-react";
 import {
   type KeyboardEvent,
@@ -65,6 +66,7 @@ export function ExerciseCombobox({
   hidePreview = false,
   onChange
 }: ExerciseComboboxProps) {
+  useLanguage();
   const id = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const inputShellRef = useRef<HTMLDivElement>(null);
@@ -78,10 +80,10 @@ export function ExerciseCombobox({
 
   const labeledOptions = useMemo<LabeledExerciseOption[]>(() => options
     .map((option) => ({ ...option, label: exerciseLabel(option) }))
-    .sort((left, right) => left.label.localeCompare(right.label)), [options]);
+    .sort((left, right) => left.label.localeCompare(right.label)), [options, getLocale()]);
   const selectedOption = useMemo(
     () => labeledOptions.find((option) => option.id === selectedId),
-    [labeledOptions, selectedId]
+    [labeledOptions, selectedId, getLocale()]
   );
   const hasPreview = !hidePreview
     && Boolean(selectedOption?.media?.some((entry) => entry.videoUrl));
@@ -95,7 +97,7 @@ export function ExerciseCombobox({
     return showAll
       ? labeledOptions
       : labeledOptions.filter((option) => normalizeSearch(option.label).includes(term));
-  }, [labeledOptions, query, selectedId]);
+  }, [labeledOptions, query, selectedId, getLocale()]);
 
   useEffect(() => {
     if (!isOpen) setQuery(value);
@@ -220,7 +222,7 @@ export function ExerciseCombobox({
             ref={inputRef}
             type="search"
             role="combobox"
-            aria-label={label}
+            aria-label={t(label)}
             aria-autocomplete="list"
             aria-controls={listboxId}
             aria-expanded={isOpen}
@@ -243,7 +245,7 @@ export function ExerciseCombobox({
           <button
             className="exercise-combobox-toggle"
             type="button"
-            aria-label={isOpen ? "Close exercise suggestions" : "Show exercise suggestions"}
+            aria-label={isOpen ? t("Close exercise suggestions") : t("Show exercise suggestions")}
             aria-expanded={isOpen}
             disabled={disabled}
             onClick={() => {
@@ -266,11 +268,11 @@ export function ExerciseCombobox({
             className="exercise-combobox-menu is-portal"
             style={menuPosition}
           >
-            <div id={listboxId} role="listbox" aria-label={`${label} suggestions`}>
+            <div id={listboxId} role="listbox" aria-label={t("{{value1}} suggestions", { value1: String(label) })}>
               {loading ? (
-                <p className="exercise-combobox-state" role="status">Loading COROS exercises...</p>
+                <p className="exercise-combobox-state" role="status">{t("Loading COROS exercises...")}</p>
               ) : filteredOptions.length === 0 ? (
-                <p className="exercise-combobox-state">No matching exercises.</p>
+                <p className="exercise-combobox-state">{t("No matching exercises.")}</p>
               ) : filteredOptions.map((option, index) => {
                 const isSelected = option.id === selectedId;
                 const isActive = index === highlightedIndex;
@@ -296,7 +298,7 @@ export function ExerciseCombobox({
                           onError={(event) => { event.currentTarget.hidden = true; }}
                         />
                       ) : null}
-                      <span>{option.label}</span>
+                      <span>{t(option.label)}</span>
                     </span>
                     {isSelected ? <Check size={15} aria-hidden="true" /> : null}
                   </button>

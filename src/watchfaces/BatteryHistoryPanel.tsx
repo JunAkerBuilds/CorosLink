@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   BatteryCharging,
@@ -22,6 +23,7 @@ export function BatteryHistoryPanel({
   authenticated = true,
   onFirmwareTypeDetected
 }: BatteryHistoryPanelProps) {
+  useLanguage();
   const [devices, setDevices] = useState<CorosPairedDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [report, setReport] = useState<CorosBatteryReport | null>(null);
@@ -94,8 +96,8 @@ export function BatteryHistoryPanel({
             <BatteryCharging size={20} />
           </span>
           <div>
-            <h2>Battery history</h2>
-            <p>View the watch&apos;s daily battery-usage breakdown.</p>
+            <h2>{t("Battery history")}</h2>
+            <p>{t("View the watch's daily battery-usage breakdown.")}</p>
           </div>
         </div>
         <button
@@ -105,7 +107,7 @@ export function BatteryHistoryPanel({
           aria-controls="watchfaces-battery-content"
           onClick={() => setExpanded((current) => !current)}
         >
-          {expanded ? "Hide battery history" : "View battery history"}
+          {expanded ? t("Hide battery history") : t("View battery history")}
           <ChevronDown className={expanded ? "is-open" : ""} size={16} aria-hidden="true" />
         </button>
       </div>
@@ -115,13 +117,11 @@ export function BatteryHistoryPanel({
           {!authenticated ? (
             <div className="watchfaces-battery-local-state">
               <KeyRound size={18} aria-hidden="true" />
-              <p>Connect your COROS account from the device menu to view battery data.</p>
+              <p>{t("Connect your COROS account from the device menu to view battery data.")}</p>
             </div>
           ) : (
             <form className="watchfaces-battery-form" onSubmit={handleSubmit}>
-              <label className="field">
-                Paired watch
-                <select
+              <label className="field">{t("Paired watch")}<select
                   value={selectedDeviceId}
                   disabled={disabled || loadingDevices || devices.length === 0}
                   onChange={(event) => {
@@ -129,7 +129,7 @@ export function BatteryHistoryPanel({
                     setReport(null);
                   }}
                 >
-                  {devices.length === 0 ? <option value="">No paired watch found</option> : null}
+                  {devices.length === 0 ? <option value="">{t("No paired watch found")}</option> : null}
                   {devices.map((device) => (
                     <option key={device.deviceId} value={device.deviceId}>
                       {device.firmwareType} · {shortUuid(device.uuid)}
@@ -143,31 +143,27 @@ export function BatteryHistoryPanel({
                 disabled={disabled || loadingDevices}
                 onClick={() => void loadDevices()}
               >
-                {loadingDevices ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
-                Refresh watches
-              </button>
+                {loadingDevices ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}{t("Refresh watches")}</button>
               <button
                 className="primary-button"
                 type="submit"
                 disabled={disabled || loading || !selectedDevice}
               >
-                {loading ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
-                Load battery history
-              </button>
+                {loading ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}{t("Load battery history")}</button>
             </form>
           )}
 
           {authenticated && deviceError ? <p className="watchfaces-battery-error">{deviceError}</p> : null}
-          {authenticated && error ? <p className="watchfaces-battery-error">{error}</p> : null}
+          {authenticated && error ? <p className="watchfaces-battery-error">{t(error)}</p> : null}
 
           {authenticated && report ? (
             <div className="watchfaces-battery-results">
               <div className="watchfaces-battery-summary">
-                <strong>{days.length} daily record{days.length === 1 ? "" : "s"}</strong>
-                {report.updatedAt ? <span>Reported {new Date(report.updatedAt).toLocaleString()}</span> : null}
+                <strong>{days.length}{" "}{t("daily record")}{days.length === 1 ? "" : "s"}</strong>
+                {report.updatedAt ? <span>{t("Reported")}{" "}{new Date(report.updatedAt).toLocaleString(getLocale())}</span> : null}
               </div>
               {days.length === 0 ? (
-                <p className="watchfaces-empty-themes">COROS returned no battery-history records for this watch.</p>
+                <p className="watchfaces-empty-themes">{t("COROS returned no battery-history records for this watch.")}</p>
               ) : (
                 <div className="watchfaces-battery-days">
                   {days.map((day, index) => (
@@ -175,8 +171,8 @@ export function BatteryHistoryPanel({
                       <summary>
                         <span>{formatDay(day.date)}</span>
                         <span className="watchfaces-battery-day-metrics">
-                          {day.percentAtQueryTime !== undefined ? <em>Query {formatPercent(day.percentAtQueryTime)}</em> : null}
-                          {day.totalPercent !== undefined ? <em>Total {formatPercent(day.totalPercent)}</em> : null}
+                          {day.percentAtQueryTime !== undefined ? <em>{t("Query")}{" "}{formatPercent(day.percentAtQueryTime)}</em> : null}
+                          {day.totalPercent !== undefined ? <em>{t("Total")}{" "}{formatPercent(day.totalPercent)}</em> : null}
                         </span>
                         <ChevronDown size={16} aria-hidden="true" />
                       </summary>
@@ -216,7 +212,7 @@ function formatDay(value: string): string {
   const date = new Date(`${value}T12:00:00`);
   return Number.isNaN(date.valueOf())
     ? value
-    : date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+    : date.toLocaleDateString(getLocale(), { weekday: "short", month: "short", day: "numeric" });
 }
 
 function formatPercent(value: number): string {
@@ -231,5 +227,5 @@ function shortUuid(value: string): string {
 }
 
 function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Battery-history request failed.";
+  return error instanceof Error ? error.message : t("Battery-history request failed.");
 }

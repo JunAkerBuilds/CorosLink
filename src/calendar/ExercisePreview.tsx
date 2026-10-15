@@ -1,3 +1,4 @@
+import { getLocale, useLanguage, t } from "../i18n/training";
 import { AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import { useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
@@ -29,19 +30,20 @@ export function ExercisePreview({
   showTargets = false,
   className = ""
 }: ExercisePreviewProps) {
+  useLanguage();
   const reducedMotion = useReducedMotion();
   const [angleIndex, setAngleIndex] = useState(0);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
   const angles = useMemo(
     () => option?.media?.filter((entry) => entry.videoUrl) ?? [],
-    [option]
+    [option, getLocale()]
   );
   const angle = angles[angleIndex] ?? angles[0];
 
   const targets = useMemo(
     () => (showTargets ? resolveExerciseTargets(name) : undefined),
-    [name, showTargets]
+    [name, showTargets, getLocale()]
   );
   const muscles = useMemo(() => {
     const activations = targets?.activations ?? [];
@@ -53,7 +55,7 @@ export function ExercisePreview({
       anatomy: MUSCLE_BY_ID[entry.muscle].anatomy,
       isPrime: entry.share >= top - PRIMARY_SHARE_TOLERANCE
     }));
-  }, [targets]);
+  }, [targets, getLocale()]);
 
   useEffect(() => {
     setAngleIndex(0);
@@ -69,20 +71,20 @@ export function ExercisePreview({
   return (
     <section
       className={`exercise-preview ${className}`.trim()}
-      aria-label={`${name || "Exercise"} demonstration`}
+      aria-label={t("{{value1}} demonstration", { value1: String(name || t("Exercise")) })}
     >
       <div className="exercise-preview-stage">
         {status === "loading" ? (
           <div className="exercise-preview-status" role="status">
             <span className="exercise-preview-spinner" aria-hidden="true" />
-            <strong>Loading demonstration</strong>
+            <strong>{t("Loading demonstration")}</strong>
           </div>
         ) : null}
         {status === "error" ? (
           <div className="exercise-preview-status is-error" role="alert">
             <AlertCircle size={20} aria-hidden="true" />
-            <strong>Demonstration unavailable</strong>
-            {angles.length > 1 ? <span>Try another angle.</span> : null}
+            <strong>{t("Demonstration unavailable")}</strong>
+            {angles.length > 1 ? <span>{t("Try another angle.")}</span> : null}
           </div>
         ) : null}
         <video
@@ -98,7 +100,7 @@ export function ExercisePreview({
           preload="metadata"
           onLoadedData={() => setStatus("ready")}
           onError={() => setStatus("error")}
-          aria-label={`${name || "Exercise"} demonstration, angle ${angleIndex + 1} of ${angles.length}`}
+          aria-label={t("{{value1}} demonstration, angle {{value2}} of {{value3}}", { value1: String(name || t("Exercise")), value2: String(angleIndex + 1), value3: String(angles.length) })}
         />
       </div>
 
@@ -106,15 +108,15 @@ export function ExercisePreview({
         <div className="exercise-preview-angles">
           <button
             type="button"
-            aria-label="Show previous angle"
+            aria-label={t("Show previous angle")}
             onClick={() => setAngleIndex((current) => (current - 1 + angles.length) % angles.length)}
           >
             <ChevronLeft size={15} aria-hidden="true" />
           </button>
-          <span aria-live="polite">Angle {angleIndex + 1} of {angles.length}</span>
+          <span aria-live="polite">{t("Angle")} {angleIndex + 1} {t("of")} {angles.length}</span>
           <button
             type="button"
-            aria-label="Show next angle"
+            aria-label={t("Show next angle")}
             onClick={() => setAngleIndex((current) => (current + 1) % angles.length)}
           >
             <ChevronRight size={15} aria-hidden="true" />
@@ -123,16 +125,16 @@ export function ExercisePreview({
       ) : null}
 
       {showTargets && targets?.mobility ? (
-        <p className="exercise-preview-note">Mobility work. It carries no training load.</p>
+        <p className="exercise-preview-note">{t("Mobility work. It carries no training load.")}</p>
       ) : null}
 
       {showTargets && muscles.length > 0 ? (
         <div className="exercise-preview-targets">
-          <h5>Trains</h5>
+          <h5>{t("Trains")}</h5>
           <ul>
             {muscles.map((muscle) => (
-              <li key={muscle.id} className={muscle.isPrime ? "is-prime" : ""} title={muscle.anatomy}>
-                {muscle.label}
+              <li key={muscle.id} className={muscle.isPrime ? "is-prime" : ""} title={t(muscle.anatomy)}>
+                {t(muscle.label)}
               </li>
             ))}
           </ul>

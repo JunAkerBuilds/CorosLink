@@ -1,4 +1,5 @@
 import { getCalendarWorkoutEvent, updateCalendarWorkoutEvent, syncEditedCalendarWorkout } from "./calendarWorkoutEventService";
+import { initializeNativeLanguage, localizeDialogOptions, setNativeLanguage } from "./localization";
 import { listCalendarWorkoutEntries } from "./calendarWorkoutEventStorage";
 import type { CalendarEventTiming, CalendarWorkoutEventRef } from "./calendarSyncTypes";
 import { registerWorkoutAutomation } from "./workoutAutomation";
@@ -606,8 +607,8 @@ async function exportTrainingHubActivityFileToDisk(
   };
   const result =
     mainWindow && !mainWindow.isDestroyed()
-      ? await dialog.showSaveDialog(mainWindow, saveOptions)
-      : await dialog.showSaveDialog(saveOptions);
+      ? await dialog.showSaveDialog(mainWindow, localizeDialogOptions(saveOptions))
+      : await dialog.showSaveDialog(localizeDialogOptions(saveOptions));
 
   const metadata = {
     activityId: activity.activityId,
@@ -868,6 +869,7 @@ app.whenReady().then(() => {
     }
   });
   initializeDatabase(app.getPath("userData"));
+  initializeNativeLanguage();
   hydratePlanDraftStoreFromDatabase();
   prunePlanDraftStore();
   pruneDeleteRequestStore();
@@ -952,6 +954,10 @@ app.on("before-quit", event => {
 });
 
 function registerIpcHandlers(): void {
+  ipcMain.handle("app:setLanguage", (event, language: unknown) => {
+    mainWindowSender(event, "language settings");
+    setNativeLanguage(language);
+  });
   ipcMain.handle("corosBle:status", () => corosNativeBle.status());
   ipcMain.handle("corosBle:connect", (_event, input?: import("./corosNativeBleTypes").CorosNativeBleConnectOptions) => corosNativeBle.connect(input?.pair === true, input));
   ipcMain.handle("corosBle:scan", () => corosNativeBle.scan());
@@ -977,8 +983,8 @@ function registerIpcHandlers(): void {
   ipcMain.handle("corosBle:wifiMusicSend", event => {
     const owner = audioOwner(event);
     return corosNativeBle.sendMusicOverWifi(async () => {
-      const result = await dialog.showOpenDialog(owner, { title: "Send MP3s to watch podcasts over Wi-Fi", properties: ["openFile", "multiSelections"],
-        filters: [{ name: "MP3 audio", extensions: ["mp3"] }] });
+      const result = await dialog.showOpenDialog(owner, localizeDialogOptions({ title: "Send MP3s to watch podcasts over Wi-Fi", properties: ["openFile", "multiSelections"],
+        filters: [{ name: "MP3 audio", extensions: ["mp3"] }] }));
       return result.canceled ? null : result.filePaths;
     });
   });
@@ -989,8 +995,8 @@ function registerIpcHandlers(): void {
   ipcMain.handle("corosBle:wifiMusicBackup", event => {
     const owner = audioOwner(event);
     return corosNativeBle.importWifiMusicBackup(async () => {
-      const result = await dialog.showOpenDialog(owner, { title: "Choose a current watch download-settings backup", properties: ["openFile"],
-        filters: [{ name: "CorosLink encrypted Wi-Fi settings", extensions: ["enc"] }] });
+      const result = await dialog.showOpenDialog(owner, localizeDialogOptions({ title: "Choose a current watch download-settings backup", properties: ["openFile"],
+        filters: [{ name: "CorosLink encrypted Wi-Fi settings", extensions: ["enc"] }] }));
       return result.canceled ? null : result.filePaths[0] ?? null;
     });
   });
@@ -1001,12 +1007,12 @@ function registerIpcHandlers(): void {
     return corosNativeBle.deleteMusic(target, async track => {
       const owner = BrowserWindow.fromWebContents(event.sender);
       if (!owner || owner.isDestroyed()) return false;
-      const result = await dialog.showMessageBox(owner, {
+      const result = await dialog.showMessageBox(owner, localizeDialogOptions({
         type: "warning", buttons: ["Cancel", "Delete from watch"], defaultId: 0, cancelId: 0,
         message: `Delete “${track.name}” from the watch?`,
         detail: "This removes the MP3 from your watch over Bluetooth. It cannot be undone. Your local library is kept.",
         noLink: true,
-      });
+      }));
       return result.response === 1;
     });
   });
@@ -1018,12 +1024,12 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle("watchfaces:forgetWatchKey", async event => {
     const owner = mainWindowSender(event, "watch key removal");
-    const result = await dialog.showMessageBox(owner, {
+    const result = await dialog.showMessageBox(owner, localizeDialogOptions({
       type: "warning", buttons: ["Cancel", "Remove watch key"], defaultId: 0, cancelId: 0,
       message: "Remove the COROS watch key from this computer?",
       detail: "CorosLink won't authenticate with your watch again until you sign in to COROS. A watch that's connected now stays connected until you disconnect it. C-LINK keeps its own copy on your iPhone.",
       noLink: true,
-    });
+    }));
     return result.response === 1 ? forgetCorosWatchKey() : getCorosWatchfaceStatus();
   });
   ipcMain.handle("corosBle:sendNotification", (_event, input: import("./corosBleNotificationProtocol").CorosNotificationInput) => corosNativeBle.sendNotification(input));
@@ -1031,7 +1037,7 @@ function registerIpcHandlers(): void {
     const options: OpenDialogOptions = { title: "Choose a compiled COROS watch face", properties: ["openFile"],
       filters: [{ name: "Compiled watch face", extensions: ["bin"] }] };
     const result = mainWindow && !mainWindow.isDestroyed()
-      ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
+      ? await dialog.showOpenDialog(mainWindow, localizeDialogOptions(options)) : await dialog.showOpenDialog(localizeDialogOptions(options));
     return result.canceled || !result.filePaths[0] ? null : corosNativeBle.prepareWatchface(result.filePaths[0]);
   });
   ipcMain.handle("corosBle:watchfaceStatus", () => corosNativeBle.watchfaceSyncStatus());
@@ -1042,7 +1048,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle("corosBle:compileWatchface", async () => {
     const options: OpenDialogOptions = { title: "Compile a custom watch face to BIN", properties: ["openFile"],
       filters: [{ name: "Final watch face DAT/ZIP", extensions: ["dat", "zip"] }] };
-    const result = mainWindow && !mainWindow.isDestroyed() ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
+    const result = mainWindow && !mainWindow.isDestroyed() ? await dialog.showOpenDialog(mainWindow, localizeDialogOptions(options)) : await dialog.showOpenDialog(localizeDialogOptions(options));
     if (result.canceled || !result.filePaths[0]) return null;
     const compiler = getCorosWatchfaceCompiler();
     // For the connected watch; with none, the archive's first supported layout (PACE Pro first).
@@ -1070,7 +1076,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle("corosBle:saveCompiledBin", async (_event, previewId: string) => {
     const filename = getCorosWatchfaceCompiler().fileForPreview(previewId);
     const options = { title: "Save compiled watch face BIN", defaultPath: path.basename(filename), filters: [{ name: "Compiled watch face BIN", extensions: ["bin"] }] };
-    const result = mainWindow && !mainWindow.isDestroyed() ? await dialog.showSaveDialog(mainWindow, options) : await dialog.showSaveDialog(options);
+    const result = mainWindow && !mainWindow.isDestroyed() ? await dialog.showSaveDialog(mainWindow, localizeDialogOptions(options)) : await dialog.showSaveDialog(localizeDialogOptions(options));
     if (result.canceled || !result.filePath) return { saved: false };
     const destination = result.filePath.toLowerCase().endsWith(".bin") ? result.filePath : result.filePath + ".bin";
     await fs.promises.copyFile(filename, destination);
@@ -1236,8 +1242,8 @@ function registerIpcHandlers(): void {
     };
     const result =
       mainWindow && !mainWindow.isDestroyed()
-        ? await dialog.showOpenDialog(mainWindow, options)
-        : await dialog.showOpenDialog(options);
+        ? await dialog.showOpenDialog(mainWindow, localizeDialogOptions(options))
+        : await dialog.showOpenDialog(localizeDialogOptions(options));
     const archivePath = result.filePaths[0];
     return result.canceled || !archivePath
       ? null
@@ -1257,8 +1263,8 @@ function registerIpcHandlers(): void {
     };
     const result =
       mainWindow && !mainWindow.isDestroyed()
-        ? await dialog.showOpenDialog(mainWindow, options)
-        : await dialog.showOpenDialog(options);
+        ? await dialog.showOpenDialog(mainWindow, localizeDialogOptions(options))
+        : await dialog.showOpenDialog(localizeDialogOptions(options));
     const artworkPath = result.filePaths[0];
     return result.canceled || !artworkPath
       ? null
@@ -1272,8 +1278,8 @@ function registerIpcHandlers(): void {
     };
     const result =
       mainWindow && !mainWindow.isDestroyed()
-        ? await dialog.showOpenDialog(mainWindow, options)
-        : await dialog.showOpenDialog(options);
+        ? await dialog.showOpenDialog(mainWindow, localizeDialogOptions(options))
+        : await dialog.showOpenDialog(localizeDialogOptions(options));
     const folderPath = result.filePaths[0];
     return result.canceled || !folderPath
       ? null
@@ -1300,8 +1306,8 @@ function registerIpcHandlers(): void {
       };
       const result =
         mainWindow && !mainWindow.isDestroyed()
-          ? await dialog.showSaveDialog(mainWindow, saveOptions)
-          : await dialog.showSaveDialog(saveOptions);
+          ? await dialog.showSaveDialog(mainWindow, localizeDialogOptions(saveOptions))
+          : await dialog.showSaveDialog(localizeDialogOptions(saveOptions));
       if (result.canceled || !result.filePath) {
         return { saved: false };
       }
@@ -1327,8 +1333,8 @@ function registerIpcHandlers(): void {
       };
       const result =
         mainWindow && !mainWindow.isDestroyed()
-          ? await dialog.showSaveDialog(mainWindow, saveOptions)
-          : await dialog.showSaveDialog(saveOptions);
+          ? await dialog.showSaveDialog(mainWindow, localizeDialogOptions(saveOptions))
+          : await dialog.showSaveDialog(localizeDialogOptions(saveOptions));
       if (result.canceled || !result.filePath) return { saved: false };
       const destinationPath = result.filePath.toLowerCase().endsWith(".zip")
         ? result.filePath
@@ -1347,8 +1353,8 @@ function registerIpcHandlers(): void {
       properties: ["openDirectory", "createDirectory"]
     };
     const result = mainWindow && !mainWindow.isDestroyed()
-      ? await dialog.showOpenDialog(mainWindow, options)
-      : await dialog.showOpenDialog(options);
+      ? await dialog.showOpenDialog(mainWindow, localizeDialogOptions(options))
+      : await dialog.showOpenDialog(localizeDialogOptions(options));
     const directory = result.canceled ? undefined : result.filePaths[0];
     if (!directory) return null;
     const folderId = `folder-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -2059,8 +2065,8 @@ function registerIpcHandlers(): void {
     };
     const result =
       mainWindow && !mainWindow.isDestroyed()
-        ? await dialog.showOpenDialog(mainWindow, options)
-        : await dialog.showOpenDialog(options);
+        ? await dialog.showOpenDialog(mainWindow, localizeDialogOptions(options))
+        : await dialog.showOpenDialog(localizeDialogOptions(options));
     return result.canceled ? null : result.filePaths[0] ?? null;
   });
 
@@ -2505,8 +2511,8 @@ function registerAudiobookIpcHandlers(): void {
     };
     const result =
       mainWindow && !mainWindow.isDestroyed()
-        ? await dialog.showOpenDialog(mainWindow, options)
-        : await dialog.showOpenDialog(options);
+        ? await dialog.showOpenDialog(mainWindow, localizeDialogOptions(options))
+        : await dialog.showOpenDialog(localizeDialogOptions(options));
     if (result.canceled || result.filePaths.length === 0) {
       return null;
     }

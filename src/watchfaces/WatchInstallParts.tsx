@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { useId } from "react";
 import { Check, Loader2, TriangleAlert, X } from "lucide-react";
 import type { CorosDirectWatchfaceStatus } from "../../electron/corosBleWatchfaceTypes";
@@ -5,13 +6,14 @@ import type { WatchfaceInstaller, WatchInstallStep } from "./watchLink";
 
 /** What the compiler flagged: images it could not load (blank on the watch) and positions COROS misreads. */
 export function CompileWarnings({ warnings }: { warnings?: string[] }) {
+  useLanguage();
   if (!warnings?.length) return null;
   const more = warnings.length - 3;
   return <div className="watch-compile-warnings" role="status">
-    <p className="watch-compile-warnings-title"><TriangleAlert size={14} aria-hidden="true" />{warnings.length === 1 ? "1 element won't show as designed" : `${warnings.length} elements won't show as designed`}</p>
+    <p className="watch-compile-warnings-title"><TriangleAlert size={14} aria-hidden="true" />{warnings.length === 1 ? t("1 element won't show as designed") : t("{{value1}} elements won't show as designed", { value1: warnings.length })}</p>
     <ul>
-      {warnings.slice(0, 3).map(warning => <li key={warning}>{warning}</li>)}
-      {more > 0 ? <li className="is-more">And {more} more.</li> : null}
+      {warnings.slice(0, 3).map(warning => <li key={warning}>{t(warning)}</li>)}
+      {more > 0 ? <li className="is-more">{t("And")}{" "}{more}{" "}{t("more.")}</li> : null}
     </ul>
   </div>;
 }
@@ -20,20 +22,21 @@ export function CompileWarnings({ warnings }: { warnings?: string[] }) {
 export function WatchSlotPicker({ installer, disabled, compact = false }: {
   installer: WatchfaceInstaller; disabled?: boolean; compact?: boolean;
 }) {
+  useLanguage();
   const name = useId();
   const { inventory, selectedSlot } = installer;
   if (!inventory) return null;
   return <fieldset className={`watch-slots${compact ? " is-compact" : ""}`} disabled={disabled}>
-    <legend className="sr-only">Destination watch face slot</legend>
+    <legend className="sr-only">{t("Destination watch face slot")}</legend>
     {inventory.slots.map(item => {
       const empty = item.faceId === null;
       return <label key={item.slot}
         className={`watch-slot${empty ? " is-empty" : ""}${item.slot === selectedSlot ? " is-selected" : ""}`}
-        title={empty ? `Slot ${item.slot + 1} is empty` : `Slot ${item.slot + 1} holds face ID ${item.faceId}`}>
+        title={empty ? t("Slot {{value1}} is empty", { value1: item.slot + 1 }) : t("Slot {{value1}} holds face ID {{value2}}", { value1: item.slot + 1, value2: item.faceId })}>
         <input type="radio" name={name} value={item.slot} checked={item.slot === selectedSlot}
           onChange={() => installer.select(item.slot)} />
         <span className="watch-slot-number">{item.slot + 1}</span>
-        <span className="watch-slot-state">{empty ? "Empty" : compact ? "In use" : <><span className="sr-only">Face ID </span>{item.faceId}</>}</span>
+        <span className="watch-slot-state">{empty ? t("Empty") : compact ? t("In use") : <><span className="sr-only">{t("Face ID")}{" "}</span>{item.faceId}</>}</span>
       </label>;
     })}
   </fieldset>;
@@ -47,6 +50,7 @@ export function WatchInstallProgress({ status, compile }: {
   /** Present when this install compiles first. */
   compile?: { state: StepState; detail?: string };
 }) {
+  useLanguage();
   const percent = status.totalBytes ? Math.min(100, Math.round(status.sentBytes / status.totalBytes * 100)) : 0;
   const sending = status.phase === "preparing" || status.phase === "transferring";
   const sent = status.phase === "verifying" || status.phase === "complete";
@@ -65,15 +69,15 @@ export function WatchInstallProgress({ status, compile }: {
           {step.state === "done" ? <Check size={12} strokeWidth={3} /> : step.state === "active" ? <Loader2 className="spin" size={12} />
             : step.state === "failed" ? <X size={12} strokeWidth={3} /> : null}
         </span>
-        <span>{step.label}</span>
-        {step.detail ? <small>{step.detail}</small> : null}
+        <span>{t(step.label)}</span>
+        {step.detail ? <small>{t(step.detail)}</small> : null}
       </li>)}
     </ol>
     <div className="watch-install-bar" aria-hidden="true">
       <span style={{ width: `${sent ? 100 : sending ? percent : 0}%` }} />
     </div>
-    <span className="sr-only">{status.phase === "verifying" ? "Verifying on watch…"
-      : sending ? `Sending… ${percent}%` : status.phase === "complete" ? "Installed." : ""}</span>
+    <span className="sr-only">{status.phase === "verifying" ? t("Verifying on watch…")
+      : sending ? t("Sending… {{percent}}%", { percent: percent }) : status.phase === "complete" ? t("Installed.") : ""}</span>
   </div>;
 }
 
@@ -81,8 +85,8 @@ export function WatchInstallProgress({ status, compile }: {
 export function watchInstallResult(status: CorosDirectWatchfaceStatus): string | null {
   const slot = (status.watchSlot ?? 0) + 1;
   if (status.phase === "complete") return status.verification === "transfer-acknowledged"
-    ? `Sent to slot ${slot}. Its face ID is unchanged, so check the new look on your watch.`
-    : `Installed in slot ${slot}. The watch confirmed the new face.`;
-  if (status.phase === "cancelled") return "Install cancelled.";
+    ? t("Sent to slot {{slot}}. Its face ID is unchanged, so check the new look on your watch.", { slot: slot })
+    : t("Installed in slot {{slot}}. The watch confirmed the new face.", { slot: slot });
+  if (status.phase === "cancelled") return t("Install cancelled.");
   return null;
 }

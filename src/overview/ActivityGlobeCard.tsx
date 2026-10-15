@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/tools";
 import {
   CalendarDays,
   ChartNoAxesColumnIncreasing,
@@ -152,9 +153,9 @@ function activityTimestampMs(value?: number): number {
 function formatVisitDate(value?: number): string {
   const timestamp = activityTimestampMs(value);
   if (!timestamp) {
-    return "Date unavailable";
+    return t("Date unavailable");
   }
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(getLocale(), {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -166,7 +167,7 @@ function coordinateLabel(point: GlobePoint): PlaceLabel {
   const lon = `${Math.abs(point.lon).toFixed(1)}° ${point.lon >= 0 ? "E" : "W"}`;
   return {
     city: `${lat}, ${lon}`,
-    country: "Location",
+    country: t("Location"),
     full: `${lat}, ${lon}`,
   };
 }
@@ -181,7 +182,7 @@ function parsePlaceLabel(label: string, point: GlobePoint): PlaceLabel {
   }
   return {
     city: parts[0]!,
-    country: parts.length > 1 ? parts[parts.length - 1]! : "Location",
+    country: parts.length > 1 ? parts[parts.length - 1]! : t("Location"),
     full: label,
   };
 }
@@ -205,7 +206,7 @@ function loadPlaceLabel(summary: LocationSummary): Promise<PlaceLabel> {
       result.city
         ? {
             city: result.city,
-            country: result.country ?? "Location",
+            country: result.country ?? t("Location"),
             full: result.label,
           }
         : parsePlaceLabel(result.label, summary.bucket),
@@ -225,7 +226,7 @@ function formatLocationDuration(seconds: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   if (hours === 0) {
-    return `${minutes} min`;
+    return t("{{p0}} min", { p0: minutes });
   }
   return minutes > 0 ? `${hours} h ${minutes} m` : `${hours} h`;
 }
@@ -323,7 +324,7 @@ function extractProfile(
     .filter((value) => value > 0);
   if (heartRate.length >= 8) {
     return {
-      label: "Heart rate",
+      label: t("Heart rate"),
       unit: "bpm",
       values: downsampleValues(heartRate, 72),
     };
@@ -334,7 +335,7 @@ function extractProfile(
     .filter(isFiniteNumber);
   if (elevation.length >= 8) {
     return {
-      label: "Elevation",
+      label: t("Elevation"),
       unit: "m",
       values: downsampleValues(elevation, 72),
     };
@@ -349,6 +350,7 @@ export function ActivityGlobeCard({
   detail,
   onSelectActivity,
 }: ActivityGlobeCardProps) {
+  const { language } = useLanguage();
   const { unitSystem } = useUnitSystem();
   const globeRendererRef = useRef<ActivityGlobeRendererHandle>(null);
   const streetEnterTimerRef = useRef<number | null>(null);
@@ -393,7 +395,7 @@ export function ActivityGlobeCard({
       }
       return timestamp >= customStartMs && timestamp <= customEndMs;
     });
-  }, [activities, period, customStart, customEnd]);
+  }, [activities, period, customStart, customEnd, language]);
 
   const activitiesRef = useRef(filteredActivities);
   activitiesRef.current = filteredActivities;
@@ -403,7 +405,7 @@ export function ActivityGlobeCard({
       filteredActivities
         .map((activity) => activity.activityId)
         .join("|"),
-    [filteredActivities],
+    [filteredActivities, language],
   );
 
   const [visits, setVisits] = useState<ActivityVisitPoint[]>(() =>
@@ -421,7 +423,7 @@ export function ActivityGlobeCard({
 
   const routePoints = useMemo(() => {
     return samplePoints(extractTrackPoints(detail));
-  }, [detail]);
+  }, [detail, language]);
 
   // Prefer cached visit routes + latest featured track for the street map.
   const streetRoutes = useMemo(() => {
@@ -433,16 +435,16 @@ export function ActivityGlobeCard({
       });
     }
     return merged;
-  }, [routes, detail?.activityId, routePoints]);
+  }, [routes, detail?.activityId, routePoints, language]);
 
   const heatBuckets = useMemo(
     () => bucketVisitsGeographically(visits),
-    [visits],
+    [visits, language],
   );
 
   const overall = useMemo(
     () => aggregateActivityStats(filteredActivities),
-    [filteredActivities],
+    [filteredActivities, language],
   );
 
   const locationSummaries = useMemo<LocationSummary[]>(() => {
@@ -516,18 +518,18 @@ export function ActivityGlobeCard({
           activityTimestampMs(right.lastVisited) -
           activityTimestampMs(left.lastVisited),
       );
-  }, [filteredActivities, heatBuckets, routes, visits]);
+  }, [filteredActivities, heatBuckets, routes, visits, language]);
 
   const selectedLocation = useMemo(
     () =>
       locationSummaries.find(
         (summary) => summary.key === selectedLocationKey,
       ) ?? null,
-    [locationSummaries, selectedLocationKey],
+    [locationSummaries, selectedLocationKey, language],
   );
   const globeLocations = useMemo(
     () => locationSummaries.map((summary) => summary.bucket),
-    [locationSummaries],
+    [locationSummaries, language],
   );
 
   useEffect(() => {
@@ -804,65 +806,69 @@ export function ActivityGlobeCard({
     : null;
   const primaryStats = [
     {
-      label: "Total distance",
+      label: t("Total distance"),
       icon: Route,
       tone: "distance",
       value: mapDistance.value,
       unit: mapDistance.unit,
     },
     {
-      label: "Training time",
+      label: t("Training time"),
       icon: Clock3,
       tone: "time",
       value: mapDuration.value,
       unit: mapDuration.unit,
     },
     {
-      label: "Activities",
+      label: t("Activities"),
       icon: ChartNoAxesColumnIncreasing,
       tone: "activities",
-      value: overall.count.toLocaleString(),
+      value: overall.count.toLocaleString(getLocale()),
       unit: "",
     },
     {
-      label: "Places visited",
+      label: t("Places visited"),
       icon: MapPin,
       tone: "places",
-      value: mapPlaceCount.toLocaleString(),
+      value: mapPlaceCount.toLocaleString(getLocale()),
       unit: "",
     },
   ];
   const secondaryStats = [
     routes.length > 0
       ? {
-          label: "GPS routes",
-          value: routes.length.toLocaleString(),
+          id: "routes",
+          label: t("GPS routes"),
+          value: routes.length.toLocaleString(getLocale()),
           unit: "",
           icon: Route,
         }
       : null,
     overall.totalElevationMeters > 0
       ? {
-          label: "Elevation gained",
+          id: "elevation",
+          label: t("Elevation gained"),
           value: Math.round(
             metersToElevation(overall.totalElevationMeters, unitSystem),
-          ).toLocaleString(),
+          ).toLocaleString(getLocale()),
           unit: elevationUnit(unitSystem),
           icon: Mountain,
         }
       : null,
     overall.totalTrainingLoad > 0
       ? {
-          label: "Training load",
-          value: Math.round(overall.totalTrainingLoad).toLocaleString(),
+          id: "load",
+          label: t("Training load"),
+          value: Math.round(overall.totalTrainingLoad).toLocaleString(getLocale()),
           unit: "TL",
           icon: Gauge,
         }
       : null,
     overall.totalCalories > 0
       ? {
-          label: "Calories",
-          value: Math.round(overall.totalCalories).toLocaleString(),
+          id: "calories",
+          label: t("Calories"),
+          value: Math.round(overall.totalCalories).toLocaleString(getLocale()),
           unit: "kcal",
           icon: Flame,
         }
@@ -871,6 +877,7 @@ export function ActivityGlobeCard({
     (
       stat,
     ): stat is {
+      id: string;
       label: string;
       value: string;
       unit: string;
@@ -883,22 +890,22 @@ export function ActivityGlobeCard({
       <div className="training-map-main">
         <div className="training-map-information">
           <header className="training-map-header">
-            <p className="training-map-eyebrow"><Compass size={17} aria-hidden="true" />Training map</p>
-            <h2 id="training-map-title">Where you’ve been</h2>
-            <p>Explore every place your training has taken you.</p>
+            <p className="training-map-eyebrow"><Compass size={17} aria-hidden="true" />{t("Training map")}</p>
+            <h2 id="training-map-title">{t("Where you’ve been")}</h2>
+            <p>{t("Explore every place your training has taken you.")}</p>
           </header>
 
           <div className="training-map-period-wrap">
             <div
               className="training-map-periods"
               role="group"
-              aria-label="Training period"
+              aria-label={t("Training period")}
             >
               {([
-                ["all", "All time"],
-                ["year", "This year"],
-                ["90-days", "Last 90 days"],
-                ["custom", "Custom"],
+                ["all", t("All time")],
+                ["year", t("This year")],
+                ["90-days", t("Last 90 days")],
+                ["custom", t("Custom")],
               ] as const).map(([value, label]) => (
                 <button
                   key={value}
@@ -922,7 +929,7 @@ export function ActivityGlobeCard({
             {period === "custom" ? (
               <div className="training-map-date-range">
                 <label>
-                  <span>From</span>
+                  <span>{t("From")}</span>
                   <input
                     type="date"
                     value={customStart}
@@ -936,7 +943,7 @@ export function ActivityGlobeCard({
                   />
                 </label>
                 <label>
-                  <span>To</span>
+                  <span>{t("To")}</span>
                   <input
                     type="date"
                     value={customEnd}
@@ -953,13 +960,13 @@ export function ActivityGlobeCard({
             ) : null}
           </div>
 
-          <section className="training-map-stats" aria-label="Training summary">
+          <section className="training-map-stats" aria-label={t("Training summary")}>
             <dl className="training-map-primary-stats">
               {primaryStats.map((stat, index) => {
                 const Icon = stat.icon;
                 return (
                 <div
-                  key={stat.label}
+                  key={stat.tone}
                   className={`training-map-primary-stat is-${stat.tone}`}
                   style={{ "--stat-delay": `${index * 45}ms` } as CSSProperties}
                 >
@@ -977,7 +984,7 @@ export function ActivityGlobeCard({
                 {secondaryStats.map((stat) => {
                   const Icon = stat.icon;
                   return (
-                    <div key={stat.label}>
+                    <div key={stat.id}>
                       <dt>
                         <span className="training-map-motion-icon" aria-hidden="true">
                           <Icon size={18} />
@@ -997,7 +1004,7 @@ export function ActivityGlobeCard({
 
           <section
             className="training-map-location"
-            aria-label={selectedLocation ? "Selected location" : "Location highlights"}
+            aria-label={selectedLocation ? t("Selected location") : t("Location highlights")}
             aria-live="polite"
           >
             {selectedLocation && selectedPlaceLabel ? (
@@ -1022,30 +1029,29 @@ export function ActivityGlobeCard({
                     }}
                   >
                     <ChevronLeft size={13} aria-hidden="true" />
-                    All places
-                  </button>
+                    {t("All places")}</button>
                 </header>
 
                 <dl className="training-map-location-metrics">
                   <div>
-                    <dt>Activities</dt>
-                    <dd>{selectedLocation.activities.length.toLocaleString()}</dd>
+                    <dt>{t("Activities")}</dt>
+                    <dd>{selectedLocation.activities.length.toLocaleString(getLocale())}</dd>
                   </div>
                   <div>
-                    <dt>Distance</dt>
+                    <dt>{t("Distance")}</dt>
                     <dd>
                       {metersToDisplayDistance(selectedLocation.distanceMeters, unitSystem).toLocaleString(
-                        undefined,
+                        getLocale(),
                         { maximumFractionDigits: 1 },
                       )} <small>{distanceUnit(unitSystem)}</small>
                     </dd>
                   </div>
                   <div>
-                    <dt>Time</dt>
+                    <dt>{t("Time")}</dt>
                     <dd>{formatLocationDuration(selectedLocation.durationSeconds)}</dd>
                   </div>
                   <div>
-                    <dt>Last visited</dt>
+                    <dt>{t("Last visited")}</dt>
                     <dd>{formatVisitDate(selectedLocation.lastVisited)}</dd>
                   </div>
                 </dl>
@@ -1054,13 +1060,13 @@ export function ActivityGlobeCard({
                   <div>
                     <span>
                       {selectedLocation.elevationMeters > 0
-                        ? "Elevation gained"
-                        : "Distance trend"}
+                        ? t("Elevation gained")
+                        : t("Distance trend")}
                     </span>
                     <strong>
                       {selectedLocation.elevationMeters > 0
-                        ? `${Math.round(metersToElevation(selectedLocation.elevationMeters, unitSystem)).toLocaleString()} ${elevationUnit(unitSystem)}`
-                        : `${metersToDisplayDistance(selectedLocation.distanceMeters, unitSystem).toLocaleString(undefined, { maximumFractionDigits: 1 })} ${distanceUnit(unitSystem)}`}
+                        ? `${Math.round(metersToElevation(selectedLocation.elevationMeters, unitSystem)).toLocaleString(getLocale())} ${elevationUnit(unitSystem)}`
+                        : `${metersToDisplayDistance(selectedLocation.distanceMeters, unitSystem).toLocaleString(getLocale(), { maximumFractionDigits: 1 })} ${distanceUnit(unitSystem)}`}
                     </strong>
                   </div>
                   {selectedLocation.trend.length > 1 ? (
@@ -1110,8 +1116,7 @@ export function ActivityGlobeCard({
                     </div>
                   ) : (
                     <p className="training-map-trend-empty">
-                      More activities will build a location trend.
-                    </p>
+                      {t("More activities will build a location trend.")}</p>
                   )}
                   <button
                     type="button"
@@ -1119,7 +1124,7 @@ export function ActivityGlobeCard({
                     onClick={zoomIntoSelectedLocation}
                     disabled={zoomingToStreet}
                   >
-                    {zoomingToStreet ? "Zooming in" : "Zoom in"}
+                    {zoomingToStreet ? t("Zooming in") : t("Zoom in")}
                     <ZoomIn size={15} aria-hidden="true" />
                   </button>
                 </div>
@@ -1127,7 +1132,7 @@ export function ActivityGlobeCard({
             ) : (
               <div className="training-map-location-content training-map-overview">
                 {visitsLoading && !mapHasVisits ? (
-                  <div className="training-map-location-loading" aria-label="Mapping GPS activities">
+                  <div className="training-map-location-loading" aria-label={t("Mapping GPS activities")}>
                     <span />
                     <span />
                     <span />
@@ -1135,29 +1140,29 @@ export function ActivityGlobeCard({
                 ) : overall.count === 0 ? (
                   <div className="training-map-location-empty">
                     <MapPin size={22} aria-hidden="true" />
-                    <h3>{connected ? "No activities in this period" : "Training Hub is offline"}</h3>
+                    <h3>{connected ? t("No activities in this period") : t("Training Hub is offline")}</h3>
                     <p>
                       {connected
-                        ? "Choose another period when more activity history is available."
-                        : "Connect Training Hub to map your routes and training history."}
+                        ? t("Choose another period when more activity history is available.")
+                        : t("Connect Training Hub to map your routes and training history.")}
                     </p>
                   </div>
                 ) : !mapHasVisits ? (
                   <div className="training-map-location-empty">
                     <Route size={22} aria-hidden="true" />
-                    <h3>No GPS routes found</h3>
-                    <p>Outdoor activities with location data will appear here.</p>
+                    <h3>{t("No GPS routes found")}</h3>
+                    <p>{t("Outdoor activities with location data will appear here.")}</p>
                   </div>
                 ) : (
                   <>
                     <header>
-                      <h3>Your training world</h3>
-                      <p>Choose a place to explore your activities.</p>
+                      <h3>{t("Your training world")}</h3>
+                      <p>{t("Choose a place to explore your activities.")}</p>
                     </header>
                     <dl className="training-map-overview-values">
                       {mostVisited ? (
                         <div>
-                          <dt><MapPinCheck size={18} aria-hidden="true" />Most visited</dt>
+                          <dt><MapPinCheck size={18} aria-hidden="true" />{t("Most visited")}</dt>
                           <dd>
                             <button
                               type="button"
@@ -1170,14 +1175,14 @@ export function ActivityGlobeCard({
                               <ChevronRight size={14} aria-hidden="true" />
                             </button>
                             <small>
-                              {mostVisited.activities.length.toLocaleString()} {mostVisited.activities.length === 1 ? "activity" : "activities"}
+                              {mostVisited.activities.length.toLocaleString(getLocale())} {mostVisited.activities.length === 1 ? t("activity") : t("activities")}
                             </small>
                           </dd>
                         </div>
                       ) : null}
                       {latestPlace ? (
                         <div>
-                          <dt><Clock3 size={18} aria-hidden="true" />Most recent</dt>
+                          <dt><Clock3 size={18} aria-hidden="true" />{t("Most recent")}</dt>
                           <dd>
                             <button
                               type="button"
@@ -1203,21 +1208,21 @@ export function ActivityGlobeCard({
 
         <section
           className={`training-map-globe-panel${streetMode ? " is-street-mode" : ""}`}
-          aria-label="Interactive training globe"
+          aria-label={t("Interactive training globe")}
         >
           <div className="training-map-globe-helper">
             <MousePointer2 size={18} aria-hidden="true" />
-            <span>Drag to explore · Scroll to zoom</span>
+            <span>{t("Drag to explore · Scroll to zoom")}</span>
           </div>
           <button
             type="button"
             className="training-map-reset"
             onClick={handleResetView}
             disabled={!canResetView}
-            aria-label={streetMode ? "Back to globe" : "Reset globe view"}
+            aria-label={streetMode ? t("Back to globe") : t("Reset globe view")}
           >
             <RotateCcw size={14} aria-hidden="true" />
-            {streetMode ? "Back to globe" : "Reset view"}
+            {streetMode ? t("Back to globe") : t("Reset view")}
           </button>
 
           <div
@@ -1225,12 +1230,12 @@ export function ActivityGlobeCard({
             role="img"
             aria-label={
               streetMode
-                ? "Street map heatmap near the selected location. Zoom out or reset to return to the globe."
+                ? t("Street map heatmap near the selected location. Zoom out or reset to return to the globe.")
                 : mapHasVisits
-                  ? `Interactive globe showing ${mapPlaceCount} training locations. Drag to rotate, scroll to zoom, and select a location for details.`
+                  ? t("Interactive globe showing {{p0}} training locations. Drag to rotate, scroll to zoom, and select a location for details.", { p0: mapPlaceCount })
                   : mapHasRoute
-                    ? "Interactive globe showing the latest GPS route."
-                    : "Interactive globe waiting for GPS activity data."
+                    ? t("Interactive globe showing the latest GPS route.")
+                    : t("Interactive globe waiting for GPS activity data.")
             }
           >
             <ActivityGlobeRenderer
@@ -1260,7 +1265,7 @@ export function ActivityGlobeCard({
             {globeError ? (
               <div className="training-map-globe-error" role="status">
                 <CircleAlert size={20} aria-hidden="true" />
-                <span>The globe could not be rendered on this device.</span>
+                <span>{t("The globe could not be rendered on this device.")}</span>
               </div>
             ) : null}
           </div>
@@ -1270,20 +1275,20 @@ export function ActivityGlobeCard({
               <Route size={14} aria-hidden="true" />
               <span>
                 {visitsLoading
-                  ? "Mapping GPS activity"
-                  : `${routes.length.toLocaleString()} GPS ${routes.length === 1 ? "route" : "routes"}`}
+                  ? t("Mapping GPS activity")
+                  : t("{{p0}} GPS {{p1}}", { p0: routes.length.toLocaleString(getLocale()), p1: routes.length === 1 ? t("route") : t("routes") })}
               </span>
             </div>
           </div>
 
           {(mapHasVisits || mapHasRoute) ? (
-            <div className="training-map-legend" aria-label="Activity intensity from low to high">
-              <strong>Activity density</strong>
-              <span>Low</span>
+            <div className="training-map-legend" aria-label={t("Activity intensity from low to high")}>
+              <strong>{t("Activity density")}</strong>
+              <span>{t("Low")}</span>
               <i className="is-low" aria-hidden="true" />
               <i className="is-medium" aria-hidden="true" />
               <i className="is-high" aria-hidden="true" />
-              <span>High</span>
+              <span>{t("High")}</span>
             </div>
           ) : null}
         </section>
@@ -1292,13 +1297,13 @@ export function ActivityGlobeCard({
       {recentPlaces.length > 0 ? (
         <section className="training-map-recent" aria-labelledby="recent-places-title">
           <header>
-            <h3 id="recent-places-title">Recent places</h3>
+            <h3 id="recent-places-title">{t("Recent places")}</h3>
             {locationSummaries.length > 5 ? (
               <div className="training-map-recent-controls">
                 <button
                   type="button"
-                  aria-label="Previous recent places"
-                  title="Previous places"
+                  aria-label={t("Previous recent places")}
+                  title={t("Previous places")}
                   disabled={recentStart === 0}
                   onClick={() => setRecentStart((current) => Math.max(0, current - 1))}
                 >
@@ -1306,8 +1311,8 @@ export function ActivityGlobeCard({
                 </button>
                 <button
                   type="button"
-                  aria-label="Next recent places"
-                  title="Next places"
+                  aria-label={t("Next recent places")}
+                  title={t("Next places")}
                   disabled={recentStart + 5 >= locationSummaries.length}
                   onClick={() =>
                     setRecentStart((current) =>
@@ -1346,19 +1351,19 @@ export function ActivityGlobeCard({
                   <span className="training-map-recent-details">
                     <span className="training-map-recent-metrics">
                       <span>
-                        <strong>{summary.activities.length.toLocaleString()}</strong>
-                        {summary.activities.length === 1 ? "activity" : "activities"}
+                        <strong>{summary.activities.length.toLocaleString(getLocale())}</strong>
+                        {summary.activities.length === 1 ? t("activity") : t("activities")}
                       </span>
                       <span>
                         <strong>
-                          {metersToDisplayDistance(summary.distanceMeters, unitSystem).toLocaleString(undefined, {
+                          {metersToDisplayDistance(summary.distanceMeters, unitSystem).toLocaleString(getLocale(), {
                             maximumFractionDigits: 0,
                           })}
                         </strong>
                         {distanceUnit(unitSystem)}
                       </span>
                     </span>
-                    <span className="training-map-recent-date" title="Last visited">
+                    <span className="training-map-recent-date" title={t("Last visited")}>
                       {formatVisitDate(summary.lastVisited)}
                     </span>
                   </span>

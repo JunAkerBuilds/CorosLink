@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import { useMemo, useState } from "react";
 import { Loader2, PanelLeftClose, Plus, Search } from "lucide-react";
 import type { ChatSessionSummary } from "../../electron/types";
@@ -21,6 +22,7 @@ export function ChatHistoryPanel({
   onSelectSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
 }) {
+  const { language } = useLanguage();
   const [query, setQuery] = useState("");
 
   const filteredSessions = useMemo(() => {
@@ -33,26 +35,26 @@ export function ChatHistoryPanel({
         session.title.toLowerCase().includes(normalized) ||
         session.preview.toLowerCase().includes(normalized)
     );
-  }, [query, sessions]);
+  }, [query, sessions, language]);
 
   const groups = useMemo(
     () => groupChatSessions(filteredSessions),
-    [filteredSessions]
+    [filteredSessions, language]
   );
 
   return (
     <div className="chat-history-panel">
       <div className="chat-history-toolbar">
         <div className="chat-history-header">
-          <p className="eyebrow">Conversations</p>
+          <p className="eyebrow">{t("Conversations")}</p>
           <button
             type="button"
             className="chat-history-collapse-button"
             onClick={onCollapse}
             aria-expanded="true"
             aria-controls="chat-conversation-sidebar"
-            aria-label="Collapse conversations"
-            title="Collapse conversations"
+            aria-label={t("Collapse conversations")}
+            title={t("Collapse conversations")}
           >
             <PanelLeftClose size={16} aria-hidden="true" />
           </button>
@@ -64,16 +66,15 @@ export function ChatHistoryPanel({
           disabled={busy}
         >
           <Plus size={14} aria-hidden="true" />
-          New chat
-        </button>
+          {t("New chat")}</button>
         <label className="chat-history-search">
           <Search size={14} aria-hidden="true" />
           <input
             type="search"
-            aria-label="Search conversations"
+            aria-label={t("Search conversations")}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search chats"
+            placeholder={t("Search chats")}
             spellCheck={false}
           />
         </label>
@@ -82,12 +83,12 @@ export function ChatHistoryPanel({
       <div className="chat-session-list">
         {groups.length === 0 ? (
           <p className="chat-history-empty">
-            {query.trim() ? "No chats match your search." : "No conversations yet."}
+            {query.trim() ? t("No chats match your search.") : t("No conversations yet.")}
           </p>
         ) : (
           groups.map((group) => (
             <section key={group.label} className="chat-session-group">
-              <h3 className="chat-session-group-label">{group.label}</h3>
+              <h3 className="chat-session-group-label">{t(group.label)}</h3>
               <div className="chat-session-group-list">
                 {group.sessions.map((session) => (
                   <ChatSessionRow

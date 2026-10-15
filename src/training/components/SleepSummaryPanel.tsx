@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n/training";
 import {
   Loader2,
   Moon,
@@ -57,15 +58,15 @@ function sleepScoreLabel(score?: number): string {
 
   switch (tone) {
     case "low":
-      return "Poor";
+      return t("Poor");
     case "mid":
-      return "Fair";
+      return t("Fair");
     case "good":
-      return "Good";
+      return t("Good");
     case "high":
-      return "Excellent";
+      return t("Excellent");
     default:
-      return "Waiting";
+      return t("Waiting");
   }
 }
 
@@ -95,7 +96,7 @@ function stageTotal(record: TrainingHubSleepRecord): number {
 
 function formatNapSummary(record: TrainingHubSleepRecord): string {
   if (record.napMinutes === undefined) {
-    return "No data";
+    return t("No data");
   }
 
   return formatSleepDuration(record.napMinutes);
@@ -125,23 +126,25 @@ function SleepMetric({
   label: string;
   value: string | number;
 }) {
+  useLanguage();
   return (
     <div className="sleep-metric">
-      <dt>{label}</dt>
+      <dt>{t(label)}</dt>
       <dd title={String(value)}>{value}</dd>
     </div>
   );
 }
 
 function SleepWindowMetric({ record }: { record: TrainingHubSleepRecord }) {
+  useLanguage();
   const window = formatSleepWindow(record);
 
   return (
     <div className="sleep-metric is-window">
-      <dt>Sleep window</dt>
+      <dt>{t("Sleep window")}</dt>
       <dd
         className="sleep-window-value"
-        title={window ? `${window.start} to ${window.end}` : "No data"}
+        title={window ? t("{{value1}} to {{value2}}", { value1: String(window.start), value2: String(window.end) }) : t("No data")}
       >
         {window ? (
           <>
@@ -156,7 +159,7 @@ function SleepWindowMetric({ record }: { record: TrainingHubSleepRecord }) {
             </span>
           </>
         ) : (
-          "No data"
+          t("No data")
         )}
       </dd>
     </div>
@@ -173,10 +176,11 @@ function formatPercent(value?: number): string {
 }
 
 function SleepStageBar({ record }: { record: TrainingHubSleepRecord }) {
+  useLanguage();
   const total = stageTotal(record);
 
   if (total <= 0) {
-    return <p className="sleep-panel-empty-stages">Stage breakdown unavailable.</p>;
+    return <p className="sleep-panel-empty-stages">{t("Stage breakdown unavailable.")}</p>;
   }
 
   const segments = [
@@ -222,7 +226,7 @@ function SleepStageBar({ record }: { record: TrainingHubSleepRecord }) {
     <div className="sleep-stage-stack">
       <div
         className="sleep-stage-bar"
-        aria-label="Sleep stage breakdown"
+        aria-label={t("Sleep stage breakdown")}
         role="list"
       >
         {segments.map((segment) => (
@@ -230,7 +234,7 @@ function SleepStageBar({ record }: { record: TrainingHubSleepRecord }) {
             key={segment.key}
             className={`sleep-stage-segment ${segment.className}`}
             style={{ flexGrow: segment.value }}
-            aria-label={`${segment.label}: ${segment.detail}`}
+            aria-label={`${t(segment.label)}: ${t(segment.detail)}`}
             data-stage-label={`${segment.label}: ${segment.detail}`}
             role="listitem"
             tabIndex={0}
@@ -241,8 +245,8 @@ function SleepStageBar({ record }: { record: TrainingHubSleepRecord }) {
         {segments.map((segment) => (
           <span key={segment.key} className="sleep-stage-legend-item">
             <span className={`sleep-stage-legend-dot ${segment.className}`} />
-            {segment.label}
-            <strong>{segment.detail}</strong>
+            {t(segment.label)}
+            <strong>{t(segment.detail)}</strong>
           </span>
         ))}
       </div>
@@ -255,6 +259,7 @@ export function SleepSummaryPanel({
   connecting = false,
   refreshing = false
 }: SleepSummaryPanelProps) {
+  useLanguage();
   const latest = sleep?.latest;
   const tone = sleepScoreTone(latest?.score);
   const label = sleepScoreLabel(latest?.score);
@@ -268,9 +273,8 @@ export function SleepSummaryPanel({
             <span className="sleep-panel-moon" aria-hidden="true">
               <MoonStar size={20} />
             </span>
-            Sleep
-          </p>
-          <h2>{latest ? formatSleepNightLabel(latest) : "Last night"}</h2>
+            {t("Sleep")} </p>
+          <h2>{latest ? formatSleepNightLabel(latest) : t("Last night")}</h2>
         </div>
         <span className="sleep-panel-icon" aria-hidden="true">
           {isLoading ? <Loader2 className="spin" size={16} /> : <MoonStar size={16} />}
@@ -278,11 +282,11 @@ export function SleepSummaryPanel({
       </div>
 
       {connecting ? (
-        <p className="sleep-panel-message">Connecting COROS data access…</p>
+        <p className="sleep-panel-message">{t("Connecting COROS data access…")}</p>
       ) : null}
 
       {!connecting && isLoading ? (
-        <p className="sleep-panel-message">Syncing sleep data…</p>
+        <p className="sleep-panel-message">{t("Syncing sleep data…")}</p>
       ) : null}
 
       {!isLoading && latest ? (
@@ -290,10 +294,10 @@ export function SleepSummaryPanel({
           <div className="sleep-panel-hero">
             <div className="sleep-panel-score">
               <strong>{latest.score !== undefined ? Math.round(latest.score) : "–"}</strong>
-              <span>{label}</span>
+              <span>{t(label)}</span>
             </div>
             <div className="sleep-panel-duration">
-              <span>Main sleep</span>
+              <span>{t("Main sleep")}</span>
               <strong>{formatSleepDuration(latest.totalMinutes)}</strong>
             </div>
           </div>
@@ -302,22 +306,22 @@ export function SleepSummaryPanel({
 
           {latest.completeness === "partial" ? (
             <p className="sleep-panel-partial">
-              Partial data: {latest.partialReason ?? "COROS is still syncing this sleep."}
+              {t("Partial data:")} {latest.partialReason ?? t("COROS is still syncing this sleep.")}
             </p>
           ) : null}
 
-          <dl className="sleep-panel-metrics" aria-label="Sleep details">
+          <dl className="sleep-panel-metrics" aria-label={t("Sleep details")}>
             <SleepWindowMetric record={latest} />
             <SleepMetric
-              label="Awake"
+              label={t("Awake")}
               value={formatSleepMetricDuration(latest.awakeMinutes)}
             />
             <SleepMetric
-              label="Wake-ups > 5m"
+              label={t("Wake-ups > 5m")}
               value={latest.awakeCountOverFiveMinutes ?? "No data"}
             />
             <SleepMetric
-              label="Naps"
+              label={t("Naps")}
               value={formatNapSummary(latest)}
             />
           </dl>
@@ -327,8 +331,8 @@ export function SleepSummaryPanel({
       {!isLoading && !latest ? (
         <p className="sleep-panel-message">
           {sleep?.mcpConnected
-            ? "No sleep data for this period."
-            : "Connect COROS data access to view sleep metrics."}
+            ? t("No sleep data for this period.")
+            : t("Connect COROS data access to view sleep metrics.")}
         </p>
       ) : null}
     </section>

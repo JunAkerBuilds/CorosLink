@@ -1,3 +1,4 @@
+import { t } from "../../i18n/toolsLocale";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   RouteActivityType,
@@ -395,7 +396,7 @@ export function useRouteSketch(
     setAutoFitProgress(null);
     if (results.length === 0) {
       setError(
-        "Auto fit couldn't route this shape here — try moving it toward more streets."
+        t("Auto fit couldn't route this shape here — try moving it toward more streets.")
       );
       return;
     }

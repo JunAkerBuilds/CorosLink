@@ -1,3 +1,4 @@
+import { getLocale, useLanguage, t } from "../i18n/training";
 import { widgetPreset } from "./dashboardLayout";
 import { type CSSProperties, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
@@ -47,12 +48,14 @@ import { createTrainingHubSampleData, type TrainingHubSampleData } from "./sampl
 import loginPageBackground from "../../public/assets/training-hub/Login-page-bg.png";
 
 export function TrainingHubView(props: TrainingHubViewProps) {
+  useLanguage();
   return import.meta.env.DEV
     ? <TrainingHubPreview {...props} />
     : <TrainingHubContent {...props} />;
 }
 
 function TrainingHubPreview(props: TrainingHubViewProps) {
+  useLanguage();
   const [sample, setSample] = useState<TrainingHubSampleData | null>(null);
   const [selectedSample, setSelectedSample] = useState<TrainingHubActivity | null>(null);
   const selectedActivity = selectedSample ?? sample?.activities[0] ?? null;
@@ -123,10 +126,11 @@ function TrainingHubContent({
   sampleDetails,
   onToggleSample
 }: TrainingHubViewProps & { sampleMode?: boolean; sampleDetails?: TrainingHubSampleData["activityDetails"]; onToggleSample?: () => void }) {
+  useLanguage();
   const loadActivityPreview = useCallback((activity: TrainingHubActivity) => {
     if (sampleDetails) {
       const detail = sampleDetails.get(activity.activityId);
-      return detail ? Promise.resolve(detail) : Promise.reject(new Error("Sample route unavailable"));
+      return detail ? Promise.resolve(detail) : Promise.reject(new Error(t("Sample route unavailable")));
     }
     return api.getTrainingHubActivityDetail(activity.activityId, activity.sportType, activity);
   }, [api, sampleDetails]);
@@ -179,7 +183,7 @@ function TrainingHubContent({
         latestRhr: undefined,
         rhrDelta: undefined
       },
-    [snapshot]
+    [snapshot, getLocale()]
   );
 
   return (
@@ -210,18 +214,15 @@ function TrainingHubContent({
             <div className="training-signin-copy-inner">
               <div className="training-command-kicker">
                 <Monitor size={18} aria-hidden="true" />
-                <p className="eyebrow">Training Hub</p>
+                <p className="eyebrow">{t("Training Hub")}</p>
               </div>
               <h2>
                 <span>COROS</span>
                 <span>
-                  <em>Training</em> Hub
-                </span>
+                  <em>{t("Training")}</em> {t("Hub")} </span>
               </h2>
               <p className="training-signin-lead">
-                Desktop access to training load, recovery, activity detail, and
-                race readiness.
-              </p>
+                {t("Desktop access to training load, recovery, activity detail, and race readiness.")} </p>
 
               <div className="training-signin-feature-list">
                 <div className="training-signin-feature">
@@ -229,11 +230,9 @@ function TrainingHubContent({
                     <ChartNoAxesColumnIncreasing size={24} aria-hidden="true" />
                   </span>
                   <div>
-                    <strong>Deep Insights</strong>
+                    <strong>{t("Deep Insights")}</strong>
                     <p>
-                      Track recovery, training load, VO2 max, and more with
-                      advanced analytics.
-                    </p>
+                      {t("Track recovery, training load, VO2 max, and more with advanced analytics.")} </p>
                   </div>
                 </div>
                 <div className="training-signin-feature">
@@ -241,11 +240,9 @@ function TrainingHubContent({
                     <Trophy size={24} aria-hidden="true" />
                   </span>
                   <div>
-                    <strong>All Your Data</strong>
+                    <strong>{t("All Your Data")}</strong>
                     <p>
-                      Sync activities, view PRs, and analyze performance over
-                      time.
-                    </p>
+                      {t("Sync activities, view PRs, and analyze performance over time.")} </p>
                   </div>
                 </div>
                 <div className="training-signin-feature">
@@ -253,11 +250,9 @@ function TrainingHubContent({
                     <ShieldCheck size={24} aria-hidden="true" />
                   </span>
                   <div>
-                    <strong>Secure &amp; Private</strong>
+                    <strong>{t("Secure & Private")}</strong>
                     <p>
-                      Remembered credentials are encrypted and stored locally
-                      on this device.
-                    </p>
+                      {t("Remembered credentials are encrypted and stored locally on this device.")} </p>
                   </div>
                 </div>
               </div>
@@ -271,16 +266,16 @@ function TrainingHubContent({
               onSubmit={onVerifyTwoFactor}
             >
               <div className="training-login-panel-header">
-                <strong>Verify it's you</strong>
+                <strong>{t("Verify it's you")}</strong>
                 <p>
-                  Enter the 6-digit code we emailed to{" "}
+                  {t("Enter the 6-digit code we emailed to")}{" "}
                   <strong>{twoFactorEmail}</strong>.
                 </p>
               </div>
 
               <div className="training-login-fields">
                 <label className="field training-login-field">
-                  <span>Verification code</span>
+                  <span>{t("Verification code")}</span>
                   <div className="training-login-input">
                     <KeyRound size={18} aria-hidden="true" />
                     <input
@@ -311,8 +306,7 @@ function TrainingHubContent({
                   ) : (
                     <ArrowRightFromLine size={17} aria-hidden="true" />
                   )}
-                  Verify and sign in
-                </button>
+                  {t("Verify and sign in")} </button>
               </div>
 
               <div className="training-login-2fa-actions">
@@ -327,8 +321,7 @@ function TrainingHubContent({
                   ) : (
                     <RefreshCw size={15} aria-hidden="true" />
                   )}
-                  Resend code
-                </button>
+                  {t("Resend code")} </button>
                 <button
                   className="training-login-text-button"
                   type="button"
@@ -336,30 +329,26 @@ function TrainingHubContent({
                   disabled={verifying}
                 >
                   <ArrowLeft size={15} aria-hidden="true" />
-                  Use a different account
-                </button>
+                  {t("Use a different account")} </button>
               </div>
 
               <p className="training-login-footer">
                 <ShieldCheck size={16} aria-hidden="true" />
-                Your credentials are encrypted and never shared.
-              </p>
+                {t("Your credentials are encrypted and never shared.")} </p>
             </form>
           ) : (
           <form className="training-login-panel" onSubmit={onLogin}>
             <div className="training-login-panel-header">
-              <strong>Welcome back</strong>
-              <p>Sign in to access your COROS Training Hub data</p>
+              <strong>{t("Welcome back")}</strong>
+              <p>{t("Sign in to access your COROS Training Hub data")}</p>
             </div>
 
             {canReconnect ? (
               <div className="training-login-reconnect">
                 <div className="training-login-reconnect-text">
-                  <strong>Saved COROS account: {status?.email}</strong>
+                  <strong>{t("Saved COROS account:")} {status?.email}</strong>
                   <small>
-                    Create a Training Hub session using your saved COROS
-                    credentials — no password needed.
-                  </small>
+                    {t("Create a Training Hub session using your saved COROS credentials — no password needed.")} </small>
                 </div>
                 <button
                   className="primary-button"
@@ -372,14 +361,13 @@ function TrainingHubContent({
                   ) : (
                     <RefreshCw size={17} aria-hidden="true" />
                   )}
-                  Sign in
-                </button>
+                  {t("Sign in")} </button>
               </div>
             ) : null}
 
             <div className="training-login-fields">
               <label className="field training-login-field">
-                <span>Email</span>
+                <span>{t("Email")}</span>
                 <div className="training-login-input">
                   <Mail size={18} aria-hidden="true" />
                   <input
@@ -393,13 +381,13 @@ function TrainingHubContent({
                 </div>
               </label>
               <label className="field training-login-field">
-                <span>Password</span>
+                <span>{t("Password")}</span>
                 <div className="training-login-input">
                   <LockKeyhole size={18} aria-hidden="true" />
                   <input
                     value={password}
                     onChange={(event) => onPasswordChange(event.target.value)}
-                    placeholder="COROS password"
+                    placeholder={t("COROS password")}
                     type={showPassword ? "text" : "password"}
                     autoComplete="current-password"
                     disabled={busy === "training-login"}
@@ -407,7 +395,7 @@ function TrainingHubContent({
                   <button
                     className="training-login-visibility"
                     type="button"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-label={showPassword ? t("Hide password") : t("Show password")}
                     onClick={() => setShowPassword((current) => !current)}
                     disabled={busy === "training-login"}
                   >
@@ -429,11 +417,8 @@ function TrainingHubContent({
                 disabled={busy === "training-login"}
               />
               <span>
-                Save this COROS account
-                <small>
-                  Securely stores an encrypted password digest so Training
-                  Hub and Watch Face Studio can each create their own session.
-                </small>
+                {t("Save this COROS account")} <small>
+                  {t("Securely stores an encrypted password digest so Training Hub and Watch Face Studio can each create their own session.")} </small>
               </span>
             </label>
 
@@ -448,12 +433,11 @@ function TrainingHubContent({
                 ) : (
                   <ArrowRightFromLine size={17} aria-hidden="true" />
                 )}
-                Sign in to COROS
-              </button>
+                {t("Sign in to COROS")} </button>
             </div>
 
             <div className="training-login-divider">
-              <span>or</span>
+              <span>{t("or")}</span>
             </div>
 
             <a
@@ -463,13 +447,11 @@ function TrainingHubContent({
               rel="noreferrer"
             >
               <ExternalLink size={16} aria-hidden="true" />
-              Open COROS Training Hub in Browser
-            </a>
+              {t("Open COROS Training Hub in Browser")} </a>
 
             <p className="training-login-footer">
               <ShieldCheck size={16} aria-hidden="true" />
-              Your credentials are encrypted and never shared.
-            </p>
+              {t("Your credentials are encrypted and never shared.")} </p>
           </form>
           )}
         </section>
@@ -504,7 +486,7 @@ function TrainingHubContent({
                   const points = (snapshot?.trendPoints ?? []).filter(point => !widget.days || point.date >= date);
                   return <TrainingTrendCharts size={widgetPreset(widget).chartSize} metric={widget.id.slice(6) as "load" | "rpe" | "hrv" | "sleep"} rangeLabel={widget.days ? `Last ${widget.days} days` : "Available history"} points={points} sleepRecords={snapshot?.sleep?.records} />;
                 }
-                case "coach": return sampleMode ? <section className="panel"><h2>Coach charts</h2><p>Charts pinned from your coach conversations appear here when using your training data.</p></section> : <CoachChartsPanel api={api} refreshToken={hubRefreshCount} showEmpty />;
+                case "coach": return sampleMode ? <section className="panel"><h2>{t("Coach charts")}</h2><p>{t("Charts pinned from your coach conversations appear here when using your training data.")}</p></section> : <CoachChartsPanel api={api} refreshToken={hubRefreshCount} showEmpty />;
                 case "zones-heart": case "zones-distance": return <TrainingZoneDistributionCharts size={widgetPreset(widget).chartSize} variant={widget.id === "zones-heart" ? "heart" : "distance"} lthrZones={snapshot?.dashboard?.lthrZones ?? []} activities={activities} analytics={snapshot?.analytics ?? null} />;
                 case "scores": return <FitnessScoresPanel size={widgetPreset(widget).chartSize} dashboard={snapshot?.dashboard ?? null} racePredictor={snapshot?.racePredictor ?? null} />;
                 case "race": return <RacePredictorCards size={widgetPreset(widget).chartSize} racePredictor={snapshot?.racePredictor ?? null} />;

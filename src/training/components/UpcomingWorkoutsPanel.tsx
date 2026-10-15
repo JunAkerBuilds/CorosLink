@@ -1,3 +1,4 @@
+import { getLocale, useLanguage, t } from "../../i18n/training";
 import type { ChartCardSize } from "../widgetSizing";
 import "../chartSizing.css";
 import "../upcomingSizing.css";
@@ -21,13 +22,14 @@ interface UpcomingWorkoutsPanelProps {
 }
 
 export function UpcomingWorkoutsPanel({ workouts, size }: UpcomingWorkoutsPanelProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const [expanded, setExpanded] = useState(false);
   const listId = useId();
   const limit = size ? { mini: 1, short: 3, standard: Infinity, tall: Infinity }[size] : Infinity;
   const scheduledWorkouts = useMemo(
     () => filterUpcomingWorkoutsFromToday(workouts),
-    [workouts]
+    [workouts, getLocale()]
   );
   const previewWorkouts = expanded ? scheduledWorkouts : scheduledWorkouts.slice(0, limit);
   const todayWorkouts = previewWorkouts.filter((workout) =>
@@ -46,8 +48,8 @@ export function UpcomingWorkoutsPanel({ workouts, size }: UpcomingWorkoutsPanelP
     <section className="panel training-upcoming-panel" data-chart-size={size}>
       <header className="training-upcoming-header">
         <div className="training-upcoming-heading">
-          <p className="eyebrow">Training Calendar</p>
-          <h2>Upcoming Workouts</h2>
+          <p className="eyebrow">{t("Training Calendar")}</p>
+          <h2>{t("Upcoming Workouts")}</h2>
           {scheduledWorkouts.length > 0 ? (
             <p className="training-upcoming-count">{countLabel}</p>
           ) : null}
@@ -59,7 +61,7 @@ export function UpcomingWorkoutsPanel({ workouts, size }: UpcomingWorkoutsPanelP
 
       {scheduledWorkouts.length === 0 ? (
         <div className="training-empty-state">
-          <p>No scheduled workouts in the next two weeks.</p>
+          <p>{t("No scheduled workouts in the next two weeks.")}</p>
         </div>
       ) : (
         <div id={listId} className="training-upcoming-body">
@@ -119,12 +121,13 @@ export function UpcomingWorkoutsPanel({ workouts, size }: UpcomingWorkoutsPanelP
           ) : null}
         </div>
       )}
-      {scheduledWorkouts.length > limit && <button type="button" className="upcoming-sized-more" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded(value => !value)}>{expanded ? "Show fewer" : `Show all ${scheduledWorkouts.length} workouts`}</button>}
+      {scheduledWorkouts.length > limit && <button type="button" className="upcoming-sized-more" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded(value => !value)}>{expanded ? t("Show fewer") : t("Show all {{value1}} workouts", { value1: String(scheduledWorkouts.length) })}</button>}
     </section>
   );
 }
 
 function TodayWorkoutCard({ workout }: { workout: TrainingHubUpcomingWorkout }) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const category = inferUpcomingWorkoutCategory(workout.name);
   const detailLine = formatUpcomingWorkoutDetailLine(
@@ -141,7 +144,7 @@ function TodayWorkoutCard({ workout }: { workout: TrainingHubUpcomingWorkout }) 
       </div>
       <div className="training-upcoming-today-copy">
         <div className="training-upcoming-today-heading">
-          <span className="training-upcoming-today-pill">Today</span>
+          <span className="training-upcoming-today-pill">{t("Today")}</span>
           <span className="training-upcoming-today-tag">{category}</span>
         </div>
         <h3 className="training-upcoming-today-title">{workout.name}</h3>
@@ -156,20 +159,20 @@ function RestDayCard({
 }: {
   nextWorkout: TrainingHubUpcomingWorkout | undefined;
 }) {
+  useLanguage();
   return (
     <article className="training-upcoming-today training-upcoming-today-empty">
       <div className="training-upcoming-today-icon" aria-hidden="true">
         <Moon size={20} strokeWidth={2.2} />
       </div>
       <div className="training-upcoming-today-copy">
-        <span className="training-upcoming-today-pill">Today</span>
-        <h3 className="training-upcoming-today-title">Rest day</h3>
+        <span className="training-upcoming-today-pill">{t("Today")}</span>
+        <h3 className="training-upcoming-today-title">{t("Rest day")}</h3>
         <p className="training-upcoming-today-meta">
-          No workout scheduled for today.
-        </p>
+          {t("No workout scheduled for today.")} </p>
         {nextWorkout ? (
           <p className="training-upcoming-today-next">
-            Next up{" "}
+            {t("Next up")}{" "}
             <strong>
               {formatUpcomingWorkoutDate(nextWorkout.happenDay)} — {nextWorkout.name}
             </strong>

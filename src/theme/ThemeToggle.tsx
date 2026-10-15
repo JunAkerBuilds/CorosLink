@@ -1,11 +1,13 @@
 import type { MouseEvent } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "./ThemeProvider";
+import { t, useLanguage } from "../i18n";
 
 export function ThemeToggle() {
+  useLanguage();
   const { theme, toggleTheme } = useTheme();
   const isPaper = theme === "paper";
-  const label = isPaper ? "Switch to dark theme" : "Switch to light theme";
+  const label = isPaper ? t("Switch to dark theme") : t("Switch to light theme");
 
   function handleClick(event: MouseEvent<HTMLButtonElement>) {
     const rect = event.currentTarget.getBoundingClientRect();

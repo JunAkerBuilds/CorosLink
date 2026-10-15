@@ -1,3 +1,4 @@
+import { formatNumber, t, getLocale, useLanguage } from "../i18n/training";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -105,8 +106,8 @@ function recordSetNumbers(record: ExerciseSessionRecord): Set<number> {
 }
 
 function formatDate(at?: number, includeYear = false): string {
-  if (!at) return "Unknown date";
-  return new Date(at * 1000).toLocaleDateString(undefined, {
+  if (!at) return t("Unknown date");
+  return new Date(at * 1000).toLocaleDateString(getLocale(), {
     month: "short",
     day: "numeric",
     ...(includeYear ? { year: "numeric" } : {})
@@ -117,8 +118,8 @@ function formatWeight(kg: number, unitSystem: UnitSystem, empty = "—"): string
   if (kg <= 0) return empty;
   const display = kilogramsToDisplayWeight(kg, unitSystem);
   const value = Number.isInteger(display)
-    ? display.toLocaleString()
-    : display.toFixed(1);
+    ? display.toLocaleString(getLocale())
+    : formatNumber(display, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   return `${value} ${weightUnit(unitSystem)}`;
 }
 
@@ -130,7 +131,7 @@ function splitWeight(
   if (kg <= 0) return { value: "—", unit: "" };
   const display = kilogramsToDisplayWeight(kg, unitSystem);
   return {
-    value: Number.isInteger(display) ? display.toLocaleString() : display.toFixed(1),
+    value: Number.isInteger(display) ? display.toLocaleString(getLocale()) : formatNumber(display, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
     unit: weightUnit(unitSystem)
   };
 }
@@ -139,9 +140,9 @@ function formatVolume(kg: number, unitSystem: UnitSystem, empty = "—"): string
   if (kg <= 0) return empty;
   const display = kilogramsToDisplayWeight(kg, unitSystem);
   if (unitSystem === "metric" && display >= 1000) {
-    return `${(display / 1000).toFixed(display >= 10_000 ? 0 : 1)} tonnes`;
+    return `${formatNumber((display / 1000), { minimumFractionDigits: display >= 10_000 ? 0 : 1, maximumFractionDigits: display >= 10_000 ? 0 : 1 })} tonnes`;
   }
-  return `${Math.round(display).toLocaleString()} ${weightUnit(unitSystem)}`;
+  return `${Math.round(display).toLocaleString(getLocale())} ${weightUnit(unitSystem)}`;
 }
 
 function formatDuration(seconds: number): string {
@@ -162,7 +163,7 @@ function comparisonDelta(latest: number, previous: number): string {
   if (previous <= 0) return latest > 0 ? "New" : "Same";
   const percent = ((latest - previous) / previous) * 100;
   if (Math.abs(percent) < 0.5) return "Same";
-  return `${percent > 0 ? "+" : "−"}${Math.abs(percent).toFixed(Math.abs(percent) < 10 ? 1 : 0)}%`;
+  return `${percent > 0 ? "+" : "−"}${formatNumber(Math.abs(percent), { minimumFractionDigits: Math.abs(percent) < 10 ? 1 : 0, maximumFractionDigits: Math.abs(percent) < 10 ? 1 : 0 })}%`;
 }
 
 /**
@@ -182,6 +183,7 @@ function SetSpine({
   loaded: boolean;
   records: Set<number>;
 }) {
+  useLanguage();
   return (
     <span className="exercise-set-spine" aria-hidden="true">
       {sets.map((set) => {
@@ -209,6 +211,7 @@ function ComparisonCard({
   unitSystem: UnitSystem;
   loaded: boolean;
 }) {
+  useLanguage();
   const metrics = loaded
     ? [
         {
@@ -233,7 +236,7 @@ function ComparisonCard({
           label: "Reps",
           latest: latest.totalReps,
           previous: previous.totalReps,
-          format: (value: number) => Math.round(value).toLocaleString()
+          format: (value: number) => Math.round(value).toLocaleString(getLocale())
         }
       ]
     : [
@@ -241,13 +244,13 @@ function ComparisonCard({
           label: "Sets",
           latest: latest.sets.length,
           previous: previous.sets.length,
-          format: (value: number) => Math.round(value).toLocaleString()
+          format: (value: number) => Math.round(value).toLocaleString(getLocale())
         },
         {
           label: "Reps",
           latest: latest.totalReps,
           previous: previous.totalReps,
-          format: (value: number) => Math.round(value).toLocaleString()
+          format: (value: number) => Math.round(value).toLocaleString(getLocale())
         },
         {
           label: "Work time",
@@ -261,9 +264,9 @@ function ComparisonCard({
     <section className="exercise-explorer-section exercise-explorer-comparison">
       <div className="exercise-explorer-section-head">
         <div>
-          <p className="eyebrow">Last vs previous</p>
+          <p className="eyebrow">{t("Last vs previous")}</p>
           <h3>
-            {formatDate(latest.at)} <span>against {formatDate(previous.at)}</span>
+            {formatDate(latest.at)} <span>{t("against")} {formatDate(previous.at)}</span>
           </h3>
         </div>
       </div>
@@ -273,7 +276,7 @@ function ComparisonCard({
           const Icon = tone === "up" ? ArrowUpRight : tone === "down" ? ArrowDownRight : Minus;
           return (
             <div key={metric.label} className="exercise-comparison-item">
-              <span>{metric.label}</span>
+              <span>{t(metric.label)}</span>
               <strong>{metric.format(metric.latest)}</strong>
               <small data-tone={tone}>
                 <Icon size={12} aria-hidden="true" />
@@ -295,6 +298,7 @@ export function ExerciseExplorer({
   onSelect,
   onClose
 }: ExerciseExplorerProps) {
+  useLanguage();
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -305,7 +309,7 @@ export function ExerciseExplorer({
   const emberFade = EMBER_FADE[theme === "paper" ? "paper" : "dark"];
   const data = useMemo(
     () => buildExerciseExplorer(sessions, exercise.name),
-    [exercise.name, sessions]
+    [exercise.name, sessions, getLocale()]
   );
   const loaded = data.totalVolumeKg > 0;
 
@@ -314,7 +318,7 @@ export function ExerciseExplorer({
       [...exercises]
         .sort((left, right) => left.name.localeCompare(right.name))
         .map((item) => ({ value: item.name, label: item.name })),
-    [exercises]
+    [exercises, getLocale()]
   );
 
   const chartData = useMemo(
@@ -328,7 +332,7 @@ export function ExerciseExplorer({
           value: kilogramsToDisplayWeight(record.bestE1rmKg, unitSystem),
           kg: record.bestE1rmKg
         })),
-    [data.sessions, unitSystem]
+    [data.sessions, unitSystem, getLocale()]
   );
 
   useEffect(() => {
@@ -404,7 +408,7 @@ export function ExerciseExplorer({
   const rail = [
     { label: "Sessions", value: String(data.sessions.length) },
     { label: "Sets", value: String(data.totalSets) },
-    { label: "Reps", value: data.totalReps.toLocaleString() },
+    { label: "Reps", value: data.totalReps.toLocaleString(getLocale()) },
     {
       label: "Volume",
       value: formatVolume(data.totalVolumeKg, unitSystem, "Bodyweight")
@@ -435,7 +439,7 @@ export function ExerciseExplorer({
         <header className="exercise-explorer-header">
           <div className="exercise-explorer-headline">
             <div className="exercise-explorer-heading">
-              <p className="eyebrow">Exercise Explorer</p>
+              <p className="eyebrow">{t("Exercise Explorer")}</p>
               <h2 id="exercise-explorer-title">{data.name}</h2>
               {exercise.muscles.length > 0 ? (
                 <p className="exercise-explorer-muscles">
@@ -444,18 +448,18 @@ export function ExerciseExplorer({
               ) : null}
             </div>
             <div className="exercise-explorer-actions">
-              <SelectDropdown
+              <SelectDropdown translateLabel={t}
                 className="exercise-explorer-select"
                 value={exercise.name}
                 options={options}
                 onChange={onSelect}
-                label="Choose an exercise"
+                label={t("Choose an exercise")}
               />
               <button
                 ref={closeRef}
                 type="button"
                 className="exercise-explorer-close"
-                aria-label="Close Exercise Explorer"
+                aria-label={t("Close Exercise Explorer")}
                 onClick={onClose}
               >
                 <X size={18} aria-hidden="true" />
@@ -464,19 +468,19 @@ export function ExerciseExplorer({
           </div>
           <p className="exercise-explorer-verdict" data-state={data.plateau.state}>
             <PlateauIcon size={13} aria-hidden="true" />
-            <strong>{data.plateau.label}</strong>
-            <span>{data.plateau.detail}</span>
+            <strong>{t(data.plateau.label)}</strong>
+            <span>{t(data.plateau.detail)}</span>
           </p>
         </header>
 
         <div className="exercise-explorer-scroll">
           <section
             className="exercise-explorer-hero"
-            aria-label={`${data.name} summary`}
+            aria-label={t("{{value1}} summary", { value1: String(data.name) })}
             data-has-chart={chartData.length >= 2}
           >
             <div className="exercise-hero-figure">
-              <p className="eyebrow">{loaded ? "Best estimated 1RM" : "Best set"}</p>
+              <p className="eyebrow">{loaded ? t("Best estimated 1RM") : t("Best set")}</p>
               <p className="exercise-hero-value">
                 <strong>{hero.value}</strong>
                 {hero.unit ? <small>{hero.unit}</small> : null}
@@ -487,8 +491,7 @@ export function ExerciseExplorer({
             {chartData.length >= 2 ? (
               <div className="exercise-hero-chart">
                 <p className="exercise-hero-chart-label">
-                  e1RM in {weightUnit(unitSystem)} · {chartData.length} loaded sessions
-                </p>
+                  {t("e1RM in")} {weightUnit(unitSystem)} · {chartData.length} {t("loaded sessions")} </p>
                 <div className="exercise-progress-chart">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={chartData} margin={{ top: 8, right: 4, left: -18, bottom: 0 }}>
@@ -521,9 +524,9 @@ export function ExerciseExplorer({
                           const point = props.payload[0].payload as (typeof chartData)[number];
                           return (
                             <div className="exercise-chart-tooltip">
-                              <span>{point.label}</span>
+                              <span>{t(point.label)}</span>
                               <strong>{formatWeight(point.kg, unitSystem)}</strong>
-                              <small>estimated one-rep max</small>
+                              <small>{t("estimated one-rep max")}</small>
                             </div>
                           );
                         }}
@@ -547,7 +550,7 @@ export function ExerciseExplorer({
             <dl className="exercise-stat-rail">
               {rail.map((item) => (
                 <div key={item.label}>
-                  <dt>{item.label}</dt>
+                  <dt>{t(item.label)}</dt>
                   <dd>{item.value}</dd>
                 </div>
               ))}
@@ -564,17 +567,17 @@ export function ExerciseExplorer({
               />
             ) : (
               <section className="exercise-explorer-section exercise-explorer-comparison is-empty">
-                <p className="eyebrow">Last vs previous</p>
-                <h3>One session logged</h3>
-                <p>Log this lift again to unlock a side-by-side comparison.</p>
+                <p className="eyebrow">{t("Last vs previous")}</p>
+                <h3>{t("One session logged")}</h3>
+                <p>{t("Log this lift again to unlock a side-by-side comparison.")}</p>
               </section>
             )}
 
             <section className="exercise-explorer-section">
               <div className="exercise-explorer-section-head">
                 <div>
-                  <p className="eyebrow">Personal records</p>
-                  <h3>Best by rep range</h3>
+                  <p className="eyebrow">{t("Personal records")}</p>
+                  <h3>{t("Best by rep range")}</h3>
                 </div>
               </div>
               {data.repRangeRecords.length > 0 ? (
@@ -588,11 +591,11 @@ export function ExerciseExplorer({
                         Math.abs(record.weightKg - data.heaviestSet.weightKg) < 0.01
                       }
                     >
-                      <span>{record.shortLabel}</span>
+                      <span>{t(record.shortLabel)}</span>
                       <small>
                         {record.weightKg > 0
                           ? `× ${record.reps} · ${formatDate(record.at)}`
-                          : record.label}
+                          : t(record.label)}
                       </small>
                       <strong>{formatWeight(record.weightKg, unitSystem)}</strong>
                     </article>
@@ -600,9 +603,7 @@ export function ExerciseExplorer({
                 </div>
               ) : (
                 <p className="exercise-explorer-empty">
-                  Rep-range records appear once you log a loaded set. Bodyweight work still
-                  shows in the set log below.
-                </p>
+                  {t("Rep-range records appear once you log a loaded set. Bodyweight work still shows in the set log below.")} </p>
               )}
             </section>
           </div>
@@ -610,15 +611,15 @@ export function ExerciseExplorer({
           <section className="exercise-explorer-section exercise-explorer-log">
             <div className="exercise-explorer-section-head">
               <div>
-                <p className="eyebrow">Set log</p>
-                <h3>Every session</h3>
+                <p className="eyebrow">{t("Set log")}</p>
+                <h3>{t("Every session")}</h3>
               </div>
               <span className="exercise-spine-key">
                 <i data-band="warmup" />
                 <i data-band="work" />
                 <i data-band="heavy" />
                 <i data-band="top" />
-                {loaded ? "light → heaviest" : "fewest → most reps"}
+                {loaded ? t("light → heaviest") : t("fewest → most reps")}
               </span>
             </div>
             <div className="exercise-session-history">
@@ -645,16 +646,16 @@ export function ExerciseExplorer({
                       />
                       <span className="exercise-history-prs">
                         {record.prs.map((pr) => (
-                          <span key={pr}>{PR_LABELS[pr]}</span>
+                          <span key={pr}>{t(PR_LABELS[pr])}</span>
                         ))}
                       </span>
                       <span className="exercise-history-summary">
-                        <span>{record.sets.length} sets</span>
-                        <span>{record.totalReps} reps</span>
+                        <span>{record.sets.length} {t("sets")}</span>
+                        <span>{record.totalReps} {t("reps")}</span>
                         <strong>
                           {loaded
                             ? formatWeight(record.bestE1rmKg, unitSystem)
-                            : `${Math.max(...record.sets.map((set) => set.reps))} best reps`}
+                            : t("{{value1}} best reps", { value1: String(Math.max(...record.sets.map((set) => set.reps))) })}
                         </strong>
                       </span>
                       <ChevronDown size={16} aria-hidden="true" />
@@ -664,12 +665,12 @@ export function ExerciseExplorer({
                         <table className="exercise-set-table">
                           <thead>
                             <tr>
-                              <th>Set</th>
-                              <th>Weight</th>
-                              <th>Reps</th>
-                              <th>e1RM</th>
-                              <th>Volume</th>
-                              <th>Work / rest</th>
+                              <th>{t("Set")}</th>
+                              <th>{t("Weight")}</th>
+                              <th>{t("Reps")}</th>
+                              <th>{t("e1RM")}</th>
+                              <th>{t("Volume")}</th>
+                              <th>{t("Work / rest")}</th>
                             </tr>
                           </thead>
                           <tbody>

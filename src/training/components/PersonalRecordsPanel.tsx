@@ -1,3 +1,4 @@
+import { getLocale, useLanguage, t } from "../../i18n/training";
 import { Mountain, Route } from "lucide-react";
 import { useEffect, useMemo, type CSSProperties, type ReactNode } from "react";
 import type {
@@ -82,6 +83,7 @@ function recordMark(label: string): string {
 }
 
 function Laurels({ children, celebrating }: { children: ReactNode; celebrating: boolean }) {
+  useLanguage();
   return (
     <div className={celebrating ? "pr-emblem is-celebrating" : "pr-emblem"} aria-hidden="true">
       <img className="pr-emblem-wheat is-left" src={`${PR_ASSET_BASE}/left-wheat_no_bg.png`} alt="" />
@@ -96,6 +98,7 @@ export function PersonalRecordsPanel({
   celebration = null,
   onCelebrate
 }: PersonalRecordsPanelProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const groups = dashboard?.personalRecords ?? [];
   const [activeGroupType, setActiveGroupType] = useSelectionPreference(
@@ -114,7 +117,7 @@ export function PersonalRecordsPanel({
 
   const activeGroup = useMemo(
     () => groups.find((group) => group.type === activeGroupType) ?? groups[0],
-    [activeGroupType, groups]
+    [activeGroupType, groups, getLocale()]
   );
 
   const records = (activeGroup?.records ?? []).filter(isPersonalRecordVisible);
@@ -146,21 +149,20 @@ export function PersonalRecordsPanel({
         <div className="pr-head-title">
           <Laurels celebrating={celebrated !== null}>{populated.length}</Laurels>
           <div className="pr-head-copy">
-            <p className="pr-eyebrow">Hall of bests</p>
-            <h2 className="pr-title">Personal Records</h2>
+            <p className="pr-eyebrow">{t("Hall of bests")}</p>
+            <h2 className="pr-title">{t("Personal Records")}</h2>
             {celebrated ? (
               <p className="pr-announce" key={celebration?.nonce} role="status">
                 <span className="pr-announce-spark" aria-hidden="true" />
-                New personal record: <strong>{recordLabel(celebrated, unitSystem)}</strong> in{" "}
+                {t("New personal record:")} <strong>{recordLabel(celebrated, unitSystem)}</strong> {t("in")}{" "}
                 <strong>{formatPersonalRecordHero(celebrated, unitSystem)}</strong>
               </p>
             ) : (
               <p className="pr-summary">
-                {populated.length} of {records.length} set
-                {newest ? (
+                {populated.length} {t("of")} {records.length} {t("set")} {newest ? (
                   <>
                     <span className="pr-summary-sep" aria-hidden="true" />
-                    Latest: <strong>{recordLabel(newest, unitSystem)}</strong> on{" "}
+                    {t("Latest:")} <strong>{recordLabel(newest, unitSystem)}</strong> {t("on")}{" "}
                     {formatRecordDateShort(newest.happenDay)}
                   </>
                 ) : null}
@@ -170,7 +172,7 @@ export function PersonalRecordsPanel({
         </div>
 
         {groups.length > 0 ? (
-          <div className="pr-periods" role="tablist" aria-label="Record period">
+          <div className="pr-periods" role="tablist" aria-label={t("Record period")}>
             {groups.map((group) => (
               <button
                 key={group.type}
@@ -180,7 +182,7 @@ export function PersonalRecordsPanel({
                 className={group.type === activeGroup?.type ? "pr-period active" : "pr-period"}
                 onClick={() => setActiveGroupType(group.type)}
               >
-                {group.label}
+                {t(group.label)}
               </button>
             ))}
           </div>
@@ -191,7 +193,7 @@ export function PersonalRecordsPanel({
         <div className="pr-body" key={activeGroup?.type}>
           {raceRecords.length > 0 ? (
             <div className="pr-section">
-              <p className="pr-section-label">Race distances</p>
+              <p className="pr-section-label">{t("Race distances")}</p>
               <div
                 className="pr-race-grid"
                 style={
@@ -220,7 +222,7 @@ export function PersonalRecordsPanel({
 
           {enduranceRecords.length > 0 ? (
             <div className="pr-section">
-              <p className="pr-section-label">Endurance</p>
+              <p className="pr-section-label">{t("Endurance")}</p>
               <div className="pr-endurance-grid">
                 {enduranceRecords.map((record, index) => (
                   <EnduranceRecordCard
@@ -240,7 +242,7 @@ export function PersonalRecordsPanel({
         </div>
       ) : (
         <div className="training-empty-state">
-          <p>No personal records loaded from your COROS dashboard yet.</p>
+          <p>{t("No personal records loaded from your COROS dashboard yet.")}</p>
         </div>
       )}
     </section>
@@ -257,16 +259,16 @@ interface RecordCardProps {
 }
 
 function LatestChip({ onCelebrate }: { onCelebrate: () => void }) {
+  useLanguage();
   return (
     <button
       type="button"
       className="pr-latest-chip"
       onClick={onCelebrate}
-      title="Celebrate again"
+      title={t("Celebrate again")}
     >
       <img src={`${PR_ASSET_BASE}/pr-logo_no_bg.png`} alt="" aria-hidden="true" />
-      New PR
-    </button>
+      {t("New PR")} </button>
   );
 }
 
@@ -293,6 +295,7 @@ function CardSlot({
   celebrationNonce: number | null;
   children: ReactNode;
 }) {
+  useLanguage();
   return (
     <div className={celebrationNonce !== null ? "pr-card-slot is-celebrating" : "pr-card-slot"}>
       {children}
@@ -302,6 +305,7 @@ function CardSlot({
 }
 
 function RaceRecordCard({ record, index, isLatest, celebrationNonce, onCelebrate }: RecordCardProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const populated = isPersonalRecordPopulated(record);
   const label = recordLabel(record, unitSystem);
@@ -321,7 +325,7 @@ function RaceRecordCard({ record, index, isLatest, celebrationNonce, onCelebrate
         </span>
 
         <div className="pr-card-top">
-          <span className="pr-card-label">{label}</span>
+          <span className="pr-card-label">{t(label)}</span>
           {isLatest ? <LatestChip onCelebrate={onCelebrate} /> : null}
         </div>
 
@@ -342,9 +346,9 @@ function RaceRecordCard({ record, index, isLatest, celebrationNonce, onCelebrate
           </>
         ) : (
           <>
-            <p className="pr-card-hero is-empty">Not yet set</p>
+            <p className="pr-card-hero is-empty">{t("Not yet set")}</p>
             <div className="pr-card-foot">
-              <span className="pr-card-date">Your first {label.toLowerCase()} lands here</span>
+              <span className="pr-card-date">{t("Your first")} {label.toLowerCase()} {t("lands here")}</span>
             </div>
           </>
         )}
@@ -360,6 +364,7 @@ function EnduranceRecordCard({
   celebrationNonce,
   onCelebrate
 }: RecordCardProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const populated = isPersonalRecordPopulated(record);
   const Icon = record.type === RECORD_TYPE_ELEVATION_GAIN ? Mountain : Route;
@@ -389,7 +394,7 @@ function EnduranceRecordCard({
               {unit ? <span className="pr-card-unit">{unit}</span> : null}
             </p>
           ) : (
-            <p className="pr-card-hero is-empty">Not yet set</p>
+            <p className="pr-card-hero is-empty">{t("Not yet set")}</p>
           )}
         </div>
 

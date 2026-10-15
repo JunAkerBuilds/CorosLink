@@ -1,3 +1,4 @@
+import { t } from "../../i18n/toolsLocale";
 import type { UnitSystem } from "../../../electron/types";
 import { elevationUnit, metersToElevation } from "../../units/units";
 
@@ -29,7 +30,7 @@ export function requestDeviceRouteLocation(
 
   if (!geolocation) {
     return Promise.reject(
-      new Error("Location services are not available in this app session.")
+      new Error(t("Location services are not available in this app session."))
     );
   }
 
@@ -44,7 +45,7 @@ export function requestDeviceRouteLocation(
           Math.abs(latitude) > 90 ||
           Math.abs(longitude) > 180
         ) {
-          reject(new Error("Location services returned invalid coordinates."));
+          reject(new Error(t("Location services returned invalid coordinates.")));
           return;
         }
 
@@ -57,7 +58,7 @@ export function requestDeviceRouteLocation(
             : "";
 
         resolve({
-          label: `Current location${accuracyLabel}`,
+          label: t("Current location{{p0}}", { p0: accuracyLabel }),
           lat: latitude,
           lon: longitude
         });
@@ -72,14 +73,14 @@ function describeLocationError(error: GeolocationPositionError): string {
   switch (error.code) {
     case 1:
       return (
-        "Location access was denied. Allow CorosLink in System Settings > " +
-        "Privacy & Security > Location Services, then try again."
+        t("Location access was denied. Allow CorosLink in System Settings > ") +
+        t("Privacy & Security > Location Services, then try again.")
       );
     case 2:
-      return "Your device could not determine a location. Check that Location Services is enabled and try again.";
+      return t("Your device could not determine a location. Check that Location Services is enabled and try again.");
     case 3:
-      return "Location request timed out. Move to an area with a better location signal and try again.";
+      return t("Location request timed out. Move to an area with a better location signal and try again.");
     default:
-      return "Could not get your current location. Try again.";
+      return t("Could not get your current location. Try again.");
   }
 }

@@ -1,3 +1,4 @@
+import { useLanguage, t } from "../../i18n/training";
 import { useLayoutEffect, useState, type RefObject } from 'react';
 import { moveWidget, widgetCatalog, widgetPreset, type DashboardWidget, type WidgetId } from '../dashboardLayout';
 import { packDashboard } from '../dashboardPacking';
@@ -7,6 +8,7 @@ import type { DashboardDropTarget } from '../dashboardDrop';
 export function WidgetDropPreview({ gridRef, layout, dragged, target }: {
   gridRef: RefObject<HTMLDivElement | null>; layout: DashboardWidget[]; dragged: WidgetId; target: DashboardDropTarget;
 }) {
+  useLanguage();
   const [rect, setRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   useLayoutEffect(() => {
     const grid = gridRef.current;
@@ -26,5 +28,5 @@ export function WidgetDropPreview({ gridRef, layout, dragged, target }: {
     setRect({ left: packed.positions[index].column * unit, top: packed.positions[index].top, width: items[index].span * unit - 16, height: items[index].height });
   }, [gridRef, layout, dragged, target]);
   const title = layout.find(widget => widget.id === dragged)?.title || widgetCatalog.find(widget => widget.id === dragged)!.title;
-  return rect && <div className="hub-drop-preview" style={rect} aria-hidden="true"><span>Place {title} here</span></div>;
+  return rect && <div className="hub-drop-preview" style={rect} aria-hidden="true"><span>{t("Place")} {title} {t("here")}</span></div>;
 }

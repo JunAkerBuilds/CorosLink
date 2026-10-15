@@ -1,3 +1,4 @@
+import { getLocale, useLanguage, t } from "../i18n/training";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowRight, CalendarClock, ChevronDown, Loader2 } from "lucide-react";
@@ -28,11 +29,11 @@ function writeOpen(open: boolean) {
 function formatClock(time: string): string {
   const minutes = toMinutes(time);
   return new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60)
-    .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    .toLocaleTimeString(getLocale(), { hour: "numeric", minute: "2-digit" });
 }
 
 function timingSummary(timing: CalendarEventTiming): string {
-  return timing.mode === "all-day" ? "All day" : `${formatClock(timing.startTime)} – ${formatClock(timing.endTime)}`;
+  return timing.mode === "all-day" ? t("All day") : `${formatClock(timing.startTime)} – ${formatClock(timing.endTime)}`;
 }
 
 function errorText(error: unknown): string {
@@ -88,6 +89,7 @@ export function CalendarEventEditor({ api, eventRef, disabled, onSaved }: {
   disabled: boolean;
   onSaved: (event: CalendarWorkoutEvent) => void;
 }) {
+  useLanguage();
   const [timing, setTiming] = useState<CalendarEventTiming | null>(null);
   const [saved, setSaved] = useState<CalendarEventTiming | null>(null);
   const [saving, setSaving] = useState(false);
@@ -112,7 +114,7 @@ export function CalendarEventEditor({ api, eventRef, disabled, onSaved }: {
     return () => { cancelled = true; mounted.current = false; };
   }, [api, eventRef.userId, eventRef.planId, eventRef.idInPlan, eventRef.happenDay, retry]);
 
-  const zones = useMemo(() => timeZoneOptions(timing?.timeZone ?? ""), [timing?.timeZone]);
+  const zones = useMemo(() => timeZoneOptions(timing?.timeZone ?? ""), [timing?.timeZone, getLocale()]);
   const dirty = !sameTiming(timing, saved);
   const duration = timing?.mode === "timed" ? durationMinutes(timing) : 0;
   const overnight = timing?.mode === "timed" && timing.endTime <= timing.startTime;
@@ -147,7 +149,7 @@ export function CalendarEventEditor({ api, eventRef, disabled, onSaved }: {
       setTiming(result.event.timing);
       setSaved(result.event.timing);
       onSaved(result.event);
-      setMessage(result.synced.length ? `Saved and updated ${result.synced.join(" and ")}.`
+      setMessage(result.synced.length ? t("Saved and updated {{value1}}.", { value1: String(result.synced.join(" and ")) })
         : result.errors.length ? "Saved in CorosLink. Calendar sync needs another try."
         : "Saved in CorosLink. Connect a calendar in Settings to sync it.");
       if (result.errors.length) setError(result.errors.join(" "));
@@ -158,7 +160,7 @@ export function CalendarEventEditor({ api, eventRef, disabled, onSaved }: {
     }
   }
 
-  return <form className="calendar-workout-event" onSubmit={save} aria-label="Calendar event">
+  return <form className="calendar-workout-event" onSubmit={save} aria-label={t("Calendar event")}>
     <button
       type="button"
       className="calendar-workout-event-head"
@@ -166,11 +168,11 @@ export function CalendarEventEditor({ api, eventRef, disabled, onSaved }: {
       aria-controls="calendar-workout-event-body"
       onClick={toggle}
     >
-      <span className="calendar-workout-event-title"><CalendarClock size={15} aria-hidden="true" />Calendar event</span>
+      <span className="calendar-workout-event-title"><CalendarClock size={15} aria-hidden="true" />{t("Calendar event")}</span>
       <span className="calendar-workout-event-summary">
-        {open ? "Syncs to Google & Apple"
-          : timing ? <>{timingSummary(timing)}{dirty ? <em>Unsaved</em> : null}</>
-          : error ? "Unavailable" : "Loading…"}
+        {open ? t("Syncs to Google & Apple")
+          : timing ? <>{timingSummary(timing)}{dirty ? <em>{t("Unsaved")}</em> : null}</>
+          : error ? t("Unavailable") : t("Loading…")}
       </span>
       <ChevronDown size={15} aria-hidden="true" className="calendar-workout-event-chevron" />
     </button>
@@ -186,7 +188,7 @@ export function CalendarEventEditor({ api, eventRef, disabled, onSaved }: {
       transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
     ><div className="calendar-workout-event-inner">
     {timing ? <fieldset disabled={saving || disabled}>
-      <div className="calendar-workout-event-mode" role="radiogroup" aria-label="Event type">
+      <div className="calendar-workout-event-mode" role="radiogroup" aria-label={t("Event type")}>
         {([["all-day", "All day"], ["timed", "Timed"]] as const).map(([mode, label]) => (
           <button
             key={mode}
@@ -195,26 +197,26 @@ export function CalendarEventEditor({ api, eventRef, disabled, onSaved }: {
             aria-checked={timing.mode === mode}
             className={timing.mode === mode ? "is-active" : undefined}
             onClick={() => edit({ ...timing, mode })}
-          >{label}</button>
+          >{t(label)}</button>
         ))}
       </div>
 
       {timing.mode === "timed" ? <>
         <div className="calendar-workout-event-times">
           <label>
-            <span>Starts</span>
+            <span>{t("Starts")}</span>
             <input name="startTime" type="time" required value={timing.startTime} onChange={event => setStart(event.target.value)} />
           </label>
           <ArrowRight size={15} aria-hidden="true" className="calendar-workout-event-arrow" />
           <label>
-            <span>Ends</span>
+            <span>{t("Ends")}</span>
             <input name="endTime" type="time" required value={timing.endTime} onChange={event => edit({ ...timing, endTime: event.target.value })} />
           </label>
         </div>
 
-        <div className="calendar-workout-event-durations" role="group" aria-label="Duration">
+        <div className="calendar-workout-event-durations" role="group" aria-label={t("Duration")}>
           <span className="calendar-workout-event-duration" aria-live="polite">
-            {formatDuration(duration)}{overnight ? " · ends next day" : ""}
+            {formatDuration(duration)}{overnight ? t(" · ends next day") : ""}
           </span>
           {DURATION_PRESETS.map(minutes => (
             <button
@@ -228,27 +230,26 @@ export function CalendarEventEditor({ api, eventRef, disabled, onSaved }: {
         </div>
 
         <label className="calendar-workout-event-zone">
-          <span>Time zone</span>
+          <span>{t("Time zone")}</span>
           <select name="timeZone" required value={timing.timeZone} onChange={event => edit({ ...timing, timeZone: event.target.value })}>
             {zones.map(zone => <option key={zone} value={zone}>{zone.replace(/_/g, " ")}</option>)}
           </select>
         </label>
-      </> : <p className="calendar-workout-event-hint">Shows as an all-day event on this date.</p>}
+      </> : <p className="calendar-workout-event-hint">{t("Shows as an all-day event on this date.")}</p>}
 
       <div className="calendar-workout-event-foot">
         <p role="status">
-          {message ?? (dirty ? "Unsaved changes" : "Up to date")}
+          {(message == null ? message : t(String(message))) ?? (dirty ? t("Unsaved changes") : t("Up to date"))}
         </p>
         {dirty && !saving ? <button type="button" className="calendar-workout-event-reset" onClick={() => { setTiming(saved); setError(null); }}>
-          Reset
-        </button> : null}
+          {t("Reset")} </button> : null}
         <button type="submit" className="primary-button" disabled={(!dirty && !error) || saving}>
           {saving ? <Loader2 size={14} className="spin" aria-hidden="true" /> : null}
-          {saving ? "Syncing…" : "Save & sync"}
+          {saving ? t("Syncing…") : t("Save & sync")}
         </button>
       </div>
-    </fieldset> : error ? <button type="button" className="secondary-button" onClick={() => setRetry(value => value + 1)}>Try again</button>
-      : <p role="status" className="calendar-workout-event-hint">Loading event…</p>}
+    </fieldset> : error ? <button type="button" className="secondary-button" onClick={() => setRetry(value => value + 1)}>{t("Try again")}</button>
+      : <p role="status" className="calendar-workout-event-hint">{t("Loading event…")}</p>}
     </div></motion.div> : null}
     </AnimatePresence>
 

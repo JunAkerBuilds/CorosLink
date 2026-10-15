@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/tools";
 import { useEffect, useId, useState } from "react";
 import { ChevronDown, Loader2, Save } from "lucide-react";
 import { MAX_CUSTOM_COACH_INSTRUCTIONS } from "../../electron/types";
@@ -18,6 +19,7 @@ export function CoachInstructionsSettings({
   disabled?: boolean;
   onSave: (value: string) => Promise<boolean>;
 }) {
+  useLanguage();
   const descriptionId = useId();
   const countId = useId();
   const [draft, setDraft] = useState(value);
@@ -53,7 +55,7 @@ export function CoachInstructionsSettings({
     setLoadingBase(true);
     setBaseError(false);
     try {
-      if (!api) throw new Error("Coach is unavailable");
+      if (!api) throw new Error(t("Coach is unavailable"));
       setBaseInstructions(await api.getBaseCoachInstructions());
     } catch {
       setBaseError(true);
@@ -70,17 +72,15 @@ export function CoachInstructionsSettings({
     >
       <ChatSettingsSectionHeader id="coach" />
       <p className="chat-settings-copy" id={descriptionId}>
-        Tell your coach about your goals, training days, equipment, or preferred
-        tone. Saved preferences apply to your next message with any provider.
-      </p>
+        {t("Tell your coach about your goals, training days, equipment, or preferred tone. Saved preferences apply to your next message with any provider.")}</p>
       <label className="chat-local-field">
-        <span>Custom instructions</span>
+        <span>{t("Custom instructions")}</span>
         <textarea
           className="chat-custom-instructions"
           rows={5}
           maxLength={MAX_CUSTOM_COACH_INSTRUCTIONS}
           aria-describedby={`${descriptionId} ${countId}`}
-          placeholder="I'm training for an October marathon. I can run Tuesday, Thursday, and Saturday. Keep advice concise."
+          placeholder={t("I'm training for an October marathon. I can run Tuesday, Thursday, and Saturday. Keep advice concise.")}
           value={draft}
           disabled={saving}
           onChange={(event) => {
@@ -98,21 +98,18 @@ export function CoachInstructionsSettings({
       </label>
       <div className="chat-custom-instructions-meta">
         <span role="status">
-          {saving ? "Saving…" : dirty ? "Unsaved changes" : saved || value ? "Saved" : "Leave blank to use defaults"}
+          {saving ? t("Saving…") : dirty ? t("Unsaved changes") : saved || value ? t("Saved") : t("Leave blank to use defaults")}
         </span>
         <span id={countId}>
-          {draft.length.toLocaleString()} / {MAX_CUSTOM_COACH_INSTRUCTIONS.toLocaleString()} characters
-        </span>
+          {draft.length.toLocaleString(getLocale())} / {MAX_CUSTOM_COACH_INSTRUCTIONS.toLocaleString(getLocale())}  {t("characters")}</span>
       </div>
       {saveError ? (
         <p className="chat-custom-instructions-error" role="alert">
-          Could not save your instructions. Your changes are still here. Try again.
-        </p>
+          {t("Could not save your instructions. Your changes are still here. Try again.")}</p>
       ) : null}
       <div className="chat-custom-instructions-footer">
         <p className="chat-settings-copy">
-          Stored on this device and sent to your selected AI provider with each message.
-        </p>
+          {t("Stored on this device and sent to your selected AI provider with each message.")}</p>
         <div className="chat-local-actions">
           <button
             type="button"
@@ -124,8 +121,7 @@ export function CoachInstructionsSettings({
               setSaved(false);
             }}
           >
-            Discard changes
-          </button>
+            {t("Discard changes")}</button>
           <button
             type="button"
             className="chat-local-action primary"
@@ -133,8 +129,7 @@ export function CoachInstructionsSettings({
             onClick={() => void save()}
           >
             {saving ? <Loader2 className="chat-spinner" size={14} aria-hidden="true" /> : <Save size={14} aria-hidden="true" />}
-            Save instructions
-          </button>
+            {t("Save instructions")}</button>
         </div>
       </div>
       <details
@@ -145,19 +140,17 @@ export function CoachInstructionsSettings({
       >
         <summary>
           <ChevronDown size={14} aria-hidden="true" />
-          View default coach instructions
-        </summary>
+          {t("View default coach instructions")}</summary>
         {baseError ? (
           <div className="chat-base-instructions-status" role="alert">
-            <p className="chat-settings-copy">Could not load the default instructions.</p>
+            <p className="chat-settings-copy">{t("Could not load the default instructions.")}</p>
             <button type="button" className="chat-local-action" onClick={() => void loadBaseInstructions()}>
-              Try again
-            </button>
+              {t("Try again")}</button>
           </div>
         ) : baseInstructions === null ? (
-          <p className="chat-settings-copy chat-base-instructions-status" role="status">Loading…</p>
+          <p className="chat-settings-copy chat-base-instructions-status" role="status">{t("Loading…")}</p>
         ) : (
-          <pre className="chat-base-instructions-body" tabIndex={0} aria-label="Default coach instructions">{baseInstructions}</pre>
+          <pre className="chat-base-instructions-body" tabIndex={0} aria-label={t("Default coach instructions")}>{baseInstructions}</pre>
         )}
       </details>
     </section>

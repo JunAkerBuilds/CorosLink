@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { batteryStateMeaning, batteryReplacementStateCount, COROS_BATTERY_STATE_ORDER } from "./watchfaceBatteryStates";
 import { WatchfaceAddMenu, type WatchfaceAddCategory, type WatchfaceAddFaceOption } from "./WatchfaceAddMenu";
 import { recoverChartGroup, recoveredChartSources, recoverWatchfaceDesign } from "./recoveredWatchfaceDesign";
@@ -56,6 +57,7 @@ function EditableNumberInput({
   fallback?: number;
   onValueChange: (value: number) => void;
 }) {
+  useLanguage();
   const inputRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState(String(value));
   const [scrubbing, setScrubbing] = useState(false);
@@ -97,7 +99,7 @@ function EditableNumberInput({
       className={`${className ?? ""} wf-scrubbable-number${
         scrubbing ? " is-scrubbing" : ""
       }`.trim()}
-      title={title ?? "Drag left or right to adjust. Click to type."}
+      title={title ?? t("Drag left or right to adjust. Click to type.")}
       onChange={(event) => {
         const next = event.target.value;
         setDraft(next);
@@ -185,6 +187,7 @@ function EditableHexColorInput({
   value: string;
   onValueChange: (value: string) => void;
 }) {
+  useLanguage();
   const inputRef = useRef<HTMLInputElement>(null);
   const normalizedValue = value.replace(/^#/, "").toUpperCase();
   const [draft, setDraft] = useState(normalizedValue);
@@ -651,6 +654,7 @@ function LinkedDimensionInputs({
   onDimensionsChange: (dimensions: WatchfaceDimensions) => void;
   onLinkedChange: (linked: boolean) => void;
 }) {
+  useLanguage();
   const updateDimension = (axis: WatchfaceDimensionAxis, value: number) => {
     onDimensionsChange(
       resizeWatchfaceDimensions(
@@ -664,20 +668,20 @@ function LinkedDimensionInputs({
     );
   };
   const toggleLabel = linked
-    ? "Unlink width and height"
-    : "Link width and height";
+    ? t("Unlink width and height")
+    : t("Link width and height");
   const finiteMaximum = Number.isFinite(maximum) ? maximum : undefined;
 
   return (
     <div
       className="watchface-position-inputs wf-linked-dimension-inputs"
       role="group"
-      aria-label="Dimensions"
+      aria-label={t("Dimensions")}
     >
       <label>
         W
         <EditableNumberInput
-          aria-label="Width"
+          aria-label={t("Width")}
           min={minimum}
           max={finiteMaximum}
           step="1"
@@ -689,9 +693,9 @@ function LinkedDimensionInputs({
       <button
         type="button"
         className="wf-linked-dimension-toggle"
-        aria-label={toggleLabel}
+        aria-label={t(toggleLabel)}
         aria-pressed={linked}
-        title={toggleLabel}
+        title={t(toggleLabel)}
         onClick={() => onLinkedChange(!linked)}
       >
         <Link2 size={14} aria-hidden="true" />
@@ -699,7 +703,7 @@ function LinkedDimensionInputs({
       <label>
         H
         <EditableNumberInput
-          aria-label="Height"
+          aria-label={t("Height")}
           min={minimum}
           max={finiteMaximum}
           step="1"
@@ -1020,6 +1024,7 @@ export function WatchfaceEditor({
   onNotice,
   onClearMessages
 }: WatchfaceEditorProps) {
+  useLanguage();
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const dragPreviewCanvasRef = useRef<HTMLCanvasElement>(null);
   const arcOverlayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -1214,7 +1219,7 @@ export function WatchfaceEditor({
   const [layersOpen, setLayersOpen] = useState(false);
   const [layerQuery, setLayerQuery] = useState("");
   const [collapsedLayerSections, setCollapsedLayerSections] = useState(
-    () => new Set<string>(["Template assets", "Always-on assets"])
+    () => new Set<string>([t("Template assets"), "Always-on assets"])
   );
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [aiHeadingSlot, setAiHeadingSlot] = useState<HTMLDivElement | null>(null);
@@ -1374,7 +1379,7 @@ export function WatchfaceEditor({
     if (snapStatusElementRef.current) {
       snapStatusElementRef.current.textContent = selectedElement
         ? backgroundElementLabel(selectedElement)
-        : selectedLayer?.label ?? "No selection";
+        : selectedLayer?.label ?? t("No selection");
       snapStatusElementRef.current.classList.remove("is-snap-status");
     }
   }
@@ -1520,12 +1525,12 @@ export function WatchfaceEditor({
       snapGuidesRef.current.flatMap((guide) => guide.kind === "layer" && guide.targetId ? [guide.targetId] : [])
     );
     const status = alignedTargets.size > 1
-      ? `Aligned with ${alignedTargets.size} layers`
+      ? t("Aligned with {{value1}} layers", { value1: alignedTargets.size })
       : formatWatchfaceSnapStatus(snapGuidesRef.current);
     if (snapStatusElementRef.current) {
       snapStatusElementRef.current.textContent = status ?? (selectedElement
         ? backgroundElementLabel(selectedElement)
-        : selectedLayer?.label ?? "No selection");
+        : selectedLayer?.label ?? t("No selection"));
       snapStatusElementRef.current.classList.toggle("is-snap-status", Boolean(status));
     }
   }
@@ -1988,7 +1993,7 @@ export function WatchfaceEditor({
       })
       .catch((caught) => {
         if (!cancelled) {
-          onError(caught instanceof Error ? caught.message : "Could not read the template.");
+          onError(caught instanceof Error ? caught.message : t("Could not read the template."));
         }
       });
     return () => {
@@ -2811,7 +2816,7 @@ export function WatchfaceEditor({
     ];
     setSelectedIds(mergedSelection);
     setContextMenu(null);
-    onNotice(`${mergedSelection.length} components grouped. They now move together.`);
+    onNotice(t("{{value1}} components grouped. They now move together.", { value1: mergedSelection.length }));
   }
 
   function unlinkSelectedLayers() {
@@ -2829,7 +2834,7 @@ export function WatchfaceEditor({
     }));
     setSelectedIds(selectedId ? [selectedId] : []);
     setContextMenu(null);
-    onNotice("Group removed. Components can now move independently.");
+    onNotice(t("Group removed. Components can now move independently."));
   }
 
   function setLayerPositionLocked(id: string, locked: boolean) {
@@ -2851,8 +2856,8 @@ export function WatchfaceEditor({
     setContextMenu(null);
     onNotice(
       movable.length === 1
-        ? "Component position locked."
-        : `${movable.length} component positions locked.`
+        ? t("Component position locked.")
+        : t("{{value1}} component positions locked.", { value1: movable.length })
     );
   }
 
@@ -2868,8 +2873,8 @@ export function WatchfaceEditor({
     setContextMenu(null);
     onNotice(
       movable.size === 1
-        ? "Component position unlocked."
-        : `${movable.size} component positions unlocked.`
+        ? t("Component position unlocked.")
+        : t("{{value1}} component positions unlocked.", { value1: movable.size })
     );
   }
 
@@ -2993,7 +2998,7 @@ export function WatchfaceEditor({
         applyLayoutMovements(glyphBaselineMovements(measured), items);
       }
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : "Could not measure glyph baselines.");
+      onError(caught instanceof Error ? caught.message : t("Could not measure glyph baselines."));
     } finally { setAligningGlyphs(false); }
   }
 
@@ -3294,7 +3299,7 @@ export function WatchfaceEditor({
     previewComplicationContent: WatchfaceStudioOptions["previewComplicationContent"] = "all"
   ): Promise<HTMLCanvasElement> {
     if (!modeSourceDetails) {
-      throw new Error("Watch face details are not ready.");
+      throw new Error(t("Watch face details are not ready."));
     }
     const frame = document.createElement("canvas");
     frame.width = dragPreviewCanvasRef.current?.width ?? PREVIEW_SIZE;
@@ -5560,9 +5565,9 @@ export function WatchfaceEditor({
           ? { nativeSize: Boolean(reference.source) }
           : {})
       });
-      onNotice(`${reference.label} replaced for every supported resolution.`);
+      onNotice(t("{{value1}} replaced for every supported resolution.", { value1: t(reference.label) }));
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : "Could not replace the template image.");
+      onError(caught instanceof Error ? caught.message : t("Could not replace the template image."));
     }
   }
 
@@ -5602,14 +5607,14 @@ export function WatchfaceEditor({
         )
       );
       if (validSprites.length === 0) {
-        throw new Error("Name battery sprites 00.png, 01.png, and so on.");
+        throw new Error(t("Name battery sprites 00.png, 01.png, and so on."));
       }
       const uniqueSprites = new Map<string, (typeof validSprites)[number]>();
       for (const entry of validSprites) {
         const existing = uniqueSprites.get(entry.state);
         if (existing) {
           throw new Error(
-            `Duplicate battery sprite “${entry.state.padStart(2, "0")}” was found in “${existing.sprite.relativePath}” and “${entry.sprite.relativePath}”.`
+            t("Duplicate battery sprite “{{value1}}” was found in “{{value2}}” and “{{value3}}”.", { value1: entry.state.padStart(2, "0"), value2: existing.sprite.relativePath, value3: entry.sprite.relativePath })
           );
         }
         uniqueSprites.set(entry.state, entry);
@@ -5655,12 +5660,12 @@ export function WatchfaceEditor({
         `Imported ${Object.keys(stateReplacements).length} ${
           overrideId === "config:battery_icon"
             ? "battery"
-            : "control battery"
+            : t("control battery")
         } sprite states on a shared ${canvasWidth}×${canvasHeight}px canvas.`
       );
     } catch (caught) {
       if (canCommit()) {
-        onError(caught instanceof Error ? caught.message : "Could not load the battery sprite folder.");
+        onError(caught instanceof Error ? caught.message : t("Could not load the battery sprite folder."));
       }
     } finally {
       finishSpriteImport(importId);
@@ -6141,12 +6146,12 @@ export function WatchfaceEditor({
         enabled: true,
         artwork: await downscaleArtwork(selected)
       });
-      onNotice("Exercise separator PNG added to this display mode.");
+      onNotice(t("Exercise separator PNG added to this display mode."));
     } catch (caught) {
       onError(
         caught instanceof Error
           ? caught.message
-          : "Could not load the Exercise separator PNG."
+          : t("Could not load the Exercise separator PNG.")
       );
     }
   }
@@ -6313,10 +6318,10 @@ export function WatchfaceEditor({
       if (selected) {
         setBackgroundArtwork(await downscaleArtwork(selected));
         selectQuickStartItem("background");
-        onNotice("Artwork added. Adjust its size in Background settings.");
+        onNotice(t("Artwork added. Adjust its size in Background settings."));
       }
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : "Could not load artwork.");
+      onError(caught instanceof Error ? caught.message : t("Could not load artwork."));
     }
   }
 
@@ -6375,7 +6380,7 @@ export function WatchfaceEditor({
     setSelectedIds([`sprite:${duplicateId}`]);
     setContextMenu(null);
     setPropertiesOpen(true);
-    onNotice("Imported image duplicated.");
+    onNotice(t("Imported image duplicated."));
   }
 
   function removeSprite(spriteId: string) {
@@ -6448,23 +6453,19 @@ export function WatchfaceEditor({
     const index = order.indexOf(layerId);
     if (index < 0) return null;
     return (
-      <div className="wf-config-asset-actions" aria-label="Layer order">
+      <div className="wf-config-asset-actions" aria-label={t("Layer order")}>
         <button
           className="secondary-button"
           type="button"
           disabled={index === 0 || isPositionLocked(layerId)}
           onClick={() => moveArtworkLayer(layerId, "backward")}
-        >
-          Move backward
-        </button>
+        >{t("Move backward")}</button>
         <button
           className="secondary-button"
           type="button"
           disabled={index === order.length - 1 || isPositionLocked(layerId)}
           onClick={() => moveArtworkLayer(layerId, "forward")}
-        >
-          Move forward
-        </button>
+        >{t("Move forward")}</button>
       </div>
     );
   }
@@ -6550,7 +6551,7 @@ export function WatchfaceEditor({
   function browseOfficialImage() {
     setOfficialBrowser({
       mode: "image",
-      title: "Official COROS images",
+      title: t("Official COROS images"),
       onPick: (frames, frameIndex) => chooseSprite(officialFrameArtwork(frames, frameIndex))
     });
   }
@@ -6574,7 +6575,7 @@ export function WatchfaceEditor({
   function browseOfficialConfigAsset(reference: WatchfaceConfigAssetReference) {
     setOfficialBrowser({
       mode: "image",
-      title: `Official image for ${reference.label}`,
+      title: t("Official image for {{value1}}", { value1: t(reference.label) }),
       defaultCategory: officialCategoryForConfigKey(reference.configKey),
       onPick: (frames, frameIndex) => chooseConfigAsset(reference, officialFrameArtwork(frames, frameIndex))
     });
@@ -6583,7 +6584,7 @@ export function WatchfaceEditor({
   function browseOfficialBatterySprites(overrideId: "config:battery_icon" | "config:control_battery_icon" = "config:battery_icon") {
     setOfficialBrowser({
       mode: "sprites",
-      title: "Official battery sprites",
+      title: t("Official battery sprites"),
       defaultCategory: "battery",
       onPick: (frames) => chooseBatterySpriteFolder(overrideId, officialAssetToSpriteFolder(frames))
     });
@@ -6593,7 +6594,7 @@ export function WatchfaceEditor({
   function browseOfficialWeatherSprites(set: WeatherAssetSet) {
     setOfficialBrowser({
       mode: "sprites",
-      title: set === "digits" ? "Official temperature digits" : `Official ${set} weather icons`,
+      title: set === "digits" ? t("Official temperature digits") : t("Official {{set}} weather icons", { set: t(set) }),
       defaultCategory: set === "digits" ? "fonts" : "weather",
       defaultRole: set === "digits" ? "weather" : undefined,
       frameCount: WEATHER_ASSET_COUNTS[set],
@@ -6649,9 +6650,9 @@ export function WatchfaceEditor({
       }));
       setSelectedId(`sprite:${sprite.id}`);
       setSelectedIds([`sprite:${sprite.id}`]);
-      onNotice("Image added. Drag it on the face to position it.");
+      onNotice(t("Image added. Drag it on the face to position it."));
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : "Could not add the image.");
+      onError(caught instanceof Error ? caught.message : t("Could not add the image."));
     } finally {
       setLoadingSprite(false);
     }
@@ -6668,7 +6669,7 @@ export function WatchfaceEditor({
     onPreviewState?: (state: { previewComplication: string | null }) => void
   ): Promise<string> {
     if (!details) {
-      throw new Error("The editor is still loading. Try again in a moment.");
+      throw new Error(t("The editor is still loading. Try again in a moment."));
     }
     const designSnapshot = resolveWatchfaceModeDesign(rootDesignSnapshot, mode);
     const snapshotSourceDetails = detailsForCompositionMode(
@@ -6774,7 +6775,7 @@ export function WatchfaceEditor({
       colorSpace: "display-p3"
     });
     if (!context) {
-      throw new Error("Could not render the circular watch background.");
+      throw new Error(t("Could not render the circular watch background."));
     }
     context.drawImage(
       await loadStudioImage(snapshotBackgroundDataUrl, false),
@@ -6789,7 +6790,7 @@ export function WatchfaceEditor({
 
   async function openExportPreview() {
     if (spriteImportTrackerRef.current.pendingCount > 0) {
-      onError("Wait for the sprite import to finish before previewing.");
+      onError(t("Wait for the sprite import to finish before previewing."));
       return;
     }
     const previewSession = sessionId;
@@ -6802,7 +6803,7 @@ export function WatchfaceEditor({
         setExportPreviewImages({ ...built, details: compiledDetails });
       }
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : "Could not render the export preview.");
+      onError(caught instanceof Error ? caught.message : t("Could not render the export preview."));
     } finally {
       setPreviewingExport(false);
     }
@@ -6812,7 +6813,7 @@ export function WatchfaceEditor({
     const snapshot = historyRef.current.present.value;
     onConvertTarget(
       structuredClone(snapshot.design),
-      snapshot.projectName.trim() || "Custom watch face",
+      snapshot.projectName.trim() || t("Custom watch face"),
       isDirty,
       bakeForWatch
     );
@@ -6821,18 +6822,18 @@ export function WatchfaceEditor({
   async function exportEditableProject() {
     onClearMessages();
     if (spriteImportTrackerRef.current.pendingCount > 0) {
-      onError("Wait for the sprite import to finish before exporting.");
+      onError(t("Wait for the sprite import to finish before exporting."));
       return;
     }
     if (!details || !backgroundDataUrl) {
-      onError("The editor is still loading. Try again in a moment.");
+      onError(t("The editor is still loading. Try again in a moment."));
       return;
     }
     const editorSnapshot = historyRef.current.present.value;
     const designSnapshot = editorSnapshot.design;
     setExporting(true);
     try {
-      const name = editorSnapshot.projectName.trim() || "Custom watch face";
+      const name = editorSnapshot.projectName.trim() || t("Custom watch face");
       const result = await api.exportCorosWatchfaceProject({
         sourceArchiveId: starterArchive.archiveId,
         name,
@@ -6841,13 +6842,13 @@ export function WatchfaceEditor({
         previewDataUrl: await renderExportPreview(designSnapshot, "current")
       });
       if (result.saved) {
-        onNotice(`Exported “${name}” as an editable website ZIP.`);
+        onNotice(t("Exported “{{name}}” as an editable website ZIP.", { name }));
       }
     } catch (caught) {
       onError(
         caught instanceof Error
           ? caught.message
-          : "Could not export the editable project."
+          : t("Could not export the editable project.")
       );
     } finally {
       setExporting(false);
@@ -6864,20 +6865,20 @@ export function WatchfaceEditor({
       if (action === "automation" || action === "convert") {
         throw new WatchfaceAutomationError(
           "EDITOR_BUSY",
-          "Wait for the sprite import to finish before building."
+          t("Wait for the sprite import to finish before building.")
         );
       }
-      onError("Wait for the sprite import to finish before building.");
+      onError(t("Wait for the sprite import to finish before building."));
       return null;
     }
     if (!details || !backgroundDataUrl) {
       if (action === "automation" || action === "convert") {
         throw new WatchfaceAutomationError(
           "EDITOR_NOT_READY",
-          "The editor is still loading."
+          t("The editor is still loading.")
         );
       }
-      onError("The editor is still loading. Try again in a moment.");
+      onError(t("The editor is still loading. Try again in a moment."));
       return null;
     }
     const editorSnapshot = historyRef.current.present.value;
@@ -6891,7 +6892,7 @@ export function WatchfaceEditor({
         templateIdOverride &&
         (!/^\d{1,20}$/.test(templateIdOverride) || /^0+$/.test(templateIdOverride))
       ) {
-        throw new Error("Template ID overrides must contain 1-20 decimal digits.");
+        throw new Error(t("Template ID overrides must contain 1-20 decimal digits."));
       }
       if (
         watchfaceIdOverride &&
@@ -6899,11 +6900,11 @@ export function WatchfaceEditor({
         !/^(?:0|[1-9]\d{0,9})$/.test(watchfaceIdOverride)
       ) {
         throw new Error(
-          "Watch-face ID overrides must be a 32-bit decimal or 0x hex value."
+          t("Watch-face ID overrides must be a 32-bit decimal or 0x hex value.")
         );
       }
       if (templateNameOverride.length > 64) {
-        throw new Error("Template name overrides must be 64 characters or fewer.");
+        throw new Error(t("Template name overrides must be 64 characters or fewer."));
       }
       const configTextReplacements = Object.entries(
         designSnapshot.configTextEdits ?? {}
@@ -7058,21 +7059,21 @@ export function WatchfaceEditor({
       if (action !== "preview" && action !== "convert") onArchiveCreated?.(archive);
       const name = requestedName?.trim() ||
         editorSnapshot.projectName.trim() ||
-        "Custom watch face";
+        t("Custom watch face");
       if (action === "export") {
         const result = await api.exportCorosWatchfaceArchive({
           archiveId: archive.archiveId,
           name
         });
-        if (result.saved) onNotice(`Exported final watch-face ZIP for “${name}”.`);
+        if (result.saved) onNotice(t("Exported final watch-face ZIP for “{{name}}”.", { name: name }));
       } else if (action === "publish") {
         onPublish(archive, name);
-        onNotice("Watch face prepared for COROS.");
+        onNotice(t("Watch face prepared for COROS."));
       }
       return { archive, name };
     } catch (caught) {
       if (action === "automation" || action === "convert") throw caught;
-      onError(caught instanceof Error ? caught.message : "Could not build the archive.");
+      onError(caught instanceof Error ? caught.message : t("Could not build the archive."));
       return null;
     } finally {
       setCreating(false);
@@ -7085,11 +7086,11 @@ export function WatchfaceEditor({
    * archive built for the destination instead; it opens as a fresh starter.
    */
   const bakeForWatchRef = useRef<NonNullable<WatchfaceAutomationConversionInput["bakeForWatch"]>>(
-    async () => { throw new Error("The editor is not ready to convert."); }
+    async () => { throw new Error(t("The editor is not ready to convert.")); }
   );
   bakeForWatchRef.current = async (target, name) => {
     const built = await createArchive("convert", name, target);
-    if (!built) throw new Error("The archive could not be built for the destination watch.");
+    if (!built) throw new Error(t("The archive could not be built for the destination watch."));
     return built.archive;
   };
   // The conversion dialog holds this while the editor is frozen; delegate
@@ -7109,9 +7110,9 @@ export function WatchfaceEditor({
     if (!bakeForWatch || allWatchesExport) return;
     let folder: Awaited<ReturnType<typeof api.chooseCorosWatchfaceExportFolder>>;
     try { folder = await api.chooseCorosWatchfaceExportFolder(); }
-    catch (caught) { onError(caught instanceof Error ? caught.message : "Could not open the folder picker."); return; }
+    catch (caught) { onError(caught instanceof Error ? caught.message : t("Could not open the folder picker.")); return; }
     if (!folder) return;
-    const projectName = historyRef.current.present.value.projectName.trim() || "Custom watch face";
+    const projectName = historyRef.current.present.value.projectName.trim() || t("Custom watch face");
     // A converted project is already named "<name> (<watch>)"; don't stack suffixes.
     let baseName = projectName, suffix;
     while ((suffix = WATCHFACE_TARGETS.find(target => baseName.endsWith(` (${target.label})`)))) {
@@ -7124,7 +7125,7 @@ export function WatchfaceEditor({
         const name = `${baseName} (${target.label})`;
         try {
           const built = await createArchive("convert", name, { firmwareType: target.firmwareType, watchModel: target.model });
-          if (!built) throw new Error("The archive could not be built.");
+          if (!built) throw new Error(t("The archive could not be built."));
           await api.exportCorosWatchfaceArchiveToFolder({ archiveId: built.archive.archiveId, name, folderId: folder.folderId });
           saved.push(target.label);
         } catch (caught) {
@@ -7134,26 +7135,26 @@ export function WatchfaceEditor({
     } finally {
       setAllWatchesExport(null);
     }
-    if (failed.length) onError(`Exported ${saved.length} of ${WATCHFACE_TARGETS.length} to “${folder.label}”. Not exported: ${failed.join("; ")}`);
-    else onNotice(`Exported final ZIPs for all ${saved.length} watches to “${folder.label}”.`);
+    if (failed.length) onError(t("Exported {{count}} of {{total}} to “{{folder}}”. Not exported: {{failed}}", { count: saved.length, total: WATCHFACE_TARGETS.length, folder: folder.label, failed: failed.join("; ") }));
+    else onNotice(t("Exported final ZIPs for all {{value1}} watches to “{{value2}}”.", { value1: saved.length, value2: t(folder.label) }));
   }
 
   async function saveProject(
     reportErrors = true
   ): Promise<CorosWatchfaceProject | null> {
     if (spriteImportTrackerRef.current.pendingCount > 0) {
-      if (reportErrors) onError("Wait for the sprite import to finish before saving.");
+      if (reportErrors) onError(t("Wait for the sprite import to finish before saving."));
       return null;
     }
     const editorSnapshot = historyRef.current.present.value;
     const designSnapshot = editorSnapshot.design;
     const name = editorSnapshot.projectName.trim();
     if (!name) {
-      if (reportErrors) onError("Name your project before saving.");
+      if (reportErrors) onError(t("Name your project before saving."));
       return null;
     }
     if (name.length > 80) {
-      if (reportErrors) onError("Project names can contain up to 80 characters.");
+      if (reportErrors) onError(t("Project names can contain up to 80 characters."));
       return null;
     }
     setSaving(true);
@@ -7196,13 +7197,13 @@ export function WatchfaceEditor({
       onProjectSaved?.(saved);
       onNotice(
         snapshotIsStillCurrent
-          ? `Saved project “${saved.name}”.`
-          : `Saved project “${saved.name}”; newer edits remain unsaved.`
+          ? t("Saved project “{{value1}}”.", { value1: saved.name })
+          : t("Saved project “{{value1}}”; newer edits remain unsaved.", { value1: saved.name })
       );
       return saved;
     } catch (caught) {
       if (reportErrors) {
-        onError(caught instanceof Error ? caught.message : "Could not save the project.");
+        onError(caught instanceof Error ? caught.message : t("Could not save the project."));
       }
       if (!reportErrors) throw caught;
       return null;
@@ -8608,34 +8609,32 @@ export function WatchfaceEditor({
     ?? layers.find((layer) => layer.timePartId);
 
   return (
-    <section ref={editorRef} className={`watchface-editor wf-studio${stageFullscreen ? " is-editor-fullscreen" : ""}`} aria-label="Watch face studio" inert={conversionBusy}>
+    <section ref={editorRef} className={`watchface-editor wf-studio${stageFullscreen ? " is-editor-fullscreen" : ""}`} aria-label={t("Watch face studio")} inert={conversionBusy}>
       <header className="watchface-editor-topbar wf-command-bar">
         <button className="wf-icon-button wf-back-button" type="button" onClick={requestBack}>
           <ArrowLeft size={18} aria-hidden="true" />
-          <span>Projects</span>
+          <span>{t("Projects")}</span>
         </button>
         <div className="watchface-editor-title wf-project-title">
-          <label className="sr-only" htmlFor={`watchface-name-${sessionId}`}>
-            Project name
-          </label>
+          <label className="sr-only" htmlFor={`watchface-name-${sessionId}`}>{t("Project name")}</label>
           <input
             id={`watchface-name-${sessionId}`}
             className="watchface-editor-name"
             value={projectName}
             maxLength={80}
-            placeholder="Untitled watch face"
+            placeholder={t("Untitled watch face")}
             onChange={(event) => setProjectName(event.target.value)}
           />
           <span className={`wf-save-state${isDirty ? " is-dirty" : ""}`} role="status">
-            {spriteImportPending ? "Importing sprites…" : isDirty ? "Unsaved" : "Saved"}
+            {spriteImportPending ? t("Importing sprites…") : isDirty ? t("Unsaved") : t("Saved")}
           </span>
         </div>
         <div className="watchface-editor-actions wf-command-actions">
           <button
             className="wf-icon-button wf-pane-toggle"
             type="button"
-            aria-label="Toggle layers"
-            title={layersOpen ? "Hide layers" : "Show layers"}
+            aria-label={t("Toggle layers")}
+            title={layersOpen ? t("Hide layers") : t("Show layers")}
             aria-pressed={layersOpen}
             onClick={() => setLayersOpen((open) => !open)}
           >
@@ -8644,26 +8643,24 @@ export function WatchfaceEditor({
           <button
             className="wf-icon-button wf-pane-toggle"
             type="button"
-            aria-label="Toggle properties"
-            title={propertiesOpen ? "Hide properties" : "Show properties"}
+            aria-label={t("Toggle properties")}
+            title={propertiesOpen ? t("Hide properties") : t("Show properties")}
             aria-pressed={propertiesOpen}
             onClick={() => setPropertiesOpen((open) => !open)}
           >
             <PanelRight size={17} />
           </button>
           <span className="wf-command-separator" aria-hidden="true" />
-          <div className="wf-history-controls" role="group" aria-label="Edit history">
-            <button className="wf-icon-button" type="button" disabled={!canUndo} aria-label="Undo" title="Undo" onClick={undo}>
+          <div className="wf-history-controls" role="group" aria-label={t("Edit history")}>
+            <button className="wf-icon-button" type="button" disabled={!canUndo} aria-label={t("Undo")} title={t("Undo")} onClick={undo}>
               <Undo2 size={17} />
             </button>
-            <button className="wf-icon-button" type="button" disabled={!canRedo} aria-label="Redo" title="Redo" onClick={redo}>
+            <button className="wf-icon-button" type="button" disabled={!canRedo} aria-label={t("Redo")} title={t("Redo")} onClick={redo}>
               <Redo2 size={17} />
             </button>
           </div>
           <button className="secondary-button wf-save-button" type="button" disabled={saving || spriteImportPending || !isDirty} onClick={() => void saveProject()}>
-            {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />}
-            Save
-          </button>
+            {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />}{t("Save")}</button>
           {showDevelopmentTools || bakeForWatch ? (
             <div className="wf-export-menu" ref={downloadMenuRef}>
               <button
@@ -8675,11 +8672,11 @@ export function WatchfaceEditor({
                 onClick={() => setDownloadMenuOpen((open) => !open)}
               >
                 {exporting || creating || allWatchesExport ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
-                {allWatchesExport ? `${allWatchesExport.label} · ${allWatchesExport.done + 1}/${allWatchesExport.total}` : "Download"}
+                {allWatchesExport ? t("{{value1}} · {{value2}}/{{value3}}", { value1: t(allWatchesExport.label), value2: allWatchesExport.done + 1, value3: allWatchesExport.total }) : t("Download")}
                 <ChevronDown size={14} aria-hidden="true" />
               </button>
               {downloadMenuOpen ? (
-                <div className="wf-export-popover" role="menu" aria-label="Download options">
+                <div className="wf-export-popover" role="menu" aria-label={t("Download options")}>
                   <button
                     type="button"
                     role="menuitem"
@@ -8690,8 +8687,8 @@ export function WatchfaceEditor({
                       <Download size={16} />
                     </span>
                     <span className="wf-export-option-copy">
-                      <strong>Editable project ZIP</strong>
-                      <small>Save an editable backup</small>
+                      <strong>{t("Editable project ZIP")}</strong>
+                      <small>{t("Save an editable backup")}</small>
                     </span>
                   </button>
                   {showDevelopmentTools ? <button
@@ -8704,8 +8701,8 @@ export function WatchfaceEditor({
                       <Package size={16} />
                     </span>
                     <span className="wf-export-option-copy">
-                      <strong>Final watch ZIP</strong>
-                      <small>Development export</small>
+                      <strong>{t("Final watch ZIP")}</strong>
+                      <small>{t("Development export")}</small>
                     </span>
                   </button> : null}
                   {bakeForWatch ? <button
@@ -8718,8 +8715,8 @@ export function WatchfaceEditor({
                       <FolderDown size={16} />
                     </span>
                     <span className="wf-export-option-copy">
-                      <strong>All watches</strong>
-                      <small>{WATCHFACE_TARGETS.length} final ZIPs in one folder</small>
+                      <strong>{t("All watches")}</strong>
+                      <small>{WATCHFACE_TARGETS.length}{" "}{t("final ZIPs in one folder")}</small>
                     </span>
                   </button> : null}
                 </div>
@@ -8729,58 +8726,52 @@ export function WatchfaceEditor({
             <button
               className="secondary-button wf-download-button"
               type="button"
-              title="Download an editable project ZIP"
+              title={t("Download an editable project ZIP")}
               disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
               onClick={() => void exportEditableProject()}
             >
-              {exporting ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
-              Download
-            </button>
+              {exporting ? <Loader2 className="spin" size={15} /> : <Download size={15} />}{t("Download")}</button>
           )}
           <button
             className="secondary-button wf-convert-button"
             type="button"
-            title="Adapt the design for another watch model"
+            title={t("Adapt the design for another watch model")}
             disabled={saving || spriteImportPending || creating || exporting || previewingExport || !backgroundDataUrl}
             onClick={convertToAnotherWatch}
           >
-            <Repeat2 size={15} />
-            Convert
-          </button>
+            <Repeat2 size={15} />{t("Convert")}</button>
           <button
             className="primary-button wf-send-button"
             type="button"
             disabled={spriteImportPending || creating || exporting || previewingExport || !backgroundDataUrl}
             onClick={() => void openExportPreview()}
           >
-            {previewingExport ? <Loader2 className="spin" size={15} /> : <Send size={15} />}
-            Send to COROS
-          </button>
+            {previewingExport ? <Loader2 className="spin" size={15} /> : <Send size={15} />}{t("Send to COROS")}</button>
         </div>
       </header>
 
       <div className="watchface-editor-grid wf-studio-grid">
-        <aside className={`watchface-editor-layers wf-pane wf-layers-pane${layersOpen ? " is-open" : ""}`} aria-label="Layers">
+        <aside className={`watchface-editor-layers wf-pane wf-layers-pane${layersOpen ? " is-open" : ""}`} aria-label={t("Layers")}>
           <div className="watchface-editor-pane-heading wf-pane-heading">
             <div className="wf-pane-heading-main">
               <span className="wf-pane-heading-icon" aria-hidden="true">
                 <Layers size={14} />
               </span>
-              <p className="watchface-editor-pane-title">Layers</p>
+              <p className="watchface-editor-pane-title">{t("Layers")}</p>
               <span
                 className="wf-pane-count"
                 aria-label={
                   previewMode === "aod"
                     ? supportsAod
-                      ? `${listedLayers.length} always-on assets`
-                      : "Uses the current face"
-                    : `${listedLayers.length + activeBackgroundElements.length} items`
+                      ? t("{{value1}} always-on assets", { value1: listedLayers.length })
+                      : t("Uses the current face")
+                    : t("{{value1}} items", { value1: listedLayers.length + activeBackgroundElements.length })
                 }
               >
                 {previewMode === "aod"
                   ? supportsAod
                     ? listedLayers.length
-                    : "Current"
+                    : t("Current")
                   : listedLayers.length + activeBackgroundElements.length}
               </span>
             </div>
@@ -8801,8 +8792,8 @@ export function WatchfaceEditor({
               <input
                 type="search"
                 value={layerQuery}
-                placeholder="Find a layer"
-                aria-label="Find a layer"
+                placeholder={t("Find a layer")}
+                aria-label={t("Find a layer")}
                 onChange={(event) => setLayerQuery(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Escape" && layerQuery) {
@@ -8815,7 +8806,7 @@ export function WatchfaceEditor({
                 <button
                   type="button"
                   className="wf-layer-search-clear"
-                  aria-label="Clear layer search"
+                  aria-label={t("Clear layer search")}
                   onClick={() => setLayerQuery("")}
                 >
                   <X size={13} />
@@ -8838,7 +8829,7 @@ export function WatchfaceEditor({
                       size={13}
                       aria-hidden="true"
                     />
-                    <span>Groups</span>
+                    <span>{t("Groups")}</span>
                     <span className="wf-layer-section-count">
                       {searchedEditorGroups.length}
                     </span>
@@ -8870,9 +8861,9 @@ export function WatchfaceEditor({
                       <button
                         type="button"
                         className={`watchface-layer-lock${locked ? " is-locked" : ""}`}
-                        aria-label={locked ? `Unlock ${group.name}` : `Lock ${group.name}`}
+                        aria-label={locked ? t("Unlock {{value1}}", { value1: group.name }) : t("Lock {{value1}}", { value1: group.name })}
                         aria-pressed={locked}
-                        title={locked ? "Unlock group" : "Lock group"}
+                        title={locked ? t("Unlock group") : t("Lock group")}
                         onClick={() => setEditorGroupLocked(group.id, !locked)}
                       >
                         {locked ? <Lock size={15} /> : <Unlock size={15} />}
@@ -8881,9 +8872,9 @@ export function WatchfaceEditor({
                         type="button"
                         className="watchface-layer-visibility"
                         disabled={group.layerIds.some(isPositionLocked)}
-                        aria-label={visible ? `Hide ${group.name}` : `Show ${group.name}`}
+                        aria-label={visible ? t("Hide {{value1}}", { value1: group.name }) : t("Show {{value1}}", { value1: group.name })}
                         aria-pressed={!visible}
-                        title={visible ? "Hide group" : "Show group"}
+                        title={visible ? t("Hide group") : t("Show group")}
                         onClick={() => toggleEditorGroupVisibility(group.id)}
                       >
                         {visible ? <Eye size={15} /> : <EyeOff size={15} />}
@@ -8918,7 +8909,7 @@ export function WatchfaceEditor({
                                 {layer?.label ?? (element ? backgroundElementLabel(element) : id)}
                               </span>
                               {hidden ? (
-                                <span className="wf-layer-hidden-flag" aria-label="Hidden">
+                                <span className="wf-layer-hidden-flag" aria-label={t("Hidden")}>
                                   <EyeOff size={12} aria-hidden="true" />
                                 </span>
                               ) : null}
@@ -8947,7 +8938,7 @@ export function WatchfaceEditor({
                           size={13}
                           aria-hidden="true"
                         />
-                        <span>{group}</span>
+                        <span>{t(group)}</span>
                         <span className="wf-layer-section-count">
                           {groupedLayers.length}
                         </span>
@@ -9049,13 +9040,13 @@ export function WatchfaceEditor({
                           ) : null}
                           {layerIcon(layer)}
                         </span>
-                        <span className={`watchface-layer-name${layer.visible ? "" : " is-hidden"}`}>{layer.label}</span>
+                        <span className={`watchface-layer-name${layer.visible ? "" : " is-hidden"}`}>{t(layer.label)}</span>
                         {(design.linkedLayerGroups ?? []).some((group) => group.includes(layer.id)) ? (
-                          <span className="wf-layer-link-state" title="Linked component" aria-label="Linked component">
+                          <span className="wf-layer-link-state" title={t("Linked component")} aria-label={t("Linked component")}>
                             <Link2 size={12} aria-hidden="true" />
                           </span>
                         ) : null}
-                        {layer.configAssetReplaced ? <span className="wf-layer-state">Custom</span> : null}
+                        {layer.configAssetReplaced ? <span className="wf-layer-state">{t("Custom")}</span> : null}
                       </button>
                       <span className="wf-layer-row-actions">
                         {renderLayerPositionLockButton(layer.id, layer.label)}
@@ -9063,9 +9054,9 @@ export function WatchfaceEditor({
                           <button
                             type="button"
                             className="watchface-layer-visibility"
-                            aria-label={layer.visible ? `Hide ${layer.label}` : `Show ${layer.label}`}
+                            aria-label={layer.visible ? t("Hide {{value1}}", { value1: t(layer.label) }) : t("Show {{value1}}", { value1: t(layer.label) })}
                             aria-pressed={!layer.visible}
-                            title={layer.visible ? "Hide layer" : "Show layer"}
+                            title={layer.visible ? t("Hide layer") : t("Show layer")}
                             onClick={() => toggleLayerVisibility(layer)}
                           >
                             {layer.visible ? <Eye size={15} /> : <EyeOff size={15} />}
@@ -9081,59 +9072,55 @@ export function WatchfaceEditor({
               {layerSearchIsEmpty ? (
                 <li className="wf-layer-empty">
                   <Search size={18} aria-hidden="true" />
-                  <p>No layer matches “{layerQuery.trim()}”.</p>
-                  <button type="button" onClick={() => setLayerQuery("")}>
-                    Clear search
-                  </button>
+                  <p>{t("No layer matches “")}{layerQuery.trim()}”.</p>
+                  <button type="button" onClick={() => setLayerQuery("")}>{t("Clear search")}</button>
                 </li>
               ) : null}
             </ul>
           ) : (
-            <div className="wf-pane-loading" role="status"><Loader2 className="spin" size={16} /> Reading template</div>
+            <div className="wf-pane-loading" role="status"><Loader2 className="spin" size={16} />{" "}{t("Reading template")}</div>
           )}
         </aside>
 
         <main className="watchface-editor-stage wf-stage">
-          <div className="wf-stage-toolbar wf-stage-toolbar--floating" role="toolbar" aria-label="Preview controls">
+          <div className="wf-stage-toolbar wf-stage-toolbar--floating" role="toolbar" aria-label={t("Preview controls")}>
             <div className="wf-zoom-control">
-              <button type="button" aria-pressed={stageZoom === "fit"} onClick={() => setStageZoom("fit")}>Fit</button>
-              <button type="button" aria-label="Zoom out" onClick={() => setStageZoom((zoom) => Math.max(0.6, (zoom === "fit" ? 1 : zoom) - 0.1))}><Minus size={15} aria-hidden="true" /></button>
+              <button type="button" aria-pressed={stageZoom === "fit"} onClick={() => setStageZoom("fit")}>{t("Fit")}</button>
+              <button type="button" aria-label={t("Zoom out")} onClick={() => setStageZoom((zoom) => Math.max(0.6, (zoom === "fit" ? 1 : zoom) - 0.1))}><Minus size={15} aria-hidden="true" /></button>
               <button
                 type="button"
                 className="wf-zoom-value"
                 aria-pressed={stageZoom === 1}
-                title="Reset zoom to 100%"
+                title={t("Reset zoom to 100%")}
                 onClick={() => setStageZoom(1)}
               >
-                {stageZoom === "fit" ? "100%" : `${Math.round(stageZoom * 100)}%`}
+                {stageZoom === "fit" ? "100%" : t("{{value1}}%", { value1: Math.round(stageZoom * 100) })}
               </button>
-              <button type="button" aria-label="Zoom in" onClick={() => setStageZoom((zoom) => Math.min(1.4, (zoom === "fit" ? 1 : zoom) + 0.1))}><Plus size={15} aria-hidden="true" /></button>
+              <button type="button" aria-label={t("Zoom in")} onClick={() => setStageZoom((zoom) => Math.min(1.4, (zoom === "fit" ? 1 : zoom) + 0.1))}><Plus size={15} aria-hidden="true" /></button>
             </div>
             <span className="wf-toolbar-divider" aria-hidden="true" />
-            <div className="wf-preview-mode-switch" role="group" aria-label="Watch display preview">
+            <div className="wf-preview-mode-switch" role="group" aria-label={t("Watch display preview")}>
               <button
                 type="button"
                 aria-pressed={previewMode === "current"}
                 onClick={() => setPreviewMode("current")}
               >
-                <SunMedium size={14} aria-hidden="true" /> Current
-              </button>
+                <SunMedium size={14} aria-hidden="true" />{" "}{t("Current")}</button>
               <button
                 type="button"
                 aria-pressed={previewMode === "aod"}
                 title={supportsAod
-                  ? "Preview and edit always-on assets"
-                  : "This MIP template uses the current face when always on"}
+                  ? t("Preview and edit always-on assets")
+                  : t("This MIP template uses the current face when always on")}
                 onClick={() => setPreviewMode("aod")}
               >
-                <MoonStar size={14} aria-hidden="true" /> Always-on
-              </button>
+                <MoonStar size={14} aria-hidden="true" />{" "}{t("Always-on")}</button>
             </div>
             <span className="wf-toolbar-divider" aria-hidden="true" />
             {previewDetails && previewDetails.resolutions.length > 1 ? (
-              <label className="wf-preview-resolution" title="Watch preview">
+              <label className="wf-preview-resolution" title={t("Watch preview")}>
                 <Watch size={14} aria-hidden="true" />
-                <span className="sr-only">Watch preview</span>
+                <span className="sr-only">{t("Watch preview")}</span>
                 <select
                   value={watchPreviewResolution?.directory ?? ""}
                   onChange={(event) => setWatchPreviewDirectory(event.target.value)}
@@ -9144,13 +9131,13 @@ export function WatchfaceEditor({
                       <option key={resolution.directory} value={resolution.directory}>
                         {resolution.width === 240 &&
                         (targetWatchModel === "apex-4" || targetFirmwareType?.toUpperCase() === "COROS W541")
-                          ? "APEX 4 42 mm · 240×240"
+                          ? t("APEX 4 42 mm · 240×240")
                           : resolution.width === 260 &&
                               (targetWatchModel === "apex-4" || targetFirmwareType?.toUpperCase() === "COROS W541")
-                            ? "APEX 4 46 mm · 260×260"
+                            ? t("APEX 4 46 mm · 260×260")
                             : resolution.width === 800
-                              ? "Master · 800×800"
-                              : `${resolution.width}×${resolution.height}`}
+                              ? t("Master · 800×800")
+                              : t("{{value1}}×{{value2}}", { value1: resolution.width, value2: resolution.height })}
                       </option>
                     ))}
                 </select>
@@ -9174,7 +9161,7 @@ export function WatchfaceEditor({
                 onClick={() => setPlacementMenuOpen((open) => !open)}
               >
                 <Magnet size={15} aria-hidden="true" />
-                <span>Placement</span>
+                <span>{t("Placement")}</span>
                 <ChevronDown size={14} aria-hidden="true" />
               </button>
               {placementMenuOpen ? (
@@ -9182,11 +9169,11 @@ export function WatchfaceEditor({
                   id={`wf-placement-panel-${sessionId}`}
                   className="wf-placement-popover"
                   role="dialog"
-                  aria-label="Placement tools"
+                  aria-label={t("Placement tools")}
                 >
                   <div className="wf-placement-heading">
-                    <strong>Placement tools</strong>
-                    <span>Editor only</span>
+                    <strong>{t("Placement tools")}</strong>
+                    <span>{t("Editor only")}</span>
                   </div>
                   <label className="watchface-studio-toggle">
                     <input
@@ -9196,9 +9183,7 @@ export function WatchfaceEditor({
                         patchPlacementPreferences({ snapEnabled: event.target.checked });
                         if (!event.target.checked) clearSnapGuides();
                       }}
-                    />
-                    Snap while dragging
-                  </label>
+                    />{t("Snap while dragging")}</label>
                   <label className="watchface-studio-toggle">
                     <input
                       type="checkbox"
@@ -9206,12 +9191,8 @@ export function WatchfaceEditor({
                       onChange={(event) =>
                         patchPlacementPreferences({ guidesVisible: event.target.checked })
                       }
-                    />
-                    Show center and safe-area guides
-                  </label>
-                  <label className="field wf-placement-field">
-                    Grid
-                    <select
+                    />{t("Show center and safe-area guides")}</label>
+                  <label className="field wf-placement-field">{t("Grid")}<select
                       value={
                         placementPreferences.gridVisible
                           ? String(placementPreferences.gridStep)
@@ -9228,16 +9209,14 @@ export function WatchfaceEditor({
                         });
                       }}
                     >
-                      <option value="off">Off</option>
-                      <option value="4">4 px</option>
-                      <option value="8">8 px</option>
-                      <option value="16">16 px</option>
-                      <option value="32">32 px</option>
+                      <option value="off">{t("Off")}</option>
+                      <option value="4">{t("4 px")}</option>
+                      <option value="8">{t("8 px")}</option>
+                      <option value="16">{t("16 px")}</option>
+                      <option value="32">{t("32 px")}</option>
                     </select>
                   </label>
-                  <label className="field watchface-zoom-control wf-placement-safe-area">
-                    Safe-area inset
-                    <span>{placementPreferences.safeAreaInsetPercent}%</span>
+                  <label className="field watchface-zoom-control wf-placement-safe-area">{t("Safe-area inset")}<span>{placementPreferences.safeAreaInsetPercent}%</span>
                     <input
                       type="range"
                       min="0"
@@ -9251,16 +9230,13 @@ export function WatchfaceEditor({
                       }
                     />
                   </label>
-                  <p className="wf-placement-note">
-                    The safe area is a design aid, not a COROS firmware limit.
-                    Hold Alt or Option while dragging to bypass snapping.
-                  </p>
+                  <p className="wf-placement-note">{t("The safe area is a design aid, not a COROS firmware limit. Hold Alt or Option while dragging to bypass snapping.")}</p>
                 </div>
               ) : null}
             </div> : (
               <span className="wf-aod-preview-label">
                 <MoonStar size={14} aria-hidden="true" />
-                {supportsAod ? "AODconfig.txt" : "Current face stays on"}
+                {supportsAod ? t("AODconfig.txt") : t("Current face stays on")}
               </span>
             )}
             <span className="wf-toolbar-divider" aria-hidden="true" />
@@ -9268,35 +9244,32 @@ export function WatchfaceEditor({
               type="button"
               className="wf-stage-fullscreen"
               aria-pressed={stageFullscreen}
-              aria-label={stageFullscreen ? "Exit full screen" : "Open the editor in full screen"}
-              title={stageFullscreen ? "Exit full screen (Esc)" : "Full screen"}
+              aria-label={stageFullscreen ? t("Exit full screen") : t("Open the editor in full screen")}
+              title={stageFullscreen ? t("Exit full screen (Esc)") : t("Full screen")}
               onClick={toggleStageFullscreen}
             >
               {stageFullscreen ? <Minimize2 size={15} aria-hidden="true" /> : <Maximize2 size={15} aria-hidden="true" />}
             </button>
           </div>
           {previewMode === "aod" && supportsAod ? (
-            <p className="watchface-studio-summary">
-              Always-on uses a black screen. Background images are omitted; custom
-              captions need a separate AOD overlay. Use light colors for digits.
-            </p>
+            <p className="watchface-studio-summary">{t("Always-on uses a black screen. Background images are omitted; custom captions need a separate AOD overlay. Use light colors for digits.")}</p>
           ) : null}
           {canEditActiveMode && selectedMovableIds.some((id) => !isPositionLocked(id)) ? (
-            <div className="wf-contextual-align-bar" role="toolbar" aria-label="Align and distribute selection">
-              <button type="button" title="Align left" aria-label="Align left" onClick={() => alignSelection("left")}><AlignHorizontalJustifyStart size={15} /></button>
-              <button type="button" title="Align horizontal centers" aria-label="Align horizontal centers" onClick={() => alignSelection("center-x")}><AlignHorizontalJustifyCenter size={15} /></button>
-              <button type="button" title="Align right" aria-label="Align right" onClick={() => alignSelection("right")}><AlignHorizontalJustifyEnd size={15} /></button>
+            <div className="wf-contextual-align-bar" role="toolbar" aria-label={t("Align and distribute selection")}>
+              <button type="button" title={t("Align left")} aria-label={t("Align left")} onClick={() => alignSelection("left")}><AlignHorizontalJustifyStart size={15} /></button>
+              <button type="button" title={t("Align horizontal centers")} aria-label={t("Align horizontal centers")} onClick={() => alignSelection("center-x")}><AlignHorizontalJustifyCenter size={15} /></button>
+              <button type="button" title={t("Align right")} aria-label={t("Align right")} onClick={() => alignSelection("right")}><AlignHorizontalJustifyEnd size={15} /></button>
               <span aria-hidden="true" />
-              <button type="button" title="Align top" aria-label="Align top" onClick={() => alignSelection("top")}><AlignVerticalJustifyStart size={15} /></button>
-              <button type="button" title="Align vertical centers" aria-label="Align vertical centers" onClick={() => alignSelection("center-y")}><AlignVerticalJustifyCenter size={15} /></button>
-              <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignSelection("bottom")}><AlignVerticalJustifyEnd size={15} /></button>
-              <button type="button" title="Align visible glyph baselines; center colons beside the tallest glyphs" aria-label="Align glyph baselines" disabled={aligningGlyphs || selectedLayoutItems().length < 2} onClick={() => void alignGlyphBaselines()}>Baseline</button>
+              <button type="button" title={t("Align top")} aria-label={t("Align top")} onClick={() => alignSelection("top")}><AlignVerticalJustifyStart size={15} /></button>
+              <button type="button" title={t("Align vertical centers")} aria-label={t("Align vertical centers")} onClick={() => alignSelection("center-y")}><AlignVerticalJustifyCenter size={15} /></button>
+              <button type="button" title={t("Align bottom")} aria-label={t("Align bottom")} onClick={() => alignSelection("bottom")}><AlignVerticalJustifyEnd size={15} /></button>
+              <button type="button" title={t("Align visible glyph baselines; center colons beside the tallest glyphs")} aria-label={t("Align glyph baselines")} disabled={aligningGlyphs || selectedLayoutItems().length < 2} onClick={() => void alignGlyphBaselines()}>{t("Baseline")}</button>
               <span aria-hidden="true" />
-              <button type="button" title="Distribute horizontal spacing" aria-label="Distribute horizontal spacing" disabled={selectedLayoutItems().length < 3} onClick={() => distributeSelection("horizontal")}><AlignHorizontalSpaceBetween size={15} /></button>
-              <button type="button" title="Distribute vertical spacing" aria-label="Distribute vertical spacing" disabled={selectedLayoutItems().length < 3} onClick={() => distributeSelection("vertical")}><AlignVerticalSpaceBetween size={15} /></button>
+              <button type="button" title={t("Distribute horizontal spacing")} aria-label={t("Distribute horizontal spacing")} disabled={selectedLayoutItems().length < 3} onClick={() => distributeSelection("horizontal")}><AlignHorizontalSpaceBetween size={15} /></button>
+              <button type="button" title={t("Distribute vertical spacing")} aria-label={t("Distribute vertical spacing")} disabled={selectedLayoutItems().length < 3} onClick={() => distributeSelection("vertical")}><AlignVerticalSpaceBetween size={15} /></button>
               <span aria-hidden="true" />
-              <button type="button" title="Group selection" aria-label="Group selection" disabled={selectedLayoutItems().length < 2} onClick={linkSelectedLayers}><Group size={15} /></button>
-              <button type="button" title="Ungroup selection" aria-label="Ungroup selection" disabled={!selectionCanUnlink} onClick={unlinkSelectedLayers}><Ungroup size={15} /></button>
+              <button type="button" title={t("Group selection")} aria-label={t("Group selection")} disabled={selectedLayoutItems().length < 2} onClick={linkSelectedLayers}><Group size={15} /></button>
+              <button type="button" title={t("Ungroup selection")} aria-label={t("Ungroup selection")} disabled={!selectionCanUnlink} onClick={unlinkSelectedLayers}><Ungroup size={15} /></button>
             </div>
           ) : null}
           <div
@@ -9311,15 +9284,15 @@ export function WatchfaceEditor({
               <>
                 <div
                   className="wf-stage-ruler is-horizontal"
-                  aria-label="Drag to create a vertical guide"
+                  aria-label={t("Drag to create a vertical guide")}
                   onPointerDown={(event) => startProjectGuide("x", event)}
                 />
                 <div
                   className="wf-stage-ruler is-vertical"
-                  aria-label="Drag to create a horizontal guide"
+                  aria-label={t("Drag to create a horizontal guide")}
                   onPointerDown={(event) => startProjectGuide("y", event)}
                 />
-                <div className="wf-project-guide-layer" aria-label="Project guides">
+                <div className="wf-project-guide-layer" aria-label={t("Project guides")}>
                   {(design.editorGuides ?? []).map((guide) => (
                     <button
                       key={guide.id}
@@ -9329,7 +9302,7 @@ export function WatchfaceEditor({
                       style={guide.axis === "x"
                         ? { left: `${(guide.position / previewWidth) * 100}%` }
                         : { top: `${(guide.position / previewHeight) * 100}%` }}
-                      aria-label="Drag guide; double-click to delete"
+                      aria-label={t("Drag guide; double-click to delete")}
                       onPointerDown={(event) => startProjectGuide(guide.axis, event, guide.id)}
                       onDoubleClick={() => removeProjectGuide(guide.id)}
                     />
@@ -9367,8 +9340,8 @@ export function WatchfaceEditor({
               tabIndex={0}
               role="img"
               aria-label={previewMode === "aod"
-                ? "Always-on watch face preview"
-                : "Interactive watch face preview. Select a layer, then use arrow keys to move it."}
+                ? t("Always-on watch face preview")
+                : t("Interactive watch face preview. Select a layer, then use arrow keys to move it.")}
               style={{
                 cursor: selectedLayer?.capabilities.position &&
                     !isMovementLockedForId(selectedLayer.id)
@@ -9503,7 +9476,7 @@ export function WatchfaceEditor({
               className="wf-layer-context-menu"
               style={{ left: contextMenu.x, top: contextMenu.y }}
             >
-              <div role="menu" aria-label="Component actions">
+              <div role="menu" aria-label={t("Component actions")}>
                 <button
                   type="button"
                   role="menuitem"
@@ -9511,12 +9484,12 @@ export function WatchfaceEditor({
                   onClick={linkSelectedLayers}
                 >
                   <Group size={15} aria-hidden="true" />
-                  <span>Group components</span>
+                  <span>{t("Group components")}</span>
                 </button>
                 {selectionHasLink ? (
                   <button type="button" role="menuitem" disabled={!selectionCanUnlink} onClick={unlinkSelectedLayers}>
                     <Ungroup size={15} aria-hidden="true" />
-                    <span>Ungroup components</span>
+                    <span>{t("Ungroup components")}</span>
                   </button>
                 ) : null}
                 {selectedSprite ? (
@@ -9527,7 +9500,7 @@ export function WatchfaceEditor({
                     onClick={() => duplicateSprite(selectedSprite.id)}
                   >
                     <Copy size={15} aria-hidden="true" />
-                    <span>Duplicate image</span>
+                    <span>{t("Duplicate image")}</span>
                   </button>
                 ) : null}
                 <button
@@ -9537,7 +9510,7 @@ export function WatchfaceEditor({
                   onClick={selectionHasLockedPosition ? unlockSelectedLayers : lockSelectedLayers}
                 >
                   {selectionHasLockedPosition ? <Unlock size={15} aria-hidden="true" /> : <Lock size={15} aria-hidden="true" />}
-                  <span>{selectionHasLockedPosition ? "Unlock position" : "Lock position"}</span>
+                  <span>{selectionHasLockedPosition ? t("Unlock position") : t("Lock position")}</span>
                 </button>
                 <button
                   type="button"
@@ -9547,15 +9520,15 @@ export function WatchfaceEditor({
                   onClick={deleteSelected}
                 >
                   <Trash2 size={15} aria-hidden="true" />
-                  <span>Delete</span>
+                  <span>{t("Delete")}</span>
                 </button>
               </div>
               <p>
                 {selectedMovableIds.length >= 2
-                  ? `${selectedMovableIds.length} components selected`
+                  ? t("{{value1}} components selected", { value1: selectedMovableIds.length })
                   : selectedMovableIds.length === 1
-                    ? "Lock this component to prevent accidental moves"
-                    : "Shift-click to select another component"}
+                    ? t("Lock this component to prevent accidental moves")
+                    : t("Shift-click to select another component")}
               </p>
             </div>
           ) : null}
@@ -9565,33 +9538,33 @@ export function WatchfaceEditor({
               <div className="wf-font-notice-body">
                 <p className="wf-font-notice-title">
                   {missingFonts.length === 1
-                    ? "MISSING FONT"
-                    : `MISSING FONTS (${missingFonts.length})`}
+                    ? t("MISSING FONT")
+                    : t("MISSING FONTS ({{value1}})", { value1: missingFonts.length })}
                 </p>
                 <ul>
                   {missingFonts.map((font) => (
                     <li key={font.family}>
-                      <strong>&quot;{font.family}&quot; font isn’t installed.</strong>
+                      <strong>{t("\"")}{font.family}{t("\" font isn’t installed.")}</strong>
                       <span>
                         {font.hasSnapshot
-                          ? "Drawn from the glyphs saved with this project."
-                          : "The preview and export use a substitute font."}
+                          ? t("Drawn from the glyphs saved with this project.")
+                          : t("The preview and export use a substitute font.")}
                       </span>
-                      <span className="wf-font-notice-uses">Used by: {font.usedBy.join(", ")}</span>
+                      <span className="wf-font-notice-uses">{t("Used by:")}{" "}{font.usedBy.join(", ")}</span>
                     </li>
                   ))}
                 </ul>
                 <p className="wf-font-notice-hint">
                   {missingFonts.some((font) => !font.hasSnapshot)
-                    ? "Install the font or choose another one before exporting."
-                    : "Install the font to change its weight or draw characters the project didn’t save."}
+                    ? t("Install the font or choose another one before exporting.")
+                    : t("Install the font to change its weight or draw characters the project didn’t save.")}
                 </p>
               </div>
               <button
                 type="button"
                 className="wf-font-notice-close"
-                aria-label="Hide font notice"
-                title="Hide"
+                aria-label={t("Hide font notice")}
+                title={t("Hide")}
                 onClick={() => setFontNoticeDismissed(true)}
               >
                 <X size={14} aria-hidden="true" />
@@ -9600,13 +9573,13 @@ export function WatchfaceEditor({
           ) : null}
           <div className="wf-stage-status" role="status">
             <span ref={snapStatusElementRef}>
-              {selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer?.label ?? "No selection"}
+              {selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer?.label ?? t("No selection")}
             </span>
-            <span>{watchCoordinateWidth} × {watchCoordinateHeight} preview</span>
+            <span>{watchCoordinateWidth} × {watchCoordinateHeight}{" "}{t("preview")}</span>
             <span>
               {previewMode === "aod"
-                ? supportsAod ? "Always-on display" : "Always-on uses Current"
-                : "Current display"}
+                ? supportsAod ? t("Always-on display") : t("Always-on uses Current")
+                : t("Current display")}
             </span>
             {missingFonts.length > 0 && fontNoticeDismissed ? (
               <span>
@@ -9616,7 +9589,7 @@ export function WatchfaceEditor({
                   onClick={() => setFontNoticeDismissed(false)}
                 >
                   <TriangleAlert size={12} aria-hidden="true" />
-                  {missingFonts.length === 1 ? "MISSING FONT" : `MISSING FONTS (${missingFonts.length})`}
+                  {missingFonts.length === 1 ? t("MISSING FONT") : t("MISSING FONTS ({{value1}})", { value1: missingFonts.length })}
                 </button>
               </span>
             ) : null}
@@ -9626,7 +9599,7 @@ export function WatchfaceEditor({
 
         <aside
           className={`watchface-editor-inspector wf-pane wf-properties-pane${propertiesOpen ? " is-open" : ""}${propertiesTab === "ai" ? " is-ai" : ""}`}
-          aria-label="Properties"
+          aria-label={t("Properties")}
           onPointerDownCapture={(event) => {
             if ((event.target as HTMLInputElement).type === "range") beginDesignTransaction();
           }}
@@ -9640,7 +9613,7 @@ export function WatchfaceEditor({
               <>
                 <div className="wf-pane-heading-main">
                   <WatchmakerDial size={22} working={aiBusy} />
-                  <p className="watchface-editor-pane-title">Watchmaker</p>
+                  <p className="watchface-editor-pane-title">{t("Watchmaker")}</p>
                 </div>
                 <div className="wf-ai-heading-actions" ref={setAiHeadingSlot} />
               </>
@@ -9651,14 +9624,14 @@ export function WatchfaceEditor({
                 <span className="wf-pane-heading-icon" aria-hidden="true">
                   <SlidersHorizontal size={14} />
                 </span>
-                <p className="watchface-editor-pane-title">Properties</p>
+                <p className="watchface-editor-pane-title">{t("Properties")}</p>
               </div>
             )}
           </div>
           <div
             className="wf-properties-tabs"
             role="tablist"
-            aria-label="Properties scope"
+            aria-label={t("Properties scope")}
           >
             <button
               type="button"
@@ -9667,9 +9640,7 @@ export function WatchfaceEditor({
               aria-controls={`wf-properties-panel-${sessionId}`}
               aria-selected={propertiesTab === "selection"}
               onClick={() => setPropertiesTab("selection")}
-            >
-              Selection
-            </button>
+            >{t("Selection")}</button>
             <button
               type="button"
               role="tab"
@@ -9677,9 +9648,7 @@ export function WatchfaceEditor({
               aria-controls={`wf-properties-panel-${sessionId}`}
               aria-selected={propertiesTab === "project"}
               onClick={() => setPropertiesTab("project")}
-            >
-              Project
-            </button>
+            >{t("Project")}</button>
             <button
               type="button"
               role="tab"
@@ -9687,11 +9656,11 @@ export function WatchfaceEditor({
               aria-controls={`wf-ai-panel-${sessionId}`}
               aria-selected={propertiesTab === "ai"}
               className={`wf-ai-tab${aiBusy ? " is-working" : ""}`}
-              title={aiBusy ? "Watchmaker is working" : "Design with Watchmaker"}
+              title={aiBusy ? t("Watchmaker is working") : t("Design with Watchmaker")}
               onClick={() => setPropertiesTab("ai")}
             >
               <WatchmakerDial size={16} working={aiBusy} />
-              <span className="wf-ai-tab-label">AI</span>
+              <span className="wf-ai-tab-label">{t("AI")}</span>
             </button>
           </div>
           {/* Stays mounted while hidden so the conversation survives tab switches. */}
@@ -9722,11 +9691,11 @@ export function WatchfaceEditor({
             selectedElement ? renderElementInspector(selectedElement) : selectedLayer ? renderInspector(selectedLayer) : previewMode === "aod" ? (
             <div className="watchface-inspector-group wf-aod-empty-inspector">
               <MoonStar size={20} aria-hidden="true" />
-              <strong>{supportsAod ? "No replaceable AOD assets" : "Current is already always on"}</strong>
+              <strong>{supportsAod ? t("No replaceable AOD assets") : t("Current is already always on")}</strong>
               <p className="watchface-studio-summary">
                 {supportsAod
-                  ? "This template has an always-on layout, but it does not reference a standalone PNG that Studio can replace."
-                  : "This MIP template has no separate AOD configuration. The Current face shown here is the same face the watch keeps visible."}
+                  ? t("This template has an always-on layout, but it does not reference a standalone PNG that Studio can replace.")
+                  : t("This MIP template has no separate AOD configuration. The Current face shown here is the same face the watch keeps visible.")}
               </p>
             </div>
           ) : (
@@ -9744,11 +9713,8 @@ export function WatchfaceEditor({
             ) : (
             <div className="wf-properties-empty">
               <MousePointerSquareDashed size={22} aria-hidden="true" />
-              <strong>Nothing selected</strong>
-              <p className="watchface-studio-summary">
-                Pick a layer on the canvas or in the Layers panel to edit it.
-                Template-wide settings live on the Project tab.
-              </p>
+              <strong>{t("Nothing selected")}</strong>
+              <p className="watchface-studio-summary">{t("Pick a layer on the canvas or in the Layers panel to edit it. Template-wide settings live on the Project tab.")}</p>
             </div>
             )
           )
@@ -9793,16 +9759,11 @@ export function WatchfaceEditor({
             const resolutionOptions = details?.resolutions ?? [];
             return renderPropertySection(
               "config",
-              "Config files",
+              t("Config files"),
               <div className="wf-property-stack wf-raw-config-editor">
-                <p className="wf-archive-note">
-                  Edit the template’s raw layout files. Studio layer moves still
-                  apply on top when you export.
-                </p>
+                <p className="wf-archive-note">{t("Edit the template’s raw layout files. Studio layer moves still apply on top when you export.")}</p>
                 {resolutionOptions.length > 1 ? (
-                  <label className="field">
-                    Resolution
-                    <select
+                  <label className="field">{t("Resolution")}<select
                       value={editorDirectory}
                       onChange={(event) =>
                         setConfigEditorDirectory(event.target.value)
@@ -9822,7 +9783,7 @@ export function WatchfaceEditor({
                 <div
                   className="wf-preview-mode-switch wf-raw-config-tabs"
                   role="tablist"
-                  aria-label="Config file"
+                  aria-label={t("Config file")}
                 >
                   <button
                     type="button"
@@ -9831,9 +9792,7 @@ export function WatchfaceEditor({
                     aria-pressed={previewMode === "current"}
                     disabled={!hasCurrentConfig}
                     onClick={() => setPreviewMode("current")}
-                  >
-                    Current
-                  </button>
+                  >{t("Current")}</button>
                   <button
                     type="button"
                     role="tab"
@@ -9841,20 +9800,16 @@ export function WatchfaceEditor({
                     aria-pressed={previewMode === "aod"}
                     disabled={!hasAodConfig}
                     onClick={() => setPreviewMode("aod")}
-                  >
-                    AOD
-                  </button>
+                  >{t("AOD")}</button>
                 </div>
                 <p className="wf-archive-note">
-                  <code>{activePath || "Not selected"}</code>
-                  {activeIsDirty ? " · edited" : ""}
+                  <code>{activePath || t("Not selected")}</code>
+                  {activeIsDirty ? t(" · edited") : ""}
                 </p>
                 {activePath &&
                 (previewMode === "aod" ? hasAodConfig : hasCurrentConfig) ? (
                   <>
-                    <label className="field">
-                      Raw config
-                      <textarea
+                    <label className="field">{t("Raw config")}<textarea
                         className="wf-raw-config-textarea"
                         spellCheck={false}
                         rows={16}
@@ -9909,15 +9864,13 @@ export function WatchfaceEditor({
                             Object.keys(rest).length > 0 ? rest : undefined
                         });
                       }}
-                    >
-                      Reset file
-                    </button>
+                    >{t("Reset file")}</button>
                   </>
                 ) : (
                   <p className="wf-archive-note">
                     {previewMode === "aod"
-                      ? "This resolution has no AODconfig.txt."
-                      : "This resolution has no config.txt."}
+                      ? t("This resolution has no AODconfig.txt.")
+                      : t("This resolution has no config.txt.")}
                   </p>
                 )}
               </div>,
@@ -9931,14 +9884,12 @@ export function WatchfaceEditor({
             "archive",
             "Archive",
             <div className="wf-property-stack wf-archive-settings">
-            <label className="field">
-              Watch-face version
-              <input
+            <label className="field">{t("Watch-face version")}<input
                 type="number"
                 min="0"
                 max="999"
                 step="1"
-                placeholder={`Auto (template v${starterArchive.watchFaceVersion})`}
+                placeholder={t("Auto (template v{{value1}})", { value1: starterArchive.watchFaceVersion })}
                 value={design.archiveWatchFaceVersion ?? ""}
                 onChange={(event) => {
                   const value = event.target.value;
@@ -9949,10 +9900,7 @@ export function WatchfaceEditor({
                 }}
               />
             </label>
-            <p className="wf-archive-note">
-              Leave blank to preserve the template version and automatically
-              raise it only when selected features require a newer version.
-            </p>
+            <p className="wf-archive-note">{t("Leave blank to preserve the template version and automatically raise it only when selected features require a newer version.")}</p>
             <label className="watchface-studio-toggle">
               <input
                 type="checkbox"
@@ -9962,19 +9910,10 @@ export function WatchfaceEditor({
                     stripBlankConfigKeys: event.target.checked || undefined
                   })
                 }
-              />
-              Remove blank config fields on build
-            </label>
-            <p className="wf-archive-note">
-              Deletes every empty <code>[key]=</code> line from{" "}
-              <code>config.txt</code> and <code>AODconfig.txt</code> in the
-              built archive. The watch treats declared-but-empty keys as
-              enabled features. An empty <code>control_*</code> group still
-              adds a blank entry to the on-watch data selector.
-            </p>
-            <label className="field">
-              Template ID override (info.json)
-              <input
+              />{t("Remove blank config fields on build")}</label>
+            <p className="wf-archive-note">{t("Deletes every empty")}{" "}<code>{t("[key]=")}</code>{" "}{t("line from")}{" "}
+              <code>{t("config.txt")}</code>{" "}{t("and")}{" "}<code>{t("AODconfig.txt")}</code>{" "}{t("in the built archive. The watch treats declared-but-empty keys as enabled features. An empty")}{" "}<code>{t("control_*")}</code>{" "}{t("group still adds a blank entry to the on-watch data selector.")}</p>
+            <label className="field">{t("Template ID override (info.json)")}<input
                 type="text"
                 inputMode="numeric"
                 pattern="[0-9]*"
@@ -9988,13 +9927,9 @@ export function WatchfaceEditor({
                 }
               />
             </label>
-            <p className="wf-archive-note">
-              Rewrites <code>o_template_id</code> in <code>info.json</code>.
-              Leave blank to keep <code>{starterArchive.sourceTemplateId}</code>.
+            <p className="wf-archive-note">{t("Rewrites")}{" "}<code>{t("o_template_id")}</code>{" "}{t("in")}{" "}<code>{t("info.json")}</code>{t(". Leave blank to keep")}{" "}<code>{starterArchive.sourceTemplateId}</code>.
             </p>
-            <label className="field">
-              Watch-face ID override (config + AOD)
-              <input
+            <label className="field">{t("Watch-face ID override (config + AOD)")}<input
                 type="text"
                 maxLength={10}
                 placeholder={
@@ -10004,7 +9939,7 @@ export function WatchfaceEditor({
                   details?.resolutions.find(
                     (resolution) => resolution.config.watchface_id
                   )?.config.watchface_id ??
-                  "0x3B9ACE60"
+                  t("0x3B9ACE60")
                 }
                 value={devWatchfaceIdOverride}
                 onChange={(event) =>
@@ -10014,28 +9949,20 @@ export function WatchfaceEditor({
                 }
               />
             </label>
-            <p className="wf-archive-note">
-              Rewrites <code>[watchface_id]</code> in every{" "}
-              <code>config.txt</code> and <code>AODconfig.txt</code> so current
-              and always-on match. Accepts decimal or <code>0x</code> hex (for
-              example <code>54</code> or <code>0x3B9ACE60</code>).
+            <p className="wf-archive-note">{t("Rewrites")}{" "}<code>{t("[watchface_id]")}</code>{" "}{t("in every")}{" "}
+              <code>{t("config.txt")}</code>{" "}{t("and")}{" "}<code>{t("AODconfig.txt")}</code>{" "}{t("so current and always-on match. Accepts decimal or")}{" "}<code>0x</code>{" "}{t("hex (for example")}{" "}<code>54</code>{" "}{t("or")}{" "}<code>{t("0x3B9ACE60")}</code>).
             </p>
-            <label className="field">
-              Template manifest name override (info.json)
-              <input
+            <label className="field">{t("Template manifest name override (info.json)")}<input
                 type="text"
                 maxLength={64}
-                placeholder="TOP PART"
+                placeholder={t("TOP PART")}
                 value={devTemplateNameOverride}
                 onChange={(event) =>
                   setDevTemplateNameOverride(event.target.value.slice(0, 64))
                 }
               />
             </label>
-            <p className="wf-archive-note">
-              Rewrites <code>m_name</code> in <code>info.json</code>; it does not
-              rename the Studio project.
-            </p>
+            <p className="wf-archive-note">{t("Rewrites")}{" "}<code>{t("m_name")}</code>{" "}{t("in")}{" "}<code>{t("info.json")}</code>{t("; it does not rename the Studio project.")}</p>
             </div>,
             { className: "wf-project-section" }
           ) : null}
@@ -10045,7 +9972,7 @@ export function WatchfaceEditor({
       </div>
 
       {(layersOpen || propertiesOpen) ? (
-        <button className="wf-sheet-scrim is-open" type="button" aria-label="Close editor panel" onClick={() => { setLayersOpen(false); setPropertiesOpen(false); }} />
+        <button className="wf-sheet-scrim is-open" type="button" aria-label={t("Close editor panel")} onClick={() => { setLayersOpen(false); setPropertiesOpen(false); }} />
       ) : null}
 
       {exportPreviewImages ? (
@@ -10079,7 +10006,7 @@ export function WatchfaceEditor({
           defaultRole={officialBrowser.defaultRole}
           frameCount={officialBrowser.frameCount}
           configKey={officialBrowser.configKey}
-          title={officialBrowser.title}
+          title={t(officialBrowser.title)}
           onPick={officialBrowser.onPick}
           onClose={() => setOfficialBrowser(null)}
         />
@@ -10087,16 +10014,15 @@ export function WatchfaceEditor({
       {leaveOpen ? (
         <div className="wf-modal-backdrop" role="presentation">
           <section className="wf-modal" role="dialog" aria-modal="true" aria-labelledby="wf-unsaved-title">
-            <h2 id="wf-unsaved-title">{backRequestId !== undefined ? "Open selected watch face?" : "Save changes?"}</h2>
+            <h2 id="wf-unsaved-title">{backRequestId !== undefined ? t("Open selected watch face?") : t("Save changes?")}</h2>
             <p>{backRequestId !== undefined
-              ? "Save or discard your current edits before opening the watch face from the website."
-              : "Your latest edits have not been saved to this project."}</p>
+              ? t("Save or discard your current edits before opening the watch face from the website.")
+              : t("Your latest edits have not been saved to this project.")}</p>
             <div className="wf-modal-actions">
-              <button className="secondary-button" type="button" onClick={() => { setLeaveOpen(false); onBackCancelled?.(); }}>Cancel</button>
-              <button className="secondary-button danger-button" type="button" onClick={onBack}>Discard</button>
+              <button className="secondary-button" type="button" onClick={() => { setLeaveOpen(false); onBackCancelled?.(); }}>{t("Cancel")}</button>
+              <button className="secondary-button danger-button" type="button" onClick={onBack}>{t("Discard")}</button>
               <button className="primary-button" type="button" disabled={saving || spriteImportPending} onClick={() => void saveProject().then((saved) => { if (saved && lastSaveWasCurrentRef.current) onBack(); })}>
-                {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />} Save
-              </button>
+                {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />}{" "}{t("Save")}</button>
             </div>
           </section>
         </div>
@@ -10368,7 +10294,7 @@ export function WatchfaceEditor({
     return (
       <WatchfaceInspectorSection
         sectionId={sectionId}
-        title={title}
+        title={t(title)}
         open={sectionId === "layer" || !collapsedInspectorSections.has(sectionId)}
         onOpenChange={(open) => setInspectorSectionOpen(sectionId, open)}
         actions={options?.actions}
@@ -10395,11 +10321,11 @@ export function WatchfaceEditor({
         }[element.kind];
       }
     }
-    if (layer.timePartId) return "Dynamic time";
-    if (layer.metricId) return "Dynamic metric";
-    if (layer.weatherIndicator) return "Dynamic weather";
-    if (layer.ampmIndicator) return "Dynamic indicator";
-    if (layer.staticSeparatorId) return "Text separator";
+    if (layer.timePartId) return t("Dynamic time");
+    if (layer.metricId) return t("Dynamic metric");
+    if (layer.weatherIndicator) return t("Dynamic weather");
+    if (layer.ampmIndicator) return t("Dynamic indicator");
+    if (layer.staticSeparatorId) return t("Text separator");
     return {
       background: "Background",
       backgroundElement: "Artwork object",
@@ -10426,7 +10352,7 @@ export function WatchfaceEditor({
     return (
       <div className="wf-property-stack">
         <label className="watchface-inspector-field">
-          <span>Progress arc</span>
+          <span>{t("Progress arc")}</span>
           <input
             type="checkbox"
             checked={exerciseProgress.arcEnabled}
@@ -10436,7 +10362,7 @@ export function WatchfaceEditor({
           />
         </label>
         <label className="watchface-inspector-field">
-          <span>Progress bar</span>
+          <span>{t("Progress bar")}</span>
           <input
             type="checkbox"
             checked={exerciseProgress.enabled}
@@ -10445,9 +10371,7 @@ export function WatchfaceEditor({
             }
           />
         </label>
-        <label className="field">
-          Progress color
-          <span className="watchface-color-control">
+        <label className="field">{t("Progress color")}<span className="watchface-color-control">
             <WatchfaceColorInput
               value={exerciseProgress.color}
               onPreview={(exerciseColor) =>
@@ -10459,7 +10383,7 @@ export function WatchfaceEditor({
           </span>
         </label>
         <label className="watchface-inspector-field">
-          <span>Preview fill</span>
+          <span>{t("Preview fill")}</span>
           <span className="wf-input-with-unit">
             <EditableNumberInput
               min="0"
@@ -10477,31 +10401,31 @@ export function WatchfaceEditor({
           </span>
         </label>
         <details className="wf-nested-disclosure">
-          <summary>Arc geometry</summary>
+          <summary>{t("Arc geometry")}</summary>
           <div className="watchface-position-inputs">
-            <label>Center X<EditableNumberInput step="1" value={exerciseProgress.arc.centerX} fallback={previewWidth / 2} onValueChange={(centerX) => updateExerciseProgress({ arc: { centerX } })} /></label>
-            <label>Center Y<EditableNumberInput step="1" value={exerciseProgress.arc.centerY} fallback={previewHeight / 2} onValueChange={(centerY) => updateExerciseProgress({ arc: { centerY } })} /></label>
-            <label>Radius X<EditableNumberInput min="1" step="1" value={exerciseProgress.arc.radiusX} fallback={1} onValueChange={(radiusX) => updateExerciseProgress({ arc: { radiusX: Math.max(1, radiusX) } })} /></label>
-            <label>Radius Y<EditableNumberInput min="1" step="1" value={exerciseProgress.arc.radiusY} fallback={1} onValueChange={(radiusY) => updateExerciseProgress({ arc: { radiusY: Math.max(1, radiusY) } })} /></label>
-            <label>Start °<EditableNumberInput min="-360" max="360" step="1" value={exerciseProgress.arc.startAngle} fallback={-135} onValueChange={(startAngle) => updateExerciseProgress({ arc: { startAngle } })} /></label>
-            <label>End °<EditableNumberInput min="-360" max="360" step="1" value={exerciseProgress.arc.endAngle} fallback={135} onValueChange={(endAngle) => updateExerciseProgress({ arc: { endAngle } })} /></label>
-            <label>Thickness<EditableNumberInput min="1" step="1" value={exerciseProgress.arc.strokeWidth} fallback={1} onValueChange={(strokeWidth) => updateExerciseProgress({ arc: { strokeWidth: Math.max(1, strokeWidth) } })} /></label>
+            <label>{t("Center X")}<EditableNumberInput step="1" value={exerciseProgress.arc.centerX} fallback={previewWidth / 2} onValueChange={(centerX) => updateExerciseProgress({ arc: { centerX } })} /></label>
+            <label>{t("Center Y")}<EditableNumberInput step="1" value={exerciseProgress.arc.centerY} fallback={previewHeight / 2} onValueChange={(centerY) => updateExerciseProgress({ arc: { centerY } })} /></label>
+            <label>{t("Radius X")}<EditableNumberInput min="1" step="1" value={exerciseProgress.arc.radiusX} fallback={1} onValueChange={(radiusX) => updateExerciseProgress({ arc: { radiusX: Math.max(1, radiusX) } })} /></label>
+            <label>{t("Radius Y")}<EditableNumberInput min="1" step="1" value={exerciseProgress.arc.radiusY} fallback={1} onValueChange={(radiusY) => updateExerciseProgress({ arc: { radiusY: Math.max(1, radiusY) } })} /></label>
+            <label>{t("Start °")}<EditableNumberInput min="-360" max="360" step="1" value={exerciseProgress.arc.startAngle} fallback={-135} onValueChange={(startAngle) => updateExerciseProgress({ arc: { startAngle } })} /></label>
+            <label>{t("End °")}<EditableNumberInput min="-360" max="360" step="1" value={exerciseProgress.arc.endAngle} fallback={135} onValueChange={(endAngle) => updateExerciseProgress({ arc: { endAngle } })} /></label>
+            <label>{t("Thickness")}<EditableNumberInput min="1" step="1" value={exerciseProgress.arc.strokeWidth} fallback={1} onValueChange={(strokeWidth) => updateExerciseProgress({ arc: { strokeWidth: Math.max(1, strokeWidth) } })} /></label>
           </div>
           <label className="watchface-inspector-field">
-            <span>Draw remaining portion</span>
+            <span>{t("Draw remaining portion")}</span>
             <input type="checkbox" checked={exerciseProgress.arc.background} onChange={(event) => updateExerciseProgress({ arc: { background: event.target.checked } })} />
           </label>
         </details>
         <details className="wf-nested-disclosure">
-          <summary>Bar geometry</summary>
+          <summary>{t("Bar geometry")}</summary>
           <div className="watchface-position-inputs">
-            <label>Left<EditableNumberInput step="1" value={exerciseProgress.rect.x0} fallback={0} onValueChange={(x0) => updateExerciseProgress({ rect: { x0 } })} /></label>
-            <label>Top<EditableNumberInput step="1" value={exerciseProgress.rect.y0} fallback={0} onValueChange={(y0) => updateExerciseProgress({ rect: { y0 } })} /></label>
-            <label>Right<EditableNumberInput step="1" value={exerciseProgress.rect.x1} fallback={previewWidth} onValueChange={(x1) => updateExerciseProgress({ rect: { x1 } })} /></label>
-            <label>Bottom<EditableNumberInput step="1" value={exerciseProgress.rect.y1} fallback={previewHeight} onValueChange={(y1) => updateExerciseProgress({ rect: { y1 } })} /></label>
+            <label>{t("Left")}<EditableNumberInput step="1" value={exerciseProgress.rect.x0} fallback={0} onValueChange={(x0) => updateExerciseProgress({ rect: { x0 } })} /></label>
+            <label>{t("Top")}<EditableNumberInput step="1" value={exerciseProgress.rect.y0} fallback={0} onValueChange={(y0) => updateExerciseProgress({ rect: { y0 } })} /></label>
+            <label>{t("Right")}<EditableNumberInput step="1" value={exerciseProgress.rect.x1} fallback={previewWidth} onValueChange={(x1) => updateExerciseProgress({ rect: { x1 } })} /></label>
+            <label>{t("Bottom")}<EditableNumberInput step="1" value={exerciseProgress.rect.y1} fallback={previewHeight} onValueChange={(y1) => updateExerciseProgress({ rect: { y1 } })} /></label>
           </div>
           <label className="watchface-inspector-field">
-            <span>Fill direction</span>
+            <span>{t("Fill direction")}</span>
             <select
               value={exerciseProgress.rect.direction}
               onChange={(event) =>
@@ -10512,17 +10436,14 @@ export function WatchfaceEditor({
                 })
               }
             >
-              <option value="left">Left to right</option>
-              <option value="right">Right to left</option>
-              <option value="top">Top to bottom</option>
-              <option value="bottom">Bottom to top</option>
+              <option value="left">{t("Left to right")}</option>
+              <option value="right">{t("Right to left")}</option>
+              <option value="top">{t("Top to bottom")}</option>
+              <option value="bottom">{t("Bottom to top")}</option>
             </select>
           </label>
         </details>
-        <p className="watchface-studio-summary">
-          COROS supplies the live exercise-goal percentage. Current settings
-          mirror to Always-on until you customize that mode.
-        </p>
+        <p className="watchface-studio-summary">{t("COROS supplies the live exercise-goal percentage. Current settings mirror to Always-on until you customize that mode.")}</p>
       </div>
     );
   }
@@ -10555,7 +10476,7 @@ export function WatchfaceEditor({
           <span className="wf-properties-identity-main">
             {sprite ? (
               <label className="wf-layer-title-field">
-                <span className="sr-only">Layer name</span>
+                <span className="sr-only">{t("Layer name")}</span>
                 <input
                   type="text"
                   value={sprite.name ?? ""}
@@ -10572,8 +10493,8 @@ export function WatchfaceEditor({
                 />
               </label>
             ) : (
-              <strong className="wf-layer-title" title={layer.label}>
-                {layer.label}
+              <strong className="wf-layer-title" title={t(layer.label)}>
+                {t(layer.label)}
               </strong>
             )}
             {editorLayerTypeLabel(layer).toLowerCase() !== layer.label.toLowerCase() ? <span className="wf-layer-type-badge">
@@ -10586,8 +10507,8 @@ export function WatchfaceEditor({
           {selectedIds.length > 1 ? (
             <span
               className="wf-pane-count"
-              title={`${selectedIds.length} layers selected`}
-              aria-label={`${selectedIds.length} layers selected`}
+              title={t("{{value1}} layers selected", { value1: selectedIds.length })}
+              aria-label={t("{{value1}} layers selected", { value1: selectedIds.length })}
             >
               {selectedIds.length}
             </span>
@@ -10597,9 +10518,9 @@ export function WatchfaceEditor({
               type="button"
               className="wf-property-icon-button"
               disabled={locked}
-              aria-label={`${layer.visible ? "Hide" : "Show"} ${layer.label}`}
+              aria-label={t("{{value1}} {{value2}}", { value1: layer.visible ? "Hide" : "Show", value2: t(layer.label) })}
               aria-pressed={!layer.visible}
-              title={layer.visible ? "Hide layer" : "Show layer"}
+              title={layer.visible ? t("Hide layer") : t("Show layer")}
               onClick={() => toggleLayerVisibility(layer)}
             >
               {layer.visible ? <Eye size={16} /> : <EyeOff size={16} />}
@@ -10650,14 +10571,14 @@ export function WatchfaceEditor({
       "Layer",
       <div className="wf-property-stack">
         <label className="wf-layer-opacity-control">
-          <span title="Controls the transparency of the entire layer">Layer opacity</span>
+          <span title={t("Controls the transparency of the entire layer")}>{t("Layer opacity")}</span>
           <input
             type="range"
             min="0"
             max="100"
             step="1"
             value={Math.round(opacity * 100)}
-            aria-label={`${layer.label} opacity`}
+            aria-label={t("{{value1}} opacity", { value1: t(layer.label) })}
             onChange={(event) => setOpacity(Number(event.target.value) / 100)}
           />
           <span className="wf-input-with-unit">
@@ -10800,7 +10721,7 @@ export function WatchfaceEditor({
                 draggable={strokes.length > 1}
                 title={
                   strokes.length > 1
-                    ? "Drag to reorder. Use Alt+Arrow Up or Alt+Arrow Down from a control."
+                    ? t("Drag to reorder. Use Alt+Arrow Up or Alt+Arrow Down from a control.")
                     : undefined
                 }
                 onDragStart={(event) => {
@@ -10850,14 +10771,14 @@ export function WatchfaceEditor({
                   >
                     <WatchfaceColorInput
                       value={primaryColor(stroke)}
-                      aria-label="Stroke color"
+                      aria-label={t("Stroke color")}
                       onValueChange={(color) => patchPrimaryColor(stroke, color)}
                     />
                   </span>
                   <EditableHexColorInput
                     className="wf-stroke-hex-input"
                     value={primaryColor(stroke)}
-                    aria-label="Stroke hex color"
+                    aria-label={t("Stroke hex color")}
                     onValueChange={(color) => patchPrimaryColor(stroke, color)}
                   />
                 </div>
@@ -10868,7 +10789,7 @@ export function WatchfaceEditor({
                     step="1"
                     value={Math.round(stroke.opacity * 100)}
                     fallback={100}
-                    aria-label="Stroke opacity"
+                    aria-label={t("Stroke opacity")}
                     onValueChange={(opacity) =>
                       patchStroke(stroke.id, { opacity: opacity / 100 })
                     }
@@ -10878,9 +10799,9 @@ export function WatchfaceEditor({
                 <button
                   type="button"
                   className="wf-stroke-row-action"
-                  aria-label={stroke.enabled ? "Hide stroke" : "Show stroke"}
+                  aria-label={stroke.enabled ? t("Hide stroke") : t("Show stroke")}
                   aria-pressed={!stroke.enabled}
-                  title={stroke.enabled ? "Hide stroke" : "Show stroke"}
+                  title={stroke.enabled ? t("Hide stroke") : t("Show stroke")}
                   onClick={() =>
                     patchStroke(stroke.id, { enabled: !stroke.enabled })
                   }
@@ -10890,8 +10811,8 @@ export function WatchfaceEditor({
                 <button
                   type="button"
                   className="wf-stroke-row-action"
-                  aria-label="Remove stroke"
-                  title="Remove stroke"
+                  aria-label={t("Remove stroke")}
+                  title={t("Remove stroke")}
                   onClick={() => removeStroke(stroke.id)}
                 >
                   <Minus size={16} />
@@ -10902,23 +10823,21 @@ export function WatchfaceEditor({
         ) : (
           <div className="wf-stroke-empty">
             <div>
-              <p>Add an outline around this layer.</p>
+              <p>{t("Add an outline around this layer.")}</p>
             </div>
             <button
               type="button"
               className="secondary-button"
               onClick={addStroke}
             >
-              <Plus size={15} aria-hidden="true" />
-              Add stroke
-            </button>
+              <Plus size={15} aria-hidden="true" />{t("Add stroke")}</button>
           </div>
         )}
         {selectedStroke ? (
           <div className="wf-stroke-details">
             <div className="wf-stroke-geometry">
               <label className="wf-stroke-control">
-                <span>Position</span>
+                <span>{t("Position")}</span>
                 <select
                   value={selectedStroke.position}
                   onChange={(event) =>
@@ -10928,13 +10847,13 @@ export function WatchfaceEditor({
                     })
                   }
                 >
-                  <option value="inside">Inside</option>
-                  <option value="center">Center</option>
-                  <option value="outside">Outside</option>
+                  <option value="inside">{t("Inside")}</option>
+                  <option value="center">{t("Center")}</option>
+                  <option value="outside">{t("Outside")}</option>
                 </select>
               </label>
               <label className="wf-stroke-control">
-                <span>Weight</span>
+                <span>{t("Weight")}</span>
                 <span className="wf-stroke-weight-field">
                   <AlignJustify size={14} aria-hidden="true" />
                   <EditableNumberInput
@@ -10954,9 +10873,9 @@ export function WatchfaceEditor({
                 className={`wf-stroke-advanced-toggle${
                   advancedOpen ? " is-active" : ""
                 }`}
-                aria-label="Stroke paint settings"
+                aria-label={t("Stroke paint settings")}
                 aria-expanded={advancedOpen}
-                title="Stroke paint settings"
+                title={t("Stroke paint settings")}
                 onClick={toggleAdvanced}
               >
                 <SlidersHorizontal size={16} />
@@ -10964,9 +10883,7 @@ export function WatchfaceEditor({
             </div>
             {advancedOpen ? (
               <div className="wf-stroke-advanced">
-                <label className="field">
-                  Paint
-                  <select
+                <label className="field">{t("Paint")}<select
                     value={selectedStroke.paint.kind}
                     onChange={(event) => {
                       if (event.target.value === "linear-gradient") {
@@ -10995,8 +10912,8 @@ export function WatchfaceEditor({
                       }
                     }}
                   >
-                    <option value="solid">Solid color</option>
-                    <option value="linear-gradient">Linear gradient</option>
+                    <option value="solid">{t("Solid color")}</option>
+                    <option value="linear-gradient">{t("Linear gradient")}</option>
                   </select>
                 </label>
                 {selectedGradient ? (
@@ -11004,7 +10921,7 @@ export function WatchfaceEditor({
                     <div className="wf-inline-property-grid">
                       {(["from", "to"] as const).map((stop) => (
                         <label className="field" key={stop}>
-                          {stop === "from" ? "From" : "To"}
+                          {stop === "from" ? t("From") : t("To")}
                           <span className="watchface-color-control">
                             <WatchfaceColorInput
                               value={selectedGradient[stop]}
@@ -11025,7 +10942,7 @@ export function WatchfaceEditor({
                       ))}
                     </div>
                     <label className="watchface-inspector-field">
-                      <span>Angle</span>
+                      <span>{t("Angle")}</span>
                       <span className="wf-input-with-unit">
                         <EditableNumberInput
                           min="0"
@@ -11059,8 +10976,8 @@ export function WatchfaceEditor({
             {strokes.length > 1 ? (
               <span
                 className="wf-stroke-order-hint"
-                title="Drag stroke rows to reorder"
-                aria-label="Stroke rows can be dragged to reorder"
+                title={t("Drag stroke rows to reorder")}
+                aria-label={t("Stroke rows can be dragged to reorder")}
               >
                 <GripVertical size={16} />
               </span>
@@ -11068,8 +10985,8 @@ export function WatchfaceEditor({
             <button
               type="button"
               className="wf-property-icon-button"
-              aria-label="Add stroke"
-              title="Add stroke"
+              aria-label={t("Add stroke")}
+              title={t("Add stroke")}
               onClick={addStroke}
             >
               <Plus size={17} />
@@ -11144,7 +11061,7 @@ export function WatchfaceEditor({
       ...current,
       effectStyles: [
         ...(current.effectStyles ?? []),
-        { id, name: `Shadow style ${(current.effectStyles?.length ?? 0) + 1}`, effects }
+        { id, name: t("Shadow style {{number}}", { number: (current.effectStyles?.length ?? 0) + 1 }), effects }
       ],
       layerEffects: {
         ...(current.layerEffects ?? {}),
@@ -11159,9 +11076,7 @@ export function WatchfaceEditor({
   ) {
     const value = normalizeWatchfaceRotation(rotation ?? 0);
     return (
-      <label className="field">
-        Sprite rotation
-        <EditableNumberInput
+      <label className="field">{t("Sprite rotation")}<EditableNumberInput
           min="0"
           max="359"
           step="1"
@@ -11171,9 +11086,7 @@ export function WatchfaceEditor({
             onChange(normalizeWatchfaceRotation(next))
           }
         />
-        <span className="watchface-studio-summary">
-          Clockwise degrees, applied to every state inside its fixed COROS PNG canvas.
-        </span>
+        <span className="watchface-studio-summary">{t("Clockwise degrees, applied to every state inside its fixed COROS PNG canvas.")}</span>
       </label>
     );
   }
@@ -11191,15 +11104,13 @@ export function WatchfaceEditor({
       "Effects",
       <div className="wf-effects-inspector">
         <span className="wf-effect-scope">
-          {scope === "aod" ? "Always-on display only" : "Current display only"}
+          {scope === "aod" ? t("Always-on display only") : t("Current display only")}
         </span>
-        <label className="field wf-effect-style-select">
-          Effect style
-          <select
+        <label className="field wf-effect-style-select">{t("Effect style")}<select
             value={binding?.kind === "style" ? binding.styleId : ""}
             onChange={(event) => bindLayerEffectStyle(layerId, event.target.value)}
           >
-            <option value="">Local effects</option>
+            <option value="">{t("Local effects")}</option>
             {(design.effectStyles ?? []).map((style) => (
               <option key={style.id} value={style.id}>{style.name}</option>
             ))}
@@ -11207,9 +11118,9 @@ export function WatchfaceEditor({
         </label>
         <div className="wf-effect-style-actions">
           {binding?.kind === "style" ? (
-            <button type="button" onClick={() => detachLayerEffectStyle(layerId)}>Detach style</button>
+            <button type="button" onClick={() => detachLayerEffectStyle(layerId)}>{t("Detach style")}</button>
           ) : (
-            <button type="button" disabled={effects.length === 0} onClick={() => saveLayerEffectStyle(layerId)}>Save as style</button>
+            <button type="button" disabled={effects.length === 0} onClick={() => saveLayerEffectStyle(layerId)}>{t("Save as style")}</button>
           )}
         </div>
         {effects.map((effect, index) => (
@@ -11217,37 +11128,33 @@ export function WatchfaceEditor({
             <div className="wf-shadow-card-heading">
               <label className="watchface-studio-toggle">
                 <input type="checkbox" checked={effect.enabled} onChange={(event) => patchEffect(effect.id, { enabled: event.target.checked })} />
-                <span>{effect.kind === "inner-shadow" ? "Inner shadow" : "Drop shadow"}</span>
+                <span>{effect.kind === "inner-shadow" ? t("Inner shadow") : t("Drop shadow")}</span>
               </label>
               <div>
-                <button type="button" aria-label="Duplicate shadow" title="Duplicate" onClick={() => writeLayerEffects(layerId, [
+                <button type="button" aria-label={t("Duplicate shadow")} title={t("Duplicate")} onClick={() => writeLayerEffects(layerId, [
                   ...effects.slice(0, index + 1),
                   { ...effect, id: createWatchfaceShadowEffect(effect.kind).id },
                   ...effects.slice(index + 1)
                 ])}><Copy size={13} /></button>
-                <button type="button" aria-label="Move shadow up" disabled={index === 0} onClick={() => {
+                <button type="button" aria-label={t("Move shadow up")} disabled={index === 0} onClick={() => {
                   const next = [...effects];
                   [next[index - 1], next[index]] = [next[index]!, next[index - 1]!];
                   writeLayerEffects(layerId, next);
                 }}><ArrowUp size={13} aria-hidden="true" /></button>
-                <button type="button" aria-label="Move shadow down" disabled={index === effects.length - 1} onClick={() => {
+                <button type="button" aria-label={t("Move shadow down")} disabled={index === effects.length - 1} onClick={() => {
                   const next = [...effects];
                   [next[index + 1], next[index]] = [next[index]!, next[index + 1]!];
                   writeLayerEffects(layerId, next);
                 }}><ArrowDown size={13} aria-hidden="true" /></button>
-                <button type="button" aria-label="Remove shadow" title="Remove" onClick={() => writeLayerEffects(layerId, effects.filter((candidate) => candidate.id !== effect.id))}><Trash2 size={13} /></button>
+                <button type="button" aria-label={t("Remove shadow")} title={t("Remove")} onClick={() => writeLayerEffects(layerId, effects.filter((candidate) => candidate.id !== effect.id))}><Trash2 size={13} /></button>
               </div>
             </div>
-            <label className="field">
-              Type
-              <select value={effect.kind} onChange={(event) => patchEffect(effect.id, { kind: event.target.value as CorosWatchfaceShadowEffect["kind"] })}>
-                <option value="outer-shadow">Outer shadow</option>
-                <option value="inner-shadow">Inner shadow</option>
+            <label className="field">{t("Type")}<select value={effect.kind} onChange={(event) => patchEffect(effect.id, { kind: event.target.value as CorosWatchfaceShadowEffect["kind"] })}>
+                <option value="outer-shadow">{t("Outer shadow")}</option>
+                <option value="inner-shadow">{t("Inner shadow")}</option>
               </select>
             </label>
-            <label className="field">
-              Color
-              <span className="watchface-color-control">
+            <label className="field">{t("Color")}<span className="watchface-color-control">
                 <WatchfaceColorInput value={effect.color} onValueChange={(color) => patchEffect(effect.id, { color })} />
                 <code>{effect.color}</code>
               </span>
@@ -11260,7 +11167,7 @@ export function WatchfaceEditor({
               ["Angle", "angle", 0, 359, 1, effect.angle]
             ] as const).map(([label, key, min, max, step, value]) => (
               <label className="field watchface-zoom-control" key={key}>
-                {label} <span>{value}{key === "opacity" ? "%" : key === "angle" ? "°" : " px"}</span>
+                {t(label)} <span>{value}{key === "opacity" ? "%" : key === "angle" ? "°" : t(" px")}</span>
                 <input
                   type="range"
                   min={min}
@@ -11278,12 +11185,10 @@ export function WatchfaceEditor({
           </section>
         ))}
         {effects.length === 0 ? (
-          <p className="watchface-studio-summary">No effects. Add a shadow to build an ordered effect stack.</p>
+          <p className="watchface-studio-summary">{t("No effects. Add a shadow to build an ordered effect stack.")}</p>
         ) : null}
         {effects.length > 0 && watchfaceLayerRequiresFixedSpriteBounds(layerId) ? (
-          <p className="watchface-studio-summary">
-            Shadows stay inside each firmware sprite so digit size and spacing remain intact. Large blur or distance values may be clipped.
-          </p>
+          <p className="watchface-studio-summary">{t("Shadows stay inside each firmware sprite so digit size and spacing remain intact. Large blur or distance values may be clipped.")}</p>
         ) : null}
         {warning ? <p className="wf-effect-warning">{warning}</p> : null}
       </div>,
@@ -11296,8 +11201,8 @@ export function WatchfaceEditor({
             type="button"
             className="wf-property-icon-button"
             disabled={isPositionLocked(layerId)}
-            aria-label="Add outer shadow"
-            title="Add outer shadow"
+            aria-label={t("Add outer shadow")}
+            title={t("Add outer shadow")}
             onClick={() =>
               writeLayerEffects(layerId, [
                 ...effects,
@@ -11362,7 +11267,7 @@ export function WatchfaceEditor({
       ? `${override.replacement.width} × ${override.replacement.height} source`
       : reference.source
         ? `${reference.source.width} × ${reference.source.height}px`
-        : "Not in template";
+        : t("Not in template");
   }
 
   /**
@@ -11384,16 +11289,16 @@ export function WatchfaceEditor({
     const previewDataUrl = configAssetPreviewDataUrl(reference);
     return (
       <div className="wf-property-stack wf-config-asset-inspector">
-        <div className={`wf-config-asset-preview${enabled ? "" : " is-disabled"}`}>{previewDataUrl ? <img src={previewDataUrl} alt={`${reference.label} preview`} /> : <Image size={24} aria-hidden="true" />}</div>
+        <div className={`wf-config-asset-preview${enabled ? "" : " is-disabled"}`}>{previewDataUrl ? <img src={previewDataUrl} alt={t("{{value1}} preview", { value1: t(reference.label) })} /> : <Image size={24} aria-hidden="true" />}</div>
         <div className="wf-config-asset-actions">
-          <button type="button" className="secondary-button" onClick={() => void chooseConfigAsset(reference)}><ImagePlus size={15} /> {override?.replacement ? "Replace again" : previewDataUrl ? "Replace image" : "Import image"}</button>
-          <button type="button" className="secondary-button" onClick={() => browseOfficialConfigAsset(reference)}><Sparkles size={15} /> Official</button>
-          {override?.replacement ? <button type="button" className="secondary-button" onClick={() => restoreConfigAsset(reference)}><RotateCcw size={15} /> {reference.source ? "Restore original" : "Remove image"}</button> : null}
+          <button type="button" className="secondary-button" onClick={() => void chooseConfigAsset(reference)}><ImagePlus size={15} /> {override?.replacement ? t("Replace again") : previewDataUrl ? t("Replace image") : t("Import image")}</button>
+          <button type="button" className="secondary-button" onClick={() => browseOfficialConfigAsset(reference)}><Sparkles size={15} />{" "}{t("Official")}</button>
+          {override?.replacement ? <button type="button" className="secondary-button" onClick={() => restoreConfigAsset(reference)}><RotateCcw size={15} /> {reference.source ? t("Restore original") : t("Remove image")}</button> : null}
         </div>
         {override?.replacement ? (
           <>
-            {supportsNativeSize ? <label className="watchface-studio-toggle"><input type="checkbox" checked={nativeSize} onChange={(event) => updateConfigAsset(reference, { nativeSize: event.target.checked })} />Native PNG size</label> : null}
-            <label className="watchface-inspector-field"><span>{nativeSize ? "Native scale" : "Artwork zoom"}</span><span className="wf-input-with-unit"><EditableNumberInput min="0.1" step="0.01" value={artworkZoom} fallback={1} onValueChange={(scale) => updateConfigAsset(reference, { scale: Math.max(0.1, scale) })} /><span>×</span></span></label>
+            {supportsNativeSize ? <label className="watchface-studio-toggle"><input type="checkbox" checked={nativeSize} onChange={(event) => updateConfigAsset(reference, { nativeSize: event.target.checked })} />{t("Native PNG size")}</label> : null}
+            <label className="watchface-inspector-field"><span>{nativeSize ? t("Native scale") : t("Artwork zoom")}</span><span className="wf-input-with-unit"><EditableNumberInput min="0.1" step="0.01" value={artworkZoom} fallback={1} onValueChange={(scale) => updateConfigAsset(reference, { scale: Math.max(0.1, scale) })} /><span>×</span></span></label>
           </>
         ) : null}
       </div>
@@ -11408,34 +11313,34 @@ export function WatchfaceEditor({
     const deviceResolution = watchPreviewResolution ?? previewResolution;
     const center = parseConfigPos(deviceResolution?.config.time_center_pos);
     const centerLabel = center && deviceResolution
-      ? `Centered at ${center.x}, ${center.y} on the ${deviceResolution.width}px preview.`
-      : "Centered on the watch face.";
+      ? t("Centered at {{value1}}, {{value2}} on the {{value3}}px preview.", { value1: center.x, value2: center.y, value3: deviceResolution.width })
+      : t("Centered on the watch face.");
     const analogPivotHint =
-      "The image center is the pivot: draw the hand pointing up, with the pivot in the middle of the canvas.";
+      t("The image center is the pivot: draw the hand pointing up, with the pivot in the middle of the canvas.");
     const onWatchBehavior = (() => {
       switch (reference.configKey) {
         case "time_center_polygon_icon1":
-          return `${centerLabel} Fixed above the hour and minute hands.`;
+          return t("{{centerLabel}} Fixed above the hour and minute hands.", { centerLabel: centerLabel });
         case "time_center_polygon_icon2":
-          return `${centerLabel} Fixed above all analog hands.`;
+          return t("{{centerLabel}} Fixed above all analog hands.", { centerLabel: centerLabel });
         case "time_hour_icon":
-          return `${centerLabel} Rotates as the analog hour hand. ${analogPivotHint}`;
+          return t("{{centerLabel}} Rotates as the analog hour hand. {{analogPivotHint}}", { centerLabel: centerLabel, analogPivotHint: analogPivotHint });
         case "time_minute_icon":
-          return `${centerLabel} Rotates as the analog minute hand. ${analogPivotHint}`;
+          return t("{{centerLabel}} Rotates as the analog minute hand. {{analogPivotHint}}", { centerLabel: centerLabel, analogPivotHint: analogPivotHint });
         case "time_second_icon":
-          return `${centerLabel} Rotates as the analog second hand. ${analogPivotHint}`;
+          return t("{{centerLabel}} Rotates as the analog second hand. {{analogPivotHint}}", { centerLabel: centerLabel, analogPivotHint: analogPivotHint });
         case "colon_icon":
-          return "Placed automatically between the hour and minute digits.";
+          return t("Placed automatically between the hour and minute digits.");
         case "control_colon_icon":
-          return "Shown automatically between split values in the selected data slot.";
+          return t("Shown automatically between split values in the selected data slot.");
         case "watchface_thmb_icon":
-          return "Archive thumbnail only; this image is not drawn on the watch face.";
+          return t("Archive thumbnail only; this image is not drawn on the watch face.");
         case "negative_sign_icon":
         case "control_negative_sign_icon":
-          return "Shown only when the watch renders a negative value.";
+          return t("Shown only when the watch renders a negative value.");
         default:
           return reference.configKey.startsWith("control_")
-            ? "Shown when this data type is active in the selectable watch slot."
+            ? t("Shown when this data type is active in the selectable watch slot.")
             : null;
       }
     })();
@@ -11454,13 +11359,12 @@ export function WatchfaceEditor({
           "advanced",
           "Advanced",
           <div className="wf-property-stack">
-            <div className="wf-config-asset-meta"><strong>{reference.label}</strong><span>{dimensions}</span><code>{reference.relativePath}</code><code>[{reference.configKey}]</code></div>
+            <div className="wf-config-asset-meta"><strong>{t(reference.label)}</strong><span>{dimensions}</span><code>{reference.relativePath}</code><code>[{reference.configKey}]</code></div>
             {onWatchBehavior ? <p className="watchface-studio-summary">{onWatchBehavior}</p> : null}
             <p className="watchface-studio-summary">
               {reference.source
-                ? `Parsed from ${reference.scope === "aod" ? "AODconfig.txt" : "config.txt"}.`
-                : `Not supplied by the template. Importing an image adds [${reference.configKey}] to config.txt.`} Visibility changes only this key. Other keys that share the original file are not altered.
-            </p>
+                ? t("Parsed from {{value1}}.", { value1: reference.scope === "aod" ? "AODconfig.txt" : "config.txt" })
+                : t("Not supplied by the template. Importing an image adds [{{value1}}] to config.txt.", { value1: reference.configKey })}{" "}{t("Visibility changes only this key. Other keys that share the original file are not altered.")}</p>
           </div>,
           { disabled: isPositionLocked(layer.id) }
         )}
@@ -11474,10 +11378,7 @@ export function WatchfaceEditor({
         "specific",
         "Sprite",
         <div className="wf-property-stack">
-          <p className="watchface-studio-summary">
-            Battery is off. Turn it on in Selectable components to add its
-            configuration and show these settings.
-          </p>
+          <p className="watchface-studio-summary">{t("Battery is off. Turn it on in Selectable components to add its configuration and show these settings.")}</p>
         </div>,
         { disabled: isPositionLocked(layer.id) }
       );
@@ -11546,7 +11447,7 @@ export function WatchfaceEditor({
     return (
       <>
         {baseIconPosition
-          ? renderPositionPanel("complication", "Watch screen position", <>
+          ? renderPositionPanel("complication", t("Watch screen position"), <>
               <div className="watchface-position-inputs">
                 <label>
                   X
@@ -11589,13 +11490,13 @@ export function WatchfaceEditor({
                   />
                 </label>
               </div>
-              <span>Nudge</span>
+              <span>{t("Nudge")}</span>
               <div className="watchface-nudge-pad wf-position-nudge-only">
-                <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy - fromWatchCoordinate(1))} aria-label="Nudge control battery icon up"><ArrowUp size={13} aria-hidden="true" /></button>
-                <button type="button" onClick={() => setIconOffset(iconOffset.dx - fromWatchCoordinate(1), iconOffset.dy)} aria-label="Nudge control battery icon left"><ArrowLeft size={13} aria-hidden="true" /></button>
-                <button type="button" onClick={() => setIconOffset(iconOffset.dx + fromWatchCoordinate(1), iconOffset.dy)} aria-label="Nudge control battery icon right"><ArrowRight size={13} aria-hidden="true" /></button>
-                <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy + fromWatchCoordinate(1))} aria-label="Nudge control battery icon down"><ArrowDown size={13} aria-hidden="true" /></button>
-                <button type="button" className="watchface-nudge-reset" onClick={() => setIconOffset(0, 0)}>Reset</button>
+                <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy - fromWatchCoordinate(1))} aria-label={t("Nudge control battery icon up")}><ArrowUp size={13} aria-hidden="true" /></button>
+                <button type="button" onClick={() => setIconOffset(iconOffset.dx - fromWatchCoordinate(1), iconOffset.dy)} aria-label={t("Nudge control battery icon left")}><ArrowLeft size={13} aria-hidden="true" /></button>
+                <button type="button" onClick={() => setIconOffset(iconOffset.dx + fromWatchCoordinate(1), iconOffset.dy)} aria-label={t("Nudge control battery icon right")}><ArrowRight size={13} aria-hidden="true" /></button>
+                <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy + fromWatchCoordinate(1))} aria-label={t("Nudge control battery icon down")}><ArrowDown size={13} aria-hidden="true" /></button>
+                <button type="button" className="watchface-nudge-reset" onClick={() => setIconOffset(0, 0)}>{t("Reset")}</button>
               </div>
             </>)
           : null}
@@ -11603,7 +11504,7 @@ export function WatchfaceEditor({
           "specific",
           "Sprite",
           <div className="wf-property-stack">
-            {renderBatteryStateStrip("config:control_battery_icon", "Selectable battery states")}
+            {renderBatteryStateStrip("config:control_battery_icon", t("Selectable battery states"))}
             <div className="wf-config-asset-actions">
               <button
                 className="secondary-button"
@@ -11612,7 +11513,7 @@ export function WatchfaceEditor({
                 onClick={() => void chooseBatterySpriteFolder("config:control_battery_icon")}
               >
                 <ImagePlus size={15} />
-                {stateCount > 0 ? "Replace sprite folder" : "Import sprite folder"}
+                {stateCount > 0 ? t("Replace sprite folder") : t("Import sprite folder")}
               </button>
               <button
                 className="secondary-button"
@@ -11620,9 +11521,7 @@ export function WatchfaceEditor({
                 disabled={spriteImportPending}
                 onClick={() => browseOfficialBatterySprites("config:control_battery_icon")}
               >
-                <Sparkles size={15} />
-                Official sprites
-              </button>
+                <Sparkles size={15} />{t("Official sprites")}</button>
               {stateCount > 0 ? (
                 <button
                   className="secondary-button"
@@ -11630,12 +11529,11 @@ export function WatchfaceEditor({
                   disabled={spriteImportPending}
                   onClick={() => restoreBatteryIcon("config:control_battery_icon")}
                 >
-                  <RotateCcw size={15} /> Restore
-                </button>
+                  <RotateCcw size={15} />{" "}{t("Restore")}</button>
               ) : null}
             </div>
             <label className="watchface-inspector-field">
-              <span>Scale</span>
+              <span>{t("Scale")}</span>
               <span className="wf-input-with-unit">
                 <EditableNumberInput
                   min="0.1"
@@ -11653,9 +11551,7 @@ export function WatchfaceEditor({
         {renderPropertySection(
           "advanced",
           "Advanced",
-          <p className="watchface-studio-summary">
-            This sprite is used only for the Battery choice in the selectable data slot. Its source, scale, and position are independent from the Selectable metric layer.
-          </p>,
+          <p className="watchface-studio-summary">{t("This sprite is used only for the Battery choice in the selectable data slot. Its source, scale, and position are independent from the Selectable metric layer.")}</p>,
           { disabled: isPositionLocked(layer.id) }
         )}
       </>
@@ -11731,45 +11627,43 @@ export function WatchfaceEditor({
         <>
           {renderPropertySection(
             "appearance",
-            "Background color",
+            t("Background color"),
             <div className="wf-property-stack">
-              <label className="field">
-                Color
-                <span className="watchface-color-control">
+              <label className="field">{t("Color")}<span className="watchface-color-control">
                   <WatchfaceColorInput value={backgroundColor.hex} onValueChange={(color) => patchDesign({ backgroundColor: toRgbaColor(color, backgroundColor.isTransparent ? 1 : backgroundColor.alpha) })} />
-                  <EditableHexColorInput aria-label="Background hex color" value={backgroundColor.hex} onValueChange={(color) => patchDesign({ backgroundColor: toRgbaColor(color, backgroundColor.isTransparent ? 1 : backgroundColor.alpha) })} />
-                  <button className="watchface-color-none" type="button" aria-label="Make background color transparent" disabled={backgroundColor.isTransparent} onClick={() => patchDesign({ backgroundColor: "transparent" })}>Clear</button>
+                  <EditableHexColorInput aria-label={t("Background hex color")} value={backgroundColor.hex} onValueChange={(color) => patchDesign({ backgroundColor: toRgbaColor(color, backgroundColor.isTransparent ? 1 : backgroundColor.alpha) })} />
+                  <button className="watchface-color-none" type="button" aria-label={t("Make background color transparent")} disabled={backgroundColor.isTransparent} onClick={() => patchDesign({ backgroundColor: "transparent" })}>{t("Clear")}</button>
                 </span>
               </label>
               <label className="watchface-inspector-field">
-                <span>Color opacity</span>
+                <span>{t("Color opacity")}</span>
                 <span className="wf-input-with-unit">
                   <EditableNumberInput min="0" max="100" step="1" disabled={backgroundColor.isTransparent} value={Math.round(backgroundColor.alpha * 100)} fallback={100} onValueChange={(opacity) => patchDesign({ backgroundColor: toRgbaColor(backgroundColor.hex, opacity / 100) })} />
                   <span>%</span>
                 </span>
               </label>
-              <p className="watchface-studio-summary">Changes only the color behind your photo and watch data.</p>
+              <p className="watchface-studio-summary">{t("Changes only the color behind your photo and watch data.")}</p>
             </div>
           )}
           {renderPropertySection(
             "specific",
-            "Background photo",
+            t("Background photo"),
             <div className="wf-property-stack">
               <div className="wf-background-photo-card">
               <div className={`wf-config-asset-preview wf-background-asset-preview${backgroundVisible ? "" : " is-disabled"}`}>
-                {backgroundArtwork ? <img src={backgroundArtwork.dataUrl} alt="Background artwork preview" /> : <Image size={28} aria-hidden="true" />}
+                {backgroundArtwork ? <img src={backgroundArtwork.dataUrl} alt={t("Background artwork preview")} /> : <Image size={28} aria-hidden="true" />}
               </div>
               <div className="wf-background-photo-actions">
-                <button className="secondary-button" type="button" onClick={() => void chooseArtwork()}><ImagePlus size={15} /> {backgroundArtwork ? "Replace photo" : "Choose photo"}</button>
-                {backgroundArtwork ? <button className="wf-photo-remove" type="button" onClick={() => setBackgroundArtwork(null)}><Trash2 size={14} /> Remove photo</button> : <p className="watchface-studio-summary">Add an image behind the time.</p>}
+                <button className="secondary-button" type="button" onClick={() => void chooseArtwork()}><ImagePlus size={15} /> {backgroundArtwork ? t("Replace photo") : t("Choose photo")}</button>
+                {backgroundArtwork ? <button className="wf-photo-remove" type="button" onClick={() => setBackgroundArtwork(null)}><Trash2 size={14} />{" "}{t("Remove photo")}</button> : <p className="watchface-studio-summary">{t("Add an image behind the time.")}</p>}
               </div>
               </div>
               {backgroundArtwork ? (
                 <div className="wf-photo-zoom">
-                  <label className="watchface-inspector-field"><span>Photo zoom</span><span className="wf-input-with-unit"><EditableNumberInput aria-label="Photo zoom" min="1" max="2.25" step="0.01" value={design.zoom} fallback={1} onValueChange={(zoom) => patchDesign({ zoom: Math.max(1, Math.min(2.25, zoom)) })} /><span>×</span></span></label>
+                  <label className="watchface-inspector-field"><span>{t("Photo zoom")}</span><span className="wf-input-with-unit"><EditableNumberInput aria-label={t("Photo zoom")} min="1" max="2.25" step="0.01" value={design.zoom} fallback={1} onValueChange={(zoom) => patchDesign({ zoom: Math.max(1, Math.min(2.25, zoom)) })} /><span>×</span></span></label>
                   <div className="wf-photo-zoom-slider">
-                    <input type="range" aria-label="Adjust photo zoom" min="1" max="2.25" step="0.01" value={design.zoom} onChange={(event) => patchDesign({ zoom: Number(event.target.value) })} />
-                    <button type="button" className="wf-property-icon-button" aria-label="Reset photo zoom" title="Reset photo zoom" disabled={design.zoom === 1} onClick={() => patchDesign({ zoom: 1 })}><RotateCcw size={14} /></button>
+                    <input type="range" aria-label={t("Adjust photo zoom")} min="1" max="2.25" step="0.01" value={design.zoom} onChange={(event) => patchDesign({ zoom: Number(event.target.value) })} />
+                    <button type="button" className="wf-property-icon-button" aria-label={t("Reset photo zoom")} title={t("Reset photo zoom")} disabled={design.zoom === 1} onClick={() => patchDesign({ zoom: 1 })}><RotateCcw size={14} /></button>
                   </div>
                 </div>
               ) : null}
@@ -11793,20 +11687,20 @@ export function WatchfaceEditor({
             "specific",
             "Sprite",
             <div className="wf-property-stack">
-              {renderBatteryStateStrip("config:battery_icon", "Battery states")}
+              {renderBatteryStateStrip("config:battery_icon", t("Battery states"))}
               <div className="wf-config-asset-actions">
-                <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => void chooseBatterySpriteFolder()}><ImagePlus size={15} /> {stateCount > 0 ? "Replace sprite folder" : "Import sprite folder"}</button>
-                <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => browseOfficialBatterySprites()}><Sparkles size={15} /> Official sprites</button>
-                {stateCount > 0 ? <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => restoreBatteryIcon()}><RotateCcw size={15} /> Restore template</button> : null}
+                <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => void chooseBatterySpriteFolder()}><ImagePlus size={15} /> {stateCount > 0 ? t("Replace sprite folder") : t("Import sprite folder")}</button>
+                <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => browseOfficialBatterySprites()}><Sparkles size={15} />{" "}{t("Official sprites")}</button>
+                {stateCount > 0 ? <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => restoreBatteryIcon()}><RotateCcw size={15} />{" "}{t("Restore template")}</button> : null}
               </div>
-              <label className="watchface-inspector-field"><span>Icon scale</span><EditableNumberInput min="0.1" step="0.01" value={iconScale} fallback={1} onValueChange={setBatteryIconScale} /></label>
-              <p className="watchface-studio-summary">Import PNGs by state index. Standard COROS sets: {COROS_BATTERY_STATE_ORDER} Preserve the existing order for other template sizes.</p>
+              <label className="watchface-inspector-field"><span>{t("Icon scale")}</span><EditableNumberInput min="0.1" step="0.01" value={iconScale} fallback={1} onValueChange={setBatteryIconScale} /></label>
+              <p className="watchface-studio-summary">{t("Import PNGs by state index. Standard COROS sets:")}{" "}{COROS_BATTERY_STATE_ORDER}{" "}{t("Preserve the existing order for other template sizes.")}</p>
             </div>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderEffectsInspector(
             layer.id,
-            "Native battery states keep their firmware slot dimensions. Shadows are clipped unless the artwork is a Studio-owned sprite folder."
+            t("Native battery states keep their firmware slot dimensions. Shadows are clipped unless the artwork is a Studio-owned sprite folder.")
           )}
         </>
       );
@@ -11820,7 +11714,7 @@ export function WatchfaceEditor({
           {renderPropertySection(
             "appearance",
             "Appearance",
-            <label className="field">Tint color<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setMetricStyle("battery", { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearMetricColor("battery")}><XCircle size={14} /></button></span></label>,
+            <label className="field">{t("Tint color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setMetricStyle("battery", { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Remove tint")} title={t("Remove tint")} onClick={() => clearMetricColor("battery")}><XCircle size={14} /></button></span></label>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderStrokeInspector(layer.id)}
@@ -11829,10 +11723,10 @@ export function WatchfaceEditor({
             "Typography",
             <div className="wf-property-stack">
               <WatchfaceNumberAlignControl value={style?.align} allowTemplateDefault onChange={(align) => setMetricStyle("battery", { align })} />
-              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" preview={renderFontPreview("battery", style)} onChange={(fontFamily) => setMetricStyle("battery", { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle("battery", typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle("battery", { letterSpacing })} />
+              <LocalFontPicker api={api} label={t("Font")} value={style?.fontFamily ?? design.fontFamily} emptyLabel={t("Keep template font")} preview={renderFontPreview("battery", style)} onChange={(fontFamily) => setMetricStyle("battery", { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle("battery", typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle("battery", { letterSpacing })} />
               <div className="watchface-position-inputs">
-                <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle("battery", { scale: Math.max(0.01, scale) })} /></label>
-                <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle("battery", { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
+                <label>{t("Scale")}<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle("battery", { scale: Math.max(0.01, scale) })} /></label>
+                <label>{t("Rotation")}<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle("battery", { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               </div>
               <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel="Battery data" onActivate={() => setMetricStyle("battery", { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont })} />
             </div>,
@@ -11851,7 +11745,7 @@ export function WatchfaceEditor({
           {renderPropertySection(
             "appearance",
             "Appearance",
-            <label className="field">Tint color<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setTimeStyle(layer.timePartId!, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearTimeColor(layer.timePartId!)}><XCircle size={14} /></button></span></label>,
+            <label className="field">{t("Tint color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setTimeStyle(layer.timePartId!, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Remove tint")} title={t("Remove tint")} onClick={() => clearTimeColor(layer.timePartId!)}><XCircle size={14} /></button></span></label>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderStrokeInspector(layer.id)}
@@ -11859,15 +11753,15 @@ export function WatchfaceEditor({
             "specific",
             "Typography",
             <div className="wf-property-stack">
-              {layer.timePartId === "autoTime" ? <button type="button" className="secondary-button" onClick={convertAutoTimeToSeparate}>Separate hours and minutes</button> : null}
+              {layer.timePartId === "autoTime" ? <button type="button" className="secondary-button" onClick={convertAutoTimeToSeparate}>{t("Separate hours and minutes")}</button> : null}
               {layer.timePartId === "seconds" && design.addSeconds && canAddSeconds ? <>
-                <p className="watchface-studio-summary">Added by Studio using the minute digits. This template has no seconds of its own.</p>
-                <div className="wf-config-asset-actions"><button className="secondary-button wf-danger-action" type="button" onClick={removeAddedSeconds}><Trash2 size={15} /> Remove seconds</button></div>
+                <p className="watchface-studio-summary">{t("Added by Studio using the minute digits. This template has no seconds of its own.")}</p>
+                <div className="wf-config-asset-actions"><button className="secondary-button wf-danger-action" type="button" onClick={removeAddedSeconds}><Trash2 size={15} />{" "}{t("Remove seconds")}</button></div>
               </> : null}
-              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" preview={renderFontPreview(layer.timePartId!, style)} onChange={(fontFamily) => setTimeStyle(layer.timePartId!, { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setTimeStyle(layer.timePartId!, typography)} onLetterSpacingChange={(letterSpacing) => setTimeStyle(layer.timePartId!, { letterSpacing })} />
+              <LocalFontPicker api={api} label={t("Font")} value={style?.fontFamily ?? design.fontFamily} emptyLabel={t("Keep template font")} preview={renderFontPreview(layer.timePartId!, style)} onChange={(fontFamily) => setTimeStyle(layer.timePartId!, { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setTimeStyle(layer.timePartId!, typography)} onLetterSpacingChange={(letterSpacing) => setTimeStyle(layer.timePartId!, { letterSpacing })} />
               <div className="watchface-position-inputs">
-                <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setTimeStyle(layer.timePartId!, { scale: Math.max(0.01, scale) })} /></label>
-                <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setTimeStyle(layer.timePartId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
+                <label>{t("Scale")}<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setTimeStyle(layer.timePartId!, { scale: Math.max(0.01, scale) })} /></label>
+                <label>{t("Rotation")}<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setTimeStyle(layer.timePartId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               </div>
               <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel={layer.label} onActivate={() => setTimeStyle(layer.timePartId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont })} />
             </div>,
@@ -11906,18 +11800,18 @@ export function WatchfaceEditor({
       return (
         <>
           {renderPositionReadout(layer)}
-          {layer.metricId === "temperature" && <p className="watchface-studio-summary">The watch's thermometer supplies this value and can be affected by body heat. Add Current weather under Weather for weather data.</p>}
+          {layer.metricId === "temperature" && <p className="watchface-studio-summary">{t("The watch's thermometer supplies this value and can be affected by body heat. Add Current weather under Weather for weather data.")}</p>}
           {renderPropertySection(
             "appearance",
             "Appearance",
             <div className="wf-property-stack">
-              <label className="field">Tint color<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setMetricStyle(layer.metricId!, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearMetricColor(layer.metricId!)}><XCircle size={14} /></button></span></label>
+              <label className="field">{t("Tint color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setMetricStyle(layer.metricId!, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Remove tint")} title={t("Remove tint")} onClick={() => clearMetricColor(layer.metricId!)}><XCircle size={14} /></button></span></label>
               {exerciseSeparator ? (
                 <details className="wf-nested-disclosure" open>
-                  <summary>Exercise separator</summary>
+                  <summary>{t("Exercise separator")}</summary>
                   <div className="wf-property-stack">
                     <label className="watchface-inspector-field">
-                      <span>Show separator</span>
+                      <span>{t("Show separator")}</span>
                       <input
                         type="checkbox"
                         checked={exerciseSeparator.enabled}
@@ -11926,9 +11820,7 @@ export function WatchfaceEditor({
                         }
                       />
                     </label>
-                    <label className="field">
-                      Color
-                      <span className="watchface-color-control">
+                    <label className="field">{t("Color")}<span className="watchface-color-control">
                         <WatchfaceColorInput
                           value={exerciseSeparator.color}
                           onValueChange={(color) => updateExerciseSeparator({ color })}
@@ -11937,20 +11829,20 @@ export function WatchfaceEditor({
                       </span>
                     </label>
                     <div className="watchface-position-inputs">
-                      <label>Center X<EditableNumberInput step="1" value={exerciseSeparator.x} fallback={previewWidth / 2} disabled={isPositionLocked(layer.id)} onValueChange={(x) => updateExerciseSeparator({ x })} /></label>
-                      <label>Center Y<EditableNumberInput step="1" value={exerciseSeparator.y} fallback={previewHeight * 0.8} disabled={isPositionLocked(layer.id)} onValueChange={(y) => updateExerciseSeparator({ y })} /></label>
-                      <label>Size<EditableNumberInput min="1" step="1" value={exerciseSeparator.size} fallback={1} onValueChange={(size) => updateExerciseSeparator({ size: Math.max(1, size) })} /></label>
-                      <label>Scale<EditableNumberInput min="0.01" step="0.01" value={exerciseSeparator.scale} fallback={1} onValueChange={(scale) => updateExerciseSeparator({ scale: Math.max(0.01, scale) })} /></label>
+                      <label>{t("Center X")}<EditableNumberInput step="1" value={exerciseSeparator.x} fallback={previewWidth / 2} disabled={isPositionLocked(layer.id)} onValueChange={(x) => updateExerciseSeparator({ x })} /></label>
+                      <label>{t("Center Y")}<EditableNumberInput step="1" value={exerciseSeparator.y} fallback={previewHeight * 0.8} disabled={isPositionLocked(layer.id)} onValueChange={(y) => updateExerciseSeparator({ y })} /></label>
+                      <label>{t("Size")}<EditableNumberInput min="1" step="1" value={exerciseSeparator.size} fallback={1} onValueChange={(size) => updateExerciseSeparator({ size: Math.max(1, size) })} /></label>
+                      <label>{t("Scale")}<EditableNumberInput min="0.01" step="0.01" value={exerciseSeparator.scale} fallback={1} onValueChange={(scale) => updateExerciseSeparator({ scale: Math.max(0.01, scale) })} /></label>
                     </div>
                     {exerciseSeparator.artwork ? (
                       <div className="wf-config-asset-preview">
                         <img
                           src={exerciseSeparator.artwork.dataUrl}
-                          alt="Exercise separator PNG"
+                          alt={t("Exercise separator PNG")}
                         />
                       </div>
                     ) : (
-                      <p className="watchface-studio-summary">Using a generated colon glyph.</p>
+                      <p className="watchface-studio-summary">{t("Using a generated colon glyph.")}</p>
                     )}
                     <div className="wf-config-asset-actions">
                       <button
@@ -11959,21 +11851,17 @@ export function WatchfaceEditor({
                         onClick={chooseExerciseSeparatorArtwork}
                       >
                         <ImagePlus size={14} />
-                        {exerciseSeparator.artwork ? "Replace PNG" : "Choose PNG"}
+                        {exerciseSeparator.artwork ? t("Replace PNG") : t("Choose PNG")}
                       </button>
                       {exerciseSeparator.artwork ? (
                         <button
                           type="button"
                           className="secondary-button"
                           onClick={() => updateExerciseSeparator({ artwork: null })}
-                        >
-                          Use text colon
-                        </button>
+                        >{t("Use text colon")}</button>
                       ) : null}
                     </div>
-                    <p className="watchface-studio-summary">
-                      This separator is flattened into the face artwork and follows Exercise when the metric moves.
-                    </p>
+                    <p className="watchface-studio-summary">{t("This separator is flattened into the face artwork and follows Exercise when the metric moves.")}</p>
                   </div>
                 </details>
               ) : null}
@@ -11986,10 +11874,10 @@ export function WatchfaceEditor({
             "Typography",
             <div className="wf-property-stack">
               <WatchfaceNumberAlignControl value={style?.align} allowTemplateDefault onChange={(align) => setMetricStyle(layer.metricId!, { align })} />
-              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" preview={renderFontPreview(layer.metricId!, style)} onChange={(fontFamily) => setMetricStyle(layer.metricId!, { fontFamily })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle(layer.metricId!, typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle(layer.metricId!, { letterSpacing })} />
+              <LocalFontPicker api={api} label={t("Font")} value={style?.fontFamily ?? design.fontFamily} emptyLabel={t("Keep template font")} preview={renderFontPreview(layer.metricId!, style)} onChange={(fontFamily) => setMetricStyle(layer.metricId!, { fontFamily })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle(layer.metricId!, typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle(layer.metricId!, { letterSpacing })} />
               <div className="watchface-position-inputs">
-                <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle(layer.metricId!, { scale: Math.max(0.01, scale) })} /></label>
-                {supportsWatchfaceSpriteRotation(layer.metricId) ? <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle(layer.metricId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label> : null}
+                <label>{t("Scale")}<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle(layer.metricId!, { scale: Math.max(0.01, scale) })} /></label>
+                {supportsWatchfaceSpriteRotation(layer.metricId) ? <label>{t("Rotation")}<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle(layer.metricId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label> : null}
               </div>
               <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel={layer.label} onActivate={() => setMetricStyle(layer.metricId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont })} />
             </div>,
@@ -11998,10 +11886,10 @@ export function WatchfaceEditor({
           {progress
             ? renderPropertySection(
                 "advanced",
-                "Goal progress",
+                t("Goal progress"),
                 <div className="wf-property-stack">
                   <label className="watchface-inspector-field">
-                    <span>Progress arc</span>
+                    <span>{t("Progress arc")}</span>
                     <input
                       type="checkbox"
                       checked={progress.arcEnabled}
@@ -12011,7 +11899,7 @@ export function WatchfaceEditor({
                     />
                   </label>
                   <label className="watchface-inspector-field">
-                    <span>Progress bar</span>
+                    <span>{t("Progress bar")}</span>
                     <input
                       type="checkbox"
                       checked={progress.rectEnabled}
@@ -12020,9 +11908,7 @@ export function WatchfaceEditor({
                       }
                     />
                   </label>
-                  <label className="field">
-                    Arc color
-                    <span className="watchface-color-control">
+                  <label className="field">{t("Arc color")}<span className="watchface-color-control">
                       <WatchfaceColorInput
                         value={progress.arcColor}
                         onPreview={(arcColor) =>
@@ -12035,9 +11921,7 @@ export function WatchfaceEditor({
                       <code>{progress.arcColor}</code>
                     </span>
                   </label>
-                  <label className="field">
-                    Bar color
-                    <span className="watchface-color-control">
+                  <label className="field">{t("Bar color")}<span className="watchface-color-control">
                       <WatchfaceColorInput
                         value={progress.rectColor}
                         onPreview={(rectColor) =>
@@ -12051,7 +11935,7 @@ export function WatchfaceEditor({
                     </span>
                   </label>
                   <label className="watchface-inspector-field">
-                    <span>Preview fill</span>
+                    <span>{t("Preview fill")}</span>
                     <span className="wf-input-with-unit">
                       <EditableNumberInput
                         min="0"
@@ -12072,48 +11956,46 @@ export function WatchfaceEditor({
                     </span>
                   </label>
                   <details className="wf-nested-disclosure">
-                    <summary>Arc geometry</summary>
+                    <summary>{t("Arc geometry")}</summary>
                     <div className="watchface-position-inputs">
-                      <label>Center X<EditableNumberInput step="1" value={progress.arc.centerX} fallback={previewWidth / 2} onValueChange={(centerX) => updateKcalProgress({ arc: { centerX } })} /></label>
-                      <label>Center Y<EditableNumberInput step="1" value={progress.arc.centerY} fallback={previewHeight / 2} onValueChange={(centerY) => updateKcalProgress({ arc: { centerY } })} /></label>
-                      <label>Radius X<EditableNumberInput min="1" step="1" value={progress.arc.radiusX} fallback={1} onValueChange={(radiusX) => updateKcalProgress({ arc: { radiusX: Math.max(1, radiusX) } })} /></label>
-                      <label>Radius Y<EditableNumberInput min="1" step="1" value={progress.arc.radiusY} fallback={1} onValueChange={(radiusY) => updateKcalProgress({ arc: { radiusY: Math.max(1, radiusY) } })} /></label>
-                      <label>Start °<EditableNumberInput min="-360" max="360" step="1" value={progress.arc.startAngle} fallback={-135} onValueChange={(startAngle) => updateKcalProgress({ arc: { startAngle } })} /></label>
-                      <label>End °<EditableNumberInput min="-360" max="360" step="1" value={progress.arc.endAngle} fallback={135} onValueChange={(endAngle) => updateKcalProgress({ arc: { endAngle } })} /></label>
-                      <label>Thickness<EditableNumberInput min="1" step="1" value={progress.arc.strokeWidth} fallback={1} onValueChange={(strokeWidth) => updateKcalProgress({ arc: { strokeWidth: Math.max(1, strokeWidth) } })} /></label>
+                      <label>{t("Center X")}<EditableNumberInput step="1" value={progress.arc.centerX} fallback={previewWidth / 2} onValueChange={(centerX) => updateKcalProgress({ arc: { centerX } })} /></label>
+                      <label>{t("Center Y")}<EditableNumberInput step="1" value={progress.arc.centerY} fallback={previewHeight / 2} onValueChange={(centerY) => updateKcalProgress({ arc: { centerY } })} /></label>
+                      <label>{t("Radius X")}<EditableNumberInput min="1" step="1" value={progress.arc.radiusX} fallback={1} onValueChange={(radiusX) => updateKcalProgress({ arc: { radiusX: Math.max(1, radiusX) } })} /></label>
+                      <label>{t("Radius Y")}<EditableNumberInput min="1" step="1" value={progress.arc.radiusY} fallback={1} onValueChange={(radiusY) => updateKcalProgress({ arc: { radiusY: Math.max(1, radiusY) } })} /></label>
+                      <label>{t("Start °")}<EditableNumberInput min="-360" max="360" step="1" value={progress.arc.startAngle} fallback={-135} onValueChange={(startAngle) => updateKcalProgress({ arc: { startAngle } })} /></label>
+                      <label>{t("End °")}<EditableNumberInput min="-360" max="360" step="1" value={progress.arc.endAngle} fallback={135} onValueChange={(endAngle) => updateKcalProgress({ arc: { endAngle } })} /></label>
+                      <label>{t("Thickness")}<EditableNumberInput min="1" step="1" value={progress.arc.strokeWidth} fallback={1} onValueChange={(strokeWidth) => updateKcalProgress({ arc: { strokeWidth: Math.max(1, strokeWidth) } })} /></label>
                     </div>
                     <label className="watchface-inspector-field">
-                      <span>Draw remaining portion</span>
+                      <span>{t("Draw remaining portion")}</span>
                       <input type="checkbox" checked={progress.arc.background} onChange={(event) => updateKcalProgress({ arc: { background: event.target.checked } })} />
                     </label>
                   </details>
                   <details className="wf-nested-disclosure">
-                    <summary>Bar geometry</summary>
+                    <summary>{t("Bar geometry")}</summary>
                     <div className="watchface-position-inputs">
-                      <label>Left<EditableNumberInput step="1" value={progress.rect.x0} fallback={0} onValueChange={(x0) => updateKcalProgress({ rect: { x0 } })} /></label>
-                      <label>Top<EditableNumberInput step="1" value={progress.rect.y0} fallback={0} onValueChange={(y0) => updateKcalProgress({ rect: { y0 } })} /></label>
-                      <label>Right<EditableNumberInput step="1" value={progress.rect.x1} fallback={previewWidth} onValueChange={(x1) => updateKcalProgress({ rect: { x1 } })} /></label>
-                      <label>Bottom<EditableNumberInput step="1" value={progress.rect.y1} fallback={previewHeight} onValueChange={(y1) => updateKcalProgress({ rect: { y1 } })} /></label>
+                      <label>{t("Left")}<EditableNumberInput step="1" value={progress.rect.x0} fallback={0} onValueChange={(x0) => updateKcalProgress({ rect: { x0 } })} /></label>
+                      <label>{t("Top")}<EditableNumberInput step="1" value={progress.rect.y0} fallback={0} onValueChange={(y0) => updateKcalProgress({ rect: { y0 } })} /></label>
+                      <label>{t("Right")}<EditableNumberInput step="1" value={progress.rect.x1} fallback={previewWidth} onValueChange={(x1) => updateKcalProgress({ rect: { x1 } })} /></label>
+                      <label>{t("Bottom")}<EditableNumberInput step="1" value={progress.rect.y1} fallback={previewHeight} onValueChange={(y1) => updateKcalProgress({ rect: { y1 } })} /></label>
                     </div>
                     <label className="watchface-inspector-field">
-                      <span>Fill direction</span>
+                      <span>{t("Fill direction")}</span>
                       <select value={progress.rect.direction} onChange={(event) => updateKcalProgress({ rect: { direction: event.target.value as CorosWatchfaceKcalProgressStyle["rect"]["direction"] } })}>
-                        <option value="left">Left to right</option>
-                        <option value="right">Right to left</option>
-                        <option value="top">Top to bottom</option>
-                        <option value="bottom">Bottom to top</option>
+                        <option value="left">{t("Left to right")}</option>
+                        <option value="right">{t("Right to left")}</option>
+                        <option value="top">{t("Top to bottom")}</option>
+                        <option value="bottom">{t("Bottom to top")}</option>
                       </select>
                     </label>
                   </details>
-                  <p className="watchface-studio-summary">
-                    COROS supplies the live goal percentage on the watch. Current settings mirror to Always-on until you customize that mode.
-                  </p>
+                  <p className="watchface-studio-summary">{t("COROS supplies the live goal percentage on the watch. Current settings mirror to Always-on until you customize that mode.")}</p>
                 </div>
               )
             : exerciseProgress
               ? renderPropertySection(
                   "advanced",
-                  "Goal progress",
+                  t("Goal progress"),
                   renderExerciseProgressControls(exerciseProgress)
                 )
               : null}
@@ -12168,7 +12050,7 @@ export function WatchfaceEditor({
           {renderPropertySection(
             "appearance",
             "Appearance",
-            <label className="field">Tint color<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setDateStyle(partId, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearDateColor(partId)}><XCircle size={14} /></button></span></label>,
+            <label className="field">{t("Tint color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setDateStyle(partId, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Remove tint")} title={t("Remove tint")} onClick={() => clearDateColor(partId)}><XCircle size={14} /></button></span></label>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderStrokeInspector(layer.id)}
@@ -12178,15 +12060,15 @@ export function WatchfaceEditor({
             <div className="wf-property-stack">
               {isAddedDatePart(partId) ? <>
                 <p className="watchface-studio-summary">{partId === "weekday"
-                  ? "Added by Studio and drawn with a font. This template has no weekday of its own."
-                  : "Added by Studio using this face's digits. This template has no date of its own."}</p>
-                <div className="wf-config-asset-actions"><button className="secondary-button wf-danger-action" type="button" onClick={() => removeAddedDatePart(partId)}><Trash2 size={15} /> Remove {layer.label.toLowerCase()}</button></div>
+                  ? t("Added by Studio and drawn with a font. This template has no weekday of its own.")
+                  : t("Added by Studio using this face's digits. This template has no date of its own.")}</p>
+                <div className="wf-config-asset-actions"><button className="secondary-button wf-danger-action" type="button" onClick={() => removeAddedDatePart(partId)}><Trash2 size={15} />{" "}{t("Remove")}{" "}{layer.label.toLowerCase()}</button></div>
               </> : null}
               <LocalFontPicker
                 api={api}
-                label="Font"
+                label={t("Font")}
                 value={style?.fontFamily ?? design.fontFamily}
-                emptyLabel={isAddedDatePart(partId) && partId === "weekday" ? "Default font" : "Keep template font"}
+                emptyLabel={isAddedDatePart(partId) && partId === "weekday" ? t("Default font") : t("Keep template font")}
                 preview={renderFontPreview(partId, style, {
                   rasterFontRequiredText: partId === "weekday" ? "MON" : usesMonthLabels ? "JAN" : undefined,
                   sampleText: partId === "weekday"
@@ -12217,7 +12099,7 @@ export function WatchfaceEditor({
                 }
               />
               <div className="field wf-sprite-size">
-                <span>Size</span>
+                <span>{t("Size")}</span>
                 <LinkedDimensionInputs
                   width={style?.width ?? nativeWidth}
                   height={style?.height ?? nativeHeight}
@@ -12235,17 +12117,17 @@ export function WatchfaceEditor({
               </div>
               {sizeOverridden ? (
                 <p className="watchface-typography-hint wf-sprite-size-hint">
-                  {sourceSizes.length > 0 ? <span>Imported at {nativeWidth} × {nativeHeight} px</span> : null}
+                  {sourceSizes.length > 0 ? <span>{t("Imported at")}{" "}{nativeWidth} × {nativeHeight}{" "}{t("px")}</span> : null}
                   <button
                     type="button"
                     className="wf-native-part-reset"
                     onClick={() => setDateStyle(partId, { width: undefined, height: undefined })}
                   >
-                    {sourceSizes.length > 0 ? "Reset" : "Use imported size"}
+                    {sourceSizes.length > 0 ? t("Reset") : t("Use imported size")}
                   </button>
                 </p>
               ) : null}
-              <label className="watchface-inspector-field"><span>Rotation</span><EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setDateStyle(partId, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
+              <label className="watchface-inspector-field"><span>{t("Rotation")}</span><EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setDateStyle(partId, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               <CustomPngFontPanel
                 api={api}
                 {...rasterFolderImportProps}
@@ -12295,8 +12177,8 @@ export function WatchfaceEditor({
               <div className="watchface-position-inputs">
                 <label>X<EditableNumberInput min="0" max={watchCoordinateWidth} step="1" value={toWatchCoordinate(sprite.x)} fallback={0} onValueChange={(x) => updateSprite(sprite.id, { x: fromWatchCoordinate(x) })} /></label>
                 <label>Y<EditableNumberInput min="0" max={watchCoordinateHeight} step="1" value={toWatchCoordinate(sprite.y)} fallback={0} onValueChange={(y) => updateSprite(sprite.id, { y: fromWatchCoordinate(y) })} /></label>
-                <label>Scale %<EditableNumberInput min="20" max="300" step="1" value={Math.round(sprite.scale * 100)} fallback={100} onValueChange={(scale) => updateSprite(sprite.id, { scale: Math.max(0.2, Math.min(3, scale / 100)) })} /></label>
-                <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={Math.round(sprite.rotation)} fallback={0} onValueChange={(rotation) => updateSprite(sprite.id, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
+                <label>{t("Scale %")}<EditableNumberInput min="20" max="300" step="1" value={Math.round(sprite.scale * 100)} fallback={100} onValueChange={(scale) => updateSprite(sprite.id, { scale: Math.max(0.2, Math.min(3, scale / 100)) })} /></label>
+                <label>{t("Rotation")}<EditableNumberInput min="0" max="360" step="1" value={Math.round(sprite.rotation)} fallback={0} onValueChange={(rotation) => updateSprite(sprite.id, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               </div>
               <LinkedDimensionInputs
                 width={toWatchCoordinate(sprite.width * sprite.scale)}
@@ -12312,18 +12194,18 @@ export function WatchfaceEditor({
                   updateSprite(sprite.id, { aspectLocked })
                 }
               />
-              <div className="wf-transform-action-row wf-flip-action-row" role="group" aria-label="Image transform options">
-                <button type="button" aria-pressed={sprite.flipX === true} onClick={() => updateSprite(sprite.id, { flipX: !sprite.flipX })}><FlipHorizontal2 size={14} /><span>Flip X</span></button>
-                <button type="button" aria-pressed={sprite.flipY === true} onClick={() => updateSprite(sprite.id, { flipY: !sprite.flipY })}><FlipVertical2 size={14} /><span>Flip Y</span></button>
+              <div className="wf-transform-action-row wf-flip-action-row" role="group" aria-label={t("Image transform options")}>
+                <button type="button" aria-pressed={sprite.flipX === true} onClick={() => updateSprite(sprite.id, { flipX: !sprite.flipX })}><FlipHorizontal2 size={14} /><span>{t("Flip X")}</span></button>
+                <button type="button" aria-pressed={sprite.flipY === true} onClick={() => updateSprite(sprite.id, { flipY: !sprite.flipY })}><FlipVertical2 size={14} /><span>{t("Flip Y")}</span></button>
               </div>
-              <div className="wf-control-label">Align to face</div>
-              <div className="wf-align-icon-grid" role="group" aria-label="Align image to face">
-                <button type="button" title="Align left" aria-label="Align left" onClick={() => updateSprite(sprite.id, { x: (sprite.width * sprite.scale) / 2 })}><AlignHorizontalJustifyStart size={14} /></button>
-                <button type="button" title="Align horizontal center" aria-label="Align horizontal center" onClick={() => updateSprite(sprite.id, { x: previewWidth / 2 })}><AlignHorizontalJustifyCenter size={14} /></button>
-                <button type="button" title="Align right" aria-label="Align right" onClick={() => updateSprite(sprite.id, { x: previewWidth - (sprite.width * sprite.scale) / 2 })}><AlignHorizontalJustifyEnd size={14} /></button>
-                <button type="button" title="Align top" aria-label="Align top" onClick={() => updateSprite(sprite.id, { y: (sprite.height * sprite.scale) / 2 })}><AlignVerticalJustifyStart size={14} /></button>
-                <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => updateSprite(sprite.id, { y: faceHeight / 2 })}><AlignVerticalJustifyCenter size={14} /></button>
-                <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => updateSprite(sprite.id, { y: faceHeight - (sprite.height * sprite.scale) / 2 })}><AlignVerticalJustifyEnd size={14} /></button>
+              <div className="wf-control-label">{t("Align to face")}</div>
+              <div className="wf-align-icon-grid" role="group" aria-label={t("Align image to face")}>
+                <button type="button" title={t("Align left")} aria-label={t("Align left")} onClick={() => updateSprite(sprite.id, { x: (sprite.width * sprite.scale) / 2 })}><AlignHorizontalJustifyStart size={14} /></button>
+                <button type="button" title={t("Align horizontal center")} aria-label={t("Align horizontal center")} onClick={() => updateSprite(sprite.id, { x: previewWidth / 2 })}><AlignHorizontalJustifyCenter size={14} /></button>
+                <button type="button" title={t("Align right")} aria-label={t("Align right")} onClick={() => updateSprite(sprite.id, { x: previewWidth - (sprite.width * sprite.scale) / 2 })}><AlignHorizontalJustifyEnd size={14} /></button>
+                <button type="button" title={t("Align top")} aria-label={t("Align top")} onClick={() => updateSprite(sprite.id, { y: (sprite.height * sprite.scale) / 2 })}><AlignVerticalJustifyStart size={14} /></button>
+                <button type="button" title={t("Align vertical center")} aria-label={t("Align vertical center")} onClick={() => updateSprite(sprite.id, { y: faceHeight / 2 })}><AlignVerticalJustifyCenter size={14} /></button>
+                <button type="button" title={t("Align bottom")} aria-label={t("Align bottom")} onClick={() => updateSprite(sprite.id, { y: faceHeight - (sprite.height * sprite.scale) / 2 })}><AlignVerticalJustifyEnd size={14} /></button>
               </div>
             </div>,
             { disabled: locked }
@@ -12332,8 +12214,8 @@ export function WatchfaceEditor({
             "appearance",
             "Appearance",
             <div className="wf-property-stack">
-              <label className="watchface-studio-toggle"><input type="checkbox" checked={Boolean(sprite.tintColor)} onChange={(event) => updateSprite(sprite.id, { tintColor: event.target.checked ? design.accentColor : null })} />Tint image</label>
-              {sprite.tintColor ? <label className="field">Tint color<span className="watchface-color-control"><WatchfaceColorInput value={sprite.tintColor} onValueChange={(color) => updateSprite(sprite.id, { tintColor: color })} /><code>{sprite.tintColor}</code><button type="button" className="watchface-color-none" aria-label="Remove tint" title="Remove tint" onClick={() => updateSprite(sprite.id, { tintColor: null })}><XCircle size={14} /></button></span></label> : null}
+              <label className="watchface-studio-toggle"><input type="checkbox" checked={Boolean(sprite.tintColor)} onChange={(event) => updateSprite(sprite.id, { tintColor: event.target.checked ? design.accentColor : null })} />{t("Tint image")}</label>
+              {sprite.tintColor ? <label className="field">{t("Tint color")}<span className="watchface-color-control"><WatchfaceColorInput value={sprite.tintColor} onValueChange={(color) => updateSprite(sprite.id, { tintColor: color })} /><code>{sprite.tintColor}</code><button type="button" className="watchface-color-none" aria-label={t("Remove tint")} title={t("Remove tint")} onClick={() => updateSprite(sprite.id, { tintColor: null })}><XCircle size={14} /></button></span></label> : null}
             </div>,
             { disabled: locked }
           )}
@@ -12343,7 +12225,7 @@ export function WatchfaceEditor({
             "Image",
             <div className="wf-property-stack">
               <div className="wf-config-asset-preview wf-image-property-preview"><img src={sprite.dataUrl} alt="" /></div>
-              <div className="wf-asset-dimensions"><span>Source</span><strong>{sprite.sourceWidth} × {sprite.sourceHeight} px</strong></div>
+              <div className="wf-asset-dimensions"><span>{t("Source")}</span><strong>{sprite.sourceWidth} × {sprite.sourceHeight}{" "}{t("px")}</strong></div>
             </div>,
             { disabled: locked }
           )}
@@ -12353,32 +12235,32 @@ export function WatchfaceEditor({
             "Advanced",
             <div className="wf-property-stack">
               <div className="watchface-position-inputs">
-                <label>Skew X<EditableNumberInput min="-80" max="80" step="1" value={normalizeWatchfaceSkew(sprite.skewX)} fallback={0} onValueChange={(skewX) => updateSprite(sprite.id, { skewX: normalizeWatchfaceSkew(skewX) })} /></label>
-                <label>Skew Y<EditableNumberInput min="-80" max="80" step="1" value={normalizeWatchfaceSkew(sprite.skewY)} fallback={0} onValueChange={(skewY) => updateSprite(sprite.id, { skewY: normalizeWatchfaceSkew(skewY) })} /></label>
+                <label>{t("Skew X")}<EditableNumberInput min="-80" max="80" step="1" value={normalizeWatchfaceSkew(sprite.skewX)} fallback={0} onValueChange={(skewX) => updateSprite(sprite.id, { skewX: normalizeWatchfaceSkew(skewX) })} /></label>
+                <label>{t("Skew Y")}<EditableNumberInput min="-80" max="80" step="1" value={normalizeWatchfaceSkew(sprite.skewY)} fallback={0} onValueChange={(skewY) => updateSprite(sprite.id, { skewY: normalizeWatchfaceSkew(skewY) })} /></label>
               </div>
-              <label className="field">Origin<select value={(() => { const origin = normalizeWatchfaceTransformOrigin(sprite.origin); return `${origin.x},${origin.y}`; })()} onChange={(event) => { const [x, y] = event.target.value.split(",").map(Number); updateSprite(sprite.id, { origin: normalizeWatchfaceTransformOrigin({ x, y }) }); }}><option value="0,0">Top left</option><option value="0.5,0">Top center</option><option value="1,0">Top right</option><option value="0,0.5">Center left</option><option value="0.5,0.5">Center</option><option value="1,0.5">Center right</option><option value="0,1">Bottom left</option><option value="0.5,1">Bottom center</option><option value="1,1">Bottom right</option></select></label>
+              <label className="field">{t("Origin")}<select value={(() => { const origin = normalizeWatchfaceTransformOrigin(sprite.origin); return `${origin.x},${origin.y}`; })()} onChange={(event) => { const [x, y] = event.target.value.split(",").map(Number); updateSprite(sprite.id, { origin: normalizeWatchfaceTransformOrigin({ x, y }) }); }}><option value="0,0">{t("Top left")}</option><option value="0.5,0">{t("Top center")}</option><option value="1,0">{t("Top right")}</option><option value="0,0.5">{t("Center left")}</option><option value="0.5,0.5">{t("Center")}</option><option value="1,0.5">{t("Center right")}</option><option value="0,1">{t("Bottom left")}</option><option value="0.5,1">{t("Bottom center")}</option><option value="1,1">{t("Bottom right")}</option></select></label>
               <div className={`wf-crop-controls${cropSpriteId === sprite.id ? " is-active" : ""}`}>
-                <div className="wf-crop-heading"><strong>Crop</strong>{cropSpriteId === sprite.id ? <span>Enter applies, Esc cancels</span> : null}</div>
+                <div className="wf-crop-heading"><strong>{t("Crop")}</strong>{cropSpriteId === sprite.id ? <span>{t("Enter applies, Esc cancels")}</span> : null}</div>
                 {cropSpriteId === sprite.id ? (
                   <>
                     <div className="watchface-sprite-transform-fields">
-                      {(["x", "y", "width", "height"] as const).map((key) => <label key={key}>{key[0]!.toUpperCase() + key.slice(1)} %<EditableNumberInput min="0" max="100" step="1" value={Math.round(normalizeWatchfaceCrop(sprite.crop)[key] * 100)} fallback={key === "width" || key === "height" ? 100 : 0} onValueChange={(value) => updateSprite(sprite.id, { crop: normalizeWatchfaceCrop({ ...normalizeWatchfaceCrop(sprite.crop), [key]: value / 100 }) })} /></label>)}
+                      {(["x", "y", "width", "height"] as const).map((key) => <label key={key}>{t(key[0]!.toUpperCase() + key.slice(1))} %<EditableNumberInput min="0" max="100" step="1" value={Math.round(normalizeWatchfaceCrop(sprite.crop)[key] * 100)} fallback={key === "width" || key === "height" ? 100 : 0} onValueChange={(value) => updateSprite(sprite.id, { crop: normalizeWatchfaceCrop({ ...normalizeWatchfaceCrop(sprite.crop), [key]: value / 100 }) })} /></label>)}
                     </div>
-                    <div className="wf-crop-actions"><button type="button" className="primary-button" onClick={applySpriteCrop}>Apply crop</button><button type="button" className="secondary-button" onClick={cancelSpriteCrop}>Cancel</button><button type="button" onClick={() => updateSprite(sprite.id, { crop: { x: 0, y: 0, width: 1, height: 1 } })}>Reset</button></div>
+                    <div className="wf-crop-actions"><button type="button" className="primary-button" onClick={applySpriteCrop}>{t("Apply crop")}</button><button type="button" className="secondary-button" onClick={cancelSpriteCrop}>{t("Cancel")}</button><button type="button" onClick={() => updateSprite(sprite.id, { crop: { x: 0, y: 0, width: 1, height: 1 } })}>{t("Reset")}</button></div>
                   </>
-                ) : <div className="wf-crop-actions"><button type="button" className="secondary-button" onClick={() => enterSpriteCrop(sprite)}><Crop size={14} /> Crop image</button><button type="button" disabled={JSON.stringify(normalizeWatchfaceCrop(sprite.crop)) === fullCrop} onClick={() => updateSprite(sprite.id, { crop: { x: 0, y: 0, width: 1, height: 1 } })}>Reset crop</button></div>}
+                ) : <div className="wf-crop-actions"><button type="button" className="secondary-button" onClick={() => enterSpriteCrop(sprite)}><Crop size={14} />{" "}{t("Crop image")}</button><button type="button" disabled={JSON.stringify(normalizeWatchfaceCrop(sprite.crop)) === fullCrop} onClick={() => updateSprite(sprite.id, { crop: { x: 0, y: 0, width: 1, height: 1 } })}>{t("Reset crop")}</button></div>}
               </div>
-              <div className="wf-control-label">Nudge</div>
+              <div className="wf-control-label">{t("Nudge")}</div>
               <div className="watchface-nudge-pad">
-                <button type="button" aria-label="Nudge image up" onClick={() => updateSprite(sprite.id, { y: sprite.y - fromWatchCoordinate(1) })}><ArrowUp size={13} /></button>
-                <button type="button" aria-label="Nudge image left" onClick={() => updateSprite(sprite.id, { x: sprite.x - fromWatchCoordinate(1) })}><ArrowLeft size={13} /></button>
-                <button type="button" aria-label="Nudge image right" onClick={() => updateSprite(sprite.id, { x: sprite.x + fromWatchCoordinate(1) })}><ArrowRight size={13} /></button>
-                <button type="button" aria-label="Nudge image down" onClick={() => updateSprite(sprite.id, { y: sprite.y + fromWatchCoordinate(1) })}><ArrowDown size={13} /></button>
-                <button type="button" className="watchface-nudge-reset" onClick={() => updateSprite(sprite.id, { x: previewWidth / 2, y: faceHeight / 2 })}>Reset</button>
+                <button type="button" aria-label={t("Nudge image up")} onClick={() => updateSprite(sprite.id, { y: sprite.y - fromWatchCoordinate(1) })}><ArrowUp size={13} /></button>
+                <button type="button" aria-label={t("Nudge image left")} onClick={() => updateSprite(sprite.id, { x: sprite.x - fromWatchCoordinate(1) })}><ArrowLeft size={13} /></button>
+                <button type="button" aria-label={t("Nudge image right")} onClick={() => updateSprite(sprite.id, { x: sprite.x + fromWatchCoordinate(1) })}><ArrowRight size={13} /></button>
+                <button type="button" aria-label={t("Nudge image down")} onClick={() => updateSprite(sprite.id, { y: sprite.y + fromWatchCoordinate(1) })}><ArrowDown size={13} /></button>
+                <button type="button" className="watchface-nudge-reset" onClick={() => updateSprite(sprite.id, { x: previewWidth / 2, y: faceHeight / 2 })}>{t("Reset")}</button>
               </div>
               {renderArtworkLayerOrderControls(watchfaceSpriteLayerId(sprite.id))}
-              <p className="watchface-studio-summary">Drag an edge or corner to resize. Shift changes ratio locking, Option resizes from center, and Shift snaps rotation to 15°.</p>
-              <div className="wf-config-asset-actions"><button className="secondary-button" type="button" disabled={(design.designSprites ?? []).length >= MAX_DESIGN_SPRITES} onClick={() => duplicateSprite(sprite.id)}><Copy size={15} /> Duplicate image</button><button className="secondary-button wf-danger-action" type="button" onClick={() => removeSprite(sprite.id)}><Trash2 size={15} /> Remove image</button></div>
+              <p className="watchface-studio-summary">{t("Drag an edge or corner to resize. Shift changes ratio locking, Option resizes from center, and Shift snaps rotation to 15°.")}</p>
+              <div className="wf-config-asset-actions"><button className="secondary-button" type="button" disabled={(design.designSprites ?? []).length >= MAX_DESIGN_SPRITES} onClick={() => duplicateSprite(sprite.id)}><Copy size={15} />{" "}{t("Duplicate image")}</button><button className="secondary-button wf-danger-action" type="button" onClick={() => removeSprite(sprite.id)}><Trash2 size={15} />{" "}{t("Remove image")}</button></div>
             </div>,
             { disabled: locked }
           )}
@@ -12393,9 +12275,7 @@ export function WatchfaceEditor({
           ? renderPropertySection(
               "appearance",
               "Appearance",
-              <label className="field">
-                Tint color
-                <span className="watchface-color-control">
+              <label className="field">{t("Tint color")}<span className="watchface-color-control">
                   <WatchfaceColorInput
                     value={
                       design.layerColors?.[layer.layoutGroupId] ??
@@ -12419,8 +12299,8 @@ export function WatchfaceEditor({
                     type="button"
                     className="watchface-color-none"
                     disabled={!design.layerColors?.[layer.layoutGroupId]}
-                    aria-label="Remove tint"
-                    title="Remove tint"
+                    aria-label={t("Remove tint")}
+                    title={t("Remove tint")}
                     onClick={() => clearLayerColor(layer.layoutGroupId!)}
                   >
                     <XCircle size={14} />
@@ -12441,9 +12321,7 @@ export function WatchfaceEditor({
           ) : layer.kind === "arcCut" && configAssetsById.get("config:arc_cut_icon") ? (
             renderConfigAssetControls(configAssetsById.get("config:arc_cut_icon")!)
           ) : (
-            <p className="watchface-studio-summary">
-              This component is rendered live by the watch firmware.
-            </p>
+            <p className="watchface-studio-summary">{t("This component is rendered live by the watch firmware.")}</p>
           ),
           { disabled: isPositionLocked(layer.id) }
         )}
@@ -12451,7 +12329,7 @@ export function WatchfaceEditor({
           ? renderEffectsInspector(
               layer.id,
               layer.id === "batteryIcon"
-                ? "This native battery slot keeps its firmware dimensions; shadows are clipped to the slot when padding cannot be represented safely."
+                ? t("This native battery slot keeps its firmware dimensions; shadows are clipped to the slot when padding cannot be represented safely.")
                 : undefined
             )
           : null}
@@ -12530,10 +12408,9 @@ export function WatchfaceEditor({
           aria-labelledby="wf-selectable-components-title"
         >
           <div className="wf-selectable-components-heading">
-            <h3 id="wf-selectable-components-title">Selectable components</h3>
+            <h3 id="wf-selectable-components-title">{t("Selectable components")}</h3>
             <span>
-              {previewChoices.length}/{supported.length} on
-            </span>
+              {previewChoices.length}/{supported.length}{" "}{t("on")}</span>
           </div>
           <div className="wf-selectable-component-list">
             {supported.map((complication) => {
@@ -12563,7 +12440,7 @@ export function WatchfaceEditor({
                   <i
                     className={`wf-selectable-component-icon${iconDataUrl ? "" : " is-empty"}`}
                     aria-hidden="true"
-                    title={iconDataUrl ? `${complication.label} icon` : undefined}
+                    title={iconDataUrl ? t("{{value1}} icon", { value1: t(complication.label) }) : undefined}
                   >
                     {iconDataUrl ? (
                       <img src={iconDataUrl} alt="" draggable={false} />
@@ -12574,22 +12451,22 @@ export function WatchfaceEditor({
                     )}
                   </i>
                   <span>
-                    <strong>{complication.label}</strong>
+                    <strong>{t(complication.label)}</strong>
                     <small>
                       {enabled
                         ? imported
-                          ? "Loaded from template"
-                          : "Added on export"
+                          ? t("Loaded from template")
+                          : t("Added on export")
                         : imported
-                          ? "Disabled"
-                          : "Not in template"}
+                          ? t("Disabled")
+                          : t("Not in template")}
                     </small>
                   </span>
                   <input
                     type="checkbox"
                     role="switch"
                     checked={enabled}
-                    aria-label={`${enabled ? "Disable" : "Enable"} ${complication.label}`}
+                    aria-label={t("{{value1}} {{value2}}", { value1: enabled ? "Disable" : "Enable", value2: t(complication.label) })}
                     onChange={(event) =>
                       setControlComplicationEnabled(
                         complication.id,
@@ -12603,9 +12480,7 @@ export function WatchfaceEditor({
           </div>
         </section>
         <WatchfaceNumberAlignControl value={design.selectableMetricStyle?.align} allowTemplateDefault onChange={(align) => setSelectableMetricStyle({ align })} />
-        <label className="field">
-          Preview data
-          <select
+        <label className="field">{t("Preview data")}<select
             value={selected}
             disabled={previewChoices.length === 0}
             onChange={(event) => {
@@ -12625,11 +12500,11 @@ export function WatchfaceEditor({
             }}
           >
             {previewChoices.length === 0 ? (
-              <option value="">No components enabled</option>
+              <option value="">{t("No components enabled")}</option>
             ) : null}
             {previewChoices.map((complication) => (
               <option key={complication.id} value={complication.id}>
-                {complication.label}
+                {t(complication.label)}
               </option>
             ))}
           </select>
@@ -12641,7 +12516,7 @@ export function WatchfaceEditor({
           baseIconPosition && selectedComplication.id !== "battery"
             ? (
               <div className="wf-inline-position-controls">
-                <strong>Icon offset</strong>
+                <strong>{t("Icon offset")}</strong>
                 <div className="watchface-position-inputs">
                   <label>
                     X
@@ -12676,18 +12551,15 @@ export function WatchfaceEditor({
                     />
                   </label>
                 </div>
-                <span>Nudge</span>
+                <span>{t("Nudge")}</span>
                 <div className="watchface-nudge-pad wf-position-nudge-only">
-                  <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy - fromWatchCoordinate(1))} aria-label="Nudge selector icon up"><ArrowUp size={13} aria-hidden="true" /></button>
-                  <button type="button" onClick={() => setIconOffset(iconOffset.dx - fromWatchCoordinate(1), iconOffset.dy)} aria-label="Nudge selector icon left"><ArrowLeft size={13} aria-hidden="true" /></button>
-                  <button type="button" onClick={() => setIconOffset(iconOffset.dx + fromWatchCoordinate(1), iconOffset.dy)} aria-label="Nudge selector icon right"><ArrowRight size={13} aria-hidden="true" /></button>
-                  <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy + fromWatchCoordinate(1))} aria-label="Nudge selector icon down"><ArrowDown size={13} aria-hidden="true" /></button>
-                  <button type="button" className="watchface-nudge-reset" onClick={() => setIconOffset(0, 0)}>Reset</button>
+                  <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy - fromWatchCoordinate(1))} aria-label={t("Nudge selector icon up")}><ArrowUp size={13} aria-hidden="true" /></button>
+                  <button type="button" onClick={() => setIconOffset(iconOffset.dx - fromWatchCoordinate(1), iconOffset.dy)} aria-label={t("Nudge selector icon left")}><ArrowLeft size={13} aria-hidden="true" /></button>
+                  <button type="button" onClick={() => setIconOffset(iconOffset.dx + fromWatchCoordinate(1), iconOffset.dy)} aria-label={t("Nudge selector icon right")}><ArrowRight size={13} aria-hidden="true" /></button>
+                  <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy + fromWatchCoordinate(1))} aria-label={t("Nudge selector icon down")}><ArrowDown size={13} aria-hidden="true" /></button>
+                  <button type="button" className="watchface-nudge-reset" onClick={() => setIconOffset(0, 0)}>{t("Reset")}</button>
                 </div>
-                <p className="watchface-studio-summary">
-                  This moves only the {selectedComplication.label.toLowerCase()} icon.
-                  Move the Selectable metric layer to reposition its icon and value together.
-                </p>
+                <p className="watchface-studio-summary">{t("This moves only the")}{" "}{selectedComplication.label.toLowerCase()}{" "}{t("icon. Move the Selectable metric layer to reposition its icon and value together.")}</p>
               </div>
             )
             : null
@@ -12695,9 +12567,9 @@ export function WatchfaceEditor({
         {renderSelectableSlotSharedAssets(selectedComplication)}
         <LocalFontPicker
           api={api}
-          label="Font"
+          label={t("Font")}
           value={design.selectableMetricStyle?.fontFamily ?? design.fontFamily}
-          emptyLabel="Keep template font"
+          emptyLabel={t("Keep template font")}
           preview={renderFontPreview("complication", design.selectableMetricStyle, {
             complicationId: selectedComplication.id
           })}
@@ -12749,9 +12621,7 @@ export function WatchfaceEditor({
             })
           }
         />
-        <label className="field">
-          Selectable value tint
-          <span className="watchface-color-control">
+        <label className="field">{t("Selectable value tint")}<span className="watchface-color-control">
             <WatchfaceColorInput
               value={design.selectableMetricStyle?.color ?? design.digitColor}
               onValueChange={(color) => setSelectableMetricStyle({ color })}
@@ -12761,8 +12631,8 @@ export function WatchfaceEditor({
               type="button"
               className="watchface-color-none"
               disabled={!design.selectableMetricStyle?.color}
-              aria-label="Remove tint"
-              title="Remove tint"
+              aria-label={t("Remove tint")}
+              title={t("Remove tint")}
               onClick={clearSelectableMetricColor}
             >
               <XCircle size={14} />
@@ -12778,12 +12648,8 @@ export function WatchfaceEditor({
             onChange={(event) =>
               setSelectableMetricStyle({ nativeSize: event.target.checked })
             }
-          />
-          Native width (no template bound)
-        </label>
-        <label className="field">
-          Artwork zoom
-          <EditableNumberInput
+          />{t("Native width (no template bound)")}</label>
+        <label className="field">{t("Artwork zoom")}<EditableNumberInput
             min="0.01"
             step="0.01"
             value={design.selectableMetricStyle?.scale ?? 1}
@@ -12794,25 +12660,18 @@ export function WatchfaceEditor({
           />
           <span className="watchface-studio-summary">
             {(design.selectableMetricStyle?.nativeSize ?? false)
-              ? "Changes digit height while preserving each digit's natural width."
-            : "Scales digits inside the selectable value's fixed COROS canvas."}
+              ? t("Changes digit height while preserving each digit's natural width.")
+            : t("Scales digits inside the selectable value's fixed COROS canvas.")}
           </span>
         </label>
         {renderFirmwareSpriteRotation(
           design.selectableMetricStyle?.rotation,
           (rotation) => setSelectableMetricStyle({ rotation })
         )}
-        <p className="watchface-studio-summary">
-          Move this Selectable metric layer to position its icon and value together.
-          Sensor temperature uses the watch's thermometer and can be affected by
-          body heat. Add Current weather under Weather for weather data.
-        </p>
+        <p className="watchface-studio-summary">{t("Move this Selectable metric layer to position its icon and value together. Sensor temperature uses the watch's thermometer and can be affected by body heat. Add Current weather under Weather for weather data.")}</p>
           </>
         ) : (
-          <p className="watchface-studio-summary">
-            Turn on a selectable component to add its configuration and edit
-            its value, icon, and position settings.
-          </p>
+          <p className="watchface-studio-summary">{t("Turn on a selectable component to add its configuration and edit its value, icon, and position settings.")}</p>
         )}
       </>
     );
@@ -12831,18 +12690,14 @@ export function WatchfaceEditor({
       return (
         <div className="wf-slot-asset">
           <div className="wf-slot-asset-heading">
-            <span>Battery icon</span>
+            <span>{t("Battery icon")}</span>
           </div>
-          <p className="watchface-studio-summary">
-            The battery choice draws a charge-state sprite folder instead of
-            one icon.{" "}
+          <p className="watchface-studio-summary">{t("The battery choice draws a charge-state sprite folder instead of one icon.")}{" "}
             <button
               type="button"
               className="text-button"
               onClick={() => selectEditorItem("controlBatteryIcon")}
-            >
-              Edit battery states
-            </button>
+            >{t("Edit battery states")}</button>
           </p>
         </div>
       );
@@ -12861,9 +12716,9 @@ export function WatchfaceEditor({
     return (
       <div className="wf-slot-asset">
         <div className="wf-slot-asset-heading">
-          <span>{complication.label} icon</span>
+          <span>{t(complication.label)}{" "}{t("icon")}</span>
           {override?.replacement ? (
-            <span className="wf-layer-state">Custom</span>
+            <span className="wf-layer-state">{t("Custom")}</span>
           ) : null}
           {reference && available ? (
             <label className="watchface-studio-toggle">
@@ -12873,18 +12728,16 @@ export function WatchfaceEditor({
                 onChange={(event) =>
                   updateConfigAsset(reference, { enabled: event.target.checked })
                 }
-              />
-              Show
-            </label>
+              />{t("Show")}</label>
           ) : null}
         </div>
         {reference ? renderConfigAssetControls(reference) : null}
         <p className="watchface-studio-summary">
           {!reference
-            ? `No ${complication.label.toLowerCase()} icon is defined for this display mode.`
+            ? t("No {{value1}} icon is defined for this display mode.", { value1: complication.label.toLowerCase() })
             : available
-              ? `${configAssetDimensions(reference)} · [${reference.configKey}]. Shown when ${complication.label.toLowerCase()} is active in the selectable slot.`
-              : `This template has no ${complication.label.toLowerCase()} icon. Import a PNG to draw one beside the value; export adds [${reference.configKey}] to config.txt.`}
+              ? t("{{value1}} · [{{value2}}]. Shown when {{value3}} is active in the selectable slot.", { value1: configAssetDimensions(reference), value2: reference.configKey, value3: complication.label.toLowerCase() })
+              : t("This template has no {{value1}} icon. Import a PNG to draw one beside the value; export adds [{{value2}}] to config.txt.", { value1: complication.label.toLowerCase(), value2: reference.configKey })}
         </p>
         {available ? offsetControls : null}
       </div>
@@ -12901,14 +12754,14 @@ export function WatchfaceEditor({
     const rows = [
       {
         reference: configAssetsById.get("config:control_colon_icon"),
-        title: "Value colon",
+        title: t("Value colon"),
         detail: complication.valueParts
-          ? `Between the ${complication.label.toLowerCase()} values`
-          : "Only data types with two values use it"
+          ? t("Between the {{value1}} values", { value1: complication.label.toLowerCase() })
+          : t("Only data types with two values use it")
       },
       {
         reference: configAssetsById.get("config:control_negative_sign_icon"),
-        title: "Negative sign",
+        title: t("Negative sign"),
         detail: "Shown before values below zero"
       }
     ].filter(
@@ -12919,7 +12772,7 @@ export function WatchfaceEditor({
     return (
       <div className="wf-slot-asset">
         <div className="wf-slot-asset-heading">
-          <span>Shared slot artwork</span>
+          <span>{t("Shared slot artwork")}</span>
         </div>
         <div className="wf-slot-asset-list">
           {rows.map(({ reference, title, detail }) => {
@@ -12940,8 +12793,8 @@ export function WatchfaceEditor({
                 </span>
                 <span className="wf-slot-asset-copy">
                   <strong>
-                    {title}
-                    {override?.replacement ? " · Custom" : ""}
+                    {t(title)}
+                    {override?.replacement ? t(" · Custom") : ""}
                   </strong>
                   <span>{detail} · {configAssetDimensions(reference)}</span>
                 </span>
@@ -12949,9 +12802,9 @@ export function WatchfaceEditor({
                   <button
                     type="button"
                     className="wf-property-icon-button"
-                    aria-label={`${enabled ? "Hide" : "Show"} ${title.toLowerCase()}`}
+                    aria-label={t("{{value1}} {{value2}}", { value1: enabled ? "Hide" : "Show", value2: title.toLowerCase() })}
                     aria-pressed={!enabled}
-                    title={enabled ? "Hide" : "Show"}
+                    title={enabled ? t("Hide") : t("Show")}
                     disabled={!previewDataUrl}
                     onClick={() => updateConfigAsset(reference, { enabled: !enabled })}
                   >
@@ -12960,8 +12813,8 @@ export function WatchfaceEditor({
                   <button
                     type="button"
                     className="wf-property-icon-button"
-                    aria-label={`Replace ${title.toLowerCase()} image`}
-                    title="Replace image"
+                    aria-label={t("Replace {{value1}} image", { value1: title.toLowerCase() })}
+                    title={t("Replace image")}
                     onClick={() => void chooseConfigAsset(reference)}
                   >
                     <ImagePlus size={14} />
@@ -12970,8 +12823,8 @@ export function WatchfaceEditor({
                     <button
                       type="button"
                       className="wf-property-icon-button"
-                      aria-label={`Restore original ${title.toLowerCase()}`}
-                      title="Restore original"
+                      aria-label={t("Restore original {{value1}}", { value1: title.toLowerCase() })}
+                      title={t("Restore original")}
                       onClick={() => restoreConfigAsset(reference)}
                     >
                       <RotateCcw size={14} />
@@ -13080,16 +12933,16 @@ export function WatchfaceEditor({
       }));
     const canvas = imported[0]?.[1];
     const summary = imported.length > 0
-      ? `${imported.length} imported state${imported.length === 1 ? "" : "s"}` +
-        (canvas ? ` · ${canvas.width} × ${canvas.height} px canvas` : "") +
-        (template ? ` · template ${template.folder}` : "")
+      ? t("{{value1}} imported state{{value2}}", { value1: imported.length, value2: imported.length === 1 ? "" : "s" }) +
+        (canvas ? t(" · {{width}} × {{height}} px canvas", { width: canvas.width, height: canvas.height }) : "") +
+        (template ? t(" · template {{folder}}", { folder: template.folder }) : "")
       : template
-        ? `Template · ${template.folder} · ${template.glyphs.length} state${template.glyphs.length === 1 ? "" : "s"}`
+        ? t("Template · {{folder}} · {{count}} states", { folder: template.folder, count: template.glyphs.length })
         : undefined;
     if (template && template.glyphs.length > 0) {
       return (
         <TemplateSpriteStrip
-          label={label}
+          label={t(label)}
           glyphs={template.glyphs}
           displayLabels={Object.fromEntries(template.glyphs.map(glyph => [glyph.label, stateLabel(glyph.label)]))}
           loadAssets={loadAssets}
@@ -13101,10 +12954,10 @@ export function WatchfaceEditor({
     }
     return (
       <WatchfaceSpriteStrip
-        label={label}
+        label={t(label)}
         cells={extraCells}
         summary={summary}
-        emptyText="No battery sprites yet. Import a folder of 00.png, 01.png… to add charge states."
+        emptyText={t("No battery sprites yet. Import a folder of 00.png, 01.png… to add charge states.")}
       />
     );
   }
@@ -13116,9 +12969,9 @@ export function WatchfaceEditor({
       <button
         type="button"
         className={`watchface-layer-lock${locked ? " is-locked" : ""}`}
-        aria-label={`${locked ? "Unlock" : "Lock"} ${label} position`}
+        aria-label={t("{{value1}} {{label}} position", { value1: t(locked ? "Unlock" : "Lock"), label: t(label) })}
         aria-pressed={locked}
-        title={locked ? "Unlock position" : "Lock position"}
+        title={locked ? t("Unlock position") : t("Lock position")}
         onClick={() => setLayerPositionLocked(id, !locked)}
       >
         {locked ? <Lock size={15} /> : <Unlock size={15} />}
@@ -13138,17 +12991,17 @@ export function WatchfaceEditor({
       <div className="watchface-inspector-position">
         <div
           className="wf-position-heading"
-          title={`${title}. Coordinates use the selected watch display.`}
+          title={t("{{title}}. Coordinates use the selected watch display.", { title: t(title) })}
         >
-          <span>Position</span>
+          <span>{t("Position")}</span>
           <Info
             size={13}
-            aria-label="Coordinates use the selected watch display"
+            aria-label={t("Coordinates use the selected watch display")}
           />
         </div>
         <fieldset
           className="wf-position-controls"
-          aria-label={title}
+          aria-label={t(title)}
           disabled={isMovementLockedForId(id)}
         >
           {children}
@@ -13212,7 +13065,7 @@ export function WatchfaceEditor({
       const max = limits?.maxDy ?? fallbackLimit;
       setOffset(offset.dx, position === "start" ? min : position === "end" ? max : (min + max) / 2);
     };
-    return renderPositionPanel(layer.id, "Watch screen position", <>
+    return renderPositionPanel(layer.id, t("Watch screen position"), <>
         <div className="watchface-position-inputs">
           <label>
             X
@@ -13247,27 +13100,25 @@ export function WatchfaceEditor({
             />
           </label>
         </div>
-        <span>Align to face</span>
-        <div className="wf-align-icon-grid" role="group" aria-label="Align layer to face">
-          <button type="button" title="Align left" aria-label="Align left" onClick={() => alignX("start")}><AlignHorizontalJustifyStart size={14} /></button>
-          <button type="button" title="Align horizontal center" aria-label="Align horizontal center" onClick={() => alignX("center")}><AlignHorizontalJustifyCenter size={14} /></button>
-          <button type="button" title="Align right" aria-label="Align right" onClick={() => alignX("end")}><AlignHorizontalJustifyEnd size={14} /></button>
-          <button type="button" title="Align top" aria-label="Align top" onClick={() => alignY("start")}><AlignVerticalJustifyStart size={14} /></button>
-          <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
-          <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
+        <span>{t("Align to face")}</span>
+        <div className="wf-align-icon-grid" role="group" aria-label={t("Align layer to face")}>
+          <button type="button" title={t("Align left")} aria-label={t("Align left")} onClick={() => alignX("start")}><AlignHorizontalJustifyStart size={14} /></button>
+          <button type="button" title={t("Align horizontal center")} aria-label={t("Align horizontal center")} onClick={() => alignX("center")}><AlignHorizontalJustifyCenter size={14} /></button>
+          <button type="button" title={t("Align right")} aria-label={t("Align right")} onClick={() => alignX("end")}><AlignHorizontalJustifyEnd size={14} /></button>
+          <button type="button" title={t("Align top")} aria-label={t("Align top")} onClick={() => alignY("start")}><AlignVerticalJustifyStart size={14} /></button>
+          <button type="button" title={t("Align vertical center")} aria-label={t("Align vertical center")} onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
+          <button type="button" title={t("Align bottom")} aria-label={t("Align bottom")} onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
         </div>
-        <span>Nudge</span>
+        <span>{t("Nudge")}</span>
         <div className="watchface-nudge-pad">
-          <button type="button" onClick={() => setOffset(offset.dx - fromWatchCoordinate(1), offset.dy)} aria-label="Nudge left"><ArrowLeft size={13} aria-hidden="true" /></button>
-          <button type="button" onClick={() => setOffset(offset.dx + fromWatchCoordinate(1), offset.dy)} aria-label="Nudge right"><ArrowRight size={13} aria-hidden="true" /></button>
-          <button type="button" onClick={() => setOffset(offset.dx, offset.dy - fromWatchCoordinate(1))} aria-label="Nudge up"><ArrowUp size={13} aria-hidden="true" /></button>
-          <button type="button" onClick={() => setOffset(offset.dx, offset.dy + fromWatchCoordinate(1))} aria-label="Nudge down"><ArrowDown size={13} aria-hidden="true" /></button>
-          <button type="button" className="watchface-nudge-reset" disabled={offset.dx === 0 && offset.dy === 0} onClick={() => setOffset(0, 0)}><RotateCcw size={13} aria-hidden="true" />Reset</button>
+          <button type="button" onClick={() => setOffset(offset.dx - fromWatchCoordinate(1), offset.dy)} aria-label={t("Nudge left")}><ArrowLeft size={13} aria-hidden="true" /></button>
+          <button type="button" onClick={() => setOffset(offset.dx + fromWatchCoordinate(1), offset.dy)} aria-label={t("Nudge right")}><ArrowRight size={13} aria-hidden="true" /></button>
+          <button type="button" onClick={() => setOffset(offset.dx, offset.dy - fromWatchCoordinate(1))} aria-label={t("Nudge up")}><ArrowUp size={13} aria-hidden="true" /></button>
+          <button type="button" onClick={() => setOffset(offset.dx, offset.dy + fromWatchCoordinate(1))} aria-label={t("Nudge down")}><ArrowDown size={13} aria-hidden="true" /></button>
+          <button type="button" className="watchface-nudge-reset" disabled={offset.dx === 0 && offset.dy === 0} onClick={() => setOffset(0, 0)}><RotateCcw size={13} aria-hidden="true" />{t("Reset")}</button>
         </div>
       </>,
-      <p className="watchface-studio-summary">
-        This element is drawn live by the watch. Drag it on the face to reposition it.
-      </p>
+      <p className="watchface-studio-summary">{t("This element is drawn live by the watch. Drag it on the face to reposition it.")}</p>
     );
   }
 
@@ -13297,7 +13148,7 @@ export function WatchfaceEditor({
       setPosition(position === "start" ? 0 : position === "end" ? maxX : maxX / 2, style.y);
     const alignY = (position: "start" | "center" | "end") =>
       setPosition(style.x, position === "start" ? 0 : position === "end" ? maxY : maxY / 2);
-    return renderPositionPanel(layer.id, "Watch screen position", <>
+    return renderPositionPanel(layer.id, t("Watch screen position"), <>
         <div className="watchface-position-inputs">
           <label>
             X
@@ -13320,26 +13171,26 @@ export function WatchfaceEditor({
             />
           </label>
         </div>
-        <span>Align to face</span>
-        <div className="wf-align-icon-grid" role="group" aria-label="Align layer to face">
-          <button type="button" title="Align left" aria-label="Align left" onClick={() => alignX("start")}><AlignHorizontalJustifyStart size={14} /></button>
-          <button type="button" title="Align horizontal center" aria-label="Align horizontal center" onClick={() => alignX("center")}><AlignHorizontalJustifyCenter size={14} /></button>
-          <button type="button" title="Align right" aria-label="Align right" onClick={() => alignX("end")}><AlignHorizontalJustifyEnd size={14} /></button>
-          <button type="button" title="Align top" aria-label="Align top" onClick={() => alignY("start")}><AlignVerticalJustifyStart size={14} /></button>
-          <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
-          <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
+        <span>{t("Align to face")}</span>
+        <div className="wf-align-icon-grid" role="group" aria-label={t("Align layer to face")}>
+          <button type="button" title={t("Align left")} aria-label={t("Align left")} onClick={() => alignX("start")}><AlignHorizontalJustifyStart size={14} /></button>
+          <button type="button" title={t("Align horizontal center")} aria-label={t("Align horizontal center")} onClick={() => alignX("center")}><AlignHorizontalJustifyCenter size={14} /></button>
+          <button type="button" title={t("Align right")} aria-label={t("Align right")} onClick={() => alignX("end")}><AlignHorizontalJustifyEnd size={14} /></button>
+          <button type="button" title={t("Align top")} aria-label={t("Align top")} onClick={() => alignY("start")}><AlignVerticalJustifyStart size={14} /></button>
+          <button type="button" title={t("Align vertical center")} aria-label={t("Align vertical center")} onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
+          <button type="button" title={t("Align bottom")} aria-label={t("Align bottom")} onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
         </div>
-        <span>Nudge</span>
+        <span>{t("Nudge")}</span>
         <div className="watchface-nudge-pad">
-          <button type="button" onClick={() => setPosition(style.x - fromWatchCoordinate(1), style.y)} aria-label="Nudge left"><ArrowLeft size={13} aria-hidden="true" /></button>
-          <button type="button" onClick={() => setPosition(style.x + fromWatchCoordinate(1), style.y)} aria-label="Nudge right"><ArrowRight size={13} aria-hidden="true" /></button>
-          <button type="button" onClick={() => setPosition(style.x, style.y - fromWatchCoordinate(1))} aria-label="Nudge up"><ArrowUp size={13} aria-hidden="true" /></button>
-          <button type="button" onClick={() => setPosition(style.x, style.y + fromWatchCoordinate(1))} aria-label="Nudge down"><ArrowDown size={13} aria-hidden="true" /></button>
+          <button type="button" onClick={() => setPosition(style.x - fromWatchCoordinate(1), style.y)} aria-label={t("Nudge left")}><ArrowLeft size={13} aria-hidden="true" /></button>
+          <button type="button" onClick={() => setPosition(style.x + fromWatchCoordinate(1), style.y)} aria-label={t("Nudge right")}><ArrowRight size={13} aria-hidden="true" /></button>
+          <button type="button" onClick={() => setPosition(style.x, style.y - fromWatchCoordinate(1))} aria-label={t("Nudge up")}><ArrowUp size={13} aria-hidden="true" /></button>
+          <button type="button" onClick={() => setPosition(style.x, style.y + fromWatchCoordinate(1))} aria-label={t("Nudge down")}><ArrowDown size={13} aria-hidden="true" /></button>
         </div>
-        <span>Scale</span>
+        <span>{t("Scale")}</span>
         <span className="wf-input-with-unit wf-position-scale">
           <EditableNumberInput
-            aria-label="Layer scale"
+            aria-label={t("Layer scale")}
             min="0.1"
             max="4"
             step="0.05"
@@ -13352,8 +13203,8 @@ export function WatchfaceEditor({
       </>,
       <p className="watchface-studio-summary">
         {target === id
-          ? "The watch draws this data live. Drag it on the face to reposition it."
-          : "The watch draws this right after the minimum temperature, so moving it moves both."}
+          ? t("The watch draws this data live. Drag it on the face to reposition it.")
+          : t("The watch draws this right after the minimum temperature, so moving it moves both.")}
       </p>
     );
   }
@@ -13400,7 +13251,7 @@ export function WatchfaceEditor({
       <>
         {renderPositionPanel(
           separatorId === "colon" ? "staticColon" : "staticDateSlash",
-          "Watch screen position",
+          t("Watch screen position"),
           <>
           <div className="watchface-position-inputs">
             <label>
@@ -13424,30 +13275,28 @@ export function WatchfaceEditor({
               />
             </label>
           </div>
-          <span>Align to face</span>
-          <div className="wf-align-icon-grid" role="group" aria-label="Align separator to face">
-            <button type="button" title="Align left" aria-label="Align left" onClick={() => alignX("start")}><AlignHorizontalJustifyStart size={14} /></button>
-            <button type="button" title="Align horizontal center" aria-label="Align horizontal center" onClick={() => alignX("center")}><AlignHorizontalJustifyCenter size={14} /></button>
-            <button type="button" title="Align right" aria-label="Align right" onClick={() => alignX("end")}><AlignHorizontalJustifyEnd size={14} /></button>
-            <button type="button" title="Align top" aria-label="Align top" onClick={() => alignY("start")}><AlignVerticalJustifyStart size={14} /></button>
-            <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
-            <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
+          <span>{t("Align to face")}</span>
+          <div className="wf-align-icon-grid" role="group" aria-label={t("Align separator to face")}>
+            <button type="button" title={t("Align left")} aria-label={t("Align left")} onClick={() => alignX("start")}><AlignHorizontalJustifyStart size={14} /></button>
+            <button type="button" title={t("Align horizontal center")} aria-label={t("Align horizontal center")} onClick={() => alignX("center")}><AlignHorizontalJustifyCenter size={14} /></button>
+            <button type="button" title={t("Align right")} aria-label={t("Align right")} onClick={() => alignX("end")}><AlignHorizontalJustifyEnd size={14} /></button>
+            <button type="button" title={t("Align top")} aria-label={t("Align top")} onClick={() => alignY("start")}><AlignVerticalJustifyStart size={14} /></button>
+            <button type="button" title={t("Align vertical center")} aria-label={t("Align vertical center")} onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
+            <button type="button" title={t("Align bottom")} aria-label={t("Align bottom")} onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
           </div>
-          <span>Nudge</span>
+          <span>{t("Nudge")}</span>
           <div className="watchface-nudge-pad">
-            <button type="button" onClick={() => setPosition(separator.x, separator.y - fromWatchCoordinate(1))} aria-label="Nudge up"><ArrowUp size={13} aria-hidden="true" /></button>
-            <button type="button" onClick={() => setPosition(separator.x - fromWatchCoordinate(1), separator.y)} aria-label="Nudge left"><ArrowLeft size={13} aria-hidden="true" /></button>
-            <button type="button" onClick={() => setPosition(separator.x + fromWatchCoordinate(1), separator.y)} aria-label="Nudge right"><ArrowRight size={13} aria-hidden="true" /></button>
-            <button type="button" onClick={() => setPosition(separator.x, separator.y + fromWatchCoordinate(1))} aria-label="Nudge down"><ArrowDown size={13} aria-hidden="true" /></button>
+            <button type="button" onClick={() => setPosition(separator.x, separator.y - fromWatchCoordinate(1))} aria-label={t("Nudge up")}><ArrowUp size={13} aria-hidden="true" /></button>
+            <button type="button" onClick={() => setPosition(separator.x - fromWatchCoordinate(1), separator.y)} aria-label={t("Nudge left")}><ArrowLeft size={13} aria-hidden="true" /></button>
+            <button type="button" onClick={() => setPosition(separator.x + fromWatchCoordinate(1), separator.y)} aria-label={t("Nudge right")}><ArrowRight size={13} aria-hidden="true" /></button>
+            <button type="button" onClick={() => setPosition(separator.x, separator.y + fromWatchCoordinate(1))} aria-label={t("Nudge down")}><ArrowDown size={13} aria-hidden="true" /></button>
           </div>
           </>
         )}
         {renderPropertySection(
           "appearance",
           "Appearance",
-          <label className="field">
-            Tint color
-            <span className="watchface-color-control">
+          <label className="field">{t("Tint color")}<span className="watchface-color-control">
               <WatchfaceColorInput
                 value={separator.color}
                 onValueChange={(color) => updateStaticSeparator(separatorId, { color })}
@@ -13457,8 +13306,8 @@ export function WatchfaceEditor({
                 type="button"
                 className="watchface-color-none"
                 disabled={separator.color === design.digitColor}
-                aria-label="Remove tint"
-                title="Remove tint"
+                aria-label={t("Remove tint")}
+                title={t("Remove tint")}
                 onClick={() => updateStaticSeparator(separatorId, { color: design.digitColor })}
               >
                 <XCircle size={14} />
@@ -13476,13 +13325,12 @@ export function WatchfaceEditor({
           <div className="wf-property-stack">
             <LocalFontPicker
               api={api}
-              label="Font"
+              label={t("Font")}
               value={separator.fontFamily ?? design.fontFamily}
-              emptyLabel="System font"
+              emptyLabel={t("System font")}
               onChange={(fontFamily) => updateStaticSeparator(separatorId, { fontFamily })}
             />
-            <label className="field watchface-zoom-control">
-              Size <span>{separator.size}px</span>
+            <label className="field watchface-zoom-control">{t("Size")}{" "}<span>{separator.size}{t("px")}</span>
               <input
                 type="range"
                 min="12"
@@ -13502,9 +13350,7 @@ export function WatchfaceEditor({
         {renderPropertySection(
           "advanced",
           "Advanced",
-          <p className="watchface-studio-summary">
-            Drag the outline on the face for coarse placement, or use the exact transform controls.
-          </p>,
+          <p className="watchface-studio-summary">{t("Drag the outline on the face for coarse placement, or use the exact transform controls.")}</p>,
           { disabled: isPositionLocked(separatorId === "colon" ? "staticColon" : "staticDateSlash") }
         )}
       </>
@@ -13555,7 +13401,7 @@ export function WatchfaceEditor({
     };
     return (
       <>
-        {renderPositionPanel("ampm", "Watch screen position", <>
+        {renderPositionPanel("ampm", t("Watch screen position"), <>
           <div className="watchface-position-inputs">
             <label>
               X
@@ -13582,40 +13428,38 @@ export function WatchfaceEditor({
               />
             </label>
           </div>
-          <span>Align to face</span>
-          <div className="wf-align-icon-grid" role="group" aria-label="Align AM/PM indicator to face">
-            <button type="button" title="Align left" aria-label="Align left" onClick={() => alignX("start")}><AlignHorizontalJustifyStart size={14} /></button>
-            <button type="button" title="Align horizontal center" aria-label="Align horizontal center" onClick={() => alignX("center")}><AlignHorizontalJustifyCenter size={14} /></button>
-            <button type="button" title="Align right" aria-label="Align right" onClick={() => alignX("end")}><AlignHorizontalJustifyEnd size={14} /></button>
-            <button type="button" title="Align top" aria-label="Align top" onClick={() => alignY("start")}><AlignVerticalJustifyStart size={14} /></button>
-            <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
-            <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
+          <span>{t("Align to face")}</span>
+          <div className="wf-align-icon-grid" role="group" aria-label={t("Align AM/PM indicator to face")}>
+            <button type="button" title={t("Align left")} aria-label={t("Align left")} onClick={() => alignX("start")}><AlignHorizontalJustifyStart size={14} /></button>
+            <button type="button" title={t("Align horizontal center")} aria-label={t("Align horizontal center")} onClick={() => alignX("center")}><AlignHorizontalJustifyCenter size={14} /></button>
+            <button type="button" title={t("Align right")} aria-label={t("Align right")} onClick={() => alignX("end")}><AlignHorizontalJustifyEnd size={14} /></button>
+            <button type="button" title={t("Align top")} aria-label={t("Align top")} onClick={() => alignY("start")}><AlignVerticalJustifyStart size={14} /></button>
+            <button type="button" title={t("Align vertical center")} aria-label={t("Align vertical center")} onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
+            <button type="button" title={t("Align bottom")} aria-label={t("Align bottom")} onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
           </div>
-          <span>Nudge</span>
+          <span>{t("Nudge")}</span>
           <div className="watchface-nudge-pad">
-            <button type="button" onClick={() => setPosition(indicator.x, indicator.y - fromWatchCoordinate(1))} aria-label="Nudge up"><ArrowUp size={13} aria-hidden="true" /></button>
-            <button type="button" onClick={() => setPosition(indicator.x - fromWatchCoordinate(1), indicator.y)} aria-label="Nudge left"><ArrowLeft size={13} aria-hidden="true" /></button>
-            <button type="button" onClick={() => setPosition(indicator.x + fromWatchCoordinate(1), indicator.y)} aria-label="Nudge right"><ArrowRight size={13} aria-hidden="true" /></button>
-            <button type="button" onClick={() => setPosition(indicator.x, indicator.y + fromWatchCoordinate(1))} aria-label="Nudge down"><ArrowDown size={13} aria-hidden="true" /></button>
+            <button type="button" onClick={() => setPosition(indicator.x, indicator.y - fromWatchCoordinate(1))} aria-label={t("Nudge up")}><ArrowUp size={13} aria-hidden="true" /></button>
+            <button type="button" onClick={() => setPosition(indicator.x - fromWatchCoordinate(1), indicator.y)} aria-label={t("Nudge left")}><ArrowLeft size={13} aria-hidden="true" /></button>
+            <button type="button" onClick={() => setPosition(indicator.x + fromWatchCoordinate(1), indicator.y)} aria-label={t("Nudge right")}><ArrowRight size={13} aria-hidden="true" /></button>
+            <button type="button" onClick={() => setPosition(indicator.x, indicator.y + fromWatchCoordinate(1))} aria-label={t("Nudge down")}><ArrowDown size={13} aria-hidden="true" /></button>
           </div>
         </>)}
         {renderPropertySection(
           "appearance",
           "Appearance",
-          <label className="field">
-            Tint color
-            <span className="watchface-color-control">
+          <label className="field">{t("Tint color")}<span className="watchface-color-control">
               <WatchfaceColorInput
                 value={indicator.color ?? design.digitColor}
                 onValueChange={(color) => updateAmPmIndicator({ color })}
               />
-              <code>{indicator.color ?? "Template colors"}</code>
+              <code>{indicator.color ?? t("Template colors")}</code>
               <button
                 type="button"
                 className="watchface-color-none"
                 disabled={!indicator.color}
-                aria-label="Remove tint"
-                title="Remove tint"
+                aria-label={t("Remove tint")}
+                title={t("Remove tint")}
                 onClick={() => updateAmPmIndicator({ color: undefined })}
               >
                 <XCircle size={14} />
@@ -13631,13 +13475,12 @@ export function WatchfaceEditor({
           <div className="wf-property-stack">
             <LocalFontPicker
               api={api}
-              label="Font"
+              label={t("Font")}
               value={indicator.fontFamily ?? ""}
-              emptyLabel="Keep template lettering"
+              emptyLabel={t("Keep template lettering")}
               onChange={(fontFamily) => updateAmPmIndicator({ fontFamily })}
             />
-            <label className="field watchface-zoom-control">
-              Size <span>{indicator.scale.toFixed(2)}×</span>
+            <label className="field watchface-zoom-control">{t("Size")}{" "}<span>{indicator.scale.toFixed(2)}×</span>
               <input
                 type="range"
                 min="0.5"
@@ -13657,9 +13500,7 @@ export function WatchfaceEditor({
         {renderPropertySection(
           "advanced",
           "Advanced",
-          <p className="watchface-studio-summary">
-            The watch swaps this sprite between AM and PM in 12-hour mode.
-          </p>,
+          <p className="watchface-studio-summary">{t("The watch swaps this sprite between AM and PM in 12-hour mode.")}</p>,
           { disabled: isPositionLocked("ampm") }
         )}
       </>
@@ -13678,20 +13519,20 @@ export function WatchfaceEditor({
         const match = /^(\d{1,2})\.png$/i.exec(sprite.name);
         if (!match) continue;
         const index = Number(match[1]);
-        if (index >= WEATHER_ASSET_COUNTS[set]) throw new Error(`Use states 00–${String(WEATHER_ASSET_COUNTS[set] - 1).padStart(2, "0")} for ${set}.`);
-        if (states[index]) throw new Error(`Duplicate weather state ${index}.`);
+        if (index >= WEATHER_ASSET_COUNTS[set]) throw new Error(t("Use states 00–{{value1}} for {{set}}.", { value1: String(WEATHER_ASSET_COUNTS[set] - 1).padStart(2, "0"), set: set }));
+        if (states[index]) throw new Error(t("Duplicate weather state {{index}}.", { index: index }));
         await loadStudioImage(sprite.dataUrl);
         states[index] = sprite.dataUrl;
       }
-      if (!Object.keys(states).length) throw new Error("Select a folder with numbered PNGs such as 00.png.");
+      if (!Object.keys(states).length) throw new Error(t("Select a folder with numbered PNGs such as 00.png."));
       if (!isSpriteImportCurrent(importId)) return;
       setDesign(prev => ({ ...prev, weatherIndicator: {
         enabled: true, x: 0, y: 0, scale: 1, ...prev.weatherIndicator,
         assets: { ...prev.weatherIndicator?.assets, [set]: states }
       } }));
-      onNotice(`Imported ${Object.keys(states).length} ${set} sprites. Other states keep the SIMPLE defaults.`);
+      onNotice(t("Imported {{count}} {{set}} sprites. Other states keep the SIMPLE defaults.", { count: Object.keys(states).length, set: t(set) }));
     } catch (error) {
-      if (isSpriteImportCurrent(importId)) onError(error instanceof Error ? error.message : "Could not import weather sprites.");
+      if (isSpriteImportCurrent(importId)) onError(error instanceof Error ? error.message : t("Could not import weather sprites."));
     } finally { finishSpriteImport(importId); }
   }
 
@@ -13739,7 +13580,7 @@ export function WatchfaceEditor({
     };
     return (
       <>
-        {renderPositionPanel("weather", "Watch screen position", <>
+        {renderPositionPanel("weather", t("Watch screen position"), <>
           <div className="watchface-position-inputs">
             <label>
               X
@@ -13772,40 +13613,38 @@ export function WatchfaceEditor({
               />
             </label>
           </div>
-          <span>Align to face</span>
-          <div className="wf-align-icon-grid" role="group" aria-label="Align weather indicator to face">
-            <button type="button" title="Align left" aria-label="Align left" onClick={() => alignX("start")}><AlignHorizontalJustifyStart size={14} /></button>
-            <button type="button" title="Align horizontal center" aria-label="Align horizontal center" onClick={() => alignX("center")}><AlignHorizontalJustifyCenter size={14} /></button>
-            <button type="button" title="Align right" aria-label="Align right" onClick={() => alignX("end")}><AlignHorizontalJustifyEnd size={14} /></button>
-            <button type="button" title="Align top" aria-label="Align top" onClick={() => alignY("start")}><AlignVerticalJustifyStart size={14} /></button>
-            <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
-            <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
+          <span>{t("Align to face")}</span>
+          <div className="wf-align-icon-grid" role="group" aria-label={t("Align weather indicator to face")}>
+            <button type="button" title={t("Align left")} aria-label={t("Align left")} onClick={() => alignX("start")}><AlignHorizontalJustifyStart size={14} /></button>
+            <button type="button" title={t("Align horizontal center")} aria-label={t("Align horizontal center")} onClick={() => alignX("center")}><AlignHorizontalJustifyCenter size={14} /></button>
+            <button type="button" title={t("Align right")} aria-label={t("Align right")} onClick={() => alignX("end")}><AlignHorizontalJustifyEnd size={14} /></button>
+            <button type="button" title={t("Align top")} aria-label={t("Align top")} onClick={() => alignY("start")}><AlignVerticalJustifyStart size={14} /></button>
+            <button type="button" title={t("Align vertical center")} aria-label={t("Align vertical center")} onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
+            <button type="button" title={t("Align bottom")} aria-label={t("Align bottom")} onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
           </div>
-          <span>Nudge</span>
+          <span>{t("Nudge")}</span>
           <div className="watchface-nudge-pad">
-            <button type="button" onClick={() => setPosition(indicator.x, indicator.y - fromWatchCoordinate(1))} aria-label="Nudge up"><ArrowUp size={13} aria-hidden="true" /></button>
-            <button type="button" onClick={() => setPosition(indicator.x - fromWatchCoordinate(1), indicator.y)} aria-label="Nudge left"><ArrowLeft size={13} aria-hidden="true" /></button>
-            <button type="button" onClick={() => setPosition(indicator.x + fromWatchCoordinate(1), indicator.y)} aria-label="Nudge right"><ArrowRight size={13} aria-hidden="true" /></button>
-            <button type="button" onClick={() => setPosition(indicator.x, indicator.y + fromWatchCoordinate(1))} aria-label="Nudge down"><ArrowDown size={13} aria-hidden="true" /></button>
+            <button type="button" onClick={() => setPosition(indicator.x, indicator.y - fromWatchCoordinate(1))} aria-label={t("Nudge up")}><ArrowUp size={13} aria-hidden="true" /></button>
+            <button type="button" onClick={() => setPosition(indicator.x - fromWatchCoordinate(1), indicator.y)} aria-label={t("Nudge left")}><ArrowLeft size={13} aria-hidden="true" /></button>
+            <button type="button" onClick={() => setPosition(indicator.x + fromWatchCoordinate(1), indicator.y)} aria-label={t("Nudge right")}><ArrowRight size={13} aria-hidden="true" /></button>
+            <button type="button" onClick={() => setPosition(indicator.x, indicator.y + fromWatchCoordinate(1))} aria-label={t("Nudge down")}><ArrowDown size={13} aria-hidden="true" /></button>
           </div>
         </>)}
         {renderPropertySection(
           "appearance",
           "Appearance",
-          <label className="field">
-            Tint color
-            <span className="watchface-color-control">
+          <label className="field">{t("Tint color")}<span className="watchface-color-control">
               <WatchfaceColorInput
                 value={indicator.color ?? design.accentColor}
                 onValueChange={(color) => updateWeatherIndicator({ color })}
               />
-              <code>{indicator.color ?? "Template colors"}</code>
+              <code>{indicator.color ?? t("Template colors")}</code>
               <button
                 type="button"
                 className="watchface-color-none"
                 disabled={!indicator.color}
-                aria-label="Remove tint"
-                title="Remove tint"
+                aria-label={t("Remove tint")}
+                title={t("Remove tint")}
                 onClick={() => updateWeatherIndicator({ color: undefined })}
               >
                 <XCircle size={14} />
@@ -13833,21 +13672,21 @@ export function WatchfaceEditor({
               replaced: Boolean(indicator.assets?.[set]?.[String(index)])
             }));
             const status = !custom
-              ? "SIMPLE default"
+              ? t("SIMPLE default")
               : imported === count
                 ? `All ${count} states replaced`
-                : `${imported} of ${count} replaced`;
+                : t("{{imported}} of {{count}} replaced", { imported: imported, count: count });
             return (
-              <section key={set} className={`wf-weather-set${custom ? " is-custom" : ""}`} aria-label={`${label} artwork`}>
+              <section key={set} className={`wf-weather-set${custom ? " is-custom" : ""}`} aria-label={t("{{label}} artwork", { label: t(label) })}>
                 <div className="wf-weather-set-head">
-                  <strong>{label}</strong>
-                  <span className="wf-weather-set-badge">{custom ? "Custom" : "Default"}</span>
+                  <strong>{t(label)}</strong>
+                  <span className="wf-weather-set-badge">{custom ? t("Custom") : t("Default")}</span>
                   {custom ? (
                     <button
                       type="button"
                       className="wf-property-icon-button"
-                      aria-label={`Restore SIMPLE default ${label.toLowerCase()}`}
-                      title="Restore SIMPLE default"
+                      aria-label={t("Restore SIMPLE default {{value1}}", { value1: label.toLowerCase() })}
+                      title={t("Restore SIMPLE default")}
                       disabled={spriteImportPending}
                       onClick={() => restoreSet(set)}
                     >
@@ -13855,15 +13694,13 @@ export function WatchfaceEditor({
                     </button>
                   ) : null}
                 </div>
-                <WatchfaceSpriteStrip label={`${label} states`} cells={cells} summary={`${status} · ${hint}`} />
+                <WatchfaceSpriteStrip label={t("{{label}} states", { label: t(label) })} cells={cells} summary={`${t(status)} · ${t(hint)}`} />
                 <div className="wf-weather-set-actions">
                   <button type="button" className="secondary-button" disabled={spriteImportPending} onClick={() => void chooseWeatherSpriteFolder(set)}>
-                    <ImagePlus size={15} /> Import PNG folder
-                  </button>
+                    <ImagePlus size={15} />{" "}{t("Import PNG folder")}</button>
                   {official ? (
                     <button type="button" className="secondary-button" disabled={spriteImportPending} onClick={() => browseOfficialWeatherSprites(set)}>
-                      <Sparkles size={15} /> Official library
-                    </button>
+                      <Sparkles size={15} />{" "}{t("Official library")}</button>
                   ) : null}
                 </div>
               </section>
@@ -13871,22 +13708,22 @@ export function WatchfaceEditor({
           };
           return (
             <div className="wf-weather-assets">
-              <p className="watchface-studio-summary">Every set starts with SIMPLE's built-in artwork. Replace a set with your own numbered PNGs or one from the official COROS library; states you leave out keep the default.</p>
+              <p className="watchface-studio-summary">{t("Every set starts with SIMPLE's built-in artwork. Replace a set with your own numbered PNGs or one from the official COROS library; states you leave out keep the default.")}</p>
               <div className="wf-weather-group">
-                <div className="wf-weather-group-head"><span>Condition icon</span></div>
+                <div className="wf-weather-group-head"><span>{t("Condition icon")}</span></div>
                 {WEATHER_ICON_SETS.map(renderSet)}
               </div>
               <div className="wf-weather-group">
                 <div className="wf-weather-group-head">
-                  <span>Temperature</span>
+                  <span>{t("Temperature")}</span>
                   <label className="watchface-studio-toggle">
                     <input type="checkbox" checked={temperatureOn} onChange={(event) => updateWeatherIndicator({ temperatureEnabled: event.target.checked })} />
-                    <span>Show reading</span>
+                    <span>{t("Show reading")}</span>
                   </label>
                 </div>
                 {temperatureOn
                   ? WEATHER_TEMPERATURE_SETS.map(renderSet)
-                  : <p className="watchface-studio-summary">Only the condition icon is shown. Turn the reading on to edit its digits and symbols.</p>}
+                  : <p className="watchface-studio-summary">{t("Only the condition icon is shown. Turn the reading on to edit its digits and symbols.")}</p>}
               </div>
             </div>
           );
@@ -13894,15 +13731,14 @@ export function WatchfaceEditor({
           disabled: isPositionLocked("weather"),
           status: (() => {
             const custom = [...WEATHER_ICON_SETS, ...WEATHER_TEMPERATURE_SETS].filter(({ set }) => Object.keys(indicator.assets?.[set] ?? {}).length > 0).length;
-            return custom > 0 ? `${custom} custom` : undefined;
+            return custom > 0 ? t("{{custom}} custom", { custom: custom }) : undefined;
           })()
         })}
         {renderStrokeInspector("weather")}
         {renderPropertySection(
           "specific",
           "Indicator",
-          <label className="field watchface-zoom-control">
-            Size <span>{indicator.scale.toFixed(2)}×</span>
+          <label className="field watchface-zoom-control">{t("Size")}{" "}<span>{indicator.scale.toFixed(2)}×</span>
             <input
               type="range"
               min="0.5"
@@ -13921,9 +13757,7 @@ export function WatchfaceEditor({
         {renderPropertySection(
           "advanced",
           "Advanced",
-          <p className="watchface-studio-summary">
-            The editor previews the sunny state at 18°. The watch shows live conditions and temperature.
-          </p>,
+          <p className="watchface-studio-summary">{t("The editor previews the sunny state at 18°. The watch shows live conditions and temperature.")}</p>,
           { disabled: isPositionLocked("weather") }
         )}
       </>
@@ -13937,13 +13771,13 @@ export function WatchfaceEditor({
     const locked = isPositionLocked(layerId);
     const layer = backgroundElementLayer(element);
     const alignButtons = (
-      <div className="wf-align-icon-grid" role="group" aria-label="Align to face">
-        <button type="button" title="Align left" aria-label="Align left" onClick={() => set({ x: 0 })}><AlignHorizontalJustifyStart size={14} /></button>
-        <button type="button" title="Align horizontal center" aria-label="Align horizontal center" onClick={() => set({ x: BACKGROUND_SPACE / 2 })}><AlignHorizontalJustifyCenter size={14} /></button>
-        <button type="button" title="Align right" aria-label="Align right" onClick={() => set({ x: BACKGROUND_SPACE })}><AlignHorizontalJustifyEnd size={14} /></button>
-        <button type="button" title="Align top" aria-label="Align top" onClick={() => set({ y: 0 })}><AlignVerticalJustifyStart size={14} /></button>
-        <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => set({ y: BACKGROUND_SPACE / 2 })}><AlignVerticalJustifyCenter size={14} /></button>
-        <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => set({ y: BACKGROUND_SPACE })}><AlignVerticalJustifyEnd size={14} /></button>
+      <div className="wf-align-icon-grid" role="group" aria-label={t("Align to face")}>
+        <button type="button" title={t("Align left")} aria-label={t("Align left")} onClick={() => set({ x: 0 })}><AlignHorizontalJustifyStart size={14} /></button>
+        <button type="button" title={t("Align horizontal center")} aria-label={t("Align horizontal center")} onClick={() => set({ x: BACKGROUND_SPACE / 2 })}><AlignHorizontalJustifyCenter size={14} /></button>
+        <button type="button" title={t("Align right")} aria-label={t("Align right")} onClick={() => set({ x: BACKGROUND_SPACE })}><AlignHorizontalJustifyEnd size={14} /></button>
+        <button type="button" title={t("Align top")} aria-label={t("Align top")} onClick={() => set({ y: 0 })}><AlignVerticalJustifyStart size={14} /></button>
+        <button type="button" title={t("Align vertical center")} aria-label={t("Align vertical center")} onClick={() => set({ y: BACKGROUND_SPACE / 2 })}><AlignVerticalJustifyCenter size={14} /></button>
+        <button type="button" title={t("Align bottom")} aria-label={t("Align bottom")} onClick={() => set({ y: BACKGROUND_SPACE })}><AlignVerticalJustifyEnd size={14} /></button>
       </div>
     );
     return (
@@ -13959,9 +13793,9 @@ export function WatchfaceEditor({
               {element.kind === "rect" || element.kind === "ellipse" ? (
                 null
               ) : element.kind === "line" ? (
-                <label>Length<EditableNumberInput min="10" max="800" step="1" value={element.dx} fallback={10} onValueChange={(dx) => set({ dx: Math.max(10, dx) })} /></label>
+                <label>{t("Length")}<EditableNumberInput min="10" max="800" step="1" value={element.dx} fallback={10} onValueChange={(dx) => set({ dx: Math.max(10, dx) })} /></label>
               ) : null}
-              <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={element.rotation} fallback={0} onValueChange={(rotation) => set({ rotation: normalizeWatchfaceRotation(rotation) })} /></label>
+              <label>{t("Rotation")}<EditableNumberInput min="0" max="360" step="1" value={element.rotation} fallback={0} onValueChange={(rotation) => set({ rotation: normalizeWatchfaceRotation(rotation) })} /></label>
             </div>
             {element.kind === "rect" || element.kind === "ellipse" ? (
               <LinkedDimensionInputs
@@ -13974,7 +13808,7 @@ export function WatchfaceEditor({
                 onLinkedChange={(aspectLocked) => set({ aspectLocked })}
               />
             ) : null}
-            <div className="wf-control-label">Align to face</div>
+            <div className="wf-control-label">{t("Align to face")}</div>
             {alignButtons}
           </div>,
           { disabled: locked }
@@ -13996,31 +13830,29 @@ export function WatchfaceEditor({
                           : { gradient: undefined }
                       )
                     }
-                  />
-                  Gradient fill
-                </label>
+                  />{t("Gradient fill")}</label>
                 {element.gradient ? (
                   <>
-                    <label className="field">From<span className="watchface-color-control"><WatchfaceColorInput value={element.gradient.from} onValueChange={(color) => set({ gradient: { ...element.gradient!, from: color } })} /><code>{element.gradient.from}</code></span></label>
-                    <label className="field">To<span className="watchface-color-control"><WatchfaceColorInput value={element.gradient.to} onValueChange={(color) => set({ gradient: { ...element.gradient!, to: color } })} /><code>{element.gradient.to}</code></span></label>
-                    <label className="watchface-inspector-field"><span>Gradient angle</span><EditableNumberInput min="0" max="360" step="1" value={element.gradient.angle} fallback={0} onValueChange={(angle) => set({ gradient: { ...element.gradient!, angle: normalizeWatchfaceRotation(angle) } })} /></label>
+                    <label className="field">{t("From")}<span className="watchface-color-control"><WatchfaceColorInput value={element.gradient.from} onValueChange={(color) => set({ gradient: { ...element.gradient!, from: color } })} /><code>{element.gradient.from}</code></span></label>
+                    <label className="field">{t("To")}<span className="watchface-color-control"><WatchfaceColorInput value={element.gradient.to} onValueChange={(color) => set({ gradient: { ...element.gradient!, to: color } })} /><code>{element.gradient.to}</code></span></label>
+                    <label className="watchface-inspector-field"><span>{t("Gradient angle")}</span><EditableNumberInput min="0" max="360" step="1" value={element.gradient.angle} fallback={0} onValueChange={(angle) => set({ gradient: { ...element.gradient!, angle: normalizeWatchfaceRotation(angle) } })} /></label>
                   </>
                 ) : (
-                  <label className="field">Fill<span className="watchface-color-control"><WatchfaceColorInput value={element.fill} onValueChange={(color) => set({ fill: color })} /><code>{element.fill}</code></span></label>
+                  <label className="field">{t("Fill")}<span className="watchface-color-control"><WatchfaceColorInput value={element.fill} onValueChange={(color) => set({ fill: color })} /><code>{element.fill}</code></span></label>
                 )}
                 {element.kind === "rect" ? (
-                  <label className="watchface-inspector-field"><span>Corner radius</span><EditableNumberInput min="0" max="200" step="1" value={element.cornerRadius} fallback={0} onValueChange={(cornerRadius) => set({ cornerRadius: Math.max(0, cornerRadius) })} /></label>
+                  <label className="watchface-inspector-field"><span>{t("Corner radius")}</span><EditableNumberInput min="0" max="200" step="1" value={element.cornerRadius} fallback={0} onValueChange={(cornerRadius) => set({ cornerRadius: Math.max(0, cornerRadius) })} /></label>
                 ) : null}
               </>
             ) : null}
             {element.kind === "line" ? (
               <>
-                <label className="field">Color<span className="watchface-color-control"><WatchfaceColorInput value={element.color} onValueChange={(color) => set({ color })} /><code>{element.color}</code></span></label>
-                <label className="watchface-inspector-field"><span>Thickness</span><EditableNumberInput min="1" max="60" step="1" value={element.strokeWidth} fallback={1} onValueChange={(strokeWidth) => set({ strokeWidth: Math.max(1, strokeWidth) })} /></label>
+                <label className="field">{t("Color")}<span className="watchface-color-control"><WatchfaceColorInput value={element.color} onValueChange={(color) => set({ color })} /><code>{element.color}</code></span></label>
+                <label className="watchface-inspector-field"><span>{t("Thickness")}</span><EditableNumberInput min="1" max="60" step="1" value={element.strokeWidth} fallback={1} onValueChange={(strokeWidth) => set({ strokeWidth: Math.max(1, strokeWidth) })} /></label>
               </>
             ) : null}
             {element.kind === "text" ? (
-              <label className="field">Color<span className="watchface-color-control"><WatchfaceColorInput value={element.color} onValueChange={(color) => set({ color })} /><code>{element.color}</code></span></label>
+              <label className="field">{t("Color")}<span className="watchface-color-control"><WatchfaceColorInput value={element.color} onValueChange={(color) => set({ color })} /><code>{element.color}</code></span></label>
             ) : null}
           </div>,
           { disabled: locked }
@@ -14031,13 +13863,13 @@ export function WatchfaceEditor({
               "specific",
               "Text",
               <div className="wf-property-stack">
-                <label className="field">Text<input value={element.text} maxLength={40} onChange={(event) => set({ text: event.target.value })} /></label>
-                <LocalFontPicker api={api} label="Font" value={element.fontFamily} emptyLabel="System font" onChange={(fontFamily) => set({ fontFamily })} />
+                <label className="field">{t("Text")}<input value={element.text} maxLength={40} onChange={(event) => set({ text: event.target.value })} /></label>
+                <LocalFontPicker api={api} label={t("Font")} value={element.fontFamily} emptyLabel={t("System font")} onChange={(fontFamily) => set({ fontFamily })} />
                 <div className="watchface-position-inputs">
-                  <label>Size<EditableNumberInput min="12" max="200" step="1" value={element.fontSize} fallback={12} onValueChange={(fontSize) => set({ fontSize: Math.max(12, fontSize) })} /></label>
-                  <label>Weight<EditableNumberInput min="100" max="900" step="100" value={element.weight} fallback={400} onValueChange={(weight) => set({ weight: Math.max(100, Math.min(900, Math.round(weight / 100) * 100)) })} /></label>
+                  <label>{t("Size")}<EditableNumberInput min="12" max="200" step="1" value={element.fontSize} fallback={12} onValueChange={(fontSize) => set({ fontSize: Math.max(12, fontSize) })} /></label>
+                  <label>{t("Weight")}<EditableNumberInput min="100" max="900" step="100" value={element.weight} fallback={400} onValueChange={(weight) => set({ weight: Math.max(100, Math.min(900, Math.round(weight / 100) * 100)) })} /></label>
                 </div>
-                <label className="field">Text align<select value={element.align} onChange={(event) => set({ align: event.target.value as CorosWatchfaceBackgroundText["align"] })}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
+                <label className="field">{t("Text align")}<select value={element.align} onChange={(event) => set({ align: event.target.value as CorosWatchfaceBackgroundText["align"] })}><option value="left">{t("Left")}</option><option value="center">{t("Center")}</option><option value="right">{t("Right")}</option></select></label>
               </div>,
               { disabled: locked }
             )
@@ -14047,19 +13879,19 @@ export function WatchfaceEditor({
           "advanced",
           "Advanced",
           <div className="wf-property-stack">
-            <div className="wf-control-label">Nudge</div>
+            <div className="wf-control-label">{t("Nudge")}</div>
             <div className="watchface-nudge-pad">
-              <button type="button" aria-label="Nudge object up" onClick={() => set({ y: element.y - 1 })}><ArrowUp size={13} /></button>
-              <button type="button" aria-label="Nudge object left" onClick={() => set({ x: element.x - 1 })}><ArrowLeft size={13} /></button>
-              <button type="button" aria-label="Nudge object right" onClick={() => set({ x: element.x + 1 })}><ArrowRight size={13} /></button>
-              <button type="button" aria-label="Nudge object down" onClick={() => set({ y: element.y + 1 })}><ArrowDown size={13} /></button>
-              <button type="button" className="watchface-nudge-reset" onClick={() => set({ x: BACKGROUND_SPACE / 2, y: BACKGROUND_SPACE / 2 })}>Reset</button>
+              <button type="button" aria-label={t("Nudge object up")} onClick={() => set({ y: element.y - 1 })}><ArrowUp size={13} /></button>
+              <button type="button" aria-label={t("Nudge object left")} onClick={() => set({ x: element.x - 1 })}><ArrowLeft size={13} /></button>
+              <button type="button" aria-label={t("Nudge object right")} onClick={() => set({ x: element.x + 1 })}><ArrowRight size={13} /></button>
+              <button type="button" aria-label={t("Nudge object down")} onClick={() => set({ y: element.y + 1 })}><ArrowDown size={13} /></button>
+              <button type="button" className="watchface-nudge-reset" onClick={() => set({ x: BACKGROUND_SPACE / 2, y: BACKGROUND_SPACE / 2 })}>{t("Reset")}</button>
             </div>
             {renderArtworkLayerOrderControls(
               watchfaceBackgroundElementLayerId(element.id)
             )}
             <button className="secondary-button wf-danger-action" type="button" onClick={() => removeElement(element.id)}>
-              <Trash2 size={15} /> Remove {element.kind === "text" ? "text" : "shape"}
+              <Trash2 size={15} />{" "}{t("Remove")}{" "}{element.kind === "text" ? t("text") : t("shape")}
             </button>
           </div>,
           { disabled: locked }

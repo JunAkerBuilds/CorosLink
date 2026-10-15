@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import {
   ChartSpline,
   Cpu,
@@ -87,6 +88,7 @@ export function ChatSettingsSectionHeader({
   id: ChatSettingsSectionId;
   badge?: string;
 }) {
+  useLanguage();
   const section = CHAT_SETTINGS_SECTIONS.find((entry) => entry.id === id);
   if (!section) return null;
   const Icon = section.icon;
@@ -97,10 +99,10 @@ export function ChatSettingsSectionHeader({
       </span>
       <div className="chat-settings-section-heading">
         <div className="chat-settings-section-title">
-          <h3>{section.label}</h3>
-          {badge ? <span className="chat-beta-badge">{badge}</span> : null}
+          <h3>{t(section.label)}</h3>
+          {badge ? <span className="chat-beta-badge">{t(badge)}</span> : null}
         </div>
-        <p>{section.description}</p>
+        <p>{t(section.description)}</p>
       </div>
     </header>
   );

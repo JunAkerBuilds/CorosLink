@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n";
 import { SidebarSimple } from "@phosphor-icons/react";
 import { motion } from "motion/react";
 import {
@@ -130,6 +131,7 @@ export function AppSidebar({
   overlayOpen,
   onOverlayOpenChange,
 }: AppSidebarProps) {
+  useLanguage();
   const overlayMode = useMediaQuery("(max-width: 720px)");
   const navItems = visiblePrimaryNavItems(showDevelopmentItems);
   const reducedMotion = useReducedMotion();
@@ -282,7 +284,7 @@ export function AppSidebar({
 
         <nav
           className="app-sidebar-nav"
-          aria-label="Primary"
+          aria-label={t("Primary")}
           ref={navRef}
         >
           <span
@@ -298,8 +300,8 @@ export function AppSidebar({
             const Icon = item.icon;
             const isActive = activeView === item.id;
             const tooltip = item.beta
-              ? `${item.label} (Beta)`
-              : item.label;
+              ? `${t(item.label)} (Beta)`
+              : t(item.label);
 
             return (
               <button
@@ -328,7 +330,7 @@ export function AppSidebar({
                   {item.showActivity && coachBusy ? (
                     <span
                       className="primary-tab-activity app-sidebar-nav-activity"
-                      aria-label="Coach is responding"
+                      aria-label={t("Coach is responding")}
                     />
                   ) : null}
                 </span>
@@ -350,9 +352,9 @@ export function AppSidebar({
                   }}
                   aria-hidden={!showLabels}
                 >
-                  <span className="app-sidebar-nav-label">{item.label}</span>
+                  <span className="app-sidebar-nav-label">{t(item.label)}</span>
                   {item.beta ? (
-                    <span className="primary-tab-beta">Beta</span>
+                    <span className="primary-tab-beta">{t("Beta")}</span>
                   ) : null}
                 </motion.span>
               </button>
@@ -367,8 +369,8 @@ export function AppSidebar({
               type="button"
               className="app-sidebar-toggle"
               aria-expanded={expanded}
-              aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
-              title={expanded ? "Collapse sidebar" : "Expand sidebar"}
+              aria-label={expanded ? t("Collapse sidebar") : t("Expand sidebar")}
+              title={expanded ? t("Collapse sidebar") : t("Expand sidebar")}
               onClick={handleToggleExpanded}
             >
               <SidebarSimple size={20} weight="regular" aria-hidden="true" />
@@ -387,8 +389,7 @@ export function AppSidebar({
                 transition={labelTransition}
                 aria-hidden={!showLabels}
               >
-                Collapse
-              </motion.span>
+                {t("Collapse")} </motion.span>
             </button>
           ) : null}
         </div>
@@ -407,7 +408,7 @@ export function AppSidebar({
           ]
             .filter(Boolean)
             .join(" ")}
-          aria-label="Close navigation"
+          aria-label={t("Close navigation")}
           aria-hidden={!overlayOpen}
           tabIndex={overlayOpen ? 0 : -1}
           onClick={() => onOverlayOpenChange(false)}

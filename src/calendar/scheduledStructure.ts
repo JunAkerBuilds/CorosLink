@@ -1,3 +1,4 @@
+import { t, formatNumber } from "../i18n/trainingLocale";
 import type {
   TrainingHubScheduledExercise,
   TrainingHubScheduledWorkoutEntry,
@@ -131,7 +132,7 @@ export function formatStepDistanceLabel(
     return `${Math.round(meters)} m`;
   }
   const km = meters / 1000;
-  return `${km.toFixed(km >= 10 ? 1 : 2)} km`;
+  return `${formatNumber(km, { minimumFractionDigits: km >= 10 ? 1 : 2, maximumFractionDigits: km >= 10 ? 1 : 2 })} km`;
 }
 
 interface ParsedTarget {
@@ -152,7 +153,7 @@ function parseRawTarget(
 
   switch (targetType) {
     case 1:
-      return { label: "Open" };
+      return { label: t("Open") };
     case 2:
       return targetValue > 0
         ? {
@@ -160,9 +161,9 @@ function parseRawTarget(
             magnitude: targetValue,
             magnitudeType: "time"
           }
-        : { label: "Open" };
+        : { label: t("Open") };
     case 3:
-      return { label: `${Math.round(targetValue)} reps` };
+      return { label: t("{{count}} reps", { count: formatNumber(Math.round(targetValue)) }) };
     case 5: {
       const meters = targetValue / 100;
       return meters > 0
@@ -171,20 +172,20 @@ function parseRawTarget(
             magnitude: meters,
             magnitudeType: "distance"
           }
-        : { label: "Open" };
+        : { label: t("Open") };
     }
     case 6:
-      return { label: `${Math.round(targetValue)} TL` };
+      return { label: `${formatNumber(Math.round(targetValue))} ${t("TL")}` };
     case 7:
       return kind === "rest"
-        ? { label: `Until ${Math.round(targetValue)} bpm` }
+        ? { label: t("Until {{count}} bpm", { count: formatNumber(Math.round(targetValue)) }) }
         : { label: `${Math.round(targetValue)} bpm` };
     case 8:
       return {
-        label: `${formatElevationValue(targetValue / 100, unitSystem, "0")} gain`
+        label: t("{{value}} gain", { value: formatElevationValue(targetValue / 100, unitSystem, "0") })
       };
     case 9:
-      return { label: `${Math.round(targetValue)} routes` };
+      return { label: t("{{count}} routes", { count: formatNumber(Math.round(targetValue)) }) };
     default:
       return {};
   }
@@ -251,7 +252,7 @@ function friendlyStepName(rawName: string, kind: ScheduledStepKind): string {
   const trimmed = rawName.trim();
   // COROS template steps carry opaque names like "T3001" — swap in the kind.
   if (!trimmed || /^T\d+$/i.test(trimmed)) {
-    return FRIENDLY_KIND_NAME[kind];
+    return t(FRIENDLY_KIND_NAME[kind]);
   }
   return trimmed;
 }

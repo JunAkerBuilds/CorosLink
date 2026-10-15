@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -32,6 +33,7 @@ function UpdatePreferencesMenu({
   onInstall,
   onPreferencesChange,
 }: AppUpdateControlsProps) {
+  useLanguage();
   const [open, setOpen] = useState(false);
   const reducedMotion = useReducedMotion();
   const [collapsedShape, setCollapsedShape] = useState({ scaleX: 0.55, scaleY: 0.14, y: 48 });
@@ -94,13 +96,13 @@ function UpdatePreferencesMenu({
       <button
         className="update-settings-trigger update-settings-trigger--labeled"
         type="button"
-        aria-label="Update settings"
+        aria-label={t("Update settings")}
         aria-expanded={open}
-        title="Update settings"
+        title={t("Update settings")}
         onClick={() => setOpen((value) => !value)}
       >
         <Settings2 size={14} aria-hidden="true" />
-        <span className="update-settings-trigger-label">Updates</span>
+        <span className="update-settings-trigger-label">{t("Updates")}</span>
       </button>
 
       {createPortal(
@@ -131,7 +133,7 @@ function UpdatePreferencesMenu({
             }
           }}
           role="dialog"
-          aria-label="Updates"
+          aria-label={t("Updates")}
         >
           <motion.div
             className="update-settings-content"
@@ -141,7 +143,7 @@ function UpdatePreferencesMenu({
             }}
           >
           <div className="update-settings-header">
-            <p className="update-settings-heading">Updates</p>
+            <p className="update-settings-heading">{t("Updates")}</p>
             <span className="update-settings-version">v{snapshot.currentVersion}</span>
           </div>
 
@@ -158,8 +160,8 @@ function UpdatePreferencesMenu({
                 >
                   <Sparkles size={14} aria-hidden="true" />
                   {snapshot.installMethod === "manual"
-                    ? `Download ${snapshot.availableVersion}`
-                    : "Restart to update"}
+                    ? t("Download {{value0}}", { value0: snapshot.availableVersion })
+                    : t("Restart to update")}
                 </button>
               ) : snapshot.status === "available" && !snapshot.autoDownload ? (
                 <button
@@ -177,8 +179,8 @@ function UpdatePreferencesMenu({
                     <Download size={14} aria-hidden="true" />
                   )}
                   {downloading
-                    ? "Starting…"
-                    : `Download ${snapshot.availableVersion}`}
+                    ? t("Starting…")
+                    : t("Download {{value0}}", { value0: snapshot.availableVersion })}
                 </button>
               ) : (
                 <button
@@ -195,21 +197,19 @@ function UpdatePreferencesMenu({
                   ) : (
                     <RefreshCw size={14} aria-hidden="true" />
                   )}
-                  Check for updates
-                </button>
+                  {t("Check for updates")} </button>
               )}
             </div>
           ) : (
             <p className="update-settings-note">
-              Your preferences will apply when you install CorosLink.
-            </p>
+              {t("Your preferences will apply when you install CorosLink.")} </p>
           )}
 
           <label className="update-settings-option">
             <input
               type="checkbox"
               role="switch"
-              aria-label="Check automatically"
+              aria-label={t("Check automatically")}
               checked={snapshot.autoCheck}
               onChange={(event) =>
                 onPreferencesChange({ autoCheck: event.target.checked })
@@ -217,18 +217,16 @@ function UpdatePreferencesMenu({
             />
             <span>
               <span className="update-settings-option-label">
-                Check automatically
-              </span>
+                {t("Check automatically")} </span>
               <span className="update-settings-option-hint">
-                Look for updates on startup.
-              </span>
+                {t("Look for updates on startup.")} </span>
             </span>
           </label>
           <label className="update-settings-option">
             <input
               type="checkbox"
               role="switch"
-              aria-label="Download automatically"
+              aria-label={t("Download automatically")}
               checked={snapshot.autoDownload}
               onChange={(event) =>
                 onPreferencesChange({ autoDownload: event.target.checked })
@@ -236,11 +234,9 @@ function UpdatePreferencesMenu({
             />
             <span>
               <span className="update-settings-option-label">
-                Download automatically
-              </span>
+                {t("Download automatically")} </span>
               <span className="update-settings-option-hint">
-                Otherwise, download only when you ask.
-              </span>
+                {t("Otherwise, download only when you ask.")} </span>
             </span>
           </label>
         </motion.div>
@@ -261,6 +257,7 @@ export function AppUpdateControls({
   onInstall,
   onPreferencesChange,
 }: AppUpdateControlsProps) {
+  useLanguage();
   const settings = (
     <UpdatePreferencesMenu
       snapshot={snapshot}
@@ -276,7 +273,7 @@ export function AppUpdateControls({
   if (!snapshot.supported) {
     return (
       <div className="app-update-controls">
-        <span className="app-version-chip" title="Development build">
+        <span className="app-version-chip" title={t("Development build")}>
           v{snapshot.currentVersion}
         </span>
         {settings}
@@ -295,14 +292,14 @@ export function AppUpdateControls({
           onClick={onInstall}
           title={
             manual
-              ? `Download CorosLink ${snapshot.availableVersion} from GitHub (required for this macOS build)`
-              : `Install CorosLink ${snapshot.availableVersion}`
+              ? t("Download CorosLink {{value0}} from GitHub (required for this macOS build)", { value0: snapshot.availableVersion })
+              : t("Install CorosLink {{value0}}", { value0: snapshot.availableVersion })
           }
         >
           <Sparkles size={15} aria-hidden="true" />
           {manual
-            ? `Download ${snapshot.availableVersion}`
-            : "Restart to update"}
+            ? t("Download {{value0}}", { value0: snapshot.availableVersion })
+            : t("Restart to update")}
         </button>
         {settings}
       </div>
@@ -320,7 +317,7 @@ export function AppUpdateControls({
           disabled={downloading}
           title={
             snapshot.releaseNotes ??
-            `Download CorosLink ${snapshot.availableVersion}`
+            t("Download CorosLink {{value0}}", { value0: snapshot.availableVersion })
           }
         >
           {downloading ? (
@@ -329,8 +326,8 @@ export function AppUpdateControls({
             <Download size={15} aria-hidden="true" />
           )}
           {downloading
-            ? "Starting…"
-            : `Download ${snapshot.availableVersion}`}
+            ? t("Starting…")
+            : t("Download {{value0}}", { value0: snapshot.availableVersion })}
         </button>
         {settings}
       </div>
@@ -340,8 +337,8 @@ export function AppUpdateControls({
   if (snapshot.status === "available" || snapshot.status === "downloading") {
     const label =
       snapshot.status === "downloading"
-        ? `Downloading ${Math.round(snapshot.downloadPercent ?? 0)}%`
-        : `Update ${snapshot.availableVersion}`;
+        ? t("Downloading {{percent}}%", { percent: Math.round(snapshot.downloadPercent ?? 0) })
+        : t("Update {{version}}", { version: snapshot.availableVersion });
 
     return (
       <div className="app-update-controls">
@@ -349,7 +346,7 @@ export function AppUpdateControls({
           className="update-chip downloading"
           title={
             snapshot.releaseNotes ??
-            `CorosLink ${snapshot.availableVersion} is available`
+            t("CorosLink {{value0}} is available", { value0: snapshot.availableVersion })
           }
         >
           {snapshot.status === "downloading" ? (
@@ -357,7 +354,7 @@ export function AppUpdateControls({
           ) : (
             <Download size={15} aria-hidden="true" />
           )}
-          <span>{label}</span>
+          <span>{t(label)}</span>
         </div>
         {settings}
       </div>

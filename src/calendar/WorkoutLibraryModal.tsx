@@ -1,3 +1,4 @@
+import { getLocale, useLanguage, t } from "../i18n/training";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { CalendarPlus, Library, LoaderCircle, Pencil, Search, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -22,6 +23,7 @@ function inputDateToKey(value: string): string {
 }
 
 export function WorkoutLibraryModal({ api, onClose, onEdit, onScheduled, onError }: WorkoutLibraryModalProps) {
+  useLanguage();
   const reducedMotion = useReducedMotion();
   const today = getLocalHappenDayKey();
   const tomorrowDate = new Date();
@@ -61,7 +63,7 @@ export function WorkoutLibraryModal({ api, onClose, onEdit, onScheduled, onError
   const visible = useMemo(() => {
     const filter = query.trim().toLowerCase();
     return (items ?? []).filter((item) => !filter || item.name.toLowerCase().includes(filter));
-  }, [items, query]);
+  }, [items, query, getLocale()]);
 
   const schedule = async () => {
     if (!selected) return;
@@ -86,27 +88,27 @@ export function WorkoutLibraryModal({ api, onClose, onEdit, onScheduled, onError
     <motion.div className="calendar-modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <motion.section className="calendar-modal calendar-library-modal" role="dialog" aria-modal="true" aria-labelledby="library-manager-title" initial={reducedMotion ? false : { opacity: 0, y: 14, scale: 0.99 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0 }}>
         <header className="calendar-modal-header">
-          <div><p className="eyebrow">COROS Training Hub</p><h2 id="library-manager-title">Workout Library</h2></div>
-          <button type="button" className="icon-button" aria-label="Close workout library" onClick={onClose}><X size={18} aria-hidden="true" /></button>
+          <div><p className="eyebrow">COROS Training Hub</p><h2 id="library-manager-title">{t("Workout Library")}</h2></div>
+          <button type="button" className="icon-button" aria-label={t("Close workout library")} onClick={onClose}><X size={18} aria-hidden="true" /></button>
         </header>
         <div className="calendar-modal-body">
-          <label className="calendar-field calendar-library-search"><span>Search workouts</span><span className="calendar-sport-search-control"><Search size={14} aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name" /></span></label>
+          <label className="calendar-field calendar-library-search"><span>{t("Search workouts")}</span><span className="calendar-sport-search-control"><Search size={14} aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search by name")} /></span></label>
           <div className="workout-library-manager-list">
-            {items === null ? <div className="workout-library-state"><LoaderCircle className="is-spinning" size={20} aria-hidden="true" /><p>Loading your COROS workout library...</p></div> : error ? <div className="workout-library-state"><p>{error}</p><button type="button" className="ghost-button" onClick={load}>Try again</button></div> : visible.length === 0 ? <div className="workout-library-state"><Library size={24} aria-hidden="true" /><p>{query ? "No workouts match your search." : "Your workout library is empty."}</p></div> : visible.map((item) => {
+            {items === null ? <div className="workout-library-state"><LoaderCircle className="is-spinning" size={20} aria-hidden="true" /><p>{t("Loading your COROS workout library...")}</p></div> : error ? <div className="workout-library-state"><p>{error}</p><button type="button" className="ghost-button" onClick={load}>{t("Try again")}</button></div> : visible.length === 0 ? <div className="workout-library-state"><Library size={24} aria-hidden="true" /><p>{query ? t("No workouts match your search.") : t("Your workout library is empty.")}</p></div> : visible.map((item) => {
               const supported = Boolean(item.sportType && item.sportType >= 1 && item.sportType <= 9);
               return <article key={item.id} className={`workout-library-row ${selected === item.id ? "is-selected" : ""}`}>
                 <button type="button" className="workout-library-select" aria-pressed={selected === item.id} onClick={() => setSelected(item.id)}>
-                  <span><strong>{item.name}</strong><small>{[item.volume, item.trainingLoad !== undefined ? `${Math.round(item.trainingLoad)} TL` : null].filter(Boolean).join(" · ") || "No calculated totals"}</small></span>
-                  <span className={`workout-library-sport ${supported ? "is-run" : ""}`}>{supported ? "Run" : "View only"}</span>
+                  <span><strong>{item.name}</strong><small>{[item.volume, item.trainingLoad !== undefined ? `${Math.round(item.trainingLoad)} TL` : null].filter(Boolean).join(" · ") || t("No calculated totals")}</small></span>
+                  <span className={`workout-library-sport ${supported ? "is-run" : ""}`}>{supported ? t("Run") : t("View only")}</span>
                 </button>
-                {supported ? <button type="button" className="ghost-button workout-library-edit" onClick={() => onEdit({ kind: "library", programId: item.id })}><Pencil size={14} aria-hidden="true" /> Edit</button> : <span className="workout-library-readonly">Editing is not supported for this sport.</span>}
+                {supported ? <button type="button" className="ghost-button workout-library-edit" onClick={() => onEdit({ kind: "library", programId: item.id })}><Pencil size={14} aria-hidden="true" /> {t("Edit")}</button> : <span className="workout-library-readonly">{t("Editing is not supported for this sport.")}</span>}
               </article>;
             })}
           </div>
         </div>
         <footer className="calendar-modal-footer workout-library-footer">
-          <label className="calendar-field"><span>Schedule selected workout</span><input type="date" min={keyToInputDate(tomorrow)} value={date} onChange={(event) => setDate(event.target.value)} /></label>
-          <button type="button" className="primary-button" disabled={!selected || !date || scheduling} onClick={() => void schedule()}>{scheduling ? <LoaderCircle className="is-spinning" size={15} aria-hidden="true" /> : <CalendarPlus size={15} aria-hidden="true" />}{scheduling ? "Scheduling..." : "Schedule"}</button>
+          <label className="calendar-field"><span>{t("Schedule selected workout")}</span><input type="date" min={keyToInputDate(tomorrow)} value={date} onChange={(event) => setDate(event.target.value)} /></label>
+          <button type="button" className="primary-button" disabled={!selected || !date || scheduling} onClick={() => void schedule()}>{scheduling ? <LoaderCircle className="is-spinning" size={15} aria-hidden="true" /> : <CalendarPlus size={15} aria-hidden="true" />}{scheduling ? t("Scheduling...") : t("Schedule")}</button>
         </footer>
       </motion.section>
     </motion.div>

@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import {
   type ReactNode,
   useId
@@ -28,6 +29,7 @@ export function WatchfaceInspectorSection({
   disabled = false,
   className = ""
 }: WatchfaceInspectorSectionProps) {
+  useLanguage();
   const contentId = useId();
   return (
     <section
@@ -49,7 +51,7 @@ export function WatchfaceInspectorSection({
             size={14}
             aria-hidden="true"
           />
-          <span>{title}</span>
+          <span>{t(title)}</span>
           {status ? <span className="wf-property-section-status">{status}</span> : null}
         </button>
         {actions ? <div className="wf-property-section-actions">{actions}</div> : null}

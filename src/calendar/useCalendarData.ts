@@ -1,3 +1,4 @@
+import { getLocale } from "../i18n/trainingLocale";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   TrainingHubActivity,
@@ -38,7 +39,7 @@ export function useCalendarData({
   refreshToken,
   isInMonth
 }: UseCalendarDataOptions) {
-  const dateKeys = useMemo(() => weekKeys.flat(), [weekKeys]);
+  const dateKeys = useMemo(() => weekKeys.flat(), [weekKeys, getLocale()]);
   const rangeStart = dateKeys[0];
   const rangeEnd = dateKeys[dateKeys.length - 1];
   const rangeKey = `${rangeStart}-${rangeEnd}`;
@@ -211,7 +212,7 @@ export function useCalendarData({
         }
       };
     });
-  }, [data, weekKeys, isInMonth]);
+  }, [data, weekKeys, isInMonth, getLocale()]);
 
   return { weeks, loading, error, reload, applyOptimisticMove };
 }

@@ -1,3 +1,4 @@
+import { useLanguage, t } from "../i18n/training";
 import { ClipboardPaste, Copy, CopyPlus } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -37,6 +38,7 @@ export function CalendarContextMenu({
   items: CalendarContextMenuItem[];
   onClose: () => void;
 }) {
+  useLanguage();
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: x, top: y });
 
@@ -111,14 +113,14 @@ export function CalendarContextMenu({
             role="menuitem"
             className="calendar-context-menu-item"
             disabled={item.disabled}
-            title={item.hint}
+            title={(item.hint == null ? item.hint : t(String(item.hint)))}
             onClick={() => {
               onClose();
               item.onSelect();
             }}
           >
             <Icon size={14} aria-hidden="true" />
-            <span className="calendar-context-menu-label">{item.label}</span>
+            <span className="calendar-context-menu-label">{t(item.label)}</span>
             {item.shortcut ? (
               <kbd className="calendar-context-menu-shortcut">{item.shortcut}</kbd>
             ) : null}

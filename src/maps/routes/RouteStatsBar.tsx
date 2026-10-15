@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n/tools";
 import {
   Activity,
   Bluetooth,
@@ -67,17 +68,18 @@ export function RouteStatsBar({
   exporting?: boolean;
   busy?: boolean;
 }) {
+  const { language } = useLanguage();
   const { unitSystem } = useUnitSystem();
   const profile = useMemo(
     () => (summary ? buildElevationProfile(summary.points) : null),
-    [summary]
+    [summary, language]
   );
 
   if (!summary) {
     return (
       <div className="route-statsbar is-empty">
         <RouteIcon size={16} aria-hidden="true" />
-        <span>{busy ? "Building route…" : "Pick a start point or draw a route to see live stats"}</span>
+        <span>{busy ? t("Building route…") : t("Pick a start point or draw a route to see live stats")}</span>
       </div>
     );
   }
@@ -100,32 +102,32 @@ export function RouteStatsBar({
           icon={<RouteIcon size={15} aria-hidden="true" />}
           value={formatDistance(summary.distanceMeters, unitSystem)}
           unit={distanceUnit(unitSystem)}
-          label="Distance"
+          label={t("Distance")}
         />
         <Metric
           icon={<Clock size={15} aria-hidden="true" />}
           value={formatDuration(duration.seconds)}
-          label={duration.estimated ? "Est. time" : "Time"}
+          label={duration.estimated ? t("Est. time") : t("Time")}
         />
         <Metric
           icon={<Gauge size={15} aria-hidden="true" />}
           value={paceSpeed ?? "—"}
-          label={cycling ? "Speed" : "Pace"}
+          label={cycling ? t("Speed") : t("Pace")}
         />
         <Metric
           icon={<TrendingUp size={15} aria-hidden="true" />}
           value={formatMeters(summary.ascentMeters, unitSystem)}
-          label="Ascent"
+          label={t("Ascent")}
         />
         <Metric
           icon={<TrendingDown size={15} aria-hidden="true" />}
           value={formatMeters(summary.descentMeters, unitSystem)}
-          label="Descent"
+          label={t("Descent")}
         />
         <Metric
           icon={<Mountain size={15} aria-hidden="true" />}
           value={climb !== undefined ? difficultyFromClimbRate(climb) : "—"}
-          label="Terrain"
+          label={t("Terrain")}
         />
       </div>
 
@@ -154,7 +156,7 @@ export function RouteStatsBar({
           {onSync ? (
             <button type="button" className="button" onClick={onSync} disabled={syncing || exporting}>
               {syncing ? <Loader2 size={14} className="spin" aria-hidden="true" /> : <Bluetooth size={14} aria-hidden="true" />}
-              {syncing ? "Syncing…" : "Sync to watch"}
+              {syncing ? t("Syncing…") : t("Sync to watch")}
             </button>
           ) : null}
           {onExport ? (
@@ -169,14 +171,12 @@ export function RouteStatsBar({
               ) : (
                 <Download size={14} aria-hidden="true" />
               )}
-              Export GPX
-            </button>
+              {t("Export GPX")}</button>
           ) : null}
           {onShare ? (
             <button type="button" className="button ghost" onClick={onShare}>
               <QrCode size={14} aria-hidden="true" />
-              Share
-            </button>
+              {t("Share")}</button>
           ) : null}
         </div>
       ) : null}
@@ -195,6 +195,7 @@ function Metric({
   unit?: string;
   label: string;
 }) {
+  const { language } = useLanguage();
   return (
     <div className="route-metric">
       <span className="route-metric-value">

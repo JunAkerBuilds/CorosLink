@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { AlignCenter, AlignLeft, AlignRight } from "lucide-react";
 import { useId } from "react";
 
@@ -31,10 +32,11 @@ export function WatchfaceNumberAlignControl({
   allowTemplateDefault = false,
   disabled = false
 }: WatchfaceNumberAlignControlProps) {
+  useLanguage();
   const labelId = useId();
   return (
     <div className="field wf-number-align-field">
-      <span id={labelId}>{label}</span>
+      <span id={labelId}>{t(label)}</span>
       <div className="wf-number-align" role="group" aria-labelledby={labelId}>
         {allowTemplateDefault ? (
           <button
@@ -42,11 +44,9 @@ export function WatchfaceNumberAlignControl({
             className="wf-number-align-auto"
             aria-pressed={value === undefined}
             disabled={disabled}
-            title="Keep the template's own alignment"
+            title={t("Keep the template's own alignment")}
             onClick={() => onChange(undefined)}
-          >
-            Auto
-          </button>
+          >{t("Auto")}</button>
         ) : null}
         {OPTIONS.map(({ value: option, label: optionLabel, Icon }) => {
           const pressed = value === option;
@@ -55,8 +55,8 @@ export function WatchfaceNumberAlignControl({
               key={option}
               type="button"
               aria-pressed={pressed}
-              aria-label={optionLabel}
-              title={optionLabel}
+              aria-label={t(optionLabel)}
+              title={t(optionLabel)}
               disabled={disabled}
               onClick={() =>
                 onChange(pressed && allowTemplateDefault ? undefined : option)

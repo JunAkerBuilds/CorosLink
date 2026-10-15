@@ -1,3 +1,4 @@
+import { getLocale, useLanguage, t } from "../i18n/training";
 import {
   AlertTriangle,
   CalendarPlus,
@@ -45,7 +46,7 @@ function userFacingError(cause: unknown): string {
 function displayDay(value: string): string {
   const digits = value.replaceAll("-", "");
   const date = new Date(`${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}T12:00:00`);
-  return Number.isNaN(date.valueOf()) ? value : date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  return Number.isNaN(date.valueOf()) ? value : date.toLocaleDateString(getLocale(), { weekday: "short", month: "short", day: "numeric" });
 }
 
 function initialInstallDate(plan: TrainingPlanDocument): string {
@@ -61,6 +62,7 @@ function initialInstallDate(plan: TrainingPlanDocument): string {
 }
 
 export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperation, onClose, onComplete }: TrainingPlanCalendarDialogProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const install = activeTrainingPlanCalendarInstall(plan);
   const operation = requestedOperation ?? (install && !(install.state === "partial" && install.lastOperation === "install") ? "remove" : "install");
@@ -74,7 +76,7 @@ export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperat
 
   const conflictCount = useMemo(
     () => preview?.conflicts.reduce((sum, conflict) => sum + conflict.existing.length, 0) ?? 0,
-    [preview]
+    [preview, getLocale()]
   );
 
   const loadPreview = async () => {
@@ -129,29 +131,29 @@ export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperat
   return <div className="plan-calendar-backdrop">
     <section className="plan-calendar-dialog" role="dialog" aria-modal="true" aria-labelledby="plan-calendar-title">
       <header>
-        <div><p className="tl-eyebrow">COROS calendar</p><h2 id="plan-calendar-title">{operation === "install" ? <CalendarPlus size={20} /> : <CalendarX size={20} />}{operation === "install" ? "Add plan to calendar" : "Remove plan from calendar"}</h2><p>{plan.name}</p></div>
-        <button type="button" className="icon-button" aria-label="Close calendar preview" disabled={mutating} onClick={onClose}><X size={17} /></button>
+        <div><p className="tl-eyebrow">{t("COROS calendar")}</p><h2 id="plan-calendar-title">{operation === "install" ? <CalendarPlus size={20} /> : <CalendarX size={20} />}{operation === "install" ? t("Add plan to calendar") : t("Remove plan from calendar")}</h2><p>{plan.name}</p></div>
+        <button type="button" className="icon-button" aria-label={t("Close calendar preview")} disabled={mutating} onClick={onClose}><X size={17} /></button>
       </header>
 
-      {offline ? <div className="plan-calendar-offline"><AlertTriangle size={18} /><div><strong>Calendar actions are unavailable offline</strong><p>Reconnect to COROS, refresh the Training Library, and try again.</p></div></div> : null}
+      {offline ? <div className="plan-calendar-offline"><AlertTriangle size={18} /><div><strong>{t("Calendar actions are unavailable offline")}</strong><p>{t("Reconnect to COROS, refresh the Training Library, and try again.")}</p></div></div> : null}
 
-      {!offline && operation === "install" && !preview ? <div className="plan-calendar-start"><label><span>Plan start date</span><input autoFocus type="date" value={startDate} min={today} aria-invalid={Boolean(startDateProblem)} aria-describedby={startDateProblem ? "plan-calendar-date-error" : undefined} disabled={loading} onChange={(event) => { setStartDate(event.target.value); setError(null); }} />{startDateProblem ? <small id="plan-calendar-date-error" className="plan-calendar-date-error" role="alert">{startDateProblem}</small> : null}</label><p>Day 1 starts on the selected date. The preview checks exact dates and shows same-day workouts; existing workouts are kept.</p><button type="button" className="primary-button" disabled={loading || Boolean(startDateProblem)} onClick={() => void loadPreview()}>{loading ? <LoaderCircle className="is-spinning" size={15} /> : <CalendarPlus size={15} />}{loading ? "Checking calendar..." : "Preview dates"}</button></div> : null}
+      {!offline && operation === "install" && !preview ? <div className="plan-calendar-start"><label><span>{t("Plan start date")}</span><input autoFocus type="date" value={startDate} min={today} aria-invalid={Boolean(startDateProblem)} aria-describedby={startDateProblem ? "plan-calendar-date-error" : undefined} disabled={loading} onChange={(event) => { setStartDate(event.target.value); setError(null); }} />{startDateProblem ? <small id="plan-calendar-date-error" className="plan-calendar-date-error" role="alert">{startDateProblem}</small> : null}</label><p>{t("Day 1 starts on the selected date. The preview checks exact dates and shows same-day workouts; existing workouts are kept.")}</p><button type="button" className="primary-button" disabled={loading || Boolean(startDateProblem)} onClick={() => void loadPreview()}>{loading ? <LoaderCircle className="is-spinning" size={15} /> : <CalendarPlus size={15} />}{loading ? t("Checking calendar...") : t("Preview dates")}</button></div> : null}
 
-      {!offline && loading ? <div className="plan-calendar-loading"><LoaderCircle className="is-spinning" size={22} /><strong>Checking the COROS calendar</strong><p>Comparing plan dates with current scheduled workouts.</p></div> : null}
+      {!offline && loading ? <div className="plan-calendar-loading"><LoaderCircle className="is-spinning" size={22} /><strong>{t("Checking the COROS calendar")}</strong><p>{t("Comparing plan dates with current scheduled workouts.")}</p></div> : null}
 
-      {error ? <div className="plan-calendar-error" role="alert"><AlertTriangle size={17} /><div><strong>{error.title}</strong><p>{error.message}</p></div><button type="button" className="ghost-button" disabled={loading || mutating} onClick={() => void loadPreview()}><RefreshCw size={14} /> Try again</button></div> : null}
+      {error ? <div className="plan-calendar-error" role="alert"><AlertTriangle size={17} /><div><strong>{error.title}</strong><p>{t(error.message)}</p></div><button type="button" className="ghost-button" disabled={loading || mutating} onClick={() => void loadPreview()}><RefreshCw size={14} /> {t("Try again")}</button></div> : null}
 
       {preview ? <div className="plan-calendar-preview">
-        <div className="plan-calendar-summary"><span><strong>{preview.entries.length}</strong><small>{operation === "install" ? "workouts to add" : "future workouts to remove"}</small></span><span><strong>{displayDay(preview.startDate)}</strong><small>{operation === "install" ? "Week 1 starts" : "installed start"}</small></span><span className={conflictCount ? "has-conflict" : ""}><strong>{conflictCount}</strong><small>same-day conflicts</small></span></div>
-        {preview.blockers.length ? <div className="plan-calendar-blockers"><strong><AlertTriangle size={15} /> Resolve before continuing</strong>{preview.blockers.map((blocker) => <p key={blocker}>{blocker}</p>)}</div> : null}
+        <div className="plan-calendar-summary"><span><strong>{preview.entries.length}</strong><small>{operation === "install" ? t("workouts to add") : t("future workouts to remove")}</small></span><span><strong>{displayDay(preview.startDate)}</strong><small>{operation === "install" ? t("Week 1 starts") : t("installed start")}</small></span><span className={conflictCount ? "has-conflict" : ""}><strong>{conflictCount}</strong><small>{t("same-day conflicts")}</small></span></div>
+        {preview.blockers.length ? <div className="plan-calendar-blockers"><strong><AlertTriangle size={15} /> {t("Resolve before continuing")}</strong>{preview.blockers.map((blocker) => <p key={blocker}>{blocker}</p>)}</div> : null}
         <div className="plan-calendar-dates" role="list">{preview.entries.map((entry) => {
           const conflict = preview.conflicts.find((item) => item.happenDay === entry.happenDay);
-          return <article key={`${entry.planEntryId}:${entry.happenDay}`} role="listitem"><time>{displayDay(entry.happenDay)}</time><div><strong>{entry.name}</strong>{conflict ? <small>{conflict.existing.length} existing: {conflict.existing.map((item) => item.name).join(", ")}</small> : <small><CheckCircle2 size={12} /> No same-day conflict</small>}</div></article>;
+          return <article key={`${entry.planEntryId}:${entry.happenDay}`} role="listitem"><time>{displayDay(entry.happenDay)}</time><div><strong>{entry.name}</strong>{conflict ? <small>{conflict.existing.length} {t("existing:")} {conflict.existing.map((item) => item.name).join(", ")}</small> : <small><CheckCircle2 size={12} /> {t("No same-day conflict")}</small>}</div></article>;
         })}</div>
-        {operation === "remove" ? <p className="plan-calendar-safety">Only recorded occurrences owned by this plan dated today or later are removed. Past, completed, and unrelated workouts stay untouched.</p> : null}
+        {operation === "remove" ? <p className="plan-calendar-safety">{t("Only recorded occurrences owned by this plan dated today or later are removed. Past, completed, and unrelated workouts stay untouched.")}</p> : null}
       </div> : null}
 
-      <footer><button type="button" className="ghost-button" disabled={mutating} onClick={onClose}>Cancel</button>{preview ? <button type="button" className={operation === "remove" ? "danger-button" : "primary-button"} disabled={mutating || preview.blockers.length > 0} onClick={() => void confirm()}>{mutating ? <LoaderCircle className="is-spinning" size={15} /> : operation === "install" ? <CalendarPlus size={15} /> : <CalendarX size={15} />}{mutating ? (operation === "install" ? "Adding serially..." : "Removing serially...") : operation === "install" ? "Add alongside conflicts" : "Remove future workouts"}</button> : null}</footer>
+      <footer><button type="button" className="ghost-button" disabled={mutating} onClick={onClose}>{t("Cancel")}</button>{preview ? <button type="button" className={operation === "remove" ? "danger-button" : "primary-button"} disabled={mutating || preview.blockers.length > 0} onClick={() => void confirm()}>{mutating ? <LoaderCircle className="is-spinning" size={15} /> : operation === "install" ? <CalendarPlus size={15} /> : <CalendarX size={15} />}{mutating ? (operation === "install" ? t("Adding serially...") : t("Removing serially...")) : operation === "install" ? t("Add alongside conflicts") : t("Remove future workouts")}</button> : null}</footer>
     </section>
   </div>;
 }

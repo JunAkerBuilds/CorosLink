@@ -1,9 +1,11 @@
+import { t, useLanguage } from "../i18n";
 import { useEffect, useState } from "react";
 import { CheckCircle2, KeyRound } from "lucide-react";
 import type { CorosLinkApi } from "../coroslink-api";
 import { CARTO_SETTINGS_CHANGED } from "../maps/routes/useCartoApiKey";
 
 export function CartoAccountSettings({ api }: { api: CorosLinkApi }) {
+  useLanguage();
   const [key, setKey] = useState("");
   const [hasKey, setHasKey] = useState(false);
   const [ready, setReady] = useState(false);
@@ -14,7 +16,7 @@ export function CartoAccountSettings({ api }: { api: CorosLinkApi }) {
     let active = true;
     void api.getRouteBuilderConfig().then(config => {
       if (active) { setHasKey(Boolean(config.cartoApiKey)); setReady(true); }
-    }).catch(() => { if (active) setError("Could not load CARTO settings. Reopen this page to try again."); });
+    }).catch(() => { if (active) setError(t("Could not load CARTO settings. Reopen this page to try again.")); });
     return () => { active = false; };
   }, [api]);
   async function save(remove = false) {
@@ -33,45 +35,44 @@ export function CartoAccountSettings({ api }: { api: CorosLinkApi }) {
       }
       setKey("");
       window.dispatchEvent(new Event(CARTO_SETTINGS_CHANGED));
-      setMessage(remove ? "CARTO key removed. Maps will use OpenStreetMap." : "CARTO key saved. Light and Dark layers are now available in the expanded activity map.");
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not save the CARTO key."); }
+      setMessage(remove ? t("CARTO key removed. Maps will use OpenStreetMap.") : t("CARTO key saved. Light and Dark layers are now available in the expanded activity map."));
+    } catch (caught) { setError(caught instanceof Error ? caught.message : t("Could not save the CARTO key.")); }
     finally { setBusy(false); }
   }
   return <div className="account-setup">
-    <h2>CARTO Basemaps</h2>
-    <p>Optional Light and Dark map styles. Standard OpenStreetMap works without an API key.</p>
-    {error && <p role="alert">{error}</p>}
-    {!ready && !error && <p role="status">Loading settings…</p>}
+    <h2>{t("CARTO Basemaps")}</h2>
+    <p>{t("Optional Light and Dark map styles. Standard OpenStreetMap works without an API key.")}</p>
+    {error && <p role="alert">{t(error)}</p>}
+    {!ready && !error && <p role="status">{t("Loading settings…")}</p>}
     {ready && <form onSubmit={event => { event.preventDefault(); void save(); }}>
       <div className={`account-key-state${hasKey ? " is-saved" : ""}`} role="status">
         {hasKey ? <CheckCircle2 size={22} aria-hidden="true" /> : <KeyRound size={22} aria-hidden="true" />}
-        <div><strong>{hasKey ? "API key saved" : "No API key saved"}</strong>
-          <span>{hasKey ? "Stored securely on this computer. CARTO map styles are enabled." : "Add a key to enable CARTO Light and Dark maps."}</span>
+        <div><strong>{hasKey ? t("API key saved") : t("No API key saved")}</strong>
+          <span>{hasKey ? t("Stored securely on this computer. CARTO map styles are enabled.") : t("Add a key to enable CARTO Light and Dark maps.")}</span>
         </div>
-        {hasKey && <span className="account-key-mask" aria-label="Saved key is hidden">••••••••</span>}
+        {hasKey && <span className="account-key-mask" aria-label={t("Saved key is hidden")}>••••••••</span>}
       </div>
-      <label className="field">CARTO Basemaps API key
-        <input name="cartoApiKey" type="password" autoComplete="off" spellCheck={false} value={key} disabled={busy}
-          placeholder={hasKey ? "Paste a replacement key" : "Paste the key from your CARTO email"}
+      <label className="field">{t("CARTO Basemaps API key")} <input name="cartoApiKey" type="password" autoComplete="off" spellCheck={false} value={key} disabled={busy}
+          placeholder={hasKey ? t("Paste a replacement key") : t("Paste the key from your CARTO email")}
           onChange={event => { setKey(event.target.value); setMessage(""); }} />
       </label>
       <div className="account-api-actions">
-        <button className="primary-button" type="submit" disabled={busy || !key.trim()}>{busy ? "Saving…" : hasKey ? (key.trim() ? "Replace saved key" : "Key saved") : "Save key"}</button>
-        <button className="secondary-button" type="button" disabled={busy || !hasKey} onClick={() => void save(true)}>Remove key</button>
+        <button className="primary-button" type="submit" disabled={busy || !key.trim()}>{busy ? t("Saving…") : hasKey ? (key.trim() ? t("Replace saved key") : t("Key saved")) : t("Save key")}</button>
+        <button className="secondary-button" type="button" disabled={busy || !hasKey} onClick={() => void save(true)}>{t("Remove key")}</button>
       </div>
-      {message && <p className="account-key-confirmation" role="status"><CheckCircle2 size={16} aria-hidden="true" />{message}</p>}
+      {message && <p className="account-key-confirmation" role="status"><CheckCircle2 size={16} aria-hidden="true" />{t(message)}</p>}
     </form>}
-    <h3>How to get your key</h3>
+    <h3>{t("How to get your key")}</h3>
     <ol className="account-api-instructions">
-      <li>Open <a href="https://carto.com/basemaps/apikey/" target="_blank" rel="noreferrer">CARTO’s API key request page</a>.</li>
-      <li>Enter your email, who you are, and a short description of your project. CARTO emails the key to you; no existing CARTO account is needed.</li>
-      <li>Copy the key from the email, paste it into the field above, and choose Save key.</li>
-      <li>Open an expanded activity map and choose Light or Dark in the map-layer selector.</li>
+      <li>{t("Open")} <a href="https://carto.com/basemaps/apikey/" target="_blank" rel="noreferrer">{t("CARTO’s API key request page")}</a>.</li>
+      <li>{t("Enter your email, who you are, and a short description of your project. CARTO emails the key to you; no existing CARTO account is needed.")}</li>
+      <li>{t("Copy the key from the email, paste it into the field above, and choose Save key.")}</li>
+      <li>{t("Open an expanded activity map and choose Light or Dark in the map-layer selector.")}</li>
     </ol>
-    <p><a href="https://dashboard.basemaps.carto.com/signin" target="_blank" rel="noreferrer">Manage your CARTO keys</a> using the same email address. Sign-in is passwordless; you can change restrictions, rename, or revoke keys there.</p>
-    <p>The key is encrypted on this computer and attached to CARTO tile requests. Use your own project’s key.</p>
-    <h3>If the map still says “API key required”</h3>
-    <p>Reopen the map or reload CorosLink to refresh cached tiles. Check your key and its restrictions in the CARTO dashboard if the watermark remains.</p>
-    <p>CARTO currently includes 5 million tile requests per calendar month across your account’s raster and vector keys. Keep CARTO and OpenStreetMap attribution visible. See <a href="https://carto.com/legal/basemap-terms/" target="_blank" rel="noreferrer">CARTO’s terms</a> for usage and commercial conditions.</p>
+    <p><a href="https://dashboard.basemaps.carto.com/signin" target="_blank" rel="noreferrer">{t("Manage your CARTO keys")}</a> {t("using the same email address. Sign-in is passwordless; you can change restrictions, rename, or revoke keys there.")}</p>
+    <p>{t("The key is encrypted on this computer and attached to CARTO tile requests. Use your own project’s key.")}</p>
+    <h3>{t("If the map still says “API key required”")}</h3>
+    <p>{t("Reopen the map or reload CorosLink to refresh cached tiles. Check your key and its restrictions in the CARTO dashboard if the watermark remains.")}</p>
+    <p>{t("CARTO currently includes 5 million tile requests per calendar month across your account’s raster and vector keys. Keep CARTO and OpenStreetMap attribution visible. See")} <a href="https://carto.com/legal/basemap-terms/" target="_blank" rel="noreferrer">{t("CARTO’s terms")}</a> {t("for usage and commercial conditions.")}</p>
   </div>;
 }

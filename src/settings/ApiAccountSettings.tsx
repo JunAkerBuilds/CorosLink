@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n";
 import { useEffect, useState } from "react";
 import type { CorosLinkApi } from "../coroslink-api";
 
@@ -12,6 +13,7 @@ const definitions = {
 
 /** Uses the same credential stores as the feature screens; no secrets are saved in browser storage. */
 export function ApiAccountSettings({ api, service }: { api: CorosLinkApi; service: ApiAccount }) {
+  useLanguage();
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [ready, setReady] = useState(false);
   const [connected, setConnected] = useState(false);
@@ -41,14 +43,14 @@ export function ApiAccountSettings({ api, service }: { api: CorosLinkApi; servic
       }
       if (active) { setDraft(values); setConnected(linked); setHasKey(storedKey); setReady(true); }
     }
-    void load().catch(caught => { if (active) setError(caught instanceof Error ? caught.message : "Could not load settings."); });
+    void load().catch(caught => { if (active) setError(caught instanceof Error ? caught.message : t("Could not load settings.")); });
     return () => { active = false; };
   }, [api, service]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true); setError(""); setMessage("");
     try { await action(); }
-    catch (caught) { setError(caught instanceof Error ? caught.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : "Could not update connection."); }
+    catch (caught) { setError(caught instanceof Error ? caught.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : t("Could not update connection.")); }
     finally { setBusy(false); }
   }
   async function aiConfig(clear = false) {
@@ -71,43 +73,43 @@ export function ApiAccountSettings({ api, service }: { api: CorosLinkApi; servic
       const saved = await api.saveChatSettings(await aiConfig()); setHasKey(saved[service].hasApiKey);
     }
     setDraft(current => ({ ...current, apiKey: "" }));
-    setMessage("Settings saved.");
+    setMessage(t("Settings saved."));
   }
   function field(name: string, label: string, secret = false, required = true) {
-    return <label className="field" key={name}>{label}<input name={name} type={secret ? "password" : "text"} autoComplete="off" spellCheck={false}
+    return <label className="field" key={name}>{t(label)}<input name={name} type={secret ? "password" : "text"} autoComplete="off" spellCheck={false}
       value={draft[name] ?? ""} required={required} disabled={busy} onChange={event => { setDraft(current => ({ ...current, [name]: event.target.value })); setMessage(""); }} /></label>;
   }
   return <div className="account-setup">
-    <h2>{definition.title}</h2><p>{definition.description}</p>
-    {error && <p role="alert">{error}</p>}
-    {!ready && !error && <p role="status">Loading settings…</p>}
+    <h2>{t(definition.title)}</h2><p>{t(definition.description)}</p>
+    {error && <p role="alert">{t(error)}</p>}
+    {!ready && !error && <p role="status">{t("Loading settings…")}</p>}
     {ready && <form onSubmit={event => { event.preventDefault(); void run(save); }}>
-      <p>{service === "local" || service === "openRouter" ? (hasKey ? "API key saved" : "No API key saved") : connected ? "Connected" : "Not connected"}</p>
-      {service === "spotify" ? <>{field("clientId", "Client ID")}{field("redirectUri", "Redirect URI")}</>
-        : <>{field("apiKey", service === "local" ? "API key (optional)" : "API key", true, service === "strength" || service === "intervals")}
-          {service === "intervals" && field("athleteId", "Athlete ID")}
-          {service === "local" && field("baseUrl", "API base URL")}
-          {(service === "local" || service === "openRouter") && field("model", "Model ID")}</>}
-      {definition.link && <a href={definition.link} target="_blank" rel="noreferrer">Open {definition.title} developer settings</a>}
+      <p>{service === "local" || service === "openRouter" ? (hasKey ? t("API key saved") : t("No API key saved")) : connected ? t("Connected") : t("Not connected")}</p>
+      {service === "spotify" ? <>{field("clientId", t("Client ID"))}{field("redirectUri", t("Redirect URI"))}</>
+        : <>{field("apiKey", service === "local" ? t("API key (optional)") : t("API key"), true, service === "strength" || service === "intervals")}
+          {service === "intervals" && field("athleteId", t("Athlete ID"))}
+          {service === "local" && field("baseUrl", t("API base URL"))}
+          {(service === "local" || service === "openRouter") && field("model", t("Model ID"))}</>}
+      {definition.link && <a href={definition.link} target="_blank" rel="noreferrer">{t("Open")} {t(definition.title)} {t("developer settings")}</a>}
       <div className="account-api-actions">
-        <button className="primary-button" type="submit" disabled={busy}>{busy ? "Working…" : "Save settings"}</button>
+        <button className="primary-button" type="submit" disabled={busy}>{busy ? t("Working…") : t("Save settings")}</button>
         {service === "spotify" && <button className="secondary-button" type="button" disabled={busy} onClick={() => void run(async () => {
           const status = connected ? await api.logoutSpotify() : await api.loginSpotify(); setConnected(status.authenticated);
           setMessage(status.authenticated ? "Spotify connected." : "Spotify signed out.");
-        })}>{connected ? "Sign out" : "Sign in to Spotify"}</button>}
+        })}>{connected ? t("Sign out") : t("Sign in to Spotify")}</button>}
         {(service === "local" || service === "openRouter") && <>
           <button className="secondary-button" type="button" disabled={busy || !draft.model?.trim() || (service === "local" && !draft.baseUrl?.trim())} onClick={() => void run(async () => {
             const config = await aiConfig();
             const result = service === "local" ? await api.testLocalChatConnection(config.local) : await api.testOpenRouterConnection(config.openRouter);
             if (!result.ok) throw new Error(result.message); setMessage(result.message);
-          })}>Test connection</button>
+          })}>{t("Test connection")}</button>
           <button className="secondary-button" type="button" disabled={busy || !hasKey} onClick={() => void run(async () => {
             const saved = await api.saveChatSettings(await aiConfig(true)); setHasKey(saved[service].hasApiKey);
             setDraft(current => ({ ...current, apiKey: "" })); setMessage("API key removed.");
-          })}>Remove API key</button>
+          })}>{t("Remove API key")}</button>
         </>}
       </div>
-      {message && <p role="status">{message}</p>}
+      {message && <p role="status">{t(message)}</p>}
     </form>}
   </div>;
 }

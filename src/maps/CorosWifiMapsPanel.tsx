@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./wifiMaps.css";
@@ -94,26 +95,27 @@ const placeParts = (label: string) => {
   return { primary, secondary: rest.join(", ") };
 };
 const summarize = (names: string[]) =>
-  names.length <= 2 ? names.join(" & ") : `${names.slice(0, 2).join(", ")} +${names.length - 2} more`;
+  names.length <= 2 ? names.join(" & ") : t("{{p0}} +{{p1}} more", { p0: names.slice(0, 2).join(", "), p1: names.length - 2 });
 
 function linkState(status: CorosWifiMapStatus | null): { tone: "ok" | "warn" | "off" | "busy"; label: string } {
-  if (!status) return { tone: "busy", label: "Checking watch…" };
-  if (!status.connected) return { tone: "off", label: "Not connected" };
-  if (!status.supported) return { tone: "warn", label: "Not supported" };
-  return status.authenticated ? { tone: "ok", label: "Connected" } : { tone: "warn", label: "Sign-in needed" };
+  if (!status) return { tone: "busy", label: t("Checking watch…") };
+  if (!status.connected) return { tone: "off", label: t("Not connected") };
+  if (!status.supported) return { tone: "warn", label: t("Not supported") };
+  return status.authenticated ? { tone: "ok", label: t("Connected") } : { tone: "warn", label: t("Sign-in needed") };
 }
 
 /** In-progress and failed downloads; finished ones are summarised separately. */
 function taskView(task: CorosWifiMapTask): { tone: "warn" | "busy" | "error" | "off"; label: string } {
   switch (task.state) {
-    case "failed": return { tone: "error", label: "Failed" };
-    case "queued": return { tone: "warn", label: "Waiting for Wi-Fi" };
-    case "downloading": return { tone: "busy", label: "Downloading" };
-    default: return { tone: "off", label: "Waiting for watch" };
+    case "failed": return { tone: "error", label: t("Failed") };
+    case "queued": return { tone: "warn", label: t("Waiting for Wi-Fi") };
+    case "downloading": return { tone: "busy", label: t("Downloading") };
+    default: return { tone: "off", label: t("Waiting for watch") };
   }
 }
 
 export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
+  useLanguage();
   const [status, setStatus] = useState<CorosWifiMapStatus | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
   const [selection, setSelection] = useSelectionPreference(SELECTION_PREFERENCE);
@@ -143,7 +145,7 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try { const next = await api.getCorosWifiMapStatus(); if (!stopped) { setStatus(next); setPollError(null); } }
-      catch (error) { if (!stopped) setPollError(apiErrorMessage(error, "Could not read watch map progress.")); }
+      catch (error) { if (!stopped) setPollError(apiErrorMessage(error, t("Could not read watch map progress."))); }
       if (!stopped) timer = setTimeout(poll, 2500);
     };
     void poll();
@@ -160,7 +162,7 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
         const preview = await api.previewCorosWifiMap(tiles);
         if (sequence === sizeSequence.current) setSize({ state: "ready", preview, checkedAt: Date.now() });
       } catch (error) {
-        if (sequence === sizeSequence.current) setSize({ state: "error", message: apiErrorMessage(error, "Could not check the map size.") });
+        if (sequence === sizeSequence.current) setSize({ state: "error", message: apiErrorMessage(error, t("Could not check the map size.")) });
       }
     }, 450);
     return () => clearTimeout(timer);
@@ -191,7 +193,7 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
       return true;
     }
     if (full) {
-      setNotice({ tone: "info", text: `You can send up to ${MAX_AREAS} areas at a time. Remove one to add ${name ?? "another"}.` });
+      setNotice({ tone: "info", text: t("You can send up to {{p0}} areas at a time. Remove one to add {{p1}}.", { p0: MAX_AREAS, p1: name ?? "another" }) });
       return false;
     }
     setNotice(null);
@@ -232,9 +234,9 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
       const connected = await api.connectCorosNativeBle({ backend: "system" });
       setStatus(await api.getCorosWifiMapStatus());
       if (connected.systemBind !== "authenticated") {
-        setNotice({ tone: "error", text: connected.authenticationError ?? "Sign in to your COROS account in Watch Faces, then reconnect before downloading maps." });
+        setNotice({ tone: "error", text: connected.authenticationError ?? t("Sign in to your COROS account in Watch Faces, then reconnect before downloading maps.") });
       }
-    } catch (error) { setNotice({ tone: "error", text: apiErrorMessage(error, "Could not connect the watch.") }); }
+    } catch (error) { setNotice({ tone: "error", text: apiErrorMessage(error, t("Could not connect the watch.")) }); }
     finally { setConnecting(false); }
   };
 
@@ -243,35 +245,35 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
     setDownloading(true); setNotice(null);
     try {
       const preview = Date.now() - size.checkedAt > PREVIEW_MAX_AGE_MS ? await api.previewCorosWifiMap(tiles) : size.preview;
-      if (!preview.fileCount) throw new Error("COROS has no map files for these areas.");
+      if (!preview.fileCount) throw new Error(t("COROS has no map files for these areas."));
       const result = await api.downloadCorosWifiMap(preview.id);
       const label = summarize(tiles.map(tile => names[key(tile)] || pointLabel(tile)));
       rememberTaskName(result.taskId, label);
       setStatus(result.status);
       setSelection({ tiles: [], names: {} });
-      setNotice({ tone: "success", text: `Your watch accepted ${label} (${formatBytes(preview.sizeBytes)}). It downloads over its saved Wi-Fi — keep it on the watch face, ideally charging.` });
+      setNotice({ tone: "success", text: t("Your watch accepted {{p0}} ({{p1}}). It downloads over its saved Wi-Fi — keep it on the watch face, ideally charging.", { p0: label, p1: formatBytes(preview.sizeBytes) }) });
     } catch (error) {
-      setNotice({ tone: "error", text: apiErrorMessage(error, "Could not start the map download.") });
+      setNotice({ tone: "error", text: apiErrorMessage(error, t("Could not start the map download.")) });
     } finally { setDownloading(false); }
   };
 
-  const hint = zoom < GRID_MIN_ZOOM ? { icon: <ZoomIn size={14} aria-hidden="true" />, text: "Zoom in or click the map to choose areas" }
+  const hint = zoom < GRID_MIN_ZOOM ? { icon: <ZoomIn size={14} aria-hidden="true" />, text: t("Zoom in or click the map to choose areas") }
     : hoverTile ? (() => {
       const id = key(hoverTile), selected = tiles.some(value => key(value) === id);
-      return selected ? { icon: <X size={14} aria-hidden="true" />, text: `Remove ${names[id] || pointLabel(hoverTile)}` }
-        : full ? { icon: <TriangleAlert size={14} aria-hidden="true" />, text: `${MAX_AREAS} of ${MAX_AREAS} areas chosen — remove one first` }
-          : { icon: <SquareMousePointer size={14} aria-hidden="true" />, text: `Add area around ${pointLabel(hoverTile)}` };
+      return selected ? { icon: <X size={14} aria-hidden="true" />, text: t("Remove {{p0}}", { p0: names[id] || pointLabel(hoverTile) }) }
+        : full ? { icon: <TriangleAlert size={14} aria-hidden="true" />, text: t("{{p0}} of {{p1}} areas chosen — remove one first", { p0: MAX_AREAS, p1: MAX_AREAS }) }
+          : { icon: <SquareMousePointer size={14} aria-hidden="true" />, text: t("Add area around {{p0}}", { p0: pointLabel(hoverTile) }) };
     })()
-      : !tiles.length ? { icon: <SquareMousePointer size={14} aria-hidden="true" />, text: "Click squares to add map areas" } : null;
+      : !tiles.length ? { icon: <SquareMousePointer size={14} aria-hidden="true" />, text: t("Click squares to add map areas") } : null;
 
   const eyebrowWatch = status?.supported ? status.watchLabel ?? watchDisplayName(status.deviceName).replace(/^COROS\s+/i, "") : "COROS";
 
   return <section className="panel wifi-maps-panel">
     <div className="section-heading wifi-maps-heading">
-      <div><p className="eyebrow">{eyebrowWatch} · Wireless maps</p><h2>Download maps to your watch</h2></div>
+      <div><p className="eyebrow">{eyebrowWatch}  {t("· Wireless maps")}</p><h2>{t("Download maps to your watch")}</h2></div>
       <span className={`wifi-maps-link is-${link.tone}`} role="status">{link.label}</span>
     </div>
-    <p className="wifi-maps-lede">Pick the areas you train in. The watch fetches them over its own Wi-Fi; CorosLink starts the download and follows progress over Bluetooth.</p>
+    <p className="wifi-maps-lede">{t("Pick the areas you train in. The watch fetches them over its own Wi-Fi; CorosLink starts the download and follows progress over Bluetooth.")}</p>
 
     <div className="wifi-maps-workspace">
       <div className="wifi-maps-stage">
@@ -281,14 +283,14 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
         {hint ? <div className="wifi-maps-hint" aria-hidden="true">{hint.icon}<span>{hint.text}</span></div> : null}
       </div>
 
-      <aside className="wifi-maps-aside" aria-label="Map download plan">
+      <aside className="wifi-maps-aside" aria-label={t("Map download plan")}>
         <div className="wifi-maps-plan">
           <div className="wifi-maps-plan-head">
-            <h3>Selected areas</h3>
+            <h3>{t("Selected areas")}</h3>
             <span className={full ? "wifi-maps-count is-full" : "wifi-maps-count"}>{tiles.length} / {MAX_AREAS}</span>
             {tiles.length ? <>
-              {tiles.length > 1 ? <button type="button" className="wifi-maps-text-button" onClick={() => requestFocus({ tiles })}>Show all</button> : null}
-              <button type="button" className="wifi-maps-text-button" disabled={downloading} onClick={clearAll}>Clear</button>
+              {tiles.length > 1 ? <button type="button" className="wifi-maps-text-button" onClick={() => requestFocus({ tiles })}>{t("Show all")}</button> : null}
+              <button type="button" className="wifi-maps-text-button" disabled={downloading} onClick={clearAll}>{t("Clear")}</button>
             </> : null}
           </div>
           <div className="wifi-maps-capacity" aria-hidden="true"><span style={{ width: `${(tiles.length / MAX_AREAS) * 100}%` }} /></div>
@@ -306,13 +308,13 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
                   </span>
                 </button>
                 <button type="button" className="wifi-maps-area-remove" disabled={downloading} onClick={() => removeTile(tile)}
-                  aria-label={`Remove ${name || pointLabel(tile)}`} title="Remove area"><X size={14} aria-hidden="true" /></button>
+                  aria-label={t("Remove {{p0}}", { p0: name || pointLabel(tile) })} title={t("Remove area")}><X size={14} aria-hidden="true" /></button>
               </li>;
             })}
           </ol> : <div className="wifi-maps-empty">
             <SquareMousePointer size={22} aria-hidden="true" />
-            <strong>No areas yet</strong>
-            <p>Search for a place or click squares on the map. Each square is one COROS map tile.</p>
+            <strong>{t("No areas yet")}</strong>
+            <p>{t("Search for a place or click squares on the map. Each square is one COROS map tile.")}</p>
           </div>}
 
           <div className="wifi-maps-plan-foot">
@@ -322,23 +324,23 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
                 disabled={downloading || size.state !== "ready" || !size.preview.fileCount}
                 onClick={() => void download()}>
                 {downloading ? <Loader2 size={16} className="spin" aria-hidden="true" /> : <Download size={16} aria-hidden="true" />}
-                {downloading ? "Starting download…" : "Download to watch"}
+                {downloading ? t("Starting download…") : t("Download to watch")}
               </button>
             </> : <ConnectCallout status={status} connecting={connecting} onConnect={() => void connect()} viaMenu={Boolean(onOpenWatchMenu)} />}
             {ready && status?.validated === false ? <p className="wifi-maps-notice" role="note">
               <TriangleAlert size={15} aria-hidden="true" />
-              <span>Map downloads on {status.watchLabel ?? "this watch"} are in beta: they were tested on PACE Pro. If the watch refuses the download, it may not support Wi-Fi maps.</span>
+              <span>{t("Map downloads on")} {status.watchLabel ?? "this watch"}  {t("are in beta: they were tested on PACE Pro. If the watch refuses the download, it may not support Wi-Fi maps.")}</span>
             </p> : null}
             {notice ? <p className={`wifi-maps-notice is-${notice.tone}`} role={notice.tone === "error" ? "alert" : "status"}>
               {notice.tone === "success" ? <CircleCheck size={15} aria-hidden="true" /> : <TriangleAlert size={15} aria-hidden="true" />}
               <span>{notice.text}</span>
             </p> : <p className="wifi-maps-foot-note"><Wifi size={14} aria-hidden="true" />
-              <span>The watch needs a saved Wi-Fi network. Keep it on the watch face while it downloads.</span></p>}
+              <span>{t("The watch needs a saved Wi-Fi network. Keep it on the watch face while it downloads.")}</span></p>}
           </div>
         </div>
 
-        {status?.tasks.length || pollError ? <section className="wifi-maps-tasks" aria-live="polite" aria-label="Downloads on watch">
-          <h3><Wifi size={15} aria-hidden="true" />On your watch</h3>
+        {status?.tasks.length || pollError ? <section className="wifi-maps-tasks" aria-live="polite" aria-label={t("Downloads on watch")}>
+          <h3><Wifi size={15} aria-hidden="true" />{t("On your watch")}</h3>
           {pollError ? <p className="wifi-maps-notice is-error" role="alert"><TriangleAlert size={15} aria-hidden="true" /><span>{pollError}</span></p> : null}
           {status?.tasks.map((task, index) => {
             if (task.state === "complete") return null;
@@ -346,18 +348,18 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
             const percent = task.totalBytes ? Math.round((task.downloadedBytes / task.totalBytes) * 100) : 0;
             return <div key={task.id} className="wifi-maps-task">
               <div className="wifi-maps-task-head">
-                <strong>{taskNames[task.id] ?? `Map download ${index + 1}`}</strong>
+                <strong>{taskNames[task.id] ?? t("Map download {{p0}}", { p0: index + 1 })}</strong>
                 <span className={`wifi-maps-task-state is-${view.tone}`}>{view.label}</span>
               </div>
-              <div className={`wifi-maps-task-bar is-${view.tone}`} role="progressbar" aria-label={`${taskNames[task.id] ?? `Map download ${index + 1}`} progress`}
+              <div className={`wifi-maps-task-bar is-${view.tone}`} role="progressbar" aria-label={t("{{p0}} progress", { p0: taskNames[task.id] ?? t("Map download {{p0}}", { p0: index + 1 }) })}
                 aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></div>
-              <small>{task.totalBytes ? `${formatBytes(task.downloadedBytes)} of ${formatBytes(task.totalBytes)} · ${percent}%` : "Size pending"}
-                {task.errorCode ? ` · Watch error ${task.errorCode}` : ""}</small>
+              <small>{task.totalBytes ? t("{{p0}} of {{p1}} · {{p2}}%", { p0: formatBytes(task.downloadedBytes), p1: formatBytes(task.totalBytes), p2: percent }) : t("Size pending")}
+                {task.errorCode ? t(" · Watch error {{p0}}", { p0: task.errorCode }) : ""}</small>
             </div>;
           })}
           {doneTasks.length ? <p className="wifi-maps-tasks-done"><CircleCheck size={15} aria-hidden="true" />
-            <span>{doneTasks.length === 1 ? `${taskNames[doneTasks[0]!.id] ?? "1 map download"} is on your watch`
-              : `${doneTasks.length} map downloads are on your watch`}</span></p> : null}
+            <span>{doneTasks.length === 1 ? t("{{p0}} is on your watch", { p0: taskNames[doneTasks[0]!.id] ?? t("1 map download") })
+              : t("{{p0}} map downloads are on your watch", { p0: doneTasks.length })}</span></p> : null}
         </section> : null}
       </aside>
     </div>
@@ -365,30 +367,32 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
 }
 
 function SizeSummary({ size, hasTiles, onRetry }: { size: SizeCheck; hasTiles: boolean; onRetry: () => void }) {
-  if (!hasTiles) return <div className="wifi-maps-size is-empty"><span>Download size</span><em>Add an area to check</em></div>;
+  useLanguage();
+  if (!hasTiles) return <div className="wifi-maps-size is-empty"><span>{t("Download size")}</span><em>{t("Add an area to check")}</em></div>;
   if (size.state === "checking" || size.state === "idle") {
-    return <div className="wifi-maps-size"><span>Download size</span><em><Loader2 size={14} className="spin" aria-hidden="true" />Checking…</em></div>;
+    return <div className="wifi-maps-size"><span>{t("Download size")}</span><em><Loader2 size={14} className="spin" aria-hidden="true" />{t("Checking…")}</em></div>;
   }
   if (size.state === "error") {
     return <div className="wifi-maps-size-error" role="alert"><TriangleAlert size={15} aria-hidden="true" /><span>{size.message}</span>
-      <button type="button" className="wifi-maps-text-button" onClick={onRetry}>Try again</button></div>;
+      <button type="button" className="wifi-maps-text-button" onClick={onRetry}>{t("Try again")}</button></div>;
   }
   if (!size.preview.fileCount) {
-    return <div className="wifi-maps-size-error"><TriangleAlert size={15} aria-hidden="true" /><span>COROS has no map data for these areas. Choose areas with land.</span></div>;
+    return <div className="wifi-maps-size-error"><TriangleAlert size={15} aria-hidden="true" /><span>{t("COROS has no map data for these areas. Choose areas with land.")}</span></div>;
   }
   return <div className="wifi-maps-size">
-    <span>Download size<small>{size.preview.fileCount} map file{size.preview.fileCount === 1 ? "" : "s"}</small></span>
+    <span>{t("Download size")}<small>{size.preview.fileCount}  {t("map file")}{size.preview.fileCount === 1 ? "" : "s"}</small></span>
     <strong>{formatBytes(size.preview.sizeBytes)}</strong>
   </div>;
 }
 
 function ConnectCallout({ status, connecting, viaMenu, onConnect }: { status: CorosWifiMapStatus | null; connecting: boolean; viaMenu: boolean; onConnect: () => void }) {
-  if (!status) return <div className="wifi-maps-connect"><Loader2 size={18} className="spin" aria-hidden="true" /><div><strong>Checking your watch…</strong></div></div>;
+  useLanguage();
+  if (!status) return <div className="wifi-maps-connect"><Loader2 size={18} className="spin" aria-hidden="true" /><div><strong>{t("Checking your watch…")}</strong></div></div>;
   const [title, body, action] = !status.connected
-    ? ["Connect your watch", "Plan areas now. Connect to check the size and send them to the watch.", "Connect watch"]
+    ? [t("Connect your watch"), t("Plan areas now. Connect to check the size and send them to the watch."), t("Connect watch")]
     : !status.supported
-      ? [`${watchDisplayName(status.deviceName)} isn’t supported`, "CorosLink doesn't recognize this watch model yet. Use COROS Maps for it.", null]
-      : ["Sign in to COROS", "The watch only accepts map downloads from a signed-in COROS account.", viaMenu ? "Open watch menu" : "Reconnect"];
+      ? [t("{{p0}} isn’t supported", { p0: watchDisplayName(status.deviceName) }), t("CorosLink doesn't recognize this watch model yet. Use COROS Maps for it."), null]
+      : [t("Sign in to COROS"), t("The watch only accepts map downloads from a signed-in COROS account."), viaMenu ? t("Open watch menu") : t("Reconnect")];
   return <>
     <div className="wifi-maps-connect">
       <Bluetooth size={18} aria-hidden="true" />
@@ -401,6 +405,7 @@ function ConnectCallout({ status, connecting, viaMenu, onConnect }: { status: Co
 }
 
 function PlaceSearch({ api, onPick }: { api: CorosLinkApi; onPick: (place: RouteGeocodeResult) => void }) {
+  useLanguage();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<RouteGeocodeResult[]>([]);
   const [active, setActive] = useState(0);
@@ -412,7 +417,7 @@ function PlaceSearch({ api, onPick }: { api: CorosLinkApi; onPick: (place: Route
   const pick = (place: RouteGeocodeResult) => { close(); setQuery(placeParts(place.label).primary); onPick(place); };
   const search = async () => {
     const text = query.trim();
-    if (text.length < 3) { setResults([]); setMessage("Type at least three letters."); return; }
+    if (text.length < 3) { setResults([]); setMessage(t("Type at least three letters.")); return; }
     const id = ++sequence.current;
     setSearching(true); setMessage(null);
     try {
@@ -420,9 +425,9 @@ function PlaceSearch({ api, onPick }: { api: CorosLinkApi; onPick: (place: Route
       if (id !== sequence.current) return;
       if (found.length === 1) { pick(found[0]!); return; }
       setResults(found.slice(0, 6)); setActive(0);
-      if (!found.length) setMessage(`No places found for “${text}”.`);
+      if (!found.length) setMessage(t("No places found for “{{p0}}”.", { p0: text }));
     } catch (error) {
-      if (id === sequence.current) { setResults([]); setMessage(apiErrorMessage(error, "Could not search for this place.")); }
+      if (id === sequence.current) { setResults([]); setMessage(apiErrorMessage(error, t("Could not search for this place."))); }
     } finally { if (id === sequence.current) setSearching(false); }
   };
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -438,15 +443,15 @@ function PlaceSearch({ api, onPick }: { api: CorosLinkApi; onPick: (place: Route
     onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) close(); }}>
     <div className="wifi-maps-search-field">
       <Search size={16} aria-hidden="true" />
-      <input aria-label="Find a city or place" placeholder="Find a city or place" value={query} onKeyDown={onKeyDown}
+      <input aria-label={t("Find a city or place")} placeholder={t("Find a city or place")} value={query} onKeyDown={onKeyDown}
         role="combobox" aria-expanded={results.length > 0} aria-controls="wifi-maps-results" aria-autocomplete="list"
         aria-activedescendant={results.length ? `wifi-maps-result-${active}` : undefined}
         onChange={event => { setQuery(event.target.value); setMessage(null); }} />
-      {searching ? <Loader2 size={15} className="spin wifi-maps-search-spinner" aria-label="Searching" />
-        : query ? <button type="button" className="wifi-maps-search-icon" aria-label="Clear search" onClick={() => { setQuery(""); close(); }}><X size={15} aria-hidden="true" /></button> : null}
-      <button type="submit" className="wifi-maps-search-submit" disabled={searching || !query.trim()}>Find</button>
+      {searching ? <Loader2 size={15} className="spin wifi-maps-search-spinner" aria-label={t("Searching")} />
+        : query ? <button type="button" className="wifi-maps-search-icon" aria-label={t("Clear search")} onClick={() => { setQuery(""); close(); }}><X size={15} aria-hidden="true" /></button> : null}
+      <button type="submit" className="wifi-maps-search-submit" disabled={searching || !query.trim()}>{t("Find")}</button>
     </div>
-    {results.length ? <ul className="wifi-maps-results" id="wifi-maps-results" role="listbox" aria-label="Places">
+    {results.length ? <ul className="wifi-maps-results" id="wifi-maps-results" role="listbox" aria-label={t("Places")}>
       {results.map((place, index) => {
         const parts = placeParts(place.label);
         return <li key={`${place.lat},${place.lon},${index}`} id={`wifi-maps-result-${index}`} role="option" aria-selected={index === active}>
@@ -488,6 +493,7 @@ function tileLatLngBounds(tiles: CorosWifiMapTile[]) {
 }
 
 function WifiAreaPicker(props: PickerProps) {
+  useLanguage();
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const redraw = useRef<() => void>(() => {});
@@ -598,5 +604,5 @@ function WifiAreaPicker(props: PickerProps) {
   }, [props.focus]);
 
   return <div className={picking ? "wifi-maps-canvas is-picking" : "wifi-maps-canvas is-zoomed-out"} ref={container}
-    role="application" aria-label="Map of download areas. Click a square to add or remove it." />;
+    role="application" aria-label={t("Map of download areas. Click a square to add or remove it.")} />;
 }

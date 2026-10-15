@@ -1,3 +1,4 @@
+import { getLocale } from "../i18n/trainingLocale";
 import type { TrainingHubSleepRecord } from "../../electron/types";
 import type { TrainingTrendPoint } from "./types";
 
@@ -51,8 +52,8 @@ export function buildSleepDurationSummary(
         days.push({
           date: key,
           label: key,
-          weekday: date.toLocaleDateString(undefined, { weekday: "short" }),
-          shortDate: date.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+          weekday: date.toLocaleDateString(getLocale(), { weekday: "short" }),
+          shortDate: date.toLocaleDateString(getLocale(), { month: "short", day: "numeric" }),
           sleepMinutes: minutes
         });
       }

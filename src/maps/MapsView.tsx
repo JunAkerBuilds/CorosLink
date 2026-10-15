@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import {
   AlertCircle,
   Download,
@@ -95,6 +96,7 @@ export function MapsView({
   onError,
   onOpenWatchMenu
 }: MapsViewProps) {
+  const { language } = useLanguage();
   const [activeTab, setActiveTab] = useSelectionPreference(
     MAPS_TAB_PREFERENCE
   );
@@ -102,18 +104,18 @@ export function MapsView({
   return (
     <div className="maps-view stack">
       <div className="media-tabs-shell">
-        <nav className="media-tabs" aria-label="Maps sections">
-          <MapsTabButton active={activeTab === "wifi"} icon={<Download size={16} aria-hidden="true" />} label="Wireless maps" onClick={() => setActiveTab("wifi")} />
+        <nav className="media-tabs" aria-label={t("Maps sections")}>
+          <MapsTabButton active={activeTab === "wifi"} icon={<Download size={16} aria-hidden="true" />} label={t("Wireless maps")} onClick={() => setActiveTab("wifi")} />
           <MapsTabButton
             active={activeTab === "coros"}
             icon={<MapIcon size={16} aria-hidden="true" />}
-            label="COROS Maps"
+            label={t("COROS Maps")}
             onClick={() => setActiveTab("coros")}
           />
           <MapsTabButton
             active={activeTab === "routes"}
             icon={<Route size={16} aria-hidden="true" />}
-            label="Route Studio"
+            label={t("Route Studio")}
             onClick={() => setActiveTab("routes")}
           />
         </nav>
@@ -145,6 +147,7 @@ function MapsTabButton({
   label: string;
   onClick: () => void;
 }) {
+  const { language } = useLanguage();
   return (
     <button
       type="button"
@@ -164,6 +167,7 @@ function CorosMapsTab({
   onMessage,
   onError
 }: MapsViewProps) {
+  const { language } = useLanguage();
   const [manifest, setManifest] = useState<CorosMapManifest | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -212,14 +216,14 @@ function CorosMapsTab({
         (cached) => freeBytes === undefined || cached.sizeBytes <= freeBytes
       )
       .map((cached) => cached.packageId);
-  }, [cachedPackages, watchConnected, freeBytes]);
+  }, [cachedPackages, watchConnected, freeBytes, language]);
 
   const selectedTotalBytes = useMemo(
     () =>
       cachedPackages
         .filter((cached) => selectedCachedIds.has(cached.packageId))
         .reduce((sum, cached) => sum + cached.sizeBytes, 0),
-    [cachedPackages, selectedCachedIds]
+    [cachedPackages, selectedCachedIds, language]
   );
 
   const allTransferableSelected =
@@ -293,7 +297,7 @@ function CorosMapsTab({
     onMessage(null);
     try {
       setDownloadJobs(await api.downloadCorosMapPackage(pkg));
-      onMessage(`Started downloading ${pkg.title} inside CorosLink.`);
+      onMessage(t("Started downloading {{p0}} inside CorosLink.", { p0: pkg.title }));
     } catch (caught) {
       onError(toErrorMessage(caught));
     } finally {
@@ -335,7 +339,7 @@ function CorosMapsTab({
       const result = await api.installCachedCorosMap(packageId);
       onWatchStatusChange(result.watch);
       setCachedPackages(await api.listCachedCorosMaps());
-      onMessage(`Installed ${formatBytes(result.sizeBytes)} of map files.`);
+      onMessage(t("Installed {{p0}} of map files.", { p0: formatBytes(result.sizeBytes) }));
     } catch (caught) {
       reportInstallOutcome(caught, onMessage, onError);
     } finally {
@@ -358,7 +362,7 @@ function CorosMapsTab({
       setCachedPackages(await api.listCachedCorosMaps());
       setSelectedCachedIds(new Set());
       onMessage(
-        `Installed ${formatBytes(result.sizeBytes)} of map files from ${packageIds.length} packages.`
+        t("Installed {{p0}} of map files from {{p1}} packages.", { p0: formatBytes(result.sizeBytes), p1: packageIds.length })
       );
     } catch (caught) {
       reportInstallOutcome(caught, onMessage, onError);
@@ -404,7 +408,7 @@ function CorosMapsTab({
     onMessage(null);
     try {
       setCachedPackages(await api.deleteCachedCorosMap(packageId));
-      onMessage("Removed the cached map package.");
+      onMessage(t("Removed the cached map package."));
     } catch (caught) {
       onError(toErrorMessage(caught));
     } finally {
@@ -420,7 +424,7 @@ function CorosMapsTab({
       const selection = await api.chooseCorosMapFolder();
       if (selection) {
         setLocalSelection(selection);
-        onMessage("Local COROS map folder selected.");
+        onMessage(t("Local COROS map folder selected."));
       }
     } catch (caught) {
       onError(toErrorMessage(caught));
@@ -440,7 +444,7 @@ function CorosMapsTab({
     try {
       const result = await api.installCorosMapFolder(localSelection.sourcePath);
       onWatchStatusChange(result.watch);
-      onMessage(`Installed ${formatBytes(result.sizeBytes)} of map files.`);
+      onMessage(t("Installed {{p0}} of map files.", { p0: formatBytes(result.sizeBytes) }));
     } catch (caught) {
       reportInstallOutcome(caught, onMessage, onError);
     } finally {
@@ -462,14 +466,14 @@ function CorosMapsTab({
     return Array.from(regions.entries()).sort((left, right) =>
       left[1].localeCompare(right[1], undefined, { numeric: true })
     );
-  }, [manifest]);
+  }, [manifest, language]);
 
   const regionFilterOptions = useMemo(
     () => [
-      { value: "all", label: "All regions" },
+      { value: "all", label: t("All regions") },
       ...regionOptions.map(([id, title]) => ({ value: id, label: title }))
     ],
-    [regionOptions]
+    [regionOptions, language]
   );
 
   useEffect(() => {
@@ -524,7 +528,7 @@ function CorosMapsTab({
       (group) =>
         (showTopo && group.topo) || (showLandscape && group.landscape)
     );
-  }, [manifest, query, regionFilter, showLandscape, showTopo]);
+  }, [manifest, query, regionFilter, showLandscape, showTopo, language]);
 
   const cachedByPackageId = useMemo(() => {
     const cached = new Map<string, CachedCorosMapPackage>();
@@ -532,7 +536,7 @@ function CorosMapsTab({
       cached.set(item.packageId, item);
     }
     return cached;
-  }, [cachedPackages]);
+  }, [cachedPackages, language]);
 
   const latestJobByPackageId = useMemo(() => {
     const jobs = new Map<string, CorosMapDownloadJob>();
@@ -542,14 +546,14 @@ function CorosMapsTab({
       }
     }
     return jobs;
-  }, [downloadJobs]);
+  }, [downloadJobs, language]);
 
   return (
     <div className="maps-grid">
       <section className="panel maps-sidebar">
         <div className="section-heading compact">
           <div>
-            <p className="eyebrow">Watch maps</p>
+            <p className="eyebrow">{t("Watch maps")}</p>
             <h2 className="watch-title">
               <span
                 className={
@@ -558,8 +562,8 @@ function CorosMapsTab({
                 aria-hidden="true"
               />
               {watchStatus?.connected
-                ? watchStatus.name ?? "COROS watch"
-                : "No watch connected"}
+                ? watchStatus.name ?? t("COROS watch")
+                : t("No watch connected")}
             </h2>
           </div>
           <HardDrive size={20} aria-hidden="true" />
@@ -570,9 +574,7 @@ function CorosMapsTab({
         <div className="maps-warning">
           <AlertCircle size={18} aria-hidden="true" />
           <p>
-            COROS packages are large. Install only the regions you need and
-            merge into the watch map folder.
-          </p>
+            {t("COROS packages are large. Install only the regions you need and merge into the watch map folder.")}</p>
         </div>
 
         <div className="local-map-install">
@@ -587,16 +589,14 @@ function CorosMapsTab({
             ) : (
               <FolderOpen size={17} aria-hidden="true" />
             )}
-            Choose Local Map Folder
-          </button>
+            {t("Choose Local Map Folder")}</button>
 
           {localSelection ? (
             <div className="local-map-selection">
               <strong>{shortPath(localSelection.mapPath)}</strong>
               <span>
                 {formatBytes(localSelection.sizeBytes)} ·{" "}
-                {localSelection.fileCount} files
-              </span>
+                {localSelection.fileCount}  {t("files")}</span>
             </div>
           ) : null}
 
@@ -615,8 +615,7 @@ function CorosMapsTab({
             ) : (
               <Upload size={17} aria-hidden="true" />
             )}
-            Install to Watch
-          </button>
+            {t("Install to Watch")}</button>
         </div>
 
         {installProgress ? (
@@ -628,11 +627,11 @@ function CorosMapsTab({
 
         <div className="map-cache-section">
           <div className="map-cache-heading">
-            <span>Cached maps</span>
+            <span>{t("Cached maps")}</span>
             <button
               type="button"
               className="icon-button"
-              title="Refresh cached maps"
+              title={t("Refresh cached maps")}
               onClick={() => void loadCachedPackages()}
             >
               <RefreshCw size={15} aria-hidden="true" />
@@ -640,7 +639,7 @@ function CorosMapsTab({
           </div>
 
           {cachedPackages.length === 0 ? (
-            <p className="map-cache-empty">No cached map packages.</p>
+            <p className="map-cache-empty">{t("No cached map packages.")}</p>
           ) : (
             <>
               <div className="map-cache-toolbar">
@@ -661,8 +660,7 @@ function CorosMapsTab({
                       batchInstalling
                     }
                   />
-                  Select all
-                </label>
+                  {t("Select all")}</label>
                 <button
                   type="button"
                   className="primary-button map-cache-transfer-button"
@@ -679,15 +677,13 @@ function CorosMapsTab({
                   ) : (
                     <Upload size={17} aria-hidden="true" />
                   )}
-                  Transfer selected{selectedCount > 0 ? ` (${selectedCount})` : ""}
+                  {t("Transfer selected")}{selectedCount > 0 ? ` (${selectedCount})` : ""}
                 </button>
               </div>
               {batchTooLarge ? (
                 <small className="map-cache-batch-warning">
-                  Selected packages exceed current free space (
-                  {formatBytes(selectedTotalBytes)} selected,{" "}
-                  {formatBytes(freeBytes!)} free)
-                </small>
+                  {t("Selected packages exceed current free space (")}{formatBytes(selectedTotalBytes)}  {t("selected,")}{" "}
+                  {formatBytes(freeBytes!)}  {t("free)")}</small>
               ) : null}
               <div className="map-cache-list">
                 {cachedPackages.map((cached) => (
@@ -718,17 +714,17 @@ function CorosMapsTab({
       <section className="panel maps-main-panel">
         <div className="section-heading compact">
           <div>
-            <p className="eyebrow">Official packages</p>
+            <p className="eyebrow">{t("Official packages")}</p>
             <h2>
               {manifest
                 ? `v${manifest.version}${manifest.bundleVersion ? ` · ${manifest.bundleVersion}` : ""}`
-                : "COROS Maps"}
+                : t("COROS Maps")}
             </h2>
           </div>
           <button
             type="button"
             className="icon-button"
-            title="Refresh package list"
+            title={t("Refresh package list")}
             onClick={() => void loadManifest()}
             disabled={loading}
           >
@@ -746,13 +742,13 @@ function CorosMapsTab({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search regions"
+              placeholder={t("Search regions")}
             />
           </label>
 
-          <SelectDropdown
+          <SelectDropdown translateLabel={t}
             className="app-select--maps"
-            label="Region"
+            label={t("Region")}
             value={regionFilter}
             options={regionFilterOptions}
             onChange={(region) =>
@@ -771,8 +767,7 @@ function CorosMapsTab({
                 }))
               }
             />
-            Landscape
-          </label>
+            {t("Landscape")}</label>
           <label className="check-row maps-check">
             <input
               type="checkbox"
@@ -784,37 +779,36 @@ function CorosMapsTab({
                 }))
               }
             />
-            Topo
-          </label>
+            {t("Topo")}</label>
         </div>
 
         <div className="map-package-list">
           {loading && !manifest ? (
             <MapsEmpty
               icon={<Loader2 className="spin" size={20} aria-hidden="true" />}
-              title="Loading packages"
+              title={t("Loading packages")}
             />
           ) : packageGroups.length === 0 ? (
             <MapsEmpty
               icon={<Search size={20} aria-hidden="true" />}
-              title="No matching packages"
+              title={t("No matching packages")}
             />
           ) : (
             <div className="table-shell maps-table-shell">
               <table>
                 <thead>
                   <tr>
-                    <th>Region</th>
+                    <th>{t("Region")}</th>
                     {showTopo ? (
                       <>
-                        <th>Topo size</th>
-                        <th>Topo</th>
+                        <th>{t("Topo size")}</th>
+                        <th>{t("Topo")}</th>
                       </>
                     ) : null}
                     {showLandscape ? (
                       <>
-                        <th>Landscape size</th>
-                        <th>Landscape</th>
+                        <th>{t("Landscape size")}</th>
+                        <th>{t("Landscape")}</th>
                       </>
                     ) : null}
                   </tr>
@@ -846,7 +840,7 @@ function CorosMapsTab({
 
         {manifest?.updatedAt ? (
           <p className="maps-footnote">
-            COROS manifest updated {manifest.updatedAt}.
+            {t("COROS manifest updated")} {manifest.updatedAt}.
           </p>
         ) : null}
       </section>
@@ -855,13 +849,13 @@ function CorosMapsTab({
 }
 
 function WatchStoragePanel({ status }: { status: WatchStatus | null }) {
+  const { language } = useLanguage();
   if (!status?.connected) {
     return (
       <div className="watch-storage is-empty">
         <HardDrive size={18} aria-hidden="true" />
         <p>
-          Connect your COROS watch over USB to see storage and install maps.
-        </p>
+          {t("Connect your COROS watch over USB to see storage and install maps.")}</p>
       </div>
     );
   }
@@ -887,16 +881,15 @@ function WatchStoragePanel({ status }: { status: WatchStatus | null }) {
           <div
             className="watch-storage-bar"
             role="img"
-            aria-label={`${formatBytes(used)} of ${formatBytes(total)} used`}
+            aria-label={t("{{p0}} of {{p1}} used", { p0: formatBytes(used), p1: formatBytes(total) })}
           >
             <span className="seg maps" style={{ width: `${mapsPct}%` }} />
             <span className="seg other" style={{ width: `${otherPct}%` }} />
           </div>
           <div className="watch-storage-caption">
             <span>
-              <strong>{formatBytes(used)}</strong> used
-            </span>
-            <span>{formatBytes(total)} total</span>
+              <strong>{formatBytes(used)}</strong>  {t("used")}</span>
+            <span>{formatBytes(total)}  {t("total")}</span>
           </div>
         </>
       ) : null}
@@ -904,19 +897,19 @@ function WatchStoragePanel({ status }: { status: WatchStatus | null }) {
       <div className="watch-storage-legend">
         <WatchStorageLegend
           swatch="maps"
-          label="Maps"
-          value={`${formatBytes(maps)} · ${status.mapFileCount ?? 0} files`}
+          label={t("Maps")}
+          value={t("{{p0}} · {{p1}} files", { p0: formatBytes(maps), p1: status.mapFileCount ?? 0 })}
         />
         {other !== undefined ? (
           <WatchStorageLegend
             swatch="other"
-            label="Other"
+            label={t("Other")}
             value={formatBytes(other)}
           />
         ) : null}
         <WatchStorageLegend
           swatch="free"
-          label="Free"
+          label={t("Free")}
           value={free !== undefined ? formatBytes(free) : "—"}
         />
       </div>
@@ -933,6 +926,7 @@ function WatchStorageLegend({
   label: string;
   value: string;
 }) {
+  const { language } = useLanguage();
   return (
     <div className="watch-storage-legend-item">
       <span className={`watch-storage-swatch ${swatch}`} aria-hidden="true" />
@@ -949,17 +943,18 @@ function MapInstallProgressPanel({
   progress: CorosMapInstallProgress;
   onCancel: () => void;
 }) {
+  const { language } = useLanguage();
   const percent = Math.round(Math.max(0, Math.min(progress.progress, 1)) * 100);
   const phaseLabel =
     progress.phase === "failed"
-      ? "Install failed"
+      ? t("Install failed")
       : progress.phase === "cancelled"
-        ? "Transfer cancelled"
+        ? t("Transfer cancelled")
         : progress.phase === "completed"
-          ? "Install complete"
+          ? t("Install complete")
           : progress.phase === "preparing"
-            ? "Preparing install"
-            : "Copying to watch";
+            ? t("Preparing install")
+            : t("Copying to watch");
 
   return (
     <div
@@ -979,22 +974,20 @@ function MapInstallProgressPanel({
         <span style={{ width: `${Math.max(2, percent)}%` }} />
       </div>
       <small>
-        {progress.label} · {formatBytes(progress.copiedBytes)} of{" "}
+        {progress.label} · {formatBytes(progress.copiedBytes)}  {t("of")}{" "}
         {formatBytes(progress.totalBytes)} · {progress.copiedFiles}/
-        {progress.totalFiles} files
-      </small>
+        {progress.totalFiles}  {t("files")}</small>
       {progress.error ? (
         <p className="map-install-error">{progress.error}</p>
       ) : progress.active ? (
         <div className="map-install-progress-actions">
-          <p>Keep the watch connected until the copy finishes.</p>
+          <p>{t("Keep the watch connected until the copy finishes.")}</p>
           <button
             type="button"
             className="secondary-button"
             onClick={onCancel}
           >
-            Cancel transfer
-          </button>
+            {t("Cancel transfer")}</button>
         </div>
       ) : null}
     </div>
@@ -1030,9 +1023,10 @@ function MapRegionRow({
   onInstallCached: (packageId: string) => void;
   onDeleteCached: (packageId: string) => void;
 }) {
+  const { language } = useLanguage();
   const regionLabel =
     group.parent === "global"
-      ? "Full region"
+      ? t("Full region")
       : titleFromRegionId(group.parent);
 
   const cellProps = {
@@ -1087,6 +1081,7 @@ function MapPackageCell({
   onInstallCached: (packageId: string) => void;
   onDeleteCached: (packageId: string) => void;
 }) {
+  const { language } = useLanguage();
   if (!pkg) {
     return (
       <>
@@ -1112,9 +1107,9 @@ function MapPackageCell({
   const downloadPercent = Math.round(
     Math.max(0, Math.min(job?.progress ?? 0, 1)) * 100
   );
-  const downloadProgressLabel = `${formatProgress(job)} · ${formatBytes(
+  const downloadProgressLabel = t("{{p0}} · {{p1}} of {{p2}}", { p0: formatProgress(job), p1: formatBytes(
     job?.receivedBytes ?? 0
-  )} of ${formatBytes(job?.sizeBytes || pkg.sizeBytes)}`;
+  ), p2: formatBytes(job?.sizeBytes || pkg.sizeBytes) });
 
   return (
     <>
@@ -1125,8 +1120,8 @@ function MapPackageCell({
           >
             {formatBytes(pkg.sizeBytes)}
           </span>
-          {tooLarge ? <span className="badge warning">Low space</span> : null}
-          {cached ? <span className="badge success">Cached</span> : null}
+          {tooLarge ? <span className="badge warning">{t("Low space")}</span> : null}
+          {cached ? <span className="badge success">{t("Cached")}</span> : null}
         </div>
       </td>
 
@@ -1152,8 +1147,8 @@ function MapPackageCell({
         ) : failedOrCancelled ? (
           <small className="map-download-error">
             {job.status === "failed"
-              ? job.error || "Download failed."
-              : "Download cancelled."}
+              ? job.error || t("Download failed.")
+              : t("Download cancelled.")}
           </small>
         ) : null}
 
@@ -1163,8 +1158,8 @@ function MapPackageCell({
               <button
                 type="button"
                 className="icon-button"
-                title="Install on watch"
-                aria-label="Install on watch"
+                title={t("Install on watch")}
+                aria-label={t("Install on watch")}
                 onClick={() => onInstallCached(pkg.id)}
                 disabled={installDisabled}
               >
@@ -1177,8 +1172,8 @@ function MapPackageCell({
               <button
                 type="button"
                 className="icon-button"
-                title="Delete cached package"
-                aria-label="Delete cached package"
+                title={t("Delete cached package")}
+                aria-label={t("Delete cached package")}
                 onClick={() => onDeleteCached(pkg.id)}
                 disabled={busy === `delete-cache:${pkg.id}`}
               >
@@ -1193,8 +1188,8 @@ function MapPackageCell({
             <button
               type="button"
               className="icon-button"
-              title="Cancel download"
-              aria-label="Cancel download"
+              title={t("Cancel download")}
+              aria-label={t("Cancel download")}
               onClick={() => onCancel(job)}
               disabled={busy === `cancel:${job.id}`}
             >
@@ -1209,8 +1204,8 @@ function MapPackageCell({
               <button
                 type="button"
                 className="icon-button"
-                title="Download package"
-                aria-label="Download package"
+                title={t("Download package")}
+                aria-label={t("Download package")}
                 onClick={() => onDownload(pkg)}
                 disabled={busy === `download:${pkg.id}`}
               >
@@ -1224,8 +1219,8 @@ function MapPackageCell({
                 <button
                   type="button"
                   className="icon-button"
-                  title="Clear download status"
-                  aria-label="Clear download status"
+                  title={t("Clear download status")}
+                  aria-label={t("Clear download status")}
                   onClick={() => onClearJob(job)}
                   disabled={busy === `clear:${job.id}`}
                 >
@@ -1265,6 +1260,7 @@ function CachedMapRow({
   onInstall: (packageId: string) => void;
   onDelete: (packageId: string) => void;
 }) {
+  const { language } = useLanguage();
   const tooLarge = freeBytes !== undefined && cached.sizeBytes > freeBytes;
   const installing =
     busy === `install-cache:${cached.packageId}` ||
@@ -1278,13 +1274,13 @@ function CachedMapRow({
           checked={selected}
           onChange={() => onToggleSelect(cached.packageId)}
           disabled={selectionDisabled}
-          aria-label={`Select ${cached.title}`}
+          aria-label={t("Select {{p0}}", { p0: cached.title })}
         />
       </label>
       <div>
         <strong>{cached.title}</strong>
         <span>
-          {cached.type === "topo" ? "Topo" : "Landscape"} ·{" "}
+          {cached.type === "topo" ? t("Topo") : t("Landscape")} ·{" "}
           {formatBytes(cached.sizeBytes)}
         </span>
       </div>
@@ -1292,7 +1288,7 @@ function CachedMapRow({
         <button
           type="button"
           className="icon-button"
-          title="Install cached package"
+          title={t("Install cached package")}
           onClick={() => onInstall(cached.packageId)}
           disabled={!watchConnected || tooLarge || installing}
         >
@@ -1305,7 +1301,7 @@ function CachedMapRow({
         <button
           type="button"
           className="icon-button"
-          title="Delete cached package"
+          title={t("Delete cached package")}
           onClick={() => onDelete(cached.packageId)}
           disabled={
             busy === `delete-cache:${cached.packageId}` || installing
@@ -1318,12 +1314,13 @@ function CachedMapRow({
           )}
         </button>
       </div>
-      {tooLarge ? <small>Too large for current free space</small> : null}
+      {tooLarge ? <small>{t("Too large for current free space")}</small> : null}
     </div>
   );
 }
 
 function MapsEmpty({ icon, title }: { icon: ReactNode; title: string }) {
+  const { language } = useLanguage();
   return (
     <div className="maps-empty">
       {icon}
@@ -1368,7 +1365,7 @@ function reportInstallOutcome(
 ): void {
   if (isInstallTransferCancelled(error)) {
     onError(null);
-    onMessage("Transfer cancelled.");
+    onMessage(t("Transfer cancelled."));
     return;
   }
 

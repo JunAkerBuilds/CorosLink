@@ -1,3 +1,4 @@
+import { getLocale, useLanguage, t } from "../../i18n/training";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import type { TrainingHubActivity } from "../../../electron/types";
@@ -50,6 +51,7 @@ interface MetricMultiSelectProps {
 }
 
 function MetricMultiSelect({ selected, onChange }: MetricMultiSelectProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const rootRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -135,7 +137,7 @@ function MetricMultiSelect({ selected, onChange }: MetricMultiSelectProps) {
 
       {isOpen ? (
         <div className="metric-multiselect-menu" role="listbox" aria-multiselectable="true">
-          <p className="metric-multiselect-hint">Stack up to three metrics</p>
+          <p className="metric-multiselect-hint">{t("Stack up to three metrics")}</p>
           {WEEKLY_ACTIVITY_METRICS.map((metric) => {
             const isSelected = selected.includes(metric);
             const isLastSelected = isSelected && selected.length === 1;
@@ -179,6 +181,7 @@ export function FitnessTrendPanel({
   snapshot,
   activities = []
 }: FitnessTrendPanelProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const [barsVisible, setBarsVisible] = useState(false);
   const [selectedMetrics, setSelectedMetrics] = useSelectionPreference(
@@ -193,7 +196,7 @@ export function FitnessTrendPanel({
         ),
         activities
       ),
-    [snapshot, activities]
+    [snapshot, activities, getLocale()]
   );
   const seriesByMetric = useMemo(
     () =>
@@ -201,7 +204,7 @@ export function FitnessTrendPanel({
         metric,
         series: buildWeeklyActivitySeries(dayList, metric, new Date(), unitSystem)
       })),
-    [dayList, selectedMetrics, unitSystem]
+    [dayList, selectedMetrics, unitSystem, getLocale()]
   );
 
   const isSingle = seriesByMetric.length === 1;
@@ -209,7 +212,7 @@ export function FitnessTrendPanel({
   const maxValue = primary.series.yMax || 1;
   const yAxisTicks = useMemo(
     () => buildWeeklyActivityYAxisTicks(maxValue),
-    [maxValue]
+    [maxValue, getLocale()]
   );
   const yAxisUnitLabel = isSingle
     ? getWeeklyActivityYAxisUnitLabel(primary.metric, primary.series.yAxisUnit)
@@ -226,7 +229,7 @@ export function FitnessTrendPanel({
   return (
     <section className="panel training-fitness-panel">
       <div className="training-fitness-header">
-        <p className="eyebrow">Weekly Activity</p>
+        <p className="eyebrow">{t("Weekly Activity")}</p>
         <div className="training-metric-select-wrap">
           <MetricMultiSelect
             selected={selectedMetrics}
@@ -255,9 +258,9 @@ export function FitnessTrendPanel({
         <div
           className="training-fitness-chart"
           role="img"
-          aria-label={`Weekly activity chart for ${seriesByMetric
+          aria-label={t("Weekly activity chart for {{value1}}.", { value1: String(seriesByMetric
             .map(({ series }) => series.metricLabel.toLowerCase())
-            .join(", ")}.`}
+            .join(", ")) })}
         >
           <div className="training-fitness-y-axis" aria-hidden="true">
             {yAxisUnitLabel ? (
@@ -292,7 +295,7 @@ export function FitnessTrendPanel({
             <div
               className="training-fitness-bars"
               role="list"
-              aria-label="Weekly activity for the current calendar week"
+              aria-label={t("Weekly activity for the current calendar week")}
             >
               {Array.from({ length: dayCount }, (_unused, dayIndex) => {
                 const dayInfo = primary.series.days[dayIndex];
@@ -371,7 +374,7 @@ export function FitnessTrendPanel({
           </div>
         </div>
       ) : (
-        <p className="training-empty-state">No weekly activity data yet.</p>
+        <p className="training-empty-state">{t("No weekly activity data yet.")}</p>
       )}
     </section>
   );

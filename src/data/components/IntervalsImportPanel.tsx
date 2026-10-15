@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n/tools";
 import {
   Activity as ActivityIcon,
   Bike,
@@ -84,6 +85,7 @@ function activityTypeIcon(type: string) {
 }
 
 export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const [status, setStatus] = useState<IntervalsStatus>({ connected: false });
   const [loadingStatus, setLoadingStatus] = useState(true);
@@ -146,7 +148,7 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
           setRefreshError(
             caught instanceof Error
               ? caught.message
-              : "Failed to load intervals.icu activities."
+              : t("Failed to load intervals.icu activities.")
           );
         }
       })
@@ -169,7 +171,7 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
       setApiKey("");
     } catch (caught) {
       setConnectError(
-        caught instanceof Error ? caught.message : "Failed to connect to intervals.icu."
+        caught instanceof Error ? caught.message : t("Failed to connect to intervals.icu.")
       );
     } finally {
       setConnecting(false);
@@ -186,7 +188,7 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
       setRefreshError(null);
     } catch (caught) {
       setRefreshError(
-        caught instanceof Error ? caught.message : "Failed to disconnect."
+        caught instanceof Error ? caught.message : t("Failed to disconnect.")
       );
     } finally {
       setDisconnecting(false);
@@ -217,7 +219,7 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
         ...current,
         [intervalsId]: {
           busy: false,
-          error: caught instanceof Error ? caught.message : "Import failed."
+          error: caught instanceof Error ? caught.message : t("Import failed.")
         }
       }));
     }
@@ -242,12 +244,10 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
     <section className="data-tool-card data-intervals-card">
       <header className="data-tool-header">
         <div className="training-backup-heading">
-          <p className="eyebrow">Import</p>
-          <h2>Import from intervals.icu</h2>
+          <p className="eyebrow">{t("Import")}</p>
+          <h2>{t("Import from intervals.icu")}</h2>
           <p className="training-backup-hint">
-            Pull activities logged on intervals.icu into COROS. Connect your
-            account, then import any activities that are missing.
-          </p>
+            {t("Pull activities logged on intervals.icu into COROS. Connect your account, then import any activities that are missing.")}</p>
         </div>
         <div className="training-backup-icon" aria-hidden="true">
           <Download size={22} />
@@ -257,7 +257,7 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
       {loadingStatus ? (
         <div className="training-empty-state">
           <Loader2 className="spin" size={18} aria-hidden="true" />
-          <p>Checking intervals.icu connection…</p>
+          <p>{t("Checking intervals.icu connection…")}</p>
         </div>
       ) : !status.connected ? (
         <form
@@ -268,22 +268,20 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
           }}
         >
           <div className="data-intervals-connect-copy">
-            <strong>Connect your intervals.icu account</strong>
+            <strong>{t("Connect your intervals.icu account")}</strong>
             <span>
-              Use an API key and athlete ID to compare intervals.icu activities
-              against COROS.
-            </span>
+              {t("Use an API key and athlete ID to compare intervals.icu activities against COROS.")}</span>
           </div>
 
           <div className="data-intervals-fields">
             <label className="field training-login-field">
-              <span>intervals.icu API key</span>
+              <span>{t("intervals.icu API key")}</span>
               <div className="training-login-input">
                 <KeyRound size={18} aria-hidden="true" />
                 <input
                   value={apiKey}
                   onChange={(event) => setApiKey(event.target.value)}
-                  placeholder="API key"
+                  placeholder={t("API key")}
                   type="password"
                   autoComplete="off"
                   disabled={connecting}
@@ -291,7 +289,7 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
               </div>
             </label>
             <label className="field training-login-field">
-              <span>Athlete ID</span>
+              <span>{t("Athlete ID")}</span>
               <div className="training-login-input">
                 <input
                   value={athleteId}
@@ -316,8 +314,7 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
               ) : (
                 <Link2 size={16} aria-hidden="true" />
               )}
-              Connect
-            </button>
+              {t("Connect")}</button>
           </div>
 
           {connectError ? (
@@ -330,10 +327,9 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
             <div className="data-intervals-identity">
               <span className="badge ready">
                 <CheckCircle2 size={14} aria-hidden="true" />
-                Connected
-              </span>
+                {t("Connected")}</span>
               {status.athleteId ? (
-                <span className="badge">Athlete {status.athleteId}</span>
+                <span className="badge">{t("Athlete")} {status.athleteId}</span>
               ) : null}
             </div>
             <button
@@ -347,15 +343,14 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
               ) : (
                 <Unlink size={14} aria-hidden="true" />
               )}
-              Disconnect
-            </button>
+              {t("Disconnect")}</button>
           </div>
 
           <div className="data-intervals-toolbar">
             <div
               className="data-intervals-range"
               role="radiogroup"
-              aria-label="How far back to look"
+              aria-label={t("How far back to look")}
             >
               {RANGE_OPTIONS.map((option) => (
                 <button
@@ -367,7 +362,7 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
                   disabled={refreshing || importingAll || anyRowBusy}
                   onClick={() => setDaysBack(option.days)}
                 >
-                  {option.label}
+                  {t(option.label)}
                 </button>
               ))}
             </div>
@@ -384,8 +379,7 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
                 ) : (
                   <RefreshCw size={16} aria-hidden="true" />
                 )}
-                Refresh
-              </button>
+                {t("Refresh")}</button>
               <button
                 type="button"
                 className="primary-button compact-button"
@@ -397,8 +391,7 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
                 ) : (
                   <Download size={16} aria-hidden="true" />
                 )}
-                Import all missing
-                {missingCount > 0 ? ` (${missingCount})` : ""}
+                {t("Import all missing")}{missingCount > 0 ? ` (${missingCount})` : ""}
               </button>
             </div>
           </div>
@@ -412,32 +405,30 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
               {refreshing ? (
                 <p>
                   <Loader2 size={16} className="spin" aria-hidden="true" />{" "}
-                  Loading intervals.icu activities…
-                </p>
+                  {t("Loading intervals.icu activities…")}</p>
               ) : (
                 <p>
-                  No intervals.icu activities found in the last {daysBack} days.
-                </p>
+                  {t("No intervals.icu activities found in the last")} {daysBack}  {t("days.")}</p>
               )}
             </div>
           ) : (
             <>
               <p className="data-intervals-summary">
                 {refreshing
-                  ? "Refreshing…"
+                  ? t("Refreshing…")
                   : missingCount > 0
-                    ? `${rows.length} activities loaded · ${missingCount} missing from COROS`
-                    : `${rows.length} activities loaded · everything is on COROS`}
+                    ? t("{{p0}} activities loaded · {{p1}} missing from COROS", { p0: rows.length, p1: missingCount })
+                    : t("{{p0}} activities loaded · everything is on COROS", { p0: rows.length })}
               </p>
               <div className="table-shell data-intervals-table">
                 <table>
                   <thead>
                     <tr>
-                      <th>Activity</th>
-                      <th>Date</th>
-                      <th>Type</th>
-                      <th className="data-intervals-num">Distance</th>
-                      <th className="data-intervals-status-col">Status</th>
+                      <th>{t("Activity")}</th>
+                      <th>{t("Date")}</th>
+                      <th>{t("Type")}</th>
+                      <th className="data-intervals-num">{t("Distance")}</th>
+                      <th className="data-intervals-status-col">{t("Status")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -482,8 +473,7 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
                               {row.onCoros ? (
                                 <span className="data-intervals-synced">
                                   <CheckCircle2 size={14} aria-hidden="true" />
-                                  On COROS
-                                </span>
+                                  {t("On COROS")}</span>
                               ) : (
                                 <button
                                   type="button"
@@ -502,8 +492,7 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
                                   ) : (
                                     <Download size={14} aria-hidden="true" />
                                   )}
-                                  Import
-                                </button>
+                                  {t("Import")}</button>
                               )}
                               {state?.error ? (
                                 <span

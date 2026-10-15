@@ -11,6 +11,7 @@ import {
   useState
 } from "react";
 import { createPortal } from "react-dom";
+import { t, useLanguage, getLocale } from "../i18n";
 
 export type SelectOption<T extends string> = {
   value: T;
@@ -29,6 +30,8 @@ export interface SelectDropdownProps<T extends string> {
   autoFocus?: boolean;
   portal?: boolean;
   title?: string;
+  /** Preserve the owning view's translation context for ambiguous option labels. */
+  translateLabel?: (source: string) => string;
 }
 
 interface MenuPosition {
@@ -67,8 +70,10 @@ export function SelectDropdown<T extends string>({
   disabled = false,
   autoFocus = false,
   portal = false,
-  title
+  title,
+  translateLabel = t
 }: SelectDropdownProps<T>) {
+  useLanguage();
   const dropdownId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -81,7 +86,7 @@ export function SelectDropdown<T extends string>({
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
   const [portalTheme, setPortalTheme] = useState<PortalTheme>({});
   const selectedOption = options.find((option) => option.value === value);
-  const selectedLabel = selectedOption?.label ?? "Select";
+  const selectedLabel = translateLabel(selectedOption?.label ?? "Select");
   const selectedIcon = renderIcon?.(value);
   const isMenuMounted = isOpen || isClosing;
   const labelId = `${dropdownId}-label`;
@@ -295,13 +300,13 @@ export function SelectDropdown<T extends string>({
       event.preventDefault();
       const now = Date.now();
       const previous = typeaheadRef.current;
-      const query = `${now - previous.updatedAt > 700 ? "" : previous.query}${event.key}`.toLocaleLowerCase();
+      const query = `${now - previous.updatedAt > 700 ? "" : previous.query}${event.key}`.toLocaleLowerCase(getLocale());
       typeaheadRef.current = { query, updatedAt: now };
       const search = [...query].every((character) => character === query[0]) ? query[0] : query;
       const currentIndex = options.findIndex((option) => option.value === (isOpen ? highlightedValue : value));
       const startIndex = search.length === 1 ? currentIndex + 1 : 0;
       const orderedOptions = [...options.slice(startIndex), ...options.slice(0, startIndex)];
-      const match = orderedOptions.find((option) => option.label.toLocaleLowerCase().startsWith(search));
+      const match = orderedOptions.find((option) => translateLabel(option.label).toLocaleLowerCase(getLocale()).startsWith(search));
       if (match) {
         openMenu(match.value);
       }
@@ -322,7 +327,7 @@ export function SelectDropdown<T extends string>({
       id={menuId}
       ref={menuRef}
       role="listbox"
-      aria-label={label}
+      aria-label={translateLabel(label)}
       aria-hidden={isClosing || undefined}
       inert={isClosing || undefined}
       data-side={menuPosition?.transform ? "top" : "bottom"}
@@ -371,7 +376,7 @@ export function SelectDropdown<T extends string>({
                     {optionIcon}
                   </span>
                 ) : null}
-                <span className="app-select-option-label">{option.label}</span>
+                <span className="app-select-option-label">{translateLabel(option.label)}</span>
               </span>
               {isSelected ? (
                 <Check
@@ -395,7 +400,7 @@ export function SelectDropdown<T extends string>({
       ref={rootRef}
     >
       <span className="sr-only" id={labelId}>
-        {label}
+        {translateLabel(label)}
       </span>
       <button
         type="button"
@@ -409,7 +414,7 @@ export function SelectDropdown<T extends string>({
         aria-labelledby={`${labelId} ${valueId}`}
         disabled={disabled}
         autoFocus={autoFocus}
-        title={title}
+        title={title ? translateLabel(title) : undefined}
         onClick={() => {
           if (!disabled) {
             if (isOpen) {

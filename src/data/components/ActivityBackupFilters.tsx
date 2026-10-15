@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../../i18n/tools";
 import {
   Bike,
   Dumbbell,
@@ -118,13 +119,13 @@ export function resolveBackupFilters(
   const durationMax = parseBound(draft.durationMax);
 
   if ([distanceMin, distanceMax, durationMin, durationMax].some(Number.isNaN)) {
-    return { error: "Lengths must be positive numbers.", summary: "" };
+    return { error: t("Lengths must be positive numbers."), summary: "" };
   }
   if (distanceMin !== undefined && distanceMax !== undefined && distanceMin > distanceMax) {
-    return { error: "Minimum distance is above the maximum.", summary: "" };
+    return { error: t("Minimum distance is above the maximum."), summary: "" };
   }
   if (durationMin !== undefined && durationMax !== undefined && durationMin > durationMax) {
-    return { error: "Minimum duration is above the maximum.", summary: "" };
+    return { error: t("Minimum duration is above the maximum."), summary: "" };
   }
 
   let startDay: string | undefined;
@@ -133,7 +134,7 @@ export function resolveBackupFilters(
     startDay = draft.customFrom || undefined;
     endDay = draft.customTo || undefined;
     if (startDay && endDay && startDay > endDay) {
-      return { error: "The start date is after the end date.", summary: "" };
+      return { error: t("The start date is after the end date."), summary: "" };
     }
   } else {
     startDay = presetStartDay(draft.datePreset);
@@ -155,15 +156,15 @@ export function resolveBackupFilters(
   if (filters.sportGroups) {
     const labels = ACTIVITY_BACKUP_SPORT_GROUPS.filter((group) =>
       filters.sportGroups?.includes(group.id)
-    ).map((group) => group.label);
-    parts.push(labels.length > 2 ? `${labels.length} activity types` : labels.join(", "));
+    ).map((group) => t(group.label));
+    parts.push(labels.length > 2 ? t("{{p0}} activity types", { p0: labels.length }) : labels.join(", "));
   }
   if (draft.datePreset === "custom") {
     if (startDay || endDay) {
-      parts.push(`${startDay ?? "Start"} → ${endDay ?? "today"}`);
+      parts.push(`${startDay ?? t("Start date")} → ${endDay ?? t("Today")}`);
     }
   } else if (draft.datePreset !== "all") {
-    parts.push(DATE_PRESETS.find((preset) => preset.value === draft.datePreset)?.label ?? "");
+    parts.push(t(DATE_PRESETS.find((preset) => preset.value === draft.datePreset)?.label ?? ""));
   }
   const range = (min: number | undefined, max: number | undefined, suffix: string) =>
     min !== undefined && max !== undefined
@@ -174,13 +175,13 @@ export function resolveBackupFilters(
           ? `≤ ${max} ${suffix}`
           : null;
   const distanceText = range(distanceMin, distanceMax, unit);
-  const durationText = range(durationMin, durationMax, "min");
+  const durationText = range(durationMin, durationMax, t("min"));
   if (distanceText) parts.push(distanceText);
   if (durationText) parts.push(durationText);
 
   return parts.length
     ? { filters, summary: parts.join(" · ") }
-    : { summary: "All activities" };
+    : { summary: t("All activities") };
 }
 
 interface ActivityBackupFiltersProps {
@@ -201,6 +202,7 @@ export function ActivityBackupFilters({
   groupCounts,
   onChange
 }: ActivityBackupFiltersProps) {
+  useLanguage();
   const isDirty =
     draft.sportGroups.length > 0 ||
     draft.datePreset !== "all" ||
@@ -228,7 +230,7 @@ export function ActivityBackupFilters({
   return (
     <div className="backup-filters">
       <div className="backup-filters-heading">
-        <span className="training-backup-formats-label">Choose activities</span>
+        <span className="training-backup-formats-label">{t("Choose activities")}</span>
         {isDirty ? (
           <button
             type="button"
@@ -237,18 +239,16 @@ export function ActivityBackupFilters({
             onClick={() => onChange(EMPTY_BACKUP_FILTER_DRAFT)}
           >
             <RotateCcw size={12} aria-hidden="true" />
-            Reset
-          </button>
+            {t("Reset")}</button>
         ) : null}
       </div>
 
       <section className="backup-filter-section" aria-labelledby="backup-filter-type">
         <h3 className="backup-filter-label" id="backup-filter-type">
-          Activity type
-        </h3>
+          {t("Activity type")}</h3>
         <div className="backup-filter-chips" role="group" aria-labelledby="backup-filter-type">
           <SportChip
-            label="All types"
+            label={t("All types")}
             icon={Layers}
             count={allCount}
             active={draft.sportGroups.length === 0}
@@ -258,7 +258,7 @@ export function ActivityBackupFilters({
           {ACTIVITY_BACKUP_SPORT_GROUPS.map((group) => (
             <SportChip
               key={group.id}
-              label={group.label}
+              label={t(group.label)}
               icon={SPORT_GROUP_ICONS[group.id] ?? Shapes}
               count={groupCounts ? groupCounts[group.id] ?? 0 : undefined}
               active={draft.sportGroups.includes(group.id)}
@@ -272,8 +272,7 @@ export function ActivityBackupFilters({
       <div className="backup-filter-split">
         <section className="backup-filter-section" aria-labelledby="backup-filter-time">
           <h3 className="backup-filter-label" id="backup-filter-time">
-            Time
-          </h3>
+            {t("Activity period")}</h3>
           <div
             className="data-intervals-range backup-filter-presets"
             role="radiogroup"
@@ -289,14 +288,14 @@ export function ActivityBackupFilters({
                 disabled={disabled}
                 onClick={() => update({ datePreset: preset.value })}
               >
-                {preset.label}
+                {t(preset.label)}
               </button>
             ))}
           </div>
           {draft.datePreset === "custom" ? (
             <div className="backup-filter-pair backup-filter-dates">
               <label className="backup-filter-input">
-                <span>From</span>
+                <span>{t("From")}</span>
                 <input
                   type="date"
                   value={draft.customFrom}
@@ -309,7 +308,7 @@ export function ActivityBackupFilters({
                 →
               </span>
               <label className="backup-filter-input">
-                <span>To</span>
+                <span>{t("To")}</span>
                 <input
                   type="date"
                   value={draft.customTo}
@@ -324,11 +323,10 @@ export function ActivityBackupFilters({
 
         <section className="backup-filter-section" aria-labelledby="backup-filter-length">
           <h3 className="backup-filter-label" id="backup-filter-length">
-            Length
-          </h3>
+            {t("Activity length")}</h3>
           <div className="backup-filter-lengths">
             <RangeInputs
-              label="Distance"
+              label={t("Distance")}
               icon={Ruler}
               unit={distanceUnit(unitSystem)}
               min={draft.distanceMin}
@@ -338,7 +336,7 @@ export function ActivityBackupFilters({
               onChange={(distanceMin, distanceMax) => update({ distanceMin, distanceMax })}
             />
             <RangeInputs
-              label="Duration"
+              label={t("Duration")}
               icon={Timer}
               unit="min"
               min={draft.durationMin}
@@ -375,6 +373,7 @@ function SportChip({
   disabled: boolean;
   onClick: () => void;
 }) {
+  useLanguage();
   const empty = count === 0 && !active;
   return (
     <button
@@ -389,7 +388,7 @@ function SportChip({
       {count === undefined ? (
         <span className="backup-chip-count is-pending" aria-hidden="true" />
       ) : (
-        <span className="backup-chip-count">{count.toLocaleString()}</span>
+        <span className="backup-chip-count">{count.toLocaleString(getLocale())}</span>
       )}
     </button>
   );
@@ -414,8 +413,9 @@ function RangeInputs({
   disabled: boolean;
   onChange: (min: string, max: string) => void;
 }) {
+  useLanguage();
   return (
-    <div className="backup-filter-range" role="group" aria-label={`${label} in ${unit}`}>
+    <div className="backup-filter-range" role="group" aria-label={t("{{p0}} in {{p1}}", { p0: label, p1: unit })}>
       <span className="backup-filter-range-name">
         <Icon size={13} aria-hidden="true" />
         {label}
@@ -427,8 +427,8 @@ function RangeInputs({
             inputMode="decimal"
             min="0"
             step={step}
-            placeholder="Min"
-            aria-label={`Minimum ${label.toLowerCase()} (${unit})`}
+            placeholder={t("Min")}
+            aria-label={t("Minimum {{p0}} ({{p1}})", { p0: label.toLowerCase(), p1: unit })}
             value={min}
             disabled={disabled}
             onChange={(event) => onChange(event.target.value, max)}
@@ -444,8 +444,8 @@ function RangeInputs({
             inputMode="decimal"
             min="0"
             step={step}
-            placeholder="Max"
-            aria-label={`Maximum ${label.toLowerCase()} (${unit})`}
+            placeholder={t("Max")}
+            aria-label={t("Maximum {{p0}} ({{p1}})", { p0: label.toLowerCase(), p1: unit })}
             value={max}
             disabled={disabled}
             onChange={(event) => onChange(min, event.target.value)}

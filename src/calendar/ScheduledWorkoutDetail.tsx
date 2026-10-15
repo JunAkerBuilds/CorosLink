@@ -1,3 +1,4 @@
+import { getLocale, useLanguage, t } from "../i18n/training";
 import { motion, useReducedMotion } from "motion/react";
 import {
   Activity,
@@ -135,23 +136,24 @@ function formatDetailVolume(volume: string | undefined, unitSystem: UnitSystem):
   const setCount = value.match(/^(\d+(?:\.\d+)?)\s+set\(s\)$/i);
   if (!setCount) return value;
 
-  return `${setCount[1]} ${Number(setCount[1]) === 1 ? "set" : "sets"}`;
+  return `${setCount[1]} ${Number(setCount[1]) === 1 ? t("set") : t("sets")}`;
 }
 
 function formatDetailLoad(load?: number): string {
   const value = formatUpcomingWorkoutLoad(load);
-  return value === "--" ? value : value.replace(/TL$/, " TL");
+  return value === "--" ? value : value.replace(/(TL|CE)$/, ` ${t("TL")}`);
 }
 
 export function ScheduledWorkoutDetail({
   entry,
   sportTypes
 }: ScheduledWorkoutDetailProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const reduceMotion = useReducedMotion();
   const view = useMemo(
     () => buildScheduledWorkoutView(entry, unitSystem),
-    [entry, unitSystem]
+    [entry, unitSystem, getLocale()]
   );
   const sport = workoutSportFromType(entry.sportType);
   const sportMeta = sport ? SPORT_VIEW[sport] : undefined;
@@ -201,7 +203,7 @@ export function ScheduledWorkoutDetail({
   const structureSummary = view.totals.stepCount > 0
     ? `${view.totals.stepCount} step${view.totals.stepCount === 1 ? "" : "s"}${
         view.totals.repeatGroups > 0
-          ? `, ${view.totals.repeatGroups} repeat group${view.totals.repeatGroups === 1 ? "" : "s"}`
+          ? t(", {{value1}} repeat group{{value2}}", { value1: String(view.totals.repeatGroups), value2: String(view.totals.repeatGroups === 1 ? "" : "s") })
           : ""
       }`
     : undefined;
@@ -215,9 +217,9 @@ export function ScheduledWorkoutDetail({
           </span>
           <div className="sched-hero-title">
             <div className="sched-hero-heading">
-              <span className="sched-hero-sport">{sportName}</span>
+              <span className="sched-hero-sport">{t(sportName)}</span>
               {showCategoryChip ? (
-                <span className="sched-hero-chip">{workoutCategory}</span>
+                <span className="sched-hero-chip">{t(workoutCategory)}</span>
               ) : null}
             </div>
             {structureSummary ? (
@@ -233,7 +235,7 @@ export function ScheduledWorkoutDetail({
             <div className="sched-stat" key={stat.label}>
               <dt className="sched-stat-label">
                 <stat.icon size={12} aria-hidden="true" />
-                {stat.label}
+                {t(stat.label)}
               </dt>
               <dd className="sched-stat-value">{stat.value}</dd>
             </div>
@@ -246,16 +248,14 @@ export function ScheduledWorkoutDetail({
           <div className="sched-structure-head">
             <h4>
               <ListChecks size={14} aria-hidden="true" />
-              Workout structure
-            </h4>
+              {t("Workout structure")} </h4>
             {view.totals.distanceMeters ? (
               <span className="sched-structure-total">
                 {formatStepDistanceLabel(
                   view.totals.distanceMeters,
                   unitSystem,
                   sport === "swim"
-                )} total
-              </span>
+                )} {t("total")} </span>
             ) : null}
           </div>
           {isStrength ? (
@@ -271,7 +271,7 @@ export function ScheduledWorkoutDetail({
       ) : (
         <motion.div className="sched-empty" {...rise(0.06)}>
           <ListChecks size={18} aria-hidden="true" />
-          <p>No structured steps — this workout runs by feel.</p>
+          <p>{t("No structured steps — this workout runs by feel.")}</p>
         </motion.div>
       )}
     </div>
@@ -340,6 +340,7 @@ function CardioStructure({
   unitSystem: UnitSystem;
   swim: boolean;
 }) {
+  useLanguage();
   const segments = buildBarSegments(view, unitSystem, swim);
   const kindsPresent = KIND_ORDER.filter((kind) =>
     view.nodes.some((node) =>
@@ -354,16 +355,16 @@ function CardioStructure({
       <div
         className="sched-bar"
         role="img"
-        aria-label={`Workout structure: ${segments
+        aria-label={t("Workout structure: {{value1}}", { value1: String(segments
           .map((segment) => segment.label)
-          .join(", ")}`}
+          .join(", ")) })}
       >
         {segments.map((segment) => (
           <span
             key={segment.key}
             className={`sched-bar-segment is-${segment.kind}`}
             style={{ flexGrow: segment.grow }}
-            title={segment.label}
+            title={t(segment.label)}
           />
         ))}
       </div>
@@ -372,7 +373,7 @@ function CardioStructure({
           {kindsPresent.map((kind) => (
             <span key={kind} className={`sched-legend-item is-${kind}`}>
               <span className="sched-legend-dot" />
-              {KIND_LABEL[kind]}
+              {t(KIND_LABEL[kind])}
             </span>
           ))}
         </div>
@@ -396,6 +397,7 @@ function CardioStructure({
 }
 
 function StepRow({ step }: { step: ScheduledStepView }) {
+  useLanguage();
   const KindIcon = KIND_ICON[step.kind];
   const setsSuffix =
     step.sets && step.sets > 1 && !step.reps ? ` ×${step.sets}` : null;
@@ -429,6 +431,7 @@ function RepeatCard({
   unitSystem: UnitSystem;
   swim: boolean;
 }) {
+  useLanguage();
   const perRep = node.magnitude
     ? node.magnitudeType === "distance"
       ? formatStepDistanceLabel(node.magnitude, unitSystem, swim)
@@ -447,11 +450,10 @@ function RepeatCard({
         <span className="sched-repeat-token" aria-hidden="true">
           <Repeat size={12} />
         </span>
-        <span className="sched-repeat-title">Repeat ×{node.repeat}</span>
+        <span className="sched-repeat-title">{t("Repeat ×")}{node.repeat}</span>
         {perRep && total ? (
           <span className="sched-repeat-total">
-            {perRep} each · {total} total
-          </span>
+            {perRep} {t("each ·")} {total} {t("total")} </span>
         ) : null}
       </div>
       <ol className="sched-repeat-steps">
@@ -479,6 +481,7 @@ function StrengthStructure({
   view: ScheduledStructureView;
   unitSystem: UnitSystem;
 }) {
+  useLanguage();
   const steps = flatSteps(view);
   const totalSets = steps.reduce((sum, step) => sum + (step.sets ?? 1), 0);
   const tonnage = steps.reduce(
@@ -496,13 +499,12 @@ function StrengthStructure({
     <>
       <div className="sched-strength-summary">
         <span className="sched-strength-chip">
-          {steps.length} exercise{steps.length === 1 ? "" : "s"}
+          {steps.length} {t("exercise")}{steps.length === 1 ? "" : "s"}
         </span>
-        <span className="sched-strength-chip">{totalSets} sets</span>
+        <span className="sched-strength-chip">{totalSets} {t("sets")}</span>
         {tonnage > 0 ? (
           <span className="sched-strength-chip">
-            {formatTonnage(tonnage, unitSystem)} lifted
-          </span>
+            {formatTonnage(tonnage, unitSystem)} {t("lifted")} </span>
         ) : null}
       </div>
       <div className="sched-strength-list">
@@ -513,7 +515,7 @@ function StrengthStructure({
             <div className="sched-circuit" key={node.id}>
               <div className="sched-circuit-head">
                 <Repeat size={12} aria-hidden="true" />
-                Circuit ×{node.repeat}
+                {t("Circuit ×")}{node.repeat}
               </div>
               {node.steps.map((step) => (
                 <LiftCard key={step.id} step={step} unitSystem={unitSystem} />
@@ -533,6 +535,7 @@ function LiftCard({
   step: ScheduledStepView;
   unitSystem: UnitSystem;
 }) {
+  useLanguage();
   const sets = step.sets ?? 1;
   const scheme = [
     sets > 1 ? `${sets} ×` : null,

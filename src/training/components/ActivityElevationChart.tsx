@@ -1,3 +1,4 @@
+import { getLocale, useLanguage, t } from "../../i18n/training";
 import { useMemo } from "react";
 import {
   Area,
@@ -40,6 +41,7 @@ function ElevationTooltip({
   label,
   unitSystem
 }: TooltipContentProps & { unitSystem: UnitSystem }) {
+  useLanguage();
   if (!active || !payload?.length) {
     return null;
   }
@@ -48,13 +50,14 @@ function ElevationTooltip({
 
   return (
     <div className="training-chart-tooltip">
-      <span>{label}</span>
+      <span>{(label == null ? label : t(String(label)))}</span>
       <strong>{typeof elevation === "number" ? `${Math.round(elevation)} ${elevationUnit(unitSystem)}` : "-"}</strong>
     </div>
   );
 }
 
 export function ActivityElevationChart({ track }: ActivityElevationChartProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const data = useMemo(() => {
     const points = track?.points ?? [];
@@ -83,12 +86,12 @@ export function ActivityElevationChart({ track }: ActivityElevationChartProps) {
         elevation: metersToElevation(point.elevation!, unitSystem)
       };
     });
-  }, [track, unitSystem]);
+  }, [track, unitSystem, getLocale()]);
 
   if (data.length < 2) {
     return (
       <div className="activity-elevation-empty">
-        <p>No elevation profile available for this activity.</p>
+        <p>{t("No elevation profile available for this activity.")}</p>
       </div>
     );
   }

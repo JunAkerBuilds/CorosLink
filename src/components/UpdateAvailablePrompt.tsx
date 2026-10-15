@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n";
 import { useEffect, useRef, useState } from "react";
 import { Download, Sparkles } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -50,6 +51,7 @@ export function UpdateAvailablePrompt({
   onDecline,
   previewKey,
 }: UpdateAvailablePromptProps) {
+  useLanguage();
   const [visibleVersion, setVisibleVersion] = useState<string | null>(null);
   const promptedVersions = useRef(new Set<string>());
   const handledPreviewKey = useRef<number | undefined>(undefined);
@@ -113,19 +115,19 @@ export function UpdateAvailablePrompt({
   const isManualInstall =
     isDownloaded && snapshot.installMethod === "manual";
   const actionLabel = isManualInstall
-    ? "Open download"
+    ? t("Open download")
     : isDownloaded
-      ? "Restart and update"
-      : "Update now";
+      ? t("Restart and update")
+      : t("Update now");
   const progress = Math.round(snapshot.downloadPercent ?? 0);
   const statusText =
     snapshot.status === "downloading"
-      ? `Downloading ${progress}% — CorosLink will restart when it is ready.`
+      ? t("Downloading {{percent}}% — CorosLink will restart when it is ready.", { percent: progress })
       : isManualInstall
-        ? "The installer will open in your browser."
+        ? t("The installer will open in your browser.")
         : isDownloaded
-          ? "The update is downloaded and ready to install."
-          : "CorosLink will download the update and restart to finish installing it.";
+          ? t("The update is downloaded and ready to install.")
+          : t("CorosLink will download the update and restart to finish installing it.");
 
   const decline = () => {
     if (previewKey === undefined) {
@@ -160,10 +162,10 @@ export function UpdateAvailablePrompt({
             aria-hidden="true"
           />
           <div>
-            <p className="update-prompt-eyebrow">Update available</p>
+            <p className="update-prompt-eyebrow">{t("Update available")}</p>
             <h2 id="update-prompt-title">CorosLink {visibleVersion}</h2>
             <p id="update-prompt-description">
-              Everything new since CorosLink {snapshot.currentVersion}.
+              {t("Everything new since CorosLink")} {snapshot.currentVersion}.
             </p>
           </div>
         </header>
@@ -185,8 +187,7 @@ export function UpdateAvailablePrompt({
             </ReactMarkdown>
           ) : (
             <p>
-              This release includes the latest improvements and bug fixes.
-            </p>
+              {t("This release includes the latest improvements and bug fixes.")} </p>
           )}
         </div>
 
@@ -198,8 +199,7 @@ export function UpdateAvailablePrompt({
               type="button"
               onClick={decline}
             >
-              Not now
-            </button>
+              {t("Not now")} </button>
             <button
               className="primary-button"
               type="button"

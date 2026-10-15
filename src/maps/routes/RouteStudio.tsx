@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n/tools";
 import {
   AlertCircle,
   CheckCircle2,
@@ -106,6 +107,7 @@ export function RouteStudio({
   onMessage: (message: string | null) => void;
   onError: (message: string | null) => void;
 }) {
+  const { language } = useLanguage();
   const { unitSystem } = useUnitSystem();
   const [mode, setMode] = useSelectionPreference(
     ROUTE_STUDIO_MODE_PREFERENCE
@@ -245,7 +247,7 @@ export function RouteStudio({
         return;
       }
       if (pinTarget) {
-        const label = `Pinned ${point.lat.toFixed(4)}, ${point.lon.toFixed(4)}`;
+        const label = t("Pinned {{p0}}, {{p1}}", { p0: point.lat.toFixed(4), p1: point.lon.toFixed(4) });
         const resolved: ResolvedPoint = {
           ...point,
           label,
@@ -368,7 +370,7 @@ export function RouteStudio({
       setActiveSavedId(route.id);
       await refreshRoutes();
       setFitRequestId((id) => id + 1);
-      onMessage(regenerate ? "Generated a fresh loop." : "Route ready.");
+      onMessage(regenerate ? t("Generated a fresh loop.") : t("Route ready."));
     } catch (caught) {
       onError(toErrorMessage(caught));
     } finally {
@@ -403,7 +405,7 @@ export function RouteStudio({
       draw.clear();
       setMode("generate");
       setFitRequestId((id) => id + 1);
-      onMessage("Route saved.");
+      onMessage(t("Route saved."));
     } catch (caught) {
       onError(toErrorMessage(caught));
     } finally {
@@ -424,10 +426,10 @@ export function RouteStudio({
       );
       const name =
         sketch.tool === "template" && template
-          ? `${template.label} sketch`
+          ? t("{{p0}} sketch", { p0: template.label })
           : sketch.tool === "text" && sketch.text.trim()
-            ? `“${sketch.text.trim().toUpperCase()}” sketch`
-            : "Freehand sketch";
+            ? t("“{{p0}}” sketch", { p0: sketch.text.trim().toUpperCase() })
+            : t("Freehand sketch");
       const payload: DrawnRoutePayload = {
         name,
         waypoints: sketch.waypoints,
@@ -448,7 +450,7 @@ export function RouteStudio({
       sketch.clear();
       setMode("generate");
       setFitRequestId((id) => id + 1);
-      onMessage("Sketch route saved.");
+      onMessage(t("Sketch route saved."));
     } catch (caught) {
       onError(toErrorMessage(caught));
     } finally {
@@ -478,8 +480,8 @@ export function RouteStudio({
       if (imported.length > 0) {
         onMessage(
           imported.length === 1
-            ? `Imported "${imported[0]!.name}".`
-            : `Imported ${imported.length} routes.`
+            ? t("Imported \"{{p0}}\".", { p0: imported[0]!.name })
+            : t("Imported {{p0}} routes.", { p0: imported.length })
         );
       }
       if (failures.length > 0) {
@@ -487,7 +489,7 @@ export function RouteStudio({
           .map(({ fileName, message }) => `${fileName}: ${message}`)
           .join("; ");
         onError(
-          `Could not import ${failures.length} file${failures.length === 1 ? "" : "s"}. ${failureDetails}`
+          t("Could not import {{p0}} file{{p1}}. {{p2}}", { p0: failures.length, p1: failures.length === 1 ? "" : "s", p2: failureDetails })
         );
       }
     } catch (caught) {
@@ -504,7 +506,7 @@ export function RouteStudio({
     try {
       const route = await api.getGeneratedRoute(summary.id);
       if (requestId !== previewRequestId.current) return;
-      if (!route) throw new Error("Saved route was not found. Refresh the route list and try again.");
+      if (!route) throw new Error(t("Saved route was not found. Refresh the route list and try again."));
       setPreviewRoute(route);
       setActiveSavedId(route.id);
       setMode("generate");
@@ -523,7 +525,7 @@ export function RouteStudio({
     try {
       const filePath = await api.exportGeneratedRoute(route.id);
       if (filePath) {
-        onMessage("GPX exported.");
+        onMessage(t("GPX exported."));
       }
     } catch (caught) {
       onError(toErrorMessage(caught));
@@ -540,8 +542,8 @@ export function RouteStudio({
     try {
       const result = await api.syncCorosRoute(route.id);
       setSyncStatus(result);
-      if (result.phase === "complete") onMessage(`"${result.routeName}" synced and verified on your watch.`);
-      else if (result.phase === "cancelled") onMessage("Route sync cancelled.");
+      if (result.phase === "complete") onMessage(t("\"{{p0}}\" synced and verified on your watch.", { p0: result.routeName }));
+      else if (result.phase === "cancelled") onMessage(t("Route sync cancelled."));
     } catch (caught) {
       const message = toErrorMessage(caught);
       setSyncStatus(current => ({ ...current!, phase: "failed", error: message }));
@@ -584,7 +586,7 @@ export function RouteStudio({
         setActiveSavedId(null);
       }
       await refreshRoutes(routePage.offset);
-      onMessage("Route deleted.");
+      onMessage(t("Route deleted."));
     } catch (caught) {
       onError(toErrorMessage(caught));
     }
@@ -616,7 +618,7 @@ export function RouteStudio({
       activityType: previewRoute.activityType,
       points: previewRoute.points
     };
-  }, [mode, draw.geometry, sketch.geometry, previewRoute, activityType]);
+  }, [mode, draw.geometry, sketch.geometry, previewRoute, activityType, language]);
 
   const showStartPin = mode === "generate" && !previewRoute && Boolean(start);
   const showEndPin =
@@ -651,7 +653,7 @@ export function RouteStudio({
         onSketchCenterMove={sketch.setCenter}
       />
 
-      <nav className="route-mode-tabs" aria-label="Route tools">
+      <nav className="route-mode-tabs" aria-label={t("Route tools")}>
         {MODE_TABS.map((tab) => {
           const Icon = tab.icon;
           return (
@@ -662,7 +664,7 @@ export function RouteStudio({
               onClick={() => setMode(tab.id)}
             >
               <Icon size={16} aria-hidden="true" />
-              {tab.label}
+              {t(tab.label)}
             </button>
           );
         })}
@@ -674,23 +676,21 @@ export function RouteStudio({
           className="route-saved-toggle route-import-toggle"
           onClick={() => void handleImportGpx()}
           disabled={importing}
-          title="Import one or more GPX files as routes"
+          title={t("Import one or more GPX files as routes")}
         >
           {importing ? (
             <Loader2 size={16} className="spin" aria-hidden="true" />
           ) : (
             <FileUp size={16} aria-hidden="true" />
           )}
-          Import GPX
-        </button>
+          {t("Import GPX")}</button>
         <button
           type="button"
           className="route-saved-toggle"
           onClick={() => setDrawerOpen(true)}
         >
           <FolderOpen size={16} aria-hidden="true" />
-          Saved
-          {routePage.total > 0 ? <span className="badge">{routePage.total}</span> : null}
+          {t("Saved")}{routePage.total > 0 ? <span className="badge">{routePage.total}</span> : null}
         </button>
       </div>
 
@@ -698,21 +698,21 @@ export function RouteStudio({
         <header className="route-panel-head">
           <h2>
             {mode === "generate"
-              ? "Generate a route"
+              ? t("Generate a route")
               : mode === "draw"
-                ? "Draw a route"
+                ? t("Draw a route")
                 : mode === "sketch"
-                  ? "Sketch GPS art"
-                  : "Explore trails"}
+                  ? t("Sketch GPS art")
+                  : t("Explore trails")}
           </h2>
           <p>
             {mode === "generate"
-              ? "Pick a start — CorosLink builds the rest."
+              ? t("Pick a start — CorosLink builds the rest.")
               : mode === "draw"
-                ? "Click the map to drop points; drag to refine."
+                ? t("Click the map to drop points; drag to refine.")
                 : mode === "sketch"
-                  ? "Draw a shape or word, then snap it to streets."
-                  : "Real-world marked routes from OpenStreetMap."}
+                  ? t("Draw a shape or word, then snap it to streets.")
+                  : t("Real-world marked routes from OpenStreetMap.")}
           </p>
         </header>
 
@@ -797,17 +797,17 @@ export function RouteStudio({
               syncStatus.phase === "failed" ? <AlertCircle size={18} aria-hidden="true" /> :
               syncing ? <Loader2 size={18} className="spin" aria-hidden="true" /> : <X size={18} aria-hidden="true" />}
             <div className="route-sync-copy">
-              <strong>{syncStatus.phase === "complete" ? "Synced to watch" :
-                syncStatus.phase === "failed" ? "Route sync failed" : syncStatus.phase === "cancelled" ? "Route sync cancelled" :
-                syncStatus.phase === "connecting" ? "Connecting to your watch…" : syncStatus.phase === "preparing" ? "Preparing route…" :
-                syncStatus.phase === "verifying" ? "Verifying route…" : "Syncing route…"}</strong>
+              <strong>{syncStatus.phase === "complete" ? t("Synced to watch") :
+                syncStatus.phase === "failed" ? t("Route sync failed") : syncStatus.phase === "cancelled" ? t("Route sync cancelled") :
+                syncStatus.phase === "connecting" ? t("Connecting to your watch…") : syncStatus.phase === "preparing" ? t("Preparing route…") :
+                syncStatus.phase === "verifying" ? t("Verifying route…") : t("Syncing route…")}</strong>
               <span title={syncStatus.error ?? syncStatus.routeName}>{syncStatus.error ?? syncStatus.routeName}</span>
             </div>
-            {syncing && syncStatus.totalBytes > 0 ? <progress aria-label="Route sync progress" max={syncStatus.totalBytes} value={syncStatus.sentBytes} /> : null}
+            {syncing && syncStatus.totalBytes > 0 ? <progress aria-label={t("Route sync progress")} max={syncStatus.totalBytes} value={syncStatus.sentBytes} /> : null}
             {syncing ? <button type="button" className="button ghost" disabled={cancelPending} onClick={() => void handleCancelSync()}>
-              {cancelPending ? "Cancelling…" : "Cancel sync"}
-            </button> : <button type="button" className="icon-button route-sync-dismiss" aria-label="Dismiss route sync message"
-              title="Dismiss route sync message" onClick={() => setSyncStatus(null)}><X size={16} aria-hidden="true" /></button>}
+              {cancelPending ? t("Cancelling…") : t("Cancel sync")}
+            </button> : <button type="button" className="icon-button route-sync-dismiss" aria-label={t("Dismiss route sync message")}
+              title={t("Dismiss route sync message")} onClick={() => setSyncStatus(null)}><X size={16} aria-hidden="true" /></button>}
           </div>
         ) : null}
         <RouteStatsBar
@@ -873,6 +873,7 @@ function AdvancedRouting({
   onMessage: (message: string | null) => void;
   onError: (message: string | null) => void;
 }) {
+  const { language } = useLanguage();
   const [open, setOpen] = useState(false);
   const [backend, setBackend] = useState<RouteBackend>("keyless");
   const [apiKey, setApiKey] = useState("");
@@ -903,7 +904,7 @@ function AdvancedRouting({
           return;
         }
       }
-      onMessage("Routing settings saved.");
+      onMessage(t("Routing settings saved."));
     } catch (caught) {
       onError(toErrorMessage(caught));
     } finally {
@@ -919,8 +920,7 @@ function AdvancedRouting({
         onClick={() => setOpen((value) => !value)}
       >
         <KeyRound size={14} aria-hidden="true" />
-        Advanced routing
-        {open ? (
+        {t("Advanced routing")}{open ? (
           <ChevronUp size={14} aria-hidden="true" />
         ) : (
           <ChevronDown size={14} aria-hidden="true" />
@@ -928,14 +928,13 @@ function AdvancedRouting({
       </button>
       {open ? (
         <div className="route-advanced-body">
-          <div className="route-toggle" role="group" aria-label="Routing engine">
+          <div className="route-toggle" role="group" aria-label={t("Routing engine")}>
             <button
               type="button"
               className={backend === "keyless" ? "is-active" : ""}
               onClick={() => setBackend("keyless")}
             >
-              Keyless
-            </button>
+              {t("Keyless")}</button>
             <button
               type="button"
               className={backend === "ors" ? "is-active" : ""}
@@ -948,14 +947,13 @@ function AdvancedRouting({
             <input
               type="password"
               className="route-advanced-key"
-              placeholder="OpenRouteService API key"
+              placeholder={t("OpenRouteService API key")}
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
             />
           ) : (
             <small>
-              Keyless routing uses BRouter &amp; Nominatim — free, no signup.
-            </small>
+              {t("Keyless routing uses BRouter &amp; Nominatim — free, no signup.")}</small>
           )}
           <button
             type="button"
@@ -964,8 +962,7 @@ function AdvancedRouting({
             disabled={saving}
           >
             {saving ? <Loader2 size={14} className="spin" aria-hidden="true" /> : null}
-            Save settings
-          </button>
+            {t("Save settings")}</button>
         </div>
       ) : null}
     </div>
@@ -979,19 +976,20 @@ function ShareModal({
   session: RouteShareSession;
   onClose: () => void;
 }) {
+  const { language } = useLanguage();
   return (
     <div className="route-share-overlay" role="dialog" aria-modal="true">
       <div className="route-share-modal">
         <div className="route-share-header">
           <div>
-            <p className="eyebrow">Share to phone</p>
-            <h3>Scan to open on your phone</h3>
+            <p className="eyebrow">{t("Share to phone")}</p>
+            <h3>{t("Scan to open on your phone")}</h3>
           </div>
           <button
             type="button"
             className="icon-button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("Close")}
           >
             <X size={18} aria-hidden="true" />
           </button>
@@ -999,22 +997,19 @@ function ShareModal({
         <img
           className="route-share-qr"
           src={session.qrDataUrl}
-          alt="QR code linking to the route GPX"
+          alt={t("QR code linking to the route GPX")}
           width={240}
           height={240}
         />
         <ol className="route-share-steps">
-          <li>Make sure your phone is on the same Wi-Fi as this computer.</li>
-          <li>Open the camera and scan the code to download the GPX.</li>
+          <li>{t("Make sure your phone is on the same Wi-Fi as this computer.")}</li>
+          <li>{t("Open the camera and scan the code to download the GPX.")}</li>
           <li>
-            Tap <strong>Share / Open with…</strong> and choose the COROS app to
-            import the route.
-          </li>
+            {t("Tap")} <strong>{t("Share / Open with…")}</strong>  {t("and choose the COROS app to import the route.")}</li>
         </ol>
         <p className="route-share-url">{session.url}</p>
         <small className="route-share-note">
-          Link works on your local network only and expires in ~10 minutes.
-        </small>
+          {t("Link works on your local network only and expires in ~10 minutes.")}</small>
       </div>
     </div>
   );

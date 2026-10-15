@@ -1,3 +1,4 @@
+import { useLanguage, t } from "../i18n/training";
 /**
  * The Training Library draws exactly one kind of picture: a ridge of weekly
  * training load. `Ridge` puts it on an index row so a plan can be recognised by
@@ -30,8 +31,9 @@ interface RidgeProps {
 }
 
 export function Ridge({ values, peakWeek, unit, variant, label }: RidgeProps) {
+  useLanguage();
   if (values.length === 0) {
-    return <span className="tl-ridge is-blank" aria-label="No weeks">&mdash;</span>;
+    return <span className="tl-ridge is-blank" aria-label={t("No weeks")}>&mdash;</span>;
   }
 
   const peak = Math.max(...values);
@@ -40,7 +42,7 @@ export function Ridge({ values, peakWeek, unit, variant, label }: RidgeProps) {
     <span
       className={`tl-ridge${variant === "count" ? " is-count" : ""}`}
       role="img"
-      aria-label={label}
+      aria-label={t(label)}
     >
       {values.map((value, index) => {
         const share = peak > 0 ? value / peak : 0;
@@ -48,7 +50,7 @@ export function Ridge({ values, peakWeek, unit, variant, label }: RidgeProps) {
         return (
           <span
             key={index}
-            title={`Week ${index + 1}: ${Math.round(value)} ${unit}`}
+            title={t("Week {{value1}}: {{value2}} {{value3}}", { value1: String(index + 1), value2: String(Math.round(value)), value3: String(unit) })}
             className={`tl-ridge-bar${value > 0 ? "" : " is-empty"}${marked ? " is-peak" : ""}`}
             style={{
               "--tl-bar-height": value > 0 ? `${Math.max(share, MINIMUM_SHARE) * 100}%` : "2px",
@@ -56,7 +58,7 @@ export function Ridge({ values, peakWeek, unit, variant, label }: RidgeProps) {
             } as React.CSSProperties}
           >
             <span className="sr-only">
-              Week {index + 1}: {Math.round(value)} {unit}
+              {t("Week")} {index + 1}: {Math.round(value)} {unit}
             </span>
           </span>
         );
@@ -81,15 +83,16 @@ interface BulletRidgeProps {
  * inside it. A solid bar taller than its pale bar means the week ran over plan.
  */
 export function BulletRidge({ weeks, label }: BulletRidgeProps) {
+  useLanguage();
   const peak = Math.max(1, ...weeks.map((week) => Math.max(week.planned, week.completed)));
 
   return (
-    <div className="tl-bullets" role="img" aria-label={label}>
+    <div className="tl-bullets" role="img" aria-label={t(label)}>
       {weeks.map((week, index) => (
         <span
           className="tl-bullet"
           key={week.weekLabel}
-          title={`${week.weekLabel} — planned ${Math.round(week.planned)}, done ${Math.round(week.completed)}`}
+          title={t("{{value1}} — planned {{value2}}, done {{value3}}", { value1: String(week.weekLabel), value2: String(Math.round(week.planned)), value3: String(Math.round(week.completed)) })}
           style={{ "--tl-bar-index": index < STAGGER_LIMIT ? index : STAGGER_LIMIT } as React.CSSProperties}
         >
           <b style={{ "--tl-bar-height": `${(week.planned / peak) * 100}%` } as React.CSSProperties} />

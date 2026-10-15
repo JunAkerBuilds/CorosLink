@@ -1,3 +1,4 @@
+import { useLanguage, t, getLocale } from "../i18n/training";
 import {
   CalendarDays,
   Check,
@@ -32,7 +33,7 @@ function errorMessage(error: unknown): string {
         /^Error invoking remote method '[^']+': (?:Error: )?/,
         "",
       )
-    : "Could not connect your calendar. Try again.";
+    : t("Could not connect your calendar. Try again.");
 }
 
 type CalendarProvider = "google" | "apple";
@@ -48,6 +49,7 @@ function CalendarConnection({
   provider: CalendarProvider;
   suggestedEmail?: string;
 }) {
+  useLanguage();
   const isGoogle = provider === "google";
   const providerName = isGoogle ? "Google Calendar" : "Apple Calendar";
   const destinationName = isGoogle ? "Google" : "iCloud";
@@ -55,8 +57,8 @@ function CalendarConnection({
   const autoSyncLabelId = useId();
   const autoSyncDescriptionId = useId();
   const timeZonesId = useId();
-  const defaultTiming = useMemo(defaultCalendarEventTiming, []);
-  const timeZones = useMemo(() => [...new Set([defaultTiming.timeZone, "UTC", ...Intl.supportedValuesOf("timeZone")])], [defaultTiming]);
+  const defaultTiming = useMemo(defaultCalendarEventTiming, [getLocale()]);
+  const timeZones = useMemo(() => [...new Set([defaultTiming.timeZone, "UTC", ...Intl.supportedValuesOf("timeZone")])], [defaultTiming, getLocale()]);
   const [timingDraft, setTimingDraft] = useState<CalendarEventTiming | null>(null);
   const [appleEmail, setAppleEmail] = useState("");
   const [appPassword, setAppPassword] = useState("");
@@ -79,7 +81,7 @@ function CalendarConnection({
             disconnect: api.disconnectAppleCalendar,
             cancelConnect: api.cancelAppleCalendarConnect,
           },
-    [api, isGoogle],
+    [api, isGoogle, getLocale()],
   );
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
   const [calendars, setCalendars] = useState<CalendarChoice[]>([]);
@@ -133,7 +135,7 @@ function CalendarConnection({
       );
       if (items.length === 0)
         setMessage(
-          `No editable calendars were found. Connect an account with permission to edit a ${destinationName} calendar.`,
+          t("No editable calendars were found. Connect an account with permission to edit a {{value1}} calendar.", { value1: String(destinationName) }),
         );
     }
   }, [adapter, destinationName]);
@@ -182,7 +184,7 @@ function CalendarConnection({
       setStatus(next);
       setClientSecret("");
       setSetupOpen(false);
-      setMessage("Google Calendar is ready to connect.");
+      setMessage(t("Google Calendar is ready to connect."));
     });
   }
 
@@ -196,7 +198,7 @@ function CalendarConnection({
       const result = await adapter.sync();
       if (saveCalendar) setCalendars([]);
       setMessage(
-        `Calendar synced: ${result.created} added, ${result.updated} updated, ${result.deleted} removed.`,
+        t("Calendar synced: {{value1}} added, {{value2}} updated, {{value3}} removed.", { value1: String(result.created), value2: String(result.updated), value3: String(result.deleted) }),
       );
     });
   }
@@ -209,7 +211,7 @@ function CalendarConnection({
   const connecting = busy === "connect" || status?.connecting;
   const choosingCalendar = calendars.length > 0;
   const lastSynced = status?.lastSyncedAt
-    ? new Date(status.lastSyncedAt).toLocaleString(undefined, {
+    ? new Date(status.lastSyncedAt).toLocaleString(getLocale(), {
         month: "short",
         day: "numeric",
         hour: "numeric",
@@ -224,7 +226,7 @@ function CalendarConnection({
   return (
     <section
       className="calendar-connection-connection"
-      aria-label={`${providerName} connection`}
+      aria-label={t("{{value1}} connection", { value1: String(providerName) })}
     >
       <div className="calendar-connection-overview">
         <div className="calendar-connection-heading">
@@ -235,34 +237,27 @@ function CalendarConnection({
             <h3>{providerName}</h3>
             {status?.connected ? (
               <span className="calendar-connection-badge">
-                <Check size={13} aria-hidden="true" /> Connected
-              </span>
+                <Check size={13} aria-hidden="true" /> {t("Connected")} </span>
             ) : null}
           </div>
         </div>
         <p className="calendar-connection-hint">
-          Your scheduled workouts appear in {destinationName},
-          from the past 7 days through the next 90 days.
-        </p>
+          {t("Your scheduled workouts appear in")} {destinationName}{t(", from the past 7 days through the next 90 days.")} </p>
         <p className="calendar-connection-hint">
-          Choose all-day events or timed workout blocks. Calendar edits won’t
-          update your COROS training plan.
-        </p>
+          {t("Choose all-day events or timed workout blocks. Calendar edits won’t update your COROS training plan.")} </p>
       </div>
 
       <div className="calendar-connection-content">
         {!status && !error ? (
           <p className="calendar-connection-loading" role="status">
-            <Loader2 size={15} className="spin" aria-hidden="true" /> Loading
-            calendar connection…
-          </p>
+            <Loader2 size={15} className="spin" aria-hidden="true" /> {t("Loading calendar connection…")} </p>
         ) : null}
 
         {status?.connected ? (
           <>
             <div className="calendar-connection-row calendar-connection-account">
               <div className="calendar-connection-row-copy">
-                <span className="calendar-connection-label">Account</span>
+                <span className="calendar-connection-label">{t("Account")}</span>
                 <strong>{status.accountEmail}</strong>
               </div>
               <button
@@ -276,27 +271,23 @@ function CalendarConnection({
                     setCalendars([]);
                     setSelected("");
                     setMessage(
-                      `${providerName} disconnected. Previously synced events remain in your calendar.${isGoogle ? "" : " You can also revoke the app-specific password at account.apple.com."}`,
+                      t("{{value1}} disconnected. Previously synced events remain in your calendar.{{value2}}", { value1: String(providerName), value2: String(isGoogle ? "" : " You can also revoke the app-specific password at account.apple.com.") }),
                     );
                   })
                 }
               >
-                {busy === "disconnect" ? "Disconnecting…" : "Disconnect"}
+                {busy === "disconnect" ? t("Disconnecting…") : t("Disconnect")}
               </button>
             </div>
             {!status.accountMatches ? (
               <p className="calendar-error">
-                Sync is paused. Sign in to the linked COROS account, or
-                disconnect and reconnect {providerName} for your current
-                account.
-              </p>
+                {t("Sync is paused. Sign in to the linked COROS account, or disconnect and reconnect")} {providerName} {t("for your current account.")} </p>
             ) : null}
 
             {choosingCalendar ? (
               <div className="calendar-connection-destination calendar-connection-row">
                 <label className="field">
-                  Destination calendar
-                  <select
+                  {t("Destination calendar")} <select
                     value={selected}
                     onChange={(event) => setSelected(event.target.value)}
                     disabled={working}
@@ -304,16 +295,14 @@ function CalendarConnection({
                     {calendars.map((calendar) => (
                       <option value={calendar.id} key={calendar.id}>
                         {calendar.name}
-                        {calendar.primary ? " (primary)" : ""}
+                        {calendar.primary ? t(" (primary)") : ""}
                       </option>
                     ))}
                   </select>
                 </label>
                 {status.calendar && status.calendar.id !== selected ? (
                   <p className="calendar-connection-hint">
-                    Previously synced events stay in the old calendar. New syncs
-                    will use the selected calendar.
-                  </p>
+                    {t("Previously synced events stay in the old calendar. New syncs will use the selected calendar.")} </p>
                 ) : null}
                 <div className="calendar-connection-actions">
                   <button
@@ -328,8 +317,8 @@ function CalendarConnection({
                       <RefreshCw size={15} aria-hidden="true" />
                     )}
                     {status.calendar?.id === selected
-                      ? "Save and sync"
-                      : "Start syncing"}
+                      ? t("Save and sync")
+                      : t("Start syncing")}
                   </button>
                   <button
                     className="calendar-connection-text-button"
@@ -340,18 +329,16 @@ function CalendarConnection({
                       setSelected(status.calendar?.id ?? "");
                     }}
                   >
-                    Cancel
-                  </button>
+                    {t("Cancel")} </button>
                 </div>
               </div>
             ) : (
               <div className="calendar-connection-row">
                 <div className="calendar-connection-row-copy">
                   <span className="calendar-connection-label">
-                    Destination calendar
-                  </span>
+                    {t("Destination calendar")} </span>
                   <strong>
-                    {status.calendar?.name ?? "No calendar selected"}
+                    {status.calendar?.name ?? t("No calendar selected")}
                   </strong>
                 </div>
                 <button
@@ -365,7 +352,7 @@ function CalendarConnection({
                   ) : (
                     <CalendarDays size={15} aria-hidden="true" />
                   )}
-                  {status.calendar ? "Change" : "Choose calendar"}
+                  {status.calendar ? t("Change") : t("Choose calendar")}
                 </button>
               </div>
             )}
@@ -379,57 +366,49 @@ function CalendarConnection({
                     await adapter.updateSettings({ eventTiming: timing });
                     if (mounted.current) setTimingDraft(null);
                     const result = await adapter.sync();
-                    if (mounted.current) setMessage(`Event preferences saved. ${result.created} added, ${result.updated} updated, ${result.deleted} removed.`);
+                    if (mounted.current) setMessage(t("Event preferences saved. {{value1}} added, {{value2}} updated, {{value3}} removed.", { value1: String(result.created), value2: String(result.updated), value3: String(result.deleted) }));
                   });
                 }}
               >
                 <div className="calendar-connection-row-copy">
-                  <strong>Workout events</strong>
-                  <p className="calendar-connection-hint">Choose how workouts fit into your calendar.</p>
+                  <strong>{t("Workout events")}</strong>
+                  <p className="calendar-connection-hint">{t("Choose how workouts fit into your calendar.")}</p>
                 </div>
                 <fieldset disabled={working || !status.accountMatches}>
                   <label className="field">
-                    Event type
-                    <select value={timing.mode} onChange={(event) => changeTiming({ mode: event.target.value as CalendarEventTiming["mode"] })}>
-                      <option value="all-day">All-day events</option>
-                      <option value="timed">Timed events</option>
+                    {t("Event type")} <select value={timing.mode} onChange={(event) => changeTiming({ mode: event.target.value as CalendarEventTiming["mode"] })}>
+                      <option value="all-day">{t("All-day events")}</option>
+                      <option value="timed">{t("Timed events")}</option>
                     </select>
                   </label>
                   {timing.mode === "timed" ? (
                     <>
                       <div className="calendar-event-time-fields">
                         <label className="field">
-                          Default start time
-                          <input type="time" required value={timing.startTime} onChange={(event) => changeTiming({ startTime: event.target.value })} />
+                          {t("Default start time")} <input type="time" required value={timing.startTime} onChange={(event) => changeTiming({ startTime: event.target.value })} />
                         </label>
                         <label className="field">
-                          Default end time
-                          <input type="time" required value={timing.endTime} onChange={(event) => changeTiming({ endTime: event.target.value })} />
+                          {t("Default end time")} <input type="time" required value={timing.endTime} onChange={(event) => changeTiming({ endTime: event.target.value })} />
                         </label>
                       </div>
                       <label className="field">
-                        Time zone
-                        <input type="text" required list={timeZonesId} value={timing.timeZone} onChange={(event) => changeTiming({ timeZone: event.target.value })} />
+                        {t("Time zone")} <input type="text" required list={timeZonesId} value={timing.timeZone} onChange={(event) => changeTiming({ timeZone: event.target.value })} />
                         <datalist id={timeZonesId}>{timeZones.map(zone => <option key={zone} value={zone} />)}</datalist>
                       </label>
                       <p className="calendar-connection-hint">
-                        Choose the start and end times for your events. Move or resize individual events in {providerName}; sync keeps those times when workout details change.
-                      </p>
-                      {timing.endTime <= timing.startTime ? <p className="calendar-connection-hint">End time is on the following day.</p> : null}
+                        {t("Choose the start and end times for your events. Move or resize individual events in")} {providerName}{t("; sync keeps those times when workout details change.")} </p>
+                      {timing.endTime <= timing.startTime ? <p className="calendar-connection-hint">{t("End time is on the following day.")}</p> : null}
                     </>
                   ) : null}
                   {timingChanged ? (
                     <p className="calendar-connection-hint">
-                      Saving updates synced workouts without individual event settings in the past 7 and next 90 days.
-                      Rescheduling a workout in CorosLink also reapplies its time.
-                    </p>
+                      {t("Saving updates synced workouts without individual event settings in the past 7 and next 90 days. Rescheduling a workout in CorosLink also reapplies its time.")} </p>
                   ) : null}
                   <div className="calendar-connection-actions">
                     <button type="submit" className="primary-button" disabled={!timingChanged}>
                       {busy === "timing" ? <Loader2 size={15} className="spin" aria-hidden="true" /> : null}
-                      Save event preferences and sync
-                    </button>
-                    {timingChanged ? <button type="button" className="calendar-connection-text-button" onClick={() => setTimingDraft(null)}>Cancel</button> : null}
+                      {t("Save event preferences and sync")} </button>
+                    {timingChanged ? <button type="button" className="calendar-connection-text-button" onClick={() => setTimingDraft(null)}>{t("Cancel")}</button> : null}
                   </div>
                 </fieldset>
               </form>
@@ -439,13 +418,12 @@ function CalendarConnection({
               <div className="calendar-connection-row calendar-connection-sync-settings">
                 <label className="calendar-connection-toggle">
                   <span className="calendar-connection-row-copy">
-                    <strong id={autoSyncLabelId}>Automatic sync</strong>
+                    <strong id={autoSyncLabelId}>{t("Automatic sync")}</strong>
                     <span
                       id={autoSyncDescriptionId}
                       className="calendar-connection-hint"
                     >
-                      Every 5 minutes while CorosLink is running.
-                    </span>
+                      {t("Every 5 minutes while CorosLink is running.")} </span>
                   </span>
                   <span className="calendar-connection-switch">
                     <input
@@ -476,20 +454,19 @@ function CalendarConnection({
                 <div className="calendar-connection-row-copy">
                   <span className="calendar-connection-label">
                     {syncState === "syncing"
-                      ? "Syncing workouts…"
-                      : "Last synced"}
+                      ? t("Syncing workouts…")
+                      : t("Last synced")}
                   </span>
                   {lastSynced ? (
                     <time
                       dateTime={status.lastSyncedAt}
-                      title={new Date(status.lastSyncedAt!).toLocaleString()}
+                      title={new Date(status.lastSyncedAt!).toLocaleString(getLocale())}
                     >
                       {lastSynced}
                     </time>
                   ) : (
                     <span className="calendar-connection-hint">
-                      No successful sync yet
-                    </span>
+                      {t("No successful sync yet")} </span>
                   )}
                 </div>
                 <button
@@ -508,10 +485,10 @@ function CalendarConnection({
                     />
                   )}
                   {syncState === "syncing"
-                    ? "Syncing…"
+                    ? t("Syncing…")
                     : syncState === "synced"
-                      ? "Synced"
-                      : "Sync now"}
+                      ? t("Synced")
+                      : t("Sync now")}
                 </button>
               </div>
             ) : null}
@@ -522,8 +499,7 @@ function CalendarConnection({
                 disabled={working}
                 onClick={() => void connect()}
               >
-                Reconnect account
-              </button>
+                {t("Reconnect account")} </button>
             ) : null}
           </>
         ) : status ? (
@@ -538,13 +514,9 @@ function CalendarConnection({
                 }}
               >
                 <p className="calendar-connection-hint">
-                  Connect the iCloud account you use in Apple Calendar. Enable
-                  iCloud Calendar on your Apple devices to see synced workouts
-                  there.
-                </p>
+                  {t("Connect the iCloud account you use in Apple Calendar. Enable iCloud Calendar on your Apple devices to see synced workouts there.")} </p>
                 <label className="field">
-                  Apple Account email
-                  <input
+                  {t("Apple Account email")} <input
                     type="email"
                     autoComplete="username"
                     required
@@ -555,12 +527,11 @@ function CalendarConnection({
                 </label>
                 {suggestedEmail && appleEmail !== suggestedEmail ? (
                   <button type="button" className="secondary-button account-email-suggestion" disabled={working} onClick={() => setAppleEmail(suggestedEmail)}>
-                    Use COROS email · {suggestedEmail}
+                    {t("Use COROS email ·")} {suggestedEmail}
                   </button>
                 ) : null}
                 <label className="field">
-                  App-specific password
-                  <input
+                  {t("App-specific password")} <input
                     type="password"
                     autoComplete="off"
                     required
@@ -575,14 +546,11 @@ function CalendarConnection({
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Create an app-specific password{" "}
+                  {t("Create an app-specific password")}{" "}
                   <ExternalLink size={12} aria-hidden="true" />
                 </a>
                 <p className="calendar-connection-hint">
-                  Use a password generated for CorosLink in your Apple Account’s
-                  Sign-In and Security settings. It is encrypted on this
-                  computer.
-                </p>
+                  {t("Use a password generated for CorosLink in your Apple Account’s Sign-In and Security settings. It is encrypted on this computer.")} </p>
               </form>
             ) : null}
             <div className="calendar-connection-actions">
@@ -605,9 +573,9 @@ function CalendarConnection({
                 )}
                 {connecting
                   ? isGoogle
-                    ? "Waiting for Google sign-in…"
-                    : "Connecting to iCloud…"
-                  : `Connect ${providerName}`}
+                    ? t("Waiting for Google sign-in…")
+                    : t("Connecting to iCloud…")
+                  : t("Connect {{value1}}", { value1: String(providerName) })}
               </button>
               {connecting ? (
                 <button
@@ -619,8 +587,7 @@ function CalendarConnection({
                       .catch((error) => setError(errorMessage(error)))
                   }
                 >
-                  Cancel sign-in
-                </button>
+                  {t("Cancel sign-in")} </button>
               ) : null}
               {isGoogle && status.configured ? (
                 <button
@@ -629,30 +596,25 @@ function CalendarConnection({
                   disabled={working}
                   onClick={() => setSetupOpen((open) => !open)}
                 >
-                  App setup
-                </button>
+                  {t("App setup")} </button>
               ) : null}
             </div>
             {isGoogle && (setupOpen || !status.configured) ? (
               <form className="calendar-connection-setup" onSubmit={saveConfig}>
-                <h3>Google app setup</h3>
+                <h3>{t("Google app setup")}</h3>
                 <p className="calendar-connection-hint">
-                  Enable the Google Calendar API in your Google Cloud project,
-                  then create an OAuth client of type{" "}
-                  <strong>Desktop app</strong>. If your app is in testing, add
-                  your Google account as a test user.
-                </p>
+                  {t("Enable the Google Calendar API in your Google Cloud project, then create an OAuth client of type")}{" "}
+                  <strong>{t("Desktop app")}</strong>{t(". If your app is in testing, add your Google account as a test user.")} </p>
                 <a
                   href="https://developers.google.com/identity/protocols/oauth2/native-app#prerequisites"
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Google setup instructions{" "}
+                  {t("Google setup instructions")}{" "}
                   <ExternalLink size={12} aria-hidden="true" />
                 </a>
                 <label className="field">
-                  Client ID
-                  <input
+                  {t("Client ID")} <input
                     autoComplete="off"
                     spellCheck={false}
                     required
@@ -663,8 +625,7 @@ function CalendarConnection({
                   />
                 </label>
                 <label className="field">
-                  Client secret (if provided by Google)
-                  <input
+                  {t("Client secret (if provided by Google)")} <input
                     type="password"
                     autoComplete="new-password"
                     value={clientSecret}
@@ -677,8 +638,7 @@ function CalendarConnection({
                   type="submit"
                   disabled={working || !clientId.trim()}
                 >
-                  Save app setup
-                </button>
+                  {t("Save app setup")} </button>
               </form>
             ) : null}
           </>
@@ -691,7 +651,7 @@ function CalendarConnection({
         ) : null}
         {message ? (
           <p className="calendar-connection-success" role="status">
-            {message}
+            {t(message)}
           </p>
         ) : null}
       </div>
@@ -700,33 +660,32 @@ function CalendarConnection({
 }
 
 export function CalendarConnections({ api, initialProvider = "google", suggestedEmail }: { api: CorosLinkApi; initialProvider?: CalendarProvider; suggestedEmail?: string }) {
+  useLanguage();
   const [provider, setProvider] = useState<CalendarProvider>(initialProvider);
   return (
     <div className="calendar-connections">
       <div className="calendar-connections-header">
         <div className="calendar-connections-title">
-          <h2>Calendar sync</h2>
-          <p>Keep planned workouts alongside the rest of your day.</p>
+          <h2>{t("Calendar sync")}</h2>
+          <p>{t("Keep planned workouts alongside the rest of your day.")}</p>
         </div>
         <div
           className="calendar-provider-tabs"
           role="group"
-          aria-label="Calendar provider"
+          aria-label={t("Calendar provider")}
         >
           <button
             type="button"
             aria-pressed={provider === "google"}
             onClick={() => setProvider("google")}
           >
-            Google Calendar
-          </button>
+            {t("Google Calendar")} </button>
           <button
             type="button"
             aria-pressed={provider === "apple"}
             onClick={() => setProvider("apple")}
           >
-            Apple Calendar
-          </button>
+            {t("Apple Calendar")} </button>
         </div>
       </div>
       <CalendarConnection key={provider} api={api} provider={provider} suggestedEmail={suggestedEmail} />
@@ -741,6 +700,7 @@ export function CalendarConnectionsDialog({
   api: CorosLinkApi;
   onClose: () => void;
 }) {
+  useLanguage();
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const element = dialog.current;
@@ -751,13 +711,13 @@ export function CalendarConnectionsDialog({
     <dialog
       className="calendar-connection-dialog"
       ref={dialog}
-      aria-label="Connect your calendar"
+      aria-label={t("Connect your calendar")}
       onCancel={onClose}
     >
       <button
         type="button"
         className="icon-button calendar-connection-close"
-        aria-label="Close calendar connection"
+        aria-label={t("Close calendar connection")}
         onClick={onClose}
       >
         <X size={18} aria-hidden="true" />

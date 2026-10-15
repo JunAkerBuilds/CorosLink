@@ -1,3 +1,4 @@
+import { getLocale, useLanguage, t } from "../../i18n/training";
 import { useMemo, useState, type CSSProperties } from "react";
 import {
   Braces,
@@ -73,6 +74,7 @@ function splitValueUnit(value: string): [string, string] {
 }
 
 function DetailStat({ label, value, icon: Icon, tone, splitUnit = false }: DetailStatProps) {
+  useLanguage();
   const [number, unit] = splitUnit ? splitValueUnit(value) : [value, ""];
   return (
     <div
@@ -84,7 +86,7 @@ function DetailStat({ label, value, icon: Icon, tone, splitUnit = false }: Detai
           <Icon size={15} aria-hidden="true" />
         </span>
       ) : null}
-      <span>{label}</span>
+      <span>{t(label)}</span>
       <strong>
         {number}
         {unit ? <small>{unit}</small> : null}
@@ -127,6 +129,7 @@ export function ActivityDetailPanel({
   onExportFile,
   exportDisabled = false
 }: ActivityDetailPanelProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const [showRaw, setShowRaw] = useState(false);
   const [mapExpanded, setMapExpanded] = useState(false);
@@ -141,7 +144,7 @@ export function ActivityDetailPanel({
     }
 
     return undefined;
-  }, [detail, listActivity, sportTypes]);
+  }, [detail, listActivity, sportTypes, getLocale()]);
 
   const isLoading =
     listActivity &&
@@ -158,14 +161,14 @@ export function ActivityDetailPanel({
         {showcase ? null : (
           <div className="section-heading compact">
             <div>
-              <p className="eyebrow">Activity Detail</p>
-              <h2>{listActivity?.name ?? "Selected activity"}</h2>
+              <p className="eyebrow">{t("Activity Detail")}</p>
+              <h2>{listActivity?.name ?? t("Selected activity")}</h2>
             </div>
           </div>
         )}
         <div className="training-detail-loading">
           <Loader2 className="spin" size={22} aria-hidden="true" />
-          <p>Loading activity…</p>
+          <p>{t("Loading activity…")}</p>
         </div>
       </div>
     );
@@ -177,13 +180,13 @@ export function ActivityDetailPanel({
         {showcase ? null : (
           <div className="section-heading compact">
             <div>
-              <p className="eyebrow">Activity Detail</p>
-              <h2>Select an activity</h2>
+              <p className="eyebrow">{t("Activity Detail")}</p>
+              <h2>{t("Select an activity")}</h2>
             </div>
           </div>
         )}
         <div className="training-empty-state">
-          <p>Click a row to view route, elevation, and lap data.</p>
+          <p>{t("Click a row to view route, elevation, and lap data.")}</p>
         </div>
       </div>
     );
@@ -235,12 +238,12 @@ export function ActivityDetailPanel({
       {showcase ? null : (
         <div className="section-heading compact">
           <div>
-            <p className="eyebrow">Activity Detail</p>
-            <h2>{detail.name ?? listActivity?.name ?? "Selected activity"}</h2>
-            {(sportName || startTime) && (
+            <p className="eyebrow">{t("Activity Detail")}</p>
+            <h2>{detail.name ?? listActivity?.name ?? t("Selected activity")}</h2>
+            {((sportName == null ? sportName : t(String(sportName))) || startTime) && (
               <div className="activity-detail-meta">
                 {sportName ? (
-                  <span className="activity-detail-sport">{sportName}</span>
+                  <span className="activity-detail-sport">{t(sportName)}</span>
                 ) : null}
                 {startTime ? (
                   <span>{formatTrainingTimestamp(startTime)}</span>
@@ -259,7 +262,7 @@ export function ActivityDetailPanel({
             {stats.map((stat) => (
               <DetailStat
                 key={stat.label}
-                label={stat.label}
+                label={t(stat.label)}
                 value={stat.value}
                 icon={showcase ? stat.icon : undefined}
                 tone={showcase ? stat.tone : undefined}
@@ -273,8 +276,7 @@ export function ActivityDetailPanel({
               <div className="activity-detail-visual-heading">
                 <h3>
                   {showcase ? <Route size={17} aria-hidden="true" /> : null}
-                  Route
-                </h3>
+                  {t("Route")} </h3>
               </div>
               <ActivityRouteMap
                 track={detail.track}
@@ -287,14 +289,13 @@ export function ActivityDetailPanel({
               <div className="activity-detail-visual-heading">
                 <h3>
                   {showcase ? <Mountain size={17} aria-hidden="true" /> : null}
-                  Elevation
-                </h3>
+                  {t("Elevation")} </h3>
                 {showcase && (elevation || detail.elevationGain !== undefined) ? (
                   <span className="activity-detail-visual-note">
                     {elevation ? (
                       <>
-                        <span>Min <strong>{formatElevationMeters(elevation.min, unitSystem)}</strong></span>
-                        <span>Max <strong>{formatElevationMeters(elevation.max, unitSystem)}</strong></span>
+                        <span>{t("Min")} <strong>{formatElevationMeters(elevation.min, unitSystem)}</strong></span>
+                        <span>{t("Max")} <strong>{formatElevationMeters(elevation.max, unitSystem)}</strong></span>
                       </>
                     ) : null}
                     {detail.elevationGain !== undefined ? (
@@ -311,8 +312,7 @@ export function ActivityDetailPanel({
             <div className="training-laps-section">
               <h3>
                 {showcase ? <Timer size={17} aria-hidden="true" /> : null}
-                Laps
-                {showcase ? (
+                {t("Laps")} {showcase ? (
                   <span className="activity-detail-visual-note">{detail.laps.length}</span>
                 ) : null}
               </h3>
@@ -323,19 +323,19 @@ export function ActivityDetailPanel({
                       <th>#</th>
                       {showcase ? (
                         <>
-                          <th>Distance</th>
-                          <th>Duration</th>
+                          <th>{t("Distance")}</th>
+                          <th>{t("Duration")}</th>
                           {!swim ? <th>{paceLabel}</th> : null}
                         </>
                       ) : (
                         <>
-                          <th>Duration</th>
-                          <th>Distance</th>
+                          <th>{t("Duration")}</th>
+                          <th>{t("Distance")}</th>
                         </>
                       )}
-                      <th>Avg HR</th>
-                      <th>Max HR</th>
-                      <th>{showcase ? "Elevation" : "Elev."}</th>
+                      <th>{t("Avg HR")}</th>
+                      <th>{t("Max HR")}</th>
+                      <th>{showcase ? t("Elevation") : t("Elev.")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -379,7 +379,7 @@ export function ActivityDetailPanel({
               activityName={detail.name ?? listActivity.name ?? "activity"}
               busy={busy}
               disabled={exportDisabled}
-              label="Export"
+              label={t("Export")}
               onExportFile={onExportFile}
             />
           ) : null}
@@ -391,7 +391,7 @@ export function ActivityDetailPanel({
             onClick={() => setShowRaw((current) => !current)}
           >
             <Braces size={15} aria-hidden="true" />
-            {showRaw ? "Hide raw JSON" : "Raw JSON"}
+            {showRaw ? t("Hide raw JSON") : t("Raw JSON")}
           </button>
           {hasRoute && !detail.strength ? (
             <button
@@ -399,8 +399,7 @@ export function ActivityDetailPanel({
               className="primary-button activity-detail-view-map"
               onClick={() => setMapExpanded(true)}
             >
-              View on Map
-              <Maximize2 size={15} aria-hidden="true" />
+              {t("View on Map")} <Maximize2 size={15} aria-hidden="true" />
             </button>
           ) : null}
         </footer>
@@ -412,7 +411,7 @@ export function ActivityDetailPanel({
             onClick={() => setShowRaw((current) => !current)}
           >
             <Braces size={14} aria-hidden="true" />
-            {showRaw ? "Hide raw JSON" : "Show raw JSON"}
+            {showRaw ? t("Hide raw JSON") : t("Show raw JSON")}
           </button>
         </div>
       )}

@@ -1,3 +1,4 @@
+import { getLocale, useLanguage, t } from "../../i18n/training";
 import { useCallback, useEffect, useId, useMemo, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type {
@@ -49,7 +50,7 @@ export function recordLabel(record: TrainingHubPersonalRecord, unitSystem: UnitS
     );
   }
 
-  return record.label;
+  return t(record.label);
 }
 
 /** Split "12.01km" / "84m" into a bold value and a muted unit. */
@@ -105,6 +106,7 @@ const RAIN = Array.from({ length: 72 }, (_, index) => ({
 }));
 
 export function RecordBurst({ variant = "card" }: { variant?: "card" | "overlay" }) {
+  useLanguage();
   const particles = variant === "overlay" ? OVERLAY_BURST : CARD_BURST;
 
   return (
@@ -132,6 +134,7 @@ export function RecordBurst({ variant = "card" }: { variant?: "card" | "overlay"
 
 /** Text split per character so the digits can roll in. */
 export function RollingText({ text, rolling, delay = 200 }: { text: string; rolling: boolean; delay?: number }) {
+  useLanguage();
   if (!rolling) {
     return <>{text}</>;
   }
@@ -170,14 +173,14 @@ export function usePersonalRecordCelebration(
   const [state, setState] = useState<CelebrationState | null>(null);
   const records = useMemo(
     () => (dashboard?.personalRecords ?? []).flatMap((group) => group.records),
-    [dashboard]
+    [dashboard, getLocale()]
   );
   const signaturesKey = useMemo(
     () =>
       [...new Set(records.filter(isPersonalRecordPopulated).map(recordSignature))]
         .sort()
         .join("|"),
-    [records]
+    [records, getLocale()]
   );
 
   useEffect(() => {
@@ -277,6 +280,7 @@ export function PersonalRecordCelebrationOverlay({
   record,
   onDismiss
 }: PersonalRecordCelebrationOverlayProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const titleId = useId();
   const [leaving, setLeaving] = useState(false);
@@ -347,7 +351,7 @@ export function PersonalRecordCelebrationOverlay({
             src={`${PR_ASSET_BASE}/left-wheat_no_bg.png`}
             alt=""
           />
-          <span className="pr-celebration-medal">PR</span>
+          <span className="pr-celebration-medal">{t("PR")}</span>
           <img
             className="pr-celebration-wheat is-right"
             src={`${PR_ASSET_BASE}/left-wheat_no_bg.png`}
@@ -356,9 +360,9 @@ export function PersonalRecordCelebrationOverlay({
           <RecordBurst variant="overlay" />
         </div>
 
-        <p className="pr-celebration-eyebrow">New personal record</p>
+        <p className="pr-celebration-eyebrow">{t("New personal record")}</p>
         <h2 className="pr-celebration-title" id={titleId}>
-          {label}
+          {t(label)}
         </h2>
         <p className="pr-celebration-hero">
           <RollingText text={value} rolling delay={900} />
@@ -371,8 +375,7 @@ export function PersonalRecordCelebrationOverlay({
         </p>
 
         <button type="button" className="pr-celebration-continue" autoFocus onClick={leave}>
-          Continue
-        </button>
+          {t("Continue")} </button>
       </div>
     </div>,
     document.body

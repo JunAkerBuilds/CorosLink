@@ -1,3 +1,4 @@
+import { formatNumber, t } from "../i18n/trainingLocale";
 import type {
   TrainingHubActivity,
   TrainingHubDailyMetric
@@ -164,7 +165,7 @@ function formatDayDisplayValue(
 ): string {
   switch (metric) {
     case "distance":
-      return `${metersToDisplayDistance(raw, unitSystem).toFixed(2)} ${distanceUnit(unitSystem)}`;
+      return `${formatNumber(metersToDisplayDistance(raw, unitSystem), { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${distanceUnit(unitSystem)}`;
     case "duration":
       return formatDurationTotal(raw);
     case "trainingLoad":
@@ -189,7 +190,7 @@ function formatWeeklyTotal(
 ): string {
   switch (metric) {
     case "distance":
-      return `${metersToDisplayDistance(totalRaw, unitSystem).toFixed(2)} ${distanceUnit(unitSystem)}`;
+      return `${formatNumber(metersToDisplayDistance(totalRaw, unitSystem), { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${distanceUnit(unitSystem)}`;
     case "duration":
       return formatDurationTotal(totalRaw);
     case "trainingLoad":
@@ -225,7 +226,7 @@ function yAxisUnitForMetric(
 
 function formatAxisTick(value: number, metric: WeeklyActivityMetric, useMinutes: boolean): string {
   if (metric === "distance") {
-    return value.toFixed(value >= 10 ? 0 : 1);
+    return formatNumber(value, { minimumFractionDigits: value >= 10 ? 0 : 1, maximumFractionDigits: value >= 10 ? 0 : 1 });
   }
 
   if (metric === "trainingLoad") {
@@ -236,7 +237,7 @@ function formatAxisTick(value: number, metric: WeeklyActivityMetric, useMinutes:
     return String(Math.round(value * 60));
   }
 
-  return value >= 1 ? value.toFixed(1) : value.toFixed(2);
+  return value >= 1 ? formatNumber(value, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : formatNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export function buildWeeklyActivitySeries(
@@ -317,7 +318,7 @@ export function getWeeklyActivityYAxisUnitLabel(
   yAxisUnit: string
 ): string {
   if (metric === "trainingLoad") {
-    return "Load";
+    return t("Load");
   }
 
   return yAxisUnit;

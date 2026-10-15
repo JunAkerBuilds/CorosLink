@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import {
   useCallback,
   useEffect,
@@ -94,6 +95,7 @@ export function AudiobooksView({
   onMessage,
   onError,
 }: AudiobooksViewProps) {
+  const { language } = useLanguage();
   const api = window.corosLink;
   const [tab, setTab] = useState<AudiobookTab>(readStoredTab);
   const [books, setBooks] = useState<Audiobook[]>([]);
@@ -144,7 +146,7 @@ export function AudiobooksView({
     const offUpdated = api.onAudiobookUpdated((book) => {
       setProgress((current) => withoutKey(current, book.id));
       if (book.status === "ready") {
-        onMessage(`"${book.title}" is ready to send: ${partCountLabel(book.parts.length)}.`);
+        onMessage(t("\"{{p0}}\" is ready to send: {{p1}}.", { p0: book.title, p1: partCountLabel(book.parts.length) }));
       } else if (book.status === "failed" && book.error) {
         onError(`${book.title}: ${book.error}`);
       }
@@ -205,7 +207,7 @@ export function AudiobooksView({
         const book = await api.importFreeAudiobook(detail.identifier, split);
         addBook(book);
         changeTab("books");
-        onMessage(`Downloading "${book.title}" from LibriVox.`);
+        onMessage(t("Downloading \"{{p0}}\" from LibriVox.", { p0: book.title }));
       },
     });
   }
@@ -231,8 +233,8 @@ export function AudiobooksView({
       onWatchStatusChange(result.watch);
       onMessage(
         result.copied === 0
-          ? `"${book.title}" is already on the watch.`
-          : `Sent ${partCountLabel(result.copied)} of "${book.title}" to the watch.`,
+          ? t("\"{{p0}}\" is already on the watch.", { p0: book.title })
+          : t("Sent {{p0}} of \"{{p1}}\" to the watch.", { p0: partCountLabel(result.copied), p1: book.title }),
       );
     });
   }
@@ -240,13 +242,13 @@ export function AudiobooksView({
   function handleRemoveFromWatch(book: Audiobook) {
     void runBookAction(book.id, async () => {
       onWatchStatusChange(await api!.removeAudiobookFromWatch(book.id));
-      onMessage(`Removed "${book.title}" from the watch.`);
+      onMessage(t("Removed \"{{p0}}\" from the watch.", { p0: book.title }));
     });
   }
 
   function handleDelete(book: Audiobook) {
-    const kept = book.source ? "" : " Your original file is kept.";
-    if (!window.confirm(`Delete "${book.title}" from CorosLink?${kept}`)) {
+    const kept = book.source ? "" : t(" Your original file is kept.");
+    if (!window.confirm(t("Delete \"{{p0}}\" from CorosLink?{{p1}}", { p0: book.title, p1: kept }))) {
       return;
     }
     void runBookAction(book.id, async () => {
@@ -261,11 +263,11 @@ export function AudiobooksView({
         <div ref={scrollRef} className="audiobook-scroll">
           <div className="section-heading audiobook-heading">
             <div>
-              <p className="eyebrow">Audiobooks</p>
+              <p className="eyebrow">{t("Audiobooks")}</p>
               <h2>
                 {tab === "books"
-                  ? `${books.length} book${books.length === 1 ? "" : "s"}`
-                  : "Free classics"}
+                  ? t("{{p0}} book{{p1}}", { p0: books.length, p1: books.length === 1 ? "" : "s" })
+                  : t("Free classics")}
               </h2>
             </div>
             {tab === "free" ? (
@@ -281,15 +283,15 @@ export function AudiobooksView({
                 <input
                   type="search"
                   value={freeQuery}
-                  placeholder="What do you want to listen to?"
-                  aria-label="Search free audiobooks"
+                  placeholder={t("What do you want to listen to?")}
+                  aria-label={t("Search free audiobooks")}
                   onChange={(event) => setFreeQuery(event.target.value)}
                 />
                 {freeQuery || freeSearch.query ? (
                   <button
                     type="button"
                     className="audiobook-search-clear"
-                    aria-label="Clear search"
+                    aria-label={t("Clear search")}
                     onClick={() => {
                       setFreeQuery("");
                       submitFreeSearch("");
@@ -301,7 +303,7 @@ export function AudiobooksView({
               </form>
             ) : null}
             <div className="audiobook-heading-actions">
-              <div className="library-filter-group" role="tablist" aria-label="Audiobooks">
+              <div className="library-filter-group" role="tablist" aria-label={t("Audiobooks")}>
                 <button
                   type="button"
                   role="tab"
@@ -312,8 +314,7 @@ export function AudiobooksView({
                   onClick={() => changeTab("books")}
                 >
                   <BookOpen size={14} aria-hidden="true" />
-                  Your books
-                </button>
+                  {t("Your books")}</button>
                 <button
                   type="button"
                   role="tab"
@@ -324,8 +325,7 @@ export function AudiobooksView({
                   onClick={() => changeTab("free")}
                 >
                   <Library size={14} aria-hidden="true" />
-                  Free classics
-                </button>
+                  {t("Free classics")}</button>
               </div>
               <button
                 className="primary-button compact-button"
@@ -338,7 +338,7 @@ export function AudiobooksView({
                 ) : (
                   <Plus size={16} aria-hidden="true" />
                 )}
-                {choosing ? "Reading file" : "Import file"}
+                {choosing ? t("Reading file") : t("Import file")}
               </button>
             </div>
           </div>
@@ -400,6 +400,7 @@ function ConvertDialog({
   onConfirmed: () => void;
   onError: (message: string) => void;
 }) {
+  const { language } = useLanguage();
   const titleId = useId();
   const hasChapters = request.chapterSource !== "none" && request.chapters.length > 1;
   const stored = readStoredSplit();
@@ -410,7 +411,7 @@ function ConvertDialog({
 
   const minutes = clampMinutes(Number(minutesInput));
   const split: AudiobookSplitOptions = { mode, minutes };
-  const parts = useMemo(() => previewParts(request, mode, minutes), [request, mode, minutes]);
+  const parts = useMemo(() => previewParts(request, mode, minutes), [request, mode, minutes, language]);
   const longestChapter = Math.max(0, ...request.chapters.map((chapter) => chapter.durationSeconds));
   const fixedCount = previewParts(request, "minutes", minutes).length;
   const stem = previewFileStem(request.title);
@@ -438,10 +439,10 @@ function ConvertDialog({
 
   const chapterDescription =
     request.chapterSource === "marks"
-      ? "Uses the chapter marks in the file. Each part is named after its chapter."
+      ? t("Uses the chapter marks in the file. Each part is named after its chapter.")
       : request.kind === "librivox"
-        ? "One part per LibriVox section, named after the section."
-        : "One part per file you chose, named after the file.";
+        ? t("One part per LibriVox section, named after the section.")
+        : t("One part per file you chose, named after the file.");
 
   return createPortal(
     <div
@@ -479,7 +480,7 @@ function ConvertDialog({
             showTitle
           />
           <div className="audiobook-convert-heading">
-            <p className="audiobook-convert-kicker">Convert for your watch</p>
+            <p className="audiobook-convert-kicker">{t("Convert for your watch")}</p>
             <h3 id={titleId}>{request.title}</h3>
             <p className="audiobook-convert-meta">
               {[request.author, formatLength(request.durationSeconds)]
@@ -492,7 +493,7 @@ function ConvertDialog({
           <button
             type="button"
             className="audiobook-convert-close"
-            aria-label="Close"
+            aria-label={t("Close")}
             disabled={converting}
             onClick={onClose}
           >
@@ -502,7 +503,7 @@ function ConvertDialog({
 
         <div className="audiobook-convert-body">
           <fieldset className="audiobook-split-options">
-            <legend>Split the book into</legend>
+            <legend>{t("Split the book into")}</legend>
             <div className="audiobook-split-grid">
               <label
                 className={`audiobook-split-option${mode === "chapters" ? " is-selected" : ""}${
@@ -525,20 +526,19 @@ function ConvertDialog({
                     <Check size={13} strokeWidth={3} />
                   </span>
                 </span>
-                <span className="audiobook-split-option-title">Chapters</span>
+                <span className="audiobook-split-option-title">{t("Chapters")}</span>
                 <span className="audiobook-split-count">
                   {hasChapters ? (
                     <>
-                      <strong>{request.chapters.length}</strong> parts
-                    </>
+                      <strong>{request.chapters.length}</strong>  {t("parts")}</>
                   ) : (
-                    "Not available"
+                    t("Not available")
                   )}
                 </span>
                 <span className="audiobook-split-option-hint">
                   {hasChapters
-                    ? `${chapterDescription} Longest is ${formatLength(longestChapter)}.`
-                    : "This book has no chapter marks, so it can only be split by length."}
+                    ? t("{{p0}} Longest is {{p1}}.", { p0: chapterDescription, p1: formatLength(longestChapter) })
+                    : t("This book has no chapter marks, so it can only be split by length.")}
                 </span>
               </label>
 
@@ -560,14 +560,14 @@ function ConvertDialog({
                     <Check size={13} strokeWidth={3} />
                   </span>
                 </span>
-                <span className="audiobook-split-option-title">Equal parts</span>
+                <span className="audiobook-split-option-title">{t("Equal parts")}</span>
                 <span className="audiobook-split-count">
-                  <strong>{fixedCount}</strong> {fixedCount === 1 ? "part" : "parts"}
+                  <strong>{fixedCount}</strong> {fixedCount === 1 ? "part" : t("parts")}
                 </span>
                 <span className="audiobook-stepper">
                   <button
                     type="button"
-                    aria-label="Shorter parts"
+                    aria-label={t("Shorter parts")}
                     disabled={minutes <= MIN_PART_MINUTES}
                     onClick={() => {
                       setMode("minutes");
@@ -584,15 +584,15 @@ function ConvertDialog({
                     max={MAX_PART_MINUTES}
                     step={1}
                     value={minutesInput}
-                    aria-label="Part length in minutes"
+                    aria-label={t("Part length in minutes")}
                     onFocus={() => setMode("minutes")}
                     onChange={(event) => setMinutesInput(event.target.value)}
                     onBlur={() => setMinutesInput(String(minutes))}
                   />
-                  <span className="audiobook-stepper-unit">min</span>
+                  <span className="audiobook-stepper-unit">{t("min")}</span>
                   <button
                     type="button"
-                    aria-label="Longer parts"
+                    aria-label={t("Longer parts")}
                     disabled={minutes >= MAX_PART_MINUTES}
                     onClick={() => {
                       setMode("minutes");
@@ -603,9 +603,7 @@ function ConvertDialog({
                   </button>
                 </span>
                 <span className="audiobook-split-option-hint">
-                  Cuts at the same length every time, even mid-sentence. Short parts lose less when
-                  the watch restarts one.
-                </span>
+                  {t("Cuts at the same length every time, even mid-sentence. Short parts lose less when the watch restarts one.")}</span>
               </label>
             </div>
           </fieldset>
@@ -614,22 +612,19 @@ function ConvertDialog({
             <p className="audiobook-convert-warning" role="note">
               <AlertTriangle size={16} aria-hidden="true" />
               <span>
-                Some chapters run {formatLength(longestChapter)}. If you stop partway through one,
-                the watch starts that chapter again from the beginning. Equal parts keep the loss
-                short.
-              </span>
+                {t("Some chapters run")} {formatLength(longestChapter)}{t(". If you stop partway through one, the watch starts that chapter again from the beginning. Equal parts keep the loss short.")}</span>
             </p>
           ) : null}
 
-          <section className="audiobook-convert-preview" aria-label="Parts preview">
-            <h4>Preview</h4>
+          <section className="audiobook-convert-preview" aria-label={t("Parts preview")}>
+            <h4>{t("Preview")}</h4>
             <ol>
               {parts.slice(0, PREVIEW_PART_COUNT).map((part, index) => (
                 <li key={index}>
                   <span className="audiobook-convert-index">{index + 1}</span>
                   <span className="audiobook-convert-names">
                     <span className="audiobook-convert-chapter">
-                      {part.title ?? `Starts at ${formatClock(part.startSeconds)}`}
+                      {part.title ?? t("Starts at {{p0}}", { p0: formatClock(part.startSeconds) })}
                     </span>
                     <span className="audiobook-convert-file">
                       {stem}{" "}
@@ -645,35 +640,26 @@ function ConvertDialog({
             </ol>
             {parts.length > PREVIEW_PART_COUNT ? (
               <p className="audiobook-convert-more">
-                + {parts.length - PREVIEW_PART_COUNT} more{" "}
-                {parts.length - PREVIEW_PART_COUNT === 1 ? "part" : "parts"}
+                + {parts.length - PREVIEW_PART_COUNT}  {t("more")}{" "}
+                {parts.length - PREVIEW_PART_COUNT === 1 ? "part" : t("parts")}
               </p>
             ) : null}
           </section>
 
-          <section className="audiobook-how" aria-label="How conversion works">
-            <h4>What happens next</h4>
+          <section className="audiobook-how" aria-label={t("How conversion works")}>
+            <h4>{t("What happens next")}</h4>
             <ol>
               {request.kind === "librivox" ? (
                 <li>
-                  CorosLink downloads the recording from the Internet Archive
-                  {request.downloadBytes ? ` (${formatBytes(request.downloadBytes)})` : ""} and
-                  checks every file against its published checksum.
-                </li>
+                  {t("CorosLink downloads the recording from the Internet Archive")}{request.downloadBytes ? ` (${formatBytes(request.downloadBytes)})` : ""}  {t("and checks every file against its published checksum.")}</li>
               ) : null}
               <li>
-                It converts the audio to mono 64 kbps MP3, the only format COROS watches play.
-                {request.kind === "file" ? " Your original file isn't changed." : ""}
+                {t("It converts the audio to mono 64 kbps MP3, the only format COROS watches play.")}{request.kind === "file" ? t(" Your original file isn't changed.") : ""}
               </li>
               <li>
-                It cuts the result into the parts above, numbered in play order. The watch can't
-                remember a position inside a track, so a part you stop halfway through starts again
-                from its beginning.
-              </li>
+                {t("It cuts the result into the parts above, numbered in play order. The watch can't remember a position inside a track, so a part you stop halfway through starts again from its beginning.")}</li>
               <li>
-                When it's done, send the book from Your books. Parts are copied one at a time, first
-                to last, because the watch plays files in the order they arrive.
-              </li>
+                {t("When it's done, send the book from Your books. Parts are copied one at a time, first to last, because the watch plays files in the order they arrive.")}</li>
             </ol>
           </section>
         </div>
@@ -681,7 +667,7 @@ function ConvertDialog({
         <footer className="audiobook-convert-footer">
           <p className="audiobook-convert-summary">
             <strong>{partCountLabel(parts.length)}</strong>
-            <span>about {formatBytes(request.durationSeconds * CONVERTED_BYTES_PER_SECOND)}</span>
+            <span>{t("about")} {formatBytes(request.durationSeconds * CONVERTED_BYTES_PER_SECOND)}</span>
           </p>
           <button
             className="secondary-button compact-button"
@@ -689,8 +675,7 @@ function ConvertDialog({
             disabled={converting}
             onClick={onClose}
           >
-            Cancel
-          </button>
+            {t("Cancel")}</button>
           <button
             className="primary-button compact-button audiobook-convert-go"
             type="button"
@@ -703,8 +688,8 @@ function ConvertDialog({
               <Download size={16} aria-hidden="true" />
             ) : null}
             {request.kind === "librivox"
-              ? `Download and convert`
-              : `Convert into ${partCountLabel(parts.length)}`}
+              ? t("Download and convert")
+              : t("Convert into {{p0}}", { p0: partCountLabel(parts.length) })}
           </button>
         </footer>
       </div>
@@ -740,6 +725,7 @@ function BookShelf({
   onImport: () => void;
   onBrowseFree: () => void;
 }) {
+  const { language } = useLanguage();
   if (books.length === 0) {
     return (
       <div className="audiobook-empty">
@@ -748,26 +734,19 @@ function BookShelf({
           <BookCover title="Dracula" size="small" />
           <BookCover title="Pride and Prejudice" size="small" />
         </div>
-        <h2>Put a book on your wrist</h2>
+        <h2>{t("Put a book on your wrist")}</h2>
         <p>
-          COROS watches play MP3 only and forget your place inside a track, so CorosLink cuts each
-          book into short parts and sends them in order. You choose how it's split before anything
-          is converted.
-        </p>
+          {t("COROS watches play MP3 only and forget your place inside a track, so CorosLink cuts each book into short parts and sends them in order. You choose how it's split before anything is converted.")}</p>
         <div className="audiobook-empty-actions">
           <button className="primary-button compact-button" type="button" onClick={onBrowseFree}>
             <Search size={16} aria-hidden="true" />
-            Browse free classics
-          </button>
+            {t("Browse free classics")}</button>
           <button className="secondary-button compact-button" type="button" onClick={onImport}>
             <Plus size={16} aria-hidden="true" />
-            Import a file
-          </button>
+            {t("Import a file")}</button>
         </div>
         <p className="audiobook-empty-formats">
-          Imports DRM-free .m4b, .m4a, .mp3, .flac and similar files. Select several files to join
-          them into one book.
-        </p>
+          {t("Imports DRM-free .m4b, .m4a, .mp3, .flac and similar files. Select several files to join them into one book.")}</p>
       </div>
     );
   }
@@ -819,6 +798,7 @@ function BookRow({
   onDelete: () => void;
   onCancel: () => void;
 }) {
+  const { language } = useLanguage();
   const ready = book.status === "ready";
   const onWatch = book.parts.filter((part) => part.onWatch).length;
   const total = book.parts.length;
@@ -832,12 +812,12 @@ function BookRow({
       elapsed += part.durationSeconds;
       return start;
     });
-  }, [book.parts]);
+  }, [book.parts, language]);
 
-  let sendLabel = "Send to watch";
-  if (transferring) sendLabel = "Sending";
-  else if (allOnWatch) sendLabel = "On watch";
-  else if (onWatch > 0) sendLabel = `Send ${total - onWatch} more`;
+  let sendLabel = t("Send to watch");
+  if (transferring) sendLabel = t("Sending");
+  else if (allOnWatch) sendLabel = t("On watch");
+  else if (onWatch > 0) sendLabel = t("Send {{p0}} more", { p0: total - onWatch });
 
   return (
     <li className={`audiobook-row${expanded ? " is-expanded" : ""}`}>
@@ -853,20 +833,20 @@ function BookRow({
           {book.status === "converting" ? (
             <BookProgress progress={progress} />
           ) : book.status === "failed" ? (
-            <p className="audiobook-error">{book.error ?? "Conversion failed."}</p>
+            <p className="audiobook-error">{book.error ?? t("Conversion failed.")}</p>
           ) : (
             <>
               <dl className="audiobook-facts">
                 <div>
-                  <dt>Length</dt>
+                  <dt>{t("Audio length")}</dt>
                   <dd>{formatLength(book.durationSeconds)}</dd>
                 </div>
                 <div>
-                  <dt>Split into</dt>
+                  <dt>{t("Split into")}</dt>
                   <dd>{partsSummary(book)}</dd>
                 </div>
                 <div>
-                  <dt>Size</dt>
+                  <dt>{t("Size")}</dt>
                   <dd>{formatBytes(book.sizeBytes)}</dd>
                 </div>
               </dl>
@@ -886,8 +866,8 @@ function BookRow({
               <button
                 className="icon-button"
                 type="button"
-                title={expanded ? "Hide parts" : "Show parts"}
-                aria-label={`${expanded ? "Hide" : "Show"} parts of ${book.title}`}
+                title={expanded ? t("Hide parts") : t("Show parts")}
+                aria-label={t("{{p0}} parts of {{p1}}", { p0: expanded ? t("Hide") : t("Show"), p1: book.title })}
                 aria-expanded={expanded}
                 aria-controls={partsId}
                 onClick={onToggle}
@@ -899,8 +879,8 @@ function BookRow({
               <button
                 className="icon-button"
                 type="button"
-                title="Remove from watch"
-                aria-label={`Remove ${book.title} from watch`}
+                title={t("Remove from watch")}
+                aria-label={t("Remove {{p0}} from watch", { p0: book.title })}
                 disabled={!connected || anyBusy || onWatch === 0}
                 onClick={onRemoveFromWatch}
               >
@@ -910,8 +890,8 @@ function BookRow({
             <button
               className="icon-button audiobook-delete"
               type="button"
-              title="Delete from CorosLink"
-              aria-label={`Delete ${book.title}`}
+              title={t("Delete from CorosLink")}
+              aria-label={t("Delete {{p0}}", { p0: book.title })}
               disabled={busy}
               onClick={onDelete}
             >
@@ -921,8 +901,7 @@ function BookRow({
           {book.status === "converting" ? (
             <button className="secondary-button compact-button" type="button" onClick={onCancel}>
               <X size={15} aria-hidden="true" />
-              Cancel
-            </button>
+              {t("Cancel")}</button>
           ) : null}
           {ready ? (
             <button
@@ -932,7 +911,7 @@ function BookRow({
                   : "primary-button compact-button audiobook-send"
               }
               type="button"
-              title={connected ? undefined : "Connect your watch over USB"}
+              title={connected ? undefined : t("Connect your watch over USB")}
               disabled={!connected || anyBusy || allOnWatch}
               onClick={onTransfer}
             >
@@ -955,7 +934,7 @@ function BookRow({
             <li key={part.index} className={part.onWatch ? "is-on-watch" : undefined}>
               <span className="audiobook-part-number">{part.index}</span>
               <span className="audiobook-part-name">
-                <span>{part.chapterTitle ?? `From ${formatClock(partStarts[offset] ?? 0)}`}</span>
+                <span>{part.chapterTitle ?? t("From {{p0}}", { p0: formatClock(partStarts[offset] ?? 0) })}</span>
                 <small>{part.name}</small>
               </span>
               <span className="audiobook-part-length">{formatLength(part.durationSeconds)}</span>
@@ -963,10 +942,9 @@ function BookRow({
                 {part.onWatch ? (
                   <>
                     <Check size={13} aria-hidden="true" />
-                    On watch
-                  </>
+                    {t("On watch")}</>
                 ) : (
-                  "Not sent"
+                  t("Not sent")
                 )}
               </span>
             </li>
@@ -978,11 +956,12 @@ function BookRow({
 }
 
 function BookProgress({ progress }: { progress?: AudiobookProgress }) {
+  const { language } = useLanguage();
   const percent = Math.round((progress?.progress ?? 0) * 100);
   return (
     <div className="audiobook-progress" role="status" aria-live="polite">
       <div className="audiobook-progress-label">
-        <span>{progress?.message ?? "Preparing"}</span>
+        <span>{progress?.message ?? t("Preparing")}</span>
         <span>{percent}%</span>
       </div>
       <div
@@ -1000,13 +979,14 @@ function BookProgress({ progress }: { progress?: AudiobookProgress }) {
 
 /** One tick per part, so the order the watch will play in stays visible. */
 function WatchMeter({ onWatch, total }: { onWatch: number; total: number }) {
+  const { language } = useLanguage();
   if (total === 0) return null;
   const label =
     onWatch === 0
-      ? "Not on the watch yet"
+      ? t("Not on the watch yet")
       : onWatch === total
-        ? "Every part is on the watch"
-        : `${onWatch} of ${total} parts on the watch`;
+        ? t("Every part is on the watch")
+        : t("{{p0}} of {{p1}} parts on the watch", { p0: onWatch, p1: total });
   return (
     <div className="audiobook-meter" aria-label={label} role="img">
       {total <= 60 ? (
@@ -1041,6 +1021,7 @@ function FreeClassics({
   onShowBooks: () => void;
   onError: (message: string) => void;
 }) {
+  const { language } = useLanguage();
   const api = window.corosLink;
   const [activeQuery, setActiveQuery] = useState("");
   const [results, setResults] = useState<FreeAudiobook[] | null>(null);
@@ -1056,7 +1037,7 @@ function FreeClassics({
           .filter((book) => book.source && book.status !== "failed")
           .map((book) => book.source!.identifier),
       ),
-    [books],
+    [books, language],
   );
 
   // Only the newest request may update the list; an older, slower one is dropped.
@@ -1107,8 +1088,8 @@ function FreeClassics({
       : undefined;
     const meta = [
       detail.runtimeSeconds ? formatLength(detail.runtimeSeconds) : null,
-      detail.sections.length === 1 ? "1 section" : `${detail.sections.length} sections`,
-      convertedBytes ? `about ${formatBytes(convertedBytes)} on the watch` : null,
+      detail.sections.length === 1 ? t("1 section") : t("{{p0}} sections", { p0: detail.sections.length }),
+      convertedBytes ? t("about {{p0}} on the watch", { p0: formatBytes(convertedBytes) }) : null,
       detail.language && detail.language !== "English" ? detail.language : null,
     ].filter((item): item is string => Boolean(item));
     return (
@@ -1127,7 +1108,7 @@ function FreeClassics({
           ) : null}
           <button className="audiobook-back" type="button" onClick={() => setDetail(null)}>
             <ArrowLeft size={15} aria-hidden="true" />
-            {activeQuery ? `Results for “${activeQuery}”` : "Most listened"}
+            {activeQuery ? t("Results for “{{p0}}”", { p0: activeQuery }) : t("Most listened")}
           </button>
           <div className="audiobook-hero-body">
             <BookCover
@@ -1137,7 +1118,7 @@ function FreeClassics({
               size="large"
             />
             <div className="audiobook-hero-copy">
-              <p className="audiobook-hero-kind">LibriVox audiobook</p>
+              <p className="audiobook-hero-kind">{t("LibriVox audiobook")}</p>
               <h2>{detail.title}</h2>
               <p className="audiobook-hero-meta">
                 {detail.author ? <strong>{detail.author}</strong> : null}
@@ -1153,8 +1134,7 @@ function FreeClassics({
           {inShelf ? (
             <button className="secondary-button audiobook-cta" type="button" onClick={onShowBooks}>
               <Check size={18} aria-hidden="true" />
-              In your books
-            </button>
+              {t("In your books")}</button>
           ) : (
             <button
               className="primary-button audiobook-cta"
@@ -1162,8 +1142,7 @@ function FreeClassics({
               onClick={() => onAdd(detail)}
             >
               <Download size={18} aria-hidden="true" />
-              Add to your books
-            </button>
+              {t("Add to your books")}</button>
           )}
           <a
             className="audiobook-source-link"
@@ -1171,22 +1150,20 @@ function FreeClassics({
             target="_blank"
             rel="noreferrer"
           >
-            View on the Internet Archive
-            <ExternalLink size={13} aria-hidden="true" />
+            {t("View on the Internet Archive")}<ExternalLink size={13} aria-hidden="true" />
           </a>
           {!inShelf ? (
             <p className="audiobook-free-hint">
-              You'll choose how to split it before anything is downloaded.
-            </p>
+              {t("You'll choose how to split it before anything is downloaded.")}</p>
           ) : null}
         </div>
 
         {detail.description ? <p className="audiobook-description">{detail.description}</p> : null}
 
-        <section className="audiobook-tracks" aria-label="Sections">
+        <section className="audiobook-tracks" aria-label={t("Sections")}>
           <div className="audiobook-tracks-head" aria-hidden="true">
             <span>#</span>
-            <span>Title</span>
+            <span>{t("Title")}</span>
             <Clock size={14} />
           </div>
           <ol>
@@ -1209,15 +1186,14 @@ function FreeClassics({
     <div className="audiobook-free">
       <div className="audiobook-free-top">
         <h2 className="audiobook-free-heading">
-          {activeQuery ? `Results for “${activeQuery}”` : "Most listened"}
+          {activeQuery ? t("Results for “{{p0}}”", { p0: activeQuery }) : t("Most listened")}
         </h2>
         <p className="audiobook-free-credit">
-          Public-domain recordings read by{" "}
+          {t("Public-domain recordings read by")}{" "}
           <a href="https://librivox.org" target="_blank" rel="noreferrer">
             LibriVox
           </a>{" "}
-          volunteers, hosted by the Internet Archive.
-        </p>
+          {t("volunteers, hosted by the Internet Archive.")}</p>
       </div>
 
       {listError ? (
@@ -1228,8 +1204,7 @@ function FreeClassics({
             type="button"
             onClick={() => void loadList(activeQuery)}
           >
-            Try again
-          </button>
+            {t("Try again")}</button>
         </div>
       ) : loadingList && !results ? (
         <ul className="audiobook-free-grid" aria-busy="true">
@@ -1244,9 +1219,7 @@ function FreeClassics({
       ) : results && results.length === 0 ? (
         <div className="audiobook-free-message">
           <p>
-            No LibriVox recordings match “{activeQuery}”. LibriVox only has books that are out of
-            copyright, so try a classic title or an author's surname.
-          </p>
+            {t("No LibriVox recordings match “")}{activeQuery}{t("”. LibriVox only has books that are out of copyright, so try a classic title or an author's surname.")}</p>
         </div>
       ) : (
         <ul className={`audiobook-free-grid${loadingList ? " is-loading" : ""}`}>
@@ -1283,8 +1256,7 @@ function FreeClassics({
                   {owned ? (
                     <span className="audiobook-free-card-owned">
                       <Check size={12} aria-hidden="true" />
-                      In your books
-                    </span>
+                      {t("In your books")}</span>
                   ) : null}
                 </button>
               </li>
@@ -1315,6 +1287,7 @@ function BookCover({
   /** Small covers are plain boards unless asked to carry the title. */
   showTitle?: boolean;
 }) {
+  const { language } = useLanguage();
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [coverUrl]);
 
@@ -1404,7 +1377,7 @@ function previewFileStem(title: string): string {
     .trim()
     .slice(0, 40)
     .replace(/[\s.]+$/, "");
-  return stem || "Audiobook";
+  return stem || t("Audiobook");
 }
 
 function titleHue(title: string): number {
@@ -1452,14 +1425,14 @@ function clampMinutes(value: number): number {
 }
 
 function partCountLabel(count: number): string {
-  return count === 1 ? "1 part" : `${count} parts`;
+  return count === 1 ? t("1 part") : t("{{p0}} parts", { p0: count });
 }
 
 function partsSummary(book: Audiobook): string {
   if (book.split.mode === "chapters" && !book.splitNote) {
-    return book.parts.length === 1 ? "1 chapter" : `${book.parts.length} chapters`;
+    return book.parts.length === 1 ? t("1 chapter") : t("{{p0}} chapters", { p0: book.parts.length });
   }
-  return `${book.parts.length} parts of ${book.split.minutes} min`;
+  return t("{{p0}} parts of {{p1}} min", { p0: book.parts.length, p1: book.split.minutes });
 }
 
 function formatLength(totalSeconds: number): string {
@@ -1468,12 +1441,12 @@ function formatLength(totalSeconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   if (hours > 0) {
-    return minutes === 0 ? `${hours} h` : `${hours} h ${minutes} min`;
+    return minutes === 0 ? `${hours} h` : t("{{p0}} h {{p1}} min", { p0: hours, p1: minutes });
   }
   if (minutes === 0) {
     return `${seconds} s`;
   }
-  return `${minutes} min`;
+  return t("{{p0}} min", { p0: minutes });
 }
 
 /** A position in the book, like 1:05:00 or 9:00. */

@@ -1,3 +1,4 @@
+import { getLocale } from "../i18n/trainingLocale";
 import type {
   TrainingHubAnalytics,
   TrainingHubDailyHealthSummary,
@@ -176,7 +177,7 @@ export function buildHeatmapGrid(cells: HeatmapCell[]): HeatmapGrid {
       seenMonths.add(monthKey);
       monthLabels.push({
         column,
-        label: new Intl.DateTimeFormat(undefined, { month: "short" }).format(date)
+        label: new Intl.DateTimeFormat(getLocale(), { month: "short" }).format(date)
       });
       break;
     }

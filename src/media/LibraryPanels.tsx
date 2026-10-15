@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import {
   useDeferredValue,
   useMemo,
@@ -224,6 +225,7 @@ export function LibrarySyncLayout({
   watchConnected,
   syncing = false,
 }: LibrarySyncLayoutProps) {
+  const { language } = useLanguage();
   return (
     <div className="library-sync-grid">
       {localPanel}
@@ -251,6 +253,7 @@ function LibraryConnector({
   watchConnected: boolean;
   syncing: boolean;
 }) {
+  const { language } = useLanguage();
   let state: ConnectorState = "idle";
   if (!watchConnected) {
     state = "disconnected";
@@ -264,14 +267,14 @@ function LibraryConnector({
 
   const label =
     state === "disconnected"
-      ? "Connect watch"
+      ? t("Connect watch")
       : state === "syncing"
-        ? "Syncing…"
+        ? t("Syncing…")
         : state === "pending"
-          ? `${pendingCount} to sync`
+          ? t("{{p0}} to sync", { p0: pendingCount })
           : state === "ready"
-            ? "All synced"
-            : "Watch connected";
+            ? t("All synced")
+            : t("Watch connected");
 
   const Icon =
     state === "disconnected"
@@ -353,6 +356,7 @@ export function LocalLibraryPanel({
   onDeleteDownloads,
   wifiSyncPanel,
 }: LocalLibraryPanelProps) {
+  const { language } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
   const [trackFilter, setTrackFilter] = useSelectionPreference(
     LOCAL_TRACK_FILTER_PREFERENCE,
@@ -363,11 +367,11 @@ export function LocalLibraryPanel({
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const searchTerms = useMemo(
     () => getSearchTerms(deferredSearchQuery),
-    [deferredSearchQuery],
+    [deferredSearchQuery, language],
   );
   const watchIndex = useMemo(
     () => createWatchTrackNameIndex(watchTracks),
-    [watchTracks],
+    [watchTracks, language],
   );
   const localTrackItems = useMemo<LocalTrackSearchItem[]>(
     () =>
@@ -385,29 +389,29 @@ export function LocalLibraryPanel({
           searchText: buildSearchText([track.title, fileName, track.url]),
         };
       }),
-    [downloads, watchConnected, watchIndex],
+    [downloads, watchConnected, watchIndex, language],
   );
   const someSelected = selectedIds.size > 0;
   const selectedItems = useMemo(
     () => localTrackItems.filter(({ track }) => selectedIds.has(track.id)),
-    [localTrackItems, selectedIds],
+    [localTrackItems, selectedIds, language],
   );
   const selectedTracks = useMemo(
     () => selectedItems.map(({ track }) => track),
-    [selectedItems],
+    [selectedItems, language],
   );
   const pendingSelectedTracks = useMemo(
     () =>
       selectedItems
         .filter(({ onWatch }) => !onWatch)
         .map(({ track }) => track),
-    [selectedItems],
+    [selectedItems, language],
   );
-  const totalSize = useMemo(() => sumBytes(downloads), [downloads]);
-  const selectedSize = useMemo(() => sumBytes(selectedTracks), [selectedTracks]);
+  const totalSize = useMemo(() => sumBytes(downloads), [downloads, language]);
+  const selectedSize = useMemo(() => sumBytes(selectedTracks), [selectedTracks, language]);
   const pendingLocalCount = useMemo(
     () => localTrackItems.filter(({ onWatch }) => !onWatch).length,
-    [localTrackItems],
+    [localTrackItems, language],
   );
   const syncedCount = downloads.length - pendingLocalCount;
   const visibleLocalItems = useMemo(() => {
@@ -423,15 +427,15 @@ export function LocalLibraryPanel({
     });
 
     return sortLocalTrackItems(filtered, sort);
-  }, [localTrackItems, searchTerms, sort, trackFilter]);
+  }, [localTrackItems, searchTerms, sort, trackFilter, language]);
   const visibleIds = useMemo(
     () => visibleLocalItems.map(({ track }) => track.id),
-    [visibleLocalItems],
+    [visibleLocalItems, language],
   );
   const selectedVisibleCount = useMemo(
     () =>
       visibleLocalItems.filter(({ track }) => selectedIds.has(track.id)).length,
-    [selectedIds, visibleLocalItems],
+    [selectedIds, visibleLocalItems, language],
   );
   const allVisibleSelected =
     visibleLocalItems.length > 0 &&
@@ -440,17 +444,17 @@ export function LocalLibraryPanel({
   const isDeletingLocal = busy?.startsWith("delete-local") ?? false;
   const countLabel =
     visibleLocalItems.length === downloads.length
-      ? `${downloads.length} track${downloads.length === 1 ? "" : "s"}`
-      : `${visibleLocalItems.length}/${downloads.length} tracks`;
+      ? t("{{p0}} track{{p1}}", { p0: downloads.length, p1: downloads.length === 1 ? "" : "s" })
+      : t("{{p0}}/{{p1}} tracks", { p0: visibleLocalItems.length, p1: downloads.length });
 
   const filterOptions: Array<{
     value: LocalTrackFilter;
     label: string;
     count: number;
   }> = [
-    { value: "all", label: "All", count: downloads.length },
-    { value: "pending", label: "Pending", count: pendingLocalCount },
-    { value: "synced", label: "Synced", count: syncedCount },
+    { value: "all", label: t("All"), count: downloads.length },
+    { value: "pending", label: t("Pending"), count: pendingLocalCount },
+    { value: "synced", label: t("Synced"), count: syncedCount },
   ];
 
   function handleBulkDelete() {
@@ -479,27 +483,27 @@ export function LocalLibraryPanel({
 
   function emptyTitle() {
     if (downloads.length === 0) {
-      return "No local tracks";
+      return t("No local tracks");
     }
     if (searchTerms.length > 0) {
-      return "No matching local tracks";
+      return t("No matching local tracks");
     }
     if (trackFilter === "pending") {
-      return "No pending transfers";
+      return t("No pending transfers");
     }
     if (trackFilter === "synced") {
-      return "No synced tracks";
+      return t("No synced tracks");
     }
 
-    return "No local tracks";
+    return t("No local tracks");
   }
 
   return (
-    <section className="library-panel library-panel--local" aria-label="Local cache">
+    <section className="library-panel library-panel--local" aria-label={t("Local cache")}>
       <header className="library-panel-header">
         <div>
           <p className="eyebrow">CorosLink</p>
-          <h3>Local cache</h3>
+          <h3>{t("Local cache")}</h3>
         </div>
         <em>
           {countLabel} · {formatBytes(totalSize)}
@@ -516,8 +520,8 @@ export function LocalLibraryPanel({
           <div className="library-transfer-progress-label">
             <span className="library-transfer-progress-name">
               {transferProgress.total > 1
-                ? `Transferring ${transferProgress.index} of ${transferProgress.total}`
-                : "Transferring"}
+                ? t("Transferring {{p0}} of {{p1}}", { p0: transferProgress.index, p1: transferProgress.total })
+                : t("Transferring")}
               {transferProgress.name ? ` · ${transferProgress.name}` : ""}
             </span>
             <span>{Math.round(transferProgress.fileProgress * 100)}%</span>
@@ -545,8 +549,8 @@ export function LocalLibraryPanel({
             <Search size={15} aria-hidden="true" />
             <input
               type="search"
-              aria-label="Search local tracks"
-              placeholder="Search local tracks"
+              aria-label={t("Search local tracks")}
+              placeholder={t("Search local tracks")}
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
             />
@@ -554,14 +558,14 @@ export function LocalLibraryPanel({
               <button
                 className="library-search-clear"
                 type="button"
-                title="Clear search"
+                title={t("Clear search")}
                 onClick={() => setSearchQuery("")}
               >
                 <X size={14} aria-hidden="true" />
               </button>
             ) : null}
           </div>
-          <div className="library-filter-group" aria-label="Local track filter">
+          <div className="library-filter-group" aria-label={t("Local track filter")}>
             {filterOptions.map((option) => (
               <button
                 key={option.value}
@@ -573,7 +577,7 @@ export function LocalLibraryPanel({
                 type="button"
                 onClick={() => setTrackFilter(option.value)}
               >
-                <span>{option.label}</span>
+                <span>{t(option.label)}</span>
                 <small>{option.count}</small>
               </button>
             ))}
@@ -592,17 +596,15 @@ export function LocalLibraryPanel({
                   ) : (
                     <Upload size={17} aria-hidden="true" />
                   )}
-                  Transfer all ({pendingLocalCount})
+                  {t("Transfer all (")}{pendingLocalCount})
                 </button>
               ) : pendingLocalCount === 0 ? (
                 <span className="library-sync-indicator">
                   <CheckCircle2 size={15} aria-hidden="true" />
-                  All synced
-                </span>
+                  {t("All synced")}</span>
               ) : (
                 <span className="library-pending-chip">
-                  {pendingLocalCount} pending
-                </span>
+                  {pendingLocalCount}  {t("pending")}</span>
               )}
             </div>
           ) : null}
@@ -614,7 +616,7 @@ export function LocalLibraryPanel({
           <span className="library-header-select">
             <input
               type="checkbox"
-              aria-label="Select visible local tracks"
+              aria-label={t("Select visible local tracks")}
               checked={allVisibleSelected}
               disabled={visibleLocalItems.length === 0}
               onChange={handleSelectVisible}
@@ -622,7 +624,7 @@ export function LocalLibraryPanel({
           </span>
           <span />
           <SortButton
-            label="Track"
+            label={t("Track")}
             sortKey="title"
             sort={sort}
             onSort={(key) =>
@@ -632,7 +634,7 @@ export function LocalLibraryPanel({
             }
           />
           <SortButton
-            label="Size"
+            label={t("Size")}
             sortKey="size"
             sort={sort}
             onSort={(key) =>
@@ -642,7 +644,7 @@ export function LocalLibraryPanel({
             }
           />
           <SortButton
-            label="Added"
+            label={t("Added")}
             sortKey="created"
             sort={sort}
             onSort={(key) =>
@@ -652,7 +654,7 @@ export function LocalLibraryPanel({
             }
           />
           <SortButton
-            label="Status"
+            label={t("Status")}
             sortKey="status"
             sort={sort}
             onSort={(key) =>
@@ -677,7 +679,7 @@ export function LocalLibraryPanel({
             title={emptyTitle()}
             subtitle={
               downloads.length === 0
-                ? "Download tracks from YouTube or Spotify to get started"
+                ? t("Download tracks from YouTube or Spotify to get started")
                 : undefined
             }
           />
@@ -694,7 +696,7 @@ export function LocalLibraryPanel({
                 <input
                   type="checkbox"
                   className="library-track-select"
-                  aria-label={`Select ${track.title}`}
+                  aria-label={t("Select {{p0}}", { p0: track.title })}
                   checked={selected}
                   onChange={() => onToggleSelect(track.id)}
                   onClick={(event) => event.stopPropagation()}
@@ -722,7 +724,7 @@ export function LocalLibraryPanel({
                   }
                 >
                   <span className="library-status-dot" aria-hidden="true" />
-                  {onWatch ? "Synced" : "Pending"}
+                  {onWatch ? t("Synced") : t("Pending")}
                 </span>
                 <div
                   className="library-track-actions"
@@ -731,7 +733,7 @@ export function LocalLibraryPanel({
                   <button
                     className="icon-button"
                     type="button"
-                    title="Transfer to watch"
+                    title={t("Transfer to watch")}
                     disabled={
                       !watchConnected ||
                       onWatch ||
@@ -749,7 +751,7 @@ export function LocalLibraryPanel({
                   <button
                     className="icon-button danger"
                     type="button"
-                    title="Delete local track"
+                    title={t("Delete local track")}
                     disabled={
                       busy === `delete-local:${track.id}` ||
                       isDeletingLocal ||
@@ -770,10 +772,10 @@ export function LocalLibraryPanel({
         <div
           className="library-selection-fab"
           role="toolbar"
-          aria-label="Local track selection actions"
+          aria-label={t("Local track selection actions")}
         >
           <span className="library-selection-fab-meta">
-            {selectedTracks.length} selected · {formatBytes(selectedSize)}
+            {selectedTracks.length}  {t("selected ·")} {formatBytes(selectedSize)}
           </span>
           {pendingSelectedTracks.length > 0 ? (
             <button
@@ -787,7 +789,7 @@ export function LocalLibraryPanel({
               ) : (
                 <Upload size={16} aria-hidden="true" />
               )}
-              Transfer ({pendingSelectedTracks.length})
+              {t("Transfer (")}{pendingSelectedTracks.length})
             </button>
           ) : null}
           <button
@@ -801,13 +803,12 @@ export function LocalLibraryPanel({
             ) : (
               <Trash2 size={16} aria-hidden="true" />
             )}
-            Delete
-          </button>
+            {t("Delete")}</button>
           <button
             className="icon-button library-selection-fab-close"
             type="button"
-            title="Clear selection"
-            aria-label="Clear selection"
+            title={t("Clear selection")}
+            aria-label={t("Clear selection")}
             onClick={onClearSelection}
           >
             <X size={15} aria-hidden="true" />
@@ -841,6 +842,7 @@ export function WatchLibraryPanel({
   onDeleteWatchTrack,
   onDeleteWatchTracks,
 }: WatchLibraryPanelProps) {
+  const { language } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
   const [sort, setSort] = useSelectionPreference(
     WATCH_TRACK_SORT_PREFERENCE,
@@ -850,7 +852,7 @@ export function WatchLibraryPanel({
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const searchTerms = useMemo(
     () => getSearchTerms(deferredSearchQuery),
-    [deferredSearchQuery],
+    [deferredSearchQuery, language],
   );
   const watchTrackItems = useMemo<WatchTrackSearchItem[]>(
     () =>
@@ -858,36 +860,36 @@ export function WatchLibraryPanel({
         track,
         searchText: buildSearchText([track.name, track.relativePath]),
       })),
-    [watchTracks],
+    [watchTracks, language],
   );
   const someSelected = selectedPaths.size > 0;
   const selectedTracks = useMemo(
     () => watchTracks.filter((track) => selectedPaths.has(track.relativePath)),
-    [selectedPaths, watchTracks],
+    [selectedPaths, watchTracks, language],
   );
-  const totalSize = useMemo(() => sumBytes(watchTracks), [watchTracks]);
-  const selectedSize = useMemo(() => sumBytes(selectedTracks), [selectedTracks]);
+  const totalSize = useMemo(() => sumBytes(watchTracks), [watchTracks, language]);
+  const selectedSize = useMemo(() => sumBytes(selectedTracks), [selectedTracks, language]);
   const visibleWatchItems = useMemo(() => {
     const filtered = watchTrackItems.filter((item) =>
       searchTextMatchesTerms(item.searchText, searchTerms),
     );
 
     return sortWatchTrackItems(filtered, sort);
-  }, [searchTerms, sort, watchTrackItems]);
+  }, [searchTerms, sort, watchTrackItems, language]);
   const visibleWatchTracks = useMemo(
     () => visibleWatchItems.map(({ track }) => track),
-    [visibleWatchItems],
+    [visibleWatchItems, language],
   );
   const visiblePaths = useMemo(
     () => visibleWatchTracks.map((track) => track.relativePath),
-    [visibleWatchTracks],
+    [visibleWatchTracks, language],
   );
   const selectedVisibleCount = useMemo(
     () =>
       visibleWatchTracks.filter((track) =>
         selectedPaths.has(track.relativePath),
       ).length,
-    [selectedPaths, visibleWatchTracks],
+    [selectedPaths, visibleWatchTracks, language],
   );
   const allVisibleSelected =
     visibleWatchTracks.length > 0 &&
@@ -895,8 +897,8 @@ export function WatchLibraryPanel({
   const isDeletingWatch = busy?.startsWith("delete-watch") ?? false;
   const countLabel =
     visibleWatchTracks.length === watchTracks.length
-      ? `${watchTracks.length} track${watchTracks.length === 1 ? "" : "s"}`
-      : `${visibleWatchTracks.length}/${watchTracks.length} tracks`;
+      ? t("{{p0}} track{{p1}}", { p0: watchTracks.length, p1: watchTracks.length === 1 ? "" : "s" })
+      : t("{{p0}}/{{p1}} tracks", { p0: visibleWatchTracks.length, p1: watchTracks.length });
   function handleBulkDelete() {
     if (selectedTracks.length === 0) {
       return;
@@ -915,16 +917,16 @@ export function WatchLibraryPanel({
 
   function emptyTitle() {
     if (!watchConnected) {
-      return "Connect a COROS watch";
+      return t("Connect a COROS watch");
     }
     if (watchTracks.length === 0) {
-      return "No MP3 files on the watch";
+      return t("No MP3 files on the watch");
     }
     if (searchTerms.length > 0) {
-      return "No matching watch tracks";
+      return t("No matching watch tracks");
     }
 
-    return "No MP3 files on the watch";
+    return t("No MP3 files on the watch");
   }
 
   return (
@@ -932,14 +934,14 @@ export function WatchLibraryPanel({
       className={`library-panel library-panel--watch ${
         watchConnected ? "is-connected" : "is-disconnected"
       }`}
-      aria-label="On watch"
+      aria-label={t("On watch")}
     >
       <header className="library-panel-header">
         <div>
           <p className="eyebrow">{presentation.displayName}</p>
-          <h3>On watch</h3>
+          <h3>{t("On watch")}</h3>
         </div>
-        <em>{watchConnected ? countLabel : "Not connected"}</em>
+        <em>{watchConnected ? countLabel : t("Not connected")}</em>
       </header>
 
       {watchConnected && watchTracks.length > 0 ? (
@@ -950,7 +952,7 @@ export function WatchLibraryPanel({
         <LibraryEmptyState
           title={emptyTitle()}
           subtitle={
-            presentation.connectHint || "to view and manage your music"
+            presentation.connectHint || t("to view and manage your music")
           }
           variant="watch"
         />
@@ -961,8 +963,8 @@ export function WatchLibraryPanel({
               <Search size={15} aria-hidden="true" />
               <input
                 type="search"
-                aria-label="Search watch tracks"
-                placeholder="Search watch tracks"
+                aria-label={t("Search watch tracks")}
+                placeholder={t("Search watch tracks")}
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
               />
@@ -970,7 +972,7 @@ export function WatchLibraryPanel({
                 <button
                   className="library-search-clear"
                   type="button"
-                  title="Clear search"
+                  title={t("Clear search")}
                   onClick={() => setSearchQuery("")}
                 >
                   <X size={14} aria-hidden="true" />
@@ -983,7 +985,7 @@ export function WatchLibraryPanel({
               <span className="library-header-select">
                 <input
                   type="checkbox"
-                  aria-label="Select visible watch tracks"
+                  aria-label={t("Select visible watch tracks")}
                   checked={allVisibleSelected}
                   disabled={visibleWatchTracks.length === 0}
                   onChange={handleSelectVisible}
@@ -991,7 +993,7 @@ export function WatchLibraryPanel({
               </span>
               <span />
               <SortButton
-                label="Track"
+                label={t("Track")}
                 sortKey="name"
                 sort={sort}
                 onSort={(key) =>
@@ -1001,7 +1003,7 @@ export function WatchLibraryPanel({
                 }
               />
               <SortButton
-                label="Size"
+                label={t("Size")}
                 sortKey="size"
                 sort={sort}
                 onSort={(key) =>
@@ -1011,7 +1013,7 @@ export function WatchLibraryPanel({
                 }
               />
               <SortButton
-                label="Modified"
+                label={t("Modified")}
                 sortKey="modified"
                 sort={sort}
                 onSort={(key) =>
@@ -1047,7 +1049,7 @@ export function WatchLibraryPanel({
                     <input
                       type="checkbox"
                       className="library-track-select"
-                      aria-label={`Select ${track.name}`}
+                      aria-label={t("Select {{p0}}", { p0: track.name })}
                       checked={selected}
                       onChange={() => onToggleSelect(track.relativePath)}
                       onClick={(event) => event.stopPropagation()}
@@ -1068,7 +1070,7 @@ export function WatchLibraryPanel({
                       <button
                         className="icon-button danger"
                         type="button"
-                        title="Delete from watch"
+                        title={t("Delete from watch")}
                         disabled={
                           !watchConnected ||
                           busy === `delete-watch:${track.relativePath}` ||
@@ -1089,10 +1091,10 @@ export function WatchLibraryPanel({
             <div
               className="library-selection-fab"
               role="toolbar"
-              aria-label="Watch track selection actions"
+              aria-label={t("Watch track selection actions")}
             >
               <span className="library-selection-fab-meta">
-                {selectedTracks.length} selected · {formatBytes(selectedSize)}
+                {selectedTracks.length}  {t("selected ·")} {formatBytes(selectedSize)}
               </span>
               <button
                 className="secondary-button compact-button danger-button"
@@ -1105,13 +1107,12 @@ export function WatchLibraryPanel({
                 ) : (
                   <Trash2 size={16} aria-hidden="true" />
                 )}
-                Delete
-              </button>
+                {t("Delete")}</button>
               <button
                 className="icon-button library-selection-fab-close"
                 type="button"
-                title="Clear selection"
-                aria-label="Clear selection"
+                title={t("Clear selection")}
+                aria-label={t("Clear selection")}
                 onClick={onClearSelection}
               >
                 <X size={15} aria-hidden="true" />
@@ -1133,6 +1134,7 @@ function WatchStorageMeter({
   watchStatus: WatchStatus | null;
   tracksSize: number;
 }) {
+  const { language } = useLanguage();
   const totalBytes = watchStatus?.totalBytes;
   if (!totalBytes || totalBytes <= 0) {
     return null;
@@ -1146,8 +1148,7 @@ function WatchStorageMeter({
       <div className="watch-storage-meta">
         <HardDrive size={13} aria-hidden="true" />
         <span>
-          {formatBytes(usedBytes)} of {formatBytes(totalBytes)} used
-        </span>
+          {formatBytes(usedBytes)}  {t("of")} {formatBytes(totalBytes)}  {t("used")}</span>
         <em>{percent}%</em>
       </div>
       <div
@@ -1156,7 +1157,7 @@ function WatchStorageMeter({
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={percent}
-        aria-label="Watch storage used"
+        aria-label={t("Watch storage used")}
       >
         <div
           className="watch-storage-bar"
@@ -1180,6 +1181,7 @@ function SortButton<Key extends string>({
   sort,
   onSort,
 }: SortButtonProps<Key>) {
+  const { language } = useLanguage();
   const active = sort.key === sortKey;
   const Icon = active
     ? sort.direction === "asc"
@@ -1193,7 +1195,7 @@ function SortButton<Key extends string>({
     <button
       className={active ? "library-sort-button active" : "library-sort-button"}
       type="button"
-      aria-label={`Sort by ${label} ${nextDirection}`}
+      aria-label={t("Sort by {{p0}} {{p1}}", { p0: label, p1: nextDirection })}
       onClick={() => onSort(sortKey)}
     >
       {label}
@@ -1203,6 +1205,7 @@ function SortButton<Key extends string>({
 }
 
 function WatchConnectIllustration() {
+  const { language } = useLanguage();
   return (
     <div className="watch-connect-illustration">
       <svg
@@ -1269,6 +1272,7 @@ function LibraryEmptyState({
   subtitle?: string;
   variant?: "default" | "watch";
 }) {
+  const { language } = useLanguage();
   return (
     <div
       className={`library-empty-state${

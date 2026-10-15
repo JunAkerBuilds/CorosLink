@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import { useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 import type { CoachCorosActionPreview } from "../../electron/types";
@@ -6,6 +7,7 @@ export function CorosActionCard({ preview, onConfirm }: {
   preview: CoachCorosActionPreview;
   onConfirm: () => Promise<CoachCorosActionPreview | undefined>;
 }) {
+  useLanguage();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const [result, setResult] = useState<CoachCorosActionPreview>();
@@ -16,7 +18,7 @@ export function CorosActionCard({ preview, onConfirm }: {
     setSaving(true);
     setError(undefined);
     try { setResult(await onConfirm()); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Unable to save this workout."); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : t("Unable to save this workout.")); }
     finally { setSaving(false); }
   };
   return <div className="chat-plan-card chat-coros-action-card">
@@ -26,7 +28,7 @@ export function CorosActionCard({ preview, onConfirm }: {
     </div>
     <p className="chat-plan-card-summary">{current.summary}</p>
     {current.details.length > 0 && <details className="chat-coros-action-details">
-      <summary>Workout details</summary>
+      <summary>{t("Workout details")}</summary>
       <ul>{current.details.map((line, index) => <li key={index}>{line}</li>)}</ul>
     </details>}
     {current.message && <p role="status">{current.state === "saved" && <Check size={14} aria-hidden="true" />} {current.message}</p>}
@@ -34,7 +36,7 @@ export function CorosActionCard({ preview, onConfirm }: {
     {(current.state === "pending" || current.state === "saving") && <div className="chat-plan-actions">
       <button type="button" className="chat-plan-upload" onClick={() => void save()} disabled={saving}>
         {saving && <Loader2 className="chat-spinner" size={14} aria-hidden="true" />}
-        {saving ? "Saving…" : current.state === "saving" ? "Check save status" : "Save to COROS"}
+        {saving ? t("Saving…") : current.state === "saving" ? t("Check save status") : t("Save to COROS")}
       </button>
     </div>}
   </div>;

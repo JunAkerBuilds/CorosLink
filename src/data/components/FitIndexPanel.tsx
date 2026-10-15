@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../../i18n/tools";
 import {
   CheckCircle2,
   Loader2,
@@ -21,16 +22,16 @@ const WINDOW_OPTIONS: Array<{ value: WindowChoice; label: string; hint: string }
 ];
 
 function formatBytes(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  if (bytes < 1024 * 1024) return t("{{p0}} KB", { p0: Math.round(bytes / 1024) });
+  if (bytes < 1024 * 1024 * 1024) return t("{{p0}} MB", { p0: (bytes / (1024 * 1024)).toFixed(1) });
+  return t("{{p0}} GB", { p0: (bytes / (1024 * 1024 * 1024)).toFixed(2) });
 }
 
 function formatWhen(iso?: string): string | null {
   if (!iso) return null;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleString(undefined, {
+  return date.toLocaleString(getLocale(), {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -39,6 +40,7 @@ function formatWhen(iso?: string): string | null {
 }
 
 export function FitIndexPanel({ api }: { api: CorosLinkApi }) {
+  useLanguage();
   const [status, setStatus] = useState<FitIndexStatus | null>(null);
   const [progress, setProgress] = useState<FitIndexProgress | null>(null);
   const [windowDays, setWindowDays] = useState<WindowChoice>(90);
@@ -80,7 +82,7 @@ export function FitIndexPanel({ api }: { api: CorosLinkApi }) {
     try {
       await api.startFitIndexSync(windowDays === 0 ? {} : { sinceDays: windowDays });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not start indexing.");
+      setError(caught instanceof Error ? caught.message : t("Could not start indexing."));
     } finally {
       setStarting(false);
     }
@@ -90,15 +92,10 @@ export function FitIndexPanel({ api }: { api: CorosLinkApi }) {
     <section className="data-tool-card training-backup-panel fit-index-panel">
       <header className="data-tool-header">
         <div className="training-backup-heading">
-          <p className="eyebrow">Local activity index</p>
-          <h2>Index activities for deep analysis</h2>
+          <p className="eyebrow">{t("Local activity index")}</p>
+          <h2>{t("Index activities for deep analysis")}</h2>
           <p className="training-backup-hint">
-            Coach computes splits, power curves, best efforts, cardiac drift, and
-            same-route comparisons from full-resolution FIT files cached on this
-            computer. Files download once, never expire, and have no daily limit.
-            Coach also indexes on demand, so this is only needed for
-            history-wide questions.
-          </p>
+            {t("Coach computes splits, power curves, best efforts, cardiac drift, and same-route comparisons from full-resolution FIT files cached on this computer. Files download once, never expire, and have no daily limit. Coach also indexes on demand, so this is only needed for history-wide questions.")}</p>
         </div>
         <div className="training-backup-icon" aria-hidden="true">
           <Radar size={22} />
@@ -108,24 +105,23 @@ export function FitIndexPanel({ api }: { api: CorosLinkApi }) {
       <div className="fit-index-body">
         <dl className="fit-index-stats">
           <div className={status && status.indexed > 0 ? "fit-index-stat is-ready" : "fit-index-stat"}>
-            <dt>Activities indexed</dt>
-            <dd>{status ? status.indexed.toLocaleString() : "–"}</dd>
+            <dt>{t("Activities indexed")}</dt>
+            <dd>{status ? status.indexed.toLocaleString(getLocale()) : "–"}</dd>
           </div>
           <div className="fit-index-stat">
-            <dt>Cache on disk</dt>
+            <dt>{t("Cache on disk")}</dt>
             <dd>{status ? formatBytes(status.cacheBytes) : "–"}</dd>
           </div>
           <div className="fit-index-stat">
-            <dt>Last sync</dt>
-            <dd className={lastSync ? undefined : "is-empty"}>{lastSync ?? "Never"}</dd>
+            <dt>{t("Last sync")}</dt>
+            <dd className={lastSync ? undefined : "is-empty"}>{lastSync ?? t("Never")}</dd>
           </div>
         </dl>
 
         <div className="fit-index-controls">
           <div className="fit-index-window">
             <span className="training-backup-formats-label" id="fit-index-window-label">
-              Window
-            </span>
+              {t("Window")}</span>
             <div
               className="fit-index-window-grid"
               role="radiogroup"
@@ -147,8 +143,8 @@ export function FitIndexPanel({ api }: { api: CorosLinkApi }) {
                     disabled={running}
                     onClick={() => setWindowDays(option.value)}
                   >
-                    <strong>{option.label}</strong>
-                    <span>{option.hint}</span>
+                    <strong>{t(option.label)}</strong>
+                    <span>{t(option.hint)}</span>
                   </button>
                 );
               })}
@@ -163,8 +159,7 @@ export function FitIndexPanel({ api }: { api: CorosLinkApi }) {
                 onClick={() => void api.cancelFitIndexSync()}
               >
                 <Square size={14} aria-hidden="true" />
-                Stop indexing
-              </button>
+                {t("Stop indexing")}</button>
             ) : (
               <button
                 type="button"
@@ -177,8 +172,7 @@ export function FitIndexPanel({ api }: { api: CorosLinkApi }) {
                 ) : (
                   <Radar size={16} aria-hidden="true" />
                 )}
-                Index activities
-              </button>
+                {t("Index activities")}</button>
             )}
           </div>
         </div>
@@ -187,7 +181,7 @@ export function FitIndexPanel({ api }: { api: CorosLinkApi }) {
           <div className="training-backup-progress fit-index-progress">
             <div className="training-backup-progress-meta">
               <span className="training-backup-progress-label">
-                {progress?.state === "listing" ? "Finding activities" : "Indexing"}
+                {progress?.state === "listing" ? t("Finding activities") : t("Indexing")}
               </span>
               {progress && progress.total > 0 ? (
                 <span className="training-backup-progress-count">
@@ -208,7 +202,7 @@ export function FitIndexPanel({ api }: { api: CorosLinkApi }) {
             {progress?.currentName && progress.state === "indexing" ? (
               <p className="training-backup-current">{progress.currentName}</p>
             ) : progress?.state === "listing" ? (
-              <p className="training-backup-current">Scanning your COROS account…</p>
+              <p className="training-backup-current">{t("Scanning your COROS account…")}</p>
             ) : null}
           </div>
         ) : null}
@@ -228,8 +222,8 @@ export function FitIndexPanel({ api }: { api: CorosLinkApi }) {
             <>
               <XCircle size={18} aria-hidden="true" />
               <div>
-                <strong>Indexing failed</strong>
-                <p>{progress.error ?? "Unknown error"}</p>
+                <strong>{t("Indexing failed")}</strong>
+                <p>{progress.error ?? t("Unknown error")}</p>
               </div>
             </>
           ) : (
@@ -237,13 +231,13 @@ export function FitIndexPanel({ api }: { api: CorosLinkApi }) {
               <CheckCircle2 size={18} aria-hidden="true" />
               <div>
                 <strong>
-                  {progress.state === "cancelled" ? "Indexing stopped" : "Index up to date"}
+                  {progress.state === "cancelled" ? t("Indexing stopped") : t("Index up to date")}
                 </strong>
                 <div className="training-backup-stats">
-                  <span className="badge ready">{progress.completed} indexed</span>
-                  <span className="badge">{progress.skipped} already indexed</span>
+                  <span className="badge ready">{progress.completed}  {t("indexed")}</span>
+                  <span className="badge">{progress.skipped}  {t("already indexed")}</span>
                   {progress.failed > 0 ? (
-                    <span className="badge danger">{progress.failed} failed</span>
+                    <span className="badge danger">{progress.failed}  {t("failed")}</span>
                   ) : null}
                 </div>
               </div>

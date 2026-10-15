@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/tools";
 import { WorkoutEditCard } from "./WorkoutEditCard";
 import { CorosActionCard } from "./CorosActionCard";
 import {
@@ -174,6 +175,7 @@ const AssistantMarkdown = memo(function AssistantMarkdown({
   content: string;
   streaming?: boolean;
 }) {
+  useLanguage();
   return (
     <div className={`chat-markdown${streaming ? " chat-markdown-streaming" : ""}`}>
       <ReactMarkdown
@@ -193,11 +195,12 @@ const ThinkingDisclosure = memo(function ThinkingDisclosure({
   content: string;
   live?: boolean;
 }) {
+  useLanguage();
   return (
     <details className={`chat-thinking${live ? " chat-thinking-live" : ""}`}>
       <summary>
-        <span>Thinking</span>
-        {live ? <small><i aria-hidden="true" />Live</small> : null}
+        <span>{t("Thinking")}</span>
+        {live ? <small><i aria-hidden="true" />{t("Live")}</small> : null}
       </summary>
       <div className="chat-thinking-text">
         <AssistantMarkdown content={content} />
@@ -217,6 +220,7 @@ function CoachInputCard({
   onChoose: (choice: CoachInputChoice) => void;
   onCustom: () => void;
 }) {
+  useLanguage();
   const answered = prompt.answeredAt !== undefined;
   return (
     <section
@@ -226,11 +230,11 @@ function CoachInputCard({
       <header className="chat-coach-prompt-header">
         <span className="chat-coach-prompt-status">
           <MessageCircle size={14} aria-hidden="true" />
-          {answered ? "Answered" : "Waiting for your answer"}
+          {answered ? t("Answered") : t("Waiting for your answer")}
         </span>
         <h4 id={`coach-prompt-${prompt.promptId}`}>{prompt.question}</h4>
       </header>
-      <div className="chat-coach-prompt-choices" role="group" aria-label="Answer choices">
+      <div className="chat-coach-prompt-choices" role="group" aria-label={t("Answer choices")}>
         {prompt.choices.map((choice, index) => {
           const selected = prompt.selectedChoiceId === choice.id;
           return (
@@ -243,7 +247,7 @@ function CoachInputCard({
             >
               <span>
                 {choice.label}
-                {!answered && index === 0 ? <em>Recommended</em> : null}
+                {!answered && index === 0 ? <em>{t("Recommended")}</em> : null}
               </span>
               {choice.description ? <small>{choice.description}</small> : null}
             </button>
@@ -257,8 +261,7 @@ function CoachInputCard({
           onClick={onCustom}
           disabled={disabled}
         >
-          Type another answer
-        </button>
+          {t("Type another answer")}</button>
       ) : null}
     </section>
   );
@@ -317,11 +320,11 @@ function isPlanSourceRepeat(step: PlanSourceNode): step is PlanSourceRepeat {
 }
 
 function formatPlanDuration(seconds: number): string {
-  if (seconds < 90) return `${Math.round(seconds)} sec`;
+  if (seconds < 90) return t("{{p0}} sec", { p0: Math.round(seconds) });
   const minutes = seconds / 60;
   return Number.isInteger(minutes)
-    ? `${minutes} min`
-    : `${minutes.toFixed(1)} min`;
+    ? t("{{p0}} min", { p0: minutes })
+    : t("{{p0}} min", { p0: minutes.toFixed(1) });
 }
 
 function formatPlanStepTarget(
@@ -335,21 +338,21 @@ function formatPlanStepTarget(
     });
   }
   if (step.target_elevation_gain_meters) {
-    return `${formatElevationValue(step.target_elevation_gain_meters, unitSystem)} gain`;
+    return t("{{p0}} gain", { p0: formatElevationValue(step.target_elevation_gain_meters, unitSystem) });
   }
   if (step.target_duration_seconds) {
     return formatPlanDuration(step.target_duration_seconds);
   }
-  if (step.target_reps) return `${step.target_reps} reps`;
+  if (step.target_reps) return t("{{p0}} reps", { p0: step.target_reps });
   if (step.target_routes) {
-    return `${step.target_routes} ${step.target_routes === 1 ? "route" : "routes"}`;
+    return `${step.target_routes} ${step.target_routes === 1 ? t("route") : t("routes")}`;
   }
   if (step.target_hr_recovery_bpm) {
-    return `to ${step.target_hr_recovery_bpm} bpm`;
+    return t("to {{p0}} bpm", { p0: step.target_hr_recovery_bpm });
   }
-  if (step.send_off_seconds) return `${formatPlanDuration(step.send_off_seconds)} send-off`;
-  if (step.target_load) return `${step.target_load} TL`;
-  return "Open";
+  if (step.send_off_seconds) return t("{{p0}} send-off", { p0: formatPlanDuration(step.send_off_seconds) });
+  if (step.target_load) return t("{{p0}} TL", { p0: step.target_load });
+  return t("Open workout target");
 }
 
 function formatPlanSourceSteps(
@@ -382,10 +385,10 @@ function isStrengthExerciseStep(step: PlanSourceStep): boolean {
 function strengthStepTitle(step: PlanSourceStep): string {
   if (step.exercise_name?.trim()) return step.exercise_name.trim();
   if (step.name?.trim()) return step.name.trim();
-  if (step.kind === "warmup") return "Warm-up";
-  if (step.kind === "cooldown") return "Cooldown";
-  if (step.kind === "rest") return "Recovery";
-  return "Strength exercise";
+  if (step.kind === "warmup") return t("Warm-up");
+  if (step.kind === "cooldown") return t("Cooldown");
+  if (step.kind === "rest") return t("Recovery");
+  return t("Strength exercise");
 }
 
 function strengthStepMarker(step: PlanSourceStep, exerciseNumber?: number): string {
@@ -412,6 +415,7 @@ function StrengthPlanStructure({
   source: PlanWorkoutEntryInput;
   unitSystem: UnitSystem;
 }) {
+  useLanguage();
   const steps = source.steps ?? [];
   const exerciseCount = countStrengthExercises(steps);
   let exerciseNumber = 0;
@@ -422,9 +426,9 @@ function StrengthPlanStructure({
     const intensity = step.intensity
       ? formatPlanIntensity(step.intensity, unitSystem)
       : undefined;
-    const setCount = step.sets && step.sets > 1 ? `${step.sets} sets` : undefined;
+    const setCount = step.sets && step.sets > 1 ? t("{{p0}} sets", { p0: step.sets }) : undefined;
     const setRest = step.sets && step.sets > 1 && step.rest_value !== undefined
-      ? `${formatPlanDuration(step.rest_value)} rest`
+      ? t("{{p0}} rest", { p0: formatPlanDuration(step.rest_value) })
       : undefined;
 
     return (
@@ -451,10 +455,10 @@ function StrengthPlanStructure({
   return (
     <section
       className="chat-plan-strength-structure"
-      aria-label={`${exerciseCount} ${exerciseCount === 1 ? "exercise" : "exercises"} in strength session structure`}
+      aria-label={t("{{p0}} {{p1}} in strength session structure", { p0: exerciseCount, p1: exerciseCount === 1 ? "exercise" : "exercises" })}
     >
       <header className="chat-plan-strength-header">
-        <strong>Session structure</strong>
+        <strong>{t("Session structure")}</strong>
         <span>
           {exerciseCount} {exerciseCount === 1 ? "exercise" : "exercises"}
         </span>
@@ -467,8 +471,8 @@ function StrengthPlanStructure({
           return (
             <li key={`repeat-${index}`} className="chat-plan-strength-repeat">
               <div className="chat-plan-strength-repeat-header">
-                <strong>{step.name?.trim() || "Repeat block"}</strong>
-                <span>{step.repeat} rounds</span>
+                <strong>{step.name?.trim() || t("Repeat block")}</strong>
+                <span>{step.repeat}  {t("rounds")}</span>
               </div>
               <ol>
                 {step.steps.map((child, childIndex) =>
@@ -510,14 +514,14 @@ function formatPlanIntensity(
     return `${kmhToDisplaySpeed(lowKmh, unitSystem).toFixed(1)}–${kmhToDisplaySpeed(highKmh, unitSystem).toFixed(1)} ${speedUnit(unitSystem)}`;
   }
   if (intensity.type === "weight") {
-    if (intensity.mode === "bodyweight") return "Bodyweight";
+    if (intensity.mode === "bodyweight") return t("Bodyweight");
     const kilograms = intensity.unit === "lb"
       ? intensity.value / POUNDS_PER_KILOGRAM
       : intensity.value;
     return `${kilogramsToDisplayWeight(kilograms, unitSystem).toFixed(1)} ${weightUnit(unitSystem)}`;
   }
   if (intensity.type === "heartRate") {
-    return `${intensity.lowBpm}–${intensity.highBpm} bpm`;
+    return t("{{p0}}–{{p1}} bpm", { p0: intensity.lowBpm, p1: intensity.highBpm });
   }
   if (intensity.type === "power" && !intensity.preset) {
     return `${intensity.lowWatts}–${intensity.highWatts} W`;
@@ -526,7 +530,7 @@ function formatPlanIntensity(
     return `${intensity.low}–${intensity.high} ${intensity.unit}`;
   }
   if (intensity.type === "swimStroke") return intensity.stroke;
-  if (intensity.type === "rpe") return `RPE ${intensity.value}`;
+  if (intensity.type === "rpe") return t("RPE {{p0}}", { p0: intensity.value });
   return undefined;
 }
 
@@ -560,9 +564,9 @@ function planDateParts(
   const date = planDateFromSchedule(scheduleDate);
   if (!date) return undefined;
   return {
-    weekday: new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(date),
+    weekday: new Intl.DateTimeFormat(getLocale(), { weekday: "short" }).format(date),
     day: String(date.getDate()),
-    month: new Intl.DateTimeFormat(undefined, { month: "short" }).format(date)
+    month: new Intl.DateTimeFormat(getLocale(), { month: "short" }).format(date)
   };
 }
 
@@ -570,7 +574,7 @@ function planDateParts(
 function formatPlanDateLabel(scheduleDate: string): string {
   const date = planDateFromSchedule(scheduleDate);
   if (!date) return scheduleDate;
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(getLocale(), {
     weekday: "short",
     month: "short",
     day: "numeric"
@@ -600,7 +604,7 @@ function planWeekStart(date: Date): Date {
 
 function formatPlanWeekRange(start: Date): string {
   const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
-  const month = new Intl.DateTimeFormat(undefined, { month: "short" });
+  const month = new Intl.DateTimeFormat(getLocale(), { month: "short" });
   if (start.getMonth() === end.getMonth()) {
     return `${month.format(start)} ${start.getDate()}-${end.getDate()}`;
   }
@@ -644,15 +648,15 @@ function groupPlanEntriesByWeek(entries: PlanDraftPreviewEntry[]): PlanWeekGroup
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([id, group], index) => ({
       id,
-      label: `Week ${index + 1}`,
+      label: t("Week {{p0}}", { p0: index + 1 }),
       dateRange: formatPlanWeekRange(group.start),
       entries: group.entries
     }));
   if (unscheduled.length > 0) {
     weeks.push({
       id: "unscheduled",
-      label: "Unscheduled",
-      dateRange: "No calendar date",
+      label: t("Unscheduled"),
+      dateRange: t("No calendar date"),
       entries: unscheduled
     });
   }
@@ -678,6 +682,7 @@ function WorkoutPreviewCard({
     scheduleDate?: string
   ) => void;
 }) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const entry = draft.entries[0];
   const suggestedDate = entry ? planEntryScheduleDate(entry) : undefined;
@@ -714,19 +719,19 @@ function WorkoutPreviewCard({
   const volume = entry
     ? (entry.source
         ? formatPlanSourceVolume(entry.source, unitSystem)
-        : undefined) ?? entry.volume ?? "Not set"
-    : "Not set";
+        : undefined) ?? entry.volume ?? t("Not set")
+    : t("Not set");
   const steps = entry
     ? (entry.source
         ? formatPlanSourceSteps(entry.source, unitSystem)
-        : undefined) ?? entry.stepsSummary ?? "No structure provided"
-    : "No structure provided";
+        : undefined) ?? entry.stepsSummary ?? t("No structure provided")
+    : t("No structure provided");
 
   return (
     <div className="chat-plan-card chat-workout-card">
       <div className="chat-plan-card-header">
         <div className="chat-plan-card-title">
-          <span className="chat-workout-card-kicker">One-off workout</span>
+          <span className="chat-workout-card-kicker">{t("One-off workout")}</span>
           <h4>{draft.name}</h4>
           <span className="chat-plan-card-summary">{draft.summary}</span>
         </div>
@@ -750,8 +755,8 @@ function WorkoutPreviewCard({
               className={`chat-plan-entry-date${calendarDateParts ? "" : " is-undated"}`}
               title={
                 destination === "calendar"
-                  ? `Add to Calendar on ${scheduleDate}`
-                  : "Save to Workout Library"
+                  ? t("Add to Calendar on {{p0}}", { p0: scheduleDate })
+                  : t("Save to Workout Library")
               }
             >
               {calendarDateParts ? (
@@ -798,7 +803,7 @@ function WorkoutPreviewCard({
       ) : (
         <div className="chat-plan-empty-week">
           <Bookmark size={16} aria-hidden="true" />
-          <span>This workout does not contain any steps yet.</span>
+          <span>{t("This workout does not contain any steps yet.")}</span>
         </div>
       )}
       {isUploaded ? (
@@ -806,14 +811,14 @@ function WorkoutPreviewCard({
           <CircleCheck size={15} aria-hidden="true" />
           <span>
             {uploadedDestination === "calendar"
-              ? `Added to your COROS Calendar on ${formatPlanDateLabel(scheduleDate)}.`
-              : "Saved to your COROS Workout Library."}
+              ? t("Added to your COROS Calendar on {{p0}}.", { p0: formatPlanDateLabel(scheduleDate) })
+              : t("Saved to your COROS Workout Library.")}
           </span>
         </p>
       ) : (
         <>
           <fieldset className="chat-plan-confirmation" disabled={uploading}>
-            <legend>Where should this workout go?</legend>
+            <legend>{t("Where should this workout go?")}</legend>
             <div className="chat-plan-destination-options">
               <label
                 className={`chat-plan-destination-option${
@@ -832,8 +837,8 @@ function WorkoutPreviewCard({
                   <BookOpen size={16} aria-hidden="true" />
                 </span>
                 <span className="chat-plan-destination-copy">
-                  <strong>Workout Library</strong>
-                  <small>Save it as an unscheduled, reusable workout.</small>
+                  <strong>{t("Workout Library")}</strong>
+                  <small>{t("Save it as an unscheduled, reusable workout.")}</small>
                 </span>
                 <CircleCheck
                   className="chat-plan-destination-check"
@@ -858,8 +863,8 @@ function WorkoutPreviewCard({
                   <CalendarDays size={16} aria-hidden="true" />
                 </span>
                 <span className="chat-plan-destination-copy">
-                  <strong>Calendar</strong>
-                  <small>Add this workout on the date you choose.</small>
+                  <strong>{t("Calendar")}</strong>
+                  <small>{t("Add this workout on the date you choose.")}</small>
                 </span>
                 <CircleCheck
                   className="chat-plan-destination-check"
@@ -870,7 +875,7 @@ function WorkoutPreviewCard({
             </div>
             {destination === "calendar" ? (
               <label className="chat-workout-calendar-date">
-                <span>Calendar date</span>
+                <span>{t("Calendar date")}</span>
                 <input
                   type="date"
                   value={scheduleDate}
@@ -887,10 +892,9 @@ function WorkoutPreviewCard({
               )}
               <span>
                 {destination === "calendar"
-                  ? `This workout will be added to Calendar on ${formatPlanDateLabel(scheduleDate)}.`
-                  : "This workout will be saved to your Workout Library without a calendar date."}
-                {" "}It will remain a one-off workout, not a training plan.
-              </span>
+                  ? t("This workout will be added to Calendar on {{p0}}.", { p0: formatPlanDateLabel(scheduleDate) })
+                  : t("This workout will be saved to your Workout Library without a calendar date.")}
+                {" "}{t("It will remain a one-off workout, not a training plan.")}</span>
             </p>
           </fieldset>
           <div className="chat-plan-actions">
@@ -912,7 +916,7 @@ function WorkoutPreviewCard({
                   <Bookmark size={14} aria-hidden="true" />
                 )
               )}
-              {destination === "calendar" ? "Add to Calendar" : "Save to Library"}
+              {destination === "calendar" ? t("Add to Calendar") : t("Save to Library")}
             </button>
           </div>
         </>
@@ -934,6 +938,7 @@ function PlanPreviewCard({
   onUpload: (destination: TrainingPlanDestination) => void;
   onReview?: () => void;
 }) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const [destination, setDestination] = useState<
     Extract<
@@ -976,12 +981,12 @@ function PlanPreviewCard({
   ).length;
   const unscheduledWorkoutCount = draft.entries.length - scheduledWorkoutCount;
   const destinationLabel: Record<TrainingPlanDestination, string> = {
-    workoutLibrary: "COROS Workout Library",
-    calendar: "COROS Calendar",
-    localPlan: "CorosLink Training Library",
-    nativePlan: "COROS Plan",
-    localTemplate: "Local CorosLink template",
-    nativePlanAndCalendar: "COROS Plan on Calendar"
+    workoutLibrary: t("COROS Workout Library"),
+    calendar: t("COROS Calendar"),
+    localPlan: t("CorosLink Training Library"),
+    nativePlan: t("COROS Plan"),
+    localTemplate: t("Local CorosLink template"),
+    nativePlanAndCalendar: t("COROS Plan on Calendar")
   };
 
   useEffect(() => {
@@ -1020,7 +1025,7 @@ function PlanPreviewCard({
                   key={`${sport ?? "unknown"}-${index}`}
                   className="chat-plan-sport-dot"
                   style={planSportStyle(sport)}
-                  title={sport ? formatWorkoutSport(sport) : "Workout"}
+                  title={sport ? formatWorkoutSport(sport) : t("Workout")}
                 >
                   <SportIcon size={10} strokeWidth={2.2} aria-hidden="true" />
                 </span>
@@ -1029,22 +1034,22 @@ function PlanPreviewCard({
           </span>
         ) : null}
       </div>
-      <div className="chat-plan-overview" aria-label="Plan overview">
+      <div className="chat-plan-overview" aria-label={t("Plan overview")}>
         <div className="chat-plan-overview-item">
-          <span>Weeks</span>
+          <span>{t("Weeks")}</span>
           <strong>{scheduledWeekCount}</strong>
         </div>
         <div className="chat-plan-overview-item">
-          <span>Workouts</span>
+          <span>{t("Workouts")}</span>
           <strong>{draft.entries.length}</strong>
         </div>
         <div className="chat-plan-overview-item">
-          <span>Sports</span>
+          <span>{t("Sports")}</span>
           <strong title={sports.join(", ")}>{sports.join(", ")}</strong>
         </div>
         <div className="chat-plan-overview-item">
-          <span>Starts</span>
-          <strong>{startDate ? formatPlanDateLabel(startDate) : "Not set"}</strong>
+          <span>{t("Starts")}</span>
+          <strong>{startDate ? formatPlanDateLabel(startDate) : t("Not set")}</strong>
         </div>
       </div>
       {selectedWeek ? (
@@ -1060,27 +1065,27 @@ function PlanPreviewCard({
               </h5>
               <small>
                 {selectedWeek.entries.length}{" "}
-                {selectedWeek.entries.length === 1 ? "workout" : "workouts"}
+                {selectedWeek.entries.length === 1 ? t("workout") : t("workouts")}
               </small>
             </div>
             {planWeeks.length > 1 ? (
-              <div className="chat-plan-week-stepper" aria-label="Change week">
+              <div className="chat-plan-week-stepper" aria-label={t("Change week")}>
                 <button
                   type="button"
                   onClick={() => selectAdjacentWeek(-1)}
                   disabled={selectedWeekIndex <= 0}
-                  aria-label="Previous week"
-                  title="Previous week"
+                  aria-label={t("Previous week")}
+                  title={t("Previous week")}
                 >
                   <ChevronLeft size={15} aria-hidden="true" />
                 </button>
-                <span>{selectedWeekIndex + 1} of {planWeeks.length}</span>
+                <span>{selectedWeekIndex + 1}  {t("of")} {planWeeks.length}</span>
                 <button
                   type="button"
                   onClick={() => selectAdjacentWeek(1)}
                   disabled={selectedWeekIndex >= planWeeks.length - 1}
-                  aria-label="Next week"
-                  title="Next week"
+                  aria-label={t("Next week")}
+                  title={t("Next week")}
                 >
                   <ChevronRight size={15} aria-hidden="true" />
                 </button>
@@ -1092,7 +1097,7 @@ function PlanPreviewCard({
               ref={weekTabsRef}
               className="chat-plan-week-tabs"
               role="tablist"
-              aria-label="Plan weeks"
+              aria-label={t("Plan weeks")}
             >
               {planWeeks.map((week) => (
                 <button
@@ -1120,11 +1125,11 @@ function PlanPreviewCard({
               const volume =
                 (entry.source
                   ? formatPlanSourceVolume(entry.source, unitSystem)
-                  : undefined) ?? entry.volume ?? "Not set";
+                  : undefined) ?? entry.volume ?? t("Not set");
               const steps =
                 (entry.source
                   ? formatPlanSourceSteps(entry.source, unitSystem)
-                  : undefined) ?? entry.stepsSummary ?? "No structure provided";
+                  : undefined) ?? entry.stepsSummary ?? t("No structure provided");
               return (
                 <li
                   key={entry.key}
@@ -1133,7 +1138,7 @@ function PlanPreviewCard({
                 >
                   <span
                     className={`chat-plan-entry-date${dateParts ? "" : " is-undated"}`}
-                    title={scheduleDate ?? "Saved to library only"}
+                    title={scheduleDate ?? t("Saved to library only")}
                   >
                     {dateParts ? (
                       <>
@@ -1182,7 +1187,7 @@ function PlanPreviewCard({
       ) : (
         <div className="chat-plan-empty-week">
           <Bookmark size={16} aria-hidden="true" />
-          <span>This plan does not contain any workouts yet.</span>
+          <span>{t("This plan does not contain any workouts yet.")}</span>
         </div>
       )}
       {draft.conflicts.length > 0 ? (
@@ -1201,7 +1206,7 @@ function PlanPreviewCard({
                   : "scheduling conflicts"}
               </strong>
             </span>
-            <small>Review before saving</small>
+            <small>{t("Review before saving")}</small>
             <ChevronDown size={14} aria-hidden="true" />
           </summary>
           <ul className="chat-plan-warnings">
@@ -1228,7 +1233,7 @@ function PlanPreviewCard({
                 {draft.warnings.length === 1 ? "plan note" : "plan notes"}
               </strong>
             </span>
-            <small>Additional plan details</small>
+            <small>{t("Additional plan details")}</small>
             <ChevronDown size={14} aria-hidden="true" />
           </summary>
           <ul className="chat-plan-notes">
@@ -1243,7 +1248,7 @@ function PlanPreviewCard({
       ) : null}
       {!isUploaded ? (
         <fieldset className="chat-plan-confirmation" disabled={uploading}>
-          <legend>How should this plan be saved?</legend>
+          <legend>{t("How should this plan be saved?")}</legend>
           <div className="chat-plan-destination-options">
             <label
               className={`chat-plan-destination-option is-primary${
@@ -1262,8 +1267,8 @@ function PlanPreviewCard({
                 <BookOpen size={16} aria-hidden="true" />
               </span>
               <span className="chat-plan-destination-copy">
-                <strong>Training Plan</strong>
-                <small>Keep these workouts together as one editable plan in CorosLink.</small>
+                <strong>{t("Training Plan")}</strong>
+                <small>{t("Keep these workouts together as one editable plan in CorosLink.")}</small>
               </span>
               <CircleCheck
                 className="chat-plan-destination-check"
@@ -1288,8 +1293,8 @@ function PlanPreviewCard({
                 <Bookmark size={16} aria-hidden="true" />
               </span>
               <span className="chat-plan-destination-copy">
-                <strong>Individual Workouts</strong>
-                <small>Save each workout separately to the COROS Workout Library.</small>
+                <strong>{t("Individual Workouts")}</strong>
+                <small>{t("Save each workout separately to the COROS Workout Library.")}</small>
               </span>
               <CircleCheck
                 className="chat-plan-destination-check"
@@ -1315,13 +1320,11 @@ function PlanPreviewCard({
                 <CalendarDays size={16} aria-hidden="true" />
               </span>
               <span className="chat-plan-destination-copy">
-                <strong>Calendar</strong>
+                <strong>{t("Calendar")}</strong>
                 <small>
                   {unscheduledWorkoutCount > 0
-                    ? `${unscheduledWorkoutCount} ${
-                        unscheduledWorkoutCount === 1 ? "workout needs" : "workouts need"
-                      } a date.`
-                    : "Schedule workouts on the dates shown above."}
+                    ? t("{{p0}} {{p1}} a date.", { p0: unscheduledWorkoutCount, p1: unscheduledWorkoutCount === 1 ? "workout needs" : "workouts need" })
+                    : t("Schedule workouts on the dates shown above.")}
                 </small>
               </span>
               <CircleCheck
@@ -1347,8 +1350,8 @@ function PlanPreviewCard({
                 <Layers size={16} aria-hidden="true" />
               </span>
               <span className="chat-plan-destination-copy">
-                <strong>COROS Plan</strong>
-                <small>Bundle these workouts into one grouped Plan in your COROS Plan Library.</small>
+                <strong>{t("COROS Plan")}</strong>
+                <small>{t("Bundle these workouts into one grouped Plan in your COROS Plan Library.")}</small>
               </span>
               <CircleCheck
                 className="chat-plan-destination-check"
@@ -1374,13 +1377,11 @@ function PlanPreviewCard({
                 <Upload size={16} aria-hidden="true" />
               </span>
               <span className="chat-plan-destination-copy">
-                <strong>COROS Plan on Calendar</strong>
+                <strong>{t("COROS Plan on Calendar")}</strong>
                 <small>
                   {unscheduledWorkoutCount > 0
-                    ? `${unscheduledWorkoutCount} ${
-                        unscheduledWorkoutCount === 1 ? "workout needs" : "workouts need"
-                      } a date.`
-                    : "Bundle into one COROS Plan and put it on your Calendar."}
+                    ? t("{{p0}} {{p1}} a date.", { p0: unscheduledWorkoutCount, p1: unscheduledWorkoutCount === 1 ? "workout needs" : "workouts need" })
+                    : t("Bundle into one COROS Plan and put it on your Calendar.")}
                 </small>
               </span>
               <CircleCheck
@@ -1405,32 +1406,16 @@ function PlanPreviewCard({
             )}
             <span>
               {destination === "localPlan"
-                ? `This will be saved as one grouped plan with ${draft.entries.length} ${
-                    draft.entries.length === 1 ? "workout" : "workouts"
-                  } in your CorosLink Training Library.`
+                ? t("This will be saved as one grouped plan with {{p0}} {{p1}} in your CorosLink Training Library.", { p0: draft.entries.length, p1: draft.entries.length === 1 ? t("workout") : t("workouts") })
                 : destination === "calendar"
-                  ? `${scheduledWorkoutCount} ${
-                      scheduledWorkoutCount === 1 ? "workout" : "workouts"
-                    } will be added to your COROS Calendar.${
-                      draft.conflicts.length > 0
-                        ? ` Review ${draft.conflicts.length} ${
-                            draft.conflicts.length === 1 ? "conflict" : "conflicts"
-                          } before adding.`
-                        : " No scheduling conflicts."
-                    }`
+                  ? t("{{p0}} {{p1}} will be added to your COROS Calendar.{{p2}}", { p0: scheduledWorkoutCount, p1: scheduledWorkoutCount === 1 ? t("workout") : t("workouts"), p2: draft.conflicts.length > 0
+                        ? t(" Review {{p0}} {{p1}} before adding.", { p0: draft.conflicts.length, p1: draft.conflicts.length === 1 ? "conflict" : "conflicts" })
+                        : t(" No scheduling conflicts.") })
                   : destination === "nativePlan"
-                    ? `This will be bundled into one Plan with ${draft.entries.length} ${
-                        draft.entries.length === 1 ? "workout" : "workouts"
-                      } in your COROS Plan Library, unscheduled.`
+                    ? t("This will be bundled into one Plan with {{p0}} {{p1}} in your COROS Plan Library, unscheduled.", { p0: draft.entries.length, p1: draft.entries.length === 1 ? t("workout") : t("workouts") })
                     : destination === "nativePlanAndCalendar"
-                      ? `This will be bundled into one Plan with ${draft.entries.length} ${
-                          draft.entries.length === 1 ? "workout" : "workouts"
-                        } and put on your COROS Calendar starting ${
-                          startDate ? formatPlanDateLabel(startDate) : "the first workout's date"
-                        }.`
-                      : `${draft.entries.length} ${
-                          draft.entries.length === 1 ? "workout" : "workouts"
-                        } will be saved individually to your COROS Workout Library. Dates will not be added to Calendar.`}
+                      ? t("This will be bundled into one Plan with {{p0}} {{p1}} and put on your COROS Calendar starting {{p2}}.", { p0: draft.entries.length, p1: draft.entries.length === 1 ? t("workout") : t("workouts"), p2: startDate ? formatPlanDateLabel(startDate) : t("the first workout's date") })
+                      : t("{{p0}} {{p1}} will be saved individually to your COROS Workout Library. Dates will not be added to Calendar.", { p0: draft.entries.length, p1: draft.entries.length === 1 ? t("workout") : t("workouts") })}
             </span>
           </p>
         </fieldset>
@@ -1440,15 +1425,11 @@ function PlanPreviewCard({
           <CircleCheck size={15} aria-hidden="true" />
           <span>
             {(uploadedResult?.destination ?? draft.uploadResult?.destination ?? destination) === "localPlan"
-              ? `Saved as a grouped plan in ${destinationLabel.localPlan}.`
+              ? t("Saved as a grouped plan in {{p0}}.", { p0: destinationLabel.localPlan })
               : (uploadedResult?.destination ?? draft.uploadResult?.destination ?? destination) === "nativePlan" ||
                   (uploadedResult?.destination ?? draft.uploadResult?.destination ?? destination) === "nativePlanAndCalendar"
-                ? `Saved as one grouped ${destinationLabel[uploadedResult?.destination ?? draft.uploadResult?.destination ?? destination]}.`
-                : `Saved to ${destinationLabel[uploadedResult?.destination ?? draft.uploadResult?.destination ?? destination]}. ${
-                    uploadedResult?.workoutsScheduled ?? draft.uploadResult?.workoutsScheduled ?? 0
-                  } scheduled, ${
-                    uploadedResult?.workoutsCreated ?? draft.uploadResult?.workoutsCreated ?? 0
-                  } saved to library.`}
+                ? t("Saved as one grouped {{p0}}.", { p0: destinationLabel[uploadedResult?.destination ?? draft.uploadResult?.destination ?? destination] })
+                : t("Saved to {{p0}}. {{p1}} scheduled, {{p2}} saved to library.", { p0: destinationLabel[uploadedResult?.destination ?? draft.uploadResult?.destination ?? destination], p1: uploadedResult?.workoutsScheduled ?? draft.uploadResult?.workoutsScheduled ?? 0, p2: uploadedResult?.workoutsCreated ?? draft.uploadResult?.workoutsCreated ?? 0 })}
           </span>
         </p>
       ) : (
@@ -1459,11 +1440,10 @@ function PlanPreviewCard({
               className="chat-plan-review"
               onClick={onReview}
               disabled={uploading}
-              title="Open this plan in the Training Library editor"
+              title={t("Open this plan in the Training Library editor")}
             >
               <BookOpen size={14} aria-hidden="true" />
-              Edit plan first
-            </button>
+              {t("Edit plan first")}</button>
           ) : null}
           <button
             type="button"
@@ -1485,14 +1465,14 @@ function PlanPreviewCard({
               <Bookmark size={14} aria-hidden="true" />
             )}
             {destination === "localPlan"
-              ? "Save Plan"
+              ? t("Save Plan")
               : destination === "calendar"
-                ? "Add to Calendar"
+                ? t("Add to Calendar")
                 : destination === "nativePlan"
-                  ? "Save Plan"
+                  ? t("Save Plan")
                   : destination === "nativePlanAndCalendar"
-                    ? "Save Plan & Schedule"
-                    : "Save Workouts"}
+                    ? t("Save Plan & Schedule")
+                    : t("Save Workouts")}
           </button>
         </div>
       )}
@@ -1516,6 +1496,7 @@ function CoachDraftPreviewCard({
   ) => void;
   onReview?: () => void;
 }) {
+  useLanguage();
   if (draft.artifactType === "workout") {
     return (
       <WorkoutPreviewCard
@@ -1539,9 +1520,9 @@ function CoachDraftPreviewCard({
 }
 
 function deleteTargetLabel(target: WorkoutDeletePreview["target"]): string {
-  if (target === "scheduled") return "Calendar";
-  if (target === "library") return "Library";
-  return "Calendar and library";
+  if (target === "scheduled") return t("Calendar");
+  if (target === "library") return t("Library");
+  return t("Calendar and library");
 }
 
 function DeletePreviewCard({
@@ -1555,26 +1536,27 @@ function DeletePreviewCard({
   deleted?: DeleteWorkoutResult;
   onConfirm: () => void;
 }) {
+  useLanguage();
   return (
     <div className="chat-plan-card chat-delete-card">
       <div className="chat-plan-card-header">
-        <h4>Delete workout</h4>
+        <h4>{t("Delete workout")}</h4>
         <span className="chat-plan-card-summary">{preview.summary}</span>
       </div>
       <dl className="chat-delete-details">
         <div>
-          <dt>Target</dt>
+          <dt>{t("Target")}</dt>
           <dd>{deleteTargetLabel(preview.target)}</dd>
         </div>
         {preview.workoutName ? (
           <div>
-            <dt>Workout</dt>
+            <dt>{t("Workout")}</dt>
             <dd>{preview.workoutName}</dd>
           </div>
         ) : null}
         {preview.scheduleDate ? (
           <div>
-            <dt>Date</dt>
+            <dt>{t("Date")}</dt>
             <dd>{preview.scheduleDate}</dd>
           </div>
         ) : null}
@@ -1594,8 +1576,7 @@ function DeletePreviewCard({
             ) : (
               <Trash2 size={14} aria-hidden="true" />
             )}
-            Delete from COROS
-          </button>
+            {t("Delete from COROS")}</button>
         </div>
       )}
     </div>
@@ -1603,6 +1584,7 @@ function DeletePreviewCard({
 }
 
 function SourceBadge({ source }: { source: SourceInfo }) {
+  useLanguage();
   if (source.mcpUsed) {
     const tools = source.mcpTools.filter(Boolean);
     return (
@@ -1610,7 +1592,7 @@ function SourceBadge({ source }: { source: SourceInfo }) {
         <Database size={12} aria-hidden="true" />
         MCP
         {tools.length > 0 ? ` · ${[...new Set(tools)].join(", ")}` : ""}
-        {source.mcpError ? " · failed" : ""}
+        {source.mcpError ? t(" · failed") : ""}
       </div>
     );
   }
@@ -1618,16 +1600,14 @@ function SourceBadge({ source }: { source: SourceInfo }) {
     return (
       <div className="chat-source chat-source-snapshot">
         <FileText size={12} aria-hidden="true" />
-        Training snapshot
-        {source.mcpEnabled ? " · MCP not called" : ""}
+        {t("Training snapshot")}{source.mcpEnabled ? t(" · MCP not called") : ""}
       </div>
     );
   }
   return (
     <div className="chat-source chat-source-none">
       <FileText size={12} aria-hidden="true" />
-      No COROS data
-    </div>
+      {t("No COROS data")}</div>
   );
 }
 
@@ -1647,9 +1627,9 @@ function formatLatestActivityExportMessage(
   const formatLabel = result.formatLabel ?? "FIT";
   const activityName = result.activityName ? ` "${result.activityName}"` : "";
   if (!result.saved || !result.filePath) {
-    return `No file saved. The latest activity ${formatLabel} export was cancelled.`;
+    return t("No file saved. The latest activity {{p0}} export was cancelled.", { p0: formatLabel });
   }
-  return `Saved the latest activity ${formatLabel} file${activityName} to:\n\n\`${result.filePath}\``;
+  return t("Saved the latest activity {{p0}} file{{p1}} to:\n\n`{{p2}}`", { p0: formatLabel, p1: activityName, p2: result.filePath });
 }
 
 interface ChatComposerHandle {
@@ -1690,6 +1670,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     },
     ref
   ) {
+  useLanguage();
     const [draft, setDraft] = useState(initialDraft);
     const draftRef = useRef(initialDraft);
     const submittingRef = useRef(false);
@@ -1750,7 +1731,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
             <textarea
               ref={textareaRef}
               className="chat-input"
-              aria-label="Message your coach"
+              aria-label={t("Message your coach")}
               value={draft}
               onChange={(event) => updateDraft(event.target.value)}
               onKeyDown={(event) => {
@@ -1765,8 +1746,8 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
               }}
               placeholder={
                 waitingForCoachAnswer
-                  ? "Type another answer…"
-                  : "Ask your coach…"
+                  ? t("Type another answer…")
+                  : t("Ask your coach…")
               }
               rows={2}
               disabled={exportingLatestActivity}
@@ -1776,7 +1757,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
                 type="button"
                 className="chat-send chat-stop"
                 onClick={onStop}
-                title="Stop"
+                title={t("Stop")}
               >
                 <Square size={15} aria-hidden="true" />
               </button>
@@ -1792,7 +1773,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
                   localProviderBlocked
                 }
                 title={
-                  localProviderBlocked ? "Enter a local model first" : "Send"
+                  localProviderBlocked ? t("Enter a local model first") : t("Send")
                 }
               >
                 <Send size={15} aria-hidden="true" />
@@ -1806,17 +1787,16 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
               className="chat-new-chat chat-composer-new-chat"
               onClick={onNewChat}
               disabled={!apiAvailable || streaming || exportingLatestActivity}
-              aria-label="Start a new chat"
-              title="Start a new chat"
+              aria-label={t("Start a new chat")}
+              title={t("Start a new chat")}
             >
               <Plus size={14} aria-hidden="true" />
-              <span>New chat</span>
+              <span>{t("New chat")}</span>
             </button>
           </div>
         </div>
         <p className="chat-disclaimer">
-          Coach can make mistakes. Verify important training decisions.
-        </p>
+          {t("Coach can make mistakes. Verify important training decisions.")}</p>
       </div>
     );
   }
@@ -1833,6 +1813,7 @@ export function ChatView({
   accountSetupRequest = 0,
   visible = true
 }: ChatViewProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const [authStatus, setAuthStatus] = useState<ChatAuthStatus | null>(null);
   const [chatSettings, setChatSettings] =
@@ -1920,7 +1901,7 @@ export function ChatView({
         const pinned = await api.pinCoachChart(preview);
         setPinnedChartIds((prev) => ({ ...prev, [preview.previewId]: pinned.id }));
       } catch (caught) {
-        onError(caught instanceof Error ? caught.message : "Could not pin the chart.");
+        onError(caught instanceof Error ? caught.message : t("Could not pin the chart."));
       } finally {
         setPinningPreviewId(null);
       }
@@ -1942,7 +1923,7 @@ export function ChatView({
           return next;
         });
       } catch (caught) {
-        onError(caught instanceof Error ? caught.message : "Could not unpin the chart.");
+        onError(caught instanceof Error ? caught.message : t("Could not unpin the chart."));
       } finally {
         setPinningPreviewId(null);
       }
@@ -2402,7 +2383,7 @@ export function ChatView({
         await ensureActiveSession("chatgpt");
       }
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : "ChatGPT sign-in failed.");
+      onError(caught instanceof Error ? caught.message : t("ChatGPT sign-in failed."));
     } finally {
       setSigningIn(false);
     }
@@ -2432,7 +2413,7 @@ export function ChatView({
       onError(
         caught instanceof Error
           ? caught.message
-          : "Claude Code detection failed."
+          : t("Claude Code detection failed.")
       );
       return null;
     } finally {
@@ -2470,7 +2451,7 @@ export function ChatView({
       }
     } catch (caught) {
       onError(
-        caught instanceof Error ? caught.message : "Claude sign-in failed."
+        caught instanceof Error ? caught.message : t("Claude sign-in failed.")
       );
     } finally {
       setConnectingClaude(false);
@@ -2489,7 +2470,7 @@ export function ChatView({
       onError(
         caught instanceof Error
           ? caught.message
-          : "Claude connection test failed."
+          : t("Claude connection test failed.")
       );
     } finally {
       setTestingClaude(false);
@@ -2518,7 +2499,7 @@ export function ChatView({
       onError(
         caught instanceof Error
           ? caught.message
-          : "Could not save Claude settings."
+          : t("Could not save Claude settings.")
       );
     }
   };
@@ -2533,7 +2514,7 @@ export function ChatView({
       setTimeline([]);
       resetEphemeralChatState();
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : "Could not start a new chat.");
+      onError(caught instanceof Error ? caught.message : t("Could not start a new chat."));
     }
   };
 
@@ -2563,7 +2544,7 @@ export function ChatView({
         }
       }
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : "Could not delete chat.");
+      onError(caught instanceof Error ? caught.message : t("Could not delete chat."));
     }
   };
 
@@ -2583,7 +2564,7 @@ export function ChatView({
         setClaudeStatus(status);
       }
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : "Provider change failed.");
+      onError(caught instanceof Error ? caught.message : t("Provider change failed."));
     }
   };
 
@@ -2625,7 +2606,7 @@ export function ChatView({
       onError(
         caught instanceof Error
           ? caught.message
-          : "Could not save the selected model."
+          : t("Could not save the selected model.")
       );
     } finally {
       setSavingSettings(false);
@@ -2662,14 +2643,14 @@ export function ChatView({
       setOpenRouterApiKey("");
       setOpenRouterConnection((current) => ({
         ok: true,
-        message: "OpenRouter settings saved.",
+        message: t("OpenRouter settings saved."),
         models: current?.models ?? []
       }));
     } catch (caught) {
       onError(
         caught instanceof Error
           ? caught.message
-          : "Could not save OpenRouter settings."
+          : t("Could not save OpenRouter settings.")
       );
     } finally {
       setSavingSettings(false);
@@ -2692,14 +2673,14 @@ export function ChatView({
       setOpenRouterApiKey("");
       setOpenRouterConnection({
         ok: true,
-        message: "OpenRouter API key cleared.",
+        message: t("OpenRouter API key cleared."),
         models: []
       });
     } catch (caught) {
       onError(
         caught instanceof Error
           ? caught.message
-          : "Could not clear the OpenRouter API key."
+          : t("Could not clear the OpenRouter API key.")
       );
     } finally {
       setSavingSettings(false);
@@ -2722,7 +2703,7 @@ export function ChatView({
       onError(
         caught instanceof Error
           ? caught.message
-          : "OpenRouter connection test failed."
+          : t("OpenRouter connection test failed.")
       );
     } finally {
       setTestingOpenRouter(false);
@@ -2749,7 +2730,7 @@ export function ChatView({
       onError(null);
       return true;
     } catch {
-      onError("Could not save Coach settings. Please try again.");
+      onError(t("Could not save Coach settings. Please try again."));
       return false;
     }
   };
@@ -2771,11 +2752,11 @@ export function ChatView({
       setLocalApiKey("");
       setLocalConnection({
         ok: true,
-        message: "Local model settings saved.",
+        message: t("Local model settings saved."),
         normalizedBaseUrl: saved.local.baseUrl
       });
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : "Local settings failed.");
+      onError(caught instanceof Error ? caught.message : t("Local settings failed."));
     } finally {
       setSavingSettings(false);
     }
@@ -2797,11 +2778,11 @@ export function ChatView({
       setLocalApiKey("");
       setLocalConnection({
         ok: true,
-        message: "Local API key cleared.",
+        message: t("Local API key cleared."),
         normalizedBaseUrl: saved.local.baseUrl
       });
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : "Could not clear API key.");
+      onError(caught instanceof Error ? caught.message : t("Could not clear API key."));
     } finally {
       setSavingSettings(false);
     }
@@ -2828,7 +2809,7 @@ export function ChatView({
           ok: false,
           message:
             runningEmpty.length > 0
-              ? `${runningEmpty.map((server) => server.label).join(" and ")} ${runningEmpty.length === 1 ? "is" : "are"} running, but no models were found. Pull an Ollama model or load a model in LM Studio, then detect again.`
+              ? t("{{p0}} {{p1}} running, but no models were found. Pull an Ollama model or load a model in LM Studio, then detect again.", { p0: runningEmpty.map((server) => server.label).join(t(" and ")), p1: runningEmpty.length === 1 ? "is" : "are" })
               : "No Ollama or LM Studio server found on localhost ports 11434 or 1234. For a server on another machine, enter its URL (for example http://192.168.1.20:8000/v1) and click Test."
         });
         return;
@@ -2868,13 +2849,13 @@ export function ChatView({
       setLocalApiKey("");
       setLocalConnection({
         ok: true,
-        message: `Detected ${preferred.label} with ${preferred.models.length} model${preferred.models.length === 1 ? "" : "s"}.`,
+        message: t("Detected {{p0}} with {{p1}} model{{p2}}.", { p0: preferred.label, p1: preferred.models.length, p2: preferred.models.length === 1 ? "" : "s" }),
         normalizedBaseUrl: preferred.baseUrl,
         models: preferred.models
       });
     } catch (caught) {
       const message =
-        caught instanceof Error ? caught.message : "Local model detection failed.";
+        caught instanceof Error ? caught.message : t("Local model detection failed.");
       if (auto) {
         setLocalConnection({ ok: false, message });
       } else {
@@ -2920,7 +2901,7 @@ export function ChatView({
         }));
       }
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : "Local connection test failed.");
+      onError(caught instanceof Error ? caught.message : t("Local connection test failed."));
     } finally {
       setTestingLocal(false);
     }
@@ -2936,7 +2917,7 @@ export function ChatView({
       // Surface the discovered tools for verification during this milestone.
       console.log("[COROS MCP] tools:", status.tools);
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : "COROS connection failed.");
+      onError(caught instanceof Error ? caught.message : t("COROS connection failed."));
     } finally {
       await refreshMcpStatuses();
       setMcpBusy(false);
@@ -2957,7 +2938,7 @@ export function ChatView({
       !chatSettings.openRouter.hasApiKey &&
       !openRouterApiKey.trim()
     ) {
-      onError("Add an OpenRouter API key in Coach settings first.");
+      onError(t("Add an OpenRouter API key in Coach settings first."));
       return false;
     }
     if (chatSettings.provider === "openrouter") {
@@ -2976,13 +2957,13 @@ export function ChatView({
         onError(
           caught instanceof Error
             ? caught.message
-            : "OpenRouter settings failed."
+            : t("OpenRouter settings failed.")
         );
         return false;
       }
     }
     if (chatSettings.provider === "local" && !chatSettings.local.model.trim()) {
-      onError("Enter a local model before starting the coach.");
+      onError(t("Enter a local model before starting the coach."));
       return false;
     }
     if (chatSettings.provider === "local") {
@@ -2998,7 +2979,7 @@ export function ChatView({
         setChatSettings(saved);
         setLocalApiKey("");
       } catch (caught) {
-        onError(caught instanceof Error ? caught.message : "Local settings failed.");
+        onError(caught instanceof Error ? caught.message : t("Local settings failed."));
         return false;
       }
     }
@@ -3079,7 +3060,7 @@ export function ChatView({
         setTimeline(restoredEntries);
         persistHistory(activeSessionIdRef.current, restoredEntries, true);
       }
-      onError(caught instanceof Error ? caught.message : "Chat request failed.");
+      onError(caught instanceof Error ? caught.message : t("Chat request failed."));
     }
     return true;
   };
@@ -3178,7 +3159,7 @@ export function ChatView({
       onError(
         caught instanceof Error
           ? caught.message
-          : "Failed to save the workout or plan to COROS."
+          : t("Failed to save the workout or plan to COROS.")
       );
     } finally {
       setUploadingDraftId(null);
@@ -3191,7 +3172,7 @@ export function ChatView({
       onError(null);
       onReviewPlan(trainingPlanFromCoachDraftPreview(draft));
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : "The Coach plan could not be opened in the Training Library.");
+      onError(caught instanceof Error ? caught.message : t("The Coach plan could not be opened in the Training Library."));
     }
   };
 
@@ -3269,7 +3250,7 @@ export function ChatView({
       onError(
         caught instanceof Error
           ? caught.message
-          : "Failed to delete workout from COROS."
+          : t("Failed to delete workout from COROS.")
       );
     } finally {
       setDeletingRequestId(null);
@@ -3306,7 +3287,7 @@ export function ChatView({
       const message =
         caught instanceof Error
           ? caught.message
-          : "Latest activity FIT export failed.";
+          : t("Latest activity FIT export failed.");
       onError(message);
       setTimeline((prev) => {
         const next: ChatEntry[] = [
@@ -3314,7 +3295,7 @@ export function ChatView({
           {
             kind: "message",
             role: "assistant",
-            content: `I couldn't download the latest activity FIT file: ${message}`
+            content: t("I couldn't download the latest activity FIT file: {{p0}}", { p0: message })
           }
         ];
         persistHistory(activeSessionIdRef.current, next, true);
@@ -3468,7 +3449,7 @@ export function ChatView({
       <div className="chat-view chat-view-login">
         <div className="chat-header">
           <div className="chat-header-title">
-            <span>Training Coach</span>
+            <span>{t("Training Coach")}</span>
           </div>
           <div className="chat-header-end">
             <button
@@ -3477,8 +3458,7 @@ export function ChatView({
               onClick={() => setSettingsOpen(true)}
             >
               <Settings2 size={16} aria-hidden="true" />
-              Settings
-            </button>
+              {t("Settings")}</button>
           </div>
         </div>
         <div className="chat-layout">
@@ -3488,13 +3468,10 @@ export function ChatView({
               <Terminal size={32} aria-hidden="true" />
               <div className="chat-login-title-row">
                 <h2>Claude Code</h2>
-                <span className="chat-beta-badge">Beta</span>
+                <span className="chat-beta-badge">{t("Beta")}</span>
               </div>
               <p>
-                Use the Claude Code CLI installed on this computer with your
-                existing Claude subscription. CorosLink does not read or store
-                your Claude credentials.
-              </p>
+                {t("Use the Claude Code CLI installed on this computer with your existing Claude subscription. CorosLink does not read or store your Claude credentials.")}</p>
               <div className="chat-login-actions">
                 {notInstalled ? (
                   <button
@@ -3503,8 +3480,7 @@ export function ChatView({
                     onClick={() => void api?.openClaudeCodeSetupGuide()}
                   >
                     <ExternalLink size={16} aria-hidden="true" />
-                    Install Claude Code
-                  </button>
+                    {t("Install Claude Code")}</button>
                 ) : (
                   <button
                     type="button"
@@ -3521,8 +3497,7 @@ export function ChatView({
                     ) : (
                       <Terminal size={16} aria-hidden="true" />
                     )}
-                    Sign in with Claude
-                  </button>
+                    {t("Sign in with Claude")}</button>
                 )}
                 <button
                   type="button"
@@ -3539,11 +3514,10 @@ export function ChatView({
                   ) : (
                     <RefreshCw size={16} aria-hidden="true" />
                   )}
-                  Check again
-                </button>
+                  {t("Check again")}</button>
               </div>
               <p className="chat-login-note">
-                {claudeStatus?.message ?? "Checking for Claude Code…"}
+                {claudeStatus?.message ?? t("Checking for Claude Code…")}
               </p>
             </div>
             <div className="chat-composer-toolbar chat-composer-toolbar-login">
@@ -3561,18 +3535,17 @@ export function ChatView({
       <div className="chat-view chat-view-login">
         <div className="chat-header">
           <div className="chat-header-title">
-            <span>Training Coach</span>
+            <span>{t("Training Coach")}</span>
           </div>
           <div className="chat-header-end">
             <button
               type="button"
               className="chat-settings-button"
               onClick={() => setSettingsOpen(true)}
-              aria-label="Open settings"
+              aria-label={t("Open settings")}
             >
               <Settings2 size={16} aria-hidden="true" />
-              Settings
-            </button>
+              {t("Settings")}</button>
           </div>
         </div>
         <div className="chat-layout">
@@ -3581,13 +3554,11 @@ export function ChatView({
             <div className="panel chat-login-panel chat-openrouter-login-panel">
               <Network size={32} aria-hidden="true" />
               <div className="chat-login-title-row">
-                <h2>Connect OpenRouter</h2>
-                <span className="chat-beta-badge">BYOK</span>
+                <h2>{t("Connect OpenRouter")}</h2>
+                <span className="chat-beta-badge">{t("BYOK")}</span>
               </div>
               <p>
-                Use your OpenRouter API key and model credits for COROS-aware
-                coaching, workout drafting, and activity tools.
-              </p>
+                {t("Use your OpenRouter API key and model credits for COROS-aware coaching, workout drafting, and activity tools.")}</p>
               <div className="chat-login-actions">
                 <button
                   type="button"
@@ -3595,8 +3566,7 @@ export function ChatView({
                   onClick={() => setSettingsOpen(true)}
                 >
                   <KeyRound size={16} aria-hidden="true" />
-                  Add API key
-                </button>
+                  {t("Add API key")}</button>
                 <button
                   type="button"
                   className="secondary-button"
@@ -3604,13 +3574,10 @@ export function ChatView({
                   disabled={!api}
                 >
                   <ExternalLink size={16} aria-hidden="true" />
-                  Get a key from OpenRouter
-                </button>
+                  {t("Get a key from OpenRouter")}</button>
               </div>
               <p className="chat-login-note">
-                Your key is encrypted in local app storage and is never added to
-                the chat transcript.
-              </p>
+                {t("Your key is encrypted in local app storage and is never added to the chat transcript.")}</p>
             </div>
             <div className="chat-composer-toolbar chat-composer-toolbar-login">
               {providerControls}
@@ -3631,18 +3598,17 @@ export function ChatView({
       >
         <div className="chat-header">
           <div className="chat-header-title">
-            <span>Training Coach</span>
+            <span>{t("Training Coach")}</span>
           </div>
           <div className="chat-header-end">
             <button
               type="button"
               className="chat-settings-button"
               onClick={() => setSettingsOpen(true)}
-              aria-label="Open settings"
+              aria-label={t("Open settings")}
             >
               <Settings2 size={16} aria-hidden="true" />
-              Settings
-            </button>
+              {t("Settings")}</button>
           </div>
         </div>
         <div className="chat-layout">
@@ -3650,11 +3616,9 @@ export function ChatView({
           <div className="chat-main chat-main-login">
             <div className="panel chat-login-panel">
               <MessageCircle size={32} aria-hidden="true" />
-              <h2>Your training coach</h2>
+              <h2>{t("Your training coach")}</h2>
               <p>
-                Sign in with your ChatGPT account to chat with a coach that knows your
-                COROS activities, recovery, and upcoming workouts.
-              </p>
+                {t("Sign in with your ChatGPT account to chat with a coach that knows your COROS activities, recovery, and upcoming workouts.")}</p>
               <button
                 type="button"
                 className="primary-button"
@@ -3664,11 +3628,9 @@ export function ChatView({
                 {signingIn ? (
                   <Loader2 className="chat-spinner" size={16} aria-hidden="true" />
                 ) : null}
-                Sign in with ChatGPT
-              </button>
+                {t("Sign in with ChatGPT")}</button>
               <p className="chat-login-note">
-                Or switch to Local model below to chat without signing in.
-              </p>
+                {t("Or switch to Local model below to chat without signing in.")}</p>
             </div>
             <div className="chat-composer-toolbar chat-composer-toolbar-login">
               {providerControls}
@@ -3684,18 +3646,17 @@ export function ChatView({
     <div className="chat-view">
       <div className="chat-header">
         <div className="chat-header-title">
-          <span>Training Coach</span>
+          <span>{t("Training Coach")}</span>
         </div>
         <div className="chat-header-end">
           <button
             type="button"
             className="chat-settings-button"
             onClick={() => setSettingsOpen(true)}
-            aria-label="Open settings"
+            aria-label={t("Open settings")}
           >
             <Settings2 size={16} aria-hidden="true" />
-            Settings
-          </button>
+            {t("Settings")}</button>
           <div className="chat-mcp" ref={mcpRef}>
             {(() => {
               const connectedServers = mcpStatuses.filter((s) => s.connected);
@@ -3709,25 +3670,24 @@ export function ChatView({
                   type="button"
                   className="chat-mcp-pill connected"
                   onClick={() => setShowTools((open) => !open)}
-                  title={`Connected via MCP: ${connectedServers
+                  title={t("Connected via MCP: {{p0}}", { p0: connectedServers
                     .map((s) => s.name)
-                    .join(", ")}`}
+                    .join(", ") })}
                   aria-expanded={showTools}
                   aria-haspopup="dialog"
                 >
                   <Database size={13} aria-hidden="true" />
                   {connectedServers.length === 1
                     ? connectedServers[0].name
-                    : `${connectedServers.length} MCP servers`}{" "}
-                  · {totalTools} tools
-                </button>
+                    : t("{{p0}} MCP servers", { p0: connectedServers.length })}{" "}
+                  · {totalTools}  {t("tools")}</button>
                 {showTools ? (
                   <div className="chat-mcp-panel">
                     <ul>
                       {connectedServers.map((s) => (
                         <li key={s.id}>
                           <code>{s.name}</code>
-                          <span>{s.toolCount} tools</span>
+                          <span>{s.toolCount}  {t("tools")}</span>
                         </li>
                       ))}
                     </ul>
@@ -3736,8 +3696,7 @@ export function ChatView({
                         type="button"
                         onClick={() => setSettingsOpen(true)}
                       >
-                        Manage servers
-                      </button>
+                        {t("Manage servers")}</button>
                     </div>
                   </div>
                 ) : null}
@@ -3758,10 +3717,10 @@ export function ChatView({
                   <Database size={13} aria-hidden="true" />
                 )}
                 {mcpBusy
-                  ? "Connecting…"
+                  ? t("Connecting…")
                   : mcpStatus?.authorized
-                    ? "Reconnect COROS"
-                    : "Connect COROS"}
+                    ? t("Reconnect COROS")
+                    : t("Connect COROS")}
               </button>
             );
             })()}
@@ -3773,8 +3732,7 @@ export function ChatView({
               onClick={() => void handleSignOut()}
             >
               <LogOut size={14} aria-hidden="true" />
-              Sign out
-            </button>
+              {t("Sign out")}</button>
           ) : null}
         </div>
       </div>
@@ -3789,34 +3747,33 @@ export function ChatView({
               <div className="chat-empty-icon">
                 <Sparkles size={26} strokeWidth={1.6} aria-hidden="true" />
               </div>
-              <h3>How can I help with your training?</h3>
+              <h3>{t("How can I help with your training?")}</h3>
               <p className="chat-empty-description">
-                A little insight. A clear plan. Your next step forward.
-              </p>
+                {t("A little insight. A clear plan. Your next step forward.")}</p>
               <div className="chat-suggestions">
                 {[
                   {
-                    title: "Review my activity",
-                    description: "Find the takeaways from my latest session",
-                    prompt: "How was my latest activity?",
+                    title: t("Review my activity"),
+                    description: t("Find the takeaways from my latest session"),
+                    prompt: t("How was my latest activity?"),
                     icon: Activity
                   },
                   {
-                    title: "Create a workout",
-                    description: "Build a session for today’s goals",
-                    prompt: "Create one workout for today and save it to my Workout Library",
+                    title: t("Create a workout"),
+                    description: t("Build a session for today’s goals"),
+                    prompt: t("Create one workout for today and save it to my Workout Library"),
                     icon: Target
                   },
                   {
-                    title: "Plan my week",
-                    description: "Bring some balance to my training",
-                    prompt: "Build a balanced week from my recent training",
+                    title: t("Plan my week"),
+                    description: t("Bring some balance to my training"),
+                    prompt: t("Build a balanced week from my recent training"),
                     icon: CalendarDays
                   },
                   {
-                    title: "Check my recovery",
-                    description: "See if I’m ready for a harder session",
-                    prompt: "Am I recovered enough for a hard session?",
+                    title: t("Check my recovery"),
+                    description: t("See if I’m ready for a harder session"),
+                    prompt: t("Am I recovered enough for a hard session?"),
                     icon: HeartPulse
                   }
                 ].map(({ title, description, prompt, icon: Icon }) => (
@@ -3839,13 +3796,13 @@ export function ChatView({
                 ))}
               </div>
               <details className="chat-more-suggestions">
-                <summary>More ways to get started <ChevronDown size={14} aria-hidden="true" /></summary>
+                <summary>{t("More ways to get started")} <ChevronDown size={14} aria-hidden="true" /></summary>
                 <div className="chat-more-suggestions-list">
                   {[
-                    "Break down my latest workout by lap",
-                    "Schedule bike intervals for Saturday",
-                    "Add strength around my endurance sessions",
-                    "Download my latest activity FIT file"
+                    t("Break down my latest workout by lap"),
+                    t("Schedule bike intervals for Saturday"),
+                    t("Add strength around my endurance sessions"),
+                    t("Download my latest activity FIT file")
                   ].map((suggestion) => (
                     <button
                       key={suggestion}
@@ -4102,10 +4059,10 @@ export function ChatView({
                     {activeTool || !thinkingText ? (
                       <span className="chat-stream-status">
                         {activeTool
-                          ? `Using ${activeTool.replace(/_/g, " ")}…`
+                          ? t("Using {{p0}}…", { p0: activeTool.replace(/_/g, " ") })
                           : resumedCoachPromptRef.current
-                            ? "Resuming plan…"
-                            : "Working on it…"}
+                            ? t("Resuming plan…")
+                            : t("Working on it…")}
                       </span>
                     ) : null}
                     {thinkingText ? (
@@ -4123,7 +4080,7 @@ export function ChatView({
               <div className="chat-avatar chat-avatar-assistant">
                 <FileDown size={16} aria-hidden="true" />
               </div>
-              <div className="chat-bubble">Preparing latest activity FIT export…</div>
+              <div className="chat-bubble">{t("Preparing latest activity FIT export…")}</div>
             </div>
           ) : null}
         </div>
@@ -4151,7 +4108,7 @@ export function ChatView({
               planPanelExpanded ? " is-expanded" : " is-list-view"
             }`}
             aria-label={
-              planPanelExpanded ? "Generated item details" : "Coach creations"
+              planPanelExpanded ? t("Generated item details") : t("Coach creations")
             }
           >
             {!planPanelExpanded ? (
@@ -4162,8 +4119,8 @@ export function ChatView({
                       <BookOpen size={15} aria-hidden="true" />
                     </span>
                     <div>
-                      <strong>Coach creations</strong>
-                      <span>Plans and one-off workouts</span>
+                      <strong>{t("Coach creations")}</strong>
+                      <span>{t("Plans and one-off workouts")}</span>
                     </div>
                   </div>
                   <strong className="chat-plan-list-count">
@@ -4206,7 +4163,7 @@ export function ChatView({
                             setSelectedPlanDraftId(draft.draftId);
                             setPlanPanelExpanded(true);
                           }}
-                          aria-label={`Open ${draft.name || `${isWorkout ? "workout" : "plan"} ${index + 1}`}`}
+                          aria-label={t("Open {{p0}}", { p0: draft.name || `${isWorkout ? t("workout") : "plan"} ${index + 1}` })}
                         >
                           <span
                             className="chat-plan-list-sport"
@@ -4220,27 +4177,27 @@ export function ChatView({
                           </span>
                           <span className="chat-plan-list-copy">
                             <span className="chat-plan-list-kicker">
-                              {isWorkout ? "One-off workout" : `Plan ${planNumber}`}
+                              {isWorkout ? t("One-off workout") : t("Plan {{p0}}", { p0: planNumber })}
                             </span>
                             <strong>
-                              {draft.name || (isWorkout ? "Untitled workout" : "Untitled plan")}
+                              {draft.name || (isWorkout ? t("Untitled workout") : t("Untitled plan"))}
                             </strong>
                             <span className="chat-plan-list-meta">
                               <span>
                                 {draft.entries.length}{" "}
                                 {draft.entries.length === 1
-                                  ? "workout"
-                                  : "workouts"}
+                                  ? t("workout")
+                                  : t("workouts")}
                               </span>
                               {!isWorkout ? (
                                 <span>
                                   {weeks} {weeks === 1 ? "week" : "weeks"}
                                 </span>
                               ) : (
-                                <span>Workout Library</span>
+                                <span>{t("Workout Library")}</span>
                               )}
                               <span data-status={saved ? "saved" : "draft"}>
-                                {saved ? "Saved" : "Draft"}
+                                {saved ? t("Saved") : t("Draft")}
                               </span>
                             </span>
                           </span>
@@ -4259,24 +4216,23 @@ export function ChatView({
                       type="button"
                       className="chat-plan-panel-back"
                       onClick={() => setPlanPanelExpanded(false)}
-                      aria-label="Back to Coach creations"
-                      title="Back to Coach creations"
+                      aria-label={t("Back to Coach creations")}
+                      title={t("Back to Coach creations")}
                     >
                       <ChevronLeft size={15} aria-hidden="true" />
-                      Creations
-                    </button>
+                      {t("Creations")}</button>
                     <div className="chat-plan-panel-title is-detail-title">
                       <div>
                         <strong title={selectedPlanDraft.name}>
                           {selectedPlanDraft.name ||
                             (selectedPlanDraft.artifactType === "workout"
-                              ? "Untitled workout"
-                              : "Untitled plan")}
+                              ? t("Untitled workout")
+                              : t("Untitled plan"))}
                         </strong>
                         <span>
                           {selectedPlanDraft.artifactType === "workout"
-                            ? "One-off workout"
-                            : `Plan ${selectedTrainingPlanNumber} of ${trainingPlanDrafts.length}`}
+                            ? t("One-off workout")
+                            : t("Plan {{p0}} of {{p1}}", { p0: selectedTrainingPlanNumber, p1: trainingPlanDrafts.length })}
                         </span>
                       </div>
                     </div>
@@ -4287,11 +4243,10 @@ export function ChatView({
                         onClick={() =>
                           handleScrollToPlanChat(selectedPlanDraft.draftId)
                         }
-                        title="View the generated response in chat"
+                        title={t("View the generated response in chat")}
                       >
                         <MessageCircle size={14} aria-hidden="true" />
-                        View in chat
-                      </button>
+                        {t("View in chat")}</button>
                     </div>
                   </div>
                 </header>

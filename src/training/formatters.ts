@@ -1,3 +1,4 @@
+import { t, getLocale, formatNumber } from "../i18n/trainingLocale";
 import type { UnitSystem } from "../../electron/types";
 import {
   distanceUnit,
@@ -13,29 +14,29 @@ import {
 /** "Aug 21, 2026 at 11:14 AM" — the activity dialog's headline date. */
 export function formatTrainingLongTimestamp(value?: number): string {
   if (!value) {
-    return "Unknown";
+    return t("Unknown");
   }
 
   const date = new Date(value < 10_000_000_000 ? value * 1000 : value);
-  const day = new Intl.DateTimeFormat(undefined, {
+  const day = new Intl.DateTimeFormat(getLocale(), {
     month: "short",
     day: "numeric",
     year: "numeric"
   }).format(date);
-  const time = new Intl.DateTimeFormat(undefined, {
+  const time = new Intl.DateTimeFormat(getLocale(), {
     hour: "numeric",
     minute: "2-digit"
   }).format(date);
-  return `${day} at ${time}`;
+  return t("{{day}} at {{time}}", { day, time });
 }
 
 export function formatTrainingTimestamp(value?: number): string {
   if (!value) {
-    return "Unknown";
+    return t("Unknown");
   }
 
   const timestamp = value < 10_000_000_000 ? value * 1000 : value;
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(getLocale(), {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -52,7 +53,7 @@ export function formatTrainingTableWhen(value?: number): string {
   const date = new Date(timestamp);
   const sameYear = date.getFullYear() === new Date().getFullYear();
 
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(getLocale(), {
     month: "numeric",
     day: "numeric",
     ...(sameYear ? {} : { year: "2-digit" }),
@@ -101,7 +102,7 @@ export function formatOptionalNumber(value?: number): string {
     return "-";
   }
 
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+  return formatNumber(value, { maximumFractionDigits: 1 });
 }
 
 export function formatPaceSecondsPerKm(
@@ -231,7 +232,7 @@ export function formatHappenDayLabel(value: string): string {
   const year = Number(value.slice(0, 4));
   const month = Number(value.slice(4, 6)) - 1;
   const day = Number(value.slice(6, 8));
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(getLocale(), {
     weekday: "short",
     month: "short",
     day: "numeric"
@@ -258,6 +259,7 @@ function formatSleepClock(value?: string): string | undefined {
     return undefined;
   }
 
+  if (getLocale() === "fr-FR") return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
   const period = hours >= 12 ? "PM" : "AM";
   const displayHour = hours % 12 || 12;
   return `${displayHour}:${String(minutes).padStart(2, "0")} ${period}`;
@@ -280,7 +282,7 @@ export function formatSignedDelta(value?: number, suffix = ""): string {
 
   const rounded = Math.round(value * 10) / 10;
   const prefix = rounded > 0 ? "+" : "";
-  return `${prefix}${rounded}${suffix}`;
+  return `${prefix}${formatNumber(rounded, { maximumFractionDigits: 1 })}${suffix}`;
 }
 
 export function recentTrainingHubDateList(days: number): string[] {
@@ -328,7 +330,7 @@ export function formatUpcomingWorkoutDate(happenDay: string): string {
   const todayKey = getLocalHappenDayKey();
 
   if (happenDay === todayKey) {
-    return "Today";
+    return t("Today");
   }
 
   const year = Number(happenDay.slice(0, 4));
@@ -343,12 +345,12 @@ export function formatUpcomingWorkoutDate(happenDay: string): string {
   );
 
   if (diffDays > 0 && diffDays <= 6) {
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat(getLocale(), {
       weekday: "short"
     }).format(date);
   }
 
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(getLocale(), {
     month: "short",
     day: "numeric"
   }).format(date);
@@ -367,7 +369,7 @@ export function formatUpcomingWorkoutLoad(value?: number): string {
     return "--";
   }
 
-  return `${Math.round(value)}TL`;
+  return `${formatNumber(Math.round(value))}${t("TL")}`;
 }
 
 export function parseUpcomingWorkoutDistanceKm(
@@ -554,7 +556,7 @@ function formatRecordDistanceHero(
   distanceMeters: number,
   unitSystem: UnitSystem
 ): string {
-  return `${metersToDisplayDistance(distanceMeters, unitSystem).toFixed(2)}${distanceUnit(unitSystem)}`;
+  return `${formatNumber(metersToDisplayDistance(distanceMeters, unitSystem), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${distanceUnit(unitSystem)}`;
 }
 
 export function formatRecordDateShort(happenDay?: string): string {
@@ -566,7 +568,7 @@ export function formatRecordDateShort(happenDay?: string): string {
   const month = Number(happenDay.slice(4, 6)) - 1;
   const day = Number(happenDay.slice(6, 8));
 
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(getLocale(), {
     month: "short",
     day: "numeric",
     year: "numeric"
@@ -593,7 +595,7 @@ export function formatPersonalRecordHero(record: {
   avgPace?: number;
 }, unitSystem: UnitSystem): string {
   if (PERSONAL_RECORD_SLOT_TYPES.has(record.type) && !isPersonalRecordPopulated(record)) {
-    return "Not recorded";
+    return t("Not recorded");
   }
 
   if (record.type === RECORD_TYPE_LONGEST_RUN) {

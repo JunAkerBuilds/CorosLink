@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n";
 import {
   useCallback,
   useEffect,
@@ -48,6 +49,7 @@ export function PrimaryTabs({
   coachBusy = false,
   showDevelopmentItems = false,
 }: PrimaryTabsProps) {
+  useLanguage();
   const compactNav = useMediaQuery("(max-width: 720px)");
   const navItems = visiblePrimaryNavItems(showDevelopmentItems);
   const navRef = useRef<HTMLElement>(null);
@@ -109,17 +111,17 @@ export function PrimaryTabs({
         value={activeView}
         options={navItems.map((tab) => ({
           value: tab.id,
-          label: tab.beta ? `${tab.label} (Beta)` : tab.label,
+          label: tab.beta ? `${t(tab.label)} (Beta)` : t(tab.label),
         }))}
         onChange={onChange}
-        label="Section"
+        label={t("Section")}
         className="app-select--nav primary-tabs-select"
       />
     );
   }
 
   return (
-    <nav className="primary-tabs" aria-label="Primary" ref={navRef}>
+    <nav className="primary-tabs" aria-label={t("Primary")} ref={navRef}>
       <span
         className="primary-tabs-indicator"
         aria-hidden="true"
@@ -148,17 +150,17 @@ export function PrimaryTabs({
               }
             }}
             onClick={() => onChange(tab.id)}
-            title={tab.beta ? `${tab.label} (Beta)` : tab.label}
+            title={tab.beta ? t("{{value0}} (Beta)", { value0: t(tab.label) }) : t(tab.label)}
           >
             <Icon size={16} aria-hidden="true" />
-            <span className="primary-tab-label">{tab.label}</span>
+            <span className="primary-tab-label">{t(tab.label)}</span>
             {tab.showActivity && coachBusy ? (
               <span
                 className="primary-tab-activity"
-                aria-label="Coach is responding"
+                aria-label={t("Coach is responding")}
               />
             ) : null}
-            {tab.beta ? <span className="primary-tab-beta">Beta</span> : null}
+            {tab.beta ? <span className="primary-tab-beta">{t("Beta")}</span> : null}
           </button>
         );
       })}

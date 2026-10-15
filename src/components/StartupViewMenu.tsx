@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n";
 import { useEffect, useRef, useState } from "react";
 import { Check, Star } from "lucide-react";
 import {
@@ -19,6 +20,7 @@ export function StartupViewMenu({
   showDevelopmentItems = false,
   showLabel = false,
 }: StartupViewMenuProps) {
+  useLanguage();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const activeLabel = getPrimaryViewLabel(value);
@@ -61,19 +63,19 @@ export function StartupViewMenu({
       <button
         className="update-settings-trigger startup-view-trigger"
         type="button"
-        aria-label={`Startup view: ${activeLabel}`}
+        aria-label={t("Startup view: {{value0}}", { value0: activeLabel })}
         aria-haspopup="menu"
         aria-expanded={open}
-        title={`Startup view: ${activeLabel}`}
+        title={t("Startup view: {{value0}}", { value0: activeLabel })}
         onClick={() => setOpen((current) => !current)}
       >
         <Star size={18} aria-hidden="true" />
-        {showLabel ? <span>Startup view</span> : null}
+        {showLabel ? <span>{t("Startup view")}</span> : null}
       </button>
 
       {open ? (
         <div className="startup-view-popover" role="menu">
-          <p className="update-settings-heading">Startup view</p>
+          <p className="update-settings-heading">{t("Startup view")}</p>
           <div className="startup-view-options">
             {visiblePrimaryNavItems(showDevelopmentItems).filter(
               (item) => !item.excludeFromStartup,
@@ -94,8 +96,8 @@ export function StartupViewMenu({
                   }}
                 >
                   <Icon size={15} aria-hidden="true" />
-                  <span className="startup-view-option-label">{label}</span>
-                  {beta ? <span className="startup-view-beta">Beta</span> : null}
+                  <span className="startup-view-option-label">{t(label)}</span>
+                  {beta ? <span className="startup-view-beta">{t("Beta")}</span> : null}
                   {active ? (
                     <Check
                       className="startup-view-check"

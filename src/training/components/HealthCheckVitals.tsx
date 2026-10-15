@@ -1,3 +1,4 @@
+import { getLocale, useLanguage, t } from "../../i18n/training";
 import { useMemo } from "react";
 import type { CSSProperties } from "react";
 import { Activity, Droplets, Heart, Wind, Zap } from "lucide-react";
@@ -37,6 +38,7 @@ const SPARK_PAD = 4;
  * so strokes and dots use non-scaling-stroke to keep their on-screen size.
  */
 function Sparkline({ points, reference }: { points: HealthInsightPoint[]; reference?: number }) {
+  useLanguage();
   const epochs = points.map(point => toEpoch(point.time));
   const values = points.map(point => point.value);
   const domain = reference === undefined ? values : [...values, reference];
@@ -62,8 +64,9 @@ function Sparkline({ points, reference }: { points: HealthInsightPoint[]; refere
 
 /** The four COROS stress bands with the reported one lit; the score marker is added when a score exists. */
 function StressBands({ level, score }: { level?: string; score?: number }) {
+  useLanguage();
   const lit = level ? STRESS_BANDS.findIndex(band => band.toLowerCase() === level.toLowerCase()) : -1;
-  return <span className="health-stress-bands" role="img" aria-label={level ? `Stress band: ${level}` : "Stress bands"}>
+  return <span className="health-stress-bands" role="img" aria-label={level ? t("Stress band: {{value1}}", { value1: String(level) }) : t("Stress bands")}>
     {STRESS_BANDS.map((band, index) => <i key={band} className={index === lit ? "is-lit" : undefined} />)}
     {score !== undefined && score > 0 && <b className="health-stress-marker" style={{ left: `${Math.min(100, score)}%` }} />}
   </span>;
@@ -82,6 +85,7 @@ interface Vital {
 export function HealthCheckVitals({ result, days, selected, onSelect }: {
   result: HealthInsightResult; days: number; selected?: string; onSelect: (key: string) => void;
 }) {
+  useLanguage();
   const { theme } = useTheme();
   const colors = getHealthVitalColors(theme);
   const { vitals, resting, level, checks, latest } = useMemo(() => {
@@ -106,16 +110,16 @@ export function HealthCheckVitals({ result, days, selected, onSelect }: {
       checks: times.size,
       latest
     };
-  }, [result]);
+  }, [result, getLocale()]);
   if (!vitals.length) return null;
 
   // One line: when the latest check was taken, plus a count only when there is more than one to choose from.
   return <>
     <p className="health-check-summary">
-      <strong>{latest ? formatTime(latest, DAY_ONLY.test(latest) ? "day" : "full") : "Latest check"}</strong>
-      {checks > 1 && <span>· {checks} checks</span>}
+      <strong>{latest ? formatTime(latest, DAY_ONLY.test(latest) ? "day" : "full") : t("Latest check")}</strong>
+      {checks > 1 && <span>· {checks} {t("checks")}</span>}
     </p>
-    <div className="health-vitals" role="group" aria-label="Health check readings">
+    <div className="health-vitals" role="group" aria-label={t("Health check readings")}>
       {vitals.map(vital => {
         const Icon = vital.icon;
         const points = vital.series?.points ?? [];
@@ -135,7 +139,7 @@ export function HealthCheckVitals({ result, days, selected, onSelect }: {
         const unit = vital.unit === "breaths/min" ? "/min" : vital.unit;
         return <button key={vital.key} type="button" className={`health-vital is-${vital.key}`} style={style as CSSProperties}
           aria-pressed={vital.series ? vital.key === selected : undefined} aria-label={description} disabled={!vital.series} onClick={() => onSelect(vital.key)}>
-          <span className="health-vital-head"><span className="health-vital-icon" aria-hidden="true"><Icon size={14} /></span>{vital.label}</span>
+          <span className="health-vital-head"><span className="health-vital-icon" aria-hidden="true"><Icon size={14} /></span>{t(vital.label)}</span>
           <span className="health-vital-value">{formatNumber(vital.value, 1)}{unit && <small>{unit}</small>}</span>
           <span className="health-vital-instrument">
             {vital.key === "stress" ? <StressBands level={level} score={vital.value} />

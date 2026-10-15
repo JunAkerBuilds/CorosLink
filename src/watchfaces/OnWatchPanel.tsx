@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { useState } from "react";
 import { BatteryMedium, Bluetooth, Settings2, Watch } from "lucide-react";
 import type { CorosNativeBleSnapshot } from "../../electron/corosNativeBleTypes";
@@ -15,6 +16,7 @@ export function OnWatchPanel({ api, snapshot, onOpenWatchMenu }: {
   snapshot: CorosNativeBleSnapshot | null;
   onOpenWatchMenu: () => void;
 }) {
+  useLanguage();
   const [busy, setBusy] = useState(false);
   const state = watchConnectionState(snapshot);
   const connected = Boolean(snapshot?.connected);
@@ -28,20 +30,20 @@ export function OnWatchPanel({ api, snapshot, onOpenWatchMenu }: {
         <div className="watch-link-identity">
           <span className={`watch-link-glyph is-${state.tone}`} aria-hidden="true"><Watch size={22} /></span>
           <div>
-            <p className="watch-link-eyebrow">On your watch</p>
-            <h2 id="watch-link-title">{connected ? watchDisplayName(snapshot?.deviceName) : "COROS watch"}</h2>
+            <p className="watch-link-eyebrow">{t("On your watch")}</p>
+            <h2 id="watch-link-title">{connected ? watchDisplayName(snapshot?.deviceName) : t("COROS watch")}</h2>
             <p className="watch-link-meta">
-              <span className={`watch-link-state is-${state.tone}`} role="status">{state.label}</span>
+              <span className={`watch-link-state is-${state.tone}`} role="status">{t(state.label)}</span>
               {connected && snapshot?.batteryPercent !== undefined ? <span className="watch-link-chip">
                 <BatteryMedium size={14} aria-hidden="true" />{snapshot.batteryPercent}%</span> : null}
-              {connected && firmware ? <span className="watch-link-chip">Firmware {firmware}</span> : null}
+              {connected && firmware ? <span className="watch-link-chip">{t("Firmware")}{" "}{firmware}</span> : null}
             </p>
           </div>
         </div>
         <div className="watch-link-actions">
           <button className={`${connected ? "secondary-button" : "primary-button"} watch-link-button`} type="button" onClick={onOpenWatchMenu}>
             {connected ? <Settings2 size={15} aria-hidden="true" /> : <Bluetooth size={15} aria-hidden="true" />}
-            {connected ? "Watch connection" : "Connect watch"}
+            {connected ? t("Watch connection") : t("Connect watch")}
           </button>
         </div>
       </header>

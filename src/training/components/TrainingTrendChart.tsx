@@ -1,6 +1,7 @@
+import { getLocale, useLanguage, t } from "../../i18n/training";
 import type { ChartCardSize } from "../widgetSizing";
 import "../chartSizing.css";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import {
   Activity,
   ArrowDown,
@@ -48,7 +49,7 @@ interface TrainingTrendChartsProps {
 type ChartValueFormatter = (value: number) => string;
 
 function formatRoundedValue(value: number): string {
-  return new Intl.NumberFormat(undefined, {
+  return new Intl.NumberFormat(getLocale(), {
     maximumFractionDigits: 1
   }).format(value);
 }
@@ -125,7 +126,7 @@ function formatTooltipHeading(date: unknown, fallback: unknown): string {
     Number(raw.slice(6, 8))
   );
 
-  return parsed.toLocaleDateString(undefined, {
+  return parsed.toLocaleDateString(getLocale(), {
     weekday: "short",
     month: "short",
     day: "numeric"
@@ -139,6 +140,7 @@ function TrendChartTooltip({
   valueFormatter,
   color
 }: TooltipContentProps & { valueFormatter?: ChartValueFormatter; color?: string }) {
+  useLanguage();
   if (!active || !payload?.length) {
     return null;
   }
@@ -194,6 +196,7 @@ export function ChartAreaGradient({
   id: string;
   stops?: { top: string; mid: string; bottom: string };
 }) {
+  useLanguage();
   const { fillStops } = useChartColors();
   const resolved = stops ?? fillStops;
   return (
@@ -214,8 +217,9 @@ function EmptyChartNotice({
   icon: LucideIcon;
   palette: TrainingMetricPalette;
   title: string;
-  children: string;
+  children: ReactNode;
 }) {
+  useLanguage();
   return (
     <div className="training-chart-empty">
       <span
@@ -225,7 +229,7 @@ function EmptyChartNotice({
         <Icon size={18} aria-hidden="true" />
       </span>
       <span className="training-chart-empty-text">
-        <strong>{title}</strong>
+        <strong>{t(title)}</strong>
         <span>{children}</span>
       </span>
     </div>
@@ -250,6 +254,7 @@ function ChartLatestStat({
   formatValue,
   formatDelta
 }: ChartLatestStatProps) {
+  useLanguage();
   const values = points
     .map((point) => point[dataKey])
     .filter(
@@ -286,16 +291,15 @@ function ChartLatestStat({
 }
 
 function HrvChartLegend() {
+  useLanguage();
   return (
     <div className="training-chart-legend" aria-hidden="true">
       <span className="training-chart-legend-item">
         <span className="training-chart-legend-dot is-accent" />
-        HRV
-      </span>
+        {t("HRV")} </span>
       <span className="training-chart-legend-item">
         <span className="training-chart-legend-line is-gold" />
-        Baseline
-      </span>
+        {t("Baseline")} </span>
     </div>
   );
 }
@@ -321,6 +325,7 @@ function TrendChartAxes({
   yAxisWidth?: number;
   yAxisDomain?: TrendAxisDomain;
 }) {
+  useLanguage();
   const { colors } = useChartColors();
   return (
     <>
@@ -361,6 +366,7 @@ function TrendChartAxes({
 }
 
 function SleepDurationCard({ points, sleepRecords, reducedMotion, size }: TrainingTrendChartsProps & { reducedMotion: boolean }) {
+  useLanguage();
   const gradientId = useId();
   const { colors, metrics } = useChartColors();
   const summary = buildSleepDurationSummary(points, sleepRecords);
@@ -374,13 +380,13 @@ function SleepDurationCard({ points, sleepRecords, reducedMotion, size }: Traini
         <span className="sleep-duration-icon" aria-hidden="true"><MoonStar size={24} /></span>
         <div>
           <div className="sleep-duration-title">
-            <h2>Sleep Duration</h2>
+            <h2>{t("Sleep Duration")}</h2>
             <details className="sleep-duration-info">
-              <summary aria-label="About the sleep duration chart"><Info size={15} /></summary>
-              <p>Average main sleep per night. Naps and incomplete sessions are excluded. The comparison appears when both seven-day periods have all seven readings.</p>
+              <summary aria-label={t("About the sleep duration chart")}><Info size={15} /></summary>
+              <p>{t("Average main sleep per night. Naps and incomplete sessions are excluded. The comparison appears when both seven-day periods have all seven readings.")}</p>
             </details>
           </div>
-          <p>Last 7 days</p>
+          <p>{t("Last 7 days")}</p>
         </div>
       </header>
       {summary.average !== undefined ? (
@@ -388,15 +394,15 @@ function SleepDurationCard({ points, sleepRecords, reducedMotion, size }: Traini
           <div className="sleep-duration-summary">
             <div className="sleep-duration-average">
               <strong>{formatSleepDuration(summary.average)}</strong>
-              <span>{summary.nights === 7 ? "Average per night" : `Average · ${summary.nights} ${summary.nights === 1 ? "night" : "nights"}`}</span>
+              <span>{summary.nights === 7 ? t("Average per night") : t("Average · {{value1}} {{value2}}", { value1: String(summary.nights), value2: String(summary.nights === 1 ? t("night") : t("nights")) })}</span>
             </div>
             {change !== undefined ? (
               <div className={`sleep-duration-comparison${change > 0 ? " is-up" : ""}`}>
                 <strong>
                   {change > 0 ? <ArrowUp size={17} aria-hidden="true" /> : change < 0 ? <ArrowDown size={17} aria-hidden="true" /> : null}
-                  <span aria-label={`${Math.abs(change)} percent ${change > 0 ? "more" : change < 0 ? "less" : "change in"} sleep`}>{Math.abs(change)}%</span>
+                  <span aria-label={t("{{value1}} percent {{value2}} sleep", { value1: String(Math.abs(change)), value2: String(change > 0 ? t("more") : change < 0 ? t("less") : t("change in")) })}>{Math.abs(change)}%</span>
                 </strong>
-                <span>vs previous 7 days</span>
+                <span>{t("vs previous 7 days")}</span>
               </div>
             ) : null}
           </div>
@@ -435,15 +441,15 @@ function SleepDurationCard({ points, sleepRecords, reducedMotion, size }: Traini
           </div>
         </>
       ) : (
-        <EmptyChartNotice icon={MoonStar} palette={metrics.sleep} title="No sleep data">
-          Sync sleep sessions from COROS to see duration trends.
-        </EmptyChartNotice>
+        <EmptyChartNotice icon={MoonStar} palette={metrics.sleep} title={t("No sleep data")}>
+          {t("Sync sleep sessions from COROS to see duration trends.")} </EmptyChartNotice>
       )}
     </section>
   );
 }
 
 export function TrainingTrendCharts({ points, sleepRecords, rangeLabel = "Last 7 days", metric, size }: TrainingTrendChartsProps) {
+  useLanguage();
   const reducedMotion = usePrefersReducedMotion();
   const { colors, metrics } = useChartColors();
 
@@ -471,8 +477,8 @@ export function TrainingTrendCharts({ points, sleepRecords, rangeLabel = "Last 7
       {(!metric || metric === "load") && <section className="panel training-chart-panel" data-metric="load" data-chart-size={size}>
         <div className="section-heading compact training-chart-heading">
           <div>
-            <p className="eyebrow">Training Load</p>
-            <h2>{rangeLabel}</h2>
+            <p className="eyebrow">{t("Training Load")}</p>
+            <h2>{t(rangeLabel)}</h2>
           </div>
           {loadPoints.length > 0 ? (
             <ChartLatestStat
@@ -514,18 +520,17 @@ export function TrainingTrendCharts({ points, sleepRecords, rangeLabel = "Last 7
           <EmptyChartNotice
             icon={Activity}
             palette={metrics.load}
-            title="No training load yet"
+            title={t("No training load yet")}
           >
-            Complete a workout and sync from COROS to see your load trend.
-          </EmptyChartNotice>
+            {t("Complete a workout and sync from COROS to see your load trend.")} </EmptyChartNotice>
         )}
       </section>}
 
       {(!metric || metric === "rpe") && <section className="panel training-chart-panel" data-metric="rpe" data-chart-size={size}>
         <div className="section-heading compact training-chart-heading">
           <div>
-            <p className="eyebrow">RPE Load · AU</p>
-            <h2>{rangeLabel}</h2>
+            <p className="eyebrow">{t("RPE Load · AU")}</p>
+            <h2>{t(rangeLabel)}</h2>
           </div>
           {rpePoints.length > 0 ? (
             <ChartLatestStat
@@ -567,18 +572,17 @@ export function TrainingTrendCharts({ points, sleepRecords, rangeLabel = "Last 7
           <EmptyChartNotice
             icon={Gauge}
             palette={metrics.rpe}
-            title="No RPE data yet"
+            title={t("No RPE data yet")}
           >
-            Rate your activities in COROS to track perceived effort.
-          </EmptyChartNotice>
+            {t("Rate your activities in COROS to track perceived effort.")} </EmptyChartNotice>
         )}
       </section>}
 
       {(!metric || metric === "hrv") && <section className="panel training-chart-panel" data-metric="hrv" data-chart-size={size}>
         <div className="section-heading compact training-chart-heading">
           <div>
-            <p className="eyebrow">HRV vs Baseline · ms</p>
-            <h2>{rangeLabel}</h2>
+            <p className="eyebrow">{t("HRV vs Baseline · ms")}</p>
+            <h2>{t(rangeLabel)}</h2>
           </div>
           <div className="training-chart-heading-side">
             {hrvPoints.length > 0 ? (
@@ -640,10 +644,9 @@ export function TrainingTrendCharts({ points, sleepRecords, rangeLabel = "Last 7
           <EmptyChartNotice
             icon={HeartPulse}
             palette={metrics.hrv}
-            title="No HRV readings"
+            title={t("No HRV readings")}
           >
-            Wear your device during sleep to capture nightly HRV.
-          </EmptyChartNotice>
+            {t("Wear your device during sleep to capture nightly HRV.")} </EmptyChartNotice>
         )}
       </section>}
 

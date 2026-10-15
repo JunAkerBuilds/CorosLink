@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertCircle,
@@ -63,6 +64,7 @@ export function McpServersPanel({
   refreshVersion?: number;
   onChange?: () => void | Promise<void>;
 }) {
+  useLanguage();
   const [servers, setServers] = useState<McpServerConfig[]>([]);
   const [statuses, setStatuses] = useState<Record<string, McpServerStatus>>({});
   const [corosAccount, setCorosAccount] = useState<CorosMcpAccount | null>(null);
@@ -134,15 +136,15 @@ export function McpServersPanel({
         <div>
           <strong>
             {loading
-              ? "Checking connections"
-              : `${connectedCount} of ${servers.length} connected`}
+              ? t("Checking connections")
+              : t("{{p0}} of {{p1}} connected", { p0: connectedCount, p1: servers.length })}
           </strong>
           <span>
             {loading
-              ? "Loading server status and available tools"
+              ? t("Loading server status and available tools")
               : toolCount > 0
-                ? `${toolCount} tools ready for the coach`
-                : "Connect a server to make its tools available"}
+                ? t("{{p0}} tools ready for the coach", { p0: toolCount })
+                : t("Connect a server to make its tools available")}
           </span>
         </div>
       </div>
@@ -180,12 +182,12 @@ export function McpServersPanel({
                   : Unplug;
             const statusLabel =
               state === "connected"
-                ? `${status.toolCount} ${status.toolCount === 1 ? "tool" : "tools"} ready`
+                ? t("{{p0}} {{p1}} ready", { p0: status.toolCount, p1: status.toolCount === 1 ? "tool" : t("tools") })
                 : state === "authorized"
-                  ? "Ready to connect"
+                  ? t("Ready to connect")
                   : state === "disabled"
-                    ? "Disabled"
-                    : "Not connected";
+                    ? t("Disabled")
+                    : t("Not connected");
             // Only a first authorization opens COROS sign-in.
             const corosRegion =
               status?.connected || status?.authenticated
@@ -250,8 +252,7 @@ export function McpServersPanel({
                       ) : (
                         <Plug size={14} aria-hidden="true" />
                       )}
-                      Disconnect
-                    </button>
+                      {t("Disconnect")}</button>
                   ) : (
                     <button
                       type="button"
@@ -266,15 +267,14 @@ export function McpServersPanel({
                       ) : (
                         <PlugZap size={14} aria-hidden="true" />
                       )}
-                      Connect
-                    </button>
+                      {t("Connect")}</button>
                   )}
                   <button
                     type="button"
                     className="mcp-server-remove"
                     disabled={busy}
-                    title="Remove server"
-                    aria-label={`Remove ${server.name}`}
+                    title={t("Remove server")}
+                    aria-label={t("Remove {{p0}}", { p0: server.name })}
                     onClick={() =>
                       run(server.id, () => api.removeMcpServer(server.id))
                     }
@@ -290,8 +290,8 @@ export function McpServersPanel({
         <div className="mcp-servers-empty">
           <Server size={20} aria-hidden="true" />
           <div>
-            <strong>No MCP servers added</strong>
-            <span>Use quick connect or add a custom endpoint below.</span>
+            <strong>{t("No MCP servers added")}</strong>
+            <span>{t("Use quick connect or add a custom endpoint below.")}</span>
           </div>
         </div>
       )}
@@ -300,8 +300,8 @@ export function McpServersPanel({
         <section className="mcp-servers-presets" aria-labelledby="mcp-quick-add">
           <div className="mcp-servers-subheading">
             <div>
-              <strong id="mcp-quick-add">Quick connect</strong>
-              <span>Hosted servers with browser sign-in</span>
+              <strong id="mcp-quick-add">{t("Quick connect")}</strong>
+              <span>{t("Hosted servers with browser sign-in")}</span>
             </div>
           </div>
           <div className="mcp-servers-preset-grid">
@@ -322,7 +322,7 @@ export function McpServersPanel({
                 </span>
                 <span>
                   <strong>{preset.name}</strong>
-                  <small>{preset.description}</small>
+                  <small>{t(preset.description)}</small>
                 </span>
                 {busyId === preset.id ? (
                   <Loader2 size={15} className="spin" aria-hidden="true" />
@@ -334,10 +334,7 @@ export function McpServersPanel({
           </div>
           {availablePresets.some((preset) => preset.id === "hevy") ? (
             <p className="chat-settings-copy">
-              Hevy opens the community server’s authorization page, where you
-              enter your Hevy Pro API key. This connects the AI coach separately
-              from Hevy workout sync in Strength.
-            </p>
+              {t("Hevy opens the community server’s authorization page, where you enter your Hevy Pro API key. This connects the AI coach separately from Hevy workout sync in Strength.")}</p>
           ) : null}
         </section>
       ) : null}
@@ -364,23 +361,23 @@ export function McpServersPanel({
       >
         <div className="mcp-servers-subheading">
           <div>
-            <strong id="mcp-custom-server">Custom server</strong>
-            <span>Add any compatible streamable HTTP endpoint</span>
+            <strong id="mcp-custom-server">{t("Custom server")}</strong>
+            <span>{t("Add any compatible streamable HTTP endpoint")}</span>
           </div>
         </div>
         <div className="mcp-servers-add-fields">
           <label className="mcp-server-field">
-            <span>Server name</span>
+            <span>{t("Server name")}</span>
             <input
               type="text"
-              placeholder="My training service"
+              placeholder={t("My training service")}
               value={addName}
               onChange={(event) => setAddName(event.target.value)}
               required
             />
           </label>
           <label className="mcp-server-field is-url">
-            <span>MCP endpoint</span>
+            <span>{t("MCP endpoint")}</span>
             <input
               type="url"
               placeholder="https://server.example/mcp"
@@ -390,7 +387,7 @@ export function McpServersPanel({
             />
           </label>
           <label className="mcp-server-field">
-            <span>Authentication</span>
+            <span>{t("Authentication")}</span>
             <select
               value={addAuth}
               onChange={(event) =>
@@ -398,8 +395,8 @@ export function McpServersPanel({
               }
             >
               <option value="oauth">OAuth</option>
-              <option value="bearer">API key</option>
-              <option value="none">None</option>
+              <option value="bearer">{t("API key")}</option>
+              <option value="none">{t("None")}</option>
             </select>
           </label>
           <button
@@ -412,8 +409,7 @@ export function McpServersPanel({
             ) : (
               <Plus size={15} aria-hidden="true" />
             )}
-            Add server
-          </button>
+            {t("Add server")}</button>
         </div>
       </form>
     </div>
@@ -422,8 +418,8 @@ export function McpServersPanel({
 
 function authLabel(authType: McpServerConfig["authType"]): string {
   if (authType === "oauth") return "OAuth";
-  if (authType === "bearer") return "API key";
-  return "No authentication";
+  if (authType === "bearer") return t("API key");
+  return t("No authentication");
 }
 
 async function loadCorosAccount(
@@ -446,6 +442,7 @@ function CorosAccountNote({
   builtin: boolean;
   serverRegion: CorosWatchfaceRegion;
 }) {
+  useLanguage();
   if (!account.email && !account.region) return null;
   // The built-in server moves to the account's region when it connects.
   const region = builtin ? account.region ?? serverRegion : serverRegion;
@@ -456,20 +453,19 @@ function CorosAccountNote({
     <div className="mcp-server-coros-account">
       <UserRound size={15} aria-hidden="true" />
       <div>
-        <span>COROS account</span>
+        <span>{t("COROS account")}</span>
         {account.email ? <strong>{account.email}</strong> : null}
         <small>
           {account.email
-            ? `Connect opens COROS sign-in on the ${regionLabel} server with this email filled in. COROS asks for your password there once.`
+            ? t("Connect opens COROS sign-in on the {{p0}} server with this email filled in. COROS asks for your password there once.", { p0: regionLabel })
             : accountElsewhere
-              ? `Connect opens COROS sign-in on the ${regionLabel} server.`
-              : `Connect opens COROS sign-in on the ${regionLabel} server, your account’s region.`}
+              ? t("Connect opens COROS sign-in on the {{p0}} server.", { p0: regionLabel })
+              : t("Connect opens COROS sign-in on the {{p0}} server, your account’s region.", { p0: regionLabel })}
         </small>
         {accountElsewhere ? (
           <small className="is-warning">
-            Your COROS account is on the{" "}
-            {COROS_MCP_REGION_LABELS[accountElsewhere]} server.
-          </small>
+            {t("Your COROS account is on the")}{" "}
+            {COROS_MCP_REGION_LABELS[accountElsewhere]}  {t("server.")}</small>
         ) : null}
       </div>
     </div>
@@ -483,15 +479,16 @@ function BearerField({
   disabled: boolean;
   onSave: (token: string) => void;
 }) {
+  useLanguage();
   const [token, setToken] = useState("");
   return (
     <label className="mcp-server-bearer-field">
-      <span>API key</span>
+      <span>{t("API key")}</span>
       <span className="mcp-server-bearer">
         <KeyRound size={14} aria-hidden="true" />
         <input
           type="password"
-          placeholder="Paste bearer token"
+          placeholder={t("Paste bearer token")}
           value={token}
           onChange={(event) => setToken(event.target.value)}
           disabled={disabled}
@@ -504,8 +501,7 @@ function BearerField({
             setToken("");
           }}
         >
-          Save key
-        </button>
+          {t("Save key")}</button>
       </span>
     </label>
   );

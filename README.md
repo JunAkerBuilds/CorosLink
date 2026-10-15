@@ -38,6 +38,8 @@
 
 ## Features
 
+The desktop interface supports English and French. Choose **Settings → App language → Français** to switch immediately. Dates and numbers follow the selected language. See the [localization guide](src/i18n/README.md) to contribute another language.
+
 ### Training Hub & Coach
 
 Sign in with your COROS account to see recovery, training load, HRV, sleep, EvoLab scores, race predictions, and full activity detail — then ask the **Coach** about it.

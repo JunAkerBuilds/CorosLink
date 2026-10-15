@@ -1,3 +1,4 @@
+import { useLanguage, t } from "../../i18n/training";
 import { useCallback, useEffect, useState } from "react";
 import { ChartLine } from "lucide-react";
 import type { PinnedCoachChart } from "../../../electron/types";
@@ -16,6 +17,7 @@ interface CoachChartsPanelProps {
  * window on mount and on every hub refresh; inline-only charts stay as pinned.
  */
 export function CoachChartsPanel({ api, refreshToken = 0, showEmpty = false }: CoachChartsPanelProps) {
+  useLanguage();
   const [charts, setCharts] = useState<PinnedCoachChart[]>([]);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -94,8 +96,8 @@ export function CoachChartsPanel({ api, refreshToken = 0, showEmpty = false }: C
 
   if (charts.length === 0) {
     return showEmpty ? <section className="panel coach-charts-panel">
-      <div className="section-heading"><div><p className="eyebrow">Coach charts</p><h2>Your pinned charts</h2></div><ChartLine size={22} aria-hidden="true" /></div>
-      <p className="coach-charts-panel-note">{error || "Pin a chart from a coach conversation to see it on your dashboard."}</p>
+      <div className="section-heading"><div><p className="eyebrow">{t("Coach charts")}</p><h2>{t("Your pinned charts")}</h2></div><ChartLine size={22} aria-hidden="true" /></div>
+      <p className="coach-charts-panel-note">{error || t("Pin a chart from a coach conversation to see it on your dashboard.")}</p>
     </section> : null;
   }
 
@@ -103,9 +105,9 @@ export function CoachChartsPanel({ api, refreshToken = 0, showEmpty = false }: C
     <section className="panel coach-charts-panel">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Coach charts</p>
+          <p className="eyebrow">{t("Coach charts")}</p>
           <h2>
-            {charts.length} pinned {charts.length === 1 ? "chart" : "charts"}
+            {charts.length} {t("pinned")} {charts.length === 1 ? t("chart") : t("charts")}
           </h2>
         </div>
         <ChartLine size={22} aria-hidden="true" />

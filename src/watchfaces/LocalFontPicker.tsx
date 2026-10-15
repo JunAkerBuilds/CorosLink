@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { Check, ChevronDown, Info, Loader2, Search, TriangleAlert, Type, X } from "lucide-react";
 import { type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -64,6 +65,7 @@ export function LocalFontPicker({
   disabled = false,
   preview
 }: LocalFontPickerProps) {
+  useLanguage();
   const [open, setOpen] = useState(false);
   const [families, setFamilies] = useState<string[] | null>(null);
   const [query, setQuery] = useState("");
@@ -141,11 +143,11 @@ export function LocalFontPicker({
       const nextFamilies = await api.listLocalFontFamilies();
       setFamilies(nextFamilies);
       if (nextFamilies.length === 0) {
-        setError("No installed font families were found. You can still enter a family name below.");
+        setError(t("No installed font families were found. You can still enter a family name below."));
       }
     } catch {
       setFamilies([]);
-      setError("Could not scan installed fonts. You can still enter a family name below.");
+      setError(t("Could not scan installed fonts. You can still enter a family name below."));
     } finally {
       setLoading(false);
     }
@@ -278,7 +280,7 @@ export function LocalFontPicker({
 
   return (
     <div ref={pickerRef} className="field watchface-font-picker">
-      <span className="watchface-font-picker-label">{label}</span>
+      <span className="watchface-font-picker-label">{t(label)}</span>
       <div className="watchface-font-picker-menu">
         <button
           ref={triggerRef}
@@ -299,13 +301,11 @@ export function LocalFontPicker({
             className={value || rasterFontIsActive ? "watchface-font-picker-value" : "watchface-font-picker-placeholder"}
             style={value && !fontIsMissing ? { fontFamily: value, ...pickerPreviewStyle } : undefined}
           >
-            {rasterFontIsActive && rasterFont ? rasterFont.label + " (PNG)" : value || emptyLabel}
+            {rasterFontIsActive && rasterFont ? rasterFont.label + t(" (PNG)") : value || t(emptyLabel)}
           </span>
           {fontIsMissing ? (
             <span className="watchface-font-missing-badge">
-              <TriangleAlert size={12} aria-hidden="true" />
-              MISSING FONT
-            </span>
+              <TriangleAlert size={12} aria-hidden="true" />{t("MISSING FONT")}</span>
           ) : null}
           <ChevronDown size={15} aria-hidden="true" />
         </button>
@@ -316,7 +316,7 @@ export function LocalFontPicker({
             ref={panelRef}
             className="watchface-font-picker-panel wf-font-picker-panel"
             role="dialog"
-            aria-label={`${label} picker`}
+            aria-label={t("{{label}} picker", { label: t(label) })}
             style={{
               top: popoverPosition?.top ?? 0,
               left: popoverPosition?.left ?? 0,
@@ -330,13 +330,13 @@ export function LocalFontPicker({
                 <Type size={16} />
               </div>
               <div>
-                <strong>Choose font</strong>
-                <span>Installed on this computer</span>
+                <strong>{t("Choose font")}</strong>
+                <span>{t("Installed on this computer")}</span>
               </div>
               <button
                 className="watchface-font-picker-close"
                 type="button"
-                aria-label="Close font picker"
+                aria-label={t("Close font picker")}
                 onClick={() => {
                   closePicker();
                   triggerRef.current?.focus();
@@ -354,13 +354,13 @@ export function LocalFontPicker({
                     autoFocus
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search fonts"
-                    aria-label="Search installed fonts"
+                    placeholder={t("Search fonts")}
+                    aria-label={t("Search installed fonts")}
                   />
                   {query ? (
                     <button
                       type="button"
-                      aria-label="Clear font search"
+                      aria-label={t("Clear font search")}
                       onClick={() => setQuery("")}
                     >
                       <X size={14} aria-hidden="true" />
@@ -368,10 +368,10 @@ export function LocalFontPicker({
                   ) : null}
                 </div>
                 <div className="watchface-font-picker-meta">
-                  <span>{query.trim() ? "Search results" : "Local fonts"}</span>
+                  <span>{query.trim() ? t("Search results") : t("Local fonts")}</span>
                   {!loading && families !== null ? (
                     <span>
-                      {Math.min(matchingFamilies.length, FONT_PICKER_RESULT_LIMIT)} of{" "}
+                      {Math.min(matchingFamilies.length, FONT_PICKER_RESULT_LIMIT)}{" "}{t("of")}{" "}
                       {matchingFamilies.length}
                     </span>
                   ) : null}
@@ -381,10 +381,9 @@ export function LocalFontPicker({
               <div className="watchface-font-picker-browser-scroll">
                 {loading ? (
                   <p className="watchface-font-picker-status">
-                    <Loader2 className="spin" size={14} /> Loading your local font library…
-                  </p>
+                    <Loader2 className="spin" size={14} />{" "}{t("Loading your local font library…")}</p>
                 ) : null}
-                {error ? <p className="watchface-font-picker-status">{error}</p> : null}
+                {error ? <p className="watchface-font-picker-status">{t(error)}</p> : null}
                 {query.trim() && !exactMatch ? (
                   <button
                     className="watchface-font-custom-option"
@@ -393,14 +392,14 @@ export function LocalFontPicker({
                   >
                     <Type size={15} aria-hidden="true" />
                     <span>
-                      <strong>Use “{query.trim()}”</strong>
-                      <small>Enter a family name that is not in the local list</small>
+                      <strong>{t("Use “")}{query.trim()}”</strong>
+                      <small>{t("Enter a family name that is not in the local list")}</small>
                     </span>
                     {candidate === query.trim() ? <Check size={15} aria-hidden="true" /> : null}
                   </button>
                 ) : null}
 
-                <div className="watchface-font-picker-results" role="listbox" aria-label="Installed font families">
+                <div className="watchface-font-picker-results" role="listbox" aria-label={t("Installed font families")}>
                   {matchingFamilies.slice(0, FONT_PICKER_RESULT_LIMIT).map((family) => (
                     <button
                       key={family}
@@ -412,7 +411,7 @@ export function LocalFontPicker({
                     >
                       <span className="watchface-font-picker-result-copy">
                         <strong style={{ fontFamily: family, ...pickerPreviewStyle }}>{family}</strong>
-                        <span style={{ fontFamily: family, ...pickerPreviewStyle }}>Ag 0123456789</span>
+                        <span style={{ fontFamily: family, ...pickerPreviewStyle }}>{t("Ag 0123456789")}</span>
                       </span>
                       <Check className="watchface-font-picker-result-check" size={15} aria-hidden="true" />
                     </button>
@@ -420,23 +419,21 @@ export function LocalFontPicker({
                   {!loading && matchingFamilies.length === 0 ? (
                     <div className="watchface-font-picker-empty">
                       <Type size={18} aria-hidden="true" />
-                      <strong>No matching fonts</strong>
-                      <span>Try another name or use the custom family above.</span>
+                      <strong>{t("No matching fonts")}</strong>
+                      <span>{t("Try another name or use the custom family above.")}</span>
                     </div>
                   ) : null}
                 </div>
                 {matchingFamilies.length > FONT_PICKER_RESULT_LIMIT ? (
-                  <p className="watchface-font-picker-status">Keep typing to narrow the list.</p>
+                  <p className="watchface-font-picker-status">{t("Keep typing to narrow the list.")}</p>
                 ) : null}
               </div>
 
-              <div className="watchface-font-picker-actions" role="group" aria-label="Font actions">
+              <div className="watchface-font-picker-actions" role="group" aria-label={t("Font actions")}>
                 <button className="secondary-button" type="button" onClick={restoreTemplate}>
-                  {emptyLabel}
+                  {t(emptyLabel)}
                 </button>
-                <button className="primary-button" type="button" disabled={!candidate.trim()} onClick={applyCandidate}>
-                  Rasterize preview
-                </button>
+                <button className="primary-button" type="button" disabled={!candidate.trim()} onClick={applyCandidate}>{t("Rasterize preview")}</button>
               </div>
             </div>
           </div>,
@@ -446,32 +443,26 @@ export function LocalFontPicker({
       </div>
 
       {fontIsMissing ? (
-        <p id={missingFontHintId} className="watchface-font-missing-hint" role="status">
-          &quot;{value}&quot; font isn’t installed. Install it or choose another font.
-        </p>
+        <p id={missingFontHintId} className="watchface-font-missing-hint" role="status">{t("\"")}{value}{t("\" font isn’t installed. Install it or choose another font.")}</p>
       ) : null}
       {preview}
 
       {typography && onTypographyChange ? (
         <div className="watchface-typography-controls">
           {rasterFontIsActive ? null : <>
-          <label>
-            Weight
-            <select
+          <label>{t("Weight")}<select
               value={fontWeight}
               disabled={fontShapeControlsDisabled}
               onChange={(event) => updateTypography({ fontWeight: Number(event.target.value) })}
             >
               {[100, 200, 300, 400, 500, 600, 700, 800, 900].map((weight) => (
                 <option key={weight} value={weight}>
-                  {weight}{weight === 400 ? " · Regular" : weight === 700 ? " · Bold" : ""}
+                  {weight}{weight === 400 ? t(" · Regular") : weight === 700 ? t(" · Bold") : ""}
                 </option>
               ))}
             </select>
           </label>
-          <label>
-            Style
-            <select
+          <label>{t("Style")}<select
               value={fontStyle}
               disabled={fontShapeControlsDisabled}
               onChange={(event) =>
@@ -480,13 +471,12 @@ export function LocalFontPicker({
                 })
               }
             >
-              <option value="normal">Normal</option>
-              <option value="italic">Italic</option>
+              <option value="normal">{t("Normal")}</option>
+              <option value="italic">{t("Italic")}</option>
             </select>
           </label>
           </>}
-          <label className="watchface-typography-tracking">
-            Sprite spacing <span>{Math.round(letterSpacing * 100)}%</span>
+          <label className="watchface-typography-tracking">{t("Sprite spacing")}{" "}<span>{Math.round(letterSpacing * 100)}%</span>
             <input
               type="range"
               min="-0.35"
@@ -501,15 +491,13 @@ export function LocalFontPicker({
       ) : null}
       {typography && !value && !rasterFontIsActive ? (
         <p className="watchface-typography-hint">
-          <Info size={13} aria-hidden="true" />
-          Font shape inherited from template
-        </p>
+          <Info size={13} aria-hidden="true" />{t("Font shape inherited from template")}</p>
       ) : null}
       {rasterFontIsActive && rasterFont && onRasterFontChange ? (
         <div className="watchface-typography-controls">
           {(["height", "baseline"] as const).map((key) => (
             <label key={key} className="watchface-typography-tracking">
-              {key === "height" ? "Glyph height" : "Baseline"}
+              {key === "height" ? t("Glyph height") : t("Baseline")}
               <span>{Math.round((rasterFont.glyphLayout?.[key] ?? (key === "height" ? 0.94 : 0.97)) * 100)}%</span>
               <input type="range" min="0.1" max="1" step="0.01" disabled={disabled}
                 value={rasterFont.glyphLayout?.[key] ?? (key === "height" ? 0.94 : 0.97)}
@@ -531,17 +519,13 @@ export function LocalFontPicker({
                   const { glyphLayout: _layout, ...automatic } = rasterFont;
                   onRasterFontChange(automatic);
                 }}
-              >
-                Reset fit
-              </button>
+              >{t("Reset fit")}</button>
             </p>
           ) : null}
         </div>
       ) : null}
       {typography && rasterFontIsActive ? (
-        <p className="watchface-typography-hint">
-          Spacing changes transparent digit cells. Time spacing keeps the digits beside the colon anchored.
-        </p>
+        <p className="watchface-typography-hint">{t("Spacing changes transparent digit cells. Time spacing keeps the digits beside the colon anchored.")}</p>
       ) : null}
 
     </div>

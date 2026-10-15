@@ -1,3 +1,4 @@
+import { getLocale } from "../i18n/trainingLocale";
 import { useMemo } from "react";
 import { useTheme } from "../theme/ThemeProvider";
 import {
@@ -17,6 +18,6 @@ export function useChartColors() {
       activeDot: getTrainingChartActiveDot(theme),
       metrics: getTrainingMetricPalettes(theme)
     }),
-    [theme]
+    [theme, getLocale()]
   );
 }

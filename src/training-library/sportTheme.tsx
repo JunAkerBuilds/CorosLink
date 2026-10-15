@@ -1,3 +1,5 @@
+import { formatWorkoutSport } from "../calendar/workoutLabels";
+import { useLanguage, t } from "../i18n/training";
 /**
  * One sport identity for the whole training library: every workout sport gets
  * its own colour and icon. Sports that Settings → Activity colors can recolour
@@ -19,7 +21,7 @@ import {
 } from "lucide-react";
 import type { CSSProperties } from "react";
 import type { TrainingPlanDocument, WorkoutSport } from "../../electron/types";
-import { formatWorkoutSport } from "../../electron/workoutCapabilities";
+
 
 export interface SportTheme {
   /** CSS colour — a customizable --sport-* token where one exists. */
@@ -88,18 +90,20 @@ interface SportBadgeProps {
 
 /** Pill with the sport's icon and name, tinted in the sport's own colour. */
 export function SportBadge({ sport, label, compact }: SportBadgeProps) {
+  useLanguage();
   const theme = sportTheme(sport);
   const Icon = theme.icon;
   return (
     <span className={`tl-sport-badge${compact ? " is-compact" : ""}`} style={sportChipStyle(sport)}>
       <Icon size={11} strokeWidth={2.2} aria-hidden="true" />
-      <span>{label ?? (sport ? formatWorkoutSport(sport) : "Workout")}</span>
+      <span>{(label == null ? label : t(String(label))) ?? (sport ? formatWorkoutSport(sport) : t("Workout"))}</span>
     </span>
   );
 }
 
 /** A single sport as a mini icon chip. */
 export function SportDot({ sport }: { sport: WorkoutSport | undefined }) {
+  useLanguage();
   const theme = sportTheme(sport);
   const Icon = theme.icon;
   return (
@@ -121,6 +125,7 @@ interface SportMixDotsProps {
 
 /** A row of mini icon chips, one per sport in a plan's mix. */
 export function SportMixDots({ sports, counts }: SportMixDotsProps) {
+  useLanguage();
   if (!sports.length) return null;
   const ordered = counts
     ? [...sports].sort((left, right) => (counts[right] ?? 0) - (counts[left] ?? 0))
@@ -149,11 +154,12 @@ const PLAN_SOURCE_LABELS: Record<PlanSource, string> = {
 };
 
 export function planSourceLabel(source: PlanSource): string {
-  return PLAN_SOURCE_LABELS[source] ?? "Local";
+  return t(PLAN_SOURCE_LABELS[source] ?? "Local");
 }
 
 /** Colour-coded provenance — where a plan came from, not what it contains. */
 export function PlanSourceBadge({ source }: { source: PlanSource }) {
+  useLanguage();
   return (
     <em className="tl-source" data-source={source}>
       {planSourceLabel(source)}

@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import { useState, type ReactNode } from "react";
 import { Bluetooth, Usb } from "lucide-react";
 import type { CorosLinkApi } from "../coroslink-api";
@@ -14,6 +15,7 @@ interface WatchMusicSourcePanelProps {
 }
 
 export function WatchMusicSourcePanel(props: WatchMusicSourcePanelProps) {
+  useLanguage();
   if (!props.connection?.connected) return props.usbPanel;
 
   // Unmount the optional view on disconnect or a change of watch. Reconnecting
@@ -24,13 +26,14 @@ export function WatchMusicSourcePanel(props: WatchMusicSourcePanelProps) {
 }
 
 function ConnectedWatchMusicSource({ api, connection, usbPanel, showWifiMusic, wifiSyncBusy, onBluetoothBusyChange }: WatchMusicSourcePanelProps) {
+  useLanguage();
   const [useBluetooth, setUseBluetooth] = useState(false);
   const [wifiBusy, setWifiBusy] = useState(false);
 
   return <div className="watch-music-source">
     <div className="watch-music-source-options">
-      <span>View library via</span>
-      <div className="library-filter-group" role="group" aria-label="Watch music connection">
+      <span>{t("View library via")}</span>
+      <div className="library-filter-group" role="group" aria-label={t("Watch music connection")}>
         <button type="button" className={`library-filter-option${!useBluetooth ? " active" : ""}`}
           aria-pressed={!useBluetooth} disabled={wifiBusy || wifiSyncBusy} onClick={() => setUseBluetooth(false)}>
           <Usb size={14} aria-hidden="true" /> USB

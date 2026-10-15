@@ -1,4 +1,5 @@
 import { PRIMARY_NAV_ITEMS, type PrimaryView } from "./primaryNav";
+import { t } from "../i18n/locale";
 
 const DEFAULT_STARTUP_VIEW: PrimaryView = "overview";
 const STARTUP_VIEW_STORAGE_KEY = "coroslink.startupView";
@@ -10,7 +11,7 @@ function isPrimaryView(value: string | null): value is PrimaryView {
 }
 
 export function getPrimaryViewLabel(view: PrimaryView): string {
-  return (
+  return t(
     PRIMARY_NAV_ITEMS.find((item) => item.id === view)?.label ??
     "Overview"
   );

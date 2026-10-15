@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n";
 import { CartoAccountSettings } from "./CartoAccountSettings";
 import { useEffect, useState } from "react";
 import {
@@ -137,6 +138,7 @@ export function AccountsSettings({
   onBack: () => void;
   onOpenAccount: (destination: AccountDestination) => void;
 }) {
+  useLanguage();
   const [connections, setConnections] = useState<
     Record<string, Connection | "unavailable">
   >({});
@@ -225,23 +227,22 @@ export function AccountsSettings({
     <section className="accounts-screen" aria-labelledby="accounts-heading">
       <button className="settings-subpage-back" type="button" onClick={onBack}>
         <ArrowLeft size={16} aria-hidden="true" />
-        Settings
-      </button>
+        {t("Settings")} </button>
       <header className="accounts-heading">
         <div className="accounts-heading-icon">
           <UserRound size={25} aria-hidden="true" />
         </div>
         <div>
-          <h2 id="accounts-heading">Accounts &amp; API</h2>
-          <p>Manage accounts, API credentials, and connected tools.</p>
+          <h2 id="accounts-heading">{t("Accounts & API")}</h2>
+          <p>{t("Manage accounts, API credentials, and connected tools.")}</p>
         </div>
         <span className="accounts-summary">
           <Check size={14} aria-hidden="true" />
-          {connectedCount} connected
+          {t("{{count}} connected", { count: connectedCount })}
         </span>
       </header>
       <div className="accounts-workspace">
-        <nav className="accounts-navigation" aria-label="Account categories">
+        <nav className="accounts-navigation" aria-label={t("Account categories")}>
           {groups.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -256,14 +257,12 @@ export function AccountsSettings({
               }}
             >
               <Icon size={17} aria-hidden="true" />
-              <span>{label}</span>
+              <span>{t(label)}</span>
             </button>
           ))}
           <p>
-            Connect only what you use.
-            <br />
-            You can add more anytime.
-          </p>
+            {t("Connect only what you use.")} <br />
+            {t("You can add more anytime.")} </p>
         </nav>
         <div className="accounts-content">
           {detail ? (
@@ -277,8 +276,7 @@ export function AccountsSettings({
                 }}
               >
                 <ArrowLeft size={15} aria-hidden="true" />
-                Accounts &amp; API
-              </button>
+                {t("Accounts & API")} </button>
               {detail === "maps" ? (
                 <RoutingAccount api={api} />
               ) : detail === "carto" ? <CartoAccountSettings api={api} /> : detail === "mcp" ? <McpServersPanel api={api} />
@@ -294,8 +292,8 @@ export function AccountsSettings({
           ) : (
             <>
               <div className="accounts-content-heading">
-                <h3>{selectedGroup.label}</h3>
-                <span>{visibleServices.length} services</span>
+                <h3>{t(selectedGroup.label)}</h3>
+                <span>{visibleServices.length} {t("services")}</span>
               </div>
               <div className="account-card-grid">
                 {visibleServices.map(
@@ -335,18 +333,18 @@ export function AccountsSettings({
                           <Icon size={25} aria-hidden="true" />
                         </span>
                         <span className="account-card-copy">
-                          <strong>{name}</strong>
+                          <strong>{t(name)}</strong>
                           <span>
                             {state &&
                             state !== "unavailable" &&
                             state.detail &&
                             id !== "maps"
                               ? state.detail
-                              : description}
+                              : t(description)}
                           </span>
                         </span>
                         <span className="account-card-category">
-                          {groups.find((item) => item.id === group)?.label}
+                          {t(groups.find((item) => item.id === group)?.label ?? "")}
                         </span>
                         <span
                           className={`account-card-status${connected ? " is-connected" : ""}`}
@@ -354,10 +352,10 @@ export function AccountsSettings({
                           {connected ? (
                             <Check size={12} aria-hidden="true" />
                           ) : null}
-                          {status}
+                          {t(status)}
                         </span>
                         <span className="account-card-action">
-                          {connected ? "Manage" : "Set up"}
+                          {connected ? t("Manage") : t("Set up")}
                           <ArrowUpRight size={13} aria-hidden="true" />
                         </span>
                       </button>
@@ -374,6 +372,7 @@ export function AccountsSettings({
 }
 
 function RoutingAccount({ api }: { api: CorosLinkApi }) {
+  useLanguage();
   const [config, setConfig] = useState<Awaited<
     ReturnType<CorosLinkApi["getRouteBuilderConfig"]>
   > | null>(null);
@@ -388,7 +387,7 @@ function RoutingAccount({ api }: { api: CorosLinkApi }) {
       },
       () => {
         if (active)
-          setError("Could not load routing settings. Go back and try again.");
+          setError(t("Could not load routing settings. Go back and try again."));
       },
     );
     return () => {
@@ -399,10 +398,8 @@ function RoutingAccount({ api }: { api: CorosLinkApi }) {
     <div className="account-setup">
       <h2>OpenRouteService</h2>
       <p>
-        Default routing works without an account. Add an OpenRouteService API
-        key if you prefer to use that service.
-      </p>
-      {error ? <p role="alert">{error}</p> : null}
+        {t("Default routing works without an account. Add an OpenRouteService API key if you prefer to use that service.")} </p>
+      {error ? <p role="alert">{t(error)}</p> : null}
       {config ? (
         <form
           onSubmit={async (event) => {
@@ -436,8 +433,7 @@ function RoutingAccount({ api }: { api: CorosLinkApi }) {
           }}
         >
           <label className="field">
-            Routing service
-            <select
+            {t("Routing service")} <select
               disabled={busy}
               value={config.backend ?? "keyless"}
               onChange={(event) => {
@@ -448,15 +444,14 @@ function RoutingAccount({ api }: { api: CorosLinkApi }) {
                 setSaved(false);
               }}
             >
-              <option value="keyless">Default — no account needed</option>
+              <option value="keyless">{t("Default — no account needed")}</option>
               <option value="ors">OpenRouteService</option>
             </select>
           </label>
           {config.backend === "ors" ? (
             <>
               <label className="field">
-                API key
-                <input
+                {t("API key")} <input
                   type="password"
                   autoComplete="off"
                   required
@@ -476,8 +471,7 @@ function RoutingAccount({ api }: { api: CorosLinkApi }) {
                 target="_blank"
                 rel="noreferrer"
               >
-                Get an OpenRouteService API key
-              </a>
+                {t("Get an OpenRouteService API key")} </a>
             </>
           ) : null}
           <button
@@ -489,12 +483,12 @@ function RoutingAccount({ api }: { api: CorosLinkApi }) {
                 !config.openRouteServiceApiKey.trim())
             }
           >
-            {busy ? "Saving…" : "Save settings"}
+            {busy ? t("Saving…") : t("Save settings")}
           </button>
-          {saved ? <p role="status">Routing settings saved.</p> : null}
+          {saved ? <p role="status">{t("Routing settings saved.")}</p> : null}
         </form>
       ) : !error ? (
-        <p role="status">Loading settings…</p>
+        <p role="status">{t("Loading settings…")}</p>
       ) : null}
     </div>
   );

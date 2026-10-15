@@ -1,3 +1,4 @@
+import { getLocale, formatNumber, t } from "../i18n/toolsLocale";
 import type { LocalTrack, WatchTrack } from "../../electron/types";
 import {
   musicFileNamesMatch,
@@ -94,7 +95,7 @@ export function countPendingTransfers(
 
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) {
-    return "0 B";
+    return `0 ${t("B")}`;
   }
 
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -103,11 +104,11 @@ export function formatBytes(bytes: number): string {
     units.length - 1,
   );
   const value = bytes / 1024 ** exponent;
-  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[exponent]}`;
+  return `${formatNumber(value, { minimumFractionDigits: value >= 10 ? 0 : 1, maximumFractionDigits: value >= 10 ? 0 : 1 })} ${t(units[exponent])}`;
 }
 
 export function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(getLocale(), {
     month: "short",
     day: "numeric",
     hour: "numeric",

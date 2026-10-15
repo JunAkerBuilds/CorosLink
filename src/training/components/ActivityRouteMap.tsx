@@ -1,3 +1,4 @@
+import { getLocale, useLanguage, t } from "../../i18n/training";
 import { useCartoApiKey } from "../../maps/routes/useCartoApiKey";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -173,6 +174,7 @@ function RouteMapCanvas({
   overlays?: RouteOverlayId[];
   ariaLabel: string;
 }) {
+  useLanguage();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
@@ -381,13 +383,12 @@ function RouteMapCanvas({
 }
 
 function RouteLegend() {
+  useLanguage();
   return (
     <span className="activity-route-legend">
       <span className="activity-route-dot is-start" aria-hidden="true" />
-      Start
-      <span className="activity-route-dot is-end" aria-hidden="true" />
-      Finish
-    </span>
+      {t("Start")} <span className="activity-route-dot is-end" aria-hidden="true" />
+      {t("Finish")} </span>
   );
 }
 
@@ -396,6 +397,7 @@ export function ActivityRouteMap({
   expanded: expandedProp,
   onExpandedChange
 }: ActivityRouteMapProps) {
+  useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
   const [expandedState, setExpandedState] = useState(false);
   const expanded = expandedProp ?? expandedState;
@@ -414,7 +416,7 @@ export function ActivityRouteMap({
   );
   const route = useMemo(
     () => (track?.points ? buildRouteGeometry(track.points) : null),
-    [track]
+    [track, getLocale()]
   );
 
   useEffect(() => {
@@ -436,7 +438,7 @@ export function ActivityRouteMap({
     return (
       <div className="activity-route-empty">
         <MapPin size={18} aria-hidden="true" />
-        <p>No GPS track available for this activity.</p>
+        <p>{t("No GPS track available for this activity.")}</p>
       </div>
     );
   }
@@ -452,8 +454,7 @@ export function ActivityRouteMap({
           onClick={() => setExpanded(true)}
         >
           <Maximize2 size={13} aria-hidden="true" />
-          Expand
-        </button>
+          {t("Expand")} </button>
       </div>
       {expanded &&
         createPortal(
@@ -471,12 +472,12 @@ export function ActivityRouteMap({
               <header className="activity-route-modal-header">
                 <div className="activity-route-modal-title">
                   <MapPin size={16} aria-hidden="true" />
-                  <h2 id="activity-route-modal-title">Route</h2>
+                  <h2 id="activity-route-modal-title">{t("Route")}</h2>
                 </div>
                 <button
                   type="button"
                   className="icon-button"
-                  aria-label="Close expanded map"
+                  aria-label={t("Close expanded map")}
                   onClick={() => setExpanded(false)}
                 >
                   <X size={18} aria-hidden="true" />

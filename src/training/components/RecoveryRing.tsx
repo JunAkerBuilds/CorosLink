@@ -1,3 +1,4 @@
+import { useLanguage, t } from "../../i18n/training";
 import { useEffect, useState } from "react";
 import { recoveryTone } from "../parsers";
 import type { TrainingSummaryMetrics } from "../types";
@@ -36,6 +37,7 @@ function readinessCopy(
 }
 
 export function RecoveryRing({ summary }: RecoveryRingProps) {
+  useLanguage();
   const [isReady, setIsReady] = useState(false);
   const recovery = summary.recoveryPct ?? 0;
   const percent = Math.max(0, Math.min(100, recovery));
@@ -54,7 +56,7 @@ export function RecoveryRing({ summary }: RecoveryRingProps) {
   return (
     <section className={`panel training-ring-panel tone-${tone}`}>
       <div className="training-ring-header">
-        <p className="eyebrow">Recovery</p>
+        <p className="eyebrow">{t("Recovery")}</p>
       </div>
 
       <div className="training-ring-content">
@@ -62,7 +64,7 @@ export function RecoveryRing({ summary }: RecoveryRingProps) {
           className={`storage-ring training-recovery-ring${
             isReady ? " is-ready" : ""
           }`}
-          aria-label={`${Math.round(percent)}% recovery`}
+          aria-label={t("{{value1}}% recovery", { value1: String(Math.round(percent)) })}
         >
           <svg viewBox="0 0 128 128" aria-hidden="true">
             <circle className="storage-ring-track" cx="64" cy="64" r={radius} />
@@ -78,11 +80,11 @@ export function RecoveryRing({ summary }: RecoveryRingProps) {
           </svg>
           <div className="storage-ring-label">
             <strong>{hasData ? `${Math.round(percent)}%` : "–"}</strong>
-            <span>{label}</span>
+            <span>{t(label)}</span>
           </div>
         </div>
 
-        <p className="training-ring-message">{message}</p>
+        <p className="training-ring-message">{t(message)}</p>
       </div>
     </section>
   );

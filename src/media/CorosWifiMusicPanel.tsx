@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/tools";
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Square, Upload, Wifi } from "lucide-react";
 import type { CorosLinkApi } from "../coroslink-api";
@@ -6,7 +7,7 @@ import { formatBytes } from "./libraryUtils";
 
 const ACTIVE = new Set(["choosing", "preparing", "downloading", "restoring"]);
 const message = (cause: unknown) => cause instanceof Error
-  ? cause.message.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/, "") : "Could not send audio over Wi-Fi.";
+  ? cause.message.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/, "") : t("Could not send audio over Wi-Fi.");
 
 export function CorosWifiMusicPanel({ api, otherBusy, onBusyChange, library }: {
   api: CorosLinkApi;
@@ -14,6 +15,7 @@ export function CorosWifiMusicPanel({ api, otherBusy, onBusyChange, library }: {
   onBusyChange: (busy: boolean) => void;
   library?: { allIds: string[]; selectedIds: string[] };
 }) {
+  useLanguage();
   const [status, setStatus] = useState<CorosWifiMusicStatus | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -45,61 +47,61 @@ export function CorosWifiMusicPanel({ api, otherBusy, onBusyChange, library }: {
   if (!status?.supported) return null;
   const disabled = otherBusy || active;
   const progress = status.totalBytes ? Math.min(100, Math.round(status.downloadedBytes / status.totalBytes * 100)) : 0;
-  const label = status.phase === "restoring" ? "Restoring watch settings…"
-    : status.phase === "downloading" ? `Sending ${status.fileName ?? "MP3s"}…`
-      : status.phase === "preparing" ? `Preparing ${status.fileName ?? "MP3s"}…` : "Choose your MP3s…";
-  return <div className="ble-wifi-music" aria-label="Wi-Fi audio sync">
-    <div className="ble-wifi-music-heading"><span><Wifi size={15} aria-hidden="true" /> Send audio over Wi-Fi</span>
+  const label = status.phase === "restoring" ? t("Restoring watch settings…")
+    : status.phase === "downloading" ? t("Sending {{p0}}…", { p0: status.fileName ?? "MP3s" })
+      : status.phase === "preparing" ? t("Preparing {{p0}}…", { p0: status.fileName ?? "MP3s" }) : t("Choose your MP3s…");
+  return <div className="ble-wifi-music" aria-label={t("Wi-Fi audio sync")}>
+    <div className="ble-wifi-music-heading"><span><Wifi size={15} aria-hidden="true" />  {t("Send audio over Wi-Fi")}</span>
       {status.ready ? <button type="button" className="secondary-button compact-button" disabled={disabled}
         onClick={() => void perform(() => api.sendCorosMusicOverWifi())}>
-        {active ? <Loader2 size={14} className="spin" aria-hidden="true" /> : <Upload size={14} aria-hidden="true" />} {library ? "Choose other MP3s" : "Send MP3s"}
+        {active ? <Loader2 size={14} className="spin" aria-hidden="true" /> : <Upload size={14} aria-hidden="true" />} {library ? t("Choose other MP3s") : t("Send MP3s")}
       </button> : null}
     </div>
-    <p>Keep the watch and computer on the same Wi-Fi. Files appear in <strong>Podcasts</strong> on the watch.</p>
+    <p>{t("Keep the watch and computer on the same Wi-Fi. Files appear in")} <strong>{t("Podcasts")}</strong>  {t("on the watch.")}</p>
     {library && status.ready ? <div className="ble-wifi-music-library">
       <div className="ble-wifi-music-actions">
         <button type="button" className="secondary-button compact-button"
           disabled={disabled || library.selectedIds.length === 0 || library.selectedIds.length > 20}
           onClick={() => void perform(() => api.sendCorosLibraryMusicOverWifi([...library.selectedIds]))}>
-          <Wifi size={14} aria-hidden="true" /> Send selected over Wi-Fi ({library.selectedIds.length})
+          <Wifi size={14} aria-hidden="true" />  {t("Send selected over Wi-Fi (")}{library.selectedIds.length})
         </button>
         <button type="button" className="secondary-button compact-button"
           disabled={disabled || library.allIds.length === 0 || library.allIds.length > 20}
           onClick={() => void perform(() => api.sendCorosLibraryMusicOverWifi([...library.allIds]))}>
-          <Upload size={14} aria-hidden="true" /> Send all over Wi-Fi ({library.allIds.length})
+          <Upload size={14} aria-hidden="true" />  {t("Send all over Wi-Fi (")}{library.allIds.length})
         </button>
       </div>
       <p>{library.allIds.length > 20 || library.selectedIds.length > 20
-        ? "Select up to 20 library tracks per Wi-Fi transfer."
-        : "Select downloaded tracks, or send all. The Synced label refers to USB music."}</p>
+        ? t("Select up to 20 library tracks per Wi-Fi transfer.")
+        : t("Select downloaded tracks, or send all. The Synced label refers to USB music.")}</p>
     </div> : null}
     {active ? <div className="ble-wifi-music-progress" role="status" aria-live="polite">
       <span>{label}</span>
-      {status.phase === "downloading" ? <><progress max={100} value={progress} aria-label="Audio transfer progress" />
-        <small>{formatBytes(status.downloadedBytes)} / {formatBytes(status.totalBytes)} · {status.completedFiles} of {status.totalFiles} files</small></> : null}
+      {status.phase === "downloading" ? <><progress max={100} value={progress} aria-label={t("Audio transfer progress")} />
+        <small>{formatBytes(status.downloadedBytes)} / {formatBytes(status.totalBytes)} · {status.completedFiles}  {t("of")} {status.totalFiles}  {t("files")}</small></> : null}
       {["preparing", "downloading"].includes(status.phase) ? <button type="button" className="secondary-button compact-button"
         onClick={() => { const request = generation.current; void api.cancelCorosWifiMusicSync().catch(cause => {
           if (request === generation.current) setError(message(cause));
-        }); }}><Square size={12} aria-hidden="true" /> Cancel sync</button> : null}
+        }); }}><Square size={12} aria-hidden="true" />  {t("Cancel sync")}</button> : null}
     </div> : null}
     {status.restorePending && !active ? <div className="ble-wifi-music-recovery">
-      <p>The watch’s download settings need restoration before another transfer.</p>
+      <p>{t("The watch’s download settings need restoration before another transfer.")}</p>
       <button type="button" className="secondary-button compact-button" disabled={disabled}
-        onClick={() => void perform(() => api.restoreCorosWifiMusicSettings())}>Restore watch settings</button>
+        onClick={() => void perform(() => api.restoreCorosWifiMusicSettings())}>{t("Restore watch settings")}</button>
     </div> : !status.ready && !active ? <div className="ble-wifi-music-setup">
       <p>{status.backupSavedAt
-        ? `The settings backup from ${new Date(status.backupSavedAt).toLocaleString()} is more than a day old. Import a current one to send audio.`
-        : "A current settings backup is needed to prepare Wi-Fi sync."}</p>
+        ? t("The settings backup from {{p0}} is more than a day old. Import a current one to send audio.", { p0: new Date(status.backupSavedAt).toLocaleString(getLocale()) })
+        : t("A current settings backup is needed to prepare Wi-Fi sync.")}</p>
       <button type="button" className="secondary-button compact-button" disabled={disabled}
-        onClick={() => void perform(() => api.importCorosWifiMusicBackup())}>Import settings backup</button>
+        onClick={() => void perform(() => api.importCorosWifiMusicBackup())}>{t("Import settings backup")}</button>
     </div> : null}
-    {status.ready && !active ? <details className="ble-wifi-music-backup"><summary>Wi-Fi settings backup</summary>
-      <p>{status.backupSavedAt ? `Saved ${new Date(status.backupSavedAt).toLocaleString()}. ` : ""}A backup is used for a day. Update it sooner after changing your COROS account, region or watch download settings.</p>
+    {status.ready && !active ? <details className="ble-wifi-music-backup"><summary>{t("Wi-Fi settings backup")}</summary>
+      <p>{status.backupSavedAt ? t("Saved {{p0}}. ", { p0: new Date(status.backupSavedAt).toLocaleString(getLocale()) }) : ""}{t("A backup is used for a day. Update it sooner after changing your COROS account, region or watch download settings.")}</p>
       <button type="button" className="secondary-button compact-button" disabled={disabled}
-        onClick={() => void perform(() => api.importCorosWifiMusicBackup())}>Update settings backup</button>
+        onClick={() => void perform(() => api.importCorosWifiMusicBackup())}>{t("Update settings backup")}</button>
     </details> : null}
-    {status.phase === "complete" && !active ? <p className="ble-wifi-music-success" role="status">Sent {status.completedFiles} file{status.completedFiles === 1 ? "" : "s"} to watch podcasts. Download settings restored.</p> : null}
-    {status.phase === "cancelled" && !active ? <p role="status">Audio sync cancelled.</p> : null}
+    {status.phase === "complete" && !active ? <p className="ble-wifi-music-success" role="status">{t("Sent")} {status.completedFiles}  {t("file")}{status.completedFiles === 1 ? "" : "s"}  {t("to watch podcasts. Download settings restored.")}</p> : null}
+    {status.phase === "cancelled" && !active ? <p role="status">{t("Audio sync cancelled.")}</p> : null}
     {error || status.error ? <p className="ble-music-error" role="alert">{error || status.error}</p> : null}
   </div>;
 }

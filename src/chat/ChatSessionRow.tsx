@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import { Trash2 } from "lucide-react";
 import type { MouseEvent } from "react";
 import type { ChatSessionSummary } from "../../electron/types";
@@ -16,6 +17,7 @@ export function ChatSessionRow({
   onSelect: () => void;
   onDelete: () => void;
 }) {
+  useLanguage();
   const handleDelete = (event: MouseEvent) => {
     event.stopPropagation();
     if (disabled) {
@@ -23,7 +25,7 @@ export function ChatSessionRow({
     }
     if (
       session.messageCount === 0 ||
-      window.confirm(`Delete "${session.title}"?`)
+      window.confirm(t("Delete \"{{p0}}\"?", { p0: session.title }))
     ) {
       onDelete();
     }
@@ -65,7 +67,7 @@ export function ChatSessionRow({
         <button
           type="button"
           className="chat-session-row-delete"
-          aria-label={`Delete ${session.title}`}
+          aria-label={t("Delete {{p0}}", { p0: session.title })}
           onClick={handleDelete}
           disabled={disabled}
         >

@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import {
   ChevronRight,
   Clock,
@@ -36,14 +37,15 @@ export function WatchfaceQuickStart({
   onShape,
   photoDisabled
 }: WatchfaceQuickStartProps) {
+  useLanguage();
   const actions = [
-    { label: "Background color", hint: "The fill behind everything", icon: Palette, onClick: onBackground },
-    { label: "Background photo", hint: "Use your own image", icon: ImagePlus, onClick: onPhoto, disabled: photoDisabled },
+    { label: "Background color", hint: t("The fill behind everything"), icon: Palette, onClick: onBackground },
+    { label: "Background photo", hint: t("Use your own image"), icon: ImagePlus, onClick: onPhoto, disabled: photoDisabled },
     ...(onTime
-      ? [{ label: "Style the time", hint: "Font, color, and size", icon: Clock, onClick: onTime }]
+      ? [{ label: "Style the time", hint: t("Font, color, and size"), icon: Clock, onClick: onTime }]
       : []),
     { label: "Add text", hint: "A fixed label on the face", icon: Type, onClick: onText },
-    { label: "Add a shape", hint: "Rectangles for panels and accents", icon: Square, onClick: onShape }
+    { label: "Add a shape", hint: t("Rectangles for panels and accents"), icon: Square, onClick: onShape }
   ];
 
   return (
@@ -52,15 +54,12 @@ export function WatchfaceQuickStart({
         <span className="wf-welcome-mark" aria-hidden="true">
           <Watch size={22} strokeWidth={1.75} />
         </span>
-        <h2 id="wf-welcome-title">Make this face yours</h2>
-        <p>
-          Start with a quick edit below, or click anything on the face to
-          change it.
-        </p>
+        <h2 id="wf-welcome-title">{t("Make this face yours")}</h2>
+        <p>{t("Start with a quick edit below, or click anything on the face to change it.")}</p>
       </div>
 
       <div className="wf-welcome-section">
-        <h3>Quick edits</h3>
+        <h3>{t("Quick edits")}</h3>
         <div className="wf-welcome-actions">
           {actions.map(({ label, hint, icon: Icon, onClick, disabled }) => (
             <button key={label} type="button" onClick={onClick} disabled={disabled}>
@@ -68,8 +67,8 @@ export function WatchfaceQuickStart({
                 <Icon size={16} />
               </span>
               <span className="wf-welcome-action-text">
-                <strong>{label}</strong>
-                <small>{hint}</small>
+                <strong>{t(label)}</strong>
+                <small>{t(hint)}</small>
               </span>
               <ChevronRight size={14} className="wf-welcome-action-arrow" aria-hidden="true" />
             </button>
@@ -78,16 +77,16 @@ export function WatchfaceQuickStart({
       </div>
 
       <div className="wf-welcome-section">
-        <h3>Shortcuts</h3>
+        <h3>{t("Shortcuts")}</h3>
         <dl className="wf-welcome-shortcuts">
           {SHORTCUTS.map(({ keys, action }) => (
             <div key={action}>
               <dt>
                 {keys.map((key) => (
-                  <kbd key={key}>{key}</kbd>
+                  <kbd key={key}>{t(key)}</kbd>
                 ))}
               </dt>
-              <dd>{action}</dd>
+              <dd>{t(action)}</dd>
             </div>
           ))}
         </dl>
@@ -95,11 +94,7 @@ export function WatchfaceQuickStart({
 
       <p className="wf-welcome-footnote">
         <MousePointerClick size={13} aria-hidden="true" />
-        <span>
-          Added text stays fixed on the watch. Style the existing time and data
-          layers for values that update live. Template-wide settings are on the
-          Project tab.
-        </span>
+        <span>{t("Added text stays fixed on the watch. Style the existing time and data layers for values that update live. Template-wide settings are on the Project tab.")}</span>
       </p>
     </section>
   );

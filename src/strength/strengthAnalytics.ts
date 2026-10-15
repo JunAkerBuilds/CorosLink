@@ -1,3 +1,4 @@
+import { formatNumber, getLocale, t } from "../i18n/trainingLocale";
 /**
  * Aggregations behind the Strength view.
  *
@@ -188,7 +189,7 @@ export function startOfWeekMs(timestampMs: number): number {
 }
 
 function weekLabel(weekStartMs: number): string {
-  return new Date(weekStartMs).toLocaleDateString(undefined, {
+  return new Date(weekStartMs).toLocaleDateString(getLocale(), {
     month: "short",
     day: "numeric"
   });
@@ -535,15 +536,15 @@ export function daysSince(timestamp?: number): number | undefined {
 export function formatDaysSince(timestamp?: number): string {
   const days = daysSince(timestamp);
   if (days === undefined) {
-    return "Not trained";
+    return t("Not trained");
   }
   if (days === 0) {
-    return "Today";
+    return t("Today");
   }
   if (days === 1) {
-    return "Yesterday";
+    return t("Yesterday");
   }
-  return `${days} days ago`;
+  return t("{{value1}} days ago", { value1: String(days) });
 }
 
 export function formatVolumeKg(
@@ -551,9 +552,9 @@ export function formatVolumeKg(
   unitSystem: UnitSystem
 ): string {
   if (unitSystem === "metric" && value >= 1000) {
-    return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)} tonnes`;
+    return `${formatNumber((value / 1000), { minimumFractionDigits: value >= 10_000 ? 0 : 1, maximumFractionDigits: value >= 10_000 ? 0 : 1 })} tonnes`;
   }
-  return `${Math.round(kilogramsToDisplayWeight(value, unitSystem)).toLocaleString()} ${weightUnit(unitSystem)}`;
+  return `${Math.round(kilogramsToDisplayWeight(value, unitSystem)).toLocaleString(getLocale())} ${weightUnit(unitSystem)}`;
 }
 
 export function formatWeightKg(
@@ -561,9 +562,9 @@ export function formatWeightKg(
   unitSystem: UnitSystem
 ): string {
   const display = kilogramsToDisplayWeight(value, unitSystem);
-  return `${Number.isInteger(display) ? display : display.toFixed(1)} ${weightUnit(unitSystem)}`;
+  return `${Number.isInteger(display) ? display : formatNumber(display, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ${weightUnit(unitSystem)}`;
 }
 
 export function formatSets(value: number): string {
-  return value >= 10 ? String(Math.round(value)) : value.toFixed(1).replace(/\.0$/, "");
+  return value >= 10 ? String(Math.round(value)) : formatNumber(value, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }

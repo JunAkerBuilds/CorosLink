@@ -1,3 +1,4 @@
+import { useLanguage, t } from "../../i18n/training";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Activity, Bike, ChevronDown, Dumbbell, FileDown, Loader2, MoreVertical } from "lucide-react";
@@ -69,6 +70,7 @@ export function ExportMenu({
   label,
   onExportFile
 }: ExportMenuProps) {
+  useLanguage();
   const [menuPosition, setMenuPosition] = useState<{
     top?: number;
     bottom?: number;
@@ -169,8 +171,8 @@ export function ExportMenu({
           ? "secondary-button training-export-button"
           : `icon-button training-action-button${compact ? " activity-card-menu" : ""}`}
         type="button"
-        aria-label={`Export ${activityName}`}
-        title={disabled ? "Sample activities cannot be exported" : "Export activity file"}
+        aria-label={t("Export {{value1}}", { value1: String(activityName) })}
+        title={disabled ? t("Sample activities cannot be exported") : t("Export activity file")}
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled || isExporting}
@@ -184,7 +186,7 @@ export function ExportMenu({
         ) : compact ? <MoreVertical size={18} aria-hidden="true" /> : (
           <>
             <FileDown size={17} aria-hidden="true" />
-            {label ? <span>{label}</span> : null}
+            {label ? <span>{t(label)}</span> : null}
             <ChevronDown size={13} aria-hidden="true" />
           </>
         )}
@@ -198,7 +200,7 @@ export function ExportMenu({
               role="menu"
               style={{ top: menuPosition.top, bottom: menuPosition.bottom, left: menuPosition.left, right: menuPosition.right }}
             >
-              <p className="training-export-dropdown-title">Export as</p>
+              <p className="training-export-dropdown-title">{t("Export as")}</p>
               {TRAINING_HUB_EXPORT_FORMATS.map((format) => (
                 <button
                   key={format.fileType}
@@ -212,10 +214,10 @@ export function ExportMenu({
                   }}
                 >
                   <span className="training-export-option-label">
-                    {format.label}
+                    {t(format.label)}
                   </span>
                   <span className="training-export-option-desc">
-                    {format.description}
+                    {t(format.description)}
                   </span>
                 </button>
               ))}
@@ -237,6 +239,7 @@ export function TrainingActivityTable({
   onLoadDetail,
   onExportFile
 }: TrainingActivityTableProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const sportTypeMap = new Map(
     sportTypes.map((item) => [item.sportType, item.sportName])
@@ -245,21 +248,21 @@ export function TrainingActivityTable({
   if (activities.length === 0) {
     return (
       <div className="training-empty-state">
-        <p>No Training Hub activities loaded.</p>
+        <p>{t("No Training Hub activities loaded.")}</p>
       </div>
     );
   }
 
   return (
     <div className="table-shell training-activity-table-shell">
-      <table aria-label="Activities">
+      <table aria-label={t("Activities")}>
         <thead>
           <tr>
-            <th scope="col">Activity</th>
-            <th scope="col">Date & time</th>
-            <th scope="col">Duration</th>
-            <th scope="col">Distance</th>
-            <th aria-label="Export" />
+            <th scope="col">{t("Activity")}</th>
+            <th scope="col">{t("Date & time")}</th>
+            <th scope="col">{t("Duration")}</th>
+            <th scope="col">{t("Distance")}</th>
+            <th aria-label={t("Export")} />
           </tr>
         </thead>
         <tbody>
@@ -282,7 +285,7 @@ export function TrainingActivityTable({
                 role="button"
                 tabIndex={0}
                 aria-selected={isSelected}
-                aria-label={`View details for ${activityName}`}
+                aria-label={t("View details for {{value1}}", { value1: String(activityName) })}
                 onClick={() => onLoadDetail(activity)}
                 onKeyDown={(event) =>
                   handleRowKeyDown(event, activity, onLoadDetail)
@@ -294,7 +297,7 @@ export function TrainingActivityTable({
                   <div className="training-activity-name">
                     <strong title={activityName}>{activityName}</strong>
                     <span className="sport-chip">
-                      {sportName}
+                      {(sportName == null ? sportName : t(String(sportName)))}
                     </span>
                   </div>
                   </div>

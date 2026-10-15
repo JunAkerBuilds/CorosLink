@@ -1,3 +1,4 @@
+import { useLanguage, t } from "../i18n/training";
 import { AnimatePresence, motion } from "motion/react";
 import { MessageCircle, Pencil, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -39,6 +40,7 @@ export function DayDetailPanel({
   onEdit,
   onError
 }: DayDetailPanelProps) {
+  useLanguage();
   const [detail, setDetail] = useState<TrainingHubActivityDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -107,8 +109,8 @@ export function DayDetailPanel({
                   {selection.kind === "scheduled"
                     ? selection.entry.name
                     : selection.activity.name ??
-                      selection.activity.sportName ??
-                      "Activity"}
+                      (selection.activity.sportName == null ? selection.activity.sportName : t(String(selection.activity.sportName))) ??
+                      t("Activity")}
                 </h3>
               </div>
               <div className="calendar-detail-actions">
@@ -116,22 +118,20 @@ export function DayDetailPanel({
                   type="button"
                   className="ghost-button calendar-detail-action"
                   onClick={() => onAskCoach(selection)}
-                  title="Ask Coach"
+                  title={t("Ask Coach")}
                 >
                   <MessageCircle size={15} aria-hidden="true" />
-                  Ask Coach
-                </button>
+                  {t("Ask Coach")} </button>
                 {selection.kind === "scheduled" && !selection.day.isPast ? (
                   <button
                     type="button"
                     className="ghost-button calendar-detail-action"
                     disabled={!selection.entry.sportType || selection.entry.sportType < 1 || selection.entry.sportType > 9}
                     onClick={() => onEdit(selection)}
-                    title={selection.entry.sportType && selection.entry.sportType >= 1 && selection.entry.sportType <= 9 ? "Edit this scheduled occurrence" : "This COROS sport is not supported by the workout editor"}
+                    title={selection.entry.sportType && selection.entry.sportType >= 1 && selection.entry.sportType <= 9 ? t("Edit this scheduled occurrence") : t("This COROS sport is not supported by the workout editor")}
                   >
                     <Pencil size={15} aria-hidden="true" />
-                    Edit
-                  </button>
+                    {t("Edit")} </button>
                 ) : null}
                 {selection.kind === "scheduled" && !selection.day.isPast ? (
                   <button
@@ -148,17 +148,17 @@ export function DayDetailPanel({
                   >
                     <Trash2 size={15} aria-hidden="true" />
                     {deleting
-                      ? "Removing…"
+                      ? t("Removing…")
                       : confirmDelete
-                        ? "Confirm remove"
-                        : "Remove"}
+                        ? t("Confirm remove")
+                        : t("Remove")}
                   </button>
                 ) : null}
                 <button
                   type="button"
                   className="ghost-button calendar-detail-action"
                   onClick={onClose}
-                  aria-label="Close details"
+                  aria-label={t("Close details")}
                 >
                   <X size={15} aria-hidden="true" />
                 </button>

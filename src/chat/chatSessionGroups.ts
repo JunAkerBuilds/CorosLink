@@ -1,3 +1,4 @@
+import { t, getLocale } from "../i18n/toolsLocale";
 import type { ChatSessionSummary } from "../../electron/types";
 
 export type ChatSessionGroupLabel =
@@ -75,18 +76,18 @@ export function formatSessionRelativeTime(updatedAt: string): string {
   const dayDiff = Math.floor((todayStart - updatedStart) / 86_400_000);
 
   if (dayDiff <= 0) {
-    return updated.toLocaleTimeString(undefined, {
+    return updated.toLocaleTimeString(getLocale(), {
       hour: "numeric",
       minute: "2-digit"
     });
   }
   if (dayDiff === 1) {
-    return "Yesterday";
+    return t("Yesterday");
   }
   if (dayDiff < 7) {
-    return updated.toLocaleDateString(undefined, { weekday: "short" });
+    return updated.toLocaleDateString(getLocale(), { weekday: "short" });
   }
-  return updated.toLocaleDateString(undefined, {
+  return updated.toLocaleDateString(getLocale(), {
     month: "short",
     day: "numeric"
   });

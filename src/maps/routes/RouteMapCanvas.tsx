@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n/tools";
 import { useCartoApiKey } from "./useCartoApiKey";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -85,6 +86,7 @@ export function RouteMapCanvas({
   onSketchStroke,
   onSketchCenterMove
 }: RouteMapCanvasProps) {
+  const { language } = useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
   const cartoApiKey = useCartoApiKey();
   const mapRef = useRef<L.Map | null>(null);
@@ -101,10 +103,10 @@ export function RouteMapCanvas({
     return (source ?? [])
       .filter((point) => point.lat !== undefined && point.lon !== undefined)
       .map((point) => [point.lat!, point.lon!] as [number, number]);
-  }, [mode, drawGeometry, route]);
+  }, [mode, drawGeometry, route, language]);
   const retracedSections = useMemo(
     () => findRetracedRouteSections(displayedLinePoints),
-    [displayedLinePoints]
+    [displayedLinePoints, language]
   );
 
   // Keep interaction callbacks in refs so the map is built exactly once.
@@ -266,13 +268,13 @@ export function RouteMapCanvas({
         weight: 2,
         bubblingMouseEvents: false
       });
-      handle.bindTooltip("Drag to move the shape", { direction: "top" });
+      handle.bindTooltip(t("Drag to move the shape"), { direction: "top" });
       makeDraggable(handle, mapRef.current, (lat, lon) =>
         centerMoveRef.current?.({ lat, lon })
       );
       handle.addTo(layer);
     }
-  }, [mode, sketchTool, sketchGhost, sketchCenter]);
+  }, [mode, sketchTool, sketchGhost, sketchCenter, language]);
 
   // Swap the base tile layer in place.
   useEffect(() => {
@@ -371,11 +373,11 @@ export function RouteMapCanvas({
     }
 
     if (startPin) {
-      addPinMarker(layer, startPin, START_COLOR, "Start");
+      addPinMarker(layer, startPin, START_COLOR, t("Route start"));
       boundsPoints.push([startPin.lat, startPin.lon]);
     }
     if (destinationPin) {
-      addPinMarker(layer, destinationPin, END_COLOR, "Destination");
+      addPinMarker(layer, destinationPin, END_COLOR, t("Destination"));
       boundsPoints.push([destinationPin.lat, destinationPin.lon]);
     }
     if (currentLocation) {
@@ -386,7 +388,7 @@ export function RouteMapCanvas({
         fillOpacity: 0.92,
         weight: 3
       })
-        .bindTooltip("You are here")
+        .bindTooltip(t("You are here"))
         .addTo(layer);
       boundsPoints.push([currentLocation.lat, currentLocation.lon]);
     }
@@ -420,7 +422,8 @@ export function RouteMapCanvas({
     destinationPin,
     currentLocation,
     fitRequestId,
-    baseLayer
+    baseLayer,
+    language
   ]);
 
   // Draggable draw waypoints (Draw / Sketch modes).
@@ -448,7 +451,7 @@ export function RouteMapCanvas({
         bubblingMouseEvents: false
       });
       marker.bindTooltip(
-        `Point ${index + 1} · drag to adjust, click to remove`,
+        t("Point {{p0}} · drag to adjust, click to remove", { p0: index + 1 }),
         { direction: "top" }
       );
       const dragState = makeDraggable(
@@ -468,7 +471,7 @@ export function RouteMapCanvas({
       });
       marker.addTo(layer);
     });
-  }, [mode, waypoints]);
+  }, [mode, waypoints, language]);
 
   const interactive =
     mode === "draw" ||
@@ -516,24 +519,24 @@ export function RouteMapCanvas({
         <button
           type="button"
           onClick={() => mapRef.current?.zoomIn()}
-          title="Zoom in"
-          aria-label="Zoom in"
+          title={t("Zoom in")}
+          aria-label={t("Zoom in")}
         >
           <Plus size={16} aria-hidden="true" />
         </button>
         <button
           type="button"
           onClick={() => mapRef.current?.zoomOut()}
-          title="Zoom out"
-          aria-label="Zoom out"
+          title={t("Zoom out")}
+          aria-label={t("Zoom out")}
         >
           <Minus size={16} aria-hidden="true" />
         </button>
         <button
           type="button"
           onClick={fitToContent}
-          title="Fit route to view"
-          aria-label="Fit route to view"
+          title={t("Fit route to view")}
+          aria-label={t("Fit route to view")}
         >
           <Maximize2 size={15} aria-hidden="true" />
         </button>
@@ -541,10 +544,10 @@ export function RouteMapCanvas({
       {retracedSections.length > 0 ? (
         <div
           className="route-map-legend"
-          aria-label="Yellow dashed line: retraced route section"
+          aria-label={t("Yellow dashed line: retraced route section")}
         >
           <span className="route-map-legend-swatch" aria-hidden="true" />
-          <span>Retraced section</span>
+          <span>{t("Retraced section")}</span>
         </div>
       ) : null}
     </>

@@ -1,3 +1,4 @@
+import { t } from "../i18n/toolsLocale";
 import type { UnitSystem } from "../../electron/types";
 
 export interface OverviewWeatherSnapshot {
@@ -44,20 +45,20 @@ export function describeWeatherCode(code: number): {
   kind: OverviewWeatherKind;
   label: string;
 } {
-  if (code === 0) return { kind: "clear", label: "Clear" };
-  if (code === 1) return { kind: "clear", label: "Mostly clear" };
-  if (code === 2) return { kind: "partly-cloudy", label: "Partly cloudy" };
-  if (code === 3) return { kind: "cloudy", label: "Overcast" };
-  if (code === 45 || code === 48) return { kind: "fog", label: "Fog" };
-  if (code >= 51 && code <= 57) return { kind: "drizzle", label: "Drizzle" };
+  if (code === 0) return { kind: "clear", label: t("Clear skies") };
+  if (code === 1) return { kind: "clear", label: t("Mostly clear") };
+  if (code === 2) return { kind: "partly-cloudy", label: t("Partly cloudy") };
+  if (code === 3) return { kind: "cloudy", label: t("Overcast") };
+  if (code === 45 || code === 48) return { kind: "fog", label: t("Fog") };
+  if (code >= 51 && code <= 57) return { kind: "drizzle", label: t("Drizzle") };
   if (code >= 61 && code <= 67) {
-    return { kind: "rain", label: code >= 66 ? "Freezing rain" : "Rain" };
+    return { kind: "rain", label: code >= 66 ? t("Freezing rain") : t("Rain") };
   }
-  if (code >= 71 && code <= 77) return { kind: "snow", label: "Snow" };
-  if (code >= 80 && code <= 82) return { kind: "rain", label: "Showers" };
-  if (code === 85 || code === 86) return { kind: "snow", label: "Snow showers" };
-  if (code >= 95) return { kind: "thunder", label: "Thunderstorm" };
-  return { kind: "cloudy", label: "Cloudy" };
+  if (code >= 71 && code <= 77) return { kind: "snow", label: t("Snow") };
+  if (code >= 80 && code <= 82) return { kind: "rain", label: t("Showers") };
+  if (code === 85 || code === 86) return { kind: "snow", label: t("Snow showers") };
+  if (code >= 95) return { kind: "thunder", label: t("Thunderstorm") };
+  return { kind: "cloudy", label: t("Cloudy") };
 }
 
 export function formatTemperature(
@@ -78,8 +79,8 @@ export function formatWindSpeed(
   unitSystem: UnitSystem
 ): string {
   return unitSystem === "imperial"
-    ? `${Math.round(kmh / 1.609344)} mph`
-    : `${Math.round(kmh)} km/h`;
+    ? t("{{p0}} mph", { p0: Math.round(kmh / 1.609344) })
+    : t("{{p0}} km/h", { p0: Math.round(kmh) });
 }
 
 export function readCachedOverviewWeather(): OverviewWeatherSnapshot | null {
@@ -140,14 +141,14 @@ function requestDevicePosition(): Promise<ResolvedPosition> {
   const geolocation =
     typeof navigator === "undefined" ? undefined : navigator.geolocation;
   if (!geolocation) {
-    return Promise.reject(new DeviceLocationError("Location services are not available.", 2));
+    return Promise.reject(new DeviceLocationError(t("Location services are not available."), 2));
   }
   return new Promise((resolve, reject) => {
     geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
         if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-          reject(new DeviceLocationError("Location services returned invalid coordinates.", 2));
+          reject(new DeviceLocationError(t("Location services returned invalid coordinates."), 2));
           return;
         }
         resolve({ lat: latitude, lon: longitude });
@@ -161,13 +162,13 @@ function requestDevicePosition(): Promise<ResolvedPosition> {
 function describeLocationError(error: GeolocationPositionError): string {
   switch (error.code) {
     case 1:
-      return "Allow CorosLink in System Settings › Privacy & Security › Location Services to see local weather.";
+      return t("Allow CorosLink in System Settings › Privacy & Security › Location Services to see local weather.");
     case 2:
-      return "Your device could not determine a location.";
+      return t("Your device could not determine a location.");
     case 3:
-      return "Location request timed out.";
+      return t("Location request timed out.");
     default:
-      return "Could not get your current location.";
+      return t("Could not get your current location.");
   }
 }
 
@@ -182,7 +183,7 @@ async function requestIpPosition(signal: AbortSignal): Promise<ResolvedPosition>
   url.searchParams.set("localityLanguage", "en");
   const response = await fetch(url, { signal });
   if (!response.ok) {
-    throw new Error(`Location lookup responded with ${response.status}.`);
+    throw new Error(t("Location lookup responded with {{p0}}.", { p0: response.status }));
   }
   const payload = (await response.json()) as {
     latitude?: number;
@@ -197,7 +198,7 @@ async function requestIpPosition(signal: AbortSignal): Promise<ResolvedPosition>
     !Number.isFinite(payload.latitude) ||
     !Number.isFinite(payload.longitude)
   ) {
-    throw new Error("Location lookup returned no position.");
+    throw new Error(t("Location lookup returned no position."));
   }
   return {
     lat: payload.latitude,
@@ -255,7 +256,7 @@ async function fetchForecast(
 
   const response = await fetch(url, { signal });
   if (!response.ok) {
-    throw new Error(`Weather service responded with ${response.status}.`);
+    throw new Error(t("Weather service responded with {{p0}}.", { p0: response.status }));
   }
   const payload = (await response.json()) as OpenMeteoResponse;
   const current = payload.current;
@@ -264,7 +265,7 @@ async function fetchForecast(
     typeof current.temperature_2m !== "number" ||
     typeof current.weather_code !== "number"
   ) {
-    throw new Error("Weather service returned an incomplete forecast.");
+    throw new Error(t("Weather service returned an incomplete forecast."));
   }
   const high = payload.daily?.temperature_2m_max?.[0];
   const low = payload.daily?.temperature_2m_min?.[0];

@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import { useState } from "react";
 import {
   Bot,
@@ -29,13 +30,13 @@ import type { CorosLinkApi } from "../coroslink-api";
 const CUSTOM_LOCAL_SERVER_OPTION = "__custom__";
 
 function claudeStatusLabel(status: ClaudeCodeStatus | null): string {
-  if (!status) return "Not checked";
-  if (status.state === "not-installed") return "Not installed";
-  if (status.state === "sign-in-required") return "Installed, sign-in required";
-  if (status.state === "connecting") return "Connecting";
-  if (status.state === "connected") return "Connected";
-  if (status.state === "usage-limit-reached") return "Usage limit reached";
-  return "Connection failed";
+  if (!status) return t("Not checked");
+  if (status.state === "not-installed") return t("Not installed");
+  if (status.state === "sign-in-required") return t("Installed, sign-in required");
+  if (status.state === "connecting") return t("Connecting");
+  if (status.state === "connected") return t("Connected");
+  if (status.state === "usage-limit-reached") return t("Usage limit reached");
+  return t("Connection failed");
 }
 
 export function ChatSettingsPanel({
@@ -127,6 +128,7 @@ export function ChatSettingsPanel({
   onMcpServersChange: () => void | Promise<void>;
   onUpdateChatSettings: (patch: Partial<ChatSettings>) => Promise<boolean>;
 }) {
+  useLanguage();
   const availableLocalServers =
     localDiscovery?.servers.filter(
       (server) => server.ok && server.models.length > 0
@@ -155,12 +157,9 @@ export function ChatSettingsPanel({
         <ChatSettingsSectionHeader id="display" />
         <label className="chat-settings-toggle-row">
           <span className="chat-settings-toggle-text">
-            <strong>Show charts and activity visuals in chat</strong>
+            <strong>{t("Show charts and activity visuals in chat")}</strong>
             <span>
-              When off, automatic heart rate trends, zone summaries, and
-              activity charts are hidden. Charts you explicitly ask the coach
-              to draw are always shown.
-            </span>
+              {t("When off, automatic heart rate trends, zone summaries, and activity charts are hidden. Charts you explicitly ask the coach to draw are always shown.")}</span>
           </span>
           <input
             type="checkbox"
@@ -192,8 +191,7 @@ export function ChatSettingsPanel({
           <div className="chat-settings-account is-signed-in">
             <span className="chat-settings-email">
               <span className="chat-settings-status-dot" aria-hidden="true" />
-              Signed in
-            </span>
+              {t("Signed in")}</span>
             <button
               type="button"
               className="chat-signout chat-signout-settings"
@@ -201,14 +199,12 @@ export function ChatSettingsPanel({
               disabled={busy}
             >
               <LogOut size={14} aria-hidden="true" />
-              Sign out
-            </button>
+              {t("Sign out")}</button>
           </div>
         ) : (
           <div className="chat-settings-account">
             <p className="chat-settings-copy">
-              Sign in with your ChatGPT account to use cloud coaching.
-            </p>
+              {t("Sign in with your ChatGPT account to use cloud coaching.")}</p>
             <button
               type="button"
               className="primary-button chat-settings-signin"
@@ -218,8 +214,7 @@ export function ChatSettingsPanel({
               {signingIn ? (
                 <Loader2 className="chat-spinner" size={16} aria-hidden="true" />
               ) : null}
-              Sign in with ChatGPT
-            </button>
+              {t("Sign in with ChatGPT")}</button>
           </div>
         )}
       </section>
@@ -231,13 +226,11 @@ export function ChatSettingsPanel({
       >
         <ChatSettingsSectionHeader id="openrouter" badge="BYOK" />
         <p className="chat-settings-copy">
-          Use your OpenRouter account and credits for coaching. CorosLink stores
-          the key encrypted on this computer and only sends it to OpenRouter.
-        </p>
+          {t("Use your OpenRouter account and credits for coaching. CorosLink stores the key encrypted on this computer and only sends it to OpenRouter.")}</p>
 
         <div className="chat-local-settings chat-local-settings-panel">
           <label className="chat-local-field">
-            <span>Model</span>
+            <span>{t("Model")}</span>
             <input
               value={chatSettings.openRouter.model}
               onChange={(event) =>
@@ -255,7 +248,7 @@ export function ChatSettingsPanel({
           </label>
           <div className="chat-local-field chat-local-field-key">
             <label htmlFor="chat-openrouter-api-key">
-              <span>API key</span>
+              <span>{t("API key")}</span>
             </label>
             <div className="chat-local-key-row">
               <KeyRound size={14} aria-hidden="true" />
@@ -267,7 +260,7 @@ export function ChatSettingsPanel({
                 }
                 placeholder={
                   chatSettings.openRouter.hasApiKey
-                    ? "Saved key"
+                    ? t("Saved key")
                     : "sk-or-v1-…"
                 }
                 type="password"
@@ -280,8 +273,7 @@ export function ChatSettingsPanel({
                   onClick={onClearOpenRouterApiKey}
                   disabled={savingSettings}
                 >
-                  Clear
-                </button>
+                  {t("Clear")}</button>
                 ) : null}
             </div>
           </div>
@@ -293,8 +285,7 @@ export function ChatSettingsPanel({
               disabled={!api}
             >
               <ExternalLink size={14} aria-hidden="true" />
-              Get API key
-            </button>
+              {t("Get API key")}</button>
             <button
               type="button"
               className="chat-local-action"
@@ -302,8 +293,7 @@ export function ChatSettingsPanel({
               disabled={!api}
             >
               <ExternalLink size={14} aria-hidden="true" />
-              Browse models
-            </button>
+              {t("Browse models")}</button>
             <button
               type="button"
               className="chat-local-action"
@@ -320,8 +310,7 @@ export function ChatSettingsPanel({
               ) : (
                 <Bot size={14} aria-hidden="true" />
               )}
-              Test
-            </button>
+              {t("Test")}</button>
             <button
               type="button"
               className="chat-local-action primary"
@@ -339,8 +328,7 @@ export function ChatSettingsPanel({
               ) : (
                 <Save size={14} aria-hidden="true" />
               )}
-              Save
-            </button>
+              {t("Save")}</button>
           </div>
           {openRouterConnection ? (
             <p
@@ -355,10 +343,7 @@ export function ChatSettingsPanel({
           ) : null}
         </div>
         <p className="chat-settings-copy">
-          Coaching prompts and requested COROS data are sent through OpenRouter
-          to the selected model provider. OpenRouter bills usage to your account.
-          Choose a model with tool calling so workout and activity tools work.
-        </p>
+          {t("Coaching prompts and requested COROS data are sent through OpenRouter to the selected model provider. OpenRouter bills usage to your account. Choose a model with tool calling so workout and activity tools work.")}</p>
       </section>
 
       <section
@@ -368,13 +353,11 @@ export function ChatSettingsPanel({
       >
         <ChatSettingsSectionHeader id="claude" badge="Beta" />
         <p className="chat-settings-copy">
-          Uses Claude Code installed and signed in on this computer. CorosLink
-          never reads or stores your Claude password or subscription credentials.
-        </p>
+          {t("Uses Claude Code installed and signed in on this computer. CorosLink never reads or stores your Claude password or subscription credentials.")}</p>
 
         <div className="chat-settings-field-grid">
           <label className="chat-local-field">
-            <span>Claude executable</span>
+            <span>{t("Claude executable")}</span>
             <div className="chat-claude-path-row">
               <Terminal size={15} aria-hidden="true" />
               <input
@@ -382,24 +365,24 @@ export function ChatSettingsPanel({
                 onChange={(event) =>
                   onUpdateClaudeCode({ executablePath: event.target.value })
                 }
-                placeholder="Auto-detect Claude Code"
+                placeholder={t("Auto-detect Claude Code")}
                 spellCheck={false}
               />
             </div>
           </label>
 
           <label className="chat-local-field">
-            <span>Model</span>
+            <span>{t("Model")}</span>
             <select
               value={chatSettings.claudeCode.model ?? ""}
               onChange={(event) =>
                 onUpdateClaudeCode({ model: event.target.value })
               }
             >
-              <option value="">Account default</option>
-              <option value="opus">Opus (most capable)</option>
-              <option value="sonnet">Sonnet (balanced)</option>
-              <option value="haiku">Haiku (fastest)</option>
+              <option value="">{t("Account default")}</option>
+              <option value="opus">{t("Opus (most capable)")}</option>
+              <option value="sonnet">{t("Sonnet (balanced)")}</option>
+              <option value="haiku">{t("Haiku (fastest)")}</option>
             </select>
           </label>
         </div>
@@ -416,7 +399,7 @@ export function ChatSettingsPanel({
             <strong>{claudeStatusLabel(claudeStatus)}</strong>
             <span>
               {claudeStatus?.message ??
-                "Check this computer for an installed Claude Code runtime."}
+                t("Check this computer for an installed Claude Code runtime.")}
             </span>
           </div>
         </div>
@@ -433,8 +416,7 @@ export function ChatSettingsPanel({
             ) : (
               <RefreshCw size={14} aria-hidden="true" />
             )}
-            Check
-          </button>
+            {t("Check")}</button>
           {claudeStatus?.state === "not-installed" ? (
             <button
               type="button"
@@ -442,8 +424,7 @@ export function ChatSettingsPanel({
               onClick={onOpenClaudeSetupGuide}
             >
               <ExternalLink size={14} aria-hidden="true" />
-              Install Claude Code
-            </button>
+              {t("Install Claude Code")}</button>
           ) : null}
           {claudeStatus?.installed && claudeStatus.state !== "connected" ? (
             <button
@@ -457,8 +438,7 @@ export function ChatSettingsPanel({
               ) : (
                 <Terminal size={14} aria-hidden="true" />
               )}
-              Sign in with Claude
-            </button>
+              {t("Sign in with Claude")}</button>
           ) : null}
           {claudeStatus?.state === "connected" ? (
             <button
@@ -472,8 +452,7 @@ export function ChatSettingsPanel({
               ) : (
                 <Bot size={14} aria-hidden="true" />
               )}
-              Test connection
-            </button>
+              {t("Test connection")}</button>
           ) : null}
           <button
             type="button"
@@ -481,19 +460,18 @@ export function ChatSettingsPanel({
             onClick={onOpenClaudeSetupGuide}
           >
             <ExternalLink size={14} aria-hidden="true" />
-            Setup guide
-          </button>
+            {t("Setup guide")}</button>
         </div>
 
         <div className="chat-claude-permissions">
-          <strong>Claude can access</strong>
+          <strong>{t("Claude can access")}</strong>
           {(
             [
-              ["recentActivities", "Recent activities"],
-              ["trainingMetrics", "Training metrics"],
-              ["upcomingWorkouts", "Upcoming workouts"],
-              ["sleepData", "Sleep data"],
-              ["fullActivityFiles", "Full activity files (local FIT analysis)"]
+              ["recentActivities", t("Recent activities")],
+              ["trainingMetrics", t("Training metrics")],
+              ["upcomingWorkouts", t("Upcoming workouts")],
+              ["sleepData", t("Sleep data")],
+              ["fullActivityFiles", t("Full activity files (local FIT analysis)")]
             ] as const
           ).map(([permission, label]) => (
             <label key={permission} className="chat-local-tools">
@@ -514,13 +492,7 @@ export function ChatSettingsPanel({
           ))}
         </div>
         <p className="chat-settings-copy">
-          These selections control built-in COROS and Training Hub data.
-          Full activity files unlock splits, power curves, best efforts, and
-          route comparisons computed locally from cached FIT files; only the
-          derived numbers reach Claude. Connected custom MCP servers are trusted
-          separately and can expose their tools to Claude. Drafts stay local
-          until you click an upload or delete button.
-        </p>
+          {t("These selections control built-in COROS and Training Hub data. Full activity files unlock splits, power curves, best efforts, and route comparisons computed locally from cached FIT files; only the derived numbers reach Claude. Connected custom MCP servers are trusted separately and can expose their tools to Claude. Drafts stay local until you click an upload or delete button.")}</p>
       </section>
 
       <section
@@ -531,7 +503,7 @@ export function ChatSettingsPanel({
         <ChatSettingsSectionHeader id="local" />
         <div className="chat-local-settings chat-local-settings-panel">
             <label className="chat-local-field">
-              <span>Server</span>
+              <span>{t("Server")}</span>
               {availableLocalServers.length > 0 ? (
                 <select
                   value={
@@ -557,13 +529,11 @@ export function ChatSettingsPanel({
                 >
                   {availableLocalServers.map((server) => (
                     <option key={server.baseUrl} value={server.baseUrl}>
-                      {server.label} · {server.models.length} model
-                      {server.models.length === 1 ? "" : "s"}
+                      {server.label} · {server.models.length}  {t("model")}{server.models.length === 1 ? "" : "s"}
                     </option>
                   ))}
                   <option value={CUSTOM_LOCAL_SERVER_OPTION}>
-                    Other server URL…
-                  </option>
+                    {t("Other server URL…")}</option>
                 </select>
               ) : null}
               {availableLocalServers.length === 0 || usingCustomLocalUrl ? (
@@ -573,13 +543,13 @@ export function ChatSettingsPanel({
                     onUpdateLocalDraft({ baseUrl: event.target.value })
                   }
                   placeholder="http://localhost:11434/v1 or https://api.example.com/v1"
-                  aria-label="Server URL"
+                  aria-label={t("Server URL")}
                   spellCheck={false}
                 />
               ) : null}
             </label>
             <label className="chat-local-field">
-              <span>Model</span>
+              <span>{t("Model")}</span>
               {discoveredLocalModels.length > 0 ? (
                 <select
                   value={
@@ -603,20 +573,20 @@ export function ChatSettingsPanel({
                   onChange={(event) =>
                     onUpdateLocalDraft({ model: event.target.value })
                   }
-                  placeholder="Detect models or enter a model id"
+                  placeholder={t("Detect models or enter a model id")}
                   spellCheck={false}
                 />
               )}
             </label>
             <label className="chat-local-field chat-local-field-key">
-              <span>API key</span>
+              <span>{t("API key")}</span>
               <div className="chat-local-key-row">
                 <KeyRound size={14} aria-hidden="true" />
                 <input
                   value={localApiKey}
                   onChange={(event) => onLocalApiKeyChange(event.target.value)}
                   placeholder={
-                    chatSettings.local.hasApiKey ? "Saved key" : "Optional"
+                    chatSettings.local.hasApiKey ? t("Saved key") : t("Optional")
                   }
                   type="password"
                   spellCheck={false}
@@ -627,8 +597,7 @@ export function ChatSettingsPanel({
                     onClick={onClearLocalApiKey}
                     disabled={savingSettings}
                   >
-                    Clear
-                  </button>
+                    {t("Clear")}</button>
                 ) : null}
               </div>
             </label>
@@ -640,7 +609,7 @@ export function ChatSettingsPanel({
                   onUpdateLocalDraft({ toolsEnabled: event.target.checked })
                 }
               />
-              <span>Use COROS tools when supported</span>
+              <span>{t("Use COROS tools when supported")}</span>
             </label>
             <div className="chat-local-actions">
               <button
@@ -654,8 +623,7 @@ export function ChatSettingsPanel({
                 ) : (
                   <RefreshCw size={14} aria-hidden="true" />
                 )}
-                Detect
-              </button>
+                {t("Detect")}</button>
               <button
                 type="button"
                 className="chat-local-action"
@@ -667,8 +635,7 @@ export function ChatSettingsPanel({
                 ) : (
                   <Bot size={14} aria-hidden="true" />
                 )}
-                Test
-              </button>
+                {t("Test")}</button>
               <button
                 type="button"
                 className="chat-local-action primary"
@@ -680,8 +647,7 @@ export function ChatSettingsPanel({
                 ) : (
                   <Save size={14} aria-hidden="true" />
                 )}
-                Save
-              </button>
+                {t("Save")}</button>
             </div>
             {localConnection ? (
               <p
@@ -704,11 +670,7 @@ export function ChatSettingsPanel({
       >
         <ChatSettingsSectionHeader id="mcp" />
         <p className="chat-settings-copy">
-          Connect additional Model Context Protocol servers so the coach can call
-          their tools. Their tools appear alongside COROS, namespaced per server.
-          Only add servers you trust because tool descriptions and returned data
-          are shared with the selected coach provider.
-        </p>
+          {t("Connect additional Model Context Protocol servers so the coach can call their tools. Their tools appear alongside COROS, namespaced per server. Only add servers you trust because tool descriptions and returned data are shared with the selected coach provider.")}</p>
         <McpServersPanel
           api={api}
           refreshVersion={mcpRefreshVersion}

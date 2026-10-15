@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import { useMemo } from "react";
 import {
   Bar,
@@ -41,6 +42,7 @@ function formatPaceValue(
 }
 
 function HrTooltip({ active, payload, label }: TooltipContentProps) {
+  const { language } = useLanguage();
   if (!active || !payload?.length) {
     return null;
   }
@@ -50,7 +52,7 @@ function HrTooltip({ active, payload, label }: TooltipContentProps) {
   return (
     <div className="training-chart-tooltip">
       <span>{label}</span>
-      <strong>{typeof hr === "number" ? `${Math.round(hr)} bpm` : "-"}</strong>
+      <strong>{typeof hr === "number" ? t("{{p0}} bpm", { p0: Math.round(hr) }) : "-"}</strong>
     </div>
   );
 }
@@ -59,12 +61,13 @@ function buildHrBarData(preview: ActivityVisualPreview) {
   return (preview.sections.hr?.laps ?? [])
     .filter((lap) => lap.avgHr !== undefined && Number.isFinite(lap.avgHr))
     .map((lap) => ({
-      label: `Lap ${lap.index}`,
+      label: t("Lap {{p0}}", { p0: lap.index }),
       hr: lap.avgHr!
     }));
 }
 
 export function ActivityVisualCard({ preview }: ActivityVisualCardProps) {
+  const { language } = useLanguage();
   const { unitSystem } = useUnitSystem();
   const { colors } = useChartColors();
   const swim = preview.sportType === 300 || preview.sportType === 301;
@@ -74,9 +77,9 @@ export function ActivityVisualCard({ preview }: ActivityVisualCardProps) {
       preview.sections.hr?.chartKind === "series" && preview.sections.hr.series
         ? buildDistanceSeriesData(preview.sections.hr.series, "hr", unitSystem, swim)
         : [],
-    [preview, swim, unitSystem]
+    [preview, swim, unitSystem, language]
   );
-  const hrBarData = useMemo(() => buildHrBarData(preview), [preview]);
+  const hrBarData = useMemo(() => buildHrBarData(preview), [preview, language]);
   const paceData = useMemo(
     () =>
       preview.sections.pace?.series
@@ -88,24 +91,24 @@ export function ActivityVisualCard({ preview }: ActivityVisualCardProps) {
             cycling
           )
         : [],
-    [cycling, preview, swim, unitSystem]
+    [cycling, preview, swim, unitSystem, language]
   );
   const powerData = useMemo(
     () =>
       preview.sections.power?.series
         ? buildDistanceSeriesData(preview.sections.power.series, "power", unitSystem, swim)
         : [],
-    [preview, swim, unitSystem]
+    [preview, swim, unitSystem, language]
   );
   const elevationData = useMemo(
     () =>
       preview.sections.elevation?.points
         ? buildElevationSeriesData(preview.sections.elevation.points, unitSystem)
         : [],
-    [preview, unitSystem]
+    [preview, unitSystem, language]
   );
 
-  const title = preview.name ?? "Activity";
+  const title = preview.name ?? t("Activity");
   const subtitle = preview.startTime ?? undefined;
   const laps = preview.sections.laps ?? [];
 
@@ -121,12 +124,12 @@ export function ActivityVisualCard({ preview }: ActivityVisualCardProps) {
         <div className="chat-visual-stats">
           {preview.avgHr != null ? (
             <span className="chat-visual-stat">
-              Avg HR <strong>{Math.round(preview.avgHr)}</strong>
+              {t("Avg HR")} <strong>{Math.round(preview.avgHr)}</strong>
             </span>
           ) : null}
           {preview.maxHr != null ? (
             <span className="chat-visual-stat">
-              Max HR <strong>{Math.round(preview.maxHr)}</strong>
+              {t("Max HR")} <strong>{Math.round(preview.maxHr)}</strong>
             </span>
           ) : null}
         </div>
@@ -134,13 +137,13 @@ export function ActivityVisualCard({ preview }: ActivityVisualCardProps) {
 
       {preview.sections.hr ? (
         <section className="chat-visual-section">
-          <h5>Heart rate</h5>
+          <h5>{t("Heart rate")}</h5>
           {preview.sections.hr.chartKind === "series" && hrSeriesData.length >= 2 ? (
             <ChatMiniAreaChart
               data={hrSeriesData}
               gradientId={`chatHrFill-${preview.previewId}`}
-              name="Heart rate"
-              formatValue={(value) => `${Math.round(value)} bpm`}
+              name={t("Heart rate")}
+              formatValue={(value) => t("{{p0}} bpm", { p0: Math.round(value) })}
             />
           ) : hrBarData.length >= 2 ? (
             <div className="chat-visual-chart-shell">
@@ -167,7 +170,7 @@ export function ActivityVisualCard({ preview }: ActivityVisualCardProps) {
                   />
                   <Bar
                     dataKey="hr"
-                    name="Avg HR"
+                    name={t("Avg HR")}
                     fill={colors.accentBright}
                     radius={[4, 4, 0, 0]}
                     isAnimationActive={false}
@@ -177,20 +180,19 @@ export function ActivityVisualCard({ preview }: ActivityVisualCardProps) {
             </div>
           ) : (
             <p className="chat-visual-empty">
-              Heart rate samples are not available for this activity.
-            </p>
+              {t("Heart rate samples are not available for this activity.")}</p>
           )}
         </section>
       ) : null}
 
       {preview.sections.pace ? (
         <section className="chat-visual-section">
-          <h5>{cycling ? "Speed" : "Pace"}</h5>
+          <h5>{cycling ? t("Speed") : t("Pace")}</h5>
           {paceData.length >= 2 ? (
             <ChatMiniAreaChart
               data={paceData}
               gradientId={`chatPaceFill-${preview.previewId}`}
-              name={cycling ? "Speed" : "Pace"}
+              name={cycling ? t("Speed") : t("Pace")}
               formatValue={(value) =>
                 cycling
                   ? `${value.toFixed(1)} ${speedUnit(unitSystem)}`
@@ -204,57 +206,56 @@ export function ActivityVisualCard({ preview }: ActivityVisualCardProps) {
             />
           ) : (
             <p className="chat-visual-empty">
-              {cycling ? "Speed" : "Pace"} samples are not available.
-            </p>
+              {cycling ? t("Speed") : t("Pace")}  {t("samples are not available.")}</p>
           )}
         </section>
       ) : null}
 
       {preview.sections.power ? (
         <section className="chat-visual-section">
-          <h5>Power</h5>
+          <h5>{t("Power")}</h5>
           {powerData.length >= 2 ? (
             <ChatMiniAreaChart
               data={powerData}
               gradientId={`chatPowerFill-${preview.previewId}`}
-              name="Power"
+              name={t("Power")}
               formatValue={(value) => `${Math.round(value)} W`}
             />
           ) : (
-            <p className="chat-visual-empty">Power samples are not available.</p>
+            <p className="chat-visual-empty">{t("Power samples are not available.")}</p>
           )}
         </section>
       ) : null}
 
       {preview.sections.elevation ? (
         <section className="chat-visual-section">
-          <h5>Elevation</h5>
+          <h5>{t("Elevation")}</h5>
           {elevationData.length >= 2 ? (
             <ChatMiniAreaChart
               data={elevationData}
               gradientId={`chatElevFill-${preview.previewId}`}
-              name="Elevation"
+              name={t("Elevation")}
               formatValue={(value) => `${Math.round(value)} ${elevationUnit(unitSystem)}`}
             />
           ) : (
-            <p className="chat-visual-empty">Elevation profile is not available.</p>
+            <p className="chat-visual-empty">{t("Elevation profile is not available.")}</p>
           )}
         </section>
       ) : null}
 
       {laps.length > 0 ? (
         <section className="chat-visual-section">
-          <h5>Laps</h5>
+          <h5>{t("Laps")}</h5>
           <div className="chat-plan-table-wrap">
             <table className="chat-plan-table">
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Distance</th>
-                  <th>Duration</th>
-                  <th>Avg HR</th>
-                  <th>Max HR</th>
-                  <th>{cycling ? "Speed" : "Pace"}</th>
+                  <th>{t("Distance")}</th>
+                  <th>{t("Duration")}</th>
+                  <th>{t("Avg HR")}</th>
+                  <th>{t("Max HR")}</th>
+                  <th>{cycling ? t("Speed") : t("Pace")}</th>
                 </tr>
               </thead>
               <tbody>

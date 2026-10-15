@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import type { CorosMcpTool } from "../../electron/types";
 
 export function CorosMcpToolsPanel({
@@ -9,14 +10,14 @@ export function CorosMcpToolsPanel({
   onDisconnect?: () => void;
   className?: string;
 }) {
+  useLanguage();
   return (
     <div className={["chat-mcp-panel", className].filter(Boolean).join(" ")}>
       <div className="chat-mcp-panel-head">
-        <span>{tools.length} COROS tools</span>
+        <span>{tools.length}  {t("COROS tools")}</span>
         {onDisconnect ? (
           <button type="button" onClick={onDisconnect}>
-            Disconnect
-          </button>
+            {t("Disconnect")}</button>
         ) : null}
       </div>
       <ul>

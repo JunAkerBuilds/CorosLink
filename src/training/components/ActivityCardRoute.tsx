@@ -1,3 +1,4 @@
+import { useLanguage, t } from "../../i18n/training";
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -36,6 +37,7 @@ export function createActivityPreviewLoader(load: ActivityPreviewLoader): Activi
 }
 
 function MiniMap({ track }: { track: TrainingHubActivityTrack }) {
+  useLanguage();
   const container = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
   useEffect(() => {
@@ -73,6 +75,7 @@ function MiniMap({ track }: { track: TrainingHubActivityTrack }) {
 export function ActivityCardRoute({ activity, load, indoor }: {
   activity: TrainingHubActivity; load: ActivityPreviewLoader; indoor: boolean;
 }) {
+  useLanguage();
   const container = useRef<HTMLDivElement>(null);
   const [result, setResult] = useState<{ track?: TrainingHubActivityTrack; failed?: boolean } | null>(null);
   useEffect(() => {
@@ -94,7 +97,7 @@ export function ActivityCardRoute({ activity, load, indoor }: {
   return <div className={`activity-card-route${validTrack ? " has-route" : ""}`} ref={container}>
     {validTrack ? <MiniMap track={validTrack} /> : <div className="activity-card-route-placeholder">
       {indoor ? <Mountain size={26} /> : result ? <MapPin size={23} /> : <Loader2 size={20} className="spin" />}
-      <span>{indoor ? "Indoor session" : result?.failed ? "Route preview unavailable" : result ? "No GPS track recorded" : "Loading route…"}</span>
+      <span>{indoor ? t("Indoor session") : result?.failed ? t("Route preview unavailable") : result ? t("No GPS track recorded") : t("Loading route…")}</span>
     </div>}
   </div>;
 }

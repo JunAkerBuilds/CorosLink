@@ -1,3 +1,4 @@
+import { useLanguage, t } from "../i18n/training";
 import type {
   TrainingHubActivity,
   TrainingHubScheduledWorkoutEntry
@@ -62,6 +63,7 @@ export function CalendarGrid({
   onAskCoachWeek,
   onContextMenu
 }: CalendarGridProps) {
+  useLanguage();
   const bodyRef = useRef<HTMLDivElement>(null);
   const todayRowRef = useRef<HTMLDivElement>(null);
   const todayWeekKey = weeks.find((week) =>
@@ -103,12 +105,11 @@ export function CalendarGrid({
       <div className="calendar-grid-header">
         {WEEKDAY_LABELS.map((label) => (
           <div key={label} className="calendar-grid-header-cell">
-            {label}
+            {t(label)}
           </div>
         ))}
         <div className="calendar-grid-header-cell calendar-grid-header-stats">
-          Weekly Statistics
-        </div>
+          {t("Weekly Statistics")} </div>
       </div>
 
       <div

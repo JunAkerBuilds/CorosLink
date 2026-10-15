@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import {
   type ComponentType,
   type ReactNode,
@@ -17,8 +18,9 @@ export function HubToolbar({
   label: string;
   children: ReactNode;
 }) {
+  useLanguage();
   return (
-    <div className="wf-hub-toolbar" role="search" aria-label={label}>
+    <div className="wf-hub-toolbar" role="search" aria-label={t(label)}>
       {children}
     </div>
   );
@@ -35,9 +37,10 @@ export function HubSearchField({
   placeholder: string;
   onChange: (value: string) => void;
 }) {
+  useLanguage();
   return (
     <label className="wf-hub-control wf-hub-control--search">
-      <span className="sr-only">{label}</span>
+      <span className="sr-only">{t(label)}</span>
       <Search size={17} aria-hidden="true" />
       <input
         type="search"
@@ -49,7 +52,7 @@ export function HubSearchField({
         <button
           className="wf-hub-control-clear"
           type="button"
-          aria-label={`Clear ${label.toLowerCase()}`}
+          aria-label={t("Clear {{value1}}", { value1: label.toLowerCase() })}
           onClick={() => onChange("")}
         >
           <X size={14} aria-hidden="true" />
@@ -72,9 +75,10 @@ export function HubSelectField({
   onChange: (value: string) => void;
   children: ReactNode;
 }) {
+  useLanguage();
   return (
     <label className="wf-hub-control">
-      <span className="sr-only">{label}</span>
+      <span className="sr-only">{t(label)}</span>
       <Icon size={16} aria-hidden="true" />
       <select value={value} onChange={(event) => onChange(event.target.value)}>
         {children}
@@ -102,8 +106,9 @@ export function HubQuickFilters<T extends string>({
   active: T;
   onChange: (value: T) => void;
 }) {
+  useLanguage();
   return (
-    <nav className="wf-hub-chips-rail" aria-label={label}>
+    <nav className="wf-hub-chips-rail" aria-label={t(label)}>
       {chips.map(({ value, label: chipLabel, icon: Icon, count }) => (
         <button
           key={value}
@@ -113,7 +118,7 @@ export function HubQuickFilters<T extends string>({
           onClick={() => onChange(value)}
         >
           {Icon ? <Icon size={16} aria-hidden="true" /> : null}
-          <span>{chipLabel}</span>
+          <span>{t(chipLabel)}</span>
           {count !== undefined ? <small>{count}</small> : null}
         </button>
       ))}
@@ -123,6 +128,7 @@ export function HubQuickFilters<T extends string>({
 
 /** Hand-drawn underline shared with the Faces website's section headings. */
 export function HubHeadingUnderline() {
+  useLanguage();
   return (
     <svg className="wf-hub-underline" viewBox="0 0 180 12" preserveAspectRatio="none" aria-hidden="true">
       <path d="M4 8 C18 8 20 3 29 6 S46 6 60 6 S77 5 91 6 S109 4 120 6 S143 4 155 5 S169 5 176 5" />
@@ -145,6 +151,7 @@ export function HubResultsHeading({
   level?: 2 | 3;
   children?: ReactNode;
 }) {
+  useLanguage();
   const Heading = level === 2 ? "h2" : "h3";
   return (
     <div className={`wf-hub-results-heading${level === 3 ? " is-group" : ""}`}>
@@ -154,10 +161,10 @@ export function HubResultsHeading({
           <Icon size={level === 2 ? 22 : 18} />
         </span>
         <Heading id={id}>
-          {title}
+          {t(title)}
           <HubHeadingUnderline />
         </Heading>
-        {note ? <span className="wf-hub-results-note">{note}</span> : null}
+        {note ? <span className="wf-hub-results-note">{typeof note === "string" ? t(note) : note}</span> : null}
       </div>
       {children}
     </div>
@@ -172,11 +179,11 @@ export function HubFilterSummary({
   summary: string;
   onClear: () => void;
 }) {
+  useLanguage();
   return (
     <div className="wf-hub-filter-summary">
-      <p>{summary}</p>
-      <button type="button" className="wf-hub-text-link" onClick={onClear}>
-        Clear filters <X size={14} aria-hidden="true" />
+      <p>{t(summary)}</p>
+      <button type="button" className="wf-hub-text-link" onClick={onClear}>{t("Clear filters")}{" "}<X size={14} aria-hidden="true" />
       </button>
     </div>
   );
@@ -241,10 +248,10 @@ export function createTaskQueue(concurrency: number) {
 
 export function formatCachedAge(savedAt: string, now = Date.now()): string {
   const elapsed = now - Date.parse(savedAt);
-  if (!Number.isFinite(elapsed) || elapsed < 60_000) return "just now";
+  if (!Number.isFinite(elapsed) || elapsed < 60_000) return t("just now");
   const minutes = Math.round(elapsed / 60_000);
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 60) return t("{{minutes}} min ago", { minutes: minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours} h ago`;
-  return `${Math.round(hours / 24)} days ago`;
+  if (hours < 48) return t("{{hours}} h ago", { hours });
+  return t("{{value1}} days ago", { value1: Math.round(hours / 24) });
 }

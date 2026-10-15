@@ -1,3 +1,4 @@
+import { useLanguage, t } from "../../i18n/training";
 import { useId } from "react";
 import type { ChartCardSize } from "../widgetSizing";
 import "../chartSizing.css";
@@ -32,12 +33,13 @@ function paceBarRatio(pace: number, fastest: number, slowest: number): number {
 }
 
 function LevelRing({ level }: { level: number }) {
+  useLanguage();
   const gradientId = useId();
   const ratio = Math.min(Math.max(level / 100, 0), 1);
   const litTicks = Math.round(ratio * LEVEL_TICK_COUNT);
 
   return (
-    <div className="race-level-ring" role="img" aria-label={`Running level ${Math.round(level)}`}>
+    <div className="race-level-ring" role="img" aria-label={t("Running level {{value1}}", { value1: String(Math.round(level)) })}>
       <svg viewBox="0 0 64 64" aria-hidden="true">
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
@@ -71,12 +73,13 @@ function LevelRing({ level }: { level: number }) {
         />
       </svg>
       <strong>{Math.round(level)}</strong>
-      <span>Level</span>
+      <span>{t("Level")}</span>
     </div>
   );
 }
 
 export function RacePredictorCards({ racePredictor, size }: RacePredictorCardsProps) {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const scores = racePredictor?.runScoreList ?? [];
   const runningLevel = racePredictor?.staminaLevel;
@@ -101,8 +104,8 @@ export function RacePredictorCards({ racePredictor, size }: RacePredictorCardsPr
     <section className="panel training-race-panel" data-chart-size={size}>
       <header className="training-race-header">
         <div className="training-race-heading">
-          <p className="eyebrow">Race Predictor</p>
-          <h2>Estimated finish times</h2>
+          <p className="eyebrow">{t("Race Predictor")}</p>
+          <h2>{t("Estimated finish times")}</h2>
         </div>
         {hasLevel ? (
           <LevelRing level={runningLevel} />
@@ -130,7 +133,7 @@ export function RacePredictorCards({ racePredictor, size }: RacePredictorCardsPr
                 <span className="race-card-index" aria-hidden="true">
                   {String(index + 1).padStart(2, "0")}
                 </span>
-                <span className="race-card-badge">{label}</span>
+                <span className="race-card-badge">{t(label)}</span>
                 <strong className="race-card-time">
                   {score.predictSeconds
                     ? formatDurationSeconds(score.predictSeconds)
@@ -150,7 +153,7 @@ export function RacePredictorCards({ racePredictor, size }: RacePredictorCardsPr
                 {paceLabel ? (
                   <span className="race-card-pace">{paceLabel}</span>
                 ) : score.score !== undefined ? (
-                  <span className="race-card-pace">Score {Math.round(score.score)}</span>
+                  <span className="race-card-pace">{t("Score")} {Math.round(score.score)}</span>
                 ) : null}
               </article>
             );
@@ -159,15 +162,13 @@ export function RacePredictorCards({ racePredictor, size }: RacePredictorCardsPr
       ) : (
         <div className="training-empty-state">
           <p>
-            No race predictions available yet. Complete more runs to unlock
-            estimates.
-          </p>
+            {t("No race predictions available yet. Complete more runs to unlock estimates.")} </p>
         </div>
       )}
 
       {paceFadePct !== null && paceFadePct > 0 ? (
         <footer className="race-card-footer">
-          <span>Pace fade</span>
+          <span>{t("Pace fade")}</span>
           <span className="race-card-footer-route">
             {labelFor(0)}
             <i aria-hidden="true" />

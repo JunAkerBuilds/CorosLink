@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "../i18n/tools";
 import {
   Bike,
   CalendarDays,
@@ -58,14 +59,15 @@ function messageFrom(error: unknown): string {
 }
 
 function typeLabel(type: CorosGearType): string {
-  return type === 1 ? "Running shoes" : "Bike";
+  return type === 1 ? t("Running shoes") : t("Bike");
 }
 
 function sportLabel(sportType: number): string {
-  return resolveSportName({ sportType }) ?? `Sport ${sportType}`;
+  return t(resolveSportName({ sportType }) ?? t("Sport {{p0}}", { p0: sportType }));
 }
 
 export function GearView({ api }: { api: CorosLinkApi }) {
+  const { language } = useLanguage();
   const { unitSystem } = useUnitSystem();
   const unit = distanceUnit(unitSystem);
   const [status, setStatus] = useState<CorosWatchfaceStatus | null>(null);
@@ -97,7 +99,7 @@ export function GearView({ api }: { api: CorosLinkApi }) {
     () =>
       catalog?.supportedInfo.find((entry) => entry.type === type)
         ?.sportTypeList ?? FALLBACK_SPORTS[type],
-    [catalog?.supportedInfo, type]
+    [catalog?.supportedInfo, type, language]
   );
 
   async function loadGear() {
@@ -162,7 +164,7 @@ export function GearView({ api }: { api: CorosLinkApi }) {
       setStatus(nextStatus);
       setPassword("");
       setCatalog(null);
-      setNotice("COROS mobile account connected.");
+      setNotice(t("COROS mobile account connected."));
     } catch (caught) {
       setError(messageFrom(caught));
     } finally {
@@ -178,7 +180,7 @@ export function GearView({ api }: { api: CorosLinkApi }) {
       const nextStatus = await api.loginCorosWatchfacesWithSavedCredentials(region);
       setStatus(nextStatus);
       setCatalog(null);
-      setNotice("COROS mobile account connected.");
+      setNotice(t("COROS mobile account connected."));
     } catch (caught) {
       setError(messageFrom(caught));
     } finally {
@@ -192,7 +194,7 @@ export function GearView({ api }: { api: CorosLinkApi }) {
     try {
       setStatus(await api.logoutCorosWatchfaces());
       setCatalog(null);
-      setNotice("COROS mobile account disconnected.");
+      setNotice(t("COROS mobile account disconnected."));
     } catch (caught) {
       setError(messageFrom(caught));
     } finally {
@@ -220,7 +222,7 @@ export function GearView({ api }: { api: CorosLinkApi }) {
       setCatalog(nextCatalog);
       setName("");
       setInitialDistance("0");
-      setNotice(`${typeLabel(type)} added to your COROS account.`);
+      setNotice(t("{{p0}} added to your COROS account.", { p0: typeLabel(type) }));
     } catch (caught) {
       setError(messageFrom(caught));
     } finally {
@@ -234,16 +236,15 @@ export function GearView({ api }: { api: CorosLinkApi }) {
     <div className="gear-view">
       <header className="gear-header">
         <div>
-          <p className="eyebrow">Equipment lifecycle</p>
-          <h1>Gear</h1>
-          <p>Track shoe and bike mileage in the same gear library as the COROS app.</p>
+          <p className="eyebrow">{t("Equipment lifecycle")}</p>
+          <h1>{t("Gear")}</h1>
+          <p>{t("Track shoe and bike mileage in the same gear library as the COROS app.")}</p>
         </div>
         {connected ? (
           <div className="gear-header-actions">
             <span className="gear-connected-pill">
               <ShieldCheck size={15} aria-hidden="true" />
-              COROS connected
-            </span>
+              {t("COROS connected")}</span>
             <button
               className="secondary-button"
               type="button"
@@ -255,8 +256,7 @@ export function GearView({ api }: { api: CorosLinkApi }) {
               ) : (
                 <RefreshCw size={16} aria-hidden="true" />
               )}
-              Refresh
-            </button>
+              {t("Refresh")}</button>
             <button
               className="secondary-button danger-button"
               type="button"
@@ -264,8 +264,7 @@ export function GearView({ api }: { api: CorosLinkApi }) {
               onClick={() => void handleLogout()}
             >
               <LogOut size={16} aria-hidden="true" />
-              Disconnect
-            </button>
+              {t("Disconnect")}</button>
           </div>
         ) : null}
       </header>
@@ -276,29 +275,26 @@ export function GearView({ api }: { api: CorosLinkApi }) {
       {loadingStatus ? (
         <section className="panel gear-loading" aria-busy="true">
           <Loader2 className="spin" size={24} aria-hidden="true" />
-          Checking your COROS mobile session…
-        </section>
+          {t("Checking your COROS mobile session…")}</section>
       ) : !connected ? (
         <section className="gear-auth-layout">
           <div className="gear-auth-copy">
             <span className="gear-auth-icon"><Footprints size={30} /></span>
-            <p className="eyebrow">One account, every mile</p>
-            <h2>Connect your COROS mobile account</h2>
+            <p className="eyebrow">{t("One account, every mile")}</p>
+            <h2>{t("Connect your COROS mobile account")}</h2>
             <p>
-              Gear uses the mobile COROS API. The encrypted session is shared
-              with Watch Face Studio and stays on this computer.
-            </p>
+              {t("Gear uses the mobile COROS API. The encrypted session is shared with Watch Face Studio and stays on this computer.")}</p>
             <div className="gear-auth-points">
-              <span><Check size={16} /> Read your current gear library</span>
-              <span><Check size={16} /> Add running shoes and bikes</span>
-              <span><Check size={16} /> Set mileage alerts and activity types</span>
+              <span><Check size={16} />  {t("Read your current gear library")}</span>
+              <span><Check size={16} />  {t("Add running shoes and bikes")}</span>
+              <span><Check size={16} />  {t("Set mileage alerts and activity types")}</span>
             </div>
           </div>
 
           <form className="panel gear-auth-card" onSubmit={handleLogin}>
             <div>
-              <p className="eyebrow">COROS sign-in</p>
-              <h2>Connect account</h2>
+              <p className="eyebrow">{t("COROS sign-in")}</p>
+              <h2>{t("Connect account")}</h2>
             </div>
             {status.savedCredentialsAvailable ? (
               <button
@@ -312,11 +308,11 @@ export function GearView({ api }: { api: CorosLinkApi }) {
                 ) : (
                   <RefreshCw size={16} />
                 )}
-                Use saved account{status.savedEmail ? ` · ${status.savedEmail}` : ""}
+                {t("Use saved account")}{status.savedEmail ? ` · ${status.savedEmail}` : ""}
               </button>
             ) : null}
             <label className="field">
-              <span>Email</span>
+              <span>{t("Email")}</span>
               <span className="gear-input-icon">
                 <Mail size={17} aria-hidden="true" />
                 <input
@@ -329,23 +325,23 @@ export function GearView({ api }: { api: CorosLinkApi }) {
               </span>
             </label>
             <label className="field">
-              <span>Password</span>
+              <span>{t("Password")}</span>
               <span className="gear-input-icon">
                 <LockKeyhole size={17} aria-hidden="true" />
                 <input
                   type="password"
                   value={password}
                   autoComplete="current-password"
-                  placeholder="COROS password"
+                  placeholder={t("COROS password")}
                   onChange={(event) => setPassword(event.target.value)}
                 />
               </span>
             </label>
             <div className="field">
-              <span>Account region</span>
-              <SelectDropdown
-                label="Account region"
-                options={REGION_OPTIONS}
+              <span>{t("Account region")}</span>
+              <SelectDropdown translateLabel={t}
+                label={t("Account region")}
+                options={REGION_OPTIONS.map(option => ({ ...option, label: t(option.label) }))}
                 portal
                 disabled={busy !== null}
                 value={region}
@@ -361,7 +357,7 @@ export function GearView({ api }: { api: CorosLinkApi }) {
                 checked={remember}
                 onChange={(event) => setRemember(event.target.checked)}
               />
-              <span>Save this account securely on this computer</span>
+              <span>{t("Save this account securely on this computer")}</span>
             </label>
             <button
               className="primary-button"
@@ -373,8 +369,7 @@ export function GearView({ api }: { api: CorosLinkApi }) {
               ) : (
                 <ShieldCheck size={17} />
               )}
-              Connect to COROS
-            </button>
+              {t("Connect to COROS")}</button>
           </form>
         </section>
       ) : (
@@ -382,9 +377,9 @@ export function GearView({ api }: { api: CorosLinkApi }) {
           <section className="gear-library" aria-labelledby="gear-library-title">
             <div className="gear-section-heading">
               <div>
-                <p className="eyebrow">Your equipment</p>
+                <p className="eyebrow">{t("Your equipment")}</p>
                 <h2 id="gear-library-title">
-                  {catalog?.gear.length ?? 0} active{" "}
+                  {catalog?.gear.length ?? 0}  {t("active")}{" "}
                   {(catalog?.gear.length ?? 0) === 1 ? "item" : "items"}
                 </h2>
               </div>
@@ -394,13 +389,12 @@ export function GearView({ api }: { api: CorosLinkApi }) {
             {catalog === null || busy === "query" ? (
               <div className="panel gear-loading">
                 <Loader2 className="spin" size={22} />
-                Loading COROS gear…
-              </div>
+                {t("Loading COROS gear…")}</div>
             ) : catalog.gear.length === 0 ? (
               <div className="panel gear-empty">
                 <Footprints size={28} aria-hidden="true" />
-                <h3>No gear yet</h3>
-                <p>Add your first pair of shoes or bike with the form.</p>
+                <h3>{t("No gear yet")}</h3>
+                <p>{t("Add your first pair of shoes or bike with the form.")}</p>
               </div>
             ) : (
               <div className="gear-card-grid">
@@ -415,22 +409,22 @@ export function GearView({ api }: { api: CorosLinkApi }) {
             <div className="gear-add-heading">
               <span><Plus size={20} aria-hidden="true" /></span>
               <div>
-                <p className="eyebrow">New equipment</p>
-                <h2>Add gear</h2>
+                <p className="eyebrow">{t("New equipment")}</p>
+                <h2>{t("Add gear")}</h2>
               </div>
             </div>
 
             <label className="field">
-              <span>Name</span>
+              <span>{t("Name")}</span>
               <input
                 value={name}
                 maxLength={80}
-                placeholder={type === 1 ? "Adizero Boston 13" : "Road bike"}
+                placeholder={type === 1 ? "Adizero Boston 13" : t("Road bike")}
                 onChange={(event) => setName(event.target.value)}
               />
             </label>
 
-            <div className="gear-type-picker" role="group" aria-label="Gear type">
+            <div className="gear-type-picker" role="group" aria-label={t("Gear type")}>
               {([1, 2] as CorosGearType[]).map((gearType) => {
                 const Icon = gearType === 1 ? Footprints : Bike;
                 return (
@@ -449,7 +443,7 @@ export function GearView({ api }: { api: CorosLinkApi }) {
             </div>
 
             <label className="field">
-              <span>First use</span>
+              <span>{t("First use")}</span>
               <span className="gear-input-icon">
                 <CalendarDays size={17} aria-hidden="true" />
                 <input
@@ -462,7 +456,7 @@ export function GearView({ api }: { api: CorosLinkApi }) {
 
             <div className="gear-distance-fields">
               <label className="field">
-                <span>Starting distance ({unit})</span>
+                <span>{t("Starting distance (")}{unit})</span>
                 <input
                   type="number"
                   min="0"
@@ -472,7 +466,7 @@ export function GearView({ api }: { api: CorosLinkApi }) {
                 />
               </label>
               <label className="field">
-                <span>Replace after ({unit})</span>
+                <span>{t("Replace after (")}{unit})</span>
                 <input
                   type="number"
                   min="0.1"
@@ -484,7 +478,7 @@ export function GearView({ api }: { api: CorosLinkApi }) {
             </div>
 
             <fieldset className="gear-sports">
-              <legend>Count these activities</legend>
+              <legend>{t("Count these activities")}</legend>
               <div>
                 {availableSports.map((sport) => (
                   <label className="gear-sport-chip" key={sport}>
@@ -512,8 +506,7 @@ export function GearView({ api }: { api: CorosLinkApi }) {
                 onChange={(event) => setNotify(event.target.checked)}
               />
               <span>
-                Alert me at the replacement distance
-                <small>COROS will use this limit for its gear notification.</small>
+                {t("Alert me at the replacement distance")}<small>{t("COROS will use this limit for its gear notification.")}</small>
               </span>
             </label>
 
@@ -534,8 +527,7 @@ export function GearView({ api }: { api: CorosLinkApi }) {
               ) : (
                 <Plus size={17} />
               )}
-              Add to COROS
-            </button>
+              {t("Add to COROS")}</button>
           </form>
         </div>
       )}
@@ -550,6 +542,7 @@ function GearCard({
   gear: CorosGear;
   unitSystem: "metric" | "imperial";
 }) {
+  const { language } = useLanguage();
   const Icon = gear.type === 1 ? Footprints : Bike;
   const usedMeters = Math.max(
     0,
@@ -569,16 +562,16 @@ function GearCard({
           <span>{typeLabel(gear.type)}</span>
           <h3>{gear.name}</h3>
         </div>
-        {gear.notify ? <span className="gear-alert-pill">Alert on</span> : null}
+        {gear.notify ? <span className="gear-alert-pill">{t("Alert on")}</span> : null}
       </div>
       <div className="gear-distance-summary">
         <strong>{formatDistanceValue(usedMeters, unitSystem, { digits: 1 })}</strong>
-        <span>of {formatDistanceValue(gear.lifeDistanceMeters, unitSystem, { digits: 0 })}</span>
+        <span>{t("of")} {formatDistanceValue(gear.lifeDistanceMeters, unitSystem, { digits: 0 })}</span>
       </div>
       <div
         className="gear-progress"
         role="progressbar"
-        aria-label={`${gear.name} lifespan`}
+        aria-label={t("{{p0}} lifespan", { p0: gear.name })}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(progress)}
@@ -586,8 +579,8 @@ function GearCard({
         <span style={{ width: `${progress}%` }} />
       </div>
       <div className="gear-card-meta">
-        <span>Since {new Date(`${gear.firstUseDay}T00:00:00`).toLocaleDateString()}</span>
-        <span>{sportNames.join(" · ") || "No activities"}</span>
+        <span>{t("Since")} {new Date(`${gear.firstUseDay}T00:00:00`).toLocaleDateString(getLocale())}</span>
+        <span>{sportNames.join(" · ") || t("No activities")}</span>
       </div>
     </article>
   );

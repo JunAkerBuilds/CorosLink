@@ -1,3 +1,4 @@
+import { t } from "../i18n/trainingLocale";
 import type { StrengthSession, StrengthSet } from "../../electron/types";
 import { resolveExerciseName } from "../training/exerciseNames";
 import {
@@ -139,7 +140,7 @@ function plateauIndicator(records: ExerciseSessionRecord[]): PlateauIndicator {
     return {
       state: "insufficient",
       label: "Building a baseline",
-      detail: `${4 - loaded.length} more loaded session${4 - loaded.length === 1 ? "" : "s"} needed before calling a trend.`,
+      detail: t("{{value1}} more loaded session{{value2}} needed before calling a trend.", { value1: String(4 - loaded.length), value2: String(4 - loaded.length === 1 ? "" : "s") }),
       sessionsConsidered: loaded.length
     };
   }
@@ -159,7 +160,7 @@ function plateauIndicator(records: ExerciseSessionRecord[]): PlateauIndicator {
     return {
       state: "declining",
       label: "Below recent peak",
-      detail: `Estimated max is ${Math.abs(changePercent).toFixed(1)}% below the first of the last ${recent.length} sessions.`,
+      detail: t("Estimated max is {{value1}}% below the first of the last {{value2}} sessions.", { value1: String(Math.abs(changePercent).toFixed(1)), value2: String(recent.length) }),
       sessionsConsidered: recent.length,
       changePercent
     };
@@ -169,7 +170,7 @@ function plateauIndicator(records: ExerciseSessionRecord[]): PlateauIndicator {
     return {
       state: "progressing",
       label: "Progressing",
-      detail: `Estimated max is up ${changePercent.toFixed(1)}% across the last ${recent.length} sessions.`,
+      detail: t("Estimated max is up {{value1}}% across the last {{value2}} sessions.", { value1: String(changePercent.toFixed(1)), value2: String(recent.length) }),
       sessionsConsidered: recent.length,
       changePercent
     };
@@ -179,7 +180,7 @@ function plateauIndicator(records: ExerciseSessionRecord[]): PlateauIndicator {
     return {
       state: "plateau",
       label: "Plateau watch",
-      detail: `Estimated max has stayed inside a 3% band for ${recent.length} sessions.`,
+      detail: t("Estimated max has stayed inside a 3% band for {{value1}} sessions.", { value1: String(recent.length) }),
       sessionsConsidered: recent.length,
       changePercent
     };
@@ -188,7 +189,7 @@ function plateauIndicator(records: ExerciseSessionRecord[]): PlateauIndicator {
   return {
     state: "steady",
     label: "Holding steady",
-    detail: `No clear climb or plateau across the last ${recent.length} sessions yet.`,
+    detail: t("No clear climb or plateau across the last {{value1}} sessions yet.", { value1: String(recent.length) }),
     sessionsConsidered: recent.length,
     changePercent
   };

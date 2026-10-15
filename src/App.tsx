@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from "./i18n";
 import {
   AlertCircle,
   ArrowLeft,
@@ -217,10 +218,11 @@ const LazyActivityGlobeCard = lazy(() =>
 );
 
 function DeferredSurfaceFallback({ label }: { label: string }) {
+  useLanguage();
   return (
     <div className="empty-state" role="status" aria-live="polite">
       <Loader2 className="spin" size={24} aria-hidden="true" />
-      <span>Loading {label}…</span>
+      <span>{t("Loading")} {t(label)}…</span>
     </div>
   );
 }
@@ -246,15 +248,14 @@ class TrainingLibraryErrorBoundary extends Component<
     return (
       <section className="empty-state" role="alert">
         <AlertCircle size={28} aria-hidden="true" />
-        <strong>Training Library could not render</strong>
+        <strong>{t("Training Library could not render")}</strong>
         <span>{this.state.error.message}</span>
         <button
           type="button"
           className="primary-button"
           onClick={() => this.setState({ error: null })}
         >
-          Try again
-        </button>
+          {t("Try again")} </button>
       </section>
     );
   }
@@ -327,6 +328,7 @@ interface YouTubeDownloadItem {
 }
 
 export default function App() {
+  useLanguage();
   const api: CorosLinkApi | undefined = window.corosLink;
   const [activeView, setActiveView] = useState<View>(readStartupView);
   const [returnToAccountSettings, setReturnToAccountSettings] = useState(false);
@@ -559,7 +561,7 @@ export default function App() {
     if (appUpdateSnapshot.status === "error") {
       installAcceptedVersionRef.current = null;
       setError(
-        appUpdateSnapshot.error ?? "Could not download the update.",
+        appUpdateSnapshot.error ?? t("Could not download the update."),
       );
     }
   }, [
@@ -980,7 +982,7 @@ export default function App() {
         return;
       }
       setYoutubeMusicStatus(result.status);
-      setMessage("YouTube Music connected.");
+      setMessage(t("YouTube Music connected."));
       void refreshYouTubeMusic().catch((caught) =>
         setError(toErrorMessage(caught)),
       );
@@ -1053,7 +1055,7 @@ export default function App() {
             }
 
             if (transferred > 0) {
-              setMessage(`${transferred} track(s) downloaded and transferred.`);
+              setMessage(t("{{value0}} track(s) downloaded and transferred.", { value0: transferred }));
               await refreshAll();
             }
           })();
@@ -1125,9 +1127,9 @@ export default function App() {
       setAppUpdateSnapshot(snapshot);
 
       if (snapshot.status === "not-available") {
-        setMessage("You're on the latest version.");
+        setMessage(t("You're on the latest version."));
       } else if (snapshot.status === "error") {
-        setError(snapshot.error ?? "Could not check for updates.");
+        setError(snapshot.error ?? t("Could not check for updates."));
       }
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -1142,7 +1144,7 @@ export default function App() {
       .then((result) => {
         if (result?.installMethod === "manual") {
           setMessage(
-            "Opened the GitHub download page. Install the new build over CorosLink in Applications.",
+            t("Opened the GitHub download page. Install the new build over CorosLink in Applications."),
           );
         }
       })
@@ -1163,7 +1165,7 @@ export default function App() {
       setAppUpdateSnapshot(snapshot);
 
       if (snapshot.status === "error") {
-        setError(snapshot.error ?? "Could not download the update.");
+        setError(snapshot.error ?? t("Could not download the update."));
       }
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -1176,7 +1178,7 @@ export default function App() {
     if (IS_DEVELOPMENT_BUILD && devUpdatePreviewKey !== undefined) {
       restoreUpdateSnapshotAfterPreview();
       setMessage(
-        `Test update ${version} accepted. No files were downloaded in the development build.`,
+        t("Test update {{value0}} accepted. No files were downloaded in the development build.", { value0: version }),
       );
       return;
     }
@@ -1290,7 +1292,7 @@ export default function App() {
     try {
       const status = await api.saveSpotifyConfig(spotifyConfig);
       setSpotifyStatus(status);
-      setMessage("Spotify settings saved.");
+      setMessage(t("Spotify settings saved."));
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -1314,7 +1316,7 @@ export default function App() {
       const status = await api.saveYouTubeMusicAuth(youtubeMusicHeadersRaw);
       setYoutubeMusicStatus(status);
       setYoutubeMusicHeadersRaw("");
-      setMessage("YouTube Music headers saved.");
+      setMessage(t("YouTube Music headers saved."));
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -1334,7 +1336,7 @@ export default function App() {
     try {
       const status = await api.loginSpotify();
       setSpotifyStatus(status);
-      setMessage("Spotify account connected.");
+      setMessage(t("Spotify account connected."));
       await refreshSpotify();
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -1361,8 +1363,8 @@ export default function App() {
       );
       setMessage(
         unlocking
-          ? "Followed playlists unlocked."
-          : "Followed playlists locked.",
+          ? t("Followed playlists unlocked.")
+          : t("Followed playlists locked."),
       );
       await refreshSpotify();
     } catch (caught) {
@@ -1386,7 +1388,7 @@ export default function App() {
       setSpotifyPlaylists([]);
       setSpotifyTracks([]);
       setSelectedSpotifyPlaylistId("");
-      setMessage("Spotify account disconnected.");
+      setMessage(t("Spotify account disconnected."));
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -1413,7 +1415,7 @@ export default function App() {
       setYoutubeMusicStatus(status);
       setYoutubeMusicPlaylists([]);
       setSelectedYouTubeMusicPlaylistId("");
-      setMessage("YouTube Music disconnected.");
+      setMessage(t("YouTube Music disconnected."));
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -1438,7 +1440,7 @@ export default function App() {
         (current) => current || result.playlists[0]?.id || "",
       );
       setMessage(
-        `Synced ${result.songs.length} song(s) and ${result.playlists.length} playlist(s) from YouTube Music.`,
+        t("Synced {{value0}} song(s) and {{value1}} playlist(s) from YouTube Music.", { value0: result.songs.length, value1: result.playlists.length }),
       );
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -1449,7 +1451,7 @@ export default function App() {
 
   async function handleQueueYouTubeMusicSong(song: YouTubeMusicSong) {
     if (!song.videoUrl) {
-      setError("This YouTube Music song did not include a video URL.");
+      setError(t("This YouTube Music song did not include a video URL."));
       return;
     }
 
@@ -1487,7 +1489,7 @@ export default function App() {
 
     if (typeof api.downloadCombinedPlaylist !== "function") {
       setError(
-        "Combined downloads aren't loaded yet. Fully quit and restart the app so the Electron process picks up the new feature.",
+        t("Combined downloads aren't loaded yet. Fully quit and restart the app so the Electron process picks up the new feature."),
       );
       return;
     }
@@ -1497,7 +1499,7 @@ export default function App() {
     }
 
     if (items.length === 0) {
-      setError("This playlist has no downloadable tracks to combine.");
+      setError(t("This playlist has no downloadable tracks to combine."));
       return;
     }
 
@@ -1535,23 +1537,16 @@ export default function App() {
         transferred = true;
       } catch (caught) {
         setError(
-          `“${result.track.title}” was saved locally, but could not be transferred to the watch: ${toErrorMessage(caught)}`,
+          t("“{{value0}}” was saved locally, but could not be transferred to the watch: {{value1}}", { value0: result.track.title, value1: toErrorMessage(caught) }),
         );
       }
     }
-    setMessage(
-      `Combined ${result.downloadedCount} track${
-        result.downloadedCount === 1 ? "" : "s"
-      } into “${result.track.title}”.${
-        reused > 0
-          ? ` Reused ${reused} cached track${reused === 1 ? "" : "s"}.`
-          : ""
-      }${
-        skipped > 0
-          ? ` ${skipped} track${skipped === 1 ? "" : "s"} could not be downloaded; retry to fetch only the missing ${skipped === 1 ? "track" : "tracks"}.`
-          : ""
-      }${transferred ? " Transferred it to the watch." : ""}`,
-    );
+    setMessage([
+      t("Combined {{count}} tracks into “{{title}}”.", { count: result.downloadedCount, title: result.track.title }),
+      reused > 0 ? t("Reused {{count}} cached tracks.", { count: reused }) : "",
+      skipped > 0 ? t("{{count}} tracks could not be downloaded. Retry to fetch the missing tracks.", { count: skipped }) : "",
+      transferred ? t("Transferred it to the watch.") : "",
+    ].filter(Boolean).join(" "));
     setCombinedDownloads((current) => {
       const next = { ...current };
       if (skipped > 0) {
@@ -1584,7 +1579,7 @@ export default function App() {
       }));
 
     if (queue.length === 0) {
-      setError("This YouTube Music playlist did not include video URLs.");
+      setError(t("This YouTube Music playlist did not include video URLs."));
       return;
     }
 
@@ -1593,7 +1588,7 @@ export default function App() {
 
   function handleOpenYouTubeMusicSong(song: YouTubeMusicSong) {
     if (!song.videoUrl) {
-      setError("This YouTube Music song did not include a video URL.");
+      setError(t("This YouTube Music song did not include a video URL."));
       return;
     }
 
@@ -1633,7 +1628,7 @@ export default function App() {
       if (result.twoFactorRequired) {
         setTrainingHub2faEmail(result.email ?? trainingHubEmail);
         setTrainingHub2faCode("");
-        setMessage("Enter the verification code we emailed you.");
+        setMessage(t("Enter the verification code we emailed you."));
       } else {
         await finishTrainingHubConnect(
           result.status,
@@ -1678,7 +1673,7 @@ export default function App() {
 
     try {
       await api.resendTrainingHubTwoFactorCode();
-      setMessage("We sent a new verification code to your email.");
+      setMessage(t("We sent a new verification code to your email."));
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -1710,7 +1705,7 @@ export default function App() {
       if (result.twoFactorRequired) {
         setTrainingHub2faEmail(result.email ?? trainingHubStatus?.email ?? null);
         setTrainingHub2faCode("");
-        setMessage("Enter the verification code we emailed you.");
+        setMessage(t("Enter the verification code we emailed you."));
       } else {
         await finishTrainingHubConnect(
           result.status,
@@ -1736,7 +1731,7 @@ export default function App() {
     try {
       setTrainingHubStatus(await api.logoutTrainingHub());
       clearTrainingHubData();
-      setMessage("COROS Training Hub disconnected.");
+      setMessage(t("COROS Training Hub disconnected."));
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -1751,7 +1746,7 @@ export default function App() {
 
     try {
       await refreshTrainingHub();
-      setMessage("COROS Training Hub analytics refreshed.");
+      setMessage(t("COROS Training Hub analytics refreshed."));
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -1785,7 +1780,7 @@ export default function App() {
 
       if (result.saved) {
         setMessage(
-          `Saved ${format?.label ?? "activity"} file to ${result.filePath}.`,
+          t("Saved {{value0}} file to {{value1}}.", { value0: format?.label ?? t("activity"), value1: result.filePath ?? "" }),
         );
       }
     } catch (caught) {
@@ -1817,15 +1812,15 @@ export default function App() {
     try {
       const jobs = await api.enqueueYouTubeDownloads([{ url: trimmedUrl }]);
       if (jobs.length === 0) {
-        setMessage("That download is already downloaded or queued.");
+        setMessage(t("That download is already downloaded or queued."));
         return;
       }
 
       setUrl("");
       setMessage(
         autoTransfer && watchStatus?.connected
-          ? "Download queued. Tracks will auto-transfer when ready."
-          : "Download queued.",
+          ? t("Download queued. Tracks will auto-transfer when ready.")
+          : t("Download queued."),
       );
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -1861,7 +1856,7 @@ export default function App() {
 
     if (typeof api.enqueueYouTubeDownloads !== "function") {
       setError(
-        "Background downloads aren't loaded yet. Fully quit and restart the app — the Electron process needs a restart to pick up the new download queue.",
+        t("Background downloads aren't loaded yet. Fully quit and restart the app — the Electron process needs a restart to pick up the new download queue."),
       );
       return;
     }
@@ -1871,11 +1866,11 @@ export default function App() {
     try {
       const jobs = await api.enqueueYouTubeDownloads(queue);
       if (jobs.length === 0) {
-        setMessage("Those downloads are already downloaded or queued.");
+        setMessage(t("Those downloads are already downloaded or queued."));
         return;
       }
       setMessage(
-        `Queued ${jobs.length} download${jobs.length === 1 ? "" : "s"}. Keep browsing — they run in the background.`,
+        t("Queued {{value0}} download{{value1}}. Keep browsing — they run in the background.", { value0: jobs.length, value1: jobs.length === 1 ? "" : "s" }),
       );
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -1936,7 +1931,7 @@ export default function App() {
     try {
       const result = await api.transferLocalTrack(id);
       setWatchStatus(result.watch);
-      setMessage("Track transferred to the watch.");
+      setMessage(t("Track transferred to the watch."));
       await refreshAll();
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -1977,7 +1972,7 @@ export default function App() {
         const result = await api.transferLocalTrack(track.id);
         setWatchStatus(result.watch);
       }
-      setMessage(`${pending.length} track(s) transferred to the watch.`);
+      setMessage(t("{{value0}} track(s) transferred to the watch.", { value0: pending.length }));
       await refreshAll();
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -1994,7 +1989,7 @@ export default function App() {
     }
 
     if (!watchStatus?.connected) {
-      setError("Connect your watch before transferring tracks.");
+      setError(t("Connect your watch before transferring tracks."));
       return;
     }
 
@@ -2025,8 +2020,8 @@ export default function App() {
       }
       setMessage(
         pending.length === 1
-          ? "Track transferred to the watch."
-          : `${pending.length} selected tracks transferred to the watch.`,
+          ? t("Track transferred to the watch.")
+          : t("{{value0}} selected tracks transferred to the watch.", { value0: pending.length }),
       );
       await refreshAll();
     } catch (caught) {
@@ -2039,7 +2034,7 @@ export default function App() {
   }
 
   async function handleDeleteWatchTrack(track: WatchTrack) {
-    if (!api || !window.confirm(`Delete "${track.name}" from the watch?`)) {
+    if (!api || !window.confirm(t("Delete \"{{value0}}\" from the watch?", { value0: track.name }))) {
       return;
     }
 
@@ -2050,7 +2045,7 @@ export default function App() {
     try {
       await api.deleteWatchTrack(track.relativePath);
       await refreshAll();
-      setMessage("Track deleted from the watch.");
+      setMessage(t("Track deleted from the watch."));
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -2084,8 +2079,8 @@ export default function App() {
       await refreshAll();
       setMessage(
         tracks.length === 1
-          ? "Track deleted from the watch."
-          : `${tracks.length} tracks deleted from the watch.`,
+          ? t("Track deleted from the watch.")
+          : t("{{value0}} tracks deleted from the watch.", { value0: tracks.length }),
       );
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -2095,7 +2090,7 @@ export default function App() {
   }
 
   async function handleDeleteDownload(track: LocalTrack) {
-    if (!api || !window.confirm(`Delete "${track.title}" locally?`)) {
+    if (!api || !window.confirm(t("Delete \"{{value0}}\" locally?", { value0: track.title }))) {
       return;
     }
 
@@ -2105,7 +2100,7 @@ export default function App() {
 
     try {
       setDownloads(await api.deleteDownload(track.id, true));
-      setMessage("Local track deleted.");
+      setMessage(t("Local track deleted."));
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -2141,8 +2136,8 @@ export default function App() {
       setDownloads(nextDownloads);
       setMessage(
         tracks.length === 1
-          ? "Local track deleted."
-          : `${tracks.length} tracks deleted.`,
+          ? t("Local track deleted.")
+          : t("{{value0}} tracks deleted.", { value0: tracks.length }),
       );
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -2251,7 +2246,7 @@ export default function App() {
     setStartupView(view);
     saveStartupView(view);
     setMessage(
-      `Startup view set to ${getPrimaryViewLabel(view)}. It will open on next launch.`,
+      t("Startup view set to {{value0}}. It will open on next launch.", { value0: getPrimaryViewLabel(view) }),
     );
   }
 
@@ -2282,7 +2277,7 @@ export default function App() {
             id="navigation-toggle"
             className="icon-button app-navigation-toggle"
             type="button"
-            aria-label={sidebarOverlayOpen ? "Close navigation" : "Open navigation"}
+            aria-label={sidebarOverlayOpen ? t("Close navigation") : t("Open navigation")}
             aria-controls="primary-sidebar"
             aria-expanded={sidebarOverlayOpen}
             onClick={() => setSidebarOverlayOpen((open) => !open)}
@@ -2297,9 +2292,9 @@ export default function App() {
             <button
               className="icon-button app-toolbar-settings"
               type="button"
-              aria-label="Settings"
+              aria-label={t("Settings")}
               aria-pressed={activeView === "settings"}
-              title="Settings"
+              title={t("Settings")}
               onClick={() => setActiveView("settings")}
             >
               <Settings size={18} aria-hidden="true" />
@@ -2317,22 +2312,21 @@ export default function App() {
                     className="app-dev-view-toggle"
                     type="button"
                     aria-pressed={showDevelopmentTools}
-                    title={showDevelopmentTools ? "Switch to production view" : "Switch to developer view"}
+                    title={showDevelopmentTools ? t("Switch to production view") : t("Switch to developer view")}
                     onClick={handleDevelopmentViewToggle}
                   >
-                    {showDevelopmentTools ? "Dev view" : "Prod view"}
+                    {showDevelopmentTools ? t("Dev view") : t("Prod view")}
                   </button>
                   {showDevelopmentTools ? (
                     <>
                       <button
                         className="app-dev-view-toggle app-dev-update-test"
                         type="button"
-                        title="Preview the update changelog prompt"
+                        title={t("Preview the update changelog prompt")}
                         onClick={showDevUpdatePreview}
                       >
                         <Sparkles size={13} aria-hidden="true" />
-                        Test update
-                      </button>
+                        {t("Test update")} </button>
                       <WatchConnectionSmokeControls
                         api={api}
                         onWatchStatusChange={setWatchStatus}
@@ -2358,8 +2352,8 @@ export default function App() {
             <button
               className="icon-button app-toolbar-refresh"
               type="button"
-              aria-label="Refresh watch and library"
-              title="Refresh watch and library"
+              aria-label={t("Refresh watch and library")}
+              title={t("Refresh watch and library")}
               onClick={handleRefresh}
               disabled={busy === "refresh" || !api}
             >
@@ -2420,8 +2414,7 @@ export default function App() {
                 }}
               >
                 <ArrowLeft size={16} aria-hidden="true" />
-                Back to Accounts &amp; API
-              </button>
+                {t("Back to Accounts & API")} </button>
             ) : null}
             {activeView === "overview" ? (
               <MediaOverviewTab
@@ -2748,15 +2741,16 @@ interface MediaViewProps {
 }
 
 function MediaView({ activeTab, onTabChange, children }: MediaViewProps) {
+  useLanguage();
   const tabs: Array<{ id: MediaTab; label: string; icon: ReactNode }> = [
     {
       id: "library",
-      label: "Library",
+      label: t("Library"),
       icon: <Music size={16} aria-hidden="true" />,
     },
     {
       id: "youtube",
-      label: "YouTube Browser",
+      label: t("YouTube Browser"),
       icon: <Link size={16} aria-hidden="true" />,
     },
     {
@@ -2781,7 +2775,7 @@ function MediaView({ activeTab, onTabChange, children }: MediaViewProps) {
     },
     {
       id: "audiobooks",
-      label: "Audiobooks",
+      label: t("Audiobooks"),
       icon: <BookOpen size={16} aria-hidden="true" />,
     },
   ];
@@ -2789,7 +2783,7 @@ function MediaView({ activeTab, onTabChange, children }: MediaViewProps) {
   return (
     <>
       <div className="media-tabs-shell">
-        <nav className="media-tabs" aria-label="Media sections">
+        <nav className="media-tabs" aria-label={t("Media sections")}>
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -2801,7 +2795,7 @@ function MediaView({ activeTab, onTabChange, children }: MediaViewProps) {
               aria-current={activeTab === tab.id ? "page" : undefined}
             >
               {tab.icon}
-              {tab.label}
+              {t(tab.label)}
             </button>
           ))}
         </nav>
@@ -2817,6 +2811,7 @@ interface StorageRingProps {
 }
 
 function StorageRing({ percent, usedBytes }: StorageRingProps) {
+  useLanguage();
   const [isReady, setIsReady] = useState(false);
   const radius = 54;
   const circumference = 2 * Math.PI * radius;
@@ -2830,7 +2825,7 @@ function StorageRing({ percent, usedBytes }: StorageRingProps) {
   return (
     <div
       className={`storage-ring${isReady ? " is-ready" : ""}`}
-      aria-label={`${percent}% storage used`}
+      aria-label={t("{{value0}}% storage used", { value0: percent })}
     >
       <svg viewBox="0 0 128 128" aria-hidden="true">
         <circle className="storage-ring-track" cx="64" cy="64" r={radius} />
@@ -2846,7 +2841,7 @@ function StorageRing({ percent, usedBytes }: StorageRingProps) {
       </svg>
       <div className="storage-ring-label">
         <strong>{percent}%</strong>
-        <span>{formatBytes(usedBytes)} used</span>
+        <span>{formatBytes(usedBytes)} {t("used")}</span>
       </div>
     </div>
   );
@@ -2861,12 +2856,13 @@ interface MetricTileProps {
 }
 
 function MetricTile({ label, value, detail, icon, onClick }: MetricTileProps) {
+  useLanguage();
   const content = (
     <>
       {icon ? <div className="metric-tile-icon">{icon}</div> : null}
-      <p className="eyebrow">{label}</p>
+      <p className="eyebrow">{t(label)}</p>
       <strong className="metric-value">{value}</strong>
-      <span>{detail}</span>
+      <span>{t(detail)}</span>
     </>
   );
 
@@ -2895,6 +2891,7 @@ const WATCH_FEATURE_ICONS: Record<
 };
 
 function ProductHero({ presentation }: { presentation: WatchPresentation }) {
+  useLanguage();
   const productName = presentation.productName ?? presentation.displayName;
 
   return (
@@ -2903,7 +2900,7 @@ function ProductHero({ presentation }: { presentation: WatchPresentation }) {
         <span className="dashboard-hero-brand">COROS</span>
         <h2 className="dashboard-hero-model">{productName}</h2>
         {presentation.tagline ? (
-          <p className="dashboard-hero-tagline">{presentation.tagline}</p>
+          <p className="dashboard-hero-tagline">{t(presentation.tagline)}</p>
         ) : null}
         {presentation.features && presentation.features.length > 0 ? (
           <ul className="dashboard-hero-features">
@@ -2914,7 +2911,7 @@ function ProductHero({ presentation }: { presentation: WatchPresentation }) {
                   <span className="dashboard-hero-feature-icon">
                     <Icon size={16} />
                   </span>
-                  {feature.label}
+                  {t(feature.label)}
                 </li>
               );
             })}
@@ -2948,8 +2945,9 @@ function RecentTrackList({
   onTransfer,
   onDeleteDownload,
 }: RecentTrackListProps) {
+  useLanguage();
   if (tracks.length === 0) {
-    return <EmptyState title="No recent downloads" />;
+    return <EmptyState title={t("No recent downloads")} />;
   }
 
   return (
@@ -2970,13 +2968,13 @@ function RecentTrackList({
             </span>
           </div>
           <span className={track.transferredAt ? "badge ready" : "badge"}>
-            {track.transferredAt ? "Synced" : "Local"}
+            {track.transferredAt ? t("Synced") : t("Local")}
           </span>
           <div className="row-actions">
             <button
               className="icon-button"
               type="button"
-              title="Transfer to watch"
+              title={t("Transfer to watch")}
               disabled={!watchConnected || busy === `transfer:${track.id}`}
               onClick={() => onTransfer(track.id)}
             >
@@ -2989,7 +2987,7 @@ function RecentTrackList({
             <button
               className="icon-button danger"
               type="button"
-              title="Delete local track"
+              title={t("Delete local track")}
               disabled={busy === `delete-local:${track.id}`}
               onClick={() => onDeleteDownload(track)}
             >
@@ -3037,6 +3035,7 @@ function MediaOverviewTab({
   onOpenLibrary,
   onSelectTrainingActivity,
 }: MediaOverviewTabProps) {
+  useLanguage();
   const greeting = useTimeOfDayGreeting();
   const watchTracks = watchStatus?.tracks ?? [];
   const recentDownloads = useMemo(
@@ -3064,10 +3063,10 @@ function MediaOverviewTab({
   const watchPresentation = getWatchPresentation(watchStatus);
   const statusTitle =
     watchPresentation.state === "disconnected"
-      ? "Not connected"
+      ? t("Not connected")
       : watchPresentation.state === "connected-known"
         ? watchPresentation.displayName
-        : (watchStatus?.name ?? "Connected");
+        : (watchStatus?.name ?? t("Connected"));
   const showProductHero =
     watchPresentation.state === "connected-known" &&
     Boolean(watchPresentation.heroImage);
@@ -3077,7 +3076,7 @@ function MediaOverviewTab({
       <header className="dashboard-welcome dashboard-block">
         <div>
           <p className="dashboard-date">
-            {new Intl.DateTimeFormat(undefined, {
+            {new Intl.DateTimeFormat(getLocale(), {
               weekday: "long",
               month: "long",
               day: "numeric",
@@ -3120,11 +3119,11 @@ function MediaOverviewTab({
                 </span>
               </div>
               <div>
-                <p className="eyebrow">Watch connection</p>
+                <p className="eyebrow">{t("Watch connection")}</p>
                 <h2>{statusTitle}</h2>
                 {!(watchConnected && storage) ? (
                   <p className="dashboard-status-hint">
-                    {watchPresentation.connectHint}
+                    {t(watchPresentation.connectHint)}
                   </p>
                 ) : null}
               </div>
@@ -3133,7 +3132,7 @@ function MediaOverviewTab({
               className={`connection-pill${watchConnected ? " connected" : ""}`}
             >
               <StatusDot connected={watchConnected} />
-              <span>{watchConnected ? "Connected" : "Offline"}</span>
+              <span>{watchConnected ? t("Connected") : t("Offline")}</span>
             </div>
           </div>
 
@@ -3145,11 +3144,11 @@ function MediaOverviewTab({
               />
 
               <p className="storage-ring-caption">
-                {formatBytes(storage.usedBytes)} of{" "}
+                {formatBytes(storage.usedBytes)} {t("of")}{" "}
                 {formatBytes(storage.totalBytes)}
                 {storage.freeBytes !== undefined
-                  ? ` · ${formatBytes(storage.freeBytes)} free`
-                  : ` · ${formatBytes(storage.totalBytes)} capacity`}
+                  ? t(" · {{value0}} free", { value0: formatBytes(storage.freeBytes) })
+                  : t(" · {{value0}} capacity", { value0: formatBytes(storage.totalBytes) })}
               </p>
             </>
           ) : null}
@@ -3158,27 +3157,27 @@ function MediaOverviewTab({
 
       <div className="dashboard-metrics dashboard-block">
         <MetricTile
-          label="Local Library"
+          label={t("Local Library")}
           value={downloads.length}
           detail={downloads.length === 1 ? "track saved" : "tracks saved"}
           icon={<Music size={18} aria-hidden="true" />}
           onClick={onOpenLibrary}
         />
         <MetricTile
-          label="On Watch"
+          label={t("On Watch")}
           value={watchTracks.length}
           detail={watchTracks.length === 1 ? "MP3 on device" : "MP3s on device"}
           icon={<HardDrive size={18} aria-hidden="true" />}
         />
         <MetricTile
-          label="Transferred"
+          label={t("Transferred")}
           value={transferredCount}
           detail={transferredCount === 1 ? "track synced" : "tracks synced"}
           icon={<CheckCircle2 size={18} aria-hidden="true" />}
           onClick={onOpenLibrary}
         />
         <MetricTile
-          label="Library Size"
+          label={t("Library Size")}
           value={formatBytes(librarySize)}
           detail="local storage used"
           icon={<FolderOpen size={18} aria-hidden="true" />}
@@ -3190,10 +3189,9 @@ function MediaOverviewTab({
         <section className="panel dashboard-recent dashboard-block">
           <div className="section-heading">
             <div>
-              <h2>Recent downloads</h2>
+              <h2>{t("Recent downloads")}</h2>
               <p className="dashboard-recent-count">
-                {recentDownloads.length} of {downloads.length} tracks
-              </p>
+                {recentDownloads.length} {t("of")} {downloads.length} {t("tracks")} </p>
             </div>
             {downloads.length > 5 ? (
               <button
@@ -3201,8 +3199,7 @@ function MediaOverviewTab({
                 type="button"
                 onClick={onOpenLibrary}
               >
-                View all
-              </button>
+                {t("View all")} </button>
             ) : null}
           </div>
 
@@ -3268,6 +3265,7 @@ function MediaLibraryTab({
   onDeleteWatchTracks,
   bluetoothMusic,
 }: MediaLibraryTabProps) {
+  useLanguage();
   const watchTracks = watchStatus?.tracks ?? [];
   const [wifiSyncBusy, setWifiSyncBusy] = useState(false);
   const [bleMusicBusy, setBleMusicBusy] = useState(false);
@@ -3441,7 +3439,7 @@ function MediaLibraryTab({
       {lastOutput.length > 0 ? (
         <section className="panel output-panel">
           <div className="section-heading compact">
-            <h2>Last download</h2>
+            <h2>{t("Last download")}</h2>
           </div>
           <pre>{lastOutput.slice(-8).join("\n")}</pre>
         </section>
@@ -3499,6 +3497,7 @@ function YouTubeJobsList({
   emptyMessage = "No downloads yet",
   compact = false,
 }: YouTubeJobsListProps) {
+  useLanguage();
   const hasActiveDownloads = jobs.some((job) => job.status === "downloading");
   const hasFinishedJobs = jobs.some(
     (job) =>
@@ -3530,7 +3529,7 @@ function YouTubeJobsList({
         <div className="youtube-downloads-header">
           <div className="youtube-downloads-title">
             <Download size={16} aria-hidden="true" />
-            <span>Downloads</span>
+            <span>{t("Downloads")}</span>
           </div>
           {hasFinishedJobs && onClearCompletedJobs ? (
             <button
@@ -3538,8 +3537,7 @@ function YouTubeJobsList({
               type="button"
               onClick={onClearCompletedJobs}
             >
-              Clear
-            </button>
+              {t("Clear")} </button>
           ) : null}
         </div>
       ) : null}
@@ -3566,8 +3564,7 @@ function YouTubeJobsList({
                     type="button"
                     onClick={() => onCancelJob(job.id)}
                   >
-                    Cancel
-                  </button>
+                    {t("Cancel")} </button>
                 ) : null}
                 {job.status === "completed" ||
                 job.status === "failed" ||
@@ -3575,7 +3572,7 @@ function YouTubeJobsList({
                   <button
                     className="icon-button compact"
                     type="button"
-                    title="Dismiss"
+                    title={t("Dismiss")}
                     onClick={() => onClearJob(job.id)}
                   >
                     <X size={14} aria-hidden="true" />
@@ -3600,8 +3597,7 @@ function YouTubeJobsList({
                   </span>
                   {isJobStalled(job) ? (
                     <span className="youtube-job-stall">
-                      No recent activity — may still be working
-                    </span>
+                      {t("No recent activity — may still be working")} </span>
                   ) : null}
                   <div className="youtube-job-progress">
                     <div
@@ -3612,13 +3608,12 @@ function YouTubeJobsList({
                   {job.trackProgress !== undefined &&
                   job.entryType === "playlist" ? (
                     <span className="youtube-job-meta">
-                      {Math.round(job.trackProgress)}% of current track
-                    </span>
+                      {Math.round(job.trackProgress)}{t("% of current track")} </span>
                   ) : null}
                 </>
               ) : null}
               {job.status === "failed" && job.error ? (
-                <span className="youtube-job-error">{job.error}</span>
+                <span className="youtube-job-error">{t(job.error)}</span>
               ) : null}
               {job.status === "completed" && job.warning ? (
                 <span className="youtube-job-warning">{job.warning}</span>
@@ -3664,6 +3659,7 @@ function YouTubeBrowserView({
   onClearJob,
   onClearCompletedJobs,
 }: YouTubeBrowserViewProps) {
+  useLanguage();
   const webviewRef = useRef<WebviewElement | null>(null);
   const domReadyRef = useRef(false);
   const lastRecordedUrlRef = useRef("");
@@ -3846,7 +3842,7 @@ function YouTubeBrowserView({
       setLoading(false);
       setLoadError(
         failEvent.errorDescription ||
-          `Failed to load ${failEvent.validatedURL || browserUrl}.`,
+          t("Failed to load {{value0}}.", { value0: failEvent.validatedURL || browserUrl }),
       );
     };
 
@@ -3954,7 +3950,7 @@ function YouTubeBrowserView({
             <button
               className="icon-button"
               type="button"
-              title="Back"
+              title={t("Back")}
               disabled={!canGoBack}
               onClick={() => webviewRef.current?.goBack()}
             >
@@ -3963,7 +3959,7 @@ function YouTubeBrowserView({
             <button
               className="icon-button"
               type="button"
-              title="Forward"
+              title={t("Forward")}
               disabled={!canGoForward}
               onClick={() => webviewRef.current?.goForward()}
             >
@@ -3972,7 +3968,7 @@ function YouTubeBrowserView({
             <button
               className="icon-button"
               type="button"
-              title="YouTube home"
+              title={t("YouTube home")}
               onClick={() => navigateTo(YOUTUBE_HOME_URL)}
             >
               <Home size={17} aria-hidden="true" />
@@ -3984,14 +3980,13 @@ function YouTubeBrowserView({
             <input
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              placeholder="Search YouTube or enter a YouTube URL"
+              placeholder={t("Search YouTube or enter a YouTube URL")}
             />
           </label>
 
           <button className="primary-button" type="submit">
             <Search size={17} aria-hidden="true" />
-            Search
-          </button>
+            {t("Search")} </button>
         </form>
       </section>
 
@@ -4002,8 +3997,8 @@ function YouTubeBrowserView({
               {downloadTarget
                 ? downloadTarget.kind
                 : loading
-                  ? "Loading"
-                  : "Browse"}
+                  ? t("Loading")
+                  : t("Browse")}
             </span>
             <strong title={title || "YouTube"}>{title || "YouTube"}</strong>
           </div>
@@ -4024,7 +4019,7 @@ function YouTubeBrowserView({
             {loadError ? (
               <div className="browser-load-error">
                 <AlertCircle size={24} aria-hidden="true" />
-                <strong>YouTube failed to load</strong>
+                <strong>{t("YouTube failed to load")}</strong>
                 <span>{loadError}</span>
                 <div className="browser-load-error-actions">
                   <button
@@ -4032,15 +4027,13 @@ function YouTubeBrowserView({
                     type="button"
                     onClick={() => void retryYouTubeLoad(false)}
                   >
-                    Retry
-                  </button>
+                    {t("Retry")} </button>
                   <button
                     className="secondary-button"
                     type="button"
                     onClick={() => void retryYouTubeLoad(true)}
                   >
-                    Reset session
-                  </button>
+                    {t("Reset session")} </button>
                 </div>
               </div>
             ) : null}
@@ -4068,7 +4061,7 @@ function YouTubeBrowserView({
           <header className="youtube-downloads-header">
             <div className="youtube-downloads-title">
               <Download size={16} aria-hidden="true" />
-              <span>Downloads</span>
+              <span>{t("Downloads")}</span>
               {activeJobCount > 0 ? (
                 <span className="youtube-downloads-count">
                   {activeJobCount}
@@ -4081,8 +4074,7 @@ function YouTubeBrowserView({
                 type="button"
                 onClick={onClearCompletedJobs}
               >
-                Clear
-              </button>
+                {t("Clear")} </button>
             ) : null}
           </header>
 
@@ -4158,6 +4150,7 @@ function CombinedDownloadButton({
   retryMissingCount,
   onDownload,
 }: CombinedDownloadButtonProps) {
+  useLanguage();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(defaultName);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -4174,14 +4167,14 @@ function CombinedDownloadButton({
   if (busy) {
     const label =
       progress?.phase === "merging"
-        ? "Merging tracks…"
+        ? t("Merging tracks…")
         : progress?.phase === "completed"
-          ? "Finishing…"
+          ? t("Finishing…")
           : progress?.reused
-            ? `Reusing ${progress.index}/${progress.total}`
+            ? t("Reusing {{index}}/{{total}}", { index: progress.index, total: progress.total })
             : progress
-              ? `Downloading ${progress.index}/${progress.total}`
-              : "Preparing…";
+              ? t("Downloading {{index}}/{{total}}", { index: progress.index, total: progress.total })
+              : t("Preparing…");
     return (
       <div
         className="combined-download combined-download--busy"
@@ -4190,7 +4183,7 @@ function CombinedDownloadButton({
       >
         <Loader2 className="spin" size={16} aria-hidden="true" />
         <span className="combined-download-status">
-          <span>{label}</span>
+          <span>{t(label)}</span>
           {progress?.title && progress.phase === "downloading" ? (
             <small>{progress.title}</small>
           ) : null}
@@ -4211,23 +4204,23 @@ function CombinedDownloadButton({
           type="button"
           disabled={items.length === 0}
           onClick={() => setEditing(true)}
-          title="Download every track and merge into one MP3"
+          title={t("Download every track and merge into one MP3")}
         >
           <Combine size={16} aria-hidden="true" />
           {error
-            ? "Retry combined download"
+            ? t("Retry combined download")
             : retryMissingCount
-              ? `Retry ${retryMissingCount} missing track${retryMissingCount === 1 ? "" : "s"}`
-              : "Combined download"}
+              ? t("Retry {{value0}} missing track{{value1}}", { value0: retryMissingCount, value1: retryMissingCount === 1 ? "" : "s" })
+              : t("Combined download")}
         </button>
         {error ? (
           <span
             className="combined-download-error"
             role="alert"
-            title={error}
+            title={t(error)}
           >
             <AlertCircle size={14} aria-hidden="true" />
-            <span>{error}</span>
+            <span>{t(error)}</span>
           </span>
         ) : null}
       </div>
@@ -4257,8 +4250,8 @@ function CombinedDownloadButton({
         className="combined-download-input"
         type="text"
         value={name}
-        placeholder="Name your MP3"
-        aria-label="Combined MP3 name"
+        placeholder={t("Name your MP3")}
+        aria-label={t("Combined MP3 name")}
         onChange={(event) => setName(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
@@ -4269,7 +4262,7 @@ function CombinedDownloadButton({
       <button
         className="icon-button combined-download-confirm"
         type="submit"
-        title="Download combined MP3"
+        title={t("Download combined MP3")}
         disabled={!trimmed}
       >
         <Download size={16} aria-hidden="true" />
@@ -4277,7 +4270,7 @@ function CombinedDownloadButton({
       <button
         className="icon-button combined-download-cancel"
         type="button"
-        title="Cancel"
+        title={t("Cancel")}
         onClick={() => setEditing(false)}
       >
         <X size={16} aria-hidden="true" />
@@ -4319,6 +4312,7 @@ const YOUTUBE_MUSIC_URL = "https://music.youtube.com/";
 // youtubeMusicBrowserService.ts), so this component just renders the page and
 // offers basic navigation.
 function YouTubeMusicLoginBrowser() {
+  useLanguage();
   const webviewRef = useRef<WebviewElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [webviewKey, setWebviewKey] = useState(0);
@@ -4375,7 +4369,7 @@ function YouTubeMusicLoginBrowser() {
           <button
             className="icon-button"
             type="button"
-            title="Reload"
+            title={t("Reload")}
             onClick={() => webviewRef.current?.reload()}
           >
             <RefreshCw size={16} aria-hidden="true" />
@@ -4383,7 +4377,7 @@ function YouTubeMusicLoginBrowser() {
           <button
             className="icon-button"
             type="button"
-            title="YouTube Music home"
+            title={t("YouTube Music home")}
             onClick={() => void webviewRef.current?.loadURL(YOUTUBE_MUSIC_URL)}
           >
             <Home size={16} aria-hidden="true" />
@@ -4403,8 +4397,7 @@ function YouTubeMusicLoginBrowser() {
           ) : (
             <LogOut size={15} aria-hidden="true" />
           )}
-          Reset session
-        </button>
+          {t("Reset session")} </button>
       </div>
       <div className="webview-frame music-login-frame">
         <webview
@@ -4448,6 +4441,7 @@ function YouTubeMusicView({
   onCombinedDownload,
   combinedDownloads,
 }: YouTubeMusicViewProps) {
+  useLanguage();
   // Default to the in-app browser sign-in; the manual header paste stays as a
   // fallback for anyone whose login the embedded browser can't complete.
   const [authMode, setAuthMode] = useState<"browser" | "manual">("browser");
@@ -4516,13 +4510,12 @@ function YouTubeMusicView({
             </div>
             <div className="spotify-account-copy">
               <p className="eyebrow">YouTube Music</p>
-              <h2>Connected</h2>
+              <h2>{t("Connected")}</h2>
               <span>
-                {status.songCount} song{status.songCount === 1 ? "" : "s"} ·{" "}
-                {status.playlistCount} playlist
-                {status.playlistCount === 1 ? "" : "s"}
+                {status.songCount} {t("song")}{status.songCount === 1 ? "" : "s"} ·{" "}
+                {status.playlistCount} {t("playlist")} {status.playlistCount === 1 ? "" : "s"}
                 {status.syncedAt
-                  ? ` · Synced ${formatDate(status.syncedAt)}`
+                  ? t(" · Synced {{value0}}", { value0: formatDate(status.syncedAt) })
                   : ""}
               </span>
             </div>
@@ -4538,8 +4531,7 @@ function YouTubeMusicView({
                 ) : (
                   <RefreshCw size={17} aria-hidden="true" />
                 )}
-                Refresh
-              </button>
+                {t("Refresh")} </button>
               <button
                 className="secondary-button"
                 type="button"
@@ -4551,8 +4543,7 @@ function YouTubeMusicView({
                 ) : (
                   <LogOut size={17} aria-hidden="true" />
                 )}
-                Disconnect
-              </button>
+                {t("Disconnect")} </button>
             </div>
           </div>
         ) : authMode === "browser" ? (
@@ -4563,22 +4554,19 @@ function YouTubeMusicView({
               </div>
               <div className="youtube-music-connect-intro">
                 <p className="eyebrow">YouTube Music</p>
-                <h2>Sign in to connect</h2>
+                <h2>{t("Sign in to connect")}</h2>
                 <span>
-                  Sign in below and CorosLink captures the access it needs
-                  automatically — no DevTools required. Then pull in your
-                  playlists and liked songs.
-                </span>
+                  {t("Sign in below and CorosLink captures the access it needs automatically — no DevTools required. Then pull in your playlists and liked songs.")} </span>
               </div>
               <span className={dependencyReady ? "badge ready" : "badge danger"}>
-                {dependencyReady ? "Ready" : "Missing"}
+                {dependencyReady ? t("Ready") : t("Missing")}
               </span>
             </div>
 
             {dependencyReady ? null : (
               <p className="youtube-music-connect-note">
                 {status?.dependencyError ??
-                  "The bundled Python runtime or ytmusicapi is missing, so sign-in can't be saved. Reinstall CorosLink or run npm run binaries:prepare."}
+                  t("The bundled Python runtime or ytmusicapi is missing, so sign-in can't be saved. Reinstall CorosLink or run npm run binaries:prepare.")}
               </p>
             )}
 
@@ -4586,17 +4574,13 @@ function YouTubeMusicView({
 
             <div className="music-signin-footer">
               <span className="youtube-music-connect-note">
-                Sign-in happens in a private, in-app YouTube Music session. Your
-                credentials stay on this device and are only used to read your
-                library.
-              </span>
+                {t("Sign-in happens in a private, in-app YouTube Music session. Your credentials stay on this device and are only used to read your library.")} </span>
               <button
                 className="text-button"
                 type="button"
                 onClick={() => setAuthMode("manual")}
               >
-                Paste headers manually instead
-              </button>
+                {t("Paste headers manually instead")} </button>
             </div>
           </div>
         ) : (
@@ -4607,14 +4591,12 @@ function YouTubeMusicView({
               </div>
               <div className="youtube-music-connect-intro">
                 <p className="eyebrow">YouTube Music</p>
-                <h2>Connect your library</h2>
+                <h2>{t("Connect your library")}</h2>
                 <span>
-                  Pull in your playlists and liked songs, then download any
-                  track straight to your watch.
-                </span>
+                  {t("Pull in your playlists and liked songs, then download any track straight to your watch.")} </span>
               </div>
               <span className={dependencyReady ? "badge ready" : "badge danger"}>
-                {dependencyReady ? "Ready" : "Missing"}
+                {dependencyReady ? t("Ready") : t("Missing")}
               </span>
             </div>
 
@@ -4624,12 +4606,11 @@ function YouTubeMusicView({
               onClick={() => setAuthMode("browser")}
             >
               <ArrowLeft size={15} aria-hidden="true" />
-              Back to in-app sign in
-            </button>
+              {t("Back to in-app sign in")} </button>
 
             <ol className="youtube-music-steps">
               <li>
-                Open{" "}
+                {t("Open")}{" "}
                 <a
                   href="https://music.youtube.com/library"
                   target="_blank"
@@ -4637,18 +4618,14 @@ function YouTubeMusicView({
                 >
                   music.youtube.com/library
                 </a>{" "}
-                while signed in, then open DevTools (F12) and switch to the{" "}
-                <strong>Network</strong> tab.
-              </li>
+                {t("while signed in, then open DevTools (F12) and switch to the")}{" "}
+                <strong>{t("Network")}</strong> {t("tab.")} </li>
               <li>
-                Filter for <code>/browse</code>, right-click a{" "}
-                <strong>POST</strong> request, and choose{" "}
-                <strong>Copy → Copy as cURL</strong> (or copy the raw request
-                headers).
-              </li>
+                {t("Filter for")} <code>/browse</code>{t(", right-click a")}{" "}
+                <strong>POST</strong> {t("request, and choose")}{" "}
+                <strong>{t("Copy → Copy as cURL")}</strong> {t("(or copy the raw request headers).")} </li>
               <li>
-                Paste it below and connect — a cURL command or a raw header
-                block both work (must include <code>cookie</code> and{" "}
+                {t("Paste it below and connect — a cURL command or a raw header block both work (must include")} <code>cookie</code> {t("and")}{" "}
                 <code>x-goog-authuser</code>).
               </li>
             </ol>
@@ -4656,13 +4633,11 @@ function YouTubeMusicView({
             <figure className="youtube-music-connect-helper">
               <img
                 src="./assets/helper-image/youtube-helper.png"
-                alt="YouTube Music DevTools guide: filter Network tab for browse, then right-click a POST request and choose Copy as cURL"
+                alt={t("YouTube Music DevTools guide: filter Network tab for browse, then right-click a POST request and choose Copy as cURL")}
                 loading="lazy"
               />
               <figcaption>
-                Filter for <code>browse</code>, then copy any POST request as
-                cURL.
-              </figcaption>
+                {t("Filter for")} <code>browse</code>{t(", then copy any POST request as cURL.")} </figcaption>
             </figure>
 
             <form
@@ -4674,7 +4649,7 @@ function YouTubeMusicView({
                   value={headersRaw}
                   onChange={(event) => onHeadersChange(event.target.value)}
                   placeholder={
-                    "Paste a 'Copy as cURL' command from music.youtube.com\n— or the raw request headers.\n\nMust include cookie and x-goog-authuser"
+                    t("Paste a 'Copy as cURL' command from music.youtube.com\n— or the raw request headers.\n\nMust include cookie and x-goog-authuser")
                   }
                   disabled={!dependencyReady || busy === "youtube-music-auth"}
                 />
@@ -4682,7 +4657,7 @@ function YouTubeMusicView({
               <div className="youtube-music-connect-footer">
                 <span className="youtube-music-connect-note">
                   {status?.dependencyError ??
-                    "Headers are stored locally and only used to read your library. They expire when you sign out of YouTube Music in your browser — re-paste them if syncing stops working."}
+                    t("Headers are stored locally and only used to read your library. They expire when you sign out of YouTube Music in your browser — re-paste them if syncing stops working.")}
                   {!status?.ytmusicapiAvailable ? (
                     <code>python3 -m pip install ytmusicapi</code>
                   ) : null}
@@ -4701,8 +4676,7 @@ function YouTubeMusicView({
                   ) : (
                     <LogIn size={17} aria-hidden="true" />
                   )}
-                  Connect with headers
-                </button>
+                  {t("Connect with headers")} </button>
               </div>
             </form>
           </div>
@@ -4713,11 +4687,9 @@ function YouTubeMusicView({
         <section className="panel youtube-music-empty">
           <div className="empty-state">
             <ListMusic size={26} aria-hidden="true" />
-            <strong>Nothing synced yet</strong>
+            <strong>{t("Nothing synced yet")}</strong>
             <span>
-              Sync to pull your YouTube Music playlists and liked songs, then
-              queue any track to your watch.
-            </span>
+              {t("Sync to pull your YouTube Music playlists and liked songs, then queue any track to your watch.")} </span>
             <button
               className="primary-button"
               type="button"
@@ -4729,8 +4701,7 @@ function YouTubeMusicView({
               ) : (
                 <RefreshCw size={17} aria-hidden="true" />
               )}
-              Sync now
-            </button>
+              {t("Sync now")} </button>
           </div>
         </section>
       ) : null}
@@ -4739,7 +4710,7 @@ function YouTubeMusicView({
         <section className="spotify-layout youtube-music-layout">
           <aside className="panel playlist-panel youtube-music-playlist-panel">
             <div className="section-heading compact playlist-heading">
-              <h2>Playlists</h2>
+              <h2>{t("Playlists")}</h2>
               <span className="count-pill">{playlists.length}</span>
             </div>
             <div className="playlist-list">
@@ -4761,8 +4732,7 @@ function YouTubeMusicView({
                   <span className="youtube-music-playlist-copy">
                     <strong>{playlist.title}</strong>
                     <span>
-                      {playlist.songCount} song
-                      {playlist.songCount === 1 ? "" : "s"}
+                      {playlist.songCount} {t("song")} {playlist.songCount === 1 ? "" : "s"}
                     </span>
                   </span>
                 </button>
@@ -4785,7 +4755,7 @@ function YouTubeMusicView({
                 combinedDownloads={combinedDownloads}
               />
             ) : (
-              <EmptyState title="Select a playlist to load its songs" />
+              <EmptyState title={t("Select a playlist to load its songs")} />
             )}
           </section>
         </section>
@@ -4823,6 +4793,7 @@ function YouTubeMusicPlaylistDetail({
   onCombinedDownload,
   combinedDownloads,
 }: YouTubeMusicPlaylistDetailProps) {
+  useLanguage();
   const combinedItems: DownloadQueueItem[] = playlist.songs
     .filter((song) => song.videoUrl)
     .map((song) => ({
@@ -4848,10 +4819,10 @@ function YouTubeMusicPlaylistDetail({
           thumbnailUrl={playlist.thumbnailUrl}
         />
         <div className="youtube-music-playlist-meta">
-          <p className="eyebrow">YouTube Music Playlist</p>
+          <p className="eyebrow">{t("YouTube Music Playlist")}</p>
           <h3>{playlist.title}</h3>
           <span>
-            {playlist.songCount} song{playlist.songCount === 1 ? "" : "s"}
+            {playlist.songCount} {t("song")}{playlist.songCount === 1 ? "" : "s"}
           </span>
           {playlist.description ? <p>{playlist.description}</p> : null}
           {playlist.playlistId ? (
@@ -4862,8 +4833,7 @@ function YouTubeMusicPlaylistDetail({
               rel="noreferrer"
             >
               <YouTubeMusicBrandIcon size={15} />
-              Open in YouTube Music
-              <ExternalLink size={13} aria-hidden="true" />
+              {t("Open in YouTube Music")} <ExternalLink size={13} aria-hidden="true" />
             </a>
           ) : null}
         </div>
@@ -4875,8 +4845,7 @@ function YouTubeMusicPlaylistDetail({
               onClick={() => onQueuePlaylist(playlist)}
             >
               <Download size={17} aria-hidden="true" />
-              Download all
-            </button>
+              {t("Download all")} </button>
             <CombinedDownloadButton
               defaultName={playlist.title}
               items={combinedItems}
@@ -4965,8 +4934,9 @@ function YouTubeMusicSongTable({
   onRetrySong,
   onOpenSong,
 }: YouTubeMusicSongTableProps) {
+  useLanguage();
   if (songs.length === 0) {
-    return <EmptyState title="No songs synced" />;
+    return <EmptyState title={t("No songs synced")} />;
   }
 
   return (
@@ -4975,10 +4945,10 @@ function YouTubeMusicSongTable({
         <thead>
           <tr>
             <th>#</th>
-            <th>Song</th>
-            <th>Album</th>
-            <th>Download</th>
-            <th>Actions</th>
+            <th>{t("Song")}</th>
+            <th>{t("Album")}</th>
+            <th>{t("Download")}</th>
+            <th>{t("Actions")}</th>
           </tr>
         </thead>
         <tbody>
@@ -4997,7 +4967,7 @@ function YouTubeMusicSongTable({
                 ),
             );
             const downloadStatus = downloaded
-              ? { label: "Downloaded", className: "badge ready" }
+              ? { label: t("Downloaded"), className: "badge ready" }
               : youtubeMusicDownloadStatus(job);
             const inProgress =
               !downloaded &&
@@ -5015,18 +4985,18 @@ function YouTubeMusicSongTable({
                     />
                     <span className="youtube-music-track-copy">
                       <strong>{song.songTitle}</strong>
-                      <span>{song.artistName ?? "Unknown Artist"}</span>
+                      <span>{song.artistName ?? t("Unknown Artist")}</span>
                     </span>
                   </div>
                 </td>
-                <td>{song.albumTitle ?? "Unknown Album"}</td>
+                <td>{song.albumTitle ?? t("Unknown Album")}</td>
                 <td>
                   <span className={downloadStatus.className}>
-                    {downloadStatus.label}
+                    {t(downloadStatus.label)}
                   </span>
                   {failed && job?.error ? (
                     <span className="youtube-music-status-error">
-                      {job.error}
+                      {t(job.error)}
                     </span>
                   ) : null}
                 </td>
@@ -5036,8 +5006,8 @@ function YouTubeMusicSongTable({
                       <button
                         className="icon-button"
                         type="button"
-                        title="Retry download"
-                        aria-label={`Retry ${song.songTitle}`}
+                        title={t("Retry download")}
+                        aria-label={t("Retry {{value0}}", { value0: song.songTitle })}
                         disabled={!song.videoUrl}
                         onClick={() => onRetrySong(song, job.id)}
                       >
@@ -5047,7 +5017,7 @@ function YouTubeMusicSongTable({
                       <button
                         className="icon-button"
                         type="button"
-                        title="Downloading"
+                        title={t("Downloading")}
                         disabled
                       >
                         <Loader2
@@ -5060,7 +5030,7 @@ function YouTubeMusicSongTable({
                       <button
                         className="icon-button"
                         type="button"
-                        title="Downloaded"
+                        title={t("Downloaded")}
                         disabled
                       >
                         <CheckCircle2 size={16} aria-hidden="true" />
@@ -5069,8 +5039,8 @@ function YouTubeMusicSongTable({
                       <button
                         className="icon-button"
                         type="button"
-                        title="Queue"
-                        aria-label={`Queue ${song.songTitle}`}
+                        title={t("Queue")}
+                        aria-label={t("Queue {{value0}}", { value0: song.songTitle })}
                         disabled={!song.videoUrl}
                         onClick={() => onQueueSong(song)}
                       >
@@ -5080,8 +5050,8 @@ function YouTubeMusicSongTable({
                     <button
                       className="icon-button"
                       type="button"
-                      title="Open in YouTube"
-                      aria-label={`Open ${song.songTitle} in YouTube`}
+                      title={t("Open in YouTube")}
+                      aria-label={t("Open {{value0}} in YouTube", { value0: song.songTitle })}
                       disabled={!song.videoUrl}
                       onClick={() => onOpenSong(song)}
                     >
@@ -5104,20 +5074,20 @@ function youtubeMusicDownloadStatus(job?: DownloadJob): {
 } {
   switch (job?.status) {
     case "queued":
-      return { label: "Queued", className: "badge" };
+      return { label: t("Queued"), className: "badge" };
     case "downloading":
       return {
         label: `${Math.round(job.progress)}%`,
         className: "badge warning",
       };
     case "completed":
-      return { label: "Downloaded", className: "badge ready" };
+      return { label: t("Downloaded"), className: "badge ready" };
     case "failed":
-      return { label: "Failed", className: "badge danger" };
+      return { label: t("Failed"), className: "badge danger" };
     case "cancelled":
-      return { label: "Cancelled", className: "badge" };
+      return { label: t("Cancelled"), className: "badge" };
     default:
-      return { label: "Not queued", className: "badge" };
+      return { label: t("Not queued"), className: "badge" };
   }
 }
 
@@ -5153,6 +5123,7 @@ function SpotifySyncView({
   onCombinedDownload,
   combinedDownloads,
 }: SpotifySyncViewProps) {
+  useLanguage();
   const api = window.corosLink;
   const [jobs, setJobs] = useState<DownloadJob[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -5259,10 +5230,10 @@ function SpotifySyncView({
             </div>
             <div className="spotify-account-copy">
               <p className="eyebrow">Spotify</p>
-              <h2>{status.displayName ?? "Connected"}</h2>
+              <h2>{status.displayName ?? t("Connected")}</h2>
               <span>
-                {playlists.length} playlist{playlists.length === 1 ? "" : "s"}{" "}
-                available
+                {playlists.length} {t("playlist")}{playlists.length === 1 ? "" : "s"}{" "}
+                {t("available")}
               </span>
             </div>
             <div className="topbar-actions">
@@ -5277,8 +5248,7 @@ function SpotifySyncView({
                 ) : (
                   <RefreshCw size={17} aria-hidden="true" />
                 )}
-                Refresh
-              </button>
+                {t("Refresh")} </button>
               <button
                 className="secondary-button"
                 type="button"
@@ -5286,8 +5256,8 @@ function SpotifySyncView({
                 onClick={onToggleFollowed}
                 title={
                   status.followedPlaylistsUnlocked
-                    ? "Stop reading playlists you only follow"
-                    : "Read playlists you follow but don't own. Signs in once more as the Spotify desktop app, which Spotify doesn't officially support for other apps and may block."
+                    ? t("Stop reading playlists you only follow")
+                    : t("Read playlists you follow but don't own. Signs in once more as the Spotify desktop app, which Spotify doesn't officially support for other apps and may block.")
                 }
               >
                 {busy === "spotify-followed" ? (
@@ -5298,8 +5268,8 @@ function SpotifySyncView({
                   <LockOpen size={17} aria-hidden="true" />
                 )}
                 {status.followedPlaylistsUnlocked
-                  ? "Lock followed playlists"
-                  : "Unlock followed playlists"}
+                  ? t("Lock followed playlists")
+                  : t("Unlock followed playlists")}
               </button>
               <button
                 className="secondary-button"
@@ -5312,8 +5282,7 @@ function SpotifySyncView({
                 ) : (
                   <LogOut size={17} aria-hidden="true" />
                 )}
-                Disconnect
-              </button>
+                {t("Disconnect")} </button>
             </div>
           </div>
         ) : (
@@ -5327,13 +5296,11 @@ function SpotifySyncView({
               </div>
               <div className="spotify-account-copy">
                 <p className="eyebrow">Spotify</p>
-                <h2>Connect Spotify</h2>
+                <h2>{t("Connect Spotify")}</h2>
                 <span>
-                  Create a free Spotify Developer app, then add its Client
-                  ID here.
-                </span>
+                  {t("Create a free Spotify Developer app, then add its Client ID here.")} </span>
               </div>
-              <span className="badge">Not connected</span>
+              <span className="badge">{t("Not connected")}</span>
             </div>
 
             <div className="spotify-connect-layout">
@@ -5342,18 +5309,16 @@ function SpotifySyncView({
                 aria-labelledby="spotify-setup-title"
               >
                 <div className="spotify-connect-guide-heading">
-                  <h3 id="spotify-setup-title">Set up your Spotify app</h3>
-                  <p>Complete these steps in the Spotify Developer Dashboard.</p>
+                  <h3 id="spotify-setup-title">{t("Set up your Spotify app")}</h3>
+                  <p>{t("Complete these steps in the Spotify Developer Dashboard.")}</p>
                 </div>
 
                 <ol className="spotify-connect-steps">
                   <li>
                     <div className="spotify-connect-step-copy">
-                      <strong>Create an app</strong>
+                      <strong>{t("Create an app")}</strong>
                       <span>
-                        Open the dashboard, select Create app, then add any app
-                        name and description.
-                      </span>
+                        {t("Open the dashboard, select Create app, then add any app name and description.")} </span>
                     </div>
                     <a
                       className="spotify-dashboard-link"
@@ -5362,25 +5327,20 @@ function SpotifySyncView({
                       rel="noreferrer"
                     >
                       <ExternalLink size={15} aria-hidden="true" />
-                      Open dashboard
-                    </a>
+                      {t("Open dashboard")} </a>
                   </li>
                   <li>
                     <div className="spotify-connect-step-copy">
-                      <strong>Add the Redirect URI</strong>
+                      <strong>{t("Add the Redirect URI")}</strong>
                       <span>
-                        Copy the URI from the credentials panel, add it under
-                        Redirect URIs, select Web API, then save the app.
-                      </span>
+                        {t("Copy the URI from the credentials panel, add it under Redirect URIs, select Web API, then save the app.")} </span>
                     </div>
                   </li>
                   <li>
                     <div className="spotify-connect-step-copy">
-                      <strong>Paste your Client ID</strong>
+                      <strong>{t("Paste your Client ID")}</strong>
                       <span>
-                        Open Settings in the new app, copy the Client ID, then
-                        save and log in here. No Client secret is needed.
-                      </span>
+                        {t("Open Settings in the new app, copy the Client ID, then save and log in here. No Client secret is needed.")} </span>
                     </div>
                   </li>
                 </ol>
@@ -5388,12 +5348,12 @@ function SpotifySyncView({
 
               <form className="spotify-connect-form" onSubmit={onConfigSubmit}>
                 <div className="spotify-credentials-heading">
-                  <h3>Add your Client ID</h3>
-                  <span>Use the values from your Spotify app Settings page.</span>
+                  <h3>{t("Add your Client ID")}</h3>
+                  <span>{t("Use the values from your Spotify app Settings page.")}</span>
                 </div>
 
                 <label className="field spotify-redirect-field">
-                  <span>Redirect URI</span>
+                  <span>{t("Redirect URI")}</span>
                   <div className="spotify-redirect-row">
                     <input value={config.redirectUri} readOnly />
                     <button
@@ -5403,20 +5363,19 @@ function SpotifySyncView({
                       onClick={() => void handleCopyRedirectUri()}
                     >
                       <Copy size={17} aria-hidden="true" />
-                      Copy URI
-                    </button>
+                      {t("Copy URI")} </button>
                   </div>
-                  <small>Add this exact address to your Spotify app.</small>
+                  <small>{t("Add this exact address to your Spotify app.")}</small>
                 </label>
 
                 <label className="field">
-                  <span>Client ID</span>
+                  <span>{t("Client ID")}</span>
                   <input
                     value={config.clientId}
                     onChange={(event) =>
                       onConfigChange({ ...config, clientId: event.target.value })
                     }
-                    placeholder="Spotify app client ID"
+                    placeholder={t("Spotify app client ID")}
                     disabled={busy === "spotify-config"}
                     autoComplete="off"
                   />
@@ -5424,16 +5383,14 @@ function SpotifySyncView({
 
                 <div className="settings-actions spotify-connect-actions">
                   <span className="spotify-connect-action-hint">
-                    Save your Client ID before logging in.
-                  </span>
+                    {t("Save your Client ID before logging in.")} </span>
                   <button
                     className="secondary-button"
                     type="submit"
                     disabled={busy === "spotify-config"}
                   >
                     <Settings size={17} aria-hidden="true" />
-                    Save Client ID
-                  </button>
+                    {t("Save Client ID")} </button>
                   <button
                     className="primary-button"
                     type="button"
@@ -5445,16 +5402,11 @@ function SpotifySyncView({
                     ) : (
                       <LogIn size={17} aria-hidden="true" />
                     )}
-                    Log in to Spotify
-                  </button>
+                    {t("Log in to Spotify")} </button>
                 </div>
 
                 <p className="spotify-connect-note">
-                  Your Client ID and sign-in stay on this device and are only
-                  used for Spotify.
-                  CorosLink reads playlists you own or collaborate on, then
-                  matches tracks through YouTube search.
-                </p>
+                  {t("Your Client ID and sign-in stay on this device and are only used for Spotify. CorosLink reads playlists you own or collaborate on, then matches tracks through YouTube search.")} </p>
               </form>
             </div>
           </div>
@@ -5465,12 +5417,12 @@ function SpotifySyncView({
         <section className="spotify-layout spotify-library-layout">
           <aside className="panel playlist-panel spotify-playlist-panel">
             <div className="section-heading compact playlist-heading">
-              <h2>Playlists</h2>
+              <h2>{t("Playlists")}</h2>
               <span className="count-pill">{playlists.length}</span>
             </div>
             <div className="playlist-list">
               {playlists.length === 0 ? (
-                <EmptyState title="No playlists loaded" />
+                <EmptyState title={t("No playlists loaded")} />
               ) : (
                 playlists.map((playlist) => (
                   <button
@@ -5491,9 +5443,8 @@ function SpotifySyncView({
                     <span className="spotify-playlist-copy">
                       <strong>{playlist.name}</strong>
                       <span>
-                        {playlist.totalTracks} track
-                        {playlist.totalTracks === 1 ? "" : "s"} ·{" "}
-                        {playlist.syncable ? "Ready" : "Followed · unlock to sync"}
+                        {playlist.totalTracks} {t("track")} {playlist.totalTracks === 1 ? "" : "s"} ·{" "}
+                        {playlist.syncable ? t("Ready") : t("Followed · unlock to sync")}
                       </span>
                     </span>
                   </button>
@@ -5520,7 +5471,7 @@ function SpotifySyncView({
                 combinedDownloads={combinedDownloads}
               />
             ) : (
-              <EmptyState title="Select a playlist to load its tracks" />
+              <EmptyState title={t("Select a playlist to load its tracks")} />
             )}
           </section>
         </section>
@@ -5560,6 +5511,7 @@ function SpotifyPlaylistDetail({
   onCombinedDownload,
   combinedDownloads,
 }: SpotifyPlaylistDetailProps) {
+  useLanguage();
   const combinedItems: DownloadQueueItem[] = tracks.map(spotifyDownloadTarget);
   const combinedId = `spotify:${playlist.id}`;
   const combinedState = combinedDownloads[combinedId];
@@ -5580,11 +5532,11 @@ function SpotifyPlaylistDetail({
           artworkUrl={playlist.artworkUrl}
         />
         <div className="spotify-playlist-meta">
-          <p className="eyebrow">Spotify Playlist</p>
+          <p className="eyebrow">{t("Spotify Playlist")}</p>
           <h3>{playlist.name}</h3>
           <span>
             {playlist.ownerName ? `${playlist.ownerName} · ` : ""}
-            {playlist.totalTracks} track{playlist.totalTracks === 1 ? "" : "s"}
+            {playlist.totalTracks} {t("track")}{playlist.totalTracks === 1 ? "" : "s"}
           </span>
           {playlist.description ? <p>{playlist.description}</p> : null}
           {playlist.url ? (
@@ -5595,8 +5547,7 @@ function SpotifyPlaylistDetail({
               rel="noreferrer"
             >
               <SpotifyBrandIcon size={15} />
-              Open in Spotify
-              <ExternalLink size={13} aria-hidden="true" />
+              {t("Open in Spotify")} <ExternalLink size={13} aria-hidden="true" />
             </a>
           ) : null}
         </div>
@@ -5608,8 +5559,7 @@ function SpotifyPlaylistDetail({
               onClick={onQueueAll}
             >
               <Download size={17} aria-hidden="true" />
-              Download all
-            </button>
+              {t("Download all")} </button>
             <CombinedDownloadButton
               defaultName={playlist.name}
               items={combinedItems}
@@ -5628,20 +5578,20 @@ function SpotifyPlaylistDetail({
       {loading ? (
         <div className="spotify-track-loading">
           <Loader2 className="spin" size={24} aria-hidden="true" />
-          <strong>Loading playlist</strong>
+          <strong>{t("Loading playlist")}</strong>
         </div>
       ) : tracks.length === 0 ? (
-        <EmptyState title="No tracks in this playlist" />
+        <EmptyState title={t("No tracks in this playlist")} />
       ) : (
         <div className="table-shell">
           <table>
             <thead>
               <tr>
                 <th>#</th>
-                <th>Title</th>
-                <th>Album</th>
-                <th>Duration</th>
-                <th>Download</th>
+                <th>{t("Title")}</th>
+                <th>{t("Album")}</th>
+                <th>{t("Duration")}</th>
+                <th>{t("Download")}</th>
               </tr>
             </thead>
             <tbody>
@@ -5653,7 +5603,7 @@ function SpotifyPlaylistDetail({
                 ) ||
                   downloadedTitleKeys.has(downloadTitleKey(target.fileBaseName));
                 const downloadStatus = downloaded
-                  ? { label: "Downloaded", className: "badge ready" }
+                  ? { label: t("Downloaded"), className: "badge ready" }
                   : youtubeMusicDownloadStatus(job);
                 const inProgress =
                   !downloaded &&
@@ -5680,14 +5630,14 @@ function SpotifyPlaylistDetail({
                     <td>
                       <div className="table-actions">
                         <span className={downloadStatus.className}>
-                          {downloadStatus.label}
+                          {t(downloadStatus.label)}
                         </span>
                         {failed && job ? (
                           <button
                             className="icon-button"
                             type="button"
-                            title="Retry download"
-                            aria-label={`Retry ${track.trackName}`}
+                            title={t("Retry download")}
+                            aria-label={t("Retry {{value0}}", { value0: track.trackName })}
                             onClick={() => onRetryTrack(track, job.id)}
                           >
                             <RefreshCw size={16} aria-hidden="true" />
@@ -5696,7 +5646,7 @@ function SpotifyPlaylistDetail({
                           <button
                             className="icon-button"
                             type="button"
-                            title="Downloading"
+                            title={t("Downloading")}
                             disabled
                           >
                             <Loader2
@@ -5709,7 +5659,7 @@ function SpotifyPlaylistDetail({
                           <button
                             className="icon-button"
                             type="button"
-                            title="Downloaded"
+                            title={t("Downloaded")}
                             disabled
                           >
                             <CheckCircle2 size={16} aria-hidden="true" />
@@ -5718,8 +5668,8 @@ function SpotifyPlaylistDetail({
                           <button
                             className="icon-button"
                             type="button"
-                            title="Download"
-                            aria-label={`Download ${track.trackName}`}
+                            title={t("Download")}
+                            aria-label={t("Download {{value0}}", { value0: track.trackName })}
                             onClick={() => onQueueTrack(track)}
                           >
                             <Download size={16} aria-hidden="true" />
@@ -5795,6 +5745,7 @@ function WatchView({
   busy,
   onDeleteWatchTrack,
 }: WatchViewProps) {
+  useLanguage();
   const watchPresentation = getWatchPresentation(watchStatus);
   const connected = Boolean(watchStatus?.connected);
   const tracks = watchStatus?.tracks ?? [];
@@ -5802,50 +5753,49 @@ function WatchView({
     watchPresentation.state === "connected-known"
       ? watchPresentation.displayName
       : connected
-        ? (watchStatus?.name ?? "COROS Watch")
-        : "No watch connected";
+        ? (watchStatus?.name ?? t("COROS Watch"))
+        : t("No watch connected");
 
   return (
     <div className="stack">
       <section className="panel">
         <div className="storage-row">
           <div>
-            <p className="eyebrow">Storage</p>
+            <p className="eyebrow">{t("Storage")}</p>
             <h2>{storageTitle}</h2>
           </div>
           {connected && storage ? (
             <div className="storage-numbers">
               <strong>{formatBytes(storage.usedBytes)}</strong>
-              <span>of {formatBytes(storage.totalBytes)}</span>
+              <span>{t("of")} {formatBytes(storage.totalBytes)}</span>
             </div>
           ) : null}
         </div>
         {connected && storage ? (
           <>
-            <div className="storage-bar" aria-label="Watch storage usage">
+            <div className="storage-bar" aria-label={t("Watch storage usage")}>
               <span style={{ width: `${storage.percent}%` }} />
             </div>
             <div className="storage-meta">
-              <span>{storage.percent}% used</span>
+              <span>{storage.percent}{t("% used")}</span>
               <span>
                 {storage.freeBytes !== undefined
-                  ? `${formatBytes(storage.freeBytes)} free`
-                  : storage.capacityLabel}
+                  ? t("{{value0}} free", { value0: formatBytes(storage.freeBytes) })
+                  : t(storage.capacityLabel)}
               </span>
             </div>
           </>
         ) : (
           <p className="connect-hint">
-            Connect your COROS watch via USB to sync music
-          </p>
+            {t("Connect your COROS watch via USB to sync music")} </p>
         )}
       </section>
 
       <section className="panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Watch Music Folder</p>
-            <h2>{tracks.length} MP3 file(s)</h2>
+            <p className="eyebrow">{t("Watch Music Folder")}</p>
+            <h2>{tracks.length} {t("MP3 file(s)")}</h2>
           </div>
           <FolderOpen size={22} aria-hidden="true" />
         </div>
@@ -5879,12 +5829,13 @@ function WatchTrackTable({
   connected,
   onDeleteWatchTrack,
 }: WatchTrackTableProps) {
+  useLanguage();
   if (!connected) {
-    return <EmptyState title="Connect a COROS watch" />;
+    return <EmptyState title={t("Connect a COROS watch")} />;
   }
 
   if (tracks.length === 0) {
-    return <EmptyState title="No MP3 files on the watch" />;
+    return <EmptyState title={t("No MP3 files on the watch")} />;
   }
 
   return (
@@ -5892,9 +5843,9 @@ function WatchTrackTable({
       <table>
         <thead>
           <tr>
-            <th>Track</th>
-            <th>Folder Path</th>
-            <th aria-label="Actions" />
+            <th>{t("Track")}</th>
+            <th>{t("Folder Path")}</th>
+            <th aria-label={t("Actions")} />
           </tr>
         </thead>
         <tbody>
@@ -5909,7 +5860,7 @@ function WatchTrackTable({
                   <button
                     className="icon-button danger"
                     type="button"
-                    title="Delete from watch"
+                    title={t("Delete from watch")}
                     disabled={busy === `delete-watch:${track.relativePath}`}
                     onClick={() => onDeleteWatchTrack(track)}
                   >
@@ -6002,12 +5953,13 @@ function Toaster({
   toasts: ToastItem[];
   onDismiss: (id: number) => void;
 }) {
+  useLanguage();
   if (toasts.length === 0) {
     return null;
   }
 
   return (
-    <div className="toast-stack" role="region" aria-label="Notifications">
+    <div className="toast-stack" role="region" aria-label={t("Notifications")}>
       {toasts.map((toast) => (
         <ToastCard key={toast.id} toast={toast} onDismiss={onDismiss} />
       ))}
@@ -6022,6 +5974,7 @@ function ToastCard({
   toast: ToastItem;
   onDismiss: (id: number) => void;
 }) {
+  useLanguage();
   return (
     <div
       className={`toast toast--${toast.kind}`}
@@ -6034,11 +5987,11 @@ function ToastCard({
           <CheckCircle2 size={18} />
         )}
       </span>
-      <span className="toast-text">{toast.text}</span>
+      <span className="toast-text">{t(toast.text)}</span>
       <button
         className="toast-close"
         type="button"
-        aria-label="Dismiss notification"
+        aria-label={t("Dismiss notification")}
         onClick={() => onDismiss(toast.id)}
       >
         <X size={15} aria-hidden="true" />
@@ -6053,22 +6006,24 @@ function ToastCard({
 }
 
 function BridgeMissing() {
+  useLanguage();
   return (
     <section className="panel">
       <div className="empty-state">
         <AlertCircle size={26} aria-hidden="true" />
-        <strong>Electron bridge unavailable</strong>
-        <span>Run the app with npm run dev or npm start.</span>
+        <strong>{t("Electron bridge unavailable")}</strong>
+        <span>{t("Run the app with npm run dev or npm start.")}</span>
       </div>
     </section>
   );
 }
 
 function EmptyState({ title }: { title: string }) {
+  useLanguage();
   return (
     <div className="empty-state">
       <Music size={24} aria-hidden="true" />
-      <strong>{title}</strong>
+      <strong>{t(title)}</strong>
     </div>
   );
 }
@@ -6082,6 +6037,7 @@ function ApplePodcastsView({
   onMessage: (message: string) => void;
   onError: (message: string) => void;
 }) {
+  useLanguage();
   const api = window.corosLink;
   const [input, setInput] = useState("");
   const [results, setResults] = useState<ApplePodcastShow[]>([]);
@@ -6239,25 +6195,25 @@ function ApplePodcastsView({
   return (
     <div className="stack stack-fill apple-podcast-view">
       <div className="apple-podcast-workspace">
-        <aside className="panel apple-podcast-browser-panel" aria-label="Podcast search">
+        <aside className="panel apple-podcast-browser-panel" aria-label={t("Podcast search")}>
           <div className="apple-podcast-browser-heading">
             <span className="apple-podcast-mark" aria-hidden="true">
               <Podcast size={20} />
             </span>
             <div>
               <p className="eyebrow">Apple Podcasts</p>
-              <h2>Find a show</h2>
+              <h2>{t("Find a show")}</h2>
             </div>
           </div>
 
           <form className="apple-podcast-search-form" onSubmit={handleSubmit}>
             <label className="apple-podcast-search-field">
-              <span>Search or paste a show link</span>
+              <span>{t("Search or paste a show link")}</span>
               <input
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
-                placeholder="Search Apple Podcasts"
-                aria-label="Search Apple Podcasts or paste a show link"
+                placeholder={t("Search Apple Podcasts")}
+                aria-label={t("Search Apple Podcasts or paste a show link")}
                 disabled={busy !== null}
               />
             </label>
@@ -6271,14 +6227,14 @@ function ApplePodcastsView({
               ) : (
                 <Search size={17} aria-hidden="true" />
               )}
-              {looksLikeApplePodcastInput(input) ? "Open" : "Search"}
+              {looksLikeApplePodcastInput(input) ? t("Open") : t("Search")}
             </button>
           </form>
 
           {results.length > 0 ? (
             <div className="apple-podcast-result-nav">
               <div className="apple-podcast-result-nav-heading">
-                <span>Shows</span>
+                <span>{t("Shows")}</span>
                 <span className="count-pill">{results.length}</span>
               </div>
               <div className="apple-podcast-results">
@@ -6309,7 +6265,7 @@ function ApplePodcastsView({
                       <span className="apple-podcast-result-copy">
                         <strong>{result.title}</strong>
                         <span>{result.authorName ?? "Apple Podcasts"}</span>
-                        <small>{result.genre ?? "Public podcast"}</small>
+                        <small>{result.genre ?? t("Public podcast")}</small>
                       </span>
                       <ArrowRight size={16} aria-hidden="true" />
                     </button>
@@ -6320,14 +6276,13 @@ function ApplePodcastsView({
           ) : (
             <div className="apple-podcast-browser-empty">
               <Podcast size={20} aria-hidden="true" />
-              <strong>Browse public shows</strong>
-              <span>Search by name or paste a link from Apple Podcasts.</span>
+              <strong>{t("Browse public shows")}</strong>
+              <span>{t("Search by name or paste a link from Apple Podcasts.")}</span>
             </div>
           )}
 
           <p className="apple-podcast-search-note">
-            Only public RSS episodes can be downloaded.
-          </p>
+            {t("Only public RSS episodes can be downloaded.")} </p>
         </aside>
 
         <section
@@ -6352,11 +6307,10 @@ function ApplePodcastsView({
                   artworkUrl={show.artworkUrl}
                 />
                 <div className="apple-podcast-show-meta">
-                  <p className="eyebrow">Selected show</p>
+                  <p className="eyebrow">{t("Selected show")}</p>
                   <h3>{show.title}</h3>
                   <span>
-                    {show.authorName ?? "Podcast"} · {show.totalEpisodeCount} public
-                    episode{show.totalEpisodeCount === 1 ? "" : "s"}
+                    {show.authorName ?? t("Podcast")} · {show.totalEpisodeCount} {t("public episode")}{show.totalEpisodeCount === 1 ? "" : "s"}
                   </span>
                   {show.description ? <p>{show.description}</p> : null}
                   {show.applePodcastsUrl ? (
@@ -6367,8 +6321,7 @@ function ApplePodcastsView({
                       rel="noreferrer"
                     >
                       <Podcast size={15} aria-hidden="true" />
-                      Open in Apple Podcasts
-                      <ExternalLink size={13} aria-hidden="true" />
+                      {t("Open in Apple Podcasts")} <ExternalLink size={13} aria-hidden="true" />
                     </a>
                   ) : null}
                 </div>
@@ -6378,10 +6331,10 @@ function ApplePodcastsView({
                 <table>
                   <thead>
                     <tr>
-                      <th>Episode</th>
-                      <th>Published</th>
-                      <th>Duration</th>
-                      <th>Download</th>
+                      <th>{t("Episode")}</th>
+                      <th>{t("Published")}</th>
+                      <th>{t("Duration")}</th>
+                      <th>{t("Download")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -6389,7 +6342,7 @@ function ApplePodcastsView({
                       const job = jobByUrl.get(episode.audioUrl);
                       const downloaded = downloadedSourceUrls.has(episode.audioUrl);
                       const status = downloaded
-                        ? { label: "Downloaded", className: "badge ready" }
+                        ? { label: t("Downloaded"), className: "badge ready" }
                         : youtubeMusicDownloadStatus(job);
                       const inProgress =
                         !downloaded &&
@@ -6408,10 +6361,10 @@ function ApplePodcastsView({
                                 <strong>{episode.title}</strong>
                                 <span>
                                   {episode.seasonNumber
-                                    ? `Season ${episode.seasonNumber}`
-                                    : "Podcast episode"}
+                                    ? t("Season {{value0}}", { value0: episode.seasonNumber })
+                                    : t("Podcast episode")}
                                   {episode.episodeNumber
-                                    ? ` · Episode ${episode.episodeNumber}`
+                                    ? t(" · Episode {{value0}}", { value0: episode.episodeNumber })
                                     : ""}
                                 </span>
                               </span>
@@ -6427,13 +6380,13 @@ function ApplePodcastsView({
                           </td>
                           <td>
                             <div className="table-actions">
-                              <span className={status.className}>{status.label}</span>
+                              <span className={status.className}>{t(status.label)}</span>
                               {failed && job ? (
                                 <button
                                   className="icon-button"
                                   type="button"
-                                  title="Retry download"
-                                  aria-label={`Retry ${episode.title}`}
+                                  title={t("Retry download")}
+                                  aria-label={t("Retry {{value0}}", { value0: episode.title })}
                                   onClick={() =>
                                     void handleRetryEpisode(episode, job.id)
                                   }
@@ -6444,7 +6397,7 @@ function ApplePodcastsView({
                                 <button
                                   className="icon-button"
                                   type="button"
-                                  title="Downloading"
+                                  title={t("Downloading")}
                                   disabled
                                 >
                                   <Loader2 className="spin" size={16} aria-hidden="true" />
@@ -6453,7 +6406,7 @@ function ApplePodcastsView({
                                 <button
                                   className="icon-button"
                                   type="button"
-                                  title="Downloaded"
+                                  title={t("Downloaded")}
                                   disabled
                                 >
                                   <CheckCircle2 size={16} aria-hidden="true" />
@@ -6462,8 +6415,8 @@ function ApplePodcastsView({
                                 <button
                                   className="icon-button"
                                   type="button"
-                                  title="Download"
-                                  aria-label={`Download ${episode.title}`}
+                                  title={t("Download")}
+                                  aria-label={t("Download {{value0}}", { value0: episode.title })}
                                   onClick={() => void handleQueueEpisode(episode)}
                                 >
                                   <Download size={16} aria-hidden="true" />
@@ -6478,9 +6431,8 @@ function ApplePodcastsView({
                 </table>
                 <div className="apple-podcast-load-more">
                   <span>
-                    Showing {show.episodes.length} of {show.totalEpisodeCount}
-                    {" "}public episodes
-                  </span>
+                    {t("Showing")} {show.episodes.length} {t("of")} {show.totalEpisodeCount}
+                    {" "}{t("public episodes")} </span>
                   {show.hasMoreEpisodes ? (
                     <button
                       className="secondary-button"
@@ -6493,10 +6445,9 @@ function ApplePodcastsView({
                       ) : (
                         <ArrowRight size={16} aria-hidden="true" />
                       )}
-                      Load 50 more
-                    </button>
+                      {t("Load 50 more")} </button>
                   ) : (
-                    <span className="apple-podcast-all-loaded">All episodes loaded</span>
+                    <span className="apple-podcast-all-loaded">{t("All episodes loaded")}</span>
                   )}
                 </div>
               </div>
@@ -6507,8 +6458,8 @@ function ApplePodcastsView({
                 <Podcast size={28} />
               </span>
               <div>
-                <h2>Select a podcast</h2>
-                <p>Search for a show on the left, then browse its public episodes here.</p>
+                <h2>{t("Select a podcast")}</h2>
+                <p>{t("Search for a show on the left, then browse its public episodes here.")}</p>
               </div>
             </div>
           )}
@@ -6519,8 +6470,9 @@ function ApplePodcastsView({
 }
 
 function ApplePodcastDetailSkeleton() {
+  useLanguage();
   return (
-    <div className="apple-podcast-detail-skeleton" aria-label="Loading podcast">
+    <div className="apple-podcast-detail-skeleton" aria-label={t("Loading podcast")}>
       <div className="apple-podcast-skeleton-header">
         <span className="apple-podcast-skeleton-art" />
         <span className="apple-podcast-skeleton-copy">
@@ -6569,6 +6521,7 @@ const APPLE_MUSIC_HOME_URL = "https://music.apple.com/";
 // soon as the user signs in (see appleMusicBrowserService.ts), so this
 // component only has to render the page and offer basic navigation.
 function AppleMusicLoginBrowser() {
+  useLanguage();
   const webviewRef = useRef<WebviewElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [webviewKey, setWebviewKey] = useState(0);
@@ -6625,7 +6578,7 @@ function AppleMusicLoginBrowser() {
           <button
             className="icon-button"
             type="button"
-            title="Reload"
+            title={t("Reload")}
             onClick={() => webviewRef.current?.reload()}
           >
             <RefreshCw size={16} aria-hidden="true" />
@@ -6633,7 +6586,7 @@ function AppleMusicLoginBrowser() {
           <button
             className="icon-button"
             type="button"
-            title="Apple Music home"
+            title={t("Apple Music home")}
             onClick={() => void webviewRef.current?.loadURL(APPLE_MUSIC_HOME_URL)}
           >
             <Home size={16} aria-hidden="true" />
@@ -6653,8 +6606,7 @@ function AppleMusicLoginBrowser() {
           ) : (
             <LogOut size={15} aria-hidden="true" />
           )}
-          Reset session
-        </button>
+          {t("Reset session")} </button>
       </div>
       <div className="webview-frame apple-music-login-frame">
         <webview
@@ -6695,6 +6647,7 @@ function AppleMusicView({
   ) => void;
   combinedDownloads: CombinedDownloadMap;
 }) {
+  useLanguage();
   const api = window.corosLink;
   const [status, setStatus] = useState<AppleMusicStatus | null>(null);
   const [headersRaw, setHeadersRaw] = useState("");
@@ -6805,8 +6758,8 @@ function AppleMusicView({
       setStatus(next);
       setNotice(
         next.hasUserToken
-          ? "Apple Music connected — your library is ready."
-          : "Signed in to Apple Music.",
+          ? t("Apple Music connected — your library is ready.")
+          : t("Signed in to Apple Music."),
       );
     });
   }, [api, setNotice]);
@@ -6895,8 +6848,8 @@ function AppleMusicView({
       const created = await api.enqueueYouTubeDownloads(targets);
       setNotice(
         created.length === 0
-          ? "Those tracks are already downloaded or queued."
-          : `Queued ${created.length} download${created.length === 1 ? "" : "s"}. They run in the background.`,
+          ? t("Those tracks are already downloaded or queued.")
+          : t("Queued {{value0}} download{{value1}}. They run in the background.", { value0: created.length, value1: created.length === 1 ? "" : "s" }),
       );
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -6934,7 +6887,7 @@ function AppleMusicView({
       const next = await api.saveAppleMusicAuth(headersRaw);
       setStatus(next);
       setHeadersRaw("");
-      setNotice("Apple Music headers saved.");
+      setNotice(t("Apple Music headers saved."));
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -6961,7 +6914,7 @@ function AppleMusicView({
       setSelectedId("");
       setDetailCache({});
       appleMusicDetailCacheMemory = {};
-      setNotice("Apple Music disconnected.");
+      setNotice(t("Apple Music disconnected."));
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -6996,11 +6949,10 @@ function AppleMusicView({
             </div>
             <div className="spotify-account-copy">
               <p className="eyebrow">Apple Music</p>
-              <h2>Connected</h2>
+              <h2>{t("Connected")}</h2>
               <span>
-                Catalog + library access
-                {status?.authUpdatedAt
-                  ? ` · Saved ${formatDate(status.authUpdatedAt)}`
+                {t("Catalog + library access")} {status?.authUpdatedAt
+                  ? t(" · Saved {{value0}}", { value0: formatDate(status.authUpdatedAt) })
                   : ""}
               </span>
             </div>
@@ -7016,8 +6968,7 @@ function AppleMusicView({
                 ) : (
                   <RefreshCw size={17} aria-hidden="true" />
                 )}
-                Refresh
-              </button>
+                {t("Refresh")} </button>
               <button
                 className="secondary-button"
                 type="button"
@@ -7029,8 +6980,7 @@ function AppleMusicView({
                 ) : (
                   <LogOut size={17} aria-hidden="true" />
                 )}
-                Disconnect
-              </button>
+                {t("Disconnect")} </button>
             </div>
           </div>
         ) : authMode === "browser" ? (
@@ -7044,12 +6994,9 @@ function AppleMusicView({
               </div>
               <div className="youtube-music-connect-intro">
                 <p className="eyebrow">Apple Music</p>
-                <h2>Sign in to connect</h2>
+                <h2>{t("Sign in to connect")}</h2>
                 <span>
-                  Sign in below, then open your <strong>Library</strong> —
-                  CorosLink captures the access it needs automatically. No
-                  DevTools and no Apple Developer account required.
-                </span>
+                  {t("Sign in below, then open your")} <strong>{t("Library")}</strong> {t("— CorosLink captures the access it needs automatically. No DevTools and no Apple Developer account required.")} </span>
               </div>
             </div>
 
@@ -7057,17 +7004,13 @@ function AppleMusicView({
 
             <div className="apple-music-signin-footer">
               <span className="youtube-music-connect-note">
-                Sign-in happens in a private, in-app Apple Music session. Your
-                credentials stay on this device and are only used to read
-                playlist metadata.
-              </span>
+                {t("Sign-in happens in a private, in-app Apple Music session. Your credentials stay on this device and are only used to read playlist metadata.")} </span>
               <button
                 className="text-button"
                 type="button"
                 onClick={() => setAuthMode("manual")}
               >
-                Paste headers manually instead
-              </button>
+                {t("Paste headers manually instead")} </button>
             </div>
           </div>
         ) : (
@@ -7081,11 +7024,9 @@ function AppleMusicView({
               </div>
               <div className="youtube-music-connect-intro">
                 <p className="eyebrow">Apple Music</p>
-                <h2>Connect your library</h2>
+                <h2>{t("Connect your library")}</h2>
                 <span>
-                  Paste the request headers from music.apple.com to read
-                  playlist metadata. No Apple Developer account needed.
-                </span>
+                  {t("Paste the request headers from music.apple.com to read playlist metadata. No Apple Developer account needed.")} </span>
               </div>
             </div>
 
@@ -7095,12 +7036,11 @@ function AppleMusicView({
               onClick={() => setAuthMode("browser")}
             >
               <ArrowLeft size={15} aria-hidden="true" />
-              Back to in-app sign in
-            </button>
+              {t("Back to in-app sign in")} </button>
 
             <ol className="youtube-music-steps">
               <li>
-                Open{" "}
+                {t("Open")}{" "}
                 <a
                   href="https://music.apple.com"
                   target="_blank"
@@ -7108,30 +7048,24 @@ function AppleMusicView({
                 >
                   music.apple.com
                 </a>{" "}
-                while signed in, then open DevTools (F12) and switch to the{" "}
-                <strong>Network</strong> tab.
-              </li>
+                {t("while signed in, then open DevTools (F12) and switch to the")}{" "}
+                <strong>{t("Network")}</strong> {t("tab.")} </li>
               <li>
-                Filter for <code>amp-api</code>, right-click any request, and
-                choose <strong>Copy → Copy as cURL</strong> (or copy the raw
-                request headers).
-              </li>
+                {t("Filter for")} <code>amp-api</code>{t(", right-click any request, and choose")} <strong>{t("Copy → Copy as cURL")}</strong> {t("(or copy the raw request headers).")} </li>
               <li>
-                Paste it below and connect — it must include the{" "}
-                <code>authorization</code> bearer token (and{" "}
-                <code>media-user-token</code> for personal playlists).
-              </li>
+                {t("Paste it below and connect — it must include the")}{" "}
+                <code>authorization</code> {t("bearer token (and")}{" "}
+                <code>media-user-token</code> {t("for personal playlists).")} </li>
             </ol>
 
             <figure className="youtube-music-connect-helper">
               <img
                 src="./assets/helper-image/apple-helper.png"
-                alt="Apple Music DevTools guide: filter Network tab for amp-api, then right-click a request and choose Copy as cURL"
+                alt={t("Apple Music DevTools guide: filter Network tab for amp-api, then right-click a request and choose Copy as cURL")}
                 loading="lazy"
               />
               <figcaption>
-                Filter for <code>amp-api</code>, then copy any request as cURL.
-              </figcaption>
+                {t("Filter for")} <code>amp-api</code>{t(", then copy any request as cURL.")} </figcaption>
             </figure>
 
             <form
@@ -7143,17 +7077,14 @@ function AppleMusicView({
                   value={headersRaw}
                   onChange={(event) => setHeadersRaw(event.target.value)}
                   placeholder={
-                    "Paste a 'Copy as cURL' command from music.apple.com\n— or the raw request headers.\n\nMust include the authorization bearer token"
+                    t("Paste a 'Copy as cURL' command from music.apple.com\n— or the raw request headers.\n\nMust include the authorization bearer token")
                   }
                   disabled={busy === "auth"}
                 />
               </label>
               <div className="youtube-music-connect-footer">
                 <span className="youtube-music-connect-note">
-                  Headers are stored locally and only used to read playlist
-                  metadata. The Apple Music token expires often — re-paste it if
-                  fetching stops working.
-                </span>
+                  {t("Headers are stored locally and only used to read playlist metadata. The Apple Music token expires often — re-paste it if fetching stops working.")} </span>
                 <button
                   className="primary-button"
                   type="submit"
@@ -7164,8 +7095,7 @@ function AppleMusicView({
                   ) : (
                     <LogIn size={17} aria-hidden="true" />
                   )}
-                  Connect with headers
-                </button>
+                  {t("Connect with headers")} </button>
               </div>
             </form>
           </div>
@@ -7178,12 +7108,10 @@ function AppleMusicView({
             <div className="empty-state">
               <ListMusic size={26} aria-hidden="true" />
               <strong>
-                {busy === "list" ? "Loading playlists…" : "No playlists found"}
+                {busy === "list" ? t("Loading playlists…") : t("No playlists found")}
               </strong>
               <span>
-                Your Apple Music library playlists load automatically. Refresh
-                to try again.
-              </span>
+                {t("Your Apple Music library playlists load automatically. Refresh to try again.")} </span>
               <button
                 className="primary-button"
                 type="button"
@@ -7195,15 +7123,14 @@ function AppleMusicView({
                 ) : (
                   <RefreshCw size={17} aria-hidden="true" />
                 )}
-                Refresh
-              </button>
+                {t("Refresh")} </button>
             </div>
           </section>
         ) : (
           <section className="spotify-layout apple-music-layout">
             <aside className="panel playlist-panel apple-music-playlist-panel">
               <div className="section-heading compact playlist-heading">
-                <h2>Playlists</h2>
+                <h2>{t("Playlists")}</h2>
                 <span className="count-pill">{playlists.length}</span>
               </div>
               <div className="playlist-list">
@@ -7230,8 +7157,7 @@ function AppleMusicView({
                       <span className="apple-music-playlist-copy">
                         <strong>{entry.name}</strong>
                         <span>
-                          {trackCount} track
-                          {trackCount === 1 ? "" : "s"}
+                          {trackCount} {t("track")} {trackCount === 1 ? "" : "s"}
                         </span>
                       </span>
                     </button>
@@ -7257,7 +7183,7 @@ function AppleMusicView({
                   combinedDownloads={combinedDownloads}
                 />
               ) : (
-                <EmptyState title="Select a playlist to load its tracks" />
+                <EmptyState title={t("Select a playlist to load its tracks")} />
               )}
             </section>
           </section>
@@ -7296,6 +7222,7 @@ function AppleMusicPlaylistDetail({
   onCombinedDownload,
   combinedDownloads,
 }: AppleMusicPlaylistDetailProps) {
+  useLanguage();
   const combinedItems: DownloadQueueItem[] = playlist.tracks.map(
     appleMusicDownloadTarget,
   );
@@ -7318,13 +7245,13 @@ function AppleMusicPlaylistDetail({
           artworkUrl={playlist.artworkUrl}
         />
         <div className="apple-music-playlist-meta">
-          <p className="eyebrow">Apple Music Playlist</p>
+          <p className="eyebrow">{t("Apple Music Playlist")}</p>
           <h3>{playlist.name}</h3>
           <span>
-            {playlist.trackCount} track{playlist.trackCount === 1 ? "" : "s"}
+            {playlist.trackCount} {t("track")}{playlist.trackCount === 1 ? "" : "s"}
             {playlist.curatorName ? ` · ${playlist.curatorName}` : ""}
             {playlist.lastModifiedAt
-              ? ` · Updated ${formatDate(playlist.lastModifiedAt)}`
+              ? t(" · Updated {{value0}}", { value0: formatDate(playlist.lastModifiedAt) })
               : ""}
           </span>
           {playlist.description ? <p>{playlist.description}</p> : null}
@@ -7336,8 +7263,7 @@ function AppleMusicPlaylistDetail({
               rel="noreferrer"
             >
               <AppleBrandIcon size={15} />
-              Open in Apple Music
-              <ExternalLink size={13} aria-hidden="true" />
+              {t("Open in Apple Music")} <ExternalLink size={13} aria-hidden="true" />
             </a>
           ) : null}
         </div>
@@ -7349,8 +7275,7 @@ function AppleMusicPlaylistDetail({
               onClick={onQueueAll}
             >
               <Download size={17} aria-hidden="true" />
-              Download all
-            </button>
+              {t("Download all")} </button>
             <CombinedDownloadButton
               defaultName={playlist.name}
               items={combinedItems}
@@ -7369,20 +7294,20 @@ function AppleMusicPlaylistDetail({
       {loadingTracks ? (
         <div className="apple-music-track-loading">
           <Loader2 className="spin" size={24} aria-hidden="true" />
-          <strong>Loading tracks</strong>
+          <strong>{t("Loading tracks")}</strong>
         </div>
       ) : playlist.tracks.length === 0 ? (
-        <EmptyState title="No tracks in this playlist" />
+        <EmptyState title={t("No tracks in this playlist")} />
       ) : (
         <div className="table-shell">
           <table>
             <thead>
               <tr>
                 <th>#</th>
-                <th>Title</th>
-                <th>Album</th>
-                <th>Duration</th>
-                <th>Download</th>
+                <th>{t("Title")}</th>
+                <th>{t("Album")}</th>
+                <th>{t("Duration")}</th>
+                <th>{t("Download")}</th>
               </tr>
             </thead>
             <tbody>
@@ -7395,7 +7320,7 @@ function AppleMusicPlaylistDetail({
                   downloadedSourceUrls.has(target.sourceUrl) ||
                   downloadedTitleKeys.has(downloadTitleKey(target.fileBaseName));
                 const downloadStatus = downloaded
-                  ? { label: "Downloaded", className: "badge ready" }
+                  ? { label: t("Downloaded"), className: "badge ready" }
                   : youtubeMusicDownloadStatus(job);
                 const inProgress =
                   !downloaded &&
@@ -7413,7 +7338,7 @@ function AppleMusicPlaylistDetail({
                         />
                         <span className="apple-music-track-copy">
                           <strong>{track.title}</strong>
-                          <span>{track.artistName ?? "Unknown Artist"}</span>
+                          <span>{track.artistName ?? t("Unknown Artist")}</span>
                         </span>
                       </div>
                     </td>
@@ -7422,14 +7347,14 @@ function AppleMusicPlaylistDetail({
                     <td>
                       <div className="table-actions">
                         <span className={downloadStatus.className}>
-                          {downloadStatus.label}
+                          {t(downloadStatus.label)}
                         </span>
                         {failed && job ? (
                           <button
                             className="icon-button"
                             type="button"
-                            title="Retry download"
-                            aria-label={`Retry ${track.title}`}
+                            title={t("Retry download")}
+                            aria-label={t("Retry {{value0}}", { value0: track.title })}
                             onClick={() => onRetryTrack(track, job.id)}
                           >
                             <RefreshCw size={16} aria-hidden="true" />
@@ -7438,7 +7363,7 @@ function AppleMusicPlaylistDetail({
                           <button
                             className="icon-button"
                             type="button"
-                            title="Downloading"
+                            title={t("Downloading")}
                             disabled
                           >
                             <Loader2
@@ -7451,7 +7376,7 @@ function AppleMusicPlaylistDetail({
                           <button
                             className="icon-button"
                             type="button"
-                            title="Downloaded"
+                            title={t("Downloaded")}
                             disabled
                           >
                             <CheckCircle2 size={16} aria-hidden="true" />
@@ -7460,8 +7385,8 @@ function AppleMusicPlaylistDetail({
                           <button
                             className="icon-button"
                             type="button"
-                            title="Download"
-                            aria-label={`Download ${track.title}`}
+                            title={t("Download")}
+                            aria-label={t("Download {{value0}}", { value0: track.title })}
                             onClick={() => onQueueTrack(track)}
                           >
                             <Download size={16} aria-hidden="true" />
@@ -7682,7 +7607,7 @@ function getYouTubeDownloadTarget(value: string): YouTubeDownloadTarget | null {
       return videoId
         ? {
             kind: "Video",
-            label: "Download MP3",
+            label: t("Download MP3"),
             url: `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`,
           }
         : null;
@@ -7698,7 +7623,7 @@ function getYouTubeDownloadTarget(value: string): YouTubeDownloadTarget | null {
     if (parsed.pathname === "/playlist" && playlistId) {
       return {
         kind: "Playlist",
-        label: "Download playlist",
+        label: t("Download playlist"),
         url: `https://www.youtube.com/playlist?list=${encodeURIComponent(playlistId)}`,
       };
     }
@@ -7706,7 +7631,7 @@ function getYouTubeDownloadTarget(value: string): YouTubeDownloadTarget | null {
     if (parsed.pathname === "/watch" && playlistId) {
       return {
         kind: "Playlist",
-        label: "Download playlist",
+        label: t("Download playlist"),
         url: `https://www.youtube.com/playlist?list=${encodeURIComponent(playlistId)}`,
       };
     }
@@ -7714,7 +7639,7 @@ function getYouTubeDownloadTarget(value: string): YouTubeDownloadTarget | null {
     if (parsed.pathname === "/watch" && videoId) {
       return {
         kind: "Video",
-        label: "Download MP3",
+        label: t("Download MP3"),
         url: `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`,
       };
     }
@@ -7907,7 +7832,7 @@ function injectYouTubeDownloadButton(webview: WebviewElement): Promise<void> {
       button = document.createElement("button");
       button.type = "button";
       button.className = btnClass;
-      button.textContent = "Download MP3";
+      button.textContent = ${JSON.stringify(t("Download MP3"))};
       button.addEventListener(
         "click",
         (event) => {
@@ -7917,10 +7842,10 @@ function injectYouTubeDownloadButton(webview: WebviewElement): Promise<void> {
           emitDownload([
             { url: button.dataset.url, title: button.dataset.title }
           ]);
-          button.textContent = "Queued ✓";
+          button.textContent = ${JSON.stringify(t("Queued ✓"))};
           button.classList.add("done");
           window.setTimeout(() => {
-            button.textContent = "Download MP3";
+            button.textContent = ${JSON.stringify(t("Download MP3"))};
             button.classList.remove("done");
           }, 1800);
         },
@@ -7931,7 +7856,7 @@ function injectYouTubeDownloadButton(webview: WebviewElement): Promise<void> {
 
     button.dataset.url = info.url;
     button.dataset.title = info.title;
-    button.title = "Download " + info.title;
+    button.title = ${JSON.stringify(t("Download"))} + " " + info.title;
   };
 
   let scheduled = false;
@@ -7973,12 +7898,12 @@ function injectYouTubeDownloadButton(webview: WebviewElement): Promise<void> {
 
 function formatJobStatus(job: DownloadJob): string {
   if (job.status === "queued") {
-    return "Queued";
+    return t("Queued");
   }
 
   if (job.status === "downloading") {
     if (job.entryType === "playlist" && job.trackIndex && job.trackTotal) {
-      return `Track ${job.trackIndex}/${job.trackTotal} · ${Math.round(job.progress)}%`;
+      return t("Track {{index}}/{{total}} · {{progress}}%", { index: job.trackIndex, total: job.trackTotal, progress: Math.round(job.progress) });
     }
 
     return `${Math.round(job.progress)}%`;
@@ -7987,35 +7912,35 @@ function formatJobStatus(job: DownloadJob): string {
   if (job.status === "completed") {
     if (job.entryType === "playlist") {
       const count = job.tracks.length || job.completedTrackCount || 0;
-      return count > 0 ? `Completed · ${count} tracks` : "Completed";
+      return count > 0 ? t("Completed · {{count}} tracks", { count }) : t("Completed");
     }
 
-    return "Completed";
+    return t("Completed");
   }
 
   if (job.status === "cancelled") {
-    return "Cancelled";
+    return t("Cancelled");
   }
 
-  return "Failed";
+  return t("Failed");
 }
 
 function formatJobActivity(job: DownloadJob): string {
   if (job.activity) {
-    return job.activity;
+    return t(job.activity);
   }
 
   switch (job.phase) {
     case "starting":
-      return "Starting yt-dlp… (first run can take ~30s)";
+      return t("Starting yt-dlp… (first run can take ~30s)");
     case "converting":
-      return "Converting to MP3…";
+      return t("Converting to MP3…");
     case "between_tracks":
-      return "Preparing next track…";
+      return t("Preparing next track…");
     case "downloading":
-      return "Downloading…";
+      return t("Downloading…");
     default:
-      return "Working…";
+      return t("Working…");
   }
 }
 
@@ -8036,18 +7961,18 @@ function isJobStalled(job: DownloadJob): boolean {
 
 function viewTitle(view: View): string {
   if (view === "overview") {
-    return "Overview";
+    return t("Overview");
   }
 
   if (view === "media") {
-    return "Media";
+    return t("Media");
   }
 
   if (view === "maps") {
-    return "Maps";
+    return t("Maps");
   }
 
-  return "Training Hub";
+  return t("Training Hub");
 }
 
 function formatBytes(bytes: number): string {
@@ -8061,11 +7986,11 @@ function formatBytes(bytes: number): string {
     units.length - 1,
   );
   const value = bytes / 1024 ** exponent;
-  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[exponent]}`;
+  return `${new Intl.NumberFormat(getLocale(), { minimumFractionDigits: value >= 10 ? 0 : 1, maximumFractionDigits: value >= 10 ? 0 : 1 }).format(value)} ${units[exponent]}`;
 }
 
 function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(getLocale(), {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -8074,5 +7999,5 @@ function formatDate(value: string): string {
 }
 
 function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return t(error instanceof Error ? error.message : String(error));
 }

@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n/tools";
 import { Cloud, Droplets, MapPin, RefreshCw, Wind } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUnitSystem } from "../units/UnitSystemProvider";
@@ -16,6 +17,7 @@ import { WeatherIcon } from "./WeatherIcon";
 import "./overviewWeather.css";
 
 export function OverviewWeatherCard() {
+  useLanguage();
   const { unitSystem } = useUnitSystem();
   const [snapshot, setSnapshot] = useState<OverviewWeatherSnapshot | null>(
     readCachedOverviewWeather
@@ -38,7 +40,7 @@ export function OverviewWeatherCard() {
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return;
         setError(
-          cause instanceof Error ? cause.message : "Weather is unavailable."
+          cause instanceof Error ? cause.message : t("Weather is unavailable.")
         );
       })
       .finally(() => {
@@ -72,7 +74,7 @@ export function OverviewWeatherCard() {
       >
         <Cloud size={18} strokeWidth={1.6} aria-hidden="true" />
         <div className="overview-weather-empty-copy">
-          <span>{loading ? "Finding local weather…" : "Weather unavailable"}</span>
+          <span>{loading ? t("Finding local weather…") : t("Weather unavailable")}</span>
           {error && !loading ? (
             <span className="overview-weather-error">{error}</span>
           ) : null}
@@ -82,7 +84,7 @@ export function OverviewWeatherCard() {
             type="button"
             className="overview-weather-refresh"
             onClick={() => refresh(true)}
-            aria-label="Retry loading weather"
+            aria-label={t("Retry loading weather")}
           >
             <RefreshCw size={13} aria-hidden="true" />
           </button>
@@ -94,10 +96,10 @@ export function OverviewWeatherCard() {
   const condition = describeWeatherCode(snapshot.weatherCode);
   const stale = !isOverviewWeatherFresh(snapshot);
   const title = [
-    `Feels like ${formatTemperature(snapshot.apparentTemperatureC, unitSystem)}`,
-    `Humidity ${Math.round(snapshot.humidityPercent)}%`,
-    `Wind ${formatWindSpeed(snapshot.windKmh, unitSystem)}`,
-    error ?? (stale ? "Showing the last forecast — refresh to update." : null)
+    t("Feels like {{p0}}", { p0: formatTemperature(snapshot.apparentTemperatureC, unitSystem) }),
+    t("Humidity {{p0}}%", { p0: Math.round(snapshot.humidityPercent) }),
+    t("Wind {{p0}}", { p0: formatWindSpeed(snapshot.windKmh, unitSystem) }),
+    error ?? (stale ? t("Showing the last forecast — refresh to update.") : null)
   ]
     .filter(Boolean)
     .join(" · ");
@@ -157,7 +159,7 @@ export function OverviewWeatherCard() {
         className="overview-weather-refresh"
         onClick={() => refresh(true)}
         disabled={loading}
-        aria-label="Refresh weather"
+        aria-label={t("Refresh weather")}
       >
         <RefreshCw size={13} aria-hidden="true" />
       </button>
