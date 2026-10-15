@@ -15,6 +15,8 @@ import {
   type PrimaryView,
   visiblePrimaryNavItems,
 } from "../navigation/primaryNav";
+import logoBase from "../../build/icon-base.svg";
+import logoSync from "../../build/icon-sync.svg";
 
 const SIDEBAR_COLLAPSED_KEY = "coroslink.sidebarCollapsed";
 
@@ -112,7 +114,6 @@ export interface AppSidebarProps {
   onChange: (view: PrimaryView) => void;
   coachBusy?: boolean;
   showDevelopmentItems?: boolean;
-  appLogo: string;
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
   overlayOpen: boolean;
@@ -125,7 +126,6 @@ export function AppSidebar({
   onChange,
   coachBusy = false,
   showDevelopmentItems = false,
-  appLogo,
   expanded,
   onExpandedChange,
   overlayOpen,
@@ -261,7 +261,8 @@ export function AppSidebar({
       <div className="app-sidebar-inner">
         <div className="app-sidebar-brand">
           <div className="brand-mark">
-            <img src={appLogo} alt="" aria-hidden="true" />
+            <img src={logoBase} alt="" aria-hidden="true" />
+            <img className="brand-mark-sync" src={logoSync} alt="" aria-hidden="true" />
           </div>
           <motion.div
             className={[

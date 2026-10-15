@@ -140,7 +140,6 @@ import {
   type WatchFeatureIcon,
   type WatchPresentation,
 } from "./watchModels";
-import appLogo from "../build/icon-animated.svg";
 import changelogMarkdown from "../CHANGELOG.md?raw";
 
 type View = PrimaryView;
@@ -2373,7 +2372,6 @@ export default function App() {
           onChange={setActiveView}
           coachBusy={coachBusy}
           showDevelopmentItems={showDevelopmentTools}
-          appLogo={appLogo}
           expanded={sidebarExpanded}
           onExpandedChange={setSidebarExpanded}
           overlayOpen={sidebarOverlayOpen}

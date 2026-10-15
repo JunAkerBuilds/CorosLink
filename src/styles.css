@@ -1732,9 +1732,31 @@ input::placeholder {
 
 .brand-mark img {
   display: block;
+  grid-area: 1 / 1;
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* The sync arrows are their own image (build/icon-sync.svg) so the compositor
+   spins a cached texture. Animating them inside one SVG re-rasterized all of
+   its blur filters every frame. Pivot matches generate-icons.mjs:
+   789.45, 702.65 in the 1254 viewBox. */
+.brand-mark-sync {
+  transform-origin: 62.955% 56.033%;
+  animation: brand-mark-sync 6s linear infinite;
+}
+
+@keyframes brand-mark-sync {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-mark-sync {
+    animation: none;
+  }
 }
 
 .nav {

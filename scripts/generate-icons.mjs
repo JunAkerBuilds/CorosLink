@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import electron from "electron";
+import { splitSyncLayer } from "./iconLayers.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -54,6 +55,12 @@ if (svgSource) {
 `;
   fs.writeFileSync(path.join(buildDir, "icon-animated.svg"), svgSource.replace("  <defs>", `${motionStyle}  <defs>`));
   console.log(`Generated ${path.join(buildDir, "icon-animated.svg")}`);
+
+  // The always-visible sidebar mark spins the arrows as a separate image.
+  const layers = splitSyncLayer(svgSource);
+  fs.writeFileSync(path.join(buildDir, "icon-base.svg"), layers.base);
+  fs.writeFileSync(path.join(buildDir, "icon-sync.svg"), layers.sync);
+  console.log(`Generated ${path.join(buildDir, "icon-base.svg")} and icon-sync.svg`);
 }
 
 fs.copyFileSync(iconPngPath, path.join(rootDir, "website/public/icon.png"));
