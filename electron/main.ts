@@ -828,10 +828,39 @@ function handleCommunityWatchfaceOpen(request: CommunityWatchfaceOpenRequest): v
   pendingCommunityWatchfaceOpen = request;
 }
 
+// `npm run dev` would otherwise end with "dev:electron exited with code 0" and
+// concurrently stopping Vite, which reads like a build problem.
+function exitForDevInstanceConflict(): void {
+  let holder = "another CorosLink instance";
+  try {
+    const pid = /-(\d+)$/.exec(fs.readlinkSync(path.join(app.getPath("userData"), "SingletonLock")))?.[1];
+    if (pid) holder = `CorosLink pid ${pid}`;
+  } catch { /* lock link is macOS/Linux-only */ }
+  console.error(`[dev] ${holder} already holds the single-instance lock. Quit it (kill, or kill -9 if it hangs), then rerun npm run dev.`);
+  app.exit(1);
+}
+
+// A dev Electron outlives `npm run dev` when its launcher dies first, and the
+// orphan keeps the single-instance lock, so every later dev launch bails out.
+function quitWhenDevLauncherExits(): void {
+  const launcherPid = process.ppid;
+  if (app.isPackaged || launcherPid <= 1) return;
+  const timer = setInterval(() => {
+    if (process.ppid === launcherPid) return;
+    clearInterval(timer);
+    console.warn(`[dev] Launcher pid ${launcherPid} exited; quitting this orphaned instance.`);
+    app.quit();
+    // Orphans have ignored a graceful quit before; don't let one linger.
+    setTimeout(() => app.exit(0), 5_000);
+  }, 2_000);
+}
+
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
-  app.quit();
+  if (app.isPackaged) app.quit();
+  else exitForDevInstanceConflict();
 } else {
+  quitWhenDevLauncherExits();
   const initialDeepLink = deepLinkFromArguments(process.argv);
   if (initialDeepLink) pendingCommunityWatchfaceOpen = initialDeepLink;
   app.on("second-instance", (_event, commandLine) => {
