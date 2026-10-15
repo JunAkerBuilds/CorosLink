@@ -17896,6 +17896,10 @@ tr.data-intervals-row-missing {
   color: var(--chat-signal-strong);
 }
 
+.chat-plan-list-meta [data-status="uncertain"] {
+  color: var(--warning-text);
+}
+
 .chat-plan-list-item > svg {
   color: var(--text-muted);
   transition: color 0.16s ease, transform 0.16s ease;

@@ -888,7 +888,8 @@ function parseEntry(value: unknown): PersistedChatEntry | null {
       state: p.state as CoachCorosActionPreview["state"],
       details: p.details.filter((line): line is string => typeof line === "string"),
       ...(typeof p.date === "string" ? { date: p.date } : {}),
-      ...(typeof p.message === "string" ? { message: p.message } : {})
+      ...(typeof p.message === "string" ? { message: p.message } : {}),
+      ...(typeof p.sport === "string" ? { sport: p.sport as CoachCorosActionPreview["sport"] } : {})
     };
     return { kind: "corosAction", preview };
   }

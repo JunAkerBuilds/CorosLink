@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import type { CoachCorosActionPreview, CorosMcpTool, UnitSystem } from "./types";
+import type { CoachCorosActionPreview, CorosMcpTool, UnitSystem, WorkoutSport } from "./types";
 import { corosInputSchema, isCorosWorkoutWrite } from "./coachCorosTools";
 import { distanceUnit, formatDistanceValue, formatElevationValue, formatPaceValue } from "./unitSystem";
 
@@ -201,10 +201,11 @@ export function createCorosActionService(deps: CorosActionDependencies) {
       if (shortName === "updateWorkoutDetails") details.unshift("Changes the library template. Existing calendar copies keep their current content.");
       if (shortName === "scheduleWorkout") details.push("Schedules an unchanged copy of the selected library workout, including its exercises and sets.");
       const date = args.date ?? record(args.planInfo).planStartDate;
+      const sport = ({ 1: "run", 2: "bike", 5: "trailRun" } as Record<number, WorkoutSport>)[Number(record(args.course ?? list(args.courseList)[0]).sportType)];
       const preview: CoachCorosActionPreview = {
         requestId: crypto.randomUUID(), title: shortName.startsWith("update") ? "Review workout changes" : shortName === "scheduleWorkout" ? "Schedule saved workout" : destination === "Training Plan" ? "Review training plan" : "Review workout",
         summary: text(review_summary).trim(), destination,
-        ...(date ? { date: String(date) } : {}), details, createdAt: now(), state: "pending"
+        ...(date ? { date: String(date) } : {}), details, createdAt: now(), state: "pending", ...(sport ? { sport } : {})
       };
       const connectionKey = deps.connectionKey();
       if (!connectionKey) throw new Error("Reconnect COROS before preparing this change.");

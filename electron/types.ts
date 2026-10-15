@@ -4143,6 +4143,8 @@ export interface CoachCorosActionPreview {
   createdAt: number;
   state: "pending" | "saving" | "saved" | "uncertain";
   message?: string;
+  /** Sport of the first workout in the request, for the Coach creations list icon. */
+  sport?: WorkoutSport;
 }
 
 /** Persisted coach timeline entry (messages plus inline action cards). */
