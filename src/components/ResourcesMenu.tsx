@@ -12,6 +12,7 @@ import {
   Map as MapIcon,
   MapPin,
   Newspaper,
+  Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -85,7 +86,14 @@ const LINK_GROUPS: ResourceGroup[] = [
   },
 ];
 
-export function ResourcesMenu({ showLabel = false }: { showLabel?: boolean }) {
+export function ResourcesMenu({
+  showLabel = false,
+  onStartTour,
+}: {
+  showLabel?: boolean;
+  /** Reopens the first-run tour. */
+  onStartTour?: () => void;
+}) {
   useLanguage();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -140,6 +148,20 @@ export function ResourcesMenu({ showLabel = false }: { showLabel?: boolean }) {
 
       {open ? (
         <div className="resources-popover" role="menu">
+          {onStartTour ? (
+            <button
+              type="button"
+              className="resources-link resources-tour"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onStartTour();
+              }}
+            >
+              <Sparkles size={15} aria-hidden="true" />
+              <span className="resources-link-label">{t("Take the tour")}</span>
+            </button>
+          ) : null}
           {LINK_GROUPS.map((group) => (
             <div className="resources-group" key={group.heading}>
               <p className="update-settings-heading">{t(group.heading)}</p>

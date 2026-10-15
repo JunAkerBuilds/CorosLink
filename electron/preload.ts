@@ -1096,6 +1096,10 @@ const api = {
   clearDiagnostics: (): Promise<DiagnosticsSnapshot> => ipcRenderer.invoke("diagnostics:clear"),
   reportRendererError: (error: RendererDiagnosticError): void => ipcRenderer.send("diagnostics:rendererError", error),
   getAppInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:getInfo"),
+  isOnboardingPending: (): Promise<boolean> =>
+    ipcRenderer.invoke("app:isOnboardingPending"),
+  completeOnboarding: (): Promise<void> =>
+    ipcRenderer.invoke("app:completeOnboarding"),
   openAppStorageLocation: (id: string): Promise<void> =>
     ipcRenderer.invoke("app:openStorageLocation", id),
   getAppUpdateStatus: (): Promise<AppUpdateSnapshot> =>

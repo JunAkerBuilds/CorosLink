@@ -512,7 +512,8 @@ input::placeholder {
   color: var(--text-secondary);
 }
 
-.app-dev-update-test {
+.app-dev-update-test,
+.app-dev-onboarding-test {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -520,7 +521,8 @@ input::placeholder {
   background: color-mix(in srgb, var(--accent-gold) 13%, var(--glass-bg));
 }
 
-.app-dev-update-test:hover {
+.app-dev-update-test:hover,
+.app-dev-onboarding-test:hover {
   border-color: color-mix(in srgb, var(--accent-gold) 72%, var(--glass-border));
   background: color-mix(in srgb, var(--accent-gold) 20%, var(--glass-bg));
 }
@@ -1565,6 +1567,16 @@ input::placeholder {
 
 .resources-link-label {
   flex: 1;
+}
+
+button.resources-tour {
+  width: calc(100% + 8px);
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
 }
 
 .resources-link-external {

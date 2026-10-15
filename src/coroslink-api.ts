@@ -727,6 +727,8 @@ export interface CorosLinkApi {
   clearDiagnostics: () => Promise<DiagnosticsSnapshot>;
   reportRendererError: (error: RendererDiagnosticError) => void;
   getAppInfo: () => Promise<AppInfo>;
+  isOnboardingPending: () => Promise<boolean>;
+  completeOnboarding: () => Promise<void>;
   openAppStorageLocation: (id: string) => Promise<void>;
   getAppUpdateStatus: () => Promise<AppUpdateSnapshot>;
   checkForAppUpdates: () => Promise<AppUpdateSnapshot>;

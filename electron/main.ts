@@ -31,6 +31,12 @@ import {
   markDownloadTransferred
 } from "./database";
 import {
+  completeOnboarding,
+  hasExistingAppData,
+  initializeOnboardingStatus,
+  isOnboardingPending
+} from "./onboardingState";
+import {
   downloadAudio,
   downloadCombinedTrack,
   getBinaryStatus
@@ -868,8 +874,10 @@ app.whenReady().then(() => {
       mainWindow.webContents.send("appleMusic:authCaptured", status);
     }
   });
+  const hadAppData = hasExistingAppData(app.getPath("userData"));
   initializeDatabase(app.getPath("userData"));
   initializeNativeLanguage();
+  initializeOnboardingStatus(hadAppData);
   hydratePlanDraftStoreFromDatabase();
   prunePlanDraftStore();
   pruneDeleteRequestStore();
@@ -2428,6 +2436,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle("app:quitAndInstallUpdate", () => quitAndInstallUpdate());
 
   ipcMain.handle("app:getInfo", () => getAppInfo());
+
+  ipcMain.handle("app:isOnboardingPending", () => isOnboardingPending());
+
+  ipcMain.handle("app:completeOnboarding", () => completeOnboarding());
 
   ipcMain.handle("app:openStorageLocation", (_event, id: string) =>
     openAppStorageLocation(id)

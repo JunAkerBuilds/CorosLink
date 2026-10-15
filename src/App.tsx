@@ -6,6 +6,7 @@ import {
   BatteryFull,
   CheckCircle2,
   Combine,
+  Compass,
   Copy,
   Download,
   BookOpen,
@@ -122,6 +123,7 @@ import { AudiobooksView } from "./media/AudiobooksView";
 import { WatchMusicSourcePanel } from "./media/WatchMusicSourcePanel";
 import { WatchConnectionMenu } from "./watch/WatchConnectionMenu";
 import type { WatchfacesNavigationRequest } from "./watchfaces/WatchfacesView";
+import type { OnboardingExit } from "./onboarding/OnboardingTour";
 import { CorosWifiMusicPanel } from "./media/CorosWifiMusicPanel";
 import {
   countPendingTransfers,
@@ -209,6 +211,11 @@ const LazyCalendarView = lazy(() =>
 );
 const LazyChatView = lazy(() =>
   import("./chat/ChatView").then(({ ChatView }) => ({ default: ChatView })),
+);
+const LazyOnboardingTour = lazy(() =>
+  import("./onboarding/OnboardingTour").then(({ OnboardingTour }) => ({
+    default: OnboardingTour,
+  })),
 );
 const LazyActivityGlobeCard = lazy(() =>
   import("./overview/ActivityGlobeCard").then(({ ActivityGlobeCard }) => ({
@@ -399,6 +406,30 @@ export default function App() {
     useState<(CommunityWatchfaceOpenRequest & { requestId: number }) | null>(null);
   const communityWatchfaceRequestSequence = useRef(0);
   const [watchMenuOpen, setWatchMenuOpen] = useState(false);
+  // The first-run tour: the main process says whether this is a new install.
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  useEffect(() => {
+    if (!api?.isOnboardingPending) return;
+    let disposed = false;
+    api.isOnboardingPending().then(
+      (pending) => {
+        if (!disposed && pending) setOnboardingOpen(true);
+      },
+      () => undefined,
+    );
+    return () => {
+      disposed = true;
+    };
+  }, [api]);
+  const closeOnboarding = useCallback(
+    (exit: OnboardingExit) => {
+      setOnboardingOpen(false);
+      void api?.completeOnboarding?.().catch(() => undefined);
+      if (exit === "sign-in") setActiveView("training");
+      if (exit === "connect-watch") setWatchMenuOpen(true);
+    },
+    [api],
+  );
   const [watchfacesNavigation, setWatchfacesNavigation] =
     useState<WatchfacesNavigationRequest | null>(null);
   const watchfacesNavigationSequence = useRef(0);
@@ -2303,7 +2334,7 @@ export default function App() {
               onChange={handleStartupViewChange}
               showDevelopmentItems={showDevelopmentTools}
             />
-            <ResourcesMenu />
+            <ResourcesMenu onStartTour={() => setOnboardingOpen(true)} />
             {IS_DEVELOPMENT_BUILD ? (
               <ToolbarMoreMenu>
                 <div className="app-toolbar-development">
@@ -2326,6 +2357,15 @@ export default function App() {
                       >
                         <Sparkles size={13} aria-hidden="true" />
                         {t("Test update")} </button>
+                      <button
+                        className="app-dev-view-toggle app-dev-onboarding-test"
+                        type="button"
+                        title={t("Preview the first-run tour")}
+                        onClick={() => setOnboardingOpen(true)}
+                      >
+                        <Compass size={13} aria-hidden="true" />
+                        {t("Test onboarding")}
+                      </button>
                       <WatchConnectionSmokeControls
                         api={api}
                         onWatchStatusChange={setWatchStatus}
@@ -2717,16 +2757,28 @@ export default function App() {
       </main>
       </div>
 
-      <UpdateAvailablePrompt
-        snapshot={appUpdateSnapshot}
-        onAccept={handleAcceptAvailableUpdate}
-        onDecline={
-          devUpdatePreviewKey === undefined
-            ? undefined
-            : restoreUpdateSnapshotAfterPreview
-        }
-        previewKey={devUpdatePreviewKey}
-      />
+      {onboardingOpen && api ? (
+        <Suspense fallback={null}>
+          <LazyOnboardingTour
+            trainingConnected={Boolean(trainingHubStatus?.authenticated)}
+            watchConnected={
+              Boolean(watchStatus?.connected) || Boolean(nativeBleStatus?.connected)
+            }
+            onClose={closeOnboarding}
+          />
+        </Suspense>
+      ) : (
+        <UpdateAvailablePrompt
+          snapshot={appUpdateSnapshot}
+          onAccept={handleAcceptAvailableUpdate}
+          onDecline={
+            devUpdatePreviewKey === undefined
+              ? undefined
+              : restoreUpdateSnapshotAfterPreview
+          }
+          previewKey={devUpdatePreviewKey}
+        />
+      )}
       <Toaster toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
