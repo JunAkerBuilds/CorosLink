@@ -1,0 +1,5 @@
+/* macOS permission prompts follow the system language, independently of the app preference. */
+"NSBluetoothAlwaysUsageDescription" = "CorosLink 通过蓝牙连接您的 COROS 手表，读取设备信息并验证手表会话。";
+"NSBluetoothPeripheralUsageDescription" = "CorosLink 通过蓝牙连接您的 COROS 手表。";
+"NSLocalNetworkUsageDescription" = "CorosLink 通过同一 Wi-Fi 网络将您选择的 MP3 文件发送到 COROS 手表。";
+"NSLocationUsageDescription" = "仅当您选择“使用我的位置”来设置路线起点时，CorosLink 才会使用您的位置。";

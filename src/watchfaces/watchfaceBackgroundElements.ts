@@ -1,3 +1,4 @@
+import { t } from "../i18n/watchfacesLocale";
 import type {
   CorosWatchfaceBackgroundElement,
   CorosWatchfaceGradientFill,
@@ -30,7 +31,7 @@ export function backgroundElementLabel(
     case "line":
       return "Line";
     case "text":
-      return element.text.trim() ? `Text “${element.text.slice(0, 14)}”` : "Text";
+      return element.text.trim() ? t("Text “{{text}}”", { text: element.text.slice(0, 14) }) : "Text";
   }
 }
 

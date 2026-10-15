@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { WATCHFACE_TARGETS, getWatchfaceTarget } from "../../electron/watchfaceTargets";
 import { drawNativeDataPreview } from "./nativeData";
 import {
@@ -401,15 +401,15 @@ export function WatchfacesView({
   const [busy, setBusy] = useState<
     "login" | "themes" | "archive" | "publish" | "project" | "community" | null
   >(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<LocalizableText | null>(null);
+  const [notice, setNotice] = useState<LocalizableText | null>(null);
   const showStudioError = useCallback((message: string) => {
     setNotice(null);
-    setError(message);
+    setError(localizedText(() => message));
   }, []);
   const showStudioNotice = useCallback((message: string) => {
     setError(null);
-    setNotice(message);
+    setNotice(localizedText(() => message));
   }, []);
 
   const applyDetectedFirmwareType = useCallback((nextFirmwareType: string) => {
@@ -471,7 +471,7 @@ export function WatchfacesView({
             savedCredentialsAvailable: false,
             suggestedRegion: "us"
           });
-          setError(toErrorMessage(caught));
+          setError(localizedText(() => toErrorMessage(caught)));
         }
       });
     return () => {
@@ -538,7 +538,7 @@ export function WatchfacesView({
         if (!cancelled) setProjects(nextProjects);
       })
       .catch((caught) => {
-        if (!cancelled) setError(toErrorMessage(caught));
+        if (!cancelled) setError(localizedText(() => toErrorMessage(caught)));
       })
       .finally(() => {
         if (!cancelled) setProjectsLoading(false);
@@ -593,12 +593,12 @@ export function WatchfacesView({
       setStatus(nextStatus);
       setPassword("");
       if (destination === "hub") setSurface("hub");
-      setNotice(nextStatus.watchAuthenticationError ?? (nextStatus.watchAuthenticationAvailable
+      setNotice(localizedText(() => nextStatus.watchAuthenticationError ?? (nextStatus.watchAuthenticationAvailable
         ? t("COROS account connected. Reconnect your watch to authenticate over Bluetooth.")
-        : t("COROS mobile session connected.")));
+        : t("COROS mobile session connected."))));
       if (destination === "conversion") await resumeConversionAfterLogin();
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
       void api.getCorosWatchfaceStatus().then(setStatus).catch(() => undefined);
@@ -615,12 +615,12 @@ export function WatchfacesView({
       setEmail(nextStatus.savedEmail ?? email);
       setPassword("");
       if (destination === "hub") setSurface("hub");
-      setNotice(nextStatus.watchAuthenticationError ?? (nextStatus.watchAuthenticationAvailable
+      setNotice(localizedText(() => nextStatus.watchAuthenticationError ?? (nextStatus.watchAuthenticationAvailable
         ? t("COROS account connected. Reconnect your watch to authenticate over Bluetooth.")
-        : t("COROS mobile session connected with your saved account.")));
+        : t("COROS mobile session connected with your saved account."))));
       if (destination === "conversion") await resumeConversionAfterLogin();
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
       void api.getCorosWatchfaceStatus().then(setStatus).catch(() => undefined);
@@ -642,11 +642,11 @@ export function WatchfacesView({
       setThemesLoaded(false);
       setThemesSavedAt(null);
       themeListMemory.clear();
-      setNotice(nextStatus.watchAuthenticationAvailable
+      setNotice(localizedText(() => nextStatus.watchAuthenticationAvailable
         ? t("Signed out of COROS. Your watch can still connect over Bluetooth. To remove its key, open Connection details in the watch menu.")
-        : t("Signed out of COROS. You can keep working locally."));
+        : t("Signed out of COROS. You can keep working locally.")));
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -767,7 +767,7 @@ export function WatchfacesView({
         api.setWatchfaceAutomationReady("editor", false);
         openStudio(baked, bakedName, undefined, undefined, true,
           { firmwareType: target.firmwareType, watchModel: target.model }, carriedWatchfacePreferences(design));
-        setNotice(t("Converted to {{value1}}. Your edits are baked into this new starter; keep editing and save it as a project.", { value1: t(target.label) }));
+        setNotice(localizedText(() => t("Converted to {{value1}}. Your edits are baked into this new starter; keep editing and save it as a project.", { value1: t(target.label) })));
         return { opened: true, name: bakedName, targetFirmwareType: target.firmwareType,
           omittedRawConfigEditCount: 0, appliedRawConfigEditCount: 0 };
       }
@@ -783,10 +783,10 @@ export function WatchfacesView({
       api.setWatchfaceAutomationReady("editor", false);
       openStudio(converted.archive, convertedName, undefined, prepared.design, true,
         { firmwareType: target.firmwareType, watchModel: target.model });
-      setNotice(t("Converted to {{value1}}. {{value2}}", { value1: t(target.label), value2: target.display === "mip"
-        ? "Current stays visible on MIP; your separate AOD design is retained for AMOLED."
-        : converted.generatedAod ? "An editable Always-on layout was created from Current. Review it before sending."
-        : "Current and Always-on layouts are preserved." }));
+      setNotice(localizedText(() => t("Converted to {{value1}}. {{value2}}", { value1: t(target.label), value2: target.display === "mip"
+        ? t("Current stays visible on MIP; your separate AOD design is retained for AMOLED.")
+        : converted.generatedAod ? t("An editable Always-on layout was created from Current. Review it before sending.")
+        : t("Current and Always-on layouts are preserved.") })));
       return { opened: true, name: convertedName, targetFirmwareType: target.firmwareType,
         omittedRawConfigEditCount: 0, appliedRawConfigEditCount: converted.appliedRawConfigEditCount };
     } finally {
@@ -809,7 +809,7 @@ export function WatchfacesView({
         void api.getCorosWatchfaceStatus().then(setStatus).catch(() => undefined);
         return;
       }
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     }
   }
 
@@ -861,7 +861,7 @@ export function WatchfacesView({
       setCommunityConfirmFace(null);
       openStudio(imported.archive, imported.face.title);
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
       setCommunityProgress(null);
@@ -881,7 +881,7 @@ export function WatchfacesView({
             t("Custom watch face"))
       );
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -891,7 +891,7 @@ export function WatchfacesView({
     event.preventDefault();
     const shareUrl = importShareUrl.trim();
     if (!shareUrl) {
-      setError(t("Paste a COROS watch-face share link."));
+      setError(localizedText(() => t("Paste a COROS watch-face share link.")));
       setNotice(null);
       return;
     }
@@ -901,7 +901,7 @@ export function WatchfacesView({
       const imported = await api.importCorosWatchfaceShareLink(shareUrl);
       openStudio(imported.archive, imported.name);
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -914,7 +914,7 @@ export function WatchfacesView({
       const project = await api.loadCorosWatchfaceProject(projectId);
       openStudio(project.archive, project.name, project);
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -930,9 +930,9 @@ export function WatchfacesView({
         current.filter((project) => project.projectId !== deleteTarget.projectId)
       );
       setDeleteTarget(null);
-      setNotice(t("Watch-face project deleted."));
+      setNotice(localizedText(() => t("Watch-face project deleted.")));
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -944,9 +944,9 @@ export function WatchfacesView({
     try {
       const duplicated = await api.duplicateCorosWatchfaceProject(projectId);
       handleProjectSaved(duplicated);
-      setNotice(t("Duplicated as “{{value1}}”.", { value1: duplicated.name }));
+      setNotice(localizedText(() => t("Duplicated as “{{value1}}”.", { value1: duplicated.name })));
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -1001,7 +1001,7 @@ export function WatchfacesView({
   ) {
     event?.preventDefault();
     if (!connected) {
-      setError(t("Sign in to your COROS account before creating a watch face."));
+      setError(localizedText(() => t("Sign in to your COROS account before creating a watch face.")));
       setNotice(null);
       setSurface("sign-in");
       return;
@@ -1032,12 +1032,12 @@ export function WatchfacesView({
       showThemeList(key, entry);
       if (options.force) {
         setNotice(
-          t("{{value1}} {{value2}}{{value3}} refreshed.", { value1: nextThemes.length, value2: watchfaceCatalogLabel(query.catalog), value3: nextThemes.length === 1 ? "" : "s" })
+          localizedText(() => t("{{value1}} {{value2}}{{value3}} refreshed.", { value1: nextThemes.length, value2: watchfaceCatalogLabel(query.catalog), value3: nextThemes.length === 1 ? "" : "s" }))
         );
       }
     } catch (caught) {
       // A cached list is still usable; only surface the failure when asked.
-      if (!shown || options.force) setError(toErrorMessage(caught));
+      if (!shown || options.force) setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       themeRequestsRef.current.delete(key);
       if (shown) setThemesRefreshing(false);
@@ -1083,13 +1083,13 @@ export function WatchfacesView({
         openStudio(download.archive, theme.name);
       } else {
         setNotice(
-          download.entries?.length
+          localizedText(() => download.entries?.length
             ? t("{{value1}} Contents: {{value2}}{{value3}}", { value1: t(download.message), value2: download.entries.slice(0, 8).join(", "), value3: download.entries.length > 8 ? ", …" : "" })
-            : download.message
+            : download.message)
         );
       }
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setDownloadingThemeUrl(null);
     }
@@ -1109,9 +1109,9 @@ export function WatchfacesView({
       });
       if (!result.usableAsTemplate || !result.archive) throw new Error(result.message);
       openStudio(result.archive, theme.name);
-      setNotice(result.message);
+      setNotice(localizedText(() => result.message));
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setOpeningThemeUrl(null);
     }
@@ -1119,7 +1119,7 @@ export function WatchfacesView({
 
   async function handleShareTheme(theme: CorosWatchfaceTheme) {
     if (!connected) {
-      setError(t("Connect your COROS account before creating a share link."));
+      setError(localizedText(() => t("Connect your COROS account before creating a share link.")));
       setNotice(null);
       return;
     }
@@ -1128,7 +1128,7 @@ export function WatchfacesView({
     const sourceTemplateId = theme.sourceTemplateId?.trim();
     if (!templateId || !sourceTemplateId) {
       setError(
-        t("COROS did not return the source template ID for this face. Refresh My watch faces and try again.")
+        localizedText(() => t("COROS did not return the source template ID for this face. Refresh My watch faces and try again."))
       );
       setNotice(null);
       return;
@@ -1152,9 +1152,9 @@ export function WatchfacesView({
       setPublishName(theme.name);
       setShareLink(nextLink);
       setPublishOpen(true);
-      setNotice(t("Your COROS share link is ready."));
+      setNotice(localizedText(() => t("Your COROS share link is ready.")));
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setSharingThemeId(null);
       setBusy(null);
@@ -1190,12 +1190,12 @@ export function WatchfacesView({
 
   async function publishArchive(archive: CorosWatchfaceArchive, name: string, archiveFirmwareType: string) {
     if (!connected) {
-      setError(t("Connect your COROS account before sending this watch face."));
+      setError(localizedText(() => t("Connect your COROS account before sending this watch face.")));
       setNotice(null);
       return;
     }
     if (!name.trim()) {
-      setError(t("Enter a watch-face name before sending."));
+      setError(localizedText(() => t("Enter a watch-face name before sending.")));
       setNotice(null);
       return;
     }
@@ -1210,9 +1210,9 @@ export function WatchfacesView({
         language
       });
       setShareLink(nextLink);
-      setNotice(t("Your COROS share link is ready."));
+      setNotice(localizedText(() => t("Your COROS share link is ready.")));
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
       void api.getCorosWatchfaceStatus().then(setStatus).catch(() => undefined);
@@ -1223,9 +1223,9 @@ export function WatchfacesView({
     if (!shareLink) return;
     try {
       await navigator.clipboard.writeText(shareLink.url);
-      setNotice(t("Share link copied."));
+      setNotice(localizedText(() => t("Share link copied.")));
     } catch {
-      setError(t("Could not copy the link. Select and copy it from the field."));
+      setError(localizedText(() => t("Could not copy the link. Select and copy it from the field.")));
     }
   }
 
@@ -1413,7 +1413,7 @@ export function WatchfacesView({
         {conversionDraft ? (
           <WatchfaceConversionDialog name={conversionDraft.name} sourceFirmwareType={conversionDraft.sourceFirmwareType}
             bakes={Boolean(conversionDraft.bakeForWatch)}
-            busy={conversionBusy || busy === "login"} error={error}
+            busy={conversionBusy || busy === "login"} error={error ? renderLocalizedText(error) : null}
             signIn={conversionSignInWatch ? {
               email, password, region, rememberCredentials,
               secureStorageAvailable: status?.secureStorageAvailable ?? false,
@@ -1434,7 +1434,7 @@ export function WatchfacesView({
             }}
             onConvert={watchModel => void convertToWatch(watchModel)} />
         ) : null}
-        <ToastRegion error={error} notice={notice} onDismiss={clearMessages} />
+        <ToastRegion error={error ? renderLocalizedText(error) : null} notice={notice ? renderLocalizedText(notice) : null} onDismiss={clearMessages} />
         {publishOpen ? (
           <PublishDialog
             archive={builtArchive}
@@ -1498,7 +1498,7 @@ export function WatchfacesView({
         />
       ) : null}
 
-      <ToastRegion error={error} notice={notice} onDismiss={clearMessages} />
+      <ToastRegion error={error ? renderLocalizedText(error) : null} notice={notice ? renderLocalizedText(notice) : null} onDismiss={clearMessages} />
 
       {status === null ? (
         <main className="watchface-auth watchface-auth--loading" aria-busy="true">
@@ -4580,7 +4580,7 @@ function ToastRegion({
       <span aria-hidden="true">
         {error ? <X size={16} /> : <Check size={16} />}
       </span>
-      <p>{error ?? notice}</p>
+      <p>{t(error ?? notice ?? "")}</p>
       <button className="icon-button" type="button" aria-label={t("Dismiss message")} onClick={onDismiss}>
         <X size={15} aria-hidden="true" />
       </button>

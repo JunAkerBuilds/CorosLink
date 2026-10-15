@@ -177,7 +177,7 @@ function strengthRestLabel(seconds: number): string {
 }
 
 function strengthTargetSummary(target: RunWorkoutEditorTarget): string {
-  if (target.type === "reps") return `${target.count} reps`;
+  if (target.type === "reps") return t("{{count}} reps", { count: target.count });
   if (target.type === "time") return clockFromSeconds(target.seconds);
   if (target.type === "open") return t("Open");
   return target.type;
@@ -190,11 +190,11 @@ function strengthStepSummary(
   const target = strengthTargetSummary(step.target);
   const load = step.intensity.type === "weight"
     ? step.intensity.mode === "bodyweight"
-      ? "bodyweight"
+      ? t("bodyweight")
       : `${step.intensity.value} ${step.intensity.unit}`
-    : "load not set";
+    : t("load not set");
   const rest = step.restValue ?? 0;
-  return `${sets} ${sets === 1 ? t("set") : t("sets")} × ${target} @ ${load}${sets > 1 ? `, ${strengthRestLabel(rest)} rest` : ""}`;
+  return `${sets} ${sets === 1 ? t("set") : t("sets")} × ${target} @ ${load}${sets > 1 ? t(", {{rest}} rest", { rest: strengthRestLabel(rest) }) : ""}`;
 }
 
 function targetForType(

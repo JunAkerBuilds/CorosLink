@@ -1720,5 +1720,15 @@ export const watchfacesFrench: Record<string, string> = {
   "{{value1}}{{value2}}": "{{value1}}{{value2}}",
   "{{value1}}: {{value2}}": "{{value1}}: {{value2}}",
   "#{{value1}}": "#{{value1}}",
-  "COROS": "COROS"
+  "COROS": "COROS",
+  "another watch": "une autre montre",
+  "digit fonts": "polices de chiffres",
+  "{{kind}} label sets": "jeux de libellés {{kind}}",
+  "weekday": "des jours de la semaine",
+  "month": "des mois",
+  "{{count}}-state sets": "jeux à {{count}} états",
+  "Current stays visible on MIP; your separate AOD design is retained for AMOLED.": "L’affichage normal reste visible sur MIP ; votre design permanent distinct est conservé pour AMOLED.",
+  "An editable Always-on layout was created from Current. Review it before sending.": "Une disposition permanente modifiable a été créée à partir de l’affichage normal. Vérifiez-la avant l’envoi.",
+  "Current and Always-on layouts are preserved.": "Les dispositions normale et permanente sont conservées.",
+  "Text “{{text}}”": "Texte « {{text}} »",
 };

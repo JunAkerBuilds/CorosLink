@@ -308,7 +308,7 @@ export function OfficialAssetBrowser({
           <>
             {error ? <p className="wf-official-assets-error" role="alert">{t(error)}</p> : null}
             <p className="wf-official-assets-summary" aria-live="polite">
-              {page ? t("{{value1}} {{value2}} from {{value3}} official faces", { value1: page.total, value2: mode === "font" ? (fontKind === "digits" ? "digit fonts" : `${fontKind} label sets`) : spriteFrameCount ? `${spriteFrameCount}-state sets` : page.total === 1 ? "set" : "sets", value3: status.facesDone }) : ""}
+              {page ? t("{{value1}} {{value2}} from {{value3}} official faces", { value1: page.total, value2: mode === "font" ? (fontKind === "digits" ? t("digit fonts") : t("{{kind}} label sets", { kind: t(fontKind === "weekday" ? "weekday" : "month") })) : spriteFrameCount ? t("{{count}}-state sets", { count: spriteFrameCount }) : t(page.total === 1 ? "set" : "sets"), value3: status.facesDone }) : ""}
               {loading ? <Loader2 className="spin" size={12} /> : null}
               {mode === "font" ? (
                 <small>

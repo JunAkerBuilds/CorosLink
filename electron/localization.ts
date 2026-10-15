@@ -1,7 +1,8 @@
 import { app, Menu, type OpenDialogOptions, type SaveDialogOptions, type MessageBoxOptions } from "electron";
 import { getSetting, setSetting } from "./database";
 
-type Language = "en" | "fr";
+import { preferredLanguage, supportedLanguage, type Language } from "./appLanguage";
+import { nativeChinese } from "./localizationChinese";
 let language: Language = "en";
 const french: Record<string, string> = {
   "File": "Fichier", "Edit": "Édition", "View": "Affichage", "Window": "Fenêtre", "Help": "Aide",
@@ -43,12 +44,13 @@ const french: Record<string, string> = {
 };
 
 export function nativeText(source: string): string {
-  if (language !== "fr") return source;
-  if (Object.hasOwn(french, source)) return french[source];
+  if (language === "en") return source;
+  const messages = language === "zh-CN" ? nativeChinese : french;
+  if (Object.hasOwn(messages, source)) return messages[source];
   const removal = /^Delete “([\s\S]*)” from the watch\?$/.exec(source);
-  if (removal) return `Supprimer « ${removal[1]} » de la montre ?`;
+  if (removal) return language === "zh-CN" ? `要从手表中删除“${removal[1]}”吗？` : `Supprimer « ${removal[1]} » de la montre ?`;
   const fileType = /^([A-Z0-9]+) file$/.exec(source);
-  return fileType ? `Fichier ${fileType[1]}` : source;
+  return fileType ? language === "zh-CN" ? `${fileType[1]} 文件` : `Fichier ${fileType[1]}` : source;
 }
 
 /** Localize presentation only; paths, file extensions and response indexes stay stable. */
@@ -83,13 +85,12 @@ function updateApplicationMenu(): void {
 }
 
 export function initializeNativeLanguage(): void {
-  const preferred = getSetting("app.language") ?? app.getLocale();
-  language = /^fr(?:[-_]|$)/i.test(preferred) ? "fr" : "en";
+  language = supportedLanguage(getSetting("app.language")) ?? preferredLanguage(app.getPreferredSystemLanguages());
   updateApplicationMenu();
 }
 
 export function setNativeLanguage(value: unknown): void {
-  if (value !== "en" && value !== "fr") throw new Error("Unsupported app language.");
+  if (value !== "en" && value !== "fr" && value !== "zh-CN") throw new Error("Unsupported app language.");
   language = value;
   setSetting("app.language", language);
   updateApplicationMenu();

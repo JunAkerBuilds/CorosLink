@@ -259,7 +259,7 @@ function formatSleepClock(value?: string): string | undefined {
     return undefined;
   }
 
-  if (getLocale() === "fr-FR") return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  if (getLocale() !== "en-US") return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
   const period = hours >= 12 ? "PM" : "AM";
   const displayHour = hours % 12 || 12;
   return `${displayHour}:${String(minutes).padStart(2, "0")} ${period}`;
@@ -448,7 +448,7 @@ export function formatUpcomingWorkoutStats(
   unitSystem: UnitSystem
 ): string {
   const count = workouts.length;
-  const workoutLabel = `${count} workout${count === 1 ? "" : "s"}`;
+  const workoutLabel = t(count === 1 ? "{{count}} workout" : "{{count}} workouts", { count: formatNumber(count) });
 
   const totalKm = workouts.reduce((sum, workout) => {
     const km = parseUpcomingWorkoutDistanceKm(workout.volume);
@@ -471,11 +471,11 @@ export function formatUpcomingWorkoutStats(
     const rounded = Math.abs(displayed - Math.round(displayed)) < 0.05
       ? Math.round(displayed)
       : Number(displayed.toFixed(1));
-    parts.push(`${rounded} ${distanceUnit(unitSystem)}`);
+    parts.push(`${formatNumber(rounded)} ${distanceUnit(unitSystem)}`);
   }
 
   if (totalLoad > 0) {
-    parts.push(`${Math.round(totalLoad)} TL`);
+    parts.push(`${formatNumber(Math.round(totalLoad))} ${t("TL")}`);
   }
 
   return parts.join(" · ");

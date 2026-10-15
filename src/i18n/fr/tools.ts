@@ -1339,5 +1339,9 @@ export const toolsFrench: Record<string, string> = {
   "date:Start": "Date de début",
   "activityPeriod:Time": "Période",
   "Activity length": "Distance et durée",
-  "audio:Length": "Durée"
+  "audio:Length": "Durée",
+  "workout needs": "séance nécessite",
+  "workouts need": "séances nécessitent",
+  "start point": "point de départ",
+  "destination": "destination",
 };

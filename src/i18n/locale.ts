@@ -3,25 +3,31 @@ import { trainingFrench } from "./fr/training";
 import { watchfacesFrench } from "./fr/watchfaces";
 import { toolsFrench } from "./fr/tools";
 
-export type Language = "en" | "fr";
+import { coreChinese } from "./zh-CN/core";
+import { trainingChinese } from "./zh-CN/training";
+import { watchfacesChinese } from "./zh-CN/watchfaces";
+import { toolsChinese } from "./zh-CN/tools";
+import { preferredLanguage, resolveLanguage, supportedLanguage, type Language } from "../../electron/appLanguage";
+export { resolveLanguage };
+export type { Language };
 export const LANGUAGE_STORAGE_KEY = "coroslink.language";
 export const LANGUAGES = [
   { value: "en", label: "English" },
   { value: "fr", label: "Français" },
+  { value: "zh-CN", label: "简体中文" },
 ] as const;
 
 export const frenchMessages: Readonly<Record<string, string>> = {
   ...trainingFrench, ...watchfacesFrench, ...toolsFrench, ...coreFrench,
 };
+export const chineseMessages: Readonly<Record<string, string>> = {
+  ...trainingChinese, ...watchfacesChinese, ...toolsChinese, ...coreChinese,
+};
 let language: Language = "en";
 const listeners = new Set<() => void>();
 
-export function resolveLanguage(value: unknown): Language {
-  return typeof value === "string" && /^fr(?:[-_]|$)/i.test(value) ? "fr" : "en";
-}
-
 export function getLanguage(): Language { return language; }
-export function getLocale(): string { return language === "fr" ? "fr-FR" : "en-US"; }
+export function getLocale(): string { return { en: "en-US", fr: "fr-FR", "zh-CN": "zh-CN" }[language]; }
 export function subscribeLanguage(listener: () => void): () => void {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
@@ -29,25 +35,27 @@ export function subscribeLanguage(listener: () => void): () => void {
 
 type Values = Record<string, string | number | null | undefined>;
 
-export function translate(source: string, selected: Language, values?: Values, messages: Readonly<Record<string, string>> = frenchMessages, context?: string): string {
+export function translate(source: string, selected: Language, values?: Values, messages?: Readonly<Record<string, string>>, context?: string): string {
+  const fallback = selected === "zh-CN" ? chineseMessages : frenchMessages;
+  const catalog = messages ?? fallback;
   const key = context ? `${context}:${source}` : source;
-  const localized = Object.hasOwn(messages, key) ? messages[key]
-    : Object.hasOwn(frenchMessages, key) ? frenchMessages[key]
-    : Object.hasOwn(messages, source) ? messages[source]
-    : Object.hasOwn(frenchMessages, source) ? frenchMessages[source] : source;
-  const message = selected === "fr" ? localized : source;
+  const localized = Object.hasOwn(catalog, key) ? catalog[key]
+    : Object.hasOwn(fallback, key) ? fallback[key]
+    : Object.hasOwn(catalog, source) ? catalog[source]
+    : Object.hasOwn(fallback, source) ? fallback[source] : source;
+  const message = selected !== "en" ? localized : source;
   // A callback keeps interpolation values literal, including $&, HTML and braces.
   return message.replace(/\{\{(\w+)\}\}/g, (placeholder, key: string) =>
     values && Object.hasOwn(values, key) ? String(values[key] ?? "") : placeholder);
 }
 
 export function t(source: string, values?: Values, context?: string): string {
-  return translate(source, language, values, frenchMessages, context);
+  return translate(source, language, values, undefined, context);
 }
 
 /** Context matters: a font's Weight and a workout's Weight use different words. */
-export function createTranslator(messages: Readonly<Record<string, string>>) {
-  return (source: string, values?: Values, context?: string): string => translate(source, language, values, messages, context);
+export function createTranslator(french: Readonly<Record<string, string>>, chinese: Readonly<Record<string, string>>) {
+  return (source: string, values?: Values, context?: string): string => translate(source, language, values, language === "zh-CN" ? chinese : french, context);
 }
 
 export function setLanguage(value: Language): void {
@@ -65,8 +73,8 @@ export function setLanguage(value: Language): void {
 export function initializeLanguage(): void {
   let stored: string | null = null;
   try { stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY); } catch { /* Restricted storage. */ }
-  const preferred = typeof navigator !== "undefined" ? navigator.languages?.[0] ?? navigator.language : "en";
-  setLanguage(resolveLanguage(stored ?? preferred));
+  const preferences = typeof navigator !== "undefined" ? navigator.languages?.length ? navigator.languages : [navigator.language] : ["en"];
+  setLanguage(supportedLanguage(stored) ?? preferredLanguage(preferences));
 }
 
 export function formatNumber(value: number, options?: Intl.NumberFormatOptions): string {

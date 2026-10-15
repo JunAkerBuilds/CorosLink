@@ -271,7 +271,7 @@ function CalendarConnection({
                     setCalendars([]);
                     setSelected("");
                     setMessage(
-                      t("{{value1}} disconnected. Previously synced events remain in your calendar.{{value2}}", { value1: String(providerName), value2: String(isGoogle ? "" : " You can also revoke the app-specific password at account.apple.com.") }),
+                      t("{{value1}} disconnected. Previously synced events remain in your calendar.{{value2}}", { value1: String(providerName), value2: String(isGoogle ? "" : t(" You can also revoke the app-specific password at account.apple.com.")) }),
                     );
                   })
                 }

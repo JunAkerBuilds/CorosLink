@@ -500,7 +500,7 @@ export function CustomPngFontPanel({
               ? t("Only {{value1}} uses this set. Other layers keep their fonts.", { value1: componentLabel ? t(componentLabel) : t("this layer") })
               : t("Every text layer on the face shares this one set.")}
             {scope === "component" && rasterFont ? t(" A whole-face set is also installed.") : ""}
-            {scope === "all" && componentRasterFont ? t(" {{value1}} has its own set that takes priority.", { value1: componentLabel ?? "This layer" }) : ""}
+            {scope === "all" && componentRasterFont ? t(" {{value1}} has its own set that takes priority.", { value1: componentLabel ?? t("This layer") }) : ""}
           </span>
         </div>
       ) : null}

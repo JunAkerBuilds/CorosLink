@@ -52,6 +52,9 @@ async function main() {
     await switchLanguage("fr", "Modifier");
     assert.equal(await js(`document.querySelector(${JSON.stringify(workoutName)}).value`), "My unsaved workout", "French switch preserves the edited workout");
     assert.equal(await js("editorLoads"), 1, "language changes do not reload the source workout");
+    await switchLanguage("zh-CN", "编辑");
+    assert.equal(await js(`document.querySelector(${JSON.stringify(workoutName)}).value`), "My unsaved workout");
+    assert.equal(await js("editorLoads"), 1, "Chinese switch does not reload the edited workout");
     await switchLanguage("en", "Edit");
     assert.equal(await js(`document.querySelector(${JSON.stringify(workoutName)}).value`), "My unsaved workout");
 
@@ -61,6 +64,8 @@ async function main() {
     await fill(clientId, "unsaved-client-id");
     await switchLanguage("fr", "Synchronisation");
     assert.equal(await js(`document.querySelector(${JSON.stringify(clientId)}).value`), "unsaved-client-id", "French switch preserves the OAuth client ID");
+    await switchLanguage("zh-CN", "日历同步");
+    assert.equal(await js(`document.querySelector(${JSON.stringify(clientId)}).value`), "unsaved-client-id");
     await switchLanguage("en", "Calendar sync");
     assert.equal(await js(`document.querySelector(${JSON.stringify(clientId)}).value`), "unsaved-client-id");
 
@@ -70,6 +75,8 @@ async function main() {
     await fill(email, "unsaved@example.com");
     await switchLanguage("fr", "Synchronisation");
     assert.equal(await js(`document.querySelector(${JSON.stringify(email)}).value`), "unsaved@example.com", "French switch preserves the Apple email");
+    await switchLanguage("zh-CN", "日历同步");
+    assert.equal(await js(`document.querySelector(${JSON.stringify(email)}).value`), "unsaved@example.com");
     console.log("Calendar language drafts passed: workout edits, OAuth client ID, and Apple email survive live language changes.");
   } finally {
     clearTimeout(watchdog);

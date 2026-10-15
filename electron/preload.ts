@@ -195,7 +195,7 @@ import type {
 } from "./types";
 
 const api = {
-  setLanguage: (language: "en" | "fr"): Promise<void> => ipcRenderer.invoke("app:setLanguage", language),
+  setLanguage: (language: "en" | "fr" | "zh-CN"): Promise<void> => ipcRenderer.invoke("app:setLanguage", language),
   getWorkoutAutomationStatus: () => ipcRenderer.invoke("workoutAutomation:status"),
   configureWorkoutAutomation: (input: { enabled: boolean; port?: number }) => ipcRenderer.invoke("workoutAutomation:configure", input),
   onWorkoutEditsChanged: (callback: () => void): (() => void) => {

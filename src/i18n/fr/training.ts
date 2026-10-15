@@ -1753,5 +1753,13 @@ export const trainingFrench: Record<string, string> = {
   "Secure & Private": "Sécurisé et privé",
   "Sessions appear here a few minutes after they sync from your watch. Try a longer stretch of time if you know you've been lifting.": "Les séances apparaissent ici quelques minutes après leur synchronisation depuis votre montre. Essayez une période plus longue si vous avez fait de la musculation.",
   "The key is encrypted with your operating system's credential storage and is never exposed to the page after connection.": "La clé est chiffrée dans le stockage d’identifiants de votre système et n’est jamais exposée à la page après la connexion.",
-  "Visibility & layer priority": "Visibilité et priorité des calques"
+  "Visibility & layer priority": "Visibilité et priorité des calques",
+  "Across {{count}} sets": "Sur {{count}} séries",
+  "About {{duration}} a session": "Environ {{duration}} par séance",
+  "{{count}} workout": "{{count}} séance",
+  "{{count}} workouts": "{{count}} séances",
+  "bodyweight": "poids du corps",
+  "load not set": "charge non définie",
+  ", {{rest}} rest": ", {{rest}} de repos",
+  " You can also revoke the app-specific password at account.apple.com.": " Vous pouvez aussi révoquer le mot de passe spécifique à l’application sur account.apple.com.",
 };

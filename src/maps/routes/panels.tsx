@@ -133,8 +133,8 @@ export function LocationSearchField({
           <button
             type="button"
             className="route-search-icon route-search-clear"
-            title={t("Clear {{p0}}", { p0: accent === "start" ? "start point" : "destination" })}
-            aria-label={t("Clear {{p0}}", { p0: accent === "start" ? "start point" : "destination" })}
+            title={t("Clear {{p0}}", { p0: t(accent === "start" ? "start point" : "destination") })}
+            aria-label={t("Clear {{p0}}", { p0: t(accent === "start" ? "start point" : "destination") })}
             onClick={onClear}
           >
             <X size={14} aria-hidden="true" />

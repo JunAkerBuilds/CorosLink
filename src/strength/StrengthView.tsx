@@ -842,20 +842,20 @@ export function StrengthView({
           key: "lifted",
           label: "Weight lifted",
           parts: totalWeightParts(summary.volumeKg, unitSystem),
-          caption: `Across ${Math.round(summary.sets).toLocaleString(getLocale())} sets`
+          caption: t("Across {{count}} sets", { count: Math.round(summary.sets).toLocaleString(getLocale()) })
         }
       : {
           key: "sets",
           label: "Sets",
           parts: [{ value: Math.round(summary.sets).toLocaleString(getLocale()) }],
-          caption: `${Math.round(summary.reps).toLocaleString(getLocale())} reps`
+          caption: t("{{count}} reps", { count: Math.round(summary.reps).toLocaleString(getLocale()) })
         },
     {
       key: "time",
       label: "Time lifting",
       parts: durationParts(summary.durationSec),
       caption: hasSessions
-        ? `About ${formatSpan(summary.durationSec / summary.sessions)} a session`
+        ? t("About {{duration}} a session", { duration: formatSpan(summary.durationSec / summary.sessions) })
         : "No time logged"
     },
     {
