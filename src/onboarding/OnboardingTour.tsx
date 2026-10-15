@@ -1,6 +1,6 @@
-/* First-run tour. App.tsx shows it once after a new install (the main process
-   decides, see electron/onboardingState.ts) and again from Help → Take the
-   tour. It opens on a language choice, then one chapter per area of the app,
+/* Welcome tour. App.tsx shows it once to everyone who hasn't finished or
+   skipped it (the main process decides, see electron/onboardingState.ts) and
+   again from Help → Take the tour. It opens on a language choice, then one chapter per area of the app,
    each with its own hue and picture, ending with appearance, units and the
    two connections worth making. */
 

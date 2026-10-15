@@ -425,7 +425,7 @@ export default function App() {
     useState<(CommunityWatchfaceOpenRequest & { requestId: number }) | null>(null);
   const communityWatchfaceRequestSequence = useRef(0);
   const [watchMenuOpen, setWatchMenuOpen] = useState(false);
-  // The first-run tour: the main process says whether this is a new install.
+  // The welcome tour: the main process says whether it's been finished or skipped yet.
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   useEffect(() => {
     if (!api?.isOnboardingPending) return;
