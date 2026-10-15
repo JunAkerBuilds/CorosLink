@@ -29,8 +29,11 @@ export function subscribeLanguage(listener: () => void): () => void {
 
 type Values = Record<string, string | number | null | undefined>;
 
-export function translate(source: string, selected: Language, values?: Values, messages: Readonly<Record<string, string>> = frenchMessages): string {
-  const localized = Object.hasOwn(messages, source) ? messages[source]
+export function translate(source: string, selected: Language, values?: Values, messages: Readonly<Record<string, string>> = frenchMessages, context?: string): string {
+  const key = context ? `${context}:${source}` : source;
+  const localized = Object.hasOwn(messages, key) ? messages[key]
+    : Object.hasOwn(frenchMessages, key) ? frenchMessages[key]
+    : Object.hasOwn(messages, source) ? messages[source]
     : Object.hasOwn(frenchMessages, source) ? frenchMessages[source] : source;
   const message = selected === "fr" ? localized : source;
   // A callback keeps interpolation values literal, including $&, HTML and braces.
@@ -38,13 +41,13 @@ export function translate(source: string, selected: Language, values?: Values, m
     values && Object.hasOwn(values, key) ? String(values[key] ?? "") : placeholder);
 }
 
-export function t(source: string, values?: Values): string {
-  return translate(source, language, values);
+export function t(source: string, values?: Values, context?: string): string {
+  return translate(source, language, values, frenchMessages, context);
 }
 
 /** Context matters: a font's Weight and a workout's Weight use different words. */
 export function createTranslator(messages: Readonly<Record<string, string>>) {
-  return (source: string, values?: Values): string => translate(source, language, values, messages);
+  return (source: string, values?: Values, context?: string): string => translate(source, language, values, messages, context);
 }
 
 export function setLanguage(value: Language): void {

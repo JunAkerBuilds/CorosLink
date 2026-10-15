@@ -1,4 +1,4 @@
-import { t, useLanguage } from "../i18n";
+import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage } from "../i18n";
 import { useEffect, useState } from "react";
 import type { CorosLinkApi } from "../coroslink-api";
 
@@ -19,8 +19,8 @@ export function ApiAccountSettings({ api, service }: { api: CorosLinkApi; servic
   const [connected, setConnected] = useState(false);
   const [hasKey, setHasKey] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [error, setError] = useState<LocalizableText>("");
+  const [message, setMessage] = useState<LocalizableText>("");
   const definition = definitions[service];
   useEffect(() => {
     let active = true;
@@ -43,14 +43,14 @@ export function ApiAccountSettings({ api, service }: { api: CorosLinkApi; servic
       }
       if (active) { setDraft(values); setConnected(linked); setHasKey(storedKey); setReady(true); }
     }
-    void load().catch(caught => { if (active) setError(caught instanceof Error ? caught.message : t("Could not load settings.")); });
+    void load().catch(caught => { if (active) setError(localizedText(() => caught instanceof Error ? caught.message : t("Could not load settings."))); });
     return () => { active = false; };
   }, [api, service]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true); setError(""); setMessage("");
     try { await action(); }
-    catch (caught) { setError(caught instanceof Error ? caught.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : t("Could not update connection.")); }
+    catch (caught) { setError(localizedText(() => caught instanceof Error ? caught.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : t("Could not update connection."))); }
     finally { setBusy(false); }
   }
   async function aiConfig(clear = false) {
@@ -73,7 +73,7 @@ export function ApiAccountSettings({ api, service }: { api: CorosLinkApi; servic
       const saved = await api.saveChatSettings(await aiConfig()); setHasKey(saved[service].hasApiKey);
     }
     setDraft(current => ({ ...current, apiKey: "" }));
-    setMessage(t("Settings saved."));
+    setMessage(localizedText(() => t("Settings saved.")));
   }
   function field(name: string, label: string, secret = false, required = true) {
     return <label className="field" key={name}>{t(label)}<input name={name} type={secret ? "password" : "text"} autoComplete="off" spellCheck={false}
@@ -81,7 +81,7 @@ export function ApiAccountSettings({ api, service }: { api: CorosLinkApi; servic
   }
   return <div className="account-setup">
     <h2>{t(definition.title)}</h2><p>{t(definition.description)}</p>
-    {error && <p role="alert">{t(error)}</p>}
+    {error && <p role="alert">{renderLocalizedText(error)}</p>}
     {!ready && !error && <p role="status">{t("Loading settings…")}</p>}
     {ready && <form onSubmit={event => { event.preventDefault(); void run(save); }}>
       <p>{service === "local" || service === "openRouter" ? (hasKey ? t("API key saved") : t("No API key saved")) : connected ? t("Connected") : t("Not connected")}</p>
@@ -95,21 +95,21 @@ export function ApiAccountSettings({ api, service }: { api: CorosLinkApi; servic
         <button className="primary-button" type="submit" disabled={busy}>{busy ? t("Working…") : t("Save settings")}</button>
         {service === "spotify" && <button className="secondary-button" type="button" disabled={busy} onClick={() => void run(async () => {
           const status = connected ? await api.logoutSpotify() : await api.loginSpotify(); setConnected(status.authenticated);
-          setMessage(status.authenticated ? "Spotify connected." : "Spotify signed out.");
+          setMessage(localizedText(() => status.authenticated ? "Spotify connected." : "Spotify signed out."));
         })}>{connected ? t("Sign out") : t("Sign in to Spotify")}</button>}
         {(service === "local" || service === "openRouter") && <>
           <button className="secondary-button" type="button" disabled={busy || !draft.model?.trim() || (service === "local" && !draft.baseUrl?.trim())} onClick={() => void run(async () => {
             const config = await aiConfig();
             const result = service === "local" ? await api.testLocalChatConnection(config.local) : await api.testOpenRouterConnection(config.openRouter);
-            if (!result.ok) throw new Error(result.message); setMessage(result.message);
+            if (!result.ok) throw new Error(result.message); setMessage(localizedText(() => result.message));
           })}>{t("Test connection")}</button>
           <button className="secondary-button" type="button" disabled={busy || !hasKey} onClick={() => void run(async () => {
             const saved = await api.saveChatSettings(await aiConfig(true)); setHasKey(saved[service].hasApiKey);
-            setDraft(current => ({ ...current, apiKey: "" })); setMessage("API key removed.");
+            setDraft(current => ({ ...current, apiKey: "" })); setMessage(localizedText(() => "API key removed."));
           })}>{t("Remove API key")}</button>
         </>}
       </div>
-      {message && <p role="status">{t(message)}</p>}
+      {message && <p role="status">{renderLocalizedText(message)}</p>}
     </form>}
   </div>;
 }

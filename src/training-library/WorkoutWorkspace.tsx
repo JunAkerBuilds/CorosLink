@@ -724,7 +724,7 @@ export function WorkoutWorkspace({
                 value=""
                 options={[
                   { value: "", label: "Move to collection" },
-                  ...collections.map((collection) => ({ value: collection.id, label: collection.name }))
+                  ...collections.map((collection) => ({ value: collection.id, label: collection.name, translate: false }))
                 ]}
                 onChange={(value) => {
                   if (value) void updateMetadata(selected, { collectionId: value });

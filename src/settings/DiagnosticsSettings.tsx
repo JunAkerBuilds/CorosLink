@@ -1,4 +1,4 @@
-import { t, useLanguage } from "../i18n";
+import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage } from "../i18n";
 import { useEffect, useState } from "react";
 import { Bug, Check, Copy, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import type { DiagnosticsSnapshot } from "../../electron/diagnosticsTypes";
@@ -9,12 +9,12 @@ export function DiagnosticsSettings({ api }: { api: CorosLinkApi }) {
   useLanguage();
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot | null>(null);
   const [busy, setBusy] = useState<"refresh" | "copy" | "clear" | null>("refresh");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<LocalizableText>("");
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
     if (!api.getDiagnostics) {
-      setError(t("Restart CorosLink to enable error logs."));
+      setError(localizedText(() => t("Restart CorosLink to enable error logs.")));
       setBusy(null);
       return;
     }
@@ -22,7 +22,7 @@ export function DiagnosticsSettings({ api }: { api: CorosLinkApi }) {
     void api.getDiagnostics().then((next) => {
       if (active) setSnapshot(next);
     }).catch(() => {
-      if (active) setError(t("Could not load error logs. Try refreshing."));
+      if (active) setError(localizedText(() => t("Could not load error logs. Try refreshing.")));
     }).finally(() => { if (active) setBusy(null); });
     return () => { active = false; };
   }, [api]);
@@ -47,9 +47,9 @@ export function DiagnosticsSettings({ api }: { api: CorosLinkApi }) {
         setNotice("Error logs cleared.");
       }
     } catch {
-      setError(action === "copy"
+      setError(localizedText(() => action === "copy"
         ? t("Could not copy the report. Open the preview below to select and copy it.")
-        : action === "clear" ? t("Could not clear error logs. Try again.") : t("Could not refresh error logs. Try again."));
+        : action === "clear" ? t("Could not clear error logs. Try again.") : t("Could not refresh error logs. Try again.")));
     } finally { setBusy(null); }
   }
 
@@ -82,7 +82,7 @@ export function DiagnosticsSettings({ api }: { api: CorosLinkApi }) {
           <textarea readOnly aria-label={t("Error report")} value={snapshot.report} spellCheck={false} />
         </details>
       ) : null}
-      {error ? <p className="diagnostics-error" role="alert">{t(error)}</p> : null}
+      {error ? <p className="diagnostics-error" role="alert">{renderLocalizedText(error)}</p> : null}
       <p className="diagnostics-notice" role="status">{t(notice)}</p>
     </section>
   );

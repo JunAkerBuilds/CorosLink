@@ -1,4 +1,5 @@
 import { t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { createCollapsedWatchfaceLayerSections, watchfaceLayerMatchesSearch } from "./watchfaceLayerSearch";
 import { batteryStateMeaning, batteryReplacementStateCount, COROS_BATTERY_STATE_ORDER } from "./watchfaceBatteryStates";
 import { WatchfaceAddMenu, type WatchfaceAddCategory, type WatchfaceAddFaceOption } from "./WatchfaceAddMenu";
 import { recoverChartGroup, recoveredChartSources, recoverWatchfaceDesign } from "./recoveredWatchfaceDesign";
@@ -1219,7 +1220,7 @@ export function WatchfaceEditor({
   const [layersOpen, setLayersOpen] = useState(false);
   const [layerQuery, setLayerQuery] = useState("");
   const [collapsedLayerSections, setCollapsedLayerSections] = useState(
-    () => new Set<string>([t("Template assets"), "Always-on assets"])
+    createCollapsedWatchfaceLayerSections
   );
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [aiHeadingSlot, setAiHeadingSlot] = useState<HTMLDivElement | null>(null);
@@ -8573,9 +8574,9 @@ export function WatchfaceEditor({
       }))
   ];
   faceAddOptions.sort((left, right) => faceAddOptionRank(left.id) - faceAddOptionRank(right.id));
-  const layerSearch = layerQuery.trim().toLowerCase();
+  const layerSearch = layerQuery.trim();
   const layerMatchesSearch = (label: string) =>
-    !layerSearch || label.toLowerCase().includes(layerSearch);
+    watchfaceLayerMatchesSearch(label, layerSearch);
   const searchedEditorGroups = visibleEditorGroups
     .map((group) => ({
       group,

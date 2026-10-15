@@ -317,7 +317,7 @@ export function ExerciseExplorer({
     () =>
       [...exercises]
         .sort((left, right) => left.name.localeCompare(right.name))
-        .map((item) => ({ value: item.name, label: item.name })),
+        .map((item) => ({ value: item.name, label: item.name, translate: false })),
     [exercises, getLocale()]
   );
 

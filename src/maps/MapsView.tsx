@@ -471,7 +471,7 @@ function CorosMapsTab({
   const regionFilterOptions = useMemo(
     () => [
       { value: "all", label: t("All regions") },
-      ...regionOptions.map(([id, title]) => ({ value: id, label: title }))
+      ...regionOptions.map(([id, title]) => ({ value: id, label: title, translate: false }))
     ],
     [regionOptions, language]
   );

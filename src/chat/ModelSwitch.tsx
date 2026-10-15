@@ -1,11 +1,8 @@
 import { t, useLanguage } from "../i18n/tools";
 import { Network, Sparkles, Terminal } from "lucide-react";
 import type { ChatProvider } from "../../electron/types";
-import {
-  getChatModelOptions,
-  type ChatModelOption
-} from "../../electron/chatModels";
-import { SelectDropdown } from "../components/SelectDropdown";
+import { getChatModelOptions } from "../../electron/chatModels";
+import { SelectDropdown, type SelectOption } from "../components/SelectDropdown";
 
 function renderChatGptIcon() {
   return <Sparkles size={14} strokeWidth={2.1} aria-hidden="true" />;
@@ -36,11 +33,11 @@ export function ModelSwitch({
   }
 
   const baseOptions = getChatModelOptions(provider);
-  const options: ChatModelOption[] = baseOptions.some(
+  const options: SelectOption<string>[] = baseOptions.some(
     (option) => option.value === model
   )
     ? baseOptions
-    : [...baseOptions, { value: model, label: model }];
+    : [...baseOptions, { value: model, label: model, translate: false }];
   const providerLabel =
     provider === "claude-code"
       ? "Claude"
@@ -67,7 +64,7 @@ export function ModelSwitch({
       className={`app-select--pill chat-model-select chat-select--${tone}`}
       menuClassName={`chat-select-menu chat-select-menu--${tone}`}
       value={model}
-      options={options.map(option => ({ ...option, label: t(option.label) }))}
+      options={options}
       onChange={onChange}
       renderIcon={renderIcon}
       label={t("{{p0}} model", { p0: providerLabel })}

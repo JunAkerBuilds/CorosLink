@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "./i18n";
+import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage, getLocale } from "./i18n";
 import {
   AlertCircle,
   ArrowLeft,
@@ -487,8 +487,8 @@ export default function App() {
   const autoTransferRef = useRef(autoTransfer);
   const watchConnectedRef = useRef(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<LocalizableText | null>(null);
+  const [error, setError] = useState<LocalizableText | null>(null);
   const [lastOutput, setLastOutput] = useState<string[]>([]);
   const [appUpdateSnapshot, setAppUpdateSnapshot] = useState<AppUpdateSnapshot>(
     {
@@ -561,7 +561,7 @@ export default function App() {
     if (appUpdateSnapshot.status === "error") {
       installAcceptedVersionRef.current = null;
       setError(
-        appUpdateSnapshot.error ?? t("Could not download the update."),
+        localizedText(() => appUpdateSnapshot.error ?? t("Could not download the update.")),
       );
     }
   }, [
@@ -623,7 +623,7 @@ export default function App() {
       setWatchStatus(watch);
       setDownloads(localDownloads);
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     }
   }, [api]);
 
@@ -864,7 +864,7 @@ export default function App() {
     void api
       .getTrainingHubStatus()
       .then(applyTrainingHubStatus)
-      .catch((caught) => setError(toErrorMessage(caught)));
+      .catch((caught) => setError(localizedText(() => toErrorMessage(caught))));
   }, [activeView, api, applyTrainingHubStatus]);
 
   const handleTrainingHubActivityDetail = useCallback(
@@ -887,7 +887,7 @@ export default function App() {
           ),
         );
       } catch (caught) {
-        setError(toErrorMessage(caught));
+        setError(localizedText(() => toErrorMessage(caught)));
       } finally {
         setBusy(null);
       }
@@ -945,13 +945,13 @@ export default function App() {
 
     void refreshAll();
     void refreshSpotify().catch((caught) => {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     });
     void refreshYouTubeMusic().catch((caught) => {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     });
     void refreshTrainingHub().catch((caught) => {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     });
 
     const interval = window.setInterval(() => {
@@ -978,13 +978,13 @@ export default function App() {
     }
     return api.onYouTubeMusicAuthCaptured((result) => {
       if (!result.status) {
-        setError(result.error);
+        setError(localizedText(() => result.error));
         return;
       }
       setYoutubeMusicStatus(result.status);
-      setMessage(t("YouTube Music connected."));
+      setMessage(localizedText(() => t("YouTube Music connected.")));
       void refreshYouTubeMusic().catch((caught) =>
-        setError(toErrorMessage(caught)),
+        setError(localizedText(() => toErrorMessage(caught))),
       );
     });
   }, [api, refreshYouTubeMusic]);
@@ -1055,7 +1055,7 @@ export default function App() {
             }
 
             if (transferred > 0) {
-              setMessage(t("{{value0}} track(s) downloaded and transferred.", { value0: transferred }));
+              setMessage(localizedText(() => t("{{value0}} track(s) downloaded and transferred.", { value0: transferred })));
               await refreshAll();
             }
           })();
@@ -1109,7 +1109,7 @@ export default function App() {
         refreshYouTubeMusic(),
       ]);
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -1127,12 +1127,12 @@ export default function App() {
       setAppUpdateSnapshot(snapshot);
 
       if (snapshot.status === "not-available") {
-        setMessage(t("You're on the latest version."));
+        setMessage(localizedText(() => t("You're on the latest version.")));
       } else if (snapshot.status === "error") {
-        setError(snapshot.error ?? t("Could not check for updates."));
+        setError(localizedText(() => snapshot.error ?? t("Could not check for updates.")));
       }
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -1144,12 +1144,12 @@ export default function App() {
       .then((result) => {
         if (result?.installMethod === "manual") {
           setMessage(
-            t("Opened the GitHub download page. Install the new build over CorosLink in Applications."),
+            localizedText(() => t("Opened the GitHub download page. Install the new build over CorosLink in Applications.")),
           );
         }
       })
       .catch((caught) => {
-        setError(toErrorMessage(caught));
+        setError(localizedText(() => toErrorMessage(caught)));
       });
   }
 
@@ -1165,10 +1165,10 @@ export default function App() {
       setAppUpdateSnapshot(snapshot);
 
       if (snapshot.status === "error") {
-        setError(snapshot.error ?? t("Could not download the update."));
+        setError(localizedText(() => snapshot.error ?? t("Could not download the update.")));
       }
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -1178,7 +1178,7 @@ export default function App() {
     if (IS_DEVELOPMENT_BUILD && devUpdatePreviewKey !== undefined) {
       restoreUpdateSnapshotAfterPreview();
       setMessage(
-        t("Test update {{value0}} accepted. No files were downloaded in the development build.", { value0: version }),
+        localizedText(() => t("Test update {{value0}} accepted. No files were downloaded in the development build.", { value0: version })),
       );
       return;
     }
@@ -1232,7 +1232,7 @@ export default function App() {
     setDevUpdatePreviewKey(undefined);
     if (api) {
       void api.getAppUpdateStatus().then(setAppUpdateSnapshot).catch((caught) => {
-        setError(toErrorMessage(caught));
+        setError(localizedText(() => toErrorMessage(caught)));
       });
     }
   }
@@ -1256,7 +1256,7 @@ export default function App() {
       const snapshot = await api.setUpdatePreferences(prefs);
       setAppUpdateSnapshot(snapshot);
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     }
   }
 
@@ -1272,7 +1272,7 @@ export default function App() {
       const tracks = await api.listSpotifyPlaylistTracks(playlistId);
       setSpotifyTracks(tracks);
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
       setSpotifyTracks([]);
     } finally {
       setBusy(null);
@@ -1292,9 +1292,9 @@ export default function App() {
     try {
       const status = await api.saveSpotifyConfig(spotifyConfig);
       setSpotifyStatus(status);
-      setMessage(t("Spotify settings saved."));
+      setMessage(localizedText(() => t("Spotify settings saved.")));
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -1316,9 +1316,9 @@ export default function App() {
       const status = await api.saveYouTubeMusicAuth(youtubeMusicHeadersRaw);
       setYoutubeMusicStatus(status);
       setYoutubeMusicHeadersRaw("");
-      setMessage(t("YouTube Music headers saved."));
+      setMessage(localizedText(() => t("YouTube Music headers saved.")));
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -1336,10 +1336,10 @@ export default function App() {
     try {
       const status = await api.loginSpotify();
       setSpotifyStatus(status);
-      setMessage(t("Spotify account connected."));
+      setMessage(localizedText(() => t("Spotify account connected.")));
       await refreshSpotify();
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -1362,13 +1362,13 @@ export default function App() {
           : await api.lockSpotifyFollowedPlaylists(),
       );
       setMessage(
-        unlocking
+        localizedText(() => unlocking
           ? t("Followed playlists unlocked.")
-          : t("Followed playlists locked."),
+          : t("Followed playlists locked.")),
       );
       await refreshSpotify();
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -1388,9 +1388,9 @@ export default function App() {
       setSpotifyPlaylists([]);
       setSpotifyTracks([]);
       setSelectedSpotifyPlaylistId("");
-      setMessage(t("Spotify account disconnected."));
+      setMessage(localizedText(() => t("Spotify account disconnected.")));
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -1415,9 +1415,9 @@ export default function App() {
       setYoutubeMusicStatus(status);
       setYoutubeMusicPlaylists([]);
       setSelectedYouTubeMusicPlaylistId("");
-      setMessage(t("YouTube Music disconnected."));
+      setMessage(localizedText(() => t("YouTube Music disconnected.")));
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -1440,10 +1440,10 @@ export default function App() {
         (current) => current || result.playlists[0]?.id || "",
       );
       setMessage(
-        t("Synced {{value0}} song(s) and {{value1}} playlist(s) from YouTube Music.", { value0: result.songs.length, value1: result.playlists.length }),
+        localizedText(() => t("Synced {{value0}} song(s) and {{value1}} playlist(s) from YouTube Music.", { value0: result.songs.length, value1: result.playlists.length })),
       );
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -1451,7 +1451,7 @@ export default function App() {
 
   async function handleQueueYouTubeMusicSong(song: YouTubeMusicSong) {
     if (!song.videoUrl) {
-      setError(t("This YouTube Music song did not include a video URL."));
+      setError(localizedText(() => t("This YouTube Music song did not include a video URL.")));
       return;
     }
 
@@ -1489,7 +1489,7 @@ export default function App() {
 
     if (typeof api.downloadCombinedPlaylist !== "function") {
       setError(
-        t("Combined downloads aren't loaded yet. Fully quit and restart the app so the Electron process picks up the new feature."),
+        localizedText(() => t("Combined downloads aren't loaded yet. Fully quit and restart the app so the Electron process picks up the new feature.")),
       );
       return;
     }
@@ -1499,7 +1499,7 @@ export default function App() {
     }
 
     if (items.length === 0) {
-      setError(t("This playlist has no downloadable tracks to combine."));
+      setError(localizedText(() => t("This playlist has no downloadable tracks to combine.")));
       return;
     }
 
@@ -1515,7 +1515,7 @@ export default function App() {
       result = await api.downloadCombinedPlaylist(id, name, items);
     } catch (caught) {
       const error = toErrorMessage(caught);
-      setError(error);
+      setError(localizedText(() => error));
       setCombinedDownloads((current) => ({
         ...current,
         [id]: { busy: false, progress: null, error },
@@ -1537,16 +1537,16 @@ export default function App() {
         transferred = true;
       } catch (caught) {
         setError(
-          t("“{{value0}}” was saved locally, but could not be transferred to the watch: {{value1}}", { value0: result.track.title, value1: toErrorMessage(caught) }),
+          localizedText(() => t("“{{value0}}” was saved locally, but could not be transferred to the watch: {{value1}}", { value0: result.track.title, value1: toErrorMessage(caught) })),
         );
       }
     }
-    setMessage([
+    setMessage(localizedText(() => [
       t("Combined {{count}} tracks into “{{title}}”.", { count: result.downloadedCount, title: result.track.title }),
       reused > 0 ? t("Reused {{count}} cached tracks.", { count: reused }) : "",
       skipped > 0 ? t("{{count}} tracks could not be downloaded. Retry to fetch the missing tracks.", { count: skipped }) : "",
       transferred ? t("Transferred it to the watch.") : "",
-    ].filter(Boolean).join(" "));
+    ].filter(Boolean).join(" ")));
     setCombinedDownloads((current) => {
       const next = { ...current };
       if (skipped > 0) {
@@ -1564,7 +1564,7 @@ export default function App() {
     try {
       await refreshAll();
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     }
   }
 
@@ -1579,7 +1579,7 @@ export default function App() {
       }));
 
     if (queue.length === 0) {
-      setError(t("This YouTube Music playlist did not include video URLs."));
+      setError(localizedText(() => t("This YouTube Music playlist did not include video URLs.")));
       return;
     }
 
@@ -1588,7 +1588,7 @@ export default function App() {
 
   function handleOpenYouTubeMusicSong(song: YouTubeMusicSong) {
     if (!song.videoUrl) {
-      setError(t("This YouTube Music song did not include a video URL."));
+      setError(localizedText(() => t("This YouTube Music song did not include a video URL.")));
       return;
     }
 
@@ -1604,7 +1604,7 @@ export default function App() {
     setTrainingHubStatus(status);
     setTrainingHub2faEmail(null);
     setTrainingHub2faCode("");
-    setMessage(successMessage);
+    setMessage(localizedText(() => successMessage));
     void loadTrainingHubWellnessData();
     await loadTrainingHubData();
   }
@@ -1628,7 +1628,7 @@ export default function App() {
       if (result.twoFactorRequired) {
         setTrainingHub2faEmail(result.email ?? trainingHubEmail);
         setTrainingHub2faCode("");
-        setMessage(t("Enter the verification code we emailed you."));
+        setMessage(localizedText(() => t("Enter the verification code we emailed you.")));
       } else {
         await finishTrainingHubConnect(
           result.status,
@@ -1636,7 +1636,7 @@ export default function App() {
         );
       }
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setTrainingHubPassword("");
       setBusy(null);
@@ -1657,7 +1657,7 @@ export default function App() {
       const status = await api.verifyTrainingHubTwoFactor(trainingHub2faCode);
       await finishTrainingHubConnect(status, "COROS Training Hub connected.");
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -1673,9 +1673,9 @@ export default function App() {
 
     try {
       await api.resendTrainingHubTwoFactorCode();
-      setMessage(t("We sent a new verification code to your email."));
+      setMessage(localizedText(() => t("We sent a new verification code to your email.")));
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -1683,7 +1683,7 @@ export default function App() {
 
   function handleTrainingHubCancel2fa() {
     void api?.cancelTrainingHubTwoFactor().catch((caught) => {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     });
     setTrainingHub2faEmail(null);
     setTrainingHub2faCode("");
@@ -1705,7 +1705,7 @@ export default function App() {
       if (result.twoFactorRequired) {
         setTrainingHub2faEmail(result.email ?? trainingHubStatus?.email ?? null);
         setTrainingHub2faCode("");
-        setMessage(t("Enter the verification code we emailed you."));
+        setMessage(localizedText(() => t("Enter the verification code we emailed you.")));
       } else {
         await finishTrainingHubConnect(
           result.status,
@@ -1713,7 +1713,7 @@ export default function App() {
         );
       }
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -1731,9 +1731,9 @@ export default function App() {
     try {
       setTrainingHubStatus(await api.logoutTrainingHub());
       clearTrainingHubData();
-      setMessage(t("COROS Training Hub disconnected."));
+      setMessage(localizedText(() => t("COROS Training Hub disconnected.")));
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -1746,9 +1746,9 @@ export default function App() {
 
     try {
       await refreshTrainingHub();
-      setMessage(t("COROS Training Hub analytics refreshed."));
+      setMessage(localizedText(() => t("COROS Training Hub analytics refreshed.")));
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -1780,11 +1780,11 @@ export default function App() {
 
       if (result.saved) {
         setMessage(
-          t("Saved {{value0}} file to {{value1}}.", { value0: format?.label ?? t("activity"), value1: result.filePath ?? "" }),
+          localizedText(() => t("Saved {{value0}} file to {{value1}}.", { value0: format?.label ?? t("activity"), value1: result.filePath ?? "" })),
         );
       }
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
       const status = await api.getTrainingHubStatus();
       setTrainingHubStatus(status);
       if (!status.authenticated) {
@@ -1812,18 +1812,18 @@ export default function App() {
     try {
       const jobs = await api.enqueueYouTubeDownloads([{ url: trimmedUrl }]);
       if (jobs.length === 0) {
-        setMessage(t("That download is already downloaded or queued."));
+        setMessage(localizedText(() => t("That download is already downloaded or queued.")));
         return;
       }
 
       setUrl("");
       setMessage(
-        autoTransfer && watchStatus?.connected
+        localizedText(() => autoTransfer && watchStatus?.connected
           ? t("Download queued. Tracks will auto-transfer when ready.")
-          : t("Download queued."),
+          : t("Download queued.")),
       );
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     }
   }
 
@@ -1835,7 +1835,7 @@ export default function App() {
     try {
       await api.recordYouTubeVisit(visitUrl, title);
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     }
   }
 
@@ -1856,7 +1856,7 @@ export default function App() {
 
     if (typeof api.enqueueYouTubeDownloads !== "function") {
       setError(
-        t("Background downloads aren't loaded yet. Fully quit and restart the app — the Electron process needs a restart to pick up the new download queue."),
+        localizedText(() => t("Background downloads aren't loaded yet. Fully quit and restart the app — the Electron process needs a restart to pick up the new download queue.")),
       );
       return;
     }
@@ -1866,14 +1866,14 @@ export default function App() {
     try {
       const jobs = await api.enqueueYouTubeDownloads(queue);
       if (jobs.length === 0) {
-        setMessage(t("Those downloads are already downloaded or queued."));
+        setMessage(localizedText(() => t("Those downloads are already downloaded or queued.")));
         return;
       }
       setMessage(
-        t("Queued {{value0}} download{{value1}}. Keep browsing — they run in the background.", { value0: jobs.length, value1: jobs.length === 1 ? "" : "s" }),
+        localizedText(() => t("Queued {{value0}} download{{value1}}. Keep browsing — they run in the background.", { value0: jobs.length, value1: jobs.length === 1 ? "" : "s" })),
       );
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     }
   }
 
@@ -1885,7 +1885,7 @@ export default function App() {
     try {
       setYoutubeJobs(await api.cancelYouTubeJob(id));
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     }
   }
 
@@ -1897,7 +1897,7 @@ export default function App() {
     try {
       setYoutubeJobs(await api.clearYouTubeJob(id));
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     }
   }
 
@@ -1909,7 +1909,7 @@ export default function App() {
     try {
       setYoutubeJobs(await api.clearCompletedYouTubeJobs());
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     }
   }
 
@@ -1931,10 +1931,10 @@ export default function App() {
     try {
       const result = await api.transferLocalTrack(id);
       setWatchStatus(result.watch);
-      setMessage(t("Track transferred to the watch."));
+      setMessage(localizedText(() => t("Track transferred to the watch.")));
       await refreshAll();
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setTransferProgress(null);
       setBusy(null);
@@ -1972,10 +1972,10 @@ export default function App() {
         const result = await api.transferLocalTrack(track.id);
         setWatchStatus(result.watch);
       }
-      setMessage(t("{{value0}} track(s) transferred to the watch.", { value0: pending.length }));
+      setMessage(localizedText(() => t("{{value0}} track(s) transferred to the watch.", { value0: pending.length })));
       await refreshAll();
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
       await refreshAll();
     } finally {
       setTransferProgress(null);
@@ -1989,7 +1989,7 @@ export default function App() {
     }
 
     if (!watchStatus?.connected) {
-      setError(t("Connect your watch before transferring tracks."));
+      setError(localizedText(() => t("Connect your watch before transferring tracks.")));
       return;
     }
 
@@ -2019,13 +2019,13 @@ export default function App() {
         setWatchStatus(result.watch);
       }
       setMessage(
-        pending.length === 1
+        localizedText(() => pending.length === 1
           ? t("Track transferred to the watch.")
-          : t("{{value0}} selected tracks transferred to the watch.", { value0: pending.length }),
+          : t("{{value0}} selected tracks transferred to the watch.", { value0: pending.length })),
       );
       await refreshAll();
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
       await refreshAll();
     } finally {
       setTransferProgress(null);
@@ -2045,9 +2045,9 @@ export default function App() {
     try {
       await api.deleteWatchTrack(track.relativePath);
       await refreshAll();
-      setMessage(t("Track deleted from the watch."));
+      setMessage(localizedText(() => t("Track deleted from the watch.")));
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -2078,12 +2078,12 @@ export default function App() {
 
       await refreshAll();
       setMessage(
-        tracks.length === 1
+        localizedText(() => tracks.length === 1
           ? t("Track deleted from the watch.")
-          : t("{{value0}} tracks deleted from the watch.", { value0: tracks.length }),
+          : t("{{value0}} tracks deleted from the watch.", { value0: tracks.length })),
       );
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -2100,9 +2100,9 @@ export default function App() {
 
     try {
       setDownloads(await api.deleteDownload(track.id, true));
-      setMessage(t("Local track deleted."));
+      setMessage(localizedText(() => t("Local track deleted.")));
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -2135,12 +2135,12 @@ export default function App() {
 
       setDownloads(nextDownloads);
       setMessage(
-        tracks.length === 1
+        localizedText(() => tracks.length === 1
           ? t("Local track deleted.")
-          : t("{{value0}} tracks deleted.", { value0: tracks.length }),
+          : t("{{value0}} tracks deleted.", { value0: tracks.length })),
       );
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setBusy(null);
     }
@@ -2246,7 +2246,7 @@ export default function App() {
     setStartupView(view);
     saveStartupView(view);
     setMessage(
-      t("Startup view set to {{value0}}. It will open on next launch.", { value0: getPrimaryViewLabel(view) }),
+      localizedText(() => t("Startup view set to {{value0}}. It will open on next launch.", { value0: getPrimaryViewLabel(view) })),
     );
   }
 
@@ -4217,10 +4217,10 @@ function CombinedDownloadButton({
           <span
             className="combined-download-error"
             role="alert"
-            title={t(error)}
+            title={renderLocalizedText(error)}
           >
             <AlertCircle size={14} aria-hidden="true" />
-            <span>{t(error)}</span>
+            <span>{renderLocalizedText(error)}</span>
           </span>
         ) : null}
       </div>
@@ -5879,7 +5879,7 @@ function WatchTrackTable({
 interface ToastItem {
   id: number;
   kind: "success" | "error";
-  text: string;
+  text: LocalizableText;
 }
 
 const TOAST_DURATION: Record<ToastItem["kind"], number> = {
@@ -5890,12 +5890,12 @@ const TOAST_DURATION: Record<ToastItem["kind"], number> = {
 // Drives the floating toast stack from the app's existing message/error state,
 // so every setMessage/setError call surfaces as an auto-dismissing toast
 // instead of a banner that shoves the layout down.
-function useToaster(message: string | null, error: string | null) {
+function useToaster(message: LocalizableText | null, error: LocalizableText | null) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const nextIdRef = useRef(0);
   const timersRef = useRef(new Map<number, number>());
-  const lastMessageRef = useRef<string | null>(null);
-  const lastErrorRef = useRef<string | null>(null);
+  const lastMessageRef = useRef<LocalizableText | null>(null);
+  const lastErrorRef = useRef<LocalizableText | null>(null);
 
   const dismissToast = useCallback((id: number) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));
@@ -5907,7 +5907,7 @@ function useToaster(message: string | null, error: string | null) {
   }, []);
 
   const pushToast = useCallback(
-    (kind: ToastItem["kind"], text: string) => {
+    (kind: ToastItem["kind"], text: LocalizableText) => {
       const id = (nextIdRef.current += 1);
       setToasts((current) => [...current.slice(-2), { id, kind, text }]);
       const timer = window.setTimeout(
@@ -5922,14 +5922,14 @@ function useToaster(message: string | null, error: string | null) {
   // Refs guard against StrictMode's double-invoke and repeated identical values
   // (e.g. a polled watch error) while still re-toasting after the source clears.
   useEffect(() => {
-    if (message && message !== lastMessageRef.current) {
+    if (message && (!lastMessageRef.current || renderLocalizedText(message) !== renderLocalizedText(lastMessageRef.current))) {
       pushToast("success", message);
     }
     lastMessageRef.current = message;
   }, [message, pushToast]);
 
   useEffect(() => {
-    if (error && error !== lastErrorRef.current) {
+    if (error && (!lastErrorRef.current || renderLocalizedText(error) !== renderLocalizedText(lastErrorRef.current))) {
       pushToast("error", error);
     }
     lastErrorRef.current = error;
@@ -5987,7 +5987,7 @@ function ToastCard({
           <CheckCircle2 size={18} />
         )}
       </span>
-      <span className="toast-text">{t(toast.text)}</span>
+      <span className="toast-text">{renderLocalizedText(toast.text)}</span>
       <button
         className="toast-close"
         type="button"

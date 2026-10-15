@@ -1,4 +1,4 @@
-import { t, useLanguage } from "../i18n";
+import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage } from "../i18n";
 import { CartoAccountSettings } from "./CartoAccountSettings";
 import { useEffect, useState } from "react";
 import {
@@ -377,7 +377,7 @@ function RoutingAccount({ api }: { api: CorosLinkApi }) {
     ReturnType<CorosLinkApi["getRouteBuilderConfig"]>
   > | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<LocalizableText>("");
   const [saved, setSaved] = useState(false);
   useEffect(() => {
     let active = true;
@@ -387,7 +387,7 @@ function RoutingAccount({ api }: { api: CorosLinkApi }) {
       },
       () => {
         if (active)
-          setError(t("Could not load routing settings. Go back and try again."));
+          setError(localizedText(() => t("Could not load routing settings. Go back and try again.")));
       },
     );
     return () => {
@@ -399,7 +399,7 @@ function RoutingAccount({ api }: { api: CorosLinkApi }) {
       <h2>OpenRouteService</h2>
       <p>
         {t("Default routing works without an account. Add an OpenRouteService API key if you prefer to use that service.")} </p>
-      {error ? <p role="alert">{t(error)}</p> : null}
+      {error ? <p role="alert">{renderLocalizedText(error)}</p> : null}
       {config ? (
         <form
           onSubmit={async (event) => {
@@ -423,9 +423,9 @@ function RoutingAccount({ api }: { api: CorosLinkApi }) {
               setSaved(true);
             } catch (caught) {
               setError(
-                caught instanceof Error
+                localizedText(() => caught instanceof Error
                   ? caught.message
-                  : "Could not save routing settings.",
+                  : "Could not save routing settings."),
               );
             } finally {
               setBusy(false);

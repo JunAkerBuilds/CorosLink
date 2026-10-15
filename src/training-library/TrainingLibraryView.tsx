@@ -895,7 +895,8 @@ function PlanIndex({
                 { value: "", label: "Move to collection" },
                 ...collections.map((collection) => ({
                   value: collection.id,
-                  label: collection.name
+                  label: collection.name,
+                  translate: false
                 }))
               ]}
               onChange={(value) => {
@@ -1276,7 +1277,8 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
       { value: "", label: "Match an activity" },
       ...activities.map((activity) => ({
         value: activity.activityId,
-        label: `${activity.name ?? activity.sportName ?? "Activity"} · ${activityDate(activity)}`
+        label: `${activity.name ?? activity.sportName ?? t("Activity")} · ${activityDate(activity)}`,
+        translate: false
       }))
     ],
     [activities, getLocale()]

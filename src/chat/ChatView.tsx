@@ -352,7 +352,7 @@ function formatPlanStepTarget(
   }
   if (step.send_off_seconds) return t("{{p0}} send-off", { p0: formatPlanDuration(step.send_off_seconds) });
   if (step.target_load) return t("{{p0}} TL", { p0: step.target_load });
-  return t("Open workout target");
+  return t("Open", undefined, "workoutTarget");
 }
 
 function formatPlanSourceSteps(

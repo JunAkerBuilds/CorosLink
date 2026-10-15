@@ -838,7 +838,7 @@ function BookRow({
             <>
               <dl className="audiobook-facts">
                 <div>
-                  <dt>{t("Audio length")}</dt>
+                  <dt>{t("Length", undefined, "audio")}</dt>
                   <dd>{formatLength(book.durationSeconds)}</dd>
                 </div>
                 <div>

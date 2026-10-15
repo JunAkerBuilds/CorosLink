@@ -1334,10 +1334,10 @@ export const toolsFrench: Record<string, string> = {
   "{{minutes}}m": "{{minutes}} min",
   "HRV": "VFC",
   "RHR": "FC au repos",
-  "Open workout target": "Libre",
-  "Route start": "Départ",
-  "Start date": "Date de début",
-  "Activity period": "Période",
+  "workoutTarget:Open": "Libre",
+  "route:Start": "Départ",
+  "date:Start": "Date de début",
+  "activityPeriod:Time": "Période",
   "Activity length": "Distance et durée",
-  "Audio length": "Durée"
+  "audio:Length": "Durée"
 };

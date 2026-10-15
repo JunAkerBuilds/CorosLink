@@ -1,4 +1,4 @@
-import { t, useLanguage } from "../i18n";
+import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage } from "../i18n";
 import { useEffect, useState } from "react";
 import { Check, Copy, Loader2, PlugZap } from "lucide-react";
 import type { CorosLinkApi } from "../coroslink-api";
@@ -9,7 +9,7 @@ export function WatchfaceAutomationSettings({ api }: { api: CorosLinkApi }) {
   useLanguage();
   const [status, setStatus] = useState<WatchfaceAutomationStatus | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<LocalizableText>("");
   const [copied, setCopied] = useState("");
   const [port, setPort] = useState("");
 
@@ -20,7 +20,7 @@ export function WatchfaceAutomationSettings({ api }: { api: CorosLinkApi }) {
         setStatus(next);
         if (next.port) setPort(String(next.port));
       }
-    }).catch((caught) => { if (mounted) setError(String(caught)); });
+    }).catch((caught) => { if (mounted) setError(localizedText(() => String(caught))); });
     return () => { mounted = false; };
   }, [api]);
 
@@ -39,7 +39,7 @@ export function WatchfaceAutomationSettings({ api }: { api: CorosLinkApi }) {
       setStatus(next);
       if (next.port) setPort(String(next.port));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("Could not update external AI access."));
+      setError(localizedText(() => caught instanceof Error ? caught.message : t("Could not update external AI access.")));
     } finally { setBusy(false); }
   }
 
@@ -48,7 +48,7 @@ export function WatchfaceAutomationSettings({ api }: { api: CorosLinkApi }) {
       await navigator.clipboard.writeText(value);
       setCopied(label);
       setError("");
-    } catch { setError(t("Could not copy. Select and copy the connection values below.")); }
+    } catch { setError(localizedText(() => t("Could not copy. Select and copy the connection values below."))); }
   }
 
   const config = status?.enabled && status.url && status.token
@@ -95,7 +95,7 @@ export function WatchfaceAutomationSettings({ api }: { api: CorosLinkApi }) {
         </details>
       )}
       {copied ? <p role="status">{copied === "config" ? t("Codex configuration copied, including the connection token.") : t("Connection token copied.")}</p> : null}
-      {error || status?.error ? <p className="wf-automation-error" role="alert">{error || status?.error}</p> : null}
+      {error || status?.error ? <p className="wf-automation-error" role="alert">{renderLocalizedText(error || status?.error || "")}</p> : null}
     </section>
   );
 }

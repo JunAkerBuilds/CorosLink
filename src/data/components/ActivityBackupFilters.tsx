@@ -161,7 +161,7 @@ export function resolveBackupFilters(
   }
   if (draft.datePreset === "custom") {
     if (startDay || endDay) {
-      parts.push(`${startDay ?? t("Start date")} → ${endDay ?? t("Today")}`);
+      parts.push(`${startDay ?? t("Start", undefined, "date")} → ${endDay ?? t("Today")}`);
     }
   } else if (draft.datePreset !== "all") {
     parts.push(t(DATE_PRESETS.find((preset) => preset.value === draft.datePreset)?.label ?? ""));
@@ -272,7 +272,7 @@ export function ActivityBackupFilters({
       <div className="backup-filter-split">
         <section className="backup-filter-section" aria-labelledby="backup-filter-time">
           <h3 className="backup-filter-label" id="backup-filter-time">
-            {t("Activity period")}</h3>
+            {t("Time", undefined, "activityPeriod")}</h3>
           <div
             className="data-intervals-range backup-filter-presets"
             role="radiogroup"

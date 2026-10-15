@@ -57,8 +57,8 @@ function CalendarConnection({
   const autoSyncLabelId = useId();
   const autoSyncDescriptionId = useId();
   const timeZonesId = useId();
-  const defaultTiming = useMemo(defaultCalendarEventTiming, [getLocale()]);
-  const timeZones = useMemo(() => [...new Set([defaultTiming.timeZone, "UTC", ...Intl.supportedValuesOf("timeZone")])], [defaultTiming, getLocale()]);
+  const defaultTiming = useMemo(defaultCalendarEventTiming, []);
+  const timeZones = useMemo(() => [...new Set([defaultTiming.timeZone, "UTC", ...Intl.supportedValuesOf("timeZone")])], [defaultTiming]);
   const [timingDraft, setTimingDraft] = useState<CalendarEventTiming | null>(null);
   const [appleEmail, setAppleEmail] = useState("");
   const [appPassword, setAppPassword] = useState("");
@@ -81,7 +81,7 @@ function CalendarConnection({
             disconnect: api.disconnectAppleCalendar,
             cancelConnect: api.cancelAppleCalendarConnect,
           },
-    [api, isGoogle, getLocale()],
+    [api, isGoogle],
   );
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
   const [calendars, setCalendars] = useState<CalendarChoice[]>([]);

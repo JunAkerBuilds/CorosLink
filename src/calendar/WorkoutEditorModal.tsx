@@ -281,7 +281,7 @@ export function WorkoutEditorModal({
       sport: "run",
       save_to_library: false
     };
-  }, [planEntry, getLocale()]);
+  }, [planEntry]);
 
   useEffect(() => {
     let cancelled = false;

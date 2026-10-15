@@ -1,4 +1,4 @@
-import { t, useLanguage } from "../i18n";
+import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage } from "../i18n";
 import { useEffect, useState } from "react";
 import { CheckCircle2, KeyRound } from "lucide-react";
 import type { CorosLinkApi } from "../coroslink-api";
@@ -10,13 +10,13 @@ export function CartoAccountSettings({ api }: { api: CorosLinkApi }) {
   const [hasKey, setHasKey] = useState(false);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [error, setError] = useState<LocalizableText>("");
+  const [message, setMessage] = useState<LocalizableText>("");
   useEffect(() => {
     let active = true;
     void api.getRouteBuilderConfig().then(config => {
       if (active) { setHasKey(Boolean(config.cartoApiKey)); setReady(true); }
-    }).catch(() => { if (active) setError(t("Could not load CARTO settings. Reopen this page to try again.")); });
+    }).catch(() => { if (active) setError(localizedText(() => t("Could not load CARTO settings. Reopen this page to try again."))); });
     return () => { active = false; };
   }, [api]);
   async function save(remove = false) {
@@ -35,14 +35,14 @@ export function CartoAccountSettings({ api }: { api: CorosLinkApi }) {
       }
       setKey("");
       window.dispatchEvent(new Event(CARTO_SETTINGS_CHANGED));
-      setMessage(remove ? t("CARTO key removed. Maps will use OpenStreetMap.") : t("CARTO key saved. Light and Dark layers are now available in the expanded activity map."));
-    } catch (caught) { setError(caught instanceof Error ? caught.message : t("Could not save the CARTO key.")); }
+      setMessage(localizedText(() => remove ? t("CARTO key removed. Maps will use OpenStreetMap.") : t("CARTO key saved. Light and Dark layers are now available in the expanded activity map.")));
+    } catch (caught) { setError(localizedText(() => caught instanceof Error ? caught.message : t("Could not save the CARTO key."))); }
     finally { setBusy(false); }
   }
   return <div className="account-setup">
     <h2>{t("CARTO Basemaps")}</h2>
     <p>{t("Optional Light and Dark map styles. Standard OpenStreetMap works without an API key.")}</p>
-    {error && <p role="alert">{t(error)}</p>}
+    {error && <p role="alert">{renderLocalizedText(error)}</p>}
     {!ready && !error && <p role="status">{t("Loading settings…")}</p>}
     {ready && <form onSubmit={event => { event.preventDefault(); void save(); }}>
       <div className={`account-key-state${hasKey ? " is-saved" : ""}`} role="status">
@@ -60,7 +60,7 @@ export function CartoAccountSettings({ api }: { api: CorosLinkApi }) {
         <button className="primary-button" type="submit" disabled={busy || !key.trim()}>{busy ? t("Saving…") : hasKey ? (key.trim() ? t("Replace saved key") : t("Key saved")) : t("Save key")}</button>
         <button className="secondary-button" type="button" disabled={busy || !hasKey} onClick={() => void save(true)}>{t("Remove key")}</button>
       </div>
-      {message && <p className="account-key-confirmation" role="status"><CheckCircle2 size={16} aria-hidden="true" />{t(message)}</p>}
+      {message && <p className="account-key-confirmation" role="status"><CheckCircle2 size={16} aria-hidden="true" />{renderLocalizedText(message)}</p>}
     </form>}
     <h3>{t("How to get your key")}</h3>
     <ol className="account-api-instructions">

@@ -11,7 +11,7 @@ import '../../src/styles.css';
 import '../../src/native-sidebar.css';
 import '../../src/training/trainingHub.css';
 
-const state = { mounts: 0, saves: [] as unknown[] };
+const state = { mounts: 0, saves: [] as unknown[], dropdownChanges: [] as string[] };
 Object.assign(window, { localizationTest: state, setTestLanguage: setLanguage });
 const api = {
   getSpotifyConfig: async () => ({ clientId: 'saved-client', redirectUri: 'https://127.0.0.1:4567/callback' }),
@@ -23,6 +23,7 @@ function Fixture() {
   useLanguage();
   const [expanded, setExpanded] = useState(true);
   const [selected, setSelected] = useState('overview');
+  const [freeform, setFreeform] = useState('back');
   useEffect(() => { state.mounts++; }, []);
   return <>
     <AppSidebar activeView="settings" onChange={() => {}} appLogo="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27/%3E" expanded={expanded} onExpandedChange={setExpanded} overlayOpen={false} onOverlayOpenChange={() => {}} />
@@ -31,6 +32,11 @@ function Fixture() {
       <div id="fixture-values"><span>{formatNumber(1234.5)}</span><span>{formatDate(new Date(2026, 9, 15), { month: 'long' })}</span></div>
       <TrainingHubHeader connected={true} status={null} busy={null} sampleMode={false} activeTab="overview" tabIdPrefix="fixture" activityCount={5} onTabChange={() => {}} onRefresh={() => {}} onLogout={() => {}} />
       <SelectDropdown label="Startup view" value={selected} onChange={setSelected} options={[{ value: 'overview', label: 'Overview' }, { value: 'calendar', label: 'Calendar' }]} />
+      <div id="fixture-freeform">
+        <SelectDropdown label="Exercise" title="Select an activity" value={freeform}
+          onChange={value => { state.dropdownChanges.push(value); setFreeform(value); }}
+          options={[{ value: 'back', label: 'Back', translate: false }, { value: 'open', label: 'Open', translate: false }, { value: 'calendar', label: 'Calendar' }, { value: 'settings', label: 'Settings' }]} />
+      </div>
       <ApiAccountSettings api={api} service="spotify" />
       <p id="fixture-fallback">{t('Untranslated custom data: Élodie')}</p>
     </main>

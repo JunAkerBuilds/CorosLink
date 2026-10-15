@@ -373,7 +373,7 @@ export function RouteMapCanvas({
     }
 
     if (startPin) {
-      addPinMarker(layer, startPin, START_COLOR, t("Route start"));
+      addPinMarker(layer, startPin, START_COLOR, t("Start", undefined, "route"));
       boundsPoints.push([startPin.lat, startPin.lon]);
     }
     if (destinationPin) {

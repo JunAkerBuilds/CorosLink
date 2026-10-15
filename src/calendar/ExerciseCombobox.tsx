@@ -298,7 +298,7 @@ export function ExerciseCombobox({
                           onError={(event) => { event.currentTarget.hidden = true; }}
                         />
                       ) : null}
-                      <span>{t(option.label)}</span>
+                      <span>{option.label}</span>
                     </span>
                     {isSelected ? <Check size={15} aria-hidden="true" /> : null}
                   </button>

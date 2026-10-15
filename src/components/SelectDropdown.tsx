@@ -16,6 +16,8 @@ import { t, useLanguage, getLocale } from "../i18n";
 export type SelectOption<T extends string> = {
   value: T;
   label: string;
+  /** Keep user/provider names literal while translating built-in option labels. */
+  translate?: boolean;
 };
 
 export interface SelectDropdownProps<T extends string> {
@@ -85,8 +87,10 @@ export function SelectDropdown<T extends string>({
   const [highlightedValue, setHighlightedValue] = useState<T>(value);
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
   const [portalTheme, setPortalTheme] = useState<PortalTheme>({});
+  const displayOptionLabel = (option: SelectOption<T>) =>
+    option.translate === false ? option.label : translateLabel(option.label);
   const selectedOption = options.find((option) => option.value === value);
-  const selectedLabel = translateLabel(selectedOption?.label ?? "Select");
+  const selectedLabel = selectedOption ? displayOptionLabel(selectedOption) : translateLabel("Select");
   const selectedIcon = renderIcon?.(value);
   const isMenuMounted = isOpen || isClosing;
   const labelId = `${dropdownId}-label`;
@@ -306,7 +310,7 @@ export function SelectDropdown<T extends string>({
       const currentIndex = options.findIndex((option) => option.value === (isOpen ? highlightedValue : value));
       const startIndex = search.length === 1 ? currentIndex + 1 : 0;
       const orderedOptions = [...options.slice(startIndex), ...options.slice(0, startIndex)];
-      const match = orderedOptions.find((option) => translateLabel(option.label).toLocaleLowerCase(getLocale()).startsWith(search));
+      const match = orderedOptions.find((option) => displayOptionLabel(option).toLocaleLowerCase(getLocale()).startsWith(search));
       if (match) {
         openMenu(match.value);
       }
@@ -376,7 +380,7 @@ export function SelectDropdown<T extends string>({
                     {optionIcon}
                   </span>
                 ) : null}
-                <span className="app-select-option-label">{translateLabel(option.label)}</span>
+                <span className="app-select-option-label">{displayOptionLabel(option)}</span>
               </span>
               {isSelected ? (
                 <Check
