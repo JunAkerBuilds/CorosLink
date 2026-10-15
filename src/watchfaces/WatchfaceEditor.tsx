@@ -10142,7 +10142,8 @@ export function WatchfaceEditor({
     if (
       layer.kind === "date" ||
       layer.kind === "weekday" ||
-      layer.id === "staticDateSlash"
+      layer.id === "staticDateSlash" ||
+      layer.nativeDataId === "date_year"
     ) {
       return "Date";
     }

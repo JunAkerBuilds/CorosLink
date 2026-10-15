@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Official faces opened in Studio now keep their year, such as the "2026" beside the date on MULTIDATA RUN. **Year** appears in the Date group of the Layers panel. Reopen the face from the catalog to get it back.
+
 ## [0.1.52] - 2026-10-12
 
 ### Added

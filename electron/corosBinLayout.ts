@@ -540,6 +540,11 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
       add(`control.date.${language}.${part}`, "number", { rect: rectangle(base + rect), geometryOffset: base + rect, control: "date" }, base + rect + 10,
         { rect: `control_${language}_date_${part}_rect`, asset: `control_${language}_date_${part}_font` });
     }
+    // The calendar year follows the Chinese weekday: rect at 0x532, digit font
+    // at 0x53c (the compiler's control_number_date_year_* binding). Official
+    // MULTIDATA RUN draws "2026" here beside its combined month/day.
+    add("control.date.year", "number", { rect: rectangle(base + 0x532), geometryOffset: base + 0x532, control: "date" }, base + 0x53c,
+      { rect: "control_number_date_year_rect", asset: "control_number_date_year_font" });
     // SetControl's per-language date records (Map::at keys 5–13 in the
     // disassembly). German/Spanish/French weekday fonts sit at 0x58c/0x59c/0x5cc
     // in official DASHBOARD; their month/day slots follow the normal-header pattern.

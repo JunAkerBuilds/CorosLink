@@ -39,6 +39,8 @@ rect(0xde, [305, 305, 375, 327]); pointer(0xe8, 3);
 bytes.writeUInt32LE(DATA, 0x316);
 rect(DATA, [280, 240, 335, 269], 17);
 pointer(DATA + 10, 3);
+// Official MULTIDATA RUN's calendar year, beside its combined month/day.
+rect(0x532, [215, 19, 283, 49]); pointer(0x53c, 3);
 pointer(0xb00, 0); // A bitmap pointer outside the known schema is retained.
 // WFChartInfo at 0xdc4 (SetChart): graph geometry, a rise/set readout with a
 // shared font, the solar angle in a temperature-like slot, a dormant readout
@@ -78,6 +80,10 @@ assert.deepEqual([get("normal", "elevation").config.rect, get("normal", "elevati
 assert.deepEqual([get("normal", "calories").config.rect, get("normal", "calories").rect.x0], ["kcal_rect", 305]);
 assert.equal(get("normal", "heartRate.legacy"), undefined, "0xde is the calorie value, not a second heart rate");
 assert.equal(get("normal", "elevation").config.asset, "elevation_font");
+const year = get("normal", "control.date.year");
+assert.deepEqual([year.active, year.rect.x0, year.rect.x1, year.rect.horizontal, year.asset.group], [true, 215, 283, "center", 3]);
+assert.deepEqual(year.config, { rect: "control_number_date_year_rect", asset: "control_number_date_year_font" }, "the year keeps the compiler's binding");
+assert.equal(get("aod", "control.date.year"), undefined);
 assert.deepEqual(Object.fromEntries(progressArcConfigValues(result.modes[0].kcalProgressArc)), {
   kcal_progress_arc: "{208,208,195,195,-138,-41,10,1}", kcal_progress_arc_color: "0x555555"
 }, "the calorie goal arc survives as its DIY keys");
