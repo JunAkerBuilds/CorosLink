@@ -1,4 +1,4 @@
-import { t, useLanguage } from "../../i18n/tools";
+import { t, useLanguage , getLocale} from "../../i18n/tools";
 import { useCartoApiKey } from "./useCartoApiKey";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -7,7 +7,8 @@ import { useEffect, useMemo, useRef } from "react";
 import type {
   GeneratedRoute,
   RouteGeometry,
-  RouteWaypoint
+  RouteWaypoint,
+  TrainingHubTrackPoint
 } from "../../../electron/types";
 import {
   resolveBaseLayer,
@@ -26,6 +27,8 @@ interface RouteMapCanvasProps {
   overlays: RouteOverlayId[];
   /** Preview route shown in Generate / Explore (and when reviewing saved). */
   route: GeneratedRoute | null;
+  /** Other generated loops, drawn faintly so their shapes can be compared. */
+  ghostRoutes?: Array<{ points: TrainingHubTrackPoint[]; highlighted: boolean }>;
   /** Live drawn geometry (Draw / Sketch modes). */
   drawGeometry: RouteGeometry | null;
   /** Draggable draw waypoints (Draw / Sketch modes). */
@@ -58,6 +61,9 @@ const ROUTE_COLOR = "#ff3b3b";
 const ROUTE_COLOR_DARK = "#2fbe91";
 const ROUTE_CASING = "#ffffff";
 const RETRACED_ROUTE_COLOR = "#facc15";
+// Loops not picked: quiet ink that reads on light and dark tiles alike.
+const GHOST_ROUTE_COLOR = "#334155";
+const GHOST_ROUTE_COLOR_DARK = "#cbd5e1";
 // Dashed sky-blue guide so the original sketch reads apart from the route.
 const SKETCH_GHOST_COLOR = "#7dd3fc";
 /** Ignore mousemove samples closer than this (px) to bound stroke size. */
@@ -70,6 +76,7 @@ export function RouteMapCanvas({
   baseLayer,
   overlays,
   route,
+  ghostRoutes = [],
   drawGeometry,
   waypoints,
   startPin,
@@ -107,6 +114,16 @@ export function RouteMapCanvas({
   const retracedSections = useMemo(
     () => findRetracedRouteSections(displayedLinePoints),
     [displayedLinePoints, language]
+  );
+  const ghostLines = useMemo(
+    () =>
+      ghostRoutes.map((ghost) => ({
+        highlighted: ghost.highlighted,
+        points: ghost.points
+          .filter((point) => point.lat !== undefined && point.lon !== undefined)
+          .map((point) => [point.lat!, point.lon!] as [number, number])
+      })),
+    [ghostRoutes]
   );
 
   // Keep interaction callbacks in refs so the map is built exactly once.
@@ -337,6 +354,33 @@ export function RouteMapCanvas({
     const editing = mode === "draw" || mode === "sketch";
     const linePoints = displayedLinePoints;
     const boundsPoints: Array<[number, number]> = [];
+    const ghostColor = baseLayer === "dark" ? GHOST_ROUTE_COLOR_DARK : GHOST_ROUTE_COLOR;
+    const drawGhost = (points: Array<[number, number]>, highlighted: boolean) => {
+      // Busy cycle maps swallow a bare thin line, so ghosts get a casing too.
+      L.polyline(points, {
+        color: baseLayer === "dark" ? "#0b0f14" : ROUTE_CASING,
+        weight: highlighted ? 7.5 : 6,
+        opacity: highlighted ? 0.85 : 0.6,
+        lineCap: "round",
+        lineJoin: "round",
+        interactive: false
+      }).addTo(layer);
+      L.polyline(points, {
+        color: ghostColor,
+        weight: highlighted ? 4.5 : 3,
+        opacity: highlighted ? 0.95 : 0.7,
+        lineCap: "round",
+        lineJoin: "round",
+        interactive: false
+      }).addTo(layer);
+    };
+
+    // Resting ghosts sit under the route; options keep one stable frame.
+    for (const ghost of ghostLines) {
+      if (editing || ghost.points.length < 2) continue;
+      if (!ghost.highlighted) drawGhost(ghost.points, false);
+      boundsPoints.push(...ghost.points);
+    }
 
     if (linePoints.length >= 2) {
       // White casing underneath keeps the line readable on light and dark tiles.
@@ -364,6 +408,12 @@ export function RouteMapCanvas({
           lineJoin: "round",
           interactive: false
         }).addTo(layer);
+      }
+      // A hovered option rides above the route so its whole shape shows.
+      for (const ghost of ghostLines) {
+        if (!editing && ghost.highlighted && ghost.points.length >= 2) {
+          drawGhost(ghost.points, true);
+        }
       }
       if (!editing) {
         addEndpoint(layer, linePoints[0]!, START_COLOR);
@@ -418,6 +468,7 @@ export function RouteMapCanvas({
     route,
     displayedLinePoints,
     retracedSections,
+    ghostLines,
     startPin,
     destinationPin,
     currentLocation,

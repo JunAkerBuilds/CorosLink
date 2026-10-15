@@ -1,5 +1,5 @@
 import { t, useLanguage, getLocale } from "../i18n/watchfaces";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { BatteryMedium, Bluetooth, Settings2, Watch } from "lucide-react";
 import type { CorosNativeBleSnapshot } from "../../electron/corosNativeBleTypes";
 import type { CorosLinkApi } from "../coroslink-api";
@@ -7,14 +7,17 @@ import { CorosDirectWatchfacePanel } from "./CorosDirectWatchfacePanel";
 import { connectedWatch, watchBetaNote, watchConnectionState, watchDisplayName, watchFaceSyncReady, watchFirmware } from "./watchLink";
 import "./watchLink.css";
 
+const ActivityScreenPanel = import.meta.env.DEV ? lazy(() => import("./CorosActivityScreenPanel").then(module => ({ default: module.CorosActivityScreenPanel }))) : null;
+
 /**
  * Watch Faces' On watch tab: the faces stored on the watch and installing new
  * ones. Connecting lives in the toolbar's watch menu, which this tab opens.
  */
-export function OnWatchPanel({ api, snapshot, onOpenWatchMenu }: {
+export function OnWatchPanel({ api, snapshot, onOpenWatchMenu, showDevelopmentTools = false }: {
   api: CorosLinkApi;
   snapshot: CorosNativeBleSnapshot | null;
   onOpenWatchMenu: () => void;
+  showDevelopmentTools?: boolean;
 }) {
   useLanguage();
   const [busy, setBusy] = useState(false);
@@ -52,6 +55,9 @@ export function OnWatchPanel({ api, snapshot, onOpenWatchMenu }: {
 
       <CorosDirectWatchfacePanel api={api} ready={watchFaceSyncReady(snapshot)} connected={connected}
         watch={connectedWatch(snapshot)} betaNote={watchBetaNote(snapshot)} disabled={busy || linking} onBusy={setBusy} />
+      {ActivityScreenPanel && showDevelopmentTools ? <Suspense fallback={<p>{t("Loading activity screens…")}</p>}>
+        <ActivityScreenPanel api={api} snapshot={snapshot} disabled={busy || linking} onBusy={setBusy} />
+      </Suspense> : null}
     </section>
   );
 }

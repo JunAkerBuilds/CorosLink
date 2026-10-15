@@ -1,14 +1,10 @@
 import { t, useLanguage, getLocale } from "../i18n/tools";
 import {
   CalendarDays,
-  ChartNoAxesColumnIncreasing,
-  Compass,
-  MapPinCheck,
   MousePointer2,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
-  Clock3,
   Flame,
   Footprints,
   Gauge,
@@ -18,6 +14,7 @@ import {
   RotateCcw,
   ZoomIn,
 } from "lucide-react";
+import { GlobeHemisphereWest } from "@phosphor-icons/react";
 import {
   Area,
   AreaChart,
@@ -35,6 +32,7 @@ import type {
   TrainingHubActivityDetail,
 } from "../../electron/types";
 import { useUnitSystem } from "../units/UnitSystemProvider";
+import { CardHead } from "./OverviewBriefing";
 import {
   distanceUnit,
   elevationUnit,
@@ -807,28 +805,24 @@ export function ActivityGlobeCard({
   const primaryStats = [
     {
       label: t("Total distance"),
-      icon: Route,
       tone: "distance",
       value: mapDistance.value,
       unit: mapDistance.unit,
     },
     {
       label: t("Training time"),
-      icon: Clock3,
       tone: "time",
       value: mapDuration.value,
       unit: mapDuration.unit,
     },
     {
       label: t("Activities"),
-      icon: ChartNoAxesColumnIncreasing,
       tone: "activities",
       value: overall.count.toLocaleString(getLocale()),
       unit: "",
     },
     {
       label: t("Places visited"),
-      icon: MapPin,
       tone: "places",
       value: mapPlaceCount.toLocaleString(getLocale()),
       unit: "",
@@ -885,154 +879,186 @@ export function ActivityGlobeCard({
     } => Boolean(stat),
   );
 
+  const placeCount = locationSummaries.length;
+  const pageSize = 5;
+  const placeTags = (summary: LocationSummary): string[] => {
+    const tags: string[] = [];
+    if (mostVisited && placeCount > 1 && summary.key === mostVisited.key) tags.push(t("Most visited"));
+    if (latestPlace && summary.key === latestPlace.key) tags.push(t("Latest"));
+    return tags;
+  };
+
   return (
-    <section className="training-map" aria-labelledby="training-map-title">
+    <section className="training-map panel" aria-label={t("Where you’ve been")}>
+      <CardHead
+        icon={<GlobeHemisphereWest size={20} weight="duotone" />}
+        hue="var(--accent)"
+        title={t("Where you’ve been")}
+        subtitle={t("Every place your training has taken you")}
+      >
+        <div
+          className="training-map-periods"
+          role="group"
+          aria-label={t("Training period")}
+        >
+          {([
+            ["all", t("All time")],
+            ["year", t("This year")],
+            ["90-days", t("Last 90 days")],
+            ["custom", t("Custom")],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={period === value ? "is-selected" : undefined}
+              aria-pressed={period === value}
+              onClick={() =>
+                setPeriodPreference((current) => ({
+                  ...current,
+                  period: value,
+                }))
+              }
+            >
+              {label}
+              {value === "custom" ? (
+                <CalendarDays size={13} aria-hidden="true" />
+              ) : null}
+            </button>
+          ))}
+        </div>
+      </CardHead>
+
+      {period === "custom" ? (
+        <div className="training-map-date-range">
+          <label>
+            <span>{t("From")}</span>
+            <input
+              type="date"
+              value={customStart}
+              max={customEnd || undefined}
+              onChange={(event) =>
+                setPeriodPreference((current) => ({
+                  ...current,
+                  customStart: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <label>
+            <span>{t("To")}</span>
+            <input
+              type="date"
+              value={customEnd}
+              min={customStart || undefined}
+              onChange={(event) =>
+                setPeriodPreference((current) => ({
+                  ...current,
+                  customEnd: event.target.value,
+                }))
+              }
+            />
+          </label>
+        </div>
+      ) : null}
+
       <div className="training-map-main">
         <div className="training-map-information">
-          <header className="training-map-header">
-            <p className="training-map-eyebrow"><Compass size={17} aria-hidden="true" />{t("Training map")}</p>
-            <h2 id="training-map-title">{t("Where you’ve been")}</h2>
-            <p>{t("Explore every place your training has taken you.")}</p>
-          </header>
-
-          <div className="training-map-period-wrap">
-            <div
-              className="training-map-periods"
-              role="group"
-              aria-label={t("Training period")}
-            >
-              {([
-                ["all", t("All time")],
-                ["year", t("This year")],
-                ["90-days", t("Last 90 days")],
-                ["custom", t("Custom")],
-              ] as const).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={period === value ? "is-selected" : undefined}
-                  aria-pressed={period === value}
-                  onClick={() =>
-                    setPeriodPreference((current) => ({
-                      ...current,
-                      period: value,
-                    }))
-                  }
-                >
-                  {label}
-                  {value === "custom" ? (
-                    <CalendarDays size={14} aria-hidden="true" />
-                  ) : null}
-                </button>
-              ))}
-            </div>
-            {period === "custom" ? (
-              <div className="training-map-date-range">
-                <label>
-                  <span>{t("From")}</span>
-                  <input
-                    type="date"
-                    value={customStart}
-                    max={customEnd || undefined}
-                    onChange={(event) =>
-                      setPeriodPreference((current) => ({
-                        ...current,
-                        customStart: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <label>
-                  <span>{t("To")}</span>
-                  <input
-                    type="date"
-                    value={customEnd}
-                    min={customStart || undefined}
-                    onChange={(event) =>
-                      setPeriodPreference((current) => ({
-                        ...current,
-                        customEnd: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
+          <dl className="training-map-stats" aria-label={t("Training summary")}>
+            {primaryStats.map((stat, index) => (
+              <div
+                key={stat.tone}
+                className={`training-map-stat is-${stat.tone}`}
+                style={{ "--stat-delay": `${index * 45}ms` } as CSSProperties}
+              >
+                <dt>
+                  <i className="training-map-stat-dot" aria-hidden="true" />
+                  <span>{stat.label}</span>
+                </dt>
+                <dd>
+                  <strong>
+                    {stat.value}
+                    {stat.unit ? <small>{stat.unit}</small> : null}
+                  </strong>
+                </dd>
               </div>
-            ) : null}
-          </div>
+            ))}
+          </dl>
 
-          <section className="training-map-stats" aria-label={t("Training summary")}>
-            <dl className="training-map-primary-stats">
-              {primaryStats.map((stat, index) => {
+          {secondaryStats.length > 0 ? (
+            <dl className="training-map-totals">
+              {secondaryStats.map((stat) => {
                 const Icon = stat.icon;
                 return (
-                <div
-                  key={stat.tone}
-                  className={`training-map-primary-stat is-${stat.tone}`}
-                  style={{ "--stat-delay": `${index * 45}ms` } as CSSProperties}
-                >
-                  <dt><span className="training-map-stat-icon"><Icon size={19} aria-hidden="true" /></span><span>{stat.label}</span></dt>
-                  <dd>
-                    <strong>{stat.value}</strong>
-                    {stat.unit ? <span>{stat.unit}</span> : null}
-                  </dd>
-                </div>
+                  <div key={stat.id}>
+                    <dt>
+                      <Icon size={13} aria-hidden="true" />
+                      <span>{stat.label}</span>
+                    </dt>
+                    <dd>
+                      <strong>{stat.value}</strong>
+                      {stat.unit ? <small>{stat.unit}</small> : null}
+                    </dd>
+                  </div>
                 );
               })}
             </dl>
-            {secondaryStats.length > 0 ? (
-              <dl className="training-map-secondary-stats">
-                {secondaryStats.map((stat) => {
-                  const Icon = stat.icon;
-                  return (
-                    <div key={stat.id}>
-                      <dt>
-                        <span className="training-map-motion-icon" aria-hidden="true">
-                          <Icon size={18} />
-                        </span>
-                        {stat.label}
-                      </dt>
-                      <dd>
-                        <strong>{stat.value}</strong>
-                        {stat.unit ? <small>{stat.unit}</small> : null}
-                      </dd>
-                    </div>
-                  );
-                })}
-              </dl>
-            ) : null}
-          </section>
+          ) : null}
 
-          <section
-            className="training-map-location"
-            aria-label={selectedLocation ? t("Selected location") : t("Location highlights")}
-            aria-live="polite"
-          >
+          <section className="training-map-places" aria-label={t("Places")} aria-live="polite">
+            <header className="training-map-places-head">
+              <h3>{t("Places")}</h3>
+              {placeCount > 0 ? (
+                <span className="training-map-count">{placeCount.toLocaleString(getLocale())}</span>
+              ) : null}
+              {placeCount > pageSize ? (
+                <div className="training-map-pager">
+                  <button
+                    type="button"
+                    aria-label={t("Previous recent places")}
+                    title={t("Previous places")}
+                    disabled={recentStart === 0}
+                    onClick={() => setRecentStart((current) => Math.max(0, current - 1))}
+                  >
+                    <ChevronLeft size={15} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("Next recent places")}
+                    title={t("Next places")}
+                    disabled={recentStart + pageSize >= placeCount}
+                    onClick={() =>
+                      setRecentStart((current) =>
+                        Math.min(placeCount - pageSize, current + 1),
+                      )
+                    }
+                  >
+                    <ChevronRight size={15} aria-hidden="true" />
+                  </button>
+                </div>
+              ) : null}
+            </header>
+
             {selectedLocation && selectedPlaceLabel ? (
-              <div
-                key={selectedLocation.key}
-                className="training-map-location-content is-selected"
-              >
-                <header className="training-map-location-header">
-                  <span className="training-map-location-icon" aria-hidden="true">
-                    <MapPin size={19} />
-                  </span>
+              <div key={selectedLocation.key} className="training-map-place-detail">
+                <header>
                   <div>
-                    <h3>{selectedPlaceLabel.city}</h3>
+                    <h4>{selectedPlaceLabel.city}</h4>
                     <p>{selectedPlaceLabel.country}</p>
                   </div>
                   <button
                     type="button"
-                    className="training-map-all-places"
+                    className="training-map-detail-back"
                     onClick={() => {
                       setSelectedLocationKey(null);
                       handleResetView();
                     }}
                   >
                     <ChevronLeft size={13} aria-hidden="true" />
-                    {t("All places")}</button>
+                    {t("All places")}
+                  </button>
                 </header>
 
-                <dl className="training-map-location-metrics">
+                <dl className="training-map-detail-metrics">
                   <div>
                     <dt>{t("Activities")}</dt>
                     <dd>{selectedLocation.activities.length.toLocaleString(getLocale())}</dd>
@@ -1043,7 +1069,8 @@ export function ActivityGlobeCard({
                       {metersToDisplayDistance(selectedLocation.distanceMeters, unitSystem).toLocaleString(
                         getLocale(),
                         { maximumFractionDigits: 1 },
-                      )} <small>{distanceUnit(unitSystem)}</small>
+                      )}
+                      <small>{distanceUnit(unitSystem)}</small>
                     </dd>
                   </div>
                   <div>
@@ -1056,8 +1083,8 @@ export function ActivityGlobeCard({
                   </div>
                 </dl>
 
-                <div className="training-map-location-trend">
-                  <div>
+                <div className="training-map-detail-trend">
+                  <div className="training-map-detail-trend-head">
                     <span>
                       {selectedLocation.elevationMeters > 0
                         ? t("Elevation gained")
@@ -1070,7 +1097,7 @@ export function ActivityGlobeCard({
                     </strong>
                   </div>
                   {selectedLocation.trend.length > 1 ? (
-                    <div className="training-map-location-chart" aria-hidden="true">
+                    <div className="training-map-detail-chart" aria-hidden="true">
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart
                           data={selectedLocation.trend.map((point) => ({
@@ -1078,6 +1105,7 @@ export function ActivityGlobeCard({
                             elevation: metersToElevation(point.elevation, unitSystem),
                             distance: metersToDisplayDistance(point.distance, unitSystem),
                           }))}
+                          margin={{ top: 4, right: 0, bottom: 0, left: 0 }}
                         >
                           <defs>
                             <linearGradient
@@ -1089,12 +1117,12 @@ export function ActivityGlobeCard({
                             >
                               <stop
                                 offset="0%"
-                                stopColor="var(--map-accent)"
+                                stopColor="var(--accent)"
                                 stopOpacity={0.3}
                               />
                               <stop
                                 offset="100%"
-                                stopColor="var(--map-accent)"
+                                stopColor="var(--accent)"
                                 stopOpacity={0}
                               />
                             </linearGradient>
@@ -1106,8 +1134,8 @@ export function ActivityGlobeCard({
                                 ? "elevation"
                                 : "distance"
                             }
-                            stroke="var(--map-accent)"
-                            strokeWidth={1.8}
+                            stroke="var(--accent)"
+                            strokeWidth={2}
                             fill="url(#trainingMapLocationFill)"
                             isAnimationActive={false}
                           />
@@ -1116,92 +1144,93 @@ export function ActivityGlobeCard({
                     </div>
                   ) : (
                     <p className="training-map-trend-empty">
-                      {t("More activities will build a location trend.")}</p>
+                      {t("More activities will build a location trend.")}
+                    </p>
                   )}
-                  <button
-                    type="button"
-                    className={`training-map-view-action${zoomingToStreet ? " is-zooming" : ""}`}
-                    onClick={zoomIntoSelectedLocation}
-                    disabled={zoomingToStreet}
-                  >
-                    {zoomingToStreet ? t("Zooming in") : t("Zoom in")}
-                    <ZoomIn size={15} aria-hidden="true" />
-                  </button>
                 </div>
+
+                <button
+                  type="button"
+                  className={`training-map-zoom${zoomingToStreet ? " is-zooming" : ""}`}
+                  onClick={zoomIntoSelectedLocation}
+                  disabled={zoomingToStreet}
+                >
+                  <ZoomIn size={14} aria-hidden="true" />
+                  {zoomingToStreet ? t("Zooming in") : t("Zoom in")}
+                </button>
+              </div>
+            ) : null}
+
+            {visitsLoading && !mapHasVisits ? (
+              <div className="training-map-places-loading" aria-label={t("Mapping GPS activities")}>
+                <span />
+                <span />
+                <span />
+              </div>
+            ) : overall.count === 0 ? (
+              <div className="training-map-places-empty">
+                <MapPin size={20} aria-hidden="true" />
+                <strong>{connected ? t("No activities in this period") : t("Training Hub is offline")}</strong>
+                <p>
+                  {connected
+                    ? t("Choose another period when more activity history is available.")
+                    : t("Connect Training Hub to map your routes and training history.")}
+                </p>
+              </div>
+            ) : !mapHasVisits ? (
+              <div className="training-map-places-empty">
+                <Route size={20} aria-hidden="true" />
+                <strong>{t("No GPS routes found")}</strong>
+                <p>{t("Outdoor activities with location data will appear here.")}</p>
               </div>
             ) : (
-              <div className="training-map-location-content training-map-overview">
-                {visitsLoading && !mapHasVisits ? (
-                  <div className="training-map-location-loading" aria-label={t("Mapping GPS activities")}>
-                    <span />
-                    <span />
-                    <span />
-                  </div>
-                ) : overall.count === 0 ? (
-                  <div className="training-map-location-empty">
-                    <MapPin size={22} aria-hidden="true" />
-                    <h3>{connected ? t("No activities in this period") : t("Training Hub is offline")}</h3>
-                    <p>
-                      {connected
-                        ? t("Choose another period when more activity history is available.")
-                        : t("Connect Training Hub to map your routes and training history.")}
-                    </p>
-                  </div>
-                ) : !mapHasVisits ? (
-                  <div className="training-map-location-empty">
-                    <Route size={22} aria-hidden="true" />
-                    <h3>{t("No GPS routes found")}</h3>
-                    <p>{t("Outdoor activities with location data will appear here.")}</p>
-                  </div>
-                ) : (
-                  <>
-                    <header>
-                      <h3>{t("Your training world")}</h3>
-                      <p>{t("Choose a place to explore your activities.")}</p>
-                    </header>
-                    <dl className="training-map-overview-values">
-                      {mostVisited ? (
-                        <div>
-                          <dt><MapPinCheck size={18} aria-hidden="true" />{t("Most visited")}</dt>
-                          <dd>
-                            <button
-                              type="button"
-                              onClick={() => selectLocation(mostVisited.bucket)}
-                            >
-                              <strong>
-                                {(placeLabels[mostVisited.key] ??
-                                  coordinateLabel(mostVisited.bucket)).city}
-                              </strong>
-                              <ChevronRight size={14} aria-hidden="true" />
-                            </button>
-                            <small>
-                              {mostVisited.activities.length.toLocaleString(getLocale())} {mostVisited.activities.length === 1 ? t("activity") : t("activities")}
-                            </small>
-                          </dd>
-                        </div>
-                      ) : null}
-                      {latestPlace ? (
-                        <div>
-                          <dt><Clock3 size={18} aria-hidden="true" />{t("Most recent")}</dt>
-                          <dd>
-                            <button
-                              type="button"
-                              onClick={() => selectLocation(latestPlace.bucket)}
-                            >
-                              <strong>
-                                {(placeLabels[latestPlace.key] ??
-                                  coordinateLabel(latestPlace.bucket)).city}
-                              </strong>
-                              <ChevronRight size={14} aria-hidden="true" />
-                            </button>
-                            <small>{formatVisitDate(latestPlace.lastVisited)}</small>
-                          </dd>
-                        </div>
-                      ) : null}
-                    </dl>
-                  </>
-                )}
-              </div>
+              <ul className="training-map-place-list">
+                {recentPlaces.map((summary, index) => {
+                  const label = placeLabels[summary.key] ?? coordinateLabel(summary.bucket);
+                  const selected = selectedLocationKey === summary.key;
+                  const tags = placeTags(summary);
+                  return (
+                    <li key={summary.key} style={{ "--place-delay": `${index * 40}ms` } as CSSProperties}>
+                      <button
+                        type="button"
+                        className={`training-map-place${selected ? " is-selected" : ""}`}
+                        aria-pressed={selected}
+                        onClick={() => selectLocation(summary.bucket)}
+                      >
+                        <span className="training-map-place-pin" aria-hidden="true">
+                          <MapPin size={15} />
+                        </span>
+                        <span className="training-map-place-name">
+                          <strong>{label.city}</strong>
+                          <small>
+                            {label.country}
+                            {tags.map((tag) => (
+                              <em key={tag} className="training-map-place-tag">{tag}</em>
+                            ))}
+                          </small>
+                        </span>
+                        <span className="training-map-place-stats">
+                          <strong>{summary.activities.length.toLocaleString(getLocale())}</strong>
+                          {" "}
+                          {summary.activities.length === 1 ? t("activity") : t("activities")}
+                          {" · "}
+                          <strong>
+                            {metersToDisplayDistance(summary.distanceMeters, unitSystem).toLocaleString(getLocale(), {
+                              maximumFractionDigits: 0,
+                            })}
+                          </strong>
+                          {" "}
+                          {distanceUnit(unitSystem)}
+                        </span>
+                        <span className="training-map-place-date" title={t("Last visited")}>
+                          {formatVisitDate(summary.lastVisited)}
+                        </span>
+                        <ChevronRight className="training-map-place-chevron" size={15} aria-hidden="true" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </section>
         </div>
@@ -1211,7 +1240,7 @@ export function ActivityGlobeCard({
           aria-label={t("Interactive training globe")}
         >
           <div className="training-map-globe-helper">
-            <MousePointer2 size={18} aria-hidden="true" />
+            <MousePointer2 size={14} aria-hidden="true" />
             <span>{t("Drag to explore · Scroll to zoom")}</span>
           </div>
           <button
@@ -1221,7 +1250,7 @@ export function ActivityGlobeCard({
             disabled={!canResetView}
             aria-label={streetMode ? t("Back to globe") : t("Reset globe view")}
           >
-            <RotateCcw size={14} aria-hidden="true" />
+            <RotateCcw size={13} aria-hidden="true" />
             {streetMode ? t("Back to globe") : t("Reset view")}
           </button>
 
@@ -1272,7 +1301,7 @@ export function ActivityGlobeCard({
 
           <div className="training-map-globe-meta">
             <div>
-              <Route size={14} aria-hidden="true" />
+              <Route size={13} aria-hidden="true" />
               <span>
                 {visitsLoading
                   ? t("Mapping GPS activity")
@@ -1293,86 +1322,6 @@ export function ActivityGlobeCard({
           ) : null}
         </section>
       </div>
-
-      {recentPlaces.length > 0 ? (
-        <section className="training-map-recent" aria-labelledby="recent-places-title">
-          <header>
-            <h3 id="recent-places-title">{t("Recent places")}</h3>
-            {locationSummaries.length > 5 ? (
-              <div className="training-map-recent-controls">
-                <button
-                  type="button"
-                  aria-label={t("Previous recent places")}
-                  title={t("Previous places")}
-                  disabled={recentStart === 0}
-                  onClick={() => setRecentStart((current) => Math.max(0, current - 1))}
-                >
-                  <ChevronLeft size={16} aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  aria-label={t("Next recent places")}
-                  title={t("Next places")}
-                  disabled={recentStart + 5 >= locationSummaries.length}
-                  onClick={() =>
-                    setRecentStart((current) =>
-                      Math.min(locationSummaries.length - 5, current + 1),
-                    )
-                  }
-                >
-                  <ChevronRight size={16} aria-hidden="true" />
-                </button>
-              </div>
-            ) : null}
-          </header>
-          <div className="training-map-recent-list">
-            {recentPlaces.map((summary, index) => {
-              const label = placeLabels[summary.key] ?? coordinateLabel(summary.bucket);
-              const selected = selectedLocationKey === summary.key;
-              return (
-                <button
-                  key={summary.key}
-                  type="button"
-                  className={selected ? "is-selected" : undefined}
-                  style={{ "--recent-delay": `${index * 45}ms` } as CSSProperties}
-                  aria-pressed={selected}
-                  onClick={() => selectLocation(summary.bucket)}
-                >
-                  <span className="training-map-recent-heading">
-                    <span className="training-map-recent-pin" aria-hidden="true">
-                      <MapPin size={17} />
-                    </span>
-                    <span className="training-map-recent-place">
-                      <strong>{label.city}</strong>
-                      <small>{label.country}</small>
-                    </span>
-                    <ChevronRight className="training-map-recent-chevron" size={16} aria-hidden="true" />
-                  </span>
-                  <span className="training-map-recent-details">
-                    <span className="training-map-recent-metrics">
-                      <span>
-                        <strong>{summary.activities.length.toLocaleString(getLocale())}</strong>
-                        {summary.activities.length === 1 ? t("activity") : t("activities")}
-                      </span>
-                      <span>
-                        <strong>
-                          {metersToDisplayDistance(summary.distanceMeters, unitSystem).toLocaleString(getLocale(), {
-                            maximumFractionDigits: 0,
-                          })}
-                        </strong>
-                        {distanceUnit(unitSystem)}
-                      </span>
-                    </span>
-                    <span className="training-map-recent-date" title={t("Last visited")}>
-                      {formatVisitDate(summary.lastVisited)}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
     </section>
   );
 

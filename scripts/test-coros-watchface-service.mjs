@@ -133,9 +133,9 @@ assert.equal(
 assert.equal(
   applyCorosWatchfaceConfigOverrides(
     "[bg_color]=0x000000\r\n",
-    { background_icon: "studio\\aod_background\\00.png" }
+    { background_icon_pos: "{0,0}", background_icon: "studio\\aod_background\\00.png" }
   ),
-  "[bg_color]=0x000000\r\n[background_icon]=studio\\aod_background\\00.png\r\n",
+  "[bg_color]=0x000000\r\n[background_icon_pos]={0,0}\r\n[background_icon]=studio\\aod_background\\00.png\r\n",
   "independent AOD artwork may add a background to a color-only config"
 );
 assert.equal(

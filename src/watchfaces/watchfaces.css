@@ -9867,8 +9867,10 @@ body.wf-value-scrubbing * {
 }
 
 /* Send to COROS panel: the compiled face at 1:1 on a quiet stage with
-   segmented preview controls; languages and pixel checks in a side column,
-   stacked below on narrow windows. Atelier tokens fall back to the shell's. */
+   segmented preview controls and its pixel checks below; the name, languages
+   and the watch and iPhone routes in a side column that scrolls on its own,
+   so the face stays in view. Stacked below on narrow windows. Atelier tokens
+   fall back to the shell's. */
 .watchface-shell .wf-send-panel {
   --send-tray: var(--atl-tray-raised, var(--wf-surface));
   --send-line: var(--atl-line, var(--wf-border));
@@ -9885,10 +9887,12 @@ body.wf-value-scrubbing * {
 }
 .watchface-shell .wf-send-header {
   display: flex;
+  flex: none;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 22px 24px 18px;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--send-line);
 }
 .watchface-shell .wf-send-header h2 {
   margin: 0;
@@ -9922,17 +9926,19 @@ body.wf-value-scrubbing * {
 }
 .watchface-shell .wf-send-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 292px;
-  gap: 20px;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr) 332px;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
-  padding: 0 24px 20px;
-  overflow: auto;
+  overflow: hidden;
 }
 .watchface-shell .wf-send-stage {
   display: grid;
   gap: 12px;
   align-content: start;
   min-width: 0;
+  padding: 18px 20px 20px 24px;
+  overflow: auto;
 }
 .watchface-shell .wf-send-toolbar {
   display: flex;
@@ -9992,7 +9998,7 @@ body.wf-value-scrubbing * {
 .watchface-shell .wf-send-canvas {
   display: grid;
   place-items: center;
-  min-height: 476px;
+  min-height: 464px;
   border: 1px solid var(--send-line);
   border-radius: 14px;
   background:
@@ -10004,7 +10010,7 @@ body.wf-value-scrubbing * {
   max-width: 100%;
   max-height: 62vh;
   overflow: auto;
-  padding: 30px;
+  padding: 24px;
 }
 .watchface-shell .wf-export-pixel-scroll img {
   display: block;
@@ -10024,17 +10030,83 @@ body.wf-value-scrubbing * {
   font-size: var(--wf-text-sm);
 }
 .watchface-shell .wf-send-status.is-error { color: var(--error-text); }
+.watchface-shell .wf-send-stage-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 16px;
+  min-height: 20px;
+  padding: 0 2px;
+}
 .watchface-shell .wf-send-caption {
   margin: 0;
-  color: var(--text-muted);
-  font-size: 11.5px;
+  color: var(--text-secondary);
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
-  text-align: center;
 }
+.watchface-shell .wf-send-check-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: help;
+}
+.watchface-shell .wf-send-check-status svg { flex: none; }
+.watchface-shell .wf-send-check-status.is-ok svg { color: var(--success-text); }
+.watchface-shell .wf-send-check-status.is-warn { color: var(--warning-text); }
+.watchface-shell .wf-send-check-status.is-error { color: var(--error-text); }
+.watchface-shell .wf-send-checks {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--warning-border, var(--send-line));
+  border-radius: 10px;
+  background: var(--warning-bg, var(--send-control));
+}
+.watchface-shell .wf-send-checks ul {
+  display: grid;
+  gap: 4px;
+  max-height: 132px;
+  margin: 0;
+  padding: 0 0 0 16px;
+  overflow: auto;
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.watchface-shell .wf-send-checks small {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.watchface-shell .wf-send-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 0 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.watchface-shell .wf-send-note svg { flex: none; margin-top: 2px; color: var(--text-secondary); }
 .watchface-shell .wf-send-side {
   display: grid;
   gap: 12px;
   align-content: start;
+  min-width: 0;
+  padding: 18px 24px 20px 4px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--send-line-strong) transparent;
+  /* Cards fade out under the footer, a cue that the column scrolls. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
 }
 .watchface-shell .wf-send-card {
   display: grid;
@@ -10045,6 +10117,14 @@ body.wf-value-scrubbing * {
   border: 1px solid var(--send-line);
   border-radius: 14px;
   background: var(--send-control);
+}
+.watchface-shell .wf-send-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  min-height: 22px;
 }
 .watchface-shell .wf-send-card legend,
 .watchface-shell .wf-send-card h3 {
@@ -10073,7 +10153,18 @@ body.wf-value-scrubbing * {
   font-size: 11.5px;
   line-height: 1.45;
 }
-.watchface-shell .wf-send-name { gap: 7px; }
+/* Name and languages share one card, split by a hairline. */
+.watchface-shell .wf-send-setup { gap: 14px; }
+.watchface-shell .wf-send-name { display: grid; gap: 7px; min-width: 0; }
+.watchface-shell .wf-send-languages {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 14px 0 0;
+  border: 0;
+  border-top: 1px solid var(--send-line);
+}
 .watchface-shell .wf-send-name > span {
   color: var(--text-primary);
   font-size: 13px;
@@ -10118,6 +10209,8 @@ body.wf-value-scrubbing * {
   font-weight: 500;
   white-space: nowrap;
 }
+/* Flex items, so the English span lines up with the button chips. */
+.watchface-shell .wf-send-language-chips li { display: flex; }
 .watchface-shell .wf-send-language-chips button { cursor: pointer; }
 .watchface-shell .wf-send-language-chips button:hover { border-color: var(--send-line-strong); color: var(--text-primary); }
 .watchface-shell .wf-send-language-chips .is-on {
@@ -10126,31 +10219,27 @@ body.wf-value-scrubbing * {
   color: var(--text-primary);
 }
 .watchface-shell .wf-send-language-chips .is-on svg { color: var(--accent); }
-.watchface-shell .wf-export-pixel-checks h3 svg { color: var(--success-text); }
-.watchface-shell .wf-export-pixel-checks.has-checks {
-  border-color: var(--warning-border, var(--send-line));
-  background: var(--warning-bg, var(--send-control));
-}
-.watchface-shell .wf-export-pixel-checks.has-checks h3 svg { color: var(--warning-text); }
-.watchface-shell .wf-export-pixel-checks ul {
-  display: grid;
-  gap: 5px;
-  max-height: 180px;
-  margin: 0;
-  padding: 0 0 0 16px;
-  overflow: auto;
-  color: var(--text-primary);
-  font-size: 12px;
-  line-height: 1.4;
-}
 .watchface-shell .wf-send-actions {
+  flex: none;
   flex-wrap: nowrap;
+  align-items: center;
   margin: 0;
   padding: 14px 24px;
   border-top: 1px solid var(--send-line);
   background: var(--send-control);
 }
 .watchface-shell .wf-send-actions > :first-child { margin-right: auto; }
+/* A Save BIN result sits beside Close, pushing the send buttons right. */
+.watchface-shell .wf-send-actions > .wf-send-footnote {
+  min-width: 0;
+  margin: 0 auto 0 4px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.watchface-shell .wf-send-actions > :first-child:has(+ .wf-send-footnote) { margin-right: 0; }
 .watchface-shell .wf-send-actions :is(.primary-button, .secondary-button) {
   display: inline-flex;
   align-items: center;
@@ -10162,7 +10251,18 @@ body.wf-value-scrubbing * {
   font-size: 13px;
 }
 @media (max-width: 860px) {
-  .watchface-shell .wf-send-body { grid-template-columns: minmax(0, 1fr); }
+  .watchface-shell .wf-send-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    overflow: auto;
+  }
+  .watchface-shell .wf-send-stage { padding: 16px 20px 0; overflow: visible; }
+  .watchface-shell .wf-send-side {
+    padding: 16px 20px 20px;
+    overflow: visible;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
   .watchface-shell .wf-send-canvas { min-height: 0; }
 }
 
@@ -13537,6 +13637,35 @@ body.wf-value-scrubbing * {
 
 .watchface-shell .wf-native-part-card > .watchface-studio-summary {
   margin: 0;
+}
+
+/* Graph: the bar and line styles, each used by its own chart pages. */
+.watchface-shell .wf-native-graph-style {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--text-muted) 28%, transparent);
+  padding-top: 8px;
+}
+
+.watchface-shell .wf-native-graph-style-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 560;
+}
+
+.watchface-shell .wf-native-graph-style-head > span:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.watchface-shell .wf-native-graph-style-head small {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 450;
 }
 
 /* Artwork: the generated sprite beside its text, then the image actions. */

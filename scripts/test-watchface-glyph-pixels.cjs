@@ -152,27 +152,45 @@ async function verifyPixels() {
     'Compiled weather artwork keeps its native height instead of stretching into a square');
   const aod = await inspect((await compiled.renderCompiledWatchfacePreview(details, resolution, 'aod', load)).dataUrl);
   check(aod.canvas.getContext('2d').getImageData(204,163,1,1).data[0] === 255, 'AOD must use its own compiled coordinates without dimming again');
-  // COROS compiles dynamic AOD fields but skips the background entirely.
-  // A light editor backdrop used to conceal black-on-black time digits.
+  // CorosLink exports AOD backgrounds through the same slot as official BINs.
   const brightBackground = png(416, 416, 0, 0, 416, 416, '#ffffff');
   const aodFrame = document.createElement('canvas'); aodFrame.width = 416; aodFrame.height = 416;
   const aodDetails = studio.detailsForCompositionMode(details, 'aod');
   const aodOptions = { fontFamily: '', digitColor: '#ffffff', accentColor: '#ffffff', tintIcons: false, tintLabels: false, previewMode: 'aod' };
   await studio.drawStudioPreview(aodFrame, brightBackground, aodDetails, aodOptions, load);
-  check([...aodFrame.getContext('2d').getImageData(208,208,1,1).data].join(',') === '0,0,0,255', 'AOD editor must omit a light background');
+  check([...aodFrame.getContext('2d').getImageData(208,208,1,1).data].join(',') === '255,255,255,255', 'AOD editor must show its authored background');
   await studio.drawStudioPreview(aodFrame, brightBackground, aodDetails, { ...aodOptions, previewMode: 'current' }, load);
   check(aodFrame.getContext('2d').getImageData(208,208,1,1).data[0] === 255, 'Current must retain the authored light background');
   const absentAodBackground = { ...resolution, aodConfig: { ...resolution.aodConfig, background_icon: 'missing.png', bg_color: '0xffffff' } };
-  const noBackground = await inspect((await compiled.renderCompiledWatchfacePreview(details, absentAodBackground, 'aod', load)).dataUrl);
-  check(noBackground.canvas.getContext('2d').getImageData(208,208,1,1).data[0] === 0, 'Compiled AOD must ignore absent background PNGs and bg_color');
+  const absentBackgroundResult = await compiled.renderCompiledWatchfacePreview(details, absentAodBackground, 'aod', load);
+  const noBackground = await inspect(absentBackgroundResult.dataUrl);
+  check(noBackground.canvas.getContext('2d').getImageData(208,208,1,1).data[0] === 0, 'A missing AOD background leaves the firmware black fill, ignoring bg_color');
+  check(absentBackgroundResult.checks.includes('background_icon: missing.png could not be loaded.'), 'A missing AOD background must be reported');
   check(noBackground.canvas.getContext('2d').getImageData(204,163,1,1).data[0] === 255, 'AOD digits must survive without a background PNG');
+  const aodBackgroundPath = `${root}/aod/art.png`;
+  asset(aodBackgroundPath, png(416,416,60,80,10,10,'#00ffff'), 416, 416);
+  const independentAod = { ...resolution, aodConfig: { ...resolution.aodConfig,
+    background_icon: 'aod\\art.png', background_icon_pos: '{7,9}', bg_color: '0xffffff' } };
+  const independentPreview = await inspect((await compiled.renderCompiledWatchfacePreview(details, independentAod, 'aod', load)).dataUrl);
+  const independentPixel = [...independentPreview.canvas.getContext('2d').getImageData(72,94,1,1).data];
+  check(independentPixel.every((channel,i)=>Math.abs(channel-[0,255,255,255][i])<=3), `Compiled AOD must use its own image, color and background position (got ${independentPixel})`);
+  check(independentPreview.canvas.getContext('2d').getImageData(62,84,1,1).data[1] === 0, 'AOD artwork must move with its background position');
+  check(independentPreview.canvas.getContext('2d').getImageData(208,208,1,1).data[0] === 0, 'Transparent AOD background pixels reveal black');
+  const { background_icon: omittedBackground, ...aodWithoutImage } = resolution.aodConfig;
+  const noImage = await inspect((await compiled.renderCompiledWatchfacePreview(details, { ...resolution, aodConfig: aodWithoutImage }, 'aod', async paths => {
+    check(!paths.some(p=>p.endsWith('/background.png')), 'An image-free AOD must not load Current background');
+    return load(paths);
+  })).dataUrl);
+  check(noImage.canvas.getContext('2d').getImageData(208,208,1,1).data[0] === 0, 'An image-free AOD keeps a black background');
   const mipLoad = async (paths) => (await load(paths)).map((asset) => asset.path.endsWith('/background.png') ? { ...asset, dataUrl: brightBackground } : asset);
   const mip = await inspect((await compiled.renderCompiledWatchfacePreview(details, { ...resolution, aodConfig: {} }, 'aod', mipLoad)).dataUrl);
   check(mip.canvas.getContext('2d').getImageData(208,208,1,1).data[0] === 255, 'A watch without a separate AOD must keep its Current background');
   // Caption overlays used a separate draw path that skipped AOD cleanup.
   // Keep faint isolated strokes in Current, but match the exported AOD mask
   // at both physical and master resolutions, including layer opacity.
-  const { buildAodSafeSpriteReplacements } = await import('/src/watchfaces/watchfaceCompose.ts');
+  const { buildAodBackgroundComposition, buildAodSafeSpriteReplacements } = await import('/src/watchfaces/watchfaceCompose.ts');
+  const aodComposition = await buildAodBackgroundComposition({ ...details, resolutions: [independentAod] }, sources.get(aodBackgroundPath).dataUrl);
+  check(aodComposition.configOverrides[0].values.background_icon_pos === '{0,0}', 'A flattened AOD export must reset the original background position');
   const caption = document.createElement('canvas'); caption.width = 32; caption.height = 24;
   const captionContext = caption.getContext('2d');
   captionContext.fillStyle = '#b8b8b8'; captionContext.fillRect(4,4,3,16);

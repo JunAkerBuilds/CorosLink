@@ -2,12 +2,14 @@
  * Watch link: the On watch tab's card (identity row, slot strip, install
  * row), Studio's "Install on watch" card in the Send dialog, and the
  * controls inside the toolbar watch menu (src/watch/watchConnection.css).
+ * The Send dialog's Send to iPhone card borrows the same controls.
  * Hub glass comes from the --wf-faces-* family; the Send dialog supplies
  * --send-*. Hairlines mix from --text-muted so they survive the paper theme.
  */
 
 .watch-link,
 .wf-send-install,
+.wf-send-phone,
 .watch-menu-panel {
   --watch-link-rule: color-mix(in srgb, var(--text-muted) 26%, transparent);
   --watch-link-control: color-mix(in srgb, var(--text-primary) 5%, transparent);
@@ -17,7 +19,7 @@
   --watch-link-ok-line: var(--success-border);
 }
 
-:root[data-theme="paper"] :is(.watch-link, .wf-send-install, .watch-menu-panel) {
+:root[data-theme="paper"] :is(.watch-link, .wf-send-install, .wf-send-phone, .watch-menu-panel) {
   --watch-link-ok: #1d7a58;
   --watch-link-ok-bg: color-mix(in srgb, #2fa77d 12%, transparent);
   --watch-link-ok-line: color-mix(in srgb, #2fa77d 34%, transparent);
@@ -182,7 +184,7 @@
 
 /* Paper's --warning-text is ~3.8:1 on grey cards; this amber keeps 4.5:1+. */
 :root[data-theme="paper"] .watch-link-state.is-warn,
-:root[data-theme="paper"] :is(.watch-link, .wf-send-install, .watch-menu-panel) .watch-compile-warnings .watch-compile-warnings-title { color: #8a5a00; }
+:root[data-theme="paper"] :is(.watch-link, .wf-send-install, .wf-send-phone, .watch-menu-panel) .watch-compile-warnings .watch-compile-warnings-title { color: #8a5a00; }
 
 .watch-link-actions {
   display: flex;
@@ -193,7 +195,7 @@
 
 /* Controls ---------------------------------------------------------------- */
 
-:is(.watch-link, .wf-send-install, .watch-menu-panel) .watch-link-button {
+:is(.watch-link, .wf-send-install, .wf-send-phone, .watch-menu-panel) .watch-link-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -206,15 +208,15 @@
   white-space: nowrap;
 }
 
-:is(.watch-link, .wf-send-install, .watch-menu-panel) .watch-link-button svg { color: currentColor; flex: none; }
+:is(.watch-link, .wf-send-install, .wf-send-phone, .watch-menu-panel) .watch-link-button svg { color: currentColor; flex: none; }
 
 /* Busy, not unavailable: keep full contrast while compiling or sending. */
-:is(.watch-link, .wf-send-install, .watch-menu-panel) .watch-link-button.is-busy:disabled {
+:is(.watch-link, .wf-send-install, .wf-send-phone, .watch-menu-panel) .watch-link-button.is-busy:disabled {
   cursor: progress;
   opacity: 1;
 }
 
-:is(.watch-link, .wf-send-install, .watch-menu-panel) .watch-link-icon-button {
+:is(.watch-link, .wf-send-install, .wf-send-phone, .watch-menu-panel) .watch-link-icon-button {
   display: inline-grid;
   flex: none;
   width: 36px;
@@ -230,13 +232,13 @@
   transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
-:is(.watch-link, .wf-send-install, .watch-menu-panel) .watch-link-icon-button:hover:not(:disabled) {
+:is(.watch-link, .wf-send-install, .wf-send-phone, .watch-menu-panel) .watch-link-icon-button:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--watch-link-rule));
   background: var(--watch-link-control-hover);
   color: var(--accent);
 }
 
-:is(.watch-link, .wf-send-install, .watch-menu-panel) .watch-link-icon-button:disabled {
+:is(.watch-link, .wf-send-install, .wf-send-phone, .watch-menu-panel) .watch-link-icon-button:disabled {
   color: var(--text-muted);
   cursor: not-allowed;
   opacity: 0.55;
@@ -481,7 +483,7 @@
 }
 
 /* Outranks the Send dialog's `.watchface-shell .wf-send-card p` grey. */
-:is(.watch-link, .wf-send-install, .watch-menu-panel) .watch-compile-warnings .watch-compile-warnings-title {
+:is(.watch-link, .wf-send-install, .wf-send-phone, .watch-menu-panel) .watch-compile-warnings .watch-compile-warnings-title {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -735,31 +737,61 @@
 
 /* Studio Send dialog: Install on watch ------------------------------------ */
 
-.wf-send-install .wf-send-install-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-}
-
-.wf-send-install .wf-send-install-head .watch-link-icon-button {
-  width: 30px;
-  height: 30px;
-  min-height: 30px;
-  margin: -4px -4px -4px 0;
+.wf-send-install .wf-send-card-head .watch-link-icon-button {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  margin: -3px -3px -3px 0;
+  border-color: transparent;
   border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
 }
 
+/* The link row: one tinted strip holding the state and, offline, Connect. */
 .wf-send-install .wf-send-install-link {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   min-width: 0;
+  min-height: 40px;
+  padding: 4px 4px 4px 12px;
+  border: 1px solid var(--watch-link-rule);
+  border-radius: 10px;
+  background: var(--watch-link-control);
 }
 
-.wf-send-install .watch-link-state { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wf-send-install .wf-send-install-link.is-ok {
+  border-color: var(--watch-link-ok-line);
+  background: var(--watch-link-ok-bg);
+}
+
+.wf-send-install .wf-send-install-link.is-warn {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+
+.wf-send-install .wf-send-install-link .watch-link-state {
+  flex: 0 1 auto;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  text-overflow: ellipsis;
+}
+
+.wf-send-install .wf-send-install-link .watch-link-state::before { flex: none; }
+
+.wf-send-install .wf-send-install-link .watch-link-button {
+  height: 30px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
 
 .wf-send-install .watch-slots {
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -927,4 +959,50 @@
   .watch-link-phone-code {
     justify-self: center;
   }
+}
+
+/* Studio Send dialog: Send to iPhone (C-LINK) ----------------------------- */
+
+.wf-send-phone .wf-send-phone-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.wf-send-phone .wf-send-phone-actions > .watch-link-button { flex: 1 1 0; min-width: 0; }
+
+.wf-send-phone .wf-send-phone-code {
+  justify-self: center;
+  margin: 2px 0;
+  padding: 8px;
+  border-radius: 12px;
+  /* Quiet zone stays white on every theme so phones can read it. */
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--watch-link-rule);
+}
+
+.wf-send-phone .wf-send-phone-code img {
+  display: block;
+  width: 168px;
+  height: 168px;
+  image-rendering: pixelated;
+}
+
+.wf-send-phone .watch-link-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.wf-send-phone .watch-link-note svg { flex: none; margin-top: 3px; }
+
+/* Outranks the Send dialog's `.watchface-shell .wf-send-card p` grey. */
+.wf-send-phone .watch-link-note.is-success { color: var(--watch-link-ok); }
+.wf-send-phone .watch-link-note.is-error { color: var(--error-text); }
+
+.wf-send-phone .wf-send-phone-timer {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
 }

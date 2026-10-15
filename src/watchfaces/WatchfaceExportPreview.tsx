@@ -1,6 +1,6 @@
 import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bluetooth, Check, CircleCheck, Download, Languages, Loader2, Send, TriangleAlert, Watch, X } from "lucide-react";
+import { Bluetooth, Check, CircleCheck, Download, Info, Languages, Loader2, Send, TriangleAlert, Watch, X } from "lucide-react";
 import type { CorosWatchfaceArchive, CorosWatchfaceTemplateAsset, CorosWatchfaceTemplateDetails } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { renderCompiledWatchfacePreview, type CompiledWatchfacePreview } from "./compiledWatchfacePixels";
@@ -11,6 +11,7 @@ import type { CorosWatchfaceCompilerStatus } from "../../electron/corosWatchface
 import { apiErrorMessage, compileSummary, connectedWatch, useCorosWatchLink, useWatchfaceInstaller, watchBetaNote, watchFaceSyncReady, watchLinkSupported } from "./watchLink";
 import { getWatchfaceTarget, watchfaceBinTarget } from "../../electron/watchfaceTargets";
 import { CompileWarnings, WatchInstallProgress, WatchSlotPicker, watchInstallResult } from "./WatchInstallParts";
+import { WatchfacePhoneSendCard } from "./WatchfacePhoneSendCard";
 import "./watchLink.css";
 
 /** How long a compiled BIN is reused. Main keeps a prepared BIN for 15 minutes; reusing it after that fails the install. */
@@ -21,13 +22,15 @@ const BIN_REUSE_MS = 10 * 60_000;
  * controls use samples and can differ on the watch. Changing languages asks
  * the editor to rebuild, which swaps in a new archive.
  */
-export function WatchfaceExportPreview({ api, archive, details, name, complication, languages, customWeekday, rebuilding,
+export function WatchfaceExportPreview({ api, archive, details, name, complication, chartSources, languages, customWeekday, rebuilding,
   onLanguagesChange, onClose, onPublish }: {
   api: CorosLinkApi;
   archive: CorosWatchfaceArchive;
   details: CorosWatchfaceTemplateDetails;
   name: string;
   complication?: WatchfaceComplicationId;
+  /** Sample chart groups captured with this archive; hidden readouts carry no source key. */
+  chartSources?: Partial<Record<WatchfacePreviewMode, string>>;
   languages: WatchfaceWatchLanguages;
   /** Whether the design replaces the weekday labels; otherwise every language keeps its own. */
   customWeekday: boolean;
@@ -70,6 +73,7 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
   const cache = useMemo(() => new Map<string, CorosWatchfaceTemplateAsset>(), [archive.archiveId]);
   const resolution = details.resolutions.find((item) => item.directory === directory) ?? details.resolutions[0]!;
   const supportsAod = Object.keys(resolution.aodConfig ?? {}).length > 0;
+  const chartSource = chartSources?.[mode === "aod" && supportsAod ? "aod" : "current"];
   const hasFirmwareChart = mode === "current" && Boolean(resolution.config.chart_rect);
 
   useEffect(() => {
@@ -94,12 +98,13 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
       return paths.map((path) => cache.get(path)!).filter(Boolean);
     }, {
       complication,
+      chartSource,
       date: sample === "wide" ? new Date(2026, 7, 28, 20, 58, 58) : new Date(2026, 8, 13, 10, 8, 36),
       ...(sample === "wide" ? { values: { steps: "88888", calories: "88888", elevation: "88888", battery: "100", exercise: "88:58" } } : {})
     }).then((preview) => { if (!cancelled) setResult(preview); })
       .catch((caught) => { if (!cancelled) setError(caught instanceof Error ? caught.message : t("Could not read the compiled preview.")); });
     return () => { cancelled = true; };
-  }, [api, archive.archiveId, cache, complication, details, mode, resolution, sample]);
+  }, [api, archive.archiveId, cache, complication, chartSource, details, mode, resolution, sample]);
 
   const busyRef = useRef(false);
   useEffect(() => {
@@ -119,6 +124,7 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
   }, [onClose]);
 
   const checks = result?.checks ?? [];
+  const checkScope = "Covers live sprites and value boxes. Artwork baked into the background, and firmware-drawn controls, are worth a visual check.";
   const [sendName, setSendName] = useState(name);
   const trimmedName = sendName.trim();
   // The compiler builds the layout of the watch Studio made this archive for (PACE Pro when unknown).
@@ -210,13 +216,16 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
     : languageMode === "english"
       ? t("Other languages keep the template's translated weekday.")
       : t("Tap a language to give it {{designed}}; the rest keep their translations.", { designed: designed });
+  // With every language customised, the month and day note goes without saying.
+  const languageFootnote = [languageMode !== "all" ? "Month and day numbers work in every language." : "",
+    customWeekday ? "Your choice is remembered for future sends." : ""].filter(Boolean).join(" ");
 
   return <div className="wf-modal-backdrop" role="presentation">
     <section id="wf-compiled-preview" className="wf-modal wf-send-panel" role="dialog" aria-modal="true" aria-labelledby="wf-send-title" aria-busy={rebuilding || busy}>
       <header className="wf-send-header">
         <div>
           <h2 id="wf-send-title">{t("Send to COROS")}</h2>
-          <p>{t("Archive artwork with sample live readings. Firmware-drawn charts may differ on your watch.")}</p>
+          <p>{t("The compiled face, pixel for pixel, with sample readings.")}</p>
         </div>
         <button type="button" className="wf-send-dismiss" aria-label={t("Close")} title={t("Close")} disabled={busy} onClick={onClose}><X size={16} /></button>
       </header>
@@ -240,33 +249,72 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
               : !result || rebuilding ? <p className="wf-send-status" role="status"><Loader2 className="spin" size={16} />{rebuilding ? t("Rebuilding with the new languages…") : t("Reading compiled pixels…")}</p>
                 : <div className="wf-export-pixel-scroll"><img src={result.dataUrl} width={result.width} height={result.height} alt={t("Compiled {{value1}} watch face at {{value2}} × {{value3}} pixels", { value1: mode === "aod" ? "always-on" : "Current", value2: result.width, value3: result.height })} /></div>}
           </div>
-          <p className="wf-send-caption">{resolution.width} × {resolution.height}{" "}{t("· shown at 1:1, one image pixel per screen pixel")}</p>
-          {hasFirmwareChart ? <p className="wf-send-caption" role="note">{t("Chart lines and bars are drawn by the watch after this preview. Install on watch keeps their colors. Sent through the COROS app, they are packed to 6 bits and PACE Pro draws them dark blue.")}</p> : null}
+          <div className="wf-send-stage-foot">
+            <p className="wf-send-caption">{t("{{p0}} × {{p1}} · actual pixels", { p0: String(resolution.width), p1: String(resolution.height) })}</p>
+            <p className={`wf-send-check-status${error ? " is-error" : checks.length ? " is-warn" : !result || rebuilding ? "" : " is-ok"}`}
+              role="status" title={t(checkScope)}>
+              {error ? <TriangleAlert size={14} aria-hidden="true" />
+                : !result || rebuilding ? <Loader2 className="spin" size={14} aria-hidden="true" />
+                  : checks.length ? <TriangleAlert size={14} aria-hidden="true" /> : <CircleCheck size={14} aria-hidden="true" />}
+              {error ? t("Pixel checks unavailable") : !result || rebuilding ? t("Checking pixels") + "…"
+                : checks.length ? t("{{value1}} {{value2}} to review", { value1: checks.length, value2: checks.length === 1 ? "check" : "checks" }) : t("No clipping or overlaps")}
+            </p>
+          </div>
+          {checks.length > 0 ? <div className="wf-send-checks">
+            <ul>{checks.map((check) => <li key={check}>{check}</li>)}</ul>
+            <small>{t(checkScope)}</small>
+          </div> : null}
+          {hasFirmwareChart ? <p className="wf-send-note" role="note"><Info size={14} aria-hidden="true" />
+            <span>{t("The watch draws chart lines and bars itself. Install on watch keeps their colors; through the COROS app, PACE Pro shows them dark blue.")}</span></p> : null}
+          {mode === "aod" && supportsAod ? <p className="wf-send-note" role="note"><Info size={14} aria-hidden="true" />
+            <span>{t("Always-on brightness and thin strokes may look different on the watch.")}</span></p> : null}
         </div>
 
         <aside className="wf-send-side" aria-label={t("Send settings")}>
-          <label className="wf-send-card wf-send-name">
-            <span>{t("Watch face name")}</span>
-            <input value={sendName} maxLength={80} spellCheck={false} placeholder={name}
-              onChange={(event) => setSendName(event.target.value)} />
-            <small>{t("Shown in the COROS app and on your watch.")}</small>
-          </label>
+          <section className="wf-send-card wf-send-setup">
+            <label className="wf-send-name">
+              <span>{t("Watch face name")}</span>
+              <input value={sendName} maxLength={80} spellCheck={false} placeholder={name}
+                onChange={(event) => setSendName(event.target.value)} />
+              <small>{t("Shown in the COROS app and on your watch.")}</small>
+            </label>
+            <fieldset className="wf-send-languages" disabled={rebuilding}>
+              <legend><Languages size={15} aria-hidden="true" />{t("Watch languages")}</legend>
+              <div className="wf-send-segmented is-full" role="radiogroup" aria-label={t("Weekday languages")}>
+                {([["all", "All"], ["english", "English"], ["selected", "Choose"]] as const).map(([value, label]) =>
+                  <button key={value} type="button" role="radio" aria-checked={languageMode === value}
+                    onClick={() => onLanguagesChange(value === "selected" ? selectedLanguages : value)}>{t(label)}</button>)}
+              </div>
+              <p>{languageNote}</p>
+              {languageMode === "selected" ? <ul className="wf-send-language-chips" aria-label={t("Languages in this watch face")}>
+                {["english", ...availableLanguages].map((language) => {
+                  const custom = customLabelLanguages(language);
+                  return <li key={language}>{language !== "english"
+                    ? <button type="button" aria-pressed={custom} className={custom ? "is-on" : ""} onClick={() => onLanguagesChange(custom
+                      ? selectedLanguages.filter((value) => value !== language)
+                      : [...selectedLanguages, language])}>{custom ? <Check size={12} aria-hidden="true" /> : null}{languageName(language)}</button>
+                    : <span className="is-on"><Check size={12} aria-hidden="true" />{languageName(language)}</span>}</li>;
+                })}
+              </ul> : null}
+              {languageFootnote ? <small>{languageFootnote}</small> : null}
+            </fieldset>
+          </section>
           {watchInstall ? <section className="wf-send-card wf-send-install" aria-labelledby="wf-send-install-title" aria-busy={installing || undefined}>
-            <div className="wf-send-install-head">
+            <div className="wf-send-card-head">
               <h3 id="wf-send-install-title"><Watch size={15} aria-hidden="true" />{t("Install on watch")}</h3>
               <button type="button" className="watch-link-icon-button" aria-label={t("Save BIN")} title={saveBinTitle}
                 disabled={!canCompile || busy} onClick={() => void saveBin()}>
                 {compiling && !installing ? <Loader2 className="spin" size={14} aria-hidden="true" /> : <Download size={14} aria-hidden="true" />}
               </button>
             </div>
-            <div className="wf-send-install-link">
+            <div className={`wf-send-install-link is-${linkTone}`}>
               <span className={`watch-link-state is-${linkTone}`} role="status" title={t(linkLabel)}>{t(linkLabel)}</span>
               {!link?.connected ? <button type="button" className="secondary-button watch-link-button" disabled={connecting || link?.phase === "connecting" || busy}
                 onClick={() => void connectWatch()}>
                 {connecting ? <Loader2 className="spin" size={14} aria-hidden="true" /> : <Bluetooth size={14} aria-hidden="true" />}{" "}{t("Connect")}</button> : null}
             </div>
             {installer.inventory ? <WatchSlotPicker installer={installer} compact disabled={busy || installer.reading} />
-              : <p>{!link?.connected ? t("Connect your {{value1}} to choose a slot. To pair a new watch, use the watch menu in the toolbar.", { value1: t(faceTarget.label) })
+              : <p>{!link?.connected ? t("Connect your {{watch}} to choose a slot. New watch? Pair it from the watch menu in the toolbar.", { watch: faceTarget.label })
                 : !installReady ? t("Installing needs an authenticated COROS watch that CorosLink supports.")
                 : installer.reading ? t("Reading watch face slots…") : t("Couldn't read the watch face slots.")}</p>}
             {installing || installResult || installCompile?.state === "failed"
@@ -285,43 +333,13 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
             {compileBlocker ? <small>{compileBlocker}</small> : <small>{bin?.archiveId === archive.archiveId && bin.preview.compile ? t("{{value1}}. ", { value1: compileSummary(bin.preview) })
               : t("Compiles on this computer. ")}{t("Sends over Bluetooth. Experimental.")}</small>}
           </section> : null}
-          <fieldset className="wf-send-card wf-send-languages" disabled={rebuilding}>
-            <legend><Languages size={15} aria-hidden="true" />{t("Watch languages")}</legend>
-            <div className="wf-send-segmented is-full" role="radiogroup" aria-label={t("Weekday languages")}>
-              {([["all", "All"], ["english", "English"], ["selected", "Choose"]] as const).map(([value, label]) =>
-                <button key={value} type="button" role="radio" aria-checked={languageMode === value}
-                  onClick={() => onLanguagesChange(value === "selected" ? selectedLanguages : value)}>{t(label)}</button>)}
-            </div>
-            <p>{languageNote}</p>
-            <ul className="wf-send-language-chips" aria-label={t("Languages in this watch face")}>
-              {["english", ...availableLanguages].map((language) => {
-                const custom = customLabelLanguages(language);
-                const toggleable = languageMode === "selected" && language !== "english";
-                return <li key={language}>{toggleable
-                  ? <button type="button" aria-pressed={custom} className={custom ? "is-on" : ""} onClick={() => onLanguagesChange(custom
-                    ? selectedLanguages.filter((value) => value !== language)
-                    : [...selectedLanguages, language])}>{custom ? <Check size={12} aria-hidden="true" /> : null}{languageName(language)}</button>
-                  : <span className={custom ? "is-on" : ""}>{custom ? <Check size={12} aria-hidden="true" /> : null}{languageName(language)}</span>}</li>;
-              })}
-            </ul>
-            <small>{t("Month and day numbers reach every language automatically.")}{customWeekday ? t(" Your choice is remembered for future sends.") : ""}</small>
-          </fieldset>
-
-          <section className={`wf-send-card wf-export-pixel-checks${checks.length || error ? " has-checks" : ""}`} aria-live="polite">
-            <h3>{error ? <TriangleAlert size={15} aria-hidden="true" />
-              : !result || rebuilding ? <Loader2 className="spin" size={15} aria-hidden="true" />
-                : checks.length ? <TriangleAlert size={15} aria-hidden="true" /> : <CircleCheck size={15} aria-hidden="true" />}
-              {error ? t("Pixel checks unavailable") : !result || rebuilding ? t("Checking pixels")
-                : checks.length ? t("{{value1}} {{value2}} to review", { value1: checks.length, value2: checks.length === 1 ? "check" : "checks" }) : t("No clipping or overlaps")}</h3>
-            {checks.length > 0 ? <ul>{checks.map((check) => <li key={check}>{check}</li>)}</ul> : null}
-            <small>{t("Covers live sprites and value boxes. Artwork baked into the background, and firmware-drawn controls, are worth a visual check.")}{mode === "aod" && supportsAod ? t(" Always-on brightness and thin strokes may look different on the watch.") : ""}</small>
-          </section>
+          <WatchfacePhoneSendCard api={api} archive={archive} name={trimmedName} disabled={rebuilding || busy || !trimmedName} />
         </aside>
       </div>
 
-      {binMessage ? <p className="wf-send-caption" role="status">{binMessage}</p> : null}
       <div className="wf-modal-actions wf-send-actions">
         <button type="button" className="secondary-button" disabled={busy} onClick={onClose}>{t("Close")}</button>
+        {binMessage ? <p className="wf-send-footnote" role="status">{t(binMessage)}</p> : null}
         {watchFooter ? <button type="button" className={`secondary-button wf-send-watch${installing ? " is-busy" : ""}`}
           disabled={!canCompile || !installReady || !target || busy || installer.reading || Boolean(watchMismatch)} title={installHint}
           onClick={() => void installOnWatch()}>

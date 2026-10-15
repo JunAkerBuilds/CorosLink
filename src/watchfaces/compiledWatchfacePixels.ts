@@ -1,4 +1,4 @@
-import type { CorosWatchfaceResolutionDetails, CorosWatchfaceTemplateDetails } from "../../electron/types";
+import type { CorosWatchfaceResolutionDetails, CorosWatchfaceTemplateAsset, CorosWatchfaceTemplateDetails } from "../../electron/types";
 import { drawStudioPreview, loadStudioImage, parseConfigPos, type WatchfaceAssetLoader, type WatchfaceComplicationId, type WatchfacePreviewMode } from "./watchfaceStudio";
 import { drawNativeDataPreview } from "./nativeData";
 import { recoverWatchfaceDesign } from "./recoveredWatchfaceDesign";
@@ -51,15 +51,21 @@ export async function renderCompiledWatchfacePreview(
   resolution: CorosWatchfaceResolutionDetails,
   mode: WatchfacePreviewMode,
   loadAssets: WatchfaceAssetLoader,
-  scenario: { date?: Date; complication?: WatchfaceComplicationId; values?: Record<string, string> } = {}
+  scenario: { date?: Date; complication?: WatchfaceComplicationId; values?: Record<string, string>; chartSource?: string } = {}
 ): Promise<CompiledWatchfacePreview> {
   const usesAod = mode === "aod" && Object.keys(resolution.aodConfig ?? {}).length > 0;
   const config = usesAod
     ? resolution.aodConfig! : resolution.config;
   const canvas = document.createElement("canvas");
   canvas.width = resolution.width; canvas.height = resolution.height;
-  const backgroundPath = `${resolution.directory}/${(config.background_icon || "background.png").replace(/\\/g, "/")}`;
-  const [background] = usesAod ? [] : await loadAssets([backgroundPath]);
+  // An AOD without an image stays black; it must not borrow Current's PNG.
+  const backgroundValue = config.background_icon || (usesAod ? "" : "background.png");
+  const backgroundPath = backgroundValue ? `${resolution.directory}/${backgroundValue.replace(/\\/g, "/")}` : "";
+  let background: CorosWatchfaceTemplateAsset | undefined;
+  if (backgroundPath) {
+    try { [background] = await loadAssets([backgroundPath]); }
+    catch (error) { if (!usesAod) throw error; }
+  }
   if (!usesAod && !background) throw new Error(`The compiled archive is missing ${backgroundPath}.`);
   // Older archive descriptions omit directly referenced numbered PNGs such as
   // studio/sunset/00.png. Resolve the active config's exact paths, including
@@ -70,7 +76,7 @@ export async function renderCompiledWatchfacePreview(
   const referencedPaths = [...new Set(Object.values(config)
     .filter((value) => /\.png$/i.test(value))
     .map(configPath))]
-    .filter((path) => !usesAod || path !== backgroundPath);
+    .filter((path) => path !== backgroundPath);
   if (background) icons.set(background.path, background);
   for (const path of referencedPaths) {
     const file = spriteFiles.get(path);
@@ -83,6 +89,9 @@ export async function renderCompiledWatchfacePreview(
     }
   }
   const checks = createCompiledPixelChecks(canvas.width, canvas.height);
+  if (usesAod && backgroundPath && !background) {
+    checks.checks.add(`background_icon: ${backgroundPath.slice(resolution.directory.length + 1)} could not be loaded.`);
+  }
   // Stock templates can name PNGs they never shipped (AROUND's icon\point.png
   // and icon\cen.png). Nothing can draw them, so list them for review.
   for (const path of missing.filter((path) => !icons.has(path))) {
@@ -102,7 +111,7 @@ export async function renderCompiledWatchfacePreview(
   // The studio pass draws template keys only. Native data layers (min/max
   // temperature, charts, stamina…) are rebuilt from the compiled keys and
   // their exported sprites, the same way an official face is recovered.
-  const { nativeData, weatherIndicator } = await recoverWatchfaceDesign(compiledDetails, loadAssets);
+  const { nativeData, weatherIndicator } = await recoverWatchfaceDesign(compiledDetails, loadAssets, scenario.chartSource);
   if (nativeData) await drawNativeDataPreview(canvas, resolution.width, nativeData, { values: scenario.values });
   if (weatherIndicator?.enabled) {
     const url = weatherIndicator.assets?.day?.["0"];

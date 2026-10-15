@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   addGeneratedRoute,
+  deleteAllGeneratedRoutes as deleteAllSavedGeneratedRoutes,
   deleteCachedCorosMapRecord,
   deleteGeneratedRoute as deleteSavedGeneratedRoute,
   getCachedCorosMap,
@@ -15,6 +16,7 @@ import {
   listGeneratedRoutes as listSavedGeneratedRoutes,
   setSetting,
   updateCachedCorosMapExtractedPath,
+  updateGeneratedRouteGeometry,
   upsertCachedCorosMap
 } from "./database";
 import type {
@@ -30,6 +32,7 @@ import type {
   GenerateRouteRequest,
   GeneratedRoute,
   GeneratedRoutePage,
+  GeneratedRouteResult,
   GpxImportFailure,
   GpxImportSummary,
   RouteActivityType,
@@ -44,10 +47,15 @@ import type {
 } from "./types";
 import {
   haversineMeters,
+  resolveRoutePreferences,
   routeViaBrouter,
   straightLineGeometry,
   synthesizeLoop
 } from "./routing/brouter";
+import {
+  normalizeElevationPreference,
+  normalizeSurfacePreference
+} from "./routing/athleteProfiles";
 import {
   geocodeNominatim,
   reverseGeocodeNominatim,
@@ -1159,31 +1167,48 @@ export async function reverseGeocodeRouteLocation(
   return reverseGeocodeNominatim(lat, lon);
 }
 
+/**
+ * Generates and saves the best route. Keyless loops also return unsaved
+ * runner-ups; the saved route keeps its id if the user picks one instead.
+ */
 export async function generateRoute(
   request: GenerateRouteRequest
-): Promise<GeneratedRoute> {
+): Promise<GeneratedRouteResult> {
   const normalized = normalizeGenerateRouteRequest(request);
-  const route =
+  const { route, alternatives } =
     resolveRouteBackend() === "ors"
-      ? await generateRouteWithOrs(normalized)
+      ? { route: await generateRouteWithOrs(normalized), alternatives: [] }
       : await generateRouteKeyless(normalized);
-  return persistRoute(route);
+  const saved = await persistRoute(route);
+  return alternatives.length > 0 ? { ...saved, alternatives } : saved;
 }
 
-/** Keyless generation via Nominatim (geocode) + BRouter (routing). */
+/**
+ * Keyless generation via Nominatim (geocode) + BRouter (routing) using
+ * CorosLink's athlete profiles, which keep runs out of parking lots and off
+ * busy carriageways and honour the surface/elevation preferences.
+ */
 async function generateRouteKeyless(
   request: GenerateRouteRequest
-): Promise<GeneratedRoute> {
+): Promise<{ route: GeneratedRoute; alternatives: RouteGeometry[] }> {
+  const preferences = resolveRoutePreferences(
+    request.activityType,
+    request.surfacePreference,
+    request.elevationPreference
+  );
   const start = await resolveLocation(request.startLocation);
 
   if (request.mode === "loop") {
-    const geometry = await synthesizeLoop(
+    const plan = await synthesizeLoop(
       { lat: start.lat, lon: start.lon },
       request.distanceKm,
-      request.activityType,
-      request.variationSeed ?? 0
+      preferences,
+      request.variationSeed
     );
-    return buildGeneratedRoute(request, geometry, start.label);
+    return {
+      route: buildGeneratedRoute(request, plan.geometry, start.label),
+      alternatives: plan.alternatives
+    };
   }
 
   const destination = await resolveLocation(request.destinationLocation ?? "");
@@ -1192,9 +1217,69 @@ async function generateRouteKeyless(
       { lat: start.lat, lon: start.lon },
       { lat: destination.lat, lon: destination.lon }
     ],
-    request.activityType
+    preferences
   );
-  return buildGeneratedRoute(request, geometry, start.label, destination.label);
+  return {
+    route: buildGeneratedRoute(request, geometry, start.label, destination.label),
+    alternatives: []
+  };
+}
+
+/**
+ * Swaps a saved route's path and stats for one of the loops Generate
+ * offered, keeping its id, name and place in the saved list.
+ */
+export async function replaceGeneratedRouteGeometry(
+  id: string,
+  geometry: RouteGeometry
+): Promise<GeneratedRoute> {
+  const route = getGeneratedRoute(id);
+  if (!route) {
+    throw new Error("Saved route was not found. Generate the route again.");
+  }
+  const points = (Array.isArray(geometry?.points) ? geometry.points : [])
+    .filter(
+      (point) =>
+        Number.isFinite(point?.lat) &&
+        Number.isFinite(point?.lon) &&
+        Math.abs(point.lat!) <= 90 &&
+        Math.abs(point.lon!) <= 180
+    )
+    .map((point) => ({
+      lat: point.lat,
+      lon: point.lon,
+      elevation: Number.isFinite(point.elevation) ? point.elevation : undefined
+    }));
+  if (points.length < 2 || !(geometry.distanceMeters > 0)) {
+    throw new Error("That route option is no longer available. Generate the route again.");
+  }
+  const optionalNumber = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  const updated: GeneratedRoute = {
+    ...route,
+    distanceMeters: Math.round(geometry.distanceMeters),
+    durationSeconds: optionalNumber(geometry.durationSeconds),
+    ascentMeters: optionalNumber(geometry.ascentMeters),
+    descentMeters: optionalNumber(geometry.descentMeters),
+    points,
+    insights:
+      geometry.insights?.wayTypes && geometry.insights.surfaces ? geometry.insights : undefined,
+    bounds: boundsForPoints(points)
+  };
+  const gpxPath =
+    route.gpxPath ?? path.join(app.getPath("userData"), "routes", `${route.id}.gpx`);
+  // Stage the GPX so a failed database write leaves the old file intact.
+  const stagedPath = `${gpxPath}.next`;
+  await fs.promises.mkdir(path.dirname(gpxPath), { recursive: true });
+  await fs.promises.writeFile(stagedPath, buildRouteGpx(updated), "utf8");
+  try {
+    updateGeneratedRouteGeometry({ ...updated, gpxPath });
+  } catch (caught) {
+    await fs.promises.rm(stagedPath, { force: true }).catch(() => undefined);
+    throw caught;
+  }
+  await fs.promises.rename(stagedPath, gpxPath);
+  return { ...updated, gpxPath };
 }
 
 /** Legacy OpenRouteService path, used only when the user opts into ORS. */
@@ -1259,7 +1344,15 @@ export async function routeWaypoints(
   if (!request.snap) {
     return straightLineGeometry(waypoints);
   }
-  return routeViaBrouter(waypoints, request.activityType);
+  // User-placed vias are intentional, so detours to reach them are kept.
+  return routeViaBrouter(
+    waypoints,
+    resolveRoutePreferences(
+      request.activityType,
+      request.surfacePreference,
+      request.elevationPreference
+    )
+  );
 }
 
 /** Persists a finished drawn route (geometry + stats) as a saved route. */
@@ -1299,10 +1392,14 @@ export async function saveDrawnRoute(
     descentMeters: payload.descentMeters,
     mode: payload.closed ? "loop" : "point-to-point",
     activityType: payload.activityType,
-    surfacePreference: "road",
+    surfacePreference: normalizeSurfacePreference(
+      payload.surfacePreference,
+      payload.activityType
+    ),
     avoidHighways: false,
-    elevationPreference: "any",
+    elevationPreference: normalizeElevationPreference(payload.elevationPreference),
     points,
+    insights: payload.insights,
     bounds: boundsForPoints(points)
   };
   return persistRoute(route);
@@ -1383,6 +1480,7 @@ function buildGeneratedRoute(
     avoidHighways: request.avoidHighways,
     elevationPreference: request.elevationPreference,
     points: geometry.points,
+    insights: geometry.insights,
     bounds: boundsForPoints(geometry.points)
   };
 }
@@ -1651,6 +1749,18 @@ export function deleteGeneratedRoute(id: string): boolean {
     fs.promises.rm(route.gpxPath, { force: true }).catch(() => undefined);
   }
   return removed;
+}
+
+/** Deletes every saved route and its stored GPX; returns how many were removed. */
+export function deleteAllGeneratedRoutes(): number {
+  const { count, gpxPaths } = deleteAllSavedGeneratedRoutes();
+  const directory = path.join(app.getPath("userData"), "routes");
+  for (const gpxPath of gpxPaths) {
+    // Only the copies CorosLink keeps in its routes folder, never a file elsewhere.
+    if (path.dirname(path.resolve(gpxPath)) !== directory) continue;
+    fs.promises.rm(gpxPath, { force: true }).catch(() => undefined);
+  }
+  return count;
 }
 
 // NOTE: COROS watches do not import navigable routes over the USB cable (unlike
@@ -2257,9 +2367,9 @@ function normalizeGenerateRouteRequest(
     distanceKm,
     mode: request.mode,
     activityType,
-    surfacePreference: request.surfacePreference,
-    avoidHighways: request.avoidHighways,
-    elevationPreference: request.elevationPreference,
+    surfacePreference: normalizeSurfacePreference(request.surfacePreference, activityType),
+    avoidHighways: Boolean(request.avoidHighways),
+    elevationPreference: normalizeElevationPreference(request.elevationPreference),
     unitSystem: normalizeUnitSystem(request.unitSystem),
     variationSeed: request.variationSeed
   };

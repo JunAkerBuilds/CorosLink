@@ -29,6 +29,13 @@ function validModelQuery(url: URL): boolean {
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+// Postgres bigint columns can reach the JSON as strings (the catalog's grouped
+// listing did in October 2026), so accept a plain integer string as the number.
+const packageBytesSchema = z.preprocess(
+  (value) => (typeof value === "string" && /^\d{1,12}$/.test(value) ? Number(value) : value),
+  z.number().int().positive().max(MAX_COMMUNITY_PACKAGE_BYTES)
+);
+
 const watchfaceSchema = z.object({
   id: z.string().uuid(),
   slug: z.string().regex(SLUG_PATTERN).max(100),
@@ -42,7 +49,7 @@ const watchfaceSchema = z.object({
   previewUrl: z.string().url(),
   detailUrl: z.string().url(),
   downloadUrl: z.string().url(),
-  packageBytes: z.number().int().positive().max(MAX_COMMUNITY_PACKAGE_BYTES),
+  packageBytes: packageBytesSchema,
   packageSha256: z.string().regex(/^[a-f0-9]{64}$/),
   validatorVersion: z.string().max(100).nullable(),
   downloadCount: z.number().int().nonnegative().optional(),
@@ -188,13 +195,18 @@ function normalizeQuery(input: CommunityWatchfaceCatalogQuery = {}) {
   return query;
 }
 
+/** Shape-checks a catalog page; the caller still vets its URLs. */
+export function parseCommunityCatalogPage(value: unknown): CommunityWatchfaceCatalogPage {
+  return catalogPageSchema.parse(value) as CommunityWatchfaceCatalogPage;
+}
+
 export async function listCommunityWatchfaces(
   input: CommunityWatchfaceCatalogQuery = {}
 ): Promise<CommunityWatchfaceCatalogPage> {
   const query = normalizeQuery(input);
-  const parsed = catalogPageSchema.parse(
+  const parsed = parseCommunityCatalogPage(
     await requestCatalog(`/api/v1/watch-faces?${query.toString()}`)
-  ) as CommunityWatchfaceCatalogPage;
+  );
   return {
     ...parsed,
     items: parsed.items.map(validateWatchfaceUrls)

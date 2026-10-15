@@ -1,0 +1,1952 @@
+/* Overview morning brief: readiness, today's plan, latest activity, race
+   predictor and the launchpad. Lives beside OverviewBriefing.tsx. */
+
+/* One hue per metric, borrowed from the Training Hub's vital and records
+   palettes, so the brief reads as distinct readings rather than one green. */
+.dashboard {
+  --ov-sleep: #a495ff;
+  --ov-hrv: #5cc8d8;
+  --ov-rhr: #f47a86;
+  --ov-vo2: #f39a5b;
+  --ov-gold: #e6bb62;
+  --ov-gold-deep: #b9832a;
+  --ov-watchfaces: #e889c8;
+  --ov-coach: #7fb2f5;
+  --ov-calendar: var(--accent);
+  --ov-music: #f47a86;
+  --ov-on-watch: #7fb2f5;
+  --ov-synced: var(--accent);
+  --ov-library: #a495ff;
+  --ov-size: #e0a93a;
+
+  /* Raised material: cool graphite lit from above, edged by light and shadow
+     instead of a hairline border. Tiles sit one step up inside a card; inset
+     wells hold tracks and chips; glyph tiles hold icons. */
+  --ov-radius: 26px;
+  --ov-radius-tile: 20px;
+  --ov-card: linear-gradient(160deg, #1d2229 0%, #171a1f 62%, #15171c 100%);
+  --ov-card-rim: inset 0 1px 0 rgba(255, 255, 255, 0.075), inset 0 -1px 0 rgba(0, 0, 0, 0.28), inset 0 0 0 1px rgba(226, 234, 242, 0.035);
+  --ov-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 24px -12px rgba(0, 0, 0, 0.55), 0 30px 60px -30px rgba(0, 0, 0, 0.6);
+  --ov-card-shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.3), 0 18px 36px -14px rgba(0, 0, 0, 0.6), 0 44px 80px -34px rgba(0, 0, 0, 0.7);
+  --ov-tile: linear-gradient(180deg, #232830 0%, #1c2026 100%);
+  --ov-tile-solid: #1e2229;
+  --ov-tile-rim: inset 0 1px 0 rgba(255, 255, 255, 0.07), inset 0 -1px 0 rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --ov-glyph: linear-gradient(160deg, #2a2f37, #16191e);
+  --ov-glyph-rim: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+  --ov-well: #101216;
+  --ov-well-rim: inset 0 1px 3px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(226, 234, 242, 0.06);
+  --ov-raised: linear-gradient(180deg, #2a2f37 0%, #22262d 100%);
+  --ov-raised-hover: linear-gradient(180deg, #323843 0%, #292e36 100%);
+  --ov-raised-rim: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.35);
+  --ov-divider: rgba(226, 234, 242, 0.085);
+}
+
+:root[data-theme="paper"] .dashboard {
+  --ov-sleep: #6f56c9;
+  --ov-hrv: #12808f;
+  --ov-rhr: #c43d4d;
+  --ov-vo2: #b85d1c;
+  --ov-gold: #9a6b12;
+  --ov-gold-deep: #b9791a;
+  --ov-watchfaces: #b5408e;
+  --ov-coach: #2f6fd6;
+  --ov-music: #c43d4d;
+  --ov-on-watch: #2f6fd6;
+  --ov-library: #6f56c9;
+  --ov-size: #a8721a;
+
+  /* One step darker than the theme's muted grey, so small text stays ≥4.5:1
+     on the tinted tiles and recessed wells. */
+  --text-muted: #5c6a61;
+
+  --ov-card: linear-gradient(160deg, #ffffff 0%, #fbfcfa 62%, #f7f8f5 100%);
+  --ov-card-rim: inset 0 1px 0 #ffffff, inset 0 0 0 1px rgba(38, 52, 41, 0.07);
+  --ov-card-shadow: 0 1px 2px rgba(30, 45, 35, 0.06), 0 10px 24px -14px rgba(30, 45, 35, 0.16), 0 30px 60px -34px rgba(30, 45, 35, 0.14);
+  --ov-card-shadow-lift: 0 2px 4px rgba(30, 45, 35, 0.07), 0 18px 36px -16px rgba(30, 45, 35, 0.2), 0 44px 80px -38px rgba(30, 45, 35, 0.18);
+  --ov-tile: linear-gradient(180deg, #f9faf8 0%, #f2f4f0 100%);
+  --ov-tile-solid: #f4f6f2;
+  --ov-tile-rim: inset 0 1px 0 #ffffff, inset 0 0 0 1px rgba(38, 52, 41, 0.07);
+  --ov-glyph: linear-gradient(160deg, #ffffff, #eef1ec);
+  --ov-glyph-rim: inset 0 1px 0 #ffffff, inset 0 0 0 1px rgba(38, 52, 41, 0.08), 0 1px 2px rgba(30, 45, 35, 0.08);
+  --ov-well: #e9ece6;
+  --ov-well-rim: inset 0 1px 2px rgba(30, 45, 35, 0.14), inset 0 0 0 1px rgba(38, 52, 41, 0.05);
+  --ov-raised: linear-gradient(180deg, #ffffff 0%, #f3f5f1 100%);
+  --ov-raised-hover: linear-gradient(180deg, #ffffff 0%, #eaeee8 100%);
+  --ov-raised-rim: inset 0 0 0 1px rgba(38, 52, 41, 0.1), 0 1px 2px rgba(30, 45, 35, 0.08);
+  --ov-divider: rgba(38, 52, 41, 0.1);
+}
+
+/* Soft light behind the brief: the accent over the greeting, the sleep hue
+   opposite. It stays put while the cards scroll over it. Matches the shell's
+   own `.content` selectors so only the background image changes. */
+.app .app-body > .content.content-overview,
+:root[data-native-sidebar-glass="true"] .app .app-body > .content.content-overview {
+  background-image:
+    radial-gradient(900px 520px at 6% -8%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 70%),
+    radial-gradient(760px 520px at 98% 4%, color-mix(in srgb, #8b7cf6 7%, transparent), transparent 70%),
+    linear-gradient(155deg, var(--surface-highlight), transparent 40%);
+}
+
+/* Every card on the Overview shares the material. The paper selector mirrors
+   the theme's `.panel` glass override so it outranks it. */
+.dashboard .panel,
+:root[data-theme="paper"] .dashboard .panel:not(.is-disconnected):not(.strength-body-panel) {
+  border-color: transparent;
+  border-radius: var(--ov-radius);
+  background:
+    radial-gradient(70% 90% at 100% 0%, color-mix(in srgb, var(--card-hue, transparent) var(--card-glow, 9%), transparent), transparent 70%),
+    var(--ov-card);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: var(--ov-card-rim), var(--ov-card-shadow);
+}
+
+.overview-briefing {
+  container: overview-brief / inline-size;
+  display: grid;
+  gap: 20px;
+}
+
+.overview-row {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: 20px;
+  align-items: stretch;
+}
+
+.overview-row.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Padding comes from `.panel` (20px), which loads after this sheet. */
+.overview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.overview-card h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.overview-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+}
+
+/* Glyph tile + title + a quieter line: what the card is, before what it says. */
+.overview-card-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.overview-card-title > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.overview-card-name {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.25;
+}
+
+.overview-card-sub {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Glyph tile: a small raised key tinted from above in its hue (--glyph), with no halo behind it. */
+.overview-glyph {
+  --glyph: var(--accent);
+  display: grid;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 11px;
+  background:
+    radial-gradient(120% 90% at 30% 0%, color-mix(in srgb, var(--glyph) 24%, transparent), transparent 70%),
+    var(--ov-glyph);
+  box-shadow: var(--ov-glyph-rim);
+  color: var(--glyph);
+}
+
+/* The round way into a card's own view, as in the header of Today's plan. */
+.overview-round-link {
+  display: grid;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ov-raised);
+  box-shadow: var(--ov-raised-rim);
+  color: var(--text-secondary);
+  padding: 0;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.overview-round-link:hover {
+  background: var(--ov-raised-hover);
+  color: var(--text-primary);
+}
+
+.overview-round-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.overview-round-link svg {
+  transition: transform 0.15s ease;
+}
+
+.overview-round-link:hover svg {
+  transform: translateX(1px);
+}
+
+/* Chips sit in a recessed well, tinted only by their text. */
+.overview-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--ov-well);
+  box-shadow: var(--ov-well-rim);
+  color: var(--text-secondary);
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-chip.is-good {
+  background: color-mix(in srgb, var(--success-dot) 10%, var(--ov-well));
+  color: var(--success-text);
+}
+
+/* Links are raised pills: the way out of a card, never the loudest thing in it. */
+.overview-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  min-height: 30px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--ov-raised);
+  box-shadow: var(--ov-raised-rim);
+  color: var(--text-primary);
+  padding: 0 10px 0 13px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.overview-link:hover {
+  background: var(--ov-raised-hover);
+}
+
+.overview-link:focus-visible,
+.overview-launch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.overview-link svg {
+  color: var(--text-secondary);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.overview-link:hover svg {
+  color: var(--text-primary);
+  transform: translateX(2px);
+}
+
+/* ---- Readiness ---------------------------------------------------------- */
+
+.overview-readiness {
+  --tone: var(--text-muted);
+  container: readiness / inline-size;
+  overflow: hidden;
+}
+
+.overview-readiness.tone-high { --tone: var(--accent); }
+.overview-readiness.tone-mid { --tone: var(--accent-gold); }
+.overview-readiness.tone-low { --tone: var(--error-text); }
+
+.overview-readiness::before {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle at 110px 150px,
+    color-mix(in srgb, var(--tone) 14%, transparent),
+    transparent 300px
+  );
+  content: "";
+  pointer-events: none;
+}
+
+.overview-readiness > * {
+  position: relative;
+}
+
+/* Ring on the left; the verdict and the vitals share the width beside it. */
+.overview-readiness-body {
+  display: grid;
+  flex: 1;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "ring copy"
+    "ring vitals";
+  column-gap: 28px;
+  row-gap: 18px;
+  align-items: start;
+}
+
+.overview-readiness-body > .overview-ring {
+  grid-area: ring;
+  align-self: center;
+}
+
+.overview-readiness-copy {
+  grid-area: copy;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.overview-readiness-copy h2 {
+  font-size: 28px;
+  letter-spacing: -0.03em;
+}
+
+.overview-readiness-copy p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.overview-ring {
+  --ring-tone: var(--text-muted);
+  position: relative;
+  flex-shrink: 0;
+  width: 172px;
+  height: 172px;
+}
+
+.overview-ring.tone-high { --ring-tone: var(--accent); }
+.overview-ring.tone-mid { --ring-tone: var(--accent-gold); }
+.overview-ring.tone-low { --ring-tone: var(--error-text); }
+
+.overview-ring svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.overview-ring-core {
+  fill: color-mix(in srgb, var(--ring-tone) 7%, transparent);
+  stroke: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  stroke-width: 1;
+}
+
+.overview-ring-ticks line {
+  stroke: color-mix(in srgb, var(--text-muted) 30%, transparent);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  transition: stroke 0.25s ease;
+}
+
+.overview-ring-ticks line.is-lit {
+  stroke: var(--ring-tone);
+}
+
+.overview-ring-track {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text-muted) 15%, transparent);
+  stroke-width: 9;
+}
+
+.overview-ring-fill {
+  fill: none;
+  stroke: var(--ring-tone);
+  stroke-width: 9;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--ring-tone) 45%, transparent));
+  transition: stroke-dashoffset 1s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.overview-ring-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 3px;
+  text-align: center;
+}
+
+.overview-ring-label strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-ring-label strong small {
+  margin-left: 1px;
+  color: var(--text-secondary);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.overview-ring-label span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Tiles grow into whatever height the row gives the card, so nothing sits empty
+   below them. The row template comes inline: one 1fr row per pair of measured
+   tiles, plus an auto row when unmeasured vitals share a strip underneath. */
+.overview-vitals {
+  grid-area: vitals;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  align-self: stretch;
+  gap: 12px;
+  margin: 0;
+}
+
+/* Each tile is lit in its metric's hue from the top corner. The verdict sits
+   beside the label, the reading under it, and the trend runs along the floor
+   with the athlete's own reference dashed through it. */
+.overview-vital {
+  --vital: var(--accent);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "label"
+    "value"
+    "trend";
+  row-gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--ov-radius-tile);
+  background:
+    radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--vital) 16%, transparent), transparent 60%),
+    var(--ov-tile);
+  box-shadow: var(--ov-tile-rim);
+  padding: 13px 15px 0;
+}
+
+.overview-vital.is-sleep,
+.overview-vital-pending.is-sleep { --vital: var(--ov-sleep); }
+.overview-vital.is-hrv,
+.overview-vital-pending.is-hrv { --vital: var(--ov-hrv); }
+.overview-vital.is-rhr,
+.overview-vital-pending.is-rhr { --vital: var(--ov-rhr); }
+.overview-vital.is-vo2,
+.overview-vital-pending.is-vo2 { --vital: var(--ov-vo2); }
+
+.overview-vital dt {
+  grid-area: label;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.overview-vital-label {
+  white-space: nowrap;
+}
+
+/* Each vital keeps its own hue: its trend, not today's recovery tone. */
+.overview-vital-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--vital);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--vital) 60%, transparent);
+}
+
+/* The verdict is the tile's one coloured word: where the reading sits against
+   the athlete's own normal, not whether the number moved. */
+.overview-vital-verdict {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  min-height: 20px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text-muted) 16%, transparent);
+  color: var(--text-secondary);
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-vital-verdict.is-good {
+  background: color-mix(in srgb, var(--success-dot) 16%, transparent);
+  color: var(--success-text);
+}
+
+.overview-vital-verdict.is-bad {
+  background: color-mix(in srgb, var(--warning-text) 16%, transparent);
+  color: var(--warning-text);
+}
+
+.overview-vital dd {
+  grid-area: value;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  margin: 0;
+}
+
+.overview-vital strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-vital strong small {
+  margin-left: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* The delta opens the line in the verdict's colour; its reference follows in grey. */
+.overview-vital-detail {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-vital-detail b {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.overview-vital-detail b.is-good { color: var(--success-text); }
+.overview-vital-detail b.is-bad { color: var(--warning-text); }
+
+/* The trend takes the height left over, within reason, so a taller tile gets
+   a taller chart rather than a gap above a fixed strip. */
+.overview-trend {
+  grid-area: trend;
+  position: relative;
+  align-self: end;
+  height: 100%;
+  min-height: 48px;
+  max-height: 84px;
+  margin-top: 4px;
+}
+
+/* The line fades in on the left (the window continues back in time) and ends
+   crisp on the right under the latest reading's dot. */
+.overview-spark {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%);
+  mask-image: linear-gradient(90deg, transparent, #000 12%);
+}
+
+.overview-spark path {
+  fill: none;
+  stroke: var(--vital);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 2px 6px color-mix(in srgb, var(--vital) 45%, transparent));
+}
+
+.overview-spark path.is-area {
+  stroke: none;
+  filter: none;
+}
+
+.overview-spark line.is-reference {
+  stroke: color-mix(in srgb, var(--vital) 55%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.overview-spark-dot {
+  position: absolute;
+  right: -4px;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--vital);
+  box-shadow:
+    0 0 0 2.5px var(--ov-tile-solid),
+    0 0 12px color-mix(in srgb, var(--vital) 70%, transparent);
+}
+
+/* Sleep draws nights, not a line: each bar stacks deep, REM and light from the
+   floor, the latest lit, the week's average dashed across them. */
+.overview-sleep-bars {
+  position: absolute;
+  inset: 0 0 9px;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.overview-sleep-night {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column-reverse;
+  min-width: 0;
+  border-radius: 3px 3px 1px 1px;
+  overflow: hidden;
+  opacity: 0.72;
+}
+
+.overview-sleep-night.is-blank {
+  visibility: hidden;
+}
+
+.overview-sleep-night.is-latest {
+  opacity: 1;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--vital) 55%, transparent);
+}
+
+.overview-sleep-night i {
+  display: block;
+  min-height: 0;
+}
+
+.overview-sleep-night .is-deep { background: var(--vital); }
+.overview-sleep-night .is-rem { background: color-mix(in srgb, var(--vital) 62%, transparent); }
+.overview-sleep-night .is-light { background: color-mix(in srgb, var(--vital) 30%, transparent); }
+.overview-sleep-night .is-total { background: color-mix(in srgb, var(--vital) 70%, transparent); }
+
+.overview-sleep-reference {
+  position: absolute;
+  right: 0;
+  left: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--vital) 55%, transparent);
+  pointer-events: none;
+}
+
+/* Vitals not measured yet share one quiet tile beneath the live ones, each a
+   row with its hint and, where it helps, the way to switch it on. */
+.overview-vitals-pending {
+  container: vitals-pending / inline-size;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  min-width: 0;
+  border-radius: var(--ov-radius-tile);
+  background: var(--ov-tile);
+  box-shadow: var(--ov-tile-rim);
+  padding: 12px 15px;
+}
+
+.overview-vitals-pending.is-wide {
+  grid-column: 1 / -1;
+}
+
+.overview-vital-pending {
+  --vital: var(--accent);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+  min-width: 0;
+}
+
+.overview-vital-pending dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.overview-vital-pending .overview-vital-dot {
+  background: color-mix(in srgb, var(--vital) 55%, var(--text-muted));
+  box-shadow: none;
+}
+
+.overview-vital-pending dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+
+.overview-vital-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--vital);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.overview-vital-action:hover {
+  text-decoration: underline;
+}
+
+@container vitals-pending (max-width: 340px) {
+  .overview-vital-pending {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container readiness (max-width: 620px) {
+  .overview-readiness-body {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "ring copy"
+      "vitals vitals";
+    align-items: center;
+  }
+
+  .overview-ring {
+    width: 128px;
+    height: 128px;
+  }
+
+  .overview-ring-label strong {
+    font-size: 31px;
+  }
+
+  .overview-readiness-copy h2 {
+    font-size: 23px;
+  }
+}
+
+@container readiness (max-width: 360px) {
+  .overview-vitals {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---- Today's plan + week strip ----------------------------------------- */
+
+.overview-today {
+  --card-hue: var(--accent);
+  --card-glow: 7%;
+}
+
+.overview-sessions {
+  display: grid;
+  gap: 10px;
+}
+
+.overview-session {
+  --overview-sport: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.overview-session > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.overview-session h2 {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.overview-session p,
+.overview-latest-title p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The sport rides in front of the session's details, in the sport's colour. */
+.overview-session p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.overview-session p svg {
+  flex-shrink: 0;
+  color: var(--overview-sport);
+}
+
+
+.overview-session.is-rest,
+.overview-session.is-empty {
+  --overview-sport: var(--text-muted);
+}
+
+.overview-session.is-empty .overview-link {
+  align-self: center;
+  margin: 0;
+}
+
+.overview-upnext {
+  display: grid;
+  gap: 8px;
+}
+
+.overview-upnext-label {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.overview-upnext ul {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-upnext li {
+  --overview-sport: var(--accent);
+  display: grid;
+  grid-template-columns: 44px 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  font-size: 13px;
+}
+
+.overview-upnext li + li {
+  border-top: 1px solid var(--ov-divider);
+}
+
+.overview-upnext li svg {
+  color: var(--overview-sport);
+}
+
+.overview-upnext-day {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.overview-upnext-name {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.overview-upnext-stats {
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-week {
+  display: grid;
+  gap: 14px;
+  margin-top: auto;
+  border-top: 1px solid var(--ov-divider);
+  padding-top: 18px;
+}
+
+.overview-week-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.overview-week-head > span:first-child {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.overview-week-head strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-week-head strong small {
+  margin-left: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.overview-week-meta {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-week-bars {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-week-bars li {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Days are recessed wells the bars rise out of. */
+.overview-week-track {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  height: 64px;
+  border-radius: 12px;
+  background: var(--ov-well);
+  box-shadow: var(--ov-well-rim);
+  padding: 4px;
+}
+
+.overview-week-bars li.is-today .overview-week-track {
+  background: color-mix(in srgb, var(--accent) 9%, var(--ov-well));
+  box-shadow: var(--ov-well-rim), inset 0 0 0 1px color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+.overview-week-bar {
+  width: 100%;
+  max-width: 22px;
+  border-radius: 8px;
+  transform-origin: bottom;
+  transform: scaleY(0);
+  transition: transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.overview-week-bars.is-ready .overview-week-bar {
+  transform: scaleY(1);
+}
+
+.overview-week-bars li:nth-child(2) .overview-week-bar { transition-delay: 40ms; }
+.overview-week-bars li:nth-child(3) .overview-week-bar { transition-delay: 80ms; }
+.overview-week-bars li:nth-child(4) .overview-week-bar { transition-delay: 120ms; }
+.overview-week-bars li:nth-child(5) .overview-week-bar { transition-delay: 160ms; }
+.overview-week-bars li:nth-child(6) .overview-week-bar { transition-delay: 200ms; }
+.overview-week-bars li:nth-child(7) .overview-week-bar { transition-delay: 240ms; }
+
+.overview-week-bar.is-done {
+  background: linear-gradient(
+    180deg,
+    var(--overview-sport),
+    color-mix(in srgb, var(--overview-sport) 62%, transparent)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 0 14px color-mix(in srgb, var(--overview-sport) 26%, transparent);
+}
+
+/* Still to come: an outline in the planned sport's colour. */
+.overview-week-bar.is-planned {
+  border: 1.5px dashed color-mix(in srgb, var(--overview-sport) 60%, transparent);
+  background: color-mix(in srgb, var(--overview-sport) 10%, transparent);
+}
+
+.overview-week-dot {
+  width: 5px;
+  height: 5px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-muted) 45%, transparent);
+}
+
+.overview-week-day {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.overview-week-date {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-week-bars li.is-today .overview-week-day,
+.overview-week-bars li.is-today .overview-week-date {
+  color: var(--accent-strong);
+}
+
+.overview-week-foot {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ---- Latest activity ---------------------------------------------------- */
+
+.overview-latest {
+  --activity-color: var(--overview-sport);
+  --card-hue: var(--activity-color);
+  --card-glow: 8%;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.95fr) minmax(0, 1.05fr);
+  gap: 22px;
+}
+
+.overview-latest-route {
+  min-height: 236px;
+}
+
+/* The training stylesheet that styles the route preview ships with the Training
+   Hub chunk, so Overview carries the parts it needs. */
+.overview-latest-route .activity-card-route {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 236px;
+  overflow: hidden;
+  isolation: isolate;
+  border: 0;
+  border-radius: 14px;
+  background: var(--bg-base);
+  box-shadow: var(--ov-well-rim);
+}
+
+.overview-latest-route .activity-card-map {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-base);
+  pointer-events: none;
+}
+
+.overview-latest-route .activity-card-map.is-dark .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) saturate(0.35) brightness(0.7);
+}
+
+.overview-latest-route .activity-card-route-placeholder {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  background: radial-gradient(
+    ellipse at 65% 80%,
+    color-mix(in srgb, var(--activity-color) 12%, transparent),
+    transparent 80%
+  );
+}
+
+.overview-latest-route .activity-card-route-placeholder svg {
+  color: var(--activity-color);
+  opacity: 0.75;
+}
+
+.overview-latest-route .activity-card-route-placeholder span {
+  font-size: 12px;
+}
+
+/* No top padding, so this header lines up with the race predictor's beside it. */
+.overview-latest-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding-bottom: 4px;
+}
+
+.overview-latest-title {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.overview-latest-title h2 {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.overview-latest-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px 16px;
+  margin: 0;
+}
+
+.overview-latest-stats div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.overview-latest-stats dt {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.overview-latest-stats dd {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-latest .overview-link {
+  margin-top: auto;
+}
+
+/* ---- Race predictor ----------------------------------------------------- */
+
+.overview-races {
+  --card-hue: var(--ov-gold);
+  --card-glow: 10%;
+}
+
+.overview-races .overview-chip {
+  background: color-mix(in srgb, var(--ov-gold) 9%, var(--ov-well));
+  color: var(--ov-gold);
+}
+
+/* Rows share one set of columns so every track ends at the same point,
+   however wide each predicted time is. */
+.overview-race-list {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr) auto;
+  gap: 10px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-race-list li {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  grid-template-rows: auto auto;
+  align-items: center;
+  row-gap: 2px;
+}
+
+.overview-race-label {
+  grid-row: span 2;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.overview-race-track {
+  grid-row: span 2;
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--ov-well);
+  box-shadow: var(--ov-well-rim);
+}
+
+.overview-race-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--ov-gold-deep), var(--ov-gold));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--ov-gold) 30%, transparent);
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.overview-race-list.is-ready .overview-race-track span {
+  transform: scaleX(1);
+}
+
+.overview-race-list strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-race-list small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-races .overview-link {
+  margin-top: auto;
+}
+
+/* ---- Sign-in invitation ------------------------------------------------- */
+
+.overview-connect {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 32px;
+  overflow: hidden;
+  padding: 32px 36px;
+}
+
+.overview-connect::before {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle at 78% 50%,
+    color-mix(in srgb, var(--accent) 12%, transparent),
+    transparent 340px
+  );
+  content: "";
+  pointer-events: none;
+}
+
+.overview-connect > * {
+  position: relative;
+}
+
+.overview-connect-copy {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}
+
+.overview-connect-copy .eyebrow {
+  margin: 0;
+  color: var(--accent-strong);
+}
+
+.overview-connect-copy h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+}
+
+.overview-connect-copy > p {
+  max-width: 52ch;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.overview-connect-points {
+  display: grid;
+  gap: 10px;
+  margin: 6px 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-connect-points li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.overview-connect-points li > span {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 10px;
+  background:
+    radial-gradient(120% 90% at 30% 0%, color-mix(in srgb, var(--accent) 24%, transparent), transparent 70%),
+    var(--ov-glyph);
+  box-shadow: var(--ov-glyph-rim);
+  color: var(--accent-strong);
+}
+
+.overview-connect-button {
+  min-height: 40px;
+  padding: 0 18px;
+}
+
+.overview-connect-preview {
+  display: grid;
+  justify-items: center;
+  gap: 22px;
+  opacity: 0.9;
+}
+
+.overview-connect-preview .overview-week-bars {
+  width: min(100%, 300px);
+}
+
+.overview-connect-preview .overview-week-track {
+  height: 56px;
+}
+
+.overview-ring.is-ghost,
+.overview-week-bars.is-ghost {
+  filter: saturate(0.85);
+  mask-image: linear-gradient(180deg, #000 55%, rgba(0, 0, 0, 0.55));
+}
+
+/* ---- Loading ------------------------------------------------------------ */
+
+.overview-skeleton {
+  min-height: 300px;
+  overflow: hidden;
+}
+
+.overview-skeleton::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    color-mix(in srgb, var(--text-muted) 9%, transparent) 50%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  animation: overview-shimmer 1.6s ease-in-out infinite;
+  content: "";
+}
+
+@keyframes overview-shimmer {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+
+/* ---- Launchpad ---------------------------------------------------------- */
+
+.overview-launchpad-shell {
+  container: overview-launch / inline-size;
+}
+
+.overview-launchpad {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.overview-launch {
+  --launch: var(--accent);
+  --launch-glow: 8%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  border: 0;
+  border-radius: var(--ov-radius-tile);
+  background:
+    radial-gradient(70% 120% at 100% 0%, color-mix(in srgb, var(--launch) var(--launch-glow), transparent), transparent 70%),
+    var(--ov-card);
+  box-shadow: var(--ov-card-rim), var(--ov-card-shadow);
+  color: inherit;
+  padding: 16px 16px 16px 18px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.overview-launch.is-watchfaces { --launch: var(--ov-watchfaces); }
+.overview-launch.is-coach { --launch: var(--ov-coach); }
+.overview-launch.is-calendar { --launch: var(--ov-calendar); }
+.overview-launch.is-media { --launch: var(--ov-music); }
+
+.overview-launch:hover {
+  --launch-glow: 14%;
+  box-shadow: var(--ov-card-rim), var(--ov-card-shadow-lift);
+  transform: translateY(-2px);
+}
+
+.overview-glyph.overview-launch-icon {
+  --glyph: var(--launch);
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
+
+.overview-launch-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.overview-launch-copy strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.overview-launch-copy span {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.overview-launch-arrow {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.overview-launch:hover .overview-launch-arrow {
+  color: var(--launch);
+  transform: translateX(2px);
+}
+
+/* ---- Connected watch ---------------------------------------------------- */
+
+.overview-watch-shell {
+  container: overview-watch / inline-size;
+}
+
+/* .panel's own padding comes later in the cascade; the product backdrop runs edge to edge. */
+.panel.overview-watch {
+  --card-hue: var(--accent);
+  --card-glow: 6%;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  overflow: hidden;
+  padding: 0;
+}
+
+.panel.overview-watch.is-compact {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.overview-watch-product {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 320px;
+  overflow: hidden;
+  padding: 28px 12px 28px 32px;
+  background: linear-gradient(115deg, rgba(10, 12, 15, 0.55), rgba(10, 12, 15, 0.2));
+}
+
+.overview-watch-product::before {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(70% 110% at 78% 50%, var(--accent-soft), transparent 62%),
+    repeating-radial-gradient(circle at 76% 50%, transparent 0 22px, rgba(255, 255, 255, 0.016) 22px 23px);
+  content: "";
+  pointer-events: none;
+}
+
+:root[data-theme="paper"] .overview-watch-product {
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.5), rgba(236, 242, 238, 0.4));
+}
+
+:root[data-theme="paper"] .overview-watch-product::before {
+  background:
+    radial-gradient(70% 110% at 78% 50%, var(--accent-soft), transparent 62%),
+    repeating-radial-gradient(circle at 76% 50%, transparent 0 22px, rgba(38, 60, 48, 0.035) 22px 23px);
+}
+
+.overview-watch-copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.overview-watch-model {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: clamp(30px, 2.6vw, 42px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+
+.overview-watch-tagline {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 15px;
+}
+
+.overview-watch-features {
+  display: grid;
+  gap: 9px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-watch-features li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.overview-watch-features svg {
+  flex-shrink: 0;
+  color: var(--accent-strong);
+}
+
+.overview-watch-image.dashboard-hero-image {
+  justify-self: center;
+  max-width: min(100%, 300px);
+  max-height: 270px;
+}
+
+.overview-watch-status {
+  display: grid;
+  align-content: center;
+  gap: 22px;
+  min-width: 0;
+  border-left: 1px solid var(--ov-divider);
+  padding: 26px 28px;
+}
+
+.overview-watch.is-compact .overview-watch-status {
+  border-left: 0;
+}
+
+.overview-watch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dashboard .overview-watch-head .eyebrow {
+  margin: 0 0 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.overview-watch-head h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.overview-watch-head .watch-status-icon {
+  width: 48px;
+  height: 48px;
+}
+
+.overview-watch-body {
+  display: grid;
+  gap: 10px;
+}
+
+/* Storage reads like iPhone Storage: a flat bar split by what fills it,
+   hairline gaps between the parts, a dot legend underneath. */
+.overview-watch-status {
+  --storage-music: var(--ov-music);
+  --storage-maps: var(--accent);
+  --storage-other: #8e8e93;
+  --storage-free: rgba(226, 234, 242, 0.1);
+}
+
+:root[data-theme="paper"] .overview-watch-status {
+  --storage-other: #a1a1a6;
+  --storage-free: rgba(38, 52, 41, 0.1);
+}
+
+/* Sits straight on the panel; a card around it made the row read heavy. */
+.overview-watch-storage {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.overview-watch-storage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-watch-storage-head > :first-child {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.overview-watch-storage-bar {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 3px;
+}
+
+.overview-watch-storage-bar span {
+  flex-shrink: 0;
+  background: var(--dot);
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.overview-watch-storage-bar span.is-free {
+  flex: 1;
+  transform: none;
+}
+
+.overview-watch-storage.is-ready .overview-watch-storage-bar span {
+  transform: scaleX(1);
+}
+
+.overview-watch-storage-bar span:nth-child(2) { transition-delay: 60ms; }
+.overview-watch-storage-bar span:nth-child(3) { transition-delay: 120ms; }
+
+.overview-watch-storage .is-music { --dot: var(--storage-music); }
+.overview-watch-storage .is-maps { --dot: var(--storage-maps); }
+.overview-watch-storage .is-other { --dot: var(--storage-other); }
+.overview-watch-storage .is-free { --dot: var(--storage-free); }
+
+.overview-watch-storage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.overview-watch-storage-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.overview-watch-storage-legend li::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dot);
+  content: "";
+}
+
+.overview-watch-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.overview-watch-stat {
+  --stat: var(--accent);
+  --stat-glow: 5%;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 0;
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--stat) var(--stat-glow), transparent), transparent 60%),
+    var(--ov-tile);
+  color: inherit;
+  padding: 12px 14px;
+  text-align: left;
+  font: inherit;
+}
+
+.overview-watch-stat.is-on-watch { --stat: var(--ov-on-watch); }
+.overview-watch-stat.is-synced { --stat: var(--ov-synced); }
+.overview-watch-stat.is-library { --stat: var(--ov-library); }
+.overview-watch-stat.is-size { --stat: var(--ov-size); }
+
+.overview-watch-stat.is-button {
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.overview-watch-stat.is-button:hover {
+  --stat-glow: 12%;
+  transform: translateY(-1px);
+}
+
+.overview-watch-stat.is-button:focus-visible {
+  outline: 2px solid var(--stat);
+  outline-offset: 2px;
+}
+
+.overview-watch-stat-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.overview-watch-stat-icon {
+  display: grid;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--stat) 14%, transparent);
+  color: var(--stat);
+}
+
+.overview-watch-stat strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-watch-stat-detail {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@container overview-watch (max-width: 1080px) {
+  .panel.overview-watch {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .overview-watch-product {
+    min-height: 260px;
+  }
+
+  .overview-watch-status {
+    border-top: 1px solid var(--ov-divider);
+    border-left: 0;
+  }
+}
+
+/* ---- Recent downloads --------------------------------------------------- */
+
+.dashboard .dashboard-recent .section-heading .secondary-button {
+  min-height: 32px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--ov-raised);
+  box-shadow: var(--ov-raised-rim);
+  color: var(--text-primary);
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dashboard .dashboard-recent .section-heading .secondary-button:hover {
+  background: var(--ov-raised-hover);
+}
+
+/* ---- Narrow windows ----------------------------------------------------- */
+
+@container overview-brief (max-width: 1060px) {
+  .overview-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container overview-brief (max-width: 640px) {
+  .overview-latest {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+
+  .overview-latest-route,
+  .overview-latest-route .activity-card-route {
+    min-height: 200px;
+  }
+
+  .overview-latest-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overview-connect {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 26px 24px;
+  }
+
+  .overview-connect-preview {
+    display: none;
+  }
+
+  .overview-week-meta {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}
+
+/* Two by two once four tiles would truncate their details. */
+@container overview-launch (max-width: 1040px) {
+  .overview-launchpad {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container overview-launch (max-width: 520px) {
+  .overview-launchpad {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overview-ring-fill,
+  .overview-week-bar,
+  .overview-race-track span,
+  .overview-watch-storage-bar span {
+    transition: none;
+  }
+
+  .overview-skeleton::after {
+    animation: none;
+  }
+}
+
+:root[data-theme="paper"] .overview-watch-image.dashboard-hero-image {
+  filter: drop-shadow(0 18px 30px rgba(30, 45, 35, 0.2));
+}

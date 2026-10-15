@@ -250,11 +250,10 @@ overrides to restore defaults; preserve the required layer fields.
 
 For `nativeData.chart`, use `chartSource`, `parts.plot` and `chartStyle` for
 geometry, bar colors, bar width/gap, line thickness and curve colors. There is
-one chart slot per mode. `chartStyle.previewType` (`"bars"` or `"curve"`) only
-selects the sample preview; both appearance sets are exported and firmware
-chooses the live representation per chart group. Official faces draw the
-sunrise, moonrise, barometer and tide groups as curves and the health/training
-groups as bars. Readouts of other chart groups that a recovered official face
+one chart slot per mode. Both appearance sets are exported and the watch
+chooses the representation per chart group: sun and moon groups draw a line,
+daily data (health/training), barometer and tide draw bars. The preview
+follows `chartSource`; `chartStyle.previewType` is ignored. Readouts of other chart groups that a recovered official face
 already declares are kept on export; the layer replaces only the shared graph
 and its selected source. The preview follows the chart layer's group:
 `chart_sun_angle` draws only in the sun group, and `weather_temp`,

@@ -1,4 +1,4 @@
-import { t, useLanguage } from "../../i18n/tools";
+import { t, useLanguage , getLocale} from "../../i18n/tools";
 import {
   Activity,
   Bluetooth,
@@ -16,8 +16,11 @@ import { useMemo } from "react";
 import type {
   ActivityPaceBaselines,
   RouteActivityType,
+  RouteInsights,
+  RouteSurfacePreference,
   TrainingHubTrackPoint
 } from "../../../electron/types";
+import { RouteMakeup } from "./RouteMakeup";
 import {
   buildElevationProfile,
   climbRatePerKm,
@@ -39,6 +42,8 @@ export interface RouteSummary {
   descentMeters?: number;
   activityType: RouteActivityType;
   points: TrainingHubTrackPoint[];
+  insights?: RouteInsights;
+  surfacePreference?: RouteSurfacePreference;
 }
 
 /**
@@ -130,6 +135,14 @@ export function RouteStatsBar({
           label={t("Terrain")}
         />
       </div>
+
+      {summary.insights ? (
+        <RouteMakeup
+          insights={summary.insights}
+          activityType={summary.activityType}
+          surfacePreference={summary.surfacePreference}
+        />
+      ) : null}
 
       {profile ? (
         <div className="route-statsbar-elevation">

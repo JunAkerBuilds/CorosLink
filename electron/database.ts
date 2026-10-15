@@ -80,6 +80,7 @@ interface GeneratedRouteRow {
   points_json: string;
   bounds_json: string | null;
   gpx_path: string | null;
+  insights_json: string | null;
 }
 
 interface TrainingActivityRow {
@@ -248,6 +249,20 @@ export function initializeDatabase(userDataPath: string): Database.Database {
       synced_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS strava_activities (
+      activity_id TEXT PRIMARY KEY,
+      start_time INTEGER NOT NULL,
+      sport_type TEXT NOT NULL,
+      summary_json TEXT NOT NULL,
+      summary_fingerprint TEXT NOT NULL,
+      detail_json TEXT,
+      detail_fingerprint TEXT,
+      synced_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_strava_activities_start_time
+      ON strava_activities(start_time);
+
     CREATE TABLE IF NOT EXISTS cached_coros_maps (
       package_id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -394,6 +409,7 @@ export function initializeDatabase(userDataPath: string): Database.Database {
   `);
 
   ensureColumn(db, "generated_routes", "activity_type", "TEXT");
+  ensureColumn(db, "generated_routes", "insights_json", "TEXT");
   // feel_type caches the COROS end-of-activity feeling (sportFeelInfo.feelType,
   // 1..5; 0 = unrated). NULL = never fetched from the detail endpoint yet.
   ensureColumn(db, "training_activities", "feel_type", "INTEGER");
@@ -412,6 +428,15 @@ export function initializeDatabase(userDataPath: string): Database.Database {
        ON CONFLICT(id) DO NOTHING`
     ).run();
     setSetting("mcp.defaultsSeeded", "1");
+  })();
+
+  // Keyless routing became the athlete-grade engine (parking-lot avoidance,
+  // loop choices) on 2026-10-15, so installs that once picked OpenRouteService
+  // move back to it once. The ORS key stays saved for switching back.
+  db.transaction(() => {
+    if (getSetting("maps.keylessDefaultApplied")) return;
+    if (getSetting("maps.routeBackend") === "ors") setSetting("maps.routeBackend", "keyless");
+    setSetting("maps.keylessDefaultApplied", "1");
   })();
 
   return db;
@@ -1158,8 +1183,22 @@ function toGeneratedRoute(row: GeneratedRouteRow): GeneratedRoute {
     bounds: row.bounds_json
       ? (JSON.parse(row.bounds_json) as GeneratedRoute["bounds"])
       : undefined,
+    insights: parseRouteInsights(row.insights_json),
     gpxPath: row.gpx_path ?? undefined
   };
+}
+
+/** Insights are display-only; a corrupt blob must not hide the route itself. */
+function parseRouteInsights(json: string | null): GeneratedRoute["insights"] {
+  if (!json) return undefined;
+  try {
+    const parsed = JSON.parse(json) as GeneratedRoute["insights"];
+    return parsed && typeof parsed === "object" && parsed.wayTypes && parsed.surfaces
+      ? parsed
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function listGeneratedRoutes(offset = 0): GeneratedRoutePage {
@@ -1206,7 +1245,8 @@ export function getGeneratedRoute(id: string): GeneratedRoute | undefined {
       `SELECT id, name, created_at, start_location, destination_location,
               distance_meters, duration_seconds, ascent_meters, descent_meters,
               mode, activity_type, surface_preference, avoid_highways,
-              elevation_preference, points_json, bounds_json, gpx_path
+              elevation_preference, points_json, bounds_json, gpx_path,
+              insights_json
        FROM generated_routes
        WHERE id = ?`
     )
@@ -1222,13 +1262,15 @@ export function addGeneratedRoute(route: GeneratedRoute): GeneratedRoute {
          id, name, created_at, start_location, destination_location,
          distance_meters, duration_seconds, ascent_meters, descent_meters,
          mode, activity_type, surface_preference, avoid_highways,
-         elevation_preference, points_json, bounds_json, gpx_path
+         elevation_preference, points_json, bounds_json, gpx_path,
+         insights_json
        )
        VALUES (
          @id, @name, @createdAt, @startLocation, @destinationLocation,
          @distanceMeters, @durationSeconds, @ascentMeters, @descentMeters,
          @mode, @activityType, @surfacePreference, @avoidHighways,
-         @elevationPreference, @pointsJson, @boundsJson, @gpxPath
+         @elevationPreference, @pointsJson, @boundsJson, @gpxPath,
+         @insightsJson
        )`
     )
     .run({
@@ -1248,9 +1290,42 @@ export function addGeneratedRoute(route: GeneratedRoute): GeneratedRoute {
       elevationPreference: route.elevationPreference,
       pointsJson: JSON.stringify(route.points),
       boundsJson: route.bounds ? JSON.stringify(route.bounds) : null,
-      gpxPath: route.gpxPath ?? null
+      gpxPath: route.gpxPath ?? null,
+      insightsJson: route.insights ? JSON.stringify(route.insights) : null
     });
 
+  return route;
+}
+
+/** Rewrites a saved route's path and stats in place (id, name and date stay). */
+export function updateGeneratedRouteGeometry(route: GeneratedRoute): GeneratedRoute {
+  const result = requireDatabase()
+    .prepare(
+      `UPDATE generated_routes SET
+         distance_meters = @distanceMeters,
+         duration_seconds = @durationSeconds,
+         ascent_meters = @ascentMeters,
+         descent_meters = @descentMeters,
+         points_json = @pointsJson,
+         bounds_json = @boundsJson,
+         gpx_path = @gpxPath,
+         insights_json = @insightsJson
+       WHERE id = @id`
+    )
+    .run({
+      id: route.id,
+      distanceMeters: route.distanceMeters,
+      durationSeconds: route.durationSeconds ?? null,
+      ascentMeters: route.ascentMeters ?? null,
+      descentMeters: route.descentMeters ?? null,
+      pointsJson: JSON.stringify(route.points),
+      boundsJson: route.bounds ? JSON.stringify(route.bounds) : null,
+      gpxPath: route.gpxPath ?? null,
+      insightsJson: route.insights ? JSON.stringify(route.insights) : null
+    });
+  if (result.changes === 0) {
+    throw new Error("Saved route was not found. Generate the route again.");
+  }
   return route;
 }
 
@@ -1259,6 +1334,21 @@ export function deleteGeneratedRoute(id: string): boolean {
     .prepare(`DELETE FROM generated_routes WHERE id = ?`)
     .run(id);
   return result.changes > 0;
+}
+
+/** Deletes every saved route, returning how many went and their GPX paths. */
+export function deleteAllGeneratedRoutes(): { count: number; gpxPaths: string[] } {
+  const database = requireDatabase();
+  return database.transaction(() => {
+    const rows = database
+      .prepare(`SELECT gpx_path FROM generated_routes`)
+      .all() as Array<{ gpx_path: string | null }>;
+    database.prepare(`DELETE FROM generated_routes`).run();
+    return {
+      count: rows.length,
+      gpxPaths: rows.flatMap((row) => (row.gpx_path ? [row.gpx_path] : []))
+    };
+  })();
 }
 
 function toTrainingActivity(row: TrainingActivityRow): TrainingHubActivity {
@@ -1844,6 +1934,130 @@ export function clearHevyCache(): void {
     database.prepare("DELETE FROM hevy_workouts").run();
     database.prepare("DELETE FROM hevy_exercise_templates").run();
   })();
+}
+
+export interface StoredStravaActivity {
+  activityId: string;
+  startTime: number;
+  summary: Record<string, unknown>;
+  summaryFingerprint: string;
+  detail?: Record<string, unknown>;
+  /** Summary fingerprint the detail was read against; a mismatch means stale. */
+  detailFingerprint?: string;
+}
+
+function parseJsonRecord(value: string | null): Record<string, unknown> | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Store a list-endpoint payload; an existing detail is kept and judged by fingerprint. */
+export function upsertStravaActivitySummary(
+  activityId: string,
+  startTime: number,
+  sportType: string,
+  summary: Record<string, unknown>,
+  fingerprint: string
+): void {
+  requireDatabase()
+    .prepare(
+      `INSERT INTO strava_activities
+         (activity_id, start_time, sport_type, summary_json, summary_fingerprint, synced_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(activity_id) DO UPDATE SET
+         start_time = excluded.start_time,
+         sport_type = excluded.sport_type,
+         summary_json = excluded.summary_json,
+         summary_fingerprint = excluded.summary_fingerprint,
+         synced_at = excluded.synced_at`
+    )
+    .run(
+      activityId,
+      startTime,
+      sportType,
+      JSON.stringify(summary),
+      fingerprint,
+      new Date().toISOString()
+    );
+}
+
+export function setStravaActivityDetail(
+  activityId: string,
+  detail: Record<string, unknown>,
+  fingerprint: string
+): void {
+  requireDatabase()
+    .prepare(
+      `UPDATE strava_activities
+       SET detail_json = ?, detail_fingerprint = ?
+       WHERE activity_id = ?`
+    )
+    .run(JSON.stringify(detail), fingerprint, activityId);
+}
+
+export function listStoredStravaActivities(sinceEpochSeconds: number): StoredStravaActivity[] {
+  const rows = requireDatabase()
+    .prepare(
+      `SELECT activity_id, start_time, summary_json, summary_fingerprint,
+              detail_json, detail_fingerprint
+       FROM strava_activities
+       WHERE start_time >= ?
+       ORDER BY start_time DESC`
+    )
+    .all(sinceEpochSeconds) as Array<{
+    activity_id: string;
+    start_time: number;
+    summary_json: string;
+    summary_fingerprint: string;
+    detail_json: string | null;
+    detail_fingerprint: string | null;
+  }>;
+
+  const activities: StoredStravaActivity[] = [];
+  for (const row of rows) {
+    const summary = parseJsonRecord(row.summary_json);
+    // A single corrupt cache entry must not hide the rest of the history.
+    if (!summary) continue;
+    activities.push({
+      activityId: row.activity_id,
+      startTime: row.start_time,
+      summary,
+      summaryFingerprint: row.summary_fingerprint,
+      detail: parseJsonRecord(row.detail_json),
+      detailFingerprint: row.detail_fingerprint ?? undefined
+    });
+  }
+  return activities;
+}
+
+/** Remove rows Strava no longer lists (deleted, or no longer a gym type) in a listed window. */
+export function reconcileStravaActivityIds(
+  sinceEpochSeconds: number,
+  retainedIds: Set<string>
+): void {
+  const database = requireDatabase();
+  const rows = database
+    .prepare("SELECT activity_id FROM strava_activities WHERE start_time >= ?")
+    .all(sinceEpochSeconds) as Array<{ activity_id: string }>;
+  const remove = database.prepare("DELETE FROM strava_activities WHERE activity_id = ?");
+  database.transaction(() => {
+    for (const row of rows) {
+      if (!retainedIds.has(row.activity_id)) {
+        remove.run(row.activity_id);
+      }
+    }
+  })();
+}
+
+export function clearStravaCache(): void {
+  requireDatabase().prepare("DELETE FROM strava_activities").run();
 }
 
 function toCachedCorosMap(row: CachedCorosMapRow): CachedCorosMapPackage {

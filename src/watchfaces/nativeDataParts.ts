@@ -2,7 +2,7 @@ import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataSty
 import { NATIVE_DATA_BY_ID, nativeHasIcon } from "../../electron/watchfaceNativeCatalog";
 
 export function defaultNativeDataStyle(id: string): Style {
-  return { enabled: true, x: 280, y: 500, scale: 1, color: "#ffffff", ...(id === "chart" ? { chartSource: "chart_stress", chartWidth: 240, chartHeight: 120, chartStyle: { previewType: "bars" as const } } : {}) };
+  return { enabled: true, x: 280, y: 500, scale: 1, color: "#ffffff", ...(id === "chart" ? { chartSource: "chart_stress", chartWidth: 240, chartHeight: 120 } : {}) };
 }
 
 export function isNativeTime(id: string, style: Style): boolean {

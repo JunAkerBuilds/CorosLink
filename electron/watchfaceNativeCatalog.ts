@@ -104,6 +104,18 @@ export function nativeChartGroup(source: string | undefined): "general" | "sun" 
   if (source === "chart_tide") return "tide";
   return "general";
 }
+/**
+ * How the watch plots a chart group's history; nothing in the face selects it.
+ * With bars and a line both configured, a PACE Pro drew SATISFY 1's sun group
+ * as a line and its barometer group as bars (2026-10-12). Official SATISFY 1/2
+ * (sun and moon groups) set only a line width; SATISFY 3 sets only a bar width
+ * for its barometer and tide groups. Barometer and tide pages stay blank until
+ * the phone syncs their data, so a blank page says nothing about the style.
+ */
+export function nativeChartRepresentation(source: string | undefined): "bars" | "curve" {
+  const group = nativeChartGroup(source ?? "chart_stress");
+  return group === "sun" || group === "moon" ? "curve" : "bars";
+}
 
 export function nativeStatePositionKey(field: NativeDataDefinition): string {
   return field.positionKey ?? `${field.id}_pos`;

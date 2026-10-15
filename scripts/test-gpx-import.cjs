@@ -95,8 +95,15 @@ async function run() {
     for (const route of listed) {
       assert.ok(fs.existsSync(service.getGeneratedRouteDetails(route.id).gpxPath));
     }
+    // An install that once picked OpenRouteService moves to keyless once, keeping its key.
+    assert.equal(database.getSetting("maps.routeBackend"), "keyless");
+    assert.equal(database.getSetting("maps.openRouteServiceApiKey"), "ors-test-key");
+    assert.equal(database.getSetting("maps.keylessDefaultApplied"), "1");
     return;
   }
+  // A fresh install starts keyless and is marked, so a later ORS choice sticks.
+  assert.equal(database.getSetting("maps.routeBackend"), undefined);
+  assert.equal(database.getSetting("maps.keylessDefaultApplied"), "1");
 
   const first = fixture("a/route.gpx", "First route");
   const last = fixture("b/route.gpx", "Last route");
@@ -226,6 +233,10 @@ async function run() {
   assert.ok(plan.every(step => !step.detail.includes("TEMP B-TREE")), "listing must use the ordering index");
   assert.equal(service.listGeneratedRoutes(1_000_000).offset, 20);
   fs.writeFileSync(path.join(root, "expected.json"), JSON.stringify(ordered));
+  // Simulate an older install on OpenRouteService for the restart below.
+  database.setSetting("maps.routeBackend", "ors");
+  database.setSetting("maps.openRouteServiceApiKey", "ors-test-key");
+  db.prepare("DELETE FROM app_settings WHERE key = 'maps.keylessDefaultApplied'").run();
   const reopened = spawnSync(process.execPath, [__filename, "--reload", root], {
     encoding: "utf8", timeout: 30_000
   });
@@ -272,8 +283,19 @@ async function run() {
   assert.equal(largePage.routes.length, 20);
   assert.ok(Buffer.byteLength(JSON.stringify(largePage)) < 8000);
   assert.equal(allRouteSummaries().length, 1020);
-  db.exec("DELETE FROM generated_routes");
+  // Clear all drops every row and the GPX copies in the routes folder, never a file elsewhere.
+  const outside = [...inputs.keys()][0];
+  db.prepare("UPDATE generated_routes SET gpx_path = ? WHERE id = 'large-0'").run(outside);
+  const stored = db.prepare("SELECT gpx_path FROM generated_routes WHERE gpx_path IS NOT NULL AND id != 'large-0'").pluck().all();
+  assert.ok(stored.length > 0 && stored.every((file) => fs.existsSync(file)));
+  assert.equal(service.deleteAllGeneratedRoutes(), 1020);
   assert.deepEqual(service.listGeneratedRoutes(20), { routes: [], total: 0, offset: 0, pageSize: 20 });
+  for (let attempt = 0; attempt < 100 && stored.some((file) => fs.existsSync(file)); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.ok(stored.every((file) => !fs.existsSync(file)), "Clear all removes the stored GPX copies");
+  assert.ok(fs.existsSync(outside), "Clear all must not delete a GPX outside the routes folder");
+  assert.equal(service.deleteAllGeneratedRoutes(), 0);
   console.log("GPX integration tests passed (large batches, restart, export/delete, failures, safe storage).");
 }
 

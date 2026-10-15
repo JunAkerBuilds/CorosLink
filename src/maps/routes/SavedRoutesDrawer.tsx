@@ -33,7 +33,9 @@ export function SavedRoutesDrawer({
   onShare,
   onSync,
   syncing,
-  onDelete
+  onDelete,
+  onDeleteAll,
+  deletingAll
 }: {
   open: boolean;
   page: GeneratedRoutePage;
@@ -49,11 +51,14 @@ export function SavedRoutesDrawer({
   onSync?: (route: GeneratedRouteSummary) => void;
   syncing?: boolean;
   onDelete: (route: GeneratedRouteSummary) => void;
+  onDeleteAll: () => void;
+  deletingAll: boolean;
 }) {
   useLanguage();
   const { routes, total, offset, pageSize } = page;
   const { unitSystem } = useUnitSystem();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
 
   // The delete confirmation arms briefly, then reverts on its own.
   useEffect(() => {
@@ -63,6 +68,12 @@ export function SavedRoutesDrawer({
     const timer = setTimeout(() => setConfirmDeleteId(null), DELETE_CONFIRM_MS);
     return () => clearTimeout(timer);
   }, [confirmDeleteId]);
+  // Clearing everything waits for an answer, but not across a close or once the list is empty.
+  useEffect(() => {
+    if (!open || total === 0) {
+      setConfirmDeleteAll(false);
+    }
+  }, [open, total]);
 
   return (
     <aside className={`route-drawer${open ? " is-open" : ""}`} aria-hidden={!open}>
@@ -71,15 +82,57 @@ export function SavedRoutesDrawer({
           <p className="eyebrow">{t("Saved routes")}</p>
           <h3>{total}  {t("route")}{total === 1 ? "" : "s"}</h3>
         </div>
-        <button
-          type="button"
-          className="icon-button"
-          onClick={onClose}
-          aria-label={t("Close saved routes")}
-        >
-          <X size={18} aria-hidden="true" />
-        </button>
+        <div className="route-drawer-head-actions">
+          {total > 0 ? (
+            <button
+              type="button"
+              className={`route-drawer-clear${confirmDeleteAll ? " is-armed" : ""}`}
+              disabled={deletingAll}
+              title={t("Delete every saved route")}
+              aria-expanded={confirmDeleteAll}
+              aria-controls="route-drawer-confirm"
+              onClick={() => setConfirmDeleteAll((current) => !current)}
+            >
+              <Trash2 size={14} aria-hidden="true" />
+              {t("Clear all")}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onClose}
+            aria-label={t("Close saved routes")}
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
       </div>
+
+      {confirmDeleteAll ? (
+        <div id="route-drawer-confirm" className="route-drawer-confirm" role="alert">
+          <p>
+            <strong>
+              {total === 1
+                ? t("Delete 1 saved route?")
+                : t("Delete all {{p0}} saved routes?", { p0: total })}
+            </strong>
+            <span>{t("This can’t be undone.")}</span>
+          </p>
+          <div className="route-drawer-confirm-actions">
+            <button type="button" disabled={deletingAll} onClick={() => setConfirmDeleteAll(false)}>
+              {t("Cancel")}
+            </button>
+            <button type="button" className="is-danger" disabled={deletingAll} onClick={onDeleteAll}>
+              {deletingAll ? (
+                <Loader2 size={14} className="spin" aria-hidden="true" />
+              ) : (
+                <Trash2 size={14} aria-hidden="true" />
+              )}
+              {t("Delete all")}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {loading && routes.length === 0 ? <p role="status">{t("Loading saved routes…")}</p> : routes.length === 0 ? (
         <div className="route-drawer-empty">

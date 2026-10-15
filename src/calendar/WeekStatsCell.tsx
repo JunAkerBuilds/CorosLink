@@ -1,16 +1,36 @@
-import { formatNumber, useLanguage, t } from "../i18n/training";
-import { MessageCircle } from "lucide-react";
+import { formatNumber, useLanguage, t , getLocale} from "../i18n/training";
+import {
+  Activity,
+  Bike,
+  Dumbbell,
+  Footprints,
+  Grip,
+  HeartPulse,
+  Medal,
+  MessageCircle,
+  Mountain,
+  MountainSnow,
+  PersonStanding,
+  Sailboat,
+  Snowflake,
+  Waves,
+  type LucideIcon
+} from "lucide-react";
+import type { UnitSystem } from "../../electron/types";
 import {
   formatDistanceMeters,
   formatDurationSeconds
 } from "../training/formatters";
 import type { WeeklyStats } from "./calendarTypes";
+import type { WeekSportFamily, WeekSportTotals } from "./weekSportBreakdown";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import {
   distanceUnit,
   elevationUnit,
   metersToDisplayDistance,
-  metersToElevation
+  metersToElevation,
+  metersToSwimDistance,
+  swimDistanceUnit
 } from "../units/units";
 
 interface WeekStatsCellProps {
@@ -35,6 +55,82 @@ function StatRow({
         {value}
       </span>
     </div>
+  );
+}
+
+const SPORT_ICONS: Record<WeekSportFamily, LucideIcon> = {
+  run: Footprints,
+  trail: Mountain,
+  hike: MountainSnow,
+  bike: Bike,
+  swim: Waves,
+  strength: Dumbbell,
+  cardio: HeartPulse,
+  walk: PersonStanding,
+  ski: Snowflake,
+  water: Sailboat,
+  climb: Grip,
+  multisport: Medal,
+  other: Activity
+};
+
+function formatActualPlannedDistance(
+  meters: number,
+  plannedKm: number,
+  unitSystem: UnitSystem,
+  swim: boolean
+): string | undefined {
+  if (plannedKm > 0) {
+    const plannedMeters = plannedKm * 1_000;
+    return swim
+      ? `${Math.round(metersToSwimDistance(meters, unitSystem))} / ${Math.round(metersToSwimDistance(plannedMeters, unitSystem))} ${swimDistanceUnit(unitSystem)}`
+      : `${formatNumber(metersToDisplayDistance(meters, unitSystem), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} / ${formatNumber(metersToDisplayDistance(plannedMeters, unitSystem), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ${distanceUnit(unitSystem)}`;
+  }
+  return meters > 0 ? formatDistanceMeters(meters, unitSystem, swim) : undefined;
+}
+
+function SportBreakdownRow({
+  sport,
+  unitSystem
+}: {
+  sport: WeekSportTotals;
+  unitSystem: UnitSystem;
+}) {
+  useLanguage();
+  const Icon = SPORT_ICONS[sport.family];
+  const time =
+    sport.plannedTimeSeconds > 0
+      ? `${formatDurationSeconds(sport.activityTimeSeconds)} / ${formatDurationSeconds(sport.plannedTimeSeconds)}`
+      : formatDurationSeconds(sport.activityTimeSeconds);
+  const distance = formatActualPlannedDistance(
+    sport.distanceMeters,
+    sport.plannedDistanceKm,
+    unitSystem,
+    sport.family === "swim"
+  );
+
+  return (
+    <li className="calendar-weekstats-sport">
+      <div className="calendar-weekstats-row">
+        <span className="calendar-weekstats-sport-name">
+          <Icon
+            size={13}
+            aria-hidden="true"
+            style={{ color: `var(--sport-${sport.color})` }}
+          />
+          <span className="calendar-weekstats-sport-label">{t(sport.label)}</span>
+        </span>
+        <span className="calendar-weekstats-value">
+          {sport.plannedLoad > 0
+            ? `${sport.actualLoad} / ${sport.plannedLoad} ${t("TL")}`
+            : `${sport.actualLoad} ${t("TL")}`}
+        </span>
+      </div>
+      <div className="calendar-weekstats-sport-meta">
+        <span>{time}</span>
+        {distance ? <span>{distance}</span> : null}
+      </div>
+    </li>
   );
 }
 
@@ -78,7 +174,13 @@ export function WeekStatsCell({ stats, onAskCoach }: WeekStatsCellProps) {
       ) : null}
       <StatRow
         label={t("Activity Time")}
-        value={stats.activityTimeSeconds > 0 ? formatDurationSeconds(stats.activityTimeSeconds) : "--"}
+        value={
+          stats.plannedTimeSeconds > 0
+            ? `${formatDurationSeconds(stats.activityTimeSeconds)} / ${formatDurationSeconds(stats.plannedTimeSeconds)}`
+            : stats.activityTimeSeconds > 0
+              ? formatDurationSeconds(stats.activityTimeSeconds)
+              : "--"
+        }
       />
       <StatRow
         label={t("Distance")}
@@ -98,6 +200,13 @@ export function WeekStatsCell({ stats, onAskCoach }: WeekStatsCellProps) {
             : "--"
         }
       />
+      {stats.sports.length > 0 ? (
+        <ul className="calendar-weekstats-sports" aria-label={t("By sport")}>
+          {stats.sports.map((sport) => (
+            <SportBreakdownRow key={sport.key} sport={sport} unitSystem={unitSystem} />
+          ))}
+        </ul>
+      ) : null}
       {hasAny ? (
         <button
           type="button"

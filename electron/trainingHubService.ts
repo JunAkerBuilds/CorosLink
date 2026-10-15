@@ -3768,17 +3768,20 @@ const RACE_PREDICTOR_TYPE_DISTANCE_METERS: Record<number, number> = {
 
 const RACE_PREDICTOR_DISPLAY_ORDER = [5, 4, 2, 1];
 
+// COROS record periods by group type. Live dashboards show type 2 holding only
+// records from the last 12 weeks and type 3 reaching back past them, so 2 is
+// "12 weeks" and 3 is "Half year".
 const RECORD_GROUP_LABELS: Record<number, string> = {
   1: "4 weeks",
-  2: "Half year",
-  3: "12 weeks",
+  2: "12 weeks",
+  3: "Half year",
   4: "All"
 };
 
 const RECORD_GROUP_DISPLAY_ORDER: Record<number, number> = {
   1: 0,
-  3: 1,
-  2: 2,
+  2: 1,
+  3: 2,
   4: 3
 };
 
@@ -4847,8 +4850,10 @@ function resolveRacePredictorType(raw: RawRaceScore): number | undefined {
 
 function parseRaceScore(raw: RawRaceScore): TrainingHubRaceScore {
   const raceType = resolveRacePredictorType(raw);
+  // COROS sends `distance: 0` on predictions; the race type names the distance.
+  const rawDistance = toOptionalNumber(raw.distance);
   const distance =
-    toOptionalNumber(raw.distance) ??
+    (rawDistance !== undefined && rawDistance > 0 ? rawDistance : undefined) ??
     (raceType !== undefined
       ? RACE_PREDICTOR_TYPE_DISTANCE_METERS[raceType]
       : undefined);

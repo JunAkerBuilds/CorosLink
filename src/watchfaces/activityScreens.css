@@ -1,0 +1,32 @@
+.activity-screens { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--glass-border); }
+.activity-screens-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.activity-screens h3 { margin: 3px 0 8px; font-size: 20px; }
+.activity-screens-head p:last-child, .activity-screen-caption { color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.activity-screen-select, .activity-screen-backups label, .activity-layout-controls label { display: grid; gap: 7px; font-size: 13px; }
+.activity-screen-select { max-width: 310px; margin: 20px 0; }
+.activity-screens select { max-width: 100%; min-width: 160px; padding: 9px 12px; background: var(--surface); color: var(--text-primary); border: 1px solid var(--glass-border); border-radius: 8px; }
+.activity-screens select:focus-visible, .activity-screen-pages button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.activity-screens select:disabled { opacity: .5; }
+.activity-screen-summary { display: flex; gap: 10px 20px; flex-wrap: wrap; margin: 18px 0; font-size: 13px; }
+.activity-screen-summary > span { color: var(--text-secondary); }
+.activity-screen-pages { display: flex; flex-wrap: wrap; gap: 12px; }
+.activity-screen-pages > button { display: grid; gap: 12px; justify-items: center; padding: 15px; border: 1px solid var(--glass-border); border-radius: 14px; background: transparent; color: var(--text-primary); font-size: 12px; }
+.activity-screen-pages > button.is-selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.activity-page-dial { display: flex; flex-direction: column; width: 152px; height: 152px; box-sizing: border-box; padding: 19px 15px 0; border-radius: 50%; overflow: hidden; color: #111; background: #f7f7f7; border: 4px solid #292929; }
+.activity-dial-row { display: flex; align-items: center; justify-content: center; min-height: 15px; }
+.activity-dial-row > span { display: grid; flex: 1; justify-items: center; gap: 1px; padding: 2px; }
+.activity-page-dial strong { font-size: 16px; line-height: 1.1; }
+.activity-page-dial small { font-size: 7px; white-space: nowrap; }
+.activity-dial-base { display: grid; justify-items: center; gap: 2px; width: 110px; min-height: 30px; margin: 4px auto 0; padding-top: 4px; background: #191919; color: #fff; border-radius: 10px 10px 0 0; }
+.activity-dial-base strong { font-size: 13px; }
+.activity-special-page { display: grid; flex: 1; align-content: center; justify-items: center; gap: 5px; font-size: 12px; }
+.activity-screen-actions, .activity-layout-controls, .activity-screen-backups { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-top: 18px; }
+.activity-screen-caption { margin: 12px 0; }
+.activity-layout-controls { padding: 18px 0; border-top: 1px solid var(--glass-border); }
+.activity-screen-preview { display: flex; gap: 24px; align-items: center; padding: 20px; margin: 12px 0; border: 1px solid var(--glass-border); border-radius: 12px; }
+.activity-screen-preview p { font-size: 13px; max-width: 420px; color: var(--text-secondary); line-height: 1.5; }
+.activity-screen-preview .activity-page-dial { flex-shrink: 0; }
+.activity-screen-backups { border-top: 1px solid var(--glass-border); padding-top: 18px; }
+.activity-screen-backups label { flex: 1; min-width: 180px; }
+.activity-screen-recovery { padding: 14px; margin: 16px 0; border: 1px solid #ad6631; border-radius: 10px; font-size: 13px; }
+@media (max-width: 650px) { .activity-screens-head { align-items: start; flex-direction: column; } .activity-screen-preview { flex-direction: column; align-items: start; } }

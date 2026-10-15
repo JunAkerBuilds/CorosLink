@@ -18,8 +18,22 @@
   background: var(--bg-base);
 }
 
+/* The page behind the opaque work surface is transparent, so the shell blur has
+   nothing to sample; it only re-runs over the whole panel whenever anything
+   inside repaints. contain: layout keeps .content the containing block for
+   fixed-position descendants, which the backdrop-filter used to provide. */
 :root[data-native-sidebar-glass="true"] .app .app-body > .content {
   background: linear-gradient(155deg, var(--surface-highlight), transparent 40%), var(--bg-base);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  contain: layout;
+}
+
+/* Overview cards sit straight on that flat surface; their blur is invisible
+   but re-ran on every frame the globe drew inside the training map. */
+:root[data-native-sidebar-glass="true"] .content-overview :is(.panel, .metric-tile, .training-map) {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 :root[data-native-sidebar-glass="true"] .app .app-sidebar,

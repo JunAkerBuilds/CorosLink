@@ -1016,7 +1016,7 @@ export interface CorosWatchfaceNativeDataStyle {
     unselectedBarColor?: string;
     barWidth?: number;
     barGap?: number;
-    /** Bars-only preview. Legacy "curve" values are preserved but render as bars. */
+    /** Ignored: the watch picks bars or a line by chart group, and the preview follows it. Older projects still carry it. */
     previewType?: "curve" | "bars";
   };
 }
@@ -1801,7 +1801,7 @@ export interface CorosMapInstallProgress {
 }
 
 export type RouteMode = "loop" | "point-to-point";
-export type RouteSurfacePreference = "road" | "trail";
+export type RouteSurfacePreference = "road" | "mixed" | "trail";
 export type RouteElevationPreference = "any" | "flatter" | "hilly";
 export type RouteActivityType =
   | "walking"
@@ -1840,6 +1840,42 @@ export interface RouteWaypointRequest {
   waypoints: RouteWaypoint[];
   activityType: RouteActivityType;
   snap: boolean;
+  /** Absent uses the sport's default (road for runs/rides, trail for hikes/MTB). */
+  surfacePreference?: RouteSurfacePreference;
+  elevationPreference?: RouteElevationPreference;
+}
+
+/** How a route's way was classified for the athlete-facing breakdown. */
+export type RouteWayType =
+  | "path"
+  | "trail"
+  | "sidewalk"
+  | "cycleway"
+  | "quietStreet"
+  | "busyRoad"
+  | "serviceRoad"
+  | "parkingLot"
+  | "steps"
+  | "other";
+
+export type RouteSurfaceType = "paved" | "gravel" | "natural" | "unknown";
+
+/**
+ * Which engine produced the geometry: CorosLink's athlete profile, BRouter's
+ * stock profile (fallback when the athlete profile could not be used),
+ * straight freehand legs, or a third-party/imported source.
+ */
+export type RouteProfileSource = "athlete" | "standard" | "freehand" | "external";
+
+/** Komoot-style quality breakdown derived from the router's per-segment tags. */
+export interface RouteInsights {
+  /** Metres per way type; types absent from the route are omitted. */
+  wayTypes: Partial<Record<RouteWayType, number>>;
+  /** Metres per surface class; types absent from the route are omitted. */
+  surfaces: Partial<Record<RouteSurfaceType, number>>;
+  /** Metres of the route that run over a section already covered. */
+  retracedMeters: number;
+  profile: RouteProfileSource;
 }
 
 /** Geometry + stats for a routed path, without any persistence. */
@@ -1849,6 +1885,7 @@ export interface RouteGeometry {
   durationSeconds?: number;
   ascentMeters?: number;
   descentMeters?: number;
+  insights?: RouteInsights;
 }
 
 /** Payload used to persist a finished drawn route. */
@@ -1864,6 +1901,9 @@ export interface DrawnRoutePayload {
   /** True when the path returns to its start (a loop). */
   closed: boolean;
   snap: boolean;
+  surfacePreference?: RouteSurfacePreference;
+  elevationPreference?: RouteElevationPreference;
+  insights?: RouteInsights;
   /** Controls user-facing generated route names only. */
   unitSystem?: UnitSystem;
 }
@@ -1940,6 +1980,8 @@ export interface GeneratedRoute {
   avoidHighways: boolean;
   elevationPreference: RouteElevationPreference;
   points: TrainingHubTrackPoint[];
+  /** Way-type/surface breakdown; absent for imported and pre-0.1.53 routes. */
+  insights?: RouteInsights;
   bounds?: {
     minLat: number;
     maxLat: number;
@@ -1947,6 +1989,15 @@ export interface GeneratedRoute {
     maxLon: number;
   };
   gpxPath?: string;
+}
+
+/** What Generate returns: the saved route plus unsaved loops to choose from. */
+export interface GeneratedRouteResult extends GeneratedRoute {
+  /**
+   * Distinct runner-up loops, best first (keyless loops only). Picking one
+   * replaces the saved route's geometry via replaceGeneratedRouteGeometry.
+   */
+  alternatives?: RouteGeometry[];
 }
 
 export interface GpxImportFailure {
@@ -2374,13 +2425,34 @@ export interface StrengthSet {
 
 export type StrengthSetType = "normal" | "warmup" | "dropset" | "failure";
 
-export type StrengthSource = "coros" | "hevy" | "combined";
+export type StrengthSource = "coros" | "hevy" | "strava" | "combined";
 
 export type StrengthDataSource = StrengthSource;
 
 export interface StrengthSourceIds {
   coros?: string;
   hevy?: string;
+  strava?: string;
+}
+
+/**
+ * What Strava adds to a gym session. Its public API has no read access to the
+ * Exercises tab, so a Strava session carries notes and effort, never sets.
+ */
+export interface StravaSessionDetails {
+  activityId: string;
+  /** Strava brand rules require data to link back with "View on Strava". */
+  url: string;
+  /** Strava `sport_type`, for example `WeightTraining` or `Crossfit`. */
+  sportType: string;
+  description?: string;
+  /** Strava Relative Effort (`suffer_score`). */
+  relativeEffort?: number;
+  /** Strava's 1–10 perceived exertion, when the athlete rated the session. */
+  perceivedExertion?: number;
+  deviceName?: string;
+  /** False until the activity's detail payload has been read. */
+  detailLoaded: boolean;
 }
 
 export interface StrengthExercise {
@@ -2433,6 +2505,8 @@ export interface StrengthSession {
   avgHr?: number;
   maxHr?: number;
   trainingLoad?: number;
+  /** Present when the session came from, or was matched to, a Strava activity. */
+  strava?: StravaSessionDetails;
   detail: StrengthDetail;
 }
 
@@ -2450,6 +2524,8 @@ export interface StrengthHistory {
   fetchedBySource?: Partial<Record<Exclude<StrengthSource, "combined">, number>>;
   /** Non-fatal provider errors; cached sessions remain usable. */
   warnings?: string[];
+  /** Informational provider notes that are not failures (a deferred backlog). */
+  notices?: string[];
 }
 
 export interface StrengthHistoryRequest {
@@ -2469,6 +2545,27 @@ export interface HevyStatus {
 
 export interface HevySettingsInput {
   includeWarmups: boolean;
+}
+
+export interface StravaStatus {
+  /** Client ID and secret from the athlete's own Strava API application are saved. */
+  configured: boolean;
+  clientId?: string;
+  connected: boolean;
+  /** A browser sign-in is waiting for Strava's redirect. */
+  connecting: boolean;
+  athleteId?: string;
+  displayName?: string;
+  profileUrl?: string;
+  /** True when the athlete granted `activity:read_all` ("Only You" activities). */
+  canReadPrivate: boolean;
+  lastSyncedAt?: string;
+}
+
+export interface StravaConfigInput {
+  clientId: string;
+  /** Blank keeps the saved secret. */
+  clientSecret?: string;
 }
 
 export interface TrainingHubActivityDetail {

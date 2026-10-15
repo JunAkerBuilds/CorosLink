@@ -108,7 +108,8 @@ export function parseHealthTextReport(text: string): { records: ObjectValue[]; p
     const trimmed = line.trim();
     if (!trimmed || /^[=\-_]{3,}$/.test(trimmed)) continue;
     if (/^[=\-_]{3,}$/.test(lines[index + 1]?.trim() ?? "")) continue; // section title
-    const header = /^(\d{4}-\d{2}-\d{2}):?$/.exec(trimmed);
+    // `2026-10-14: No data` marks a day without measurements; it is not prose worth showing.
+    const header = /^(\d{4}-\d{2}-\d{2}):?(?:\s+no data\.?)?$/i.exec(trimmed);
     if (header) { flush(); date = header[1]; summary = { date }; continue; }
     if (/^[A-Za-z_]\w*=[^,]*(?:,\s*[A-Za-z_]\w*=[^,]*)+$/.test(trimmed)) {
       const record: ObjectValue = date ? { date } : {};
@@ -244,6 +245,11 @@ export function parseHealthInsightResponse(kind: HealthInsightKind, response: st
       const report = parseHealthTextReport(trimmed);
       if (report.records.length) {
         for (const record of report.records) walk(record, time, context, depth + 1);
+        for (const note of report.prose) reports.add(note);
+        return;
+      }
+      // An all-empty COROS report: keep its sentences, drop the section titles and rules.
+      if (report.prose.length && /^\s*={3,}\s*$/m.test(trimmed)) {
         for (const note of report.prose) reports.add(note);
         return;
       }

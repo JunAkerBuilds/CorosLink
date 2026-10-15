@@ -408,6 +408,12 @@ import {
   renderDesignBackground
 } from "./watchfaceBackground";
 import {
+  blankWatchfaceDesign,
+  isBlankRemovableLayer,
+  restoreWatchfaceTemplateTime,
+  templateTimeTint
+} from "./watchfaceBlankStart";
+import {
   makeWatchfaceDragForegroundDesign
 } from "./watchfaceDragIsolation";
 import {
@@ -726,6 +732,11 @@ interface WatchfaceEditorProps {
   targetFirmwareType?: string;
   targetWatchModel?: WatchModelId;
   initialDesign?: CorosWatchfaceDesignState;
+  /**
+   * Opens the template with every layer removed and a plain black background,
+   * for a face made from scratch. Ignored when an initial design is given.
+   */
+  startBlank?: boolean;
   /** Editor-only choices a baked conversion can't carry in the archive's config. */
   carriedPreferences?: WatchfaceCarriedPreferences;
   initialProjectId?: string;
@@ -960,43 +971,17 @@ function browserPlacementStorage(): Storage | undefined {
 /**
  * A recovered face converts by baking a final archive for the destination and
  * reopening it as a starter, so only what its config stores survives. The
- * chart's bar/line choice is editor-only (the watch picks per chart group);
- * carry it across so the converted face previews like the source.
+ * chart group that was open is editor-only; carry it across so the converted
+ * face opens on the same group.
  */
 export interface WatchfaceCarriedPreferences {
-  chartPreviewType?: Partial<Record<"current" | "aod", "curve" | "bars">>;
   /** The chart group that was open; the baked face still carries the others. */
   chartSource?: Partial<Record<"current" | "aod", string>>;
 }
 
-type ChartPreviewType = "curve" | "bars";
-type NativeDataMap = CorosWatchfaceDesignState["nativeData"];
-
 export function carriedWatchfacePreferences(design: CorosWatchfaceDesignState): WatchfaceCarriedPreferences | undefined {
-  const pick = <T,>(current: T | undefined, aod: T | undefined) =>
-    current || aod ? { ...(current ? { current } : {}), ...(aod ? { aod } : {}) } : undefined;
-  const aodChart = design.modeDesigns?.aod?.nativeData?.chart;
-  const chartPreviewType = pick(design.nativeData?.chart?.chartStyle?.previewType, aodChart?.chartStyle?.previewType);
-  const chartSource = pick(design.nativeData?.chart?.chartSource, aodChart?.chartSource);
-  return chartPreviewType || chartSource
-    ? { ...(chartPreviewType ? { chartPreviewType } : {}), ...(chartSource ? { chartSource } : {}) } : undefined;
-}
-
-function withChartPreviewType(nativeData: NativeDataMap, previewType: ChartPreviewType | undefined): NativeDataMap {
-  const chart = nativeData?.chart;
-  if (!chart || !previewType) return nativeData;
-  return { ...nativeData, chart: { ...chart, chartStyle: { ...chart.chartStyle, previewType } } };
-}
-
-function applyCarriedPreferences(design: CorosWatchfaceDesignState, carried: WatchfaceCarriedPreferences | undefined): CorosWatchfaceDesignState {
-  const types = carried?.chartPreviewType;
-  if (!types) return design;
-  const aod = design.modeDesigns?.aod;
-  return {
-    ...design,
-    nativeData: withChartPreviewType(design.nativeData, types.current),
-    ...(aod ? { modeDesigns: { ...design.modeDesigns, aod: { ...aod, nativeData: withChartPreviewType(aod.nativeData, types.aod) } } } : {})
-  };
+  const current = design.nativeData?.chart?.chartSource, aod = design.modeDesigns?.aod?.nativeData?.chart?.chartSource;
+  return current || aod ? { chartSource: { ...(current ? { current } : {}), ...(aod ? { aod } : {}) } } : undefined;
 }
 
 export function WatchfaceEditor({
@@ -1007,6 +992,7 @@ export function WatchfaceEditor({
   targetFirmwareType,
   targetWatchModel,
   initialDesign,
+  startBlank = false,
   carriedPreferences,
   initialProjectId,
   initialProjectName,
@@ -1195,6 +1181,7 @@ export function WatchfaceEditor({
     archive: CorosWatchfaceArchive;
     name: string;
     details: CorosWatchfaceTemplateDetails;
+    chartSources?: Partial<Record<WatchfacePreviewMode, string>>;
   } | null>(null);
   const closeExportPreview = useCallback(() => setExportPreviewImages(null), []);
   const [aligningGlyphs, setAligningGlyphs] = useState(false);
@@ -1975,7 +1962,11 @@ export function WatchfaceEditor({
           if (recoveredAod && nextDesign.modeDesigns?.aod) {
             nextDesign = { ...nextDesign, modeDesigns: { aod: { ...nextDesign.modeDesigns.aod, ...recoveredAod } } };
           }
-          nextDesign = applyCarriedPreferences(nextDesign, carriedPreferences);
+        }
+        // Blanked before the first checkpoint, so Undo never returns to the
+        // template's own design.
+        if (startBlank && !initialDesign) {
+          nextDesign = blankWatchfaceDesign(nextDesign, described);
         }
         const initialized = {
           ...current,
@@ -2007,6 +1998,7 @@ export function WatchfaceEditor({
     loadAssets,
     onError,
     sessionId,
+    startBlank,
     starterArchive.archiveId,
     starterArchive.recoveredFromCompiled
   ]);
@@ -2616,19 +2608,14 @@ export function WatchfaceEditor({
     if (!context) return;
     let cancelled = false;
     const paint = async () => {
+      const image = previewBackgroundDataUrl ? await loadStudioImage(previewBackgroundDataUrl) : null;
+      if (cancelled) return;
+      context.clearRect(0, 0, canvas.width, canvas.height);
       if (previewStudioOptions.previewMode === "aod") {
         context.fillStyle = "#000000";
         context.fillRect(0, 0, canvas.width, canvas.height);
-        return;
       }
-      if (!previewBackgroundDataUrl) {
-        context.clearRect(0, 0, canvas.width, canvas.height);
-        return;
-      }
-      const image = await loadStudioImage(previewBackgroundDataUrl);
-      if (cancelled) return;
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      if (image) context.drawImage(image, 0, 0, canvas.width, canvas.height);
     };
     void paint();
     return () => { cancelled = true; };
@@ -4495,7 +4482,7 @@ export function WatchfaceEditor({
     if (selectorIconTarget && movingId !== "complication") {
       targets.push({
         id: `selectorIcon:${selectorIconTarget.complicationId}`,
-        label: "Complication icon",
+        label: t("Complication icon"),
         bounds: selectorIconTarget
       });
     }
@@ -5817,10 +5804,14 @@ export function WatchfaceEditor({
   const canAddSeconds = previewMode === "current" &&
     Boolean(templateSecondsResolution && !templateHasSeconds(templateSecondsResolution));
   function addSeconds() {
-    if (!design.addSeconds) {
+    if (!design.addSeconds || design.layerVisibility?.seconds === false) {
       setDesign((prev) => ({
         ...prev,
         addSeconds: true,
+        // Start blank hides a watch-size tree's own seconds; Add shows them.
+        layerVisibility: Object.fromEntries(
+          Object.entries(prev.layerVisibility ?? {}).filter(([id]) => id !== "seconds")
+        ),
         // Minute-sized digits are too large for seconds; start at half size.
         timeStyles: {
           ...prev.timeStyles,
@@ -5945,7 +5936,13 @@ export function WatchfaceEditor({
           ? { ...overrides[id], enabled: true }
           : { enabled: true, replacement: artwork[key] };
       }
-      return { ...modeDesign, configAssetOverrides: overrides };
+      // Hands deleted earlier (or by Start blank) are listed again.
+      const handLayerIds = new Set(keys.map((key) => `configAsset:config:${key}`));
+      return {
+        ...modeDesign,
+        configAssetOverrides: overrides,
+        removedLayerIds: (modeDesign.removedLayerIds ?? []).filter((id) => !handLayerIds.has(id))
+      };
     };
     const activeConfig =
       previewMode === "aod" ? source.aodConfig : source.config;
@@ -5972,7 +5969,8 @@ export function WatchfaceEditor({
           ...design.modeDesigns,
           aod: {
             ...design.modeDesigns.aod,
-            configAssetOverrides: aod.configAssetOverrides
+            configAssetOverrides: aod.configAssetOverrides,
+            removedLayerIds: aod.removedLayerIds
           }
         }
       };
@@ -6001,7 +5999,9 @@ export function WatchfaceEditor({
     initialStyle.y = Math.max(0, Math.round((previewHeight - size.height) / 2));
     setDesign(prev => ({ ...prev,
       ...(id === "weather_temp" && prev.weatherIndicator ? {weatherIndicator: {...prev.weatherIndicator, temperatureEnabled: false}} : {}),
-      nativeData: { ...prev.nativeData, [id]: { ...initialStyle, ...prev.nativeData?.[id], enabled: true, ...(chartSource ? {chartSource} : {}) } }
+      nativeData: { ...prev.nativeData, [id]: { ...initialStyle, ...prev.nativeData?.[id], enabled: true, ...(chartSource ? {chartSource} : {}) } },
+      // A deleted layer is listed again once added back.
+      removedLayerIds: (prev.removedLayerIds ?? []).filter((layerId) => layerId !== `native:${id}`)
     }));
     selectEditorItem(`native:${id}`);
     openQuickStartProperties();
@@ -6860,7 +6860,7 @@ export function WatchfaceEditor({
     action: "publish" | "export" | "automation" | "preview" | "convert" = "publish",
     requestedName?: string,
     destination?: { firmwareType: string; watchModel: WatchModelId }
-  ): Promise<{ archive: CorosWatchfaceArchive; name: string } | null> {
+  ): Promise<{ archive: CorosWatchfaceArchive; name: string; chartSources: Partial<Record<WatchfacePreviewMode, string>> } | null> {
     onClearMessages();
     if (spriteImportTrackerRef.current.pendingCount > 0) {
       if (action === "automation" || action === "convert") {
@@ -7071,7 +7071,12 @@ export function WatchfaceEditor({
         onPublish(archive, name);
         onNotice(t("Watch face prepared for COROS."));
       }
-      return { archive, name };
+      const chartSources: Partial<Record<WatchfacePreviewMode, string>> = {};
+      for (const mode of ["current", "aod"] as const) {
+        const chart = resolveWatchfaceModeDesign(designSnapshot, mode).nativeData?.chart;
+        if (chart?.enabled) chartSources[mode] = chart.chartSource ?? "chart_stress";
+      }
+      return { archive, name, chartSources };
     } catch (caught) {
       if (action === "automation" || action === "convert") throw caught;
       onError(caught instanceof Error ? caught.message : t("Could not build the archive."));
@@ -7278,13 +7283,17 @@ export function WatchfaceEditor({
     const nativeIds = new Set(removed.flatMap((layer) => layer.nativeDataId ? [layer.nativeDataId] : []));
     setDesign((current) => syncLegacyWatchfaceGroups({
       ...current,
-      // Native layers are fully removed: Add starts them fresh.
+      // Native layers stay as switched-off entries. Export clears the keys of
+      // every entry it has; a missing one would leave a field the template's
+      // own config draws (recovered and converted faces) on the watch.
       nativeData: Object.fromEntries(
-        Object.entries(current.nativeData ?? {}).filter(([id]) => !nativeIds.has(id))
+        Object.entries(current.nativeData ?? {}).map(([id, style]) =>
+          [id, nativeIds.has(id) ? { ...style, enabled: false } : style]
+        )
       ),
       removedLayerIds: [...new Set([
         ...(current.removedLayerIds ?? []),
-        ...removed.filter((layer) => !layer.nativeDataId).map((layer) => layer.id)
+        ...removed.map((layer) => layer.id)
       ])],
       editorGroups: (current.editorGroups ?? [])
         .map((group) => ({ ...group, layerIds: group.layerIds.filter((id) => !removedIds.has(id)) }))
@@ -7307,6 +7316,56 @@ export function WatchfaceEditor({
       endDesignTransaction();
     }
     selectQuickStartItem(layer.id);
+  }
+
+  /**
+   * The blank-face quick start: brings back the template's hours, minutes and
+   * colon in Current and, like analog hands, in Always-on as well. Digits the
+   * background would hide are tinted (see templateTimeTint).
+   */
+  const addingTemplateTimeRef = useRef(false);
+  async function addTemplateTime() {
+    if (!details || addingTemplateTimeRef.current) return;
+    addingTemplateTimeRef.current = true;
+    try {
+      await restoreTemplateTime(details);
+    } finally {
+      addingTemplateTimeRef.current = false;
+    }
+  }
+
+  async function restoreTemplateTime(sourceDetails: CorosWatchfaceTemplateDetails) {
+    const modes: WatchfacePreviewMode[] =
+      supportsAod && historyRef.current.present.value.design.modeDesigns?.aod
+        ? ["current", "aod"]
+        : ["current"];
+    const tints = await Promise.all(modes.map((mode) =>
+      templateTimeTint(
+        resolveWatchfaceModeDesign(historyRef.current.present.value.design, mode),
+        sourceDetails,
+        mode,
+        loadAssets
+      ).catch(() => undefined)
+    ));
+    const current = historyRef.current;
+    let next = current.present.value.design;
+    for (const [index, mode] of modes.entries()) {
+      next = writeWatchfaceModeDesign(
+        next,
+        mode,
+        restoreWatchfaceTemplateTime(resolveWatchfaceModeDesign(next, mode), sourceDetails, mode, {
+          removedOnly: mode === "aod",
+          tint: tints[index]
+        })
+      );
+    }
+    const nextValue = { ...current.present.value, design: next };
+    applyHistory(
+      current.transactionBase
+        ? updateWatchfaceEditorHistoryTransaction(current, nextValue)
+        : recordWatchfaceEditorHistory(current, nextValue)
+    );
+    if (quickStartTimeLayer) selectQuickStartItem(quickStartTimeLayer.id);
   }
 
   function deleteSelectedArtwork() {
@@ -8544,8 +8603,8 @@ export function WatchfaceEditor({
     (layer) => layer.visible || !removedLayerIds.has(layer.id)
   );
   const faceAddOptions: WatchfaceAddFaceOption[] = [
-    ...(canAddSeconds ? [{ id: "seconds", label: "Seconds", category: "Time" as const, added: Boolean(design.addSeconds), onAdd: addSeconds }] : []),
-    { id: "analog", label: "Analog hands", category: "Time", added: analogHandsOnFace, onAdd: addAnalogHands },
+    ...(canAddSeconds ? [{ id: "seconds", label: t("Seconds"), category: "Time" as const, added: Boolean(design.addSeconds), onAdd: addSeconds }] : []),
+    { id: "analog", label: t("Analog hands"), category: "Time", added: analogHandsOnFace, onAdd: addAnalogHands },
     ...WATCHFACE_DATE_PARTS
       .filter((part) => addableDateParts.has(part.id))
       .map((part) => ({
@@ -8607,7 +8666,24 @@ export function WatchfaceEditor({
     ? backgroundElementLayer(selectedElement)
     : selectedLayer;
   const quickStartTimeLayer = layers.find((layer) => layer.timePartId && layer.visible)
-    ?? layers.find((layer) => layer.timePartId);
+    ?? layers.find((layer) => layer.timePartId && layer.timePartId !== "seconds");
+  // A digital clock needs hours and minutes, or auto-aligned time; a lone
+  // digit is a template decoration, not something Add the time should bring.
+  const templateClockLayers = layers.filter((layer) =>
+    layer.timePartId === "autoTime" || layer.timePartId === "hours" || layer.timePartId === "minutes"
+  );
+  const templateHasDigitalClock =
+    templateClockLayers.some((layer) => layer.timePartId === "autoTime") ||
+    (templateClockLayers.some((layer) => layer.timePartId === "hours") &&
+      templateClockLayers.some((layer) => layer.timePartId === "minutes"));
+  // Nothing drawn on the face but its background, as after Start blank.
+  const faceIsBlank = backgroundElements.length === 0 && !layers.some(
+    (layer) => layer.visible && (layer.kind === "customSprite" || isBlankRemovableLayer(layer))
+  );
+  // Selectable-slot icons are edited inside their metric, not listed.
+  const paneLayerCount = listedLayers.filter(
+    (layer) => !layerIsSelectableSlotAsset(layer)
+  ).length;
 
   return (
     <section ref={editorRef} className={`watchface-editor wf-studio${stageFullscreen ? " is-editor-fullscreen" : ""}`} aria-label={t("Watch face studio")} inert={conversionBusy}>
@@ -8764,16 +8840,16 @@ export function WatchfaceEditor({
                 aria-label={
                   previewMode === "aod"
                     ? supportsAod
-                      ? t("{{value1}} always-on assets", { value1: listedLayers.length })
+                      ? t("{{value1}} always-on assets", { value1: paneLayerCount })
                       : t("Uses the current face")
-                    : t("{{value1}} items", { value1: listedLayers.length + activeBackgroundElements.length })
+                    : t("{{value1}} items", { value1: paneLayerCount + activeBackgroundElements.length })
                 }
               >
                 {previewMode === "aod"
                   ? supportsAod
-                    ? listedLayers.length
+                    ? paneLayerCount
                     : t("Current")
-                  : listedLayers.length + activeBackgroundElements.length}
+                  : paneLayerCount + activeBackgroundElements.length}
               </span>
             </div>
             {canEditActiveMode ? <WatchfaceAddMenu
@@ -9705,9 +9781,16 @@ export function WatchfaceEditor({
                 onBackground={() => selectQuickStartItem("background")}
                 onPhoto={() => void chooseArtwork()}
                 photoDisabled={isPositionLocked("background")}
+                blank={faceIsBlank}
                 onTime={quickStartTimeLayer
                   ? () => selectQuickStartItem(quickStartTimeLayer.id)
                   : undefined}
+                onAddTime={templateHasDigitalClock
+                  ? templateClockLayers.every((layer) => layer.visible) ? undefined : () => void addTemplateTime()
+                  // Faces without a digital clock keep time with analog
+                  // hands, which every DIY template can show (its own, or Studio's).
+                  : analogHandsOnFace ? undefined : addAnalogHands}
+                addTimeHint={templateHasDigitalClock ? undefined : "Analog hands that keep time"}
                 onText={() => addElement("text")}
                 onShape={() => addElement("rect")}
               />
@@ -10318,7 +10401,7 @@ export function WatchfaceEditor({
           rect: "Rectangle",
           ellipse: "Ellipse",
           line: "Line",
-          text: "Text"
+          text: t("Text")
         }[element.kind];
       }
     }
@@ -12763,7 +12846,7 @@ export function WatchfaceEditor({
       {
         reference: configAssetsById.get("config:control_negative_sign_icon"),
         title: t("Negative sign"),
-        detail: "Shown before values below zero"
+        detail: t("Shown before values below zero")
       }
     ].filter(
       (row): row is typeof row & { reference: WatchfaceConfigAssetReference } =>

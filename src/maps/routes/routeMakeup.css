@@ -1,0 +1,224 @@
+/* Route makeup readout inside the Route Studio stats bar. */
+.route-statsbar {
+  /* Anchors the makeup popover to the whole bar, not the narrow readout. */
+  position: relative;
+}
+.route-makeup {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 16px;
+  border-left: 1px solid var(--glass-border);
+}
+
+.route-makeup-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 8px;
+  margin: -4px -8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.route-makeup-toggle:hover,
+.route-makeup-toggle[aria-expanded="true"] {
+  background: var(--accent-soft);
+}
+.route-makeup-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.route-makeup-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  white-space: nowrap;
+}
+.route-makeup-figure strong {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--text-primary);
+}
+.route-makeup-figure em {
+  font-style: normal;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.route-makeup-caret {
+  color: var(--text-muted);
+  transition: transform 0.18s ease;
+}
+.route-makeup-toggle[aria-expanded="false"] .route-makeup-caret {
+  transform: rotate(180deg);
+}
+
+.route-makeup-callouts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.route-makeup-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  cursor: default;
+}
+.route-makeup-chip.is-warning {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+.route-makeup-chip.is-good {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.route-makeup-popover {
+  position: absolute;
+  z-index: 5;
+  /* Right-aligned so it clears the route panel on the left. */
+  right: 12px;
+  bottom: calc(100% + 10px);
+  box-sizing: border-box;
+  width: min(620px, calc(100% - 24px));
+  padding: 14px 16px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--radius-md);
+  /* Nested inside the bar's own backdrop blur, so its blur can't reach the
+     map: stay near-opaque to keep map labels from bleeding through. */
+  background: rgba(12, 16, 21, 0.97);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+:root[data-theme="paper"] .route-makeup-popover {
+  border-color: var(--glass-border);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 50px rgba(60, 50, 35, 0.16);
+}
+.route-makeup-popover > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.route-makeup-popover > header strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.route-makeup-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 14px 28px;
+}
+.route-makeup-list h4 {
+  margin: 0 0 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.route-makeup-list ul {
+  display: grid;
+  grid-template-columns: max-content minmax(40px, 1fr) auto;
+  gap: 7px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.route-makeup-list li {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.route-makeup-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+.route-makeup-track {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 16%, transparent);
+  overflow: hidden;
+}
+.route-makeup-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.route-makeup-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.route-makeup-value em {
+  display: inline-block;
+  min-width: 34px;
+  margin-left: 6px;
+  font-style: normal;
+  color: var(--text-muted);
+}
+
+.route-makeup-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 14px 0 0;
+  padding: 12px 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--text-muted) 22%, transparent);
+  list-style: none;
+}
+.route-makeup-notes li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.route-makeup-notes li > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--text-muted);
+}
+.route-makeup-notes li.is-warning > svg {
+  color: var(--warning-text);
+}
+.route-makeup-notes li.is-good > svg {
+  color: var(--success-text);
+}
+
+@media (max-width: 900px) {
+  .route-makeup {
+    padding-left: 0;
+    border-left: 0;
+  }
+}

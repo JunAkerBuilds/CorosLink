@@ -7,6 +7,7 @@ import type { DiagnosticsSnapshot, RendererDiagnosticError } from "./diagnostics
 import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "./watchfaceAutomationTypes";
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "./calendarSyncTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "./googleCalendarTypes";
+import type { ManualRaceInput, RaceEditInput, RaceOverview, StravaRaceImportResult } from "./raceTypes";
 import type {
   ActivityBackupFilters,
   ActivityBackupPreview,
@@ -35,6 +36,7 @@ import type {
   GenerateRouteRequest,
   GeneratedRoute,
   GeneratedRoutePage,
+  GeneratedRouteResult,
   GpxImportSummary,
   LocalTrack,
   RouteActivityType,
@@ -54,6 +56,8 @@ import type {
   SpotifySyncUpdate,
   HevySettingsInput,
   HevyStatus,
+  StravaConfigInput,
+  StravaStatus,
   StrengthHistory,
   StrengthHistoryRequest,
   TrainingHubActivity,
@@ -285,6 +289,17 @@ const api = {
   connectCorosNativeBle: (input?: import("./corosNativeBleTypes").CorosNativeBleConnectOptions): Promise<CorosNativeBleSnapshot> => ipcRenderer.invoke("corosBle:connect", input),
   scanCorosNativeBle: (): Promise<CorosNativeBleSnapshot> => ipcRenderer.invoke("corosBle:scan"),
   refreshCorosNativeBle: (): Promise<CorosNativeBleSnapshot> => ipcRenderer.invoke("corosBle:refresh"),
+  getCorosActivityScreenStatus: (): Promise<import("./corosActivityScreenTypes").CorosActivityScreenStatus> => ipcRenderer.invoke("corosBle:activityScreenStatus"),
+  listCorosActivityScreenSports: (): Promise<import("./corosActivityScreenTypes").CorosActivityScreenSport[]> => ipcRenderer.invoke("corosBle:activityScreenSports"),
+  readCorosActivityScreens: (sportId: number): Promise<import("./corosActivityScreenTypes").CorosActivityScreenDocument> => ipcRenderer.invoke("corosBle:activityScreensRead", sportId),
+  getCorosActivityScreenBackups: (): Promise<import("./corosActivityScreenTypes").CorosActivityScreenBackup[]> => ipcRenderer.invoke("corosBle:activityScreenBackups"),
+  backupCorosActivityScreens: (input: { snapshotId: string }): Promise<import("./corosActivityScreenTypes").CorosActivityScreenBackup> => ipcRenderer.invoke("corosBle:activityScreensBackup", input),
+  syncCorosActivityScreenBaseline: (input: { snapshotId: string }): Promise<import("./corosActivityScreenTypes").CorosActivityScreenResult> => ipcRenderer.invoke("corosBle:activityScreenBaselineSync", input),
+  confirmCorosActivityScreenBaseline: (input: { snapshotId: string }): Promise<import("./corosActivityScreenTypes").CorosActivityScreenDocument> => ipcRenderer.invoke("corosBle:activityScreenBaselineConfirm", input),
+  previewCorosActivityScreenLayout: (input: { snapshotId: string; pageIndex: number; fieldCount: number }): Promise<import("./corosActivityScreenTypes").CorosActivityScreenPreview> => ipcRenderer.invoke("corosBle:activityScreenPreview", input),
+  applyCorosActivityScreenLayout: (input: { previewId: string }): Promise<import("./corosActivityScreenTypes").CorosActivityScreenResult> => ipcRenderer.invoke("corosBle:activityScreenApply", input),
+  restoreCorosActivityScreens: (input: { backupId: string }): Promise<import("./corosActivityScreenTypes").CorosActivityScreenResult> => ipcRenderer.invoke("corosBle:activityScreensRestore", input),
+  exportCorosActivityScreenBackup: (input: { backupId: string }): Promise<{ saved: boolean }> => ipcRenderer.invoke("corosBle:activityScreenBackupExport", input),
   getCorosMusicInventory: (): Promise<import("./corosBleMusicTypes").CorosBleMusicInventory> => ipcRenderer.invoke("corosBle:musicInventory"),
   getCorosWifiMusicStatus: (): Promise<import("./corosWifiMusicTypes").CorosWifiMusicStatus> => ipcRenderer.invoke("corosBle:wifiMusicStatus"),
   sendCorosMusicOverWifi: (): Promise<import("./corosWifiMusicTypes").CorosWifiMusicStatus> => ipcRenderer.invoke("corosBle:wifiMusicSend"),
@@ -295,6 +310,14 @@ const api = {
   deleteCorosMusicTrack: (target: import("./corosBleMusicTypes").CorosBleMusicDeleteTarget): Promise<import("./corosBleMusicTypes").CorosBleMusicDeleteResult> => ipcRenderer.invoke("corosBle:deleteMusic", target),
   disconnectCorosNativeBle: (): Promise<CorosNativeBleSnapshot> => ipcRenderer.invoke("corosBle:disconnect"),
   createCorosPhonePairingCode: (): Promise<import("./corosNativeBleTypes").CorosPhonePairingCode> => ipcRenderer.invoke("corosBle:phonePairing"),
+  startCorosWatchfacePhoneSend: (input: import("./watchfacePhoneSendTypes").WatchfacePhoneSendInput): Promise<import("./watchfacePhoneSendTypes").WatchfacePhoneSend> => ipcRenderer.invoke("watchfaces:phoneSendStart", input),
+  stopCorosWatchfacePhoneSend: (): Promise<void> => ipcRenderer.invoke("watchfaces:phoneSendStop"),
+  airDropCorosWatchfaceToIphone: (input: import("./watchfacePhoneSendTypes").WatchfacePhoneSendInput): Promise<void> => ipcRenderer.invoke("watchfaces:airDropToIphone", input),
+  onCorosWatchfacePhoneSendStatus: (callback: (status: import("./watchfacePhoneSendTypes").WatchfacePhoneSendStatus) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: import("./watchfacePhoneSendTypes").WatchfacePhoneSendStatus) => callback(status);
+    ipcRenderer.on("watchfaces:phoneSendStatus", listener);
+    return () => ipcRenderer.removeListener("watchfaces:phoneSendStatus", listener);
+  },
   sendCorosNotification: (input: import("./corosBleNotificationProtocol").CorosNotificationInput): Promise<{ sent: true; fragments: number }> => ipcRenderer.invoke("corosBle:sendNotification", input),
   chooseCorosDirectWatchface: (): Promise<import("./corosBleWatchfaceTypes").CorosDirectWatchfacePreview | null> => ipcRenderer.invoke("corosBle:chooseWatchface"),
   getCorosWatchfaceSyncStatus: (): Promise<import("./corosBleWatchfaceTypes").CorosDirectWatchfaceStatus> => ipcRenderer.invoke("corosBle:watchfaceStatus"),
@@ -941,6 +964,28 @@ const api = {
   updateHevySettings: (input: HevySettingsInput): Promise<HevyStatus> =>
     ipcRenderer.invoke("hevy:updateSettings", input),
   disconnectHevy: (): Promise<void> => ipcRenderer.invoke("hevy:disconnect"),
+  getStravaStatus: (): Promise<StravaStatus> => ipcRenderer.invoke("strava:getStatus"),
+  saveStravaConfig: (input: StravaConfigInput): Promise<StravaStatus> =>
+    ipcRenderer.invoke("strava:saveConfig", input),
+  connectStrava: (): Promise<StravaStatus> => ipcRenderer.invoke("strava:connect"),
+  cancelStravaConnect: (): Promise<void> => ipcRenderer.invoke("strava:cancelConnect"),
+  disconnectStrava: (): Promise<void> => ipcRenderer.invoke("strava:disconnect"),
+  getRaceOverview: (): Promise<RaceOverview> => ipcRenderer.invoke("races:getOverview"),
+  listRaceActivityIds: (): Promise<string[]> => ipcRenderer.invoke("races:listActivityIds"),
+  markActivityAsRace: (activity: TrainingHubActivity): Promise<RaceOverview> =>
+    ipcRenderer.invoke("races:markActivity", activity),
+  unmarkActivityAsRace: (activityId: string): Promise<RaceOverview> =>
+    ipcRenderer.invoke("races:unmarkActivity", activityId),
+  dismissRaceSuggestion: (activityId: string): Promise<RaceOverview> =>
+    ipcRenderer.invoke("races:dismissSuggestion", activityId),
+  updateRace: (input: RaceEditInput): Promise<RaceOverview> =>
+    ipcRenderer.invoke("races:update", input),
+  removeRace: (raceId: string): Promise<RaceOverview> =>
+    ipcRenderer.invoke("races:remove", raceId),
+  addManualRace: (input: ManualRaceInput): Promise<RaceOverview> =>
+    ipcRenderer.invoke("races:addManual", input),
+  importStravaRaces: (full?: boolean): Promise<StravaRaceImportResult> =>
+    ipcRenderer.invoke("races:importStrava", full),
   startRpeBackfill: (): Promise<void> =>
     ipcRenderer.invoke("trainingHub:startRpeBackfill"),
   getRpeBackfillStatus: (): Promise<{ pending: number; running: boolean }> =>
@@ -1071,8 +1116,13 @@ const api = {
     lon: number
   ): Promise<RouteGeocodeResult> =>
     ipcRenderer.invoke("maps:reverseGeocodeRouteLocation", lat, lon),
-  generateRoute: (request: GenerateRouteRequest): Promise<GeneratedRoute> =>
+  generateRoute: (request: GenerateRouteRequest): Promise<GeneratedRouteResult> =>
     ipcRenderer.invoke("maps:generateRoute", request),
+  replaceGeneratedRouteGeometry: (
+    id: string,
+    geometry: RouteGeometry
+  ): Promise<GeneratedRoute> =>
+    ipcRenderer.invoke("maps:replaceGeneratedRouteGeometry", id, geometry),
   routeWaypoints: (request: RouteWaypointRequest): Promise<RouteGeometry> =>
     ipcRenderer.invoke("maps:routeWaypoints", request),
   saveDrawnRoute: (payload: DrawnRoutePayload): Promise<GeneratedRoute> =>
@@ -1085,6 +1135,8 @@ const api = {
     ipcRenderer.invoke("maps:exportGeneratedRoute", id),
   deleteGeneratedRoute: (id: string): Promise<boolean> =>
     ipcRenderer.invoke("maps:deleteGeneratedRoute", id),
+  deleteAllGeneratedRoutes: (): Promise<number> =>
+    ipcRenderer.invoke("maps:deleteAllGeneratedRoutes"),
   startRouteShare: (id: string): Promise<RouteShareSession> =>
     ipcRenderer.invoke("maps:startRouteShare", id),
   stopRouteShare: (): Promise<void> =>

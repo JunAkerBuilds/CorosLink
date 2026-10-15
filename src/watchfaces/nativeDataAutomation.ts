@@ -1,5 +1,5 @@
 import type { CorosWatchfaceNativeAssetRole, CorosWatchfaceNativeDataStyle } from "../../electron/types";
-import { NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, NATIVE_DATA_FIELDS } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, NATIVE_DATA_FIELDS, nativeChartRepresentation } from "../../electron/watchfaceNativeCatalog";
 import { defaultNativeDataStyle, isNativeTime, nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRoleIndices } from "./nativeDataParts";
 
 /** Distinguish exporter-defined roles from sample artwork and unverified firmware states. */
@@ -95,12 +95,12 @@ export function getNativeDataAutomationCatalog() {
     coordinates: "Layer x/y use capabilities.placement master pixels. Part offsets, dimensions, line widths and bar spacing use master pixels before the layer scale. Units, symbols and decimal points have firmware-controlled positions.",
     editing: "Use add_native_field with id, x, y and optional style to create any catalog field absent from the current mode, even when the starting template has no corresponding config or sprites. Export creates these bindings and assets. Use set/merge/unset for existing fields. Pointer parents must exist and merge is shallow. Unset optional overrides to restore defaults. Use mode:'aod' with the same /design paths for AOD.",
     artwork: "assets[role][stateIndex] accepts a PNG assetId from import_asset or get_document. State keys are canonical unpadded strings such as '0'. Missing states use defaults. assetTexts uses the same role/index map. Replacement images take precedence over text. Decimal is a numeric decimal point.",
-    chartPreviewTypes: ["bars", "curve"],
     limits: [
       "One slot per fixed data field and one shared chart layer per display mode.",
       "Charts are experimental. Bar rendering has been reported on PACE Pro, but history selection and live updates remain unverified. chartSource selects a numeric/icon data field to export, not a confirmed firmware history selector. A successful preview/export does not prove live chart support.",
       "PACE Pro testing reports chart changes on Back while the chart number remains absent. Do not treat cycling as proof of numeric-readout support or a fix for missing numbers. A separate metric layer is independent and will not follow chart changes.",
-      "chartStyle.previewType selects the sample preview only: 'bars' uses barWidth, barGap, selectedBarColor and unselectedBarColor; 'curve' uses lineWidth, upperColor and lowerColor. Both appearance sets are exported. Firmware still chooses the live graph representation per chart group; sunrise, moonrise, barometer and tide groups draw curves on official faces.",
+      "The watch, not the face, chooses bars or a line for each chart group: sun and moon groups (chart_sunrise, chart_sun_angle, chart_moonrise, chart_moon, chart_moon_percent) draw a line from lineWidth, upperColor and lowerColor; daily data (stress, stamina, steps, calories, elevation), barometer and tide draw bars from barWidth, barGap, selectedBarColor and unselectedBarColor. Both sets are exported and the preview follows chartSource. With both sets configured a PACE Pro drew the sunrise group as a line and the barometer group as bars; tide bars are inferred from official SATISFY 3. Barometer and tide pages need phone-synced data and stay empty without it; an empty page is not evidence about the graph style. A width of 0 hides that style on every group that uses it. chartStyle.previewType is ignored.",
+      "The watch draws a graph only when the face declares a chart number. With the plot shown and the selected source's number (moon phase: states) hidden, export writes an invisible readout inside the plot: transparent 1x1 digits plus a blank icon. Whether that is enough on the watch is not yet confirmed.",
       "The watch cycles chart groups with Back (general, sun, moon, barometer, tide). Readouts of other groups already in a recovered official face's config are kept on export; the chart layer replaces only the shared graph and its selected source. The preview follows the chart layer's group: chart_sun_angle draws only in the sun group, and weather_temp, weather_temp_min/max, weather_wind and weather_direction are hidden only where they share a slot with the group's alternative. Hidden-by-group layers remain enabled and exported.",
       "The watch draws minimum and maximum temperature as one reading: minimum, separator, maximum, then one unit. With both enabled the maximum follows the minimum and its own x/y are ignored, so place the reading with weather_temp_min. Minimum supplies the separator, unit and minus artwork.",
       "AQI availability depends on region and synced weather data. A blank weather_aqi layer does not by itself establish an export bug; check whether the watch's built-in Weather widget has an AQI reading. Preview and simulation values are samples, not supplied live data.",
@@ -121,6 +121,8 @@ export function getNativeDataAutomationCatalog() {
     }),
     chartSources: NATIVE_CHART_SOURCES.map(source => ({
       ...source,
+      // What the watch plots for this source's group (see limits).
+      graph: nativeChartRepresentation(source.id),
       components: describeNativeDataComponents("chart", { ...defaultNativeDataStyle("chart"), chartSource: source.id })
     }))
   };

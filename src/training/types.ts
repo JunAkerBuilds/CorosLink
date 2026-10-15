@@ -84,6 +84,13 @@ export interface HeatmapGrid {
   monthLabels: HeatmapMonthLabel[];
 }
 
+/** Another view asking the Training Hub to show a tab, optionally with an activity open. */
+export interface TrainingHubNavigationRequest {
+  tab: "overview" | "activities" | "records" | "races";
+  activity?: TrainingHubActivity;
+  requestId: number;
+}
+
 export interface TrainingHubViewProps {
   api: CorosLinkApi;
   status: TrainingHubStatus | null;
@@ -118,6 +125,8 @@ export interface TrainingHubViewProps {
     activity: TrainingHubActivity,
     fileType: TrainingHubActivityFileType
   ) => void;
+  navigationRequest?: TrainingHubNavigationRequest | null;
+  onNavigationRequestHandled?: () => void;
 }
 
 export type { TrainingHubDailyMetric };

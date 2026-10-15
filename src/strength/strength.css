@@ -2878,7 +2878,10 @@
 }
 
 .strength-session-list li {
-  display: grid;
+  /* A column, not a grid: grid rows stretched to the row's tallest card and
+     floated short cards' facts mid-card. */
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   padding: 18px 20px;
   border: 1px solid var(--sx-hairline);
@@ -2966,6 +2969,38 @@
 .strength-session-chips span.is-more {
   background: transparent;
   color: var(--text-muted);
+}
+
+/* Strava notes often hold the exercise list itself, one move per line. */
+.strength-session-notes {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.strength-session-strava {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  /* Every card's link sits on the same baseline along the row. */
+  margin-top: auto;
+  gap: 4px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.strength-session-strava:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 @media (max-width: 1180px) {

@@ -24,12 +24,14 @@ export async function getTrainingHealthInsight(kind: HealthInsightKind, days = 7
     const data = parseHealthInsightResponse(kind, response);
     // A prose-only answer such as "No … data found in …" is an empty window, not a report.
     const noValues = !data.metrics.length && !data.series.length;
-    const emptyNotice = Boolean(data.report && /\bno\b[^\n]*\b(?:data|found|recorded|available)\b/i.test(data.report));
-    const empty = noValues && (!data.report || emptyNotice);
+    // Keep only COROS' "No … found" sentence; the rest of an empty report is headings and notes.
+    const emptyNotice = (data.report ?? "").split("\n").map(line => line.trim())
+      .filter(line => /\bno\b.*\b(?:data|found|recorded|available)\b/i.test(line)).join(" ");
+    const empty = noValues && (!data.report || Boolean(emptyNotice));
     return {
       ...base, ...data,
       status: empty ? "empty" : "ready",
-      message: empty && emptyNotice ? data.report : undefined,
+      message: empty && emptyNotice ? emptyNotice : undefined,
       fetchedAt: new Date().toISOString()
     };
   } catch (error) {

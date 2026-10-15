@@ -2530,6 +2530,7 @@ export function applyCorosWatchfaceConfigOverrides(
     "watchface_id",
     // Independent AOD artwork may add a flattened background to a valid
     // color-only AODconfig that did not originally declare a PNG.
+    "background_icon_pos",
     "background_icon",
     // Studio can expose selectable components that the imported template did
     // not originally declare. The renderer only emits this fixed allow-list;

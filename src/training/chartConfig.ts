@@ -1,4 +1,5 @@
 import type { Theme } from "../theme/theme";
+import type { StreamChannelKey } from "./activityStreams";
 
 export const TRAINING_HEATMAP_DAYS = 365;
 
@@ -180,6 +181,47 @@ const PAPER_VITAL_COLORS: Record<HealthVitalKey, string> = {
 /** One hue per vital so a tile and its trend chart read as the same thing. */
 export function getHealthVitalColors(theme: Theme): Record<HealthVitalKey, string> {
   return theme === "paper" ? PAPER_VITAL_COLORS : DARK_VITAL_COLORS;
+}
+
+const DARK_ACTIVITY_CHANNEL_COLORS: Record<StreamChannelKey, string> = {
+  pace: "#5ce5a2",
+  gap: "#4fd1c5",
+  hr: "#ff6b81",
+  cadence: "#a78bfa",
+  power: "#f5c451",
+  stride: "#6aa6f5",
+  gct: "#f2994a",
+  vo: "#f472b6",
+  vr: "#a3e635",
+  elevation: "#9a9aa2",
+  grade: "#d6c29a"
+};
+
+const PAPER_ACTIVITY_CHANNEL_COLORS: Record<StreamChannelKey, string> = {
+  pace: "#12855c",
+  gap: "#0f7a80",
+  hr: "#c8364f",
+  cadence: "#6d4fc4",
+  power: "#946600",
+  stride: "#2f6fd6",
+  gct: "#b45a12",
+  vo: "#b8327a",
+  vr: "#4d7c0f",
+  elevation: "#8a857c",
+  grade: "#7a6a4f"
+};
+
+/** One hue per activity channel, shared by the picker, lanes and readout. */
+export function getActivityChannelColors(theme: Theme): Record<StreamChannelKey, string> {
+  return theme === "paper" ? PAPER_ACTIVITY_CHANNEL_COLORS : DARK_ACTIVITY_CHANNEL_COLORS;
+}
+
+/** Easy-to-hard ramp for time-in-zone bars and heart-rate lane bands (up to 7 zones). */
+const DARK_INTENSITY_ZONE_COLORS = ["#8e9bb0", "#6aa6f5", "#4fd6a6", "#e9c95a", "#f2994a", "#f2667a", "#c084fc"];
+const PAPER_INTENSITY_ZONE_COLORS = ["#66728a", "#2f6fd6", "#12855c", "#9a7300", "#c2570c", "#c8364f", "#8b3fd0"];
+
+export function getIntensityZoneColors(theme: Theme): readonly string[] {
+  return theme === "paper" ? PAPER_INTENSITY_ZONE_COLORS : DARK_INTENSITY_ZONE_COLORS;
 }
 
 /** Back-compat static exports (dark palette) for any non-theme-aware callers. */

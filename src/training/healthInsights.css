@@ -98,6 +98,21 @@
 .health-insight-report { max-height: 320px; overflow: auto; }
 .health-insight-report table { border-collapse: collapse; width: 100%; }
 .health-insight-report td, .health-insight-report th { text-align: left; padding: 6px; }
+/* Sleep HRV: the night's average (dot) against COROS' normal range (band) and baseline (dashed tick). */
+.health-hrv-reference { display: flex; flex-direction: column; gap: 9px; }
+.health-hrv-reference .health-insight-legend { margin: 0; }
+.health-hrv-gauge { position: relative; height: 8px; margin: 4px 7px 0; border-radius: 999px; background: color-mix(in srgb, var(--text-muted) 14%, transparent); }
+.health-hrv-gauge-range { position: absolute; top: 0; bottom: 0; border-radius: 999px; background: color-mix(in srgb, var(--insight-tone) 26%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--insight-tone) 42%, transparent); }
+.health-hrv-gauge-baseline { position: absolute; top: -4px; bottom: -4px; margin-left: -1px; border-left: 2px dashed var(--text-muted); }
+.health-hrv-gauge-value { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: var(--insight-tone); box-shadow: 0 0 0 3px var(--surface), 0 0 12px color-mix(in srgb, var(--insight-tone) 50%, transparent); }
+.health-hrv-notice { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 8px 11px; border: 1px solid color-mix(in srgb, var(--insight-tone) 22%, var(--glass-border)); border-radius: 10px; background: color-mix(in srgb, var(--insight-tone) 8%, transparent); color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+.health-hrv-notice svg { flex-shrink: 0; margin-top: 2px; color: var(--insight-tone); }
+.health-hrv-notice strong { color: var(--text-primary); font-weight: 650; }
+.health-insight-state strong { color: var(--text-primary); font-size: 13.5px; font-weight: 650; }
+.health-hrv-empty { flex: 1; justify-content: center; }
+.health-hrv-empty > svg { color: var(--insight-tone); }
+.health-insight-sleepHrv .chart-card-details .health-insight-stats { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+
 /* Health check: the five readings a watch check takes in one sitting, one tile per vital.
    Each tile is its own small instrument and doubles as the selector for the trend below. */
 /* Headline is the latest check's time (the sleep card does the same with its night), caption counts the period. */
@@ -188,6 +203,8 @@
 :root[data-theme="paper"] .health-vital:hover:not(:disabled) { box-shadow: var(--glass-inset), var(--shadow-soft); }
 :root[data-theme="paper"] .health-vital[aria-pressed="true"] { border-color: var(--vital); background: radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--vital) 14%, transparent), transparent 70%), var(--surface); box-shadow: var(--glass-inset), 0 0 0 1px color-mix(in srgb, var(--vital) 24%, transparent); }
 :root[data-theme="paper"] .health-insight-stats > div { border-color: color-mix(in srgb, var(--text-muted) 24%, transparent); background: var(--surface); box-shadow: none; }
+:root[data-theme="paper"] .health-hrv-gauge-value { box-shadow: 0 0 0 3px var(--surface); }
+:root[data-theme="paper"] .health-hrv-notice { border-color: color-mix(in srgb, var(--insight-tone) 26%, color-mix(in srgb, var(--text-muted) 24%, transparent)); }
 :root[data-theme="paper"] .health-vital-hint { border-color: color-mix(in srgb, var(--text-muted) 32%, transparent); }
 
 @media (max-width: 900px) { .health-insights-grid { grid-template-columns: minmax(0, 1fr); } }

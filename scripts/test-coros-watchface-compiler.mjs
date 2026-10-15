@@ -12,6 +12,7 @@ const {FIELDS}=require('../dist-electron/watchfaceCompiler/fields.js');
 const {cbzCompress,encodeImageBlock,encodeFramesBlock}=require('../dist-electron/watchfaceCompiler/bitmap.js');
 const {parseConfig,parsePos,parseRect,rgb222}=require('../dist-electron/watchfaceCompiler/config.js');
 const {decodePng}=require('../dist-electron/watchfaceCompiler/png.js');
+const {findCorosBitmapBlocks,decodeCorosBitmapFrame}=require('../dist-electron/corosBinLayout.js');
 const unzipper=require('unzipper');
 const {getWatchfaceTarget}=require('../dist-electron/watchfaceTargets.js');
 
@@ -77,8 +78,9 @@ try {
   entry('watchface_416x416/config.txt',['[background_icon_pos]={0,0}','[background_icon]=bg.png','[bg_color]=0xff0000',
    '[time_hour_high_pos]={100,120}','[time_hour_high_font]=digits','[step_rect]={10,20,30,40,right}','[step_font]=digits','[step_font_color]=0x00ff00',
    '[bluetooth_icon_pos]={-5,6}','[bluetooth_icon]=icon\\bt.png','[no_disturb_icon_pos]={7,8}','[no_disturb_icon]=icon/battery.png','[chart_selected_bar_color]=0xff0000','[chart_curves_lower_color]=0x00ff88','[weather_wind_icon_pos]={9,9}','[weather_wind_icon]=icon\\Heart.png',''].join('\r\n')),
-  entry('watchface_416x416/AODconfig.txt','[time_hour_high_pos]={100,120}\n[time_hour_high_font]=digits\n'),
+  entry('watchface_416x416/AODconfig.txt','[background_icon_pos]={7,9}\n[background_icon]=aod.png\n[bg_color]=0xffffff\n[time_hour_high_pos]={100,120}\n[time_hour_high_font]=digits\n'),
   entry('watchface_416x416/bg.png',png(208,208,(x,y)=>[x,y,(x*y)&255,255])),
+  entry('watchface_416x416/aod.png',png(208,208,(x,y)=>x>=20&&x<40&&y>=30&&y<50?[0,255,255,255]:[0,0,0,0])),
   entry('watchface_416x416/icon/bt.png',png(10,10)),entry('watchface_416x416/icon/battery.png',png(10,10)),entry('watchface_416x416/icon/heart.png',png(10,10)),
   ...Object.entries(glyphs).map(([name,data])=>entry(name,data))];
  const engine=new CorosWatchfaceCompiler(path.join(temp,'built-in'));
@@ -97,6 +99,27 @@ try {
  const blockAt=offset=>{const at=bin.readUInt32LE(offset);return at?[bin.readUInt16LE(at),bin.readUInt16LE(at+2),bin[at+6]]:null;};
  assert.deepEqual(blockAt(0x1a),[416,416,1],'background scaled to the screen');
  assert.deepEqual(blockAt(0x1e),[315,315,1],'thumbnail falls back to the preview, scaled to 315');
+ const aodOffset=bin.readUInt32LE(0x322);
+ assert.deepEqual(blockAt(aodOffset+0x1a),[416,416,1],'AOD background scales to the native display');
+ assert.notEqual(bin.readUInt32LE(aodOffset+0x1a),bin.readUInt32LE(0x1a),'AOD keeps its independent background');
+ assert.deepEqual([bin.readInt32LE(aodOffset+0x12),bin.readInt32LE(aodOffset+0x16)],[7,9],'AOD keeps its background position');
+ assert.equal(bin.readUInt32LE(aodOffset+0x1e),0,'AOD has no picker thumbnail');
+ assert.equal(bin[aodOffset+0x22],0,'AOD retains the firmware black fill, ignoring bg_color');
+ const aodBlock=findCorosBitmapBlocks(bin,aodOffset+0x1202).find(block=>block.offset===bin.readUInt32LE(aodOffset+0x1a));
+ const aodPixels=decodeCorosBitmapFrame(bin,aodBlock,0);
+ const aodPixel=(x,y)=>[...aodPixels.subarray((y*416+x)*4,(y*416+x)*4+4)];
+ assert.deepEqual(aodPixel(50,70),[0,255,255,255],'AOD artwork keeps its color');
+ assert.deepEqual(aodPixel(208,208),[0,0,0,0],'AOD background transparency survives encoding');
+ const backgroundCase=(config)=>compileWatchface(new Map(built.map(e=>[e.name,e.name.endsWith('/AODconfig.txt')?Buffer.from(config):e.data])),{faceId:1});
+ const defaultPosition=backgroundCase('[background_icon]=aod.png\n').bin;
+ assert.ok(defaultPosition.readUInt32LE(aodOffset+0x1a)>0,'Studio AOD backgrounds compile without a position key');
+ assert.deepEqual([defaultPosition.readInt32LE(aodOffset+0x12),defaultPosition.readInt32LE(aodOffset+0x16)],[0,0],'an omitted AOD position defaults to the origin');
+ assert.equal(backgroundCase('[time_hour_high_pos]={100,120}\n[time_hour_high_font]=digits\n').bin.readUInt32LE(aodOffset+0x1a),0,'a background-free AOD must not borrow Current artwork');
+ const sharedBackground=backgroundCase('[background_icon]=bg.png\n').bin;
+ assert.equal(sharedBackground.readUInt32LE(aodOffset+0x1a),sharedBackground.readUInt32LE(0x1a),'a shared Current/AOD background reuses its bitmap');
+ const missingBackground=backgroundCase('[background_icon]=missing-aod.png\n');
+ assert.equal(missingBackground.bin.readUInt32LE(aodOffset+0x1a),0,'a missing AOD background stays blank');
+ assert.ok(missingBackground.warnings.includes('missing-aod.png is missing.'),'missing AOD backgrounds produce a warning');
  assert.deepEqual(blockAt(FIELDS.time_hour_high_font[1]),[12,18,10],'digit fonts are one 10-frame block');
  assert.equal(bin.readUInt32LE(FIELDS.step_font[1]),bin.readUInt32LE(FIELDS.time_hour_high_font[1]),'a shared font folder is stored once');
  assert.deepEqual([bin.readInt16LE(FIELDS.step_rect[1]),bin.readInt16LE(FIELDS.step_rect[1]+6),bin[FIELDS.step_rect[1]+8]],[10,40,0x14]);

@@ -32,7 +32,7 @@ import {
 } from "@phosphor-icons/react";
 import logoBase from "../../build/icon-base.svg";
 import logoSync from "../../build/icon-sync.svg";
-import { LANGUAGES, useLanguage } from "../i18n";
+import { LANGUAGES, formatNumber, t, useLanguage } from "../i18n";
 import { useTheme } from "../theme/ThemeProvider";
 import type { Theme } from "../theme/theme";
 import { useUnitSystem } from "../units/UnitSystemProvider";
@@ -73,6 +73,7 @@ interface Chapter {
   places?: Array<{ label: string; icon: Icon }>;
 }
 
+/* English source text, translated with tour() where it is read. */
 const CHAPTERS: Chapter[] = [
   {
     id: "hello",
@@ -267,6 +268,9 @@ const CHAPTERS: Chapter[] = [
 
 const LAST_INDEX = CHAPTERS.length - 1;
 
+/** Chapter copy, with an "onboarding:" catalog key where a shared word needs other wording here. */
+const tour = (source: string) => t(source, undefined, "onboarding");
+
 /** Fit the fixed-size picture to whatever room the stage has. */
 function useStageScale() {
   const ref = useRef<HTMLDivElement>(null);
@@ -328,6 +332,7 @@ function ChoiceTile({
   /** Picture, label and check side by side instead of stacked. */
   row?: boolean;
 }) {
+  useLanguage();
   return (
     <button
       type="button"
@@ -346,6 +351,7 @@ function ChoiceTile({
 }
 
 function ThemePreview({ theme }: { theme: Theme }) {
+  useLanguage();
   return (
     <span className={`onb-theme-preview is-${theme}`} aria-hidden="true">
       <i className="is-sidebar" />
@@ -361,7 +367,7 @@ function ThemePreview({ theme }: { theme: Theme }) {
 function LanguagePicker() {
   const { language, setLanguage } = useLanguage();
   return (
-    <div className="onb-languages" role="group" aria-label="App language">
+    <div className="onb-languages" role="group" aria-label={t("App language")}>
       {LANGUAGES.map((option) => (
         <ChoiceTile
           key={option.value}
@@ -381,6 +387,7 @@ function LanguagePicker() {
 }
 
 function Preferences() {
+  useLanguage();
   const { theme, setTheme } = useTheme();
   const { unitSystem, setUnitSystem } = useUnitSystem();
   const pickTheme = (next: Theme) => (event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -390,35 +397,35 @@ function Preferences() {
   return (
     <div className="onb-preferences">
       <div className="onb-preference">
-        <span className="onb-preference-label">Appearance</span>
+        <span className="onb-preference-label">{t("Appearance")}</span>
         <div className="onb-choices">
-          <ChoiceTile label="Dark" selected={theme === "dark"} onSelect={pickTheme("dark")}>
+          <ChoiceTile label={t("Dark")} selected={theme === "dark"} onSelect={pickTheme("dark")}>
             <ThemePreview theme="dark" />
           </ChoiceTile>
-          <ChoiceTile label="Paper" selected={theme === "paper"} onSelect={pickTheme("paper")}>
+          <ChoiceTile label={t("Paper")} selected={theme === "paper"} onSelect={pickTheme("paper")}>
             <ThemePreview theme="paper" />
           </ChoiceTile>
         </div>
       </div>
       <div className="onb-preference">
-        <span className="onb-preference-label">Units</span>
+        <span className="onb-preference-label">{t("Units")}</span>
         <div className="onb-choices">
           <ChoiceTile
-            label="Metric"
+            label={t("Metric")}
             selected={unitSystem === "metric"}
             onSelect={() => setUnitSystem("metric")}
           >
             <span className="onb-units" aria-hidden="true">
-              km<small>kg · m</small>
+              {t("km")}<small>{t("kg · m")}</small>
             </span>
           </ChoiceTile>
           <ChoiceTile
-            label="Imperial"
+            label={t("Imperial")}
             selected={unitSystem === "imperial"}
             onSelect={() => setUnitSystem("imperial")}
           >
             <span className="onb-units" aria-hidden="true">
-              mi<small>lb · ft</small>
+              {t("mi")}<small>{t("lb · ft")}</small>
             </span>
           </ChoiceTile>
         </div>
@@ -436,22 +443,23 @@ function ConnectStage({
   watchConnected: boolean;
   onExit: (exit: OnboardingExit) => void;
 }) {
+  useLanguage();
   return (
     <div className="onb-connect">
-      <p className="onb-connect-heading">Connect when you’re ready</p>
+      <p className="onb-connect-heading">{t("Connect when you’re ready")}</p>
       <div className="onb-connect-card" style={{ "--glyph": "var(--onb-cyan)", "--i": 0 } as CSSProperties}>
         <span className="onb-connect-glyph">
           <ChartLineUp size={22} weight="duotone" aria-hidden="true" />
         </span>
         <div className="onb-connect-copy">
-          <strong>COROS account</strong>
-          <span>Unlocks Training Hub, Coach, Calendar and Strength.</span>
+          <strong>{t("COROS account")}</strong>
+          <span>{t("Unlocks Training Hub, Coach, Calendar and Strength.")}</span>
         </div>
         {trainingConnected ? (
           <ConnectedBadge />
         ) : (
           <button type="button" className="onb-button is-raised" onClick={() => onExit("sign-in")}>
-            Sign in
+            {t("Sign in")}
           </button>
         )}
       </div>
@@ -460,20 +468,20 @@ function ConnectStage({
           <Watch size={22} weight="duotone" aria-hidden="true" />
         </span>
         <div className="onb-connect-copy">
-          <strong>Your watch</strong>
-          <span>Bluetooth or USB, for faces, maps, routes and music.</span>
+          <strong>{t("Your watch")}</strong>
+          <span>{t("Bluetooth or USB, for faces, maps, routes and music.")}</span>
         </div>
         {watchConnected ? (
           <ConnectedBadge />
         ) : (
           <button type="button" className="onb-button is-raised" onClick={() => onExit("connect-watch")}>
-            Connect
+            {t("Connect")}
           </button>
         )}
       </div>
       <p className="onb-connect-note" style={{ "--i": 2 } as CSSProperties}>
         <ShieldCheck size={16} weight="duotone" aria-hidden="true" />
-        Sign-ins stay on this computer, and sensitive ones are encrypted with your system keychain.
+        {t("Sign-ins stay on this computer, and sensitive ones are encrypted with your system keychain.")}
       </p>
     </div>
   );
@@ -488,6 +496,7 @@ export interface OnboardingTourProps {
 }
 
 export function OnboardingTour({ trainingConnected, watchConnected, onClose }: OnboardingTourProps) {
+  useLanguage();
   const [index, setIndex] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [leaving, setLeaving] = useState(false);
@@ -591,7 +600,7 @@ export function OnboardingTour({ trainingConnected, watchConnected, onClose }: O
             </span>
             {!isLast ? (
               <button type="button" className="onb-skip" onClick={() => close("skip")}>
-                Skip tour
+                {t("Skip tour")}
               </button>
             ) : null}
           </header>
@@ -607,13 +616,13 @@ export function OnboardingTour({ trainingConnected, watchConnected, onClose }: O
                   <chapter.icon size={16} weight="duotone" aria-hidden="true" />
                 </span>
               ) : null}
-              {chapter.eyebrow}
+              {tour(chapter.eyebrow)}
             </p>
             <h2 id="onboarding-title" className="onb-title">
-              {chapter.title}
+              {tour(chapter.title)}
             </h2>
             <p id="onboarding-lede" className="onb-lede">
-              {chapter.lede}
+              {tour(chapter.lede)}
             </p>
 
             {chapter.points ? (
@@ -622,8 +631,8 @@ export function OnboardingTour({ trainingConnected, watchConnected, onClose }: O
                   <li key={point.title}>
                     <span className="onb-point-dot" aria-hidden="true" />
                     <span>
-                      <strong>{point.title}</strong>
-                      {point.body}
+                      <strong>{tour(point.title)}</strong>
+                      {tour(point.body)}
                     </span>
                   </li>
                 ))}
@@ -635,11 +644,11 @@ export function OnboardingTour({ trainingConnected, watchConnected, onClose }: O
 
             {chapter.places ? (
               <p className="onb-places">
-                <span>In the sidebar</span>
+                <span>{t("In the sidebar")}</span>
                 {chapter.places.map(({ label, icon: Glyph }) => (
                   <span key={label} className="onb-place">
                     <Glyph size={14} weight="regular" aria-hidden="true" />
-                    {label}
+                    {t(label)}
                   </span>
                 ))}
               </p>
@@ -647,7 +656,7 @@ export function OnboardingTour({ trainingConnected, watchConnected, onClose }: O
           </div>
 
           <footer className="onb-footer">
-            <nav className="onb-progress-steps" aria-label="Tour chapters">
+            <nav className="onb-progress-steps" aria-label={t("Tour chapters")}>
               {CHAPTERS.map((item, itemIndex) => (
                 <button
                   key={item.id}
@@ -659,9 +668,13 @@ export function OnboardingTour({ trainingConnected, watchConnected, onClose }: O
                   ]
                     .filter(Boolean)
                     .join(" ")}
-                  aria-label={`${item.label}, step ${itemIndex + 1} of ${CHAPTERS.length}`}
+                  aria-label={t("{{chapter}}, step {{step}} of {{total}}", {
+                    chapter: tour(item.label),
+                    step: formatNumber(itemIndex + 1),
+                    total: formatNumber(CHAPTERS.length)
+                  })}
                   aria-current={itemIndex === index ? "step" : undefined}
-                  title={item.label}
+                  title={tour(item.label)}
                   tabIndex={-1}
                   onClick={() => goTo(itemIndex)}
                 >
@@ -671,12 +684,12 @@ export function OnboardingTour({ trainingConnected, watchConnected, onClose }: O
             </nav>
             <div className="onb-actions">
               <span className="onb-counter" aria-live="polite">
-                {index + 1} of {CHAPTERS.length}
+                {t("{{step}} of {{total}}", { step: formatNumber(index + 1), total: formatNumber(CHAPTERS.length) })}
               </span>
               {!isFirst ? (
                 <button type="button" className="onb-button is-ghost" onClick={() => goTo(index - 1)}>
                   <ArrowLeft size={15} weight="bold" aria-hidden="true" />
-                  Back
+                  {t("Back")}
                 </button>
               ) : null}
               <button
@@ -686,12 +699,12 @@ export function OnboardingTour({ trainingConnected, watchConnected, onClose }: O
                 onClick={() => (isLast ? close("explore") : goTo(index + 1))}
               >
                 {chapter.id === "hello"
-                  ? "Let’s get started"
+                  ? t("Let’s get started")
                   : chapter.id === "welcome"
-                    ? "Show me around"
+                    ? t("Show me around")
                     : isLast
-                      ? "Start exploring"
-                      : `Next: ${nextChapter.label}`}
+                      ? t("Start exploring")
+                      : t("Next: {{chapter}}", { chapter: tour(nextChapter.label) })}
                 <ArrowRight size={15} weight="bold" aria-hidden="true" />
               </button>
             </div>

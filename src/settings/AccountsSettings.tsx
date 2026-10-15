@@ -1,7 +1,8 @@
-import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage } from "../i18n";
+import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage , getLocale} from "../i18n";
 import { CartoAccountSettings } from "./CartoAccountSettings";
 import { useEffect, useState } from "react";
 import {
+  Activity,
   ArrowLeft,
   CalendarDays,
   Dumbbell,
@@ -27,6 +28,7 @@ import { ApiAccountSettings, type ApiAccount } from "./ApiAccountSettings";
 import { McpServersPanel } from "../chat/McpServersPanel";
 import { WatchfaceAutomationSettings } from "./WatchfaceAutomationSettings";
 import { WorkoutAutomationSettings } from "./WorkoutAutomationSettings";
+import { StravaConnection } from "../strength/StravaConnection";
 import "./accountsSettings.css";
 
 export type AccountDestination =
@@ -101,6 +103,13 @@ const services = [
     icon: Dumbbell,
   },
   {
+    id: "strava",
+    name: "Strava",
+    description: "Gym sessions · your Strava API app",
+    group: "strength",
+    icon: Activity,
+  },
+  {
     id: "coach",
     name: "ChatGPT & Claude",
     description: "Coach account sign-in",
@@ -142,7 +151,7 @@ export function AccountsSettings({
   const [connections, setConnections] = useState<
     Record<string, Connection | "unavailable">
   >({});
-  const [detail, setDetail] = useState<"google" | "apple" | "maps" | "carto" | "mcp" | "automation" | ApiAccount | null>(
+  const [detail, setDetail] = useState<"google" | "apple" | "maps" | "carto" | "mcp" | "automation" | "strava" | ApiAccount | null>(
     null,
   );
   const [revision, setRevision] = useState(0);
@@ -177,6 +186,10 @@ export function AccountsSettings({
       strength: async () => ({
         connected: (await api.getHevyStatus()).connected,
       }),
+      strava: async () => {
+        const s = await api.getStravaStatus();
+        return { connected: s.connected, detail: s.displayName };
+      },
       google: async () => {
         const s = await api.getGoogleCalendarStatus();
         return { connected: s.connected, detail: s.accountEmail };
@@ -192,7 +205,7 @@ export function AccountsSettings({
           detail:
             s.backend === "ors"
               ? undefined
-              : "No account needed for default routing",
+              : t("No account needed for default routing"),
         };
       },
     };
@@ -281,6 +294,7 @@ export function AccountsSettings({
                 <RoutingAccount api={api} />
               ) : detail === "carto" ? <CartoAccountSettings api={api} /> : detail === "mcp" ? <McpServersPanel api={api} />
                 : detail === "automation" ? <><WatchfaceAutomationSettings api={api} /><WorkoutAutomationSettings api={api} /></>
+                : detail === "strava" ? <StravaAccount api={api} />
                 : detail !== "google" && detail !== "apple" ? <ApiAccountSettings key={detail} api={api} service={detail} /> : (
                 <CalendarConnections
                   api={api}
@@ -322,7 +336,7 @@ export function AccountsSettings({
                           if (
                             id === "google" ||
                             id === "apple" ||
-                            id === "maps" || id === "carto" || id === "spotify" || id === "strength" || id === "intervals" ||
+                            id === "maps" || id === "carto" || id === "spotify" || id === "strength" || id === "strava" || id === "intervals" ||
                             id === "openRouter" || id === "local" || id === "mcp" || id === "automation"
                           )
                             setDetail(id);
@@ -368,6 +382,17 @@ export function AccountsSettings({
         </div>
       </div>
     </section>
+  );
+}
+
+function StravaAccount({ api }: { api: CorosLinkApi }) {
+  useLanguage();
+  return (
+    <div className="account-setup">
+      <h2>Strava</h2>
+      <p>{t("Bring gym sessions recorded on Strava into Strength, alongside COROS and Hevy.")}</p>
+      <StravaConnection api={api} />
+    </div>
   );
 }
 

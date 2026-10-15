@@ -580,15 +580,12 @@ async function main() {
     await window.webContents.executeJavaScript(`(() => { [...document.querySelectorAll('[aria-label="Component"] [role="tab"]')].find(tab => tab.textContent === 'Graph').click(); })()`);
     await until(()=>window.webContents.executeJavaScript(`Boolean(document.querySelector('input[aria-label="Bar width"]'))`),Boolean,"graph controls");
     assert.ok(await window.webContents.executeJavaScript(`(() => {
-      const type=document.querySelector('select[aria-label="Graph type"]');
-      return !type.disabled && type.value==='bars' && [...type.options].map(option=>option.value).join()==='bars,curve';
-    })()`),'Bar and line graphs are both offered in the inspector');
-    await window.webContents.executeJavaScript(`(() => { const select=document.querySelector('select[aria-label="Graph type"]'); select.value='curve'; select.dispatchEvent(new Event('change',{bubbles:true})); })()`);
-    await until(()=>window.webContents.executeJavaScript(`Boolean(document.querySelector('input[aria-label="Line thickness"]') && document.querySelector('input[aria-label="Upper curve"]') && document.querySelector('input[aria-label="Lower curve"]'))`),Boolean,"line graph controls");
-    document=await tool("get_document");
-    assert.equal(document.design.nativeData.chart.chartStyle.previewType,'curve','Line graph preview is selectable');
-    await window.webContents.executeJavaScript(`(() => { const select=document.querySelector('select[aria-label="Graph type"]'); select.value='bars'; select.dispatchEvent(new Event('change',{bubbles:true})); })()`);
-    await until(()=>window.webContents.executeJavaScript(`Boolean(document.querySelector('input[aria-label="Bar width"]'))`),Boolean,"bar graph controls");
+      const groups=[...document.querySelectorAll('.wf-native-graph-style')];
+      return !document.querySelector('select[aria-label="Graph type"]')
+        && groups.map(group=>group.getAttribute('aria-label')).join()==='Bar style,Line style'
+        && groups[0].querySelector('.wf-native-part-badge')?.textContent==='This page' && !groups[1].querySelector('.wf-native-part-badge')
+        && Boolean(document.querySelector('input[aria-label="Line thickness"]') && document.querySelector('input[aria-label="Upper curve"]') && document.querySelector('input[aria-label="Lower curve"]'));
+    })()`),'Bar and line styles are both editable; a stress chart marks bars as its page style');
     const graphToggleSize=await window.webContents.executeJavaScript(`(() => { const box=document.querySelector('input[aria-label="Show Graph"]').getBoundingClientRect(); return {width:box.width,height:box.height}; })()`);
     assert.ok(graphToggleSize.width<=20&&graphToggleSize.height<=20,'Graph visibility checkbox fits the inspector');
     await window.webContents.executeJavaScript(`document.querySelector('input[aria-label="Show Graph"]').click()`);

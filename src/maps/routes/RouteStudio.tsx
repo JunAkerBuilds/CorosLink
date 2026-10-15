@@ -1,4 +1,4 @@
-import { t, useLanguage } from "../../i18n/tools";
+import { t, useLanguage , getLocale} from "../../i18n/tools";
 import {
   AlertCircle,
   CheckCircle2,
@@ -25,8 +25,10 @@ import type {
   RouteActivityType,
   RouteBackend,
   RouteElevationPreference,
+  RouteGeometry,
   RouteMode,
   RouteShareSession,
+  RouteSurfacePreference,
   RouteWaypoint
 } from "../../../electron/types";
 import type { CorosLinkApi } from "../../coroslink-api";
@@ -35,6 +37,7 @@ import { useUnitSystem } from "../../units/UnitSystemProvider";
 import type { RouteBaseLayer, RouteOverlayId } from "./constants";
 import { RouteMapCanvas, type RouteStudioMode } from "./RouteMapCanvas";
 import { RouteStatsBar, type RouteSummary } from "./RouteStatsBar";
+import { LoopOptions } from "./LoopOptions";
 import { SavedRoutesDrawer } from "./SavedRoutesDrawer";
 import {
   DrawPanel,
@@ -48,7 +51,7 @@ import { SketchPanel } from "./SketchPanel";
 import { SKETCH_TEMPLATES } from "./sketchShapes";
 import { useRouteDraw } from "./useRouteDraw";
 import { useRouteSketch } from "./useRouteSketch";
-import { surfaceForActivity, toErrorMessage } from "./utils";
+import { formatShortDistance, surfaceForActivity, toErrorMessage } from "./utils";
 import {
   defineSelectionPreference,
   selectionIsArrayOf,
@@ -113,6 +116,15 @@ export function RouteStudio({
     ROUTE_STUDIO_MODE_PREFERENCE
   );
   const [activityType, setActivityType] = useState<RouteActivityType>("running");
+  const [surfacePreference, setSurfacePreference] = useState<RouteSurfacePreference>(
+    () => surfaceForActivity("running")
+  );
+  // Surface choices differ per sport (MTB has no "road"), so a sport switch
+  // restarts from that sport's default.
+  const handleActivityChange = useCallback((next: RouteActivityType) => {
+    setActivityType(next);
+    setSurfacePreference(surfaceForActivity(next));
+  }, []);
 
   // Generate state
   const [routeMode, setRouteMode] = useState<RouteMode>("loop");
@@ -128,6 +140,14 @@ export function RouteStudio({
     null
   );
   const [generating, setGenerating] = useState(false);
+  // Loops from the latest generation: the saved best match, then runner-ups.
+  const [loopChoice, setLoopChoice] = useState<{
+    routeId: string;
+    options: RouteGeometry[];
+    selected: number;
+  } | null>(null);
+  const [hoveredLoop, setHoveredLoop] = useState<number | null>(null);
+  const [pickingLoop, setPickingLoop] = useState(false);
 
   // Shared / preview state
   const [previewRoute, setPreviewRouteState] = useState<GeneratedRoute | null>(null);
@@ -157,6 +177,7 @@ export function RouteStudio({
   }, [api]);
   const [activeSavedId, setActiveSavedId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [deletingAll, setDeletingAll] = useState(false);
   const [syncStatus, setSyncStatus] = useState<CorosRouteSyncStatus | null>(null);
   const [cancelPending, setCancelPending] = useState(false);
   const syncing = syncStatus !== null && ["connecting", "preparing", "transferring", "verifying"].includes(syncStatus.phase);
@@ -201,7 +222,7 @@ export function RouteStudio({
     ROUTE_STUDIO_OVERLAYS_PREFERENCE
   );
 
-  const draw = useRouteDraw(api, activityType);
+  const draw = useRouteDraw(api, activityType, surfacePreference);
   const sketch = useRouteSketch(api, activityType);
   const [savingSketch, setSavingSketch] = useState(false);
 
@@ -359,22 +380,78 @@ export function RouteStudio({
         distanceKm,
         mode: routeMode,
         activityType,
-        surfacePreference: surfaceForActivity(activityType),
+        surfacePreference,
         avoidHighways: false,
         elevationPreference,
         unitSystem,
         variationSeed: regenerate ? Date.now() : undefined
       };
-      const route = await api.generateRoute(request);
+      const { alternatives = [], ...route } = await api.generateRoute(request);
       setPreviewRoute(route);
       setActiveSavedId(route.id);
+      setHoveredLoop(null);
+      setLoopChoice(
+        alternatives.length > 0
+          ? { routeId: route.id, options: [routeGeometryOf(route), ...alternatives], selected: 0 }
+          : null
+      );
       await refreshRoutes();
       setFitRequestId((id) => id + 1);
-      onMessage(regenerate ? t("Generated a fresh loop.") : t("Route ready."));
+      const targetMeters = distanceKm * 1_000;
+      // Sparse road grids only allow certain loop lengths; say so rather than
+      // let a clean but off-target loop pass for the requested distance.
+      if (
+        routeMode === "loop" &&
+        Math.abs(route.distanceMeters - targetMeters) / targetMeters > 0.06
+      ) {
+        onMessage(
+          alternatives.length > 0
+            ? t("Best loop here is {{distance}} (you asked for {{target}}). Compare the other loops below, or try New variation.", {
+                distance: formatShortDistance(route.distanceMeters, unitSystem),
+                target: formatShortDistance(targetMeters, unitSystem)
+              })
+            : t("Closest clean loop here is {{distance}} (you asked for {{target}}). Try New variation for other shapes.", {
+                distance: formatShortDistance(route.distanceMeters, unitSystem),
+                target: formatShortDistance(targetMeters, unitSystem)
+              })
+        );
+      } else {
+        onMessage(regenerate ? t("Generated a fresh loop.") : t("Route ready."));
+      }
     } catch (caught) {
       onError(toErrorMessage(caught));
     } finally {
       setGenerating(false);
+    }
+  }
+
+  /** Makes another generated loop the saved route, keeping its id and name. */
+  async function handlePickLoop(index: number) {
+    const option = loopChoice?.options[index];
+    if (!loopChoice || !option || !previewRoute || pickingLoop || index === loopChoice.selected) {
+      return;
+    }
+    const before = { route: previewRoute, selected: loopChoice.selected };
+    // Show the pick at once; saving only rewrites a local file and row.
+    setLoopChoice({ ...loopChoice, selected: index });
+    setPreviewRoute(withRouteGeometry(previewRoute, option));
+    const previewVersion = previewRequestId.current;
+    setPickingLoop(true);
+    onError(null);
+    try {
+      const saved = await api.replaceGeneratedRouteGeometry(before.route.id, option);
+      if (previewVersion === previewRequestId.current) setPreviewRoute(saved);
+      await refreshRoutes(routePage.offset);
+    } catch (caught) {
+      if (previewVersion === previewRequestId.current) {
+        setLoopChoice((current) =>
+          current?.routeId === before.route.id ? { ...current, selected: before.selected } : current
+        );
+        setPreviewRoute(before.route);
+      }
+      onError(toErrorMessage(caught));
+    } finally {
+      setPickingLoop(false);
     }
   }
 
@@ -396,6 +473,9 @@ export function RouteStudio({
         activityType,
         closed: draw.closed,
         snap: draw.snap,
+        surfacePreference,
+        elevationPreference: "any",
+        insights: draw.geometry.insights,
         unitSystem
       };
       const route = await api.saveDrawnRoute(payload);
@@ -441,6 +521,9 @@ export function RouteStudio({
         activityType,
         closed: sketch.closed,
         snap: true,
+        surfacePreference: surfaceForActivity(activityType),
+        elevationPreference: "any",
+        insights: sketch.geometry.insights,
         unitSystem
       };
       const route = await api.saveDrawnRoute(payload);
@@ -585,10 +668,37 @@ export function RouteStudio({
         setPreviewRoute(null);
         setActiveSavedId(null);
       }
+      if (loopChoice?.routeId === route.id) {
+        setLoopChoice(null);
+      }
       await refreshRoutes(routePage.offset);
       onMessage(t("Route deleted."));
     } catch (caught) {
       onError(toErrorMessage(caught));
+    }
+  }
+
+  async function handleDeleteAll() {
+    onError(null);
+    setDeletingAll(true);
+    try {
+      const removed = await api.deleteAllGeneratedRoutes();
+      // Every saved route is gone: drop an in-flight preview, the shown one and its loop picker.
+      if (selectingRouteId) {
+        previewRequestId.current += 1;
+        setSelectingRouteId(null);
+      }
+      if (activeSavedId) {
+        setPreviewRoute(null);
+        setActiveSavedId(null);
+      }
+      setLoopChoice(null);
+      await refreshRoutes(0);
+      onMessage(removed === 1 ? t("Deleted 1 route.") : t("Deleted {{p0}} routes.", { p0: removed }));
+    } catch (caught) {
+      onError(toErrorMessage(caught));
+    } finally {
+      setDeletingAll(false);
     }
   }
 
@@ -604,7 +714,9 @@ export function RouteStudio({
         ascentMeters: geometry.ascentMeters,
         descentMeters: geometry.descentMeters,
         activityType,
-        points: geometry.points
+        points: geometry.points,
+        insights: geometry.insights,
+        surfacePreference: mode === "draw" ? surfacePreference : surfaceForActivity(activityType)
       };
     }
     if (!previewRoute) {
@@ -616,9 +728,27 @@ export function RouteStudio({
       ascentMeters: previewRoute.ascentMeters,
       descentMeters: previewRoute.descentMeters,
       activityType: previewRoute.activityType,
-      points: previewRoute.points
+      points: previewRoute.points,
+      insights: previewRoute.insights,
+      surfacePreference: previewRoute.surfacePreference
     };
-  }, [mode, draw.geometry, sketch.geometry, previewRoute, activityType, language]);
+  }, [mode, draw.geometry, sketch.geometry, previewRoute, activityType, surfacePreference, language]);
+
+  const showLoopChoice =
+    mode === "generate" &&
+    routeMode === "loop" &&
+    loopChoice !== null &&
+    previewRoute?.id === loopChoice.routeId;
+  // The loops not picked stay on the map, faintly, so shapes can be compared.
+  const ghostRoutes = useMemo(
+    () =>
+      showLoopChoice && loopChoice
+        ? loopChoice.options
+            .map((option, index) => ({ points: option.points, highlighted: index === hoveredLoop, index }))
+            .filter((ghost) => ghost.index !== loopChoice.selected)
+        : [],
+    [showLoopChoice, loopChoice, hoveredLoop]
+  );
 
   const showStartPin = mode === "generate" && !previewRoute && Boolean(start);
   const showEndPin =
@@ -634,6 +764,7 @@ export function RouteStudio({
         baseLayer={baseLayer}
         overlays={overlays}
         route={mode === "draw" || mode === "sketch" ? null : previewRoute}
+        ghostRoutes={ghostRoutes}
         drawGeometry={mode === "sketch" ? sketch.geometry : draw.geometry}
         waypoints={mode === "sketch" ? sketch.waypoints : draw.waypoints}
         startPin={showStartPin ? start : null}
@@ -653,45 +784,50 @@ export function RouteStudio({
         onSketchCenterMove={sketch.setCenter}
       />
 
-      <nav className="route-mode-tabs" aria-label={t("Route tools")}>
-        {MODE_TABS.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              className={tab.id === mode ? "is-active" : ""}
-              onClick={() => setMode(tab.id)}
-            >
-              <Icon size={16} aria-hidden="true" />
-              {t(tab.label)}
-            </button>
-          );
-        })}
-      </nav>
+      <div className="route-topbar">
+        <nav className="route-mode-tabs" aria-label={t("Route tools")}>
+          {MODE_TABS.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={tab.id === mode ? "is-active" : ""}
+                onClick={() => setMode(tab.id)}
+              >
+                <Icon size={16} aria-hidden="true" />
+                {t(tab.label)}
+              </button>
+            );
+          })}
+        </nav>
 
-      <div className="route-top-actions">
-        <button
-          type="button"
-          className="route-saved-toggle route-import-toggle"
-          onClick={() => void handleImportGpx()}
-          disabled={importing}
-          title={t("Import one or more GPX files as routes")}
-        >
-          {importing ? (
-            <Loader2 size={16} className="spin" aria-hidden="true" />
-          ) : (
-            <FileUp size={16} aria-hidden="true" />
-          )}
-          {t("Import GPX")}</button>
-        <button
-          type="button"
-          className="route-saved-toggle"
-          onClick={() => setDrawerOpen(true)}
-        >
-          <FolderOpen size={16} aria-hidden="true" />
-          {t("Saved")}{routePage.total > 0 ? <span className="badge">{routePage.total}</span> : null}
-        </button>
+        <div className="route-top-actions">
+          <button
+            type="button"
+            className="route-saved-toggle route-import-toggle"
+            onClick={() => void handleImportGpx()}
+            disabled={importing}
+            title={t("Import one or more GPX files as routes")}
+          >
+            {importing ? (
+              <Loader2 size={16} className="spin" aria-hidden="true" />
+            ) : (
+              <FileUp size={16} aria-hidden="true" />
+            )}
+            <span className="route-top-label">{t("Import GPX")}</span>
+          </button>
+          <button
+            type="button"
+            className="route-saved-toggle"
+            onClick={() => setDrawerOpen(true)}
+            title={t("Saved routes")}
+          >
+            <FolderOpen size={16} aria-hidden="true" />
+            <span className="route-top-label">{t("Saved")}</span>
+            {routePage.total > 0 ? <span className="badge">{routePage.total}</span> : null}
+          </button>
+        </div>
       </div>
 
       <section className="route-panel">
@@ -721,13 +857,15 @@ export function RouteStudio({
             <GeneratePanel
               api={api}
               activityType={activityType}
-              onActivityChange={setActivityType}
+              onActivityChange={handleActivityChange}
               mode={routeMode}
               onModeChange={setRouteMode}
               distanceKm={distanceKm}
               onDistanceChange={setDistanceKm}
               elevationPreference={elevationPreference}
               onElevationChange={setElevationPreference}
+              surfacePreference={surfacePreference}
+              onSurfaceChange={setSurfacePreference}
               start={start}
               destination={destination}
               onSelectStart={handleSelectStart}
@@ -742,6 +880,19 @@ export function RouteStudio({
               onError={onError}
               busy={generating}
               hasResult={Boolean(previewRoute)}
+              results={
+                showLoopChoice && loopChoice && previewRoute ? (
+                  <LoopOptions
+                    options={loopChoice.options}
+                    selected={loopChoice.selected}
+                    activityType={previewRoute.activityType}
+                    surfacePreference={previewRoute.surfacePreference}
+                    disabled={generating}
+                    onPick={(index) => void handlePickLoop(index)}
+                    onHover={setHoveredLoop}
+                  />
+                ) : null
+              }
             />
             <AdvancedRouting api={api} onMessage={onMessage} onError={onError} />
           </>
@@ -749,7 +900,9 @@ export function RouteStudio({
           <DrawPanel
             draw={draw}
             activityType={activityType}
-            onActivityChange={setActivityType}
+            onActivityChange={handleActivityChange}
+            surfacePreference={surfacePreference}
+            onSurfaceChange={setSurfacePreference}
             onSave={() => void handleSaveDraw()}
             saving={savingDraw}
             canSave={draw.hasRoute}
@@ -758,7 +911,7 @@ export function RouteStudio({
           <SketchPanel
             sketch={sketch}
             activityType={activityType}
-            onActivityChange={setActivityType}
+            onActivityChange={handleActivityChange}
             onSave={() => void handleSaveSketch()}
             saving={savingSketch}
             canSave={sketch.hasRoute}
@@ -854,6 +1007,8 @@ export function RouteStudio({
         onSync={(route) => void handleSync(route)}
         syncing={syncing}
         onDelete={(route) => void handleDelete(route)}
+        onDeleteAll={() => void handleDeleteAll()}
+        deletingAll={deletingAll}
       />
 
       {shareSession ? (
@@ -861,6 +1016,30 @@ export function RouteStudio({
       ) : null}
     </div>
   );
+}
+
+function routeGeometryOf(route: GeneratedRoute): RouteGeometry {
+  return {
+    points: route.points,
+    distanceMeters: route.distanceMeters,
+    durationSeconds: route.durationSeconds,
+    ascentMeters: route.ascentMeters,
+    descentMeters: route.descentMeters,
+    insights: route.insights
+  };
+}
+
+function withRouteGeometry(route: GeneratedRoute, geometry: RouteGeometry): GeneratedRoute {
+  return {
+    ...route,
+    points: geometry.points,
+    distanceMeters: geometry.distanceMeters,
+    durationSeconds: geometry.durationSeconds,
+    ascentMeters: geometry.ascentMeters,
+    descentMeters: geometry.descentMeters,
+    insights: geometry.insights,
+    bounds: undefined
+  };
 }
 
 /** Optional power-user backend: paste an OpenRouteService key to use ORS. */

@@ -1185,8 +1185,11 @@
 }
 
 .onb-heat-row > span {
+  overflow: hidden;
   color: var(--text-secondary);
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .onb-heat-row i {

@@ -1,6 +1,7 @@
 import type {
   RouteActivityType,
-  RouteElevationPreference
+  RouteElevationPreference,
+  RouteSurfacePreference
 } from "../../../electron/types";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -195,3 +196,37 @@ export const ROUTE_ELEVATION_OPTIONS: Array<{
   { value: "flatter", label: "Flatter" },
   { value: "hilly", label: "Hilly" }
 ];
+
+export interface SurfaceOption {
+  value: RouteSurfacePreference;
+  label: string;
+  /** Tooltip explaining what the router will favour. */
+  hint: string;
+}
+
+/**
+ * Surface choices per sport. Mountain biking never routes "road-only", so it
+ * only offers the two off-road leanings.
+ */
+export function routeSurfaceOptions(
+  activityType: RouteActivityType
+): SurfaceOption[] {
+  if (activityType === "cycling-mountain") {
+    return [
+      { value: "mixed", label: "Mixed", hint: "Gravel roads and easy trails, with pavement to link them" },
+      { value: "trail", label: "Singletrack", hint: "Seek out dirt trails; pavement only to connect" }
+    ];
+  }
+  if (activityType === "cycling-road") {
+    return [
+      { value: "road", label: "Paved", hint: "Smooth pavement only, low-traffic roads first" },
+      { value: "mixed", label: "Mixed", hint: "Pavement plus good gravel and bike paths" },
+      { value: "trail", label: "Gravel", hint: "Prefer gravel and dirt roads where they exist" }
+    ];
+  }
+  return [
+    { value: "road", label: "Road", hint: "Sidewalks, paved paths and quiet streets" },
+    { value: "mixed", label: "Mixed", hint: "Any good path: paved, gravel or park trails" },
+    { value: "trail", label: "Trail", hint: "Dirt paths and trails; streets only to connect" }
+  ];
+}

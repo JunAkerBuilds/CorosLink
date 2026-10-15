@@ -37,7 +37,7 @@ import {
 } from "@phosphor-icons/react";
 import logoBase from "../../build/icon-base.svg";
 import logoSync from "../../build/icon-sync.svg";
-import { LANGUAGES, type Language } from "../i18n";
+import { LANGUAGES, formatDate, formatNumber, getLocale, t, useLanguage, type Language } from "../i18n";
 import {
   distanceUnit,
   elevationUnit,
@@ -77,6 +77,23 @@ function place(left: number, top: number, width: number, height?: number): CSSPr
   return { left, top, width, height };
 }
 
+const percent = (fraction: number) => formatNumber(fraction, { style: "percent" });
+
+/** The number and its sign apart, so the sign can sit smaller ("92 %" in French). */
+function percentParts(fraction: number): { value: string; sign: string } {
+  const parts = new Intl.NumberFormat(getLocale(), { style: "percent" }).formatToParts(fraction);
+  const numeric = new Set(["integer", "group", "decimal", "fraction"]);
+  return {
+    value: parts.filter((part) => numeric.has(part.type)).map((part) => part.value).join(""),
+    sign: parts.filter((part) => !numeric.has(part.type)).map((part) => part.value).join("")
+  };
+}
+
+/** Monday-first narrow weekday names in the app language (1 Jan 2024 was a Monday). */
+function weekdayInitials(): string[] {
+  return Array.from({ length: 7 }, (_, index) => formatDate(new Date(2024, 0, 1 + index), { weekday: "narrow" }));
+}
+
 function VCard({
   index,
   style,
@@ -88,6 +105,7 @@ function VCard({
   className?: string;
   children: ReactNode;
 }) {
+  useLanguage();
   return (
     <div
       className={["onb-vcard", className].filter(Boolean).join(" ")}
@@ -111,6 +129,7 @@ function VHead({
   hue?: string;
   children?: ReactNode;
 }) {
+  useLanguage();
   return (
     <div className="onb-vhead">
       <span className="onb-vglyph" style={hue ? ({ "--glyph": hue } as CSSProperties) : undefined}>
@@ -161,6 +180,7 @@ function OrbitBackdrop() {
 }
 
 export function HelloVignette({ language }: { language: Language }) {
+  useLanguage();
   return (
     <div className="onb-vignette">
       <OrbitBackdrop />
@@ -197,6 +217,7 @@ const ORBIT: Array<{ icon: Icon; hue: string }> = [
 ];
 
 export function WelcomeVignette() {
+  useLanguage();
   return (
     <div className="onb-vignette onb-v-welcome">
       <OrbitBackdrop />
@@ -225,14 +246,15 @@ export function WelcomeVignette() {
 /* ----------------------------------------------------------------- Training */
 
 const LOAD_BARS = [38, 58, 0, 86, 48, 104, 24];
-const WEEKDAY_INITIALS = ["M", "T", "W", "T", "F", "S", "S"];
 
 export function TrainingVignette({ unitSystem }: { unitSystem: UnitSystem }) {
-  const split = unitSystem === "imperial" ? "last 3 miles" : "last 5 km";
+  useLanguage();
+  const split = unitSystem === "imperial" ? t("last 3 miles") : t("last 5 km");
+  const weekdays = weekdayInitials();
   return (
     <div className="onb-vignette">
       <VCard index={0} style={place(20, 34, 206, 236)} className="onb-v-recovery">
-        <VHead icon={Heartbeat} title="Recovery" />
+        <VHead icon={Heartbeat} title={t("Recovery")} />
         <div className="onb-ring">
           <svg viewBox="0 0 120 120" aria-hidden="true">
             <defs>
@@ -253,16 +275,16 @@ export function TrainingVignette({ unitSystem }: { unitSystem: UnitSystem }) {
             />
           </svg>
           <span className="onb-ring-copy">
-            <strong>94%</strong>
-            <span>Ready</span>
+            <strong>{percent(0.94)}</strong>
+            <span>{t("Ready")}</span>
           </span>
         </div>
-        <p className="onb-vnote">Cleared for a hard session</p>
+        <p className="onb-vnote">{t("Cleared for a hard session")}</p>
       </VCard>
 
       <VCard index={1} style={place(242, 52, 298, 204)}>
-        <VHead icon={Lightning} title="Training load" sub="This week" hue="var(--onb-amber)">
-          <span className="onb-vchip">412</span>
+        <VHead icon={Lightning} title={t("Training load")} sub={t("This week")} hue="var(--onb-amber)">
+          <span className="onb-vchip">{formatNumber(412)}</span>
         </VHead>
         <div className="onb-bars">
           <span className="onb-bars-band" />
@@ -274,15 +296,15 @@ export function TrainingVignette({ unitSystem }: { unitSystem: UnitSystem }) {
                   .join(" ")}
                 style={{ "--h": `${Math.max(height, 4)}px`, "--b": index } as CSSProperties}
               />
-              <em>{WEEKDAY_INITIALS[index]}</em>
+              <em>{weekdays[index]}</em>
             </span>
           ))}
         </div>
       </VCard>
 
       <VCard index={2} style={place(52, 286, 478)} className="onb-v-coach">
-        <VHead icon={ChatCircleDots} title="Coach" hue="var(--onb-blue)" />
-        <p className="onb-bubble is-you">How did Sunday’s long run go?</p>
+        <VHead icon={ChatCircleDots} title={t("Coach")} hue="var(--onb-blue)" />
+        <p className="onb-bubble is-you">{t("How did Sunday’s long run go?")}</p>
         <div className="onb-bubble-row">
           <span className="onb-typing" aria-hidden="true">
             <i />
@@ -290,7 +312,10 @@ export function TrainingVignette({ unitSystem }: { unitSystem: UnitSystem }) {
             <i />
           </span>
           <p className="onb-bubble is-coach">
-            Strong one. You negative-split the {split}, and heart-rate drift stayed under 4%.
+            {t("Strong one. You negative-split the {{split}}, and heart-rate drift stayed under {{drift}}.", {
+              split,
+              drift: percent(0.04)
+            })}
           </p>
         </div>
       </VCard>
@@ -321,15 +346,17 @@ function currentWeek(): { dates: number[]; today: number } {
 }
 
 export function PlanVignette({ unitSystem }: { unitSystem: UnitSystem }) {
+  useLanguage();
   const { dates, today } = currentWeek();
+  const weekdays = weekdayInitials();
   const unit = distanceUnit(unitSystem);
   const easy = unitSystem === "imperial" ? "5 mi" : "8 km";
   const long = unitSystem === "imperial" ? "12 mi" : "20 km";
   const pills: PlannedPill[] = [
     { day: 0, name: "Easy run", detail: easy, sport: "run" },
-    { day: 1, name: "Strength", detail: "45 min", sport: "strength" },
-    { day: 2, name: "Tempo", detail: "6 × 4 min", sport: "run" },
-    { day: 4, name: "Ride", detail: "1h 30m", sport: "bike" },
+    { day: 1, name: "Strength", detail: t("45 min"), sport: "strength" },
+    { day: 2, name: "Tempo", detail: t("6 × 4 min"), sport: "run" },
+    { day: 4, name: "Ride", detail: t("1h 30m"), sport: "bike" },
     { day: 5, name: "Long run", detail: long, sport: "run" }
   ];
   const steps: Array<{ grow: number; height: number; work?: boolean }> = [
@@ -340,39 +367,46 @@ export function PlanVignette({ unitSystem }: { unitSystem: UnitSystem }) {
     ]).flat(),
     { grow: 2.4, height: 20 }
   ];
+  const onPlan = percentParts(0.92);
   return (
     <div className="onb-vignette">
       <VCard index={0} style={place(18, 46, 524)}>
-        <VHead icon={CalendarDots} title="This week" hue="var(--onb-violet)">
+        <VHead icon={CalendarDots} title={t("This week")} hue="var(--onb-violet)">
           <span className="onb-vchip is-synced">
             <ArrowsClockwise size={11} weight="bold" aria-hidden="true" />
-            Google Calendar
-          </span>
+            {t("Google Calendar")}</span>
         </VHead>
         <div className="onb-week">
           {dates.map((date, index) => (
             <div key={index} className={["onb-week-day", index === today && "is-today"].filter(Boolean).join(" ")}>
               <span className="onb-week-label">
-                {WEEKDAY_INITIALS[index]}
-                <b>{date}</b>
+                {weekdays[index]}
+                <b>{formatNumber(date)}</b>
               </span>
               {pills
                 .filter((pill) => pill.day === index)
                 .map((pill) => (
                   <span key={pill.name} className={`onb-pill is-${pill.sport}${pill.day === 4 ? " is-lifted" : ""}`}>
-                    <strong>{pill.name}</strong>
+                    <strong>{t(pill.name, undefined, "calendarPill")}</strong>
                     <span>{pill.detail}</span>
                   </span>
                 ))}
               {index === 3 ? <span className="onb-pill-drop" aria-hidden="true" /> : null}
-              {index === 6 ? <span className="onb-week-rest">Rest</span> : null}
+              {index === 6 ? <span className="onb-week-rest">{t("Rest")}</span> : null}
             </div>
           ))}
         </div>
       </VCard>
 
       <VCard index={1} style={place(34, 240, 312)}>
-        <VHead icon={Path} title="Tempo intervals" sub={`Run · 6 × 4 min · ${unitSystem === "imperial" ? "6.2" : "10"} ${unit}`} hue="var(--onb-mint)" />
+        <VHead
+          icon={Path}
+          title={t("Tempo intervals")}
+          sub={t("Run · 6 × 4 min · {{distance}}", {
+            distance: `${formatNumber(unitSystem === "imperial" ? 6.2 : 10)} ${unit}`
+          })}
+          hue="var(--onb-mint)"
+        />
         <div className="onb-steps">
           {steps.map((step, index) => (
             <span
@@ -382,21 +416,24 @@ export function PlanVignette({ unitSystem }: { unitSystem: UnitSystem }) {
             />
           ))}
         </div>
-        <p className="onb-vnote is-left">Warm up · 6 × 4 min hard, 2 min easy · Cool down</p>
+        <p className="onb-vnote is-left">{t("Warm up · 6 × 4 min hard, 2 min easy · Cool down")}</p>
       </VCard>
 
       <VCard index={2} style={place(362, 254, 180, 168)} className="onb-v-plan">
-        <VHead icon={Trophy} title="Half marathon" hue="var(--onb-amber)" />
+        <VHead icon={Trophy} title={t("Half marathon")} hue="var(--onb-amber)" />
         <div className="onb-phases" aria-hidden="true">
           <span className="is-done" />
           <span className="is-now" />
           <span />
           <span />
         </div>
-        <span className="onb-vcaption">Build · week 5 of 12</span>
+        <span className="onb-vcaption">
+          {t("Build · week {{week}} of {{total}}", { week: formatNumber(5), total: formatNumber(12) })}
+        </span>
         <span className="onb-vstat">
-          92<small>%</small>
-          <em>on plan</em>
+          {onPlan.value}
+          <small>{onPlan.sign}</small>
+          <em>{t("on plan")}</em>
         </span>
       </VCard>
     </div>
@@ -427,23 +464,24 @@ function donutArc(start: number, end: number, radius: number): string {
 }
 
 export function StrengthVignette({ unitSystem }: { unitSystem: UnitSystem }) {
+  useLanguage();
   const unit = weightUnit(unitSystem);
   const best = Math.round(kilogramsToDisplayWeight(142.5, unitSystem) * 2) / 2;
   const gain = Math.round(kilogramsToDisplayWeight(5, unitSystem));
   const split = [
-    { label: "Push", share: 0.34, hue: "var(--onb-amber)" },
-    { label: "Pull", share: 0.31, hue: "var(--onb-rose)" },
-    { label: "Legs", share: 0.35, hue: "var(--onb-violet)" }
+    { label: t("Push"), share: 0.34, hue: "var(--onb-amber)" },
+    { label: t("Pull"), share: 0.31, hue: "var(--onb-rose)" },
+    { label: t("Legs"), share: 0.35, hue: "var(--onb-violet)" }
   ];
   let cursor = 0;
   return (
     <div className="onb-vignette">
       <VCard index={0} style={place(18, 36, 316, 280)}>
-        <VHead icon={Barbell} title="Muscle coverage" sub="Last 8 weeks" hue="var(--onb-amber)" />
+        <VHead icon={Barbell} title={t("Muscle coverage")} sub={t("Last 8 weeks")} hue="var(--onb-amber)" />
         <div className="onb-heat" role="presentation">
           {MUSCLE_ROWS.map((row, rowIndex) => (
             <div key={row.name} className="onb-heat-row">
-              <span>{row.name}</span>
+              <span>{t(row.name, undefined, "muscle")}</span>
               {row.load.map((value, column) => (
                 <i
                   key={column}
@@ -454,16 +492,16 @@ export function StrengthVignette({ unitSystem }: { unitSystem: UnitSystem }) {
           ))}
         </div>
         <div className="onb-heat-legend" aria-hidden="true">
-          <span>Less</span>
+          <span>{t("Less")}</span>
           {[0.15, 0.4, 0.65, 0.9].map((value) => (
             <i key={value} style={{ "--v": value } as CSSProperties} />
           ))}
-          <span>More</span>
+          <span>{t("More")}</span>
         </div>
       </VCard>
 
       <VCard index={1} style={place(350, 50, 192, 230)} className="onb-v-balance">
-        <VHead icon={Stack} title="Balance" hue="var(--onb-violet)" />
+        <VHead icon={Stack} title={t("Balance")} hue="var(--onb-violet)" />
         <div className="onb-donut">
           <svg viewBox="0 0 120 120" aria-hidden="true">
             <circle cx="60" cy="60" r="46" className="onb-donut-track" />
@@ -481,13 +519,13 @@ export function StrengthVignette({ unitSystem }: { unitSystem: UnitSystem }) {
               );
             })}
           </svg>
-          <span className="onb-donut-copy">Even</span>
+          <span className="onb-donut-copy">{t("Even", undefined, "balance")}</span>
         </div>
         <div className="onb-legend">
           {split.map((part) => (
             <span key={part.label} style={{ "--dot": part.hue } as CSSProperties}>
-              {part.label}
-              <b>{Math.round(part.share * 100)}%</b>
+              {t(part.label)}
+              <b>{percent(part.share)}</b>
             </span>
           ))}
         </div>
@@ -496,21 +534,26 @@ export function StrengthVignette({ unitSystem }: { unitSystem: UnitSystem }) {
       <VCard index={2} style={place(350, 296, 192)} className="onb-v-pr">
         <span className="onb-pr-eyebrow">
           <Trophy size={13} weight="fill" aria-hidden="true" />
-          New best
+          {t("New best")}
         </span>
-        <strong className="onb-pr-lift">Back squat</strong>
+        <strong className="onb-pr-lift">{t("Back squat")}</strong>
         <span className="onb-pr-value">
-          {best.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+          {formatNumber(best, { maximumFractionDigits: 1 })}
           <small>{unit}</small>
         </span>
-        <span className="onb-pr-note">Estimated 1RM · +{gain} {unit}</span>
+        <span className="onb-pr-note">{t("Estimated 1RM · +{{gain}} {{unit}}", { gain: formatNumber(gain), unit })}</span>
       </VCard>
 
       <VCard index={3} style={place(18, 332, 316)} className="onb-v-hevy">
-        <VHead icon={ArrowsClockwise} title="Hevy" sub="12 workouts merged this month" hue="var(--onb-cyan)">
+        <VHead
+          icon={ArrowsClockwise}
+          title="Hevy"
+          sub={t("{{count}} workouts merged this month", { count: formatNumber(12) })}
+          hue="var(--onb-cyan)"
+        >
           <span className="onb-vchip">
             <Check size={11} weight="bold" aria-hidden="true" />
-            Synced
+            {t("Synced")}
           </span>
         </VHead>
       </VCard>
@@ -532,10 +575,12 @@ function useClock(): Date {
 const TICKS = Array.from({ length: 60 }, (_, index) => index);
 
 export function WatchfacesVignette() {
+  useLanguage();
   const now = useClock();
   const hours = String(now.getHours()).padStart(2, "0");
   const minutes = String(now.getMinutes()).padStart(2, "0");
-  const weekday = now.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+  // Watch faces print the bare abbreviation: "THU", "JEU" (not "JEU.").
+  const weekday = formatDate(now, { weekday: "short" }).replace(/\.$/, "").toLocaleUpperCase(getLocale());
   return (
     <div className="onb-vignette">
       <div className="onb-watch" style={{ "--i": 0 } as CSSProperties}>
@@ -583,25 +628,25 @@ export function WatchfacesVignette() {
             </span>
             <span>
               <Footprints size={12} weight="fill" aria-hidden="true" />
-              8,432
+              {formatNumber(8432)}
             </span>
           </span>
         </div>
       </div>
 
       <VCard index={1} style={place(16, 148, 164)} className="onb-v-layers">
-        <VHead icon={Stack} title="Layers" hue="var(--onb-pink)" />
+        <VHead icon={Stack} title={t("Layers")} hue="var(--onb-pink)" />
         <ul className="onb-layers">
           {[
-            { icon: TextT, label: "Minutes", selected: true },
-            { icon: TextT, label: "Hours" },
-            { icon: CalendarDots, label: "Date" },
-            { icon: Footprints, label: "Steps ring" },
-            { icon: ImageSquare, label: "Background" }
+            { icon: TextT, label: t("Minutes"), selected: true },
+            { icon: TextT, label: t("Hours") },
+            { icon: CalendarDots, label: t("Date") },
+            { icon: Footprints, label: t("Steps ring") },
+            { icon: ImageSquare, label: t("Background") }
           ].map(({ icon: Glyph, label, selected }) => (
             <li key={label} className={selected ? "is-selected" : undefined}>
               <Glyph size={13} weight="bold" aria-hidden="true" />
-              {label}
+              {t(label)}
             </li>
           ))}
         </ul>
@@ -610,13 +655,13 @@ export function WatchfacesVignette() {
       <VCard index={2} style={place(380, 42, 166, 92)} className="onb-v-ai">
         <span className="onb-ai-label">
           <Sparkle size={13} weight="fill" aria-hidden="true" />
-          Ask AI
+          {t("Ask AI")}
         </span>
-        <p>Make the minutes pink and a little bolder</p>
+        <p>{t("Make the minutes pink and a little bolder")}</p>
       </VCard>
 
       <VCard index={3} style={place(384, 320, 158)} className="onb-v-style">
-        <span className="onb-vcaption">Color</span>
+        <span className="onb-vcaption">{t("Color")}</span>
         <span className="onb-swatches" aria-hidden="true">
           <i style={{ "--sw": "#e889c8" } as CSSProperties} className="is-picked" />
           <i style={{ "--sw": "#53cba1" } as CSSProperties} />
@@ -626,7 +671,7 @@ export function WatchfacesVignette() {
         </span>
         <span className="onb-send">
           <PaperPlaneTilt size={13} weight="fill" aria-hidden="true" />
-          Install on watch
+          {t("Install on watch", undefined, "onboarding")}
         </span>
       </VCard>
     </div>
@@ -672,8 +717,9 @@ const PROFILE_LINE = smoothPath(PROFILE);
 const PROFILE_AREA = `${PROFILE_LINE} L300 72 L0 72Z`;
 
 export function MapsVignette({ unitSystem }: { unitSystem: UnitSystem }) {
-  const distance = unitSystem === "imperial" ? "7.7" : "12.4";
-  const climb = Math.round(metersToElevation(386, unitSystem)).toLocaleString();
+  useLanguage();
+  const distance = formatNumber(unitSystem === "imperial" ? 7.7 : 12.4);
+  const climb = formatNumber(Math.round(metersToElevation(386, unitSystem)));
   const climbUnit = elevationUnit(unitSystem);
   return (
     <div className="onb-vignette">
@@ -693,11 +739,11 @@ export function MapsVignette({ unitSystem }: { unitSystem: UnitSystem }) {
           <i />
           ↑ {climb} {climbUnit}
         </span>
-        <span className="onb-map-layer">Topo</span>
+        <span className="onb-map-layer">{t("Topo")}</span>
       </VCard>
 
       <VCard index={1} style={place(18, 322, 340, 122)}>
-        <VHead icon={Path} title="Elevation" hue="var(--onb-blue)">
+        <VHead icon={Path} title={t("Elevation")} hue="var(--onb-blue)">
           <span className="onb-vchip">
             ↑ {climb} {climbUnit}
           </span>
@@ -715,11 +761,16 @@ export function MapsVignette({ unitSystem }: { unitSystem: UnitSystem }) {
       </VCard>
 
       <VCard index={2} style={place(374, 322, 168, 122)} className="onb-v-download">
-        <VHead icon={DownloadSimple} title="Alps topo" sub="1.2 GB" hue="var(--onb-mint)" />
+        <VHead
+          icon={DownloadSimple}
+          title={t("Alps topo")}
+          sub={t("{{p0}} GB", { p0: formatNumber(1.2) })}
+          hue="var(--onb-mint)"
+        />
         <span className="onb-progress" style={{ "--p": 0.64 } as CSSProperties}>
           <i />
         </span>
-        <span className="onb-vcaption">Installing on watch · 64%</span>
+        <span className="onb-vcaption">{t("Installing on watch · {{progress}}", { progress: percent(0.64) })}</span>
       </VCard>
     </div>
   );
@@ -727,17 +778,20 @@ export function MapsVignette({ unitSystem }: { unitSystem: UnitSystem }) {
 
 /* -------------------------------------------------------------------- Music */
 
+/* Titles are provider content and stay as published; `detail` is translated. */
 const TRACKS: Array<{
   title: string;
   source: string;
+  detail: string;
+  count: number;
   art: string;
   initial: string;
   state: "done" | "copying" | "queued";
 }> = [
-  { title: "Tempo Run Mix", source: "Spotify · 24 tracks", art: "#53cba1", initial: "T", state: "done" },
-  { title: "Trail Talk", source: "Podcast · Episode 112", art: "#a495ff", initial: "T", state: "done" },
-  { title: "Pride and Prejudice", source: "LibriVox · 18 parts", art: "#e0a93a", initial: "P", state: "copying" },
-  { title: "Long Run Lo-fi", source: "YouTube Music · 31 tracks", art: "#f47a86", initial: "L", state: "queued" }
+  { title: "Tempo Run Mix", source: "Spotify", detail: "{{count}} tracks", count: 24, art: "#53cba1", initial: "T", state: "done" },
+  { title: "Trail Talk", source: "Podcast", detail: "Episode {{count}}", count: 112, art: "#a495ff", initial: "T", state: "done" },
+  { title: "Pride and Prejudice", source: "LibriVox", detail: "{{count}} parts", count: 18, art: "#e0a93a", initial: "P", state: "copying" },
+  { title: "Long Run Lo-fi", source: "YouTube Music", detail: "{{count}} tracks", count: 31, art: "#f47a86", initial: "L", state: "queued" }
 ];
 
 const SOURCES: Array<{ icon: Icon; label: string; tint: string }> = [
@@ -750,10 +804,11 @@ const SOURCES: Array<{ icon: Icon; label: string; tint: string }> = [
 ];
 
 export function MusicVignette() {
+  useLanguage();
   return (
     <div className="onb-vignette">
       <VCard index={0} style={place(18, 16, 340)}>
-        <VHead icon={MusicNotes} title="Library" sub="Ready for your watch" hue="var(--onb-rose)" />
+        <VHead icon={MusicNotes} title={t("Library")} sub={t("Ready for your watch")} hue="var(--onb-rose)" />
         <ul className="onb-tracks">
           {TRACKS.map((track) => (
             <li key={track.title} className={track.state === "copying" ? "is-copying" : undefined}>
@@ -762,7 +817,9 @@ export function MusicVignette() {
               </span>
               <span className="onb-track-copy">
                 <strong>{track.title}</strong>
-                <span>{track.source}</span>
+                <span>
+                  {t(track.source)} · {t(track.detail, { count: formatNumber(track.count) })}
+                </span>
               </span>
               {track.state === "done" ? (
                 <CheckCircle className="onb-track-state is-done" size={17} weight="fill" aria-hidden="true" />
@@ -777,7 +834,7 @@ export function MusicVignette() {
       </VCard>
 
       <VCard index={1} style={place(374, 28, 168, 214)} className="onb-v-storage">
-        <VHead icon={Watch} title="On your watch" hue="var(--onb-pink)" />
+        <VHead icon={Watch} title={t("On your watch", undefined, "onboarding")} hue="var(--onb-pink)" />
         <div className="onb-ring is-small">
           <svg viewBox="0 0 120 120" aria-hidden="true">
             <circle cx="60" cy="60" r="48" className="onb-ring-track" />
@@ -793,18 +850,19 @@ export function MusicVignette() {
           </svg>
           <span className="onb-ring-copy">
             <strong>
-              2.4<small>GB</small>
+              {formatNumber(2.4)}
+              <small>{t("GB")}</small>
             </strong>
-            <span>free</span>
+            <span>{t("free", undefined, "storage")}</span>
           </span>
         </div>
       </VCard>
 
       <VCard index={2} style={place(374, 258, 168)} className="onb-v-sources">
-        <span className="onb-vcaption">Sources</span>
+        <span className="onb-vcaption">{t("Sources")}</span>
         <span className="onb-sources">
           {SOURCES.map(({ icon: Glyph, label, tint }) => (
-            <span key={label} title={label} style={{ "--tint": tint } as CSSProperties}>
+            <span key={label} title={t(label)} style={{ "--tint": tint } as CSSProperties}>
               <Glyph size={17} weight="duotone" aria-hidden="true" />
             </span>
           ))}
@@ -812,7 +870,16 @@ export function MusicVignette() {
       </VCard>
 
       <VCard index={3} style={place(18, 340, 340)} className="onb-v-transfer">
-        <VHead icon={Books} title="Copying to watch" sub="Pride and Prejudice · part 7 of 18" hue="var(--onb-amber)" />
+        <VHead
+          icon={Books}
+          title={t("Copying to watch")}
+          sub={t("{{title}} · part {{part}} of {{total}}", {
+            title: t("Pride and Prejudice"),
+            part: formatNumber(7),
+            total: formatNumber(18)
+          })}
+          hue="var(--onb-amber)"
+        />
         <span className="onb-progress is-live" style={{ "--p": 0.39 } as CSSProperties}>
           <i />
         </span>
@@ -824,10 +891,11 @@ export function MusicVignette() {
 /* ---------------------------------------------------------------- Connect */
 
 export function ConnectedBadge() {
+  useLanguage();
   return (
     <span className="onb-connected">
       <Check size={13} weight="bold" aria-hidden="true" />
-      Connected
+      {t("Connected")}
     </span>
   );
 }

@@ -1,5 +1,5 @@
 import type { CorosWatchfaceAssetReplacement, CorosWatchfaceConfigOverride, CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceResolutionDetails, CorosWatchfaceTemplateDetails } from "../../electron/types";
-import { NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartGroup, nativeChartSourceKeys, nativeFieldKeys, nativeConfigPrefix, nativeHasIcon, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartGroup, nativeChartRepresentation, nativeChartSourceKeys, nativeFieldKeys, nativeConfigPrefix, nativeHasIcon, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
 import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, offsetConfigValue, parseConfigPos, parseConfigRect, pickPreviewResolution, resizeAndTintSprite } from "./watchfaceStudio";
 import { isNativeTime, nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRolePart, nativeRoleIndices, nativeStateCount } from "./nativeDataParts";
 import { parseSimulationDateTime, type WatchfacePreviewScenario } from "./watchfaceSimulation";
@@ -267,9 +267,19 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
         }
         return `${folder}\\00.png`;
       };
-      const icon = async (prefix: string, riseKey?: string, setKey?: string) => {
+      /** A folder of transparent 1x1 frames: a font or state table that draws nothing. */
+      const blankFrames = (folder: string, count: number) => {
+        for (let i = 0; i < count; i++) {
+          const path = `${resolution.directory}/${folder}/${String(i).padStart(2, "0")}.png`;
+          if (written.has(path)) continue;
+          written.add(path);
+          assetReplacements.push({ path, dataUrl: canvasImage(1, 1, () => undefined), create: !existing.has(path), allowDimensionOverride: true });
+        }
+        return folder;
+      };
+      const icon = async (prefix: string, riseKey?: string, setKey?: string, hasValue = part("value").enabled) => {
         if (!part("icon").enabled) {
-          if (!part("value").enabled) return;
+          if (!hasValue) return;
           values[`${prefix}_icon_pos`] = point("icon");
           values[riseKey ?? `${prefix}_icon`] = blankIcon();
           if (setKey) values[setKey] = blankIcon();
@@ -346,17 +356,32 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
         ] as const) {
           if (part(role).enabled) { values[imageKey] = await sprite(role); values[positionKey] = point(role); }
         }
+        // The watch draws the graph only when the face declares a chart readout.
+        // A graph-only face sent through C-LINK showed no graph until its number
+        // was turned on (2026-10-13), although COROS's compiler and ours write the
+        // same graph either way. So a hidden number becomes an invisible one,
+        // placed inside the plot, as hidden icons become blank ones.
+        const invisible = part("plot").enabled && !part(source === "chart_moon" ? "states" : "value").enabled;
+        const plotX = Math.round((style.x + part("plot").x * style.scale) * ratio), plotY = Math.round((style.y + part("plot").y * style.scale) * ratio);
+        const hiddenRect = (dx = 0) => `{${plotX + dx},${plotY},${plotX + dx + 8},${plotY + 4},left|vcenter}`;
         if (isNativeTime(id, style)) {
-          await time(source);
-          await icon(source, `${source}_icon`, source === "chart_sunrise" ? "chart_sunset_icon" : "chart_moonset_icon");
+          if (invisible) {
+            values[`${source}_hour_rect`] = hiddenRect(); values[`${source}_minute_rect`] = hiddenRect(10);
+            values[`${source}_font`] = blankFrames("cl_nd_chart_blank_digits", 10);
+            values.chart_colon_icon = blankIcon();
+          } else await time(source);
+          await icon(source, `${source}_icon`, source === "chart_sunrise" ? "chart_sunset_icon" : "chart_moonset_icon", part("value").enabled || invisible);
         } else if (source === "chart_moon") {
           if (part("states").enabled) {
             values.chart_moon_icon_pos = point("states"); values.chart_moon_icon = folders.states;
             for (let i = 0; i < 30; i++) await sprite("states", i);
+          } else if (invisible) {
+            values.chart_moon_icon_pos = `{${plotX},${plotY}}`; values.chart_moon_icon = blankFrames("cl_nd_chart_blank_moon", 30);
           }
         } else {
           if (part("value").enabled) { values[`${source}_rect`] = rect("value"); values[`${source}_font`] = await font(); }
-          await icon(source);
+          else if (invisible) { values[`${source}_rect`] = hiddenRect(); values[`${source}_font`] = blankFrames("cl_nd_chart_blank_digits", 10); }
+          await icon(source, undefined, undefined, part("value").enabled || invisible);
         }
         if (part("value").enabled && source !== "chart_moon") {
           values.chart_point_icon = await sprite("decimal");
@@ -533,18 +558,19 @@ export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: nu
     }
     if (field.kind === "solar" && part("progress").enabled) await draw("progress");
     if (id !== "chart") continue;
-    const plot = part("plot"), chart = style.chartStyle;
+    // The watch picks bars or a line by chart group, so the preview does too.
+    const plot = part("plot"), chart = style.chartStyle, line = nativeChartRepresentation(source) === "curve";
     if (plot.enabled) {
       ctx.save();
       ctx.beginPath(); ctx.rect(x + plot.x * scale, y + plot.y * scale, plot.width * scale, plot.height * scale); ctx.clip();
-      if (chart?.previewType === "curve" ? chart.lineWidth === 0 : chart?.barWidth === 0) {
+      if (line ? chart?.lineWidth === 0 : chart?.barWidth === 0) {
         // That style is switched off: the watch draws nothing for it.
-      } else if (chart?.previewType === "curve") {
+      } else if (line) {
         // Sample curve using the exported line appearance. Rise/set sources draw
         // a day arc around a horizon like official sun/moon groups; other
         // sources trace the sample history. Upper/lower colors split at the
         // horizon or the plot's midline.
-        const upper = chart.upperColor ?? plot.color, lower = chart.lowerColor ?? "#555555", lineWidth = Math.max(1, chart.lineWidth ?? 2) * scale;
+        const upper = chart?.upperColor ?? plot.color, lower = chart?.lowerColor ?? "#555555", lineWidth = Math.max(1, chart?.lineWidth ?? 2) * scale;
         const px = (t: number) => x + (plot.x + t * plot.width) * scale, py = (v: number) => y + (plot.y + (1 - v) * plot.height) * scale;
         const arc = isNativeTime(id, style), split = arc ? 0.45 : 0.5;
         const curve = (t: number) => arc ? split + Math.cos((t - 0.5) * Math.PI * 2) * 0.42 : (() => {
@@ -578,6 +604,6 @@ export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: nu
       ctx.restore();
     }
     // chart_bar_mask marks the selected bar; official curve groups draw no marker.
-    if (part("mask").enabled && chart?.previewType !== "curve") await draw("mask");
+    if (part("mask").enabled && !line) await draw("mask");
   }
 }

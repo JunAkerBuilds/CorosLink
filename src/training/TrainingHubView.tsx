@@ -32,6 +32,8 @@ import { SleepSummaryPanel } from "./components/SleepSummaryPanel";
 import { TrainingHeatmapPanel } from "./components/TrainingHeatmapPanel";
 import { TrainingSummaryTiles } from "./components/TrainingSummaryTiles";
 import { TrainingActivities } from "./components/TrainingActivities";
+import { RacesPanel } from "./components/RacesPanel";
+import { useRaceJournal } from "./useRaceJournal";
 import { TrainingTrendCharts } from "./components/TrainingTrendChart";
 import {
   PerceivedEffortPanel,
@@ -122,6 +124,8 @@ function TrainingHubContent({
   onRefresh,
   onLoadDetail,
   onExportFile,
+  navigationRequest,
+  onNavigationRequestHandled,
   sampleMode = false,
   sampleDetails,
   onToggleSample
@@ -167,6 +171,22 @@ function TrainingHubContent({
     setActiveTab(tab);
     setVisitedTabs(current => current.includes(tab) ? current : [...current, tab]);
   };
+  const [activityOpenRequest, setActivityOpenRequest] =
+    useState<{ activity: TrainingHubActivity; requestId: number } | null>(null);
+  useEffect(() => {
+    if (!navigationRequest) return;
+    const { tab, activity, requestId } = navigationRequest;
+    setActiveTab(tab);
+    setVisitedTabs(current => current.includes(tab) ? current : [...current, tab]);
+    if (activity) setActivityOpenRequest({ activity, requestId });
+    onNavigationRequestHandled?.();
+  }, [navigationRequest, onNavigationRequestHandled]);
+  const raceJournal = useRaceJournal(api, {
+    enabled: connected,
+    sampleMode,
+    // New activities in the cache can bring new race suggestions.
+    refreshKey: `${hubRefreshCount}:${activities.length}`
+  });
   const [showPassword, setShowPassword] = useState(false);
   const signInBackgroundStyle = connected
     ? undefined
@@ -373,7 +393,7 @@ function TrainingHubContent({
                   <input
                     value={email}
                     onChange={(event) => onEmailChange(event.target.value)}
-                    placeholder="you@example.com"
+                    placeholder={t("you@example.com")}
                     type="email"
                     autoComplete="username"
                     disabled={busy === "training-login"}
@@ -516,6 +536,8 @@ function TrainingHubContent({
                 resolveLocation={api.reverseGeocodeRouteLocation}
                 onLoadDetail={onLoadDetail}
                 onExportFile={onExportFile}
+                raceTags={raceJournal}
+                openRequest={activityOpenRequest}
               />
             ) : null}
           </div>
@@ -531,9 +553,23 @@ function TrainingHubContent({
             {visitedTabs.includes("records") ? (
               <PersonalRecordsPanel
                 dashboard={snapshot?.dashboard ?? null}
+                activities={activities}
                 celebration={prCelebration.cardCelebration}
                 onCelebrate={prCelebration.replay}
               />
+            ) : null}
+          </div>
+
+          <div
+            id={`${tabIdPrefix}-panel-races`}
+            className="stack training-hub-tab-panel"
+            role="tabpanel"
+            aria-labelledby={`${tabIdPrefix}-tab-races`}
+            tabIndex={0}
+            hidden={activeTab !== "races"}
+          >
+            {visitedTabs.includes("races") ? (
+              <RacesPanel journal={raceJournal} onOpenActivities={() => changeTab("activities")} />
             ) : null}
           </div>
         </>

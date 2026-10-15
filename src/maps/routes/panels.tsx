@@ -1,4 +1,4 @@
-import { t, useLanguage } from "../../i18n/tools";
+import { t, useLanguage , getLocale} from "../../i18n/tools";
 import {
   Compass,
   Layers,
@@ -15,12 +15,13 @@ import {
   Undo2,
   X
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type {
   RouteActivityType,
   RouteElevationPreference,
   RouteGeocodeResult,
   RouteMode,
+  RouteSurfacePreference,
   RouteWaypoint
 } from "../../../electron/types";
 import type { CorosLinkApi } from "../../coroslink-api";
@@ -37,6 +38,7 @@ import {
   ROUTE_ELEVATION_OPTIONS,
   ROUTE_OVERLAY_LAYERS,
   ROUTE_OVERLAY_ORDER,
+  routeSurfaceOptions,
   type RouteBaseLayer,
   type RouteOverlayId
 } from "./constants";
@@ -250,6 +252,38 @@ const IMPERIAL_DISTANCE_PRESETS: Record<
   bike: [10, 25, 50, 100].map((value) => ({ value, label: t("{{p0}} mi", { p0: value }) }))
 };
 
+/** Road / Mixed / Trail chips; labels adapt to the sport. */
+export function SurfacePicker({
+  activityType,
+  value,
+  onChange
+}: {
+  activityType: RouteActivityType;
+  value: RouteSurfacePreference;
+  onChange: (value: RouteSurfacePreference) => void;
+}) {
+  useLanguage();
+  return (
+    <div className="route-field-inline">
+      <label>{t("Surface")}</label>
+      <div className="route-chip-group" role="group" aria-label={t("Surface preference")}>
+        {routeSurfaceOptions(activityType).map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            className={option.value === value ? "is-active" : ""}
+            aria-pressed={option.value === value}
+            title={option.hint}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function StepTitle({ index, children }: { index: number; children: string }) {
   useLanguage();
   return (
@@ -272,6 +306,8 @@ export function GeneratePanel({
   onDistanceChange,
   elevationPreference,
   onElevationChange,
+  surfacePreference,
+  onSurfaceChange,
   start,
   destination,
   onSelectStart,
@@ -285,7 +321,8 @@ export function GeneratePanel({
   onRegenerate,
   onError,
   busy,
-  hasResult
+  hasResult,
+  results
 }: {
   api: CorosLinkApi;
   activityType: RouteActivityType;
@@ -296,6 +333,8 @@ export function GeneratePanel({
   onDistanceChange: (value: number) => void;
   elevationPreference: RouteElevationPreference;
   onElevationChange: (value: RouteElevationPreference) => void;
+  surfacePreference: RouteSurfacePreference;
+  onSurfaceChange: (value: RouteSurfacePreference) => void;
   start: ResolvedPoint | null;
   destination: ResolvedPoint | null;
   onSelectStart: (point: ResolvedPoint) => void;
@@ -310,6 +349,8 @@ export function GeneratePanel({
   onError: (message: string | null) => void;
   busy: boolean;
   hasResult: boolean;
+  /** Shown under the Generate button, e.g. the loops to choose from. */
+  results?: ReactNode;
 }) {
   useLanguage();
   const { unitSystem } = useUnitSystem();
@@ -446,6 +487,12 @@ export function GeneratePanel({
           </div>
         ) : null}
 
+        <SurfacePicker
+          activityType={activityType}
+          value={surfacePreference}
+          onChange={onSurfaceChange}
+        />
+
         <div className="route-field-inline">
           <label>{t("Elevation")}</label>
           <div className="route-chip-group" role="group" aria-label={t("Elevation preference")}>
@@ -491,6 +538,7 @@ export function GeneratePanel({
         ) : null}
       </div>
       {ctaHint && !busy ? <p className="route-cta-hint">{ctaHint}</p> : null}
+      {results}
     </div>
   );
 }
@@ -499,6 +547,8 @@ export function DrawPanel({
   draw,
   activityType,
   onActivityChange,
+  surfacePreference,
+  onSurfaceChange,
   onSave,
   saving,
   canSave
@@ -506,6 +556,8 @@ export function DrawPanel({
   draw: RouteDraw;
   activityType: RouteActivityType;
   onActivityChange: (activity: RouteActivityType) => void;
+  surfacePreference: RouteSurfacePreference;
+  onSurfaceChange: (value: RouteSurfacePreference) => void;
   onSave: () => void;
   saving: boolean;
   canSave: boolean;
@@ -540,6 +592,14 @@ export function DrawPanel({
             {t("Freehand")}</button>
         </div>
       </div>
+
+      {draw.snap ? (
+        <SurfacePicker
+          activityType={activityType}
+          value={surfacePreference}
+          onChange={onSurfaceChange}
+        />
+      ) : null}
 
       <div className="route-draw-tools">
         <button

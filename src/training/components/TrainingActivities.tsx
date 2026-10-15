@@ -1,7 +1,7 @@
 import { useLanguage, getLocale, t } from "../../i18n/training";
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Activity, Bike, CalendarDays, ChevronLeft, ChevronRight, Dumbbell, Flame,
-  Footprints, Gauge, Heart, LayoutGrid, List, MapPin, Mountain, Search, Sparkles, Timer, X } from "lucide-react";
+import { Activity, Bike, CalendarDays, ChevronLeft, ChevronRight, Dumbbell, Flag, Flame,
+  Footprints, Gauge, Heart, LayoutGrid, List, Loader2, MapPin, Mountain, Search, Sparkles, Timer, X } from "lucide-react";
 import { PersonSimpleRun, PersonSimpleWalk, PersonSimpleSwim } from "@phosphor-icons/react";
 import type { RouteGeocodeResult, TrainingHubActivity, TrainingHubActivityDetail, TrainingHubSportType } from "../../../electron/types";
 import type { TrainingHubViewProps } from "../types";
@@ -10,6 +10,8 @@ import { activityCategory, activityTimeline, activityTimestamp, activityTotals, 
 import { formatDistanceMeters, formatDurationSeconds, formatElevationMeters, formatPaceSecondsPerKm, formatTrainingLongTimestamp,
   formatTrainingTimestamp } from "../formatters";
 import { resolveSportName } from "../sportTypes";
+import { isRaceSportType } from "../../../electron/raceModel";
+import type { RaceJournal } from "../useRaceJournal";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import { formatSpeedValue, metersToSwimDistance, swimDistanceUnit } from "../../units/units";
 import { ActivityCardRoute, createActivityPreviewLoader, type ActivityPreviewLoader } from "./ActivityCardRoute";
@@ -52,11 +54,11 @@ function ActivitySummary({ activities }: { activities: TrainingHubActivity[] }) 
   const totals = useMemo(() => activityTotals(activities), [activities, getLocale()]);
   const timeline = useMemo(() => activityTimeline(activities), [activities, getLocale()]);
   const metrics = [
-    { key: "count", label: "Total Activities", value: totals.count.toLocaleString(getLocale()), icon: PersonSimpleRun, color: "#52dfab", bars: true, note: "In this selection" },
-    { key: "distance", label: "Total Distance", value: totals.distance === undefined ? "—" : formatDistanceMeters(totals.distance, unitSystem), icon: MapPin, color: "#65dcec", bars: false, note: "Distance covered" },
-    { key: "duration", label: "Total Time", value: totals.duration === undefined ? "—" : formatDurationSeconds(totals.duration), icon: Timer, color: "#c995f5", bars: true, note: "Time in motion" },
-    { key: "pace", label: "Avg Pace", value: formatPaceSecondsPerKm(totals.pace, unitSystem), icon: Gauge, color: "#58ddd4", bars: false, note: "Running & walking" },
-    { key: "calories", label: "Calories", value: totals.calories === undefined ? "—" : `${Math.round(totals.calories).toLocaleString(getLocale())} kcal`, icon: Flame, color: "#f7aa54", bars: true, note: "Energy burned" }
+    { key: "count", label: t("Total Activities"), value: totals.count.toLocaleString(getLocale()), icon: PersonSimpleRun, color: "#52dfab", bars: true, note: "In this selection" },
+    { key: "distance", label: t("Total Distance"), value: totals.distance === undefined ? "—" : formatDistanceMeters(totals.distance, unitSystem), icon: MapPin, color: "#65dcec", bars: false, note: "Distance covered" },
+    { key: "duration", label: t("Total Time"), value: totals.duration === undefined ? "—" : formatDurationSeconds(totals.duration), icon: Timer, color: "#c995f5", bars: true, note: "Time in motion" },
+    { key: "pace", label: t("Avg Pace"), value: formatPaceSecondsPerKm(totals.pace, unitSystem), icon: Gauge, color: "#58ddd4", bars: false, note: "Running & walking" },
+    { key: "calories", label: t("Calories"), value: totals.calories === undefined ? "—" : `${Math.round(totals.calories).toLocaleString(getLocale())} kcal`, icon: Flame, color: "#f7aa54", bars: true, note: "Energy burned" }
   ] as const;
   return <div className="activities-summary" aria-label={t("Activity totals")}>
     {metrics.map(({ key, label, value, icon: Icon, color, bars, note }) =>
@@ -72,10 +74,14 @@ type Props = Pick<TrainingHubViewProps, "activities" | "sportTypes" | "selectedA
   loadPreview: ActivityPreviewLoader; sampleMode?: boolean;
   /** Reverse-geocodes a track's first point for the detail dialog's location chip. */
   resolveLocation?: (lat: number, lon: number) => Promise<RouteGeocodeResult>;
+  /** Race tags: a badge on cards and a Mark as race toggle in the dialog. */
+  raceTags?: Pick<RaceJournal, "raceActivityIds" | "pending" | "readOnly" | "toggleActivity">;
+  /** Opens this activity's detail when another view links straight to it. */
+  openRequest?: { activity: TrainingHubActivity; requestId: number } | null;
 };
 
-function ActivityCard({ activity, sportTypes, busy, sampleMode, onLoadDetail, onExportFile, loadPreview }: {
-  activity: TrainingHubActivity; sportTypes: TrainingHubSportType[];
+function ActivityCard({ activity, sportTypes, busy, sampleMode, onLoadDetail, onExportFile, loadPreview, isRace = false }: {
+  activity: TrainingHubActivity; sportTypes: TrainingHubSportType[]; isRace?: boolean;
 } & Pick<Props, "busy" | "sampleMode" | "onLoadDetail" | "onExportFile" | "loadPreview">) {
   useLanguage();
   const { unitSystem } = useUnitSystem();
@@ -96,6 +102,7 @@ function ActivityCard({ activity, sportTypes, busy, sampleMode, onLoadDetail, on
       <span className="activity-card-sport-icon"><Icon size={29} aria-hidden="true" /></span>
       <div className="activity-card-title"><h3><button type="button" onClick={() => onLoadDetail(activity)} title={name}>{name}</button></h3>
         <time dateTime={activityTimestamp(activity.startTime) ? new Date(activityTimestamp(activity.startTime)).toISOString() : undefined}>{formatTrainingTimestamp(activity.startTime)}</time></div>
+      {isRace ? <span className="activity-card-race" title={t("Marked as a race")}><Flag size={12} aria-hidden="true" />{t("Race")}</span> : null}
       <span className="activity-card-badge">{t(sport.label)}</span>
       <ExportMenu activity={activity} activityName={name} busy={busy} disabled={sampleMode} compact onExportFile={onExportFile} />
     </header>
@@ -107,8 +114,8 @@ function ActivityCard({ activity, sportTypes, busy, sampleMode, onLoadDetail, on
         <span><strong>{paceValue}</strong><small>{category === "ride" ? t("Avg Speed") : t("Avg Pace")}</small></span>
       </span>
       <span className="activity-card-secondary">
-        <span><Heart size={18} className="activity-metric-heart" /><span><strong>{activity.avgHr === undefined ? "—" : `${Math.round(activity.avgHr)} bpm`}</strong><small>{t("Avg HR")}</small></span></span>
-        <span><Flame size={18} className="activity-metric-calories" /><span><strong>{activity.calories === undefined ? "—" : `${Math.round(activity.calories)} kcal`}</strong><small>{t("Calories")}</small></span></span>
+        <span><Heart size={18} className="activity-metric-heart" /><span><strong>{activity.avgHr === undefined ? "—" : t("{{p0}} bpm", { p0: String(Math.round(activity.avgHr)) })}</strong><small>{t("Avg HR")}</small></span></span>
+        <span><Flame size={18} className="activity-metric-calories" /><span><strong>{activity.calories === undefined ? "—" : t("{{p0}} kcal", { p0: String(Math.round(activity.calories)) })}</strong><small>{t("Calories")}</small></span></span>
         <span><Mountain size={18} className="activity-metric-elevation" /><span><strong>{formatElevationMeters(activity.elevationGain, unitSystem)}</strong><small>{t("Elev Gain")}</small></span></span>
       </span>
     </button>
@@ -155,7 +162,7 @@ function ActivityCalendar({ activities, onOpen }: { activities: TrainingHubActiv
 }
 
 export function TrainingActivities({ activities, sportTypes, selectedActivity, activityDetail, busy,
-  onLoadDetail, onExportFile, loadPreview, resolveLocation, sampleMode = false }: Props) {
+  onLoadDetail, onExportFile, loadPreview, resolveLocation, raceTags, openRequest, sampleMode = false }: Props) {
   useLanguage();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<ActivityCategory>("all");
@@ -168,6 +175,12 @@ export function TrainingActivities({ activities, sportTypes, selectedActivity, a
   const filtered = useMemo(() => selectActivities(activities, category, query, sort, names), [activities, category, query, sort, names, getLocale()]);
   useEffect(() => { setLimit(24); }, [category, query, sort]);
   function openActivity(activity: TrainingHubActivity) { setOpened(activity); onLoadDetail(activity); }
+  const handledOpenRequest = useRef<number | null>(null);
+  useEffect(() => {
+    if (!openRequest || handledOpenRequest.current === openRequest.requestId) return;
+    handledOpenRequest.current = openRequest.requestId;
+    openActivity(openRequest.activity);
+  }, [openRequest]);
   return <div className="activities-browser">
     <div className="activities-toolbar">
       <label className="activities-search"><Search size={17} aria-hidden="true" /><input type="search" aria-label={t("Search activities")}
@@ -194,18 +207,31 @@ export function TrainingActivities({ activities, sportTypes, selectedActivity, a
         : view === "list" ? <div className="activities-list-view"><TrainingActivityTable activities={filtered.slice(0, limit)} sportTypes={sportTypes}
           selectedActivityId={opened?.activityId ?? null} busy={busy} exportDisabled={sampleMode} onLoadDetail={openActivity} onExportFile={onExportFile} /></div>
         : <div className="activities-card-grid">{filtered.slice(0, limit).map(activity => <ActivityCard key={activity.activityId}
-          activity={activity} sportTypes={sportTypes} busy={busy} sampleMode={sampleMode} onLoadDetail={openActivity} onExportFile={onExportFile} loadPreview={loader} />)}</div>}
+          activity={activity} sportTypes={sportTypes} busy={busy} sampleMode={sampleMode} onLoadDetail={openActivity} onExportFile={onExportFile} loadPreview={loader}
+          isRace={raceTags?.raceActivityIds.has(activity.activityId)} />)}</div>}
       <div className="activities-browser-footer"><span>{view === "calendar" ? t("Activities by month") : t("Showing {{value1}} of {{value2}} activities", { value1: String(Math.min(limit, filtered.length)), value2: String(filtered.length) })}</span>
         {view !== "calendar" && filtered.length > limit ? <button type="button" onClick={() => setLimit(current => current + 24)}>{t("Show more activities")}</button> : null}
         {view === "grid" ? <span className="activities-map-attribution">{t("Maps ©")} <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">{t("OpenStreetMap contributors")}</a></span> : null}
       </div>
       </div>
       {view === "list" && opened ? <ActivityDetailDialog inline opened={opened} sportTypes={sportTypes} activityDetail={activityDetail} busy={busy} sampleMode={sampleMode}
-        resolveLocation={resolveLocation} onLoadDetail={onLoadDetail} onExportFile={onExportFile} onClose={() => setOpened(null)} /> : null}
+        resolveLocation={resolveLocation} raceTags={raceTags} onLoadDetail={onLoadDetail} onExportFile={onExportFile} onClose={() => setOpened(null)} /> : null}
     </div>
-    <ActivityDetailDialog opened={view === "list" ? null : opened} sportTypes={sportTypes} activityDetail={activityDetail} busy={busy} sampleMode={sampleMode}
+    <ActivityDetailDialog opened={view === "list" ? null : opened} sportTypes={sportTypes} activityDetail={activityDetail} busy={busy} sampleMode={sampleMode} raceTags={raceTags}
       resolveLocation={resolveLocation} onLoadDetail={onLoadDetail} onExportFile={onExportFile} onClose={() => setOpened(null)} />
   </div>;
+}
+
+function RaceToggle({ activity, raceTags }: { activity: TrainingHubActivity; raceTags: NonNullable<Props["raceTags"]> }) {
+  useLanguage();
+  const isRace = raceTags.raceActivityIds.has(activity.activityId);
+  const pending = raceTags.pending === `mark:${activity.activityId}`;
+  return <button type="button" className={`activity-dialog-race-toggle${isRace ? " is-race" : ""}`} aria-pressed={isRace}
+    disabled={raceTags.readOnly || raceTags.pending !== null} title={isRace ? t("In your races. Click to remove it.") : t("Add this run to your races")}
+    onClick={() => void raceTags.toggleActivity(activity)}>
+    {pending ? <Loader2 className="spin" size={13} aria-hidden="true" /> : <Flag size={13} aria-hidden="true" />}
+    {isRace ? t("Race") : t("Mark as race")}
+  </button>;
 }
 
 // One reverse-geocode per activity; results are stable, so keep them for the session.
@@ -217,9 +243,9 @@ const pacingCopy: Record<LapPacing, string> = {
   "positive-split": "You went out fast and eased off in the back half."
 };
 
-function ActivityDetailDialog({ inline = false, opened, sportTypes, activityDetail, busy, sampleMode, resolveLocation, onLoadDetail, onExportFile, onClose }: {
+function ActivityDetailDialog({ inline = false, opened, sportTypes, activityDetail, busy, sampleMode, resolveLocation, raceTags, onLoadDetail, onExportFile, onClose }: {
   inline?: boolean; opened: TrainingHubActivity | null; onClose: () => void;
-} & Pick<Props, "sportTypes" | "activityDetail" | "busy" | "sampleMode" | "resolveLocation" | "onLoadDetail" | "onExportFile">) {
+} & Pick<Props, "sportTypes" | "activityDetail" | "busy" | "sampleMode" | "resolveLocation" | "raceTags" | "onLoadDetail" | "onExportFile">) {
   useLanguage();
   const dialog = useRef<HTMLDialogElement>(null);
   const headingId = useId();
@@ -269,7 +295,8 @@ function ActivityDetailDialog({ inline = false, opened, sportTypes, activityDeta
               {location ? <><i aria-hidden="true" /><MapPin size={14} aria-hidden="true" /><span>{location}</span></> : null}</p>
             <div className="activity-dialog-chips"><span className="activity-dialog-badge">{t(sport.label)}</span>
               {sportName && sportName.toLowerCase() !== sport.label.toLowerCase() ? <span className="activity-dialog-chip">{t(sportName)}</span> : null}
-              {trainingLoad !== undefined ? <span className="activity-dialog-chip">{t("Training Load")} <strong>{Math.round(trainingLoad)}</strong></span> : null}</div>
+              {trainingLoad !== undefined ? <span className="activity-dialog-chip">{t("Training Load")} <strong>{Math.round(trainingLoad)}</strong></span> : null}
+              {raceTags && isRaceSportType(opened.sportType) ? <RaceToggle activity={opened} raceTags={raceTags} /> : null}</div>
           </div>
           {detail && !inline ? <aside className="activity-dialog-insight"><span><Sparkles size={18} aria-hidden="true" /></span>
             <p><strong>{t(praise)} {pacing ? t(pacingCopy[pacing]) : ""}</strong><small>{t(encouragementNote)}</small></p></aside> : null}

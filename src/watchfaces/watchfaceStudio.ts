@@ -8628,14 +8628,23 @@ export async function drawStudioPreview(
   }
   const scale = canvas.width / resolution.width;
   context.clearRect(0, 0, canvas.width, canvas.height);
-  // COROS BuildAodWatchface omits SetBackground (including bg_color).
-  // Showing the flattened artwork here made black AOD digits look readable
-  // in Studio even though they disappear against the watch's black screen.
+  // AOD uses a black fill beneath its bitmap, even when bg_color is set.
+  // CorosLink exports the background slot used by official AOD layouts.
   if (options.transparentBackground) {
     // Painted by the editor's own background canvas beneath the arc overlay.
   } else if (options.previewMode === "aod") {
     context.fillStyle = "#000000";
     context.fillRect(0, 0, canvas.width, canvas.height);
+    if (backgroundDataUrl) {
+      const position = options.compiledPixels ? parseConfigPos(resolution.config.background_icon_pos) : null;
+      context.drawImage(
+        await loadPreviewBackground(backgroundDataUrl),
+        (position?.x ?? 0) * scale,
+        (position?.y ?? 0) * scale,
+        canvas.width,
+        canvas.height
+      );
+    }
   } else {
     context.drawImage(
       await loadPreviewBackground(backgroundDataUrl),

@@ -14,6 +14,7 @@ import {
 } from "../../maps/routes/constants";
 import { MapLayerControl } from "../../maps/routes/panels";
 import { useTheme } from "../../theme/ThemeProvider";
+import type { RouteCursor } from "../routeCursor";
 import {
   defineSelectionPreference,
   selectionIsArrayOf,
@@ -26,6 +27,8 @@ interface ActivityRouteMapProps {
   /** Controlled expansion: a host can open the full-screen map from its own controls. */
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
+  /** Chart hover point and selected stretch to mirror on the inline map. */
+  cursor?: RouteCursor;
 }
 
 interface RouteGeometry {
@@ -38,6 +41,9 @@ const ROUTE_COLOR_PAPER = "#0f7f5f";
 const START_COLOR = "#34d399";
 const END_COLOR = "#f26d6d";
 const MARKER_RING = "#ffffff";
+// Gold reads on street, satellite and dark tiles alike, and is not a route colour.
+const CURSOR_SEGMENT_COLOR = "#ffc857";
+const CURSOR_DOT_RING = "#0b1015";
 const ROUTE_ANIMATION_MS = 2200;
 const ACTIVITY_BASE_LAYERS: RouteBaseLayer[] = ["street", "outdoors", "topo", "satellite", "light", "dark"];
 
@@ -166,13 +172,15 @@ function RouteMapCanvas({
   scrollWheelZoom = false,
   baseLayer,
   overlays,
-  ariaLabel
+  ariaLabel,
+  cursor
 }: {
   route: RouteGeometry;
   scrollWheelZoom?: boolean;
   baseLayer?: RouteBaseLayer;
   overlays?: RouteOverlayId[];
   ariaLabel: string;
+  cursor?: RouteCursor;
 }) {
   useLanguage();
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -291,6 +299,50 @@ function RouteMapCanvas({
 
     animationFrame = window.requestAnimationFrame(animateRoute);
 
+    let cursorDot: L.CircleMarker | undefined;
+    let cursorSegment: L.Polyline | undefined;
+    const applyCursor = () => {
+      const { point, segment } = cursor?.get() ?? { point: null, segment: null };
+      if (segment && segment.length > 1) {
+        if (cursorSegment) {
+          cursorSegment.setLatLngs(segment);
+        } else {
+          cursorSegment = L.polyline(segment, {
+            color: CURSOR_SEGMENT_COLOR,
+            weight: 6,
+            opacity: 0.95,
+            lineCap: "round",
+            lineJoin: "round",
+            interactive: false
+          }).addTo(map);
+        }
+        cursorSegment.bringToFront();
+      } else if (cursorSegment) {
+        cursorSegment.remove();
+        cursorSegment = undefined;
+      }
+      if (point) {
+        if (cursorDot) {
+          cursorDot.setLatLng(point);
+        } else {
+          cursorDot = L.circleMarker(point, {
+            radius: 7,
+            color: CURSOR_DOT_RING,
+            weight: 3,
+            fillColor: MARKER_RING,
+            fillOpacity: 1,
+            interactive: false
+          }).addTo(map);
+        }
+        cursorDot.bringToFront();
+      } else if (cursorDot) {
+        cursorDot.remove();
+        cursorDot = undefined;
+      }
+    };
+    const unsubscribeCursor = cursor?.subscribe(applyCursor);
+    applyCursor();
+
     const resizeObserver = new ResizeObserver(() => {
       map.invalidateSize();
       if (!fitted) {
@@ -301,6 +353,7 @@ function RouteMapCanvas({
 
     return () => {
       window.cancelAnimationFrame(animationFrame);
+      unsubscribeCursor?.();
       resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
@@ -309,7 +362,7 @@ function RouteMapCanvas({
       routeLineRef.current = null;
       overlayLayersRef.current.clear();
     };
-  }, [route, theme, scrollWheelZoom, cartoApiKey]);
+  }, [route, theme, scrollWheelZoom, cartoApiKey, cursor]);
 
   // Swap the base tile layer in place so zoom/pan and the route animation
   // survive a layer change.
@@ -395,7 +448,8 @@ function RouteLegend() {
 export function ActivityRouteMap({
   track,
   expanded: expandedProp,
-  onExpandedChange
+  onExpandedChange,
+  cursor
 }: ActivityRouteMapProps) {
   useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -445,7 +499,7 @@ export function ActivityRouteMap({
 
   return (
     <div className="activity-route-map" ref={containerRef}>
-      <RouteMapCanvas route={route} baseLayer={baseLayer} ariaLabel="Activity route map" />
+      <RouteMapCanvas route={route} baseLayer={baseLayer} ariaLabel="Activity route map" cursor={cursor} />
       <div className="activity-route-footer">
         <RouteLegend />
         <button

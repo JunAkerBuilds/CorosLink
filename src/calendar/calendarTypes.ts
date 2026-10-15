@@ -3,6 +3,7 @@ import type {
   TrainingHubDailyMetric,
   TrainingHubScheduledWorkoutEntry
 } from "../../electron/types";
+import type { WeekSportTotals } from "./weekSportBreakdown";
 
 /** A scheduled workout matched (or not) to the completed activity on the same day. */
 export interface PlannedActualPair {
@@ -29,6 +30,7 @@ export interface WeeklyStats {
   actualLoad: number;
   plannedLoad: number;
   activityTimeSeconds: number;
+  plannedTimeSeconds: number;
   distanceMeters: number;
   plannedDistanceKm: number;
   elevationGain: number;
@@ -41,6 +43,8 @@ export interface WeeklyStats {
   /** COROS recommended weekly training-load band. */
   recommendedLoadMin?: number;
   recommendedLoadMax?: number;
+  /** Every sport done or planned this week, in display order. */
+  sports: WeekSportTotals[];
 }
 
 export interface CalendarWeek {

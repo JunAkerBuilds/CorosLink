@@ -89,6 +89,8 @@
 .panel.health-insight-sleepHrv:is([data-chart-size="standard"], [data-chart-size="tall"]) .health-insight-stats > div { padding: 5px 10px; min-width: 54px; }
 .panel.health-insight-sleepHrv:is([data-chart-size="standard"], [data-chart-size="tall"]) .health-insight-chart { min-height: 150px; flex-basis: 150px; }
 .panel.health-insight-sleepHrv .health-insight-legend { margin: 0; gap: 12px; }
+.panel.health-insight-sleepHrv .health-hrv-reference .health-insight-legend { row-gap: 4px; }
+.panel.health-insight-sleepHrv:is([data-chart-size="mini"], [data-chart-size="short"]) .health-hrv-notice { padding: 5px 8px; font-size: 11px; }
 .health-hrv-explanation { font-size: 11px; }
 .health-hrv-explanation > :not(summary) { margin: 6px 0; }
 .health-hrv-explanation summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

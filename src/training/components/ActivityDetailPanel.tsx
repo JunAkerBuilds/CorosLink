@@ -32,8 +32,12 @@ import {
 import { isCyclingSportType, isSwimSportType, resolveSportName } from "../sportTypes";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import { formatSpeedValue } from "../../units/units";
+import { parseActivityStreams, parseActivityZones } from "../activityStreams";
+import { createRouteCursor } from "../routeCursor";
+import { ActivityChannels } from "./ActivityChannels";
 import { ActivityElevationChart } from "./ActivityElevationChart";
 import { ActivityRouteMap } from "./ActivityRouteMap";
+import { ActivityTimeInZones } from "./ActivityTimeInZones";
 import { StrengthDetailPanel } from "./StrengthDetailPanel";
 import { ExportMenu } from "./TrainingActivityTable";
 
@@ -145,6 +149,21 @@ export function ActivityDetailPanel({
 
     return undefined;
   }, [detail, listActivity, sportTypes, getLocale()]);
+  const routeCursor = useMemo(() => createRouteCursor(), []);
+  // Showcase only: the per-second channels and zone totals ride along in the raw detail payload.
+  const streamSportType = detail?.sportType ?? listActivity?.sportType;
+  const streamOptions = useMemo(
+    () => ({ cycling: isCyclingSportType(streamSportType), swim: isSwimSportType(streamSportType) }),
+    [streamSportType]
+  );
+  const streams = useMemo(
+    () => (showcase && detail && !detail.strength ? parseActivityStreams(detail.raw, streamOptions) : null),
+    [showcase, detail, streamOptions]
+  );
+  const zones = useMemo(
+    () => (showcase && detail && !detail.strength ? parseActivityZones(detail.raw, streamOptions) : {}),
+    [showcase, detail, streamOptions]
+  );
 
   const isLoading =
     listActivity &&
@@ -222,15 +241,15 @@ export function ActivityDetailPanel({
   const elevation = showcase ? elevationRange(detail) : undefined;
 
   const stats: DetailStatProps[] = [
-    { label: "Duration", value: formatDurationSeconds(detail.duration), icon: Timer, tone: "#5ce5a2" },
-    { label: "Distance", value: formatDistanceMeters(detail.distance, unitSystem, swim), icon: MapPin, tone: "#65dcec" },
+    { label: t("Duration"), value: formatDurationSeconds(detail.duration), icon: Timer, tone: "#5ce5a2" },
+    { label: t("Distance"), value: formatDistanceMeters(detail.distance, unitSystem, swim), icon: MapPin, tone: "#65dcec" },
     ...(performance ? [{ label: paceLabel, value: performance, icon: Gauge, tone: "#58ddd4" }] : []),
-    { label: "Avg HR", value: showcase ? withUnit(detail.avgHr, "bpm") : formatOptionalNumber(detail.avgHr), icon: Heart, tone: "#ff7288" },
-    { label: "Max HR", value: showcase ? withUnit(detail.maxHr, "bpm") : formatOptionalNumber(detail.maxHr), icon: HeartPulse, tone: "#c995f5" },
-    { label: "Calories", value: showcase ? withUnit(detail.calories, "kcal") : formatOptionalNumber(detail.calories), icon: Flame, tone: "#ffb649" },
-    { label: showcase ? "Elevation Gain" : "Elevation", value: formatElevationMeters(detail.elevationGain, unitSystem), icon: Mountain, tone: "#5ce5a2" },
+    { label: t("Avg HR"), value: showcase ? withUnit(detail.avgHr, "bpm") : formatOptionalNumber(detail.avgHr), icon: Heart, tone: "#ff7288" },
+    { label: t("Max HR"), value: showcase ? withUnit(detail.maxHr, "bpm") : formatOptionalNumber(detail.maxHr), icon: HeartPulse, tone: "#c995f5" },
+    { label: t("Calories"), value: showcase ? withUnit(detail.calories, "kcal") : formatOptionalNumber(detail.calories), icon: Flame, tone: "#ffb649" },
+    { label: showcase ? t("Elevation Gain") : t("Elevation"), value: formatElevationMeters(detail.elevationGain, unitSystem), icon: Mountain, tone: "#5ce5a2" },
     // The dialog header already carries training load as a chip.
-    ...(showcase ? [] : [{ label: "Training Load", value: formatOptionalNumber(detail.trainingLoad), icon: Zap }])
+    ...(showcase ? [] : [{ label: t("Training Load"), value: formatOptionalNumber(detail.trainingLoad), icon: Zap }])
   ];
 
   return (
@@ -282,6 +301,7 @@ export function ActivityDetailPanel({
                 track={detail.track}
                 expanded={showcase ? mapExpanded : undefined}
                 onExpandedChange={showcase ? setMapExpanded : undefined}
+                cursor={streams?.hasGps ? routeCursor : undefined}
               />
             </section>
 
@@ -307,6 +327,17 @@ export function ActivityDetailPanel({
               <ActivityElevationChart track={detail.track} />
             </section>
           </div>
+
+          {zones.hr || zones.pace ? <ActivityTimeInZones zones={zones} /> : null}
+          {streams ? (
+            <ActivityChannels
+              key={detail.activityId ?? "activity"}
+              streams={streams}
+              cycling={cycling}
+              elevationGain={detail.elevationGain}
+              cursor={routeCursor}
+            />
+          ) : null}
 
           {showLaps ? (
             <div className="training-laps-section">

@@ -84,9 +84,96 @@ function matchCandidate(
 
 function sourceIdsOf(session: StrengthSession): StrengthSourceIds {
   if (session.sourceIds) return session.sourceIds;
-  return session.source === "hevy"
-    ? { hevy: session.activityId.replace(/^hevy:/, "") }
-    : { coros: session.activityId };
+  if (session.source === "hevy") return { hevy: session.activityId.replace(/^hevy:/, "") };
+  if (session.source === "strava") {
+    return { strava: session.activityId.replace(/^strava:/, "") };
+  }
+  return { coros: session.activityId };
+}
+
+/** Start gap of a Strava copy of `session`, or undefined when they are not the same workout. */
+function stravaStartDifference(
+  session: StrengthSession,
+  strava: StrengthSession
+): number | undefined {
+  if (
+    session.startTime === undefined ||
+    strava.startTime === undefined ||
+    localDay(session.startTime) !== localDay(strava.startTime)
+  ) {
+    return undefined;
+  }
+  // Time only: Strava's API exposes no exercises to compare. COROS and Hevy
+  // both upload with the original start, so real copies sit within minutes.
+  const startDifference = Math.abs(session.startTime - strava.startTime);
+  return startDifference <= 30 * 60 || intervalOverlapRatio(session, strava) >= 0.6
+    ? startDifference
+    : undefined;
+}
+
+function attachStrava(session: StrengthSession, strava: StrengthSession): StrengthSession {
+  const summary = session.detail.summary;
+  const avgHr = session.avgHr ?? summary.avgHr ?? strava.avgHr;
+  const maxHr = session.maxHr ?? summary.maxHr ?? strava.maxHr;
+  // Hevy records no calories and stores 0, not undefined.
+  const calories = session.calories ?? (summary.calories > 0 ? summary.calories : strava.calories);
+  return {
+    ...session,
+    source: "combined",
+    sourceIds: { ...sourceIdsOf(session), strava: sourceIdsOf(strava).strava },
+    strava: strava.strava,
+    avgHr,
+    maxHr,
+    calories,
+    detail: {
+      ...session.detail,
+      summary: { ...summary, avgHr, maxHr, calories: calories ?? 0 }
+    }
+  };
+}
+
+/**
+ * Fold Strava gym activities into an existing history. Most are copies of a
+ * COROS or Hevy session (both auto-upload to Strava) and only add notes and
+ * effort; the rest were recorded on Strava alone and stand as their own session.
+ */
+export function attachStravaSessions(
+  sessions: StrengthSession[],
+  stravaSessions: StrengthSession[]
+): StrengthSession[] {
+  const candidates: { sessionIndex: number; stravaIndex: number; startDifference: number }[] = [];
+  for (let sessionIndex = 0; sessionIndex < sessions.length; sessionIndex += 1) {
+    for (let stravaIndex = 0; stravaIndex < stravaSessions.length; stravaIndex += 1) {
+      const startDifference = stravaStartDifference(
+        sessions[sessionIndex],
+        stravaSessions[stravaIndex]
+      );
+      if (startDifference !== undefined) {
+        candidates.push({ sessionIndex, stravaIndex, startDifference });
+      }
+    }
+  }
+  candidates.sort((left, right) => left.startDifference - right.startDifference);
+
+  const attached = new Map<number, number>();
+  const usedStrava = new Set<number>();
+  for (const candidate of candidates) {
+    if (attached.has(candidate.sessionIndex) || usedStrava.has(candidate.stravaIndex)) {
+      continue;
+    }
+    attached.set(candidate.sessionIndex, candidate.stravaIndex);
+    usedStrava.add(candidate.stravaIndex);
+  }
+
+  return [
+    ...sessions.map((session, index) => {
+      const stravaIndex = attached.get(index);
+      return stravaIndex === undefined
+        ? session
+        : attachStrava(session, stravaSessions[stravaIndex]);
+    }),
+    ...stravaSessions.filter((_, index) => !usedStrava.has(index))
+  ].sort((left, right) => (right.startTime ?? 0) - (left.startTime ?? 0));
 }
 
 export function mergeStrengthSessionPair(
@@ -177,7 +264,8 @@ export function combineStrengthSessions(
 export function selectStrengthSessions(
   source: StrengthDataSource,
   coros: StrengthSession[],
-  hevy: StrengthSession[]
+  hevy: StrengthSession[],
+  strava: StrengthSession[] = []
 ): StrengthSession[] {
   if (source === "coros") {
     return coros.map((session) => ({
@@ -187,5 +275,6 @@ export function selectStrengthSessions(
     }));
   }
   if (source === "hevy") return hevy;
-  return combineStrengthSessions(coros, hevy);
+  if (source === "strava") return strava;
+  return attachStravaSessions(combineStrengthSessions(coros, hevy), strava);
 }

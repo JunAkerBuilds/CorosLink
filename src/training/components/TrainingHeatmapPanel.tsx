@@ -1,5 +1,6 @@
 import { getLocale, useLanguage, t } from "../../i18n/training";
 import {
+  memo,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -133,7 +134,7 @@ function formatCellAriaLabel(
   return `${cell.label}: ${metricLabel}, distance ${distance}, duration ${duration}`;
 }
 
-export function TrainingHeatmapPanel({
+function TrainingHeatmapPanelComponent({
   snapshot,
   activities = [],
   rpeBackfill = null
@@ -685,3 +686,7 @@ export function TrainingHeatmapPanel({
     </section>
   );
 }
+
+// The hub re-renders on every App state change; skip the ~365 cells unless
+// the data behind them changed.
+export const TrainingHeatmapPanel = memo(TrainingHeatmapPanelComponent);

@@ -7,6 +7,7 @@ import type { DiagnosticsSnapshot, RendererDiagnosticError } from "../electron/d
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "../electron/calendarSyncTypes";
 import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "../electron/watchfaceAutomationTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "../electron/googleCalendarTypes";
+import type { ManualRaceInput, RaceEditInput, RaceOverview, StravaRaceImportResult } from "../electron/raceTypes";
 import type {
   ActivityBackupFilters,
   ActivityBackupPreview,
@@ -35,6 +36,7 @@ import type {
   GenerateRouteRequest,
   GeneratedRoute,
   GeneratedRoutePage,
+  GeneratedRouteResult,
   GpxImportSummary,
   LocalTrack,
   RouteActivityType,
@@ -54,6 +56,8 @@ import type {
   SpotifySyncUpdate,
   HevySettingsInput,
   HevyStatus,
+  StravaConfigInput,
+  StravaStatus,
   StrengthHistory,
   StrengthHistoryRequest,
   TrainingHubActivity,
@@ -262,6 +266,17 @@ export interface CorosLinkApi {
   connectCorosNativeBle: (input?: import("../electron/corosNativeBleTypes").CorosNativeBleConnectOptions) => Promise<CorosNativeBleSnapshot>;
   scanCorosNativeBle: () => Promise<CorosNativeBleSnapshot>;
   refreshCorosNativeBle: () => Promise<CorosNativeBleSnapshot>;
+  getCorosActivityScreenStatus?: () => Promise<import("../electron/corosActivityScreenTypes").CorosActivityScreenStatus>;
+  listCorosActivityScreenSports?: () => Promise<import("../electron/corosActivityScreenTypes").CorosActivityScreenSport[]>;
+  readCorosActivityScreens?: (sportId: number) => Promise<import("../electron/corosActivityScreenTypes").CorosActivityScreenDocument>;
+  getCorosActivityScreenBackups?: () => Promise<import("../electron/corosActivityScreenTypes").CorosActivityScreenBackup[]>;
+  backupCorosActivityScreens?: (input: { snapshotId: string }) => Promise<import("../electron/corosActivityScreenTypes").CorosActivityScreenBackup>;
+  syncCorosActivityScreenBaseline?: (input: { snapshotId: string }) => Promise<import("../electron/corosActivityScreenTypes").CorosActivityScreenResult>;
+  confirmCorosActivityScreenBaseline?: (input: { snapshotId: string }) => Promise<import("../electron/corosActivityScreenTypes").CorosActivityScreenDocument>;
+  previewCorosActivityScreenLayout?: (input: { snapshotId: string; pageIndex: number; fieldCount: number }) => Promise<import("../electron/corosActivityScreenTypes").CorosActivityScreenPreview>;
+  applyCorosActivityScreenLayout?: (input: { previewId: string }) => Promise<import("../electron/corosActivityScreenTypes").CorosActivityScreenResult>;
+  restoreCorosActivityScreens?: (input: { backupId: string }) => Promise<import("../electron/corosActivityScreenTypes").CorosActivityScreenResult>;
+  exportCorosActivityScreenBackup?: (input: { backupId: string }) => Promise<{ saved: boolean }>;
   getCorosMusicInventory: () => Promise<import("../electron/corosBleMusicTypes").CorosBleMusicInventory>;
   getCorosWifiMusicStatus: () => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
   sendCorosMusicOverWifi: () => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
@@ -272,6 +287,11 @@ export interface CorosLinkApi {
   deleteCorosMusicTrack: (target: import("../electron/corosBleMusicTypes").CorosBleMusicDeleteTarget) => Promise<import("../electron/corosBleMusicTypes").CorosBleMusicDeleteResult>;
   disconnectCorosNativeBle: () => Promise<CorosNativeBleSnapshot>;
   createCorosPhonePairingCode?: () => Promise<import("../electron/corosNativeBleTypes").CorosPhonePairingCode>;
+  startCorosWatchfacePhoneSend?: (input: import("../electron/watchfacePhoneSendTypes").WatchfacePhoneSendInput) => Promise<import("../electron/watchfacePhoneSendTypes").WatchfacePhoneSend>;
+  stopCorosWatchfacePhoneSend?: () => Promise<void>;
+  /** macOS only: opens the share menu, with AirDrop, for the face as a .dat C-LINK opens. */
+  airDropCorosWatchfaceToIphone?: (input: import("../electron/watchfacePhoneSendTypes").WatchfacePhoneSendInput) => Promise<void>;
+  onCorosWatchfacePhoneSendStatus?: (callback: (status: import("../electron/watchfacePhoneSendTypes").WatchfacePhoneSendStatus) => void) => () => void;
   sendCorosNotification: (input: import("../electron/corosBleNotificationProtocol").CorosNotificationInput) => Promise<{ sent: true; fragments: number }>;
   chooseCorosDirectWatchface: () => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfacePreview | null>;
   getCorosWatchfaceSyncStatus: () => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfaceStatus>;
@@ -643,6 +663,20 @@ export interface CorosLinkApi {
   connectHevy: (apiKey: string) => Promise<HevyStatus>;
   updateHevySettings: (input: HevySettingsInput) => Promise<HevyStatus>;
   disconnectHevy: () => Promise<void>;
+  getStravaStatus: () => Promise<StravaStatus>;
+  saveStravaConfig: (input: StravaConfigInput) => Promise<StravaStatus>;
+  connectStrava: () => Promise<StravaStatus>;
+  cancelStravaConnect: () => Promise<void>;
+  disconnectStrava: () => Promise<void>;
+  getRaceOverview: () => Promise<RaceOverview>;
+  listRaceActivityIds: () => Promise<string[]>;
+  markActivityAsRace: (activity: TrainingHubActivity) => Promise<RaceOverview>;
+  unmarkActivityAsRace: (activityId: string) => Promise<RaceOverview>;
+  dismissRaceSuggestion: (activityId: string) => Promise<RaceOverview>;
+  updateRace: (input: RaceEditInput) => Promise<RaceOverview>;
+  removeRace: (raceId: string) => Promise<RaceOverview>;
+  addManualRace: (input: ManualRaceInput) => Promise<RaceOverview>;
+  importStravaRaces: (full?: boolean) => Promise<StravaRaceImportResult>;
   startRpeBackfill: () => Promise<void>;
   getRpeBackfillStatus: () => Promise<{ pending: number; running: boolean }>;
   getRpeLoadByDay: () => Promise<Record<string, number>>;
@@ -711,7 +745,11 @@ export interface CorosLinkApi {
     lat: number,
     lon: number
   ) => Promise<RouteGeocodeResult>;
-  generateRoute: (request: GenerateRouteRequest) => Promise<GeneratedRoute>;
+  generateRoute: (request: GenerateRouteRequest) => Promise<GeneratedRouteResult>;
+  replaceGeneratedRouteGeometry: (
+    id: string,
+    geometry: RouteGeometry
+  ) => Promise<GeneratedRoute>;
   routeWaypoints: (request: RouteWaypointRequest) => Promise<RouteGeometry>;
   saveDrawnRoute: (payload: DrawnRoutePayload) => Promise<GeneratedRoute>;
   importRouteGpx: (
@@ -719,6 +757,7 @@ export interface CorosLinkApi {
   ) => Promise<GpxImportSummary | null>;
   exportGeneratedRoute: (id: string) => Promise<string | null>;
   deleteGeneratedRoute: (id: string) => Promise<boolean>;
+  deleteAllGeneratedRoutes: () => Promise<number>;
   startRouteShare: (id: string) => Promise<RouteShareSession>;
   stopRouteShare: () => Promise<void>;
   validateRouteApiKey: (apiKey: string) => Promise<RouteApiKeyValidation>;

@@ -100,6 +100,19 @@ const hrvReport = parse('sleepHrv', [
 assert.deepEqual(hrvReport.metrics.map(m => [m.key, m.value]), [['average', 83], ['normalRange', '75–105'], ['baseline', 90], ['evaluation', 'Normal'], ['hrv', 104]]);
 assert.deepEqual(hrvReport.series.map(s => [s.key, s.points.length]), [['average', 1], ['hrv', 2]], 'baseline is summary-only');
 assert.equal(hrvReport.report, 'Note: dates are wake-up days.');
+const hrvEmpty = parse('sleepHrv', [
+  'Sleep HRV — 2026-10-14', '========================', 'Note: dates are wake-up days (each value comes from the night that ended that morning).', '',
+  'HRV Assessment — Last 1 days', '========================', '', '2026-10-14: No data', '',
+  'No sleep HRV time series data found in the last 1 days.'
+].join('\n'));
+assert.equal(hrvEmpty.metrics.length + hrvEmpty.series.length, 0);
+assert.equal(hrvEmpty.report, 'Note: dates are wake-up days (each value comes from the night that ended that morning).\n\nNo sleep HRV time series data found in the last 1 days.', 'An empty report keeps its sentences, not its titles, rules or No-data days');
+const hrvGap = parse('sleepHrv', [
+  'HRV Assessment — Last 2 days', '========================', '',
+  '2026-10-13:', '  HRV Avg: 84 ms — Normal', '', '2026-10-14: No data'
+].join('\n'));
+assert.deepEqual(hrvGap.series.map(s => [s.key, s.points.map(p => p.time)]), [['average', ['2026-10-13']]]);
+assert.equal(hrvGap.report, undefined, 'A No-data day is not prose');
 const cycleReport = parse('cycle', 'Menstrual Cycle Data\n====================\nQuery Range: 2026-09-15 to 2026-09-21\nToday: 2026-09-21 | No cycle includes today\nCurrent Cycle: Not found in returned cycles\nNext Period Start: Unknown\nGeneral: usual period 7 days, usual cycle 28 days\n\nNo menstrual cycle data found for this range.');
 assert.deepEqual(cycleReport.metrics.map(m => [m.key, m.value]), [['usualCycleLength', 28], ['usualPeriodLength', 7]], 'Unknown placeholders are dropped');
 assert.equal(cycleReport.report, 'No menstrual cycle data found for this range.');

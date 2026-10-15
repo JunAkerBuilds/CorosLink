@@ -13,7 +13,8 @@ import { decodeRouteInventory, encodeWatchRoute, encodeRouteBlockHeader, routeSl
 import type { CorosRouteSyncStatus } from "./corosBleRouteTypes";
 import type { GeneratedRoute } from "./types";
 import { encodeNotificationFrames, type CorosNotificationInput } from "./corosBleNotificationProtocol";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { CorosActivityScreenService } from "./corosActivityScreenService";
 import { decodeWatchfaceInventory, selectWatchfaceSlot, encodeWatchfaceFile, encodeWatchfaceBlockHeader, WATCHFACE_BLOCK_BYTES, WATCHFACE_MAX_BYTES } from "./corosBleWatchfaceProtocol";
 import type { CorosDirectWatchfaceInventory, CorosDirectWatchfacePreview, CorosDirectWatchfaceStatus, CorosDirectWatchfaceTarget } from "./corosBleWatchfaceTypes";
 import { decodeMusicInventoryPage, encodeMusicDeleteFile, encodeMusicDeleteHeader, requireMusicDeleteAcknowledgement } from "./corosBleMusicProtocol";
@@ -61,6 +62,22 @@ export class CorosNativeBleService {
   private musicDeleteTask?: Promise<CorosBleMusicDeleteResult>;
   private musicConfirming = false;
   private wifiMusicTask?: Promise<CorosWifiMusicStatus>;
+  private activityScreenTask?: Promise<unknown>;
+  private readonly activityScreens = new CorosActivityScreenService({
+    enabled: () => !app.isPackaged,
+    identity: () => {
+      this.requireTransferSession();
+      if (this.watchTarget()?.model !== "pace-pro") throw new Error("Development activity-screen sync currently supports PACE Pro only.");
+      const name = this.state.deviceName ?? "PACE Pro";
+      const deviceId = this.state.serialNumber || this.state.deviceId;
+      const firmware = this.state.firmwareRevision || this.state.softwareRevision;
+      if (!deviceId || !firmware) throw new Error("Refresh the watch connection to read its identity and firmware first.");
+      return { key: createHash("sha256").update(JSON.stringify(["pace-pro", deviceId])).digest("hex"), name, model: "pace-pro", firmware };
+    },
+    session: () => JSON.stringify([this.musicSession(), this.state.firmwareRevision, this.state.softwareRevision]),
+    exchange: (opcode, payload) => this.controlCommand(opcode, payload),
+    directory: () => path.join(app.getPath("userData"), "activity-screen-backups")
+  });
   private readonly wifiMusic = new CorosWifiMusicService({
     identity: () => this.wifiMusicIdentity(),
     // Checked on PACE Pro 3.2008.0 over Mac Bluetooth; other watches, Windows and Linux are open as beta.
@@ -327,7 +344,7 @@ export class CorosNativeBleService {
 
   async status(): Promise<CorosNativeBleSnapshot> {
     if (this.connecting || this.scanning) return { ...this.publicState(), phase: this.connecting ? "connecting" : "scanning" };
-    if (this.wifiMusicTask || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.musicInventoryTask || (this.musicDeleteTask && !this.musicConfirming)) return this.publicState();
+    if (this.activityScreenTask || this.wifiMusicTask || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.musicInventoryTask || (this.musicDeleteTask && !this.musicConfirming)) return this.publicState();
     if (!this.worker) {
       const state = this.publicState();
       return { ...state, phase: state.available ? state.phase : "unavailable" };
@@ -338,6 +355,7 @@ export class CorosNativeBleService {
 
   connect(pair = false, options: CorosNativeBleConnectOptions = {}): Promise<CorosNativeBleSnapshot> {
     if (this.wifiMusicTask) return Promise.reject(new Error("Wait for audio sync to restore the watch settings before reconnecting."));
+    if (this.activityScreenTask) return Promise.reject(new Error("Wait for the activity-page operation to finish before reconnecting."));
     if (this.musicInventoryTask || this.musicDeleteTask) return Promise.reject(new Error("Wait for the Bluetooth music operation to finish before reconnecting."));
     this.musicInventory = undefined;
     if (this.connecting) return this.connecting;
@@ -438,6 +456,7 @@ export class CorosNativeBleService {
 
   scan(): Promise<CorosNativeBleSnapshot> {
     if (this.wifiMusicTask) return Promise.reject(new Error("Wait for audio sync and settings restoration before scanning."));
+    if (this.activityScreenTask) return Promise.reject(new Error("Wait for the activity-page operation to finish before scanning."));
     if (this.scanning) return this.scanning;
     this.scanning = (async () => {
       if (this.connecting) await this.connecting;
@@ -453,7 +472,7 @@ export class CorosNativeBleService {
   }
 
   refresh(): Promise<CorosNativeBleSnapshot> {
-    if (this.wifiMusicTask) return Promise.resolve(this.publicState());
+    if (this.activityScreenTask || this.wifiMusicTask) return Promise.resolve(this.publicState());
     if (this.musicInventoryTask || this.musicDeleteTask) return Promise.reject(new Error("Wait for the Bluetooth music operation to finish before refreshing the connection."));
     return this.request("refresh");
   }
@@ -471,7 +490,7 @@ export class CorosNativeBleService {
   listMusic(): Promise<CorosBleMusicInventory> {
     if (this.wifiMusicBusy) return Promise.reject(new Error("Wait for Wi-Fi audio sync and settings restoration before reading music."));
     if (this.musicInventoryTask) return this.musicInventoryTask;
-    if (this.musicDeleteTask || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.mapStarting || this.connecting || this.scanning) {
+    if (this.activityScreenTask || this.musicDeleteTask || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.mapStarting || this.connecting || this.scanning) {
       return Promise.reject(new Error("Wait for the current Bluetooth operation to finish before reading music."));
     }
     this.musicInventoryTask = (async () => {
@@ -498,7 +517,7 @@ export class CorosNativeBleService {
   }
 
   private requireWifiMusicIdle(): void {
-    if (this.wifiMusicBusy || this.connecting || this.scanning || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask ||
+    if (this.activityScreenTask || this.wifiMusicBusy || this.connecting || this.scanning || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask ||
         this.musicInventoryTask || this.musicDeleteTask || this.mapStarting) throw new Error("Wait for the current Bluetooth operation and settings restoration to finish.");
     this.requireMusicSession();
   }
@@ -530,7 +549,7 @@ export class CorosNativeBleService {
   }
 
   restoreWifiMusicSettings(): Promise<CorosWifiMusicStatus> {
-    if (this.wifiMusicTask || this.connecting || this.scanning || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.musicInventoryTask || this.musicDeleteTask || this.mapStarting) {
+    if (this.activityScreenTask || this.wifiMusicTask || this.connecting || this.scanning || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.musicInventoryTask || this.musicDeleteTask || this.mapStarting) {
       return Promise.reject(new Error("Wait for the current Bluetooth operation to finish."));
     }
     this.requireMusicSession();
@@ -586,7 +605,7 @@ export class CorosNativeBleService {
 
   deleteMusic(target: CorosBleMusicDeleteTarget, confirm: (track: CorosBleMusicTrack) => Promise<boolean>): Promise<CorosBleMusicDeleteResult> {
     if (this.wifiMusicBusy) return Promise.reject(new Error("Wait for Wi-Fi audio sync and settings restoration before deleting music."));
-    if (this.musicDeleteTask || this.musicInventoryTask || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.mapStarting || this.connecting || this.scanning) {
+    if (this.activityScreenTask || this.musicDeleteTask || this.musicInventoryTask || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.mapStarting || this.connecting || this.scanning) {
       return Promise.reject(new Error("Wait for the current Bluetooth operation to finish before deleting music."));
     }
     const cached = this.musicInventory;
@@ -645,7 +664,7 @@ export class CorosNativeBleService {
     // Keep the busy guard for transfers and other writes.
     if (this.polling) await this.polling;
     await this.mapPolling?.catch(() => {});
-    if (this.connecting || this.scanning || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.musicInventoryTask || this.musicDeleteTask || this.mapStarting || this.pending.size) {
+    if (this.activityScreenTask || this.connecting || this.scanning || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.musicInventoryTask || this.musicDeleteTask || this.mapStarting || this.pending.size) {
       throw new Error("Wait for the current Bluetooth operation to finish before sending a message.");
     }
     if (!this.state.connected || this.state.systemBind !== "authenticated") {
@@ -667,9 +686,38 @@ export class CorosNativeBleService {
   private async controlCommand(opcode: number, payload: Buffer): Promise<Buffer> {
     this.requireTransferSession();
     const response = await this.send("exchange", { opcode, payload: payload.toString("base64"), maximumWriteBytes: 20 });
-    if (typeof response.payload !== "string") throw new Error("The watch did not answer the map command.");
+    if (typeof response.payload !== "string") throw new Error("The watch did not answer the Bluetooth command.");
     return Buffer.from(response.payload, "base64");
   }
+
+  private activityScreenOperation<T>(task: () => Promise<T> | T): Promise<T> {
+    if (app.isPackaged) return Promise.reject(new Error("Activity-screen sync is available only in development builds."));
+    if (this.activityScreenTask || this.wifiMusicBusy || this.connecting || this.scanning || this.routeTask || this.watchfaceTask ||
+        this.watchfaceInventoryTask || this.musicInventoryTask || this.musicDeleteTask || this.mapStarting ||
+        (this.pending.size && !this.polling && !this.mapPolling)) {
+      return Promise.reject(new Error("Wait for the current Bluetooth operation before working on activity pages."));
+    }
+    const operation = (async () => {
+      await this.polling;
+      await this.mapPolling;
+      return task();
+    })().finally(() => { this.activityScreenTask = undefined; });
+    this.activityScreenTask = operation;
+    return operation;
+  }
+  activityScreenStatus() { return this.activityScreens.status(); }
+  activityScreenBackups() { return this.activityScreens.backups(); }
+  exportActivityScreenBackup(id: string) { return this.activityScreens.exportBackup(id); }
+  listActivityScreenSports() { return this.activityScreenOperation(() => this.activityScreens.sports()); }
+  readActivityScreens(sportId: number) { return this.activityScreenOperation(() => this.activityScreens.read(sportId)); }
+  backupActivityScreens(snapshotId: string) { return this.activityScreenOperation(() => this.activityScreens.backup(snapshotId)); }
+  syncActivityScreenBaseline(snapshotId: string) { return this.activityScreenOperation(() => this.activityScreens.syncBaseline(snapshotId)); }
+  confirmActivityScreenBaseline(snapshotId: string) { return this.activityScreenOperation(() => this.activityScreens.confirmBaseline(snapshotId)); }
+  previewActivityScreenLayout(snapshotId: string, pageIndex: number, fieldCount: number) {
+    return this.activityScreenOperation(() => this.activityScreens.preview(snapshotId, pageIndex, fieldCount));
+  }
+  applyActivityScreenLayout(previewId: string) { return this.activityScreenOperation(() => this.activityScreens.apply(previewId)); }
+  restoreActivityScreens(backupId: string) { return this.activityScreenOperation(() => this.activityScreens.restore(backupId)); }
 
   async previewWifiMap(tiles: unknown): Promise<CorosWifiMapPreview> {
     this.requireTransferSession();
@@ -685,7 +733,7 @@ export class CorosNativeBleService {
       const result: CorosWifiMapStatus = { supported: Boolean(recognized), watchLabel: recognized?.label, validated: isValidatedWatch(state),
         connected: state.connected, authenticated: state.systemBind === "authenticated", deviceName: state.deviceName,
         tasks: [], updatedAt: Date.now() };
-      if (!result.supported || !result.connected || !result.authenticated || this.wifiMusicBusy || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.musicInventoryTask || this.musicDeleteTask) return result;
+      if (!result.supported || !result.connected || !result.authenticated || this.activityScreenTask || this.wifiMusicBusy || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.musicInventoryTask || this.musicDeleteTask) return result;
       const wifi = await this.controlCommand(0xb2, Buffer.from([5]));
       if (wifi.length !== 2 || wifi[0] !== 1) throw new Error("The watch returned an unsupported Wi-Fi status.");
       result.wifiStateCode = wifi[1];
@@ -697,6 +745,7 @@ export class CorosNativeBleService {
 
   downloadWifiMap(previewId: string): Promise<{ taskId: string; status: CorosWifiMapStatus }> {
     if (this.wifiMusicBusy) throw new Error("Wait for Wi-Fi audio sync and settings restoration before downloading maps.");
+    if (this.activityScreenTask) throw new Error("Wait for activity-page sync to finish before starting a map download.");
     if (this.musicInventoryTask || this.musicDeleteTask) throw new Error("Wait for the Bluetooth music operation to finish.");
     if (this.watchfaceTask || this.watchfaceInventoryTask) throw new Error("Wait for watch face sync to finish before starting a map download.");
     if (this.routeTask) throw new Error("Wait for route sync to finish before starting a map download.");
@@ -719,6 +768,7 @@ export class CorosNativeBleService {
 
   syncRoute(route: GeneratedRoute): Promise<CorosRouteSyncStatus> {
     if (this.wifiMusicBusy) return Promise.reject(new Error("Wait for Wi-Fi audio sync and settings restoration before syncing routes."));
+    if (this.activityScreenTask) return Promise.reject(new Error("Wait for activity-page sync to finish before syncing a route."));
     if (this.musicInventoryTask || this.musicDeleteTask) return Promise.reject(new Error("Wait for the Bluetooth music operation to finish."));
     if (this.watchfaceTask || this.watchfaceInventoryTask) return Promise.reject(new Error("Wait for watch face sync to finish before syncing a route."));
     if (this.routeTask) return Promise.reject(new Error("A route sync is already running."));
@@ -820,7 +870,7 @@ export class CorosNativeBleService {
   listWatchfaceSlots(): Promise<CorosDirectWatchfaceInventory> {
     if (this.wifiMusicBusy) return Promise.reject(new Error("Wait for Wi-Fi audio sync and settings restoration before reading watch faces."));
     if (this.watchfaceInventoryTask) return this.watchfaceInventoryTask;
-    if (this.watchfaceTask || this.routeTask || this.musicInventoryTask || this.musicDeleteTask || this.mapStarting || this.connecting || this.scanning) {
+    if (this.activityScreenTask || this.watchfaceTask || this.routeTask || this.musicInventoryTask || this.musicDeleteTask || this.mapStarting || this.connecting || this.scanning) {
       return Promise.reject(new Error("Wait for the current Bluetooth transfer to finish before reading watch face slots."));
     }
     this.watchfaceInventoryTask = (async () => {
@@ -841,7 +891,7 @@ export class CorosNativeBleService {
 
   syncWatchface(previewId: string, target?: CorosDirectWatchfaceTarget): Promise<CorosDirectWatchfaceStatus> {
     if (this.wifiMusicBusy) return Promise.reject(new Error("Wait for Wi-Fi audio sync and settings restoration before installing a watch face."));
-    if (this.watchfaceTask || this.watchfaceInventoryTask || this.musicInventoryTask || this.musicDeleteTask || this.routeTask || this.mapStarting || this.connecting || this.scanning) {
+    if (this.activityScreenTask || this.watchfaceTask || this.watchfaceInventoryTask || this.musicInventoryTask || this.musicDeleteTask || this.routeTask || this.mapStarting || this.connecting || this.scanning) {
       return Promise.reject(new Error("Wait for the current Bluetooth transfer to finish before syncing a watch face."));
     }
     const prepared = this.preparedFace(previewId);
@@ -903,6 +953,7 @@ export class CorosNativeBleService {
   }
 
   async disconnect(): Promise<CorosNativeBleSnapshot> {
+    if (this.activityScreenTask) await this.activityScreenTask.catch(() => undefined);
     if (this.wifiMusicTask) {
       this.wifiMusic.cancel();
       await this.wifiMusicTask.catch(() => undefined);

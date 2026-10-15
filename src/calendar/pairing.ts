@@ -5,6 +5,7 @@ import type {
 } from "../../electron/types";
 import { parseUpcomingWorkoutDistanceKm } from "../training/formatters";
 import type { CalendarDay, PlannedActualPair, WeeklyStats } from "./calendarTypes";
+import { buildWeekSportBreakdown, scheduledPlannedSeconds } from "./weekSportBreakdown";
 
 type SportBucket = "run" | "bike" | "swim" | "walk" | "strength" | "other";
 
@@ -136,6 +137,7 @@ export function computeWeeklyStats(days: CalendarDay[]): WeeklyStats {
   let actualLoad = 0;
   let plannedLoad = 0;
   let activityTimeSeconds = 0;
+  let plannedTimeSeconds = 0;
   let distanceMeters = 0;
   let plannedDistanceKm = 0;
   let elevationGain = 0;
@@ -149,6 +151,7 @@ export function computeWeeklyStats(days: CalendarDay[]): WeeklyStats {
     }
     for (const entry of day.scheduled) {
       plannedLoad += entry.trainingLoad ?? 0;
+      plannedTimeSeconds += scheduledPlannedSeconds(entry);
       plannedDistanceKm += parseUpcomingWorkoutDistanceKm(entry.volume) ?? 0;
     }
   }
@@ -158,11 +161,13 @@ export function computeWeeklyStats(days: CalendarDay[]): WeeklyStats {
     actualLoad: Math.round(actualLoad),
     plannedLoad: Math.round(plannedLoad),
     activityTimeSeconds,
+    plannedTimeSeconds,
     distanceMeters,
     plannedDistanceKm,
     elevationGain: Math.round(elevationGain),
     baseFitness: lastDefined(metrics, (metric) => metric.staminaLevel),
     loadImpact: lastDefined(metrics, (metric) => metric.tiredRateNew),
-    loadRatio: lastDefined(metrics, (metric) => metric.trainingLoadRatio)
+    loadRatio: lastDefined(metrics, (metric) => metric.trainingLoadRatio),
+    sports: buildWeekSportBreakdown(days)
   };
 }

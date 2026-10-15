@@ -150,6 +150,7 @@ export async function buildAodBackgroundComposition(
     configOverrides.push({
       path: `${resolution.directory}/AODconfig.txt`,
       values: {
+        background_icon_pos: "{0,0}",
         background_icon: "studio\\aod_background\\00.png"
       }
     });

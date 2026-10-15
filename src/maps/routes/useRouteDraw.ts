@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   RouteActivityType,
   RouteGeometry,
+  RouteSurfacePreference,
   RouteWaypoint
 } from "../../../electron/types";
 import type { CorosLinkApi } from "../../coroslink-api";
@@ -36,7 +37,8 @@ export interface RouteDraw {
  */
 export function useRouteDraw(
   api: CorosLinkApi,
-  activityType: RouteActivityType
+  activityType: RouteActivityType,
+  surfacePreference: RouteSurfacePreference
 ): RouteDraw {
   const [waypoints, setWaypoints] = useState<RouteWaypoint[]>([]);
   const [geometry, setGeometry] = useState<RouteGeometry | null>(null);
@@ -59,7 +61,7 @@ export function useRouteDraw(
     setRouting(true);
     const timer = setTimeout(() => {
       void api
-        .routeWaypoints({ waypoints, activityType, snap })
+        .routeWaypoints({ waypoints, activityType, snap, surfacePreference })
         .then((next) => {
           if (seq === requestSeq.current) {
             setGeometry(next);
@@ -79,7 +81,7 @@ export function useRouteDraw(
     }, ROUTE_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [api, waypoints, activityType, snap]);
+  }, [api, waypoints, activityType, snap, surfacePreference]);
 
   const addPoint = useCallback((point: RouteWaypoint) => {
     setWaypoints((current) => [...current, point]);

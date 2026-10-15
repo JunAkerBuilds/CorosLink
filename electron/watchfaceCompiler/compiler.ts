@@ -173,19 +173,22 @@ function buildLayout(config: Map<string, string>, mode: "normal" | "aod", stream
   const flag = (key: string) => config.has(key) ? parseNumber(config.get(key)!) : 0;
   header[0x10] = ((flag("watchface_theme_color_off") & 1) | ((flag("watchface_point_layer") & 1) << 1) |
     ((flag("watchface_time_format") & 3) << 2) | (flag("watchface_default_theme_color") << 4)) & 0xff;
+  // Firmware fills AOD with black regardless of this color byte.
   if (mode === "normal" && config.has("bg_color")) header[0x22] = rgb222(parseNumber(config.get("bg_color")!));
   header.writeUInt16LE(HEADER, 0x138);
   header[0x13b] = typeof info.o_diy_version === "number" ? info.o_diy_version & 0xff : 0;
-  // SetBackground (normal only): background, then thumbnail.
-  if (mode === "normal") {
-    if (written(config, "background_icon_pos")) {
-      const [x, y] = position("background_icon_pos");
-      header.writeInt32LE(x, 0x12); header.writeInt32LE(y, 0x16);
-      if (config.has("background_icon")) {
-        header.writeUInt32LE(stream.single(path(config.get("background_icon")!), InsideType.Background,
-          image => scaleImage(image, target.screen, target.screen)), 0x1a);
-      }
+  // Official BINs include an AOD background, although COROS's DIY exporter
+  // skips it. Studio's AOD artwork may omit its position; default to {0,0}.
+  if (written(config, "background_icon_pos") || (mode === "aod" && config.has("background_icon"))) {
+    const [x, y] = config.has("background_icon_pos") ? position("background_icon_pos") : [0, 0];
+    header.writeInt32LE(x, 0x12); header.writeInt32LE(y, 0x16);
+    if (config.has("background_icon")) {
+      header.writeUInt32LE(stream.single(path(config.get("background_icon")!), InsideType.Background,
+        image => scaleImage(image, target.screen, target.screen)), 0x1a);
     }
+  }
+  // Only the normal layout has a picker thumbnail.
+  if (mode === "normal") {
     // COROS ignores both images here and renders the picker thumbnail itself
     // (background plus elements with demo values), so watchface_thmb_icon, often
     // just the bare background, showed an empty face. The composed preview is

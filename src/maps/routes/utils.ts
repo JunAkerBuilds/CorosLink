@@ -4,11 +4,14 @@ import type {
   GeneratedRoute,
   RouteActivityType,
   RouteElevationPreference,
+  RouteSurfacePreference,
   TrainingHubTrackPoint
 } from "../../../electron/types";
 import { ROUTE_ACTIVITY_OPTIONS } from "./constants";
 import type { UnitSystem } from "../../../electron/types";
 import {
+  FEET_PER_METER,
+  METERS_PER_MILE,
   distanceUnit,
   elevationUnit,
   metersToDisplayDistance,
@@ -36,12 +39,26 @@ export function maxDistanceForActivity(activityType: RouteActivityType): number 
   return isCyclingActivity(activityType) ? 300 : 100;
 }
 
+/** Sport default; mirrors defaultSurfaceForActivity in the routing engine. */
 export function surfaceForActivity(
   activityType: RouteActivityType
-): "road" | "trail" {
+): RouteSurfacePreference {
   return activityType === "hiking" || activityType === "cycling-mountain"
     ? "trail"
     : "road";
+}
+
+/** Short distances for route breakdowns: "120 m" / "1.4 km" (or ft / mi). */
+export function formatShortDistance(meters: number, unitSystem: UnitSystem): string {
+  if (unitSystem === "imperial") {
+    const miles = meters / METERS_PER_MILE;
+    return miles < 0.1
+      ? `${Math.round((meters * FEET_PER_METER) / 10) * 10} ft`
+      : `${miles.toFixed(1)} mi`;
+  }
+  return meters < 1000
+    ? `${Math.round(meters / 10) * 10} m`
+    : `${(meters / 1000).toFixed(1)} km`;
 }
 
 export function formatDistance(

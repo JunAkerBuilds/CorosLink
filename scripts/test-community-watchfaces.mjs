@@ -6,9 +6,41 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const serviceUrl = pathToFileURL(
   path.join(repoRoot, "dist-electron", "communityWatchfaceService.js")
 ).href;
-const { parseCommunityWatchfaceDeepLink, trustedDownloadLocation } = await import(
+const { parseCommunityCatalogPage, parseCommunityWatchfaceDeepLink, trustedDownloadLocation } = await import(
   `${serviceUrl}?cacheBust=${Date.now()}`
 );
+
+// The grouped "designs" listing once sent packageBytes as a bigint string,
+// which took the whole Community tab down.
+const catalogItem = {
+  id: "4a6f96bf-0bed-4942-bd66-7b9cf7850a5f",
+  slug: "ridge-line",
+  title: "Ridge Line",
+  description: "",
+  creatorName: "Creator",
+  creatorHandle: null,
+  models: ["PACE Pro"],
+  tags: [],
+  publishedAt: "2026-10-12T18:00:35.841Z",
+  previewUrl: "https://watchfaces.coroslink.com/api/watch-faces/4a6f96bf-0bed-4942-bd66-7b9cf7850a5f/preview",
+  detailUrl: "https://watchfaces.coroslink.com/face/ridge-line",
+  downloadUrl: "https://watchfaces.coroslink.com/api/downloads/4a6f96bf-0bed-4942-bd66-7b9cf7850a5f",
+  packageBytes: 2205409,
+  packageSha256: "a".repeat(64),
+  validatorVersion: null
+};
+const catalogPage = (packageBytes) => ({
+  schemaVersion: 1,
+  items: [{ ...catalogItem, packageBytes }],
+  pagination: { page: 1, pageSize: 12, total: 1, pageCount: 1 },
+  facets: { models: ["PACE Pro"], styles: [] }
+});
+for (const packageBytes of [2205409, "2205409"]) {
+  assert.equal(parseCommunityCatalogPage(catalogPage(packageBytes)).items[0].packageBytes, 2205409);
+}
+for (const packageBytes of ["", "0", "-5", "1e6", "12.5", " 42", "104857601", null, true]) {
+  assert.throws(() => parseCommunityCatalogPage(catalogPage(packageBytes)), undefined, String(packageBytes));
+}
 
 assert.deepEqual(
   parseCommunityWatchfaceDeepLink("coroslink://watchfaces/ridge-line"),

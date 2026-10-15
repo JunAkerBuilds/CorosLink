@@ -426,7 +426,7 @@ async function main() {
         assert.equal(chart.x + chart.parts.value.x, source.readInt16LE(0xe78));
         assert.equal(chart.parts.value.digitWidth, 23);
         assert.equal(chart.chartStyle.lineWidth, source[0xe66]);
-        assert.equal(chart.chartStyle.previewType, "curve", "Sun-path groups preview as a line graph");
+        assert.equal(chart.chartStyle.previewType, undefined, "Recovery stores no preview-only graph type; the source decides");
         assert.equal(chart.chartStyle.unselectedBarColor, "#555555");
         const angle = reopened.design.nativeData.chart_sun_angle;
         assert(angle?.enabled, "Solar angle readout is recovered as an editable layer");

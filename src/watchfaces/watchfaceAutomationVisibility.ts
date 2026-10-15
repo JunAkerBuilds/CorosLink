@@ -345,8 +345,16 @@ export function setWatchfaceAutomationVisibility(
     }
   }
 
-  return resolved.reduce(
-    (next, layer) => applyLayerVisibility(next, modeDetails, mode, layer, visible),
+  const next = resolved.reduce(
+    (current, layer) => applyLayerVisibility(current, modeDetails, mode, layer, visible),
     design
   );
+  if (!visible || !next.removedLayerIds?.length) return next;
+  // Showing a deleted layer adds it back, as the Add menu does, so hiding it
+  // later keeps it in the Layers list.
+  const shown = new Set(resolved.map((layer) => layer.id));
+  return {
+    ...next,
+    removedLayerIds: next.removedLayerIds.filter((id) => !shown.has(id))
+  };
 }

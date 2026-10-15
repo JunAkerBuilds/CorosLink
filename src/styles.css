@@ -16795,6 +16795,12 @@ tr.data-intervals-row-missing {
     min-height: auto;
   }
 
+  /* Route Studio is a full-height map; with flex: none it collapses to 0 */
+  .maps-view:has(> .route-studio) {
+    flex: 1;
+    min-height: 0;
+  }
+
   .maps-view > .maps-grid {
     flex: none;
     grid-template-rows: none;
@@ -22446,17 +22452,33 @@ tr.data-intervals-row-missing {
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
 }
 
-/* Mode switcher — top center */
-.route-mode-tabs {
+/* Top bar: mode switcher centred over the map, Import GPX + Saved on the right.
+   The side columns share the free space, so the tabs stay centred while the
+   actions fit beside them; the right column never shrinks below the actions,
+   so on narrower maps the tabs slide left instead of under Import GPX. The
+   container sits here, not on .route-studio, whose fixed share modal it would
+   trap inside the map. */
+.route-topbar {
   position: absolute;
   z-index: 1200;
   top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 16px;
+  right: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr);
+  align-items: start;
+  container: route-topbar / inline-size;
+  pointer-events: none;
+}
+
+/* Mode switcher — top center */
+.route-mode-tabs {
+  grid-column: 2;
   display: flex;
   gap: 4px;
   padding: 5px;
   border-radius: var(--radius-pill);
+  pointer-events: auto;
 }
 .route-mode-tabs button {
   display: inline-flex;
@@ -22481,14 +22503,14 @@ tr.data-intervals-row-missing {
   box-shadow: 0 6px 18px var(--accent-glow);
 }
 
-/* Saved routes toggle — top right */
+/* Import GPX + Saved routes — top right */
 .route-top-actions {
-  position: absolute;
-  z-index: 1200;
-  top: 16px;
-  right: 16px;
+  grid-column: 3;
+  justify-self: end;
+  margin-left: 12px;
   display: flex;
   gap: 8px;
+  pointer-events: auto;
 }
 
 .route-saved-toggle {
@@ -22519,6 +22541,44 @@ tr.data-intervals-row-missing {
   font-size: 11px;
   font-weight: 700;
   text-align: center;
+}
+
+/* Narrow map: Import GPX and Saved drop to icons first, then the tabs tighten.
+   The zero-width label keeps its line box (same button height) and stays in the
+   accessibility tree. French labels are wider, so they collapse sooner. */
+@container route-topbar (max-width: 729px) {
+  .route-top-actions .route-saved-toggle {
+    gap: 0;
+    padding-inline: 14px;
+  }
+  .route-top-actions .route-top-label {
+    width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .route-top-actions .badge {
+    margin-left: 8px;
+  }
+}
+@container route-topbar (max-width: 839px) {
+  :lang(fr) .route-top-actions .route-saved-toggle {
+    gap: 0;
+    padding-inline: 14px;
+  }
+  :lang(fr) .route-top-actions .route-top-label {
+    width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  :lang(fr) .route-top-actions .badge {
+    margin-left: 8px;
+  }
+}
+@container route-topbar (max-width: 629px) {
+  .route-mode-tabs button {
+    gap: 6px;
+    padding-inline: 10px;
+  }
 }
 
 /* Control panel — top left */
@@ -23280,6 +23340,7 @@ tr.data-intervals-row-missing {
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  container: route-footer / inline-size;
 }
 .route-sync-status {
   display: flex;
@@ -23414,6 +23475,25 @@ tr.data-intervals-row-missing {
   margin-left: auto;
 }
 
+/* Narrow studio: drop the truncated name and pair the elevation chart with the
+   metrics, so the bar wraps to two rows instead of four and the panel keeps room. */
+@container route-footer (max-width: 820px) {
+  .route-statsbar-name {
+    display: none;
+  }
+  .route-statsbar-elevation {
+    order: 1;
+  }
+  .route-statsbar .route-makeup,
+  .route-statsbar-actions {
+    order: 2;
+  }
+  .route-statsbar .route-makeup {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
 /* Saved routes drawer */
 .route-drawer {
   position: absolute;
@@ -23444,6 +23524,92 @@ tr.data-intervals-row-missing {
   margin: 2px 0 0;
   font-size: 18px;
   color: var(--text-primary);
+}
+.route-drawer-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Clear all: a quiet head action that opens a confirmation bar below the head */
+.route-drawer-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.route-drawer-clear:hover:not(:disabled),
+.route-drawer-clear.is-armed {
+  border-color: var(--error-border);
+  color: var(--error-text);
+}
+.route-drawer-clear.is-armed {
+  background: var(--error-bg);
+}
+.route-drawer-clear:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.route-drawer-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--error-border);
+  border-radius: var(--radius-md);
+  background: var(--error-bg);
+}
+.route-drawer-confirm p {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  color: var(--text-primary); /* the red tint drops --text-secondary under 4.5:1 on paper */
+  font-size: 12px;
+  line-height: 1.4;
+}
+.route-drawer-confirm strong {
+  font-size: 13px;
+}
+.route-drawer-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.route-drawer-confirm-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.route-drawer-confirm-actions button.is-danger {
+  border-color: transparent;
+  background: var(--error-text);
+  color: var(--surface);
+}
+.route-drawer-confirm-actions button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.route-drawer-confirm-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 .route-drawer-empty {
   flex: 1;
@@ -23555,11 +23721,29 @@ tr.data-intervals-row-missing {
   gap: 2px;
 }
 
-/* Small screens: stack panel above stats, narrow drawer */
+/* Small screens: stack panel above stats, narrow drawer. The map tools turn into
+   one row beside the panel (the column would run into the stats bar on a short
+   map), and the panel fills the width up to them; the legend wraps under the row. */
 @media (max-width: 900px) {
+  .route-studio {
+    --route-map-tools-w: 168px; /* layers 42 + three 36 px buttons, 6 px gaps */
+  }
   .route-panel {
-    width: calc(100% - 32px);
+    width: calc(100% - 42px - var(--route-map-tools-w)); /* 16 + 10 gap + tools + 16 */
     max-height: max(0px, min(46%, calc(100% - var(--route-footer-clearance, 190px))));
+  }
+  .route-map-controls {
+    top: 75px; /* centred on the 42 px layers toggle */
+    right: 64px;
+    flex-direction: row;
+  }
+  .route-map-legend {
+    top: 122px;
+    max-width: var(--route-map-tools-w);
+    padding-block: 6px;
+  }
+  .route-map-legend-swatch {
+    flex: none;
   }
   .route-statsbar-metrics {
     gap: 14px;
@@ -25704,17 +25888,21 @@ tr.data-intervals-row-missing {
 
 .calendar-weekstats-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
+  column-gap: 8px;
 }
 
 .calendar-weekstats-label {
   font-size: 11px;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
+/* Long "actual / planned" values drop below the label, still right-aligned. */
 .calendar-weekstats-value {
+  margin-left: auto;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
@@ -25724,6 +25912,61 @@ tr.data-intervals-row-missing {
 .calendar-weekstats-value.tone-accent { color: var(--accent-strong); }
 .calendar-weekstats-value.tone-gold { color: var(--accent-gold); }
 .calendar-weekstats-value.tone-warn { color: var(--warning-text); }
+
+/* Per-sport breakdown: every activity type done or planned this week. */
+.calendar-weekstats-sports {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 0;
+  padding: 9px 0 0;
+  list-style: none;
+  border-top: 1px solid color-mix(in srgb, var(--text-muted) 28%, transparent);
+}
+
+.calendar-weekstats-sport {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.calendar-weekstats-sport > .calendar-weekstats-row {
+  align-items: center;
+}
+
+.calendar-weekstats-sport-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.calendar-weekstats-sport-name svg {
+  flex-shrink: 0;
+}
+
+.calendar-weekstats-sport-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-weekstats-sport-meta {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 10px;
+  padding-left: 19px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.calendar-weekstats-sport-meta span {
+  white-space: nowrap;
+}
 
 .calendar-weekstats-coach {
   display: inline-flex;

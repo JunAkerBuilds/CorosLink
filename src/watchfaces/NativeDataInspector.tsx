@@ -5,6 +5,7 @@ import { FolderInput, ImagePlus, RotateCcw, Trash2 } from "lucide-react";
 import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceNativePartStyle } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeDataAsset, nativeDataPreviewValue } from "./nativeData";
+import { nativeChartRepresentation } from "../../electron/watchfaceNativeCatalog";
 import { nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRoleIndices } from "./nativeDataParts";
 import { loadStudioImage, resizeAndTintSprite } from "./watchfaceStudio";
 import { LocalFontPicker } from "./LocalFontPicker";
@@ -162,14 +163,38 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   const colorControl = (label: string, value: string, change: (color: string) => void) => <label className="field">{t(label)}<span className="watchface-color-control"><WatchfaceColorInput key={`${id}:${style.chartSource ?? ""}:${partKey}:${label}`} aria-label={t(label)} value={value} onValueChange={(color) => change(color)} /><code>{value}</code></span></label>;
 
   const notes = [
-    definition.kind === "chart" ? <p key="chart" className="watchface-studio-summary" role="note"><strong>{t("Experimental charts.")}</strong>{" "}{t("This preview uses sample data.")}{" "}{style.chartSource !== "chart_moon" && t("Line graphs are not available right now.")}</p> : null,
+    definition.kind === "chart" ? <p key="chart" className="watchface-studio-summary" role="note"><strong>{t("Experimental charts.")}</strong>{" "}{t("This preview uses sample data.")}</p> : null,
     definition.kind === "chart" && chartGroups.length > 1 ? <p key="chart-groups" className="watchface-studio-summary" role="note"><strong>{t("Selectable on the watch.")}</strong>{" "}{t("Back cycles this graph through its chart groups. This face has readouts for")}{" "}{chartGroups.map(chartSourceLabel).join(", ")}{t(". Choose one under Chart data to preview and edit it. The layer exports the group shown; the others keep the face's original readouts and don't follow a moved graph.")}</p> : null,
+    definition.kind === "chart" && nativePart(id, style, "plot").enabled && !nativePart(id, style, style.chartSource === "chart_moon" ? "states" : "value").enabled
+      ? <p key="chart-hidden" className="watchface-studio-summary" role="note"><strong>{t("Graph without a number.")}</strong> {t("The watch only draws a graph when the face has a chart number, so the export adds an invisible one. Experimental: check the graph on your watch.")}</p> : null,
     definition.kind === "chart" && style.chartSource !== "chart_moon" ? <p key="chart-pace" className="watchface-studio-summary" role="note">{t("Chart numbers may stay blank on PACE Pro even when Back changes the graph. The sample number here does not confirm watch support. A separate metric layer can show a value, but will not follow chart changes.")}</p> : null,
     definition.availability ? <p key="availability" className="watchface-studio-summary" role="note"><strong>{t("AQI —")}{" "}{t(definition.availability.label)}.</strong> {t(definition.availability.message)}</p> : null,
     definition.note ? <p key="note" className="watchface-studio-summary" role="note">{t(definition.note)}</p> : null
   ].filter(Boolean);
 
   const artworkStateLabel = (i: number) => { const label = SPRITE_LABELS[role!]?.[i]; return label ? t(label) : role === "digits" ? t("Digit {{i}}", { i }) : t("State {{i}}", { i }); };
+
+  // The watch picks bars or a line per chart page; the face only styles both.
+  const drawsLine = nativeChartRepresentation(style.chartSource) === "curve";
+  const graphStyle = (line: boolean, pages: string, controls: ReactNode) => <div key={line ? "line" : "bars"} className="wf-native-graph-style" role="group" aria-label={line ? t("Line style") : t("Bar style")}>
+    <div className="wf-native-graph-style-head"><span>{line ? t("Line") : t("Bars")} <small>· {pages}</small></span>{line === drawsLine ? <span className="wf-native-part-badge">{t("This page")}</span> : null}</div>
+    {controls}
+  </div>;
+  const graphStyles = [
+    graphStyle(false, "daily data, barometer, tide", <>
+      <div className="watchface-position-inputs">
+        {numberControl("Bar width",style.chartStyle?.barWidth ?? 8,barWidth=>patchChart({barWidth}),0,80,true)}
+        {numberControl("Bar gap",style.chartStyle?.barGap ?? 4,barGap=>patchChart({barGap}),0,80,true)}
+      </div>
+      {colorControl("Selected bar",style.chartStyle?.selectedBarColor ?? component.color,selectedBarColor=>patchChart({selectedBarColor}))}
+      {colorControl("Other bars",style.chartStyle?.unselectedBarColor ?? "#555555",unselectedBarColor=>patchChart({unselectedBarColor}))}
+    </>),
+    graphStyle(true, "sun and moon", <>
+      <div className="watchface-position-inputs">{numberControl("Line thickness",style.chartStyle?.lineWidth ?? 2,lineWidth=>patchChart({lineWidth}),0,40,true)}</div>
+      {colorControl("Upper curve",style.chartStyle?.upperColor ?? component.color,upperColor=>patchChart({upperColor}))}
+      {colorControl("Lower curve",style.chartStyle?.lowerColor ?? "#555555",lowerColor=>patchChart({lowerColor}))}
+    </>)
+  ];
 
   return <>
     {renderSection("appearance", "Appearance", <div className="wf-property-stack">
@@ -216,20 +241,8 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
         {role && <LocalFontPicker api={api} label={t("Font")} value={style.parts?.[partKey]?.fontFamily ?? ""} emptyLabel={t("Layer font")} disabled={locked} onChange={fontFamily=>patchPart({fontFamily:fontFamily || undefined})} />}
 
         {partKey === "plot" && <>
-          <label className="field">{t("Graph type")}<select aria-label={t("Graph type")} value={style.chartStyle?.previewType ?? "bars"} onChange={event=>patchChart({previewType:event.target.value as "curve" | "bars"})}><option value="bars">{t("Bar graph")}</option><option value="curve">{t("Line graph")}</option></select></label>
-          {(style.chartStyle?.previewType ?? "bars") === "curve" ? <>
-            <div className="watchface-position-inputs">{numberControl(t("Line thickness"),style.chartStyle?.lineWidth ?? 2,lineWidth=>patchChart({lineWidth}),0,40,true)}</div>
-            {colorControl(t("Upper curve"),style.chartStyle?.upperColor ?? component.color,upperColor=>patchChart({upperColor}))}
-            {colorControl(t("Lower curve"),style.chartStyle?.lowerColor ?? "#555555",lowerColor=>patchChart({lowerColor}))}
-          </> : <>
-            <div className="watchface-position-inputs">
-              {numberControl(t("Bar width"),style.chartStyle?.barWidth ?? 8,barWidth=>patchChart({barWidth}),0,80,true)}
-              {numberControl(t("Bar gap"),style.chartStyle?.barGap ?? 4,barGap=>patchChart({barGap}),0,80,true)}
-            </div>
-            {colorControl(t("Selected bar"),style.chartStyle?.selectedBarColor ?? component.color,selectedBarColor=>patchChart({selectedBarColor}))}
-            {colorControl(t("Other bars"),style.chartStyle?.unselectedBarColor ?? "#555555",unselectedBarColor=>patchChart({unselectedBarColor}))}
-          </>}
-          <p className="watchface-studio-summary">{t("Graph type only changes this preview. Bar and line appearance are both exported; the watch draws each chart group's live history in its own representation. A width of 0 turns that style off, so groups drawn that way show no graph.")}</p>
+          <p className="watchface-studio-summary">{t("The")}{chartSourceLabel(style.chartSource ?? "chart_stress")} {t("page draws")}{drawsLine ? t("a line") : t("bars")}{t(". Back on the watch switches chart pages, and each page uses one of these styles. Barometer and tide pages need data from the phone and stay empty until it syncs. A width of 0 hides that style's graph.")}</p>
+          {drawsLine ? [graphStyles[1], graphStyles[0]] : graphStyles}
         </>}
 
         {role && <div className="wf-native-artwork">

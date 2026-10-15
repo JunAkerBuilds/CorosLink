@@ -57,6 +57,17 @@ assert.equal(legacyFixture.runScoreList.length, 1);
 assert.equal(legacyFixture.runScoreList[0].predictSeconds, 1500);
 assert.equal(legacyFixture.runScoreList[0].distanceLabel, "5K");
 
+// The live dashboard sends `distance: 0.0` on every prediction.
+const zeroDistanceFixture = parseRacePredictor({
+  runScoreList: [
+    { type: 5, duration: 1353, avgPace: 271, distance: 0.0 },
+    { type: 2, duration: 6269, avgPace: 297, distance: 0.0 }
+  ]
+});
+
+assert.equal(zeroDistanceFixture.runScoreList[0].distance, 5000);
+assert.equal(zeroDistanceFixture.runScoreList[1].distance, 21097);
+
 const emptyFixture = parseRacePredictor({
   runScoreList: [{ type: 5, avgPace: 300 }]
 });

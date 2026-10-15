@@ -149,8 +149,8 @@ assert.equal(periodGroups[1]?.label, "12 weeks");
 assert.equal(periodGroups[2]?.label, "Half year");
 assert.equal(periodGroups[3]?.label, "All");
 assert.equal(periodGroups[0]?.records[0]?.duration, 1782);
-assert.equal(periodGroups[1]?.records[0]?.duration, 1847);
-assert.equal(periodGroups[2]?.records[0]?.duration, 1845);
+assert.equal(periodGroups[1]?.records[0]?.duration, 1845);
+assert.equal(periodGroups[2]?.records[0]?.duration, 1847);
 assert.equal(periodGroups[3]?.records[0]?.duration, 1849);
 assert.equal(periodGroups[3]?.records[0]?.avgPace, 369.8);
 
@@ -171,7 +171,9 @@ const tenKFixture = parsePersonalRecordGroups([
 assert.equal(tenKFixture?.duration, 5127);
 assert.equal(tenKFixture?.avgPace, 512.7);
 
-const halfYearGroup = parsePersonalRecordGroups([
+// Type 2 is the 12-week board: on a live dashboard (2026-10-14) its oldest
+// record was Jul 25, while type 3 still held a Jul 1 race and a Jun 28 run.
+const twelveWeekGroup = parsePersonalRecordGroups([
   {
     type: 2,
     recordList: [
@@ -198,9 +200,9 @@ const halfYearGroup = parsePersonalRecordGroups([
   }
 ])[0];
 
-assert.equal(halfYearGroup?.label, "Half year");
-assert.equal(halfYearGroup?.records[0]?.duration, 1849);
-assert.equal(halfYearGroup?.records[0]?.avgPace, 369.8);
+assert.equal(twelveWeekGroup?.label, "12 weeks");
+assert.equal(twelveWeekGroup?.records[0]?.duration, 1849);
+assert.equal(twelveWeekGroup?.records[0]?.avgPace, 369.8);
 
 const recordTimePriority = parsePersonalRecordGroups([
   {

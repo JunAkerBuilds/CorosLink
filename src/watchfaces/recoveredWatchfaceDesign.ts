@@ -15,7 +15,7 @@ import { getWeatherCapability } from "./weatherAssets";
 export async function recoverWatchfaceDesign(
   details: CorosWatchfaceTemplateDetails,
   loadAssets: (paths: string[]) => Promise<CorosWatchfaceTemplateAsset[]>,
-  /** Start the chart layer on this readout when the face carries it (e.g. after a conversion). */
+  /** Sample chart group selected by the editor, including a graph with its readout hidden. */
   preferredChartSource?: string
 ): Promise<Pick<CorosWatchfaceDesignState, "weatherIndicator" | "nativeData"> & Partial<Pick<CorosWatchfaceDesignState, "backgroundColor">>> {
   const resolution = pickPreviewResolution(details);
@@ -130,6 +130,8 @@ export async function recoverWatchfaceDesign(
     nativeData[field.id] = { enabled: true, ...position, scale: 1, color: "#ffffff", stateCount: Object.keys(states).length,
       parts: { states: { enabled: true, x: 0, y: 0, width: file.width, height: file.height } }, assets: { states } };
   }
+  const solar = await recoverSolar(config, source, sprites);
+  if (solar) nativeData.sunriseset = solar;
   const chart = await recoverChart(config, source, sprites, preferredChartSource);
   if (chart) nativeData.chart = chart;
   // RUBY HORIZON declares an icon-less air-quality value on top of its UV
@@ -165,6 +167,51 @@ export async function recoverWatchfaceDesign(
 type Rect = NonNullable<ReturnType<typeof parseConfigRect>>;
 function overlaps(a: Rect, b: Rect): boolean {
   return a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+}
+
+/** The independent rise/set reading has its own font, colon and two icon states. */
+async function recoverSolar(config: Record<string, string>, source: (key: string) => CorosWatchfaceSpriteFile[],
+  sprites: (key: string) => Promise<Record<string, string>>): Promise<CorosWatchfaceNativeDataStyle | null> {
+  const hour = parseConfigRect(config.sunriseset_hour_rect), minute = parseConfigRect(config.sunriseset_minute_rect);
+  const font = source("sunriseset_font")[0];
+  const hasValue = Boolean(hour && minute && font && hour.x1 > hour.x0 && minute.x1 > minute.x0);
+  const iconFiles = [source("sunriseset_sunrise_icon")[0], source("sunriseset_sunset_icon")[0]];
+  const icon = iconFiles.some(Boolean) ? parseConfigPos(config.sunriseset_icon_pos) : null;
+  const progressFiles = [source("sunrise_progress")[0], source("sunset_progress")[0]];
+  const progress = progressFiles.some(Boolean) ? parseConfigPos(config.sunriseset_progress_pos) : null;
+  if (!hasValue && !icon && !progress) return null;
+  const origin = {
+    x: Math.min(...[hasValue ? hour!.x0 : undefined, icon?.x, progress?.x].filter((v): v is number => v !== undefined)),
+    y: Math.min(...[hasValue ? hour!.y0 : undefined, icon?.y, progress?.y].filter((v): v is number => v !== undefined))
+  };
+  const assets: CorosWatchfaceNativeDataStyle["assets"] = {};
+  const parts: NonNullable<CorosWatchfaceNativeDataStyle["parts"]> = {
+    value: { enabled: false }, icon: { enabled: false }, symbols: { enabled: false }, progress: { enabled: false }
+  };
+  if (hasValue) {
+    assets.digits = await sprites("sunriseset_font");
+    parts.value = { enabled: true, x: hour!.x0 - origin.x, y: hour!.y0 - origin.y,
+      width: hour!.x1 - hour!.x0 + minute!.x1 - minute!.x0, height: font!.height, digitWidth: font!.width,
+      align: /\bright\b/.test(config.sunriseset_hour_rect) ? "right" : /\bhcenter\b/.test(config.sunriseset_hour_rect) ? "center" : "left" };
+    const colon = source("sunriseset_colon_icon")[0];
+    if (colon) assets.symbols = { 3: (await sprites("sunriseset_colon_icon"))[0] };
+    parts.symbols = { enabled: Boolean(colon), width: Math.max(0, minute!.x0 - hour!.x1), height: colon?.height ?? font!.height };
+  }
+  for (const [role, position, files, keys] of [
+    ["icon", icon, iconFiles, ["sunriseset_sunrise_icon", "sunriseset_sunset_icon"]],
+    ["progress", progress, progressFiles, ["sunrise_progress", "sunset_progress"]]
+  ] as const) {
+    if (!position) continue;
+    const frames: Record<string, string> = {};
+    for (const [index, key] of keys.entries()) {
+      const url = (await sprites(key))[0];
+      if (url) frames[index] = url;
+    }
+    const file = files.find(Boolean)!;
+    assets[role] = frames;
+    parts[role] = { enabled: true, x: position.x - origin.x, y: position.y - origin.y, width: file.width, height: file.height };
+  }
+  return { enabled: true, ...origin, scale: 1, color: "#ffffff", parts, assets };
 }
 
 /**
@@ -233,16 +280,24 @@ export async function recoverChartGroup(details: CorosWatchfaceTemplateDetails,
 async function recoverChart(config: Record<string, string>, source: (key: string) => CorosWatchfaceSpriteFile[],
   sprites: (key: string) => Promise<Record<string, string>>, preferred?: string): Promise<CorosWatchfaceNativeDataStyle | null> {
   const plot = parseConfigRect(config.chart_rect);
+  if (!plot || plot.x1 <= plot.x0 || plot.y1 <= plot.y0) return null;
   const sources = templateChartSources(config, source);
-  const chartSource = preferred && sources.includes(preferred) ? preferred : sources[0];
-  if (!plot || !chartSource) return null;
+  // A graph can hide every numeric/icon readout. The build snapshot supplies
+  // its sample group in Send to COROS; standalone archives can still preview
+  // a curve-only or bar plot without inventing a visible readout.
+  const chartSource = preferred && NATIVE_CHART_SOURCES.some(item => item.id === preferred)
+    ? preferred : sources[0] ?? (storedWidth(config.chart_bar_width, 8) === 0 && storedWidth(config.chart_curves_width, 2) > 0 ? "chart_sunrise" : "chart_stress");
   const rectKey = chartRectKey;
   const moon = chartSource === "chart_moon", isTime = ["chart_sunrise", "chart_moonrise"].includes(chartSource);
-  const iconKey = moon ? "chart_moon_icon" : `${chartSource}_icon`, iconFile = source(iconKey)[0];
+  // Studio exports a hidden number as 1x1 transparent frames so the watch
+  // still draws the graph; reopen it as hidden, with its blank icon.
+  const blank = (file?: CorosWatchfaceSpriteFile) => Boolean(file && file.width <= 1 && file.height <= 1);
+  const readoutFile = source(moon ? "chart_moon_icon" : `${chartSource}_font`)[0], invisible = blank(readoutFile);
+  const iconKey = moon ? "chart_moon_icon" : `${chartSource}_icon`, iconFile = invisible && (moon || blank(source(iconKey)[0])) ? undefined : source(iconKey)[0];
   const iconPosition = iconFile ? parseConfigPos(config[moon ? "chart_moon_icon_pos" : `${chartSource}_icon_pos`]) : null;
-  const valueRect = moon ? null : parseConfigRect(config[rectKey(chartSource)]);
+  const valueRect = moon || invisible ? null : parseConfigRect(config[rectKey(chartSource)]);
   const minuteRect = isTime ? parseConfigRect(config[`${chartSource}_minute_rect`]) : null;
-  const font = moon ? null : source(`${chartSource}_font`)[0];
+  const font = moon || invisible ? null : readoutFile;
   const artwork = { background: ["chart_bg", "chart_pos"], mask: ["chart_bar_mask", "chart_bar_mask_pos"], noDataMask: ["chart_bar_nodata_mask", "chart_bar_nodata_mask_pos"] } as const;
   const placed = (Object.entries(artwork) as [keyof typeof artwork, readonly [string, string]][])
     .flatMap(([role, [key, posKey]]) => { const file = source(key)[0], position = parseConfigPos(config[posKey]); return file && position ? [{ role, key, file, position }] : []; });
@@ -290,13 +345,6 @@ async function recoverChart(config: Record<string, string>, source: (key: string
   const color = (key: string, fallback: string) => /^0x[0-9a-f]{6}$/i.test(config[key] ?? "") ? `#${config[key].slice(2).toLowerCase()}` : fallback;
   // The preview's curve marker uses the plot color; match it to the curve.
   parts.plot = { ...parts.plot, color: color("chart_curves_upper_color", "#ffffff") };
-  // Official faces zero the graph style they don't draw: SATISFY 1/2 keep
-  // bar width 0 with a 3px curve, SATISFY 3 keeps 6px bars with curve width 0
-  // (its barometer group draws bars). Only when both are set (NOMAD) fall back
-  // to the groups that draw curves on the other official faces.
-  const barWidth = Number(config.chart_bar_width) || 0, curveWidth = Number(config.chart_curves_width) || 0;
-  const previewType = barWidth > 0 && curveWidth === 0 ? "bars" : curveWidth > 0 && barWidth === 0 ? "curve"
-    : ["chart_sunrise", "chart_moonrise", "chart_baro", "chart_tide"].includes(chartSource) ? "curve" : "bars";
   return {
     enabled: true, ...origin, scale: 1, color: "#ffffff", chartSource, chartWidth: plot.x1 - plot.x0, chartHeight: plot.y1 - plot.y0, parts, assets,
     chartStyle: {
@@ -306,8 +354,7 @@ async function recoverChart(config: Record<string, string>, source: (key: string
       barWidth: storedWidth(config.chart_bar_width, 8), barGap: Number.isFinite(Number(config.chart_bar_interval)) && config.chart_bar_interval !== undefined ? Number(config.chart_bar_interval) : 4,
       selectedBarColor: color("chart_selected_bar_color", "#ffffff"), unselectedBarColor: color("chart_unselected_bar_color", "#555555"),
       upperColor: color("chart_curves_upper_color", "#ffffff"), lowerColor: color("chart_curves_lower_color", "#555555"),
-      lineWidth: storedWidth(config.chart_curves_width, 2),
-      previewType
+      lineWidth: storedWidth(config.chart_curves_width, 2)
     }
   };
 }

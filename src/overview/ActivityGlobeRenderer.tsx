@@ -1,4 +1,4 @@
-import { t, useLanguage } from "../i18n/tools";
+import { t, useLanguage , getLocale} from "../i18n/tools";
 import {
   forwardRef,
   memo,
@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import Globe, { type GlobeMethods } from "react-globe.gl";
+import type { GlobeMethods } from "react-globe.gl";
 import {
   BufferAttribute,
   BufferGeometry,
@@ -23,6 +23,7 @@ import {
   SRGBColorSpace,
 } from "three";
 import type { GeoHeatBucket, GlobePoint } from "./activityVisitHeatmap";
+import { Globe } from "./Globe";
 
 interface ActivityGlobeRendererProps {
   frameKey: string;
@@ -251,15 +252,17 @@ const ActivityGlobeRendererComponent = forwardRef<
     [paperTheme, language],
   );
 
+  // three.js lights use physical units, so intensities carry a π factor (the
+  // same scaling globe.gl's own default lights use).
   const lights = useMemo(() => {
     const hemisphere = new HemisphereLight(
       paperTheme ? "#ffffff" : "#a9c6db",
       paperTheme ? "#687681" : "#03080c",
-      paperTheme ? 0.96 : 0.72,
+      (paperTheme ? 0.54 : 0.72) * Math.PI,
     );
     const directional = new DirectionalLight(
       paperTheme ? "#f8fbff" : "#d7e7f2",
-      paperTheme ? 0.58 : 0.62,
+      (paperTheme ? 0.33 : 0.62) * Math.PI,
     );
     directional.position.set(-3.5, 4.5, 5.5);
     return [hemisphere, directional];
@@ -556,6 +559,46 @@ const ActivityGlobeRendererComponent = forwardRef<
     [stopIdleRotation],
   );
 
+  // globe.gl redraws every frame even when nothing moves. Stop the loop while
+  // the window is backgrounded (the same rule as body.is-backgrounded) or the
+  // globe is scrolled out of view; the canvas keeps showing its last frame.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!ready || !container) {
+      return;
+    }
+    let onScreen = true;
+    let paused = false;
+    const sync = () => {
+      const globe = globeRef.current;
+      const shouldPause = !onScreen || document.hidden || !document.hasFocus();
+      if (!globe || shouldPause === paused) {
+        return;
+      }
+      paused = shouldPause;
+      if (paused) {
+        globe.pauseAnimation();
+      } else {
+        globe.resumeAnimation();
+      }
+    };
+    const observer = new IntersectionObserver(([entry]) => {
+      onScreen = entry?.isIntersecting ?? true;
+      sync();
+    });
+    observer.observe(container);
+    document.addEventListener("visibilitychange", sync);
+    window.addEventListener("focus", sync);
+    window.addEventListener("blur", sync);
+    sync();
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", sync);
+      window.removeEventListener("focus", sync);
+      window.removeEventListener("blur", sync);
+    };
+  }, [ready]);
+
   const handleReady = useCallback(() => {
     const globe = globeRef.current;
     if (!globe) {
@@ -652,7 +695,9 @@ const ActivityGlobeRendererComponent = forwardRef<
         backgroundColor="rgba(0, 0, 0, 0)"
         rendererConfig={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
         animateIn={false}
-        waitForGlobeReady={false}
+        // Keep waitForGlobeReady at its default. With false, three-globe runs
+        // its ready step inside its constructor, before onGlobeReady is set,
+        // so handleReady (and everything gated on `ready`) never ran.
         globeOffset={[0, 8]}
         globeMaterial={globeMaterial}
         globeCurvatureResolution={3}

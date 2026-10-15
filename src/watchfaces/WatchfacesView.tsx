@@ -20,6 +20,7 @@ import {
   Check,
   ChevronDown,
   Circle,
+  CircleDashed,
   Clipboard,
   Clock,
   Copy,
@@ -83,6 +84,7 @@ import { watchLinkSupported } from "./watchLink";
 import { carriedWatchfacePreferences, WatchfaceEditor, type WatchfaceCarriedPreferences } from "./WatchfaceEditor";
 import { renderDesignBackground } from "./watchfaceBackground";
 import { deriveDesignDetails, toStudioOptions } from "./watchfaceCompose";
+import { pickScratchBaseTheme } from "./watchfaceBlankStart";
 import { createWatchfaceEditorSessionId } from "./watchfaceEditorHistory";
 import {
   firmwareTypeForWatchfaceArchive,
@@ -256,6 +258,8 @@ interface StudioSession {
   archive: CorosWatchfaceArchive;
   project?: CorosWatchfaceProject;
   initialDesign?: CorosWatchfaceDesignState;
+  /** Opens the template emptied, for a face made from scratch. */
+  startBlank?: boolean;
   carriedPreferences?: WatchfaceCarriedPreferences;
   initialName: string;
   targetFirmwareType: string;
@@ -387,12 +391,16 @@ export function WatchfacesView({
   const [downloadingThemeUrl, setDownloadingThemeUrl] = useState<string | null>(
     null
   );
+  // Which of a template's two openings is downloading.
+  const [downloadingBlank, setDownloadingBlank] = useState(false);
   const [openingThemeUrl, setOpeningThemeUrl] = useState<string | null>(null);
   const [sharingThemeId, setSharingThemeId] = useState<string | null>(null);
 
   const [builtArchive, setBuiltArchive] =
     useState<CorosWatchfaceArchive | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [newFaceOpen, setNewFaceOpen] = useState(false);
+  const [startingScratch, setStartingScratch] = useState(false);
   const [importShareUrl, setImportShareUrl] = useState("");
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishName, setPublishName] = useState("");
@@ -652,6 +660,74 @@ export function WatchfacesView({
     }
   }
 
+  /** Creating a face starts on the editable templates, where Start blank lives. */
+  function openCreateTemplates() {
+    setThemeCatalog("editable");
+    setHubTab("templates");
+  }
+
+  /** Every create entry point asks first: a template, or an empty face. */
+  function openNewFaceDialog() {
+    clearMessages();
+    setNewFaceOpen(true);
+  }
+
+  function chooseTemplateStart() {
+    setNewFaceOpen(false);
+    openCreateTemplates();
+  }
+
+  /**
+   * Start from scratch: this watch's editable catalog (memory, disk copy,
+   * then COROS), opened blank from its first digital template.
+   */
+  async function handleStartScratch() {
+    if (startingScratch) return;
+    if (!connected) {
+      setNewFaceOpen(false);
+      setError(localizedText(() => t("Sign in to your COROS account before creating a watch face.")));
+      setNotice(null);
+      setSurface("sign-in");
+      return;
+    }
+    // Same shape and key order as themeQuery, so the caches are shared.
+    const query = {
+      firmwareType,
+      language,
+      maxWatchFaceVersion: Number(maxWatchFaceVersion),
+      catalog: "editable" as const
+    };
+    const key = JSON.stringify(query);
+    setStartingScratch(true);
+    clearMessages();
+    try {
+      let entry = themeListMemory.get(key) ??
+        (await api.readCachedCorosWatchfaceThemes(query).catch(() => null));
+      if (!entry?.themes.length) {
+        entry = {
+          savedAt: new Date().toISOString(),
+          themes: await api.listCorosWatchfaceThemes(query)
+        };
+      }
+      themeListMemory.set(key, entry);
+      showThemeList(key, entry);
+      const base = pickScratchBaseTheme(entry.themes);
+      if (!base) {
+        throw new Error(
+          `COROS has no editable template for the ${
+            watchLabelForFirmware(firmwareType) ?? firmwareType
+          } to start from.`
+        );
+      }
+      await handleDownloadTheme(base, true, "editable");
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setStartingScratch(false);
+      setNewFaceOpen(false);
+    }
+  }
+
   function openStudio(
     archive: CorosWatchfaceArchive,
     initialName: string,
@@ -659,7 +735,8 @@ export function WatchfacesView({
     transferredDesign?: CorosWatchfaceDesignState,
     initiallyDirty = false,
     automationTarget?: { firmwareType?: string; watchModel?: WatchModelId },
-    carriedPreferences?: WatchfaceCarriedPreferences
+    carriedPreferences?: WatchfaceCarriedPreferences,
+    startBlank = false
   ) {
     const targetFirmwareType = automationTarget?.firmwareType?.trim() ||
       firmwareTypeForWatchfaceArchive(
@@ -675,25 +752,28 @@ export function WatchfacesView({
         ? watchStatus?.model
         : undefined);
     applyDetectedFirmwareType(targetFirmwareType);
+    // A blank start takes only the layout, never a design bundled with it.
+    const bundledProject = startBlank ? undefined : archive.editableProject;
     setStudioSession({
       id: createWatchfaceEditorSessionId(project?.projectId ?? archive.archiveId),
       archive,
       project,
-      ...(transferredDesign || project?.design || archive.editableProject?.design
+      ...(transferredDesign || project?.design || bundledProject?.design
         ? {
             initialDesign:
-              transferredDesign ?? project?.design ?? archive.editableProject?.design
+              transferredDesign ?? project?.design ?? bundledProject?.design
           }
         : {}),
       initialName:
         (transferredDesign
           ? initialName
-          : project?.name ?? archive.editableProject?.name ?? initialName
+          : project?.name ?? bundledProject?.name ?? initialName
         ).trim() || t("Untitled watch face"),
       targetFirmwareType,
       ...(targetWatchModel ? { targetWatchModel } : {}),
       ...(initiallyDirty ? { initiallyDirty: true } : {}),
-      ...(carriedPreferences ? { carriedPreferences } : {})
+      ...(carriedPreferences ? { carriedPreferences } : {}),
+      ...(startBlank ? { startBlank: true } : {})
     });
     setBuiltArchive(null);
     setImportOpen(false);
@@ -1069,9 +1149,14 @@ export function WatchfacesView({
     return () => window.clearTimeout(timeout);
   }, [busy, connected, hubTab, status, surface, themeQueryKey]);
 
-  async function handleDownloadTheme(theme: CorosWatchfaceTheme) {
+  async function handleDownloadTheme(
+    theme: CorosWatchfaceTheme,
+    blank = false,
+    catalog: CorosWatchfaceThemeCatalog = themeCatalog
+  ) {
     if (!theme.packageUrl || openingThemeUrl || downloadingThemeUrl) return;
     setDownloadingThemeUrl(theme.packageUrl);
+    setDownloadingBlank(blank);
     clearMessages();
     try {
       const download = await api.downloadCorosWatchfaceTheme({
@@ -1079,8 +1164,12 @@ export function WatchfacesView({
         name: theme.name,
         firmwareType: theme.firmwareType?.trim() || firmwareType
       });
-      if (themeCatalog !== "official" && download.usableAsTemplate && download.archive) {
-        openStudio(download.archive, theme.name);
+      if (catalog !== "official" && download.usableAsTemplate && download.archive) {
+        if (blank) {
+          openStudio(download.archive, "Untitled watch face", undefined, undefined, false, undefined, undefined, true);
+        } else {
+          openStudio(download.archive, theme.name);
+        }
       } else {
         setNotice(
           localizedText(() => download.entries?.length
@@ -1092,6 +1181,7 @@ export function WatchfacesView({
       setError(localizedText(() => toErrorMessage(caught)));
     } finally {
       setDownloadingThemeUrl(null);
+      setDownloadingBlank(false);
     }
   }
 
@@ -1393,6 +1483,7 @@ export function WatchfacesView({
           targetFirmwareType={studioSession.targetFirmwareType}
           targetWatchModel={studioSession.targetWatchModel}
           initialDesign={studioSession.initialDesign}
+          startBlank={studioSession.startBlank}
           carriedPreferences={studioSession.carriedPreferences}
           initialProjectId={studioSession.project?.projectId}
           initialProjectName={studioSession.project?.name ?? studioSession.initialName}
@@ -1494,7 +1585,7 @@ export function WatchfacesView({
           onConnect={() => setSurface("sign-in")}
           onDisconnect={() => void handleLogout()}
           onImport={() => setImportOpen(true)}
-          onCreate={() => setHubTab("templates")}
+          onCreate={openNewFaceDialog}
         />
       ) : null}
 
@@ -1629,7 +1720,7 @@ export function WatchfacesView({
           />
 
           {activeHubTab === "watch" ? (
-            <OnWatchPanel api={api} snapshot={watchLink} onOpenWatchMenu={onOpenWatchMenu} />
+            <OnWatchPanel api={api} snapshot={watchLink} onOpenWatchMenu={onOpenWatchMenu} showDevelopmentTools={IS_DEVELOPMENT_BUILD && showDevelopmentTools} />
           ) : activeHubTab === "browse" ? (
             <CommunityWatchfaceBrowser
               api={api}
@@ -1657,7 +1748,7 @@ export function WatchfacesView({
                 void handleDuplicateProject(project.projectId)
               }
               onDelete={setDeleteTarget}
-              onCreate={() => setHubTab("templates")}
+              onCreate={openNewFaceDialog}
               onImport={() => setImportOpen(true)}
             />
           ) : (
@@ -1678,6 +1769,7 @@ export function WatchfacesView({
               savedAt={themesSavedAt}
               refreshing={themesRefreshing}
               downloadingThemeUrl={downloadingThemeUrl}
+              downloadingBlank={downloadingBlank}
               openingThemeUrl={openingThemeUrl}
               sharingThemeId={sharingThemeId}
               onSignIn={() => setSurface("sign-in")}
@@ -1695,6 +1787,7 @@ export function WatchfacesView({
               onSubmit={(event) => void handleLoadThemes(event, { force: true })}
               onRefresh={() => void handleLoadThemes(undefined, { force: true })}
               onUseTheme={(theme) => void handleDownloadTheme(theme)}
+              onStartBlank={(theme) => void handleDownloadTheme(theme, true)}
               onOpenOfficialTheme={(theme) => void handleOpenOfficialTheme(theme)}
               onShareTheme={(theme) => void handleShareTheme(theme)}
             />
@@ -1723,6 +1816,15 @@ export function WatchfacesView({
           onConfirm={() =>
             void prepareCommunityImport(communityConfirmFace.slug, true, new URL(communityConfirmFace.downloadUrl).searchParams.get("model") ?? undefined)
           }
+        />
+      ) : null}
+      {newFaceOpen ? (
+        <NewWatchFaceDialog
+          watchLabel={watchLabelForFirmware(firmwareType)}
+          starting={startingScratch}
+          onTemplate={chooseTemplateStart}
+          onScratch={() => void handleStartScratch()}
+          onClose={() => setNewFaceOpen(false)}
         />
       ) : null}
       {importOpen ? (
@@ -2913,7 +3015,7 @@ function ProjectsDashboard({
                 <HubQuickFilters
                   label={t("Filter by watch")}
                   chips={[
-                    { value: "", label: "All", icon: LayoutGrid, count: projects.length },
+                    { value: "", label: t("All"), icon: LayoutGrid, count: projects.length },
                     ...modelChips.slice(0, 6)
                   ]}
                   active={activeModel}
@@ -2950,7 +3052,7 @@ function ProjectsDashboard({
             <Watch size={26} />
           </span>
           <h2 id="watchface-empty-title">{t("Your watch faces will appear here")}</h2>
-          <p>{t("Start with an official template or import an existing project archive.")}</p>
+          <p>{t("Start from an official template, start blank, or import an existing project archive.")}</p>
           <div className="watchface-project-empty-actions">
             <button className="primary-button" type="button" disabled={disabled} onClick={onCreate}>
               <Plus size={16} aria-hidden="true" />{" "}{t("Create watch face")}</button>
@@ -3164,7 +3266,7 @@ function CreateProjectCard({
     >
       <span className="wf-hub-create-icon" aria-hidden="true"><Plus size={22} /></span>
       <strong>{t("Create watch face")}</strong>
-      <span>{t("Start from an official template")}</span>
+      <span>{t("Start from a template, or blank")}</span>
     </button>
   );
 }
@@ -3566,6 +3668,7 @@ interface TemplatesPanelProps {
   savedAt: string | null;
   refreshing: boolean;
   downloadingThemeUrl: string | null;
+  downloadingBlank: boolean;
   openingThemeUrl: string | null;
   sharingThemeId: string | null;
   onSignIn: () => void;
@@ -3580,6 +3683,7 @@ interface TemplatesPanelProps {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onRefresh: () => void;
   onUseTheme: (theme: CorosWatchfaceTheme) => void;
+  onStartBlank: (theme: CorosWatchfaceTheme) => void;
   onOpenOfficialTheme: (theme: CorosWatchfaceTheme) => void;
   onShareTheme: (theme: CorosWatchfaceTheme) => void;
 }
@@ -3641,9 +3745,11 @@ function TemplatesPanel(props: TemplatesPanelProps) {
       busy={props.busy}
       actionsBusy={actionsBusy}
       downloading={props.downloadingThemeUrl === theme.packageUrl}
+      downloadingBlank={props.downloadingBlank}
       opening={props.openingThemeUrl === theme.packageUrl}
       sharing={props.sharingThemeId === theme.id}
       onUse={() => props.onUseTheme(theme)}
+      onStartBlank={() => props.onStartBlank(theme)}
       onOpenOfficial={() => props.onOpenOfficialTheme(theme)}
       onShare={() => props.onShareTheme(theme)}
     />
@@ -3873,7 +3979,7 @@ function TemplatesPanel(props: TemplatesPanelProps) {
                   <HubQuickFilters
                     label={t("Template categories")}
                     chips={[
-                      { value: "", label: "All", icon: LayoutGrid, count: props.visibleThemes.length },
+                      { value: "", label: t("All"), icon: LayoutGrid, count: props.visibleThemes.length },
                       ...categories.slice(0, 7).map(({ name, count }) => ({
                         value: name,
                         label: name,
@@ -3929,9 +4035,11 @@ function TemplateCard({
   busy,
   actionsBusy,
   downloading,
+  downloadingBlank,
   opening,
   sharing,
   onUse,
+  onStartBlank,
   onOpenOfficial,
   onShare
 }: {
@@ -3940,9 +4048,11 @@ function TemplateCard({
   busy: TemplatesPanelProps["busy"];
   actionsBusy: boolean;
   downloading: boolean;
+  downloadingBlank: boolean;
   opening: boolean;
   sharing: boolean;
   onUse: () => void;
+  onStartBlank: () => void;
   onOpenOfficial: () => void;
   onShare: () => void;
 }) {
@@ -3950,9 +4060,9 @@ function TemplateCard({
   const [imageFailed, setImageFailed] = useState(false);
   const primary =
     catalog === "official" && theme.packageUrl
-      ? { label: opening ? "Opening…" : t("Open in editor"), icon: Pencil, run: onOpenOfficial, active: opening }
+      ? { label: opening ? t("Opening…") : t("Open in editor"), icon: Pencil, run: onOpenOfficial, active: opening }
       : catalog === "editable" && theme.packageUrl
-        ? { label: "Use template", icon: ArrowRight, run: onUse, active: downloading }
+        ? { label: t("Use template"), icon: ArrowRight, run: onUse, active: downloading }
         : null;
   return (
     <article className="wf-hub-card wf-hub-card--template">
@@ -4011,12 +4121,27 @@ function TemplateCard({
             disabled={actionsBusy}
             onClick={onUse}
           >
-            {downloading ? (
+            {downloading && !downloadingBlank ? (
               <Loader2 className="spin" size={14} aria-hidden="true" />
             ) : (
               <Pencil size={14} aria-hidden="true" />
             )}
-            {downloading ? t("Opening…") : t("Use this template")}
+            {downloading && !downloadingBlank ? t("Opening…") : t("Use this template")}
+          </button>
+          <button
+            className="wf-hub-text-link"
+            type="button"
+            disabled={actionsBusy}
+            title={t("Open this template's layout with nothing on the face")}
+            aria-label={t("Start blank from {{p0}}", { p0: String(theme.name) })}
+            onClick={onStartBlank}
+          >
+            {downloading && downloadingBlank ? (
+              <Loader2 className="spin" size={14} aria-hidden="true" />
+            ) : (
+              <CircleDashed size={14} aria-hidden="true" />
+            )}
+            {downloading && downloadingBlank ? t("Opening…") : t("Start blank")}
           </button>
         </div>
       ) : catalog === "official" && theme.packageUrl ? (
@@ -4451,6 +4576,93 @@ function ConfirmDeleteDialog({
           <button className="secondary-button" type="button" disabled={busy} onClick={onCancel} autoFocus>{t("Cancel")}</button>
           <button className="secondary-button danger-button" type="button" disabled={busy} onClick={onConfirm}>
             {busy ? <Loader2 className="spin" size={16} aria-hidden="true" /> : <Trash2 size={16} aria-hidden="true" />}{t("Delete project")}</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/** The product name of the watch a firmware type belongs to. */
+function watchLabelForFirmware(firmwareType: string): string | undefined {
+  const normalized = firmwareType.trim().toUpperCase();
+  return WATCHFACE_TARGETS.find(
+    (target) => target.firmwareType.toUpperCase() === normalized
+  )?.label;
+}
+
+function NewWatchFaceDialog({
+  watchLabel,
+  starting,
+  onTemplate,
+  onScratch,
+  onClose
+}: {
+  watchLabel: string | undefined;
+  starting: boolean;
+  onTemplate: () => void;
+  onScratch: () => void;
+  onClose: () => void;
+}) {
+  useLanguage();
+  return (
+    <div className="watchface-modal-backdrop" role="presentation">
+      <section
+        className="watchface-modal wf-new-face-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wf-new-face-title"
+        aria-describedby="wf-new-face-description"
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && !starting) onClose();
+        }}
+      >
+        <button
+          className="icon-button watchface-modal-close"
+          type="button"
+          aria-label={t("Close new watch face dialog")}
+          disabled={starting}
+          onClick={onClose}
+        >
+          <X size={17} aria-hidden="true" />
+        </button>
+        <h2 id="wf-new-face-title">{t("New watch face")}</h2>
+        <p id="wf-new-face-description">{t("How do you want to start?")}</p>
+
+        <div className="wf-new-face-options">
+          <button
+            className="wf-new-face-option"
+            type="button"
+            disabled={starting}
+            onClick={onTemplate}
+            autoFocus
+          >
+            <span className="wf-new-face-dial wf-new-face-dial--template" aria-hidden="true">
+              <span className="wf-new-face-dial-date">WED 15</span>
+              <span className="wf-new-face-dial-time">10:08</span>
+              <span className="wf-new-face-dial-data">
+                <span />
+                <span />
+                <span />
+              </span>
+            </span>
+            <strong>{t("From a template")}</strong>
+            <span>{t("Pick a COROS layout, then restyle its time, colors and data.")}</span>
+          </button>
+          <button
+            className="wf-new-face-option"
+            type="button"
+            disabled={starting}
+            aria-busy={starting}
+            onClick={onScratch}
+          >
+            <span className="wf-new-face-dial wf-new-face-dial--blank" aria-hidden="true">
+              {starting ? <Loader2 className="spin" size={22} /> : <Plus size={22} />}
+            </span>
+            <strong>{starting ? t("Opening…") : t("Start from scratch")}</strong>
+            <span>
+              {t("An empty face for your")}{" "}
+              <span className="wf-new-face-watch">{watchLabel ?? t("watch")}</span>{t(". Add the time, date and data yourself.")}</span>
+          </button>
         </div>
       </section>
     </div>

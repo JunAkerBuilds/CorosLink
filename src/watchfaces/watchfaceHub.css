@@ -1063,3 +1063,151 @@
     flex: 1 1 100%;
   }
 }
+
+/* New watch face chooser ------------------------------------------------- */
+
+.watchface-shell--hub .wf-new-face-dialog {
+  width: min(540px, 100%);
+}
+
+.watchface-shell--hub .wf-new-face-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.watchface-shell--hub .wf-new-face-option {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 5px;
+  border: 1px solid var(--wf-faces-edge);
+  border-radius: var(--wf-faces-radius);
+  background: var(--wf-faces-panel);
+  box-shadow: inset 0 1px 0 var(--wf-faces-highlight);
+  color: var(--text-primary);
+  padding: 24px 18px 20px;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 200ms ease,
+    box-shadow 260ms ease,
+    transform 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.watchface-shell--hub .wf-new-face-option > strong {
+  margin-top: 14px;
+  font-size: var(--wf-text-lg);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.watchface-shell--hub .wf-new-face-option > span:last-child {
+  color: var(--text-secondary);
+  font-size: var(--wf-text-sm);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.watchface-shell--hub .wf-new-face-watch {
+  white-space: nowrap;
+}
+
+.watchface-shell--hub .wf-new-face-option:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--wf-faces-edge));
+  box-shadow:
+    inset 0 1px 0 var(--wf-faces-highlight),
+    0 18px 36px -24px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.watchface-shell--hub .wf-new-face-option:focus-visible {
+  outline: 2px solid var(--wf-focus);
+  outline-offset: 2px;
+}
+
+.watchface-shell--hub .wf-new-face-option:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* The option that is opening stays fully drawn. */
+.watchface-shell--hub .wf-new-face-option[aria-busy="true"] {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--wf-faces-edge));
+  opacity: 1;
+}
+
+.watchface-shell--hub .wf-new-face-dial {
+  display: grid;
+  width: 104px;
+  height: 104px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  place-items: center;
+}
+
+/* A small lit face: date, time, three data bars. Dark in both themes, like the gallery dials. */
+.watchface-shell--hub .wf-new-face-dial--template {
+  align-content: center;
+  gap: 3px;
+  border: 4px solid #2a3034;
+  background: #050607;
+  box-shadow: 0 12px 24px -16px rgb(0 0 0 / 80%);
+  color: #f2f7f4;
+}
+
+.watchface-shell--hub .wf-new-face-dial-date {
+  color: #62d1ac;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.watchface-shell--hub .wf-new-face-dial-time {
+  font-family: var(--font-display);
+  font-size: 27px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.watchface-shell--hub .wf-new-face-dial-data {
+  display: flex;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.watchface-shell--hub .wf-new-face-dial-data > span {
+  width: 13px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--wf-faces-tint-1);
+}
+
+.watchface-shell--hub .wf-new-face-dial-data > span:nth-child(2) {
+  background: var(--wf-faces-tint-2);
+}
+
+.watchface-shell--hub .wf-new-face-dial-data > span:nth-child(3) {
+  background: var(--wf-faces-tint-3);
+}
+
+.watchface-shell--hub .wf-new-face-dial--blank {
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 55%, var(--wf-faces-edge));
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--accent-strong);
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .watchface-shell--hub .wf-new-face-option:hover:not(:disabled) {
+    transform: translateY(-2px);
+  }
+}
+
+@media (max-width: 520px) {
+  .watchface-shell--hub .wf-new-face-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

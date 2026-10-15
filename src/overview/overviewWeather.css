@@ -8,16 +8,16 @@
   flex-shrink: 0;
   min-height: 64px;
   padding: 10px 40px 10px 14px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
+  border: 0;
+  border-radius: var(--ov-radius-tile, var(--radius-md));
   background:
     radial-gradient(
       120% 140% at 0% 0%,
       color-mix(in srgb, var(--weather-accent) 14%, transparent),
       transparent 60%
     ),
-    var(--glass-surface, var(--glass-bg));
-  box-shadow: var(--shadow-card, var(--glass-shadow)), var(--glass-inset);
+    var(--ov-card, var(--glass-bg));
+  box-shadow: var(--ov-card-rim, var(--glass-inset)), var(--ov-card-shadow, var(--glass-shadow));
   color: var(--text-primary);
   font-family: var(--font-display);
   transition: opacity 0.2s ease;
@@ -111,7 +111,7 @@
   flex-direction: column;
   gap: 3px;
   padding-left: 14px;
-  border-left: 1px solid var(--glass-border);
+  border-left: 1px solid var(--ov-divider, var(--glass-border));
   font-size: 11px;
   font-weight: 500;
   color: var(--text-secondary);

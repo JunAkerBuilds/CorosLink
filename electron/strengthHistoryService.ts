@@ -4,6 +4,11 @@ import {
   getHevyStatus,
   syncHevyStrengthHistory
 } from "./hevyService";
+import {
+  getStoredStravaStrengthSessions,
+  getStravaStatus,
+  syncStravaStrengthHistory
+} from "./stravaService";
 import { selectStrengthSessions } from "./strengthSessionMerge";
 import {
   getTrainingHubStatus,
@@ -33,15 +38,21 @@ export async function syncStrengthHistory(
   const source = request.source ?? "combined";
   const wantsCoros = source === "combined" || source === "coros";
   const wantsHevy = source === "combined" || source === "hevy";
+  const wantsStrava = source === "combined" || source === "strava";
   const corosConnected = getTrainingHubStatus().authenticated;
   const hevyConnected = getHevyStatus().connected;
+  const stravaConnected = getStravaStatus().connected;
   const warnings: string[] = [];
+  const notices: string[] = [];
 
   let corosSessions: StrengthSession[] = [];
   let hevySessions: StrengthSession[] = [];
+  let stravaSessions: StrengthSession[] = [];
   let corosPending = 0;
   let corosFetched = 0;
   let hevyFetched = 0;
+  let stravaPending = 0;
+  let stravaFetched = 0;
 
   if (wantsCoros && corosConnected) {
     try {
@@ -66,14 +77,28 @@ export async function syncStrengthHistory(
     }
   }
 
+  if (wantsStrava && stravaConnected) {
+    try {
+      const result = await syncStravaStrengthHistory(days, request.force ?? false);
+      stravaSessions = result.sessions;
+      stravaPending = result.pending;
+      stravaFetched = result.fetched;
+      if (result.notice) notices.push(result.notice);
+    } catch (error) {
+      warnings.push(errorMessage("Strava", error));
+      stravaSessions = getStoredStravaStrengthSessions(days);
+    }
+  }
+
   return {
-    sessions: selectStrengthSessions(source, corosSessions, hevySessions),
-    pending: corosPending,
-    fetched: corosFetched + hevyFetched,
+    sessions: selectStrengthSessions(source, corosSessions, hevySessions, stravaSessions),
+    pending: corosPending + stravaPending,
+    fetched: corosFetched + hevyFetched + stravaFetched,
     days,
     source,
-    pendingBySource: { coros: corosPending, hevy: 0 },
-    fetchedBySource: { coros: corosFetched, hevy: hevyFetched },
-    ...(warnings.length > 0 ? { warnings } : {})
+    pendingBySource: { coros: corosPending, hevy: 0, strava: stravaPending },
+    fetchedBySource: { coros: corosFetched, hevy: hevyFetched, strava: stravaFetched },
+    ...(warnings.length > 0 ? { warnings } : {}),
+    ...(notices.length > 0 ? { notices } : {})
   };
 }

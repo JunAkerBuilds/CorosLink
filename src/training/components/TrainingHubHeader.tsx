@@ -6,7 +6,8 @@ import type { TrainingHubStatus } from "../../../electron/types";
 export const trainingHubTabs = [
   { id: "overview", label: "Overview" },
   { id: "activities", label: "Activities" },
-  { id: "records", label: "Records & PRs" }
+  { id: "records", label: "Records & PRs" },
+  { id: "races", label: "Races" }
 ] as const;
 
 export type TrainingHubTab = typeof trainingHubTabs[number]["id"];

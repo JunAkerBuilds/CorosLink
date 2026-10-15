@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import type {
   HevyStatus,
+  StravaStatus,
   StrengthDataSource,
   StrengthSession,
   TrainingHubStatus,
@@ -53,6 +54,7 @@ import { MusclePanel } from "./MusclePanel";
 import { MUSCLE_BY_ID, type MuscleId } from "./muscles";
 import { buildSampleStrengthSessions } from "./sampleSessions";
 import { ExerciseExplorer } from "./ExerciseExplorer";
+import { StravaConnection } from "./StravaConnection";
 import { explorerExerciseName } from "./exerciseExplorerData";
 import {
   buildStrengthAnalytics,
@@ -104,7 +106,7 @@ const STRENGTH_SOURCE_PREFERENCE =
   defineSelectionPreference<StrengthDataSource>({
     key: "strength.source",
     defaultValue: "combined",
-    validate: selectionIsOneOf(["combined", "hevy", "coros"])
+    validate: selectionIsOneOf(["combined", "hevy", "strava", "coros"])
   });
 
 const STRENGTH_BODY_VIEW_PREFERENCE = defineSelectionPreference<BodyView>({
@@ -193,10 +195,78 @@ function formatSyncTime(value?: string): string {
 }
 
 function sessionSourceLabel(session: StrengthSession): string | undefined {
-  if (session.source === "combined") return "Hevy + COROS";
+  const ids = session.sourceIds;
+  if (ids) {
+    const providers = [
+      ids.hevy ? "Hevy" : undefined,
+      ids.coros ? "COROS" : undefined,
+      ids.strava ? "Strava" : undefined
+    ].filter(Boolean);
+    if (providers.length > 0) return providers.join(" + ");
+  }
   if (session.source === "hevy") return "Hevy";
   if (session.source === "coros") return "COROS";
+  if (session.source === "strava") return "Strava";
   return undefined;
+}
+
+interface ConnectedSources {
+  coros: boolean;
+  hevy: boolean;
+  strava: boolean;
+}
+
+/** Combined once two sources are linked; otherwise the one that is. */
+function preferredSource(connected: ConnectedSources): StrengthDataSource {
+  const linked = Object.values(connected).filter(Boolean).length;
+  if (linked >= 2) return "combined";
+  if (connected.hevy) return "hevy";
+  if (connected.strava) return "strava";
+  return "coros";
+}
+
+function sourceIsAvailable(
+  source: StrengthDataSource,
+  connected: ConnectedSources
+): boolean {
+  if (source === "combined") {
+    return Object.values(connected).filter(Boolean).length >= 2;
+  }
+  return connected[source];
+}
+
+function pendingNotice(pending: { coros: number; strava: number }): string | null {
+  const total = pending.coros + pending.strava;
+  if (total <= 0) return null;
+  const sessions = `${total} more session${total === 1 ? "" : "s"}`;
+  if (pending.coros > 0 && pending.strava > 0) {
+    return `Reading ${sessions} from COROS and Strava. The map fills in as they arrive.`;
+  }
+  if (pending.coros > 0) {
+    return `Reading ${sessions} from COROS. The map fills in as they arrive.`;
+  }
+  return `Reading notes for ${sessions} from Strava.`;
+}
+
+/**
+ * A session with no set breakdown (Strava's API never shares one) keeps the
+ * same three-fact line as a lifting session; the rest sits in the chip row.
+ */
+function summaryOnlyFacts(session: StrengthSession): { facts: string[]; chips: string[] } {
+  const summary = session.detail.summary;
+  const facts = [formatSpan(summary.durationSec || session.duration || 0)];
+  const avgHr = session.avgHr ?? summary.avgHr;
+  if (avgHr) facts.push(`${avgHr} bpm avg`);
+  const calories = session.calories ?? summary.calories;
+  if (calories) facts.push(`${Math.round(calories).toLocaleString(getLocale())} kcal`);
+  const chips = [session.sportName ?? "Gym session"];
+  if (session.strava?.relativeEffort) {
+    chips.push(`Relative Effort ${Math.round(session.strava.relativeEffort)}`);
+  }
+  if (session.strava?.perceivedExertion) {
+    chips.push(`Felt ${session.strava.perceivedExertion}/10`);
+  }
+  return { facts, chips };
 }
 
 interface FigurePart {
@@ -453,12 +523,15 @@ export function StrengthView({
   const [hevyApiKey, setHevyApiKey] = useState("");
   const [hevyBusy, setHevyBusy] = useState(false);
   const [hevyDialogError, setHevyDialogError] = useState<string | null>(null);
+  const [stravaStatus, setStravaStatus] = useState<StravaStatus | null>(null);
+  const [stravaDialogOpen, setStravaDialogOpen] = useState(false);
   const [loadedSessions, setLoadedSessions] = useState<StrengthSession[]>([]);
   const [sampleMode, setSampleMode] = useState(false);
-  const [pending, setPending] = useState(0);
+  const [pending, setPending] = useState({ coros: 0, strava: 0 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [notices, setNotices] = useState<string[]>([]);
   const [view, setView] = useSelectionPreference(
     STRENGTH_BODY_VIEW_PREFERENCE
   );
@@ -476,55 +549,56 @@ export function StrengthView({
   const syncSequenceRef = useRef(0);
   const sourceInitializedRef = useRef(sourcePreference.restored);
   const hevyConnected = Boolean(hevyStatus?.connected);
-  const anyConnected = corosConnected || hevyConnected;
+  const stravaConnected = Boolean(stravaStatus?.connected);
+  const anyConnected = corosConnected || hevyConnected || stravaConnected;
+  const connectedSources = useMemo<ConnectedSources>(
+    () => ({ coros: corosConnected, hevy: hevyConnected, strava: stravaConnected }),
+    [corosConnected, hevyConnected, stravaConnected]
+  );
 
   useEffect(() => {
     let active = true;
     setHevyStatusLoading(true);
-    api
-      .getHevyStatus()
-      .then((next) => {
-        if (!active) return;
-        setHevyStatus(next);
-        if (!sourceInitializedRef.current) {
-          sourceInitializedRef.current = true;
-          setSource(
-            corosConnected && next.connected
-              ? "combined"
-              : next.connected
-                ? "hevy"
-                : "coros"
-          );
-        }
-      })
-      .catch((caught) => {
-        if (!active) return;
-        setHevyStatus({ connected: false, includeWarmups: false });
+    // Both provider checks settle before the source is chosen, so a linked
+    // Strava never loses the first pick to a still-loading Hevy check.
+    void Promise.all([
+      api.getHevyStatus().catch((caught: unknown) => {
+        if (active) setError(toErrorMessage(caught));
+        return { connected: false, includeWarmups: false } satisfies HevyStatus;
+      }),
+      api.getStravaStatus().catch(
+        () =>
+          ({ configured: false, connected: false, connecting: false, canReadPrivate: false }) satisfies StravaStatus
+      )
+    ]).then(([nextHevy, nextStrava]) => {
+      if (!active) return;
+      setHevyStatus(nextHevy);
+      setStravaStatus(nextStrava);
+      if (!sourceInitializedRef.current) {
         sourceInitializedRef.current = true;
-        setSource("coros");
-        setError(toErrorMessage(caught));
-      })
-      .finally(() => {
-        if (active) setHevyStatusLoading(false);
-      });
+        setSource(
+          preferredSource({
+            coros: corosConnected,
+            hevy: nextHevy.connected,
+            strava: nextStrava.connected
+          })
+        );
+      }
+      setHevyStatusLoading(false);
+    });
     return () => {
       active = false;
     };
   }, [api, corosConnected]);
 
   useEffect(() => {
-    if (hevyStatus === null) return;
-    setSource((current) => {
-      if (current === "combined" && corosConnected && hevyConnected) return current;
-      if (current === "coros" && corosConnected) return current;
-      if (current === "hevy" && hevyConnected) return current;
-      return corosConnected && hevyConnected
-        ? "combined"
-        : hevyConnected
-          ? "hevy"
-          : "coros";
-    });
-  }, [corosConnected, hevyConnected, hevyStatus]);
+    if (hevyStatus === null || stravaStatus === null) return;
+    setSource((current) =>
+      sourceIsAvailable(current, connectedSources)
+        ? current
+        : preferredSource(connectedSources)
+    );
+  }, [connectedSources, hevyStatus, stravaStatus]);
 
   useEffect(() => {
     if (source !== "coros" && metric === "time") {
@@ -533,13 +607,15 @@ export function StrengthView({
   }, [metric, source]);
 
   useEffect(() => {
-    if (!hevyDialogOpen) return;
+    if (!hevyDialogOpen && !stravaDialogOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !hevyBusy) setHevyDialogOpen(false);
+      if (event.key !== "Escape") return;
+      if (hevyDialogOpen && !hevyBusy) setHevyDialogOpen(false);
+      if (stravaDialogOpen) setStravaDialogOpen(false);
     };
     document.addEventListener("keydown", closeOnEscape);
     return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [hevyBusy, hevyDialogOpen]);
+  }, [hevyBusy, hevyDialogOpen, stravaDialogOpen]);
 
   const requestView = useCallback((next: BodyView) => {
     setSelectedMuscle(null);
@@ -579,6 +655,12 @@ export function StrengthView({
       setLoading(true);
       setError(null);
       setWarnings([]);
+      setNotices([]);
+
+      const pendingOf = (history: { pending: number; pendingBySource?: { coros?: number; strava?: number } }) => ({
+        coros: history.pendingBySource?.coros ?? history.pending,
+        strava: history.pendingBySource?.strava ?? 0
+      });
 
       try {
         let result = await api.syncStrengthHistory({ days, force, source });
@@ -586,8 +668,9 @@ export function StrengthView({
           return;
         }
         setLoadedSessions(result.sessions);
-        setPending(result.pending);
+        setPending(pendingOf(result));
         setWarnings(result.warnings ?? []);
+        setNotices(result.notices ?? []);
 
         // Keep draining while COROS still owes us breakdowns; each round
         // repaints the body map so it fills in as the history arrives.
@@ -604,8 +687,9 @@ export function StrengthView({
             return;
           }
           setLoadedSessions(next.sessions);
-          setPending(next.pending);
+          setPending(pendingOf(next));
           setWarnings(next.warnings ?? []);
+          setNotices(next.notices ?? []);
           // A round that fetched nothing means the API is refusing; stop
           // instead of spinning against it.
           if (next.fetched === 0) {
@@ -620,13 +704,18 @@ export function StrengthView({
       } finally {
         if (syncSequenceRef.current === sequence) {
           setLoading(false);
-          if (source !== "coros") {
+          if (source === "combined" || source === "hevy") {
             void api.getHevyStatus().then(setHevyStatus).catch(() => undefined);
+          }
+          if (source === "combined" || source === "strava") {
+            void api.getStravaStatus().then(setStravaStatus).catch(() => undefined);
           }
         }
       }
     },
-    [api, anyConnected, days, hevyStatusLoading, source]
+    // The link flags re-run the sync when a source joins an unchanged selection,
+    // such as Strava folding into an existing Combined view.
+    [api, anyConnected, days, hevyConnected, hevyStatusLoading, source, stravaConnected]
   );
 
   useEffect(() => {
@@ -696,15 +785,36 @@ export function StrengthView({
       setHevyStatus({ connected: false, includeWarmups: false });
       setLoadedSessions([]);
       setWarnings([]);
-      setPending(0);
-      setSource(corosConnected ? "coros" : "hevy");
-      if (!corosConnected) setHevyDialogOpen(false);
+      setPending({ coros: 0, strava: 0 });
+      setSource(preferredSource({ ...connectedSources, hevy: false }));
+      if (!corosConnected && !stravaConnected) setHevyDialogOpen(false);
     } catch (caught) {
       setHevyDialogError(toErrorMessage(caught));
     } finally {
       setHevyBusy(false);
     }
-  }, [api, corosConnected]);
+  }, [api, connectedSources, corosConnected, stravaConnected]);
+
+  const changeStravaStatus = useCallback(
+    (next: StravaStatus) => {
+      // Undefined while the first status check is still out: the panel's own
+      // first report is then not a change, and must not override the
+      // restored source.
+      const wasConnected = stravaStatus?.connected;
+      setStravaStatus(next);
+      if (next.connected && wasConnected === false) {
+        // A fresh link is what the user came for: show it alongside the rest.
+        setSource(preferredSource({ ...connectedSources, strava: true }));
+      } else if (!next.connected && wasConnected === true) {
+        syncSequenceRef.current += 1;
+        setLoadedSessions([]);
+        setWarnings([]);
+        setNotices([]);
+        setPending({ coros: 0, strava: 0 });
+      }
+    },
+    [connectedSources, stravaStatus?.connected]
+  );
 
   // Sample mode swaps in a generated history so the page can be worked on
   // without a populated account; nothing about it touches the API or the cache.
@@ -723,6 +833,12 @@ export function StrengthView({
     : null;
   const openExercise = useCallback((name: string) => setSelectedExerciseName(name), []);
   const closeExercise = useCallback(() => setSelectedExerciseName(null), []);
+
+  const pendingText = pendingNotice(pending);
+  // Strava gym sessions arrive without sets; say why they leave the map blank.
+  const summaryOnlyStravaSessions = sessions.filter(
+    (session) => session.strava && session.detail.exercises.length === 0
+  ).length;
 
   const highlightedMuscle = figureHover ?? listHover ?? selectedMuscle;
   const panelMuscle = selectedMuscle;
@@ -833,40 +949,40 @@ export function StrengthView({
   const summaryItems: { key: string; label: string; parts: FigurePart[]; caption: string }[] = [
     {
       key: "sessions",
-      label: "Sessions",
+      label: t("Sessions"),
       parts: [{ value: String(summary.sessions) }],
       caption: cadencePhrase(summary.sessionsPerWeek) || "Nothing logged yet"
     },
     usesWeights
       ? {
           key: "lifted",
-          label: "Weight lifted",
+          label: t("Weight lifted"),
           parts: totalWeightParts(summary.volumeKg, unitSystem),
           caption: t("Across {{count}} sets", { count: Math.round(summary.sets).toLocaleString(getLocale()) })
         }
       : {
           key: "sets",
-          label: "Sets",
+          label: t("Sets"),
           parts: [{ value: Math.round(summary.sets).toLocaleString(getLocale()) }],
           caption: t("{{count}} reps", { count: Math.round(summary.reps).toLocaleString(getLocale()) })
         },
     {
       key: "time",
-      label: "Time lifting",
+      label: t("Time lifting"),
       parts: durationParts(summary.durationSec),
       caption: hasSessions
         ? t("About {{duration}} a session", { duration: formatSpan(summary.durationSec / summary.sessions) })
-        : "No time logged"
+        : t("No time logged")
     },
     {
       key: "heaviest",
-      label: "Heaviest lift",
+      label: t("Heaviest lift"),
       parts: summary.heaviestLift
         ? liftWeightParts(summary.heaviestLift.weightKg, unitSystem)
         : [{ value: "—" }],
       caption: summary.heaviestLift
         ? `${summary.heaviestLift.name} × ${summary.heaviestLift.reps}`
-        : "Nothing with weight on it yet"
+        : t("Nothing with weight on it yet")
     }
   ];
 
@@ -1017,6 +1133,45 @@ export function StrengthView({
     </div>
   ) : null;
 
+  const stravaDialog = stravaDialogOpen ? (
+    <div
+      className="strength-hevy-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) setStravaDialogOpen(false);
+      }}
+    >
+      <section
+        className="strength-hevy-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="strength-strava-title"
+      >
+        <header>
+          <div>
+            <p className="eyebrow">{t("Strength source")}</p>
+            <h2 id="strength-strava-title">
+              {stravaConnected ? t("Strava connected") : t("Connect Strava")}
+            </h2>
+          </div>
+          <button
+            type="button"
+            className="strength-hevy-close"
+            aria-label={t("Close Strava settings")}
+            onClick={() => setStravaDialogOpen(false)}
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </header>
+        <StravaConnection
+          api={api}
+          onStatusChange={changeStravaStatus}
+          onDone={() => setStravaDialogOpen(false)}
+        />
+      </section>
+    </div>
+  ) : null;
+
   // The controls only appear once there is something to control: on the
   // connect screen a window picker and a Refresh button would both be dead.
   const renderHeader = (withControls: boolean) => (
@@ -1037,8 +1192,9 @@ export function StrengthView({
           <div className="strength-segment strength-source" role="group" aria-label={t("Strength source")}>
             {(
               [
-                ["combined", "Combined", !(corosConnected && hevyConnected)],
+                ["combined", "Combined", !sourceIsAvailable("combined", connectedSources)],
                 ["hevy", "Hevy", !hevyConnected],
+                ["strava", "Strava", !stravaConnected],
                 ["coros", "COROS", !corosConnected]
               ] as const
             ).map(([id, label, disabled]) => (
@@ -1104,6 +1260,23 @@ export function StrengthView({
                 {t("Connect Hevy")} </>
             )}
           </button>
+          <button
+            type="button"
+            className="strength-action"
+            onClick={() => setStravaDialogOpen(true)}
+          >
+            {stravaConnected ? (
+              <>
+                <span className="strength-hevy-dot" aria-hidden="true" />
+                <Settings2 size={14} aria-hidden="true" />
+                Strava
+              </>
+            ) : (
+              <>
+                <Link2 size={14} aria-hidden="true" />
+                {t("Connect Strava")}</>
+            )}
+          </button>
         </div>
       </div>
     </header>
@@ -1117,6 +1290,7 @@ export function StrengthView({
           <Loader2 className="spin" size={14} aria-hidden="true" />
           {t("Checking strength connections…")} </p>
         {hevyDialog}
+        {stravaDialog}
       </section>
     );
   }
@@ -1131,8 +1305,7 @@ export function StrengthView({
             <LockKeyhole size={22} />
           </span>
           <h3>{t("Connect a strength source")}</h3>
-          <p>
-            {t("Import completed workouts from Hevy, read sessions from COROS Training Hub, or connect both for one combined history.")} </p>
+          <p>{t("Import completed workouts from Hevy, gym sessions from Strava, read sessions from COROS Training Hub, or connect several for one combined history.")}</p>
           <div className="strength-connect-actions">
             <button
               type="button"
@@ -1141,6 +1314,13 @@ export function StrengthView({
             >
               <Link2 size={16} aria-hidden="true" />
               {t("Connect Hevy")} </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setStravaDialogOpen(true)}
+            >
+              <Link2 size={16} aria-hidden="true" />
+              {t("Connect Strava")}</button>
             <button type="button" className="secondary-button" onClick={onOpenTraining}>
               {t("Open Training Hub")} </button>
           </div>
@@ -1150,6 +1330,7 @@ export function StrengthView({
           <div className="strength-sample-cta">{sampleButton}</div>
         ) : null}
         {hevyDialog}
+        {stravaDialog}
       </section>
     );
   }
@@ -1158,6 +1339,7 @@ export function StrengthView({
     <section className="strength-view">
       {renderHeader(true)}
       {hevyDialog}
+      {stravaDialog}
 
       {sampleMode ? (
         <p className="strength-notice is-sample" role="status">
@@ -1180,17 +1362,36 @@ export function StrengthView({
           ))
         : null}
 
-      {pending > 0 && !sampleMode ? (
+      {!sampleMode
+        ? notices.map((notice) => (
+            <p className="strength-notice" role="status" key={notice}>
+              <Info size={14} aria-hidden="true" />
+              {notice}
+            </p>
+          ))
+        : null}
+
+      {pendingText && !sampleMode ? (
         <p className="strength-notice" role="status">
           <Loader2 className="spin" size={14} aria-hidden="true" />
-          {t("Reading")} {pending} {t("more session")}{pending === 1 ? "" : "s"} {t("from COROS. The map fills in as they arrive.")} </p>
+          {pendingText}
+        </p>
       ) : null}
 
       {hasSessions && genericSetCount > 0 ? (
         <p className="strength-notice is-attribution" role="note">
           <Info size={15} aria-hidden="true" />
           <span>
-            {t("COROS recorded {{value1}} working {{value2}} only as Full Body, so {{value3}} excluded from the map. Specific attribution is available for {{value4}} of {{value5}} working sets.", { value1: String(genericSetCount.toLocaleString()), value2: String(genericSetCount === 1 ? t("set") : t("sets")), value3: String(genericSetCount === 1 ? t("it is") : t("they are")), value4: String(attributedSetCount.toLocaleString()), value5: String(workingSetCount.toLocaleString()) })}
+            {t("COROS recorded {{value1}} working {{value2}} only as Full Body, so {{value3}} excluded from the map. Specific attribution is available for {{value4}} of {{value5}} working sets.", { value1: String(genericSetCount.toLocaleString(getLocale())), value2: String(genericSetCount === 1 ? t("set") : t("sets")), value3: String(genericSetCount === 1 ? t("it is") : t("they are")), value4: String(attributedSetCount.toLocaleString(getLocale())), value5: String(workingSetCount.toLocaleString(getLocale())) })}
+          </span>
+        </p>
+      ) : null}
+
+      {hasSessions && summaryOnlyStravaSessions > 0 ? (
+        <p className="strength-notice is-attribution" role="note">
+          <Info size={15} aria-hidden="true" />
+          <span>
+            {t("{{p0}} {{p1}} from Strava alone. Strava's API does not share the Exercises tab, so {{p2}} toward sessions and time but not sets or the map.", { p0: String(summaryOnlyStravaSessions.toLocaleString(getLocale())), p1: String(summaryOnlyStravaSessions === 1 ? "session comes" : "sessions come"), p2: String(summaryOnlyStravaSessions === 1 ? "it counts" : "they count") })}
           </span>
         </p>
       ) : null}
@@ -1286,7 +1487,7 @@ export function StrengthView({
               <h3>{t("No specific muscle data")}</h3>
               <p>
                 {genericSetCount > 0
-                  ? t("COROS recorded {{value1}} working {{value2}} only as Full Body. Session totals remain available, but the map stays neutral because no specific muscles were identified.", { value1: String(genericSetCount.toLocaleString()), value2: String(genericSetCount === 1 ? t("set") : t("sets")) })
+                  ? t("COROS recorded {{value1}} working {{value2}} only as Full Body. Session totals remain available, but the map stays neutral because no specific muscles were identified.", { value1: String(genericSetCount.toLocaleString(getLocale())), value2: String(genericSetCount === 1 ? t("set") : t("sets")) })
                   : t("None of the exercises in this window could be matched to specific muscles. Session totals remain available, but the map stays neutral.")}
               </p>
             </div>
@@ -1656,6 +1857,8 @@ export function StrengthView({
                     ),
                   0
                 );
+                const summaryOnly =
+                  session.detail.exercises.length === 0 ? summaryOnlyFacts(session) : null;
                 return (
                   <li key={session.activityId}>
                     <div className="strength-session-head">
@@ -1669,37 +1872,67 @@ export function StrengthView({
                         <span>{formatSessionDate(session.startTime)}</span>
                       </div>
                     </div>
-                    <p className="strength-session-facts">
-                      <span>{detail.sets} {t("sets")}</span>
-                      <span>
-                        {volume > 0
-                          ? formatTotalWeight(volume, unitSystem)
-                          : t("Bodyweight")}
-                      </span>
-                      <span>{formatSpan(detail.durationSec)}</span>
-                    </p>
-                    <div className="strength-session-chips">
-                      {session.detail.exercises.slice(0, 3).map((exercise, index) => {
-                        const name = explorerExerciseName(
-                          exercise.nameKey,
-                          exercise.rawName
-                        );
-                        return (
-                          <button
-                            type="button"
-                            className="strength-session-chip-button"
-                            key={`${exercise.nameKey}-${index}`}
-                            onClick={() => openExercise(name)}
-                          >
-                            {exercise.sets}× {name}
-                          </button>
-                        );
-                      })}
-                      {session.detail.exercises.length > 3 ? (
-                        <span className="is-more">
-                          +{session.detail.exercises.length - 3} {t("more")} </span>
-                      ) : null}
-                    </div>
+                    {summaryOnly ? (
+                      <>
+                        <p className="strength-session-facts">
+                          {summaryOnly.facts.map((fact) => (
+                            <span key={fact}>{fact}</span>
+                          ))}
+                        </p>
+                        <div className="strength-session-chips">
+                          {summaryOnly.chips.map((chip) => (
+                            <span key={chip}>{chip}</span>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="strength-session-facts">
+                        <span>{detail.sets} {t("sets")}</span>
+                        <span>
+                          {volume > 0
+                            ? formatTotalWeight(volume, unitSystem)
+                            : t("Bodyweight")}
+                        </span>
+                        <span>{formatSpan(detail.durationSec)}</span>
+                      </p>
+                    )}
+                    {session.detail.exercises.length > 0 ? (
+                      <div className="strength-session-chips">
+                        {session.detail.exercises.slice(0, 3).map((exercise, index) => {
+                          const name = explorerExerciseName(
+                            exercise.nameKey,
+                            exercise.rawName
+                          );
+                          return (
+                            <button
+                              type="button"
+                              className="strength-session-chip-button"
+                              key={`${exercise.nameKey}-${index}`}
+                              onClick={() => openExercise(name)}
+                            >
+                              {exercise.sets}× {name}
+                            </button>
+                          );
+                        })}
+                        {session.detail.exercises.length > 3 ? (
+                          <span className="is-more">
+                            +{session.detail.exercises.length - 3} {t("more")} </span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {session.strava?.description ? (
+                      <p className="strength-session-notes">{session.strava.description}</p>
+                    ) : null}
+                    {session.strava ? (
+                      <a
+                        className="strength-session-strava"
+                        href={session.strava.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {t("View on Strava")}<ExternalLink size={12} aria-hidden="true" />
+                      </a>
+                    ) : null}
                   </li>
                 );
               })}

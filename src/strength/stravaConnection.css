@@ -1,0 +1,160 @@
+/* Strava connection panel. It renders inside the Strength dialog and on the
+   Accounts settings page, so it derives its own hairlines from text tokens
+   instead of borrowing the Strength view's --sx-* scale. */
+
+.strava-connection {
+  --strava-hairline: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --strava-well: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  --strava-orange: #fc5200;
+  display: grid;
+  gap: 14px;
+  max-width: 520px;
+  min-width: 0;
+}
+
+.account-setup .strava-connection {
+  margin-top: 24px;
+}
+
+.strava-connection .strava-connection-copy {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.strava-connection-account {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--strava-hairline);
+  border-radius: 16px;
+  background: var(--strava-well);
+}
+
+.strava-connection-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--strava-orange);
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.strava-connection-account div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.strava-connection-account strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strava-connection-account div > span {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.strava-connection-account a,
+.strava-connection-link,
+.strava-connection-text-button {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.strava-connection-account a:hover,
+.strava-connection-link:hover,
+.strava-connection-text-button:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.strava-connection-waiting {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--strava-hairline);
+  border-radius: 14px;
+  background: var(--strava-well);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.strava-connection-warning {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--warning-border);
+  border-radius: 11px;
+  background: var(--warning-bg);
+  /* The warning hue fails contrast as small text on paper; it stays in the frame. */
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.strava-connection-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--error-border);
+  border-radius: 11px;
+  background: var(--error-bg);
+  color: var(--error-text);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.strava-connection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.strava-connection-actions.is-split {
+  justify-content: space-between;
+}
+
+.strava-connection-actions .primary-button,
+.strava-connection-actions .secondary-button {
+  min-height: 40px;
+}
+
+.strava-connection-actions svg {
+  color: currentColor;
+}
+
+/* Two classes: this sheet can load before the global .secondary-button. */
+.strava-connection .strava-connection-danger {
+  color: var(--error-text);
+}
+
+@media (max-width: 700px) {
+  .strava-connection-actions.is-split {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+}

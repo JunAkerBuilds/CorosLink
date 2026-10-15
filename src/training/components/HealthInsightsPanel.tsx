@@ -13,9 +13,10 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { getHealthVitalColors } from "../chartConfig";
 import type { HealthVitalKey } from "../chartConfig";
 import { sampleHealthInsight } from "../healthInsightsSample";
-import { DAY_ONLY, formatNumber, formatTime, toEpoch } from "../healthInsightsFormat";
+import { DAY_ONLY, badgeTone, formatNumber, formatTime, parseRange, toEpoch } from "../healthInsightsFormat";
 import { useChartColors } from "../useChartColors";
 import { HEALTH_VITAL_LABELS, HealthCheckVitals } from "./HealthCheckVitals";
+import { SleepHrvEmpty, SleepHrvNotSynced, SleepHrvSummary, latestSleepHrvNight, sleepHrvNotes } from "./SleepHrvSummary";
 import "../healthInsights.css";
 
 const cards: { kind: HealthInsightKind; title: string; subtitle: string; icon: LucideIcon }[] = [
@@ -30,19 +31,6 @@ const GAP_MS = 3 * 60 * 60 * 1000;
 
 function metricText(metric: HealthInsightMetric): string {
   return typeof metric.value === "number" ? formatNumber(metric.value, 1) : metric.value;
-}
-
-/** COROS wording → badge tone. Only labels COROS itself reports are shown. */
-function badgeTone(value: string): "good" | "watch" | "alert" | "neutral" {
-  if (/\b(normal|relaxed|low|good|balanced|optimal)\b/i.test(value)) return "good";
-  if (/\b(medium|moderate|elevated|slightly)\b/i.test(value)) return "watch";
-  if (/\b(high|poor|below|above|unbalanced)\b/i.test(value)) return "alert";
-  return "neutral";
-}
-
-function parseRange(value: string | number): [number, number] | undefined {
-  const match = /^(\d+(?:\.\d+)?)\s*[–-]\s*(\d+(?:\.\d+)?)$/.exec(String(value));
-  return match ? [Number(match[1]), Number(match[2])] : undefined;
 }
 
 function HealthChart({ series, range, baseline, color, connect = false }: { series: HealthInsightSeries; range?: [number, number]; baseline?: number; color?: string; connect?: boolean }) {
@@ -129,7 +117,10 @@ function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sam
   useLanguage();
   const compact = (kind === "stress" || kind === "sleepHrv") && (size === "mini" || size === "short");
   const [days, setDays] = useState(7);
-  const [result, setResult] = useState<HealthInsightResult | null>(null);
+  const [fetched, setFetched] = useState<HealthInsightResult | null>(null);
+  // Sleep HRV only: an empty "Today" falls back to the latest night of the week, or notes the week is empty too.
+  const [latest, setLatest] = useState<HealthInsightResult | null>(null);
+  const [weekEmpty, setWeekEmpty] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showCycle, setShowCycle] = useState(false);
   const [selectedSeries, setSelectedSeries] = useState("");
@@ -138,20 +129,34 @@ function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sam
   const enabled = kind !== "cycle" || showCycle;
   useEffect(() => {
     let cancelled = false;
-    setResult(null);
+    setFetched(null);
+    setLatest(null);
+    setWeekEmpty(false);
     if (!enabled) { setLoading(false); return; }
-    if (sampleMode) { setResult(sampleHealthInsight(kind, days)); setLoading(false); return; }
+    if (sampleMode) { setFetched(sampleHealthInsight(kind, days)); setLoading(false); return; }
     setLoading(true);
-    void Promise.resolve().then(() => api.getTrainingHealthInsight(kind, days)).then(data => {
-      if (!cancelled) setResult(data);
+    void Promise.resolve().then(() => api.getTrainingHealthInsight(kind, days)).then(async data => {
+      if (kind === "sleepHrv" && days === 1 && data.status === "empty") {
+        const week = await api.getTrainingHealthInsight(kind, 7).catch(() => undefined);
+        if (cancelled) return;
+        setLatest(week?.status === "ready" ? latestSleepHrvNight(week) ?? null : null);
+        setWeekEmpty(week?.status === "empty");
+      }
+      if (!cancelled) setFetched(data);
     }).catch(error => {
-      if (!cancelled) setResult({ kind, days, status: "error", metrics: [], series: [], message: error instanceof Error ? error.message : "Could not load health data." });
+      if (!cancelled) setFetched({ kind, days, status: "error", metrics: [], series: [], message: error instanceof Error ? error.message : "Could not load health data." });
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [api, kind, days, refreshToken, sampleMode, enabled]);
-  // Prefer the first series that can actually draw a line.
-  const series = result?.series.find(item => item.key === selectedSeries) ?? result?.series.find(item => item.points.length > 1) ?? result?.series[0];
-  const message = result?.status === "empty" ? (result.message ?? "No measurements for this period. Sync your watch with the COROS app to update your data.")
+  const fallback = fetched?.status === "empty" && latest ? latest : undefined;
+  const result = fallback ?? fetched;
+  const hrv = kind === "sleepHrv" && result?.status === "ready" && result.metrics.some(metric => metric.key === "average" && typeof metric.value === "number");
+  // Prefer the first series that can actually draw a line; a one-night average is a dot, not a chart.
+  const chartable = result?.series.filter(item => !hrv || item.points.length > 1) ?? [];
+  const series = chartable.find(item => item.key === selectedSeries) ?? result?.series.find(item => item.points.length > 1) ?? (hrv ? undefined : result?.series[0]);
+  const hrvEmpty = kind === "sleepHrv" && result?.status === "empty";
+  const message = hrvEmpty ? undefined
+    : result?.status === "empty" ? (result.message ?? "No measurements for this period. Sync your watch with the COROS app to update your data.")
     : result?.status === "unavailable" ? "This data is not available from your COROS connection yet."
     : result?.status === "disconnected" ? "Connect COROS data access to see your health information."
     : result?.status === "error" ? "Could not load this data. Use Refresh at the top of Training Hub to try again." : undefined;
@@ -161,6 +166,7 @@ function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sam
   const baseline = series && baselineMetric && typeof baselineMetric.value === "number" && baselineMetric.unit === series.unit ? baselineMetric.value : undefined;
   const referenceKeys = [...(range ? ["normalRange"] : []), ...(baseline !== undefined ? ["baseline"] : [])];
   const report = result?.report;
+  const hrvNotes = hrv ? sleepHrvNotes(report) : undefined;
   const longReport = Boolean(report && report.length > 320);
   // A health check is five readings taken together, so it gets its own tile layout instead of the hero + tab strip.
   const vitals = kind === "healthCheck" && result?.status === "ready" && result.metrics.some(metric => typeof metric.value === "number");
@@ -192,7 +198,7 @@ function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sam
         <div><h3 id={id}>{t(title)}</h3><p>{t(subtitle)}</p></div>
       </div>
       {kind !== "cycle" && <div className="health-insight-period">
-        {compact ? <select aria-label={t("{{value1}} period", { value1: String(t(title)) })} value={days} onChange={event => setDays(Number(event.target.value))}><option value={1}>{t("Today")}</option><option value={7}>{t("Last 7 days")}</option></select> : <Segmented label={t("{{value1}} period", { value1: String(t(title)) })} value={days} options={[{ value: 1, label: "Today" }, { value: 7, label: "Last 7 days" }]} onChange={setDays} />}
+        {compact ? <select aria-label={t("{{value1}} period", { value1: String(t(title)) })} value={days} onChange={event => setDays(Number(event.target.value))}><option value={1}>{t("Today")}</option><option value={7}>{t("Last 7 days")}</option></select> : <Segmented label={t("{{value1}} period", { value1: String(t(title)) })} value={days} options={[{ value: 1, label: t("Today") }, { value: 7, label: t("Last 7 days") }]} onChange={setDays} />}
       </div>}
     </div>
     {kind === "cycle" && <button type="button" className="secondary-button health-cycle-toggle" aria-expanded={showCycle} aria-controls={`${id}-content`} onClick={() => setShowCycle(value => !value)}>{showCycle ? t("Hide cycle details") : t("Show cycle details")}</button>}
@@ -203,6 +209,20 @@ function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sam
         {result?.status === "disconnected" && <button type="button" className="secondary-button" onClick={onConnect} disabled={connecting}>{connecting ? t("Connecting…") : t("Connect COROS data access")}</button>}
         {result?.status === "error" && (result.message == null ? result.message : t(String(result.message))) && <details className="health-insight-error"><summary>{t("Error details")}</summary><p>{(result.message == null ? result.message : t(String(result.message)))}</p></details>}
       </div>}
+      {!loading && hrvEmpty && <div className="health-insight-state health-hrv-empty" role="status">
+        <MoonStar size={18} aria-hidden="true" /><SleepHrvEmpty week={days === 7 || weekEmpty} />
+      </div>}
+      {!loading && hrv && result && <>
+        {fallback && <SleepHrvNotSynced compact={compact} />}
+        <SleepHrvSummary result={result} part={compact ? "primary" : undefined} />
+        {chartable.length > 1 && (compact ? <select aria-label={t("Chart")} value={series?.key ?? ""} onChange={event => setSelectedSeries(event.target.value)}>{chartable.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select> : <Segmented label={t("Chart")} value={series?.key ?? ""} options={chartable.map(item => ({ value: item.key, label: item.label }))} onChange={setSelectedSeries} />)}
+        {series && <HealthChart series={series} range={range} baseline={baseline} color={toneColor} />}
+        {compact ? <details className="chart-card-details"><summary>{t("Details & source")}</summary>
+          <SleepHrvSummary result={result} part="details" />
+          {hrvNotes && <div className="health-insight-note"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: () => null, a: ({ children }) => <span>{children}</span> }}>{hrvNotes}</ReactMarkdown></div>}
+          <p className="health-insight-source">{sourceLine}</p>
+        </details> : hrvNotes && <details className="health-insight-report health-hrv-explanation"><summary>{t("COROS notes")}</summary><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: () => null, a: ({ children }) => <span>{children}</span> }}>{hrvNotes}</ReactMarkdown></details>}
+      </>}
       {!loading && result?.status === "ready" && vitals && <>
         <HealthCheckVitals result={result} days={days} selected={series?.key} onSelect={setSelectedSeries} />
         {series && series.points.length > 1 && <div className="health-check-trend">
@@ -213,7 +233,7 @@ function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sam
         {series && series.points.length === 1 && <p className="health-vital-hint">{t("Only one")} {vitalLabel === "HRV" ? t("HRV") : vitalLabel?.toLowerCase()} {t("reading")} {days === 1 ? t("today") : t("in the last {{value1}} days", { value1: String(days) })}{t(". Run another health check on your watch to see how it moves.")}</p>}
         {report && <details className="health-insight-report"><summary>{t("COROS report")}</summary><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: () => null, a: ({ children }) => <span>{children}</span> }}>{report}</ReactMarkdown></details>}
       </>}
-      {!loading && result?.status === "ready" && !vitals && <>
+      {!loading && result?.status === "ready" && !vitals && !hrv && <>
         {series ? <SeriesSummary result={result} series={series} referenceKeys={referenceKeys} part={compact ? "primary" : undefined} /> : <dl className="health-insight-metrics">
           {result.metrics.map(metric => <div key={metric.key}><dt>{t(metric.label)}</dt><dd>{metricText(metric)}{metric.unit && <small> {metric.unit}</small>}</dd></div>)}
         </dl>}

@@ -69,90 +69,37 @@
   --map-card-shadow: 0 4px 18px color-mix(in srgb, var(--map-accent) 4%, transparent);
 }
 
+
+/* ---- Card ---------------------------------------------------------------- */
+
+/* The atlas shares the Overview's raised material (`.dashboard .panel`
+   supplies the surface and padding); this sheet lays out what sits on it. */
 .training-map {
-  container-name: training-map;
-  container-type: inline-size;
+  --card-hue: var(--accent);
+  --card-glow: 6%;
+  container: training-map / inline-size;
   position: relative;
+  display: grid;
+  gap: 16px;
   width: 100%;
-  max-width: 1800px;
   min-width: 0;
-  margin-inline: auto;
-  padding: 24px;
   overflow: hidden;
-  border: 1px solid var(--map-border);
-  border-radius: 14px;
-  background: radial-gradient(ellipse at 90% 0%, color-mix(in srgb, var(--map-accent) 4%, transparent), transparent 65%), var(--glass-surface);
-  color: var(--map-text-primary);
-  box-shadow: var(--map-panel-shadow);
+  color: var(--text-primary);
 }
 
-.training-map-main {
-  display: grid;
-  grid-template-columns: minmax(340px, 0.38fr) minmax(520px, 0.62fr);
-  gap: clamp(16px, 1.45vw, 24px);
-  min-width: 0;
+.training-map .overview-card-head {
+  flex-wrap: wrap;
 }
 
-.training-map-information {
-  container: training-map-information / inline-size;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  min-width: 0;
-  align-self: start;
-}
-
-.training-map-header {
-  display: grid;
-  gap: 4px;
-  padding: 0;
-}
-
-.training-map-header .training-map-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  margin: 0 0 5px;
-  color: var(--map-accent);
-  font-size: 10px;
-  font-weight: 550;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.training-map-header h2 {
-  margin: 0;
-  color: var(--map-text-primary);
-  font-family: var(--font-display);
-  font-size: clamp(24px, 2vw, 30px);
-  font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: -0.025em;
-}
-
-.training-map-header > p:last-child {
-  margin: 4px 0 0;
-  color: var(--map-text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.training-map-period-wrap {
-  display: grid;
-  justify-items: start;
-  gap: 10px;
-}
-
+/* Period picker: a recessed well with the chosen range raised out of it. */
 .training-map-periods {
-  display: grid;
-  width: min(100%, 390px);
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 5px;
-  border: 1px solid var(--glass-border);
-  border-radius: 17px;
-  background: #1e2022;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
-  padding: 5px;
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--ov-well);
+  box-shadow: var(--ov-well-rim);
+  padding: 3px;
 }
 
 .training-map-periods button {
@@ -161,658 +108,663 @@
   justify-content: center;
   gap: 6px;
   min-width: 0;
-  min-height: 42px;
-  border: 1px solid transparent;
-  border-radius: 12px;
+  min-height: 28px;
+  border: 0;
+  border-radius: var(--radius-pill);
   background: transparent;
-  color: var(--map-text-secondary);
-  padding: 0 7px;
-  font-size: 11px;
+  color: var(--text-muted);
+  padding: 0 12px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.005em;
   white-space: nowrap;
   cursor: pointer;
   transition:
-    color 200ms var(--map-ease),
-    background 200ms var(--map-ease),
-    box-shadow 200ms var(--map-ease),
-    transform 120ms var(--map-ease);
+    color 180ms var(--map-ease),
+    background 180ms var(--map-ease),
+    box-shadow 180ms var(--map-ease);
 }
 
 .training-map-periods button:hover:not(.is-selected) {
-  color: var(--map-text-primary);
-  background: color-mix(in srgb, var(--map-elevated-surface) 84%, transparent);
+  color: var(--text-secondary);
 }
 
 .training-map-periods button.is-selected {
-  background: linear-gradient(180deg, var(--success-bg), transparent), var(--sidebar-indicator-bg);
-  border-color: var(--success-border);
-  color: var(--success-text);
-  box-shadow: inset 0 1px 0 var(--success-border), 0 2px 10px rgba(0, 0, 0, 0.08);
+  background: var(--ov-raised);
+  box-shadow: var(--ov-raised-rim);
+  color: var(--text-primary);
 }
 
-:root[data-theme="paper"] .training-map-periods {
-  background: var(--glass-bg);
+.training-map-periods button svg {
+  width: 13px;
+  height: 13px;
+  color: var(--text-muted);
 }
 
-.training-map-periods button:active,
-.training-map-view-action:active,
-.training-map-recent-list > button:active,
-.training-map-reset:active,
-.training-map-recent-controls button:active {
-  transform: translateY(1px);
-}
-
-.training-map-periods button:focus-visible,
-.training-map-all-places:focus-visible,
-.training-map-overview-values button:focus-visible,
-.training-map-date-range input:focus-visible,
-.training-map-view-action:focus-visible,
-.training-map-recent-list > button:focus-visible,
-.training-map-reset:focus-visible,
-.training-map-recent-controls button:focus-visible {
-  outline: 2px solid var(--map-accent);
-  outline-offset: 2px;
+.training-map-periods button.is-selected svg {
+  color: var(--accent);
 }
 
 .training-map-date-range {
-  display: grid;
-  width: 100%;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
+  margin-top: -4px;
   animation: training-map-content-in 200ms ease both;
 }
 
 .training-map-date-range label {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  display: inline-flex;
   align-items: center;
-  gap: 9px;
-  min-height: 40px;
-  border: 1px solid var(--map-border);
-  border-radius: 12px;
-  background: var(--map-card-surface);
-  padding: 4px 10px 4px 12px;
-  transition:
-    border-color 180ms var(--map-ease),
-    box-shadow 180ms var(--map-ease);
+  gap: 8px;
+  min-height: 32px;
+  border-radius: var(--radius-pill);
+  background: var(--ov-raised);
+  box-shadow: var(--ov-raised-rim);
+  padding: 0 12px;
+  transition: box-shadow 180ms var(--map-ease);
 }
 
 .training-map-date-range label:focus-within {
-  border-color: color-mix(in srgb, var(--map-accent) 45%, var(--map-border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--map-accent) 12%, transparent);
+  box-shadow: var(--ov-raised-rim), 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .training-map-date-range label > span {
-  color: var(--map-text-muted);
-  font-size: 9.5px;
-  font-weight: 750;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .training-map-date-range input {
-  width: 100%;
   min-width: 0;
   border: 0;
   background: transparent;
-  color: var(--map-text-primary);
-  font-size: 11.5px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   outline: none;
+  color-scheme: dark;
 }
 
-.training-map-stats {
-  overflow: hidden;
-  border: 1px solid var(--map-border);
-  border-radius: 12px;
-  background: var(--map-card-surface);
-  box-shadow: var(--map-card-shadow);
+:root[data-theme="paper"] .training-map-date-range input {
+  color-scheme: light;
 }
 
-.training-map-primary-stats,
-.training-map-secondary-stats,
-.training-map-location-metrics,
-.training-map-overview-values {
-  margin: 0;
-  padding: 0;
-}
+/* ---- Layout -------------------------------------------------------------- */
 
-.training-map-primary-stats {
+.training-map-main {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding: 20px 4px;
+  grid-template-columns: minmax(340px, 0.4fr) minmax(480px, 0.6fr);
+  gap: 16px;
+  min-width: 0;
 }
 
-.training-map-primary-stat {
+.training-map-information {
+  container: training-map-information / inline-size;
   display: grid;
   align-content: start;
-  gap: 8px;
+  gap: 14px;
   min-width: 0;
-  padding: 0 14px;
+}
+
+/* ---- Totals -------------------------------------------------------------- */
+
+/* Four readings as tiles, each lit in its own hue like the vitals. */
+.training-map-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.training-map-stat {
+  --stat: var(--accent);
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  border-radius: var(--ov-radius-tile);
+  background:
+    radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--stat) 14%, transparent), transparent 60%),
+    var(--ov-tile);
+  box-shadow: var(--ov-tile-rim);
+  padding: 12px 14px 13px;
   animation: training-map-stat-in 420ms var(--map-ease) both;
   animation-delay: var(--stat-delay);
 }
 
-.training-map-primary-stat + .training-map-primary-stat {
-  border-left: 1px solid var(--map-border);
-}
+.training-map-stat.is-distance { --stat: var(--accent); }
+.training-map-stat.is-time { --stat: var(--ov-coach); }
+.training-map-stat.is-activities { --stat: var(--ov-library); }
+.training-map-stat.is-places { --stat: var(--ov-size); }
 
-.training-map-primary-stat dt {
+.training-map-stat dt {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 9px;
+  align-items: center;
+  gap: 7px;
   min-width: 0;
-  color: var(--map-text-secondary);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-.training-map-primary-stat dd {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 5px;
-  min-width: 0;
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.training-map-primary-stat dd strong {
-  color: var(--map-text-primary);
-  font-family: var(--font-display);
-  font-size: 28px;
-  font-weight: 550;
-  line-height: 1.1;
-  letter-spacing: -0.035em;
-}
-
-.training-map-primary-stat dd span {
-  color: var(--map-text-muted);
-  font-size: 11px;
+  color: var(--text-secondary);
+  font-size: 12px;
   font-weight: 600;
 }
 
-.training-map-secondary-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px 24px;
-  border-top: 1px solid var(--map-border);
-  padding: 16px 18px;
-}
-
-.training-map-secondary-stats > div {
-  display: grid;
-  align-content: start;
-  gap: 5px;
-  min-width: 0;
-}
-
-/* Animate the existing SVG artwork, without timers or React render loops. */
-.training-map-motion-icon {
-  --motion-ink: #55cba6;
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 28px;
-  width: 28px;
-  height: 28px;
-  border-radius: 9px;
-  color: var(--motion-ink);
-  background: color-mix(in srgb, var(--motion-ink) 11%, transparent);
-}
-.training-map-motion-icon:has(.lucide-mountain) { --motion-ink: #83b1e9; }
-.training-map-motion-icon:has(.lucide-gauge) { --motion-ink: #b6a0e9; }
-.training-map-motion-icon:has(.lucide-flame) { --motion-ink: #f0a06c; }
-:root[data-theme="paper"] .training-map-motion-icon { --motion-ink: #168063; }
-:root[data-theme="paper"] .training-map-motion-icon:has(.lucide-mountain) { --motion-ink: #3b73b4; }
-:root[data-theme="paper"] .training-map-motion-icon:has(.lucide-gauge) { --motion-ink: #8060b5; }
-:root[data-theme="paper"] .training-map-motion-icon:has(.lucide-flame) { --motion-ink: #be632b; }
-.training-map-secondary-stats .training-map-motion-icon svg {
-  width: 18px;
-  height: 18px;
-  color: inherit;
-  overflow: visible;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .training-map-motion-icon .lucide-route path {
-    stroke-dasharray: 7 3;
-    animation: training-map-route-flow 3s linear infinite;
-  }
-  .training-map-motion-icon .lucide-mountain {
-    animation: training-map-elevation-rise 4.8s ease-in-out infinite;
-  }
-  /* Lucide Gauge's first path is its needle; pivot at its base (12, 14). */
-  .training-map-motion-icon .lucide-gauge path:first-child {
-    transform-origin: 12px 14px;
-    animation: training-map-gauge-sweep 5s ease-in-out infinite;
-  }
-  .training-map-motion-icon .lucide-flame {
-    transform-origin: 50% 90%;
-    animation: training-map-flame-flicker 3.6s ease-in-out infinite;
-  }
-}
-@keyframes training-map-route-flow {
-  to { stroke-dashoffset: -30; }
-}
-@keyframes training-map-elevation-rise {
-  0%, 65%, 100% { transform: translateY(0); }
-  30% { transform: translateY(-2px); }
-  45% { transform: translateY(-1px); }
-}
-@keyframes training-map-gauge-sweep {
-  0%, 85%, 100% { transform: rotate(-25deg); }
-  35% { transform: rotate(20deg); }
-  55% { transform: rotate(5deg); }
-}
-@keyframes training-map-flame-flicker {
-  0%, 100% { transform: scale(1) rotate(0); fill: transparent; }
-  25% { transform: scale(.96, 1.08) rotate(-3deg); }
-  50% { transform: scale(1.05, .96) rotate(2deg); fill: color-mix(in srgb, currentColor 18%, transparent); }
-  75% { transform: scale(.98, 1.04) rotate(-1deg); }
-}
-
-.training-map-secondary-stats dt {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--map-text-secondary);
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.training-map-secondary-stats dd {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 3px;
-  margin: 0;
-  color: var(--map-text-primary);
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
-}
-
-.training-map-secondary-stats dd strong {
-  font-weight: 550;
-  letter-spacing: -0.01em;
-}
-
-.training-map-secondary-stats dd small {
-  color: var(--map-text-muted);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.training-map-location {
+.training-map-stat dt span {
   overflow: hidden;
-  border: 1px solid var(--map-border);
-  border-radius: 12px;
-  background: var(--map-card-surface);
-  box-shadow: var(--map-card-shadow);
-}
-
-.training-map-location-content {
-  padding: 18px;
-  animation: training-map-content-in 240ms var(--map-ease) both;
-}
-
-.training-map-location-header {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 11px;
-  padding-bottom: 13px;
-  border-bottom: 1px solid var(--map-border);
-}
-
-.training-map-location-icon {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 11px;
-  background: var(--map-accent-muted);
-  color: var(--map-accent);
-}
-
-.training-map-location-header h3,
-.training-map-overview h3,
-.training-map-location-empty h3 {
-  margin: 0;
-  color: var(--map-text-primary);
-  font-family: var(--font-display);
-  font-size: 17px;
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.025em;
-}
-
-.training-map-location-header p {
-  margin: 2px 0 0;
-  color: var(--map-text-muted);
-  font-size: 11px;
-}
-
-.training-map-all-places {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 4px 8px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--map-text-secondary);
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.training-map-all-places:hover {
-  background: var(--map-secondary-surface);
-  color: var(--map-text-primary);
-}
-
-.training-map-location-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  padding: 14px 0 12px;
-}
-
-.training-map-location-metrics div {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.training-map-location-metrics dt {
-  color: var(--map-text-muted);
-  font-size: 9px;
-  font-weight: 750;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.training-map-location-metrics dd {
-  overflow: hidden;
-  margin: 0;
-  color: var(--map-text-primary);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.3;
+  white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.training-map-stat-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--stat);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--stat) 60%, transparent);
+}
+
+.training-map-stat dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.training-map-stat strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-.training-map-location-metrics dd small {
-  color: var(--map-text-muted);
-  font-size: 9.5px;
+.training-map-stat strong small {
+  margin-left: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
   font-weight: 600;
+  letter-spacing: 0;
 }
 
-.training-map-location-trend {
+/* The secondary totals share one recessed well under the tiles. */
+.training-map-totals {
   display: grid;
-  grid-template-columns: minmax(96px, 0.78fr) minmax(100px, 1.2fr) auto;
-  align-items: end;
-  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin: 0;
+  border-radius: 16px;
+  background: var(--ov-well);
+  box-shadow: var(--ov-well-rim);
+  padding: 11px 14px 12px;
 }
 
-.training-map-location-trend > div:first-child {
+.training-map-totals > div {
   display: grid;
   gap: 3px;
+  min-width: 0;
 }
 
-.training-map-location-trend > div:first-child span {
-  color: var(--map-text-muted);
-  font-size: 9px;
-  font-weight: 750;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+.training-map-totals dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
-.training-map-location-trend > div:first-child strong {
-  color: var(--map-text-primary);
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+.training-map-totals dt svg {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+}
+
+.training-map-totals dt span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.training-map-totals dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-.training-map-location-chart {
-  height: 42px;
+.training-map-totals dd small {
+  margin-left: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ---- Places -------------------------------------------------------------- */
+
+.training-map-places {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.training-map-places-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.training-map-places-head h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+.training-map-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  border-radius: var(--radius-pill);
+  background: var(--ov-well);
+  box-shadow: var(--ov-well-rim);
+  color: var(--text-muted);
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.training-map-pager {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.training-map-pager button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ov-raised);
+  box-shadow: var(--ov-raised-rim);
+  color: var(--text-secondary);
+  padding: 0;
+  cursor: pointer;
+  transition:
+    background 180ms var(--map-ease),
+    color 180ms var(--map-ease);
+}
+
+.training-map-pager button:hover:not(:disabled) {
+  background: var(--ov-raised-hover);
+  color: var(--text-primary);
+}
+
+.training-map-pager button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.training-map-place-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.training-map-place-list > li {
+  min-width: 0;
+  animation: training-map-content-in 260ms var(--map-ease) both;
+  animation-delay: var(--place-delay);
+}
+
+/* One row per place: pin, name and country, the visit tally, the last date. */
+.training-map-place {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  column-gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--ov-tile);
+  box-shadow: var(--ov-tile-rim);
+  color: var(--text-primary);
+  padding: 8px 12px 8px 10px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 180ms var(--map-ease),
+    box-shadow 180ms var(--map-ease),
+    transform 120ms var(--map-ease);
+}
+
+.training-map-place:hover {
+  background: var(--ov-raised-hover);
+}
+
+.training-map-place:active {
+  transform: translateY(1px);
+}
+
+.training-map-place.is-selected {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent 65%),
+    var(--ov-tile);
+  box-shadow: var(--ov-tile-rim), inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.training-map-place-pin {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--ov-glyph);
+  box-shadow: var(--ov-glyph-rim);
+  color: var(--accent);
+}
+
+.training-map-place-name {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.training-map-place-name strong {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.training-map-place-name small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.training-map-place-tag {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-height: 17px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  padding: 0 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-style: normal;
+}
+
+.training-map-place-stats,
+.training-map-place-date {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.training-map-place-stats strong {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.training-map-place-chevron {
+  color: var(--text-muted);
+  transition:
+    transform 150ms var(--map-ease),
+    color 150ms var(--map-ease);
+}
+
+.training-map-place:hover .training-map-place-chevron {
+  transform: translateX(2px);
+  color: var(--text-secondary);
+}
+
+/* The chosen place opens above the list: its totals in a well, its trend, a way in. */
+.training-map-place-detail {
+  display: grid;
+  gap: 12px;
+  border-radius: var(--ov-radius-tile);
+  background:
+    radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%),
+    var(--ov-tile);
+  box-shadow: var(--ov-tile-rim);
+  padding: 14px 15px 15px;
+  animation: training-map-content-in 220ms var(--map-ease) both;
+}
+
+.training-map-place-detail > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.training-map-place-detail h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.training-map-place-detail > header p {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.training-map-detail-back,
+.training-map-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--ov-raised);
+  box-shadow: var(--ov-raised-rim);
+  color: var(--text-secondary);
+  padding: 0 11px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 180ms var(--map-ease),
+    color 180ms var(--map-ease),
+    transform 120ms var(--map-ease);
+}
+
+.training-map-detail-back:hover,
+.training-map-zoom:hover:not(:disabled) {
+  background: var(--ov-raised-hover);
+  color: var(--text-primary);
+}
+
+.training-map-detail-back:active,
+.training-map-zoom:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.training-map-zoom {
+  justify-self: start;
+  color: var(--accent);
+}
+
+.training-map-zoom:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.training-map-zoom.is-zooming svg {
+  animation: training-map-skeleton 1s ease-in-out infinite;
+}
+
+.training-map-detail-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin: 0;
+  border-radius: 14px;
+  background: var(--ov-well);
+  box-shadow: var(--ov-well-rim);
+  padding: 10px 12px 11px;
+}
+
+.training-map-detail-metrics > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.training-map-detail-metrics dt {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.training-map-detail-metrics dd {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.training-map-detail-metrics dd small {
+  margin-left: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.training-map-detail-trend {
+  display: grid;
+  gap: 4px;
+}
+
+.training-map-detail-trend-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.training-map-detail-trend-head strong {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.training-map-detail-chart {
+  height: 60px;
   min-width: 0;
 }
 
 .training-map-trend-empty {
-  align-self: center;
   margin: 0;
-  color: var(--map-text-muted);
-  font-size: 9.5px;
-  line-height: 1.35;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
-.training-map-view-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-height: 38px;
-  border: 0;
-  border-radius: 11px;
-  background: var(--map-accent-gradient);
-  color: var(--map-on-accent);
-  padding: 0 14px;
-  font-size: 11px;
-  font-weight: 750;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-  cursor: pointer;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 4px 14px color-mix(in srgb, var(--map-accent) 26%, transparent);
-  transition:
-    filter 200ms var(--map-ease),
-    box-shadow 200ms var(--map-ease),
-    transform 160ms var(--map-ease);
-}
-
-.training-map-view-action svg {
-  transition: transform 180ms var(--map-ease);
-}
-
-.training-map-view-action:hover {
-  filter: brightness(1.06);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 7px 20px color-mix(in srgb, var(--map-accent) 34%, transparent);
-  transform: translateY(-1px);
-}
-
-.training-map-view-action:hover svg {
-  transform: scale(1.12);
-}
-
-.training-map-view-action:disabled {
-  cursor: wait;
-  filter: brightness(1.04);
-}
-
-.training-map-view-action.is-zooming svg {
-  animation: training-map-zoom-pulse 520ms ease-in-out infinite alternate;
-}
-
-@keyframes training-map-zoom-pulse {
-  to {
-    transform: scale(1.28);
-  }
-}
-
-.training-map-overview {
+.training-map-places-empty,
+.training-map-places-loading {
   display: grid;
-  gap: 18px;
-}
-
-.training-map-overview > header {
-  display: grid;
+  justify-items: start;
   gap: 6px;
+  border-radius: var(--ov-radius-tile);
+  background: var(--ov-tile);
+  box-shadow: var(--ov-tile-rim);
+  padding: 16px 16px 18px;
 }
 
-.training-map-overview > header p,
-.training-map-location-empty p {
-  max-width: 46ch;
-  margin: 0;
-  color: var(--map-text-secondary);
-  font-size: 11.5px;
-  line-height: 1.5;
+.training-map-places-empty {
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
-.training-map-overview-values {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+.training-map-places-empty svg {
+  color: var(--accent);
 }
 
-.training-map-overview-values div {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-  padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--map-accent) 14%, var(--map-border));
-  border-radius: 12px;
-  background: linear-gradient(125deg, var(--map-accent-muted), transparent);
-}
-
-.training-map-overview-values div + div {
-  background: linear-gradient(125deg, color-mix(in srgb, #7d88bc 12%, transparent), transparent);
-}
-
-.training-map-overview-values dt {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--map-text-secondary);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-.training-map-overview-values dd {
-  display: grid;
-  gap: 3px;
-  margin: 0;
-}
-
-.training-map-overview-values button {
-  display: flex;
-  align-items: center;
-  justify-self: start;
-  gap: 8px;
-  max-width: 100%;
-  min-height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--map-text-primary);
-  text-align: left;
-  cursor: pointer;
-}
-
-.training-map-overview-values button strong {
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 550;
-  line-height: 1.35;
-  letter-spacing: -0.02em;
-  overflow-wrap: anywhere;
-}
-
-.training-map-overview-values button svg {
-  flex-shrink: 0;
-  color: var(--map-text-muted);
-}
-
-.training-map-overview-values button:hover,
-.training-map-overview-values button:hover svg {
-  color: var(--map-accent-hover);
-}
-
-.training-map-overview-values dd > small {
-  color: var(--map-text-muted);
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.training-map-location-empty {
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 10px;
-  min-height: 150px;
-  color: var(--map-accent);
-  text-align: center;
-}
-
-.training-map-location-empty svg {
-  width: 20px;
-  height: 20px;
-  box-sizing: content-box;
-  padding: 10px;
-  border-radius: 13px;
-  background: var(--map-accent-muted);
-}
-
-.training-map-location-empty h3 {
+.training-map-places-empty strong {
   margin-top: 2px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
 }
 
-.training-map-location-empty p {
-  max-width: 40ch;
+.training-map-places-empty p {
+  margin: 0;
+  line-height: 1.5;
+  text-wrap: pretty;
 }
 
-.training-map-location-loading {
-  display: grid;
+.training-map-places-loading {
   gap: 10px;
+  min-height: 110px;
   align-content: center;
-  min-height: 130px;
 }
 
-.training-map-location-loading span {
+.training-map-places-loading span {
   display: block;
-  height: 14px;
+  height: 12px;
   border-radius: 6px;
-  background: color-mix(in srgb, var(--map-text-primary) 7%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
   animation: training-map-skeleton 1.4s ease-in-out infinite;
 }
 
-.training-map-location-loading span:nth-child(1) {
-  width: 42%;
-}
+.training-map-places-loading span:nth-child(1) { width: 42%; }
+.training-map-places-loading span:nth-child(2) { width: 76%; }
+.training-map-places-loading span:nth-child(3) { width: 60%; }
 
-.training-map-location-loading span:nth-child(2) {
-  width: 76%;
-}
+/* ---- Globe --------------------------------------------------------------- */
 
-.training-map-location-loading span:nth-child(3) {
-  width: 60%;
-}
-
+/* The globe turns inside a recessed well; its controls float above as raised pills. */
 .training-map-globe-panel {
   position: relative;
   min-width: 0;
-  min-height: 520px;
+  min-height: 540px;
   overflow: hidden;
   isolation: isolate;
-  border: 1px solid var(--map-border);
-  border-radius: 12px;
+  border-radius: var(--ov-radius-tile);
   background:
     radial-gradient(ellipse 62% 58% at 50% 42%, var(--map-globe-radial) 0%, transparent 72%),
     radial-gradient(ellipse 78% 78% at 50% 52%, var(--map-globe-rim-light) 0%, transparent 76%),
-    var(--map-globe-background);
+    var(--ov-well);
+  box-shadow: var(--ov-well-rim);
 }
 
 .training-map-globe-panel::before {
@@ -943,65 +895,57 @@
   z-index: 4;
 }
 
-.training-map-globe-helper {
-  top: 16px;
-  left: 16px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  border: 1px solid var(--map-border);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--map-secondary-surface) 64%, transparent);
-  backdrop-filter: blur(14px) saturate(1.15);
-  -webkit-backdrop-filter: blur(14px) saturate(1.15);
-  box-shadow: 0 8px 22px var(--map-globe-control-shadow);
-  color: var(--map-text-secondary);
-  padding: 0 13px;
-  font-size: 10.5px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  pointer-events: none;
-}
-
-.training-map-globe-helper svg {
-  width: 14px;
-  height: 14px;
-  color: var(--map-accent);
-}
-
-.training-map-reset {
-  top: 16px;
-  right: 16px;
+.training-map-globe-helper,
+.training-map-reset,
+.training-map-globe-meta > div,
+.training-map-legend {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 38px;
-  border: 1px solid var(--map-border);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--map-secondary-surface) 72%, transparent);
-  backdrop-filter: blur(14px) saturate(1.15);
-  -webkit-backdrop-filter: blur(14px) saturate(1.15);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--map-text-primary) 8%, transparent),
-    0 8px 22px var(--map-globe-control-shadow);
-  color: var(--map-text-secondary);
-  padding: 0 13px;
-  font-size: 10.5px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  min-height: 30px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--ov-raised);
+  box-shadow: var(--ov-raised-rim);
+  color: var(--text-secondary);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+}
+
+.training-map-globe-helper {
+  top: 14px;
+  left: 14px;
+  pointer-events: none;
+}
+
+.training-map-globe-helper svg,
+.training-map-globe-meta svg {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  color: var(--accent);
+}
+
+.training-map-reset {
+  top: 14px;
+  right: 14px;
   cursor: pointer;
   transition:
-    color 180ms var(--map-ease),
     background 180ms var(--map-ease),
-    border-color 180ms var(--map-ease),
-    transform 160ms var(--map-ease);
+    color 180ms var(--map-ease),
+    transform 120ms var(--map-ease);
 }
 
 .training-map-reset:hover:not(:disabled) {
-  border-color: var(--map-border-strong);
-  background: var(--map-elevated-surface);
-  color: var(--map-text-primary);
+  background: var(--ov-raised-hover);
+  color: var(--text-primary);
+}
+
+.training-map-reset:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .training-map-reset:disabled {
@@ -1010,58 +954,35 @@
 }
 
 .training-map-globe-meta {
-  left: 16px;
-  bottom: 16px;
+  left: 14px;
+  bottom: 14px;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: calc(100% - 182px);
   flex-wrap: wrap;
-}
-
-.training-map-globe-meta > div {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 36px;
-  padding: 8px 11px;
-  border: 1px solid var(--map-border);
-  border-radius: 12px;
-  background: var(--map-elevated-surface);
-  box-shadow: 0 4px 16px var(--map-globe-control-shadow);
-  color: var(--map-text-secondary);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.training-map-globe-meta svg {
-  color: var(--map-accent);
+  gap: 8px;
+  max-width: calc(100% - 210px);
 }
 
 .training-map-legend {
-  right: 16px;
-  bottom: 16px;
-  display: grid;
-  grid-template-columns: auto repeat(3, 10px) auto;
-  padding: 10px 12px;
-  border: 1px solid var(--map-border);
-  border-radius: 12px;
-  background: var(--map-elevated-surface);
-  align-items: center;
-  gap: 7px;
-  color: var(--map-text-muted);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  right: 14px;
+  bottom: 14px;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
   pointer-events: none;
+}
+
+.training-map-legend strong {
+  margin-right: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .training-map-legend i {
   display: block;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: var(--map-accent);
+  background: var(--accent);
 }
 
 .training-map-legend i.is-low {
@@ -1079,7 +1000,7 @@
 .training-map-legend i.is-high {
   width: 10px;
   height: 10px;
-  box-shadow: 0 0 0 4px var(--map-accent-muted);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .training-map-globe-error {
@@ -1090,267 +1011,23 @@
   place-content: center;
   justify-items: center;
   gap: 10px;
-  background: var(--map-globe-background);
-  color: var(--map-text-secondary);
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
 .training-map-globe-error svg {
-  color: var(--map-accent);
+  color: var(--accent);
 }
 
-.training-map-recent {
-  margin-top: 20px;
-  padding-top: 18px;
-  border-top: 1px solid var(--map-border);
-}
-
-.training-map-recent > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
-}
-
-.training-map-recent h3 {
-  margin: 0;
-  color: var(--map-text-primary);
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-}
-
-.training-map-recent-controls {
-  display: flex;
-  gap: 6px;
-}
-
-.training-map-recent-controls button {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--map-border);
-  border-radius: 9px;
-  background: var(--map-card-surface);
-  color: var(--map-text-secondary);
-  cursor: pointer;
-  transition:
-    color 180ms var(--map-ease),
-    border-color 180ms var(--map-ease),
-    background 180ms var(--map-ease),
-    transform 160ms var(--map-ease);
-}
-
-.training-map-recent-controls button:hover:not(:disabled) {
-  border-color: var(--map-border-strong);
-  background: var(--map-elevated-surface);
-  color: var(--map-text-primary);
-}
-
-.training-map-recent-controls button:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
-.training-map-recent-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
-  gap: 12px;
-}
-
-.training-map-recent-list > button {
-  display: grid;
-  grid-template-rows: 1fr auto;
-  gap: 0;
-  min-width: 0;
-  min-height: 130px;
-  border: 1px solid var(--map-border);
-  border-radius: 12px;
-  background: var(--map-card-surface);
-  box-shadow: none;
-  color: var(--map-text-primary);
-  padding: 0;
-  overflow: hidden;
-  text-align: left;
-  cursor: pointer;
-  animation: training-map-content-in 300ms var(--map-ease) both;
-  animation-delay: var(--recent-delay, 0ms);
-  transition:
-    color 200ms var(--map-ease),
-    border-color 200ms var(--map-ease),
-    background 200ms var(--map-ease),
-    transform 200ms var(--map-ease),
-    box-shadow 200ms var(--map-ease);
-}
-
-.training-map-recent-list > button:hover {
-  border-color: var(--map-border-strong);
-  background: var(--map-card-surface-hover);
-  transform: translateY(-1px);
-}
-
-.training-map-recent-list > button.is-selected {
-  border-color: color-mix(in srgb, var(--map-accent) 55%, var(--map-border));
-  background: color-mix(in srgb, var(--map-accent-muted) 55%, var(--map-card-surface));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--map-accent) 15%, transparent);
-}
-
-.training-map-recent-heading {
-  padding: 20px 16px;
-  background: radial-gradient(ellipse at 95% 100%, color-mix(in srgb, var(--map-accent) 12%, transparent), transparent 70%), linear-gradient(110deg, var(--map-accent-muted), transparent);
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.training-map-recent-pin {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 42px;
-  border-radius: 12px;
-  border: 1px solid var(--map-border);
-  background: var(--map-elevated-surface);
-  color: var(--map-accent);
-  transition:
-    background 200ms var(--map-ease),
-    color 200ms var(--map-ease),
-    box-shadow 200ms var(--map-ease);
-}
-
-.training-map-recent-list > button.is-selected .training-map-recent-pin {
-  background: var(--map-accent-gradient);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  color: var(--map-on-accent);
-}
-
-.training-map-recent-place {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.training-map-recent-place strong {
-  color: var(--map-text-primary);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.training-map-recent-place small {
-  color: var(--map-text-secondary);
-  font-size: 11px;
-  font-weight: 400;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-.training-map-recent-details {
-  padding: 12px 16px;
-  border-top: 1px solid var(--map-border);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px 12px;
-  min-width: 0;
-  color: var(--map-text-secondary);
-  font-size: 11px;
-  line-height: 1.4;
-  font-variant-numeric: tabular-nums;
-}
-
-.training-map-recent-metrics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  min-width: 0;
-}
-
-.training-map-recent-metrics > span {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  white-space: nowrap;
-}
-
-.training-map-recent-metrics strong {
-  color: var(--map-text-primary);
-  font-size: 12px;
-  font-weight: 550;
-}
-
-.training-map-recent-date {
-  color: var(--map-text-muted);
-  font-size: 10px;
-}
-
-.training-map-recent-chevron {
-  color: var(--map-text-muted);
-  transition:
-    color 180ms var(--map-ease),
-    transform 180ms var(--map-ease);
-}
-
-.training-map-recent-list > button:hover .training-map-recent-chevron {
-  color: var(--map-accent);
-  transform: translateX(2px);
-}
-
-/* A consistent fine stroke and tonal badges give the map its own visual hierarchy. */
-.training-map .lucide { stroke-width: 1.7; }
-.training-map-eyebrow > svg {
-  box-sizing: content-box;
-  padding: 6px;
-  border-radius: 50%;
-  background: var(--map-accent-muted);
-}
-.training-map-stat-icon {
-  display: grid;
-  place-items: center;
-  flex: 0 0 34px;
-  width: 34px;
-  height: 34px;
-  border-radius: 11px;
-  color: var(--stat-ink, var(--map-accent));
-  background: color-mix(in srgb, var(--stat-ink, var(--map-accent)) 12%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--stat-ink, var(--map-accent)) 10%, transparent);
-}
-.training-map-primary-stat.is-time { --stat-ink: #7c9edb; }
-.training-map-primary-stat.is-activities { --stat-ink: #a193d2; }
-.training-map-primary-stat.is-places { --stat-ink: #dca369; }
-:root[data-theme="paper"] .training-map-primary-stat.is-time { --stat-ink: #426db4; }
-:root[data-theme="paper"] .training-map-primary-stat.is-activities { --stat-ink: #7960b1; }
-:root[data-theme="paper"] .training-map-primary-stat.is-places { --stat-ink: #aa6c2f; }
-.training-map-overview-values dt svg { flex-shrink: 0; color: var(--map-accent); }
-.training-map-overview-values div + div dt svg { color: #8b8fbd; }
-.training-map-overview-values button { width: 100%; justify-content: space-between; }
-.training-map-overview-values div:focus-within { border-color: var(--map-accent); }
-.training-map-legend strong {
-  grid-column: 1 / -1;
-  color: var(--map-text-secondary);
-  font-size: 10px;
-  font-weight: 550;
-  margin-bottom: 2px;
-}
-.training-map-legend i { justify-self: center; }
-.training-map-recent-list > button:hover {
-  box-shadow: 0 6px 18px color-mix(in srgb, var(--map-accent) 8%, transparent);
-}
-@media (prefers-reduced-transparency: reduce) {
-  .training-map-globe-helper,
-  .training-map-reset {
-    background: var(--map-elevated-surface);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
+.training-map-periods button:focus-visible,
+.training-map-date-range input:focus-visible,
+.training-map-pager button:focus-visible,
+.training-map-place:focus-visible,
+.training-map-detail-back:focus-visible,
+.training-map-zoom:focus-visible,
+.training-map-reset:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 @keyframes training-map-stat-in {
@@ -1385,19 +1062,11 @@
   }
 }
 
-/* The overall layout follows the map width; summary details follow their
-   own column so labels stay readable beside a large globe. */
-@container training-map (max-width: 1280px) {
-  .training-map-main {
-    grid-template-columns: minmax(325px, 0.37fr) minmax(480px, 0.63fr);
-    gap: 18px;
-  }
+/* ---- Responsive ---------------------------------------------------------- */
 
-}
-
-@container training-map (max-width: 1120px) {
+@container training-map (max-width: 1180px) {
   .training-map-main {
-    grid-template-columns: minmax(310px, 0.38fr) minmax(440px, 0.62fr);
+    grid-template-columns: minmax(300px, 0.42fr) minmax(400px, 0.58fr);
   }
 
   .training-map-globe-stage .activity-globe-webgl {
@@ -1408,7 +1077,6 @@
 @container training-map (max-width: 900px) {
   .training-map-main {
     grid-template-columns: minmax(0, 1fr);
-    gap: 20px;
   }
 
   .training-map-globe-panel {
@@ -1416,132 +1084,78 @@
   }
 }
 
-@container training-map (max-width: 480px) {
-  .training-map-globe-helper {
-    max-width: calc(100% - 152px);
-    border-radius: 10px;
-    padding: 6px 8px;
-    font-size: 9px;
-    line-height: 1.4;
+@container training-map (max-width: 640px) {
+  .training-map-periods {
+    width: 100%;
   }
 
-  .training-map-globe-helper svg {
-    flex-shrink: 0;
+  .training-map-periods button {
+    flex: 1;
+    padding: 0 6px;
   }
 
   .training-map-globe-meta {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-  }
-}
-
-@container training-map-information (min-width: 560px) {
-  .training-map-secondary-stats {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 16px;
-  }
-}
-
-@container training-map-information (max-width: 480px) {
-  .training-map-primary-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    padding: 0;
+    max-width: calc(100% - 28px);
   }
 
-  .training-map-primary-stat {
-    padding: 16px 18px;
-  }
-
-  .training-map-primary-stat + .training-map-primary-stat {
-    border-left: 0;
-  }
-
-  .training-map-primary-stat:nth-child(even) {
-    border-left: 1px solid var(--map-border);
-  }
-
-  .training-map-primary-stat:nth-child(n + 3) {
-    border-top: 1px solid var(--map-border);
-  }
-
-  .training-map-location-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-  }
-
-  .training-map-location-metrics dd {
-    overflow: visible;
-    white-space: normal;
-  }
-
-  .training-map-location-trend {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: center;
-  }
-
-  .training-map-view-action {
-    grid-column: 1 / -1;
-    justify-self: start;
-  }
-}
-
-@container training-map-information (max-width: 360px) {
-  .training-map-periods button {
-    gap: 4px;
-    padding-inline: 4px;
-    font-size: 10px;
-  }
-
-  .training-map-secondary-stats {
-    column-gap: 16px;
-  }
-
-  .training-map-date-range {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .training-map-location-header {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .training-map-location-icon {
+  .training-map-legend {
     display: none;
   }
 }
 
-@container training-map-information (max-width: 280px) {
-  .training-map-periods {
+@container training-map-information (max-width: 560px) {
+  .training-map-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
 
-  .training-map-overview-values {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 14px;
+@container training-map-information (max-width: 470px) {
+  .training-map-totals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container training-map-information (max-width: 440px) {
+  .training-map-place {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
   }
 
-  .training-map-overview-values div + div {
-    padding: 14px;
+  .training-map-place-date {
+    display: none;
+  }
+
+  .training-map-detail-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container training-map-information (max-width: 340px) {
+  .training-map-place {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .training-map-place-stats {
+    display: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .training-map-primary-stat,
-  .training-map-location-content,
+  .training-map-stat,
+  .training-map-place-list > li,
+  .training-map-place-detail,
   .training-map-date-range,
-  .training-map-recent-list > button,
-  .training-map-location-loading span {
+  .training-map-places-loading span,
+  .training-map-zoom.is-zooming svg {
     animation: none;
   }
 
   .training-map-periods button,
-  .training-map-view-action,
-  .training-map-view-action svg,
-  .training-map-recent-list > button,
-  .training-map-recent-chevron,
-  .training-map-recent-pin,
-  .training-map-reset,
-  .training-map-recent-controls button {
+  .training-map-pager button,
+  .training-map-place,
+  .training-map-place-chevron,
+  .training-map-detail-back,
+  .training-map-zoom,
+  .training-map-reset {
     transition: none;
   }
 

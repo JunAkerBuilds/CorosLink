@@ -89,7 +89,10 @@ import { buildTrainingHubSnapshot } from "./training/parsers";
 import { fetchTrainingDashboard, fetchUpcomingWorkouts } from "./training/api";
 import { TRAINING_HEATMAP_DAYS } from "./training/chartConfig";
 import { recentTrainingHubDateList } from "./training/formatters";
-import type { TrainingHubSnapshot } from "./training/types";
+import type {
+  TrainingHubNavigationRequest,
+  TrainingHubSnapshot,
+} from "./training/types";
 import type { CorosLinkApi } from "./coroslink-api";
 import { AppUpdateControls } from "./components/AppUpdateControls";
 import { DonateButton } from "./components/DonateButton";
@@ -132,6 +135,11 @@ import {
 import { trackAvatarColor, trackInitial } from "./media/trackAvatar";
 import { useTimeOfDayGreeting } from "./hooks/useTimeOfDayGreeting";
 import { OverviewWeatherCard } from "./overview/OverviewWeatherCard";
+import {
+  OverviewBriefing,
+  OverviewLaunchpad,
+  useOverviewBriefing,
+} from "./overview/OverviewBriefing";
 import {
   defineSelectionPreference,
   selectionIsOneOf,
@@ -325,6 +333,15 @@ async function listAllTrainingHubActivities(
   return activities;
 }
 
+/**
+ * IPC hands back a fresh object on every call. Polled App state keeps its
+ * current value when the payload is unchanged, otherwise App and every mounted
+ * view re-render for nothing.
+ */
+function sameJson(current: unknown, next: unknown): boolean {
+  return JSON.stringify(current) === JSON.stringify(next);
+}
+
 let appleMusicSelectedPlaylistIdMemory = "";
 let appleMusicDetailCacheMemory: Record<string, AppleMusicPlaylist> = {};
 
@@ -390,7 +407,9 @@ export default function App() {
     async function poll() {
       try {
         const status = await api!.getCorosNativeBleStatus();
-        if (!disposed) setNativeBleStatus(status);
+        if (!disposed) {
+          setNativeBleStatus((current) => (sameJson(current, status) ? current : status));
+        }
       } catch {
         if (!disposed) setNativeBleStatus(null);
       } finally {
@@ -512,6 +531,10 @@ export default function App() {
   const [trainingHubDailyHealthData, setTrainingHubDailyHealthData] =
     useState<TrainingHubDailyHealthSummary | null>(null);
   const [sleepConnecting, setSleepConnecting] = useState(false);
+  const [trainingHubLoaded, setTrainingHubLoaded] = useState(false);
+  const [trainingHubNavigation, setTrainingHubNavigation] =
+    useState<TrainingHubNavigationRequest | null>(null);
+  const trainingHubNavigationSequence = useRef(0);
   const [url, setUrl] = useState("");
   const [autoTransfer, setAutoTransfer] = useState(true);
   const autoTransferRef = useRef(autoTransfer);
@@ -650,8 +673,10 @@ export default function App() {
         api.getWatchStatus(),
         api.listDownloads(),
       ]);
-      setWatchStatus(watch);
-      setDownloads(localDownloads);
+      setWatchStatus((current) => (sameJson(current, watch) ? current : watch));
+      setDownloads((current) =>
+        sameJson(current, localDownloads) ? current : localDownloads,
+      );
     } catch (caught) {
       setError(localizedText(() => toErrorMessage(caught)));
     }
@@ -870,14 +895,18 @@ export default function App() {
       return;
     }
 
-    const status = await api.getTrainingHubStatus();
-    applyTrainingHubStatus(status);
+    try {
+      const status = await api.getTrainingHubStatus();
+      applyTrainingHubStatus(status);
 
-    if (status.authenticated) {
-      void loadTrainingHubWellnessData();
-      await loadTrainingHubData();
-    } else {
-      clearTrainingHubData();
+      if (status.authenticated) {
+        void loadTrainingHubWellnessData();
+        await loadTrainingHubData();
+      } else {
+        clearTrainingHubData();
+      }
+    } finally {
+      setTrainingHubLoaded(true);
     }
   }, [
     api,
@@ -924,6 +953,16 @@ export default function App() {
     },
     [api],
   );
+
+  const openTrainingHubActivity = useCallback((activity: TrainingHubActivity) => {
+    trainingHubNavigationSequence.current += 1;
+    setTrainingHubNavigation({
+      tab: "activities",
+      activity,
+      requestId: trainingHubNavigationSequence.current,
+    });
+    setActiveView("training");
+  }, []);
 
   useEffect(() => {
     if (!api || trainingHubActivities.length === 0) {
@@ -1118,10 +1157,15 @@ export default function App() {
       return null;
     }
 
-    const usedBytes = watchStatus.usedBytes ?? trackBytes;
+    const mapBytes = watchStatus.mapSizeBytes ?? 0;
+    // The volume's own figure; without it only music and maps are known.
+    const usedBytes = watchStatus.usedBytes ?? trackBytes + mapBytes;
     return {
       totalBytes,
       usedBytes,
+      usedReported: watchStatus.usedBytes !== undefined,
+      musicBytes: trackBytes,
+      mapBytes,
       freeBytes: watchStatus.freeBytes,
       percent: Math.min(100, Math.round((usedBytes / totalBytes) * 100)),
       capacityLabel: presentation.capacityLabel ?? "Storage unavailable",
@@ -2456,17 +2500,25 @@ export default function App() {
             ) : null}
             {activeView === "overview" ? (
               <MediaOverviewTab
+                api={api}
                 downloads={downloads}
                 watchStatus={watchStatus}
                 storage={storage}
                 watchConnected={Boolean(watchStatus?.connected)}
                 trainingConnected={Boolean(trainingHubStatus?.authenticated)}
+                trainingStatusKnown={trainingHubStatus !== null || trainingHubLoaded}
+                trainingLoading={!trainingHubLoaded}
+                trainingSnapshot={trainingHubSnapshot}
                 trainingActivities={trainingHubActivities}
+                trainingUpcomingWorkouts={trainingHubUpcomingWorkouts}
+                trainingSportTypes={trainingHubSportTypes}
                 trainingActivityDetail={trainingHubActivityDetail}
                 busy={busy}
                 onTransfer={handleTransfer}
                 onDeleteDownload={handleDeleteDownload}
                 onOpenLibrary={() => openMediaTab("library")}
+                onNavigate={setActiveView}
+                onOpenTrainingActivity={openTrainingHubActivity}
                 onSelectTrainingActivity={handleTrainingHubActivityDetail}
               />
             ) : null}
@@ -2578,7 +2630,7 @@ export default function App() {
               </MediaView>
             ) : null}
             {activeView === "maps" ? (
-              <Suspense fallback={<DeferredSurfaceFallback label="maps" />}>
+              <Suspense fallback={<DeferredSurfaceFallback label={t("maps")} />}>
                 <LazyMapsView
                   api={api}
                   watchStatus={watchStatus}
@@ -2591,7 +2643,7 @@ export default function App() {
             ) : null}
             {watchfacesMounted || activeView === "watchfaces" ? (
               <Suspense
-                fallback={<DeferredSurfaceFallback label="Watch Studio" />}
+                fallback={<DeferredSurfaceFallback label={t("Watch Studio")} />}
               >
                 <LazyWatchfacesView
                   api={api}
@@ -2610,7 +2662,7 @@ export default function App() {
               </Suspense>
             ) : null}
             {activeView === "training" ? (
-              <Suspense fallback={<DeferredSurfaceFallback label="training" />}>
+              <Suspense fallback={<DeferredSurfaceFallback label={t("training")} />}>
                 <LazyTrainingHubView
                   api={api}
                   status={trainingHubStatus}
@@ -2641,6 +2693,8 @@ export default function App() {
                   onRefresh={handleTrainingHubRefresh}
                   onLoadDetail={handleTrainingHubActivityDetail}
                   onExportFile={handleTrainingHubExport}
+                  navigationRequest={trainingHubNavigation}
+                  onNavigationRequestHandled={() => setTrainingHubNavigation(null)}
                 />
               </Suspense>
             ) : null}
@@ -2648,13 +2702,13 @@ export default function App() {
             showDevelopmentTools &&
             LazyGearView &&
             activeView === "gear" ? (
-              <Suspense fallback={<DeferredSurfaceFallback label="gear" />}>
+              <Suspense fallback={<DeferredSurfaceFallback label={t("gear")} />}>
                 <LazyGearView api={api} />
               </Suspense>
             ) : null}
             {activeView === "library" ? (
               <TrainingLibraryErrorBoundary>
-                <Suspense fallback={<DeferredSurfaceFallback label="Training Library" />}>
+                <Suspense fallback={<DeferredSurfaceFallback label={t("Training Library")} />}>
                   <LazyTrainingLibraryView
                     api={api}
                     status={trainingHubStatus}
@@ -2672,7 +2726,7 @@ export default function App() {
               </TrainingLibraryErrorBoundary>
             ) : null}
             {activeView === "strength" ? (
-              <Suspense fallback={<DeferredSurfaceFallback label="strength" />}>
+              <Suspense fallback={<DeferredSurfaceFallback label={t("strength")} />}>
                 <LazyStrengthView
                   initialAccountSetup={accountSetupView === "strength"}
                   api={api}
@@ -2703,7 +2757,7 @@ export default function App() {
               />
             ) : null}
             {activeView === "calendar" ? (
-              <Suspense fallback={<DeferredSurfaceFallback label="calendar" />}>
+              <Suspense fallback={<DeferredSurfaceFallback label={t("calendar")} />}>
                 <LazyCalendarView
                   api={api}
                   status={trainingHubStatus}
@@ -2730,7 +2784,7 @@ export default function App() {
                 aria-hidden={activeView !== "coach"}
               >
                 <Suspense
-                  fallback={<DeferredSurfaceFallback label="Coach" />}
+                  fallback={<DeferredSurfaceFallback label={t("Coach")} />}
                 >
                   <LazyChatView
                     accountSetupRequest={coachAccountSetupRequest}
@@ -2855,17 +2909,26 @@ function MediaView({ activeTab, onTabChange, children }: MediaViewProps) {
   );
 }
 
-interface StorageRingProps {
-  percent: number;
-  usedBytes: number;
+interface StorageBarProps {
+  storage: NonNullable<MediaOverviewTabProps["storage"]>;
 }
 
-function StorageRing({ percent, usedBytes }: StorageRingProps) {
+/** Watch storage the way iPhone Storage shows it: one bar split by what fills it. */
+function StorageBar({ storage }: StorageBarProps) {
   useLanguage();
   const [isReady, setIsReady] = useState(false);
-  const radius = 54;
-  const circumference = 2 * Math.PI * radius;
-  const targetOffset = circumference - (percent / 100) * circumference;
+  const { totalBytes, usedBytes, musicBytes, mapBytes, percent } = storage;
+  const segments = [
+    { key: "music", label: t("Music"), bytes: musicBytes },
+    { key: "maps", label: t("Maps"), bytes: mapBytes },
+    // Whatever else the volume holds: firmware, faces, activity files.
+    {
+      key: "other",
+      label: t("System & other"),
+      bytes: storage.usedReported ? Math.max(0, usedBytes - musicBytes - mapBytes) : 0,
+    },
+  ].filter((segment) => segment.bytes > 0);
+  const percentLabel = percent === 0 && usedBytes > 0 ? "<1%" : `${percent}%`;
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setIsReady(true));
@@ -2873,62 +2936,47 @@ function StorageRing({ percent, usedBytes }: StorageRingProps) {
   }, []);
 
   return (
-    <div
-      className={`storage-ring${isReady ? " is-ready" : ""}`}
-      aria-label={t("{{value0}}% storage used", { value0: percent })}
-    >
-      <svg viewBox="0 0 128 128" aria-hidden="true">
-        <circle className="storage-ring-track" cx="64" cy="64" r={radius} />
-        <circle
-          className="storage-ring-progress"
-          cx="64"
-          cy="64"
-          r={radius}
-          strokeDasharray={circumference}
-          strokeDashoffset={isReady ? targetOffset : circumference}
-          transform="rotate(-90 64 64)"
-        />
-      </svg>
-      <div className="storage-ring-label">
-        <strong>{percent}%</strong>
-        <span>{formatBytes(usedBytes)} {t("used")}</span>
+    <div className={`overview-watch-storage${isReady ? " is-ready" : ""}`}>
+      <div className="overview-watch-storage-head">
+        <span>{t("Storage")}</span>
+        <span>
+          {formatBytes(usedBytes)} {t("of")} {formatBytes(totalBytes)} {t("used")}
+        </span>
       </div>
+      <div
+        className="overview-watch-storage-bar"
+        role="meter"
+        aria-label={t("Watch storage usage")}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        aria-valuetext={`${percentLabel} ${t("used")}`}
+      >
+        {segments.map((segment) => (
+          <span
+            key={segment.key}
+            className={`is-${segment.key}`}
+            // Unrounded, with a floor so a few kilobytes still show as a sliver.
+            style={{ width: `max(4px, ${(segment.bytes / totalBytes) * 100}%)` }}
+          />
+        ))}
+        <span className="is-free" />
+      </div>
+      {segments.length > 0 ? (
+        <ul className="overview-watch-storage-legend">
+          {segments.map((segment) => (
+            <li
+              key={segment.key}
+              className={`is-${segment.key}`}
+              title={formatBytes(segment.bytes)}
+            >
+              {t(segment.label)}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
-}
-
-interface MetricTileProps {
-  label: string;
-  value: string | number;
-  detail: string;
-  icon?: ReactNode;
-  onClick?: () => void;
-}
-
-function MetricTile({ label, value, detail, icon, onClick }: MetricTileProps) {
-  useLanguage();
-  const content = (
-    <>
-      {icon ? <div className="metric-tile-icon">{icon}</div> : null}
-      <p className="eyebrow">{t(label)}</p>
-      <strong className="metric-value">{value}</strong>
-      <span>{t(detail)}</span>
-    </>
-  );
-
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        className="metric-tile metric-tile-button"
-        onClick={onClick}
-      >
-        {content}
-      </button>
-    );
-  }
-
-  return <section className="metric-tile">{content}</section>;
 }
 
 const WATCH_FEATURE_ICONS: Record<
@@ -2940,42 +2988,129 @@ const WATCH_FEATURE_ICONS: Record<
   battery: ({ size = 17 }) => <BatteryFull size={size} aria-hidden="true" />,
 };
 
-function ProductHero({ presentation }: { presentation: WatchPresentation }) {
+interface WatchOverviewPanelProps {
+  /** Null when the model has no product shot; the panel then shows status only. */
+  presentation: WatchPresentation | null;
+  statusTitle: string;
+  storage: MediaOverviewTabProps["storage"];
+  onWatchCount: number;
+  syncedCount: number;
+  libraryCount: number;
+  librarySize: string;
+  onOpenLibrary: () => void;
+}
+
+/** The connected watch in one panel: product, storage and the music on it. */
+function WatchOverviewPanel({
+  presentation,
+  statusTitle,
+  storage,
+  onWatchCount,
+  syncedCount,
+  libraryCount,
+  librarySize,
+  onOpenLibrary,
+}: WatchOverviewPanelProps) {
   useLanguage();
-  const productName = presentation.productName ?? presentation.displayName;
+  const productName = presentation
+    ? (presentation.productName ?? presentation.displayName)
+    : null;
+  const stats = [
+    { hue: "on-watch", icon: <HardDrive size={15} aria-hidden="true" />, label: t("On watch"), value: onWatchCount, detail: onWatchCount === 1 ? t("MP3") : t("MP3s") },
+    { hue: "synced", icon: <CheckCircle2 size={15} aria-hidden="true" />, label: t("Synced"), value: syncedCount, detail: t("from library"), open: true },
+    { hue: "library", icon: <Music size={15} aria-hidden="true" />, label: t("Library"), value: libraryCount, detail: libraryCount === 1 ? t("track saved") : t("tracks saved"), open: true },
+    { hue: "size", icon: <FolderOpen size={15} aria-hidden="true" />, label: t("Library size"), value: librarySize, detail: t("on this computer"), open: true },
+  ];
 
   return (
-    <section className="dashboard-hero dashboard-hero--product panel">
-      <div className="dashboard-hero-copy">
-        <span className="dashboard-hero-brand">COROS</span>
-        <h2 className="dashboard-hero-model">{productName}</h2>
-        {presentation.tagline ? (
-          <p className="dashboard-hero-tagline">{t(presentation.tagline)}</p>
-        ) : null}
-        {presentation.features && presentation.features.length > 0 ? (
-          <ul className="dashboard-hero-features">
-            {presentation.features.map((feature) => {
-              const Icon = WATCH_FEATURE_ICONS[feature.icon];
-              return (
-                <li key={feature.label}>
-                  <span className="dashboard-hero-feature-icon">
-                    <Icon size={16} />
+    <section className={`panel overview-watch${presentation ? "" : " is-compact"}`}>
+      {presentation ? (
+        <div className="overview-watch-product">
+          <div className="overview-watch-copy">
+            <span className="dashboard-hero-brand">COROS</span>
+            <h2 className="overview-watch-model">{productName}</h2>
+            {presentation.tagline ? (
+              <p className="overview-watch-tagline">{t(presentation.tagline)}</p>
+            ) : null}
+            {presentation.features && presentation.features.length > 0 ? (
+              <ul className="overview-watch-features">
+                {presentation.features.map((feature) => {
+                  const Icon = WATCH_FEATURE_ICONS[feature.icon];
+                  return (
+                    <li key={feature.label}>
+                      <Icon size={15} />
+                      {t(feature.label)}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+          </div>
+          {presentation.heroImage ? (
+            <img
+              src={presentation.heroImage}
+              alt={presentation.heroAlt ?? ""}
+              className="dashboard-hero-image overview-watch-image"
+              data-watch-model={presentation.model}
+            />
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="overview-watch-status">
+        <header className="overview-watch-head">
+          <div className="dashboard-status-lead">
+            <div className="watch-status-icon connected" aria-hidden="true">
+              <Watch size={24} />
+              <span className="watch-status-badge">
+                <CheckCircle2 size={13} strokeWidth={2.5} />
+              </span>
+            </div>
+            <div>
+              <p className="eyebrow">{t("Watch connection")}</p>
+              <h2>{statusTitle}</h2>
+            </div>
+          </div>
+          <div className="connection-pill connected">
+            <StatusDot connected />
+            <span>{t("Connected")}</span>
+          </div>
+        </header>
+
+        <div className="overview-watch-body">
+          {storage ? (
+            <StorageBar storage={storage} />
+          ) : null}
+          <div className="overview-watch-stats">
+            {stats.map((stat) => {
+              const content = (
+                <>
+                  <span className="overview-watch-stat-label">
+                    <span className="overview-watch-stat-icon">{stat.icon}</span>
+                    {t(stat.label)}
                   </span>
-                  {t(feature.label)}
-                </li>
+                  <strong>{stat.value}</strong>
+                  <span className="overview-watch-stat-detail">{t(stat.detail)}</span>
+                </>
+              );
+              return stat.open ? (
+                <button
+                  key={stat.hue}
+                  type="button"
+                  className={`overview-watch-stat is-${stat.hue} is-button`}
+                  onClick={onOpenLibrary}
+                >
+                  {content}
+                </button>
+              ) : (
+                <div key={stat.hue} className={`overview-watch-stat is-${stat.hue}`}>
+                  {content}
+                </div>
               );
             })}
-          </ul>
-        ) : null}
+          </div>
+        </div>
       </div>
-      {presentation.heroImage ? (
-        <img
-          src={presentation.heroImage}
-          alt={presentation.heroAlt ?? ""}
-          className="dashboard-hero-image"
-          data-watch-model={presentation.model}
-        />
-      ) : null}
     </section>
   );
 }
@@ -3051,38 +3186,58 @@ function RecentTrackList({
 }
 
 interface MediaOverviewTabProps {
+  api: CorosLinkApi | undefined;
   downloads: LocalTrack[];
   watchStatus: WatchStatus | null;
   storage: {
     totalBytes: number;
     usedBytes: number;
+    usedReported: boolean;
+    musicBytes: number;
+    mapBytes: number;
     freeBytes?: number;
     percent: number;
     capacityLabel: string;
   } | null;
   watchConnected: boolean;
   trainingConnected: boolean;
+  /** False until the first Training Hub status check settles. */
+  trainingStatusKnown: boolean;
+  trainingLoading: boolean;
+  trainingSnapshot: TrainingHubSnapshot | null;
   trainingActivities: TrainingHubActivity[];
+  trainingUpcomingWorkouts: TrainingHubUpcomingWorkout[];
+  trainingSportTypes: TrainingHubSportType[];
   trainingActivityDetail: TrainingHubActivityDetail | null;
   busy: string | null;
   onTransfer: (id: string) => void;
   onDeleteDownload: (track: LocalTrack) => void;
   onOpenLibrary: () => void;
+  onNavigate: (view: View) => void;
+  onOpenTrainingActivity: (activity: TrainingHubActivity) => void;
   onSelectTrainingActivity: (activity: TrainingHubActivity) => void;
 }
 
 function MediaOverviewTab({
+  api,
   downloads,
   watchStatus,
   storage,
   watchConnected,
   trainingConnected,
+  trainingStatusKnown,
+  trainingLoading,
+  trainingSnapshot,
   trainingActivities,
+  trainingUpcomingWorkouts,
+  trainingSportTypes,
   trainingActivityDetail,
   busy,
   onTransfer,
   onDeleteDownload,
   onOpenLibrary,
+  onNavigate,
+  onOpenTrainingActivity,
   onSelectTrainingActivity,
 }: MediaOverviewTabProps) {
   useLanguage();
@@ -3120,6 +3275,12 @@ function MediaOverviewTab({
   const showProductHero =
     watchPresentation.state === "connected-known" &&
     Boolean(watchPresentation.heroImage);
+  const briefing = useOverviewBriefing(
+    trainingConnected ? trainingSnapshot : null,
+    trainingConnected ? trainingActivities : [],
+    trainingConnected ? trainingUpcomingWorkouts : [],
+  );
+  const upcomingCount = briefing.plan.upcomingCount;
 
   return (
     <div className="dashboard">
@@ -3135,105 +3296,53 @@ function MediaOverviewTab({
           <h1 className="dashboard-greeting">
             {greeting} <span className="dashboard-greeting-wave" aria-hidden="true">👋</span>
           </h1>
+          {trainingConnected && briefing.brief ? (
+            <p className="dashboard-subtitle">{briefing.brief}</p>
+          ) : null}
         </div>
         <OverviewWeatherCard />
       </header>
 
-      <div
-        className={[
-          "dashboard-hero-row",
-          "dashboard-block",
-          !showProductHero && "dashboard-hero-row--no-hero",
-        ]
-          .filter(Boolean)
-          .join(" ")}
-      >
-        {showProductHero ? (
-          <ProductHero presentation={watchPresentation} />
-        ) : null}
+      {/* A connected watch is the live thing on the desk, so it leads. */}
+      {watchConnected ? (
+        <div className="dashboard-block overview-watch-shell">
+          <WatchOverviewPanel
+            presentation={showProductHero ? watchPresentation : null}
+            statusTitle={statusTitle}
+            storage={storage}
+            onWatchCount={watchTracks.length}
+            syncedCount={transferredCount}
+            libraryCount={downloads.length}
+            librarySize={formatBytes(librarySize)}
+            onOpenLibrary={onOpenLibrary}
+          />
+        </div>
+      ) : null}
 
-        <section className="dashboard-status panel">
-          <div className="dashboard-status-header">
-            <div className="dashboard-status-lead">
-              <div
-                className={`watch-status-icon${watchConnected ? " connected" : ""}`}
-                aria-hidden="true"
-              >
-                <Watch size={26} />
-                <span className="watch-status-badge">
-                  {watchConnected ? (
-                    <CheckCircle2 size={13} strokeWidth={2.5} />
-                  ) : (
-                    <X size={12} strokeWidth={3} />
-                  )}
-                </span>
-              </div>
-              <div>
-                <p className="eyebrow">{t("Watch connection")}</p>
-                <h2>{statusTitle}</h2>
-                {!(watchConnected && storage) ? (
-                  <p className="dashboard-status-hint">
-                    {t(watchPresentation.connectHint)}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-            <div
-              className={`connection-pill${watchConnected ? " connected" : ""}`}
-            >
-              <StatusDot connected={watchConnected} />
-              <span>{watchConnected ? t("Connected") : t("Offline")}</span>
-            </div>
-          </div>
-
-          {watchConnected && storage ? (
-            <>
-              <StorageRing
-                percent={storage.percent}
-                usedBytes={storage.usedBytes}
-              />
-
-              <p className="storage-ring-caption">
-                {formatBytes(storage.usedBytes)} {t("of")}{" "}
-                {formatBytes(storage.totalBytes)}
-                {storage.freeBytes !== undefined
-                  ? t(" · {{value0}} free", { value0: formatBytes(storage.freeBytes) })
-                  : t(" · {{value0}} capacity", { value0: formatBytes(storage.totalBytes) })}
-              </p>
-            </>
-          ) : null}
-        </section>
-      </div>
-
-      <div className="dashboard-metrics dashboard-block">
-        <MetricTile
-          label={t("Local Library")}
-          value={downloads.length}
-          detail={downloads.length === 1 ? "track saved" : "tracks saved"}
-          icon={<Music size={18} aria-hidden="true" />}
-          onClick={onOpenLibrary}
-        />
-        <MetricTile
-          label={t("On Watch")}
-          value={watchTracks.length}
-          detail={watchTracks.length === 1 ? "MP3 on device" : "MP3s on device"}
-          icon={<HardDrive size={18} aria-hidden="true" />}
-        />
-        <MetricTile
-          label={t("Transferred")}
-          value={transferredCount}
-          detail={transferredCount === 1 ? "track synced" : "tracks synced"}
-          icon={<CheckCircle2 size={18} aria-hidden="true" />}
-          onClick={onOpenLibrary}
-        />
-        <MetricTile
-          label={t("Library Size")}
-          value={formatBytes(librarySize)}
-          detail="local storage used"
-          icon={<FolderOpen size={18} aria-hidden="true" />}
-          onClick={onOpenLibrary}
+      <div className="dashboard-block">
+        <OverviewBriefing
+          api={api}
+          connected={trainingStatusKnown ? trainingConnected : null}
+          loading={trainingLoading}
+          briefing={briefing}
+          snapshot={trainingSnapshot}
+          activities={trainingActivities}
+          sportTypes={trainingSportTypes}
+          onNavigate={onNavigate}
+          onOpenActivity={onOpenTrainingActivity}
         />
       </div>
+
+      <div className="dashboard-block">
+        <OverviewLaunchpad
+          trackCount={downloads.length}
+          librarySize={formatBytes(librarySize)}
+          upcomingCount={upcomingCount}
+          trainingConnected={trainingConnected}
+          onNavigate={onNavigate}
+        />
+      </div>
+
 
       {downloads.length > 0 ? (
         <section className="panel dashboard-recent dashboard-block">
@@ -3264,7 +3373,7 @@ function MediaOverviewTab({
       ) : null}
 
       <div className="overview-globe-section dashboard-block">
-        <Suspense fallback={<DeferredSurfaceFallback label="activity globe" />}>
+        <Suspense fallback={<DeferredSurfaceFallback label={t("activity globe")} />}>
           <LazyActivityGlobeCard
             activities={trainingActivities}
             connected={trainingConnected}
@@ -4050,7 +4159,7 @@ function YouTubeBrowserView({
                   ? t("Loading")
                   : t("Browse")}
             </span>
-            <strong title={title || "YouTube"}>{title || "YouTube"}</strong>
+            <strong title={title || t("YouTube")}>{title || t("YouTube")}</strong>
           </div>
 
           <div className="webview-frame">
@@ -4665,14 +4774,12 @@ function YouTubeMusicView({
                   href="https://music.youtube.com/library"
                   target="_blank"
                   rel="noreferrer"
-                >
-                  music.youtube.com/library
-                </a>{" "}
+                >{t("music.youtube.com/library")}</a>{" "}
                 {t("while signed in, then open DevTools (F12) and switch to the")}{" "}
                 <strong>{t("Network")}</strong> {t("tab.")} </li>
               <li>
                 {t("Filter for")} <code>/browse</code>{t(", right-click a")}{" "}
-                <strong>POST</strong> {t("request, and choose")}{" "}
+                <strong>{t("POST")}</strong> {t("request, and choose")}{" "}
                 <strong>{t("Copy → Copy as cURL")}</strong> {t("(or copy the raw request headers).")} </li>
               <li>
                 {t("Paste it below and connect — a cURL command or a raw header block both work (must include")} <code>cookie</code> {t("and")}{" "}
@@ -4931,6 +5038,7 @@ function YouTubeMusicBrandIcon({
   size?: number;
   className?: string;
 }) {
+  useLanguage();
   return (
     <svg
       className={className}
@@ -4953,6 +5061,7 @@ function YouTubeMusicArtwork({
   thumbnailUrl?: string;
   className: string;
 }) {
+  useLanguage();
   return thumbnailUrl ? (
     <img className={className} src={thumbnailUrl} alt="" />
   ) : (
@@ -5745,6 +5854,7 @@ function SpotifyArtwork({
   artworkUrl?: string;
   className: string;
 }) {
+  useLanguage();
   return artworkUrl ? (
     <img className={className} src={artworkUrl} alt="" />
   ) : (
@@ -5761,6 +5871,7 @@ function SpotifyBrandIcon({
   size?: number;
   className?: string;
 }) {
+  useLanguage();
   return (
     <svg
       className={className}
@@ -6549,6 +6660,7 @@ function ApplePodcastArtwork({
   artworkUrl?: string;
   className: string;
 }) {
+  useLanguage();
   return artworkUrl ? (
     <img className={className} src={artworkUrl} alt="" />
   ) : (
@@ -7095,9 +7207,7 @@ function AppleMusicView({
                   href="https://music.apple.com"
                   target="_blank"
                   rel="noreferrer"
-                >
-                  music.apple.com
-                </a>{" "}
+                >{t("music.apple.com")}</a>{" "}
                 {t("while signed in, then open DevTools (F12) and switch to the")}{" "}
                 <strong>{t("Network")}</strong> {t("tab.")} </li>
               <li>
@@ -7462,6 +7572,7 @@ function AppleMusicArtwork({
   artworkUrl?: string;
   className: string;
 }) {
+  useLanguage();
   return artworkUrl ? (
     <img className={className} src={artworkUrl} alt="" />
   ) : (
@@ -7478,6 +7589,7 @@ function AppleBrandIcon({
   size?: number;
   className?: string;
 }) {
+  useLanguage();
   return (
     <svg
       className={className}
@@ -7610,6 +7722,7 @@ function formatTrackDuration(durationMs?: number): string {
 }
 
 function StatusDot({ connected }: { connected: boolean }) {
+  useLanguage();
   return <span className={connected ? "status-dot connected" : "status-dot"} />;
 }
 

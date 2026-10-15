@@ -3,7 +3,7 @@ import { initializeNativeLanguage, localizeDialogOptions, setNativeLanguage } fr
 import { listCalendarWorkoutEntries } from "./calendarWorkoutEventStorage";
 import type { CalendarEventTiming, CalendarWorkoutEventRef } from "./calendarSyncTypes";
 import { registerWorkoutAutomation } from "./workoutAutomation";
-import { app, BrowserWindow, dialog, nativeTheme, session, shell } from "electron";
+import { app, BrowserWindow, dialog, nativeTheme, session, shell, ShareMenu } from "electron";
 import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow } from "./diagnosticsService";
 import { googleCalendar, startGoogleCalendarSync, stopGoogleCalendarSync } from "./googleCalendarService";
 import type { GoogleCalendarConfigInput } from "./googleCalendarTypes";
@@ -15,6 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import { listLocalFontFamilies } from "./fontService";
 import { corosNativeBle } from "./corosNativeBleService";
+import { registerCorosActivityScreenIpc } from "./corosActivityScreenIpc";
 import { resolveWifiMusicLibraryFiles } from "./corosWifiMusicLibrary";
 import { getCorosWatchfaceCompiler } from "./corosWatchfaceCompiler";
 import { getWatchfaceTarget } from "./watchfaceTargets";
@@ -118,8 +119,29 @@ import {
   getHevyStatus,
   updateHevySettings
 } from "./hevyService";
+import {
+  cancelStravaConnect,
+  connectStrava,
+  disconnectStrava,
+  getStravaStatus,
+  saveStravaConfig
+} from "./stravaService";
+import {
+  addManualRace,
+  clearStravaRaceData,
+  dismissRaceSuggestion,
+  getRaceOverview,
+  importStravaRaces,
+  listRaceActivityIds,
+  markActivityAsRace,
+  removeRace,
+  unmarkActivityAsRace,
+  updateRace
+} from "./raceService";
+import type { ManualRaceInput, RaceEditInput } from "./raceTypes";
 import type {
   HevySettingsInput,
+  StravaConfigInput,
   StrengthHistoryRequest,
   UnitSystem,
   WorkoutSport
@@ -206,11 +228,13 @@ import {
   cancelCorosMapInstall,
   chooseCorosMapFolder,
   clearCorosMapDownloadJob,
+  deleteAllGeneratedRoutes,
   deleteCachedCorosMap,
   deleteGeneratedRoute,
   downloadCorosMapPackage,
   exportGeneratedRoute,
   generateRoute,
+  replaceGeneratedRouteGeometry,
   geocodeRouteLocation,
   reverseGeocodeRouteLocation,
   getCorosMapInstallProgress,
@@ -235,6 +259,7 @@ import {
   validateRouteApiKey
 } from "./mapService";
 import { startRouteShare, stopRouteShare } from "./routeShareServer";
+import { startWatchfacePhoneSend, stopWatchfacePhoneSend } from "./watchfacePhoneSend";
 import type {
   CombinedDownloadResult,
   CorosMapPackage,
@@ -244,6 +269,7 @@ import type {
   GenerateRouteRequest,
   RouteActivityType,
   RouteBuilderConfig,
+  RouteGeometry,
   RouteWaypointRequest,
   SpotifyConfig,
   TrainingHubActivity,
@@ -502,6 +528,9 @@ function notifyWindowFullscreen(fullscreen: boolean): void {
     mainWindow.webContents.send("window:fullscreenChanged", fullscreen);
   }
 }
+
+/** The folder holding the last face shared to an iPhone with AirDrop. */
+let iphoneShareFolder: string | null = null;
 
 // Turns an activity name into a filesystem-safe base name for export downloads.
 function sanitizeExportFileName(name?: string): string {
@@ -959,6 +988,8 @@ app.on("before-quit", event => {
   stopGoogleCalendarSync();
   stopAppleCalendarSync();
   stopRouteShare();
+  stopWatchfacePhoneSend();
+  if (iphoneShareFolder) fs.rmSync(iphoneShareFolder, { recursive: true, force: true });
 });
 
 function registerIpcHandlers(): void {
@@ -988,6 +1019,8 @@ function registerIpcHandlers(): void {
     requireBleMusic();
     return mainWindowSender(event, "audio sync");
   };
+  registerCorosActivityScreenIpc({ ipc: ipcMain, isPackaged: () => app.isPackaged, api: corosNativeBle,
+    owner: event => mainWindowSender(event, "activity-screen sync"), saveDialog: (owner, options) => dialog.showSaveDialog(owner, localizeDialogOptions(options)) });
   ipcMain.handle("corosBle:wifiMusicSend", event => {
     const owner = audioOwner(event);
     return corosNativeBle.sendMusicOverWifi(async () => {
@@ -1029,6 +1062,42 @@ function registerIpcHandlers(): void {
   ipcMain.handle("corosBle:phonePairing", event => {
     mainWindowSender(event, "iPhone pairing");
     return corosNativeBle.phonePairingCode();
+  });
+  // Send to iPhone: Studio's final archive for C-LINK, over the local network (every platform)
+  // or AirDrop (macOS). C-LINK adds it to My Faces and installs it on the watch from there.
+  const phoneSendInput = (input: unknown) => {
+    const value = input as { archiveId?: unknown; name?: unknown; firmwareType?: unknown } | null;
+    if (!value || typeof value.archiveId !== "string" || typeof value.name !== "string") {
+      throw new Error("Build the watch face before sending it to your iPhone.");
+    }
+    const target = typeof value.firmwareType === "string" ? getWatchfaceTarget(value.firmwareType) : undefined;
+    return { archiveId: value.archiveId, name: value.name.trim().slice(0, 80) || "Custom watch face", model: target?.model };
+  };
+  ipcMain.handle("watchfaces:phoneSendStart", async (event, input: unknown) => {
+    const owner = mainWindowSender(event, "Send to iPhone");
+    const { archiveId, name, model } = phoneSendInput(input);
+    const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), "coroslink-iphone-"));
+    try {
+      const filename = path.join(temporary, "face.zip");
+      await exportCorosWatchfaceArchive(archiveId, filename);
+      const data = await fs.promises.readFile(filename);
+      return await startWatchfacePhoneSend({ data, name, model }, status => {
+        if (!owner.isDestroyed()) owner.webContents.send("watchfaces:phoneSendStatus", status);
+      });
+    } finally { await fs.promises.rm(temporary, { recursive: true, force: true }); }
+  });
+  ipcMain.handle("watchfaces:phoneSendStop", () => stopWatchfacePhoneSend());
+  ipcMain.handle("watchfaces:airDropToIphone", async (event, input: unknown) => {
+    const owner = mainWindowSender(event, "AirDrop");
+    if (process.platform !== "darwin") throw new Error("AirDrop is only on macOS. Use Show code instead.");
+    const { archiveId, name } = phoneSendInput(input);
+    // AirDrop reads the file after the menu closes, so it stays until the next share or quit.
+    if (iphoneShareFolder) await fs.promises.rm(iphoneShareFolder, { recursive: true, force: true });
+    iphoneShareFolder = await fs.promises.mkdtemp(path.join(os.tmpdir(), "coroslink-airdrop-"));
+    // .dat is the type C-LINK registers, so the iPhone offers to open it there.
+    const filename = path.join(iphoneShareFolder, `${sanitizeExportFileName(name) || "CorosLink-watch-face"}.dat`);
+    await exportCorosWatchfaceArchive(archiveId, filename);
+    new ShareMenu({ filePaths: [filename] }).popup({ window: owner });
   });
   ipcMain.handle("watchfaces:forgetWatchKey", async event => {
     const owner = mainWindowSender(event, "watch key removal");
@@ -2145,6 +2214,35 @@ function registerIpcHandlers(): void {
   );
   ipcMain.handle("hevy:disconnect", () => disconnectHevy());
 
+  ipcMain.handle("strava:getStatus", () => getStravaStatus());
+  ipcMain.handle("strava:saveConfig", (_event, input: StravaConfigInput) =>
+    saveStravaConfig(input)
+  );
+  ipcMain.handle("strava:connect", () => connectStrava());
+  ipcMain.handle("strava:cancelConnect", () => cancelStravaConnect());
+  ipcMain.handle("strava:disconnect", async () => {
+    await disconnectStrava();
+    clearStravaRaceData();
+  });
+
+  ipcMain.handle("races:getOverview", () => getRaceOverview());
+  ipcMain.handle("races:listActivityIds", () => listRaceActivityIds());
+  ipcMain.handle("races:markActivity", (_event, activity: TrainingHubActivity) =>
+    markActivityAsRace(activity)
+  );
+  ipcMain.handle("races:unmarkActivity", (_event, activityId: string) =>
+    unmarkActivityAsRace(activityId)
+  );
+  ipcMain.handle("races:dismissSuggestion", (_event, activityId: string) =>
+    dismissRaceSuggestion(activityId)
+  );
+  ipcMain.handle("races:update", (_event, input: RaceEditInput) => updateRace(input));
+  ipcMain.handle("races:remove", (_event, raceId: string) => removeRace(raceId));
+  ipcMain.handle("races:addManual", (_event, input: ManualRaceInput) => addManualRace(input));
+  ipcMain.handle("races:importStrava", (_event, full?: boolean) =>
+    importStravaRaces(full === true)
+  );
+
   ipcMain.handle("trainingHub:getSportTypeMap", () => getSportTypeMap());
 
   ipcMain.handle("trainingHub:getActivityPaceBaselines", () =>
@@ -2389,6 +2487,12 @@ function registerIpcHandlers(): void {
   );
 
   ipcMain.handle(
+    "maps:replaceGeneratedRouteGeometry",
+    (_event, id: string, geometry: RouteGeometry) =>
+      replaceGeneratedRouteGeometry(id, geometry)
+  );
+
+  ipcMain.handle(
     "maps:routeWaypoints",
     (_event, request: RouteWaypointRequest) => routeWaypoints(request)
   );
@@ -2409,6 +2513,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("maps:deleteGeneratedRoute", (_event, id: string) =>
     deleteGeneratedRoute(id)
+  );
+
+  ipcMain.handle("maps:deleteAllGeneratedRoutes", () =>
+    deleteAllGeneratedRoutes()
   );
 
   ipcMain.handle("maps:validateRouteApiKey", (_event, apiKey: string) =>
