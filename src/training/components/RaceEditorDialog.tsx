@@ -2,7 +2,7 @@ import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguag
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Loader2, Trash2, X } from "lucide-react";
 import type { ManualRaceInput, RaceDistanceKey, RaceEditInput, RaceEntry } from "../../../electron/raceTypes";
-import { RACE_DISTANCES, raceDistanceMeters } from "../../../electron/raceModel";
+import { RACE_DISTANCES } from "../../../electron/raceModel";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import { displayDistanceToMeters, distanceUnit, metersToDisplayDistance } from "../../units/units";
 import { formatRaceTime, fromDateInputValue, parseRaceTime, toDateInputValue } from "../raceFormat";
@@ -138,7 +138,6 @@ export function RaceEditorDialog({ target, busy, error, onClose, onSave, onAdd, 
 
   const shownError = localError ?? error;
   const recordedTime = race?.recordedTime;
-  const standardMeters = draft && draft.distanceKey !== "other" ? raceDistanceMeters(draft.distanceKey) : undefined;
 
   return (
     <dialog
@@ -226,7 +225,10 @@ export function RaceEditorDialog({ target, busy, error, onClose, onSave, onAdd, 
             </label>
             {recorded ? (
               <p className="race-field-hint is-wide" id={`${headingId}-time-hint`}>
-                {t("Leave blank to use the watch time")}{recordedTime ? ` (${formatRaceTime(recordedTime)})` : ""}{t(". Results count over the official")}{standardMeters ? t(" distance") : t(" course length")}{t(", not the distance your watch measured.")}</p>
+                {recordedTime
+                  ? t("Leave blank to use the watch time ({{time}}).", { time: formatRaceTime(recordedTime) })
+                  : t("Leave blank to use the watch time.")}{" "}
+                {t("Results use the official course distance, not the distance your watch measured.")}</p>
             ) : null}
             <label className="race-field is-wide">
               <span>{t("Placing")}<em>{t("optional")}</em></span>

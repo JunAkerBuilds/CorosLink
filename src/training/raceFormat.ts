@@ -4,6 +4,14 @@ import type { UnitSystem } from "../../electron/types";
 import { raceDistanceLabel } from "../../electron/raceModel";
 import { formatDistanceValue } from "../units/units";
 
+/** The race service keeps its reason strings independent of the UI language. */
+export function formatRaceSuggestionReason(reason: string): string {
+  const speedup = /^(\d+)% quicker than your usual pace$/.exec(reason);
+  return speedup
+    ? t("{{percent}}% quicker than your usual pace", { percent: speedup[1] })
+    : t(reason);
+}
+
 /** "22:11" or "1:40:15"; tenths only when a chip time carries them. */
 export function formatRaceTime(seconds: number | undefined): string {
   if (seconds === undefined || !Number.isFinite(seconds) || seconds <= 0) return "—";

@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import {
   formatRaceDelta,
   formatRaceDistance,
+  formatRaceSuggestionReason,
   formatRaceTime,
   fromDateInputValue,
   parseRaceTime,
   toDateInputValue
 } from "../src/training/raceFormat.ts";
+import { setLanguage } from "../src/i18n/locale.ts";
 
 assert.equal(formatRaceTime(1331), "22:11");
 assert.equal(formatRaceTime(6315), "1:45:15");
@@ -39,5 +41,16 @@ const epoch = fromDateInputValue("2026-07-01");
 assert.equal(toDateInputValue(epoch), "2026-07-01");
 assert.equal(new Date(epoch * 1000).getHours(), 9);
 assert.equal(fromDateInputValue("July 1"), undefined);
+
+for (const [language, name, pace] of [
+  ['fr', 'Le nom évoque une course', '12 % plus rapide que votre allure habituelle'],
+  ['zh-CN', '名称像是比赛', '比平时配速快 12%']
+]) {
+  setLanguage(language);
+  assert.equal(formatRaceSuggestionReason('Named like a race'), name);
+  assert.equal(formatRaceSuggestionReason('12% quicker than your usual pace'), pace);
+  assert.equal(formatRaceSuggestionReason('Unknown reason $& 我的比赛'), 'Unknown reason $& 我的比赛');
+}
+setLanguage('en');
 
 console.log("race format tests passed");

@@ -68,13 +68,13 @@ export function RacePlaque({
   const first = races[0];
   const improvement = valueOf(best) - valueOf(first);
   const all = group.distanceKey === "all";
-  const count = `${races.length} ${races.length === 1 ? "race" : "races"}`;
+  const count = races.length === 1 ? t("1 race") : t("{{count}} races", { count: races.length.toLocaleString(getLocale()) });
   // On a narrow plaque only the gap shows; the words drop out (see races.css).
   const trend =
     races.length === 1 ? (
-      "One so far"
+      t("One so far")
     ) : best === first ? (
-      "First still fastest"
+      t("First still fastest")
     ) : (
       <>
         {formatRaceDelta(improvement)}
@@ -88,7 +88,7 @@ export function RacePlaque({
       className={`race-plaque${active ? " is-active" : ""}`}
       data-distance={group.distanceKey}
       aria-pressed={active}
-      aria-label={t("{{p0}}: best {{p1}}{{p2}}, {{p3}}", { p0: String(group.label), p1: String(formatRaceTime(valueOf(best))), p2: String(all ? " as a 5K" : ""), p3: String(count) })}
+      aria-label={t("{{p0}}: best {{p1}}{{p2}}, {{p3}}", { p0: String(group.label), p1: String(formatRaceTime(valueOf(best))), p2: String(all ? t(" as a 5K") : ""), p3: String(count) })}
       onClick={onSelect}
     >
       {all ? null : (

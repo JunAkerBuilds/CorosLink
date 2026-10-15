@@ -241,7 +241,12 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
         {role && <LocalFontPicker api={api} label={t("Font")} value={style.parts?.[partKey]?.fontFamily ?? ""} emptyLabel={t("Layer font")} disabled={locked} onChange={fontFamily=>patchPart({fontFamily:fontFamily || undefined})} />}
 
         {partKey === "plot" && <>
-          <p className="watchface-studio-summary">{t("The")}{chartSourceLabel(style.chartSource ?? "chart_stress")} {t("page draws")}{drawsLine ? t("a line") : t("bars")}{t(". Back on the watch switches chart pages, and each page uses one of these styles. Barometer and tide pages need data from the phone and stay empty until it syncs. A width of 0 hides that style's graph.")}</p>
+          <p className="watchface-studio-summary">
+            {drawsLine
+              ? t("The {{page}} page draws a line.", { page: chartSourceLabel(style.chartSource ?? "chart_stress") })
+              : t("The {{page}} page draws bars.", { page: chartSourceLabel(style.chartSource ?? "chart_stress") })}{" "}
+            {t("Back on the watch switches chart pages, and each page uses one of these styles. Barometer and tide pages need data from the phone and stay empty until it syncs. A width of 0 hides that style's graph.")}
+          </p>
           {drawsLine ? [graphStyles[1], graphStyles[0]] : graphStyles}
         </>}
 

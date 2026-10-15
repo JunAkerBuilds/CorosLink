@@ -4660,8 +4660,7 @@ function NewWatchFaceDialog({
             </span>
             <strong>{starting ? t("Opening…") : t("Start from scratch")}</strong>
             <span>
-              {t("An empty face for your")}{" "}
-              <span className="wf-new-face-watch">{watchLabel ?? t("watch")}</span>{t(". Add the time, date and data yourself.")}</span>
+              {t("An empty face for {{watch}}. Add the time, date and data yourself.", { watch: watchLabel ?? t("your watch") })}</span>
           </button>
         </div>
       </section>

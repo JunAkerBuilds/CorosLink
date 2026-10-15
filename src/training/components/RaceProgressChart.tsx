@@ -232,7 +232,7 @@ export function RaceProgressChart({ points, valueLabel, selectedId, onSelect, co
               tabIndex={0}
               role="button"
               aria-label={`${point.name}, ${formatRaceDate(point.startTime)}: ${formatRaceTime(point.value)}${
-                point.isBest ? ", best" : ""
+                point.isBest ? t(", best") : ""
               }`}
               onPointerEnter={() => setHovered(point.raceId)}
               onPointerLeave={() => setHovered((current) => (current === point.raceId ? null : current))}

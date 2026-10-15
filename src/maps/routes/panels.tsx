@@ -273,10 +273,10 @@ export function SurfacePicker({
             type="button"
             className={option.value === value ? "is-active" : ""}
             aria-pressed={option.value === value}
-            title={option.hint}
+            title={t(option.hint)}
             onClick={() => onChange(option.value)}
           >
-            {option.label}
+            {t(option.label)}
           </button>
         ))}
       </div>

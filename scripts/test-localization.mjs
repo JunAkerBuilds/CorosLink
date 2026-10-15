@@ -22,6 +22,7 @@ assert.equal(storage.get(LANGUAGE_STORAGE_KEY), 'fr');
 assert.equal(getLocale(), 'fr-FR');
 assert.equal(t('Settings'), 'Paramètres');
 assert.equal(trainingT('Weight'), 'Poids');
+assert.equal(trainingT('Open'), 'Libre');
 assert.equal(watchfaceT('Weight'), 'Graisse');
 assert.equal(trainingT('Stroke'), 'Nage');
 assert.equal(watchfaceT('Stroke'), 'Contour');

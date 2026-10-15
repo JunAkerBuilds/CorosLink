@@ -772,7 +772,7 @@ export function StrengthView({
   const disconnectHevyAccount = useCallback(async () => {
     if (
       !window.confirm(
-        "Disconnect Hevy and erase its cached workouts from this device?"
+        t("Disconnect Hevy and erase its cached workouts from this device?")
       )
     ) {
       return;
@@ -1391,7 +1391,9 @@ export function StrengthView({
         <p className="strength-notice is-attribution" role="note">
           <Info size={15} aria-hidden="true" />
           <span>
-            {t("{{p0}} {{p1}} from Strava alone. Strava's API does not share the Exercises tab, so {{p2}} toward sessions and time but not sets or the map.", { p0: String(summaryOnlyStravaSessions.toLocaleString(getLocale())), p1: String(summaryOnlyStravaSessions === 1 ? "session comes" : "sessions come"), p2: String(summaryOnlyStravaSessions === 1 ? "it counts" : "they count") })}
+            {summaryOnlyStravaSessions === 1
+              ? t("1 session comes from Strava alone. Strava's API does not share the Exercises tab, so it counts toward sessions and time but not sets or the map.")
+              : t("{{count}} sessions come from Strava alone. Strava's API does not share the Exercises tab, so they count toward sessions and time but not sets or the map.", { count: summaryOnlyStravaSessions.toLocaleString(getLocale()) })}
           </span>
         </p>
       ) : null}

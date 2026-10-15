@@ -93,7 +93,7 @@ export function RecordWorkChart({ unit, buckets, medals }: RecordWorkChartProps)
               style={{ background: `var(--sport-${category})` }}
               aria-hidden="true"
             />
-            {SPORT_COLOR_LABELS[category]}
+            {t(SPORT_COLOR_LABELS[category])}
           </li>
         ))}
         <li>
@@ -107,7 +107,9 @@ export function RecordWorkChart({ unit, buckets, medals }: RecordWorkChartProps)
           height={height}
           viewBox={`0 0 ${width} ${height}`}
           role="img"
-          aria-label={t("Training time per {{p0}}, with the {{p1}}s you set records marked", { p0: String(unit), p1: String(unit) })}
+          aria-label={unit === "week"
+            ? t("Training time per week, with record-setting weeks marked")
+            : t("Training time per month, with record-setting months marked")}
         >
           {ticks.map((tick) => (
             <g key={tick}>

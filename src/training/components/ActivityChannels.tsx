@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../../i18n/training";
+import { t, useLanguage, getLocale, formatNumber } from "../../i18n/training";
 import {
   useCallback,
   useEffect,
@@ -128,7 +128,7 @@ function clock(seconds: number): string {
 }
 
 function trimNumber(value: number, digits: number): string {
-  return String(Number(value.toFixed(digits)));
+  return formatNumber(value, { maximumFractionDigits: digits });
 }
 
 function buildChannelSpecs(
@@ -166,7 +166,7 @@ function buildChannelSpecs(
     inverse: false,
     minSpan,
     toDisplay,
-    format: (value) => (digits === 0 ? String(Math.round(value)) : value.toFixed(digits))
+    format: (value) => formatNumber(value, { minimumFractionDigits: digits, maximumFractionDigits: digits })
   });
 
   const pace: ChannelSpec =
@@ -184,7 +184,7 @@ function buildChannelSpecs(
     pace,
     gap: runPace("gap", "Grade-adjusted pace", "GAP"),
     hr: plain("hr", "Heart rate", "HR", "bpm", 12),
-    cadence: plain("cadence", "Cadence", "Cadence", cycling ? "rpm" : "spm", 10),
+    cadence: plain("cadence", cycling ? t("Cycling cadence") : t("Cadence"), "Cadence", cycling ? "rpm" : "spm", 10),
     power: plain("power", "Power", "Power", "W", 40),
     stride: plain("stride", "Stride length", "Stride", imperial ? "ft" : "m", imperial ? 0.3 : 0.1, 2, (value) =>
       imperial ? value * 3.28084 : value
@@ -380,7 +380,7 @@ export function ActivityChannels({ streams, cycling, elevationGain, cursor }: Ac
     setPreferred([...preferred.filter((item) => !available.includes(item)), ...next]);
   };
 
-  const specs = useMemo(() => buildChannelSpecs(streams, unitSystem, cycling), [streams, unitSystem, cycling]);
+  const specs = useMemo(() => buildChannelSpecs(streams, unitSystem, cycling), [streams, unitSystem, cycling, getLocale()]);
   const display = useMemo(() => {
     const result: Partial<Record<StreamChannelKey, Float64Array>> = {};
     for (const key of available) {
@@ -692,13 +692,13 @@ export function ActivityChannels({ streams, cycling, elevationGain, cursor }: Ac
         note:
           summary?.elevationLoss !== undefined && !wholeActivity
             ? `−${Math.round(metersToElevation(summary.elevationLoss, unitSystem))} ${elevationUnit(unitSystem)}`
-            : "gain"
+            : t("gain")
       };
     }
     const average = summary?.averages[key];
     return {
       value: average === undefined ? "–" : spec.format(spec.toDisplay(average)),
-      note: "avg"
+      note: t("avg")
     };
   };
 

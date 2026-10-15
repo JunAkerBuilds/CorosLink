@@ -25,7 +25,7 @@ import {
 import type { UnitSystem } from "../../../electron/types";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import { formatDistanceValue, formatElevationValue, formatPaceValue } from "../../units/units";
-import { formatRaceDate, formatRaceDelta, formatRaceDistance, formatRaceTime } from "../raceFormat";
+import { formatRaceDate, formatRaceDelta, formatRaceDistance, formatRaceSuggestionReason, formatRaceTime } from "../raceFormat";
 import type { RaceJournal } from "../useRaceJournal";
 import { RacePlaque, type PlaqueGroup } from "./RacePlaques";
 import { RaceComparison } from "./RaceComparison";
@@ -37,10 +37,10 @@ const ALL = "all";
 
 /** "First half" reads better in a chip than "First Half Marathon". */
 function shortDistance(race: RaceEntry, label: string): string {
-  if (race.distanceKey === "half") return "half";
-  if (race.distanceKey === "marathon") return "marathon";
-  if (race.distanceKey === "1mi") return "mile";
-  return race.distanceKey === "other" ? "race" : label;
+  if (race.distanceKey === "half") return t("Half");
+  if (race.distanceKey === "marathon") return t("Marathon");
+  if (race.distanceKey === "1mi") return t("mile");
+  return race.distanceKey === "other" ? t("race") : label;
 }
 
 function paceOf(race: RaceEntry): number {
@@ -212,7 +212,9 @@ export function RacesPanel({
       {strava && strava.hiddenRaces > 0 ? (
         <p className="race-notice" role="status">
           <Info size={15} aria-hidden="true" />
-          {t("{{p0}} {{p1}} from Strava {{p2}} hidden while Strava is disconnected. Your notes and chip times are kept.", { p0: String(strava.hiddenRaces), p1: String(strava.hiddenRaces === 1 ? "race" : "races"), p2: String(strava.hiddenRaces === 1 ? "is" : "are") })}
+          {strava.hiddenRaces === 1
+            ? t("1 race from Strava is hidden while Strava is disconnected. Your notes and chip times are kept.")
+            : t("{{count}} races from Strava are hidden while Strava is disconnected. Your notes and chip times are kept.", { count: strava.hiddenRaces.toLocaleString(getLocale()) })}
         </p>
       ) : null}
 
@@ -401,11 +403,11 @@ function RaceSuggestions({
           const { activity } = suggestion;
           const marking = journal.pending === `mark:${activity.activityId}`;
           const dismissing = journal.pending === `dismiss:${activity.activityId}`;
-          const label = suggestion.distanceKey === "other" ? "Race" : raceDistanceLabel(suggestion.distanceKey);
+          const label = t(suggestion.distanceKey === "other" ? "Race" : raceDistanceLabel(suggestion.distanceKey));
           return (
             <li key={activity.activityId} className="race-suggestion">
               <span className="race-suggestion-chip" data-distance={suggestion.distanceKey} aria-hidden="true">
-                {suggestion.distanceKey === "half" ? t("Half") : suggestion.distanceKey === "marathon" ? t("Mar") : label}
+                {suggestion.distanceKey === "half" ? t("Half") : suggestion.distanceKey === "marathon" ? t("Mar", undefined, "raceDistance") : label}
               </span>
               <div className="race-suggestion-copy">
                 <strong>{activity.name || t("Run")}</strong>
@@ -413,7 +415,7 @@ function RaceSuggestions({
                   {activity.startTime ? formatRaceDate(activity.startTime) : t("Undated")}, {formatDistanceValue(activity.distance, unitSystem)} {t("in")}{" "}
                   {formatRaceTime(activity.duration)}
                 </span>
-                <small>{suggestion.reasons.join(". ")}.</small>
+                <small>{suggestion.reasons.map(formatRaceSuggestionReason).join(". ")}.</small>
               </div>
               <div className="race-suggestion-actions">
                 <button
@@ -495,7 +497,7 @@ function RaceProgress({
       </div>
       <RaceProgressChart
         points={points}
-        valueLabel={all ? "5K equivalent" : `${group.label} finish time`}
+        valueLabel={all ? t("5K equivalent") : t("{{distance}} finish time", { distance: group.label })}
         selectedId={selectedId}
         onSelect={onSelect}
         color={all ? "var(--accent)" : `var(--race-dot-${group.distanceKey})`}
@@ -560,7 +562,7 @@ function RaceRow({
   const isPb = !isFirst && Boolean(progress?.wasPersonalBest);
   const detailId = `race-detail-${race.raceId.replace(/[^a-z0-9]/gi, "-")}`;
   // COROS is the default source here, so only the others are named.
-  const source = race.source === "manual" ? "Added by hand" : race.stravaActivityId ? "Strava" : null;
+  const source = race.source === "manual" ? t("Added by hand") : race.stravaActivityId ? "Strava" : null;
   const buildUp = race.buildUp;
   const hasBuildUp = Boolean(buildUp && (buildUp.runs > 0 || buildUp.complete));
 
@@ -594,7 +596,7 @@ function RaceRow({
           ) : (
             <span
               className={`race-trend ${delta !== undefined && delta < 0 ? "is-faster" : "is-slower"}`}
-              title={t("Versus {{p0}}", { p0: String(previous?.name ?? "the previous race") })}
+              title={t("Versus {{p0}}", { p0: String(previous?.name ?? t("the previous race")) })}
             >
               {formatRaceDelta(delta)}
             </span>

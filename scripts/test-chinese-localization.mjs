@@ -10,7 +10,7 @@ import { coreChinese } from '../src/i18n/zh-CN/core.ts';
 import { trainingChinese } from '../src/i18n/zh-CN/training.ts';
 import { toolsChinese } from '../src/i18n/zh-CN/tools.ts';
 import { watchfacesChinese } from '../src/i18n/zh-CN/watchfaces.ts';
-import { chineseMessages, initializeLanguage, getLanguage, getLocale, setLanguage, translate, t, subscribeLanguage, formatDate, formatNumber, LANGUAGE_STORAGE_KEY } from '../src/i18n/locale.ts';
+import { frenchMessages, chineseMessages, initializeLanguage, getLanguage, getLocale, setLanguage, translate, t, subscribeLanguage, formatDate, formatNumber, LANGUAGE_STORAGE_KEY } from '../src/i18n/locale.ts';
 import { backgroundElementLabel } from '../src/watchfaces/watchfaceBackgroundElements.ts';
 import { nativeChinese } from '../electron/localizationChinese.ts';
 import { preferredLanguage, resolveLanguage } from '../electron/appLanguage.ts';
@@ -124,6 +124,12 @@ for (const key of ['NSBluetoothAlwaysUsageDescription', 'NSBluetoothPeripheralUs
 // Traverse actual source calls so a new reachable screen cannot silently introduce
 // an English fallback while catalog-parity tests continue to pass.
 let translatedCalls = 0;
+function assertCovered(key, filename, context) {
+  const contextualKey = context ? `${context}:${key}` : key;
+  for (const [language, messages] of [['French', frenchMessages], ['Chinese', chineseMessages]]) {
+    assert.ok(!/[A-Za-z]{2}/.test(key) || Object.hasOwn(messages, contextualKey) || Object.hasOwn(messages, key), `Untranslated ${language} message ${filename}: ${contextualKey}`);
+  }
+}
 function audit(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const filename = path.join(directory, entry.name);
@@ -134,8 +140,7 @@ function audit(directory) {
       if (ts.isCallExpression(node) && node.expression.getText(source) === 't' && node.arguments[0] && ts.isStringLiteral(node.arguments[0])) {
         const key = node.arguments[0].text;
         const context = node.arguments[2];
-        const contextualKey = context && ts.isStringLiteral(context) ? `${context.text}:${key}` : key;
-        assert.ok(!/[A-Za-z]{2}/.test(key) || Object.hasOwn(chineseMessages, contextualKey) || Object.hasOwn(chineseMessages, key), `Untranslated call ${filename}: ${contextualKey}`);
+        assertCovered(key, filename, context && ts.isStringLiteral(context) ? context.text : undefined);
         translatedCalls++;
       }
       ts.forEachChild(node, visit);
@@ -144,4 +149,32 @@ function audit(directory) {
   }
 }
 audit(new URL('../src', import.meta.url).pathname);
+// These labels are read through t(variable), so literal-call coverage cannot see them.
+for (const [filename, declarations] of [
+  ['src/maps/routes/routeMakeupModel.ts', ['WAY_GROUPS', 'SURFACE_ROWS']],
+  ['src/maps/routes/constants.ts', ['routeSurfaceOptions']],
+  ['src/overview/OverviewBriefing.tsx', ['VERDICTS']],
+  ['src/training/components/ActivityChannels.tsx', ['buildChannelSpecs']],
+  ['src/onboarding/OnboardingTour.tsx', ['CHAPTERS']],
+  ['src/training/sportColors.ts', ['SPORT_COLOR_LABELS']],
+  ['src/calendar/weekSportBreakdown.ts', ['WEEK_SPORT_FAMILY_META']]
+]) {
+  const source = ts.createSourceFile(filename, fs.readFileSync(new URL(`../${filename}`, import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true);
+  const allProperties = declarations.includes('VERDICTS') || declarations.includes('SPORT_COLOR_LABELS');
+  function labels(node) {
+    if (ts.isPropertyAssignment(node) && ts.isStringLiteral(node.initializer) &&
+        (allProperties || ['label', 'hint', 'foot', 'bike', 'body', 'title', 'eyebrow', 'lede'].includes(node.name.getText(source)))) {
+      assertCovered(node.initializer.text, filename, declarations.includes('CHAPTERS') ? 'onboarding' : undefined);
+    }
+    if (ts.isCallExpression(node) && ['plain', 'runPace'].includes(node.expression.getText(source)) && node.arguments[1] && ts.isStringLiteral(node.arguments[1])) {
+      assertCovered(node.arguments[1].text, filename);
+    }
+    ts.forEachChild(node, labels);
+  }
+  function declarationsWithLabels(node) {
+    if ((ts.isVariableDeclaration(node) || ts.isFunctionDeclaration(node)) && node.name && declarations.includes(node.name.getText(source))) labels(node);
+    else ts.forEachChild(node, declarationsWithLabels);
+  }
+  declarationsWithLabels(source);
+}
 console.log(`Chinese localization passed: ${Object.keys(chineseMessages).length} catalog keys, ${translatedCalls} source calls, preferences, scoped context, interpolation, feedback, dates and units.`);

@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/tools";
+import { t, useLanguage, getLocale, formatNumber } from "../i18n/tools";
 import { lazy, Suspense, useEffect, useId, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { ArrowUpRight, ChevronRight, LogIn } from "lucide-react";
 import {
@@ -124,7 +124,7 @@ function sportStyle(family: WeekSportFamily): CSSProperties {
 
 /** "Easy", "Intervals"… for runs, the sport itself for everything else. */
 function workoutKind(workout: TrainingHubUpcomingWorkout, family: WeekSportFamily): string {
-  return family === "run" ? inferUpcomingWorkoutCategory(workout.name) : WEEK_SPORT_FAMILY_META[family].label;
+  return t(family === "run" ? inferUpcomingWorkoutCategory(workout.name) : WEEK_SPORT_FAMILY_META[family].label);
 }
 
 function workoutStats(workout: TrainingHubUpcomingWorkout, unitSystem: Parameters<typeof formatUpcomingWorkoutVolumeDisplay>[1]): string {
@@ -438,7 +438,7 @@ function formatDelta(delta: number | undefined, unit = ""): string | undefined {
   if (delta === undefined || !Number.isFinite(delta)) return undefined;
   const rounded = Math.round(delta * 10) / 10;
   if (rounded === 0) return `±0${unit}`;
-  return `${rounded > 0 ? "+" : "−"}${Math.abs(rounded)}${unit}`;
+  return `${rounded > 0 ? "+" : "−"}${formatNumber(Math.abs(rounded))}${unit}`;
 }
 
 /** "1h 32m", or just "45m" under an hour, for stage lengths and sleep deltas. */
@@ -461,7 +461,10 @@ function rangeTitle(history: number[], unit: string, format: (value: number) => 
   const average = history.reduce((sum, value) => sum + value, 0) / history.length;
   const low = Math.min(...history);
   const high = Math.max(...history);
-  return `Last ${history.length} ${unit} · avg ${format(average)} · range ${format(low)} – ${format(high)}`;
+  const values = { count: history.length, average: format(average), low: format(low), high: format(high) };
+  return unit === "nights"
+    ? t("Last {{count}} nights · avg {{average}} · range {{low}} – {{high}}", values)
+    : t("Last {{count}} days · avg {{average}} · range {{low}} – {{high}}", values);
 }
 
 /** How a reading sits against the athlete's own normal: the one coloured word on a tile. */
@@ -504,39 +507,39 @@ function vitalSpecs(vitals: Vitals, onNavigate: (view: PrimaryView) => void): Vi
   const sleepVerdict = sleep.value === undefined
     ? undefined
     : sleepStale
-      ? "Not synced"
+      ? t("Not synced")
       : sleep.score !== undefined && sleep.score > 0
-        ? `Score ${Math.round(sleep.score)}`
-        : sleepTone === "bad" ? "Short night" : sleepTone === "good" ? "Long night" : "Typical";
+        ? t("Score {{score}}", { score: Math.round(sleep.score) })
+        : sleepTone === "bad" ? t("Short night") : sleepTone === "good" ? t("Long night") : t("Typical");
   const sleepStages = (sleep.deep ?? 0) + (sleep.rem ?? 0) > 0;
   const sleepDetail = sleepStale && sleep.happenDay
-    ? { detail: `Last synced ${formatUpcomingWorkoutDate(sleep.happenDay)}` }
+    ? { detail: t("Last synced {{time}}", { time: formatUpcomingWorkoutDate(sleep.happenDay) }) }
     : sleepStages
-      ? { detail: `Deep ${formatShortMinutes(sleep.deep ?? 0)} · REM ${formatShortMinutes(sleep.rem ?? 0)}` }
+      ? { detail: t("Deep {{deep}} · REM {{rem}}", { deep: formatShortMinutes(sleep.deep ?? 0), rem: formatShortMinutes(sleep.rem ?? 0) }) }
       : sleep.delta !== undefined
-        ? { lead: formatSignedMinutes(sleep.delta), detail: " vs 7-night avg" }
-        : { detail: "Last night" };
+        ? { lead: formatSignedMinutes(sleep.delta), detail: t(" vs 7-night avg") }
+        : { detail: t("Last night") };
 
   const hrvTone = hrv.baseline !== undefined ? deltaTone(hrv.delta, true, 3) : "flat";
   const hrvDelta = formatDelta(hrv.delta, " ms");
   const hrvDetail = hrvDelta && hrv.baseline !== undefined
-    ? { lead: hrvDelta, detail: ` vs baseline ${Math.round(hrv.baseline)}` }
+    ? { lead: hrvDelta, detail: t(" vs baseline {{value}}", { value: Math.round(hrv.baseline) }) }
     : hrv.nightsToBaseline !== undefined
-      ? { detail: `${hrv.nightsToBaseline} more ${hrv.nightsToBaseline === 1 ? "night" : "nights"} to a baseline` }
-      : { detail: "Baseline forming" };
+      ? { detail: hrv.nightsToBaseline === 1 ? t("1 more night to a baseline") : t("{{count}} more nights to a baseline", { count: hrv.nightsToBaseline }) }
+      : { detail: t("Baseline forming") };
 
   const rhrTone = deltaTone(rhr.delta, false, 2);
   const rhrDelta = formatDelta(rhr.delta, " bpm");
   const rhrDetail = rhrDelta && rhr.reference !== undefined
-    ? { lead: rhrDelta, detail: ` vs 7-day avg ${Math.round(rhr.reference)}` }
-    : { detail: rhr.history.length > 1 ? `${rhr.history.length}-day trend` : "First reading" };
+    ? { lead: rhrDelta, detail: t(" vs 7-day avg {{value}}", { value: Math.round(rhr.reference) }) }
+    : { detail: rhr.history.length > 1 ? t("{{count}}-day trend", { count: rhr.history.length }) : t("First reading") };
 
   const vo2Tone = deltaTone(vo2max.delta, true, 0.3);
   const vo2Delta = vo2max.delta !== undefined && Math.abs(vo2max.delta) >= 0.1 ? formatDelta(vo2max.delta) : undefined;
-  const level = vo2max.level !== undefined ? `Running level ${vo2max.level}` : undefined;
+  const level = vo2max.level !== undefined ? t("Running level {{p0}}", { p0: vo2max.level }) : undefined;
   const vo2Detail = vo2Delta
-    ? { lead: vo2Delta, detail: ` this week${level ? ` · Level ${vo2max.level}` : ""}` }
-    : { detail: level ?? (vo2max.history.length > 1 ? `${vo2max.history.length}-day trend` : "First estimate") };
+    ? { lead: vo2Delta, detail: vo2max.level !== undefined ? t(" this week · Level {{level}}", { level: vo2max.level }) : t(" this week") }
+    : { detail: level ?? (vo2max.history.length > 1 ? t("{{count}}-day trend", { count: vo2max.history.length }) : t("First estimate")) };
 
   return [
     {
@@ -550,29 +553,31 @@ function vitalSpecs(vitals: Vitals, onNavigate: (view: PrimaryView) => void): Vi
       trend: sleep.nights.length >= 2
         ? <SleepBars nights={sleep.nights} reference={sleep.reference} />
         : <TrendLine values={sleep.history} reference={sleep.reference} />,
-      emptyHint: sleep.connected ? "No nights synced yet · wear your watch to bed" : "Connect COROS data access to bring in your nights",
-      action: sleep.connected ? undefined : { label: "Connect", onClick: () => onNavigate("training") }
+      emptyHint: sleep.connected ? t("No nights synced yet · wear your watch to bed") : t("Connect COROS data access to bring in your nights"),
+      action: sleep.connected ? undefined : { label: t("Connect"), onClick: () => onNavigate("training") }
     },
     {
       hue: "hrv",
       label: t("Sleep HRV"),
       value: hrv.value !== undefined ? String(Math.round(hrv.value)) : undefined,
       unit: "ms",
-      verdict: hrv.value !== undefined && hrv.baseline !== undefined ? VERDICTS.hrv[hrvTone] : undefined,
+      verdict: hrv.value !== undefined && hrv.baseline !== undefined ? t(VERDICTS.hrv[hrvTone]) : undefined,
       tone: hrvTone,
       ...hrvDetail,
       title: rangeTitle(hrv.history, "nights", (value) => `${Math.round(value)} ms`),
       trend: <TrendLine values={hrv.history} reference={hrv.reference} />,
       emptyHint: hrv.nightsToBaseline !== undefined
-        ? `${hrv.nightsToBaseline} more ${hrv.nightsToBaseline === 1 ? "night" : "nights"} with the watch on to set a baseline`
-        : "Wear your watch to bed to measure it"
+        ? hrv.nightsToBaseline === 1
+          ? t("Wear your watch for 1 more night to set a baseline")
+          : t("Wear your watch for {{count}} more nights to set a baseline", { count: hrv.nightsToBaseline })
+        : t("Wear your watch to bed to measure it")
     },
     {
       hue: "rhr",
       label: t("Resting HR"),
       value: rhr.value !== undefined ? String(Math.round(rhr.value)) : undefined,
       unit: "bpm",
-      verdict: rhr.delta !== undefined ? VERDICTS.rhr[rhrTone] : undefined,
+      verdict: rhr.delta !== undefined ? t(VERDICTS.rhr[rhrTone]) : undefined,
       tone: rhrTone,
       ...rhrDetail,
       title: rangeTitle(rhr.history, "days", (value) => `${Math.round(value)} bpm`),
@@ -582,12 +587,12 @@ function vitalSpecs(vitals: Vitals, onNavigate: (view: PrimaryView) => void): Vi
     {
       hue: "vo2",
       label: t("VO₂max"),
-      value: vo2max.value !== undefined ? (Number.isInteger(vo2max.value) ? String(vo2max.value) : vo2max.value.toFixed(1)) : undefined,
-      verdict: vo2max.delta !== undefined ? VERDICTS.vo2[vo2Tone] : undefined,
+      value: vo2max.value !== undefined ? formatNumber(vo2max.value, { maximumFractionDigits: 1 }) : undefined,
+      verdict: vo2max.delta !== undefined ? t(VERDICTS.vo2[vo2Tone]) : undefined,
       tone: vo2Tone,
       ...vo2Detail,
       title: vo2max.history.length > 1
-        ? `Last ${vo2max.history.length} days · ${vo2max.history[0]!.toFixed(1)} → ${vo2max.history[vo2max.history.length - 1]!.toFixed(1)}`
+        ? t("Last {{count}} days · {{first}} → {{last}}", { count: vo2max.history.length, first: formatNumber(vo2max.history[0]!, { minimumFractionDigits: 1, maximumFractionDigits: 1 }), last: formatNumber(vo2max.history[vo2max.history.length - 1]!, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })
         : undefined,
       trend: <TrendLine values={vo2max.history} />,
       emptyHint: t("Run outdoors with GPS to estimate it")
@@ -669,7 +674,7 @@ function ReadinessCard({
         icon={<Heartbeat size={20} weight="duotone" />}
         hue="var(--tone)"
         title={t("Readiness")}
-        subtitle="Recovery and overnight vitals"
+        subtitle={t("Recovery and overnight vitals")}
       >
         {readiness.percent !== undefined ? (
           <span className={`overview-chip${readiness.fullRecoveryHours ? "" : " is-good"}`}>
@@ -717,7 +722,7 @@ function TodayCard({
         icon={<CalendarDots size={20} weight="duotone" />}
         hue="var(--ov-calendar)"
         title={t("Today’s plan")}
-        subtitle="From your COROS calendar"
+        subtitle={t("From your COROS calendar")}
       >
         <button
           type="button"
@@ -823,8 +828,8 @@ function WeekStrip({ week }: { week: WeekSummary }) {
             new Intl.DateTimeFormat(getLocale(), { weekday: "long", month: "short", day: "numeric" }).format(
               new Date(Number(day.happenDay.slice(0, 4)), Number(day.happenDay.slice(4, 6)) - 1, Number(day.happenDay.slice(6, 8)))
             ),
-            done ? `${day.load} TL · ${day.sessions} ${day.sessions === 1 ? "session" : "sessions"}` : undefined,
-            day.planned.length ? `Planned: ${day.planned.map((workout) => workout.name.trim()).join(", ")}` : undefined
+            done ? `${day.load} TL · ${day.sessions} ${day.sessions === 1 ? t("session") : t("sessions")}` : undefined,
+            day.planned.length ? t("Planned: {{workouts}}", { workouts: day.planned.map((workout) => workout.name.trim()).join(", ") }) : undefined
           ].filter(Boolean).join("\n");
           return (
             <li
@@ -962,7 +967,7 @@ function RacePredictionsCard({
         icon={<Timer size={20} weight="duotone" />}
         hue="var(--ov-gold)"
         title={t("Race predictor")}
-        subtitle="If you raced today"
+        subtitle={t("If you raced today")}
       >
         {level !== undefined && Number.isFinite(level) ? (
           <span className="overview-chip">{t("Running level {{p0}}", { p0: String(Math.round(level)) })}</span>
@@ -972,7 +977,7 @@ function RacePredictionsCard({
         {scores.slice(0, 4).map((score, index) => {
           const pace = score.avgPace ?? 0;
           const ratio = pace > 0 && slowest > fastest ? 1 - ((pace - fastest) / (slowest - fastest)) * 0.6 : 1;
-          const label = score.distanceLabel ?? (score.distance ? formatDistanceValue(score.distance, unitSystem) : `Race ${index + 1}`);
+          const label = score.distanceLabel ? t(score.distanceLabel) : score.distance ? formatDistanceValue(score.distance, unitSystem) : t("Race {{number}}", { number: index + 1 });
           return (
             <li key={`${label}-${index}`}>
               <span className="overview-race-label">{label}</span>
@@ -986,7 +991,7 @@ function RacePredictionsCard({
         })}
       </ul>
       <button type="button" className="overview-link" onClick={onOpen}>
-        Training Hub
+        {t("Training Hub")}
         <ChevronRight size={14} aria-hidden="true" />
       </button>
     </section>
@@ -1075,14 +1080,18 @@ export function OverviewLaunchpad({
       view: "calendar",
       title: t("Calendar"),
       detail: upcomingCount > 0
-        ? t("{{p0}} {{p1}} in the next two weeks", { p0: String(upcomingCount), p1: String(upcomingCount === 1 ? "workout" : "workouts") })
+        ? upcomingCount === 1
+          ? t("1 workout in the next two weeks")
+          : t("{{count}} workouts in the next two weeks", { count: upcomingCount.toLocaleString(getLocale()) })
         : t("Plan your next block")
     },
     {
       view: "media",
       title: t("Music"),
       detail: trackCount > 0
-        ? `${trackCount} ${trackCount === 1 ? "track" : "tracks"} · ${librarySize}`
+        ? trackCount === 1
+          ? t("1 track · {{size}}", { size: librarySize })
+          : t("{{count}} tracks · {{size}}", { count: trackCount.toLocaleString(getLocale()), size: librarySize })
         : t("Load music for your runs")
     }
   ];

@@ -13,16 +13,16 @@ function toErrorMessage(error: unknown): string {
 }
 
 function formatSyncTime(value?: string): string {
-  if (!value) return "Not synced yet";
+  if (!value) return t("Not synced yet");
   const date = new Date(value);
   return Number.isNaN(date.getTime())
-    ? "Not synced yet"
-    : `Last synced ${date.toLocaleString(getLocale(), {
+    ? t("Not synced yet")
+    : t("Last synced {{time}}", { time: date.toLocaleString(getLocale(), {
         month: "short",
         day: "numeric",
         hour: "numeric",
         minute: "2-digit"
-      })}`;
+      }) });
 }
 
 /**
@@ -129,7 +129,7 @@ export function StravaConnection({
   );
 
   const disconnect = useCallback(async () => {
-    if (!window.confirm("Disconnect Strava and erase its cached gym sessions from this device?")) {
+    if (!window.confirm(t("Disconnect Strava and erase its cached gym sessions from this device?"))) {
       return;
     }
     setBusy(true);
