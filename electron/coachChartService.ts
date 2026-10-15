@@ -1,50 +1,65 @@
 import crypto from "node:crypto";
 import {
-  coachChartNeedsSleep,
-  coachChartUsesMetrics,
-  coachChartWindowDays,
+  COACH_CHART_INTRADAY_SOURCE,
+  COACH_CHART_MAX_PINNED,
+  bucketIntradayReadings,
+  coachChartNeeds,
   describeCoachChart,
   parseCoachChartSpec,
   resolveCoachChart,
-  CoachChartSpecError
+  upsertPinnedCoachChart,
+  withCoachChartDefaults,
+  CoachChartSpecError,
+  type CoachChartIntradayWindow,
+  type CoachChartReading
 } from "./coachChartUtils";
 import { ensureCorosMcpConnected } from "./corosMcpService";
 import { getSetting, setSetting } from "./database";
+import { getTrainingDailyHealthData } from "./dailyHealthDataService";
+import { getTrainingHealthInsight } from "./healthInsightsService";
+import type { HealthInsightKind } from "./healthInsightsTypes";
 import { getTrainingSleepData } from "./sleepDataService";
 import {
   getDailyMetrics,
   getTrainingAnalytics,
+  getTrainingDashboard,
   getTrainingHubStatus
 } from "./trainingHubService";
 import {
   buildTrendPoints,
+  mergeDailyHealthIntoTrendPoints,
   mergeSleepIntoTrendPoints,
   mergeTrainingDayLists,
   recentTrainingHubDateList
 } from "./trainingTrendUtils";
 import type {
+  CoachChartIntradayKey,
   CoachChartPreview,
   CoachChartSpec,
+  PinCoachChartResult,
   PinnedCoachChart,
   TrainingTrendPoint
 } from "./types";
 
 const PINNED_CHARTS_KEY = "coach.pinnedCharts";
-const MAX_PINNED_CHARTS = 12;
 
 export interface TrendWindow {
   points: TrainingTrendPoint[];
   sleepAvailable: boolean;
+  /** True when COROS MCP answered the daily health (steps/calories) query. */
+  dailyHealthAvailable: boolean;
 }
 
 /**
  * Daily trend points for the last `days` days: Training Hub daily metrics
- * merged with analytics, plus sleep score/duration from COROS MCP when a
- * session is already available (never prompts for sign-in mid-chat).
+ * merged with analytics, plus sleep score/duration and daily step/calorie
+ * totals from COROS MCP when a session is already available (never prompts
+ * for sign-in mid-chat).
  */
 export async function loadTrendWindow(
   days: number,
-  includeSleep: boolean
+  includeSleep: boolean,
+  includeDailyHealth = false
 ): Promise<TrendWindow> {
   const [analytics, dailyMetrics] = await Promise.all([
     getTrainingAnalytics(),
@@ -53,47 +68,112 @@ export async function loadTrendWindow(
   const dayList = mergeTrainingDayLists(dailyMetrics, analytics);
   let points = buildTrendPoints(dayList, days);
   let sleepAvailable = false;
+  let dailyHealthAvailable = false;
 
-  if (includeSleep && points.length > 0) {
+  if ((includeSleep || includeDailyHealth) && points.length > 0) {
     try {
       if (await ensureCorosMcpConnected()) {
-        const sleep = await getTrainingSleepData(null, days);
-        sleepAvailable = sleep.mcpConnected && sleep.records.length > 0;
-        points = mergeSleepIntoTrendPoints(points, sleep);
+        if (includeSleep) {
+          const sleep = await getTrainingSleepData(null, days);
+          sleepAvailable = sleep.mcpConnected && sleep.records.length > 0;
+          points = mergeSleepIntoTrendPoints(points, sleep);
+        }
+        if (includeDailyHealth) {
+          const health = await getTrainingDailyHealthData(null, days);
+          dailyHealthAvailable = health.mcpConnected;
+          points = mergeDailyHealthIntoTrendPoints(points, health);
+        }
       }
     } catch (error) {
-      console.warn("[coachChartService] sleep merge skipped:", error);
+      console.warn("[coachChartService] COROS daily merge skipped:", error);
     }
   }
 
-  return { points, sleepAvailable };
+  return { points, sleepAvailable, dailyHealthAvailable };
+}
+
+interface IntradayLoad {
+  window: CoachChartIntradayWindow;
+  available: boolean;
+}
+
+/**
+ * Hourly COROS health readings for the last `days` days, from whichever
+ * health queries the requested metrics need. Never opens a sign-in window.
+ */
+export async function loadIntradayWindow(
+  days: number,
+  kinds: ("stress" | "healthCheck")[],
+  now = new Date()
+): Promise<IntradayLoad> {
+  const readings: Partial<Record<CoachChartIntradayKey, CoachChartReading[]>> = {};
+  let available = false;
+  for (const kind of kinds) {
+    const result = await getTrainingHealthInsight(kind as HealthInsightKind, days);
+    if (result.status === "error") {
+      throw new Error(result.message ?? "Could not load COROS health data.");
+    }
+    if (result.status === "disconnected" || result.status === "unavailable") continue;
+    available = true;
+    for (const [metric, source] of Object.entries(COACH_CHART_INTRADAY_SOURCE) as [
+      CoachChartIntradayKey,
+      { kind: string; seriesKey: string }
+    ][]) {
+      if (source.kind !== kind) continue;
+      const series = result.series.find((entry) => entry.key === source.seriesKey);
+      readings[metric] = series?.points ?? [];
+    }
+  }
+  return { window: bucketIntradayReadings(readings, days, now), available };
 }
 
 async function resolveSpec(
   spec: CoachChartSpec,
   previewId: string
 ): Promise<{ preview: CoachChartPreview; text: string }> {
-  let window: TrendWindow | undefined;
-  if (coachChartUsesMetrics(spec)) {
-    if (!getTrainingHubStatus().authenticated) {
+  const needs = coachChartNeeds(spec);
+  let daily: TrendWindow | undefined;
+  let intraday: IntradayLoad | undefined;
+  let dashboard: { recoveryPct?: number } | undefined;
+  const hubAuthenticated = getTrainingHubStatus().authenticated;
+
+  if (needs.dailyDays !== undefined || needs.dashboard) {
+    if (!hubAuthenticated) {
       throw new CoachChartSpecError(
-        "Metric-bound series need Training Hub. Ask the athlete to connect COROS in Settings, or pass inline values instead."
+        "Daily metrics and recovery need Training Hub. Ask the athlete to connect COROS in Settings, or pass inline values instead."
       );
     }
-    window = await loadTrendWindow(
-      coachChartWindowDays(spec),
-      coachChartNeedsSleep(spec)
-    );
+  }
+  if (needs.dailyDays !== undefined) {
+    daily = await loadTrendWindow(needs.dailyDays, needs.sleep, needs.dailyHealth);
+  }
+  if (needs.intradayDays !== undefined) {
+    intraday = await loadIntradayWindow(needs.intradayDays, needs.intradayKinds);
+  }
+  if (needs.dashboard) {
+    try {
+      const data = await getTrainingDashboard();
+      dashboard = { recoveryPct: data.recoveryPct };
+    } catch (error) {
+      console.warn("[coachChartService] dashboard lookup skipped:", error);
+      dashboard = {};
+    }
   }
 
   const { preview, droppedRanges } = resolveCoachChart(spec, {
     previewId,
-    trendPoints: window?.points,
-    sleepAvailable: window?.sleepAvailable
+    trendPoints: daily?.points,
+    intraday: intraday?.window,
+    dashboard,
+    sleepAvailable: daily?.sleepAvailable,
+    dailyHealthAvailable: daily?.dailyHealthAvailable,
+    intradayAvailable: intraday?.available
   });
   const text = describeCoachChart(preview, {
     droppedRanges,
-    sleepAvailable: window ? window.sleepAvailable : undefined
+    sleepAvailable: daily && needs.sleep ? daily.sleepAvailable : undefined,
+    dailyHealthAvailable: daily && needs.dailyHealth ? daily.dailyHealthAvailable : undefined,
+    intradayAvailable: intraday ? intraday.available : undefined
   });
   return { preview, text };
 }
@@ -115,17 +195,18 @@ function readPinned(): PinnedCoachChart[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed.filter(
-          (entry): entry is PinnedCoachChart =>
-            typeof entry === "object" &&
-            entry !== null &&
-            typeof entry.id === "string" &&
-            typeof entry.pinnedAt === "string" &&
-            typeof entry.preview === "object" &&
-            entry.preview !== null
-        )
-      : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (entry): entry is PinnedCoachChart =>
+          typeof entry === "object" &&
+          entry !== null &&
+          typeof entry.id === "string" &&
+          typeof entry.pinnedAt === "string" &&
+          typeof entry.preview === "object" &&
+          entry.preview !== null
+      )
+      .map((entry) => ({ ...entry, preview: withCoachChartDefaults(entry.preview) }));
   } catch {
     return [];
   }
@@ -139,28 +220,28 @@ export function listPinnedCoachCharts(): PinnedCoachChart[] {
   return readPinned();
 }
 
-export function pinCoachChart(preview: CoachChartPreview): PinnedCoachChart {
-  const charts = readPinned();
-  const existing = charts.find(
-    (entry) => entry.preview.previewId === preview.previewId
-  );
-  if (existing) return existing;
-
-  const pinned: PinnedCoachChart = {
+/**
+ * Pin a chart to the Training Hub. A chart whose title matches an existing
+ * pin replaces it in place, so re-rendering a card never leaves duplicates.
+ */
+export function pinCoachChart(preview: CoachChartPreview): PinCoachChartResult {
+  const result = upsertPinnedCoachChart(readPinned(), withCoachChartDefaults(preview), {
     id: crypto.randomUUID(),
-    preview,
-    pinnedAt: new Date().toISOString()
-  };
-  const next = [pinned, ...charts].slice(0, MAX_PINNED_CHARTS);
-  writePinned(next);
-  return pinned;
+    now: new Date().toISOString(),
+    maxPinned: COACH_CHART_MAX_PINNED
+  });
+  if (result.changed) writePinned(result.charts);
+  return { pinned: result.pinned, replaced: result.replaced };
 }
 
 export function unpinCoachChart(id: string): void {
   writePinned(readPinned().filter((entry) => entry.id !== id));
 }
 
-/** Re-resolve a pinned chart's metric-bound series over a fresh window. */
+/**
+ * Re-resolve a pinned chart's bound series and tiles over the same window
+ * ending now. Snapshot charts are returned unchanged.
+ */
 export async function refreshPinnedCoachChart(
   id: string
 ): Promise<PinnedCoachChart | null> {

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Pinned coach charts that keep themselves current.** Charts Coach draws can now bind more than daily training metrics: hourly **stress, heart rate, blood oxygen and respiratory rate** from the watch over 1–7 days, plus daily **steps, calories and VO₂ max**, and the stat tiles above a chart can bind to a metric too (latest, average, min, max or sum, including current recovery). Every card shows whether it is **Live**, **Partly live** or a **Snapshot**, so you know before pinning whether it will update. Pinned charts refresh on the Training Hub on their own: when the page opens, after a hub refresh, when you come back to the app, and every 15 minutes while it stays open, with a "refreshed 5 min ago" stamp. Snapshot charts get a **Make live** button that sends Coach the chart to rebuild from your data.
+- Pinning a chart adds the **Coach charts** section to your Training Hub dashboard if it isn't there yet, and the card says where the chart went. The section was opt-in before, so a first pin landed somewhere you couldn't see.
+
+### Changed
+
+- Pinning a chart with the same title as one already on the Training Hub updates that pin in place instead of adding a second copy. In Coach the button reads **Update pin** when that is what it will do, and Coach is told to reuse titles for charts you've pinned.
+
 ### Fixed
 
 - In the paper theme, the training globe on Overview is a softly shaded off-white sphere instead of a flat grey ball.

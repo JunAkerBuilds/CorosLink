@@ -1,5 +1,6 @@
 import { strengthEditPreviewSchema } from "./workoutEditService";
 import crypto from "node:crypto";
+import { withCoachChartDefaults } from "./coachChartUtils";
 import {
   deleteChatSessionRow,
   getChatPlanDraft,
@@ -13,7 +14,7 @@ import type {
   CoachChartPreview,
   CoachChartResolvedRange,
   CoachChartResolvedSeries,
-  CoachChartTileSpec,
+  CoachChartResolvedTile,
   ActivityVisualHrSection,
   ActivityVisualLapPoint,
   ActivityVisualPreview,
@@ -832,7 +833,7 @@ function parseCoachChartPreview(value: unknown): CoachChartPreview | null {
           : []
       )
     : [];
-  const tiles: CoachChartTileSpec[] = Array.isArray(value.tiles)
+  const tiles: CoachChartResolvedTile[] = Array.isArray(value.tiles)
     ? value.tiles.flatMap((entry) =>
         isRecord(entry) &&
         typeof entry.label === "string" &&
@@ -842,19 +843,40 @@ function parseCoachChartPreview(value: unknown): CoachChartPreview | null {
                 label: entry.label,
                 value: entry.value,
                 caption:
-                  typeof entry.caption === "string" ? entry.caption : undefined
+                  typeof entry.caption === "string" ? entry.caption : undefined,
+                metric:
+                  typeof entry.metric === "string"
+                    ? (entry.metric as CoachChartResolvedTile["metric"])
+                    : undefined,
+                stat:
+                  typeof entry.stat === "string"
+                    ? (entry.stat as CoachChartResolvedTile["stat"])
+                    : undefined,
+                unit: typeof entry.unit === "string" ? entry.unit : undefined
               }
             ]
           : []
       )
     : [];
-  return {
+  const stringList = (list: unknown): string[] | undefined =>
+    Array.isArray(list)
+      ? list.filter((item): item is string => typeof item === "string")
+      : undefined;
+  const window =
+    isRecord(value.window) &&
+    (value.window.kind === "daily" ||
+      value.window.kind === "intraday" ||
+      value.window.kind === "static") &&
+    typeof value.window.days === "number"
+      ? { kind: value.window.kind as CoachChartPreview["window"]["kind"], days: value.window.days }
+      : undefined;
+  // Previews saved before freshness existed derive it from their bindings.
+  return withCoachChartDefaults({
     previewId: value.previewId,
     spec: value.spec as unknown as CoachChartPreview["spec"],
     labels,
-    dates: Array.isArray(value.dates)
-      ? value.dates.filter((date): date is string => typeof date === "string")
-      : undefined,
+    dates: stringList(value.dates),
+    times: stringList(value.times),
     series,
     ranges,
     tiles,
@@ -862,8 +884,15 @@ function parseCoachChartPreview(value: unknown): CoachChartPreview | null {
       typeof value.resolvedAt === "string"
         ? value.resolvedAt
         : new Date(0).toISOString(),
-    live: value.live === true
-  };
+    live: typeof value.live === "boolean" ? value.live : undefined,
+    freshness:
+      value.freshness === "live" ||
+      value.freshness === "partial" ||
+      value.freshness === "snapshot"
+        ? value.freshness
+        : undefined,
+    window
+  });
 }
 
 function parseEntry(value: unknown): PersistedChatEntry | null {

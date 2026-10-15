@@ -185,7 +185,7 @@
 
 .coach-charts-panel-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr));
   gap: 14px;
 }
 
@@ -208,4 +208,98 @@
   .coach-chart-card-panel .coach-chart-shell {
     height: 200px;
   }
+}
+
+/* ----- Freshness: whether a pinned copy can refresh itself ----- */
+
+/* Actions drop under the title when a panel column is narrow, instead of
+   squeezing the title and subtitle into a ragged column. */
+.coach-chart-card .chat-visual-card-header {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.coach-chart-heading {
+  display: grid;
+  flex: 1 1 240px;
+  min-width: 0;
+  gap: 2px;
+}
+
+.coach-chart-heading h4 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+}
+
+.coach-chart-stamp {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.coach-chart-freshness {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px 1px 6px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  cursor: help;
+}
+
+.coach-chart-freshness i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.85;
+}
+
+.coach-chart-freshness.is-live {
+  border-color: var(--success-border, var(--glass-border));
+  color: var(--success-text, var(--text-primary));
+}
+
+.coach-chart-freshness.is-partial {
+  border-color: var(--warning-border, var(--glass-border));
+  color: var(--warning-text, var(--text-primary));
+}
+
+.coach-chart-freshness.is-snapshot {
+  color: var(--text-muted);
+}
+
+.coach-chart-action.is-make-live {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+}
+
+.coach-chart-action.is-make-live:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.coach-chart-pin-note {
+  margin: -4px 0 0;
+  color: var(--success-text, var(--text-secondary));
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* A bound tile is drawn like a live reading: a thin accent rule at the top. */
+.coach-chart-tile.is-bound {
+  box-shadow: inset 0 2px 0 color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.coach-charts-panel-meta {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
 }

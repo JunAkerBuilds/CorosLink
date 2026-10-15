@@ -32,6 +32,17 @@ export function defaultWidget(id: WidgetId): DashboardWidget {
   const definition = widgetCatalog.find(widget => widget.id === id)!;
   return { id, size: definition.size, preset: `${definition.size}-standard`, title: '', days: 0, metrics: ['load', 'heart', 'steps', 'calories'] };
 }
+/**
+ * Adds a widget to the saved dashboard when it is not there yet, so a feature
+ * that produces content for it (pinning a coach chart) is visible without a
+ * trip through Edit dashboard. Returns true when the layout changed.
+ */
+export function ensureDashboardWidget(id: WidgetId, storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage): boolean {
+  const layout = parseLayout(storage.getItem(dashboardStorageKey));
+  if (layout.some(widget => widget.id === id)) return false;
+  storage.setItem(dashboardStorageKey, JSON.stringify({ version: 3, widgets: [...layout, { ...defaultWidget(id), startRow: true }] }));
+  return true;
+}
 const defaultPlacements: { id: WidgetId; preset: string; startRow?: boolean }[] = [
   { id: 'recovery', preset: '3-standard' },
   { id: 'fitness', preset: '6-standard' },

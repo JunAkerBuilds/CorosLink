@@ -102,7 +102,39 @@ const coachChartEntry = {
   }
 };
 const [restoredChart] = parseChatTranscriptJson(JSON.stringify([coachChartEntry]));
-assert.deepEqual(JSON.parse(JSON.stringify(restoredChart)), coachChartEntry);
+// Previews saved before freshness existed derive it: one bound series plus a
+// static tile is partial, and a dated axis is a daily window.
+assert.deepEqual(JSON.parse(JSON.stringify(restoredChart)), {
+  ...coachChartEntry,
+  preview: { ...coachChartEntry.preview, freshness: "partial", window: { kind: "daily", days: 30 } }
+});
+
+// Intraday charts keep their hour stamps, bound tiles and freshness as saved.
+const intradayEntry = {
+  kind: "coachChart",
+  preview: {
+    previewId: "coach-chart:req:def",
+    spec: {
+      title: "Stress today",
+      days: 1,
+      series: [{ label: "Stress", metric: "stress" }],
+      tiles: [{ label: "Avg", metric: "stress", stat: "avg" }]
+    },
+    labels: ["07:00", "08:00"],
+    times: ["2026-10-15T11:00:00.000Z", "2026-10-15T12:00:00.000Z"],
+    series: [
+      { key: "s0", label: "Stress", kind: "line", axis: "left", color: "sleep", dashed: false, metric: "stress", values: [31, 44] }
+    ],
+    ranges: [],
+    tiles: [{ label: "Avg", value: "37.5", metric: "stress", stat: "avg" }],
+    resolvedAt: "2026-10-15T13:00:00.000Z",
+    live: true,
+    freshness: "live",
+    window: { kind: "intraday", days: 1 }
+  }
+};
+const [restoredIntraday] = parseChatTranscriptJson(JSON.stringify([intradayEntry]));
+assert.deepEqual(JSON.parse(JSON.stringify(restoredIntraday)), intradayEntry);
 assert.deepEqual(
   parseChatTranscriptJson(
     JSON.stringify([{ kind: "coachChart", preview: { previewId: "x", labels: [], series: [] } }])

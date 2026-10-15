@@ -130,6 +130,7 @@ import type {
   FitIndexProgress,
   FitIndexStatus,
   FitIndexSyncOptions,
+  PinCoachChartResult,
   PinnedCoachChart,
   LocalChatConfig,
   LocalChatConnectionTest,
@@ -1338,7 +1339,7 @@ const api = {
   },
   listPinnedCoachCharts: (): Promise<PinnedCoachChart[]> =>
     ipcRenderer.invoke("coachCharts:list"),
-  pinCoachChart: (preview: CoachChartPreview): Promise<PinnedCoachChart> =>
+  pinCoachChart: (preview: CoachChartPreview): Promise<PinCoachChartResult> =>
     ipcRenderer.invoke("coachCharts:pin", preview),
   unpinCoachChart: (id: string): Promise<void> =>
     ipcRenderer.invoke("coachCharts:unpin", id),

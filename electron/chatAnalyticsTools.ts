@@ -1,9 +1,14 @@
 import { loadTrendWindow, renderCoachChart } from "./coachChartService";
 import {
   COACH_CHART_DEFAULT_DAYS,
+  COACH_CHART_INTRADAY_DEFAULT_DAYS,
+  COACH_CHART_INTRADAY_MAX_DAYS,
+  COACH_CHART_INTRADAY_MIN_DAYS,
   COACH_CHART_MAX_DAYS,
-  COACH_CHART_METRIC_KEYS,
   COACH_CHART_MIN_DAYS,
+  COACH_CHART_SERIES_METRICS,
+  COACH_CHART_TILE_METRICS,
+  COACH_CHART_TILE_STATS,
   CoachChartSpecError
 } from "./coachChartUtils";
 import {
@@ -49,23 +54,31 @@ const RENDER_CHART_TOOL: CorosMcpTool = {
   description:
     "Draw a chart inline in the chat. Use it whenever the athlete asks to see, chart, graph, " +
     "compare, or visualize a trend, or when a multi-week pattern is clearer as a picture. " +
-    "Prefer metric-bound series (set `metric`) so CorosLink fetches the daily numbers itself " +
-    "over the last `days` days; only pass inline `values` for derived series (e.g. a 7-day " +
-    "rolling load) and match the window length exactly, using null for gaps. Shade training " +
-    "blocks with `ranges` and add per-block summaries with `tiles`. Up to 6 series. " +
-    "The tool returns per-series stats so you can narrate the chart afterwards.",
+    "Prefer bound series and tiles (set `metric`) so CorosLink fetches the numbers itself: daily " +
+    "metrics span the last `days` days, intraday metrics (stress, heart rate, SpO2, respiratory " +
+    "rate) are hourly over 1–7 days. The athlete can pin a chart to the Training Hub, and only " +
+    "bound parts refresh there: when they want a card that stays current (today's health, a " +
+    "dashboard, 'keep this updated'), bind every series and tile and use no inline `values`. " +
+    "Only pass inline `values` for derived series (e.g. a 7-day rolling load) and match the " +
+    "window length exactly, using null for gaps. Shade training blocks with `ranges`. Up to 6 " +
+    "series. The tool returns per-series stats so you can narrate the chart afterwards.",
   inputSchema: {
     type: "object",
     required: ["title", "series"],
     properties: {
-      title: { type: "string", description: "Short chart title." },
+      title: {
+        type: "string",
+        description:
+          "Short chart title. Reuse the exact title when re-rendering a chart the athlete pinned, so the pin updates in place."
+      },
       subtitle: { type: "string", description: "Optional one-line context." },
       days: {
         type: "integer",
-        minimum: COACH_CHART_MIN_DAYS,
+        minimum: COACH_CHART_INTRADAY_MIN_DAYS,
         maximum: COACH_CHART_MAX_DAYS,
         description:
-          `Window for metric-bound series, ${COACH_CHART_MIN_DAYS}–${COACH_CHART_MAX_DAYS} days ending today. Default ${COACH_CHART_DEFAULT_DAYS}.`
+          `Window ending now. Daily metrics: ${COACH_CHART_MIN_DAYS}–${COACH_CHART_MAX_DAYS} days (default ${COACH_CHART_DEFAULT_DAYS}). ` +
+          `Intraday metrics: ${COACH_CHART_INTRADAY_MIN_DAYS}–${COACH_CHART_INTRADAY_MAX_DAYS} days (default ${COACH_CHART_INTRADAY_DEFAULT_DAYS} = today).`
       },
       labels: {
         type: "array",
@@ -84,9 +97,10 @@ const RENDER_CHART_TOOL: CorosMcpTool = {
             label: { type: "string" },
             metric: {
               type: "string",
-              enum: [...COACH_CHART_METRIC_KEYS],
+              enum: [...COACH_CHART_SERIES_METRICS],
               description:
-                "Daily metric to bind: trainingLoad (daily load), rpeLoad (session-RPE load), avgSleepHrv (overnight HRV ms), sleepHrvBase (HRV baseline), rhr (resting HR), sleepScore, sleepMinutes, trainingLoadRatio, staminaLevel."
+                "Metric to bind. Daily (one point per day): trainingLoad, rpeLoad (session-RPE load), avgSleepHrv (overnight HRV ms), sleepHrvBase (HRV baseline), rhr (resting HR), sleepScore, sleepMinutes, trainingLoadRatio, staminaLevel, vo2max, steps, calories. " +
+                "Intraday (one point per hour, from the COROS watch): stress (0–100), heartRate, spo2, respiratoryRate. A chart binds daily or intraday metrics, not both."
             },
             values: {
               type: "array",
@@ -124,14 +138,30 @@ const RENDER_CHART_TOOL: CorosMcpTool = {
         type: "array",
         items: {
           type: "object",
-          required: ["label", "value"],
+          required: ["label"],
           properties: {
             label: { type: "string" },
-            value: { type: "string" },
+            value: {
+              type: "string",
+              description: "Static text. Omit it and set `metric` instead so the tile refreshes with the chart."
+            },
+            metric: {
+              type: "string",
+              enum: [...COACH_CHART_TILE_METRICS],
+              description:
+                "Bind the tile to a metric (any series metric, plus recoveryPct for current recovery). Daily metrics reduce over the chart window (or the last 7 days on other charts); intraday metrics over the chart window (or today)."
+            },
+            stat: {
+              type: "string",
+              enum: [...COACH_CHART_TILE_STATS],
+              description: "How the window reduces to one number. Default latest."
+            },
+            unit: { type: "string", description: "Unit suffix for a bound value; defaults per metric." },
             caption: { type: "string" }
           }
         },
-        description: "Summary stat tiles shown above the chart."
+        description:
+          "Summary stat tiles shown above the chart. Bind them with `metric` so they stay current when pinned."
       },
       leftAxisLabel: { type: "string" },
       rightAxisLabel: { type: "string" },

@@ -3475,6 +3475,10 @@ export interface TrainingTrendPoint {
   sleepScore?: number;
   trainingLoadRatio?: number;
   staminaLevel?: number;
+  vo2max?: number;
+  /** Daily totals from COROS MCP daily health. */
+  steps?: number;
+  calories?: number;
 }
 
 // ----- Coach charts (AI-authored, declarative) -----
@@ -3489,7 +3493,36 @@ export type CoachChartMetricKey =
   | "sleepScore"
   | "sleepMinutes"
   | "trainingLoadRatio"
-  | "staminaLevel";
+  | "staminaLevel"
+  | "vo2max"
+  | "steps"
+  | "calories";
+
+/**
+ * Timestamped COROS health readings, averaged per hour over the last 1–7
+ * days. A chart binds either daily or intraday metrics, never both.
+ */
+export type CoachChartIntradayKey =
+  | "stress"
+  | "heartRate"
+  | "spo2"
+  | "respiratoryRate";
+
+export type CoachChartSeriesMetric = CoachChartMetricKey | CoachChartIntradayKey;
+
+/** Current-state values a tile can show that have no series behind them. */
+export type CoachChartTileOnlyKey = "recoveryPct";
+export type CoachChartTileMetric = CoachChartSeriesMetric | CoachChartTileOnlyKey;
+export type CoachChartTileStat = "latest" | "avg" | "min" | "max" | "sum";
+
+export type CoachChartWindowKind = "daily" | "intraday" | "static";
+
+/**
+ * live: every series and tile is bound, so a pinned copy regenerates itself.
+ * partial: bound parts refresh; inline values stay as first rendered.
+ * snapshot: nothing is bound, so a pinned copy never changes.
+ */
+export type CoachChartFreshness = "live" | "partial" | "snapshot";
 
 export type CoachChartSeriesKind = "line" | "area" | "bar";
 export type CoachChartAxis = "left" | "right";
@@ -3509,8 +3542,8 @@ export interface CoachChartSeriesSpec {
   axis?: CoachChartAxis;
   color?: CoachChartColor;
   dashed?: boolean;
-  /** Bind to a daily metric over the chart window; resolved by CorosLink. */
-  metric?: CoachChartMetricKey;
+  /** Bind to a daily or intraday metric over the chart window; resolved by CorosLink. */
+  metric?: CoachChartSeriesMetric;
   /** Inline values aligned with the x axis; null marks a gap. */
   values?: (number | null)[];
 }
@@ -3525,15 +3558,27 @@ export interface CoachChartRangeSpec {
 
 export interface CoachChartTileSpec {
   label: string;
-  value: string;
+  /** Static text; required unless `metric` is set. */
+  value?: string;
   caption?: string;
+  /** Bind the value to a metric so pinned copies refresh it. */
+  metric?: CoachChartTileMetric;
+  /** How the chart window reduces to one number. Default latest. */
+  stat?: CoachChartTileStat;
+  /** Unit suffix for bound values; each metric has a sensible default. */
+  unit?: string;
+}
+
+/** Tile as drawn: bound tiles carry the value CorosLink resolved. */
+export interface CoachChartResolvedTile extends CoachChartTileSpec {
+  value: string;
 }
 
 /** What the model sends to render_chart. */
 export interface CoachChartSpec {
   title: string;
   subtitle?: string;
-  /** Window for bound metrics (7–90 days). Default 30. */
+  /** Window for bound metrics: 7–90 days (default 30) for daily, 1–7 (default 1) for intraday. */
   days?: number;
   /** X-axis labels for inline-only charts. Ignored when a series is bound. */
   labels?: string[];
@@ -3552,7 +3597,7 @@ export interface CoachChartResolvedSeries {
   axis: CoachChartAxis;
   color: CoachChartColor;
   dashed: boolean;
-  metric?: CoachChartMetricKey;
+  metric?: CoachChartSeriesMetric;
   values: (number | null)[];
 }
 
@@ -3569,18 +3614,31 @@ export interface CoachChartPreview {
   labels: string[];
   /** YYYYMMDD per point when the x axis is a date window. */
   dates?: string[];
+  /** ISO hour start per point when the x axis is intraday. */
+  times?: string[];
   series: CoachChartResolvedSeries[];
   ranges: CoachChartResolvedRange[];
-  tiles: CoachChartTileSpec[];
+  tiles: CoachChartResolvedTile[];
   resolvedAt: string;
-  /** True when at least one series is metric-bound and can be refreshed. */
+  /** True when at least one series or tile is bound and can be refreshed. */
   live: boolean;
+  freshness: CoachChartFreshness;
+  /** Window the bound parts were resolved over; a refresh re-runs the same window ending now. */
+  window: { kind: CoachChartWindowKind; days: number };
 }
 
 export interface PinnedCoachChart {
   id: string;
   preview: CoachChartPreview;
   pinnedAt: string;
+  /** Set when a newer rendering replaced this pin in place. */
+  updatedAt?: string;
+}
+
+export interface PinCoachChartResult {
+  pinned: PinnedCoachChart;
+  /** True when an existing pin with the same title was replaced instead of adding a second one. */
+  replaced: boolean;
 }
 
 export interface ActivityVisualLapPoint {

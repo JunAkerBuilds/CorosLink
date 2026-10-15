@@ -1,6 +1,6 @@
 import { t, useLanguage, getLocale } from "../i18n/tools";
 import { useMemo } from "react";
-import { Pin, PinOff, RefreshCw } from "lucide-react";
+import { Pin, PinOff, RefreshCw, Sparkles } from "lucide-react";
 import {
   Area,
   Bar,
@@ -21,6 +21,12 @@ import type {
 } from "../../electron/types";
 import { trainingChartTooltipStyle } from "../training/chartConfig";
 import { useChartColors } from "../training/useChartColors";
+import {
+  coachChartFreshness,
+  formatRelativeTime,
+  freshnessHint,
+  freshnessLabel
+} from "./coachChartFreshness";
 import "./coachChart.css";
 
 export interface CoachChartCardProps {
@@ -28,10 +34,16 @@ export interface CoachChartCardProps {
   /** "chat" renders inside a chat bubble; "panel" is the Training Hub tile. */
   variant?: "chat" | "panel";
   pinned?: boolean;
+  /** A pin with this chart's title already exists, so pinning updates it in place. */
+  replaces?: boolean;
   busy?: boolean;
+  /** One-line confirmation shown under the header after pinning. */
+  notice?: string | null;
   onPin?: () => void;
   onUnpin?: () => void;
   onRefresh?: () => void;
+  /** Asks Coach to rebuild a snapshot chart with bound metrics. */
+  onMakeLive?: () => void;
 }
 
 interface SeriesPalette {
@@ -71,6 +83,12 @@ function formatWindow(preview: CoachChartPreview): string {
   const count = preview.labels.length;
   const first = preview.labels[0];
   const last = preview.labels[count - 1];
+  if (preview.times) {
+    const days = preview.window?.days ?? 1;
+    return days > 1
+      ? t("Last {{p0}} days · {{p1}} – {{p2}}", { p0: days, p1: first, p2: last })
+      : t("Today · {{p0}} – {{p1}}", { p0: first, p1: last });
+  }
   if (preview.dates) {
     return t("Last {{p0}} days · {{p1}} – {{p2}}", { p0: count, p1: first, p2: last });
   }
@@ -125,10 +143,13 @@ export function CoachChartCard({
   preview,
   variant = "chat",
   pinned = false,
+  replaces = false,
   busy = false,
+  notice = null,
   onPin,
   onUnpin,
-  onRefresh
+  onRefresh,
+  onMakeLive
 }: CoachChartCardProps) {
   const { language } = useLanguage();
   const { colors, activeDot } = useChartColors();
@@ -162,25 +183,41 @@ export function CoachChartCard({
   const gradientPrefix = `coachChart-${preview.previewId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const tickGap = preview.labels.length > 40 ? 48 : 28;
 
+  const freshness = coachChartFreshness(preview);
   const subtitle = preview.spec.subtitle ?? formatWindow(preview);
   const stamp =
     variant === "panel" && preview.resolvedAt
-      ? `${preview.live ? t("Updated") : t("Pinned")} ${formatResolvedAt(preview.resolvedAt)}`
+      ? freshness === "snapshot"
+        ? t("Snapshot · {{date}}", { date: formatResolvedAt(preview.resolvedAt) })
+        : t("Updated {{time}}", {
+            time: formatRelativeTime(preview.resolvedAt, new Date(), getLocale())
+          })
       : null;
+  const showMakeLive = Boolean(onMakeLive) && freshness !== "live";
+  const showRefresh = Boolean(onRefresh) && freshness !== "snapshot";
 
   return (
-    <div className={`chat-visual-card coach-chart-card coach-chart-card-${variant}`}>
+    <div
+      className={`chat-visual-card coach-chart-card coach-chart-card-${variant} is-${freshness}`}
+    >
       <div className="chat-visual-card-header">
-        <div>
-          <h4>{preview.spec.title}</h4>
-          <span className="chat-visual-card-subtitle">
-            {subtitle}
-            {stamp ? <> · {stamp}</> : null}
-          </span>
+        <div className="coach-chart-heading">
+          <h4>
+            {preview.spec.title}
+            <span
+              className={`coach-chart-freshness is-${freshness}`}
+              title={freshnessHint(freshness)}
+            >
+              <i aria-hidden="true" />
+              {freshnessLabel(freshness)}
+            </span>
+          </h4>
+          <span className="chat-visual-card-subtitle">{subtitle}</span>
+          {stamp ? <span className="coach-chart-stamp">{stamp}</span> : null}
         </div>
-        {onPin || onUnpin || onRefresh ? (
+        {onPin || onUnpin || showRefresh || showMakeLive ? (
           <div className="coach-chart-actions">
-            {onRefresh && preview.live ? (
+            {showRefresh ? (
               <button
                 type="button"
                 className="coach-chart-action"
@@ -196,13 +233,29 @@ export function CoachChartCard({
                 <span>{t("Refresh")}</span>
               </button>
             ) : null}
+            {showMakeLive ? (
+              <button
+                type="button"
+                className="coach-chart-action is-make-live"
+                onClick={onMakeLive}
+                disabled={busy}
+                title={t("Ask Coach to rebuild this chart from your data so it refreshes itself")}
+              >
+                <Sparkles size={13} aria-hidden="true" />
+                <span>{t("Make live")}</span>
+              </button>
+            ) : null}
             {pinned && onUnpin ? (
               <button
                 type="button"
                 className="coach-chart-action is-pinned"
                 onClick={onUnpin}
                 disabled={busy}
-                title={t("Remove from Training Hub")}
+                title={
+                  variant === "panel"
+                    ? t("Remove from Training Hub")
+                    : t("On your Training Hub dashboard under Coach charts. Click to unpin.")
+                }
               >
                 <PinOff size={13} aria-hidden="true" />
                 <span>{variant === "panel" ? t("Unpin") : t("Pinned")}</span>
@@ -213,20 +266,33 @@ export function CoachChartCard({
                 className="coach-chart-action"
                 onClick={onPin}
                 disabled={busy}
-                title={t("Keep this chart on the Training Hub")}
+                title={
+                  replaces
+                    ? t("Replace the pinned chart that has this title")
+                    : t("Keep this chart on the Training Hub")
+                }
               >
                 <Pin size={13} aria-hidden="true" />
-                <span>{t("Pin to Training Hub")}</span>
+                <span>{replaces ? t("Update pin") : t("Pin to Training Hub")}</span>
               </button>
             ) : null}
           </div>
         ) : null}
       </div>
 
+      {notice ? (
+        <p className="coach-chart-pin-note" role="status">
+          {notice}
+        </p>
+      ) : null}
+
       {preview.tiles.length > 0 ? (
         <div className="coach-chart-tiles">
           {preview.tiles.map((tile, index) => (
-            <div key={`${tile.label}-${index}`} className="coach-chart-tile">
+            <div
+              key={`${tile.label}-${index}`}
+              className={`coach-chart-tile${tile.metric ? " is-bound" : ""}`}
+            >
               <span className="coach-chart-tile-label">{tile.label}</span>
               <strong className="coach-chart-tile-value">{tile.value}</strong>
               {tile.caption ? (

@@ -2695,6 +2695,10 @@ export default function App() {
                   onExportFile={handleTrainingHubExport}
                   navigationRequest={trainingHubNavigation}
                   onNavigationRequestHandled={() => setTrainingHubNavigation(null)}
+                  onOpenCoach={(prompt) => {
+                    setCoachPrefill(prompt);
+                    setActiveView("coach");
+                  }}
                 />
               </Suspense>
             ) : null}

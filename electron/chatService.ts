@@ -1692,9 +1692,12 @@ function withLiveToolInstructions(
       guidance.push(
         "Use render_chart when the athlete asks to see, chart, graph, compare, or visualize something, " +
           "or when a multi-week pattern (HRV around hard blocks, sleep vs load, RHR drift) reads better as a picture. " +
-          "Bind series to metrics (`metric`) rather than retyping numbers; use inline `values` only for derived series " +
-          "and match the window length. Shade training blocks with `ranges` and add per-block `tiles`. " +
-          "Put series with different units on separate axes. After the chart renders, give 2–4 concise takeaways."
+          "Bind series and tiles to metrics (`metric`) rather than retyping numbers; use inline `values` only for derived series " +
+          "and match the window length. Intraday metrics (stress, heartRate, spo2, respiratoryRate) chart hours over 1–7 days. " +
+          "Shade training blocks with `ranges` and add per-block `tiles`. Put series with different units on separate axes. " +
+          "Charts pinned to the Training Hub refresh only their bound parts, so when the athlete wants a card that stays current " +
+          "bind everything and reuse the same title so the pin updates in place instead of duplicating. " +
+          "After the chart renders, give 2–4 concise takeaways."
       );
     }
     guidance.push("Inline charts are shown automatically when these tools return data.");

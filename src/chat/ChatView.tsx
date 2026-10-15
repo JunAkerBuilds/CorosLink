@@ -1,12 +1,15 @@
 import { t, useLanguage, getLocale } from "../i18n/tools";
 import { WorkoutEditCard } from "./WorkoutEditCard";
 import { CorosActionCard } from "./CorosActionCard";
+import { normalizeCoachChartTitle } from "./coachChartFreshness";
+import { ensureDashboardWidget } from "../training/dashboardLayout";
 import {
   forwardRef,
   memo,
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -1871,9 +1874,22 @@ export function ChatView({
   const [deletedWorkouts, setDeletedWorkouts] = useState<
     Record<string, DeleteWorkoutResult>
   >({});
-  // previewId -> pinned chart id, so cards know whether they live on the Training Hub.
-  const [pinnedChartIds, setPinnedChartIds] = useState<Record<string, string>>({});
+  // What is pinned on the Training Hub, so cards know whether they live there
+  // and whether pinning would replace an older chart with the same title.
+  const [pinnedCharts, setPinnedCharts] = useState<
+    { id: string; previewId: string; title: string }[]
+  >([]);
   const [pinningPreviewId, setPinningPreviewId] = useState<string | null>(null);
+  // previewId -> one-line confirmation under the card after pinning.
+  const [pinNotices, setPinNotices] = useState<Record<string, string>>({});
+  const pinnedChartIds = useMemo(
+    () => Object.fromEntries(pinnedCharts.map((chart) => [chart.previewId, chart.id])),
+    [pinnedCharts]
+  );
+  const pinnedTitles = useMemo(
+    () => new Set(pinnedCharts.map((chart) => normalizeCoachChartTitle(chart.title))),
+    [pinnedCharts]
+  );
 
   useEffect(() => {
     if (!api) return;
@@ -1882,8 +1898,12 @@ export function ChatView({
       .listPinnedCoachCharts()
       .then((charts) => {
         if (cancelled) return;
-        setPinnedChartIds(
-          Object.fromEntries(charts.map((chart) => [chart.preview.previewId, chart.id]))
+        setPinnedCharts(
+          charts.map((chart) => ({
+            id: chart.id,
+            previewId: chart.preview.previewId,
+            title: chart.preview.spec.title
+          }))
         );
       })
       .catch(() => undefined);
@@ -1898,8 +1918,27 @@ export function ChatView({
       setPinningPreviewId(preview.previewId);
       onError(null);
       try {
-        const pinned = await api.pinCoachChart(preview);
-        setPinnedChartIds((prev) => ({ ...prev, [preview.previewId]: pinned.id }));
+        const { pinned, replaced } = await api.pinCoachChart(preview);
+        setPinnedCharts((prev) => [
+          { id: pinned.id, previewId: preview.previewId, title: preview.spec.title },
+          ...prev.filter((chart) => chart.id !== pinned.id)
+        ]);
+        // The Coach charts widget is opt-in on the dashboard; a first pin
+        // would otherwise land somewhere the athlete cannot see.
+        let addedWidget = false;
+        try {
+          addedWidget = ensureDashboardWidget("coach");
+        } catch {
+          addedWidget = false;
+        }
+        setPinNotices((prev) => ({
+          ...prev,
+          [preview.previewId]: addedWidget
+            ? t("Pinned. A Coach charts section was added to your Training Hub dashboard.")
+            : replaced
+              ? t("Updated the pinned chart with this title on your Training Hub.")
+              : t("Pinned to your Training Hub dashboard, under Coach charts.")
+        }));
       } catch (caught) {
         onError(caught instanceof Error ? caught.message : t("Could not pin the chart."));
       } finally {
@@ -1917,7 +1956,8 @@ export function ChatView({
       onError(null);
       try {
         await api.unpinCoachChart(pinnedId);
-        setPinnedChartIds((prev) => {
+        setPinnedCharts((prev) => prev.filter((chart) => chart.id !== pinnedId));
+        setPinNotices((prev) => {
           const next = { ...prev };
           delete next[previewId];
           return next;
@@ -3996,7 +4036,11 @@ export function ChatView({
                     <CoachChartCard
                       preview={entry.preview}
                       pinned={Boolean(pinnedChartIds[previewId])}
+                      replaces={pinnedTitles.has(
+                        normalizeCoachChartTitle(entry.preview.spec.title)
+                      )}
                       busy={pinningPreviewId === previewId}
+                      notice={pinnedChartIds[previewId] ? pinNotices[previewId] ?? null : null}
                       onPin={() => void pinCoachChart(entry.preview)}
                       onUnpin={() => void unpinCoachChart(previewId)}
                     />

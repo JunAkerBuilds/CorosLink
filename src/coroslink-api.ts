@@ -130,6 +130,7 @@ import type {
   FitIndexProgress,
   FitIndexStatus,
   FitIndexSyncOptions,
+  PinCoachChartResult,
   PinnedCoachChart,
   LocalChatConfig,
   LocalChatConnectionTest,
@@ -847,7 +848,7 @@ export interface CorosLinkApi {
   cancelFitIndexSync: () => Promise<FitIndexProgress | null>;
   onFitIndexProgress: (callback: (progress: FitIndexProgress) => void) => () => void;
   listPinnedCoachCharts: () => Promise<PinnedCoachChart[]>;
-  pinCoachChart: (preview: CoachChartPreview) => Promise<PinnedCoachChart>;
+  pinCoachChart: (preview: CoachChartPreview) => Promise<PinCoachChartResult>;
   unpinCoachChart: (id: string) => Promise<void>;
   refreshPinnedCoachChart: (id: string) => Promise<PinnedCoachChart | null>;
   setWindowBackground: (color: string) => Promise<void>;

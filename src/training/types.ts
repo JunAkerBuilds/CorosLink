@@ -127,6 +127,8 @@ export interface TrainingHubViewProps {
   ) => void;
   navigationRequest?: TrainingHubNavigationRequest | null;
   onNavigationRequestHandled?: () => void;
+  /** Opens Coach with the composer prefilled (e.g. to rebuild a pinned chart). */
+  onOpenCoach?: (prompt: string) => void;
 }
 
 export type { TrainingHubDailyMetric };

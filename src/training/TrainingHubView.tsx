@@ -126,6 +126,7 @@ function TrainingHubContent({
   onExportFile,
   navigationRequest,
   onNavigationRequestHandled,
+  onOpenCoach,
   sampleMode = false,
   sampleDetails,
   onToggleSample
@@ -506,7 +507,7 @@ function TrainingHubContent({
                   const points = (snapshot?.trendPoints ?? []).filter(point => !widget.days || point.date >= date);
                   return <TrainingTrendCharts size={widgetPreset(widget).chartSize} metric={widget.id.slice(6) as "load" | "rpe" | "hrv" | "sleep"} rangeLabel={widget.days ? `Last ${widget.days} days` : "Available history"} points={points} sleepRecords={snapshot?.sleep?.records} />;
                 }
-                case "coach": return sampleMode ? <section className="panel"><h2>{t("Coach charts")}</h2><p>{t("Charts pinned from your coach conversations appear here when using your training data.")}</p></section> : <CoachChartsPanel api={api} refreshToken={hubRefreshCount} showEmpty />;
+                case "coach": return sampleMode ? <section className="panel"><h2>{t("Coach charts")}</h2><p>{t("Charts pinned from your coach conversations appear here when using your training data.")}</p></section> : <CoachChartsPanel api={api} refreshToken={hubRefreshCount} showEmpty onOpenCoach={onOpenCoach} />;
                 case "zones-heart": case "zones-distance": return <TrainingZoneDistributionCharts size={widgetPreset(widget).chartSize} variant={widget.id === "zones-heart" ? "heart" : "distance"} lthrZones={snapshot?.dashboard?.lthrZones ?? []} activities={activities} analytics={snapshot?.analytics ?? null} />;
                 case "scores": return <FitnessScoresPanel size={widgetPreset(widget).chartSize} dashboard={snapshot?.dashboard ?? null} racePredictor={snapshot?.racePredictor ?? null} />;
                 case "race": return <RacePredictorCards size={widgetPreset(widget).chartSize} racePredictor={snapshot?.racePredictor ?? null} />;

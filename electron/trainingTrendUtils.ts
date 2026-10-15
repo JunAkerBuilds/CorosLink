@@ -1,5 +1,6 @@
 import type {
   TrainingHubAnalytics,
+  TrainingHubDailyHealthSummary,
   TrainingHubDailyMetric,
   TrainingHubDailyMetrics,
   TrainingHubSleepSummary,
@@ -57,8 +58,31 @@ export function buildTrendPoints(
     sleepHrvBase: day.sleepHrvBase,
     rhr: day.rhr,
     trainingLoadRatio: day.trainingLoadRatio,
-    staminaLevel: day.staminaLevel
+    staminaLevel: day.staminaLevel,
+    vo2max: day.vo2max
   }));
+}
+
+/** Adds COROS daily step and calorie totals to the matching trend days. */
+export function mergeDailyHealthIntoTrendPoints(
+  trendPoints: TrainingTrendPoint[],
+  health?: TrainingHubDailyHealthSummary | null
+): TrainingTrendPoint[] {
+  if (!health?.records.length) {
+    return trendPoints;
+  }
+  const byDay = new Map(health.records.map((record) => [record.happenDay, record]));
+  return trendPoints.map((point) => {
+    const record = byDay.get(point.date);
+    if (!record) {
+      return point;
+    }
+    return {
+      ...point,
+      steps: record.steps ?? point.steps,
+      calories: record.calories ?? point.calories
+    };
+  });
 }
 
 export function mergeSleepIntoTrendPoints(
