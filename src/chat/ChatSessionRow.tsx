@@ -54,6 +54,9 @@ export function ChatSessionRow({
       }}
       title={session.preview || session.title}
     >
+      {active ? (
+        <span className="chat-session-row-indicator" aria-hidden="true" />
+      ) : null}
       <span className="chat-session-row-body">
         <span className="chat-session-row-title">{session.title}</span>
         {session.preview ? (

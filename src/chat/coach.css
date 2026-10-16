@@ -368,6 +368,7 @@
 
 :root .app .chat-session-row {
   position: relative;
+  isolation: isolate;
   min-height: 0;
   padding: 9px 10px;
   border: 0;
@@ -383,12 +384,23 @@
   transform: none;
 }
 
+/* The highlight is its own element so a session switch slides just the pill. */
 :root .app .chat-session-row.is-active,
 :root .app .chat-session-row.is-active:hover:not(.is-disabled) {
   border-radius: 10px;
-  background: var(--sidebar-indicator-bg);
+  background: transparent;
   border-color: transparent;
+  box-shadow: none;
+}
+
+.chat-session-row-indicator {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 10px;
+  background: var(--sidebar-indicator-bg);
   box-shadow: var(--sidebar-indicator-shadow);
+  pointer-events: none;
 }
 
 :root .app .chat-session-row-title {
@@ -582,11 +594,11 @@
   animation: coach-hero-in 520ms var(--coach-ease) 80ms both;
 }
 
+/* No entrance on the composer: it is the anchor the morph carries. */
 :root .app .chat-view .chat-main:has(.chat-empty) .chat-composer {
   order: 4;
   margin: 0 0 14px;
   padding: 0;
-  animation: coach-hero-in 520ms var(--coach-ease) 120ms both;
 }
 
 :root .app .chat-view .chat-main:has(.chat-empty) .chat-suggestions {
@@ -1270,6 +1282,157 @@
   animation: coach-fade-up 360ms var(--coach-ease) both;
 }
 
+/* COROS action card (scheduled workout). In the panel the header already
+   carries its title and date, so the body leads with the summary. */
+:root .app .chat-view .chat-plan-panel-body > .chat-coros-action-card > .chat-plan-card-header {
+  display: none;
+}
+
+:root .app .chat-view .chat-coros-action-card {
+  gap: 12px;
+}
+
+:root .app .chat-view .chat-coros-action-card > .chat-plan-card-summary {
+  max-width: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+:root .app .chat-view .chat-coros-action-details {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+:root .app .chat-view .chat-coros-action-details summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  min-height: 28px;
+  margin-left: -6px;
+  padding: 0 8px 0 6px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  list-style: none;
+  cursor: pointer;
+  transition: background 160ms var(--coach-ease-soft), color 160ms var(--coach-ease-soft);
+}
+
+:root .app .chat-view .chat-coros-action-details summary::-webkit-details-marker {
+  display: none;
+}
+
+:root .app .chat-view .chat-coros-action-details summary::before {
+  content: "›";
+  display: inline-block;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  transition: transform 220ms var(--coach-ease);
+}
+
+:root .app .chat-view .chat-coros-action-details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+:root .app .chat-view .chat-coros-action-details summary:hover {
+  background: var(--coach-ink-4);
+  color: var(--text-primary);
+}
+
+:root .app .chat-view .chat-coros-action-details ul {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 10px 14px 10px 30px;
+  border-radius: 12px;
+  background: var(--coach-ink-2);
+  animation: coach-fade-up 240ms var(--coach-ease) both;
+}
+
+:root .app .chat-view .chat-coros-action-card p[role="status"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--success-text);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+:root .app .chat-view .chat-coros-action-card p[role="alert"] {
+  font-size: 12.5px;
+}
+
+/* Primary/secondary pair for card actions across the Coach view. */
+:root .app .chat-view .chat-plan-upload {
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--coach-send-bg);
+  color: var(--coach-send-fg);
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: none;
+  transition: filter 160ms var(--coach-ease-soft), transform 200ms var(--coach-ease), opacity 160ms var(--coach-ease-soft);
+}
+
+:root .app .chat-view .chat-plan-upload:hover:not(:disabled) {
+  border-color: transparent;
+  box-shadow: none;
+  filter: brightness(1.06);
+}
+
+:root .app .chat-view .chat-plan-upload:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+:root .app .chat-view .chat-plan-upload:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+:root .app .chat-view .chat-plan-review {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--coach-ink-4);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+:root .app .chat-view .chat-plan-review:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--coach-ink-8);
+  color: var(--text-primary);
+}
+
+:root .app .chat-view .chat-plan-panel .chat-plan-actions {
+  background: linear-gradient(180deg, transparent 0, var(--coach-sidebar) 18px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:root .app .chat-view .chat-coros-action-card .chat-plan-actions {
+  position: static;
+  justify-content: flex-end;
+  padding: 2px 0 0;
+  background: none;
+}
+
+:root .app .chat-view .chat-coros-action-card .chat-plan-upload {
+  flex: 0 0 auto;
+  min-width: 160px;
+  justify-content: center;
+}
+
 /* ---------- MCP popover ---------- */
 
 :root .app .chat-view .chat-mcp-panel {
@@ -1448,7 +1611,7 @@
   view-transition-name: coach-hero-more;
 }
 
-:root.is-coach-morph .chat-view .chat-session-row.is-active {
+:root.is-coach-morph .chat-view .chat-session-row-indicator {
   view-transition-name: coach-active-chat;
 }
 
@@ -1478,16 +1641,11 @@
   view-transition-name: coach-creation-body;
 }
 
-/* The morph owns these boxes for its duration; CSS transitions and the
-   hero's own entrance would fight it (a live snapshot at opacity 0 is a
-   composer that vanishes instead of travelling). */
+/* The morph owns these boxes for its duration; CSS transitions would fight
+   it. Entrance keyframes are deliberately left alone: toggling them with this
+   class would restart them when it is removed and replay every entrance. */
 :root.is-coach-morph .chat-view :is(.chat-sidebar-shell, .chat-plan-panel, .chat-main > .chat-header) {
   transition: none;
-}
-
-:root.is-coach-morph .chat-view .chat-main:has(.chat-empty) :is(.chat-empty-icon, .chat-empty h3, .chat-empty-description, .chat-suggestions, .chat-more-suggestions, .chat-composer),
-:root.is-coach-morph .chat-view :is(.chat-plan-panel, .chat-plan-panel-body) {
-  animation: none;
 }
 
 :root.is-coach-morph::view-transition-group(coach-composer) {
@@ -1505,14 +1663,22 @@
   animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* A true crossfade: complementary linear fades blended plus-lighter keep
+   unchanged pixels (navigation, top bar) perfectly still. */
+:root.is-coach-morph::view-transition-image-pair(root) {
+  isolation: isolate;
+}
+
 :root.is-coach-morph::view-transition-old(root) {
   z-index: 1;
-  animation: coach-fade-out 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  mix-blend-mode: plus-lighter;
+  animation: coach-fade-out 240ms linear both;
 }
 
 :root.is-coach-morph::view-transition-new(root) {
   z-index: 2;
-  animation: coach-fade-in 240ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  mix-blend-mode: plus-lighter;
+  animation: coach-fade-in 240ms linear both;
 }
 
 :root.is-coach-morph::view-transition-old(coach-hero-icon),
