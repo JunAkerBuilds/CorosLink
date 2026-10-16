@@ -17,6 +17,7 @@ import {
 } from "react";
 import {
   Activity,
+  ArrowUp,
   ArrowUpRight,
   BookOpen,
   Bookmark,
@@ -28,7 +29,6 @@ import {
   CircleCheck,
   Database,
   ExternalLink,
-  FileDown,
   FileText,
   HeartPulse,
   Info,
@@ -40,7 +40,6 @@ import {
   Network,
   Plus,
   RefreshCw,
-  Send,
   Settings2,
   Sparkles,
   Square,
@@ -49,12 +48,12 @@ import {
   Trash2,
   TriangleAlert,
   Upload,
-  User,
   X
 } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { CorosLinkApi } from "../coroslink-api";
+import { morph } from "./coachMorph";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import {
   POUNDS_PER_KILOGRAM,
@@ -1816,36 +1815,43 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
                   ? t("Type another answer…")
                   : t("Ask your coach…")
               }
-              rows={2}
+              rows={1}
               disabled={exportingLatestActivity}
             />
-            {streaming ? (
-              <button
-                type="button"
-                className="chat-send chat-stop"
-                onClick={onStop}
-                title={t("Stop")}
-              >
-                <Square size={15} aria-hidden="true" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="chat-send"
-                onClick={() => void submitDraft()}
-                disabled={
-                  !apiAvailable ||
+            <button
+              type="button"
+              className={streaming ? "chat-send chat-stop" : "chat-send"}
+              data-mode={streaming ? "stop" : "send"}
+              onClick={() => {
+                if (streaming) {
+                  onStop();
+                } else {
+                  void submitDraft();
+                }
+              }}
+              disabled={
+                !streaming &&
+                (!apiAvailable ||
                   !trimmedDraft ||
                   exportingLatestActivity ||
-                  localProviderBlocked
-                }
-                title={
-                  localProviderBlocked ? t("Enter a local model first") : t("Send")
-                }
-              >
-                <Send size={15} aria-hidden="true" />
-              </button>
-            )}
+                  localProviderBlocked)
+              }
+              title={
+                streaming
+                  ? t("Stop")
+                  : localProviderBlocked
+                    ? t("Enter a local model first")
+                    : t("Send")
+              }
+              aria-label={streaming ? t("Stop") : t("Send")}
+            >
+              <span className="chat-send-glyph chat-send-glyph-send" aria-hidden="true">
+                <ArrowUp size={16} strokeWidth={2.4} />
+              </span>
+              <span className="chat-send-glyph chat-send-glyph-stop" aria-hidden="true">
+                <Square size={12} strokeWidth={2.4} fill="currentColor" />
+              </span>
+            </button>
           </div>
           <div className="chat-composer-toolbar">
             {providerControls}
@@ -2125,13 +2131,20 @@ export function ChatView({
     persistTimeoutRef.current = setTimeout(run, 300);
   };
 
-  const loadSession = async (sessionId: string) => {
+  const loadSession = async (sessionId: string, animate = false) => {
     if (!api) return;
     try {
       const entries = await api.getChatSession(sessionId);
-      setTimeline(fromPersistedEntries(entries));
-      resetEphemeralChatState();
-      setActiveSessionId(sessionId);
+      const commit = () => {
+        setTimeline(fromPersistedEntries(entries));
+        resetEphemeralChatState();
+        setActiveSessionId(sessionId);
+      };
+      if (animate) {
+        morph(commit);
+      } else {
+        commit();
+      }
     } catch {
       setTimeline([]);
       resetEphemeralChatState();
@@ -2613,10 +2626,12 @@ export function ChatView({
     onError(null);
     try {
       const created = await api.createChatSession(chatSettings.provider);
-      setSessions((current) => [created, ...current]);
-      setActiveSessionId(created.id);
-      setTimeline([]);
-      resetEphemeralChatState();
+      morph(() => {
+        setSessions((current) => [created, ...current]);
+        setActiveSessionId(created.id);
+        setTimeline([]);
+        resetEphemeralChatState();
+      });
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : t("Could not start a new chat."));
     }
@@ -2627,7 +2642,7 @@ export function ChatView({
       return;
     }
     onError(null);
-    await loadSession(sessionId);
+    await loadSession(sessionId, true);
   };
 
   const handleDeleteSession = async (sessionId: string) => {
@@ -3143,16 +3158,24 @@ export function ChatView({
     activeRequestIdRef.current = requestId;
     resumedCoachPromptRef.current = originalPrompt;
     sourceRef.current = null;
-    setCurrentSource(null);
-    setTimeline(nextEntries);
+    const commitSend = () => {
+      setCurrentSource(null);
+      setTimeline(nextEntries);
+      setStreaming(true);
+      setStreamingText("");
+    };
+    // The first message of a conversation morphs the hero into the transcript.
+    if (timeline.length === 0) {
+      morph(commitSend);
+    } else {
+      commitSend();
+    }
     // Keep the unanswered card durable until the resumed turn completes. If
     // the app closes mid-request, reloading the session can safely offer it
     // again instead of leaving an answered-but-incomplete invisible entry.
     if (!originalPrompt) {
       persistHistory(activeSessionIdRef.current, nextEntries, true);
     }
-    setStreaming(true);
-    setStreamingText("");
     onError(null);
 
     const wireMessages = toWireMessages(nextEntries);
@@ -3596,23 +3619,23 @@ export function ChatView({
     const notInstalled = claudeStatus?.state === "not-installed";
     return (
       <div className="chat-view chat-view-login">
-        <div className="chat-header">
-          <div className="chat-header-title">
-            <span>{t("Training Coach")}</span>
-          </div>
-          <div className="chat-header-end">
-            <button
-              type="button"
-              className="chat-settings-button"
-              onClick={() => setSettingsOpen(true)}
-            >
-              <Settings2 size={16} aria-hidden="true" />
-              {t("Settings")}</button>
-          </div>
-        </div>
         <div className="chat-layout">
           <ChatSidebar {...sidebarProps} />
           <div className="chat-main chat-main-login">
+            <div className="chat-header">
+              <div className="chat-header-title">
+                <span>{t("Training Coach")}</span>
+              </div>
+              <div className="chat-header-end">
+                <button
+                  type="button"
+                  className="chat-settings-button"
+                  onClick={() => setSettingsOpen(true)}
+                >
+                  <Settings2 size={16} aria-hidden="true" />
+                  {t("Settings")}</button>
+              </div>
+            </div>
             <div className="panel chat-login-panel chat-claude-login-panel">
               <Terminal size={32} aria-hidden="true" />
               <div className="chat-login-title-row">
@@ -3682,24 +3705,24 @@ export function ChatView({
   if (showOpenRouterGate) {
     return (
       <div className="chat-view chat-view-login">
-        <div className="chat-header">
-          <div className="chat-header-title">
-            <span>{t("Training Coach")}</span>
-          </div>
-          <div className="chat-header-end">
-            <button
-              type="button"
-              className="chat-settings-button"
-              onClick={() => setSettingsOpen(true)}
-              aria-label={t("Open settings")}
-            >
-              <Settings2 size={16} aria-hidden="true" />
-              {t("Settings")}</button>
-          </div>
-        </div>
         <div className="chat-layout">
           <ChatSidebar {...sidebarProps} />
           <div className="chat-main chat-main-login">
+            <div className="chat-header">
+              <div className="chat-header-title">
+                <span>{t("Training Coach")}</span>
+              </div>
+              <div className="chat-header-end">
+                <button
+                  type="button"
+                  className="chat-settings-button"
+                  onClick={() => setSettingsOpen(true)}
+                  aria-label={t("Open settings")}
+                >
+                  <Settings2 size={16} aria-hidden="true" />
+                  {t("Settings")}</button>
+              </div>
+            </div>
             <div className="panel chat-login-panel chat-openrouter-login-panel">
               <Network size={32} aria-hidden="true" />
               <div className="chat-login-title-row">
@@ -3745,24 +3768,24 @@ export function ChatView({
           .filter(Boolean)
           .join(" ")}
       >
-        <div className="chat-header">
-          <div className="chat-header-title">
-            <span>{t("Training Coach")}</span>
-          </div>
-          <div className="chat-header-end">
-            <button
-              type="button"
-              className="chat-settings-button"
-              onClick={() => setSettingsOpen(true)}
-              aria-label={t("Open settings")}
-            >
-              <Settings2 size={16} aria-hidden="true" />
-              {t("Settings")}</button>
-          </div>
-        </div>
         <div className="chat-layout">
           <ChatSidebar {...sidebarProps} />
           <div className="chat-main chat-main-login">
+            <div className="chat-header">
+              <div className="chat-header-title">
+                <span>{t("Training Coach")}</span>
+              </div>
+              <div className="chat-header-end">
+                <button
+                  type="button"
+                  className="chat-settings-button"
+                  onClick={() => setSettingsOpen(true)}
+                  aria-label={t("Open settings")}
+                >
+                  <Settings2 size={16} aria-hidden="true" />
+                  {t("Settings")}</button>
+              </div>
+            </div>
             <div className="panel chat-login-panel">
               <MessageCircle size={32} aria-hidden="true" />
               <h2>{t("Your training coach")}</h2>
@@ -3793,102 +3816,104 @@ export function ChatView({
 
   return (
     <div className="chat-view">
-      <div className="chat-header">
-        <div className="chat-header-title">
-          <span>{t("Training Coach")}</span>
-        </div>
-        <div className="chat-header-end">
-          <button
-            type="button"
-            className="chat-settings-button"
-            onClick={() => setSettingsOpen(true)}
-            aria-label={t("Open settings")}
-          >
-            <Settings2 size={16} aria-hidden="true" />
-            {t("Settings")}</button>
-          <div className="chat-mcp" ref={mcpRef}>
-            {(() => {
-              const connectedServers = mcpStatuses.filter((s) => s.connected);
-              const totalTools = connectedServers.reduce(
-                (n, s) => n + s.toolCount,
-                0
-              );
-              return connectedServers.length > 0 ? (
-              <>
-                <button
-                  type="button"
-                  className="chat-mcp-pill connected"
-                  onClick={() => setShowTools((open) => !open)}
-                  title={t("Connected via MCP: {{p0}}", { p0: connectedServers
-                    .map((s) => s.name)
-                    .join(", ") })}
-                  aria-expanded={showTools}
-                  aria-haspopup="dialog"
-                >
-                  <Database size={13} aria-hidden="true" />
-                  {connectedServers.length === 1
-                    ? connectedServers[0].name
-                    : t("{{p0}} MCP servers", { p0: connectedServers.length })}{" "}
-                  · {totalTools}  {t("tools")}</button>
-                {showTools ? (
-                  <div className="chat-mcp-panel">
-                    <ul>
-                      {connectedServers.map((s) => (
-                        <li key={s.id}>
-                          <code>{s.name}</code>
-                          <span>{s.toolCount}  {t("tools")}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="chat-mcp-panel-head">
-                      <button
-                        type="button"
-                        onClick={() => setSettingsOpen(true)}
-                      >
-                        {t("Manage servers")}</button>
-                    </div>
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <button
-                type="button"
-                className="chat-mcp-pill"
-                onClick={() => {
-                  setSettingsOpen(true);
-                  void handleConnectMcp();
-                }}
-                disabled={mcpBusy}
-              >
-                {mcpBusy ? (
-                  <Loader2 className="chat-spinner" size={13} aria-hidden="true" />
-                ) : (
-                  <Database size={13} aria-hidden="true" />
-                )}
-                {mcpBusy
-                  ? t("Connecting…")
-                  : mcpStatus?.authorized
-                    ? t("Reconnect COROS")
-                    : t("Connect COROS")}
-              </button>
-            );
-            })()}
-          </div>
-          {isChatGptProvider ? (
-            <button
-              type="button"
-              className="chat-signout"
-              onClick={() => void handleSignOut()}
-            >
-              <LogOut size={14} aria-hidden="true" />
-              {t("Sign out")}</button>
-          ) : null}
-        </div>
-      </div>
-
       <div className="chat-layout">
         <ChatSidebar {...sidebarProps} />
         <div className="chat-main">
+          <div className="chat-header">
+            <div className="chat-header-title">
+              <span>{t("Training Coach")}</span>
+            </div>
+            <div className="chat-header-end">
+              <button
+                type="button"
+                className="chat-settings-button"
+                onClick={() => setSettingsOpen(true)}
+                aria-label={t("Open settings")}
+              >
+                <Settings2 size={16} aria-hidden="true" />
+                {t("Settings")}</button>
+              <div className="chat-mcp" ref={mcpRef}>
+                {(() => {
+                  const connectedServers = mcpStatuses.filter((s) => s.connected);
+                  const totalTools = connectedServers.reduce(
+                    (n, s) => n + s.toolCount,
+                    0
+                  );
+                  return connectedServers.length > 0 ? (
+                  <>
+                    <button
+                      type="button"
+                      className="chat-mcp-pill connected"
+                      onClick={() => setShowTools((open) => !open)}
+                      title={t("Connected via MCP: {{p0}}", { p0: connectedServers
+                        .map((s) => s.name)
+                        .join(", ") })}
+                      aria-expanded={showTools}
+                      aria-haspopup="dialog"
+                    >
+                      <Database size={13} aria-hidden="true" />
+                      {connectedServers.length === 1
+                        ? connectedServers[0].name
+                        : t("{{p0}} MCP servers", { p0: connectedServers.length })}
+                      <span className="chat-mcp-pill-detail">
+                        {" "}· {totalTools}  {t("tools")}
+                      </span>
+                    </button>
+                    {showTools ? (
+                      <div className="chat-mcp-panel">
+                        <ul>
+                          {connectedServers.map((s) => (
+                            <li key={s.id}>
+                              <code>{s.name}</code>
+                              <span>{s.toolCount}  {t("tools")}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="chat-mcp-panel-head">
+                          <button
+                            type="button"
+                            onClick={() => setSettingsOpen(true)}
+                          >
+                            {t("Manage servers")}</button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="chat-mcp-pill"
+                    onClick={() => {
+                      setSettingsOpen(true);
+                      void handleConnectMcp();
+                    }}
+                    disabled={mcpBusy}
+                  >
+                    {mcpBusy ? (
+                      <Loader2 className="chat-spinner" size={13} aria-hidden="true" />
+                    ) : (
+                      <Database size={13} aria-hidden="true" />
+                    )}
+                    {mcpBusy
+                      ? t("Connecting…")
+                      : mcpStatus?.authorized
+                        ? t("Reconnect COROS")
+                        : t("Connect COROS")}
+                  </button>
+                );
+                })()}
+              </div>
+              {isChatGptProvider ? (
+                <button
+                  type="button"
+                  className="chat-signout"
+                  onClick={() => void handleSignOut()}
+                >
+                  <LogOut size={14} aria-hidden="true" />
+                  {t("Sign out")}</button>
+              ) : null}
+            </div>
+          </div>
           <div className="chat-transcript" ref={scrollRef}>
         <div className="chat-thread">
           {timeline.length === 0 && !streaming ? (
@@ -3981,9 +4006,6 @@ export function ChatView({
                   key={`tool-notice-${index}`}
                   className="chat-row chat-row-assistant"
                 >
-                  <div className="chat-avatar chat-avatar-assistant">
-                    <Sparkles size={16} aria-hidden="true" />
-                  </div>
                   <div className="chat-bubble chat-bubble-tool-notice">
                     {entry.message}
                   </div>
@@ -4000,9 +4022,6 @@ export function ChatView({
                   key={entry.prompt.promptId}
                   className="chat-row chat-row-assistant"
                 >
-                  <div className="chat-avatar chat-avatar-assistant">
-                    <MessageCircle size={16} aria-hidden="true" />
-                  </div>
                   <div className="chat-bubble chat-bubble-coach-prompt">
                     <CoachInputCard
                       prompt={entry.prompt}
@@ -4026,9 +4045,6 @@ export function ChatView({
                   key={entry.draft.draftId}
                   className="chat-row chat-row-assistant"
                 >
-                  <div className="chat-avatar chat-avatar-assistant">
-                    <Sparkles size={16} aria-hidden="true" />
-                  </div>
                   <div className="chat-bubble chat-bubble-plan">
                     <CoachDraftPreviewCard
                       draft={entry.draft}
@@ -4056,7 +4072,7 @@ export function ChatView({
                 return null;
               }
               return <div key={entry.preview.requestId} className="chat-row chat-row-assistant">
-                <div className="chat-avatar chat-avatar-assistant"><Sparkles size={16} aria-hidden="true" /></div>
+                
                 <div className="chat-bubble chat-bubble-plan">
                   <CorosActionCard preview={entry.preview} onConfirm={() => handleConfirmCorosAction(entry.preview.requestId)} />
                 </div>
@@ -4069,9 +4085,6 @@ export function ChatView({
                   key={entry.preview.requestId}
                   className="chat-row chat-row-assistant"
                 >
-                  <div className="chat-avatar chat-avatar-assistant">
-                    <Sparkles size={16} aria-hidden="true" />
-                  </div>
                   <div className="chat-bubble chat-bubble-plan">
                     <DeletePreviewCard
                       preview={entry.preview}
@@ -4092,9 +4105,6 @@ export function ChatView({
                   key={entry.preview.previewId}
                   className="chat-row chat-row-assistant"
                 >
-                  <div className="chat-avatar chat-avatar-assistant">
-                    <Sparkles size={16} aria-hidden="true" />
-                  </div>
                   <div className="chat-bubble chat-bubble-plan">
                     <ActivityVisualCard preview={entry.preview} />
                   </div>
@@ -4108,9 +4118,6 @@ export function ChatView({
                   key={entry.preview.previewId}
                   className="chat-row chat-row-assistant"
                 >
-                  <div className="chat-avatar chat-avatar-assistant">
-                    <Sparkles size={16} aria-hidden="true" />
-                  </div>
                   <div className="chat-bubble chat-bubble-plan">
                     <FitnessTrendCard preview={entry.preview} />
                   </div>
@@ -4124,9 +4131,6 @@ export function ChatView({
                   key={entry.preview.previewId}
                   className="chat-row chat-row-assistant"
                 >
-                  <div className="chat-avatar chat-avatar-assistant">
-                    <Sparkles size={16} aria-hidden="true" />
-                  </div>
                   <div className="chat-bubble chat-bubble-plan">
                     <HrZoneCard preview={entry.preview} />
                   </div>
@@ -4141,9 +4145,6 @@ export function ChatView({
                   key={previewId}
                   className="chat-row chat-row-assistant"
                 >
-                  <div className="chat-avatar chat-avatar-assistant">
-                    <Sparkles size={16} aria-hidden="true" />
-                  </div>
                   <div className="chat-bubble chat-bubble-plan chat-bubble-chart">
                     <CoachChartCard
                       preview={entry.preview}
@@ -4171,13 +4172,6 @@ export function ChatView({
                 }`}
                 data-chat-entry-index={index}
               >
-                <div className={`chat-avatar chat-avatar-${entry.role}`}>
-                  {entry.role === "assistant" ? (
-                    <Sparkles size={16} aria-hidden="true" />
-                  ) : (
-                    <User size={16} aria-hidden="true" />
-                  )}
-                </div>
                 <div className="chat-bubble">
                   {entry.role === "assistant" ? (
                     <>
@@ -4206,9 +4200,6 @@ export function ChatView({
 
           {streaming ? (
             <div className="chat-row chat-row-assistant">
-              <div className="chat-avatar chat-avatar-assistant">
-                <Sparkles size={16} aria-hidden="true" />
-              </div>
               <div className="chat-bubble chat-bubble-streaming">
                 {streamingText ? (
                   <>
@@ -4240,9 +4231,6 @@ export function ChatView({
 
           {exportingLatestActivity ? (
             <div className="chat-row chat-row-assistant">
-              <div className="chat-avatar chat-avatar-assistant">
-                <FileDown size={16} aria-hidden="true" />
-              </div>
               <div className="chat-bubble">{t("Preparing latest activity FIT export…")}</div>
             </div>
           ) : null}
@@ -4296,10 +4284,11 @@ export function ChatView({
                   {creations.map((creation, index) => {
                     const selected = creation.id === selectedCreation.id;
                     const SportIcon = sportTheme(creation.sport).icon;
-                    const select = () => {
-                      setSelectedCreationId(creation.id);
-                      setPlanPanelExpanded(true);
-                    };
+                    const select = () =>
+                      morph(
+                        () => setPlanPanelExpanded(true),
+                        () => setSelectedCreationId(creation.id)
+                      );
 
                     if (creation.kind === "corosAction") {
                       const label = creation.summary || t(creation.title);
@@ -4424,7 +4413,7 @@ export function ChatView({
                     <button
                       type="button"
                       className="chat-plan-panel-back"
-                      onClick={() => setPlanPanelExpanded(false)}
+                      onClick={() => morph(() => setPlanPanelExpanded(false))}
                       aria-label={t("Back to Coach creations")}
                       title={t("Back to Coach creations")}
                     >

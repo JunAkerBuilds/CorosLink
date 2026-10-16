@@ -1,5 +1,8 @@
-/* Coach is an edge-to-edge graphite workspace. Keep these overrides after
-   the shared desktop styles so its rails and header share one canvas. */
+/* Coach is an edge-to-edge graphite workspace: a full-height conversations
+   rail, a reading column with its own title bar, and the creations panel.
+   This sheet loads after styles.css/desktop.css and restyles the chat-*
+   primitives defined there; state changes morph through View Transitions
+   (see coachMorph.ts, which sets html.is-coach-morph while one runs). */
 :root .app .app-body > .content-fill:has(> .content-coach-panel:not(.view-panel-hidden)) {
   margin: 0;
   padding: 0;
@@ -10,6 +13,8 @@
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
+
+/* ---------- Palette ---------- */
 
 :root .app .chat-view {
   --accent: #c1c7d0;
@@ -25,6 +30,10 @@
   --text-muted: #a5aab3;
   --coach-canvas: #141516;
   --coach-sidebar: #171819;
+  --coach-ink-2: rgba(240, 241, 243, 0.04);
+  --coach-ink-4: rgba(240, 241, 243, 0.06);
+  --coach-ink-8: rgba(240, 241, 243, 0.1);
+  --coach-ink-12: rgba(240, 241, 243, 0.14);
   --glass-bg: #1c1d1f;
   --glass-bg-hover: #252628;
   --glass-bg-elevated: #202123;
@@ -36,8 +45,14 @@
   --coach-glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.025);
   --coach-glass-surface: linear-gradient(145deg, var(--coach-glass-reflection), transparent 48%), var(--coach-glass-fill);
   --coach-rail-surface: var(--coach-sidebar);
+  --coach-composer-shadow: 0 10px 30px rgba(0, 0, 0, 0.22), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  --coach-pop-shadow: 0 18px 44px rgba(0, 0, 0, 0.42);
+  --coach-send-bg: #f0f1f3;
+  --coach-send-fg: #141516;
   --coach-frost: none;
   --coach-light: transparent;
+  --coach-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --coach-ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
   --surface: var(--coach-canvas);
   --chat-signal: var(--accent);
   --chat-signal-strong: var(--accent-strong);
@@ -62,6 +77,10 @@
   --text-muted: #59626e;
   --coach-canvas: #f8f9fb;
   --coach-sidebar: #f0f2f5;
+  --coach-ink-2: rgba(41, 46, 54, 0.035);
+  --coach-ink-4: rgba(41, 46, 54, 0.055);
+  --coach-ink-8: rgba(41, 46, 54, 0.09);
+  --coach-ink-12: rgba(41, 46, 54, 0.13);
   --glass-bg: #f0f2f5;
   --glass-bg-hover: #e7eaf0;
   --glass-bg-elevated: #ffffff;
@@ -71,18 +90,41 @@
   --coach-glass-edge: rgba(114, 126, 145, 0.16);
   --coach-glass-shadow: 0 12px 32px rgba(43, 52, 67, 0.08);
   --coach-glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.92), inset 0 -1px 0 rgba(255, 255, 255, 0.4);
-  --coach-light: rgba(170, 182, 204, 0.20);
+  --coach-composer-shadow: 0 12px 32px rgba(43, 52, 67, 0.1), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  --coach-pop-shadow: 0 18px 44px rgba(43, 52, 67, 0.16);
+  --coach-send-bg: #292e36;
+  --coach-send-fg: #ffffff;
+  --coach-light: rgba(170, 182, 204, 0.2);
   --coach-rail-surface: linear-gradient(165deg, rgba(255, 255, 255, 0.36), transparent 72%), rgba(239, 242, 247, 0.36);
 }
 
-:root .app .chat-view .chat-header {
-  min-height: 66px;
-  padding: 16px 24px;
-  border-bottom-color: transparent;
+/* ---------- Shell ---------- */
+
+:root .app .chat-view .chat-layout {
+  height: 100%;
+}
+
+:root .app .chat-view .chat-main {
+  container: coach-main / inline-size;
+  position: relative;
+}
+
+/* The title bar belongs to the reading column; both rails run full height. */
+:root .app .chat-view .chat-main > .chat-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  margin: 0;
+  padding: 12px 20px 12px 24px;
+  border: 0;
   background: transparent;
   box-shadow: none;
-  backdrop-filter: var(--coach-frost);
-  -webkit-backdrop-filter: var(--coach-frost);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: padding-left 280ms var(--coach-ease);
 }
 
 :root .app .chat-view .chat-header::after,
@@ -92,26 +134,42 @@
   display: none;
 }
 
+:root .app .chat-view .chat-layout:has(> .chat-sidebar-expand-button) .chat-main > .chat-header {
+  padding-left: 64px;
+}
+
 :root .app .chat-header-title {
+  min-width: 0;
+  gap: 8px;
   font-size: 15px;
   font-weight: 600;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
+}
+
+:root .app .chat-header-title > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 :root .app .chat-header-end {
-  gap: 8px;
+  flex: none;
+  gap: 4px;
 }
 
 :root .app .chat-header :is(.chat-settings-button, .chat-signout, .chat-mcp-pill) {
-  min-height: 32px;
-  padding: 6px 10px;
+  min-height: 30px;
+  max-width: 100%;
+  padding: 0 10px;
+  white-space: nowrap;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 9px;
   background: transparent;
   color: var(--text-secondary);
   box-shadow: none;
   font-size: 12px;
   font-weight: 500;
+  transition: background 160ms var(--coach-ease-soft), color 160ms var(--coach-ease-soft), border-color 160ms var(--coach-ease-soft);
 }
 
 :root .app .chat-header .chat-mcp-pill.connected,
@@ -128,13 +186,19 @@
 }
 
 :root .app .chat-header button:hover:not(:disabled) {
-  background: var(--glass-bg-hover);
+  background: var(--coach-ink-4);
   color: var(--text-primary);
 }
 
-/* Keep the familiar green selection against the graphite history rail. */
+:root .app .chat-header button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---------- Conversations rail ---------- */
+
 :root .app .chat-sidebar-shell.is-open {
-  width: 256px;
+  width: 264px;
   padding: 0;
 }
 
@@ -146,8 +210,8 @@
   --accent-soft: inherit;
   --accent-glow: inherit;
   --accent-gradient: inherit;
-  width: 256px;
-  min-width: 256px;
+  width: 264px;
+  min-width: 264px;
   border: 0;
   border-right: 1px solid var(--coach-glass-edge);
   border-radius: 0;
@@ -158,14 +222,35 @@
 }
 
 :root .app .chat-sidebar.is-overlay {
-  width: min(280px, 100%);
+  width: min(284px, 100%);
   min-width: 0;
   box-shadow: 16px 0 40px rgba(0, 0, 0, 0.15);
 }
 
+:root .app .chat-sidebar-expand-button {
+  top: 12px;
+  left: 16px;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  animation: coach-fade-in 240ms var(--coach-ease) both;
+}
+
+:root .app .chat-sidebar-expand-button:hover {
+  border-color: transparent;
+  background: var(--coach-ink-4);
+  color: var(--text-primary);
+}
+
 :root .app .chat-history-toolbar {
-  gap: 12px;
-  padding: 18px 16px 14px;
+  gap: 6px;
+  padding: 12px 10px 6px;
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -173,50 +258,86 @@
   -webkit-backdrop-filter: none;
 }
 
+:root .app .chat-history-header {
+  min-height: 32px;
+  padding: 0 0 0 10px;
+}
+
 :root .app .chat-history-header .eyebrow {
   color: var(--text-secondary);
   font-size: 12px;
-  font-weight: 550;
-  letter-spacing: 0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   text-transform: none;
+}
+
+:root .app .chat-history-collapse-button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 9px;
+  color: var(--text-muted);
+}
+
+:root .app .chat-history-collapse-button:hover {
+  border-color: transparent;
+  background: var(--coach-ink-4);
+  color: var(--text-primary);
 }
 
 :root .app .chat-new-chat-sidebar {
   justify-content: flex-start;
-  gap: 9px;
-  min-height: 38px;
-  padding: 8px 12px;
-  border: 1px solid var(--glass-border);
-  border-radius: 9px;
-  background: var(--coach-glass-surface);
+  gap: 10px;
+  min-height: 36px;
+  margin-top: 2px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--coach-ink-4);
   color: var(--text-primary);
+  font-size: 12.5px;
   font-weight: 550;
-  box-shadow: var(--coach-glass-inset);
+  box-shadow: none;
+  transition: background 160ms var(--coach-ease-soft), color 160ms var(--coach-ease-soft);
+}
+
+:root .app .chat-new-chat-sidebar svg {
+  color: var(--text-secondary);
+  transition: transform 260ms var(--coach-ease), color 160ms var(--coach-ease-soft);
 }
 
 :root .app .chat-new-chat-sidebar:hover:not(:disabled) {
-  background: var(--glass-bg-hover);
-  color: var(--accent-strong);
+  background: var(--coach-ink-8);
+  color: var(--text-primary);
   transform: none;
 }
 
+:root .app .chat-new-chat-sidebar:hover:not(:disabled) svg {
+  color: var(--text-primary);
+  transform: rotate(90deg);
+}
+
 :root .app .chat-history-search {
+  min-height: 34px;
   padding-inline: 10px;
-  border: 1px solid var(--coach-glass-edge);
-  border-radius: 8px;
-  background: var(--coach-glass-fill);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--coach-ink-2);
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  transition: background 160ms var(--coach-ease-soft), border-color 160ms var(--coach-ease-soft), box-shadow 160ms var(--coach-ease-soft);
 }
 
 :root .app .chat-history-search:focus-within {
-  border-color: var(--accent);
-  background: var(--glass-bg);
+  border-color: var(--coach-ink-12);
+  background: var(--coach-canvas);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 :root .app .chat-history-search input {
-  font-size: 12px;
+  padding: 6px 0;
+  font-size: 12.5px;
 }
 
 :root .app .chat-view :is(.chat-input, .chat-history-search input)::placeholder {
@@ -225,11 +346,15 @@
 }
 
 :root .app .chat-session-list {
-  padding: 4px 10px 20px;
+  padding: 2px 10px 20px;
+}
+
+:root .app .chat-session-group + .chat-session-group {
+  margin-top: 10px;
 }
 
 :root .app .chat-session-group-label {
-  margin: 10px 12px 8px;
+  margin: 10px 10px 4px;
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0;
@@ -237,17 +362,22 @@
   opacity: 1;
 }
 
+:root .app .chat-session-group-list {
+  gap: 1px;
+}
+
 :root .app .chat-session-row {
   position: relative;
-  min-height: 60px;
-  padding: 11px 12px;
-  border-radius: 9px;
-  border-color: transparent;
-  gap: 6px;
+  min-height: 0;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 10px;
+  gap: 2px 8px;
+  transition: background 180ms var(--coach-ease-soft), color 180ms var(--coach-ease-soft);
 }
 
 :root .app .chat-session-row:hover:not(.is-disabled) {
-  background: var(--glass-bg);
+  background: var(--coach-ink-4);
   border-color: transparent;
   box-shadow: none;
   transform: none;
@@ -255,57 +385,232 @@
 
 :root .app .chat-session-row.is-active,
 :root .app .chat-session-row.is-active:hover:not(.is-disabled) {
-  border-radius: calc(var(--radius-lg) - 2px);
+  border-radius: 10px;
   background: var(--sidebar-indicator-bg);
-  border-color: var(--sidebar-indicator-border);
+  border-color: transparent;
   box-shadow: var(--sidebar-indicator-shadow);
 }
 
 :root .app .chat-session-row-title {
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 550;
+  line-height: 1.35;
 }
 
 :root .app .chat-session-row-preview {
-  font-size: 11px;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+:root .app .chat-session-row-meta {
+  gap: 4px;
+  padding-top: 1px;
 }
 
 :root .app .chat-session-row-time {
-  font-size: 10px;
+  font-size: 10.5px;
 }
 
 :root .app .chat-session-row-delete {
   position: absolute;
-  right: 8px;
-  bottom: 7px;
+  right: 6px;
+  bottom: 5px;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
   background: var(--coach-sidebar);
 }
 
-/* The empty state stays readable as either sidebar changes width. */
-:root .app .chat-main {
-  container: coach-main / inline-size;
+:root .app .chat-session-row.is-active .chat-session-row-delete {
+  background: transparent;
 }
 
-:root .app .chat-thread:has(.chat-empty) {
-  min-height: 100%;
-  max-width: 800px;
-  padding: 32px;
+:root .app .chat-history-empty {
+  margin: 14px 12px 0;
+  font-size: 12px;
 }
 
-:root .app .chat-empty {
-  width: 100%;
-  max-width: 640px;
-  padding: 12px 0 28px;
+/* ---------- Reading column ---------- */
+
+:root .app .chat-view .chat-thread {
+  max-width: 760px;
+  padding: 18px 32px 16px;
+  gap: 22px;
+}
+
+:root .app .chat-view .chat-row {
   gap: 0;
-  animation: none;
+  animation: coach-row-in 380ms var(--coach-ease) both;
+}
+
+:root .app .chat-view .chat-row-user {
+  flex-direction: row;
+  justify-content: flex-end;
+  animation-name: coach-row-in-user;
+}
+
+:root .app .chat-view .chat-bubble {
+  max-width: 100%;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+:root .app .chat-view .chat-row-assistant > .chat-bubble {
+  padding-top: 0;
+}
+
+:root .app .chat-view .chat-row-user > .chat-bubble {
+  max-width: min(100%, 560px);
+  padding: 10px 16px;
+  border: 1px solid var(--coach-glass-edge);
+  border-radius: 18px;
+  background: var(--coach-ink-4);
+  box-shadow: none;
+  font-size: 14.5px;
+  line-height: 1.6;
+  transform-origin: bottom right;
+  /* The translucent fill carries depth without a backdrop layer per row. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:root[data-theme="paper"] .app .chat-view .chat-row-user > .chat-bubble {
+  background: var(--glass-bg-elevated);
+  box-shadow: var(--coach-glass-inset), 0 2px 10px rgba(43, 52, 67, 0.05);
+}
+
+:root .app .chat-view .chat-bubble-plan {
+  width: 100%;
+}
+
+:root .app .chat-view .chat-row.is-chat-jump-target {
+  outline-offset: 10px;
+}
+
+/* Attribution reads as quiet metadata, not a badge. */
+:root .app .chat-view .chat-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+:root .app .chat-view .chat-source svg {
+  color: var(--text-muted);
+  opacity: 0.9;
+}
+
+:root .app .chat-view .chat-source-error {
+  color: var(--error-text);
+}
+
+:root .app .chat-view .chat-thinking summary {
+  min-height: 26px;
+  padding: 2px 8px 2px 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+:root .app .chat-view .chat-thinking summary small {
+  color: var(--text-secondary);
+}
+
+:root .app .chat-view .chat-thinking summary i {
+  background: var(--success-dot, var(--accent));
+  box-shadow: none;
+}
+
+:root .app .chat-view .chat-stream-status {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+:root .app .chat-view .chat-markdown-streaming > :last-child::after {
+  width: 6px;
+  height: 1em;
+  border-radius: 1px;
+  background: var(--text-secondary);
+  box-shadow: none;
+}
+
+/* ---------- Hero: the first message starts from the middle of the column ---------- */
+
+:root .app .chat-view .chat-main:has(.chat-empty) {
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+:root .app .chat-view .chat-main:has(.chat-empty) :is(.chat-transcript, .chat-thread, .chat-empty) {
+  display: contents;
+}
+
+:root .app .chat-view .chat-main:has(.chat-empty) :where(.chat-empty-icon, .chat-empty h3, .chat-empty-description, .chat-suggestions, .chat-more-suggestions, .chat-composer) {
+  align-self: center;
+  width: min(100% - 48px, 680px);
+}
+
+:root .app .chat-view .chat-main:has(.chat-empty) .chat-empty-icon {
+  order: 1;
+  width: 44px;
+  height: 44px;
+  margin: auto 0 18px;
+  animation: coach-hero-in 520ms var(--coach-ease) both;
+}
+
+:root .app .chat-view .chat-main:has(.chat-empty) .chat-empty h3 {
+  order: 2;
+  margin: 0 0 8px;
+  text-align: center;
+  animation: coach-hero-in 520ms var(--coach-ease) 40ms both;
+}
+
+:root .app .chat-view .chat-main:has(.chat-empty) .chat-empty-description {
+  order: 3;
+  margin: 0 0 26px;
+  text-align: center;
+  animation: coach-hero-in 520ms var(--coach-ease) 80ms both;
+}
+
+:root .app .chat-view .chat-main:has(.chat-empty) .chat-composer {
+  order: 4;
+  margin: 0 0 14px;
+  padding: 0;
+  animation: coach-hero-in 520ms var(--coach-ease) 120ms both;
+}
+
+:root .app .chat-view .chat-main:has(.chat-empty) .chat-suggestions {
+  order: 5;
+  margin: 0;
+  animation: coach-hero-in 520ms var(--coach-ease) 180ms both;
+}
+
+:root .app .chat-view .chat-main:has(.chat-empty) .chat-more-suggestions {
+  order: 6;
+  margin: 14px 0 auto;
+  /* Sit the group a touch above true center, where the eye expects it. */
+  padding-bottom: clamp(16px, 7vh, 80px);
+  animation: coach-hero-in 520ms var(--coach-ease) 240ms both;
+}
+
+:root .app .chat-view .chat-main:has(.chat-empty) .chat-disclaimer,
+:root .app .chat-view .chat-main:has(.chat-empty) .chat-composer-new-chat {
+  display: none;
 }
 
 :root .app .chat-empty-icon {
-  width: 52px;
-  height: 52px;
-  margin-bottom: 24px;
   border: 1px solid var(--coach-glass-edge);
-  border-radius: 16px;
+  border-radius: 14px;
   background: var(--coach-glass-surface);
   color: var(--accent-strong);
   box-shadow: var(--coach-glass-inset), var(--coach-glass-shadow);
@@ -314,17 +619,21 @@
   animation: none;
 }
 
+:root .app .chat-empty-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
 :root .app .chat-empty h3 {
-  max-width: 470px;
-  font-size: clamp(25px, 3cqi, 32px);
-  line-height: 1.22;
-  font-weight: 550;
-  letter-spacing: -0.045em;
+  font-size: clamp(24px, 3cqi, 30px);
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.04em;
   text-wrap: balance;
 }
 
 .chat-empty-description {
-  margin: 14px 0 30px;
+  margin: 0;
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.6;
@@ -334,44 +643,53 @@
 :root .app .chat-suggestions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
   width: 100%;
   max-width: none;
 }
 
 :root .app .chat-suggestion {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) 15px;
+  grid-template-columns: 18px minmax(0, 1fr) 14px;
   align-items: start;
   gap: 12px;
-  min-height: 88px;
-  padding: 19px 16px;
-  border: 1px solid var(--coach-glass-edge);
-  border-radius: 12px;
-  background: var(--coach-glass-surface);
+  min-height: 0;
+  padding: 14px 14px 13px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: var(--coach-ink-2);
   text-align: left;
-  box-shadow: var(--coach-glass-inset), 0 6px 20px rgba(0, 0, 0, 0.06);
+  box-shadow: none;
   animation: none;
-  backdrop-filter: var(--coach-frost);
-  -webkit-backdrop-filter: var(--coach-frost);
-  transition: background 160ms ease, border-color 160ms ease;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: background 180ms var(--coach-ease-soft), border-color 180ms var(--coach-ease-soft), transform 260ms var(--coach-ease);
 }
 
 :root .app .chat-suggestion:hover {
-  border-color: var(--accent);
-  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--coach-glass-surface);
-  box-shadow: var(--coach-glass-inset), var(--coach-glass-shadow);
-  transform: none;
+  border-color: var(--coach-glass-edge);
+  background: var(--coach-ink-4);
+  box-shadow: none;
+  transform: translateY(-1px);
+}
+
+:root .app .chat-suggestion:active {
+  transform: translateY(0) scale(0.995);
 }
 
 .chat-suggestion-icon {
-  margin-top: 1px;
-  color: var(--accent);
+  margin-top: 2px;
+  color: var(--text-secondary);
+  transition: color 180ms var(--coach-ease-soft);
+}
+
+:root .app .chat-suggestion:hover .chat-suggestion-icon {
+  color: var(--text-primary);
 }
 
 .chat-suggestion-copy {
   display: grid;
-  gap: 5px;
+  gap: 3px;
 }
 
 .chat-suggestion-copy strong {
@@ -383,18 +701,25 @@
 
 .chat-suggestion-copy > span {
   color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.5;
+  font-size: 11.5px;
+  line-height: 1.45;
 }
 
 .chat-suggestion-arrow {
-  margin-top: 2px;
+  margin-top: 3px;
   color: var(--text-muted);
+  opacity: 0;
+  transform: translate(-3px, 3px);
+  transition: opacity 180ms var(--coach-ease-soft), transform 260ms var(--coach-ease);
+}
+
+:root .app .chat-suggestion:hover .chat-suggestion-arrow {
+  opacity: 1;
+  transform: translate(0, 0);
 }
 
 .chat-more-suggestions {
   width: 100%;
-  margin-top: 20px;
   font-size: 12px;
 }
 
@@ -405,11 +730,12 @@
   gap: 6px;
   width: fit-content;
   margin: 0 auto;
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 5px 10px;
+  border-radius: 8px;
   color: var(--text-muted);
   list-style: none;
   cursor: pointer;
+  transition: color 160ms var(--coach-ease-soft), background 160ms var(--coach-ease-soft);
 }
 
 .chat-more-suggestions summary::-webkit-details-marker {
@@ -417,7 +743,12 @@
 }
 
 .chat-more-suggestions summary:hover {
+  background: var(--coach-ink-2);
   color: var(--text-primary);
+}
+
+.chat-more-suggestions summary svg {
+  transition: transform 260ms var(--coach-ease);
 }
 
 .chat-more-suggestions[open] summary svg {
@@ -427,8 +758,9 @@
 .chat-more-suggestions-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 14px;
+  gap: 6px;
+  margin-top: 10px;
+  animation: coach-fade-up 320ms var(--coach-ease) both;
 }
 
 .chat-more-suggestions-list button {
@@ -438,69 +770,97 @@
   gap: 8px;
   padding: 10px 12px;
   border: 0;
-  border-radius: 8px;
-  background: var(--glass-bg);
+  border-radius: 10px;
+  background: var(--coach-ink-2);
   color: var(--text-secondary);
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition: background 160ms var(--coach-ease-soft), color 160ms var(--coach-ease-soft);
 }
 
 .chat-more-suggestions-list button:hover {
-  background: var(--glass-bg-hover);
+  background: var(--coach-ink-4);
   color: var(--text-primary);
 }
 
 .chat-more-suggestions-list button svg {
   flex: none;
+  color: var(--text-muted);
 }
 
-/* One composer surface contains the draft and the quieter model controls. */
+/* ---------- Composer ---------- */
+
 :root .app .chat-composer {
   flex: none;
-  padding: 12px 32px 16px;
+  align-items: stretch;
+  padding: 6px 32px 12px;
 }
 
 :root .app .chat-composer-inner {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 12px;
-  padding: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "attachments attachments"
+    "field field"
+    "toolbar send";
+  align-items: end;
+  gap: 8px 10px;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 12px 12px 10px 16px;
   border: 1px solid var(--coach-glass-edge);
-  border-radius: 16px;
+  border-radius: 20px;
   background: var(--coach-glass-surface);
-  box-shadow: var(--coach-glass-inset), var(--coach-glass-shadow);
+  box-shadow: var(--coach-composer-shadow);
   backdrop-filter: var(--coach-frost);
   -webkit-backdrop-filter: var(--coach-frost);
+  transition: border-color 200ms var(--coach-ease-soft), box-shadow 200ms var(--coach-ease-soft), background 200ms var(--coach-ease-soft);
 }
 
 :root .app .chat-composer-inner:focus-within {
-  border-color: var(--accent);
-  box-shadow: var(--coach-glass-inset), 0 0 0 3px var(--accent-soft), var(--coach-glass-shadow);
+  border-color: var(--coach-ink-12);
+  background: var(--glass-bg-elevated);
+  box-shadow: var(--coach-composer-shadow), 0 0 0 3px var(--accent-soft);
+}
+
+:root[data-theme="paper"] .app .chat-composer-inner {
+  background: var(--glass-bg-elevated);
 }
 
 .chat-composer-entry {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
+  display: contents;
+}
+
+:root .app .chat-composer-attachments {
+  grid-area: attachments;
+  margin-top: 2px;
 }
 
 :root .app .chat-input {
+  grid-area: field;
   min-width: 0;
-  padding: 0;
-  font-size: 14px;
+  min-height: 26px;
+  max-height: 220px;
+  padding: 1px 0;
+  font-size: 14.5px;
   line-height: 1.6;
   outline: none;
+  field-sizing: content;
+  scrollbar-width: thin;
 }
 
 :root .app .chat-composer .chat-composer-toolbar {
+  grid-area: toolbar;
   max-width: none;
+  min-width: 0;
   margin: 0;
-  gap: 8px;
+  gap: 6px;
 }
 
 :root .app .chat-composer .chat-provider-controls {
-  gap: 4px;
+  gap: 2px;
 }
 
 :root .app .chat-composer :is(.chat-provider-select, .chat-model-select) {
@@ -512,21 +872,22 @@
 
 :root .app .chat-composer .app-select-trigger {
   min-height: 28px;
-  padding: 0 8px;
+  padding: 0 8px 0 6px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 500;
   box-shadow: none;
   transform: none;
+  transition: background 160ms var(--coach-ease-soft), color 160ms var(--coach-ease-soft);
 }
 
 :root .app .chat-composer .app-select-trigger:hover,
 :root .app .chat-composer .app-select-trigger[aria-expanded="true"] {
-  border-color: var(--glass-border);
-  background: var(--glass-bg-hover);
+  border-color: transparent;
+  background: var(--coach-ink-4);
   color: var(--text-primary);
   box-shadow: none;
   transform: none;
@@ -539,34 +900,58 @@
   box-shadow: none;
 }
 
-:root .app .chat-composer-new-chat {
-  flex: none;
-  padding: 5px 8px;
-  border-color: transparent;
-  border-radius: 7px;
-  color: var(--text-muted);
-  font-size: 11px;
+:root .app .chat-composer .app-select-leading-icon {
+  width: 18px;
+  height: 18px;
 }
 
+:root .app .chat-composer-new-chat {
+  flex: none;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  transition: background 160ms var(--coach-ease-soft), color 160ms var(--coach-ease-soft);
+}
+
+:root .app .chat-composer-new-chat:hover:not(:disabled) {
+  background: var(--coach-ink-4);
+  color: var(--text-primary);
+}
+
+/* One control for send and stop: the glyphs morph in place. */
 :root .app .chat-send {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: var(--accent);
-  color: var(--text-on-accent);
+  position: relative;
+  grid-area: send;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--coach-send-bg);
+  color: var(--coach-send-fg);
   box-shadow: none;
+  overflow: hidden;
+  transition: background 220ms var(--coach-ease-soft), color 220ms var(--coach-ease-soft), transform 260ms var(--coach-ease), opacity 160ms var(--coach-ease-soft);
 }
 
 :root .app .chat-send:hover:not(:disabled) {
-  background: var(--accent-hover);
+  background: var(--coach-send-bg);
   box-shadow: none;
-  transform: none;
+  transform: scale(1.06);
+}
+
+:root .app .chat-send:active:not(:disabled) {
+  transform: scale(0.94);
 }
 
 :root .app .chat-send:disabled {
-  background: var(--glass-bg-hover);
+  background: var(--coach-ink-8);
   color: var(--text-muted);
   opacity: 1;
+  cursor: default;
 }
 
 :root .app .chat-send.chat-stop {
@@ -574,36 +959,40 @@
   color: var(--coach-canvas);
 }
 
+:root .app .chat-send svg {
+  transition: none;
+  transform: none;
+}
+
+.chat-send-glyph {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transition: opacity 220ms var(--coach-ease-soft), transform 320ms var(--coach-ease);
+}
+
+.chat-send-glyph svg {
+  display: block;
+}
+
+:root .app .chat-send[data-mode="send"] .chat-send-glyph-stop {
+  opacity: 0;
+  transform: scale(0.4) rotate(90deg);
+}
+
+:root .app .chat-send[data-mode="stop"] .chat-send-glyph-send {
+  opacity: 0;
+  transform: scale(0.4) rotate(-90deg) translateY(4px);
+}
+
+:root .app .chat-send[data-mode="stop"] .chat-send-glyph-stop {
+  animation: coach-stop-pulse 1.6s var(--coach-ease-soft) infinite;
+}
+
 :root .app .chat-disclaimer {
-  margin-top: 10px;
-  font-size: 10px;
-}
-
-/* Match the history rail, conversation surfaces, and creations panel. */
-:root .app .chat-view .chat-plan-panel {
-  margin: 0;
-  border: 0;
-  border-left: 1px solid var(--coach-glass-edge);
-  border-radius: 0;
-  background: var(--coach-rail-surface);
-  box-shadow: none;
-  backdrop-filter: var(--coach-frost);
-  -webkit-backdrop-filter: var(--coach-frost);
-}
-
-:root .app .chat-view .chat-plan-list-header {
-  background: transparent;
-  border-bottom-color: transparent;
-}
-
-:root .app .chat-view .chat-row-user > .chat-bubble {
-  border: 1px solid var(--coach-glass-edge);
-  background: var(--coach-glass-surface);
-  box-shadow: var(--coach-glass-inset), 0 4px 16px rgba(0, 0, 0, 0.06);
-  /* The translucent fill and reflections carry depth on long transcripts
-     without allocating a backdrop blur layer for every message. */
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  margin: 8px 0 0;
+  font-size: 10.5px;
 }
 
 /* Context sent with a message (a pinned chart's spec) reads as a chip, not text. */
@@ -635,6 +1024,7 @@
   font-size: 12px;
   font-weight: 500;
   line-height: 1.3;
+  animation: coach-fade-up 240ms var(--coach-ease) both;
 }
 
 :root .app .chat-attachment > svg {
@@ -687,29 +1077,490 @@
   outline-offset: 1px;
 }
 
-:root .app .chat-view .chat-avatar-assistant,
-:root .app .chat-view .chat-avatar-user {
-  border: 1px solid var(--coach-glass-edge);
-  background: var(--coach-glass-surface);
-  color: var(--text-primary);
-  box-shadow: var(--coach-glass-inset);
-}
+/* ---------- Creations panel ---------- */
 
-:root .app .chat-view .chat-mcp-panel {
-  background: var(--coach-glass-surface);
-  border-color: var(--coach-glass-edge);
-  box-shadow: var(--coach-glass-inset), var(--coach-glass-shadow);
+:root .app .chat-view .chat-plan-panel {
+  margin: 0;
+  border: 0;
+  border-left: 1px solid var(--coach-glass-edge);
+  border-radius: 0;
+  background: var(--coach-rail-surface);
+  box-shadow: none;
   backdrop-filter: var(--coach-frost);
   -webkit-backdrop-filter: var(--coach-frost);
+  animation: coach-panel-in 420ms var(--coach-ease) both;
 }
 
-/* Apply the matching reflection to the main navigation only on Coach. */
+:root .app .chat-view .chat-plan-list-header {
+  min-height: 56px;
+  padding: 12px 14px 8px;
+  border-bottom: 0;
+  background: transparent;
+  animation: none;
+}
+
+:root .app .chat-view .chat-plan-list-header strong {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+:root .app .chat-view .chat-plan-list-header span {
+  font-size: 10.5px;
+}
+
+:root .app .chat-view .chat-plan-panel-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text) !important;
+}
+
+:root .app .chat-view .chat-plan-list-count {
+  min-width: 22px;
+  height: 22px;
+  border: 0;
+  background: var(--coach-ink-4);
+}
+
+:root .app .chat-view .chat-plan-list {
+  gap: 2px;
+  padding: 2px 10px 16px;
+  animation: none;
+}
+
+:root .app .chat-view .chat-plan-list-item {
+  grid-template-columns: 30px minmax(0, 1fr) 14px;
+  gap: 10px;
+  padding: 9px 8px 9px 10px;
+  border: 0;
+  border-radius: 10px;
+  transition: background 180ms var(--coach-ease-soft), color 180ms var(--coach-ease-soft);
+}
+
+:root .app .chat-view .chat-plan-list-item:hover {
+  border-color: transparent;
+  background: var(--coach-ink-4);
+}
+
+:root .app .chat-view .chat-plan-list-item:active {
+  transform: none;
+}
+
+:root .app .chat-view .chat-plan-list-item.is-selected {
+  border-color: transparent;
+  background: var(--sidebar-indicator-bg);
+  box-shadow: var(--sidebar-indicator-shadow);
+}
+
+:root .app .chat-view .chat-plan-list-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+:root .app .chat-view .chat-plan-list-sport {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--chat-plan-sport) 12%, transparent);
+}
+
+:root .app .chat-view .chat-plan-list-kicker {
+  font-size: 10px;
+  font-weight: 500;
+}
+
+:root .app .chat-view .chat-plan-list-copy > strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+:root .app .chat-view .chat-plan-list-meta {
+  font-size: 10px;
+}
+
+:root .app .chat-view .chat-plan-list-meta [data-status="saved"] {
+  color: var(--success-text);
+}
+
+:root .app .chat-view .chat-plan-list-item > svg {
+  color: var(--text-muted);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 180ms var(--coach-ease-soft), transform 260ms var(--coach-ease), color 180ms var(--coach-ease-soft);
+}
+
+:root .app .chat-view .chat-plan-list-item:is(:hover, .is-selected) > svg {
+  color: var(--text-secondary);
+  opacity: 1;
+  transform: translateX(0);
+}
+
+:root .app .chat-view .chat-plan-panel-header {
+  min-height: 56px;
+  padding: 11px 14px 10px 10px;
+  border-bottom: 1px solid var(--coach-glass-edge);
+  background: transparent;
+  animation: none;
+}
+
+:root .app .chat-view .chat-plan-panel-heading {
+  gap: 6px;
+}
+
+:root .app .chat-view .chat-plan-panel-back {
+  gap: 2px;
+  min-height: 30px;
+  padding: 0 8px 0 4px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 500;
+  transition: background 160ms var(--coach-ease-soft), color 160ms var(--coach-ease-soft);
+}
+
+:root .app .chat-view .chat-plan-panel-back:hover {
+  background: var(--coach-ink-4);
+  color: var(--text-primary);
+  transform: none;
+}
+
+:root .app .chat-view .chat-plan-panel-back svg {
+  transition: transform 260ms var(--coach-ease);
+}
+
+:root .app .chat-view .chat-plan-panel-back:hover svg {
+  transform: translateX(-2px);
+}
+
+:root .app .chat-view .chat-plan-panel-title strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:root .app .chat-view .chat-plan-panel-title span {
+  font-size: 10.5px;
+}
+
+:root .app .chat-view .chat-plan-panel-chat-link {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 500;
+  box-shadow: none;
+  transition: background 160ms var(--coach-ease-soft), color 160ms var(--coach-ease-soft);
+}
+
+:root .app .chat-view .chat-plan-panel-chat-link:hover {
+  background: var(--coach-ink-4);
+  color: var(--text-primary);
+  box-shadow: none;
+  transform: none;
+}
+
+:root .app .chat-view .chat-plan-panel-body {
+  animation: coach-fade-up 360ms var(--coach-ease) both;
+}
+
+/* ---------- MCP popover ---------- */
+
+:root .app .chat-view .chat-mcp-panel {
+  top: calc(100% + 6px);
+  width: 300px;
+  padding: 10px;
+  border-color: var(--coach-glass-edge);
+  border-radius: 14px;
+  background: var(--glass-bg-elevated);
+  box-shadow: var(--coach-pop-shadow);
+  backdrop-filter: var(--coach-frost);
+  -webkit-backdrop-filter: var(--coach-frost);
+  transform-origin: top right;
+  animation: coach-pop-in 260ms var(--coach-ease) both;
+}
+
+:root .app .chat-view .chat-mcp-panel ul {
+  gap: 2px;
+}
+
+:root .app .chat-view .chat-mcp-panel li {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 8px;
+}
+
+:root .app .chat-view .chat-mcp-panel li:hover {
+  background: var(--coach-ink-2);
+}
+
+:root .app .chat-view .chat-mcp-panel li code {
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 550;
+}
+
+:root .app .chat-view .chat-mcp-panel-head {
+  margin: 6px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--coach-glass-edge);
+}
+
+:root .app .chat-view .chat-mcp-panel-head button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--coach-ink-4);
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 500;
+  transition: background 160ms var(--coach-ease-soft);
+}
+
+:root .app .chat-view .chat-mcp-panel-head button:hover {
+  background: var(--coach-ink-8);
+}
+
+/* ---------- Sign-in states ---------- */
+
+:root .app .chat-view .chat-main-login {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 0;
+}
+
+:root .app .chat-view .chat-main-login > .chat-login-panel {
+  align-self: center;
+  margin: auto 16px 0;
+}
+
+:root .app .chat-view .chat-main-login > .chat-composer-toolbar-login {
+  align-self: center;
+  width: auto;
+  margin: 16px 16px auto;
+}
+
+/* ---------- Shared navigation reflection ---------- */
+
 :root .app:has(.content-coach-panel:not(.view-panel-hidden)) .app-sidebar {
   background: linear-gradient(165deg, var(--surface-highlight), transparent 65%), color-mix(in srgb, var(--glass-bg-elevated) 30%, transparent);
   box-shadow: inset -1px 0 0 var(--glass-border);
   backdrop-filter: blur(36px);
   -webkit-backdrop-filter: blur(36px);
 }
+
+/* ---------- Motion ---------- */
+
+@keyframes coach-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes coach-row-in-user {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+}
+
+@keyframes coach-hero-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes coach-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes coach-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes coach-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+}
+
+@keyframes coach-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+@keyframes coach-stop-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(0.84);
+  }
+}
+
+/* View Transitions: while coachMorph.ts runs an update, these regions keep a
+   name so the browser animates their boxes between the two states. Scoping
+   the names to the morph keeps the theme's circular reveal untouched. */
+:root.is-coach-morph .chat-view .chat-composer-inner {
+  view-transition-name: coach-composer;
+}
+
+:root.is-coach-morph .chat-view .chat-empty-icon {
+  view-transition-name: coach-hero-icon;
+}
+
+:root.is-coach-morph .chat-view .chat-empty h3 {
+  view-transition-name: coach-hero-title;
+}
+
+:root.is-coach-morph .chat-view .chat-empty-description {
+  view-transition-name: coach-hero-copy;
+}
+
+:root.is-coach-morph .chat-view .chat-suggestions {
+  view-transition-name: coach-hero-prompts;
+}
+
+:root.is-coach-morph .chat-view .chat-more-suggestions {
+  view-transition-name: coach-hero-more;
+}
+
+:root.is-coach-morph .chat-view .chat-session-row.is-active {
+  view-transition-name: coach-active-chat;
+}
+
+/* Title-bar actions slide with the column instead of ghosting when a rail appears. */
+:root.is-coach-morph .chat-view .chat-main > .chat-header .chat-header-end {
+  view-transition-name: coach-header-end;
+}
+
+:root.is-coach-morph .chat-view .chat-plan-panel {
+  view-transition-name: coach-creations;
+}
+
+:root.is-coach-morph .chat-view .chat-plan-list-header {
+  view-transition-name: coach-creations-head;
+}
+
+:root.is-coach-morph .chat-view .chat-plan-list {
+  view-transition-name: coach-creations-list;
+}
+
+:root.is-coach-morph .chat-view .chat-plan-list-item.is-selected,
+:root.is-coach-morph .chat-view .chat-plan-panel-header {
+  view-transition-name: coach-creation-focus;
+}
+
+:root.is-coach-morph .chat-view .chat-plan-panel-body {
+  view-transition-name: coach-creation-body;
+}
+
+/* The morph owns these boxes for its duration; CSS transitions and the
+   hero's own entrance would fight it (a live snapshot at opacity 0 is a
+   composer that vanishes instead of travelling). */
+:root.is-coach-morph .chat-view :is(.chat-sidebar-shell, .chat-plan-panel, .chat-main > .chat-header) {
+  transition: none;
+}
+
+:root.is-coach-morph .chat-view .chat-main:has(.chat-empty) :is(.chat-empty-icon, .chat-empty h3, .chat-empty-description, .chat-suggestions, .chat-more-suggestions, .chat-composer),
+:root.is-coach-morph .chat-view :is(.chat-plan-panel, .chat-plan-panel-body) {
+  animation: none;
+}
+
+:root.is-coach-morph::view-transition-group(coach-composer) {
+  z-index: 5;
+}
+
+:root.is-coach-morph::view-transition-group(*) {
+  animation-duration: 440ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root.is-coach-morph::view-transition-old(*),
+:root.is-coach-morph::view-transition-new(*) {
+  animation-duration: 260ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:root.is-coach-morph::view-transition-old(root) {
+  z-index: 1;
+  animation: coach-fade-out 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+:root.is-coach-morph::view-transition-new(root) {
+  z-index: 2;
+  animation: coach-fade-in 240ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+:root.is-coach-morph::view-transition-old(coach-hero-icon),
+:root.is-coach-morph::view-transition-old(coach-hero-title),
+:root.is-coach-morph::view-transition-old(coach-hero-copy),
+:root.is-coach-morph::view-transition-old(coach-hero-prompts),
+:root.is-coach-morph::view-transition-old(coach-hero-more) {
+  animation: coach-hero-out 260ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+:root.is-coach-morph::view-transition-new(coach-hero-icon),
+:root.is-coach-morph::view-transition-new(coach-hero-title),
+:root.is-coach-morph::view-transition-new(coach-hero-copy),
+:root.is-coach-morph::view-transition-new(coach-hero-prompts),
+:root.is-coach-morph::view-transition-new(coach-hero-more) {
+  animation: coach-hero-back 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* The composer travels as one solid surface: no crossfade between its snapshots. */
+:root.is-coach-morph::view-transition-old(coach-composer) {
+  display: none;
+}
+
+:root.is-coach-morph::view-transition-new(coach-composer) {
+  animation: none;
+}
+
+@keyframes coach-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes coach-hero-out {
+  to {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+}
+
+@keyframes coach-hero-back {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* ---------- Fallbacks ---------- */
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   :root .app .chat-view {
@@ -736,9 +1587,15 @@
   }
 }
 
-@container coach-main (max-width: 560px) {
-  :root .app .chat-thread:has(.chat-empty) {
-    padding: 28px 20px;
+/* ---------- Narrow columns ---------- */
+
+@container coach-main (max-width: 640px) {
+  :root .app .chat-view .chat-thread {
+    padding-inline: 20px;
+  }
+
+  :root .app .chat-view .chat-main:has(.chat-empty) :where(.chat-empty h3, .chat-empty-description, .chat-suggestions, .chat-more-suggestions, .chat-composer) {
+    width: min(100% - 32px, 680px);
   }
 
   :root .app .chat-suggestions,
@@ -747,37 +1604,61 @@
   }
 
   :root .app .chat-suggestion {
-    min-height: 72px;
-    padding: 14px;
+    padding: 12px 14px;
   }
 
   :root .app .chat-composer {
-    padding-inline: 20px;
+    padding-inline: 16px;
+  }
+
+  :root .app .chat-view .chat-row-user > .chat-bubble {
+    max-width: 88%;
   }
 }
 
-@container coach-main (max-width: 400px) {
+/* Narrow columns keep the title bar on one line: icon-only actions, a shorter pill. */
+@container coach-main (max-width: 560px) {
+  :root .app .chat-header :is(.chat-settings-button, .chat-signout) {
+    width: 30px;
+    padding: 0;
+    justify-content: center;
+    font-size: 0;
+    gap: 0;
+  }
+
+  :root .app .chat-header :is(.chat-settings-button, .chat-signout) svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  :root .app .chat-header .chat-mcp-pill-detail {
+    display: none;
+  }
+
+  :root .app .chat-view .chat-mcp-panel {
+    width: min(300px, calc(100cqw - 24px));
+  }
+}
+
+@container coach-main (max-width: 420px) {
   :root .app .chat-composer {
-    padding-inline: 12px;
+    padding-inline: 10px;
   }
 
   :root .app .chat-composer-inner {
-    padding: 12px;
+    padding: 10px 10px 8px 12px;
   }
 
   .chat-composer-new-chat span {
     display: none;
   }
-}
 
-@media (max-width: 700px) {
-  :root .app .chat-view .chat-header {
-    flex-wrap: wrap;
-    padding: 12px 16px;
+  :root .app .chat-view .chat-main > .chat-header {
+    padding-inline: 14px;
   }
 
-  :root .app .chat-header-end {
-    gap: 4px;
+  :root .app .chat-view .chat-layout:has(> .chat-sidebar-expand-button) .chat-main > .chat-header {
+    padding-left: 54px;
   }
 }
 
