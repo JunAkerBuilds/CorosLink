@@ -149,7 +149,13 @@ async function createStubRelay() {
     req.on("data", (chunk) => chunks.push(chunk));
     req.on("end", async () => {
       const raw = Buffer.concat(chunks).toString("utf8");
-      const call = { method: req.method, url: req.url, raw, authorization: req.headers.authorization };
+      const call = {
+        method: req.method,
+        url: req.url,
+        raw,
+        authorization: req.headers.authorization,
+        signature: req.headers[protocol.ENVIRONMENT_SIGNATURE_HEADER.toLowerCase()]
+      };
       state.calls.push(call);
       try {
         if (req.method === "GET" && req.url === "/.well-known/jwks.json") {
@@ -376,6 +382,23 @@ try {
   assert.equal(firstStart.tokenSha256, sha256Hex("connector-token-1"));
   assert.deepEqual(firstStart.argv, ["tunnel", "--no-autoupdate", "run"]);
   assert.ok(changes > 0);
+
+  // ----- The descriptor's keyThumbprint is the key the relay linked -----
+  {
+    const thumbprint = await jose.calculateJwkThumbprint(linkCall.body.publicJwk, "sha256");
+    const { protectedHeader } = await jose.compactVerify(
+      linkCall.signature,
+      await jose.importJWK({ ...linkCall.body.publicJwk }, "ES256")
+    );
+    assert.equal(protectedHeader.kid, thumbprint, "the link signature's kid is the RFC 7638 thumbprint of publicJwk");
+    assert.equal(relay.state.links.get(identity.environmentId).kid, thumbprint, "what the relay reports as keyThumbprint");
+    for (const headers of [{ Host: `127.0.0.1:${port}` }, tunnelHeaders]) {
+      const descriptor = await request(port, { path: "/v1/descriptor", headers });
+      assert.equal(descriptor.status, 200);
+      assert.equal(descriptor.json.keyThumbprint, thumbprint, "LAN and tunnel descriptors carry the linked key's thumbprint");
+    }
+    assert.equal(JSON.parse(settings.get("remote.cloud.link")).keyThumbprint, thumbprint);
+  }
 
   // ----- The tunnel host is allowed; mint answers with the pinned key -----
   {

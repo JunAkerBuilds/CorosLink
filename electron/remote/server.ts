@@ -677,7 +677,8 @@ export class RemoteServer {
       platform: platform ?? process.platform,
       appVersion,
       protocol: REMOTE_PROTOCOL_VERSION,
-      capabilities: [...REMOTE_CAPABILITIES]
+      capabilities: [...REMOTE_CAPABILITIES],
+      keyThumbprint: this.options.identity.kid
     };
   }
 

@@ -67,6 +67,13 @@ export interface EnvironmentDescriptor {
   appVersion: string;
   protocol: number;
   capabilities: string[];
+  /**
+   * RFC 7638 SHA-256 thumbprint of the environment's public P-256 key: the
+   * relay's `keyThumbprint` in GET /v1/environments and ConnectResponse.
+   * C-LINK pins it when pairing on the LAN and refuses a relay connect signed
+   * by another key. Older desktops leave it out (phones pin on first sight).
+   */
+  keyThumbprint: string;
 }
 
 /** A session issued to one device, bound to its DPoP key's thumbprint. */

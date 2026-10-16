@@ -72,8 +72,10 @@ try {
       platform: "darwin",
       appVersion: "9.9.9",
       protocol: 1,
-      capabilities: ["coach"]
+      capabilities: ["coach"],
+      keyThumbprint: identity.kid
     });
+    assert.equal(identity.kid, await jose.calculateJwkThumbprint(identity.publicJwk, "sha256"), "RFC 7638 thumbprint");
     assert.equal(descriptor.headers["cache-control"], "no-store");
     assert.equal((await request(port, { path: "/v1/descriptor", headers: { Host: `localhost:${port}` } })).status, 200);
 
