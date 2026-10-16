@@ -75,6 +75,22 @@ describe("POST /v1/environments/:id/connect", () => {
     log.mockRestore();
   });
 
+  it("returns the key thumbprint the mint answer was verified with", async () => {
+    const body = (await (await connect()).json()) as ConnectResponse;
+    expect(body.keyThumbprint).toBe(desktop.kid);
+  });
+
+  it("hands nothing over when the computer is unlinked while it mints", async () => {
+    const honest = honestDesktop(desktop, relayPublicJwk, harness.clock);
+    harness.desktops.set(linked.hostname, async (request) => {
+      await harness.env.DB.prepare("UPDATE environment_links SET revoked_at = 1").run();
+      return honest(request);
+    });
+    const response = await connect();
+    expect(response.status).toBe(404);
+    expect(await errorCode(response)).toBe("environment_not_linked");
+  });
+
   it("binds the mint request to the DPoP key thumbprint", async () => {
     let requestedJkt = "";
     const honest = honestDesktop(desktop, relayPublicJwk, harness.clock, {

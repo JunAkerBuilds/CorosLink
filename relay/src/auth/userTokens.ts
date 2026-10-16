@@ -19,6 +19,8 @@ const JWKS_TTL_MS = 10 * 60 * 1000;
 /** A token with an unknown kid triggers at most one JWKS refetch per this window. */
 const JWKS_REFETCH_COOLDOWN_MS = 30 * 1000;
 const JWKS_FETCH_TIMEOUT_MS = 5_000;
+/** While the website's JWKS is unreachable, keys this old are still trusted, no older. */
+const JWKS_MAX_STALE_MS = 60 * 60 * 1000;
 const CLOCK_TOLERANCE_SECONDS = 30;
 
 interface CachedJwks {
@@ -64,21 +66,23 @@ async function websiteKey(kid: string, config: RelayConfig, deps: Deps): Promise
   const url = config.websiteJwksUrl;
   const now = deps.now();
   let cached = jwksCache.get(url);
-  if (!cached || now - cached.fetchedAt > JWKS_TTL_MS) {
+  const lastAttempt = lastFetchAttempt.get(url);
+  // Refresh when due, but at most once per cooldown: an outage must not turn
+  // every request into a 5-second fetch.
+  if ((!cached || now - cached.fetchedAt > JWKS_TTL_MS) && (lastAttempt === undefined || now - lastAttempt >= JWKS_REFETCH_COOLDOWN_MS)) {
     try {
       cached = await fetchJwks(url, deps);
     } catch (error) {
       log("warn", "website_jwks_fetch_failed", { reason: error instanceof Error ? error.message : "unknown" });
-      if (!cached) {
-        throw new RelayError("upstream_error", "The website signing keys are unavailable. Retry shortly.");
-      }
     }
+  }
+  if (!cached || now - cached.fetchedAt > JWKS_MAX_STALE_MS) {
+    throw new RelayError("upstream_error", "The website signing keys are unavailable. Retry shortly.");
   }
   const key = cached.keys.get(kid);
   if (key) return key;
   // A rotated key: refetch once per cooldown window, then give up.
-  const lastAttempt = lastFetchAttempt.get(url) ?? 0;
-  if (now - lastAttempt >= JWKS_REFETCH_COOLDOWN_MS) {
+  if (now - (lastFetchAttempt.get(url) ?? 0) >= JWKS_REFETCH_COOLDOWN_MS) {
     try {
       return (await fetchJwks(url, deps)).keys.get(kid) ?? null;
     } catch {

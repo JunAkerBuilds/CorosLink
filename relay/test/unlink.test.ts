@@ -104,6 +104,23 @@ describe("POST /v1/environments/unlink", () => {
     expect(harness.cloudflare.liveTunnels().map((tunnel) => tunnel.id)).toEqual([linked.tunnelId]);
   });
 
+  it("also deletes a tunnel and DNS record the allocation lost track of", async () => {
+    await harness.env.DB.prepare(
+      "UPDATE allocations SET tunnel_id = NULL, configured_tunnel_id = NULL, dns_record_id = NULL, dns_tunnel_id = NULL",
+    ).run();
+    const response = await userUnlink();
+    expect(((await response.json()) as UnlinkResponse).teardown).toBe("complete");
+    expect(harness.cloudflare.liveTunnels()).toHaveLength(0);
+    expect(harness.cloudflare.dns.size).toBe(0);
+  });
+
+  it("does not count an empty 200 from Cloudflare as a finished delete", async () => {
+    harness.cloudflare.rawNext("DELETE", /\/dns_records\//u, 200, "");
+    const response = await userUnlink();
+    expect(((await response.json()) as UnlinkResponse).teardown).toBe("pending");
+    expect(harness.cloudflare.dns.size).toBe(1);
+  });
+
   it("accepts an environment-signed unlink from the desktop", async () => {
     const response = await harness.signedPost(desktop, "/v1/environments/unlink", "environment.unlink", {
       environmentId: desktop.environmentId,

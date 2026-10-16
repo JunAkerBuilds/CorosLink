@@ -36,11 +36,11 @@ export async function brokerConnect(
   input: { userId: string; environmentId: string; jkt: string },
 ): Promise<ConnectResponse> {
   const tunnelConfig = requireTunnelConfig(ctx.config);
-  const key = { userId: input.userId, environmentId: input.environmentId };
-  const [link, allocation] = await Promise.all([getActiveLink(ctx.db, key), getAllocation(ctx.db, key)]);
+  const link = await getActiveLink(ctx.db, input);
   if (!link) {
     throw new RelayError("environment_not_linked", "This computer is not linked to your account.");
   }
+  const allocation = await getAllocation(ctx.db, { ...input, kid: link.env_key_jkt });
   if (!allocation || allocation.status !== "ready" || !allocation.tunnel_id) {
     throw new RelayError("environment_not_ready", "This computer's remote access is not ready yet.");
   }
@@ -135,9 +135,15 @@ export async function brokerConnect(
     log("warn", "mint_response_invalid", { environmentId: input.environmentId });
     throw invalidResponse();
   }
+  // An unlink or re-key while the desktop was minting wins: hand nothing over.
+  const still = await getActiveLink(ctx.db, input);
+  if (!still || still.env_key_jkt !== link.env_key_jkt) {
+    throw new RelayError("environment_not_linked", "This computer was unlinked while connecting.");
+  }
   log("info", "connect_brokered", { environmentId: input.environmentId });
   return {
     environmentId: input.environmentId,
+    keyThumbprint: link.env_key_jkt,
     hostname: allocation.hostname,
     httpBaseUrl: httpBaseUrlForHostname(allocation.hostname),
     credential,

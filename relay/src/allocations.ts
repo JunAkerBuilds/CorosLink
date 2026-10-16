@@ -44,16 +44,20 @@ export function cloudflare(ctx: RelayContext): CloudflareClient {
 const STABLE_ID = /^[a-f0-9]{16}$/u;
 
 /**
- * The hostname and tunnel name of a user/environment pair. Derived from a hash
- * so they are stable for life and reveal neither id. The hostname is
- * first-level under the tunnel zone so the zone's free certificate covers it.
+ * The hostname and tunnel name of a user/environment pair and its environment
+ * key. Derived from a hash so they are stable for life and reveal no id. The
+ * key is part of it so a relink with another key gets a new address instead of
+ * taking over the one phones already use. The hostname is first-level under
+ * the tunnel zone so the zone's free certificate covers it.
  */
 export async function allocationNames(
   config: RelayConfig,
   zoneName: string,
   key: AllocationKey,
 ): Promise<{ hostname: string; tunnelName: string }> {
-  const stableId = (await sha256Hex(`coroslink-relay:v1:${config.stage}:${key.userId}:${key.environmentId}`)).slice(0, 16);
+  const stableId = (
+    await sha256Hex(`coroslink-relay:v1:${config.stage}:${key.userId}:${key.environmentId}:${key.kid}`)
+  ).slice(0, 16);
   return { hostname: `${stableId}.${zoneName}`, tunnelName: `${tunnelNamePrefix(config.stage)}${stableId}` };
 }
 
@@ -209,9 +213,7 @@ export async function ensureEndpoint(
   await write({
     status: state.status === "ready" ? "ready" : "provisioning",
     claimed_at: null,
-    ...(input.mode === "recovery"
-      ? { last_recovery_at: now, recovery_registered_at: state.recovery_registered_at ?? now }
-      : {}),
+    ...(input.mode === "recovery" ? { recovery_registered_at: state.recovery_registered_at ?? now } : {}),
   });
 
   try {
@@ -242,8 +244,14 @@ export async function ensureEndpoint(
       await write({ dns_record_id: recordId, dns_tunnel_id: tunnel.id });
     }
 
-    if (state.status !== "ready") {
-      await write({ status: "ready", ready_at: state.ready_at ?? ctx.deps.now() });
+    // The recovery window starts only once a recovery succeeded, so a
+    // Cloudflare failure part way can be retried after its Retry-After.
+    if (state.status !== "ready" || input.mode === "recovery") {
+      await write({
+        status: "ready",
+        ready_at: state.ready_at ?? ctx.deps.now(),
+        ...(input.mode === "recovery" ? { last_recovery_at: now } : {}),
+      });
     }
 
     return { allocation: state, tunnelId: tunnel.id, tunnelChanged: tunnel.id !== previousTunnelId, reconfigured };
@@ -263,26 +271,34 @@ export async function connectorToken(ctx: RelayContext, tunnelId: string): Promi
 export type TeardownOutcome = "complete" | "pending" | "skipped";
 
 /**
- * Deletes the DNS record and tunnel of an allocation whose link was revoked.
- * The caller must have committed the revocation first. The allocation is
- * claimed at its current generation and every step re-checks the claim, so a
- * relink that took the row over wins. The hostname stays reserved.
+ * Deletes the DNS record and tunnel of an allocation whose link was revoked
+ * (or re-keyed). The caller must have committed the revocation first. The
+ * allocation is claimed at its current generation and every step re-checks
+ * the claim, so a relink that took the row over wins. Besides the recorded
+ * ids it deletes any live tunnel with the allocation's name and any CNAME at
+ * its hostname, which catches a resource a cancelled or racing provision
+ * created but never recorded. The hostname stays reserved.
  */
-export async function teardownAllocation(ctx: RelayContext, key: AllocationKey): Promise<TeardownOutcome> {
+export async function teardownAllocation(
+  ctx: RelayContext,
+  key: AllocationKey,
+  report: { rateLimited: boolean } = { rateLimited: false },
+): Promise<TeardownOutcome> {
   if (!ctx.config.tunnel) return "pending";
   const cf = cloudflare(ctx);
   const now = ctx.deps.now();
   const row = await getAllocation(ctx.db, key);
   if (!row) return "complete";
-  if (row.status === "released" && row.tunnel_id === null && row.dns_record_id === null) return "complete";
   if (isBusy(row, now)) return "pending";
 
-  const previousStatus: AllocationStatus = row.status;
+  // Restoring a claim never leaves a cleanup status behind without its claim.
+  const previousStatus: AllocationStatus =
+    row.status === "reaping" || row.status === "deprovisioning" ? "provisioning" : row.status;
   let generation = await updateAllocation(ctx.db, key, row.generation, { status: "deprovisioning", claimed_at: now }, now);
   if (generation === null) return "pending";
 
   const link = await getLink(ctx.db, key);
-  if (link && link.revoked_at === null) {
+  if (link && link.revoked_at === null && link.env_key_jkt === key.kid) {
     // Relinked between the revocation and our claim: the allocation is theirs.
     await updateAllocation(ctx.db, key, generation, { status: previousStatus, claimed_at: null }, ctx.deps.now());
     return "skipped";
@@ -303,16 +319,28 @@ export async function teardownAllocation(ctx: RelayContext, key: AllocationKey):
       generation = await updateAllocation(ctx.db, key, generation, { dns_record_id: null, dns_tunnel_id: null }, ctx.deps.now());
       if (generation === null) return "pending";
     }
-    if (row.tunnel_id) {
+    const named = (await cf.listTunnels({ name: row.tunnel_name })).result.filter(
+      (tunnel) => tunnel.name === row.tunnel_name && !tunnel.deleted_at,
+    );
+    const tunnelIds = new Set([...(row.tunnel_id ? [row.tunnel_id] : []), ...named.map((tunnel) => tunnel.id)]);
+    for (const tunnelId of tunnelIds) {
       if (!(await held())) return "pending";
       // Unlink disconnects a running connector; Cloudflare refuses to delete a tunnel with live connections.
       try {
-        await cf.deleteTunnelConnections(row.tunnel_id);
+        await cf.deleteTunnelConnections(tunnelId);
       } catch (error) {
         if (!isNotFound(error)) throw error;
       }
       try {
-        await cf.deleteTunnel(row.tunnel_id);
+        await cf.deleteTunnel(tunnelId);
+      } catch (error) {
+        if (!isNotFound(error)) throw error;
+      }
+    }
+    for (const record of await cf.listCnameRecords(row.hostname)) {
+      if (!(await held())) return "pending";
+      try {
+        await cf.deleteDnsRecord(record.id);
       } catch (error) {
         if (!isNotFound(error)) throw error;
       }
@@ -334,6 +362,7 @@ export async function teardownAllocation(ctx: RelayContext, key: AllocationKey):
     return released === null ? "pending" : "complete";
   } catch (error) {
     // The claim stays; it ages out after CLAIM_TTL_MS and the cron retries.
+    if (error instanceof CloudflareApiError && error.rateLimited) report.rateLimited = true;
     log("warn", "teardown_failed", {
       environmentId: key.environmentId,
       reason: error instanceof CloudflareApiError ? `${error.operation}:${error.status}` : "unknown",

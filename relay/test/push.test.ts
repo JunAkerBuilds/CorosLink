@@ -1,5 +1,6 @@
 import { decodeJwt, decodeProtectedHeader } from "jose";
 import { beforeEach, describe, expect, it } from "vitest";
+import { resetApnsCaches } from "../src/apns";
 import type { ActivityResponse } from "../src/protocol";
 import { createEnvironment, errorCode, Harness, RELAY_ORIGIN, type EnvironmentIdentity } from "./helpers";
 
@@ -77,6 +78,16 @@ describe("push", () => {
     const tokens = harness.apns.sent.map((sent) => sent.headers.authorization);
     expect(tokens[0]).toBe(tokens[1]);
     expect(tokens[2]).not.toBe(tokens[1]);
+  });
+
+  it("shares the provider token across isolates through D1", async () => {
+    await register(PHONE_TOKEN, "production");
+    await activity();
+    resetApnsCaches(); // a fresh isolate
+    harness.clock.advance(10 * 60 * 1000);
+    await activity();
+    const tokens = harness.apns.sent.map((sent) => sent.headers.authorization);
+    expect(tokens[1]).toBe(tokens[0]);
   });
 
   it("deletes tokens APNs reports as unregistered", async () => {

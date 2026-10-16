@@ -139,7 +139,8 @@ Deploys are by hand at first. A GitHub Action can run `npm run check` and `wrang
   - It starts `off`. Move a stage to `dry-run`, watch the `maintenance` log (`wouldDelete`, `skipped*`, `candidates`), then switch to `enabled`.
   - Accounts are capped at 10 linked computers.
 - **Orphans:** a tunnel named like the relay's but with no allocation row is never deleted automatically (`skippedOrphan`). Delete it by hand after checking.
-- **Hosts that never registered recovery:** their tunnels are never reaped (`skippedNoRecovery`). The desktop is expected to call recovery at startup and right after linking.
+- **Hosts that never registered recovery:** their tunnels are never reaped (`skippedNoRecovery`). The desktop is expected to call recovery at startup and right after linking. A host that links but never runs recovery can therefore hold up to 10 tunnels per account indefinitely; watch `skippedNoRecovery` in the `maintenance` log.
+- **Unlinked leftovers:** a tunnel left behind by an unlink that raced a link is deleted once it shows up idle (`unlinked` in the log).
 - **Logs:** structured JSON lines carrying ids and counters only. Tokens, connector tokens and credentials are never logged.
 - **Rotating the relay key:**
   1. Publish the next public key in `RELAY_EXTRA_JWKS` and deploy.

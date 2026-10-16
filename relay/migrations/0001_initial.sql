@@ -27,13 +27,17 @@ CREATE INDEX environment_links_active_user
   ON environment_links (user_id)
   WHERE revoked_at IS NULL;
 
--- The tunnel endpoint of a user/environment pair. The hostname and tunnel
--- name are derived once and kept for life; the tunnel itself can be replaced.
+-- The tunnel endpoint of a user/environment pair and the environment key it
+-- was linked with. The hostname and tunnel name are derived from all three and
+-- kept for life; the tunnel itself can be replaced. A new key never inherits
+-- an old key's hostname, so whoever holds the user's token cannot take over
+-- the address a phone already trusts by relinking with their own key.
 -- Every write bumps generation and is conditional on the generation it read,
 -- so a stale writer (a slow retry, a cleanup sweep) cannot clobber a newer one.
 CREATE TABLE allocations (
   user_id TEXT NOT NULL,
   environment_id TEXT NOT NULL,
+  env_key_jkt TEXT NOT NULL,
   hostname TEXT NOT NULL UNIQUE,
   tunnel_name TEXT NOT NULL UNIQUE,
   status TEXT NOT NULL
@@ -55,7 +59,7 @@ CREATE TABLE allocations (
   tunnel_released_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
-  PRIMARY KEY (user_id, environment_id),
+  PRIMARY KEY (user_id, environment_id, env_key_jkt),
   FOREIGN KEY (user_id, environment_id) REFERENCES environment_links (user_id, environment_id)
 );
 
@@ -82,6 +86,15 @@ CREATE TABLE push_devices (
 );
 
 CREATE INDEX push_devices_user ON push_devices (user_id);
+
+-- The APNs provider token, shared by every isolate: Apple refuses tokens that
+-- change too often (TooManyProviderTokenUpdates).
+CREATE TABLE apns_provider_tokens (
+  key_id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL,
+  token TEXT NOT NULL,
+  issued_at INTEGER NOT NULL
+);
 
 -- Replay guard for environment signature nonces and DPoP jtis.
 CREATE TABLE nonces (

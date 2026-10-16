@@ -192,6 +192,8 @@ export interface LinkResponse {
   /** cloudflared connector token. Secret: keep it with safeStorage. */
   connectorToken: string;
   generation: number;
+  /** RFC 7638 thumbprint of the linked environment key. */
+  keyThumbprint: string;
 }
 
 /**
@@ -246,6 +248,12 @@ export type CloudflareTunnelStatus = "healthy" | "degraded" | "down" | "inactive
 /** `GET /v1/environments`. Auth: website JWT (any client). */
 export interface EnvironmentSummary {
   environmentId: string;
+  /**
+   * RFC 7638 thumbprint of the desktop key the relay verifies mint answers
+   * with. Phones pin it (from LAN pairing or first sight): a change means the
+   * computer was unlinked and relinked with another key.
+   */
+  keyThumbprint: string;
   label: string;
   platform: EnvironmentPlatform;
   hostname: string | null;
@@ -268,6 +276,8 @@ export interface ListEnvironmentsResponse {
  */
 export interface ConnectResponse {
   environmentId: string;
+  /** The key that signed this credential's mint answer; compare with the pinned one. */
+  keyThumbprint: string;
   hostname: string;
   httpBaseUrl: string;
   /** One-time bootstrap credential bound to the DPoP key. Redeem at the desktop's /v1/auth/bootstrap. */
@@ -337,6 +347,7 @@ export const ERROR_CODES = [
   "environment_not_linked", // 404
   "environment_not_ready", // 409: the tunnel is still provisioning
   "link_limit_reached", // 409: MAX_LINKED_ENVIRONMENTS_PER_USER computers already linked
+  "environment_key_mismatch", // 409: linked with another key; unlink first
   "allocation_conflict", // 409: a concurrent change won; retry
   "allocation_busy", // 503: cleanup holds the tunnel; retry after Retry-After
   "rate_limited", // 429: see Retry-After

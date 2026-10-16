@@ -1,6 +1,6 @@
 import { CLAIM_TTL_MS, teardownAllocation, type RelayContext } from "./allocations";
 import { purgeExpiredNonces } from "./auth/replay";
-import { listPendingTeardowns, pruneTunnelStatusCache } from "./db";
+import { allocationKeyOf, listPendingTeardowns, pruneTunnelStatusCache } from "./db";
 import { defaultDeps, loadConfig, type Deps, type Env } from "./env";
 import { errorResponse, RelayError } from "./http";
 import { log } from "./log";
@@ -102,7 +102,7 @@ export async function runMaintenance(env: Env, deps: Deps = defaultDeps()): Prom
   if (ctx.config.tunnel) {
     for (const row of await listPendingTeardowns(env.DB, now - CLAIM_TTL_MS, TEARDOWN_RETRY_LIMIT)) {
       teardownsAttempted += 1;
-      const outcome = await teardownAllocation(ctx, { userId: row.user_id, environmentId: row.environment_id });
+      const outcome = await teardownAllocation(ctx, allocationKeyOf(row));
       if (outcome === "complete") teardownsCompleted += 1;
     }
   }

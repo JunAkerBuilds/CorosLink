@@ -18,6 +18,7 @@ export type AllocationStatus = "provisioning" | "ready" | "reaping" | "deprovisi
 export interface AllocationRow {
   user_id: string;
   environment_id: string;
+  env_key_jkt: string;
   hostname: string;
   tunnel_name: string;
   status: AllocationStatus;
@@ -36,21 +37,30 @@ export interface AllocationRow {
   updated_at: number;
 }
 
-export interface AllocationKey {
+export interface LinkKey {
   userId: string;
   environmentId: string;
 }
 
+/** An allocation belongs to a link and the environment key it was made with. */
+export interface AllocationKey extends LinkKey {
+  kid: string;
+}
+
+export function allocationKeyOf(row: Pick<AllocationRow, "user_id" | "environment_id" | "env_key_jkt">): AllocationKey {
+  return { userId: row.user_id, environmentId: row.environment_id, kid: row.env_key_jkt };
+}
+
 // --- links ------------------------------------------------------------------
 
-export async function getLink(db: D1Database, key: AllocationKey): Promise<LinkRow | null> {
+export async function getLink(db: D1Database, key: LinkKey): Promise<LinkRow | null> {
   return db
     .prepare("SELECT * FROM environment_links WHERE user_id = ? AND environment_id = ?")
     .bind(key.userId, key.environmentId)
     .first<LinkRow>();
 }
 
-export async function getActiveLink(db: D1Database, key: AllocationKey): Promise<LinkRow | null> {
+export async function getActiveLink(db: D1Database, key: LinkKey): Promise<LinkRow | null> {
   return db
     .prepare("SELECT * FROM environment_links WHERE user_id = ? AND environment_id = ? AND revoked_at IS NULL")
     .bind(key.userId, key.environmentId)
@@ -80,8 +90,8 @@ export async function listActiveLinks(db: D1Database, userId: string, limit = 50
  */
 export async function activateLink(
   db: D1Database,
-  input: AllocationKey & { publicJwk: string; kid: string; label: string; platform: EnvironmentPlatform; now: number },
-): Promise<AllocationKey[]> {
+  input: LinkKey & { publicJwk: string; kid: string; label: string; platform: EnvironmentPlatform; now: number },
+): Promise<LinkKey[]> {
   const { results: superseded } = await db
     .prepare(
       "SELECT user_id, environment_id FROM environment_links WHERE environment_id = ? AND env_key_jkt = ? AND user_id != ? AND revoked_at IS NULL",
@@ -129,7 +139,7 @@ export async function activateLink(
 }
 
 /** Commits the revocation. Returns false when the link was not active. */
-export async function revokeLink(db: D1Database, key: AllocationKey, now: number): Promise<boolean> {
+export async function revokeLink(db: D1Database, key: LinkKey, now: number): Promise<boolean> {
   const result = await db
     .prepare(
       "UPDATE environment_links SET revoked_at = ?, updated_at = ? WHERE user_id = ? AND environment_id = ? AND revoked_at IS NULL",
@@ -143,9 +153,18 @@ export async function revokeLink(db: D1Database, key: AllocationKey, now: number
 
 export async function getAllocation(db: D1Database, key: AllocationKey): Promise<AllocationRow | null> {
   return db
+    .prepare("SELECT * FROM allocations WHERE user_id = ? AND environment_id = ? AND env_key_jkt = ?")
+    .bind(key.userId, key.environmentId, key.kid)
+    .first<AllocationRow>();
+}
+
+/** Every allocation of a user/environment pair, whatever key it was made with. */
+export async function listAllocationsForLink(db: D1Database, key: LinkKey): Promise<AllocationRow[]> {
+  const { results } = await db
     .prepare("SELECT * FROM allocations WHERE user_id = ? AND environment_id = ?")
     .bind(key.userId, key.environmentId)
-    .first<AllocationRow>();
+    .all<AllocationRow>();
+  return results;
 }
 
 /** Creates the allocation once; the hostname and tunnel name never change afterwards. */
@@ -155,11 +174,11 @@ export async function reserveAllocation(
 ): Promise<AllocationRow> {
   await db
     .prepare(
-      `INSERT INTO allocations (user_id, environment_id, hostname, tunnel_name, status, generation, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'provisioning', 0, ?, ?)
-       ON CONFLICT (user_id, environment_id) DO NOTHING`,
+      `INSERT INTO allocations (user_id, environment_id, env_key_jkt, hostname, tunnel_name, status, generation, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'provisioning', 0, ?, ?)
+       ON CONFLICT (user_id, environment_id, env_key_jkt) DO NOTHING`,
     )
-    .bind(input.userId, input.environmentId, input.hostname, input.tunnelName, input.now, input.now)
+    .bind(input.userId, input.environmentId, input.kid, input.hostname, input.tunnelName, input.now, input.now)
     .run();
   const row = await getAllocation(db, input);
   if (!row) {
@@ -210,7 +229,7 @@ export async function updateAllocation(
   generation: number,
   fields: AllocationFields,
   now: number,
-  conditions: { tunnelId?: string; statusIn?: AllocationStatus[] } = {},
+  conditions: { tunnelId?: string | null; statusIn?: AllocationStatus[] } = {},
 ): Promise<number | null> {
   const assignments: string[] = [];
   const values: unknown[] = [];
@@ -221,9 +240,11 @@ export async function updateAllocation(
   }
   assignments.push("generation = generation + 1", "updated_at = ?");
   values.push(now);
-  let where = "user_id = ? AND environment_id = ? AND generation = ?";
-  values.push(key.userId, key.environmentId, generation);
-  if (conditions.tunnelId !== undefined) {
+  let where = "user_id = ? AND environment_id = ? AND env_key_jkt = ? AND generation = ?";
+  values.push(key.userId, key.environmentId, key.kid, generation);
+  if (conditions.tunnelId === null) {
+    where += " AND tunnel_id IS NULL";
+  } else if (conditions.tunnelId !== undefined) {
     where += " AND tunnel_id = ?";
     values.push(conditions.tunnelId);
   }
@@ -238,28 +259,38 @@ export async function updateAllocation(
   return (result.meta.changes ?? 0) === 1 ? generation + 1 : null;
 }
 
-export async function listAllocationsByTunnelNames(db: D1Database, names: string[]): Promise<AllocationRow[]> {
-  const rows: AllocationRow[] = [];
+export type AllocationWithLinkState = AllocationRow & {
+  /** 1 while the allocation's link is active with the same key; 0 once revoked or re-keyed. */
+  link_active: number;
+};
+
+export async function listAllocationsByTunnelNames(db: D1Database, names: string[]): Promise<AllocationWithLinkState[]> {
+  const rows: AllocationWithLinkState[] = [];
   // D1 caps bound parameters per statement at 100.
   for (let start = 0; start < names.length; start += 90) {
     const chunk = names.slice(start, start + 90);
     if (chunk.length === 0) continue;
     const { results } = await db
-      .prepare(`SELECT * FROM allocations WHERE tunnel_name IN (${chunk.map(() => "?").join(", ")})`)
+      .prepare(
+        `SELECT a.*, CASE WHEN l.revoked_at IS NULL AND l.env_key_jkt = a.env_key_jkt THEN 1 ELSE 0 END AS link_active
+         FROM allocations a
+         JOIN environment_links l ON l.user_id = a.user_id AND l.environment_id = a.environment_id
+         WHERE a.tunnel_name IN (${chunk.map(() => "?").join(", ")})`,
+      )
       .bind(...chunk)
-      .all<AllocationRow>();
+      .all<AllocationWithLinkState>();
     rows.push(...results);
   }
   return rows;
 }
 
-/** Allocations whose link was revoked but still hold Cloudflare resources. */
+/** Allocations whose link was revoked or re-keyed but still hold Cloudflare resources. */
 export async function listPendingTeardowns(db: D1Database, staleBefore: number, limit: number): Promise<AllocationRow[]> {
   const { results } = await db
     .prepare(
       `SELECT a.* FROM allocations a
        JOIN environment_links l ON l.user_id = a.user_id AND l.environment_id = a.environment_id
-       WHERE l.revoked_at IS NOT NULL
+       WHERE (l.revoked_at IS NOT NULL OR l.env_key_jkt != a.env_key_jkt)
          AND (a.tunnel_id IS NOT NULL OR a.dns_record_id IS NOT NULL)
          AND (a.status NOT IN ('reaping', 'deprovisioning') OR a.claimed_at IS NULL OR a.claimed_at < ?)
        ORDER BY a.updated_at
@@ -354,4 +385,36 @@ export async function deletePushDevice(db: D1Database, token: string): Promise<v
 export async function markPushSent(db: D1Database, tokens: string[], now: number): Promise<void> {
   if (tokens.length === 0) return;
   await db.batch(tokens.map((token) => db.prepare("UPDATE push_devices SET last_sent_at = ? WHERE token = ?").bind(now, token)));
+}
+
+// --- APNs provider token ----------------------------------------------------------
+
+export async function getStoredProviderToken(
+  db: D1Database,
+  keyId: string,
+): Promise<{ team_id: string; token: string; issued_at: number } | null> {
+  return db
+    .prepare("SELECT team_id, token, issued_at FROM apns_provider_tokens WHERE key_id = ?")
+    .bind(keyId)
+    .first<{ team_id: string; token: string; issued_at: number }>();
+}
+
+/**
+ * Stores a freshly minted token unless another isolate stored a newer one
+ * than `replaceBefore`, then returns whichever token won.
+ */
+export async function storeProviderToken(
+  db: D1Database,
+  input: { keyId: string; teamId: string; token: string; issuedAt: number; replaceBefore: number },
+): Promise<{ token: string; issued_at: number }> {
+  await db
+    .prepare(
+      `INSERT INTO apns_provider_tokens (key_id, team_id, token, issued_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT (key_id) DO UPDATE SET team_id = excluded.team_id, token = excluded.token, issued_at = excluded.issued_at
+       WHERE apns_provider_tokens.issued_at < ? OR apns_provider_tokens.team_id != excluded.team_id`,
+    )
+    .bind(input.keyId, input.teamId, input.token, input.issuedAt, input.replaceBefore)
+    .run();
+  const stored = await getStoredProviderToken(db, input.keyId);
+  return stored ?? { token: input.token, issued_at: input.issuedAt };
 }

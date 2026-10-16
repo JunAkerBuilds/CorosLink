@@ -72,6 +72,21 @@ describe("website relay tokens", () => {
     expect(await errorCode(await list(token))).toBe("invalid_token");
   });
 
+  it("rides out a website JWKS outage on recent keys without refetching on every request", async () => {
+    expect((await list(await harness.userToken())).status).toBe(200);
+    harness.jwksFailing = true;
+    harness.clock.advance(11 * 60 * 1000);
+    expect((await list(await harness.userToken())).status).toBe(200);
+    expect(harness.jwksFetches).toBe(2);
+    expect((await list(await harness.userToken())).status).toBe(200);
+    expect(harness.jwksFetches).toBe(2); // within the 30 s cooldown
+    // Keys older than an hour are no longer trusted.
+    harness.clock.advance(50 * 60 * 1000);
+    const stale = await list(await harness.userToken());
+    expect(stale.status).toBe(502);
+    expect(await errorCode(stale)).toBe("upstream_error");
+  });
+
   it("caches the JWKS between requests", async () => {
     await list(await harness.userToken());
     await list(await harness.userToken());

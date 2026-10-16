@@ -98,6 +98,18 @@ describe("POST /v1/environments/recovery", () => {
     expect((await harness.recovery(desktop, { tunnelId: linked.tunnelId, port: 47_831 })).status).toBe(200);
   });
 
+  it("does not start the two-minute window when a recovery fails part way", async () => {
+    harness.cloudflare.tunnels.get(linked.tunnelId)!.deleted_at = new Date(harness.clock.now).toISOString();
+    harness.cloudflare.failNext("POST", /\/cfd_tunnel$/u, 429);
+    const failed = await harness.recovery(desktop, { tunnelId: linked.tunnelId, port: 47_831 });
+    expect(failed.status).toBe(503);
+    expect(await errorCode(failed)).toBe("upstream_rate_limited");
+    harness.clock.advance(31_000);
+    const retried = await harness.recovery(desktop, { tunnelId: linked.tunnelId, port: 47_831 });
+    expect(retried.status).toBe(200);
+    expect(((await retried.json()) as RecoveryResponse).action).toBe("reprovisioned");
+  });
+
   it("waits while cleanup holds the allocation", async () => {
     await harness.env.DB.prepare("UPDATE allocations SET status = 'reaping', claimed_at = ?").bind(harness.clock.now).run();
     const busy = await harness.recovery(desktop, { tunnelId: linked.tunnelId, port: 47_831 });

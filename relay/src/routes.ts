@@ -14,16 +14,20 @@ import { brokerConnect } from "./connect";
 import { jwkThumbprint, parseEnvironmentPublicJwk } from "./crypto";
 import {
   activateLink,
+  allocationKeyOf,
+  getActiveLink,
   getActiveLinkByKey,
   getAllocation,
   getCachedTunnelStatus,
   listActiveLinks,
+  listAllocationsForLink,
   listPushDevices,
   putCachedTunnelStatus,
   registerPushDevice,
   revokeLink,
   unregisterPushDevice,
   type AllocationKey,
+  type LinkKey,
   type AllocationRow,
   type LinkRow,
 } from "./db";
@@ -60,8 +64,9 @@ const ANY_CLIENT = [WEBSITE_CLIENT_IDS.ios, WEBSITE_CLIENT_IDS.desktop] as const
 const TUNNEL_STATUS_TTL_MS = 30_000;
 const LABEL_PATTERN = /^[^\u0000-\u001f\u007f]+$/u;
 
+/** The allocation of a link: its user, environment and current key. */
 function linkedKey(link: LinkRow): AllocationKey {
-  return { userId: link.user_id, environmentId: link.environment_id };
+  return { userId: link.user_id, environmentId: link.environment_id, kid: link.env_key_jkt };
 }
 
 /** Resolves an environment-signed call to the active link holding that key. */
@@ -92,7 +97,19 @@ export async function handleLink(request: Request, ctx: RelayContext): Promise<R
   const label = requireString(signed.body, "label", { max: 64, pattern: LABEL_PATTERN }).trim();
   const platform = requireOneOf(signed.body, "platform", ENVIRONMENT_PLATFORMS);
   const port = requirePort(signed.body);
-  const key = { userId: user.userId, environmentId: signed.environmentId };
+  const key: AllocationKey = { userId: user.userId, environmentId: signed.environmentId, kid: signed.kid };
+
+  // An active link keeps its key. Re-keying would let anyone holding the
+  // user's desktop token slip their own key behind a computer the phones
+  // already trust; a new key needs an explicit unlink, and then it gets a new
+  // hostname of its own.
+  const current = await getActiveLink(ctx.db, key);
+  if (current && current.env_key_jkt !== key.kid) {
+    throw new RelayError(
+      "environment_key_mismatch",
+      "This computer is linked with a different key. Unlink it first, then link again.",
+    );
+  }
 
   const others = (await listActiveLinks(ctx.db, user.userId)).filter(
     (link) => link.environment_id !== key.environmentId,
@@ -114,7 +131,7 @@ export async function handleLink(request: Request, ctx: RelayContext): Promise<R
   });
   for (const previous of superseded) {
     // The desktop switched accounts; release the old account's tunnel in the background.
-    ctx.waitUntil(teardownAllocation(ctx, previous));
+    ctx.waitUntil(teardownAllocation(ctx, { ...previous, kid: key.kid }));
   }
 
   const ensured = await ensureEndpoint(ctx, key, { port, mode: "link" });
@@ -132,6 +149,7 @@ export async function handleLink(request: Request, ctx: RelayContext): Promise<R
     tunnelId: ensured.tunnelId,
     connectorToken: token,
     generation: ensured.allocation.generation,
+    keyThumbprint: key.kid,
   };
   return json(body);
 }
@@ -176,7 +194,7 @@ export async function handleRecovery(request: Request, ctx: RelayContext): Promi
 // --- POST /v1/environments/unlink -------------------------------------------------
 
 export async function handleUnlink(request: Request, ctx: RelayContext): Promise<Response> {
-  let key: AllocationKey;
+  let key: LinkKey;
   if (hasEnvironmentSignature(request) && !request.headers.has("authorization")) {
     const signed = await verifyEnvironmentRequest(request, {
       config: ctx.config,
@@ -196,15 +214,20 @@ export async function handleUnlink(request: Request, ctx: RelayContext): Promise
   // Revocation commits before any teardown: if Cloudflare or the database
   // fails below, the link is already unusable, never half-alive.
   const revoked = await revokeLink(ctx.db, key, ctx.deps.now());
-  if (!revoked && !(await getAllocation(ctx.db, key))) {
+  const allocations = await listAllocationsForLink(ctx.db, key);
+  if (!revoked && allocations.length === 0) {
     throw new RelayError("environment_not_linked", "This computer is not linked to your account.");
   }
-  const outcome = await teardownAllocation(ctx, key);
+  // Every key this pair was ever linked with, not only the current one.
+  let outcome: "complete" | "pending" = "complete";
+  for (const allocation of allocations) {
+    if ((await teardownAllocation(ctx, allocationKeyOf(allocation))) === "pending") outcome = "pending";
+  }
   log("info", "environment_unlinked", { environmentId: key.environmentId, teardown: outcome });
   const body: UnlinkResponse = {
     environmentId: key.environmentId,
     unlinked: true,
-    teardown: outcome === "pending" ? "pending" : "complete",
+    teardown: outcome,
   };
   return json(body);
 }
@@ -230,6 +253,7 @@ async function tunnelStatus(ctx: RelayContext, tunnelId: string): Promise<Cloudf
 async function summarize(ctx: RelayContext, link: LinkRow, allocation: AllocationRow | null): Promise<EnvironmentSummary> {
   const base = {
     environmentId: link.environment_id,
+    keyThumbprint: link.env_key_jkt,
     label: link.label,
     platform: link.platform,
     hostname: allocation?.hostname ?? null,

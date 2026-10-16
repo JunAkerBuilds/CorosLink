@@ -4,7 +4,14 @@ import { isExpiredTunnel, rotatedPages, SWEEP_DELETE_LIMIT, SWEEP_LIST_REQUEST_L
 import { createEnvironment, errorCode, Harness, type EnvironmentIdentity, type FakeTunnel } from "./helpers";
 
 const MINUTE = 60 * 1000;
+/** Links and recoveries vouch for a tunnel for 5 minutes; sweeps run after that. */
+const SETTLE = 6 * MINUTE;
 let harness: Harness;
+
+function sweep() {
+  harness.clock.advance(SETTLE);
+  return harness.maintenance();
+}
 
 async function setup(mode: "off" | "dry-run" | "enabled") {
   harness = await Harness.create({ RELAY_TUNNEL_CLEANUP_MODE: mode });
@@ -27,10 +34,12 @@ async function idleDesktop(
   const tunnel = harness.cloudflare.tunnels.get(linked.tunnelId)!;
   const idleFor = options.idleFor ?? 10 * MINUTE;
   const state = options.state ?? "down";
+  // Times are relative to when sweep() runs.
+  const sweepAt = harness.clock.now + SETTLE;
   tunnel.status = state;
-  tunnel.created_at = iso(harness.clock.now - idleFor - MINUTE);
-  if (state === "inactive") tunnel.created_at = iso(harness.clock.now - idleFor);
-  if (state === "down") tunnel.conns_inactive_at = iso(harness.clock.now - idleFor);
+  tunnel.created_at = iso(sweepAt - idleFor - MINUTE);
+  if (state === "inactive") tunnel.created_at = iso(sweepAt - idleFor);
+  if (state === "down") tunnel.conns_inactive_at = iso(sweepAt - idleFor);
   return { desktop, linked, tunnel };
 }
 
@@ -55,10 +64,10 @@ async function seedIdleAllocations(count: number): Promise<void> {
         .bind("bulk_user", environmentId, `kid_${index}`),
       db
         .prepare(
-          `INSERT INTO allocations (user_id, environment_id, hostname, tunnel_name, status, generation, tunnel_id, configured_tunnel_id, origin_port, ready_at, recovery_registered_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, 'ready', 3, ?, ?, 4000, 0, 0, 0, 0)`,
+          `INSERT INTO allocations (user_id, environment_id, env_key_jkt, hostname, tunnel_name, status, generation, tunnel_id, configured_tunnel_id, origin_port, ready_at, recovery_registered_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, 'ready', 3, ?, ?, 4000, 0, 0, 0, 0)`,
         )
-        .bind("bulk_user", environmentId, `${hex}.tunnels.test`, `clink-${hex}`, tunnel.id, tunnel.id),
+        .bind("bulk_user", environmentId, `kid_${index}`, `${hex}.tunnels.test`, `clink-${hex}`, tunnel.id, tunnel.id),
     );
   }
   for (let start = 0; start < statements.length; start += 100) {
@@ -109,8 +118,8 @@ describe("sweep modes", () => {
     await setup("off");
     await idleDesktop();
     harness.calls = [];
-    const { sweep } = await harness.maintenance();
-    expect(sweep).toMatchObject({ mode: "off", listRequests: 0, deleted: 0, wouldDelete: 0 });
+    const { sweep: result } = await sweep();
+    expect(result).toMatchObject({ mode: "off", listRequests: 0, deleted: 0, wouldDelete: 0 });
     expect(harness.cloudflareCalls()).toEqual([]);
   });
 
@@ -129,8 +138,8 @@ describe("sweep modes", () => {
     });
 
     harness.calls = [];
-    const { sweep } = await harness.maintenance();
-    expect(sweep).toMatchObject({
+    const { sweep: result } = await sweep();
+    expect(result).toMatchObject({
       mode: "dry-run",
       scanned: 4,
       wouldDelete: 2,
@@ -139,7 +148,7 @@ describe("sweep modes", () => {
       skippedNoRecovery: 1,
       skippedOrphan: 1,
     });
-    expect(sweep.candidates).toContain(eligible.tunnel.name);
+    expect(result.candidates).toContain(eligible.tunnel.name);
     expect(harness.cloudflareCalls().every((call) => call.method === "GET")).toBe(true);
     expect(harness.cloudflare.liveTunnels()).toHaveLength(6);
   });
@@ -168,8 +177,8 @@ describe("sweep modes", () => {
     });
     replaced.tunnel.status = "healthy";
 
-    const { sweep } = await harness.maintenance();
-    expect(sweep).toMatchObject({
+    const { sweep: result } = await sweep();
+    expect(result).toMatchObject({
       mode: "enabled",
       wouldDelete: 2,
       attempted: 2,
@@ -202,7 +211,6 @@ describe("sweep modes", () => {
   it("enabled: a host that reconnects mid-sweep wins", async () => {
     await setup("enabled");
     const { desktop, linked, tunnel } = await idleDesktop();
-    harness.clock.advance(3 * MINUTE);
     let busy: Response | undefined;
     harness.cloudflare.hooks.push({
       method: "GET",
@@ -215,11 +223,62 @@ describe("sweep modes", () => {
         tunnel.status = "healthy";
       },
     });
-    const { sweep } = await harness.maintenance();
+    const { sweep: result } = await sweep();
     expect(await errorCode(busy!)).toBe("allocation_busy");
-    expect(sweep).toMatchObject({ deleted: 0, skippedReconnected: 1 });
+    expect(result).toMatchObject({ deleted: 0, skippedReconnected: 1 });
     expect(harness.cloudflare.liveTunnels().map((entry) => entry.id)).toContain(tunnel.id);
     expect((await harness.allocation("user_1", desktop.environmentId))?.status).toBe("ready");
+  });
+});
+
+describe("sweep safety", () => {
+  it("leaves a tunnel a recovery just vouched for", async () => {
+    await setup("enabled");
+    const { tunnel } = await idleDesktop({ idleFor: 30 * MINUTE });
+    harness.clock.advance(2 * MINUTE);
+    const { sweep: result } = await harness.maintenance();
+    expect(result).toMatchObject({ skippedRecent: 1, deleted: 0 });
+    expect(harness.cloudflare.liveTunnels().map((entry) => entry.id)).toContain(tunnel.id);
+  });
+
+  it("treats an empty 200 from Cloudflare as a failure, not as a deleted tunnel", async () => {
+    await setup("enabled");
+    const { desktop, linked } = await idleDesktop();
+    harness.cloudflare.rawNext("GET", new RegExp(`/cfd_tunnel/${linked.tunnelId}$`, "u"), 200, "");
+    const { sweep: result } = await sweep();
+    expect(result).toMatchObject({ failed: 1, deleted: 0 });
+    expect(await harness.allocation("user_1", desktop.environmentId)).toMatchObject({
+      status: "ready",
+      tunnel_id: linked.tunnelId,
+    });
+  });
+
+  it("cleans up a tunnel a link created after its unlink had already finished", async () => {
+    await setup("enabled");
+    const desktop = await createEnvironment();
+    await harness.link(desktop);
+    const unlink = async () =>
+      harness.fetch(
+        new Request("https://relay.test/v1/environments/unlink", {
+          method: "POST",
+          headers: { authorization: `Bearer ${await harness.userToken()}`, "content-type": "application/json" },
+          body: JSON.stringify({ environmentId: desktop.environmentId }),
+        }),
+      );
+    await unlink();
+    // A relink is about to create the tunnel when a second unlink lands and finishes first.
+    harness.cloudflare.hooks.push({ method: "POST", path: /\/cfd_tunnel$/u, once: true, run: async () => void (await unlink()) });
+    const relink = await harness.link(desktop);
+    expect(relink.status).toBe(409);
+    const [leaked] = harness.cloudflare.liveTunnels();
+    expect(leaked).toBeDefined();
+    expect((await harness.allocation("user_1", desktop.environmentId))?.tunnel_id).toBeNull();
+
+    // Once it has sat unused for an hour, cleanup finds it through its unlinked allocation.
+    harness.clock.advance(61 * MINUTE);
+    const { sweep: result } = await harness.maintenance();
+    expect(result).toMatchObject({ unlinked: 1, deleted: 1 });
+    expect(harness.cloudflare.liveTunnels()).toHaveLength(0);
   });
 });
 

@@ -10,6 +10,7 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   environment_not_linked: 404,
   environment_not_ready: 409,
   link_limit_reached: 409,
+  environment_key_mismatch: 409,
   allocation_conflict: 409,
   allocation_busy: 503,
   rate_limited: 429,

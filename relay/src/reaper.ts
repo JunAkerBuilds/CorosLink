@@ -1,6 +1,11 @@
-import { isManagedTunnelName, type RelayContext } from "./allocations";
+import { isManagedTunnelName, teardownAllocation, type RelayContext } from "./allocations";
 import { CloudflareApiError, CloudflareClient, isNotFound, isRateLimited, type CloudflareTunnel } from "./cloudflare";
-import { listAllocationsByTunnelNames, updateAllocation, type AllocationRow } from "./db";
+import {
+  allocationKeyOf,
+  listAllocationsByTunnelNames,
+  updateAllocation,
+  type AllocationWithLinkState,
+} from "./db";
 import { tunnelNamePrefix, type CleanupMode } from "./env";
 import { log } from "./log";
 
@@ -31,6 +36,10 @@ export interface SweepResult {
   skippedNoRecovery: number;
   skippedBusy: number;
   skippedReconnected: number;
+  /** A recovery or link touched the allocation inside the grace period. */
+  skippedRecent: number;
+  /** Tunnels of revoked or re-keyed links, handed to teardown (recorded or not). */
+  unlinked: number;
   truncated: boolean;
   rateLimited: boolean;
   deadlineReached: boolean;
@@ -53,6 +62,8 @@ function emptyResult(mode: CleanupMode): SweepResult {
     skippedNoRecovery: 0,
     skippedBusy: 0,
     skippedReconnected: 0,
+    skippedRecent: 0,
+    unlinked: 0,
     truncated: false,
     rateLimited: false,
     deadlineReached: false,
@@ -186,7 +197,8 @@ export async function sweepIdleTunnels(ctx: RelayContext, mode: CleanupMode): Pr
   );
   const byName = new Map(allocations.map((row) => [row.tunnel_name, row]));
 
-  const candidates: Array<{ row: AllocationRow; tunnel: CloudflareTunnel; status: CandidateStatus }> = [];
+  const candidates: Candidate[] = [];
+  const unlinkedSeen = new Set<string>();
   for (const { tunnel, status } of rotated) {
     const row = byName.get(tunnel.name);
     if (!row) {
@@ -194,22 +206,38 @@ export async function sweepIdleTunnels(ctx: RelayContext, mode: CleanupMode): Pr
       result.skippedOrphan += 1;
       continue;
     }
-    if (row.tunnel_id === null) {
-      result.skippedUnrecorded += 1;
-      continue;
-    }
-    if (row.tunnel_id !== tunnel.id) {
-      result.skippedReplaced += 1;
-      continue;
-    }
-    if (row.recovery_registered_at === null) {
-      // This host cannot replace a deleted tunnel by itself.
-      result.skippedNoRecovery += 1;
-      continue;
-    }
-    if (row.status !== "ready" && row.status !== "provisioning") {
-      result.skippedBusy += 1;
-      continue;
+    let kind: Candidate["kind"] = "idle";
+    if (!row.link_active) {
+      // Unlinked or re-keyed: nobody can reach this tunnel any more, recorded
+      // or not (a provision cancelled mid-way leaves it unrecorded). Teardown
+      // claims the row and deletes everything under its name.
+      const allocation = `${row.user_id}\u0000${row.environment_id}\u0000${row.env_key_jkt}`;
+      if (unlinkedSeen.has(allocation)) continue;
+      unlinkedSeen.add(allocation);
+      kind = "unlinked";
+    } else {
+      if (row.tunnel_id === null) {
+        result.skippedUnrecorded += 1;
+        continue;
+      }
+      if (row.tunnel_id !== tunnel.id) {
+        result.skippedReplaced += 1;
+        continue;
+      }
+      if (row.recovery_registered_at === null) {
+        // This host cannot replace a deleted tunnel by itself.
+        result.skippedNoRecovery += 1;
+        continue;
+      }
+      if (row.status !== "ready" && row.status !== "provisioning") {
+        result.skippedBusy += 1;
+        continue;
+      }
+      if (row.updated_at > startedAt - DOWN_GRACE_MS) {
+        // A recovery or link just vouched for this tunnel; give its connector time to come up.
+        result.skippedRecent += 1;
+        continue;
+      }
     }
     result.wouldDelete += 1;
     if (mode === "dry-run") {
@@ -220,25 +248,53 @@ export async function sweepIdleTunnels(ctx: RelayContext, mode: CleanupMode): Pr
       result.truncated = true;
       break;
     }
-    candidates.push({ row, tunnel, status });
+    candidates.push({ row, tunnel, status, kind });
   }
 
   for (const candidate of candidates) {
     if (result.rateLimited || pastDeadline()) break;
-    await reapOne(ctx, cf, candidate, cutoffs[candidate.status], result);
+    if (candidate.kind === "unlinked") {
+      await reapUnlinked(ctx, candidate, result);
+    } else {
+      await reapOne(ctx, cf, candidate, cutoffs[candidate.status], result);
+    }
   }
   return result;
+}
+
+interface Candidate {
+  row: AllocationWithLinkState;
+  tunnel: CloudflareTunnel;
+  status: CandidateStatus;
+  kind: "idle" | "unlinked";
+}
+
+async function reapUnlinked(ctx: RelayContext, candidate: Candidate, result: SweepResult): Promise<void> {
+  result.attempted += 1;
+  result.unlinked += 1;
+  const report = { rateLimited: false };
+  const outcome = await teardownAllocation(ctx, allocationKeyOf(candidate.row), report);
+  if (outcome === "complete") {
+    result.deleted += 1;
+    log("info", "reaper_deleted_unlinked_tunnel", { tunnelName: candidate.row.tunnel_name });
+  } else if (outcome === "pending") {
+    result.failed += 1;
+  }
+  if (report.rateLimited) {
+    result.rateLimited = true;
+    result.truncated = true;
+  }
 }
 
 async function reapOne(
   ctx: RelayContext,
   cf: CloudflareClient,
-  candidate: { row: AllocationRow; tunnel: CloudflareTunnel; status: CandidateStatus },
+  candidate: Candidate,
   cutoff: number,
   result: SweepResult,
 ): Promise<void> {
   const { row, tunnel, status } = candidate;
-  const key = { userId: row.user_id, environmentId: row.environment_id };
+  const key = allocationKeyOf(row);
   const claimedAt = ctx.deps.now();
   // Claim at the generation we read. A recovery or relink since then bumped
   // it, and the host that came back wins.
@@ -256,6 +312,7 @@ async function reapOne(
   }
   const release = () =>
     updateAllocation(ctx.db, key, claimed, { status: row.status, claimed_at: null }, ctx.deps.now());
+  let remoteDeleted = false;
 
   try {
     let current: CloudflareTunnel | null = null;
@@ -277,6 +334,7 @@ async function reapOne(
         if (!isNotFound(error)) throw error;
       }
     }
+    remoteDeleted = true;
     // The DNS record stays: recovery points it at the replacement tunnel, so
     // the hostname phones know keeps working.
     const finished = await updateAllocation(
@@ -299,7 +357,9 @@ async function reapOne(
     log("info", "reaper_deleted_tunnel", { tunnelName: row.tunnel_name, status });
   } catch (error) {
     result.failed += 1;
-    await release();
+    // Once the tunnel is gone, never point the row back at it: leave the claim
+    // to age out, and the next recovery re-provisions.
+    if (!remoteDeleted) await release();
     if (isRateLimited(error)) {
       result.rateLimited = true;
       result.truncated = true;

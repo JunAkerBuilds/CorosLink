@@ -120,11 +120,45 @@ describe("POST /v1/environments/link", () => {
 
   it("lets a different key link the same environment id only as a separate link", async () => {
     const impostor = await createEnvironment(desktop.environmentId);
-    await harness.link(desktop, { userId: "user_1" });
+    const real = (await (await harness.link(desktop, { userId: "user_1" })).json()) as LinkResponse;
     const response = await harness.link(impostor, { userId: "user_attacker" });
     expect(response.status).toBe(200);
+    expect(((await response.json()) as LinkResponse).hostname).not.toBe(real.hostname);
     // The real link is untouched.
     expect((await harness.linkRow("user_1", desktop.environmentId))?.revoked_at).toBeNull();
+  });
+
+  it("refuses to re-key an active link, even for the same account", async () => {
+    const real = (await (await harness.link(desktop)).json()) as LinkResponse;
+    expect(real.keyThumbprint).toBe(desktop.kid);
+    const impostor = await createEnvironment(desktop.environmentId);
+    const response = await harness.link(impostor);
+    expect(response.status).toBe(409);
+    expect(await errorCode(response)).toBe("environment_key_mismatch");
+    const link = await harness.linkRow("user_1", desktop.environmentId);
+    expect(link?.env_key_jkt).toBe(desktop.kid);
+    expect(harness.cloudflare.liveTunnels()).toHaveLength(1);
+  });
+
+  it("gives a key linked after an unlink its own hostname, so it cannot take over the old one", async () => {
+    const real = (await (await harness.link(desktop)).json()) as LinkResponse;
+    await harness.fetch(
+      new Request("https://relay.test/v1/environments/unlink", {
+        method: "POST",
+        headers: { authorization: `Bearer ${await harness.userToken()}`, "content-type": "application/json" },
+        body: JSON.stringify({ environmentId: desktop.environmentId }),
+      }),
+    );
+    const impostor = await createEnvironment(desktop.environmentId);
+    const relinked = (await (await harness.link(impostor)).json()) as LinkResponse;
+    expect(relinked.hostname).not.toBe(real.hostname);
+    expect(relinked.keyThumbprint).toBe(impostor.kid);
+    expect(harness.cloudflare.liveTunnels().map((tunnel) => tunnel.id)).toEqual([relinked.tunnelId]);
+    const { body } = await harness.getJson<{ environments: Array<{ keyThumbprint: string }> }>(
+      "/v1/environments",
+      await harness.userToken({ clientId: "c-link-ios" }),
+    );
+    expect(body.environments.map((environment) => environment.keyThumbprint)).toEqual([impostor.kid]);
   });
 
   it("caps how many computers one account links, each being a paid tunnel", async () => {

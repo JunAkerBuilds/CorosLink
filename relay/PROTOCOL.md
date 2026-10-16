@@ -27,7 +27,7 @@ An ES256 JWT that `watchfaces.coroslink.com` issues at `POST /api/v1/app/relay-t
   - `sid` = the app session id
   - `iat`, and `exp` no more than 600 s after `iat`
   - `jti`
-- **What the relay checks:** the signature, against the JWKS. It caches the keys for 10 minutes and refetches at most once per 30 s when it sees an unknown `kid`. It also checks `iss`, `aud`, `exp` (with 30 s of skew), the lifetime, and that `client_id` is allowed for the endpoint. `sub`, `sid` and `jti` must be present.
+- **What the relay checks:** the signature, against the JWKS. It caches the keys for 10 minutes and refetches at most once per 30 s, whether the cache is due or it sees an unknown `kid`. While the JWKS is unreachable it keeps trusting keys it fetched in the last hour, then answers 502 `upstream_error`. It also checks `iss`, `aud`, `exp` (with 30 s of skew), the lifetime, and that `client_id` is allowed for the endpoint. `sub`, `sid` and `jti` must be present.
 - **Revocation:** the relay cannot see a website session being revoked. The 10-minute lifetime is the bound, so the website must stop minting tokens for a revoked session.
 
 ### Environment key and signature (P2/P6)
@@ -101,7 +101,7 @@ claims: {
 1. Verify the signature against the pinned relay JWKS.
 2. Check `typ`, `iss` and `aud`; check that `exp` hasn't passed and is no more than 120 s after `iat`; check that `environmentId` is its own and `userId` is the linked user.
 3. Refuse a `nonce` it has seen.
-4. Mint a one-time credential bound to `jkt`, lasting at most 10 minutes.
+4. Mint a one-time credential bound to `jkt`, lasting at most 10 minutes. The relay allows 60 s of clock skew on top.
 5. Answer `200`:
 
 ```
@@ -122,21 +122,22 @@ The relay checks the proof against the environment key it stored at link time, t
 
 ## Tunnels
 
-- **Hostnames:** each user/environment pair gets one hostname for life: `<16 hex>.<TUNNEL_ZONE_NAME>`. It is first-level, so the zone's free certificate covers it, and it is derived from a hash that reveals neither id. The tunnel is named `clink-<same 16 hex>` (`clink-<stage>-…` outside production).
+- **Hostnames:** each user/environment/key triple gets one hostname for life: `<16 hex>.<TUNNEL_ZONE_NAME>`. It is first-level, so the zone's free certificate covers it, and it is derived from a hash that reveals no id. The tunnel is named `clink-<same 16 hex>` (`clink-<stage>-…` outside production).
+- **Why the key is part of it:** a token for the user is enough to call link. Including the key means whoever holds that token can never slip their own key behind an address phones already trust. A new key always gets a new hostname.
 - **Ingress:** `[{hostname, service: "http://localhost:<port>"}, {service: "http_status:404"}]`. cloudflared sends the original `Host`, so the desktop server must accept the tunnel hostname. It should listen on `127.0.0.1`; cloudflared tries every address `localhost` resolves to.
 - **Generations:** every write to an allocation bumps its `generation`, and only lands if the generation is still the one the writer read. Link and recovery checkpoint each Cloudflare step (tunnel id, ingress, DNS record), so a retry resumes where it stopped. Unlink and cleanup claim the generation before deleting anything. If a concurrent writer wins, the loser answers `allocation_conflict` (retry) or `allocation_busy` (retry after `Retry-After`).
 
 ## Endpoints
 
-Every response is JSON. Every non-2xx body is `{ "error": { "code", "message", "details"? } }`. Codes are listed in `ERROR_CODES` in `src/protocol.ts`. 429 and 503 answers carry `Retry-After`.
+Every response is JSON. Every non-2xx body is `{ "error": { "code", "message", "details"? } }`. Codes are listed in `ERROR_CODES` in `src/protocol.ts`. `rate_limited`, `allocation_busy` and `upstream_rate_limited` answers carry `Retry-After`; `not_configured` (503) does not, since retrying won't help.
 
 | Endpoint | Auth | Body → response |
 | --- | --- | --- |
-| `POST /v1/environments/link` | Bearer (`coroslink-desktop`) + env signature, `op` link | `LinkRequest {environmentId, publicJwk, label, platform, port}` → `LinkResponse {environmentId, userId, hostname, httpBaseUrl, tunnelId, connectorToken, generation}` |
+| `POST /v1/environments/link` | Bearer (`coroslink-desktop`) + env signature, `op` link | `LinkRequest {environmentId, publicJwk, label, platform, port}` → `LinkResponse {environmentId, userId, hostname, httpBaseUrl, tunnelId, connectorToken, generation, keyThumbprint}` |
 | `POST /v1/environments/recovery` | env signature, `op` recovery | `RecoveryRequest {environmentId, tunnelId \| null, port}` → `RecoveryResponse {…, action, connectorToken?}` |
 | `POST /v1/environments/unlink` | Bearer (any client) **or** env signature, `op` unlink | `{environmentId}` → `{environmentId, unlinked: true, teardown: "complete" \| "pending"}` |
 | `GET /v1/environments` | Bearer (any client) | → `{environments: EnvironmentSummary[]}` |
-| `POST /v1/environments/:environmentId/connect` | Bearer (`c-link-ios`) + `DPoP` | empty → `ConnectResponse {environmentId, hostname, httpBaseUrl, credential, expiresAt}` |
+| `POST /v1/environments/:environmentId/connect` | Bearer (`c-link-ios`) + `DPoP` | empty → `ConnectResponse {environmentId, keyThumbprint, hostname, httpBaseUrl, credential, expiresAt}` |
 | `POST /v1/devices` | Bearer (`c-link-ios`) | `{token: <APNs hex>, environment: "sandbox" \| "production"}` → `{registered: true}` |
 | `DELETE /v1/devices` | Bearer (any client) | `{token}` → `{unregistered: true}` |
 | `POST /v1/activity` | env signature, `op` activity | `{environmentId, sessionId, event: "replied" \| "approval"}` → `{sent, failed, removed}` |
@@ -152,6 +153,7 @@ Every response is JSON. Every non-2xx body is `{ "error": { "code", "message", "
   3. It returns the connector token.
 - **Idempotent:** link again whenever the port or label changes, or to recover a lost connector token.
 - **Changing accounts:** if this desktop key is linked under another account, that account's link is revoked and its tunnel torn down.
+- **Changing keys:** an active link keeps its key. Linking the same `environmentId` with another key answers 409 `environment_key_mismatch`. Unlink first; the new key then gets a new hostname.
 - **Limit:** an account can link `MAX_LINKED_ENVIRONMENTS_PER_USER` (10) computers. Past that the answer is 409 `link_limit_reached`.
 - **The connector token is a secret.** Store it with `safeStorage` and run `cloudflared tunnel --no-autoupdate run` with `TUNNEL_TOKEN` in the environment.
 
@@ -169,7 +171,7 @@ Every response is JSON. Every non-2xx body is `{ "error": { "code", "message", "
   - `action` is `unchanged`, `reconfigured` or `reprovisioned`.
   - `connectorToken` is present whenever `tunnelId` in the request is not the current tunnel. Restart cloudflared with it.
 - **Limits:**
-  - At most once per 120 s per environment; otherwise 429 with `Retry-After`. Inside that window, start the stored connector anyway.
+  - At most once per 120 s per environment, counted from the last recovery that **succeeded**; otherwise 429 with `Retry-After`. Inside that window, start the stored connector anyway. A failed recovery (e.g. 503 `upstream_rate_limited`) can be retried after its own `Retry-After`.
   - 503 `allocation_busy` means cleanup holds the tunnel. Retry after `Retry-After`; it doesn't use up the 120 s.
 
 ### Unlink
@@ -178,11 +180,13 @@ Every response is JSON. Every non-2xx body is `{ "error": { "code", "message", "
 - **Order:**
   1. The relay commits the revocation first, so the link is dead even if teardown fails.
   2. It claims the allocation's generation.
-  3. It deletes the DNS record, then the tunnel's connections, then the tunnel. The hostname stays reserved for a later relink.
+  3. It deletes the recorded DNS record, then each tunnel's connections, then the tunnels. Besides the recorded ids, it deletes any live tunnel with the allocation's name and any CNAME at its hostname, which catches resources a cancelled or racing link created but never recorded. This covers every key the computer was ever linked with. The hostname stays reserved for a later relink with the same key.
 - **Failed teardown:** `teardown: "pending"` means teardown failed part way. The 5-minute cron retries it.
 - **Afterwards:** a desktop's later signed calls get 404 `environment_not_linked`. It should stop cloudflared and drop the connector token.
 
 ### List
+
+Every entry carries `keyThumbprint`, the RFC 7638 thumbprint of the desktop key the relay verifies mint answers with. Phones should pin it (from LAN pairing, or the first time they see the computer). A changed thumbprint means the computer was unlinked and relinked with another key, and the phone should ask before trusting it.
 
 `status` is one of:
 - `online`: Cloudflare reports the tunnel `healthy` or `degraded`.
@@ -194,7 +198,7 @@ Cloudflare's status is cached for 30 s.
 
 ### Connect
 
-The relay checks that the link and allocation are active, signs the mint request and verifies the desktop's proof. It answers with:
+The relay checks that the link and allocation are active, signs the mint request and verifies the desktop's proof. It re-reads the link after the desktop answers, so an unlink during the mint hands nothing over. The response's `keyThumbprint` names the key that signed the answer. It answers with:
 - 404 `environment_not_linked`;
 - 409 `environment_not_ready`;
 - 502 `environment_unreachable` (asleep or offline), `environment_redirect_refused`, `environment_refused` (the desktop answered 4xx) or `environment_response_invalid`.
@@ -216,7 +220,8 @@ The relay sends APNs alerts to every device the linked user registered:
 ```
 
 - **Dead tokens:** a token APNs reports as `410`/`Unregistered`, `BadDeviceToken` or `DeviceTokenNotForTopic` is deleted.
-- **Device limit:** an account keeps its 20 most recently registered devices.
+- **Device limit:** an account keeps its 20 most recently registered devices. Registering a token another account holds moves it, since tokens are not secret enough to prove ownership.
+- **Provider token:** one ES256 token per APNs key, stored in D1 so every isolate reuses it for ~50 minutes. Apple refuses tokens that change too often. On `ExpiredProviderToken` or `InvalidProviderToken` the relay retries once with a newer one.
 
 ## Cleanup (cron, every 5 minutes)
 
@@ -229,13 +234,15 @@ The relay sends APNs alerts to every device the linked user registered:
   - **Deleted only if:**
     - the allocation registered recovery;
     - it still records that tunnel id;
-    - it is `ready` or `provisioning`.
+    - it is `ready` or `provisioning`;
+    - no recovery or link touched it in the last 5 minutes (`skippedRecent`), so a host that just woke up has time to reconnect.
+  - **Unlinked allocations:** a listed tunnel whose allocation's link was revoked or re-keyed (`unlinked`) is handed to the unlink teardown, which deletes it by name. That is how a tunnel created after its unlink finished gets removed.
   - **Skipped and counted:**
     - orphans, which have no allocation (`skippedOrphan`; clear these by hand);
     - replaced tunnels (`skippedReplaced`);
-    - unrecorded tunnels (`skippedUnrecorded`);
+    - unrecorded tunnels of an active link, which a provision may still own (`skippedUnrecorded`);
     - hosts without recovery (`skippedNoRecovery`);
     - busy allocations (`skippedBusy`).
-  - **Claiming:** each delete claims the allocation's generation and rechecks the tunnel first. A host that reconnects mid-sweep keeps its tunnel, and a recovery that arrives while the claim is held gets `allocation_busy`.
+  - **Claiming:** each delete claims the allocation's generation and rechecks the tunnel first. A host that reconnects mid-sweep keeps its tunnel, and a recovery that arrives while the claim is held gets `allocation_busy`. Cloudflare answers must be an explicit `success: true`: an empty or truncated 200 is a failure, never "the tunnel is gone".
   - **Bounds per sweep:** 10 list requests, 100 deletions and a 110 s deadline. A Cloudflare 429 stops the sweep. Each sweep starts one budget further along the candidate list.
   - **After a reap:** the DNS record stays. The desktop's next recovery re-provisions the tunnel behind the same hostname.

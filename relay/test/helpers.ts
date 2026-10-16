@@ -115,6 +115,13 @@ export class FakeCloudflare {
 
   constructor(private readonly clock: Clock) {}
 
+  private raw: Array<{ method: string; path: RegExp; status: number; body: string }> = [];
+
+  /** Answers the next matching request with exactly this status and body. */
+  rawNext(method: string, path: RegExp, status: number, body: string): void {
+    this.raw.push({ method, path, status, body });
+  }
+
   failNext(method: string, path: RegExp, status: number, options: { code?: number; message?: string; times?: number } = {}): void {
     this.failures.push({ method, path, status, times: options.times ?? 1, code: options.code, message: options.message });
   }
@@ -154,6 +161,11 @@ export class FakeCloudflare {
         if (hook.once) this.hooks.splice(this.hooks.indexOf(hook), 1);
         await hook.run();
       }
+    }
+    const raw = this.raw.find((entry) => entry.method === request.method && entry.path.test(path));
+    if (raw) {
+      this.raw.splice(this.raw.indexOf(raw), 1);
+      return new Response(raw.body, { status: raw.status });
     }
     const failure = this.failures.find((entry) => entry.method === request.method && entry.path.test(path));
     if (failure) {
@@ -419,6 +431,7 @@ export class Harness {
   /** Desktop mint handlers by hostname. */
   desktops = new Map<string, DesktopMint>();
   jwksFetches = 0;
+  jwksFailing = false;
   extraWebsiteKeys: Array<JWK & { kid: string }> = [];
   env!: Env;
 
@@ -463,6 +476,7 @@ export class Harness {
       if (url.host === "api.cloudflare.com") return this.cloudflare.handle(request);
       if (url.href === WEBSITE_JWKS_URL) {
         this.jwksFetches += 1;
+        if (this.jwksFailing) return new Response("unavailable", { status: 503 });
         return new Response(
           JSON.stringify({
             keys: [{ ...this.website.publicJwk, kid: this.website.kid, alg: "ES256", use: "sig" }, ...this.extraWebsiteKeys],
@@ -596,6 +610,7 @@ export async function resetDatabase(db: D1Database): Promise<void> {
     db.prepare("DELETE FROM push_devices"),
     db.prepare("DELETE FROM nonces"),
     db.prepare("DELETE FROM tunnel_status_cache"),
+    db.prepare("DELETE FROM apns_provider_tokens"),
   ]);
 }
 

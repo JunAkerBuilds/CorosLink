@@ -113,7 +113,9 @@ export class CloudflareClient {
     } catch {
       // Non-JSON error pages fall through to the status check.
     }
-    if (!response.ok || envelope.success === false) {
+    // Only an explicit success counts: an empty or truncated 200 is a failure,
+    // never "no result".
+    if (!response.ok || envelope.success !== true) {
       const retryAfter = Number(response.headers.get("retry-after"));
       throw new CloudflareApiError(
         operation,
@@ -145,7 +147,11 @@ export class CloudflareClient {
   }
 
   async getTunnel(tunnelId: string): Promise<CloudflareTunnel> {
-    return (await this.call<CloudflareTunnel>("get-tunnel", "GET", this.tunnelPath(`/${tunnelId}`))).result;
+    const tunnel = (await this.call<CloudflareTunnel>("get-tunnel", "GET", this.tunnelPath(`/${tunnelId}`))).result;
+    if (tunnel?.id !== tunnelId) {
+      throw new CloudflareApiError("get-tunnel", 502, [{ message: "response is for another tunnel" }]);
+    }
+    return tunnel;
   }
 
   async listTunnels(query: TunnelListQuery): Promise<{ result: CloudflareTunnel[]; resultInfo?: ResultInfo }> {
