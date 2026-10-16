@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The Coach's **Coach creations** panel (wide windows) now also lists the workouts and plans the coach prepares through COROS's own tools, so it no longer stays hidden when the only thing to review is a **Review workout** card. Open an item for its details and **Save to COROS** from the panel, as with local drafts.
 - In the paper theme, the training globe on Overview is a softly shaded off-white sphere instead of a flat grey ball.
 
 ## [0.1.53] - 2026-10-15

@@ -114,7 +114,11 @@ import {
   upsertWorkoutDeleteEntry,
   upsertCorosActionEntry,
   isChatVisualEntry,
+  listCoachCreations,
+  planEntryScheduleDate,
   type ChatEntry,
+  type CoachCreation,
+  type CoachCreationStatus,
   type SourceInfo
 } from "./chatTypes";
 
@@ -584,13 +588,6 @@ function formatPlanDateLabel(scheduleDate: string): string {
   }).format(date);
 }
 
-function planEntryScheduleDate(entry: PlanDraftPreviewEntry): string | undefined {
-  if (entry.scheduleDate) return entry.scheduleDate;
-  const sourceDate = entry.source?.schedule_date;
-  if (!sourceDate || !/^\d{8}$/.test(sourceDate)) return undefined;
-  return `${sourceDate.slice(0, 4)}-${sourceDate.slice(4, 6)}-${sourceDate.slice(6, 8)}`;
-}
-
 function localPlanDateKey(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -669,6 +666,21 @@ function groupPlanEntriesByWeek(entries: PlanDraftPreviewEntry[]): PlanWeekGroup
 /** Inline style hook that tints a row/chip with the sport's own colour. */
 function planSportStyle(sport: PlanDraftPreviewEntry["sport"]): CSSProperties {
   return { "--chat-plan-sport": sportTheme(sport).color } as CSSProperties;
+}
+
+function creationStatusLabel(status: CoachCreationStatus): string {
+  switch (status) {
+    case "saved":
+      return t("Saved");
+    case "pending":
+      return t("Pending");
+    case "saving":
+      return t("Saving…");
+    case "uncertain":
+      return t("Unconfirmed");
+    default:
+      return t("Draft");
+  }
 }
 
 function WorkoutPreviewCard({
@@ -1857,7 +1869,7 @@ export function ChatView({
   const [mcpRefreshVersion, setMcpRefreshVersion] = useState(0);
   const [mcpBusy, setMcpBusy] = useState(false);
   const [showTools, setShowTools] = useState(false);
-  const [selectedPlanDraftId, setSelectedPlanDraftId] = useState<
+  const [selectedCreationId, setSelectedCreationId] = useState<
     string | null
   >(null);
   const [planPanelExpanded, setPlanPanelExpanded] = useState(false);
@@ -3216,9 +3228,13 @@ export function ChatView({
     }
   };
 
-  const handleScrollToPlanChat = (draftId: string) => {
-    const planIndex = timeline.findIndex(
-      (entry) => entry.kind === "planDraft" && entry.draft.draftId === draftId
+  const handleScrollToCreationChat = (creation: CoachCreation) => {
+    const planIndex = timeline.findIndex((entry) =>
+      creation.kind === "planDraft"
+        ? entry.kind === "planDraft" &&
+          entry.draft.draftId === creation.draft.draftId
+        : entry.kind === "corosAction" &&
+          entry.preview.requestId === creation.preview.requestId
     );
     if (planIndex < 0) return;
 
@@ -3364,28 +3380,60 @@ export function ChatView({
   const showOpenRouterGate =
     isOpenRouterProvider && !chatSettings.openRouter.hasApiKey;
   const showPlanPanel = useMediaQuery("(min-width: 1400px)");
-  const planDrafts = timeline.flatMap((entry) =>
-    entry.kind === "planDraft" ? [entry.draft] : []
+  // Local drafts and official COROS review cards, in timeline order.
+  const creations = listCoachCreations(timeline, uploadedPlans);
+  const latestCreation = creations.at(-1);
+  const selectedCreation =
+    creations.find((creation) => creation.id === selectedCreationId) ??
+    latestCreation;
+  // "Plan 2 of 3" numbering counts local training plans only.
+  const trainingPlanDrafts = creations.flatMap((creation) =>
+    creation.kind === "planDraft" && creation.artifact === "plan"
+      ? [creation.draft]
+      : []
   );
-  const latestPlanDraft = planDrafts.at(-1);
-  const selectedPlanDraft =
-    planDrafts.find((draft) => draft.draftId === selectedPlanDraftId) ??
-    latestPlanDraft;
-  const trainingPlanDrafts = planDrafts.filter(
-    (draft) => draft.artifactType !== "workout"
+  const selectedTrainingPlanNumber =
+    selectedCreation?.kind === "planDraft" && selectedCreation.artifact === "plan"
+      ? trainingPlanDrafts.findIndex(
+          (draft) => draft.draftId === selectedCreation.draft.draftId
+        ) + 1
+      : 0;
+  const creationArtifacts = new Set(
+    creations.map((creation) => creation.artifact)
   );
-  const selectedTrainingPlanNumber = selectedPlanDraft?.artifactType !== "workout"
-    ? trainingPlanDrafts.findIndex(
-        (draft) => draft.draftId === selectedPlanDraft?.draftId
-      ) + 1
-    : 0;
+  const creationsSubtitle =
+    creationArtifacts.size > 1
+      ? t("Plans and one-off workouts")
+      : creationArtifacts.has("plan")
+        ? t("Training plans")
+        : t("One-off workouts");
+  const selectedCreationTitle = !selectedCreation
+    ? ""
+    : selectedCreation.kind === "corosAction"
+      ? t(selectedCreation.title)
+      : selectedCreation.title ||
+        (selectedCreation.artifact === "workout"
+          ? t("Untitled workout")
+          : t("Untitled plan"));
+  const selectedCreationKicker = !selectedCreation
+    ? ""
+    : selectedCreation.kind === "corosAction"
+      ? [t(selectedCreation.destination), selectedCreation.date]
+          .filter(Boolean)
+          .join(" · ")
+      : selectedCreation.artifact === "workout"
+        ? t("One-off workout")
+        : t("Plan {{p0}} of {{p1}}", {
+            p0: selectedTrainingPlanNumber,
+            p1: trainingPlanDrafts.length
+          });
 
   useEffect(() => {
-    setSelectedPlanDraftId(latestPlanDraft?.draftId ?? null);
-    if (latestPlanDraft) {
+    setSelectedCreationId(latestCreation?.id ?? null);
+    if (latestCreation) {
       setPlanPanelExpanded(false);
     }
-  }, [activeSessionId, latestPlanDraft?.draftId]);
+  }, [activeSessionId, latestCreation?.id]);
 
   const providerSwitch = (
     <ProviderSwitch
@@ -3943,6 +3991,9 @@ export function ChatView({
               return <div key={entry.preview.proposalId} className="chat-row chat-row-assistant"><div className="chat-bubble chat-bubble-plan">{api && <WorkoutEditCard preview={entry.preview} api={api} />}</div></div>;
             }
             if (entry.kind === "corosAction") {
+              if (showPlanPanel) {
+                return null;
+              }
               return <div key={entry.preview.requestId} className="chat-row chat-row-assistant">
                 <div className="chat-avatar chat-avatar-assistant"><Sparkles size={16} aria-hidden="true" /></div>
                 <div className="chat-bubble chat-bubble-plan">
@@ -4146,7 +4197,7 @@ export function ChatView({
             onStop={handleStop}
           />
         </div>
-        {showPlanPanel && selectedPlanDraft ? (
+        {showPlanPanel && selectedCreation ? (
           <aside
             className={`chat-plan-panel${
               planPanelExpanded ? " is-expanded" : " is-list-view"
@@ -4164,26 +4215,76 @@ export function ChatView({
                     </span>
                     <div>
                       <strong>{t("Coach creations")}</strong>
-                      <span>{t("Plans and one-off workouts")}</span>
+                      <span>{creationsSubtitle}</span>
                     </div>
                   </div>
                   <strong className="chat-plan-list-count">
-                    {planDrafts.length}
+                    {creations.length}
                   </strong>
                 </header>
                 <ol className="chat-plan-list">
-                  {planDrafts.map((draft, index) => {
-                    const saved = Boolean(
-                      uploadedPlans[draft.draftId] ||
-                        draft.uploadResult ||
-                        draft.uploadedAt
-                    );
-                    const isWorkout = draft.artifactType === "workout";
+                  {creations.map((creation, index) => {
+                    const selected = creation.id === selectedCreation.id;
+                    const SportIcon = sportTheme(creation.sport).icon;
+                    const select = () => {
+                      setSelectedCreationId(creation.id);
+                      setPlanPanelExpanded(true);
+                    };
+
+                    if (creation.kind === "corosAction") {
+                      const label = creation.summary || t(creation.title);
+                      return (
+                        <li key={creation.id}>
+                          <button
+                            type="button"
+                            className={`chat-plan-list-item${
+                              selected ? " is-selected" : ""
+                            }`}
+                            onClick={select}
+                            aria-label={t("Open {{p0}}", { p0: label })}
+                          >
+                            <span
+                              className="chat-plan-list-sport"
+                              style={planSportStyle(creation.sport)}
+                            >
+                              <SportIcon
+                                size={15}
+                                strokeWidth={2}
+                                aria-hidden="true"
+                              />
+                            </span>
+                            <span className="chat-plan-list-copy">
+                              <span className="chat-plan-list-kicker">
+                                {t(creation.title)}
+                              </span>
+                              <strong>{label}</strong>
+                              <span className="chat-plan-list-meta">
+                                <span>{t(creation.destination)}</span>
+                                {creation.date ? (
+                                  <span>{creation.date}</span>
+                                ) : null}
+                                <span data-status={creation.status}>
+                                  {creationStatusLabel(creation.status)}
+                                </span>
+                              </span>
+                            </span>
+                            <ChevronRight size={15} aria-hidden="true" />
+                          </button>
+                        </li>
+                      );
+                    }
+
+                    const { draft } = creation;
+                    const saved = creation.status === "saved";
+                    const isWorkout = creation.artifact === "workout";
                     const planNumber = isWorkout
                       ? 0
-                      : planDrafts
+                      : creations
                           .slice(0, index + 1)
-                          .filter((item) => item.artifactType !== "workout").length;
+                          .filter(
+                            (item) =>
+                              item.kind === "planDraft" && item.artifact === "plan"
+                          ).length;
                     const weeks = isWorkout
                       ? 0
                       : Math.max(
@@ -4192,26 +4293,20 @@ export function ChatView({
                             (week) => week.id !== "unscheduled"
                           ).length
                         );
-                    const primarySport = draft.entries[0]?.sport;
-                    const SportIcon = sportTheme(primarySport).icon;
-                    const selected = draft.draftId === selectedPlanDraft.draftId;
 
                     return (
-                      <li key={draft.draftId}>
+                      <li key={creation.id}>
                         <button
                           type="button"
                           className={`chat-plan-list-item${
                             selected ? " is-selected" : ""
                           }`}
-                          onClick={() => {
-                            setSelectedPlanDraftId(draft.draftId);
-                            setPlanPanelExpanded(true);
-                          }}
+                          onClick={select}
                           aria-label={t("Open {{p0}}", { p0: draft.name || `${isWorkout ? t("workout") : "plan"} ${index + 1}` })}
                         >
                           <span
                             className="chat-plan-list-sport"
-                            style={planSportStyle(primarySport)}
+                            style={planSportStyle(creation.sport)}
                           >
                             <SportIcon
                               size={15}
@@ -4267,17 +4362,10 @@ export function ChatView({
                       {t("Creations")}</button>
                     <div className="chat-plan-panel-title is-detail-title">
                       <div>
-                        <strong title={selectedPlanDraft.name}>
-                          {selectedPlanDraft.name ||
-                            (selectedPlanDraft.artifactType === "workout"
-                              ? t("Untitled workout")
-                              : t("Untitled plan"))}
+                        <strong title={selectedCreationTitle}>
+                          {selectedCreationTitle}
                         </strong>
-                        <span>
-                          {selectedPlanDraft.artifactType === "workout"
-                            ? t("One-off workout")
-                            : t("Plan {{p0}} of {{p1}}", { p0: selectedTrainingPlanNumber, p1: trainingPlanDrafts.length })}
-                        </span>
+                        <span>{selectedCreationKicker}</span>
                       </div>
                     </div>
                     <div className="chat-plan-panel-actions">
@@ -4285,7 +4373,7 @@ export function ChatView({
                         type="button"
                         className="chat-plan-panel-chat-link"
                         onClick={() =>
-                          handleScrollToPlanChat(selectedPlanDraft.draftId)
+                          handleScrollToCreationChat(selectedCreation)
                         }
                         title={t("View the generated response in chat")}
                       >
@@ -4295,24 +4383,38 @@ export function ChatView({
                   </div>
                 </header>
                 <div className="chat-plan-panel-body">
-                  <CoachDraftPreviewCard
-                    key={selectedPlanDraft.draftId}
-                    draft={selectedPlanDraft}
-                    uploading={uploadingDraftId === selectedPlanDraft.draftId}
-                    uploaded={uploadedPlans[selectedPlanDraft.draftId]}
-                    onUpload={(destination, scheduleDate) =>
-                      void handleUploadPlanDraft(
-                        selectedPlanDraft.draftId,
-                        destination,
-                        scheduleDate
-                      )
-                    }
-                    onReview={
-                      onReviewPlan
-                        ? () => handleReviewPlanDraft(selectedPlanDraft)
-                        : undefined
-                    }
-                  />
+                  {selectedCreation.kind === "corosAction" ? (
+                    <CorosActionCard
+                      key={selectedCreation.id}
+                      preview={selectedCreation.preview}
+                      onConfirm={() =>
+                        handleConfirmCorosAction(
+                          selectedCreation.preview.requestId
+                        )
+                      }
+                    />
+                  ) : (
+                    <CoachDraftPreviewCard
+                      key={selectedCreation.id}
+                      draft={selectedCreation.draft}
+                      uploading={
+                        uploadingDraftId === selectedCreation.draft.draftId
+                      }
+                      uploaded={uploadedPlans[selectedCreation.draft.draftId]}
+                      onUpload={(destination, scheduleDate) =>
+                        void handleUploadPlanDraft(
+                          selectedCreation.draft.draftId,
+                          destination,
+                          scheduleDate
+                        )
+                      }
+                      onReview={
+                        onReviewPlan
+                          ? () => handleReviewPlanDraft(selectedCreation.draft)
+                          : undefined
+                      }
+                    />
+                  )}
                 </div>
               </>
             )}

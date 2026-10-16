@@ -2,6 +2,7 @@ import { t, useLanguage } from "../i18n/tools";
 import { useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 import type { CoachCorosActionPreview } from "../../electron/types";
+import { isoDateFromCompact } from "./chatTypes";
 
 export function CorosActionCard({ preview, onConfirm }: {
   preview: CoachCorosActionPreview;
@@ -12,7 +13,7 @@ export function CorosActionCard({ preview, onConfirm }: {
   const [error, setError] = useState<string>();
   const [result, setResult] = useState<CoachCorosActionPreview>();
   const current = result ?? preview;
-  const date = current.date?.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
+  const date = isoDateFromCompact(current.date);
   const save = async () => {
     if (saving) return;
     setSaving(true);
@@ -23,8 +24,8 @@ export function CorosActionCard({ preview, onConfirm }: {
   };
   return <div className="chat-plan-card chat-coros-action-card">
     <div className="chat-plan-card-header">
-      <h4>{current.title}</h4>
-      <span className="chat-plan-card-summary">{current.destination}{date ? ` · ${date}` : ""}</span>
+      <h4>{t(current.title)}</h4>
+      <span className="chat-plan-card-summary">{t(current.destination)}{date ? ` · ${date}` : ""}</span>
     </div>
     <p className="chat-plan-card-summary">{current.summary}</p>
     {current.details.length > 0 && <details className="chat-coros-action-details">
