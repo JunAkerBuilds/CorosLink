@@ -288,6 +288,19 @@ export function initializeDatabase(userDataPath: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_chat_sessions_provider_updated
       ON chat_sessions(provider, updated_at DESC);
 
+    -- Numbered Coach events (CoachSessionHub), so a client that drops off can
+    -- replay what it missed. Live turn text is not kept here, only saved
+    -- changes and turn boundaries; chat_sessions.messages_json stays the snapshot.
+    CREATE TABLE IF NOT EXISTS chat_session_events (
+      session_id TEXT NOT NULL,
+      seq INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      client_message_id TEXT,
+      PRIMARY KEY (session_id, seq)
+    );
+
     CREATE TABLE IF NOT EXISTS chat_plan_drafts (
       draft_id TEXT PRIMARY KEY,
       plan_json TEXT NOT NULL,
@@ -415,6 +428,8 @@ export function initializeDatabase(userDataPath: string): Database.Database {
   ensureColumn(db, "training_activities", "feel_type", "INTEGER");
   migrateChatSessionProviderConstraint(db);
   migrateChatTranscriptsToSessions(db);
+  // After the provider rebuild above, which recreates chat_sessions.
+  ensureColumn(db, "chat_sessions", "last_seq", "INTEGER NOT NULL DEFAULT 0");
 
   // Seed the default only once, including when upgrading an existing registry.
   // Remember initialization separately so removing COROS survives a restart.
@@ -963,9 +978,75 @@ export function updateChatSessionRow(
 }
 
 export function deleteChatSessionRow(id: string): void {
+  const database = requireDatabase();
+  database.transaction(() => {
+    database.prepare("DELETE FROM chat_session_events WHERE session_id = ?").run(id);
+    database.prepare("DELETE FROM chat_sessions WHERE id = ?").run(id);
+  })();
+}
+
+export interface ChatSessionEventRow {
+  seq: number;
+  kind: string;
+  payload_json: string;
+  created_at: string;
+  client_message_id: string | null;
+}
+
+export function getChatSessionLastSeq(sessionId: string): number {
+  const row = requireDatabase()
+    .prepare("SELECT last_seq FROM chat_sessions WHERE id = ?")
+    .get(sessionId) as { last_seq: number | null } | undefined;
+  return row?.last_seq ?? 0;
+}
+
+/** Appends events and moves the session's cursor in one transaction. */
+export function appendChatSessionEvents(
+  sessionId: string,
+  events: Array<{ seq: number; kind: string; payloadJson: string; createdAt: string; clientMessageId?: string }>,
+  lastSeq: number
+): void {
+  const database = requireDatabase();
+  const insert = database.prepare(
+    `INSERT OR REPLACE INTO chat_session_events (session_id, seq, kind, payload_json, created_at, client_message_id)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  );
+  const cursor = database.prepare(
+    "UPDATE chat_sessions SET last_seq = MAX(last_seq, ?) WHERE id = ?"
+  );
+  database.transaction(() => {
+    for (const event of events) {
+      insert.run(sessionId, event.seq, event.kind, event.payloadJson, event.createdAt, event.clientMessageId ?? null);
+    }
+    cursor.run(lastSeq, sessionId);
+  })();
+}
+
+export function listChatSessionEventRows(sessionId: string, afterSeq = 0): ChatSessionEventRow[] {
+  return requireDatabase()
+    .prepare(
+      `SELECT seq, kind, payload_json, created_at, client_message_id
+       FROM chat_session_events
+       WHERE session_id = ? AND seq > ?
+       ORDER BY seq ASC`
+    )
+    .all(sessionId, afterSeq) as ChatSessionEventRow[];
+}
+
+/** Drops events at or below `throughSeq`; replay from before it becomes a snapshot. */
+export function pruneChatSessionEvents(sessionId: string, throughSeq: number): void {
   requireDatabase()
-    .prepare("DELETE FROM chat_sessions WHERE id = ?")
-    .run(id);
+    .prepare("DELETE FROM chat_session_events WHERE session_id = ? AND seq <= ?")
+    .run(sessionId, throughSeq);
+}
+
+/** Forgets every event and sets the cursor, for transcripts changed outside the hub. */
+export function resetChatSessionEvents(sessionId: string, lastSeq: number): void {
+  const database = requireDatabase();
+  database.transaction(() => {
+    database.prepare("DELETE FROM chat_session_events WHERE session_id = ?").run(sessionId);
+    database.prepare("UPDATE chat_sessions SET last_seq = ? WHERE id = ?").run(lastSeq, sessionId);
+  })();
 }
 
 function toSpotifySyncTrack(row: SpotifySyncTrackRow): SpotifySyncTrack {

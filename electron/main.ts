@@ -29,10 +29,20 @@ import {
   deleteDownload,
   getDownloadById,
   hasAvailableDownloadForUrl,
+  getSetting,
   initializeDatabase,
   listDownloads,
-  markDownloadTransferred
+  markDownloadTransferred,
+  setSetting
 } from "./database";
+import {
+  CoachSessionHub,
+  createChatHistorySessionStore,
+  createSqliteCoachEventStore,
+  type CoachConfirmInput,
+  type CoachSendInput
+} from "./coachHub";
+import { workoutEdits } from "./workoutEditRuntime";
 import { completeOnboarding, isOnboardingPending } from "./onboardingState";
 import {
   downloadAudio,
@@ -406,7 +416,8 @@ import {
   testOpenRouterConnection,
   uploadTrainingPlanDraft,
   confirmWorkoutDelete,
-  confirmCoachCorosAction
+  confirmCoachCorosAction,
+  type ChatStreamSink
 } from "./chatService";
 import {
   listPinnedCoachCharts,
@@ -471,6 +482,55 @@ import type {
 
 let mainWindow: BrowserWindow | undefined;
 let workoutAutomation: ReturnType<typeof registerWorkoutAutomation> | undefined;
+// Owns every Coach conversation; the window (and later phones) are its clients.
+let coachHub: CoachSessionHub | undefined;
+
+function requireCoachHub(): CoachSessionHub {
+  if (!coachHub) throw new Error("Coach is still starting. Try again in a moment.");
+  return coachHub;
+}
+
+function createCoachHub(): CoachSessionHub {
+  return new CoachSessionHub({
+    // getChatSessionEntries also reconciles COROS review cards with their saves.
+    sessions: createChatHistorySessionStore(undefined, { load: getChatSessionEntries }),
+    events: createSqliteCoachEventStore(),
+    stream: {
+      start: (sink, requestId, messages, unitSystem, provider) =>
+        streamChat(sink, requestId, messages, unitSystem, { provider }),
+      cancel: cancelChat
+    },
+    actions: {
+      confirmCorosAction: confirmCoachCorosAction,
+      confirmWorkoutDelete,
+      uploadPlanDraft: uploadTrainingPlanDraft,
+      strengthEditStatus: (proposalId) => workoutEdits().status(proposalId),
+      confirmStrengthEdit: (proposalId, reviewHash, selectedIds) =>
+        workoutEdits().confirm(proposalId, reviewHash, selectedIds),
+      cancelStrengthEdit: async (proposalId) => {
+        await workoutEdits().tool("cancel_workout_edit", { proposalId }, "coach");
+        return workoutEdits().status(proposalId);
+      }
+    },
+    settings: getChatSettings,
+    unitSystem: {
+      get: () => {
+        const saved = getSetting("coach.unitSystem");
+        return saved ? normalizeUnitSystem(saved) : undefined;
+      },
+      set: (value) => setSetting("coach.unitSystem", value)
+    }
+  });
+}
+
+/** `chat:send` streams (the Training Library generator) go to the window that asked. */
+function windowChatSink(window: BrowserWindow | undefined): ChatStreamSink {
+  return {
+    send: (channel, payload) => {
+      if (window && !window.isDestroyed()) window.webContents.send(channel, payload);
+    }
+  };
+}
 let watchfaceAutomation: ReturnType<typeof registerWatchfaceAutomation> | undefined;
 let rendererReady = false;
 let pendingCommunityWatchfaceOpen: CommunityWatchfaceOpenRequest | undefined;
@@ -935,9 +995,15 @@ app.whenReady().then(() => {
   hydratePlanDraftStoreFromDatabase();
   prunePlanDraftStore();
   pruneDeleteRequestStore();
+  coachHub = createCoachHub();
   registerIpcHandlers();
   watchfaceAutomation = registerWatchfaceAutomation(() => mainWindow);
-  workoutAutomation = registerWorkoutAutomation(() => mainWindow);
+  workoutAutomation = registerWorkoutAutomation(() => mainWindow, {
+    // A strength review saved from its card updates the Coach entry for every client.
+    onCoachEditChanged: (proposalId) => {
+      void coachHub?.syncStrengthEdit(proposalId).catch(() => undefined);
+    }
+  });
   startGoogleCalendarSync();
   startAppleCalendarSync();
   setJobListener((jobs) => {
@@ -1007,6 +1073,7 @@ app.on("before-quit", event => {
     }
     return;
   }
+  coachHub?.shutdown();
   void corosNativeBle.stop();
   void watchfaceAutomation?.stop();
   void workoutAutomation?.stop();
@@ -1735,10 +1802,16 @@ function registerIpcHandlers(): void {
   ipcMain.handle("chat:logout", () => logoutChat());
 
   // Kicks off streaming; assistant text is pushed via chat:stream* events.
+  // Coach conversations use coach:send instead, which the hub owns.
   ipcMain.handle(
     "chat:send",
-    (_event, requestId: string, messages: ChatMessage[], unitSystem?: UnitSystem) =>
-      streamChat(mainWindow, requestId, messages, normalizeUnitSystem(unitSystem))
+    (event, requestId: string, messages: ChatMessage[], unitSystem?: UnitSystem) =>
+      streamChat(
+        windowChatSink(BrowserWindow.fromWebContents(event.sender) ?? mainWindow),
+        requestId,
+        messages,
+        normalizeUnitSystem(unitSystem)
+      )
   );
 
   ipcMain.handle("chat:cancel", (_event, requestId: string) =>
@@ -1759,13 +1832,100 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "chat:saveSession",
-    (_event, sessionId: string, entries: PersistedChatEntry[]) =>
-      saveChatSessionEntries(sessionId, entries)
+    (_event, sessionId: string, entries: PersistedChatEntry[]) => {
+      const summary = saveChatSessionEntries(sessionId, entries);
+      coachHub?.invalidate(sessionId);
+      return summary;
+    }
   );
 
   ipcMain.handle("chat:deleteSession", (_event, sessionId: string) => {
-    deleteChatSessionById(sessionId);
+    if (coachHub) coachHub.deleteSession(sessionId);
+    else deleteChatSessionById(sessionId);
   });
+
+  // ----- Coach hub: the window is one client among equals -----
+  // One live subscription per window: the conversation it shows.
+  const coachSubscriptions = new Map<number, { sessionId: string; unsubscribe: () => void }>();
+  const dropCoachSubscription = (contentsId: number) => {
+    coachSubscriptions.get(contentsId)?.unsubscribe();
+    coachSubscriptions.delete(contentsId);
+  };
+  const watchedCoachClients = new Set<number>();
+  requireCoachHub().onSessionsChanged((change) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("coach:sessions", change);
+  });
+  ipcMain.handle("coach:listSessions", (_event, provider?: ChatProvider) =>
+    requireCoachHub().listSessions(provider)
+  );
+  ipcMain.handle("coach:getSession", (_event, sessionId: string) =>
+    requireCoachHub().getSession(sessionId)
+  );
+  ipcMain.handle("coach:createSession", (_event, provider: ChatProvider) =>
+    requireCoachHub().createSession(provider)
+  );
+  ipcMain.handle("coach:deleteSession", (_event, sessionId: string) => {
+    requireCoachHub().deleteSession(sessionId);
+  });
+  ipcMain.handle("coach:subscribe", (event, sessionId: string, afterSeq: number) => {
+    const contents = event.sender;
+    dropCoachSubscription(contents.id);
+    const subscription = requireCoachHub().subscribe(sessionId, afterSeq, (frame) => {
+      if (!contents.isDestroyed()) contents.send("coach:event", frame);
+    });
+    coachSubscriptions.set(contents.id, { sessionId, unsubscribe: subscription.unsubscribe });
+    if (!watchedCoachClients.has(contents.id)) {
+      watchedCoachClients.add(contents.id);
+      const contentsId = contents.id;
+      contents.once("destroyed", () => {
+        watchedCoachClients.delete(contentsId);
+        dropCoachSubscription(contentsId);
+      });
+    }
+    return { response: subscription.response, replay: subscription.replay };
+  });
+  ipcMain.handle("coach:unsubscribe", (event, sessionId: string) => {
+    if (coachSubscriptions.get(event.sender.id)?.sessionId === sessionId) {
+      dropCoachSubscription(event.sender.id);
+    }
+  });
+  ipcMain.handle("coach:send", (_event, input: CoachSendInput) =>
+    requireCoachHub().send({
+      ...input,
+      unitSystem: input.unitSystem ? normalizeUnitSystem(input.unitSystem) : undefined
+    })
+  );
+  ipcMain.handle("coach:cancel", (_event, sessionId: string) =>
+    requireCoachHub().cancel(sessionId)
+  );
+  // Approvals from the desktop come only from its own window; remote clients
+  // reach the hub with their grant's permissions instead (CoachActor).
+  ipcMain.handle("coach:confirm", (event, input: CoachConfirmInput) => {
+    mainWindowSender(event, "Coach approvals");
+    return requireCoachHub().confirm({
+      ...input,
+      options: input.options
+        ? {
+            ...input.options,
+            unitSystem: input.options.unitSystem ? normalizeUnitSystem(input.options.unitSystem) : undefined
+          }
+        : undefined
+    });
+  });
+  ipcMain.handle(
+    "coach:beginLocalTurn",
+    (event, sessionId: string, clientMessageId: string, text: string) => {
+      mainWindowSender(event, "Coach file exports");
+      return requireCoachHub().beginLocalTurn(sessionId, clientMessageId, text);
+    }
+  );
+  ipcMain.handle(
+    "coach:finishLocalTurn",
+    (event, sessionId: string, requestId: string, reply: string) => {
+      mainWindowSender(event, "Coach file exports");
+      requireCoachHub().finishLocalTurn(sessionId, requestId, reply);
+    }
+  );
 
   ipcMain.handle("chatMcp:getStatus", () => getCorosMcpStatus());
 

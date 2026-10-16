@@ -9,6 +9,7 @@ import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "./googleCalendarTypes";
 import type { ManualRaceInput, RaceEditInput, RaceOverview, StravaRaceImportResult } from "./raceTypes";
 import type { WorkoutJournalEntry, WorkoutJournalSaveInput } from "./workoutJournalTypes";
+import type { CoachConfirmInput, CoachConfirmResult, CoachEventFrame, CoachSendInput, CoachSessionsChange, CoachSnapshot, CoachSubscribeResult } from "./coachHub/coachContract";
 import type {
   ActivityBackupFilters,
   ActivityBackupPreview,
@@ -1331,6 +1332,46 @@ const api = {
     ipcRenderer.invoke("chat:confirmCorosAction", requestId),
   confirmWorkoutDelete: (requestId: string): Promise<DeleteWorkoutResult> =>
     ipcRenderer.invoke("chat:confirmWorkoutDelete", requestId),
+  // Coach hub: conversations live in the main process; the window is a client.
+  coachListSessions: (provider?: ChatProvider): Promise<ChatSessionSummary[]> =>
+    ipcRenderer.invoke("coach:listSessions", provider),
+  coachGetSession: (sessionId: string): Promise<CoachSnapshot> =>
+    ipcRenderer.invoke("coach:getSession", sessionId),
+  coachCreateSession: (provider: ChatProvider): Promise<ChatSessionSummary> =>
+    ipcRenderer.invoke("coach:createSession", provider),
+  coachDeleteSession: (sessionId: string): Promise<void> =>
+    ipcRenderer.invoke("coach:deleteSession", sessionId),
+  coachSubscribe: (
+    sessionId: string,
+    afterSeq: number
+  ): Promise<{ response: CoachSubscribeResult; replay: CoachEventFrame[] }> =>
+    ipcRenderer.invoke("coach:subscribe", sessionId, afterSeq),
+  coachUnsubscribe: (sessionId: string): Promise<void> =>
+    ipcRenderer.invoke("coach:unsubscribe", sessionId),
+  coachSend: (input: CoachSendInput): Promise<{ requestId: string }> =>
+    ipcRenderer.invoke("coach:send", input),
+  coachCancel: (sessionId: string): Promise<{ cancelled: boolean }> =>
+    ipcRenderer.invoke("coach:cancel", sessionId),
+  coachConfirm: (input: CoachConfirmInput): Promise<CoachConfirmResult> =>
+    ipcRenderer.invoke("coach:confirm", input),
+  coachBeginLocalTurn: (
+    sessionId: string,
+    clientMessageId: string,
+    text: string
+  ): Promise<{ requestId: string }> =>
+    ipcRenderer.invoke("coach:beginLocalTurn", sessionId, clientMessageId, text),
+  coachFinishLocalTurn: (sessionId: string, requestId: string, reply: string): Promise<void> =>
+    ipcRenderer.invoke("coach:finishLocalTurn", sessionId, requestId, reply),
+  onCoachEvent: (callback: (frame: CoachEventFrame) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, frame: CoachEventFrame) => callback(frame);
+    ipcRenderer.on("coach:event", listener);
+    return () => ipcRenderer.removeListener("coach:event", listener);
+  },
+  onCoachSessionsChanged: (callback: (change: CoachSessionsChange) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, change: CoachSessionsChange) => callback(change);
+    ipcRenderer.on("coach:sessions", listener);
+    return () => ipcRenderer.removeListener("coach:sessions", listener);
+  },
   getFitIndexStatus: (): Promise<FitIndexStatus> =>
     ipcRenderer.invoke("fitIndex:getStatus"),
   startFitIndexSync: (options?: FitIndexSyncOptions): Promise<FitIndexProgress> =>

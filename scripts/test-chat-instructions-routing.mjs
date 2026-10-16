@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { EventEmitter } from "node:events";
 import path from "node:path";
 import vm from "node:vm";
 
@@ -76,10 +75,8 @@ vm.runInNewContext(readFileSync(servicePath, "utf8"), {
 }, { filename: servicePath });
 
 const events = [];
-const window = Object.assign(new EventEmitter(), {
-  isDestroyed: () => false,
-  webContents: { send: (channel, payload) => events.push({ channel, payload }) }
-});
+// streamChat writes to a sink (the window for chat:send, a Coach session in the hub).
+const window = { send: (channel, payload) => events.push({ channel, payload }) };
 const { streamChat, getChatSettings, saveChatSettings } = module.exports;
 
 for (const provider of ["chatgpt", "openrouter", "local", "claude-code"]) {

@@ -22226,6 +22226,11 @@ tr.data-intervals-row-missing {
   border-color: color-mix(in srgb, var(--danger, #e5484d) 35%, var(--glass-border));
 }
 
+/* A failed delete (from any device) stays retryable under its reason. */
+.chat-delete-card [role="alert"] {
+  color: var(--text-danger, #e66c6c);
+}
+
 .chat-delete-details {
   display: grid;
   gap: 8px;

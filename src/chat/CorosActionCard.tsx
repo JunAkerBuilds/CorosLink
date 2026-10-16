@@ -1,5 +1,5 @@
 import { t, useLanguage } from "../i18n/tools";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 import type { CoachCorosActionPreview } from "../../electron/types";
 import { isoDateFromCompact } from "./chatTypes";
@@ -12,6 +12,8 @@ export function CorosActionCard({ preview, onConfirm }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const [result, setResult] = useState<CoachCorosActionPreview>();
+  // The Coach hub's entry is the truth once it changes, whichever device saved.
+  useEffect(() => setResult(undefined), [preview]);
   const current = result ?? preview;
   const date = isoDateFromCompact(current.date);
   const save = async () => {
@@ -35,9 +37,10 @@ export function CorosActionCard({ preview, onConfirm }: {
     {current.message && <p role="status">{current.state === "saved" && <Check size={14} aria-hidden="true" />} {current.message}</p>}
     {error && <p role="alert">{error}</p>}
     {(current.state === "pending" || current.state === "saving") && <div className="chat-plan-actions">
-      <button type="button" className="chat-plan-upload" onClick={() => void save()} disabled={saving}>
-        {saving && <Loader2 className="chat-spinner" size={14} aria-hidden="true" />}
-        {saving ? t("Saving…") : current.state === "saving" ? t("Check save status") : t("Save to COROS")}
+      {/* "saving" is a save in flight, possibly started from another device. */}
+      <button type="button" className="chat-plan-upload" onClick={() => void save()} disabled={saving || current.state === "saving"}>
+        {(saving || current.state === "saving") && <Loader2 className="chat-spinner" size={14} aria-hidden="true" />}
+        {saving || current.state === "saving" ? t("Saving…") : t("Save to COROS")}
       </button>
     </div>}
   </div>;

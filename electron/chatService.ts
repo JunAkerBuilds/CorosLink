@@ -702,28 +702,43 @@ function getStoredToken(): StoredChatToken | null {
 
 // ----- Streaming chat -----
 
+/**
+ * Where a stream's `chat:stream*` events go: the window for `chat:send`, or a
+ * Coach session in CoachSessionHub. A stream ends only when it finishes, is
+ * cancelled, or the app quits, never because a window closed.
+ */
+export interface ChatStreamSink {
+  send(channel: string, payload: unknown): void;
+}
+
+export interface StreamChatOptions {
+  /** The session's provider; defaults to the one selected in Coach settings. */
+  provider?: ChatProvider;
+}
+
 export async function streamChat(
-  mainWindow: BrowserWindow | null | undefined,
+  sink: ChatStreamSink,
   requestId: string,
   messages: ChatMessage[],
-  unitSystem: UnitSystem = "metric"
+  unitSystem: UnitSystem = "metric",
+  options: StreamChatOptions = {}
 ): Promise<void> {
   unitSystem = normalizeUnitSystem(unitSystem);
   const send = (channel: string, payload: unknown) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(channel, payload);
+    try {
+      sink.send(channel, payload);
+    } catch (error) {
+      console.warn("[chat] stream listener failed:", error);
     }
   };
 
   const controller = new AbortController();
   activeStreams.set(requestId, controller);
-  // Abort if the window goes away mid-stream.
-  const onClosed = () => controller.abort();
-  mainWindow?.once("closed", onClosed);
 
   let fullText = "";
+  const provider = options.provider ?? getChatSettings().provider;
   try {
-    const settings = getChatSettings();
+    const settings: ChatSettings = { ...getChatSettings(), provider };
     if (settings.provider === "claude-code") {
       const status = await inspectClaudeCodeStatus(
         settings.claudeCode.executablePath
@@ -1120,7 +1135,7 @@ export async function streamChat(
     if (controller.signal.aborted) {
       send("chat:streamDone", { requestId, fullText, finishReason: "cancelled" });
     } else {
-      if (getChatSettings().provider === "claude-code") {
+      if (provider === "claude-code") {
         const current = getChatSettings().claudeCode;
         const failure =
           error instanceof ClaudeCodeProviderError ? error.kind : "connection";
@@ -1150,7 +1165,6 @@ export async function streamChat(
       });
     }
   } finally {
-    mainWindow?.removeListener("closed", onClosed);
     activeStreams.delete(requestId);
   }
 }

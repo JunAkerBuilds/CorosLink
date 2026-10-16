@@ -21,10 +21,12 @@ import {
 } from "./trainingHubService";
 import {
   getChatPlanDraft,
+  getSetting,
   listChatPlanDrafts,
   markChatPlanDraftUploaded,
   pruneChatPlanDrafts,
-  saveChatPlanDraft
+  saveChatPlanDraft,
+  setSetting
 } from "./database";
 import type {
   CorosMcpTool,
@@ -86,6 +88,32 @@ interface DeleteWorkoutParams {
 
 const draftStore = new Map<string, StoredPlanDraft>();
 const deleteRequestStore = new Map<string, StoredDeleteRequest>();
+// Staged deletes survive a restart, so a card approved later (or from another
+// device) still finds its request.
+const DELETE_REQUESTS_SETTING = "chat.deleteRequests";
+let deleteRequestsLoaded = false;
+
+function deleteRequests(): Map<string, StoredDeleteRequest> {
+  if (deleteRequestsLoaded) return deleteRequestStore;
+  deleteRequestsLoaded = true;
+  try {
+    const saved = JSON.parse(getSetting(DELETE_REQUESTS_SETTING) ?? "[]") as unknown;
+    if (Array.isArray(saved)) {
+      for (const request of saved as StoredDeleteRequest[]) {
+        if (typeof request?.requestId === "string" && !deleteRequestStore.has(request.requestId)) {
+          deleteRequestStore.set(request.requestId, request);
+        }
+      }
+    }
+  } catch {
+    // A corrupt list only loses cards staged before it; new requests still work.
+  }
+  return deleteRequestStore;
+}
+
+function persistDeleteRequests(): void {
+  setSetting(DELETE_REQUESTS_SETTING, JSON.stringify([...deleteRequests().values()]));
+}
 
 function persistPlanDraft(stored: StoredPlanDraft): void {
   draftStore.set(stored.draftId, stored);
@@ -892,12 +920,13 @@ async function handleDeleteWorkout(
 
   try {
     const preview = await buildWorkoutDeletePreview(params);
-    deleteRequestStore.set(preview.requestId, {
+    deleteRequests().set(preview.requestId, {
       requestId: preview.requestId,
       params,
       preview,
       createdAt: Date.now()
     });
+    persistDeleteRequests();
     onWorkoutDelete?.(preview);
 
     return JSON.stringify({
@@ -1079,7 +1108,7 @@ async function buildWorkoutDeletePreview(
 export async function confirmWorkoutDeleteById(
   requestId: string
 ): Promise<DeleteWorkoutResult> {
-  const stored = deleteRequestStore.get(requestId);
+  const stored = deleteRequests().get(requestId);
   if (!stored) {
     throw new Error("Workout delete request not found or expired.");
   }
@@ -1089,6 +1118,7 @@ export async function confirmWorkoutDeleteById(
 
   const result = await deleteWorkout(stored.params);
   stored.executedAt = Date.now();
+  persistDeleteRequests();
   return result;
 }
 
@@ -1201,9 +1231,12 @@ export function prunePlanDraftStore(): void {
 /** Remove delete requests older than 24 hours */
 export function pruneDeleteRequestStore(): void {
   const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-  for (const [id, request] of deleteRequestStore) {
+  let pruned = false;
+  for (const [id, request] of deleteRequests()) {
     if (request.createdAt < cutoff) {
       deleteRequestStore.delete(id);
+      pruned = true;
     }
   }
+  if (pruned) persistDeleteRequests();
 }
