@@ -1,0 +1,82 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Setup-only relay for the remote Coach. It links desktops, provisions a
+  // Cloudflare Tunnel per desktop, brokers one-time credentials and sends push.
+  // It never carries chat traffic. See README.md for setup and PROTOCOL.md for
+  // the wire contract.
+  "name": "coroslink-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-30",
+  // Mint calls go to tunnel hostnames in the same Cloudflare account; send them
+  // over the public path so they reach the tunnel, not this zone's origin.
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "workers_dev": false,
+  "routes": [{ "pattern": "relay.coroslink.com", "custom_domain": true }],
+  "observability": { "enabled": true },
+
+  // database_id is a placeholder until `wrangler d1 create coroslink-relay`.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "coroslink-relay",
+      "database_id": "00000000-0000-4000-8000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Maintenance: nonce purge, pending unlink teardown, idle tunnel cleanup.
+  "triggers": { "crons": ["*/5 * * * *"] },
+
+  // Secrets (set with `wrangler secret put`, never committed):
+  //   CF_API_TOKEN, RELAY_SIGNING_KEY, APNS_PRIVATE_KEY
+  "vars": {
+    "RELAY_STAGE": "production",
+    "RELAY_ORIGIN": "https://relay.coroslink.com",
+    "WEBSITE_ISSUER": "https://watchfaces.coroslink.com",
+    "WEBSITE_JWKS_URL": "https://watchfaces.coroslink.com/.well-known/relay-jwks.json",
+    "WEBSITE_JWT_AUDIENCE": "relay.coroslink.com",
+    // Tunnel domain is undecided; fill these in once it is a zone in the account.
+    "CF_ACCOUNT_ID": "",
+    "TUNNEL_ZONE_ID": "",
+    "TUNNEL_ZONE_NAME": "",
+    "RELAY_SIGNING_KEY_ID": "relay-2026-10",
+    "APNS_KEY_ID": "",
+    "APNS_TEAM_ID": "",
+    "APNS_BUNDLE_ID": "com.akerrules.clink",
+    // off | dry-run | enabled. Changing it is a deploy.
+    "RELAY_TUNNEL_CLEANUP_MODE": "off"
+  },
+
+  "env": {
+    // relay-dev.coroslink.com: deploy and link a real desktop here first.
+    "dev": {
+      "name": "coroslink-relay-dev",
+      "workers_dev": false,
+      "routes": [{ "pattern": "relay-dev.coroslink.com", "custom_domain": true }],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "coroslink-relay-dev",
+          "database_id": "00000000-0000-4000-8000-000000000001",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "triggers": { "crons": ["*/5 * * * *"] },
+      "vars": {
+        "RELAY_STAGE": "dev",
+        "RELAY_ORIGIN": "https://relay-dev.coroslink.com",
+        "WEBSITE_ISSUER": "https://watchfaces.coroslink.com",
+        "WEBSITE_JWKS_URL": "https://watchfaces.coroslink.com/.well-known/relay-jwks.json",
+        "WEBSITE_JWT_AUDIENCE": "relay.coroslink.com",
+        "CF_ACCOUNT_ID": "",
+        "TUNNEL_ZONE_ID": "",
+        "TUNNEL_ZONE_NAME": "",
+        "RELAY_SIGNING_KEY_ID": "relay-dev-2026-10",
+        "APNS_KEY_ID": "",
+        "APNS_TEAM_ID": "",
+        "APNS_BUNDLE_ID": "com.akerrules.clink",
+        "RELAY_TUNNEL_CLEANUP_MODE": "dry-run"
+      }
+    }
+  }
+}
