@@ -430,6 +430,7 @@ export function initializeDatabase(userDataPath: string): Database.Database {
   migrateChatTranscriptsToSessions(db);
   // After the provider rebuild above, which recreates chat_sessions.
   ensureColumn(db, "chat_sessions", "last_seq", "INTEGER NOT NULL DEFAULT 0");
+  createRemoteAccessTables(db);
 
   // Seed the default only once, including when upgrading an existing registry.
   // Remember initialization separately so removing COROS survives a restart.
@@ -601,6 +602,46 @@ function migrateChatTranscriptsToSessions(database: Database.Database): void {
   }
 
   database.exec("DROP TABLE chat_transcripts");
+}
+
+/**
+ * Remote Coach access (electron/remote/auth.ts). Secrets, credentials and
+ * session tokens are stored only as SHA-256 hashes; times are epoch ms.
+ *
+ * remote_pairing_grants: one-time secrets. `pair` is a QR code's secret
+ * (10 minutes); `bootstrap` is a relay-minted credential (about 2 minutes),
+ * bound to the phone key's thumbprint (`jkt`), with the relay's `nonce` kept
+ * so a replayed mint request is refused.
+ *
+ * remote_sessions: one per paired device, bound to its DPoP key (`jkt`).
+ */
+export function createRemoteAccessTables(database: Database.Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS remote_pairing_grants (
+      id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL CHECK(kind IN ('pair', 'bootstrap')),
+      secret_hash TEXT NOT NULL UNIQUE,
+      scopes TEXT NOT NULL,
+      jkt TEXT,
+      nonce TEXT UNIQUE,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS remote_sessions (
+      id TEXT PRIMARY KEY,
+      token_hash TEXT NOT NULL UNIQUE,
+      label TEXT NOT NULL,
+      jkt TEXT NOT NULL,
+      scopes TEXT NOT NULL,
+      via TEXT NOT NULL CHECK(via IN ('pair', 'bootstrap')),
+      created_at INTEGER NOT NULL,
+      last_used_at INTEGER,
+      expires_at INTEGER NOT NULL,
+      revoked_at INTEGER
+    );
+  `);
 }
 
 function ensureColumn(

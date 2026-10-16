@@ -20,6 +20,7 @@ import type {
   OpenRouterConnectionTest
 } from "../../electron/types";
 import { CoachInstructionsSettings } from "./CoachInstructionsSettings";
+import { RemoteAccessSettings } from "./RemoteAccessSettings";
 import { McpServersPanel } from "./McpServersPanel";
 import { formatChatModelLabel, useChatModelOptions } from "./ModelSwitch";
 import {
@@ -206,6 +207,8 @@ export function ChatSettingsPanel({
         disabled={savingSettings || busy}
         onSave={(customInstructions) => onUpdateChatSettings({ customInstructions })}
       />
+
+      <RemoteAccessSettings api={api} />
 
       <section
         className="chat-settings-section"

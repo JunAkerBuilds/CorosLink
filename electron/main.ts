@@ -43,6 +43,7 @@ import {
   type CoachSendInput
 } from "./coachHub";
 import { workoutEdits } from "./workoutEditRuntime";
+import { RemoteAccess } from "./remote/remoteAccess";
 import { completeOnboarding, isOnboardingPending } from "./onboardingState";
 import {
   downloadAudio,
@@ -488,6 +489,14 @@ let coachHub: CoachSessionHub | undefined;
 function requireCoachHub(): CoachSessionHub {
   if (!coachHub) throw new Error("Coach is still starting. Try again in a moment.");
   return coachHub;
+}
+
+// The environment server phones (C-LINK) drive the Coach hub through.
+let remoteAccess: RemoteAccess | undefined;
+
+function requireRemoteAccess(): RemoteAccess {
+  if (!remoteAccess) throw new Error("Remote access is still starting. Try again in a moment.");
+  return remoteAccess;
 }
 
 function createCoachHub(): CoachSessionHub {
@@ -996,7 +1005,13 @@ app.whenReady().then(() => {
   prunePlanDraftStore();
   pruneDeleteRequestStore();
   coachHub = createCoachHub();
+  remoteAccess = new RemoteAccess({
+    hub: coachHub,
+    settings: { get: getSetting, set: setSetting },
+    defaultProvider: () => getChatSettings().provider
+  });
   registerIpcHandlers();
+  remoteAccess.initialize();
   watchfaceAutomation = registerWatchfaceAutomation(() => mainWindow);
   workoutAutomation = registerWorkoutAutomation(() => mainWindow, {
     // A strength review saved from its card updates the Coach entry for every client.
@@ -1074,6 +1089,7 @@ app.on("before-quit", event => {
     return;
   }
   coachHub?.shutdown();
+  void remoteAccess?.stop();
   void corosNativeBle.stop();
   void watchfaceAutomation?.stop();
   void workoutAutomation?.stop();
@@ -1926,6 +1942,36 @@ function registerIpcHandlers(): void {
       requireCoachHub().finishLocalTurn(sessionId, requestId, reply);
     }
   );
+
+  // Remote access: only the main window manages devices (access:write).
+  requireRemoteAccess().onStatus((status) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("remote:status", status);
+  });
+  ipcMain.handle("remote:getStatus", (event) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().status();
+  });
+  ipcMain.handle("remote:setNetworkAccess", (event, enabled: unknown) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().setNetworkAccess(enabled === true);
+  });
+  ipcMain.handle("remote:setKeepAwake", (event, enabled: unknown) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().setKeepAwake(enabled === true);
+  });
+  ipcMain.handle("remote:createPairing", (event, input?: { viewOnly?: unknown }) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().createPairing({ viewOnly: input?.viewOnly === true });
+  });
+  ipcMain.handle("remote:cancelPairing", (event, id?: unknown) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().cancelPairing(typeof id === "string" ? id : undefined);
+  });
+  ipcMain.handle("remote:revokeDevice", (event, id: unknown) => {
+    mainWindowSender(event, "Remote access");
+    if (typeof id !== "string") throw new Error("Choose a device to remove.");
+    return requireRemoteAccess().revokeDevice(id);
+  });
 
   ipcMain.handle("chatMcp:getStatus", () => getCorosMcpStatus());
 

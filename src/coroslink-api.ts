@@ -10,6 +10,7 @@ import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarSta
 import type { ManualRaceInput, RaceEditInput, RaceOverview, StravaRaceImportResult } from "../electron/raceTypes";
 import type { WorkoutJournalEntry, WorkoutJournalSaveInput } from "../electron/workoutJournalTypes";
 import type { CoachConfirmInput, CoachConfirmResult, CoachEventFrame, CoachSendInput, CoachSessionsChange, CoachSnapshot, CoachSubscribeResult } from "../electron/coachHub/coachContract";
+import type { RemoteAccessStatus, RemotePairingCode } from "../electron/remote/contract";
 import type {
   ActivityBackupFilters,
   ActivityBackupPreview,
@@ -866,6 +867,13 @@ export interface CorosLinkApi {
   coachFinishLocalTurn: (sessionId: string, requestId: string, reply: string) => Promise<void>;
   onCoachEvent: (callback: (frame: CoachEventFrame) => void) => () => void;
   onCoachSessionsChanged: (callback: (change: CoachSessionsChange) => void) => () => void;
+  getRemoteAccessStatus: () => Promise<RemoteAccessStatus>;
+  setRemoteNetworkAccess: (enabled: boolean) => Promise<RemoteAccessStatus>;
+  setRemoteKeepAwake: (enabled: boolean) => Promise<RemoteAccessStatus>;
+  createRemotePairing: (input?: { viewOnly?: boolean }) => Promise<RemotePairingCode>;
+  cancelRemotePairing: (id?: string) => Promise<RemoteAccessStatus>;
+  revokeRemoteDevice: (id: string) => Promise<RemoteAccessStatus>;
+  onRemoteAccessStatus: (callback: (status: RemoteAccessStatus) => void) => () => void;
   getFitIndexStatus: () => Promise<FitIndexStatus>;
   startFitIndexSync: (options?: FitIndexSyncOptions) => Promise<FitIndexProgress>;
   cancelFitIndexSync: () => Promise<FitIndexProgress | null>;

@@ -10,6 +10,7 @@ import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarSta
 import type { ManualRaceInput, RaceEditInput, RaceOverview, StravaRaceImportResult } from "./raceTypes";
 import type { WorkoutJournalEntry, WorkoutJournalSaveInput } from "./workoutJournalTypes";
 import type { CoachConfirmInput, CoachConfirmResult, CoachEventFrame, CoachSendInput, CoachSessionsChange, CoachSnapshot, CoachSubscribeResult } from "./coachHub/coachContract";
+import type { RemoteAccessStatus, RemotePairingCode } from "./remote/contract";
 import type {
   ActivityBackupFilters,
   ActivityBackupPreview,
@@ -1371,6 +1372,21 @@ const api = {
     const listener = (_event: Electron.IpcRendererEvent, change: CoachSessionsChange) => callback(change);
     ipcRenderer.on("coach:sessions", listener);
     return () => ipcRenderer.removeListener("coach:sessions", listener);
+  },
+  // Remote access: the environment server C-LINK pairs with.
+  getRemoteAccessStatus: (): Promise<RemoteAccessStatus> => ipcRenderer.invoke("remote:getStatus"),
+  setRemoteNetworkAccess: (enabled: boolean): Promise<RemoteAccessStatus> =>
+    ipcRenderer.invoke("remote:setNetworkAccess", enabled),
+  setRemoteKeepAwake: (enabled: boolean): Promise<RemoteAccessStatus> =>
+    ipcRenderer.invoke("remote:setKeepAwake", enabled),
+  createRemotePairing: (input?: { viewOnly?: boolean }): Promise<RemotePairingCode> =>
+    ipcRenderer.invoke("remote:createPairing", input),
+  cancelRemotePairing: (id?: string): Promise<RemoteAccessStatus> => ipcRenderer.invoke("remote:cancelPairing", id),
+  revokeRemoteDevice: (id: string): Promise<RemoteAccessStatus> => ipcRenderer.invoke("remote:revokeDevice", id),
+  onRemoteAccessStatus: (callback: (status: RemoteAccessStatus) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: RemoteAccessStatus) => callback(status);
+    ipcRenderer.on("remote:status", listener);
+    return () => ipcRenderer.removeListener("remote:status", listener);
   },
   getFitIndexStatus: (): Promise<FitIndexStatus> =>
     ipcRenderer.invoke("fitIndex:getStatus"),
