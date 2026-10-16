@@ -1761,7 +1761,8 @@ function withLiveToolInstructions(
         .map((tool) => tool.name)
         .join(", ")}. ` +
         "Use list_recent_activities to find activity_id and sport_type, then " +
-        "get_activity_detail for lap tables. Set include_series=true for HR/pace/power trends. " +
+        "get_activity_detail for lap tables, power and cadence. " +
+        "Set include_series=true for HR/pace/power/cadence trends. " +
         "Inline activity charts (HR, pace, power, elevation, laps) appear automatically when data is available."
     );
   }

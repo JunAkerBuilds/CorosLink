@@ -5576,13 +5576,15 @@ function mergeSeriesArrays(
   distance?: number[],
   hr?: number[],
   pace?: number[],
-  power?: number[]
+  power?: number[],
+  cadence?: number[]
 ): TrainingHubActivitySeriesPoint[] {
   const length = Math.max(
     distance?.length ?? 0,
     hr?.length ?? 0,
     pace?.length ?? 0,
-    power?.length ?? 0
+    power?.length ?? 0,
+    cadence?.length ?? 0
   );
 
   if (length === 0) {
@@ -5607,16 +5609,72 @@ function mergeSeriesArrays(
     if (power && power[index] !== undefined) {
       point.power = Math.round(power[index]!);
     }
-    if (
-      point.distance !== undefined ||
-      point.hr !== undefined ||
-      point.pace !== undefined ||
-      point.power !== undefined
-    ) {
+    if (cadence && cadence[index] !== undefined) {
+      point.cadence = Math.round(cadence[index]!);
+    }
+    if (hasActivitySeriesValue(point)) {
       points.push(point);
     }
   }
 
+  return points;
+}
+
+function hasActivitySeriesValue(point: TrainingHubActivitySeriesPoint): boolean {
+  return (
+    point.distance !== undefined ||
+    point.hr !== undefined ||
+    point.pace !== undefined ||
+    point.power !== undefined ||
+    point.cadence !== undefined
+  );
+}
+
+// Live /activity/detail/query sends per-second samples as frequencyList
+// objects keyed heart/speed/power/cadence (distance in 0.01 m). Keys are absent
+// while a sensor has no reading, so read each point whole to keep metrics on
+// the same sample.
+function parseFrequencyListSeries(
+  frequencyList: unknown[]
+): TrainingHubActivitySeriesPoint[] {
+  const points: TrainingHubActivitySeriesPoint[] = [];
+  for (const item of frequencyList) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const sample = item as Record<string, unknown>;
+    const point: TrainingHubActivitySeriesPoint = {};
+    const distance = normalizeActivityDistanceMeters(toOptionalNumber(sample.distance));
+    if (distance !== undefined) {
+      point.distance = distance;
+    }
+    const hr =
+      toOptionalNumber(sample.heart) ??
+      toOptionalNumber(sample.heartRate) ??
+      toOptionalNumber(sample.hr) ??
+      toOptionalNumber(sample.avgHr);
+    if (hr !== undefined && hr > 0) {
+      point.hr = Math.round(hr);
+    }
+    const paceRaw = toOptionalNumber(sample.pace) ?? toOptionalNumber(sample.speed);
+    if (paceRaw !== undefined) {
+      const pace = normalizeActivityDuration(paceRaw) ?? paceRaw;
+      if (isPlausiblePaceSecondsPerKm(pace)) {
+        point.pace = pace;
+      }
+    }
+    const power = recordedActivityMetric(sample.power);
+    if (power !== undefined) {
+      point.power = power;
+    }
+    const cadence = recordedActivityMetric(sample.cadence);
+    if (cadence !== undefined) {
+      point.cadence = cadence;
+    }
+    if (hasActivitySeriesValue(point)) {
+      points.push(point);
+    }
+  }
   return points;
 }
 
@@ -5631,8 +5689,15 @@ function collectSeriesCandidates(raw: Record<string, unknown>): TrainingHubActiv
   ]);
   const rootPace = pickNumericSeries(raw, ["paceList", "speedList", "avgPaceList"]);
   const rootPower = pickNumericSeries(raw, ["powerList", "wattsList", "avgPowerList"]);
+  const rootCadence = pickNumericSeries(raw, ["cadenceList", "avgCadenceList"]);
 
-  const rootSeries = mergeSeriesArrays(rootDistance, rootHr, rootPace, rootPower);
+  const rootSeries = mergeSeriesArrays(
+    rootDistance,
+    rootHr,
+    rootPace,
+    rootPower,
+    rootCadence
+  );
   if (rootSeries.length > 0) {
     candidates.push(rootSeries);
   }
@@ -5671,40 +5736,15 @@ function collectSeriesCandidates(raw: Record<string, unknown>): TrainingHubActiv
     ]);
     const pace = pickNumericSeries(series, ["paceList", "speedList", "avgPaceList"]);
     const power = pickNumericSeries(series, ["powerList", "wattsList", "avgPowerList"]);
-    const merged = mergeSeriesArrays(distance, hr, pace, power);
+    const cadence = pickNumericSeries(series, ["cadenceList", "avgCadenceList"]);
+    const merged = mergeSeriesArrays(distance, hr, pace, power, cadence);
     if (merged.length > 0) {
       candidates.push(merged);
     }
   }
 
   if (Array.isArray(raw.frequencyList)) {
-    const distance = raw.frequencyList
-      .map((point) =>
-        point && typeof point === "object"
-          ? normalizeActivityDistanceMeters(
-              toOptionalNumber((point as Record<string, unknown>).distance)
-            )
-          : undefined
-      )
-      .filter((value): value is number => value !== undefined);
-    const hr = raw.frequencyList
-      .map((point) =>
-        point && typeof point === "object"
-          ? toOptionalNumber((point as Record<string, unknown>).heartRate) ??
-            toOptionalNumber((point as Record<string, unknown>).hr) ??
-            toOptionalNumber((point as Record<string, unknown>).avgHr)
-          : undefined
-      )
-      .filter((value): value is number => value !== undefined);
-    const pace = raw.frequencyList
-      .map((point) =>
-        point && typeof point === "object"
-          ? toOptionalNumber((point as Record<string, unknown>).pace) ??
-            toOptionalNumber((point as Record<string, unknown>).speed)
-          : undefined
-      )
-      .filter((value): value is number => value !== undefined);
-    const merged = mergeSeriesArrays(distance, hr, pace, undefined);
+    const merged = parseFrequencyListSeries(raw.frequencyList);
     if (merged.length > 0) {
       candidates.push(merged);
     }
@@ -5754,6 +5794,9 @@ export function downsampleActivitySeries(
     const powers = bucket
       .map((item) => item.power)
       .filter((value): value is number => value !== undefined);
+    const cadences = bucket
+      .map((item) => item.cadence)
+      .filter((value): value is number => value !== undefined);
 
     if (distances.length > 0) {
       point.distance = distances[distances.length - 1];
@@ -5767,13 +5810,13 @@ export function downsampleActivitySeries(
     if (powers.length > 0) {
       point.power = Math.round(powers.reduce((sum, value) => sum + value, 0) / powers.length);
     }
+    if (cadences.length > 0) {
+      point.cadence = Math.round(
+        cadences.reduce((sum, value) => sum + value, 0) / cadences.length
+      );
+    }
 
-    if (
-      point.distance !== undefined ||
-      point.hr !== undefined ||
-      point.pace !== undefined ||
-      point.power !== undefined
-    ) {
+    if (hasActivitySeriesValue(point)) {
       sampled.push(point);
     }
   }
@@ -5788,10 +5831,11 @@ export function formatActivitySeriesForChat(
   cycling = false
 ): string {
   if (points.length === 0) {
-    return "Time series: no HR/pace/power samples available.";
+    return "Time series: no HR/pace/power/cadence samples available.";
   }
 
-  const header = `Distance | HR | ${cycling ? "Speed" : "Pace"} | Power`;
+  const cadenceUnit = cycling ? "rpm" : "spm";
+  const header = `Distance | HR | ${cycling ? "Speed" : "Pace"} | Power | Cadence`;
   const rows = points.map((point) =>
     [
       point.distance !== undefined
@@ -5803,7 +5847,8 @@ export function formatActivitySeriesForChat(
           ? formatSpeedValue(3600 / point.pace, unitSystem)
           : formatPaceValue(point.pace, unitSystem).replace(" /", "/")
         : "—",
-      point.power !== undefined ? `${point.power} W` : "—"
+      point.power !== undefined ? `${point.power} W` : "—",
+      point.cadence !== undefined ? `${point.cadence} ${cadenceUnit}` : "—"
     ].join(" | ")
   );
 
@@ -6032,6 +6077,11 @@ export function parseActivityDetail(raw: Record<string, unknown>): TrainingHubAc
     trainingLoad:
       toOptionalNumber(raw.trainingLoad) ??
       toOptionalNumber(summary.trainingLoad),
+    avgPower: pickRecordedActivityMetric(raw, summary, "avgPower"),
+    maxPower: pickRecordedActivityMetric(raw, summary, "maxPower"),
+    normalizedPower: pickRecordedActivityMetric(raw, summary, "np"),
+    avgCadence: pickRecordedActivityMetric(raw, summary, "avgCadence"),
+    maxCadence: pickRecordedActivityMetric(raw, summary, "maxCadence"),
     laps,
     track,
     series: parseActivitySeries(raw),
@@ -6086,8 +6136,27 @@ function parseActivityLap(raw: unknown, index: number): TrainingHubActivityLap {
       toOptionalNumber(lap.ascent) ??
         toOptionalNumber(lap.elevationGain) ??
         toOptionalNumber(lap.elevGain)
-    )
+    ),
+    avgPower: recordedActivityMetric(lap.avgPower),
+    maxPower: recordedActivityMetric(lap.maxPower),
+    avgCadence: recordedActivityMetric(lap.avgCadence),
+    maxCadence: recordedActivityMetric(lap.maxCadence)
   };
+}
+
+// COROS fills every metric slot and writes 0 when a sensor did not record it
+// (lap maxPower is always 0 on PACE Pro runs), so only positive values count.
+function recordedActivityMetric(value: unknown): number | undefined {
+  const numeric = toOptionalNumber(value);
+  return numeric !== undefined && numeric > 0 ? Math.round(numeric) : undefined;
+}
+
+function pickRecordedActivityMetric(
+  raw: Record<string, unknown>,
+  summary: Record<string, unknown>,
+  key: string
+): number | undefined {
+  return recordedActivityMetric(raw[key]) ?? recordedActivityMetric(summary[key]);
 }
 
 function extractDayList(raw: Record<string, unknown>): unknown[] {

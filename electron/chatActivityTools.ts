@@ -64,8 +64,9 @@ export function getChatActivityTools(): CorosMcpTool[] {
     {
       name: "get_activity_detail",
       description:
-        "Fetch detailed COROS activity data including lap/split breakdown (distance, " +
-        "duration, avg/max HR, pace). Use activity_id and sport_type from " +
+        "Fetch detailed COROS activity data including avg/max power and cadence and a " +
+        "lap/split breakdown (distance, duration, avg/max HR, pace, power, cadence). " +
+        "Use activity_id and sport_type from " +
         "list_recent_activities or the training snapshot. Prefer this local tool over " +
         "COROS MCP for lap and split analysis.",
       inputSchema: {
@@ -82,7 +83,7 @@ export function getChatActivityTools(): CorosMcpTool[] {
           include_series: {
             type: "boolean",
             description:
-              "Include downsampled HR/pace/power progression (~60 points). Default false."
+              "Include downsampled HR/pace/power/cadence progression (~60 points). Default false."
           }
         },
         required: ["activity_id", "sport_type"]
@@ -401,6 +402,15 @@ export function formatActivityDetailForChat(
     detail.elevationGain
       ? `Elevation gain: +${formatElevationValue(detail.elevationGain, unitSystem)}`
       : undefined,
+    detail.avgPower ? `Avg power: ${detail.avgPower} W` : undefined,
+    detail.maxPower ? `Max power: ${detail.maxPower} W` : undefined,
+    detail.normalizedPower ? `Normalized power: ${detail.normalizedPower} W` : undefined,
+    detail.avgCadence
+      ? `Avg cadence: ${formatCadence(detail.avgCadence, cycling)}`
+      : undefined,
+    detail.maxCadence
+      ? `Max cadence: ${formatCadence(detail.maxCadence, cycling)}`
+      : undefined,
     detail.trainingLoad ? `Training load: ${detail.trainingLoad}` : undefined,
     detail.calories ? `Calories: ${Math.round(detail.calories)}` : undefined
   ].filter(Boolean);
@@ -426,7 +436,7 @@ export function formatActivityDetailForChat(
       );
     } else {
       sections.push(
-        "Time series: HR/pace samples are not available in the COROS detail response for this activity. " +
+        "Time series: HR/pace/power/cadence samples are not available in the COROS detail response for this activity. " +
           "For full per-second data, export the FIT file from CorosLink."
       );
     }
@@ -442,7 +452,15 @@ function formatLapTable(
   cycling: boolean
 ): string {
   const capped = laps.slice(0, MAX_LAPS);
-  const header = `Lap | Distance | Duration | Avg HR | Max HR | ${cycling ? "Speed" : "Pace"}`;
+  // Power and cadence columns appear only when the watch recorded them, so
+  // HR-only activities keep the compact table.
+  const optionalColumns = LAP_SENSOR_COLUMNS.filter((column) =>
+    capped.some((lap) => lap[column.key] !== undefined)
+  );
+  const header = [
+    `Lap | Distance | Duration | Avg HR | Max HR | ${cycling ? "Speed" : "Pace"}`,
+    ...optionalColumns.map((column) => column.label)
+  ].join(" | ");
   const rows = capped.map((lap) => {
     const cols = [
       String(lap.index),
@@ -452,7 +470,14 @@ function formatLapTable(
       lap.maxHr ? `${lap.maxHr}` : "—",
       cycling && lap.distance && lap.duration
         ? formatSpeedValue((lap.distance / 1000) / (lap.duration / 3600), unitSystem)
-        : lap.pace ? formatPaceSeconds(lap.pace, unitSystem) : "—"
+        : lap.pace ? formatPaceSeconds(lap.pace, unitSystem) : "—",
+      ...optionalColumns.map((column) => {
+        const value = lap[column.key];
+        if (value === undefined) {
+          return "—";
+        }
+        return column.unit === "W" ? `${value} W` : formatCadence(value, cycling);
+      })
     ];
     return cols.join(" | ");
   });
@@ -462,6 +487,21 @@ function formatLapTable(
     lines.push(`… ${laps.length - MAX_LAPS} more laps omitted`);
   }
   return lines.join("\n");
+}
+
+const LAP_SENSOR_COLUMNS: ReadonlyArray<{
+  key: "avgPower" | "maxPower" | "avgCadence" | "maxCadence";
+  label: string;
+  unit: "W" | "cadence";
+}> = [
+  { key: "avgPower", label: "Avg Power", unit: "W" },
+  { key: "maxPower", label: "Max Power", unit: "W" },
+  { key: "avgCadence", label: "Avg Cadence", unit: "cadence" },
+  { key: "maxCadence", label: "Max Cadence", unit: "cadence" }
+];
+
+function formatCadence(value: number, cycling: boolean): string {
+  return `${value} ${cycling ? "rpm" : "spm"}`;
 }
 
 function formatIsoDate(epochSeconds: number): string {

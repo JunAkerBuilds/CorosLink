@@ -184,4 +184,98 @@ assert.equal(
   null
 );
 
+// Shape of a live PACE Pro run from /activity/detail/query (2026-10-02, values
+// trimmed): power and cadence live in summary, in nested lapItemList entries,
+// and in per-second frequencyList samples keyed heart/speed/power/cadence.
+// COROS writes 0 where a metric was not recorded (lap maxPower, np).
+const powerRunFixture = {
+  labelId: "act-power-1",
+  summary: {
+    name: "Ottawa Run",
+    sportType: 100,
+    totalTime: 249889,
+    distance: 700761,
+    avgHr: 163,
+    maxHr: 188,
+    avgPower: 204,
+    maxPower: 306,
+    np: 0,
+    avgCadence: 153,
+    maxCadence: 169
+  },
+  lapList: [
+    {
+      type: 2,
+      lapDistance: 100000,
+      lapItemList: [
+        { distance: 100000, time: 34980, avgHr: 157, maxHr: 173, avgPace: 349.81, avgPower: 201, maxPower: 0, avgCadence: 154, maxCadence: 160 },
+        { distance: 100000, time: 35685, avgHr: 165, maxHr: 176, avgPace: 356.86, avgPower: 209, maxPower: 0, avgCadence: 153, maxCadence: 163 },
+        { distance: 100000, time: 35224, avgHr: 157, maxHr: 173, avgPace: 352.24, avgPower: 202, maxPower: 0, avgCadence: 153, maxCadence: 160 }
+      ]
+    },
+    {
+      type: -1,
+      lapItemList: [
+        { distance: 700761, time: 249889, avgHr: 163, maxHr: 188, avgPower: 204, maxPower: 306, avgCadence: 153, maxCadence: 169 }
+      ]
+    }
+  ],
+  frequencyList: [
+    { distance: 0, heart: 96, timestamp: 179095736400 },
+    { distance: 0, heart: 97, speed: 657, timestamp: 179095736500 },
+    { distance: 27250, heart: 159, speed: 356, power: 205, cadence: 155, timestamp: 179095746400 },
+    { distance: 27600, heart: 160, speed: 350, power: 210, cadence: 156, timestamp: 179095746500 }
+  ]
+};
+
+const powerRun = parseActivityDetail(powerRunFixture);
+assert.equal(powerRun.avgPower, 204);
+assert.equal(powerRun.maxPower, 306);
+assert.equal(powerRun.normalizedPower, undefined);
+assert.equal(powerRun.avgCadence, 153);
+assert.equal(powerRun.maxCadence, 169);
+assert.equal(powerRun.laps.length, 3);
+assert.deepEqual(
+  powerRun.laps.map((lap) => [lap.avgPower, lap.maxPower, lap.avgCadence, lap.maxCadence]),
+  [[201, undefined, 154, 160], [209, undefined, 153, 163], [202, undefined, 153, 160]]
+);
+
+// Samples keep each metric on its own timestamp even when early points lack power.
+assert.equal(powerRun.series?.length, 4);
+assert.deepEqual(powerRun.series?.[0], { hr: 96 });
+assert.deepEqual(powerRun.series?.[2], {
+  distance: 272.5,
+  hr: 159,
+  pace: 356,
+  power: 205,
+  cadence: 155
+});
+
+const powerRunText = formatActivityDetailForChat(powerRun, true);
+assert.match(powerRunText, /Avg power: 204 W/);
+assert.match(powerRunText, /Max power: 306 W/);
+assert.match(powerRunText, /Avg cadence: 153 spm/);
+assert.match(powerRunText, /Max cadence: 169 spm/);
+assert.doesNotMatch(powerRunText, /Normalized power/);
+assert.match(
+  powerRunText,
+  /Lap \| Distance \| Duration \| Avg HR \| Max HR \| Pace \| Avg Power \| Avg Cadence \| Max Cadence\n/
+);
+assert.match(powerRunText, /\n1 \| 1\.00 km \| 5:50 \| 157 \| 173 \| 5:50\/km \| 201 W \| 154 spm \| 160 spm\n/);
+assert.match(powerRunText, /Distance \| HR \| Pace \| Power \| Cadence/);
+assert.match(powerRunText, /0\.27 km \| 159 \| 5:56\/km \| 205 W \| 155 spm/);
+assert.ok(buildActivityVisualPreview(powerRun, "req-power")?.sections.power);
+
+// HR-only activities keep the compact lap table.
+assert.doesNotMatch(formatted, /Power|Cadence/);
+
+const poweredRide = formatActivityDetailForChat({
+  ...bikeDetail,
+  avgPower: 180,
+  avgCadence: 88,
+  laps: [{ ...bikeDetail.laps[0], avgPower: 180, avgCadence: 88 }]
+}, false);
+assert.match(poweredRide, /Avg cadence: 88 rpm/);
+assert.match(poweredRide, /\| 180 W \| 88 rpm$/m);
+
 console.log("test-chat-activity-tools: ok");

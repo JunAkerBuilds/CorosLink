@@ -2391,6 +2391,12 @@ export interface TrainingHubActivityLap {
   maxHr?: number;
   pace?: number;
   elevationGain?: number;
+  /** Watts. COROS sends 0 for "not recorded", which parses as undefined. */
+  avgPower?: number;
+  maxPower?: number;
+  /** Steps per minute on foot, revolutions per minute on a bike. */
+  avgCadence?: number;
+  maxCadence?: number;
 }
 
 export interface TrainingHubTrackPoint {
@@ -2409,6 +2415,7 @@ export interface TrainingHubActivitySeriesPoint {
   hr?: number;
   pace?: number;
   power?: number;
+  cadence?: number;
 }
 
 export interface StrengthSet {
@@ -2581,6 +2588,11 @@ export interface TrainingHubActivityDetail {
   calories?: number;
   elevationGain?: number;
   trainingLoad?: number;
+  avgPower?: number;
+  maxPower?: number;
+  normalizedPower?: number;
+  avgCadence?: number;
+  maxCadence?: number;
   laps: TrainingHubActivityLap[];
   track?: TrainingHubActivityTrack;
   series?: TrainingHubActivitySeriesPoint[];
