@@ -363,4 +363,50 @@ export interface RemoteAccessStatus {
   pairing: { id: string; expiresAt: string } | null;
   devices: RemoteDevice[];
   error?: string;
+  /** Away from home: the website account, the relay link and the Cloudflare connector. */
+  cloud?: CloudLinkStatus;
+}
+
+// ----- Away from home (electron/remote/cloud/) -----
+
+/**
+ * off: "Link this computer" is off. linking: talking to the relay or starting
+ * the connector. online: cloudflared has a connection to Cloudflare. offline:
+ * linked, but cloudflared isn't connected right now. error: see `message`.
+ */
+export type CloudLinkState = "off" | "linking" | "online" | "offline" | "error";
+
+export interface CloudLinkStatus {
+  /** Cloudflare publishes a connector for this computer (or one is installed). */
+  available: boolean;
+  account: {
+    signedIn: boolean;
+    handle: string | null;
+    displayName: string | null;
+    /** Waiting for the browser to come back from watchfaces.coroslink.com. */
+    signingIn: boolean;
+    error?: string;
+  };
+  /** The "Link this computer" switch. Off until the person turns it on. */
+  enabled: boolean;
+  linked: boolean;
+  state: CloudLinkState;
+  message?: string;
+  /** `<one label>.coroslinkrelay.com`, the only cloud host C-LINK accepts. */
+  hostname: string | null;
+  connector: {
+    /** env: COROSLINK_CLOUDFLARED_PATH; path: on PATH; managed: downloaded by CorosLink. */
+    source: "env" | "path" | "managed" | null;
+    version: string | null;
+    /** None is installed: ask before downloading `downloadVersion` (`downloadBytes`). */
+    needsDownload: boolean;
+    downloading: boolean;
+    /** 0-1 while downloading. */
+    progress: number | null;
+    downloadVersion: string;
+    downloadBytes: number | null;
+    connections: number;
+  };
+  /** Cloudflare stops building cloudflared for Intel Macs in 2027. */
+  intelMac: boolean;
 }

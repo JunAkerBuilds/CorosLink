@@ -44,6 +44,7 @@ import {
 } from "./coachHub";
 import { workoutEdits } from "./workoutEditRuntime";
 import { RemoteAccess } from "./remote/remoteAccess";
+import { isAuthCallbackUrl } from "./remote/cloud/websiteAccount";
 import { completeOnboarding, isOnboardingPending } from "./onboardingState";
 import {
   downloadAudio,
@@ -887,6 +888,21 @@ function deepLinkFromArguments(argumentsList: string[]): CommunityWatchfaceOpenR
   return null;
 }
 
+/** The watchfaces.coroslink.com sign-in coming back from the browser (remote access, away from home). */
+function authCallbackFromArguments(argumentsList: string[]): string | null {
+  return argumentsList.find((argument) => isAuthCallbackUrl(argument)) ?? null;
+}
+
+function handleAuthCallback(url: string): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+  // Before startup there is no sign-in waiting for it, so there's nothing to finish.
+  void remoteAccess?.handleAuthCallback(url).catch(() => undefined);
+}
+
 function handleCommunityWatchfaceOpen(request: CommunityWatchfaceOpenRequest): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (mainWindow.isMinimized()) mainWindow.restore();
@@ -936,8 +952,10 @@ if (!hasSingleInstanceLock) {
   const initialDeepLink = deepLinkFromArguments(process.argv);
   if (initialDeepLink) pendingCommunityWatchfaceOpen = initialDeepLink;
   app.on("second-instance", (_event, commandLine) => {
-    const request = deepLinkFromArguments(commandLine);
-    if (request) handleCommunityWatchfaceOpen(request);
+    const authCallback = authCallbackFromArguments(commandLine);
+    const request = authCallback ? null : deepLinkFromArguments(commandLine);
+    if (authCallback) handleAuthCallback(authCallback);
+    else if (request) handleCommunityWatchfaceOpen(request);
     else if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
@@ -946,6 +964,10 @@ if (!hasSingleInstanceLock) {
   });
   app.on("open-url", (event, url) => {
     event.preventDefault();
+    if (isAuthCallbackUrl(url)) {
+      handleAuthCallback(url);
+      return;
+    }
     const request = parseCommunityWatchfaceDeepLink(url);
     if (request) handleCommunityWatchfaceOpen(request);
   });
@@ -1971,6 +1993,27 @@ function registerIpcHandlers(): void {
     mainWindowSender(event, "Remote access");
     if (typeof id !== "string") throw new Error("Choose a device to remove.");
     return requireRemoteAccess().revokeDevice(id);
+  });
+  // Away from home: website sign-in, the relay link and Cloudflare's connector.
+  ipcMain.handle("remote:cloudSignIn", (event) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().cloudSignIn();
+  });
+  ipcMain.handle("remote:cloudCancelSignIn", (event) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().cloudCancelSignIn();
+  });
+  ipcMain.handle("remote:cloudSignOut", (event) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().cloudSignOut();
+  });
+  ipcMain.handle("remote:setCloudLink", (event, input?: { enabled?: unknown; allowDownload?: unknown }) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().setCloudLink(input?.enabled === true, { allowDownload: input?.allowDownload === true });
+  });
+  ipcMain.handle("remote:cloudUnlink", (event) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().cloudUnlink();
   });
 
   ipcMain.handle("chatMcp:getStatus", () => getCorosMcpStatus());

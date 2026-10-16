@@ -1,8 +1,11 @@
-import { app, powerSaveBlocker, safeStorage } from "electron";
+import { app, powerSaveBlocker, safeStorage, shell } from "electron";
 import QRCode from "qrcode";
 import type { CoachSessionHub } from "../coachHub/coachSessionHub";
 import type { ChatProvider } from "../types";
 import { RemoteAuth, remoteDeviceFromRecord } from "./auth";
+import { CloudLink, RELAY_TRUST_KEY, TUNNEL_HOSTNAME_KEY } from "./cloud/cloudLink";
+import { PRODUCTION_RELAY_URL, relayBaseUrl } from "./cloud/relayClient";
+import { PRODUCTION_WEBSITE_URL, WebsiteAccount, websiteBaseUrl } from "./cloud/websiteAccount";
 import {
   DEFAULT_GRANT_PERMISSIONS,
   VIEW_ONLY_PERMISSIONS,
@@ -33,9 +36,6 @@ import { RemoteServer, remoteLanAddresses, type RelayTrust } from "./server";
 
 const NETWORK_ACCESS_KEY = "remote.networkAccess";
 const KEEP_AWAKE_KEY = "remote.keepAwake";
-/** Set by the cloud link (P6); empty until then, so mint answers 404. */
-const TUNNEL_HOSTNAME_KEY = "remote.tunnelHostname";
-const RELAY_TRUST_KEY = "remote.relayTrust";
 
 const safeStorageBox: RemoteSecretBox = {
   ensureAvailable() {
@@ -66,9 +66,41 @@ export class RemoteAccess {
   private readonly listeners = new Set<(status: RemoteAccessStatus) => void>();
   private pairingTimer: NodeJS.Timeout | null = null;
   private pruneTimer: NodeJS.Timeout | null = null;
+  /** Away from home: the website account, the relay link and cloudflared. */
+  readonly cloud: CloudLink;
 
   constructor(private readonly options: RemoteAccessOptions) {
     this.auth.onChange(() => this.changed());
+    const onChange = () => this.changed();
+    const settings = options.settings;
+    this.cloud = new CloudLink({
+      settings,
+      secrets: safeStorageBox,
+      account: new WebsiteAccount({
+        origin: configuredUrl(
+          () => websiteBaseUrl({ isPackaged: app.isPackaged, override: process.env.COROSLINK_WATCHFACE_SITE_URL }),
+          PRODUCTION_WEBSITE_URL
+        ),
+        settings,
+        secrets: safeStorageBox,
+        openExternal: (url) => shell.openExternal(url),
+        onChange
+      }),
+      relayUrl: configuredUrl(
+        () => relayBaseUrl({ isPackaged: app.isPackaged, override: process.env.COROSLINK_RELAY_URL }),
+        PRODUCTION_RELAY_URL
+      ),
+      environment: async () => {
+        const server = await this.ensureStarted();
+        if (!this.identity || server.port === null) throw new Error("Remote access isn't running.");
+        return { identity: this.identity, port: server.port };
+      },
+      label: () => computerName(),
+      platform: process.platform,
+      arch: process.arch,
+      userDataDir: app.getPath("userData"),
+      onChange
+    });
   }
 
   /** At launch: start only if remote access was set up before, so nobody else gets a keychain prompt. */
@@ -76,6 +108,10 @@ export class RemoteAccess {
     this.pruneTimer = setInterval(() => this.prune(), 24 * 60 * 60_000);
     this.pruneTimer.unref?.();
     this.prune();
+    // Turns and staged approvals become text-free pushes while linked.
+    this.options.hub.onEvent((frame) => this.cloud.noteCoachEvent(frame));
+    // Reconnects the tunnel when linked and switched on (which starts the server).
+    this.cloud.initialize();
     if (!hasRemoteIdentity(this.options.settings)) return;
     void this.ensureStarted().catch(() => undefined);
   }
@@ -144,6 +180,7 @@ export class RemoteAccess {
         networkAccess: this.networkAccess,
         tunnelHostname: () => settings.get(TUNNEL_HOSTNAME_KEY) || null,
         relayTrust: () => this.relayTrust(),
+        refreshRelayTrust: () => this.cloud.refreshRelayTrust(),
         onConnectionsChanged: () => this.changed()
       });
       await this.server.start();
@@ -161,7 +198,7 @@ export class RemoteAccess {
     if (this.pairingTimer) clearTimeout(this.pairingTimer);
     if (this.pruneTimer) clearInterval(this.pruneTimer);
     this.releaseKeepAwake();
-    await this.server?.stop();
+    await Promise.all([this.cloud.stop(), this.server?.stop()]);
   }
 
   status(): RemoteAccessStatus {
@@ -188,7 +225,8 @@ export class RemoteAccess {
       environmentId: this.identity?.environmentId ?? null,
       pairing,
       devices,
-      ...(this.error ? { error: this.error } : {})
+      ...(this.error ? { error: this.error } : {}),
+      cloud: this.cloud.status()
     };
   }
 
@@ -253,6 +291,38 @@ export class RemoteAccess {
     return this.status();
   }
 
+  // ----- Away from home -----
+
+  async cloudSignIn(): Promise<RemoteAccessStatus> {
+    await this.cloud.signIn();
+    return this.status();
+  }
+
+  cloudCancelSignIn(): RemoteAccessStatus {
+    this.cloud.cancelSignIn();
+    return this.status();
+  }
+
+  async cloudSignOut(): Promise<RemoteAccessStatus> {
+    await this.cloud.signOut();
+    return this.status();
+  }
+
+  async setCloudLink(enabled: boolean, input: { allowDownload?: boolean } = {}): Promise<RemoteAccessStatus> {
+    await this.cloud.setEnabled(enabled, input);
+    return this.status();
+  }
+
+  async cloudUnlink(): Promise<RemoteAccessStatus> {
+    await this.cloud.unlink();
+    return this.status();
+  }
+
+  /** The `coroslink://auth/callback` deep link from the browser. */
+  handleAuthCallback(url: string): Promise<void> {
+    return this.cloud.handleAuthCallback(url);
+  }
+
   // ----- Keep awake -----
 
   /** Holds the computer awake while a device is connected, if the setting is on. */
@@ -269,5 +339,15 @@ export class RemoteAccess {
     if (this.blockerId === null) return;
     if (powerSaveBlocker.isStarted(this.blockerId)) powerSaveBlocker.stop(this.blockerId);
     this.blockerId = null;
+  }
+}
+
+/** A dev override (unpackaged builds only); a bad one falls back to production with a warning. */
+function configuredUrl(resolve: () => string, fallback: string): string {
+  try {
+    return resolve();
+  } catch (error) {
+    console.warn("[remote]", error instanceof Error ? error.message : error);
+    return fallback;
   }
 }

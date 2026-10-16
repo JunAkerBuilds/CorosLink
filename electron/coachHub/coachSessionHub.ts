@@ -190,6 +190,7 @@ function isoFromCompactDate(value: string | undefined): string | undefined {
 export class CoachSessionHub {
   private readonly cache = new Map<string, SessionState>();
   private readonly sessionListeners = new Set<(change: CoachSessionsChange) => void>();
+  private readonly eventListeners = new Set<CoachEventListener>();
   private readonly confirming = new Set<string>();
   private readonly now: () => number;
   private readonly randomId: () => string;
@@ -265,6 +266,12 @@ export class CoachSessionHub {
   onSessionsChanged(listener: (change: CoachSessionsChange) => void): () => void {
     this.sessionListeners.add(listener);
     return () => this.sessionListeners.delete(listener);
+  }
+
+  /** Every event of every session, for the cloud link's text-free activity pushes. */
+  onEvent(listener: CoachEventListener): () => void {
+    this.eventListeners.add(listener);
+    return () => this.eventListeners.delete(listener);
   }
 
   // ----- Subscriptions -----
@@ -870,7 +877,7 @@ export class CoachSessionHub {
         console.warn("[coach] could not save an event:", error);
       }
     }
-    for (const listener of [...state.subscribers]) {
+    for (const listener of [...state.subscribers, ...this.eventListeners]) {
       try {
         listener(frame);
       } catch (error) {

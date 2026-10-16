@@ -1383,6 +1383,12 @@ const api = {
     ipcRenderer.invoke("remote:createPairing", input),
   cancelRemotePairing: (id?: string): Promise<RemoteAccessStatus> => ipcRenderer.invoke("remote:cancelPairing", id),
   revokeRemoteDevice: (id: string): Promise<RemoteAccessStatus> => ipcRenderer.invoke("remote:revokeDevice", id),
+  cloudSignIn: (): Promise<RemoteAccessStatus> => ipcRenderer.invoke("remote:cloudSignIn"),
+  cloudCancelSignIn: (): Promise<RemoteAccessStatus> => ipcRenderer.invoke("remote:cloudCancelSignIn"),
+  cloudSignOut: (): Promise<RemoteAccessStatus> => ipcRenderer.invoke("remote:cloudSignOut"),
+  setCloudLink: (input: { enabled: boolean; allowDownload?: boolean }): Promise<RemoteAccessStatus> =>
+    ipcRenderer.invoke("remote:setCloudLink", input),
+  cloudUnlink: (): Promise<RemoteAccessStatus> => ipcRenderer.invoke("remote:cloudUnlink"),
   onRemoteAccessStatus: (callback: (status: RemoteAccessStatus) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, status: RemoteAccessStatus) => callback(status);
     ipcRenderer.on("remote:status", listener);

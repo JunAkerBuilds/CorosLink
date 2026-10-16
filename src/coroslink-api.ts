@@ -873,6 +873,14 @@ export interface CorosLinkApi {
   createRemotePairing: (input?: { viewOnly?: boolean }) => Promise<RemotePairingCode>;
   cancelRemotePairing: (id?: string) => Promise<RemoteAccessStatus>;
   revokeRemoteDevice: (id: string) => Promise<RemoteAccessStatus>;
+  /** Away from home: sign in to watchfaces.coroslink.com in the browser. */
+  cloudSignIn: () => Promise<RemoteAccessStatus>;
+  cloudCancelSignIn: () => Promise<RemoteAccessStatus>;
+  /** Signs out of watchfaces.coroslink.com and unlinks this computer. */
+  cloudSignOut: () => Promise<RemoteAccessStatus>;
+  /** "Link this computer"; `allowDownload` once the person agreed to download cloudflared. */
+  setCloudLink: (input: { enabled: boolean; allowDownload?: boolean }) => Promise<RemoteAccessStatus>;
+  cloudUnlink: () => Promise<RemoteAccessStatus>;
   onRemoteAccessStatus: (callback: (status: RemoteAccessStatus) => void) => () => void;
   getFitIndexStatus: () => Promise<FitIndexStatus>;
   startFitIndexSync: (options?: FitIndexSyncOptions) => Promise<FitIndexProgress>;
