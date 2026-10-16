@@ -331,7 +331,7 @@ function buildBarSegments(
   }));
 }
 
-function CardioStructure({
+export function CardioStructure({
   view,
   unitSystem,
   swim

@@ -1,7 +1,16 @@
 import { t, useLanguage } from "../i18n/tools";
 import { useState } from "react";
-import { Bookmark, CalendarDays, Check, CircleCheck, Layers, Loader2 } from "lucide-react";
-import type { CSSProperties } from "react";
+import {
+  Bookmark,
+  CalendarDays,
+  Check,
+  CircleCheck,
+  Layers,
+  ListChecks,
+  Loader2,
+  Route,
+  Timer
+} from "lucide-react";
 import type {
   CoachCorosActionPreview,
   CoachCorosActionStep,
@@ -9,28 +18,44 @@ import type {
   WorkoutSport
 } from "../../electron/types";
 import { sportTheme } from "../training-library/sportTheme";
+import { useUnitSystem } from "../units/UnitSystemProvider";
+import { CardioStructure } from "../calendar/ScheduledWorkoutDetail";
+import {
+  formatStepDistanceLabel,
+  formatStepTimeLabel,
+  type ScheduledNodeView,
+  type ScheduledStepView,
+  type ScheduledStructureView
+} from "../calendar/scheduledStructure";
 import { isoDateFromCompact } from "./chatTypes";
-
-function dateParts(iso: string | undefined) {
-  if (!iso) return undefined;
-  const date = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return undefined;
-  return {
-    weekday: date.toLocaleDateString(undefined, { weekday: "short" }),
-    day: date.toLocaleDateString(undefined, { day: "numeric" }),
-    month: date.toLocaleDateString(undefined, { month: "short" }),
-    label: date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
-  };
-}
 
 const LEGACY_SPORTS: Record<string, WorkoutSport | undefined> = { Run: "run", Bike: "bike", "Trail run": "trailRun", "Rest day": undefined };
 const LEGACY_KINDS: Record<string, CoachCorosActionStep["kind"]> = { "Warm-up": "warmup", Training: "training", Recovery: "recovery", "Cool-down": "cooldown" };
+const SPORT_CATEGORY: Partial<Record<WorkoutSport, string>> = { run: "run", trailRun: "trail", bike: "bike", strength: "strength" };
+
+/** Parse a display target ("1.20 km", "400 m", "10 min", "20 s", "4:30") back into a bar magnitude. */
+function targetMagnitude(target: string): Pick<CoachCorosActionStep, "magnitude" | "magnitudeType"> {
+  const text = target.trim();
+  let match = /^([\d.]+)\s*(km|mi|m)$/.exec(text);
+  if (match) {
+    const value = Number(match[1]);
+    const meters = match[2] === "km" ? value * 1000 : match[2] === "mi" ? value * 1609.344 : value;
+    return { magnitude: meters, magnitudeType: "distance" };
+  }
+  match = /^(\d+)\s*min$/.exec(text);
+  if (match) return { magnitude: Number(match[1]) * 60, magnitudeType: "time" };
+  match = /^(\d+)\s*s$/.exec(text);
+  if (match) return { magnitude: Number(match[1]), magnitudeType: "time" };
+  match = /^(\d+):(\d{2})$/.exec(text);
+  if (match) return { magnitude: Number(match[1]) * 60 + Number(match[2]), magnitudeType: "time" };
+  return {};
+}
 
 function legacyStep(line: string): CoachCorosActionStep | undefined {
   const match = /^(Warm-up|Training|Recovery|Cool-down): (.+?)(?: · (.+))?$/.exec(line.trim());
   if (!match) return undefined;
   const intensity = match[3] && match[3] !== "No intensity target" ? match[3] : undefined;
-  return { kind: LEGACY_KINDS[match[1]!], label: match[1]!, target: match[2]!, ...(intensity ? { intensity } : {}) };
+  return { kind: LEGACY_KINDS[match[1]!], label: match[1]!, target: match[2]!, ...(intensity ? { intensity } : {}), ...targetMagnitude(match[2]!) };
 }
 
 /** Actions staged before structured workouts existed only kept summary lines; rebuild the structure from them. */
@@ -58,53 +83,120 @@ function legacyWorkouts(details: string[]): CoachCorosActionWorkout[] {
   return workouts;
 }
 
-function countSteps(workout: CoachCorosActionWorkout): number {
-  return workout.steps.reduce((n, step) => n + ("repeats" in step ? step.steps.length : 1), 0);
+/** Shape a staged COROS workout like a scheduled one so it shares the calendar's structure view. */
+function structureView(workout: CoachCorosActionWorkout): ScheduledStructureView {
+  let distanceMeters = 0;
+  let durationSeconds = 0;
+  let stepCount = 0;
+  let repeatGroups = 0;
+  const toStep = (step: CoachCorosActionStep, id: string): ScheduledStepView => {
+    const magnitude = step.magnitude ?? targetMagnitude(step.target).magnitude;
+    const magnitudeType = step.magnitudeType ?? targetMagnitude(step.target).magnitudeType;
+    stepCount += 1;
+    return {
+      id,
+      kind: step.kind === "recovery" ? "rest" : step.kind,
+      name: t(step.label),
+      targetLabel: step.target,
+      ...(step.intensity ? { intensityLabel: step.intensity } : {}),
+      ...(magnitude !== undefined && magnitudeType ? { magnitude, magnitudeType } : {})
+    };
+  };
+  const nodes: ScheduledNodeView[] = workout.steps.map((node, index) => {
+    if ("repeats" in node) {
+      repeatGroups += 1;
+      const steps = node.steps.map((step, childIndex) => toStep(step, `g${index}-${childIndex}`));
+      const types = new Set(steps.map((step) => step.magnitudeType).filter(Boolean));
+      const magnitudeType = types.size === 1 ? steps[0]?.magnitudeType : undefined;
+      const magnitude = magnitudeType ? steps.reduce((sum, step) => sum + (step.magnitude ?? 0), 0) : undefined;
+      for (const step of steps) {
+        if (step.magnitudeType === "distance") distanceMeters += (step.magnitude ?? 0) * node.repeats;
+        if (step.magnitudeType === "time") durationSeconds += (step.magnitude ?? 0) * node.repeats;
+      }
+      return { type: "repeat", id: `g${index}`, name: t("Intervals"), repeat: node.repeats, steps, ...(magnitude !== undefined && magnitudeType ? { magnitude, magnitudeType } : {}) };
+    }
+    const step = toStep(node, `s${index}`);
+    if (step.magnitudeType === "distance") distanceMeters += step.magnitude ?? 0;
+    if (step.magnitudeType === "time") durationSeconds += step.magnitude ?? 0;
+    return { type: "step", step };
+  });
+  return {
+    nodes,
+    totals: { ...(distanceMeters ? { distanceMeters } : {}), ...(durationSeconds ? { durationSeconds } : {}), stepCount, repeatGroups },
+    source: "parsed"
+  };
 }
 
-/** The step list of one COROS workout, in the same structure block as strength drafts. */
-function CorosWorkoutStructure({ workout }: { workout: CoachCorosActionWorkout }) {
+function dateLabel(iso: string | undefined, style: "short" | "long") {
+  if (!iso) return undefined;
+  const date = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return style === "short"
+    ? date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
+    : date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+}
+
+function CorosWorkoutDetail({ workout, date }: { workout: CoachCorosActionWorkout; date?: string }) {
   useLanguage();
-  const total = countSteps(workout);
-  let number = 0;
-  const renderStep = (step: CoachCorosActionStep, key: string) => {
-    number += 1;
-    const tone = step.kind === "recovery" ? "rest" : step.kind;
-    return (
-      <li key={key} className={`chat-plan-strength-step is-${tone}`}>
-        <span className="chat-plan-strength-marker" aria-hidden="true">{number}</span>
-        <span className="chat-plan-strength-step-copy">
-          <strong>{t(step.label)}</strong>
-        </span>
-        <span className="chat-plan-strength-prescription">
-          <strong>{step.target}</strong>
-          {step.intensity ? <span>{step.intensity}</span> : null}
-        </span>
-      </li>
-    );
-  };
+  const { unitSystem } = useUnitSystem();
+  const view = structureView(workout);
+  const SportIcon = sportTheme(workout.sport).icon;
+  const category = (workout.sport && SPORT_CATEGORY[workout.sport]) ?? "other";
+  const hasRepeat = view.totals.repeatGroups > 0;
+  const stats: Array<{ icon: typeof Route; label: string; value: string }> = [];
+  if (view.totals.distanceMeters) stats.push({ icon: Route, label: t("Distance"), value: formatStepDistanceLabel(view.totals.distanceMeters, unitSystem) });
+  if (view.totals.durationSeconds) stats.push({ icon: Timer, label: t("Timed work"), value: formatStepTimeLabel(view.totals.durationSeconds) });
+  if (date) stats.push({ icon: CalendarDays, label: workout.dayNo !== undefined ? t("Day {{p0}}", { p0: workout.dayNo + 1 }) : t("Scheduled"), value: dateLabel(date, "short") ?? date });
+  const context = view.totals.stepCount
+    ? `${view.totals.stepCount} ${view.totals.stepCount === 1 ? t("step") : t("steps")}${hasRepeat ? `, ${view.totals.repeatGroups} ${view.totals.repeatGroups === 1 ? t("repeat group") : t("repeat groups")}` : ""}`
+    : undefined;
+
   return (
-    <section className="chat-plan-strength-structure" aria-label={t("Session structure")}>
-      <header className="chat-plan-strength-header">
-        <strong>{t("Session structure")}</strong>
-        <span>{total} {total === 1 ? t("step") : t("steps")}</span>
-      </header>
-      <ol className="chat-plan-strength-steps">
-        {workout.steps.map((step, index) =>
-          "repeats" in step ? (
-            <li key={`group-${index}`} className="chat-plan-strength-repeat">
-              <div className="chat-plan-strength-repeat-header">
-                <strong>{t("Intervals")}</strong>
-                <span>{step.repeats} {t("rounds")}</span>
+    <div className={`sched-detail chat-coros-detail is-${category}`}>
+      <div className="sched-hero">
+        <div className="sched-hero-top">
+          <span className="sched-hero-icon" aria-hidden="true"><SportIcon size={20} /></span>
+          <div className="sched-hero-title">
+            <div className="sched-hero-heading">
+              <span className="sched-hero-sport">{workout.sportLabel}</span>
+              {hasRepeat ? <span className="sched-hero-chip">{t("Intervals")}</span> : null}
+            </div>
+            {context ? (
+              <span className="sched-hero-context">
+                <Layers size={12} aria-hidden="true" />
+                {context}
+              </span>
+            ) : null}
+          </div>
+        </div>
+        {stats.length ? (
+          <dl className={`sched-hero-stats is-${stats.length}`}>
+            {stats.map((stat) => (
+              <div className="sched-stat" key={stat.label}>
+                <dt className="sched-stat-label"><stat.icon size={12} aria-hidden="true" />{stat.label}</dt>
+                <dd className="sched-stat-value">{stat.value}</dd>
               </div>
-              <ol>{step.steps.map((child, childIndex) => renderStep(child, `group-${index}-${childIndex}`))}</ol>
-            </li>
-          ) : (
-            renderStep(step, `step-${index}`)
-          )
-        )}
-      </ol>
-    </section>
+            ))}
+          </dl>
+        ) : null}
+      </div>
+      {view.nodes.length ? (
+        <div className="sched-structure">
+          <div className="sched-structure-head">
+            <h4><ListChecks size={14} aria-hidden="true" />{t("Workout structure")}</h4>
+            {view.totals.distanceMeters ? (
+              <span className="sched-structure-total">{formatStepDistanceLabel(view.totals.distanceMeters, unitSystem)} {t("total")}</span>
+            ) : null}
+          </div>
+          <CardioStructure view={view} unitSystem={unitSystem} swim={false} />
+        </div>
+      ) : (
+        <div className="sched-empty">
+          <ListChecks size={18} aria-hidden="true" />
+          <p>{t("No structured steps — this workout runs by feel.")}</p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -118,28 +210,18 @@ export function CorosActionCard({ preview, onConfirm }: {
   const [result, setResult] = useState<CoachCorosActionPreview>();
   const current = result ?? preview;
   const date = isoDateFromCompact(current.date);
-  const parts = dateParts(date);
   const workouts = current.workouts ?? legacyWorkouts(current.details);
   const lead = workouts[0];
   const isPlan = current.destination === "Training Plan";
   const isCalendar = current.destination === "Calendar";
-  const sport = lead?.sport ?? current.sport;
-  const theme = sportTheme(sport);
-  const SportIcon = theme.icon;
-  const sportStyle = { "--chat-plan-sport": theme.color } as CSSProperties;
   const saved = current.state === "saved";
-  const stepCount = workouts.reduce((n, workout) => n + countSteps(workout), 0);
-  const meta = lead
-    ? isPlan
-      ? `${workouts.length} ${workouts.length === 1 ? t("workout") : t("workouts")} · ${t(current.destination)}`
-      : `${lead.sportLabel} · ${stepCount} ${stepCount === 1 ? t("step") : t("steps")}${parts ? ` · ${parts.label}` : ""}`
-    : [t(current.destination), date].filter(Boolean).join(" · ");
+  const when = dateLabel(date, "short");
   const DestinationIcon = isPlan ? Layers : isCalendar ? CalendarDays : Bookmark;
   const destinationNote = isPlan
-    ? t("This plan will be saved to your COROS Training Plans{{p0}}.", { p0: parts ? t(" starting {{p0}}", { p0: parts.label }) : "" })
+    ? t("Saves to your COROS Training Plans{{p0}}.", { p0: when ? t(" starting {{p0}}", { p0: when }) : "" })
     : isCalendar
-      ? t("This workout will be added to your COROS Calendar{{p0}}.", { p0: parts ? t(" on {{p0}}", { p0: parts.label }) : "" })
-      : t("This workout will be saved to your COROS Workout Library.");
+      ? t("Adds to your COROS Calendar{{p0}}.", { p0: when ? t(" on {{p0}}", { p0: when }) : "" })
+      : t("Saves to your COROS Workout Library.");
   const actionLabel = saving
     ? t("Saving…")
     : current.state === "saving"
@@ -163,73 +245,31 @@ export function CorosActionCard({ preview, onConfirm }: {
     <div className="chat-plan-card chat-workout-card chat-coros-action-card">
       <div className="chat-plan-card-header">
         <div className="chat-plan-card-title">
-          {lead ? <span className="chat-workout-card-kicker">{t(current.title)}</span> : null}
+          <span className="chat-workout-card-kicker">{when ? `${t(current.title)} · ${when}` : t(current.title)}</span>
           <h4>{lead ? (isPlan ? current.summary : lead.name) : t(current.title)}</h4>
-          <span className="chat-plan-card-summary">{lead && !isPlan ? current.summary : meta}</span>
+          {!lead || isPlan ? <span className="chat-plan-card-summary">{isPlan ? t(current.destination) : current.summary}</span> : null}
         </div>
-        {sport ? (
-          <span className="chat-plan-sport-dot" style={sportStyle} title={lead?.sportLabel ?? sport}>
-            <SportIcon size={12} strokeWidth={2.2} aria-hidden="true" />
-          </span>
-        ) : null}
       </div>
 
-      {workouts.length > 0 ? (
-        <ul className="chat-plan-entries chat-workout-entries">
-          {workouts.map((workout, index) => {
-            const WorkoutIcon = sportTheme(workout.sport).icon;
-            return (
-              <li
-                key={`${workout.name}-${index}`}
-                className={`chat-plan-entry is-strength${workout.steps.length ? "" : " is-rest-day"}`}
-                style={{ "--chat-plan-sport": sportTheme(workout.sport).color } as CSSProperties}
-              >
-                <span className={`chat-plan-entry-date${parts || workout.dayNo !== undefined ? "" : " is-undated"}`}>
-                  {workout.dayNo !== undefined ? (
-                    <>
-                      <span className="chat-plan-entry-weekday">{t("Day")}</span>
-                      <span className="chat-plan-entry-day">{workout.dayNo + 1}</span>
-                    </>
-                  ) : parts ? (
-                    <>
-                      <span className="chat-plan-entry-weekday">{parts.weekday}</span>
-                      <span className="chat-plan-entry-day">{parts.day}</span>
-                      <span className="chat-plan-entry-month">{parts.month}</span>
-                    </>
-                  ) : (
-                    <Bookmark size={14} aria-hidden="true" />
-                  )}
-                </span>
-                <span className="chat-plan-entry-main">
-                  <span className="chat-plan-entry-name">{workout.name}</span>
-                  {workout.description ? (
-                    <span className="chat-plan-entry-steps">{workout.description}</span>
-                  ) : null}
-                  {workout.steps.length ? <CorosWorkoutStructure workout={workout} /> : null}
-                </span>
-                <span className="chat-plan-entry-meta">
-                  <span className="chat-plan-entry-tags">
-                    <span className="chat-plan-entry-sport">
-                      <WorkoutIcon size={11} strokeWidth={2.2} aria-hidden="true" />
-                      {workout.sportLabel}
-                    </span>
-                  </span>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <>
-          <p className="chat-plan-card-summary">{current.summary}</p>
-          {current.details.length > 0 && (
-            <details className="chat-coros-action-details">
-              <summary>{t("Workout details")}</summary>
-              <ul>{current.details.map((line, index) => <li key={index}>{line}</li>)}</ul>
-            </details>
-          )}
-        </>
-      )}
+      {workouts.length ? (
+        <div className="chat-coros-workouts">
+          {workouts.map((workout, index) => (
+            <CorosWorkoutDetail key={`${workout.name}-${index}`} workout={workout} date={date} />
+          ))}
+        </div>
+      ) : current.details.length > 0 ? (
+        <details className="chat-coros-action-details">
+          <summary>{t("Workout details")}</summary>
+          <ul>{current.details.map((line, index) => <li key={index}>{line}</li>)}</ul>
+        </details>
+      ) : null}
+
+      {lead && !isPlan ? (
+        <details className="chat-coros-action-details">
+          <summary>{t("Coach's note")}</summary>
+          <p className="chat-coros-action-note">{current.summary}</p>
+        </details>
+      ) : null}
 
       {saved ? (
         <p className="chat-plan-success">
@@ -245,13 +285,9 @@ export function CorosActionCard({ preview, onConfirm }: {
             </p>
           ) : null}
           {error ? <p role="alert">{error}</p> : null}
-          <p className="chat-plan-destination-summary" data-tone="ok">
-            <DestinationIcon size={13} aria-hidden="true" />
-            <span>{destinationNote}</span>
-          </p>
           {(current.state === "pending" || current.state === "saving") && (
             <div className="chat-plan-actions">
-              <button type="button" className="chat-plan-upload" onClick={() => void save()} disabled={saving}>
+              <button type="button" className="chat-plan-upload" onClick={() => void save()} disabled={saving} title={destinationNote}>
                 {saving ? <Loader2 className="chat-spinner" size={14} aria-hidden="true" /> : <DestinationIcon size={14} aria-hidden="true" />}
                 {actionLabel}
               </button>

@@ -4220,6 +4220,9 @@ export interface CoachCorosActionStep {
   label: string;
   target: string;
   intensity?: string;
+  /** Bar magnitude: meters for distance targets, seconds for time targets. */
+  magnitude?: number;
+  magnitudeType?: "distance" | "time";
 }
 
 export type CoachCorosActionStructure =

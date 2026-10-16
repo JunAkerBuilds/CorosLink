@@ -1294,8 +1294,28 @@
   line-height: 1.5;
 }
 
-:root .app .chat-view .chat-coros-action-card .chat-plan-entry.is-rest-day .chat-plan-entry-main {
-  justify-content: center;
+:root .app .chat-view .chat-coros-workouts {
+  display: grid;
+  gap: 14px;
+}
+
+/* The calendar's detail blocks sit on the card surface: no second frame. */
+:root .app .chat-view .chat-coros-detail {
+  gap: 12px;
+}
+
+:root .app .chat-view .chat-coros-detail .sched-hero {
+  padding: 14px;
+}
+
+:root .app .chat-view .chat-coros-action-note {
+  margin: 8px 0 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--coach-ink-2);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.55;
 }
 
 :root .app .chat-view .chat-coros-action-card > .chat-plan-card-summary {

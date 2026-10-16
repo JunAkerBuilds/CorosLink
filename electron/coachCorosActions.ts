@@ -104,7 +104,11 @@ function sectionStructure(section: ObjectValue, sport: number, unitSystem: UnitS
       intensity = `${metric}: ${low}–${high} ${pace ? `/${distanceUnit(unitSystem)}` : section.intensityType === 1 ? "bpm" : "W"}`;
     } else throw new Error("The intensity metric needs a zone or range.");
   } else if (section.intensityType !== undefined || intensityFields.some(key => section[key] !== undefined)) throw new Error("Unsupported intensity. Use the local workout draft tools for this prescription.");
-  return { kind: STEP_KINDS[Number(section.sectionType)] ?? "training", label: kind, target, ...(intensity ? { intensity } : {}) };
+  const magnitudeType = section.targetType === 1 ? "distance" : section.targetType === 2 ? "time" : undefined;
+  return {
+    kind: STEP_KINDS[Number(section.sectionType)] ?? "training", label: kind, target, ...(intensity ? { intensity } : {}),
+    ...(magnitudeType ? { magnitude: Number(section.targetValue), magnitudeType } : {})
+  };
 }
 
 function actionDetails(args: ObjectValue, unitSystem: UnitSystem): { details: string[]; workouts: CoachCorosActionWorkout[] } {
