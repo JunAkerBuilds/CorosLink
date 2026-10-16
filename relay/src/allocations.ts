@@ -14,7 +14,7 @@ import {
   type AllocationRow,
   type AllocationStatus,
 } from "./db";
-import { tunnelNamePrefix, type Deps, type RelayConfig, type TunnelConfig } from "./env";
+import { hostnameLabelPrefix, tunnelNamePrefix, type Deps, type RelayConfig, type TunnelConfig } from "./env";
 import { RelayError } from "./http";
 import { log } from "./log";
 import { RECOVERY_MIN_INTERVAL_SECONDS } from "./protocol";
@@ -58,12 +58,19 @@ export async function allocationNames(
   const stableId = (
     await sha256Hex(`coroslink-relay:v1:${config.stage}:${key.userId}:${key.environmentId}:${key.kid}`)
   ).slice(0, 16);
-  return { hostname: `${stableId}.${zoneName}`, tunnelName: `${tunnelNamePrefix(config.stage)}${stableId}` };
+  return {
+    hostname: `${hostnameLabelPrefix(config.stage)}${stableId}.${zoneName}`,
+    tunnelName: `${tunnelNamePrefix(config.stage)}${stableId}`,
+  };
 }
 
-export function isManagedHostname(hostname: string, zoneName: string): boolean {
+/** One label under the zone, shaped like this stage's hostnames and no other's. */
+export function isManagedHostname(hostname: string, zoneName: string, stage: string): boolean {
   const suffix = `.${zoneName}`;
-  return hostname.endsWith(suffix) && STABLE_ID.test(hostname.slice(0, -suffix.length));
+  if (!hostname.endsWith(suffix)) return false;
+  const label = hostname.slice(0, -suffix.length);
+  const prefix = hostnameLabelPrefix(stage);
+  return label.startsWith(prefix) && STABLE_ID.test(label.slice(prefix.length));
 }
 
 export function isManagedTunnelName(name: string, stage: string): boolean {
@@ -289,6 +296,14 @@ export async function teardownAllocation(
   const now = ctx.deps.now();
   const row = await getAllocation(ctx.db, key);
   if (!row) return "complete";
+  // Stages share one account and zone: never delete anything not named like this stage's own.
+  if (
+    !isManagedTunnelName(row.tunnel_name, ctx.config.stage) ||
+    !isManagedHostname(row.hostname, ctx.config.tunnel.zoneName, ctx.config.stage)
+  ) {
+    log("warn", "teardown_refused_foreign_names", { tunnelName: row.tunnel_name });
+    return "skipped";
+  }
   if (isBusy(row, now)) return "pending";
 
   // Restoring a claim never leaves a cleanup status behind without its claim.

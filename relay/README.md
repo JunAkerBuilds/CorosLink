@@ -43,14 +43,14 @@ Vars live in `wrangler.jsonc`, with one block per stage. Secrets are set with `w
 
 | Name | Kind | Value |
 | --- | --- | --- |
-| `RELAY_STAGE` | var | `production` or `dev`. It separates tunnel names (`clink-…` and `clink-dev-…`) and hostnames when both stages share an account. |
+| `RELAY_STAGE` | var | `production` or `dev` (lowercase letters and digits). Both stages share one account and tunnel zone, so the stage is built into every name: production uses `<16 hex>.coroslinkrelay.com` and tunnel `clink-<16 hex>`; dev uses `dev-<16 hex>.coroslinkrelay.com` and tunnel `clink-dev-<16 hex>`. Each stage only ever deletes tunnels and records named like its own. |
 | `RELAY_ORIGIN` | var | `https://relay.coroslink.com` (dev: `https://relay-dev.coroslink.com`). The `aud` of environment signatures, the `iss` of mint requests, and the origin in DPoP `htu`. |
 | `WEBSITE_ISSUER` | var | `https://watchfaces.coroslink.com` |
 | `WEBSITE_JWKS_URL` | var | `https://watchfaces.coroslink.com/.well-known/relay-jwks.json` |
 | `WEBSITE_JWT_AUDIENCE` | var | `relay.coroslink.com`. This is what the website puts in `aud`. |
-| `CF_ACCOUNT_ID` | var | The Cloudflare account that owns the tunnels |
-| `TUNNEL_ZONE_ID` | var | Zone id of the tunnel domain |
-| `TUNNEL_ZONE_NAME` | var | The tunnel domain, e.g. `example-tunnels.net`. Hostnames are `<16 hex>.<zone>`. The domain is still undecided, so this is configuration only. |
+| `CF_ACCOUNT_ID` | var | The Cloudflare account that holds `coroslink.com` and the tunnels |
+| `TUNNEL_ZONE_ID` | var | The `coroslinkrelay.com` zone's ID (its Overview page → API) |
+| `TUNNEL_ZONE_NAME` | var | `coroslinkrelay.com`. It is used only for per-computer tunnel addresses, always one label under the zone, which is all the phone accepts. |
 | `CF_API_TOKEN` | secret | An API token with **Account · Cloudflare Tunnel · Edit** and **Zone · DNS · Edit** on the tunnel zone only |
 | `RELAY_SIGNING_KEY` | secret | ES256 private key, PKCS8 PEM. Signs mint requests; desktops pin its public key. |
 | `RELAY_SIGNING_KEY_ID` | var | Its `kid`, e.g. `relay-2026-10`. Change it whenever the key changes. |
@@ -70,13 +70,12 @@ Missing configuration fails only the endpoints that need it:
 
 ## Before the first deploy
 
-None of these resources exist yet. Each one needs creating in the Cloudflare account:
+Only the tunnel zone exists so far. The rest still needs creating in the Cloudflare account:
 
-1. **Tunnel domain.**
-   - Buy the domain and add it as a full-setup zone. A domain separate from `coroslink.com` is recommended, so the tunnel token's DNS · Edit can't touch the main site.
-   - Note its zone id and set `TUNNEL_ZONE_ID` and `TUNNEL_ZONE_NAME` in both stages.
-   - The free Universal SSL certificate covers `*.<zone>`, which is why hostnames are first-level.
-2. **API token.** Create it with Account · Cloudflare Tunnel · Edit (this account) and Zone · DNS · Edit (the tunnel zone only).
+1. **Tunnel domain (done).** `coroslinkrelay.com` is a full-setup zone on the free plan, in the same account as `coroslink.com`. It has no DNS records; the relay creates one proxied CNAME per linked computer. Put the account ID and this zone's ID into `wrangler.jsonc` for both stages; they're left blank in the repo.
+   - Keeping it separate from `coroslink.com` means the tunnel token's DNS · Edit can't touch the main site.
+   - The free Universal SSL certificate covers `*.coroslinkrelay.com`, which is why hostnames are first-level. Check the zone is **Active** before linking a desktop.
+2. **API token.** Create it with Account · Cloudflare Tunnel · Edit (this account) and Zone · DNS · Edit on `coroslinkrelay.com` only. One token serves both stages.
    ```bash
    npx wrangler secret put CF_API_TOKEN --env=""
    ```

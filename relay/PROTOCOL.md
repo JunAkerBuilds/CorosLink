@@ -122,7 +122,12 @@ The relay checks the proof against the environment key it stored at link time, t
 
 ## Tunnels
 
-- **Hostnames:** each user/environment/key triple gets one hostname for life: `<16 hex>.<TUNNEL_ZONE_NAME>`. It is first-level, so the zone's free certificate covers it, and it is derived from a hash that reveals no id. The tunnel is named `clink-<same 16 hex>` (`clink-<stage>-…` outside production).
+- **Hostnames:** each user/environment/key triple gets one hostname for life:
+  - production: `<16 hex>.coroslinkrelay.com`, tunnel `clink-<same 16 hex>`;
+  - relay-dev: `dev-<16 hex>.coroslinkrelay.com`, tunnel `clink-dev-<same 16 hex>`.
+
+  The hostname is always one label under `TUNNEL_ZONE_NAME`, so the zone's free certificate covers it and the phone accepts it. The hex comes from a hash that reveals no id.
+- **Stages:** both stages share one account and zone. The stage prefix makes their names impossible to collide, and each stage's cleanup and unlink teardown only ever delete tunnels and records named like its own.
 - **Why the key is part of it:** a token for the user is enough to call link. Including the key means whoever holds that token can never slip their own key behind an address phones already trust. A new key always gets a new hostname.
 - **Ingress:** `[{hostname, service: "http://localhost:<port>"}, {service: "http_status:404"}]`. cloudflared sends the original `Host`, so the desktop server must accept the tunnel hostname. It should listen on `127.0.0.1`; cloudflared tries every address `localhost` resolves to.
 - **Generations:** every write to an allocation bumps its `generation`, and only lands if the generation is still the one the writer read. Link and recovery checkpoint each Cloudflare step (tunnel id, ingress, DNS record), so a retry resumes where it stopped. Unlink and cleanup claim the generation before deleting anything. If a concurrent writer wins, the loser answers `allocation_conflict` (retry) or `allocation_busy` (retry after `Retry-After`).

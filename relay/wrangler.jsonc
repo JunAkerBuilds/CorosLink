@@ -35,10 +35,12 @@
     "WEBSITE_ISSUER": "https://watchfaces.coroslink.com",
     "WEBSITE_JWKS_URL": "https://watchfaces.coroslink.com/.well-known/relay-jwks.json",
     "WEBSITE_JWT_AUDIENCE": "relay.coroslink.com",
-    // Tunnel domain is undecided; fill these in once it is a zone in the account.
+    // Tunnel addresses live on their own zone, coroslinkrelay.com, in the same
+    // account as coroslink.com. Both stages share it; dev names carry a stage
+    // prefix so they never collide.
     "CF_ACCOUNT_ID": "",
     "TUNNEL_ZONE_ID": "",
-    "TUNNEL_ZONE_NAME": "",
+    "TUNNEL_ZONE_NAME": "coroslinkrelay.com",
     "RELAY_SIGNING_KEY_ID": "relay-2026-10",
     "APNS_KEY_ID": "",
     "APNS_TEAM_ID": "",
@@ -70,7 +72,7 @@
         "WEBSITE_JWT_AUDIENCE": "relay.coroslink.com",
         "CF_ACCOUNT_ID": "",
         "TUNNEL_ZONE_ID": "",
-        "TUNNEL_ZONE_NAME": "",
+        "TUNNEL_ZONE_NAME": "coroslinkrelay.com",
         "RELAY_SIGNING_KEY_ID": "relay-dev-2026-10",
         "APNS_KEY_ID": "",
         "APNS_TEAM_ID": "",

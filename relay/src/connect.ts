@@ -45,7 +45,7 @@ export async function brokerConnect(
     throw new RelayError("environment_not_ready", "This computer's remote access is not ready yet.");
   }
   // The relay only ever calls hostnames it derived itself, never one a caller supplied.
-  if (!isManagedHostname(allocation.hostname, tunnelConfig.zoneName)) {
+  if (!isManagedHostname(allocation.hostname, tunnelConfig.zoneName, ctx.config.stage)) {
     throw new RelayError("environment_not_ready", "This computer's remote address is not valid.");
   }
 

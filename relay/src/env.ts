@@ -77,15 +77,22 @@ export function cleanupModeFrom(value: string | undefined): CleanupMode {
   return value === "dry-run" || value === "enabled" ? value : "off";
 }
 
+/** Stage names become part of DNS labels and tunnel names. */
+const STAGE_PATTERN = /^[a-z][a-z0-9]{0,15}$/u;
+
 export function loadConfig(env: Env): RelayConfig {
   const zoneName = (env.TUNNEL_ZONE_NAME ?? "").trim().toLowerCase().replace(/\.$/u, "");
+  const stage = present(env.RELAY_STAGE) ? env.RELAY_STAGE.trim() : "production";
   return {
-    stage: present(env.RELAY_STAGE) ? env.RELAY_STAGE.trim() : "production",
+    stage,
     origin: env.RELAY_ORIGIN.replace(/\/+$/u, ""),
     websiteIssuer: env.WEBSITE_ISSUER,
     websiteJwksUrl: env.WEBSITE_JWKS_URL,
     websiteAudience: env.WEBSITE_JWT_AUDIENCE,
+    // An unusable stage name disables tunnels rather than risk names that
+    // could collide with another stage's.
     tunnel:
+      STAGE_PATTERN.test(stage) &&
       present(env.CF_ACCOUNT_ID) &&
       present(env.TUNNEL_ZONE_ID) &&
       present(zoneName) &&
@@ -121,4 +128,13 @@ export function loadConfig(env: Env): RelayConfig {
 /** Tunnel names are `<prefix><16 hex>`; the prefix separates stages in one account. */
 export function tunnelNamePrefix(stage: string): string {
   return stage === "production" ? "clink-" : `clink-${stage}-`;
+}
+
+/**
+ * Hostname labels are `<prefix><16 hex>`: no prefix in production, `<stage>-`
+ * elsewhere. Stages share one tunnel zone, so the prefix makes a collision
+ * impossible rather than unlikely. The result is still one DNS label.
+ */
+export function hostnameLabelPrefix(stage: string): string {
+  return stage === "production" ? "" : `${stage}-`;
 }
