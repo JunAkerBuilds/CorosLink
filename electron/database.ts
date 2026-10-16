@@ -91,6 +91,7 @@ interface TrainingActivityRow {
   start_time: number | null;
   end_time: number | null;
   duration: number | null;
+  moving_time: number | null;
   distance: number | null;
   avg_hr: number | null;
   max_hr: number | null;
@@ -426,6 +427,9 @@ export function initializeDatabase(userDataPath: string): Database.Database {
   // feel_type caches the COROS end-of-activity feeling (sportFeelInfo.feelType,
   // 1..5; 0 = unrated). NULL = never fetched from the detail endpoint yet.
   ensureColumn(db, "training_activities", "feel_type", "INTEGER");
+  // moving_time = list workoutTime (timer seconds, excl. pauses); duration
+  // stays elapsed. NULL = synced before moving time was stored.
+  ensureColumn(db, "training_activities", "moving_time", "INTEGER");
   migrateChatSessionProviderConstraint(db);
   migrateChatTranscriptsToSessions(db);
   // After the provider rebuild above, which recreates chat_sessions.
@@ -1482,6 +1486,7 @@ function toTrainingActivity(row: TrainingActivityRow): TrainingHubActivity {
     startTime: row.start_time ?? undefined,
     endTime: row.end_time ?? undefined,
     duration: row.duration ?? undefined,
+    movingTime: row.moving_time ?? undefined,
     distance: row.distance ?? undefined,
     avgHr: row.avg_hr ?? undefined,
     maxHr: row.max_hr ?? undefined,
@@ -1502,13 +1507,13 @@ export function upsertTrainingActivities(
   const insert = database.prepare(
     `INSERT INTO training_activities (
        activity_id, name, sport_type, sport_name, start_time, end_time,
-       duration, distance, avg_hr, max_hr, calories, training_load,
-       elevation_gain, synced_at
+       duration, moving_time, distance, avg_hr, max_hr, calories,
+       training_load, elevation_gain, synced_at
      )
      VALUES (
        @activityId, @name, @sportType, @sportName, @startTime, @endTime,
-       @duration, @distance, @avgHr, @maxHr, @calories, @trainingLoad,
-       @elevationGain, @syncedAt
+       @duration, @movingTime, @distance, @avgHr, @maxHr, @calories,
+       @trainingLoad, @elevationGain, @syncedAt
      )
      ON CONFLICT(activity_id) DO UPDATE SET
        name = excluded.name,
@@ -1517,6 +1522,7 @@ export function upsertTrainingActivities(
        start_time = excluded.start_time,
        end_time = excluded.end_time,
        duration = excluded.duration,
+       moving_time = excluded.moving_time,
        distance = excluded.distance,
        avg_hr = excluded.avg_hr,
        max_hr = excluded.max_hr,
@@ -1539,6 +1545,7 @@ export function upsertTrainingActivities(
         startTime: activity.startTime ?? null,
         endTime: activity.endTime ?? null,
         duration: activity.duration ?? null,
+        movingTime: activity.movingTime ?? null,
         distance: activity.distance ?? null,
         avgHr: activity.avgHr ?? null,
         maxHr: activity.maxHr ?? null,
@@ -1645,8 +1652,8 @@ export function listStoredTrainingActivities(limit = 500): TrainingHubActivity[]
   const rows = requireDatabase()
     .prepare(
       `SELECT activity_id, name, sport_type, sport_name, start_time, end_time,
-              duration, distance, avg_hr, max_hr, calories, training_load,
-              elevation_gain
+              duration, moving_time, distance, avg_hr, max_hr, calories,
+              training_load, elevation_gain
        FROM training_activities
        ORDER BY start_time DESC
        LIMIT ?`

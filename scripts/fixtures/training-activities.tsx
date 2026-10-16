@@ -14,7 +14,8 @@ const activities: TrainingHubActivity[] = [
   { activityId: "ride", name: "Montreal Road Bike", sportType: 200, distance: 3070, duration: 1018, avgHr: 138, calories: 248, elevationGain: 32 },
   { activityId: "walk", name: "Montreal Walk", sportType: 900, distance: 2610, duration: 2252, avgHr: 98, calories: 216, elevationGain: 18 },
   { activityId: "run2", name: "Ottawa Run", sportType: 100, distance: 6630, duration: 3241, avgHr: 157, calories: 654, elevationGain: 20 },
-  { activityId: "run3", name: "Hamilton Run", sportType: 100, distance: 7010, duration: 3889, avgHr: 145, calories: 701, elevationGain: 31 },
+  // Live paused-run times (2026-10-02): elapsed 51:50, moving 41:39 at 5:57/km.
+  { activityId: "run3", name: "Hamilton Run", sportType: 100, distance: 7007.61, duration: 3110, movingTime: 2499, avgHr: 145, calories: 701, elevationGain: 31 },
   { activityId: "missing", name: "10km Easy Run", sportType: 100, distance: 3140, duration: 1386 },
   { activityId: "indoor", name: "Evening Strength", sportType: 402, duration: 1800, avgHr: 131, calories: 205 },
   { activityId: "failed", name: "Unavailable route", sportType: 104, duration: 1200, distance: 1200 }

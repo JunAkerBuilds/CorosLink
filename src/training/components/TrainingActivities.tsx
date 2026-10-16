@@ -11,6 +11,7 @@ import { formatDistanceMeters, formatDurationSeconds, formatElevationMeters, for
   formatTrainingTimestamp } from "../formatters";
 import { resolveSportName } from "../sportTypes";
 import { isRaceSportType } from "../../../electron/raceModel";
+import { activityMovingSeconds, activityPaceSecondsPerKm, activitySignificantElapsedSeconds } from "../../../electron/activityTime";
 import type { RaceJournal } from "../useRaceJournal";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import { formatSpeedValue, metersToSwimDistance, swimDistanceUnit } from "../../units/units";
@@ -89,12 +90,14 @@ function ActivityCard({ activity, sportTypes, busy, sampleMode, onLoadDetail, on
   const sport = sports.find(item => item.id === category)!;
   const Icon = sport.icon;
   const name = activity.name || resolveSportName(activity, sportTypes) || "Activity";
-  const pace = activity.distance && activity.duration ? activity.duration / (activity.distance / 1000) : undefined;
+  // Moving time, as COROS shows it; elapsed would count pauses into pace.
+  const moving = activityMovingSeconds(activity);
+  const pace = activityPaceSecondsPerKm(activity);
   const paceValue = category === "ride"
     ? formatSpeedValue(pace ? 3600 / pace : undefined, unitSystem)
     : category === "swim"
-      ? activity.distance && activity.duration
-        ? `${formatDurationSeconds(activity.duration / (metersToSwimDistance(activity.distance, unitSystem) / 100))} /100${swimDistanceUnit(unitSystem)}` : "—"
+      ? activity.distance && moving
+        ? `${formatDurationSeconds(moving / (metersToSwimDistance(activity.distance, unitSystem) / 100))} /100${swimDistanceUnit(unitSystem)}` : "—"
       : formatPaceSecondsPerKm(pace, unitSystem);
   const indoor = [101, 201, 300, 400, 402, 701, 800, 801].includes(activity.sportType);
   return <article className={`activity-card activity-sport-${category}`}>
@@ -110,7 +113,7 @@ function ActivityCard({ activity, sportTypes, busy, sampleMode, onLoadDetail, on
       <ActivityCardRoute activity={activity} load={loadPreview} indoor={indoor} />
       <span className="activity-card-primary">
         <span><strong>{activity.distance === undefined ? "—" : formatDistanceMeters(activity.distance, unitSystem, category === "swim")}</strong><small>{t("Distance")}</small></span>
-        <span><strong>{activity.duration === undefined ? "—" : formatDurationSeconds(activity.duration)}</strong><small>{t("Time")}</small></span>
+        <span><strong>{moving === undefined ? "—" : formatDurationSeconds(moving)}</strong><small>{t("Time")}</small></span>
         <span><strong>{paceValue}</strong><small>{category === "ride" ? t("Avg Speed") : t("Avg Pace")}</small></span>
       </span>
       <span className="activity-card-secondary">
@@ -280,6 +283,10 @@ function ActivityDetailDialog({ inline = false, opened, sportTypes, activityDeta
   const failed = opened !== null && !detail && busy !== `training-detail:${opened.activityId}`;
   const timestamp = opened ? activityTimestamp(opened.startTime) : 0;
   const trainingLoad = detail?.trainingLoad ?? opened?.trainingLoad;
+  // The panel headlines moving time; elapsed rides here once pauses reach a minute.
+  const elapsed = activitySignificantElapsedSeconds({
+    duration: detail?.duration ?? opened?.duration, movingTime: detail?.movingTime ?? opened?.movingTime
+  });
   const pacing = detail && !detail.strength ? lapPacing(detail.laps) : undefined;
   const [praise, encouragementNote] = encouragement[category];
   const content = opened ? <div className="activity-dialog-surface">
@@ -295,6 +302,7 @@ function ActivityDetailDialog({ inline = false, opened, sportTypes, activityDeta
               {location ? <><i aria-hidden="true" /><MapPin size={14} aria-hidden="true" /><span>{location}</span></> : null}</p>
             <div className="activity-dialog-chips"><span className="activity-dialog-badge">{t(sport.label)}</span>
               {sportName && sportName.toLowerCase() !== sport.label.toLowerCase() ? <span className="activity-dialog-chip">{t(sportName)}</span> : null}
+              {elapsed !== undefined ? <span className="activity-dialog-chip">{t("Elapsed")} <strong>{formatDurationSeconds(elapsed)}</strong></span> : null}
               {trainingLoad !== undefined ? <span className="activity-dialog-chip">{t("Training Load")} <strong>{Math.round(trainingLoad)}</strong></span> : null}
               {raceTags && isRaceSportType(opened.sportType) ? <RaceToggle activity={opened} raceTags={raceTags} /> : null}</div>
           </div>

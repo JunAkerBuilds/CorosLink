@@ -3,6 +3,7 @@ import { BrowserWindow, safeStorage, shell } from "electron";
 import crypto from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import { activityMovingSeconds, activitySignificantElapsedSeconds } from "./activityTime";
 import { deleteSettings, getSetting, setSetting } from "./database";
 import {
   formatScheduledExercisesForChat,
@@ -2046,6 +2047,16 @@ async function buildTrainingContext(
   return { text: sections.join("\n").trim(), hasData };
 }
 
+/** Moving time, plus elapsed once pauses reach a minute (as COROS shows it). */
+function formatActivityTime(activity: TrainingHubActivity): string {
+  const moving = activityMovingSeconds(activity);
+  if (moving === undefined) return "";
+  const elapsed = activitySignificantElapsedSeconds(activity);
+  return elapsed === undefined
+    ? formatDurationSeconds(moving)
+    : `${formatDurationSeconds(moving)} moving (${formatDurationSeconds(elapsed)} elapsed)`;
+}
+
 function formatActivities(
   activities: TrainingHubActivity[],
   unitSystem: UnitSystem
@@ -2066,7 +2077,7 @@ function formatActivities(
                 /swim/i.test(activity.sportName ?? "")
             })
           : "",
-        activity.duration ? formatDurationSeconds(activity.duration) : "",
+        formatActivityTime(activity),
         activity.avgHr ? `avg HR ${activity.avgHr}` : "",
         activity.trainingLoad ? `load ${activity.trainingLoad}` : "",
         activity.elevationGain

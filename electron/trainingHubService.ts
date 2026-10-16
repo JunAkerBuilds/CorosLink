@@ -31,6 +31,7 @@ import {
   upsertStrengthSessionDetail,
   upsertTrainingActivities
 } from "./database";
+import { activityMovingSeconds } from "./activityTime";
 import { buildRpeDistribution, dailyRpeLoad } from "./rpeLoad";
 import type {
   ActivityPaceBaseline,
@@ -245,7 +246,10 @@ interface RawTrainingHubActivity {
   sport_name?: string;
   startTime?: number;
   endTime?: number;
+  /** Elapsed seconds including pauses. */
   totalTime?: number;
+  /** Seconds the timer ran (totalTime minus pauses). */
+  workoutTime?: number;
   distance?: number;
   avgHr?: number;
   maxHr?: number;
@@ -1479,7 +1483,9 @@ export async function getActivityPaceBaselines(): Promise<ActivityPaceBaselines>
 
   for (const activity of activities) {
     const distance = activity.distance ?? 0;
-    const duration = activity.duration ?? 0;
+    // Moving time, like COROS's own avg pace: pauses at lights or a café
+    // would otherwise slow the baseline route ETAs are built on.
+    const duration = activityMovingSeconds(activity) ?? 0;
     if (distance < MIN_ACTIVITY_DISTANCE_METERS || duration <= 0) {
       continue;
     }
@@ -3523,7 +3529,7 @@ function resolveWorkoutSetCount(
   }, 0);
 }
 
-function mapTrainingHubActivity(
+export function mapTrainingHubActivity(
   raw: RawTrainingHubActivity
 ): TrainingHubActivity {
   const activityId = raw.labelId ?? raw.activityId ?? "";
@@ -3535,7 +3541,12 @@ function mapTrainingHubActivity(
     sportName: raw.sportName ?? raw.sport_name,
     startTime: raw.startTime,
     endTime: raw.endTime,
+    // The list API sends both in whole seconds (live run: 3110 vs 2499).
     duration: raw.totalTime,
+    movingTime: movingTimeWithinElapsed(
+      raw.workoutTime !== undefined && raw.workoutTime > 0 ? raw.workoutTime : undefined,
+      raw.totalTime
+    ),
     distance: raw.distance,
     avgHr: raw.avgHr,
     maxHr: raw.maxHr,
@@ -5998,10 +6009,25 @@ function coalesceActivityMetric(
   return detailValue;
 }
 
+// Detail summaries carry totalTime (elapsed, incl. pauses) and workoutTime
+// (timer running): a live PACE Pro run had 310995 vs 249889 (0.01 s) with
+// pauseTime 61106. Moving time above elapsed means the two were scaled
+// differently, so drop it and let callers fall back to elapsed.
+function movingTimeWithinElapsed(
+  movingTime: number | undefined,
+  elapsed: number | undefined
+): number | undefined {
+  if (movingTime === undefined || (elapsed !== undefined && movingTime > elapsed)) {
+    return undefined;
+  }
+  return movingTime;
+}
+
 export function mergeActivityDetailWithList(
   detail: TrainingHubActivityDetail,
   listActivity: TrainingHubActivity
 ): TrainingHubActivityDetail {
+  const duration = coalesceActivityMetric(detail.duration, listActivity.duration);
   return {
     ...detail,
     activityId: detail.activityId ?? listActivity.activityId,
@@ -6015,7 +6041,11 @@ export function mergeActivityDetailWithList(
         undefined
       ),
     startTime: detail.startTime ?? listActivity.startTime,
-    duration: coalesceActivityMetric(detail.duration, listActivity.duration),
+    duration,
+    movingTime: movingTimeWithinElapsed(
+      detail.movingTime ?? listActivity.movingTime,
+      duration
+    ),
     distance: coalesceActivityMetric(detail.distance, listActivity.distance),
     avgHr: coalesceActivityMetric(detail.avgHr, listActivity.avgHr),
     maxHr: coalesceActivityMetric(detail.maxHr, listActivity.maxHr),
@@ -6041,6 +6071,7 @@ export function parseActivityDetail(raw: Record<string, unknown>): TrainingHubAc
     "duration",
     "workoutTime"
   ]);
+  const duration = normalizeActivityDuration(durationRaw);
   const distanceRaw = pickActivityNumber(raw, summary, ["distance", "totalDistance"]);
   const elevationRaw = pickActivityNumber(raw, summary, [
     "ascent",
@@ -6064,7 +6095,11 @@ export function parseActivityDetail(raw: Record<string, unknown>): TrainingHubAc
         toOptionalNumber(summary.startTime) ??
         toOptionalNumber(summary.startTimestamp)
     ),
-    duration: normalizeActivityDuration(durationRaw),
+    duration,
+    movingTime: movingTimeWithinElapsed(
+      normalizeActivityDuration(pickActivityNumber(raw, summary, ["workoutTime"])),
+      duration
+    ),
     distance: normalizeActivityDistanceMeters(distanceRaw),
     avgHr:
       toOptionalNumber(raw.avgHr) ??

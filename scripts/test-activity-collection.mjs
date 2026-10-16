@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { activityCategory, activityTimeline, activityTimestamp, activityTotals, lapPacing, selectActivities } from "../src/training/activityCollection.ts";
+import { activityMovingSeconds, activityPaceSecondsPerKm, activitySignificantElapsedSeconds, activitySpeedKmh } from "../electron/activityTime.ts";
 
 const activities = [
   { activityId: "run", name: "Ottawa Run", sportType: 100, distance: 5000, duration: 1800, startTime: 1_800_000_000, calories: 300 },
@@ -32,6 +33,32 @@ assert.equal(activityTotals([activities[1]]).calories, 0, "Recorded zero remains
 assert.equal(activityTimeline(activities).reduce((total, bucket) => total + bucket.count, 0), 3);
 assert.equal(activityTimeline([]).length, 10);
 console.log("Activity collection passed: filtering, sort, timestamp units, mixed-sport pace, missing data and chart buckets.");
+// Moving vs elapsed (live PACE Pro run, 2026-10-02): COROS shows 41:39 at
+// 5:57/km; elapsed 51:50 would read 7:24/km. Cards, totals, sort, the detail
+// panel and the Overview card all go through these helpers.
+const pausedRun = { activityId: "paused", sportType: 100, distance: 7007.61, duration: 3110, movingTime: 2499, startTime: 1_800_000_003 };
+assert.equal(activityMovingSeconds(pausedRun), 2499);
+assert.equal(Math.round(activityPaceSecondsPerKm(pausedRun)), 357);
+assert.equal(activitySignificantElapsedSeconds(pausedRun), 3110);
+assert.equal(activitySignificantElapsedSeconds({ ...pausedRun, duration: 2558 }), undefined, "Under a minute of pauses: no elapsed stat");
+assert.equal(activitySignificantElapsedSeconds({ ...pausedRun, duration: 2559 }), 2559, "A full minute of pauses shows elapsed");
+assert.equal(activitySignificantElapsedSeconds({ ...pausedRun, movingTime: undefined }), undefined);
+const legacyRun = { ...pausedRun, movingTime: undefined };
+assert.equal(activityMovingSeconds(legacyRun), 3110, "Rows cached before movingTime fall back to elapsed");
+assert.equal(Math.round(activityPaceSecondsPerKm(legacyRun)), 444);
+assert.equal(activityMovingSeconds({ duration: 3110, movingTime: 0 }), 3110, "Zero moving time is missing data");
+assert.equal(activityPaceSecondsPerKm({ duration: 3110, movingTime: 2499 }), undefined, "No distance, no pace");
+assert.equal(activityPaceSecondsPerKm({ distance: 0, duration: 3110 }), undefined);
+assert.equal(activitySpeedKmh({ distance: 30000, duration: 4500, movingTime: 3600 }), 30, "Ride speed uses moving time");
+// The detail panel combines detail and list fields the same way.
+assert.equal(activitySpeedKmh({ distance: 30000, duration: 4500 }), 24);
+const pausedTotals = activityTotals([pausedRun, activities[0]]);
+assert.equal(pausedTotals.duration, 2499 + 1800, "Total Time is moving time");
+assert.equal(Math.round(pausedTotals.pace), Math.round((2499 + 1800) / 12.00761));
+const longElapsed = { activityId: "long-elapsed", sportType: 100, duration: 3000, movingTime: 1700 };
+assert.deepEqual(selectActivities([longElapsed, activities[0]], "all", "", "duration", names).map(a => a.activityId), ["run", "long-elapsed"], "Longest time sorts on moving time");
+console.log("Activity collection passed: moving-time totals, pace, speed, elapsed threshold and sort.");
+
 assert.equal(lapPacing([{ distance: 1000, duration: 300 }, { distance: 1000, duration: 305 }]), undefined, "Needs three timed laps");
 assert.equal(lapPacing([{ distance: 1000, duration: 300 }, { distance: 1000, duration: 304 }, { distance: 1000, duration: 298 }, { distance: 400, duration: 121 }]), "consistent");
 assert.equal(lapPacing([{ distance: 1000, duration: 330 }, { distance: 1000, duration: 320 }, { distance: 1000, duration: 290 }, { distance: 1000, duration: 280 }]), "negative-split");

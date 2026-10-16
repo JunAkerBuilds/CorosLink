@@ -22,6 +22,12 @@ import type {
   TrainingHubSportType
 } from "../../../electron/types";
 import {
+  activityMovingSeconds,
+  activityPaceSecondsPerKm,
+  activitySignificantElapsedSeconds,
+  activitySpeedKmh
+} from "../../../electron/activityTime";
+import {
   formatDistanceMeters,
   formatDurationSeconds,
   formatElevationMeters,
@@ -217,15 +223,22 @@ export function ActivityDetailPanel({
   const cycling =
     isCyclingSportType(detail.sportType ?? listActivity?.sportType) ||
     /bike|cycl|ride/i.test(sportName ?? "");
-  const distance = detail.distance ?? listActivity?.distance;
-  const duration = detail.duration ?? listActivity?.duration;
-  const performance = distance && duration
-    ? cycling
-      ? formatSpeedValue((distance / 1000) / (duration / 3600), unitSystem)
-      : !swim
-        ? formatPaceSecondsPerKm(duration / (distance / 1000), unitSystem)
-        : undefined
-    : undefined;
+  // detail.duration is elapsed time including pauses. Like the COROS app,
+  // headline moving time and derive pace/speed from it (laps are moving too).
+  const times = {
+    duration: detail.duration ?? listActivity?.duration,
+    movingTime: detail.movingTime ?? listActivity?.movingTime,
+    distance: detail.distance ?? listActivity?.distance
+  };
+  const moving = activityMovingSeconds(times);
+  const elapsed = activitySignificantElapsedSeconds(times);
+  const speed = cycling ? activitySpeedKmh(times) : undefined;
+  const pace = !cycling && !swim ? activityPaceSecondsPerKm(times) : undefined;
+  const performance = speed !== undefined
+    ? formatSpeedValue(speed, unitSystem)
+    : pace !== undefined
+      ? formatPaceSecondsPerKm(pace, unitSystem)
+      : undefined;
   const paceLabel = cycling ? "Avg Speed" : "Avg Pace";
   const lapPerformance = (lap: TrainingHubActivityDetail["laps"][number]): string => {
     if (swim || !lap.distance || !lap.duration) {
@@ -241,7 +254,10 @@ export function ActivityDetailPanel({
   const elevation = showcase ? elevationRange(detail) : undefined;
 
   const stats: DetailStatProps[] = [
-    { label: t("Duration"), value: formatDurationSeconds(detail.duration), icon: Timer, tone: "#5ce5a2" },
+    { label: elapsed === undefined ? t("Duration") : t("Moving Time"), value: formatDurationSeconds(moving), icon: Timer, tone: "#5ce5a2" },
+    // The dialog header carries elapsed as a chip, like training load: an
+    // eighth tile would wrap onto a row of its own.
+    ...(elapsed === undefined || showcase ? [] : [{ label: t("Elapsed"), value: formatDurationSeconds(elapsed) }]),
     { label: t("Distance"), value: formatDistanceMeters(detail.distance, unitSystem, swim), icon: MapPin, tone: "#65dcec" },
     ...(performance ? [{ label: paceLabel, value: performance, icon: Gauge, tone: "#58ddd4" }] : []),
     { label: t("Avg HR"), value: showcase ? withUnit(detail.avgHr, "bpm") : formatOptionalNumber(detail.avgHr), icon: Heart, tone: "#ff7288" },

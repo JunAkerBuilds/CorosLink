@@ -8,6 +8,7 @@ const distUrl = (file) =>
 
 const {
   formatActivityDetailForChat,
+  formatActivityListLine,
   buildActivityVisualPreview,
   buildActivityHrTrendPreview
 } = await import(`${distUrl("chatActivityTools.js")}?cacheBust=${Date.now()}`);
@@ -188,12 +189,16 @@ assert.equal(
 // trimmed): power and cadence live in summary, in nested lapItemList entries,
 // and in per-second frequencyList samples keyed heart/speed/power/cadence.
 // COROS writes 0 where a metric was not recorded (lap maxPower, np).
+// totalTime is elapsed (51:50); workoutTime is moving (41:39) = totalTime -
+// pauseTime, all in 0.01 s.
 const powerRunFixture = {
   labelId: "act-power-1",
   summary: {
     name: "Ottawa Run",
     sportType: 100,
-    totalTime: 249889,
+    totalTime: 310995,
+    workoutTime: 249889,
+    pauseTime: 61106,
     distance: 700761,
     avgHr: 163,
     maxHr: 188,
@@ -252,6 +257,11 @@ assert.deepEqual(powerRun.series?.[2], {
 });
 
 const powerRunText = formatActivityDetailForChat(powerRun, true);
+// Moving time and pace headline the summary; elapsed appears once pauses matter.
+assert.equal(powerRun.duration, 3110);
+assert.equal(powerRun.movingTime, 2499);
+assert.match(powerRunText, /\nMoving time: 41:39\nElapsed: 51:50 \(10:11 paused\)\nAvg pace: 5:57\/km\n/);
+assert.doesNotMatch(powerRunText, /Duration: 51:50|7:24\/km/);
 assert.match(powerRunText, /Avg power: 204 W/);
 assert.match(powerRunText, /Max power: 306 W/);
 assert.match(powerRunText, /Avg cadence: 153 spm/);
@@ -268,6 +278,49 @@ assert.ok(buildActivityVisualPreview(powerRun, "req-power")?.sections.power);
 
 // HR-only activities keep the compact lap table.
 assert.doesNotMatch(formatted, /Power|Cadence/);
+
+// Older fixtures without workoutTime keep elapsed as the duration.
+assert.match(formatted, /\nDuration: 10:00:00\n/);
+assert.doesNotMatch(formatted, /Moving time|Elapsed/);
+
+// Under a minute of pauses: moving time and pace, no Elapsed line.
+const shortPauseText = formatActivityDetailForChat(
+  { ...powerRun, duration: 2540, movingTime: 2499, laps: [] },
+  false
+);
+assert.match(shortPauseText, /\nDuration: 41:39\nAvg pace: 5:57\/km\n/);
+assert.doesNotMatch(shortPauseText, /Elapsed|Moving time/);
+
+// Rides report moving speed.
+const pausedRide = formatActivityDetailForChat(
+  { ...bikeDetail, duration: 3_600 + 900, movingTime: 3_600 },
+  false
+);
+assert.match(pausedRide, /Moving time: 1:00:00\nElapsed: 1:15:00 \(15:00 paused\)\nAvg speed: /);
+assert.equal(
+  pausedRide.match(/Avg speed: (.+)/)?.[1],
+  formatActivityDetailForChat({ ...bikeDetail, duration: 3_600 }, false).match(/Avg speed: (.+)/)?.[1]
+);
+
+// list_recent_activities lines carry moving time, plus elapsed once pauses
+// reach a minute (list API values for the same run).
+const listedRun = {
+  activityId: "480757304470307016",
+  sportType: 100,
+  distance: 7007.61,
+  duration: 3110,
+  movingTime: 2499
+};
+assert.match(formatActivityListLine(listedRun, "metric"), / · 41:39 moving \(51:50 elapsed\)$/);
+assert.match(
+  formatActivityListLine({ ...listedRun, duration: 2540 }, "metric"),
+  / · 41:39$/
+);
+// Activities cached before moving time was stored keep elapsed.
+assert.match(
+  formatActivityListLine({ ...listedRun, movingTime: undefined }, "metric"),
+  / · 51:50$/
+);
 
 const poweredRide = formatActivityDetailForChat({
   ...bikeDetail,

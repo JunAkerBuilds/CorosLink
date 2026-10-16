@@ -52,10 +52,18 @@ async function main() {
     await click('.activities-sport-filters .activity-sport-all');
     await input('hamilton');
     await until(cards, n => n === 1, 'search');
+    // Cards show moving time and moving pace, as COROS does.
+    assert.match(await js(`document.querySelector('.activity-card-primary').textContent`), /41:39Time5:57 \/kmAvg Pace/);
     await js(`localStorage.setItem('coroslink.selection.v1.training.activityRoute.baseLayer', JSON.stringify('light')); void 0`);
     await click('.activity-card-body');
     await until(() => count('dialog[open]'), n => n === 1, 'detail dialog');
     assert.match(await js(`document.querySelector('dialog').textContent`), /Hamilton Run/);
+    // Ten minutes of pauses: moving time headlines, elapsed joins the header chips.
+    assert.deepEqual(
+      (await js(`Array.from(document.querySelectorAll('dialog .activity-detail-stat'), el => el.textContent)`)).slice(0, 3),
+      ['Moving Time41:39', 'Distance7.01km', 'Avg Pace5:57/km']
+    );
+    assert.ok((await js(`Array.from(document.querySelectorAll('dialog .activity-dialog-chip'), el => el.textContent)`)).includes('Elapsed 51:50'));
     await click('.activity-route-expand');
     await until(() => count('dialog .activity-route-modal-backdrop'), n => n === 1, 'expanded route within modal');
     await until(() => count('dialog .activity-route-modal-map .activity-route-base-tile img.leaflet-tile'), n => n > 0, 'expanded street tiles');

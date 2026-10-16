@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  mapTrainingHubActivity,
   mergeActivityDetailWithList,
   parseActivityDetail
 } from "../dist-electron/trainingHubService.js";
@@ -117,6 +118,94 @@ assert.equal(merged.duration, 14436);
 assert.equal(merged.distance, 29700);
 assert.equal(merged.calories, 2675);
 assert.equal(merged.elevationGain, 1005);
+
+// Detail summary sends elapsed (totalTime) and moving (workoutTime) time in
+// 0.01 s; laps carry moving time. Values from a live PACE Pro run, 2026-10-02.
+const pausedRunFixture = {
+  summary: {
+    sportType: 100,
+    totalTime: 310995,
+    workoutTime: 249889,
+    pauseTime: 61106,
+    distance: 700761
+  },
+  lapList: [
+    {
+      type: -1,
+      lapItemList: [{ distance: 700761, time: 249889, pauseTime: 61106 }]
+    }
+  ]
+};
+const pausedRun = parseActivityDetail(pausedRunFixture);
+assert.equal(pausedRun.duration, 3110);
+assert.equal(pausedRun.movingTime, 2499);
+assert.equal(pausedRun.laps[0]?.duration, 2499);
+assert.equal(detail.movingTime, undefined);
+
+// The list API sends the same pair in seconds; the detail's duration stays
+// elapsed and its moving time survives the merge.
+const pausedRunMerged = mergeActivityDetailWithList(pausedRun, {
+  activityId: "480757304470307016",
+  sportType: 100,
+  duration: 3110,
+  distance: 7007.61
+});
+assert.equal(pausedRunMerged.duration, 3110);
+assert.equal(pausedRunMerged.movingTime, 2499);
+
+// Moving time longer than elapsed means mismatched units: drop it.
+assert.equal(
+  parseActivityDetail({ summary: { totalTime: 310995, workoutTime: 9000 } }).movingTime,
+  undefined
+);
+assert.equal(
+  mergeActivityDetailWithList(
+    { ...pausedRun, duration: 31, movingTime: 2499 },
+    { activityId: "480757304470307016", sportType: 100, duration: 3110 }
+  ).movingTime,
+  2499
+);
+assert.equal(
+  mergeActivityDetailWithList(
+    { ...pausedRun, duration: 310995, movingTime: 249889 },
+    { activityId: "480757304470307016", sportType: 100, duration: 3110 }
+  ).movingTime,
+  undefined
+);
+
+// The list API (/activity/query) row for the same run, in whole seconds:
+// totalTime is elapsed, workoutTime is moving.
+const pausedRunListRow = {
+  labelId: "480757304470307016",
+  sportType: 100,
+  totalTime: 3110,
+  workoutTime: 2499,
+  distance: 7007.61
+};
+const pausedRunListed = mapTrainingHubActivity(pausedRunListRow);
+assert.equal(pausedRunListed.activityId, "480757304470307016");
+assert.equal(pausedRunListed.duration, 3110);
+assert.equal(pausedRunListed.movingTime, 2499);
+// Long activities stay in seconds: no 0.01 s rescaling above 10,000.
+assert.equal(
+  mapTrainingHubActivity({ ...pausedRunListRow, totalTime: 15_000, workoutTime: 14_000 }).movingTime,
+  14_000
+);
+// Missing, zero, or longer-than-elapsed moving time falls back to elapsed.
+for (const workoutTime of [undefined, 0, 3111]) {
+  assert.equal(mapTrainingHubActivity({ ...pausedRunListRow, workoutTime }).movingTime, undefined);
+}
+assert.equal(
+  mapTrainingHubActivity({ ...pausedRunListRow, totalTime: undefined }).movingTime,
+  2499
+);
+
+// A detail without workoutTime takes the list's moving time.
+const { movingTime: _dropped, ...pausedRunNoMoving } = pausedRun;
+assert.equal(
+  mergeActivityDetailWithList(pausedRunNoMoving, pausedRunListed).movingTime,
+  2499
+);
 
 const flatLapFixture = {
   summary: {

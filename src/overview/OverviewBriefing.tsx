@@ -32,6 +32,7 @@ import {
   WEEK_SPORT_FAMILY_META,
   type WeekSportFamily
 } from "../calendar/weekSportBreakdown";
+import { activityMovingSeconds } from "../../electron/activityTime";
 import type { CorosLinkApi } from "../coroslink-api";
 import type { PrimaryView } from "../navigation/primaryNav";
 import { PRIMARY_NAV_ITEMS } from "../navigation/primaryNav";
@@ -888,7 +889,8 @@ function LatestActivityCard({
   const swim = isSwimSportType(activity.sportType);
   const sportName = resolveSportName(activity, sportTypes) ?? "Activity";
   const distance = activity.distance && activity.distance > 0 ? activity.distance : undefined;
-  const duration = activity.duration && activity.duration > 0 ? activity.duration : undefined;
+  // Moving time, as COROS shows it: pauses would stretch Time and slow Pace.
+  const duration = activityMovingSeconds(activity);
   const paceLabel = distance && duration && !swim
     ? isCyclingSportType(activity.sportType)
       ? { label: t("Speed"), value: formatSpeedValue((distance / 1000) / (duration / 3600), unitSystem) }

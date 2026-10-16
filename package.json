@@ -76,6 +76,8 @@
     "test:daily-health-data-parser": "npm run build:electron && node scripts/test-daily-health-data-parser.mjs",
     "test:training-formatters": "npm run build:electron && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-training-formatters.mjs",
     "test:activity-collection": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-activity-collection.mjs",
+    "test:activity-detail": "npm run build:electron && node scripts/test-activity-detail.mjs",
+    "test:training-activity-store": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-training-activity-store.cjs",
     "test:activity-streams": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-activity-streams.mjs",
     "test:training-activities-ui": "electron scripts/test-training-activities-ui.cjs",
     "test:weekly-activity": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-weekly-activity.mjs",

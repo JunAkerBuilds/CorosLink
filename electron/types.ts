@@ -2274,7 +2274,13 @@ export interface TrainingHubActivity {
   sportName?: string;
   startTime?: number;
   endTime?: number;
+  /** Elapsed seconds including pauses (list `totalTime`). */
   duration?: number;
+  /**
+   * Seconds the timer ran, excluding pauses (list `workoutTime`). COROS
+   * derives avg pace/speed from this; read it via activityMovingSeconds().
+   */
+  movingTime?: number;
   distance?: number;
   avgHr?: number;
   maxHr?: number;
@@ -2581,7 +2587,13 @@ export interface TrainingHubActivityDetail {
   sportType?: number;
   sportName?: string;
   startTime?: number;
+  /** Elapsed seconds including pauses (COROS `totalTime`). */
   duration?: number;
+  /**
+   * Seconds the timer ran, excluding pauses (COROS `workoutTime`). COROS
+   * computes avg pace/speed from this; lap durations are moving time too.
+   */
+  movingTime?: number;
   distance?: number;
   avgHr?: number;
   maxHr?: number;

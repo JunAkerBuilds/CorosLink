@@ -1,3 +1,4 @@
+import { activityMovingSeconds } from "../../electron/activityTime";
 import type { TrainingHubActivity } from "../../electron/types";
 import { isCyclingSportType, isSwimSportType, resolveSportName } from "./sportTypes";
 
@@ -44,7 +45,7 @@ export function selectActivities(
     (!search || `${activity.name ?? ""} ${resolveSportName(activity, sportNames) ?? ""}`.toLocaleLowerCase().includes(search))
   ).sort((a, b) => {
     if (sort === "distance") return (b.distance ?? 0) - (a.distance ?? 0);
-    if (sort === "duration") return (b.duration ?? 0) - (a.duration ?? 0);
+    if (sort === "duration") return (activityMovingSeconds(b) ?? 0) - (activityMovingSeconds(a) ?? 0);
     // Undated activities always follow dated activities.
     const aTime = activityTimestamp(a.startTime), bTime = activityTimestamp(b.startTime);
     if (!aTime || !bTime) return aTime ? -1 : bTime ? 1 : 0;
@@ -53,20 +54,22 @@ export function selectActivities(
 }
 
 export function activityTotals(activities: TrainingHubActivity[]) {
-  const sum = (key: "distance" | "duration" | "calories") => {
-    const values = activities.map(activity => activity[key]).filter((value): value is number =>
+  const sum = (read: (activity: TrainingHubActivity) => number | undefined) => {
+    const values = activities.map(read).filter((value): value is number =>
       value !== undefined && Number.isFinite(value) && value >= 0);
     return values.length ? values.reduce((total, value) => total + value, 0) : undefined;
   };
+  // Time and pace are moving time, as COROS reports them; elapsed adds pauses.
   // Running/walking pace is distance weighted; cycling and swimming use different units.
   const paced = activities.filter(activity =>
     ["run", "walk"].includes(activityCategory(activity.sportType)) &&
     Number.isFinite(activity.distance) && (activity.distance ?? 0) > 0 &&
-    Number.isFinite(activity.duration) && (activity.duration ?? 0) > 0);
+    activityMovingSeconds(activity) !== undefined);
   const distance = paced.reduce((total, activity) => total + activity.distance!, 0);
-  const duration = paced.reduce((total, activity) => total + activity.duration!, 0);
-  return { count: activities.length, distance: sum("distance"), duration: sum("duration"),
-    calories: sum("calories"), pace: distance > 0 ? duration / (distance / 1000) : undefined };
+  const duration = paced.reduce((total, activity) => total + activityMovingSeconds(activity)!, 0);
+  return { count: activities.length, distance: sum(activity => activity.distance),
+    duration: sum(activityMovingSeconds), calories: sum(activity => activity.calories),
+    pace: distance > 0 ? duration / (distance / 1000) : undefined };
 }
 
 export function activityTimeline(activities: TrainingHubActivity[]) {

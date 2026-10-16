@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { Activity, Bike, ChevronDown, Dumbbell, FileDown, Loader2, MoreVertical } from "lucide-react";
 import { PersonSimpleRun, PersonSimpleSwim, PersonSimpleWalk } from "@phosphor-icons/react";
 import { activityCategory } from "../activityCollection";
+import { activityMovingSeconds } from "../../../electron/activityTime";
 import type { KeyboardEvent } from "react";
 import {
   TRAINING_HUB_EXPORT_FORMATS,
@@ -306,7 +307,7 @@ export function TrainingActivityTable({
                   {formatTrainingTableWhen(activity.startTime)}
                 </td>
                 <td className="training-activity-metric">
-                  {formatDurationSeconds(activity.duration)}
+                  {formatDurationSeconds(activityMovingSeconds(activity))}
                 </td>
                 <td className="training-activity-metric">
                   {formatDistanceMeters(

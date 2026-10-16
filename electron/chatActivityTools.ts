@@ -1,4 +1,9 @@
 import {
+  activityMovingSeconds,
+  activitySignificantElapsedSeconds,
+  SIGNIFICANT_PAUSE_SECONDS
+} from "./activityTime";
+import {
   getTrainingHubStatus,
   getTrainingHubActivityDetail,
   listTrainingHubActivities,
@@ -350,7 +355,19 @@ function isCyclingActivity(sportType: number | undefined, sportName?: string): b
     /bike|cycl|ride/i.test(sportName ?? "");
 }
 
-function formatActivityListLine(
+/** Moving time, plus elapsed once pauses reach a minute (as COROS shows it). */
+function formatActivityListTime(activity: TrainingHubActivity): string | undefined {
+  const moving = activityMovingSeconds(activity);
+  if (moving === undefined) {
+    return undefined;
+  }
+  const elapsed = activitySignificantElapsedSeconds(activity);
+  return elapsed === undefined
+    ? formatDurationSeconds(moving)
+    : `${formatDurationSeconds(moving)} moving (${formatDurationSeconds(elapsed)} elapsed)`;
+}
+
+export function formatActivityListLine(
   activity: TrainingHubActivity,
   unitSystem: UnitSystem
 ): string {
@@ -365,7 +382,7 @@ function formatActivityListLine(
           swim: isSwimActivity(activity.sportType, activity.sportName)
         })
       : undefined,
-    activity.duration ? formatDurationSeconds(activity.duration) : undefined,
+    formatActivityListTime(activity),
     activity.avgHr ? `avg HR ${activity.avgHr}` : undefined,
     activity.maxHr ? `max HR ${activity.maxHr}` : undefined,
     activity.trainingLoad ? `load ${activity.trainingLoad}` : undefined
@@ -380,11 +397,19 @@ export function formatActivityDetailForChat(
 ): string {
   const swim = isSwimActivity(detail.sportType, detail.sportName);
   const cycling = isCyclingActivity(detail.sportType, detail.sportName);
-  const performance = detail.distance && detail.duration
+  // detail.duration is elapsed time including pauses. Like the COROS app,
+  // report moving time and derive pace/speed from it (laps are moving too).
+  const moving = detail.movingTime ?? detail.duration;
+  const paused =
+    detail.duration !== undefined && detail.movingTime !== undefined
+      ? detail.duration - detail.movingTime
+      : 0;
+  const showElapsed = paused >= SIGNIFICANT_PAUSE_SECONDS;
+  const performance = detail.distance && moving
     ? cycling
-      ? `Avg speed: ${formatSpeedValue((detail.distance / 1000) / (detail.duration / 3600), unitSystem)}`
+      ? `Avg speed: ${formatSpeedValue((detail.distance / 1000) / (moving / 3600), unitSystem)}`
       : !swim
-        ? `Avg pace: ${formatPaceSeconds(detail.duration / (detail.distance / 1000), unitSystem)}`
+        ? `Avg pace: ${formatPaceSeconds(moving / (detail.distance / 1000), unitSystem)}`
         : undefined
     : undefined;
   const summaryParts = [
@@ -395,7 +420,12 @@ export function formatActivityDetailForChat(
     detail.distance
       ? `Distance: ${formatDistanceValue(detail.distance, unitSystem, { swim })}`
       : undefined,
-    detail.duration ? `Duration: ${formatDurationSeconds(detail.duration)}` : undefined,
+    moving
+      ? `${showElapsed ? "Moving time" : "Duration"}: ${formatDurationSeconds(moving)}`
+      : undefined,
+    showElapsed && detail.duration
+      ? `Elapsed: ${formatDurationSeconds(detail.duration)} (${formatDurationSeconds(paused)} paused)`
+      : undefined,
     performance,
     detail.avgHr ? `Avg HR: ${detail.avgHr} bpm` : undefined,
     detail.maxHr ? `Max HR: ${detail.maxHr} bpm` : undefined,
