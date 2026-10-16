@@ -16,6 +16,7 @@ import type {
   WorkoutDeletePreview,
   WorkoutSport
 } from "../../electron/types";
+import { actionName } from "./corosActionWorkouts";
 
 /** Where an assistant answer's data came from, for the source indicator. */
 export interface SourceInfo {
@@ -103,8 +104,10 @@ export type CoachCreationStatus = "draft" | CoachCorosActionPreview["state"];
 interface CoachCreationBase {
   /** Unique across both authoring routes (draft ids and request ids are prefixed). */
   id: string;
-  /** The draft's name, or the COROS action's title ("Review workout"). */
+  /** The workout or plan name; falls back to the COROS action's title ("Review workout"). */
   title: string;
+  /** The COROS action's title ("Review workout"), shown as the list kicker. */
+  kicker?: string;
   /** The coach's one-line description of the item. */
   summary: string;
   artifact: "plan" | "workout";
@@ -202,7 +205,8 @@ export function listCoachCreations(
       creations.push({
         kind: "corosAction",
         id: `coros:${preview.requestId}`,
-        title: preview.title,
+        title: actionName(preview) ?? preview.title,
+        kicker: preview.title,
         summary: preview.summary,
         artifact: preview.destination === "Training Plan" ? "plan" : "workout",
         ...(preview.sport ? { sport: preview.sport } : {}),

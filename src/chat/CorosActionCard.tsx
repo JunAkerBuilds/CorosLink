@@ -29,59 +29,8 @@ import {
 } from "../calendar/scheduledStructure";
 import { isoDateFromCompact } from "./chatTypes";
 
-const LEGACY_SPORTS: Record<string, WorkoutSport | undefined> = { Run: "run", Bike: "bike", "Trail run": "trailRun", "Rest day": undefined };
-const LEGACY_KINDS: Record<string, CoachCorosActionStep["kind"]> = { "Warm-up": "warmup", Training: "training", Recovery: "recovery", "Cool-down": "cooldown" };
 const SPORT_CATEGORY: Partial<Record<WorkoutSport, string>> = { run: "run", trailRun: "trail", bike: "bike", strength: "strength" };
-
-/** Parse a display target ("1.20 km", "400 m", "10 min", "20 s", "4:30") back into a bar magnitude. */
-function targetMagnitude(target: string): Pick<CoachCorosActionStep, "magnitude" | "magnitudeType"> {
-  const text = target.trim();
-  let match = /^([\d.]+)\s*(km|mi|m)$/.exec(text);
-  if (match) {
-    const value = Number(match[1]);
-    const meters = match[2] === "km" ? value * 1000 : match[2] === "mi" ? value * 1609.344 : value;
-    return { magnitude: meters, magnitudeType: "distance" };
-  }
-  match = /^(\d+)\s*min$/.exec(text);
-  if (match) return { magnitude: Number(match[1]) * 60, magnitudeType: "time" };
-  match = /^(\d+)\s*s$/.exec(text);
-  if (match) return { magnitude: Number(match[1]), magnitudeType: "time" };
-  match = /^(\d+):(\d{2})$/.exec(text);
-  if (match) return { magnitude: Number(match[1]) * 60 + Number(match[2]), magnitudeType: "time" };
-  return {};
-}
-
-function legacyStep(line: string): CoachCorosActionStep | undefined {
-  const match = /^(Warm-up|Training|Recovery|Cool-down): (.+?)(?: · (.+))?$/.exec(line.trim());
-  if (!match) return undefined;
-  const intensity = match[3] && match[3] !== "No intensity target" ? match[3] : undefined;
-  return { kind: LEGACY_KINDS[match[1]!], label: match[1]!, target: match[2]!, ...(intensity ? { intensity } : {}), ...targetMagnitude(match[2]!) };
-}
-
-/** Actions staged before structured workouts existed only kept summary lines; rebuild the structure from them. */
-function legacyWorkouts(details: string[]): CoachCorosActionWorkout[] {
-  const workouts: CoachCorosActionWorkout[] = [];
-  let current: CoachCorosActionWorkout | undefined;
-  for (const line of details) {
-    const header = /^(?:Day (\d+) · )?(Run|Bike|Rest day|Trail run) · (.+)$/.exec(line);
-    if (header) {
-      current = { name: header[3]!, sportLabel: header[2]!, steps: [], ...(LEGACY_SPORTS[header[2]!] ? { sport: LEGACY_SPORTS[header[2]!] } : {}), ...(header[1] ? { dayNo: Number(header[1]) - 1 } : {}) };
-      workouts.push(current);
-      continue;
-    }
-    if (!current) continue;
-    const group = /^(\d+) × \((.+)\)$/.exec(line);
-    if (group) {
-      const steps = group[2]!.split("; ").map(legacyStep).filter((step): step is CoachCorosActionStep => Boolean(step));
-      if (steps.length) current.steps.push({ repeats: Number(group[1]), steps });
-      continue;
-    }
-    const step = legacyStep(line);
-    if (step) current.steps.push(step);
-    else if (!current.description && !current.steps.length) current.description = line;
-  }
-  return workouts;
-}
+import { actionWorkouts, targetMagnitude } from "./corosActionWorkouts";
 
 /** Shape a staged COROS workout like a scheduled one so it shares the calendar's structure view. */
 function structureView(workout: CoachCorosActionWorkout): ScheduledStructureView {
@@ -210,7 +159,7 @@ export function CorosActionCard({ preview, onConfirm }: {
   const [result, setResult] = useState<CoachCorosActionPreview>();
   const current = result ?? preview;
   const date = isoDateFromCompact(current.date);
-  const workouts = current.workouts ?? legacyWorkouts(current.details);
+  const workouts = actionWorkouts(current);
   const lead = workouts[0];
   const isPlan = current.destination === "Training Plan";
   const isCalendar = current.destination === "Calendar";

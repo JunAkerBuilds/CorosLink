@@ -3493,7 +3493,7 @@ export function ChatView({
   const selectedCreationTitle = !selectedCreation
     ? ""
     : selectedCreation.kind === "corosAction"
-      ? t(selectedCreation.title)
+      ? selectedCreation.title
       : selectedCreation.title ||
         (selectedCreation.artifact === "workout"
           ? t("Untitled workout")
@@ -4291,7 +4291,7 @@ export function ChatView({
                       );
 
                     if (creation.kind === "corosAction") {
-                      const label = creation.summary || t(creation.title);
+                      const label = creation.title;
                       return (
                         <li key={creation.id}>
                           <button
@@ -4314,7 +4314,7 @@ export function ChatView({
                             </span>
                             <span className="chat-plan-list-copy">
                               <span className="chat-plan-list-kicker">
-                                {t(creation.title)}
+                                {t(creation.kicker ?? creation.title)}
                               </span>
                               <strong>{label}</strong>
                               <span className="chat-plan-list-meta">
