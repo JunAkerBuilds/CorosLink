@@ -39,6 +39,28 @@ export function buildCoachInstructions(customInstructions?: string): string {
   );
 }
 
+/**
+ * The athlete's current local date and time, so "today", "tomorrow" and
+ * weekday names resolve against the clock on this computer rather than the
+ * model's training cutoff. Rebuilt per request.
+ */
+export function buildCurrentTimeInstruction(now: Date = new Date()): string {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const local = new Intl.DateTimeFormat("en-US", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZone
+  }).format(now);
+  const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const tomorrowIso = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
+  const tomorrowName = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone }).format(tomorrow);
+  return (
+    `## Current date and time\n` +
+    `It is now ${local} (${timeZone}). Today is ${iso}; tomorrow is ${tomorrowName}, ${tomorrowIso}. ` +
+    "Resolve every relative date the athlete uses (today, tomorrow, this weekend, next Tuesday) from this clock, " +
+    "and pass calendar dates to tools as YYYYMMDD. Never assume the date from your training data."
+  );
+}
+
 /** The default coach prompt, shown verbatim in Settings > Coach instructions. */
 export function buildBaseCoachInstructions(): string {
   return (

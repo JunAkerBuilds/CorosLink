@@ -43,6 +43,7 @@ const {
 const {
   buildBaseCoachInstructions,
   buildCoachInstructions,
+  buildCurrentTimeInstruction,
   buildCoachSportCapabilityGuide,
   formatCoachDashboard,
   formatRecentActivityMix,
@@ -70,6 +71,15 @@ const { MAX_CUSTOM_COACH_INSTRUCTIONS } = await import(
 const baseCoachInstructions = buildBaseCoachInstructions();
 assert.equal(buildCoachInstructions(), baseCoachInstructions);
 assert.equal(buildCoachInstructions("   \n\t"), baseCoachInstructions);
+
+// The model gets the athlete's local clock, so relative dates resolve against today.
+const clock = buildCurrentTimeInstruction(new Date(2026, 9, 16, 16, 30));
+assert.match(clock, /Today is 2026-10-16/);
+assert.match(clock, /tomorrow is Saturday, 2026-10-17/);
+assert.match(clock, /Friday, October 16, 2026/);
+assert.match(clock, /YYYYMMDD/);
+const yearEnd = buildCurrentTimeInstruction(new Date(2026, 11, 31, 23, 59));
+assert.match(yearEnd, /tomorrow is Friday, 2027-01-01/);
 const customized = buildCoachInstructions("  Only schedule runs on Tue/Thu/Sat.  ");
 assert.ok(customized.startsWith(baseCoachInstructions));
 assert.match(customized, /## Athlete's custom instructions/);

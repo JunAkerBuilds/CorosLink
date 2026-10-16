@@ -142,6 +142,7 @@ import {
 } from "./unitSystem.js";
 import {
   buildCoachInstructions,
+  buildCurrentTimeInstruction,
   buildCoachSportCapabilityGuide,
   formatCoachDashboard,
   formatRecentActivityMix,
@@ -1950,6 +1951,7 @@ async function buildTrainingContext(
 ): Promise<{ text: string; hasData: boolean }> {
   // Rebuilt per request so edits to the athlete's custom instructions apply live.
   const coachInstructions = buildCoachInstructions(customInstructions);
+  const timeInstruction = buildCurrentTimeInstruction();
   const unitInstruction =
     `The athlete selected ${unitSystem === "imperial" ? "Imperial" : "Metric"} units. ` +
     `Use ${unitSystem === "imperial" ? "miles, feet, min/mi, mph, pounds, and yards for swims" : "kilometres, metres, min/km, km/h, and kilograms"} in every user-facing answer and tool summary. ` +
@@ -1964,7 +1966,7 @@ async function buildTrainingContext(
     return {
       hasData: false,
       text:
-        `${coachInstructions}\n\n${unitInstruction}\n\n` +
+        `${coachInstructions}\n\n${timeInstruction}\n\n${unitInstruction}\n\n` +
         "NOTE: The athlete is not signed in to COROS Training Hub, so no training " +
         "data is available. Encourage them to connect it for personalised advice."
     };
@@ -1985,7 +1987,7 @@ async function buildTrainingContext(
       : Promise.resolve([] as TrainingHubUpcomingWorkout[])
   ]);
 
-  const sections: string[] = [coachInstructions, "", unitInstruction, ""];
+  const sections: string[] = [coachInstructions, "", timeInstruction, "", unitInstruction, ""];
   let hasData = false;
 
   if (activities.status === "fulfilled" && activities.value.length > 0) {
