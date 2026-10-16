@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import type { CoachCorosActionPreview, CorosMcpTool, UnitSystem, WorkoutSport } from "./types";
+import type { CoachCorosActionPreview, CoachCorosActionStep, CoachCorosActionStructure, CoachCorosActionWorkout, CorosMcpTool, UnitSystem, WorkoutSport } from "./types";
 import { corosInputSchema, isCorosWorkoutWrite } from "./coachCorosTools";
 import { distanceUnit, formatDistanceValue, formatElevationValue, formatPaceValue } from "./unitSystem";
 
@@ -8,6 +8,7 @@ const record = (value: unknown): ObjectValue => value && typeof value === "objec
 const list = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
 const text = (value: unknown): string => typeof value === "string" ? value : "";
 const ACTION_TTL = 24 * 60 * 60_000;
+const WORKOUT_SPORTS: Record<number, WorkoutSport> = { 1: "run", 2: "bike", 5: "trailRun" };
 
 interface ReadRequest { name: string; args: ObjectValue }
 interface StoredAction {
@@ -59,14 +60,21 @@ function duration(seconds: unknown): string {
   return n % 60 === 0 ? `${n / 60} min` : `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
 }
 
-function sectionSummary(section: ObjectValue, sport: number, unitSystem: UnitSystem, depth = 0): string {
+const STEP_KINDS: Record<number, CoachCorosActionStep["kind"]> = { 1: "warmup", 2: "training", 3: "recovery", 4: "cooldown" };
+
+function stepSummary(step: CoachCorosActionStructure): string {
+  if ("repeats" in step) return `${step.repeats} × (${step.steps.map(stepSummary).join("; ")})`;
+  return `${step.label}: ${step.target} · ${step.intensity ?? "No intensity target"}`;
+}
+
+function sectionStructure(section: ObjectValue, sport: number, unitSystem: UnitSystem, depth = 0): CoachCorosActionStructure {
   const intensityFields = ["sectionIntensity", "intensityPercentStart", "intensityPercentEnd", "intensityValueStart", "intensityValueEnd"];
   if (section.intervalGroup) {
     if (depth > 0) throw new Error("Nested interval groups are not supported.");
     if (["intensityType", "targetType", "targetValue", ...intensityFields].some(key => section[key] !== undefined)) throw new Error("Set targets and intensity on interval steps, not the group.");
     const sets = list(section.sets);
     if (!sets.length || !Number.isInteger(section.repeats) || Number(section.repeats) < 1 || Number(section.repeats) > 20) throw new Error("An interval group needs 1–20 repetitions and steps.");
-    return `${section.repeats} × (${sets.map(item => sectionSummary(record(item), sport, unitSystem, depth + 1)).join("; ")})`;
+    return { repeats: Number(section.repeats), steps: sets.map(item => sectionStructure(record(item), sport, unitSystem, depth + 1) as CoachCorosActionStep) };
   }
   if (section.sets !== undefined || section.repeats !== undefined) throw new Error("Only interval groups may have sets or repeats.");
   if (depth && ![2, 3].includes(Number(section.sectionType))) throw new Error("Interval steps must be training or recovery.");
@@ -76,7 +84,7 @@ function sectionSummary(section: ObjectValue, sport: number, unitSystem: UnitSys
   const target = ({ 1: formatDistanceValue(Number(section.targetValue), unitSystem), 2: duration(section.targetValue), 3: `${formatElevationValue(Number(section.targetValue), unitSystem)} ascent`, 4: "Open" } as Record<number, string>)[Number(section.targetType)];
   if (!kind || !target || (section.targetType !== 4 && !(Number(section.targetValue) > 0))) throw new Error("Every workout step needs a valid type and target.");
   const metric = ({ 1: "Heart rate", 2: "Pace", 3: "Effort threshold pace", 4: "Power" } as Record<number, string>)[Number(section.intensityType)];
-  let intensity = "No intensity target";
+  let intensity: string | undefined;
   if (metric) {
     if (!(sport === 2 ? [1, 4] : sport === 5 ? [1, 2, 3, 4] : [1, 2, 4]).includes(Number(section.intensityType))) throw new Error("This intensity metric is unsupported for the sport in COROS MCP. Use a local workout draft.");
     const formats = [section.sectionIntensity !== undefined, section.intensityPercentStart !== undefined || section.intensityPercentEnd !== undefined, section.intensityValueStart !== undefined || section.intensityValueEnd !== undefined];
@@ -96,11 +104,12 @@ function sectionSummary(section: ObjectValue, sport: number, unitSystem: UnitSys
       intensity = `${metric}: ${low}–${high} ${pace ? `/${distanceUnit(unitSystem)}` : section.intensityType === 1 ? "bpm" : "W"}`;
     } else throw new Error("The intensity metric needs a zone or range.");
   } else if (section.intensityType !== undefined || intensityFields.some(key => section[key] !== undefined)) throw new Error("Unsupported intensity. Use the local workout draft tools for this prescription.");
-  return `${kind}: ${target} · ${intensity}`;
+  return { kind: STEP_KINDS[Number(section.sectionType)] ?? "training", label: kind, target, ...(intensity ? { intensity } : {}) };
 }
 
-function actionDetails(args: ObjectValue, unitSystem: UnitSystem): string[] {
+function actionDetails(args: ObjectValue, unitSystem: UnitSystem): { details: string[]; workouts: CoachCorosActionWorkout[] } {
   const details: string[] = [];
+  const workouts: CoachCorosActionWorkout[] = [];
   const plan = record(args.planInfo);
   if (plan.planName) details.push(text(plan.planName));
   if (plan.planOverview) details.push(text(plan.planOverview));
@@ -116,7 +125,13 @@ function actionDetails(args: ObjectValue, unitSystem: UnitSystem): string[] {
     if (course.sportType === 4 ? list(course.sections).length > 0 : list(course.sections).length === 0) throw new Error("Sport workouts need steps; rest days must have no steps.");
     details.push(`${course.dayNo === undefined ? "" : `Day ${Number(course.dayNo) + 1} · `}${sport} · ${course.courseName}`);
     if (course.courseDescription) details.push(text(course.courseDescription));
-    details.push(...list(course.sections).map(section => sectionSummary(record(section), Number(course.sportType), unitSystem)));
+    const steps = list(course.sections).map(section => sectionStructure(record(section), Number(course.sportType), unitSystem));
+    details.push(...steps.map(stepSummary));
+    workouts.push({
+      name: text(course.courseName), ...(course.courseDescription ? { description: text(course.courseDescription) } : {}),
+      ...(WORKOUT_SPORTS[Number(course.sportType)] ? { sport: WORKOUT_SPORTS[Number(course.sportType)] } : {}), sportLabel: sport,
+      ...(course.dayNo === undefined ? {} : { dayNo: Number(course.dayNo) }), steps
+    });
   }
   const phase = record(args.phaseInfo);
   if (phase.planRationale) details.push(text(phase.planRationale));
@@ -125,7 +140,7 @@ function actionDetails(args: ObjectValue, unitSystem: UnitSystem): string[] {
     const label = ({ 1: "Preparation", 2: "Base", 3: "Build", 4: "Peak", 5: "Race", 6: "Transition" } as Record<number, string>)[Number(p.phaseType)];
     details.push(`${label ?? "Training phase"}: ${p.startDate}–${p.endDate} · ${p.durationWeeks} weeks`);
   }
-  return details;
+  return { details, workouts };
 }
 
 function parsedResponse(response: string): ObjectValue {
@@ -187,7 +202,7 @@ export function createCorosActionService(deps: CorosActionDependencies) {
       const checked = new AjvJsonSchemaValidator().getValidator(corosInputSchema(tool.inputSchema))(args);
       if (!checked.valid) throw new Error(`Invalid COROS workout arguments: ${checked.errorMessage}`);
       validateDestination(name.slice(7), args);
-      const details = actionDetails(args, unitSystem);
+      const { details, workouts } = actionDetails(args, unitSystem);
       const shortName = name.slice(7);
       const read = sourceRead(shortName, args);
       let source: StoredAction["source"];
@@ -201,11 +216,11 @@ export function createCorosActionService(deps: CorosActionDependencies) {
       if (shortName === "updateWorkoutDetails") details.unshift("Changes the library template. Existing calendar copies keep their current content.");
       if (shortName === "scheduleWorkout") details.push("Schedules an unchanged copy of the selected library workout, including its exercises and sets.");
       const date = args.date ?? record(args.planInfo).planStartDate;
-      const sport = ({ 1: "run", 2: "bike", 5: "trailRun" } as Record<number, WorkoutSport>)[Number(record(args.course ?? list(args.courseList)[0]).sportType)];
+      const sport = WORKOUT_SPORTS[Number(record(args.course ?? list(args.courseList)[0]).sportType)];
       const preview: CoachCorosActionPreview = {
         requestId: crypto.randomUUID(), title: shortName.startsWith("update") ? "Review workout changes" : shortName === "scheduleWorkout" ? "Schedule saved workout" : destination === "Training Plan" ? "Review training plan" : "Review workout",
         summary: text(review_summary).trim(), destination,
-        ...(date ? { date: String(date) } : {}), details, createdAt: now(), state: "pending", ...(sport ? { sport } : {})
+        ...(date ? { date: String(date) } : {}), details, createdAt: now(), state: "pending", ...(sport ? { sport } : {}), ...(workouts.length ? { workouts } : {})
       };
       const connectionKey = deps.connectionKey();
       if (!connectionKey) throw new Error("Reconnect COROS before preparing this change.");

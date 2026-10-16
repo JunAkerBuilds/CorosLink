@@ -4214,6 +4214,29 @@ export interface WorkoutDeletePreview {
   summary: string;
 }
 
+/** One step of a COROS workout as the Coach proposed it, already formatted for display. */
+export interface CoachCorosActionStep {
+  kind: "warmup" | "training" | "recovery" | "cooldown";
+  label: string;
+  target: string;
+  intensity?: string;
+}
+
+export type CoachCorosActionStructure =
+  | CoachCorosActionStep
+  | { repeats: number; steps: CoachCorosActionStep[] };
+
+/** A workout inside a staged COROS action, for the detailed card. */
+export interface CoachCorosActionWorkout {
+  name: string;
+  description?: string;
+  sport?: WorkoutSport;
+  sportLabel: string;
+  /** Zero-based day offset inside a training plan. */
+  dayNo?: number;
+  steps: CoachCorosActionStructure[];
+}
+
 export interface CoachCorosActionPreview {
   requestId: string;
   title: string;
@@ -4226,6 +4249,8 @@ export interface CoachCorosActionPreview {
   message?: string;
   /** Sport of the first workout in the request, for the Coach creations list icon. */
   sport?: WorkoutSport;
+  /** Structured workouts behind `details`, for the detailed card (absent on older entries). */
+  workouts?: CoachCorosActionWorkout[];
 }
 
 /** Persisted coach timeline entry (messages plus inline action cards). */

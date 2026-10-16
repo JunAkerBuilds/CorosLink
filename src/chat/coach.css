@@ -1282,14 +1282,20 @@
   animation: coach-fade-up 360ms var(--coach-ease) both;
 }
 
-/* COROS action card (scheduled workout). In the panel the header already
-   carries its title and date, so the body leads with the summary. */
-:root .app .chat-view .chat-plan-panel-body > .chat-coros-action-card > .chat-plan-card-header {
-  display: none;
+/* COROS action card: the same detailed layout as a one-off workout draft
+   (kicker, title, dated entry with its session structure, destination note). */
+:root .app .chat-view .chat-coros-action-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
 }
 
-:root .app .chat-view .chat-coros-action-card {
-  gap: 12px;
+:root .app .chat-view .chat-coros-action-card .chat-plan-entry.is-rest-day .chat-plan-entry-main {
+  justify-content: center;
 }
 
 :root .app .chat-view .chat-coros-action-card > .chat-plan-card-summary {
@@ -1355,15 +1361,6 @@
   animation: coach-fade-up 240ms var(--coach-ease) both;
 }
 
-:root .app .chat-view .chat-coros-action-card p[role="status"] {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--success-text);
-  font-size: 12.5px;
-  font-weight: 500;
-}
-
 :root .app .chat-view .chat-coros-action-card p[role="alert"] {
   font-size: 12.5px;
 }
@@ -1418,19 +1415,6 @@
   background: linear-gradient(180deg, transparent 0, var(--coach-sidebar) 18px);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-}
-
-:root .app .chat-view .chat-coros-action-card .chat-plan-actions {
-  position: static;
-  justify-content: flex-end;
-  padding: 2px 0 0;
-  background: none;
-}
-
-:root .app .chat-view .chat-coros-action-card .chat-plan-upload {
-  flex: 0 0 auto;
-  min-width: 160px;
-  justify-content: center;
 }
 
 /* ---------- MCP popover ---------- */
