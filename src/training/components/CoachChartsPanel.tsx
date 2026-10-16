@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChartLine } from "lucide-react";
 import type { PinnedCoachChart } from "../../../electron/types";
 import type { CorosLinkApi } from "../../coroslink-api";
+import type { CoachPrefill } from "../../chat/chatTypes";
 import { CoachChartCard } from "../../chat/CoachChartCard";
 import { buildMakeLivePrompt } from "../../chat/coachChartFreshness";
 import type { ChartCardSize } from "../widgetSizing";
@@ -16,7 +17,7 @@ interface CoachChartsPanelProps {
   refreshToken?: number;
   showEmpty?: boolean;
   /** Opens Coach with a prompt; used to rebuild snapshot charts with bound data. */
-  onOpenCoach?: (prompt: string) => void;
+  onOpenCoach?: (prefill: CoachPrefill) => void;
 }
 
 /** A live chart older than this is refreshed when the page is shown or focused. */

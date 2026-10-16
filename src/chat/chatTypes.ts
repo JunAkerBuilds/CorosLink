@@ -2,6 +2,7 @@ import type { StrengthEditPreview } from "../../electron/workoutEditTypes";
 import type {
   ActivityVisualPreview,
   ChatMessage,
+  ChatMessageAttachment,
   CoachCorosActionPreview,
   CoachChartPreview,
   CoachInputPrompt,
@@ -25,8 +26,15 @@ export interface ChatMessageEntry {
   kind: "message";
   role: ChatMessage["role"];
   content: string;
+  attachment?: ChatMessageAttachment;
   source?: SourceInfo;
   reasoningSummary?: string;
+}
+
+/** Text dropped into the Coach composer from elsewhere in the app. */
+export interface CoachPrefill {
+  text: string;
+  attachment?: ChatMessageAttachment;
 }
 
 export interface ChatPlanDraftEntry {
@@ -222,7 +230,12 @@ export function upsertCoachChartEntry(
 export function toWireMessages(entries: ChatEntry[]): ChatMessage[] {
   return entries.flatMap((entry): ChatMessage[] => {
     if (entry.kind === "message") {
-      return [{ role: entry.role, content: entry.content }];
+      return [{
+        role: entry.role,
+        content: entry.attachment
+          ? `${entry.content}\n\n${entry.attachment.content}`
+          : entry.content
+      }];
     }
     if (entry.kind === "workoutEdit") return [{ role: "assistant", content: `Strength edit proposal ${entry.preview.proposalId}. Last recorded state: ${entry.preview.state}. Call get_workout_edit_status for current results; never assume it was saved.` }];
     if (entry.kind === "corosAction") {
@@ -290,6 +303,7 @@ function persistVisualEntry(entry: ChatEntry): PersistedChatEntry | null {
       kind: "message",
       role: entry.role,
       content: entry.content,
+      ...(entry.attachment ? { attachment: entry.attachment } : {}),
       ...(entry.source ? { source: entry.source } : {}),
       ...(entry.reasoningSummary
         ? { reasoningSummary: entry.reasoningSummary }
@@ -363,6 +377,7 @@ export function fromPersistedEntries(entries: PersistedChatEntry[]): ChatEntry[]
       kind: "message",
       role: entry.role,
       content: entry.content,
+      ...(entry.attachment ? { attachment: entry.attachment } : {}),
       ...(entry.source ? { source: entry.source } : {}),
       ...(entry.reasoningSummary
         ? { reasoningSummary: entry.reasoningSummary }

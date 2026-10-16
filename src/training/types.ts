@@ -15,6 +15,7 @@ import type {
   TrainingHubUpcomingWorkout
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
+import type { CoachPrefill } from "../chat/chatTypes";
 
 export interface TrainingTrendPoint {
   date: string;
@@ -128,7 +129,7 @@ export interface TrainingHubViewProps {
   navigationRequest?: TrainingHubNavigationRequest | null;
   onNavigationRequestHandled?: () => void;
   /** Opens Coach with the composer prefilled (e.g. to rebuild a pinned chart). */
-  onOpenCoach?: (prompt: string) => void;
+  onOpenCoach?: (prefill: CoachPrefill) => void;
 }
 
 export type { TrainingHubDailyMetric };

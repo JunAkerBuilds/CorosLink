@@ -1,5 +1,6 @@
 import { t } from "../i18n/toolsLocale";
 import type { CoachChartFreshness, CoachChartPreview } from "../../electron/types";
+import type { CoachPrefill } from "./chatTypes";
 
 /** Pins match by title, so a re-rendered chart replaces its older pin. */
 export function normalizeCoachChartTitle(title: string): string {
@@ -50,9 +51,10 @@ export function formatRelativeTime(iso: string, now: Date = new Date(), locale?:
 
 /**
  * Prompt that asks Coach to rebuild a snapshot chart with bound metrics. The
- * spec goes along without its inline numbers, which is what we want replaced.
+ * athlete sees one sentence; the spec rides along as an attachment without
+ * its inline numbers, which is what we want replaced.
  */
-export function buildMakeLivePrompt(preview: CoachChartPreview): string {
+export function buildMakeLivePrompt(preview: CoachChartPreview): CoachPrefill {
   const spec = preview.spec;
   const outline = {
     title: spec.title,
@@ -74,12 +76,18 @@ export function buildMakeLivePrompt(preview: CoachChartPreview): string {
     ranges: spec.ranges,
     note: spec.note
   };
-  return (
-    t(
-      "Rebuild my pinned chart “{{title}}” so it updates by itself: bind every series and tile to a metric instead of inline values, keep the same title and layout, and tell me if anything cannot be bound.",
-      { title: spec.title }
-    ) +
-    "\n\n" +
-    JSON.stringify(outline, (_key, value) => (value === undefined ? undefined : value), 2)
-  );
+  return {
+    text: t("Make my pinned chart “{{title}}” update by itself.", { title: spec.title }),
+    attachment: {
+      kind: "chart",
+      label: spec.title,
+      content: [
+        "Pinned chart to rebuild (current spec, inline numbers omitted):",
+        "```json",
+        JSON.stringify(outline, null, 2),
+        "```",
+        "Call render_chart again with the same title so the pin is replaced in place. Bind every series and tile to a metric (tiles also take a stat) instead of inline values, keep the layout, and tell the athlete which parts cannot be bound."
+      ].join("\n")
+    }
+  };
 }

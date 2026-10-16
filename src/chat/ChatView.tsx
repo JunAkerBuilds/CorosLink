@@ -21,6 +21,7 @@ import {
   BookOpen,
   Bookmark,
   CalendarDays,
+  ChartLine,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -48,7 +49,8 @@ import {
   Trash2,
   TriangleAlert,
   Upload,
-  User
+  User,
+  X
 } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -67,6 +69,7 @@ import {
 } from "../units/units";
 import type {
   ChatAuthStatus,
+  ChatMessageAttachment,
   ChatProvider,
   ChatSessionSummary,
   ChatSettings,
@@ -115,6 +118,7 @@ import {
   upsertCorosActionEntry,
   isChatVisualEntry,
   type ChatEntry,
+  type CoachPrefill,
   type SourceInfo
 } from "./chatTypes";
 
@@ -278,7 +282,7 @@ interface ChatViewProps {
   /** Fires when a coach request is in progress (streaming or exporting). */
   onActivityChange?: (active: boolean) => void;
   /** Text preloaded into the composer (e.g. "Ask Coach" from the calendar). */
-  pendingPrompt?: string | null;
+  pendingPrompt?: CoachPrefill | null;
   onPendingPromptConsumed?: () => void;
   accountSetupRequest?: number;
   /** False while Coach stays mounted behind another view. */
@@ -1614,6 +1618,35 @@ function SourceBadge({ source }: { source: SourceInfo }) {
   );
 }
 
+/** Context sent with a user message, shown as a chip instead of its text. */
+function MessageAttachmentChip({
+  attachment,
+  onRemove
+}: {
+  attachment: ChatMessageAttachment;
+  onRemove?: () => void;
+}) {
+  useLanguage();
+  return (
+    <span className="chat-attachment">
+      <ChartLine size={13} aria-hidden="true" />
+      <span className="chat-attachment-kind">{t("Pinned chart")}</span>
+      <span className="chat-attachment-label">{attachment.label}</span>
+      {onRemove ? (
+        <button
+          type="button"
+          className="chat-attachment-remove"
+          onClick={onRemove}
+          aria-label={t("Remove {{label}} from this message", { label: attachment.label })}
+          title={t("Remove {{label}} from this message", { label: attachment.label })}
+        >
+          <X size={12} aria-hidden="true" />
+        </button>
+      ) : null}
+    </span>
+  );
+}
+
 function isLatestActivityFileRequest(text: string): boolean {
   const normalized = text.toLowerCase();
   return (
@@ -1637,7 +1670,8 @@ function formatLatestActivityExportMessage(
 
 interface ChatComposerHandle {
   focus: () => void;
-  setDraft: (value: string) => void;
+  /** Replaces the whole draft, including any attachment. */
+  setDraft: (value: string, attachment?: ChatMessageAttachment) => void;
 }
 
 interface ChatComposerProps {
@@ -1651,7 +1685,7 @@ interface ChatComposerProps {
   localModelConfigured: boolean;
   onDraftChange: (value: string) => void;
   onNewChat: () => void;
-  onSend: (message: string) => Promise<boolean>;
+  onSend: (message: string, attachment?: ChatMessageAttachment) => Promise<boolean>;
   onStop: () => void;
 }
 
@@ -1676,6 +1710,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
   useLanguage();
     const [draft, setDraft] = useState(initialDraft);
     const draftRef = useRef(initialDraft);
+    const [attachment, setAttachment] = useState<ChatMessageAttachment | null>(null);
     const submittingRef = useRef(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const trimmedDraft = draft.trim();
@@ -1698,7 +1733,10 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       ref,
       () => ({
         focus: () => textareaRef.current?.focus(),
-        setDraft: updateDraft
+        setDraft: (value, nextAttachment) => {
+          updateDraft(value);
+          setAttachment(nextAttachment ?? null);
+        }
       }),
       [updateDraft]
     );
@@ -1715,12 +1753,15 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       }
 
       const submittedDraft = draft;
+      const submittedAttachment = attachment;
       submittingRef.current = true;
       updateDraft("");
+      setAttachment(null);
       try {
-        const accepted = await onSend(trimmedDraft);
+        const accepted = await onSend(trimmedDraft, submittedAttachment ?? undefined);
         if (!accepted && !draftRef.current) {
           updateDraft(submittedDraft);
+          setAttachment(submittedAttachment);
         }
       } finally {
         submittingRef.current = false;
@@ -1730,6 +1771,17 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     return (
       <div className="chat-composer">
         <div className="chat-composer-inner">
+          {attachment ? (
+            <div className="chat-composer-attachments">
+              <MessageAttachmentChip
+                attachment={attachment}
+                onRemove={() => {
+                  setAttachment(null);
+                  textareaRef.current?.focus();
+                }}
+              />
+            </div>
+          ) : null}
           <div className="chat-composer-entry">
             <textarea
               ref={textareaRef}
@@ -2002,7 +2054,7 @@ export function ChatView({
     if (!pendingPrompt || !composerRef.current) {
       return;
     }
-    composerRef.current?.setDraft(pendingPrompt);
+    composerRef.current?.setDraft(pendingPrompt.text, pendingPrompt.attachment);
     onPendingPromptConsumed?.();
     // Focus after the coach panel becomes visible.
     requestAnimationFrame(() => composerRef.current?.focus());
@@ -2966,7 +3018,8 @@ export function ChatView({
 
   const sendMessage = async (
     trimmed: string,
-    answeredPrompt?: { promptId: string; choiceId: string }
+    answeredPrompt?: { promptId: string; choiceId: string },
+    attachment?: ChatMessageAttachment
   ): Promise<boolean> => {
     if (!api || !trimmed || streaming || exportingLatestActivity) return false;
     if (isLatestActivityFileRequest(trimmed)) {
@@ -3031,7 +3084,9 @@ export function ChatView({
             entry.prompt.answeredAt === undefined
         )
       : -1;
-    if (answeredPromptIndex < 0) {
+    // A message carrying an attachment is its own request, not a free-text
+    // answer to an open question card (answers cannot hold attachments).
+    if (answeredPromptIndex < 0 && !attachment) {
       for (let index = timeline.length - 1; index >= 0; index -= 1) {
         const entry = timeline[index];
         if (entry.kind === "coachPrompt" && entry.prompt.answeredAt === undefined) {
@@ -3064,7 +3119,12 @@ export function ChatView({
       ? answeredTimeline
       : [
           ...answeredTimeline,
-          { kind: "message", role: "user", content: trimmed }
+          {
+            kind: "message",
+            role: "user",
+            content: trimmed,
+            ...(attachment ? { attachment } : {})
+          }
         ];
     const requestId = crypto.randomUUID();
 
@@ -4078,7 +4138,14 @@ export function ChatView({
                       ) : null}
                     </>
                   ) : (
-                    entry.content
+                    <>
+                      {entry.content}
+                      {entry.attachment ? (
+                        <div className="chat-message-attachments">
+                          <MessageAttachmentChip attachment={entry.attachment} />
+                        </div>
+                      ) : null}
+                    </>
                   )}
                 </div>
               </div>
@@ -4142,7 +4209,9 @@ export function ChatView({
             localModelConfigured={localModelConfigured}
             onDraftChange={handleComposerDraftChange}
             onNewChat={() => void handleNewChat()}
-            onSend={sendMessage}
+            onSend={(message, attachment) =>
+              sendMessage(message, undefined, attachment)
+            }
             onStop={handleStop}
           />
         </div>

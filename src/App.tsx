@@ -94,6 +94,7 @@ import type {
   TrainingHubSnapshot,
 } from "./training/types";
 import type { CorosLinkApi } from "./coroslink-api";
+import type { CoachPrefill } from "./chat/chatTypes";
 import { AppUpdateControls } from "./components/AppUpdateControls";
 import { DonateButton } from "./components/DonateButton";
 import { UpdateAvailablePrompt } from "./components/UpdateAvailablePrompt";
@@ -392,7 +393,7 @@ export default function App() {
   const [watchfacesMounted, setWatchfacesMounted] = useState(
     activeView === "watchfaces",
   );
-  const [coachPrefill, setCoachPrefill] = useState<string | null>(null);
+  const [coachPrefill, setCoachPrefill] = useState<CoachPrefill | null>(null);
   const [pendingCoachPlan, setPendingCoachPlan] = useState<TrainingPlanDocument | null>(null);
   const [calendarRefreshToken, setCalendarRefreshToken] = useState(0);
   const [activeMediaTab, setActiveMediaTab] = useSelectionPreference(
@@ -2695,8 +2696,8 @@ export default function App() {
                   onExportFile={handleTrainingHubExport}
                   navigationRequest={trainingHubNavigation}
                   onNavigationRequestHandled={() => setTrainingHubNavigation(null)}
-                  onOpenCoach={(prompt) => {
-                    setCoachPrefill(prompt);
+                  onOpenCoach={(prefill) => {
+                    setCoachPrefill(prefill);
                     setActiveView("coach");
                   }}
                 />
@@ -2718,7 +2719,7 @@ export default function App() {
                     status={trainingHubStatus}
                     onOpenTraining={() => setActiveView("training")}
                     onOpenCoach={(prompt) => {
-                      setCoachPrefill(prompt ?? null);
+                      setCoachPrefill(prompt ? { text: prompt } : null);
                       setActiveView("coach");
                     }}
                     pendingPlan={pendingCoachPlan}
@@ -2771,7 +2772,7 @@ export default function App() {
                   onError={setError}
                   onOpenTraining={() => setActiveView("training")}
                   onOpenCoach={(prompt) => {
-                    setCoachPrefill(prompt);
+                    setCoachPrefill({ text: prompt });
                     setActiveView("coach");
                   }}
                 />

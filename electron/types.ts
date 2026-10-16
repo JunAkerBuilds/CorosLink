@@ -2777,10 +2777,21 @@ export interface PersistedChatSource {
   mcpError?: string;
 }
 
+/**
+ * Context that rides along with a user message: the model reads `content`
+ * after the message text, while the transcript only shows a chip with `label`.
+ */
+export interface ChatMessageAttachment {
+  kind: "chart";
+  label: string;
+  content: string;
+}
+
 export interface PersistedChatMessageEntry {
   kind: "message";
   role: ChatRole;
   content: string;
+  attachment?: ChatMessageAttachment;
   source?: PersistedChatSource;
   /** Display-safe provider reasoning summary, never raw chain-of-thought. */
   reasoningSummary?: string;

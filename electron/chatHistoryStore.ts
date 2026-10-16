@@ -18,6 +18,7 @@ import type {
   ActivityVisualHrSection,
   ActivityVisualLapPoint,
   ActivityVisualPreview,
+  ChatMessageAttachment,
   ChatProvider,
   ChatSessionSummary,
   CoachInputChoice,
@@ -749,6 +750,7 @@ function parseMessageEntry(value: unknown): PersistedChatMessageEntry | null {
   }
 
   const source = parseSource(value.source);
+  const attachment = role === "user" ? parseMessageAttachment(value.attachment) : null;
   const reasoningSummary =
     typeof value.reasoningSummary === "string" && value.reasoningSummary.trim()
       ? value.reasoningSummary
@@ -757,9 +759,23 @@ function parseMessageEntry(value: unknown): PersistedChatMessageEntry | null {
     kind: "message",
     role,
     content: value.content,
+    ...(attachment ? { attachment } : {}),
     ...(source ? { source } : {}),
     ...(reasoningSummary ? { reasoningSummary } : {})
   };
+}
+
+function parseMessageAttachment(value: unknown): ChatMessageAttachment | null {
+  if (
+    !isRecord(value) ||
+    value.kind !== "chart" ||
+    typeof value.label !== "string" ||
+    typeof value.content !== "string" ||
+    !value.content.trim()
+  ) {
+    return null;
+  }
+  return { kind: "chart", label: value.label, content: value.content };
 }
 
 function parseCoachChartSeries(value: unknown): CoachChartResolvedSeries | null {
