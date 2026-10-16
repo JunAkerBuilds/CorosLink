@@ -7,10 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.54] - 2026-10-15
+
 ### Added
 
 - **A brief and a debrief on every calendar workout.** Open a workout in the calendar to write a **brief** before it: a one-line goal, the things to watch for, and a fuel plan. Coach can write one too: tap **Ask Coach** on an empty brief, or ask in chat, and it lands on the workout with a Coach badge. After the session, the **debrief** asks how it felt on a five-step scale, lets you tick off each focus point as hit, partly or missed, and logs what you ate or drank, whether it was something new, and how it sat. A journal box takes the rest. Everything saves as you go, and stays on the workout when you drag it to another day. Workouts with notes get a small mark in the calendar. Coach reads your journal before advising on fueling or pacing, sees your recent debriefs and upcoming briefs, and can log a debrief from what you tell it in chat. Notes stay on this computer; nothing is sent to COROS.
-- **Pinned coach charts that keep themselves current.** Charts Coach draws can now bind more than daily training metrics: hourly **stress, heart rate, blood oxygen and respiratory rate** from the watch over 1–7 days, plus daily **steps, calories and VO₂ max**, and the stat tiles above a chart can bind to a metric too (latest, average, min, max or sum, including current recovery). Every card shows whether it is **Live**, **Partly live** or a **Snapshot**, so you know before pinning whether it will update. Pinned charts refresh on the Training Hub on their own: when the page opens, after a hub refresh, when you come back to the app, and every 15 minutes while it stays open, with a "refreshed 5 min ago" stamp. Snapshot charts get a **Make live** button that sends Coach the chart to rebuild from your data.
+- **Pinned coach charts that keep themselves current.** Charts Coach draws can now bind more than daily training metrics: hourly **stress, heart rate, blood oxygen and respiratory rate** from the watch over 1–7 days, plus daily **steps, calories and VO₂ max**, and the stat tiles above a chart can bind to a metric too (latest, average, min, max or sum, including current recovery). Every card shows whether it is **Live**, **Partly live** or a **Snapshot**, so you know before pinning whether it will update. Pinned charts refresh on the Training Hub on their own: when the page opens, after a hub refresh, when you come back to the app, and every 15 minutes while it stays open, with a "refreshed 5 min ago" stamp. Snapshot charts get a **Make live** button that opens Coach with a one-line request and the chart attached as a small **Pinned chart** chip, so Coach can rebuild it from your data. Remove the chip before sending if you change your mind.
 - Pinning a chart adds the **Coach charts** section to your Training Hub dashboard if it isn't there yet, and the card says where the chart went. The section was opt-in before, so a first pin landed somewhere you couldn't see.
 
 ### Changed
@@ -21,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Bluetooth works on Windows.** Finding or connecting a watch with **Windows Bluetooth** failed every time with "System Bluetooth failed (ModuleNotFoundError)" since 0.1.52, because the Bluetooth parts bundled with the app didn't match the app's own Python. They do now, and a build that mixes them up again stops before it can ship.
 - The Coach's **Coach creations** panel (wide windows) now also lists the workouts and plans the coach prepares through COROS's own tools, so it no longer stays hidden when the only thing to review is a **Review workout** card. Open an item for its details and **Save to COROS** from the panel, as with local drafts.
 - In the paper theme, the training globe on Overview is a softly shaded off-white sphere instead of a flat grey ball.
 
