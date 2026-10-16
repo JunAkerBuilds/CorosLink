@@ -13,6 +13,13 @@ export async function prepareSystemBluetooth(platform=process.platform,arch=proc
   const lock=JSON.parse(fs.readFileSync(path.join(root,'scripts','bundled-bleak.lock.json'),'utf8'));
   const target=`${platform}-${arch}`, wheels=lock.targets[target];
   if(!wheels) throw new Error(`System Bluetooth is not supported for ${target}.`);
+  // Compiled wheels only import on the CPython they were built for: winrt has no
+  // pure-Python fallback, so a cp310 wheel under the bundled 3.11 breaks Windows Bluetooth.
+  const runtime=JSON.parse(fs.readFileSync(path.join(root,'scripts','bundled-binaries.lock.json'),'utf8')).python.version.split('.').slice(0,2).join('.');
+  const abi=`cp${runtime.replace('.','')}`;
+  const stale=wheels.filter(wheel=>!wheel.filename.endsWith('-none-any.whl')&&!wheel.filename.includes(`-${abi}-`));
+  if(lock.pythonVersion!==runtime||stale.length) throw new Error(
+    `scripts/bundled-bleak.lock.json targets Python ${lock.pythonVersion} but the bundled runtime is ${runtime}${stale.length?` (${stale.map(wheel=>wheel.filename).join(', ')})`:''}. Re-pin the Bluetooth wheels for ${abi}.`);
   const bin=path.join(root,'bin',target), destination=path.join(bin,'ble-python');
   const marker=path.join(destination,'coroslink-ble-dependencies.json');
   const fingerprint=createHash('sha256').update(JSON.stringify(wheels)).digest('hex');
