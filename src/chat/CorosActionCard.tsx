@@ -5,7 +5,8 @@ import type { CSSProperties } from "react";
 import type {
   CoachCorosActionPreview,
   CoachCorosActionStep,
-  CoachCorosActionWorkout
+  CoachCorosActionWorkout,
+  WorkoutSport
 } from "../../electron/types";
 import { sportTheme } from "../training-library/sportTheme";
 import { isoDateFromCompact } from "./chatTypes";
@@ -20,6 +21,41 @@ function dateParts(iso: string | undefined) {
     month: date.toLocaleDateString(undefined, { month: "short" }),
     label: date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
   };
+}
+
+const LEGACY_SPORTS: Record<string, WorkoutSport | undefined> = { Run: "run", Bike: "bike", "Trail run": "trailRun", "Rest day": undefined };
+const LEGACY_KINDS: Record<string, CoachCorosActionStep["kind"]> = { "Warm-up": "warmup", Training: "training", Recovery: "recovery", "Cool-down": "cooldown" };
+
+function legacyStep(line: string): CoachCorosActionStep | undefined {
+  const match = /^(Warm-up|Training|Recovery|Cool-down): (.+?)(?: · (.+))?$/.exec(line.trim());
+  if (!match) return undefined;
+  const intensity = match[3] && match[3] !== "No intensity target" ? match[3] : undefined;
+  return { kind: LEGACY_KINDS[match[1]!], label: match[1]!, target: match[2]!, ...(intensity ? { intensity } : {}) };
+}
+
+/** Actions staged before structured workouts existed only kept summary lines; rebuild the structure from them. */
+function legacyWorkouts(details: string[]): CoachCorosActionWorkout[] {
+  const workouts: CoachCorosActionWorkout[] = [];
+  let current: CoachCorosActionWorkout | undefined;
+  for (const line of details) {
+    const header = /^(?:Day (\d+) · )?(Run|Bike|Rest day|Trail run) · (.+)$/.exec(line);
+    if (header) {
+      current = { name: header[3]!, sportLabel: header[2]!, steps: [], ...(LEGACY_SPORTS[header[2]!] ? { sport: LEGACY_SPORTS[header[2]!] } : {}), ...(header[1] ? { dayNo: Number(header[1]) - 1 } : {}) };
+      workouts.push(current);
+      continue;
+    }
+    if (!current) continue;
+    const group = /^(\d+) × \((.+)\)$/.exec(line);
+    if (group) {
+      const steps = group[2]!.split("; ").map(legacyStep).filter((step): step is CoachCorosActionStep => Boolean(step));
+      if (steps.length) current.steps.push({ repeats: Number(group[1]), steps });
+      continue;
+    }
+    const step = legacyStep(line);
+    if (step) current.steps.push(step);
+    else if (!current.description && !current.steps.length) current.description = line;
+  }
+  return workouts;
 }
 
 function countSteps(workout: CoachCorosActionWorkout): number {
@@ -83,7 +119,7 @@ export function CorosActionCard({ preview, onConfirm }: {
   const current = result ?? preview;
   const date = isoDateFromCompact(current.date);
   const parts = dateParts(date);
-  const workouts = current.workouts ?? [];
+  const workouts = current.workouts ?? legacyWorkouts(current.details);
   const lead = workouts[0];
   const isPlan = current.destination === "Training Plan";
   const isCalendar = current.destination === "Calendar";
@@ -127,7 +163,7 @@ export function CorosActionCard({ preview, onConfirm }: {
     <div className="chat-plan-card chat-workout-card chat-coros-action-card">
       <div className="chat-plan-card-header">
         <div className="chat-plan-card-title">
-          <span className="chat-workout-card-kicker">{t(current.title)}</span>
+          {lead ? <span className="chat-workout-card-kicker">{t(current.title)}</span> : null}
           <h4>{lead ? (isPlan ? current.summary : lead.name) : t(current.title)}</h4>
           <span className="chat-plan-card-summary">{lead && !isPlan ? current.summary : meta}</span>
         </div>
