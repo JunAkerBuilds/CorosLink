@@ -303,7 +303,7 @@ export function CalendarView({
   );
 
   const authenticated = Boolean(status?.authenticated);
-  const { weeks, loading, error, reload, applyOptimisticMove } = useCalendarData({
+  const { weeks, journal, loading, error, reload, applyOptimisticMove, applyJournalSave } = useCalendarData({
     api,
     authenticated,
     weekKeys,
@@ -794,6 +794,19 @@ export function CalendarView({
     [onOpenCoach, unitSystem]
   );
 
+  const handleAskCoachBrief = useCallback(
+    (target: CalendarSelection) => {
+      const name = target.kind === "scheduled"
+        ? target.entry.name
+        : target.day.pairs.find((pair) => pair.activity?.activityId === target.activity.activityId)?.scheduled.name ?? target.activity.name;
+      const day = target.kind === "scheduled" ? target.entry.happenDay : target.day.dateKey;
+      onOpenCoach(
+        `Write a brief for my "${name ?? "workout"}" on ${formatHappenDayLabel(day)}: a one-line goal, 2–4 focus cues to watch, and a fuel plan if this session needs one. Save it to the workout so I see it in the calendar.`
+      );
+    },
+    [onOpenCoach]
+  );
+
   const handleAskCoachSelection = useCallback(
     (target: CalendarSelection) => {
       if (target.kind === "scheduled") {
@@ -1063,6 +1076,9 @@ export function CalendarView({
         onClose={() => setSelection(null)}
         onDelete={handleDelete}
         onAskCoach={handleAskCoachSelection}
+        journal={journal}
+        onJournalSaved={applyJournalSave}
+        onAskCoachBrief={handleAskCoachBrief}
         onEdit={(target) => {
           setSelection(null);
           setEditRef({

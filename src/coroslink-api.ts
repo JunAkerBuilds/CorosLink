@@ -8,6 +8,7 @@ import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus
 import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "../electron/watchfaceAutomationTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "../electron/googleCalendarTypes";
 import type { ManualRaceInput, RaceEditInput, RaceOverview, StravaRaceImportResult } from "../electron/raceTypes";
+import type { WorkoutJournalEntry, WorkoutJournalSaveInput } from "../electron/workoutJournalTypes";
 import type {
   ActivityBackupFilters,
   ActivityBackupPreview,
@@ -669,6 +670,10 @@ export interface CorosLinkApi {
   connectStrava: () => Promise<StravaStatus>;
   cancelStravaConnect: () => Promise<void>;
   disconnectStrava: () => Promise<void>;
+  listWorkoutJournal: (startDay: string, endDay: string) => Promise<WorkoutJournalEntry[]>;
+  /** Saves as the athlete; resolves null when the entry ended up empty and was removed. */
+  saveWorkoutJournal: (input: WorkoutJournalSaveInput) => Promise<WorkoutJournalEntry | null>;
+  onWorkoutJournalChanged: (callback: () => void) => () => void;
   getRaceOverview: () => Promise<RaceOverview>;
   listRaceActivityIds: () => Promise<string[]>;
   markActivityAsRace: (activity: TrainingHubActivity) => Promise<RaceOverview>;

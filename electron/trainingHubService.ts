@@ -1739,7 +1739,7 @@ export async function scheduleWorkoutOnDate(
   program: Record<string, unknown>,
   happenDay: string,
   sortNo = 1
-): Promise<void> {
+): Promise<string> {
   if (!/^\d{8}$/.test(happenDay)) {
     throw new Error("happenDay must be YYYYMMDD.");
   }
@@ -1774,6 +1774,7 @@ export async function scheduleWorkoutOnDate(
     versionObjects: [{ id: idInPlan, status: 1 }],
     pbVersion: toOptionalNumber(program.pbVersion) ?? 2
   });
+  return String(idInPlan);
 }
 
 export async function listScheduledWorkoutEntries(
@@ -2348,12 +2349,12 @@ export async function rescheduleScheduledWorkout(
     happenDay: string;
   },
   newHappenDay: string
-): Promise<void> {
+): Promise<{ idInPlan: string } | undefined> {
   if (!/^\d{8}$/.test(newHappenDay)) {
     throw new Error("newHappenDay must be YYYYMMDD.");
   }
   if (newHappenDay === entry.happenDay) {
-    return;
+    return undefined;
   }
   if (newHappenDay < formatScheduleDay(new Date())) {
     throw new Error("COROS does not allow scheduling workouts before today.");
@@ -2361,13 +2362,14 @@ export async function rescheduleScheduledWorkout(
 
   const match = await findScheduledWorkoutWithProgram(entry);
 
-  await scheduleWorkoutOnDate(match.rawProgram, newHappenDay, match.sortNo ?? 1);
+  const idInPlan = await scheduleWorkoutOnDate(match.rawProgram, newHappenDay, match.sortNo ?? 1);
   await removeScheduledWorkout({
     planId: match.planId,
     idInPlan: match.idInPlan,
     planProgramId: match.planProgramId,
     pbVersion: toOptionalNumber(match.rawProgram.pbVersion)
   });
+  return { idInPlan };
 }
 
 export async function deleteWorkout(options: {

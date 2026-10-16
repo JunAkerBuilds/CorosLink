@@ -1,5 +1,5 @@
 import { useLanguage, t } from "../i18n/training";
-import { Check, ClipboardPaste, Copy, GripVertical, Plus } from "lucide-react";
+import { Check, ClipboardPaste, Copy, FlaskConical, GripVertical, Plus, Target } from "lucide-react";
 import { useState, type DragEvent } from "react";
 import type {
   TrainingHubActivity,
@@ -29,6 +29,9 @@ import {
   type PlannedActualPair
 } from "./calendarTypes";
 import { dayNumber } from "./dateUtils";
+import type { WorkoutJournalEntry } from "../../electron/workoutJournalTypes";
+import { journalEntryForActivity, journalEntryForPair } from "./journalRefs";
+import "./workoutJournal.css";
 
 interface DayCellProps {
   day: CalendarDay;
@@ -107,6 +110,27 @@ function activityStatsLine(
   return parts.join(" · ");
 }
 
+const FEEL_WORDS = ["Awful", "Rough", "Okay", "Good", "Great"];
+
+/** A quiet mark on the chip: a target for a brief, a feel dot for a debrief. */
+function JournalMark({ entry }: { entry: WorkoutJournalEntry | undefined }) {
+  useLanguage();
+  if (!entry) return null;
+  const { brief, debrief } = entry;
+  const label = [
+    brief ? (brief.author === "coach" ? t("Coach brief") : t("Brief")) : null,
+    debrief ? (debrief.feel ? t("Debrief · {{value1}}", { value1: t(FEEL_WORDS[debrief.feel - 1]!, undefined, "workoutJournal") }) : t("Debrief")) : null,
+    debrief?.fueling?.experiment ? t("Fueling experiment") : null
+  ].filter(Boolean).join(" · ");
+  return (
+    <span className="calendar-chip-journal" title={label} aria-label={label} role="img">
+      {brief && !debrief ? <Target size={10} className={brief.author === "coach" ? "is-coach" : undefined} aria-hidden="true" /> : null}
+      {debrief?.fueling?.experiment ? <FlaskConical size={10} aria-hidden="true" /> : null}
+      {debrief ? <span className={`calendar-chip-feel${debrief.feel ? ` is-feel-${debrief.feel}` : ""}`} aria-hidden="true" /> : null}
+    </span>
+  );
+}
+
 function PairChip({
   pair,
   day,
@@ -180,6 +204,7 @@ function PairChip({
         ) : null}
         <span className="calendar-chip-title">
           <span className="calendar-chip-name">{activity.name ?? scheduled.name}</span>
+          <JournalMark entry={journalEntryForPair(day.journal, pair)} />
           {pair.completionPct !== undefined ? (
             <span
               className={`calendar-chip-badge ${completionTone(pair.completionPct)}`}
@@ -256,6 +281,7 @@ function PairChip({
       ) : null}
       <span className="calendar-chip-title">
         <span className="calendar-chip-name">{scheduled.name}</span>
+        <JournalMark entry={journalEntryForPair(day.journal, pair)} />
       </span>
       {scheduled.calendarEvent ? <span className="calendar-chip-meta">
         {scheduled.calendarEvent.timing.mode === "all-day" ? t("All day") : `${scheduled.calendarEvent.timing.startTime}–${scheduled.calendarEvent.timing.endTime}${scheduled.calendarEvent.timing.endTime <= scheduled.calendarEvent.timing.startTime ? t(" (+1 day)") : ""}`}
@@ -436,6 +462,7 @@ export function DayCell({
               <span className="calendar-chip-name">
                 {activity.name ?? (activity.sportName == null ? activity.sportName : t(String(activity.sportName))) ?? t("Activity")}
               </span>
+              <JournalMark entry={journalEntryForActivity(day.journal, activity.activityId)} />
             </span>
             <span className="calendar-chip-meta">{activityStatsLine(activity, unitSystem)}</span>
             {activity.trainingLoad !== undefined ? (

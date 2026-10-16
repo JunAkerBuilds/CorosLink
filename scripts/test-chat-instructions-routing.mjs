@@ -52,6 +52,7 @@ const mocks = {
   "./chatActivityTools": { getChatActivityTools: () => [], isChatActivityTool: () => false },
   "./chatAnalyticsTools": { getChatAnalyticsTools: () => [], isChatAnalyticsTool: () => false },
   "./chatFitTools": { getChatFitTools: () => [], isChatFitTool: () => false },
+  "./chatJournalTools": { getChatJournalTools: () => [], isChatJournalTool: () => false, formatWorkoutJournalContext: () => "" },
   "./chatHistoryStore": {},
   "./localChatProvider": { ...require("./localChatProvider"), streamLocalChatCompletion: capture("local") },
   "./openRouterProvider": { ...require("./openRouterProvider"), streamOpenRouterChatCompletion: capture("openrouter") },

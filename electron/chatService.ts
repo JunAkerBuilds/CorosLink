@@ -48,6 +48,13 @@ import {
   type ChatFitToolName
 } from "./chatFitTools";
 import {
+  formatWorkoutJournalContext,
+  getChatJournalTools,
+  handleChatJournalTool,
+  isChatJournalTool,
+  type ChatJournalToolName
+} from "./chatJournalTools";
+import {
   getChatInteractionTools,
   handleChatInteractionTool,
   isChatInteractionTool,
@@ -1165,6 +1172,7 @@ function getAllChatTools(): CorosMcpTool[] {
     ...getChatAnalyticsTools(),
     ...getChatFitTools(),
     ...getChatWorkoutTools(),
+    ...getChatJournalTools(),
     ...getChatInteractionTools()
   ];
 }
@@ -1189,6 +1197,10 @@ export function getClaudeCodeTools(
   // Local FIT analysis reads full-resolution activity files, so it sits behind
   // the same switch as sending FIT files to Claude.
   const fitTools = permissions.fullActivityFiles ? getChatFitTools() : [];
+  // Debriefs describe finished workouts; briefs sit on upcoming ones.
+  const journalTools = getChatJournalTools().filter((tool) =>
+    tool.name === "write_workout_brief" ? permissions.upcomingWorkouts : permissions.recentActivities
+  );
   const workoutTools = getChatWorkoutTools().filter((tool) => {
     if (isWorkoutEditTool(tool.name)) return permissions.upcomingWorkouts;
     if (
@@ -1211,6 +1223,7 @@ export function getClaudeCodeTools(
     ...analyticsTools,
     ...fitTools,
     ...workoutTools,
+    ...journalTools,
     ...getChatInteractionTools()
   ];
 }
@@ -1304,6 +1317,12 @@ async function executeChatTool(
       });
       throw caught;
     }
+  }
+  if (isChatJournalTool(name)) {
+    if (claudePermissions && (name === "write_workout_brief" ? !claudePermissions.upcomingWorkouts : !claudePermissions.recentActivities)) {
+      throw new Error("The workout journal is disabled in Coach settings.");
+    }
+    return handleChatJournalTool(name as ChatJournalToolName, args);
   }
   if (isChatAnalyticsTool(name)) {
     try {
@@ -1645,6 +1664,7 @@ function withLiveToolInstructions(
   const activityTools = tools.filter((tool) => isChatActivityTool(tool.name));
   const analyticsTools = tools.filter((tool) => isChatAnalyticsTool(tool.name));
   const fitTools = tools.filter((tool) => isChatFitTool(tool.name));
+  const journalTools = tools.filter((tool) => isChatJournalTool(tool.name));
   const interactionTools = tools.filter((tool) =>
     isChatInteractionTool(tool.name)
   );
@@ -1654,6 +1674,7 @@ function withLiveToolInstructions(
       !isChatActivityTool(tool.name) &&
       !isChatAnalyticsTool(tool.name) &&
       !isChatFitTool(tool.name) &&
+      !isChatJournalTool(tool.name) &&
       !isChatInteractionTool(tool.name)
   );
   const corosMcpTools = mcpTools.filter((tool) =>
@@ -1774,6 +1795,32 @@ function withLiveToolInstructions(
       buildCoachSportCapabilityGuide()
     );
   }
+  if (journalTools.length > 0) {
+    const names = new Set(journalTools.map((tool) => tool.name));
+    const guidance = [
+      "",
+      "## Workout journal",
+      `Journal tools: ${journalTools.map((tool) => tool.name).join(", ")}. ` +
+        "Each calendar workout can carry a brief (goal, focus cues, fuel plan) and a debrief (feel, cue check-ins, fueling, notes). " +
+        "The journal is the athlete's own record; treat it as first-hand evidence about how sessions and fueling went."
+    ];
+    if (names.has("read_workout_journal")) {
+      guidance.push("Call read_workout_journal (fueling_only for nutrition questions) before advising on fueling, pacing or a recurring issue, and cite what they logged.");
+    }
+    if (names.has("write_workout_brief")) {
+      guidance.push(
+        "When the athlete asks what to focus on in a scheduled workout, or agrees to one, save it with write_workout_brief: " +
+          "one-line goal, 2–4 specific checkable cues, a fuel plan only when it matters (long or hard sessions, race rehearsal)."
+      );
+    }
+    if (names.has("log_workout_debrief")) {
+      guidance.push(
+        "When the athlete tells you how a finished workout went (feel, fueling, niggles, whether they hit the plan), " +
+          "offer to log it, or log it directly when they ask, with log_workout_debrief using only what they said."
+      );
+    }
+    sections.push(guidance.join("\n"));
+  }
   if (interactionTools.length > 0) {
     sections.push(
       "",
@@ -1891,6 +1938,13 @@ async function buildTrainingContext(
   if (upcoming.status === "fulfilled" && upcoming.value.length > 0) {
     sections.push("## Upcoming workouts");
     sections.push(formatUpcoming(upcoming.value, unitSystem));
+    sections.push("");
+    hasData = true;
+  }
+  const journal = formatWorkoutJournalContext({ past: includeActivities, upcoming: includeUpcoming });
+  if (journal) {
+    sections.push("## Workout journal (athlete's briefs and debriefs, recent and upcoming)");
+    sections.push(journal);
     sections.push("");
     hasData = true;
   }

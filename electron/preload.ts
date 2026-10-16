@@ -8,6 +8,7 @@ import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, Watc
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "./calendarSyncTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "./googleCalendarTypes";
 import type { ManualRaceInput, RaceEditInput, RaceOverview, StravaRaceImportResult } from "./raceTypes";
+import type { WorkoutJournalEntry, WorkoutJournalSaveInput } from "./workoutJournalTypes";
 import type {
   ActivityBackupFilters,
   ActivityBackupPreview,
@@ -971,6 +972,15 @@ const api = {
   connectStrava: (): Promise<StravaStatus> => ipcRenderer.invoke("strava:connect"),
   cancelStravaConnect: (): Promise<void> => ipcRenderer.invoke("strava:cancelConnect"),
   disconnectStrava: (): Promise<void> => ipcRenderer.invoke("strava:disconnect"),
+  listWorkoutJournal: (startDay: string, endDay: string): Promise<WorkoutJournalEntry[]> =>
+    ipcRenderer.invoke("workoutJournal:list", startDay, endDay),
+  saveWorkoutJournal: (input: WorkoutJournalSaveInput): Promise<WorkoutJournalEntry | null> =>
+    ipcRenderer.invoke("workoutJournal:save", input),
+  onWorkoutJournalChanged: (callback: () => void): (() => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("workoutJournal:changed", listener);
+    return () => ipcRenderer.removeListener("workoutJournal:changed", listener);
+  },
   getRaceOverview: (): Promise<RaceOverview> => ipcRenderer.invoke("races:getOverview"),
   listRaceActivityIds: (): Promise<string[]> => ipcRenderer.invoke("races:listActivityIds"),
   markActivityAsRace: (activity: TrainingHubActivity): Promise<RaceOverview> =>

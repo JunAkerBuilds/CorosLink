@@ -84,6 +84,7 @@
     "test:strava-strength": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-strava-strength.mjs",
     "test:strava-service": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-strava-service.mjs",
     "test:race-model": "node --experimental-strip-types scripts/test-race-model.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-race-format.mjs",
+    "test:workout-journal": "node --experimental-strip-types scripts/test-workout-journal.mjs",
     "test:race-service": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-race-service.mjs",
     "test:exercise-explorer": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-exercise-explorer.mjs",
     "test:strength-body-focus": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-strength-body-focus.mjs",

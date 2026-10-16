@@ -6,6 +6,8 @@ import type {
   TrainingHubScheduledWorkoutEntry
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
+import type { WorkoutJournalEntry, WorkoutJournalRef } from "../../electron/workoutJournalTypes";
+import { findJournalEntry } from "../../electron/workoutJournalModel";
 import { getLocalHappenDayKey, happenDayFromTimestamp } from "../training/formatters";
 import {
   moveScheduledWorkoutEntries,
@@ -49,6 +51,8 @@ export function useCalendarData({
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
 
+  const [journal, setJournal] = useState<WorkoutJournalEntry[]>([]);
+  const [journalVersion, setJournalVersion] = useState(0);
   const cacheRef = useRef(new Map<string, CalendarRangeData>());
   const rangeKeyRef = useRef(rangeKey);
   rangeKeyRef.current = rangeKey;
@@ -101,6 +105,38 @@ export function useCalendarData({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, authenticated, rangeKey, refreshToken, version]);
 
+  // Notes are local, so they load on their own and never wait on COROS.
+  useEffect(() => {
+    if (!api || !authenticated || !rangeStart || !rangeEnd) {
+      setJournal([]);
+      return;
+    }
+    let cancelled = false;
+    void api
+      .listWorkoutJournal(rangeStart, rangeEnd)
+      .then((entries) => {
+        if (!cancelled) setJournal(entries);
+      })
+      .catch(() => {
+        if (!cancelled) setJournal([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, authenticated, rangeKey, refreshToken, version, journalVersion]);
+
+  // The Coach can write a brief while the calendar is open.
+  useEffect(() => api?.onWorkoutJournalChanged?.(() => setJournalVersion((current) => current + 1)), [api]);
+
+  const applyJournalSave = useCallback((entry: WorkoutJournalEntry | null, ref: WorkoutJournalRef) => {
+    setJournal((current) => {
+      const target = entry?.entryId ?? findJournalEntry(current, ref)?.entryId;
+      const rest = current.filter((item) => item.entryId !== target);
+      return entry ? [...rest, entry] : rest;
+    });
+  }, []);
+
   const reload = useCallback(() => {
     cacheRef.current.delete(rangeKeyRef.current);
     setVersion((current) => current + 1);
@@ -150,6 +186,7 @@ export function useCalendarData({
     const scheduledByDay = new Map<string, TrainingHubScheduledWorkoutEntry[]>();
     const activitiesByDay = new Map<string, TrainingHubActivity[]>();
     const metricByDay = new Map<string, TrainingHubDailyMetric>();
+    const journalByDay = new Map<string, WorkoutJournalEntry[]>();
 
     for (const entry of data?.scheduled ?? []) {
       const list = scheduledByDay.get(entry.happenDay) ?? [];
@@ -167,6 +204,11 @@ export function useCalendarData({
     }
     for (const metric of data?.metrics ?? []) {
       metricByDay.set(metric.happenDay, metric);
+    }
+    for (const entry of journal) {
+      const list = journalByDay.get(entry.happenDay) ?? [];
+      list.push(entry);
+      journalByDay.set(entry.happenDay, list);
     }
 
     return weekKeys.map((row) => {
@@ -187,7 +229,8 @@ export function useCalendarData({
           activities,
           metric: metricByDay.get(dateKey),
           pairs,
-          unplannedActivities: unplanned
+          unplannedActivities: unplanned,
+          journal: journalByDay.get(dateKey)
         };
       });
 
@@ -212,7 +255,7 @@ export function useCalendarData({
         }
       };
     });
-  }, [data, weekKeys, isInMonth, getLocale()]);
+  }, [data, journal, weekKeys, isInMonth, getLocale()]);
 
-  return { weeks, loading, error, reload, applyOptimisticMove };
+  return { weeks, journal, loading, error, reload, applyOptimisticMove, applyJournalSave };
 }

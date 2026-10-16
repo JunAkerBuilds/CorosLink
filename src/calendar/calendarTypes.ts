@@ -3,6 +3,7 @@ import type {
   TrainingHubDailyMetric,
   TrainingHubScheduledWorkoutEntry
 } from "../../electron/types";
+import type { WorkoutJournalEntry } from "../../electron/workoutJournalTypes";
 import type { WeekSportTotals } from "./weekSportBreakdown";
 
 /** A scheduled workout matched (or not) to the completed activity on the same day. */
@@ -24,6 +25,8 @@ export interface CalendarDay {
   pairs: PlannedActualPair[];
   /** Activities not matched to any scheduled workout. */
   unplannedActivities: TrainingHubActivity[];
+  /** Briefs and debriefs saved for this day's workouts. */
+  journal?: WorkoutJournalEntry[];
 }
 
 export interface WeeklyStats {

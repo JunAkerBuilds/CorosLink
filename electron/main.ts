@@ -3,6 +3,8 @@ import { initializeNativeLanguage, localizeDialogOptions, setNativeLanguage } fr
 import { listCalendarWorkoutEntries } from "./calendarWorkoutEventStorage";
 import type { CalendarEventTiming, CalendarWorkoutEventRef } from "./calendarSyncTypes";
 import { registerWorkoutAutomation } from "./workoutAutomation";
+import { followRescheduledWorkout, listWorkoutJournal, onWorkoutJournalChanged, saveWorkoutJournal } from "./workoutJournalService";
+import type { WorkoutJournalSaveInput } from "./workoutJournalTypes";
 import { app, BrowserWindow, dialog, nativeTheme, session, shell, ShareMenu } from "electron";
 import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow } from "./diagnosticsService";
 import { googleCalendar, startGoogleCalendarSync, stopGoogleCalendarSync } from "./googleCalendarService";
@@ -2080,7 +2082,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "trainingHub:rescheduleWorkout",
-    (
+    async (
       _event,
       entry: {
         planId: string;
@@ -2089,7 +2091,16 @@ function registerIpcHandlers(): void {
         happenDay: string;
       },
       newHappenDay: string
-    ) => rescheduleScheduledWorkout(entry, newHappenDay)
+    ) => {
+      const moved = await rescheduleScheduledWorkout(entry, newHappenDay);
+      if (!moved) return;
+      // The re-added workout gets a new idInPlan; its brief and debrief follow it.
+      const target = (await listScheduledWorkoutEntries(newHappenDay, newHappenDay).catch(() => []))
+        .find((candidate) => candidate.idInPlan === moved.idInPlan);
+      if (target) {
+        followRescheduledWorkout(entry, { planId: target.planId, idInPlan: target.idInPlan, happenDay: newHappenDay });
+      }
+    }
   );
 
   ipcMain.handle(
@@ -2245,6 +2256,16 @@ function registerIpcHandlers(): void {
   ipcMain.handle("strava:disconnect", async () => {
     await disconnectStrava();
     clearStravaRaceData();
+  });
+
+  ipcMain.handle("workoutJournal:list", (_event, startDay: string, endDay: string) =>
+    listWorkoutJournal(startDay, endDay)
+  );
+  ipcMain.handle("workoutJournal:save", (_event, input: WorkoutJournalSaveInput) =>
+    saveWorkoutJournal(input, "athlete")
+  );
+  onWorkoutJournalChanged(() => {
+    mainWindow?.webContents.send("workoutJournal:changed");
   });
 
   ipcMain.handle("races:getOverview", () => getRaceOverview());

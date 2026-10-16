@@ -1,7 +1,7 @@
 import { useLanguage, t } from "../i18n/training";
 import { AnimatePresence, motion } from "motion/react";
 import { MessageCircle, Pencil, Trash2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
   TrainingHubActivityDetail,
   TrainingHubSportType
@@ -13,6 +13,10 @@ import type { CalendarSelection } from "./calendarTypes";
 import { ScheduledWorkoutDetail } from "./ScheduledWorkoutDetail";
 import { CalendarEventEditor } from "./CalendarEventEditor";
 import type { CalendarWorkoutEvent } from "../../electron/calendarSyncTypes";
+import type { WorkoutJournalEntry, WorkoutJournalRef } from "../../electron/workoutJournalTypes";
+import { findJournalEntry } from "../../electron/workoutJournalModel";
+import { journalRefForSelection } from "./journalRefs";
+import { WorkoutJournal } from "./WorkoutJournal";
 
 interface DayDetailPanelProps {
   api: CorosLinkApi;
@@ -26,6 +30,9 @@ interface DayDetailPanelProps {
   onAskCoach: (selection: CalendarSelection) => void;
   onEdit: (selection: Extract<CalendarSelection, { kind: "scheduled" }>) => void;
   onError: (message: string | null) => void;
+  journal?: WorkoutJournalEntry[];
+  onJournalSaved?: (entry: WorkoutJournalEntry | null, ref: WorkoutJournalRef) => void;
+  onAskCoachBrief?: (selection: CalendarSelection) => void;
 }
 export function DayDetailPanel({
   api,
@@ -38,7 +45,10 @@ export function DayDetailPanel({
   onDelete,
   onAskCoach,
   onEdit,
-  onError
+  onError,
+  journal,
+  onJournalSaved,
+  onAskCoachBrief
 }: DayDetailPanelProps) {
   useLanguage();
   const [detail, setDetail] = useState<TrainingHubActivityDetail | null>(null);
@@ -46,6 +56,8 @@ export function DayDetailPanel({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const activity = selection?.kind === "activity" ? selection.activity : null;
+  const journalRef = useMemo(() => (selection ? journalRefForSelection(selection) : null), [selection]);
+  const journalEntry = journalRef && journal ? findJournalEntry(journal, journalRef) : undefined;
 
   useEffect(() => {
     setConfirmDelete(false);
@@ -173,6 +185,18 @@ export function DayDetailPanel({
                 disabled={deleting}
                 onSaved={onEventSaved}
               /> : null}
+              {journalRef && userId ? (
+                <WorkoutJournal
+                  key={JSON.stringify([userId, journalRef.planId, journalRef.idInPlan, journalRef.activityId])}
+                  api={api}
+                  workoutRef={journalRef}
+                  entry={journalEntry}
+                  canBrief={Boolean(journalRef.planId)}
+                  canDebrief={selection.kind === "activity" || selection.day.isPast || selection.day.isToday}
+                  onSaved={(entry, ref) => onJournalSaved?.(entry, ref)}
+                  onAskCoachBrief={onAskCoachBrief ? () => onAskCoachBrief(selection) : undefined}
+                />
+              ) : null}
               {selection.kind === "scheduled" ? (
                 <ScheduledWorkoutDetail
                   entry={selection.entry}
