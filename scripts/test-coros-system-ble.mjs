@@ -11,7 +11,7 @@ const facePath=path.join(os.tmpdir(),`coros-direct-face-${process.pid}.bin`);
 fs.writeFileSync(facePath,fixtureFace());
 const filename=path.resolve('dist-electron/corosNativeBleService.js');
 const require=createRequire(filename);
-const {CorosBleAccountAuth,crc32Mpeg2}=require('./corosBleAuth.js');
+const {CorosBleAccountAuth,crc32Mpeg2,describeBindReply}=require('./corosBleAuth.js');
 const {privateKey,publicKey}=generateKeyPairSync('rsa',{modulusLength:2048});
 const credential={version:1,deviceName:'COROS PACE Pro TEST',accountUserId:'1',
   bindProfile:Buffer.from('019367a53200000000f0012b0700000080','hex').toString('base64'),
@@ -32,15 +32,21 @@ for(const nonce of [Buffer.from('new!'),Buffer.from('next')]) {
 assert.notDeepEqual(...signatures);
 assert.throws(()=>new CorosBleAccountAuth({...credential,accountUserId:'2'},credential.deviceName),/invalid/);
 assert.throws(()=>provider.authenticatedPayload(Buffer.alloc(17),Buffer.alloc(17)),/key update/);
+// A refused reply keeps the card's message but carries its status and flags (never the nonce) for error reports.
+const noKey=Buffer.alloc(17);noKey[0]=0x35;noKey[9]=4;Buffer.from('nonc').copy(noKey,11);
+assert.throws(()=>provider.authenticatedPayload(Buffer.alloc(17),noKey),error=>error.name==='CorosBindReplyError'&&/key update/.test(error.message)&&
+  error.reply==='status 5 (0x35), flags 0x04: no key, auth type 0, challenge'&&!error.reply.includes('nonc'));
+assert.equal(describeBindReply(Buffer.alloc(3)),'3-byte reply');
 
 for(const platform of ['darwin','win32','linux']) {
   const settings=new Map([['coros.ble.accountAuth',Buffer.from('encrypted:'+JSON.stringify(credential)).toString('base64')]]);
-  const workers=[],writes=[],credentialReads=[];const exports={};
-  vm.runInNewContext(fs.readFileSync(filename,'utf8'),{exports,Buffer,setTimeout,clearTimeout,
+  const workers=[],writes=[],credentialReads=[],diagnostics=[];const exports={};let noKeyReply=false;
+  vm.runInNewContext(fs.readFileSync(filename,'utf8'),{exports,Buffer,Error,setTimeout,clearTimeout,
     process:{platform,arch:'x64',env:{BUMBLE_SNOOPER:'unsafe',BUMBLE_LOGLEVEL:'DEBUG'},resourcesPath:'/resources'},
     require(id){
       if(id==='electron')return {app:{isPackaged:false,getAppPath:()=>'/project'},safeStorage:{isEncryptionAvailable:()=>true,
         encryptString:t=>Buffer.from('encrypted:'+t),decryptString:b=>b.toString().slice(10)}};
+      if(id==='./diagnosticsService')return {recordDiagnosticError:(source,error)=>diagnostics.push({source,message:error.message})};
       if(id==='./database')return {getSetting:k=>{
         if(k==='coros.credentials'||k==='trainingHub.credentials')credentialReads.push(k);
         return settings.get(k);
@@ -78,7 +84,7 @@ for(const platform of ['darwin','win32','linux']) {
             else if(request.opcode===0x96) {assert.equal(data.toString('hex'),'00','inventory request must have a logical payload byte');payload=Buffer.alloc(40);faceIds.forEach((id,i)=>payload.writeUInt32LE(id,i*4));}
             else {
               payload=Buffer.alloc(17);
-              if(data.length===17){payload[0]=0x35;payload[9]=5;Buffer.from('live').copy(payload,11);}
+              if(data.length===17){payload[0]=0x35;payload[9]=noKeyReply?4:5;Buffer.from('live').copy(payload,11);}
               else {assert.equal(verify('sha256',Buffer.concat([Buffer.from('live'),data.subarray(281,289)]),publicKey,data.subarray(25,281)),true);payload[0]=0x31;}
             }
           }
@@ -219,6 +225,14 @@ for(const platform of ['darwin','win32','linux']) {
   assert.equal(offlineConnected.systemBind,'authenticated','a new app instance authenticates from the saved key without a cloud session or password');
   assert.deepEqual(credentialReads,[],'offline Bluetooth authentication does not use account login credentials');
   await offlineService.disconnect();
+  noKeyReply=true;
+  const refused=await offlineService.connect(false,{backend:'system'});
+  assert.equal(refused.systemBind,'failed');assert.match(refused.authenticationError,/key update/);
+  assert.equal(refused.authenticationError.includes('status'),false,'the card keeps the plain message');
+  const logged=diagnostics.at(-1);assert.equal(logged.source,'corosBle:authenticate');
+  assert.match(logged.message,/key update.*\[COROS W332 V 3\.2008\.0; watch reply status 5 \(0x35\), flags 0x04: no key, auth type 0, challenge\]/);
+  assert.equal(logged.message.includes('live'),false,'error reports never carry the watch nonce');
+  await offlineService.disconnect();noKeyReply=false;
   settings.delete('coros.ble.loginAuth');
   settings.set('coros.credentials','encrypted-saved-account');
   settings.set('trainingHub.credentials','encrypted-legacy-saved-account');

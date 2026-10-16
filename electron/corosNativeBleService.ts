@@ -4,7 +4,8 @@ import path from "node:path";
 import { app, safeStorage } from "electron";
 import { getSetting, setSetting } from "./database";
 import type { CorosBleBackend, CorosNativeBleConnectOptions, CorosNativeBleSnapshot } from "./corosNativeBleTypes";
-import { CorosBleAccountAuth, type CorosAccountCredential } from "./corosBleAuth";
+import { CorosBindReplyError, CorosBleAccountAuth, describeBindReply, type CorosAccountCredential } from "./corosBleAuth";
+import { recordDiagnosticError } from "./diagnosticsService";
 import { COROS_BLE_LOGIN_KEY_SETTING, createCorosLoginCredential, type CorosBleLoginKey } from "./corosBleLoginKey";
 import { decodeWifiMapTasks, encodeWifiMapStart, requireWifiDownloadReady } from "./corosBleWifiProtocol";
 import { createWifiMapTask, previewWifiMap } from "./corosWifiMapService";
@@ -447,10 +448,21 @@ export class CorosNativeBleService {
       const challenge = await exchange(base, 20);
       const authenticated = account.authenticatedPayload(base, challenge);
       const bound = await exchange(authenticated, Math.min(240, this.state.maximumWriteBytes ?? 20));
-      if (bound.length !== 17 || (bound[0]! & 7) !== 1 || !this.state.connected) throw new Error("The watch rejected COROS authentication. Sign in with the account paired to this watch, then reconnect.");
+      if (bound.length !== 17 || (bound[0]! & 7) !== 1 || !this.state.connected) {
+        throw new CorosBindReplyError("The watch rejected COROS authentication. Sign in with the account paired to this watch, then reconnect.",
+          describeBindReply(bound));
+      }
       this.state = { ...this.state, systemBind: "authenticated", authenticatedAt: Date.now() };
     } catch (error) {
-      this.state = { ...this.state, systemBind: "failed", authenticationError: error instanceof Error ? error.message : "COROS authentication did not complete." };
+      const message = error instanceof Error ? error.message : "COROS authentication did not complete.";
+      this.state = { ...this.state, systemBind: "failed", authenticationError: message };
+      // The card only shows the message. The report also names the watch and
+      // what it replied, since only PACE Pro's replies have been checked.
+      const watch = `${this.state.modelNumber || "unknown model"} ${this.state.softwareRevision || this.state.firmwareRevision || "unknown firmware"}`;
+      const reply = error instanceof CorosBindReplyError ? `watch reply ${error.reply}` : "no watch reply decoded";
+      recordDiagnosticError("corosBle:authenticate", Object.assign(new Error(`${message} [${watch}; ${reply}]`), {
+        name: error instanceof Error ? error.name : "Error", stack: error instanceof Error ? error.stack : undefined
+      }));
     }
   }
 

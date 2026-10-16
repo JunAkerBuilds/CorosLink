@@ -17,6 +17,25 @@ export function crc32Mpeg2(data: Uint8Array): number {
   return crc;
 }
 
+/**
+ * The status byte and flag byte of a SystemBind reply, for error reports. The
+ * account checksum and the nonce are left out.
+ */
+export function describeBindReply(reply: Buffer): string {
+  if (reply.length !== 17) return `${reply.length}-byte reply`;
+  const flags = reply[9]!;
+  return `status ${reply[0]! & 7} (0x${reply[0]!.toString(16).padStart(2, "0")}), flags 0x${flags.toString(16).padStart(2, "0")}: ` +
+    `${flags & 1 ? "key" : "no key"}, auth type ${(flags >> 1) & 1}, ${flags & 4 ? "challenge" : "no challenge"}`;
+}
+
+/** A SystemBind reply CorosLink can't continue from; `reply` says what the watch sent. */
+export class CorosBindReplyError extends Error {
+  constructor(message: string, readonly reply: string) {
+    super(message);
+    this.name = "CorosBindReplyError";
+  }
+}
+
 /** Account secrets and signatures are main-process data, never renderer state. */
 export class CorosBleAccountAuth {
   private readonly user: Buffer;
@@ -47,7 +66,8 @@ export class CorosBleAccountAuth {
 
   authenticatedPayload(base: Buffer, challenge: Buffer): Buffer {
     if (challenge.length !== 17 || (challenge[0]! & 7) !== 5 || (challenge[9]! & 7) !== 5) {
-      throw new Error("The watch needs a COROS account key update. Reconnect with the official COROS app, then sign in to CorosLink again.");
+      throw new CorosBindReplyError("The watch needs a COROS account key update. Reconnect with the official COROS app, then sign in to CorosLink again.",
+        describeBindReply(challenge));
     }
     const nonce = challenge.subarray(11, 15);
     const signature = sign("sha256", Buffer.concat([nonce, this.user]), { key: this.key, padding: constants.RSA_PKCS1_PADDING });
