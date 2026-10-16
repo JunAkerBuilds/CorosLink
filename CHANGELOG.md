@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Pinning a chart with the same title as one already on the Training Hub updates that pin in place instead of adding a second copy. In Coach the button reads **Update pin** when that is what it will do, and Coach is told to reuse titles for charts you've pinned.
+- The **Coach charts** widget can be resized like the other chart widgets, from Small to Full width and from mini to tall, so a pinned chart can sit beside another widget instead of always taking a full row. Shorter sizes shrink the plot and tiles and drop the notes.
+- Pinned charts on the Training Hub lead with their own title. The "1 pinned chart" heading is gone, a lone chart is the widget itself rather than a card inside a card, and freshness and age share one small line ("Coach · Live · 5 min ago"). Refresh and Unpin are quiet icons; Make live keeps its label. The plot grows to fill the widget instead of leaving an empty band.
 
 ### Fixed
 

@@ -75,7 +75,7 @@ for (const preset of widgetPresets('healthCheck')) {
 }
 console.log('Health check proportions and saved sizes passed');
 
-for (const id of ['stress', 'sleepHrv', 'trend-load', 'trend-rpe', 'trend-hrv', 'trend-sleep', 'zones-heart', 'zones-distance', 'scores', 'race', 'effort', 'upcoming', 'cycle']) {
+for (const id of ['stress', 'sleepHrv', 'trend-load', 'trend-rpe', 'trend-hrv', 'trend-sleep', 'zones-heart', 'zones-distance', 'scores', 'race', 'effort', 'upcoming', 'cycle', 'coach']) {
   const presets = widgetPresets(id);
   assert.equal(presets.length, 20);
   for (const preset of presets) {
@@ -86,3 +86,8 @@ for (const id of ['stress', 'sleepHrv', 'trend-load', 'trend-rpe', 'trend-hrv', 
   }
 }
 console.log('All chart sizes snap and persist across shared height tiers');
+
+const savedCoach = parseLayout(JSON.stringify({ version: 3, widgets: [{ id: 'coach', size: 12, preset: '12-standard' }] }));
+assert.equal(savedCoach[0].preset, '12-standard', 'Full-width coach charts saved before resizing keep their size');
+assert.equal(defaultWidget('coach').preset, '12-standard', 'Newly added coach charts still start full width');
+console.log('Coach charts resize like the other chart widgets');

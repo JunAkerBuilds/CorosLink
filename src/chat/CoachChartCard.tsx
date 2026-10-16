@@ -44,6 +44,8 @@ export interface CoachChartCardProps {
   onRefresh?: () => void;
   /** Asks Coach to rebuild a snapshot chart with bound metrics. */
   onMakeLive?: () => void;
+  /** Panel only: names the source in the status line when the card is the whole widget. */
+  eyebrow?: string;
 }
 
 interface SeriesPalette {
@@ -149,7 +151,8 @@ export function CoachChartCard({
   onPin,
   onUnpin,
   onRefresh,
-  onMakeLive
+  onMakeLive,
+  eyebrow
 }: CoachChartCardProps) {
   const { language } = useLanguage();
   const { colors, activeDot } = useChartColors();
@@ -185,14 +188,15 @@ export function CoachChartCard({
 
   const freshness = coachChartFreshness(preview);
   const subtitle = preview.spec.subtitle ?? formatWindow(preview);
-  const stamp =
-    variant === "panel" && preview.resolvedAt
+  const isPanel = variant === "panel";
+  // On the dashboard, freshness and age share one quiet line above the title
+  // ("Live · 5 min ago", "Snapshot · Oct 13") instead of a badge plus a stamp.
+  const statusTime =
+    isPanel && preview.resolvedAt
       ? freshness === "snapshot"
-        ? t("Snapshot · {{date}}", { date: formatResolvedAt(preview.resolvedAt) })
-        : t("Updated {{time}}", {
-            time: formatRelativeTime(preview.resolvedAt, new Date(), getLocale())
-          })
-      : null;
+        ? formatResolvedAt(preview.resolvedAt)
+        : formatRelativeTime(preview.resolvedAt, new Date(), getLocale())
+      : "";
   const showMakeLive = Boolean(onMakeLive) && freshness !== "live";
   const showRefresh = Boolean(onRefresh) && freshness !== "snapshot";
 
@@ -202,37 +206,35 @@ export function CoachChartCard({
     >
       <div className="chat-visual-card-header">
         <div className="coach-chart-heading">
+          {isPanel ? (
+            <p className="coach-chart-kicker">
+              {eyebrow ? <span>{eyebrow}</span> : null}
+              <span
+                className={`coach-chart-status is-${freshness}`}
+                title={freshnessHint(freshness)}
+              >
+                <i aria-hidden="true" />
+                {freshnessLabel(freshness)}
+              </span>
+              {statusTime ? <span>{statusTime}</span> : null}
+            </p>
+          ) : null}
           <h4>
             {preview.spec.title}
-            <span
-              className={`coach-chart-freshness is-${freshness}`}
-              title={freshnessHint(freshness)}
-            >
-              <i aria-hidden="true" />
-              {freshnessLabel(freshness)}
-            </span>
+            {isPanel ? null : (
+              <span
+                className={`coach-chart-freshness is-${freshness}`}
+                title={freshnessHint(freshness)}
+              >
+                <i aria-hidden="true" />
+                {freshnessLabel(freshness)}
+              </span>
+            )}
           </h4>
           <span className="chat-visual-card-subtitle">{subtitle}</span>
-          {stamp ? <span className="coach-chart-stamp">{stamp}</span> : null}
         </div>
         {onPin || onUnpin || showRefresh || showMakeLive ? (
           <div className="coach-chart-actions">
-            {showRefresh ? (
-              <button
-                type="button"
-                className="coach-chart-action"
-                onClick={onRefresh}
-                disabled={busy}
-                title={t("Refresh with the latest data")}
-              >
-                <RefreshCw
-                  size={13}
-                  aria-hidden="true"
-                  className={busy ? "is-spinning" : undefined}
-                />
-                <span>{t("Refresh")}</span>
-              </button>
-            ) : null}
             {showMakeLive ? (
               <button
                 type="button"
@@ -245,21 +247,47 @@ export function CoachChartCard({
                 <span>{t("Make live")}</span>
               </button>
             ) : null}
-            {pinned && onUnpin ? (
+            {/* Live charts refresh themselves, so the manual refresh stays an icon. */}
+            {showRefresh ? (
               <button
                 type="button"
-                className="coach-chart-action is-pinned"
-                onClick={onUnpin}
+                className="coach-chart-action is-icon"
+                onClick={onRefresh}
                 disabled={busy}
-                title={
-                  variant === "panel"
-                    ? t("Remove from Training Hub")
-                    : t("On your Training Hub dashboard under Coach charts. Click to unpin.")
-                }
+                aria-label={t("Refresh")}
+                title={t("Refresh with the latest data")}
               >
-                <PinOff size={13} aria-hidden="true" />
-                <span>{variant === "panel" ? t("Unpin") : t("Pinned")}</span>
+                <RefreshCw
+                  size={14}
+                  aria-hidden="true"
+                  className={busy ? "is-spinning" : undefined}
+                />
               </button>
+            ) : null}
+            {pinned && onUnpin ? (
+              isPanel ? (
+                <button
+                  type="button"
+                  className="coach-chart-action is-icon"
+                  onClick={onUnpin}
+                  disabled={busy}
+                  aria-label={t("Unpin")}
+                  title={t("Remove from Training Hub")}
+                >
+                  <PinOff size={14} aria-hidden="true" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="coach-chart-action is-pinned"
+                  onClick={onUnpin}
+                  disabled={busy}
+                  title={t("On your Training Hub dashboard under Coach charts. Click to unpin.")}
+                >
+                  <PinOff size={13} aria-hidden="true" />
+                  <span>{t("Pinned")}</span>
+                </button>
+              )
             ) : onPin ? (
               <button
                 type="button"
@@ -331,101 +359,82 @@ export function CoachChartCard({
 
       {hasData ? (
         <div className="coach-chart-shell">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart
-              data={rows}
-              margin={{ top: 12, right: hasRightAxis ? 4 : 12, left: -6, bottom: 4 }}
-            >
-              <defs>
-                {preview.series
-                  .filter((entry) => entry.kind === "area")
-                  .map((entry) => {
-                    const stops = palette(entry.color).stops;
-                    return (
-                      <linearGradient
-                        key={entry.key}
-                        id={`${gradientPrefix}-${entry.key}`}
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop offset="0%" stopColor={stops.top} stopOpacity={0.45} />
-                        <stop offset="55%" stopColor={stops.mid} stopOpacity={0.14} />
-                        <stop offset="100%" stopColor={stops.bottom} stopOpacity={0} />
-                      </linearGradient>
-                    );
-                  })}
-              </defs>
-              <CartesianGrid stroke={colors.grid} vertical={false} strokeDasharray="3 3" />
-              {preview.ranges.map((range, index) => (
-                <ReferenceArea
-                  key={`range-${index}`}
-                  x1={range.fromIndex}
-                  x2={range.toIndex}
-                  yAxisId="left"
-                  fill={colors.accentSoft}
-                  fillOpacity={0.35}
-                  stroke="none"
-                  ifOverflow="extendDomain"
-                  label={
-                    range.label
-                      ? {
-                          value: range.label,
-                          position: "insideTop",
-                          fill: colors.text,
-                          fontSize: 10,
-                          fontWeight: 650
-                        }
-                      : undefined
-                  }
-                />
-              ))}
-              <XAxis
-                dataKey="x"
-                type="category"
-                tickFormatter={(value) => preview.labels[Number(value)] ?? ""}
-                tick={{ fill: colors.text, fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                minTickGap={tickGap}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                yAxisId="left"
-                tick={{ fill: colors.text, fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                width={40}
-                domain={axisDomain("left")}
-                label={
-                  preview.spec.leftAxisLabel
-                    ? {
-                        value: preview.spec.leftAxisLabel,
-                        angle: -90,
-                        position: "insideLeft",
-                        fill: colors.text,
-                        fontSize: 10,
-                        offset: 14
-                      }
-                    : undefined
-                }
-              />
-              {hasRightAxis ? (
-                <YAxis
-                  yAxisId="right"
-                  orientation="right"
+          {/* The plot fills the shell absolutely so a panel card can grow it to the widget's height. */}
+          <div className="coach-chart-plot">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart
+                data={rows}
+                margin={{ top: 12, right: hasRightAxis ? 4 : 12, left: -6, bottom: 4 }}
+              >
+                <defs>
+                  {preview.series
+                    .filter((entry) => entry.kind === "area")
+                    .map((entry) => {
+                      const stops = palette(entry.color).stops;
+                      return (
+                        <linearGradient
+                          key={entry.key}
+                          id={`${gradientPrefix}-${entry.key}`}
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop offset="0%" stopColor={stops.top} stopOpacity={0.45} />
+                          <stop offset="55%" stopColor={stops.mid} stopOpacity={0.14} />
+                          <stop offset="100%" stopColor={stops.bottom} stopOpacity={0} />
+                        </linearGradient>
+                      );
+                    })}
+                </defs>
+                <CartesianGrid stroke={colors.grid} vertical={false} strokeDasharray="3 3" />
+                {preview.ranges.map((range, index) => (
+                  <ReferenceArea
+                    key={`range-${index}`}
+                    x1={range.fromIndex}
+                    x2={range.toIndex}
+                    yAxisId="left"
+                    fill={colors.accentSoft}
+                    fillOpacity={0.35}
+                    stroke="none"
+                    ifOverflow="extendDomain"
+                    label={
+                      range.label
+                        ? {
+                            value: range.label,
+                            position: "insideTop",
+                            fill: colors.text,
+                            fontSize: 10,
+                            fontWeight: 650
+                          }
+                        : undefined
+                    }
+                  />
+                ))}
+                <XAxis
+                  dataKey="x"
+                  type="category"
+                  tickFormatter={(value) => preview.labels[Number(value)] ?? ""}
                   tick={{ fill: colors.text, fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
-                  width={40}
-                  domain={axisDomain("right")}
+                  minTickGap={tickGap}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  yAxisId="left"
+                  tick={{ fill: colors.text, fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  // A rotated axis title needs its own lane beside the tick numbers.
+                  width={preview.spec.leftAxisLabel ? 52 : 40}
+                  domain={axisDomain("left")}
                   label={
-                    preview.spec.rightAxisLabel
+                    preview.spec.leftAxisLabel
                       ? {
-                          value: preview.spec.rightAxisLabel,
-                          angle: 90,
-                          position: "insideRight",
+                          value: preview.spec.leftAxisLabel,
+                          angle: -90,
+                          position: "insideLeft",
                           fill: colors.text,
                           fontSize: 10,
                           offset: 14
@@ -433,47 +442,86 @@ export function CoachChartCard({
                       : undefined
                   }
                 />
-              ) : null}
-              <Tooltip
-                cursor={{ stroke: colors.cursor, strokeWidth: 1 }}
-                content={(props) => (
-                  <CoachChartTooltip
-                    {...props}
-                    labels={preview.labels}
-                    series={preview.series}
-                    palette={palette}
+                {hasRightAxis ? (
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={{ fill: colors.text, fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={preview.spec.rightAxisLabel ? 52 : 40}
+                    domain={axisDomain("right")}
+                    label={
+                      preview.spec.rightAxisLabel
+                        ? {
+                            value: preview.spec.rightAxisLabel,
+                            angle: 90,
+                            position: "insideRight",
+                            fill: colors.text,
+                            fontSize: 10,
+                            offset: 14
+                          }
+                        : undefined
+                    }
                   />
-                )}
-                contentStyle={trainingChartTooltipStyle}
-              />
-              {preview.series.map((entry) => {
-                const stroke = palette(entry.color).stroke;
-                const yAxisId = entry.axis === "right" && hasRightAxis ? "right" : "left";
-                if (entry.kind === "bar") {
-                  return (
-                    <Bar
-                      key={entry.key}
-                      dataKey={entry.key}
-                      name={entry.label}
-                      yAxisId={yAxisId}
-                      fill={stroke}
-                      fillOpacity={0.55}
-                      radius={[3, 3, 0, 0]}
-                      maxBarSize={18}
-                      isAnimationActive={false}
+                ) : null}
+                <Tooltip
+                  cursor={{ stroke: colors.cursor, strokeWidth: 1 }}
+                  content={(props) => (
+                    <CoachChartTooltip
+                      {...props}
+                      labels={preview.labels}
+                      series={preview.series}
+                      palette={palette}
                     />
-                  );
-                }
-                if (entry.kind === "area") {
+                  )}
+                  contentStyle={trainingChartTooltipStyle}
+                />
+                {preview.series.map((entry) => {
+                  const stroke = palette(entry.color).stroke;
+                  const yAxisId = entry.axis === "right" && hasRightAxis ? "right" : "left";
+                  if (entry.kind === "bar") {
+                    return (
+                      <Bar
+                        key={entry.key}
+                        dataKey={entry.key}
+                        name={entry.label}
+                        yAxisId={yAxisId}
+                        fill={stroke}
+                        fillOpacity={0.55}
+                        radius={[3, 3, 0, 0]}
+                        maxBarSize={18}
+                        isAnimationActive={false}
+                      />
+                    );
+                  }
+                  if (entry.kind === "area") {
+                    return (
+                      <Area
+                        key={entry.key}
+                        type="monotone"
+                        dataKey={entry.key}
+                        name={entry.label}
+                        yAxisId={yAxisId}
+                        stroke={stroke}
+                        fill={`url(#${gradientPrefix}-${entry.key})`}
+                        strokeWidth={2}
+                        strokeDasharray={entry.dashed ? "5 4" : undefined}
+                        dot={false}
+                        activeDot={activeDot}
+                        connectNulls
+                        isAnimationActive={false}
+                      />
+                    );
+                  }
                   return (
-                    <Area
+                    <Line
                       key={entry.key}
                       type="monotone"
                       dataKey={entry.key}
                       name={entry.label}
                       yAxisId={yAxisId}
                       stroke={stroke}
-                      fill={`url(#${gradientPrefix}-${entry.key})`}
                       strokeWidth={2}
                       strokeDasharray={entry.dashed ? "5 4" : undefined}
                       dot={false}
@@ -482,26 +530,10 @@ export function CoachChartCard({
                       isAnimationActive={false}
                     />
                   );
-                }
-                return (
-                  <Line
-                    key={entry.key}
-                    type="monotone"
-                    dataKey={entry.key}
-                    name={entry.label}
-                    yAxisId={yAxisId}
-                    stroke={stroke}
-                    strokeWidth={2}
-                    strokeDasharray={entry.dashed ? "5 4" : undefined}
-                    dot={false}
-                    activeDot={activeDot}
-                    connectNulls
-                    isAnimationActive={false}
-                  />
-                );
-              })}
-            </ComposedChart>
-          </ResponsiveContainer>
+                })}
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       ) : (
         <p className="chat-visual-empty">{t("No data in this window.")}</p>

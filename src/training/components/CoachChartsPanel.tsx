@@ -1,17 +1,17 @@
-import { useLanguage, t, getLocale } from "../../i18n/training";
+import { useLanguage, t } from "../../i18n/training";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChartLine } from "lucide-react";
 import type { PinnedCoachChart } from "../../../electron/types";
 import type { CorosLinkApi } from "../../coroslink-api";
 import { CoachChartCard } from "../../chat/CoachChartCard";
-import {
-  buildMakeLivePrompt,
-  coachChartFreshness,
-  formatRelativeTime
-} from "../../chat/coachChartFreshness";
+import { buildMakeLivePrompt } from "../../chat/coachChartFreshness";
+import type { ChartCardSize } from "../widgetSizing";
+import "../chartSizing.css";
 
 interface CoachChartsPanelProps {
   api: CorosLinkApi | undefined;
+  /** Dashboard height tier; sets the plot height and how much chrome each card keeps. */
+  size?: ChartCardSize;
   /** Bumps whenever the Training Hub refreshes, so live charts re-resolve too. */
   refreshToken?: number;
   showEmpty?: boolean;
@@ -29,12 +29,11 @@ const POLL_MS = 15 * 60 * 1000;
  * refresh on mount, on every hub refresh, whenever the window comes back
  * after a while, and on a slow timer; snapshot charts stay as pinned.
  */
-export function CoachChartsPanel({ api, refreshToken = 0, showEmpty = false, onOpenCoach }: CoachChartsPanelProps) {
+export function CoachChartsPanel({ api, size, refreshToken = 0, showEmpty = false, onOpenCoach }: CoachChartsPanelProps) {
   useLanguage();
   const [charts, setCharts] = useState<PinnedCoachChart[]>([]);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
-  const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null);
   // Relative stamps ("12 min ago") drift, so re-render once a minute.
   const [, setTick] = useState(0);
   const chartsRef = useRef<PinnedCoachChart[]>([]);
@@ -59,7 +58,6 @@ export function CoachChartsPanel({ api, refreshToken = 0, showEmpty = false, onO
           setCharts((prev) =>
             prev.map((chart) => (chart.id === id ? updated : chart))
           );
-          setLastRefreshAt(Date.now());
         }
         setError(null);
       } catch (caught) {
@@ -142,49 +140,31 @@ export function CoachChartsPanel({ api, refreshToken = 0, showEmpty = false, onO
   }, [refreshLive]);
 
   if (charts.length === 0) {
-    return showEmpty ? <section className="panel coach-charts-panel">
-      <div className="section-heading"><div><p className="eyebrow">{t("Coach charts")}</p><h2>{t("Your pinned charts")}</h2></div><ChartLine size={22} aria-hidden="true" /></div>
-      <p className="coach-charts-panel-note">{error || t("Pin a chart from a coach conversation to see it on your dashboard.")}</p>
-    </section> : null;
+    return showEmpty ? (
+      <section className="panel coach-charts-panel is-empty" data-chart-size={size}>
+        <p className="eyebrow">{t("Coach charts")}</p>
+        <div className="coach-charts-panel-empty">
+          <ChartLine size={20} aria-hidden="true" />
+          <p>{error || t("Pin a chart from a coach conversation to see it on your dashboard.")}</p>
+        </div>
+      </section>
+    ) : null;
   }
 
-  const liveCount = charts.filter((chart) => coachChartFreshness(chart.preview) !== "snapshot").length;
-  const snapshotCount = charts.length - liveCount;
-  const meta =
-    liveCount > 0
-      ? lastRefreshAt
-        ? t("Updates automatically · refreshed {{time}}", {
-            time: formatRelativeTime(new Date(lastRefreshAt).toISOString(), new Date(), getLocale())
-          })
-        : t("Updates automatically")
-      : t("Nothing here refreshes on its own");
-
+  // A lone chart is the widget: its own title leads and the status line names
+  // Coach. Several charts share one small label; each card keeps its status.
+  const single = charts.length === 1;
   return (
-    <section className="panel coach-charts-panel">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">{t("Coach charts")}</p>
-          <h2>
-            {charts.length} {t("pinned")} {charts.length === 1 ? t("chart") : t("charts")}
-          </h2>
-          <p className="coach-charts-panel-meta">{meta}</p>
-        </div>
-        <ChartLine size={22} aria-hidden="true" />
-      </div>
-      {error ? <p className="coach-charts-panel-note">{error}</p> : null}
-      {snapshotCount > 0 && onOpenCoach ? (
-        <p className="coach-charts-panel-note">
-          {snapshotCount === 1
-            ? t("1 chart is a snapshot and won't update on its own. Make live asks Coach to rebuild it from your data.")
-            : t("{{count}} charts are snapshots and won't update on their own. Make live asks Coach to rebuild them from your data.", { count: snapshotCount })}
-        </p>
-      ) : null}
+    <section className={`panel coach-charts-panel${single ? " is-single" : ""}`} data-chart-size={size}>
+      {single ? null : <p className="eyebrow coach-charts-panel-label">{t("Coach charts")}</p>}
+      {error ? <p className="coach-charts-panel-note" role="alert">{error}</p> : null}
       <div className="coach-charts-panel-grid">
         {charts.map((chart) => (
           <CoachChartCard
             key={chart.id}
             preview={chart.preview}
             variant="panel"
+            eyebrow={single ? t("Coach") : undefined}
             pinned
             busy={busyIds.has(chart.id)}
             onUnpin={() => void unpinChart(chart.id)}

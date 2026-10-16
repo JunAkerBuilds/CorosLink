@@ -67,6 +67,9 @@
 
 .coach-chart-tile {
   display: grid;
+  /* Tiles in a row share its height; keep each value under its label rather
+     than floating down when a neighbour has a caption. */
+  align-content: start;
   gap: 2px;
   padding: 9px 11px;
   border: 1px solid var(--glass-border);
@@ -162,11 +165,21 @@
 }
 
 .coach-chart-shell {
+  position: relative;
   height: 240px;
 }
 
+.coach-chart-plot {
+  position: absolute;
+  inset: 0;
+}
+
+/* On the dashboard the plot takes its size tier as a floor and grows into any
+   height the widget has left, so a card never ends in an empty band. */
 .coach-chart-card-panel .coach-chart-shell {
-  height: 220px;
+  flex: 1 0 var(--coach-chart-height, 220px);
+  height: auto;
+  min-height: var(--coach-chart-height, 220px);
 }
 
 .coach-chart-note {
@@ -204,8 +217,7 @@
     min-width: 0;
   }
 
-  .coach-chart-shell,
-  .coach-chart-card-panel .coach-chart-shell {
+  .coach-chart-card-chat .coach-chart-shell {
     height: 200px;
   }
 }
@@ -232,11 +244,6 @@
   flex-wrap: wrap;
   gap: 8px;
   margin: 0;
-}
-
-.coach-chart-stamp {
-  color: var(--text-muted);
-  font-size: 11.5px;
 }
 
 .coach-chart-freshness {
@@ -298,8 +305,160 @@
   box-shadow: inset 0 2px 0 color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
-.coach-charts-panel-meta {
-  margin: 4px 0 0;
+/* ----- Training Hub: widget sizes -----
+   The Coach charts widget resizes like the other chart widgets. Width comes
+   from the dashboard grid; the height tier sets the plot height and how much
+   supporting text each card keeps. */
+
+.coach-charts-panel[data-chart-size="mini"] { --coach-chart-height: 96px; }
+.coach-charts-panel[data-chart-size="short"] { --coach-chart-height: 148px; }
+.coach-charts-panel[data-chart-size="standard"] { --coach-chart-height: 220px; }
+.coach-charts-panel[data-chart-size="tall"] { --coach-chart-height: 340px; }
+
+.coach-charts-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .coach-charts-panel-grid {
+  gap: 10px;
+}
+
+.coach-charts-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .coach-chart-card {
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.coach-charts-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .coach-chart-tiles {
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 6px;
+}
+
+.coach-charts-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .coach-chart-tile {
+  padding: 6px 9px;
+}
+
+.coach-charts-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .coach-chart-tile-value {
+  font-size: 15px;
+}
+
+.coach-charts-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .coach-chart-note,
+.coach-charts-panel[data-chart-size="mini"] .coach-chart-tile-caption {
+  display: none;
+}
+
+.coach-charts-panel[data-chart-size="mini"] .coach-chart-tile-label {
+  font-size: 9.5px;
+}
+
+.coach-charts-panel[data-chart-size="mini"] .coach-chart-tile-value {
+  font-size: 14px;
+}
+
+/* ----- Training Hub: card header -----
+   Everything on the dashboard is pinned, so the card leads with its own title.
+   Freshness and age sit in one small line above it, Refresh and Unpin are
+   quiet icons, and only Make live keeps a label. */
+
+.coach-chart-kicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0 0 3px;
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.coach-chart-kicker > * + *::before {
+  content: "·";
+  margin: 0 7px;
+  color: var(--text-muted);
+}
+
+.coach-chart-status {
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+}
+
+.coach-chart-status i {
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.coach-chart-status.is-live {
+  color: var(--success-text, var(--text-primary));
+}
+
+.coach-chart-status.is-partial {
+  color: var(--warning-text, var(--text-primary));
+}
+
+.coach-chart-card-panel .coach-chart-heading h4 {
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.coach-chart-action.is-icon {
+  justify-content: center;
+  width: 28px;
+  padding: 0;
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+
+.coach-chart-action.is-icon:hover:not(:disabled) {
+  border-color: var(--glass-border);
+}
+
+.coach-chart-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ----- Training Hub: one chart vs several ----- */
+
+.coach-charts-panel-label {
+  margin: 0;
+}
+
+/* Several charts: the grid fills the widget so a short card's plot can grow to
+   match its row-mate instead of leaving a gap under it. */
+.coach-charts-panel[data-chart-size] .coach-charts-panel-grid {
+  flex: 1 0 auto;
+}
+
+/* One chart is the widget itself: no card inside the card. */
+.coach-charts-panel.is-single .coach-chart-card {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.coach-charts-panel.is-single .coach-chart-heading h4 {
+  font-size: 17px;
+}
+
+.coach-charts-panel-empty {
+  display: grid;
+  flex: 1;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.coach-charts-panel-empty p {
+  max-width: 34ch;
+  margin: 0;
+}
+
+.coach-charts-panel-empty svg {
+  color: var(--text-muted);
 }

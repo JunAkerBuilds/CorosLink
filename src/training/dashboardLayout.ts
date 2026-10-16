@@ -17,7 +17,7 @@ export const widgetCatalog = [
   { id: 'trend-rpe', title: 'Perceived load trend', description: 'Your perceived effort load over time.', sizes: [3, 4, 6, 8, 12], size: 6 },
   { id: 'trend-hrv', title: 'HRV trend', description: 'Overnight variability against your baseline.', sizes: [3, 4, 6, 8, 12], size: 6 },
   { id: 'trend-sleep', title: 'Sleep duration', description: 'Your seven-day sleep duration comparison.', sizes: [3, 4, 6, 8, 12], size: 6 },
-  { id: 'coach', title: 'Coach charts', description: 'Charts pinned from your coach conversations.', sizes: [12], size: 12 },
+  { id: 'coach', title: 'Coach charts', description: 'Charts pinned from your coach conversations.', sizes: [3, 4, 6, 8, 12], size: 12 },
   { id: 'zones-heart', title: 'Heart rate zones', description: 'Threshold heart rate zone distribution.', sizes: [3, 4, 6, 8, 12], size: 6 },
   { id: 'zones-distance', title: 'Distance zones', description: 'Distribution of your running distances.', sizes: [3, 4, 6, 8, 12], size: 6 },
   { id: 'scores', title: 'Fitness scores', description: 'Your current performance profile.', sizes: [3, 4, 6, 8, 12], size: 3 },
