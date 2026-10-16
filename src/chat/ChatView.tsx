@@ -3512,6 +3512,7 @@ export function ChatView({
     <div className="chat-provider-controls">
       {providerSwitch}
       <ModelSwitch
+        api={api}
         provider={chatSettings.provider}
         model={selectedModel}
         disabled={savingSettings || isBusy}

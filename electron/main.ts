@@ -394,6 +394,7 @@ import {
   getChatAuthStatus,
   getChatSessionEntries,
   getChatSettings,
+  listChatModelOptions,
   listChatSessionsForProvider,
   loginChat,
   logoutChat,
@@ -1709,6 +1710,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("chat:openOpenRouterModels", () =>
     shell.openExternal(OPENROUTER_MODELS_URL)
+  );
+
+  ipcMain.handle("chat:listModels", (_event, provider: ChatProvider) =>
+    listChatModelOptions(provider)
   );
 
   ipcMain.handle("chat:getClaudeCodeStatus", () =>

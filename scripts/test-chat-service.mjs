@@ -748,9 +748,11 @@ globalThis.fetch = originalFetch;
 const { readChatSettingsFromStore, saveChatSettingsToStore } = await import(
   `${distUrl("chatSettingsStore.js")}?cacheBust=${Date.now()}`
 );
-const { getChatGptModelCandidates } = await import(
-  `${distUrl("chatModels.js")}?cacheBust=${Date.now()}`
-);
+const {
+  getChatGptModelCandidates,
+  chatGptModelOptionsFromCatalog,
+  claudeModelOptionsFromCli
+} = await import(`${distUrl("chatModels.js")}?cacheBust=${Date.now()}`);
 
 assert.deepEqual(
   getChatGptModelCandidates("gpt-5.6-terra", "gpt-5.5"),
@@ -758,7 +760,57 @@ assert.deepEqual(
 );
 assert.deepEqual(
   getChatGptModelCandidates(undefined, "gpt-5.5").slice(0, 2),
-  ["gpt-5.5", "gpt-6-astra"]
+  ["gpt-5.5", "gpt-6.1-sol"]
+);
+
+assert.deepEqual(
+  chatGptModelOptionsFromCatalog([
+    { slug: "gpt-6.1-sol", displayName: "GPT-6.1-Sol", efforts: [] },
+    { slug: "gpt-5.5", displayName: "GPT-5.5", efforts: [] }
+  ]),
+  [
+    { value: "", label: "Auto" },
+    { value: "gpt-6.1-sol", label: "GPT-6.1 Sol" },
+    { value: "gpt-5.5", label: "GPT-5.5" }
+  ]
+);
+
+// Rows as Claude Code 2.1.296 reports them through supportedModels().
+assert.deepEqual(
+  claudeModelOptionsFromCli([
+    { value: "default", resolvedModel: "claude-opus-5-5", displayName: "Default (recommended)" },
+    { value: "opus", resolvedModel: "claude-opus-5-5", displayName: "Opus 5.5" },
+    { value: "fable", resolvedModel: "claude-fable-5-1", displayName: "Fable 5.1" },
+    { value: "sonnet", resolvedModel: "claude-sonnet-5-5", displayName: "Sonnet 5.5" },
+    { value: "haiku", resolvedModel: "claude-haiku-5-5", displayName: "Haiku 5.5" },
+    { value: "claude-haiku-4-5-20251001", resolvedModel: "claude-haiku-4-5-20251001", displayName: "Haiku 4.5" },
+    { value: "claude-opus-4-8", resolvedModel: "claude-opus-4-8", displayName: "Opus 4.8" }
+  ]),
+  [
+    { value: "", label: "Default", detail: "Opus 5.5" },
+    { value: "opus", label: "Claude Opus 5.5" },
+    { value: "fable", label: "Claude Fable 5.1" },
+    { value: "sonnet", label: "Claude Sonnet 5.5" },
+    { value: "haiku", label: "Claude Haiku 5.5" }
+  ]
+);
+
+// Subscription sign-ins get short names and Fable only as a pinned 1M id.
+assert.deepEqual(
+  claudeModelOptionsFromCli([
+    { value: "default", resolvedModel: "claude-opus-5-5", displayName: "Default (recommended)" },
+    { value: "opus", resolvedModel: "claude-opus-5-5", displayName: "Opus" },
+    { value: "claude-fable-5-1[1m]", resolvedModel: "claude-fable-5-1", displayName: "Fable" },
+    { value: "sonnet", resolvedModel: "claude-sonnet-5-5", displayName: "Sonnet" },
+    { value: "haiku", resolvedModel: "claude-haiku-5-5", displayName: "Haiku" }
+  ]),
+  [
+    { value: "", label: "Default", detail: "Opus 5.5" },
+    { value: "opus", label: "Claude Opus 5.5" },
+    { value: "claude-fable-5-1[1m]", label: "Claude Fable 5.1" },
+    { value: "sonnet", label: "Claude Sonnet 5.5" },
+    { value: "haiku", label: "Claude Haiku 5.5" }
+  ]
 );
 
 const settingsValues = new Map();

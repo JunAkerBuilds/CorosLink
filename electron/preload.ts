@@ -1,5 +1,5 @@
 import type { CalendarEventTiming, CalendarWorkoutEventRef, CalendarWorkoutEventSaveResult } from "./calendarSyncTypes";
-import type { ChatGptModelInfo } from "./chatModels";
+import type { ChatGptModelInfo, ChatModelOption } from "./chatModels";
 import type { HealthInsightKind, HealthInsightResult } from "./healthInsightsTypes";
 import { contextBridge, ipcRenderer } from "electron";
 import type { CorosNativeBleSnapshot } from "./corosNativeBleTypes";
@@ -1212,6 +1212,8 @@ const api = {
     ipcRenderer.invoke("chat:openOpenRouterKeys"),
   openOpenRouterModels: (): Promise<void> =>
     ipcRenderer.invoke("chat:openOpenRouterModels"),
+  listChatModels: (provider: ChatProvider): Promise<ChatModelOption[]> =>
+    ipcRenderer.invoke("chat:listModels", provider),
   getClaudeCodeStatus: (): Promise<ClaudeCodeStatus> =>
     ipcRenderer.invoke("chat:getClaudeCodeStatus"),
   connectClaudeCode: (): Promise<ClaudeCodeStatus> =>

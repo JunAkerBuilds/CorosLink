@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { constants as fsConstants } from "node:fs";
 import { z } from "zod";
+import type { ClaudeCliModel } from "./chatModels";
 import type {
   ChatMessage,
   ClaudeCodeConnectionTest,
@@ -17,6 +18,7 @@ const DETECTION_TIMEOUT_MS = 5_000;
 const AUTH_TIMEOUT_MS = 8_000;
 const TEST_TIMEOUT_MS = 45_000;
 const REQUEST_TIMEOUT_MS = 3 * 60_000;
+const MODEL_LIST_TIMEOUT_MS = 20_000;
 
 const SUBSCRIPTION_ENV_KEYS = [
   "ANTHROPIC_API_KEY",
@@ -64,7 +66,7 @@ export interface StreamClaudeCodeOptions extends ClaudeCodeToolCallbacks {
   tools: CorosMcpTool[];
   signal: AbortSignal;
   timeoutMs?: number;
-  /** Model alias (opus/sonnet/haiku) or full id. Omit for the account default. */
+  /** Model alias (opus/fable/sonnet/haiku) or full id. Omit for the account default. */
   model?: string;
 }
 
@@ -354,6 +356,50 @@ export async function testClaudeCodeConnection(
       message: error.message
     };
     return { ok: false, status: failedStatus, message: error.message };
+  }
+}
+
+/**
+ * Asks the CLI which models it offers without running a turn: the session
+ * initializes, reports its catalog, and closes. Spends no usage.
+ */
+export async function listClaudeCodeModels(
+  executablePath: string
+): Promise<ClaudeCliModel[]> {
+  const sdk = await import("@anthropic-ai/claude-agent-sdk");
+  const controller = new AbortController();
+  // Streaming-input mode keeps the session open with no prompt to answer.
+  async function* noPrompt(): AsyncGenerator<never> {
+    await new Promise<void>((resolve) =>
+      controller.signal.addEventListener("abort", () => resolve(), { once: true })
+    );
+  }
+  const session = sdk.query({
+    prompt: noPrompt(),
+    options: {
+      abortController: controller,
+      pathToClaudeCodeExecutable: executablePath,
+      tools: [],
+      settingSources: [],
+      persistSession: false,
+      env: createClaudeSubscriptionEnvironment()
+    }
+  });
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      session.supportedModels(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("Claude Code did not list its models.")),
+          MODEL_LIST_TIMEOUT_MS
+        );
+      })
+    ]);
+  } finally {
+    clearTimeout(timeout);
+    session.close();
+    controller.abort();
   }
 }
 

@@ -21,6 +21,7 @@ import type {
 } from "../../electron/types";
 import { CoachInstructionsSettings } from "./CoachInstructionsSettings";
 import { McpServersPanel } from "./McpServersPanel";
+import { formatChatModelLabel, useChatModelOptions } from "./ModelSwitch";
 import {
   ChatSettingsSectionHeader,
   chatSettingsSectionDomId
@@ -37,6 +38,31 @@ function claudeStatusLabel(status: ClaudeCodeStatus | null): string {
   if (status.state === "connected") return t("Connected");
   if (status.state === "usage-limit-reached") return t("Usage limit reached");
   return t("Connection failed");
+}
+
+/** Claude Code's own model catalog, labelled with the version each alias runs. */
+function ClaudeModelSelect({
+  api,
+  value,
+  onChange
+}: {
+  api: CorosLinkApi | undefined;
+  value: string;
+  onChange: (model: string) => void;
+}) {
+  const options = useChatModelOptions(api, "claude-code");
+  return (
+    <select value={value} onChange={(event) => onChange(event.target.value)}>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {formatChatModelLabel(option)}
+        </option>
+      ))}
+      {options.some((option) => option.value === value) ? null : (
+        <option value={value}>{value}</option>
+      )}
+    </select>
+  );
 }
 
 export function ChatSettingsPanel({
@@ -373,17 +399,11 @@ export function ChatSettingsPanel({
 
           <label className="chat-local-field">
             <span>{t("Model")}</span>
-            <select
+            <ClaudeModelSelect
+              api={api}
               value={chatSettings.claudeCode.model ?? ""}
-              onChange={(event) =>
-                onUpdateClaudeCode({ model: event.target.value })
-              }
-            >
-              <option value="">{t("Account default")}</option>
-              <option value="opus">{t("Opus (most capable)")}</option>
-              <option value="sonnet">{t("Sonnet (balanced)")}</option>
-              <option value="haiku">{t("Haiku (fastest)")}</option>
-            </select>
+              onChange={(model) => onUpdateClaudeCode({ model })}
+            />
           </label>
         </div>
 

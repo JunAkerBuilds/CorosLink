@@ -79,8 +79,10 @@ import {
 } from "./openRouterProvider";
 import {
   ClaudeCodeProviderError,
+  detectClaudeCodeExecutable,
   getClaudeCodeStatus as inspectClaudeCodeStatus,
   launchClaudeCodeLogin,
+  listClaudeCodeModels,
   streamClaudeCodeCompletion,
   testClaudeCodeConnection as runClaudeCodeConnectionTest
 } from "./claudeCodeProvider";
@@ -92,9 +94,15 @@ import {
   type ChatSettingsStore
 } from "./chatSettingsStore";
 import {
+  CHATGPT_AUTO_CATALOG,
   CHATGPT_FALLBACK_MODELS,
+  CLAUDE_MODEL_OPTIONS,
+  chatGptModelOptionsFromCatalog,
+  claudeModelOptionsFromCli,
   getChatGptModelCandidates,
-  type ChatGptModelInfo
+  getChatModelOptions,
+  type ChatGptModelInfo,
+  type ChatModelOption
 } from "./chatModels";
 import {
   createChatSession,
@@ -163,7 +171,7 @@ const IMAGES_URL = "https://chatgpt.com/backend-api/codex/images";
 const IMAGE_MODEL = "gpt-image-2";
 // Same catalog the Codex CLI reads; it gates newer models by client version.
 const MODELS_URL = "https://chatgpt.com/backend-api/codex/models";
-const MODELS_CLIENT_VERSION = "0.155.0";
+const MODELS_CLIENT_VERSION = "0.162.0";
 const MODELS_CACHE_MS = 10 * 60_000;
 // Max agent rounds: each round is one model response; if it calls COROS tools
 // we execute them and loop, until it answers with no further tool calls.
@@ -175,7 +183,9 @@ const RESPONSES_USER_AGENT = "codex_cli_rs";
 const SETTINGS = {
   token: "chat.oauthToken",
   authUpdatedAt: "chat.authUpdatedAt",
-  model: "chat.model"
+  model: "chat.model",
+  /** Auto order the cached model was found under. */
+  modelCatalog: "chat.modelCatalog"
 } as const;
 
 // requestId -> AbortController for in-flight streams.
@@ -398,7 +408,12 @@ export function logoutChat(): ChatAuthStatus {
     controller.abort();
   }
   activeStreams.clear();
-  deleteSettings([SETTINGS.token, SETTINGS.authUpdatedAt, SETTINGS.model]);
+  deleteSettings([
+    SETTINGS.token,
+    SETTINGS.authUpdatedAt,
+    SETTINGS.model,
+    SETTINGS.modelCatalog
+  ]);
   return { signedIn: false };
 }
 
@@ -1419,7 +1434,11 @@ async function resolveModelAndOpenStream(
   selectedModel?: string,
   reasoningEffort?: string
 ): Promise<{ response: Response } | { error: string; authError: boolean }> {
-  const cached = getSetting(SETTINGS.model);
+  // A model cached under an older Auto order would hide newer models forever.
+  const cached =
+    getSetting(SETTINGS.modelCatalog) === CHATGPT_AUTO_CATALOG
+      ? getSetting(SETTINGS.model)
+      : undefined;
   const candidates = getChatGptModelCandidates(selectedModel, cached);
 
   let lastDetail = "";
@@ -1463,7 +1482,10 @@ async function resolveModelAndOpenStream(
     }
 
     if (response.ok && response.body) {
-      if (model !== cached) setSetting(SETTINGS.model, model);
+      if (model !== cached) {
+        setSetting(SETTINGS.model, model);
+        setSetting(SETTINGS.modelCatalog, CHATGPT_AUTO_CATALOG);
+      }
       return { response };
     }
 
@@ -1627,6 +1649,54 @@ export async function listChatGptModels(): Promise<ChatGptModelInfo[]> {
     console.warn("[chat] ChatGPT model list unavailable:", error instanceof Error ? error.message : error);
     return CHATGPT_FALLBACK_MODELS;
   }
+}
+
+let claudeModelCache:
+  | { at: number; executablePath: string; options: Promise<ChatModelOption[]> }
+  | null = null;
+
+async function listClaudeModelOptions(): Promise<ChatModelOption[]> {
+  const executablePath = await detectClaudeCodeExecutable(
+    getChatSettings().claudeCode.executablePath
+  );
+  if (!executablePath) return CLAUDE_MODEL_OPTIONS;
+  if (
+    claudeModelCache?.executablePath === executablePath &&
+    Date.now() - claudeModelCache.at < MODELS_CACHE_MS
+  ) {
+    return claudeModelCache.options;
+  }
+  // Cache the pending lookup so pickers mounting together share one CLI launch.
+  const options = listClaudeCodeModels(executablePath)
+    .then((models) => {
+      const listed = claudeModelOptionsFromCli(models);
+      if (listed.length < 2) throw new Error("empty model list");
+      return listed;
+    })
+    .catch((error: unknown) => {
+      console.warn(
+        "[chat] Claude Code model list unavailable:",
+        error instanceof Error ? error.message : error
+      );
+      if (claudeModelCache?.options === options) claudeModelCache = null;
+      return CLAUDE_MODEL_OPTIONS;
+    });
+  claudeModelCache = { at: Date.now(), executablePath, options };
+  return options;
+}
+
+/**
+ * Model picker rows for a Coach provider, from the provider's own live
+ * catalog where it has one. Falls back to the static list on any failure.
+ */
+export async function listChatModelOptions(
+  provider: ChatProvider
+): Promise<ChatModelOption[]> {
+  if (provider === "claude-code") return listClaudeModelOptions();
+  if (provider === "chatgpt") {
+    return chatGptModelOptionsFromCatalog(await listChatGptModels());
+  }
+  return getChatModelOptions(provider);
 }
 
 /** A COROS message turned into a Responses-API input item. */

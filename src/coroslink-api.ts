@@ -1,6 +1,6 @@
 import type { CalendarEventTiming, CalendarWorkoutEventRef, CalendarWorkoutEventSaveResult } from "../electron/calendarSyncTypes";
 import type { CorosNativeBleSnapshot } from "../electron/corosNativeBleTypes";
-import type { ChatGptModelInfo } from "../electron/chatModels";
+import type { ChatGptModelInfo, ChatModelOption } from "../electron/chatModels";
 import type { StrengthEditPreview } from "../electron/workoutEditTypes";
 import type { HealthInsightKind, HealthInsightResult } from "../electron/healthInsightsTypes";
 import type { DiagnosticsSnapshot, RendererDiagnosticError } from "../electron/diagnosticsTypes";
@@ -799,6 +799,7 @@ export interface CorosLinkApi {
   ) => Promise<OpenRouterConnectionTest>;
   openOpenRouterKeys: () => Promise<void>;
   openOpenRouterModels: () => Promise<void>;
+  listChatModels: (provider: ChatProvider) => Promise<ChatModelOption[]>;
   getClaudeCodeStatus: () => Promise<ClaudeCodeStatus>;
   connectClaudeCode: () => Promise<ClaudeCodeStatus>;
   testClaudeCodeConnection: () => Promise<ClaudeCodeConnectionTest>;
