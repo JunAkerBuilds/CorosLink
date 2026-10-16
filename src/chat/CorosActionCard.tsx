@@ -1,5 +1,5 @@
 import { t, useLanguage } from "../i18n/tools";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bookmark,
   CalendarDays,
@@ -157,6 +157,8 @@ export function CorosActionCard({ preview, onConfirm }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const [result, setResult] = useState<CoachCorosActionPreview>();
+  // The Coach hub's entry is the truth once it changes, whichever device saved.
+  useEffect(() => setResult(undefined), [preview]);
   const current = result ?? preview;
   const date = isoDateFromCompact(current.date);
   const workouts = actionWorkouts(current);
@@ -171,11 +173,11 @@ export function CorosActionCard({ preview, onConfirm }: {
     : isCalendar
       ? t("Adds to your COROS Calendar{{p0}}.", { p0: when ? t(" on {{p0}}", { p0: when }) : "" })
       : t("Saves to your COROS Workout Library.");
-  const actionLabel = saving
+  // "saving" is a save in flight, possibly started from another device.
+  const busy = saving || current.state === "saving";
+  const actionLabel = busy
     ? t("Saving…")
-    : current.state === "saving"
-      ? t("Check save status")
-      : isPlan
+    : isPlan
         ? t("Save plan to COROS")
         : isCalendar
           ? t("Add to COROS Calendar")
@@ -236,8 +238,8 @@ export function CorosActionCard({ preview, onConfirm }: {
           {error ? <p role="alert">{error}</p> : null}
           {(current.state === "pending" || current.state === "saving") && (
             <div className="chat-plan-actions">
-              <button type="button" className="chat-plan-upload" onClick={() => void save()} disabled={saving} title={destinationNote}>
-                {saving ? <Loader2 className="chat-spinner" size={14} aria-hidden="true" /> : <DestinationIcon size={14} aria-hidden="true" />}
+              <button type="button" className="chat-plan-upload" onClick={() => void save()} disabled={busy} title={destinationNote}>
+                {busy ? <Loader2 className="chat-spinner" size={14} aria-hidden="true" /> : <DestinationIcon size={14} aria-hidden="true" />}
                 {actionLabel}
               </button>
             </div>

@@ -9,6 +9,8 @@ import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, Watc
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "../electron/googleCalendarTypes";
 import type { ManualRaceInput, RaceEditInput, RaceOverview, StravaRaceImportResult } from "../electron/raceTypes";
 import type { WorkoutJournalEntry, WorkoutJournalSaveInput } from "../electron/workoutJournalTypes";
+import type { CoachConfirmInput, CoachConfirmResult, CoachEventFrame, CoachSendInput, CoachSessionsChange, CoachSnapshot, CoachSubscribeResult } from "../electron/coachHub/coachContract";
+import type { RemoteAccessStatus, RemotePairingCode } from "../electron/remote/contract";
 import type {
   ActivityBackupFilters,
   ActivityBackupPreview,
@@ -849,6 +851,37 @@ export interface CorosLinkApi {
   ) => Promise<UploadPlanResult>;
   confirmCorosAction: (requestId: string) => Promise<CoachCorosActionPreview>;
   confirmWorkoutDelete: (requestId: string) => Promise<DeleteWorkoutResult>;
+  coachListSessions: (provider?: ChatProvider) => Promise<ChatSessionSummary[]>;
+  coachGetSession: (sessionId: string) => Promise<CoachSnapshot>;
+  coachCreateSession: (provider: ChatProvider) => Promise<ChatSessionSummary>;
+  coachDeleteSession: (sessionId: string) => Promise<void>;
+  coachSubscribe: (
+    sessionId: string,
+    afterSeq: number
+  ) => Promise<{ response: CoachSubscribeResult; replay: CoachEventFrame[] }>;
+  coachUnsubscribe: (sessionId: string) => Promise<void>;
+  coachSend: (input: CoachSendInput) => Promise<{ requestId: string }>;
+  coachCancel: (sessionId: string) => Promise<{ cancelled: boolean }>;
+  coachConfirm: (input: CoachConfirmInput) => Promise<CoachConfirmResult>;
+  coachBeginLocalTurn: (sessionId: string, clientMessageId: string, text: string) => Promise<{ requestId: string }>;
+  coachFinishLocalTurn: (sessionId: string, requestId: string, reply: string) => Promise<void>;
+  onCoachEvent: (callback: (frame: CoachEventFrame) => void) => () => void;
+  onCoachSessionsChanged: (callback: (change: CoachSessionsChange) => void) => () => void;
+  getRemoteAccessStatus: () => Promise<RemoteAccessStatus>;
+  setRemoteNetworkAccess: (enabled: boolean) => Promise<RemoteAccessStatus>;
+  setRemoteKeepAwake: (enabled: boolean) => Promise<RemoteAccessStatus>;
+  createRemotePairing: (input?: { viewOnly?: boolean }) => Promise<RemotePairingCode>;
+  cancelRemotePairing: (id?: string) => Promise<RemoteAccessStatus>;
+  revokeRemoteDevice: (id: string) => Promise<RemoteAccessStatus>;
+  /** Away from home: sign in to watchfaces.coroslink.com in the browser. */
+  cloudSignIn: () => Promise<RemoteAccessStatus>;
+  cloudCancelSignIn: () => Promise<RemoteAccessStatus>;
+  /** Signs out of watchfaces.coroslink.com and unlinks this computer. */
+  cloudSignOut: () => Promise<RemoteAccessStatus>;
+  /** "Link this computer"; `allowDownload` once the person agreed to download cloudflared. */
+  setCloudLink: (input: { enabled: boolean; allowDownload?: boolean }) => Promise<RemoteAccessStatus>;
+  cloudUnlink: () => Promise<RemoteAccessStatus>;
+  onRemoteAccessStatus: (callback: (status: RemoteAccessStatus) => void) => () => void;
   getFitIndexStatus: () => Promise<FitIndexStatus>;
   startFitIndexSync: (options?: FitIndexSyncOptions) => Promise<FitIndexProgress>;
   cancelFitIndexSync: () => Promise<FitIndexProgress | null>;

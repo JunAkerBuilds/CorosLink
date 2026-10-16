@@ -397,7 +397,11 @@ function parseWorkoutDeletePreview(value: unknown): WorkoutDeletePreview | null 
     scheduleDate:
       typeof value.scheduleDate === "string" ? value.scheduleDate : undefined,
     programId: typeof value.programId === "string" ? value.programId : undefined,
-    summary: value.summary
+    summary: value.summary,
+    ...(value.state === "pending" || value.state === "deleted" || value.state === "failed"
+      ? { state: value.state }
+      : {}),
+    ...(typeof value.message === "string" ? { message: value.message } : {})
   };
 }
 
@@ -1048,6 +1052,11 @@ export function restoreChatPlanDraftSources(
   });
 }
 
+/** The entry as it will read back after a save, or null when a save would drop it. */
+export function normalizePersistedChatEntry(entry: PersistedChatEntry): PersistedChatEntry | null {
+  return parseEntry(entry);
+}
+
 function normalizeEntries(entries: PersistedChatEntry[]): PersistedChatEntry[] {
   return entries
     .map((entry) => parseEntry(entry))
@@ -1154,6 +1163,14 @@ export function listChatSessions(
   return database
     .listSessions(normalizeProvider(provider))
     .map((row) => toSessionSummary(row));
+}
+
+export function getChatSessionSummary(
+  id: string,
+  database: ChatSessionDatabase = defaultDatabase
+): ChatSessionSummary | undefined {
+  const row = database.getSession(id);
+  return row ? toSessionSummary(row) : undefined;
 }
 
 export function getChatSession(

@@ -4,6 +4,7 @@ import {
   Cpu,
   MessageSquareText,
   Plug,
+  Smartphone,
   Sparkles,
   UserRound,
   Waypoints,
@@ -13,6 +14,7 @@ import {
 export type ChatSettingsSectionId =
   | "display"
   | "coach"
+  | "remote"
   | "chatgpt"
   | "openrouter"
   | "claude"
@@ -38,6 +40,13 @@ export const CHAT_SETTINGS_SECTIONS: ReadonlyArray<{
     label: "Coach instructions",
     description: "Goals, schedule, and tone your coach should know",
     icon: MessageSquareText,
+    group: "Coach"
+  },
+  {
+    id: "remote",
+    label: "Remote access",
+    description: "Use Coach from C-LINK on your iPhone",
+    icon: Smartphone,
     group: "Coach"
   },
   {

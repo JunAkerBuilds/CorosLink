@@ -89,9 +89,14 @@ import type {
   TrainingHubExportResult,
   UploadPlanResult,
   WorkoutIntensityInput,
-  WorkoutDeletePreview,
-  DeleteWorkoutResult
+  WorkoutDeletePreview
 } from "../../electron/types";
+import {
+  applyCoachEvent,
+  coachStateFromSnapshot,
+  type CoachClientState,
+  type CoachEventFrame
+} from "../../electron/coachHub/coachContract";
 import { formatWorkoutSport } from "../../electron/workoutCapabilities";
 import { trainingPlanFromCoachDraftPreview } from "../../electron/trainingPlanDomain";
 import { sportTheme } from "../training-library/sportTheme";
@@ -104,17 +109,6 @@ import { ChatSidebar } from "./ChatSidebar";
 import { ModelSwitch } from "./ModelSwitch";
 import { ProviderSwitch } from "./ProviderSwitch";
 import {
-  fromPersistedEntries,
-  toPersistedEntries,
-  toWireMessages,
-  upsertActivityVisualEntry,
-  upsertCoachChartEntry,
-  upsertCoachPromptEntry,
-  upsertFitnessTrendEntry,
-  upsertHrZoneEntry,
-  upsertPlanDraftEntry,
-  upsertWorkoutDeleteEntry,
-  upsertCorosActionEntry,
   isChatVisualEntry,
   listCoachCreations,
   planEntryScheduleDate,
@@ -124,6 +118,8 @@ import {
   type CoachPrefill,
   type SourceInfo
 } from "./chatTypes";
+
+const NO_ENTRIES: ChatEntry[] = [];
 
 const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   provider: "chatgpt",
@@ -1546,12 +1542,10 @@ function deleteTargetLabel(target: WorkoutDeletePreview["target"]): string {
 function DeletePreviewCard({
   preview,
   deleting,
-  deleted,
   onConfirm
 }: {
   preview: WorkoutDeletePreview;
   deleting: boolean;
-  deleted?: DeleteWorkoutResult;
   onConfirm: () => void;
 }) {
   useLanguage();
@@ -1579,9 +1573,13 @@ function DeletePreviewCard({
           </div>
         ) : null}
       </dl>
-      {deleted ? (
-        <p className="chat-plan-success">{deleted.message}</p>
+      {preview.state === "deleted" ? (
+        <p className="chat-plan-success">{preview.message}</p>
       ) : (
+        <>
+        {preview.state === "failed" && preview.message ? (
+          <p role="alert">{preview.message}</p>
+        ) : null}
         <div className="chat-plan-actions">
           <button
             type="button"
@@ -1596,6 +1594,7 @@ function DeletePreviewCard({
             )}
             {t("Delete from COROS")}</button>
         </div>
+        </>
       )}
     </div>
   );
@@ -1915,13 +1914,29 @@ export function ChatView({
   useEffect(() => {
     if (accountSetupRequest > 0) setSettingsOpen(true);
   }, [accountSetupRequest]);
-  const [timeline, setTimeline] = useState<ChatEntry[]>([]);
-  const [streaming, setStreaming] = useState(false);
-  const [streamingText, setStreamingText] = useState("");
-  const [thinkingText, setThinkingText] = useState("");
-  const [activeTool, setActiveTool] = useState<string | null>(null);
+  // The open conversation as the Coach hub in the main process reports it.
+  // This window renders it; the hub builds and saves the transcript.
+  const [coachState, setCoachState] = useState<CoachClientState | null>(null);
+  // Tools called so far in the turn in progress, for the live source badge.
+  const [liveTools, setLiveTools] = useState<{ requestId: string; tools: string[]; error?: string } | null>(null);
   const [exportingLatestActivity, setExportingLatestActivity] = useState(false);
-  const [currentSource, setCurrentSource] = useState<SourceInfo | null>(null);
+  const timeline = coachState?.entries ?? NO_ENTRIES;
+  const activeTurn = coachState?.activeTurn ?? null;
+  // The FIT export is a turn the window writes itself; it shows its own row.
+  const streaming = Boolean(activeTurn) && !exportingLatestActivity;
+  const streamingText = activeTurn?.text ?? "";
+  const thinkingText = activeTurn?.thinking ?? "";
+  const activeTool = activeTurn?.tool ?? null;
+  const currentSource: SourceInfo | null =
+    activeTurn && liveTools?.requestId === activeTurn.requestId && liveTools.tools.length > 0
+      ? {
+          snapshotIncluded: false,
+          mcpEnabled: true,
+          mcpUsed: true,
+          mcpTools: liveTools.tools,
+          ...(liveTools.error ? { mcpError: liveTools.error } : {})
+        }
+      : null;
   const [mcpStatus, setMcpStatus] = useState<CorosMcpStatus | null>(null);
   const [mcpStatuses, setMcpStatuses] = useState<McpServerStatus[]>([]);
   const [mcpRefreshVersion, setMcpRefreshVersion] = useState(0);
@@ -1935,15 +1950,9 @@ export function ChatView({
     number | null
   >(null);
   const [uploadingDraftId, setUploadingDraftId] = useState<string | null>(null);
-  const [uploadedPlans, setUploadedPlans] = useState<
-    Record<string, UploadPlanResult>
-  >({});
   const [deletingRequestId, setDeletingRequestId] = useState<string | null>(
     null
   );
-  const [deletedWorkouts, setDeletedWorkouts] = useState<
-    Record<string, DeleteWorkoutResult>
-  >({});
   // What is pinned on the Training Hub, so cards know whether they live there
   // and whether pinning would replace an older chart with the same title.
   const [pinnedCharts, setPinnedCharts] = useState<
@@ -2041,24 +2050,21 @@ export function ChatView({
     [api, onError, pinnedChartIds]
   );
 
-  // Ref so the push-event handlers filter on the current request without
-  // being recreated (and re-subscribed) on every keystroke.
-  const activeRequestIdRef = useRef<string | null>(null);
+  // Refs so the push-event handlers read current values without being
+  // recreated (and re-subscribed) on every keystroke.
   const activeSessionIdRef = useRef<string | null>(null);
-  // Accumulates source info across the current stream's info events.
-  const sourceRef = useRef<SourceInfo | null>(null);
-  const thinkingRef = useRef("");
-  // Interaction cards are appended after the assistant's final text so the
-  // question and its choices stay in a natural reading order.
-  const pendingCoachPromptsRef = useRef<CoachInputPrompt[]>([]);
-  // Kept only while a paused Coach turn is resuming, so a failed/cancelled
-  // request can restore the question instead of silently losing it.
-  const resumedCoachPromptRef = useRef<CoachInputPrompt | null>(null);
+  const coachStateRef = useRef<CoachClientState | null>(null);
+  // Events that arrive while a conversation is opening, applied once it is.
+  const pendingFramesRef = useRef<CoachEventFrame[]>([]);
+  const providerRef = useRef<ChatProvider>(DEFAULT_CHAT_SETTINGS.provider);
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+  const onPlanUploadedRef = useRef(onPlanUploaded);
+  onPlanUploadedRef.current = onPlanUploaded;
   const autoDetectLocalRef = useRef(false);
   const claudePollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const mcpRef = useRef<HTMLDivElement>(null);
-  const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chatHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
@@ -2085,60 +2091,47 @@ export function ChatView({
     chatSettings.provider
   ]);
 
-  const resetEphemeralChatState = () => {
-    setUploadedPlans({});
-    setDeletedWorkouts({});
-    pendingCoachPromptsRef.current = [];
-    resumedCoachPromptRef.current = null;
+  const showCoachState = (state: CoachClientState | null) => {
+    coachStateRef.current = state;
+    setCoachState(state);
   };
 
-  const persistHistory = (
-    sessionId: string | null,
-    entries: ChatEntry[],
-    immediate = false
-  ) => {
-    if (!api || !sessionId) return;
-    const run = () => {
-      void api
-        .saveChatSession(sessionId, toPersistedEntries(entries))
-        .then((summary) => {
-          if (!summary) return;
-          setSessions((current) => {
-            const index = current.findIndex((session) => session.id === summary.id);
-            if (index < 0) {
-              return [summary, ...current];
-            }
-            const next = [...current];
-            next[index] = summary;
-            next.sort(
-              (left, right) =>
-                new Date(right.updatedAt).getTime() -
-                new Date(left.updatedAt).getTime()
-            );
-            return next;
-          });
-        })
-        .catch(() => undefined);
-    };
-    if (persistTimeoutRef.current) {
-      clearTimeout(persistTimeoutRef.current);
-      persistTimeoutRef.current = null;
-    }
-    if (immediate) {
-      run();
-      return;
-    }
-    persistTimeoutRef.current = setTimeout(run, 300);
+  const upsertSessionSummary = (summary: ChatSessionSummary) => {
+    setSessions((current) => {
+      const next = [summary, ...current.filter((session) => session.id !== summary.id)];
+      next.sort(
+        (left, right) =>
+          new Date(right.updatedAt).getTime() -
+          new Date(left.updatedAt).getTime()
+      );
+      return next;
+    });
   };
 
+  /**
+   * Shows a conversation: its snapshot, then every event after its cursor. With
+   * `animate`, the switch morphs from the conversation on screen.
+   */
   const loadSession = async (sessionId: string, animate = false) => {
     if (!api) return;
+    activeSessionIdRef.current = sessionId;
+    setActiveSessionId(sessionId);
+    // The previous conversation stays up until this one's snapshot arrives.
+    setLiveTools(null);
+    pendingFramesRef.current = [];
     try {
-      const entries = await api.getChatSession(sessionId);
+      const snapshot = await api.coachGetSession(sessionId);
+      if (activeSessionIdRef.current !== sessionId) return;
+      const { response, replay } = await api.coachSubscribe(sessionId, snapshot.cursor);
+      if (activeSessionIdRef.current !== sessionId) return;
       const commit = () => {
-        setTimeline(fromPersistedEntries(entries));
-        resetEphemeralChatState();
-        setActiveSessionId(sessionId);
+        showCoachState(
+          coachStateFromSnapshot(response.mode === "snapshot" ? response.snapshot : snapshot)
+        );
+        // Events that arrived meanwhile were held for this snapshot; apply them in order.
+        const pending = pendingFramesRef.current;
+        pendingFramesRef.current = [];
+        applyCoachFramesRef.current([...replay, ...pending]);
       };
       if (animate) {
         morph(commit);
@@ -2146,14 +2139,15 @@ export function ChatView({
         commit();
       }
     } catch {
-      setTimeline([]);
-      resetEphemeralChatState();
+      if (activeSessionIdRef.current === sessionId) {
+        showCoachState(null);
+      }
     }
   };
 
   const refreshSessions = async (provider: ChatProvider) => {
     if (!api) return [];
-    const listed = await api.listChatSessions(provider);
+    const listed = await api.coachListSessions(provider);
     setSessions(listed);
     return listed;
   };
@@ -2165,13 +2159,105 @@ export function ChatView({
       await loadSession(listed[0].id);
       return listed[0].id;
     }
-    const created = await api.createChatSession(provider);
+    const created = await api.coachCreateSession(provider);
     setSessions([created]);
-    setActiveSessionId(created.id);
-    setTimeline([]);
-    resetEphemeralChatState();
+    await loadSession(created.id);
     return created.id;
   };
+
+  // Applies hub events to the open conversation, with the side effects the
+  // old in-window transcript had: errors, sign-in state, refreshed views.
+  const applyCoachFrames = (frames: CoachEventFrame[]) => {
+    let state = coachStateRef.current;
+    if (!state) return;
+    const wasEmpty = state.entries.length === 0;
+    for (const frame of frames) {
+      if (frame.sessionId !== state.sessionId || frame.seq <= state.cursor) continue;
+      const next = applyCoachEvent(state, frame);
+      if (next === "resync") {
+        void loadSession(state.sessionId);
+        return;
+      }
+      if (frame.event === "turn.started") {
+        setLiveTools({ requestId: frame.data.requestId, tools: [] });
+      } else if (frame.event === "turn.tool") {
+        const { requestId, tool, status, message } = frame.data;
+        setLiveTools((current) => {
+          const base = current?.requestId === requestId ? current : { requestId, tools: [] };
+          return {
+            requestId,
+            tools: tool ? [...base.tools, tool] : base.tools,
+            error: status === "failed" ? message ?? status : base.error
+          };
+        });
+      } else if (frame.event === "turn.completed") {
+        setLiveTools(null);
+      } else if (frame.event === "turn.failed") {
+        setLiveTools(null);
+        onErrorRef.current(frame.data.message);
+        if (frame.data.authError) {
+          setAuthStatus({ signedIn: false });
+        }
+        if (providerRef.current === "claude-code") {
+          void api
+            ?.getClaudeCodeStatus()
+            .then(setClaudeStatus)
+            .catch(() => undefined);
+        }
+      } else if (frame.event === "entry.updated") {
+        // Saves land on any device; refresh the Training views when one does.
+        const before = state.entries[frame.data.index];
+        const after = frame.data.entry;
+        const saved =
+          (after.kind === "planDraft" && before?.kind === "planDraft" &&
+            !before.draft.uploadedAt && Boolean(after.draft.uploadedAt)) ||
+          (after.kind === "corosAction" && before?.kind === "corosAction" &&
+            before.preview.state !== "saved" && after.preview.state === "saved") ||
+          (after.kind === "workoutDelete" && before?.kind === "workoutDelete" &&
+            before.preview.state !== "deleted" && after.preview.state === "deleted");
+        if (saved) onPlanUploadedRef.current?.();
+      }
+      state = next;
+    }
+    const settled = state;
+    // A conversation's first message morphs the hero into the transcript.
+    if (wasEmpty && settled.entries.length > 0) {
+      morph(() => showCoachState(settled));
+    } else {
+      showCoachState(settled);
+    }
+  };
+  const applyCoachFramesRef = useRef(applyCoachFrames);
+  applyCoachFramesRef.current = applyCoachFrames;
+
+  useEffect(() => {
+    if (!api) return;
+    const unsubscribeEvents = api.onCoachEvent((frame) => {
+      if (frame.sessionId !== activeSessionIdRef.current) return;
+      if (coachStateRef.current?.sessionId !== frame.sessionId) {
+        pendingFramesRef.current.push(frame);
+        return;
+      }
+      applyCoachFramesRef.current([frame]);
+    });
+    const unsubscribeSessions = api.onCoachSessionsChanged((change) => {
+      if (change.kind === "delete") {
+        setSessions((current) => current.filter((session) => session.id !== change.sessionId));
+      } else if (change.session.provider === providerRef.current) {
+        upsertSessionSummary(change.session);
+      }
+    });
+    return () => {
+      unsubscribeEvents();
+      unsubscribeSessions();
+      const sessionId = activeSessionIdRef.current;
+      if (sessionId) void api.coachUnsubscribe(sessionId).catch(() => undefined);
+    };
+  }, [api]);
+
+  useEffect(() => {
+    providerRef.current = chatSettings.provider;
+  }, [chatSettings.provider]);
 
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
@@ -2211,10 +2297,6 @@ export function ChatView({
       });
     return () => {
       cancelled = true;
-      if (persistTimeoutRef.current) {
-        clearTimeout(persistTimeoutRef.current);
-        persistTimeoutRef.current = null;
-      }
       if (claudePollTimerRef.current) {
         clearTimeout(claudePollTimerRef.current);
         claudePollTimerRef.current = null;
@@ -2245,11 +2327,6 @@ export function ChatView({
       cancelled = true;
     };
   }, [api, visible]);
-
-  useEffect(() => {
-    if (!api || checkingAuth || streaming || !activeSessionId) return;
-    persistHistory(activeSessionId, timeline);
-  }, [api, checkingAuth, streaming, timeline, activeSessionId]);
 
   useEffect(() => {
     onActivityChange?.(streaming || exportingLatestActivity);
@@ -2306,184 +2383,6 @@ export function ChatView({
     };
   }, [showTools, settingsOpen]);
 
-  // Subscribe once to the streaming push channels.
-  useEffect(() => {
-    if (!api) return;
-    const restoreResumedCoachPrompt = () => {
-      const originalPrompt = resumedCoachPromptRef.current;
-      resumedCoachPromptRef.current = null;
-      if (!originalPrompt) return;
-      setTimeline((prev) => {
-        const next = prev.map((entry): ChatEntry =>
-          entry.kind === "coachPrompt" &&
-          entry.prompt.promptId === originalPrompt.promptId
-            ? { kind: "coachPrompt", prompt: originalPrompt }
-            : entry
-        );
-        persistHistory(activeSessionIdRef.current, next, true);
-        return next;
-      });
-    };
-    const finishStreaming = (finalText: string, finishReason?: string) => {
-      activeRequestIdRef.current = null;
-      setStreaming(false);
-      setStreamingText("");
-      setThinkingText("");
-      setActiveTool(null);
-      const source = sourceRef.current ?? undefined;
-      const reasoningSummary = thinkingRef.current.trim() || undefined;
-      thinkingRef.current = "";
-      const coachPrompts = pendingCoachPromptsRef.current;
-      pendingCoachPromptsRef.current = [];
-      setCurrentSource(null);
-      sourceRef.current = null;
-      if (finishReason === "cancelled") {
-        restoreResumedCoachPrompt();
-        return;
-      }
-      resumedCoachPromptRef.current = null;
-      if (finalText || coachPrompts.length > 0) {
-        setTimeline((prev) => {
-          let next: ChatEntry[] = [...prev];
-          if (source?.mcpError) {
-            next.push({ kind: "toolNotice", message: source.mcpError });
-          }
-          if (finalText) {
-            next.push({
-              kind: "message",
-              role: "assistant",
-              content: finalText,
-              source,
-              reasoningSummary
-            });
-          }
-          for (const prompt of coachPrompts) {
-            next = upsertCoachPromptEntry(next, prompt);
-          }
-          persistHistory(activeSessionIdRef.current, next, true);
-          return next;
-        });
-      }
-    };
-
-    const unsubscribers = [
-      api.onChatStreamStart((payload) => {
-        if (payload.requestId !== activeRequestIdRef.current) return;
-        setStreamingText("");
-        setThinkingText("");
-        thinkingRef.current = "";
-        setActiveTool(null);
-        pendingCoachPromptsRef.current = [];
-      }),
-      api.onChatStreamToken((payload) => {
-        if (payload.requestId !== activeRequestIdRef.current) return;
-        setActiveTool(null);
-        setStreamingText((prev) => prev + payload.delta);
-      }),
-      api.onChatStreamInfo((payload) => {
-        if (payload.requestId !== activeRequestIdRef.current) return;
-        if (payload.kind === "context") {
-          sourceRef.current = {
-            snapshotIncluded: payload.snapshotIncluded,
-            mcpEnabled: payload.mcpEnabled,
-            mcpUsed: false,
-            mcpTools: []
-          };
-          setCurrentSource(sourceRef.current);
-        } else if (payload.kind === "planDraft") {
-          setTimeline((prev) => upsertPlanDraftEntry(prev, payload.draft));
-        } else if (payload.kind === "workoutEdit") {
-          setTimeline(prev => {
-            const entry = { kind: "workoutEdit" as const, preview: payload.preview };
-            const index = prev.findIndex(e => e.kind === "workoutEdit" && e.preview.proposalId === payload.preview.proposalId);
-            return index < 0 ? [...prev, entry] : prev.map((e, i) => i === index ? entry : e);
-          });
-        } else if (payload.kind === "corosAction") {
-          setTimeline(prev => upsertCorosActionEntry(prev, payload.preview));
-        } else if (payload.kind === "workoutDelete") {
-          setTimeline((prev) =>
-            upsertWorkoutDeleteEntry(prev, payload.preview)
-          );
-        } else if (payload.kind === "activityVisual") {
-          if (chatSettings.visualizationsEnabled) {
-            setTimeline((prev) => upsertActivityVisualEntry(prev, payload.preview));
-          }
-        } else if (payload.kind === "fitnessTrend") {
-          if (chatSettings.visualizationsEnabled) {
-            setTimeline((prev) => upsertFitnessTrendEntry(prev, payload.preview));
-          }
-        } else if (payload.kind === "hrZoneSummary") {
-          if (chatSettings.visualizationsEnabled) {
-            setTimeline((prev) => upsertHrZoneEntry(prev, payload.preview));
-          }
-        } else if (payload.kind === "coachChart") {
-          // Explicitly requested by the coach, so not subject to the visuals toggle.
-          setTimeline((prev) => upsertCoachChartEntry(prev, payload.preview));
-        } else if (payload.kind === "coachPrompt") {
-          pendingCoachPromptsRef.current = [
-            ...pendingCoachPromptsRef.current.filter(
-              (prompt) => prompt.promptId !== payload.prompt.promptId
-            ),
-            payload.prompt
-          ];
-        } else if (payload.kind === "thinking") {
-          thinkingRef.current += payload.delta;
-          setThinkingText(thinkingRef.current);
-        } else if (payload.kind === "mcp") {
-          setActiveTool(payload.status === "call" ? payload.tool ?? null : null);
-          const base: SourceInfo = sourceRef.current ?? {
-            snapshotIncluded: false,
-            mcpEnabled: true,
-            mcpUsed: false,
-            mcpTools: []
-          };
-          sourceRef.current = {
-            ...base,
-            mcpUsed: true,
-            mcpTools: payload.tool
-              ? [...base.mcpTools, payload.tool]
-              : base.mcpTools,
-            mcpError:
-              /fail|error/i.test(payload.status) || payload.message
-                ? payload.message ?? payload.status
-                : base.mcpError
-          };
-          setCurrentSource(sourceRef.current);
-        }
-      }),
-      api.onChatStreamDone((payload) => {
-        if (payload.requestId !== activeRequestIdRef.current) return;
-        finishStreaming(payload.fullText, payload.finishReason);
-      }),
-      api.onChatStreamError((payload) => {
-        if (payload.requestId !== activeRequestIdRef.current) return;
-        activeRequestIdRef.current = null;
-        setStreaming(false);
-        setStreamingText("");
-        setThinkingText("");
-        thinkingRef.current = "";
-        setActiveTool(null);
-        setCurrentSource(null);
-        sourceRef.current = null;
-        pendingCoachPromptsRef.current = [];
-        restoreResumedCoachPrompt();
-        onError(payload.message);
-        if (payload.authError) {
-          setAuthStatus({ signedIn: false });
-        }
-        if (chatSettings.provider === "claude-code") {
-          void api
-            .getClaudeCodeStatus()
-            .then(setClaudeStatus)
-            .catch(() => undefined);
-        }
-      })
-    ];
-    return () => {
-      for (const unsubscribe of unsubscribers) unsubscribe();
-    };
-  }, [api, chatSettings.provider, chatSettings.visualizationsEnabled, onError]);
-
   // Keep the transcript scrolled to the newest content.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -2508,11 +2407,9 @@ export function ChatView({
 
   const handleSignOut = async () => {
     if (!api) return;
-    if (activeRequestIdRef.current) {
-      void api.cancelChat(activeRequestIdRef.current);
-      activeRequestIdRef.current = null;
-      setStreaming(false);
-      setStreamingText("");
+    const sessionId = activeSessionIdRef.current;
+    if (activeTurn && sessionId) {
+      void api.coachCancel(sessionId).catch(() => undefined);
     }
     const status = await api.logoutChat();
     setAuthStatus(status);
@@ -2625,13 +2522,9 @@ export function ChatView({
     if (!api || streaming || exportingLatestActivity) return;
     onError(null);
     try {
-      const created = await api.createChatSession(chatSettings.provider);
-      morph(() => {
-        setSessions((current) => [created, ...current]);
-        setActiveSessionId(created.id);
-        setTimeline([]);
-        resetEphemeralChatState();
-      });
+      const created = await api.coachCreateSession(chatSettings.provider);
+      upsertSessionSummary(created);
+      await loadSession(created.id, true);
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : t("Could not start a new chat."));
     }
@@ -2649,17 +2542,15 @@ export function ChatView({
     if (!api || streaming || exportingLatestActivity) return;
     onError(null);
     try {
-      await api.deleteChatSession(sessionId);
+      await api.coachDeleteSession(sessionId);
       const listed = await refreshSessions(chatSettings.provider);
       if (sessionId === activeSessionId) {
         if (listed.length > 0) {
           await loadSession(listed[0].id);
         } else {
-          const created = await api.createChatSession(chatSettings.provider);
+          const created = await api.coachCreateSession(chatSettings.provider);
           setSessions([created]);
-          setActiveSessionId(created.id);
-          setTimeline([]);
-          resetEphemeralChatState();
+          await loadSession(created.id);
         }
       }
     } catch (caught) {
@@ -3103,99 +2994,23 @@ export function ChatView({
         return false;
       }
     }
-    let answeredPromptIndex = answeredPrompt
-      ? timeline.findIndex(
-          (entry) =>
-            entry.kind === "coachPrompt" &&
-            entry.prompt.promptId === answeredPrompt.promptId &&
-            entry.prompt.answeredAt === undefined
-        )
-      : -1;
-    // A message carrying an attachment is its own request, not a free-text
-    // answer to an open question card (answers cannot hold attachments).
-    if (answeredPromptIndex < 0 && !attachment) {
-      for (let index = timeline.length - 1; index >= 0; index -= 1) {
-        const entry = timeline[index];
-        if (entry.kind === "coachPrompt" && entry.prompt.answeredAt === undefined) {
-          answeredPromptIndex = index;
-          break;
-        }
-      }
-    }
-    const promptEntry =
-      answeredPromptIndex >= 0 ? timeline[answeredPromptIndex] : undefined;
-    const originalPrompt =
-      promptEntry?.kind === "coachPrompt" ? promptEntry.prompt : null;
-    const answeredTimeline = timeline.map((entry, index): ChatEntry =>
-      index === answeredPromptIndex && entry.kind === "coachPrompt"
-        ? {
-            kind: "coachPrompt",
-            prompt: {
-              ...entry.prompt,
-              answer: trimmed,
-              answeredAt: Date.now(),
-              selectedChoiceId:
-                answeredPrompt?.promptId === entry.prompt.promptId
-                  ? answeredPrompt.choiceId
-                  : undefined
-            }
-          }
-        : entry
-    );
-    const nextEntries: ChatEntry[] = originalPrompt
-      ? answeredTimeline
-      : [
-          ...answeredTimeline,
-          {
-            kind: "message",
-            role: "user",
-            content: trimmed,
-            ...(attachment ? { attachment } : {})
-          }
-        ];
-    const requestId = crypto.randomUUID();
-
-    activeRequestIdRef.current = requestId;
-    resumedCoachPromptRef.current = originalPrompt;
-    sourceRef.current = null;
-    const commitSend = () => {
-      setCurrentSource(null);
-      setTimeline(nextEntries);
-      setStreaming(true);
-      setStreamingText("");
-    };
-    // The first message of a conversation morphs the hero into the transcript.
-    if (timeline.length === 0) {
-      morph(commitSend);
-    } else {
-      commitSend();
-    }
-    // Keep the unanswered card durable until the resumed turn completes. If
-    // the app closes mid-request, reloading the session can safely offer it
-    // again instead of leaving an answered-but-incomplete invisible entry.
-    if (!originalPrompt) {
-      persistHistory(activeSessionIdRef.current, nextEntries, true);
-    }
+    const sessionId = activeSessionIdRef.current;
+    if (!sessionId) return false;
     onError(null);
-
-    const wireMessages = toWireMessages(nextEntries);
     try {
-      await api.sendChat(requestId, wireMessages, unitSystem);
+      // The hub decides whether this answers an open question card and
+      // builds the transcript; the window only says what was written.
+      await api.coachSend({
+        sessionId,
+        clientMessageId: crypto.randomUUID(),
+        text: trimmed,
+        ...(answeredPrompt ? { promptAnswer: answeredPrompt } : {}),
+        ...(attachment ? { attachment } : {}),
+        unitSystem
+      });
     } catch (caught) {
-      activeRequestIdRef.current = null;
-      setStreaming(false);
-      if (originalPrompt) {
-        resumedCoachPromptRef.current = null;
-        const restoredEntries = timeline.map((entry): ChatEntry =>
-          entry.kind === "coachPrompt" &&
-          entry.prompt.promptId === originalPrompt.promptId
-            ? { kind: "coachPrompt", prompt: originalPrompt }
-            : entry
-        );
-        setTimeline(restoredEntries);
-        persistHistory(activeSessionIdRef.current, restoredEntries, true);
-      }
       onError(caught instanceof Error ? caught.message : t("Chat request failed."));
+      return false;
     }
     return true;
   };
@@ -3215,8 +3030,9 @@ export function ChatView({
   };
 
   const handleStop = () => {
-    if (!api || !activeRequestIdRef.current) return;
-    void api.cancelChat(activeRequestIdRef.current);
+    const sessionId = activeSessionIdRef.current;
+    if (!api || !sessionId || !activeTurn) return;
+    void api.coachCancel(sessionId).catch(() => undefined);
   };
 
   const handleUploadPlanDraft = async (
@@ -3228,68 +3044,17 @@ export function ChatView({
     setUploadingDraftId(draftId);
     onError(null);
     try {
-      const result = await api.uploadTrainingPlanDraft(
-        draftId,
-        unitSystem,
-        destination,
-        scheduleDate
-      );
-      const scheduledDates = new Map(
-        result.entries.flatMap((entry) => {
-          if (!entry.date) return [];
-          const normalized = entry.date.replace(/-/g, "");
-          if (!/^\d{8}$/.test(normalized)) return [];
-          return [[
-            entry.key,
-            `${normalized.slice(0, 4)}-${normalized.slice(4, 6)}-${normalized.slice(6, 8)}`
-          ] as const];
-        })
-      );
-      setUploadedPlans((prev) => ({ ...prev, [draftId]: result }));
-      setTimeline((prev) => {
-        const next = prev.map((entry) =>
-          entry.kind === "planDraft" && entry.draft.draftId === draftId
-            ? {
-                kind: "planDraft" as const,
-                draft: {
-                  ...entry.draft,
-                  uploadedAt: Date.now(),
-                  entries: entry.draft.entries.map((draftEntry) => {
-                    const scheduledDate = scheduledDates.get(draftEntry.key);
-                    const clearDate =
-                      destination === "workoutLibrary" &&
-                      entry.draft.artifactType === "workout";
-                    return {
-                      ...draftEntry,
-                      scheduleDate: clearDate
-                        ? undefined
-                        : scheduledDate ?? draftEntry.scheduleDate,
-                      source: draftEntry.source
-                        ? {
-                            ...draftEntry.source,
-                            schedule_date: clearDate
-                              ? undefined
-                              : scheduledDate?.replace(/-/g, "") ??
-                                draftEntry.source.schedule_date
-                          }
-                        : undefined
-                    };
-                  }),
-                  uploadResult: {
-                    workoutsScheduled: result.workoutsScheduled,
-                    workoutsCreated: result.workoutsCreated,
-                    destination: result.destination,
-                    localPlanId: result.localPlanId,
-                    groupedPlanCreated: result.groupedPlanCreated
-                  }
-                }
-              }
-            : entry
-        );
-        persistHistory(activeSessionIdRef.current, next, true);
-        return next;
+      const sessionId = activeSessionIdRef.current;
+      if (!sessionId) return;
+      // The hub saves the result into the card for every client and the
+      // Training views refresh when its update arrives.
+      await api.coachConfirm({
+        sessionId,
+        kind: "planUpload",
+        id: draftId,
+        decision: "confirm",
+        options: { destination, scheduleDate, unitSystem }
       });
-      onPlanUploaded?.();
     } catch (caught) {
       onError(
         caught instanceof Error
@@ -3364,27 +3129,32 @@ export function ChatView({
   };
 
   const handleConfirmCorosAction = async (requestId: string) => {
-    if (!api) return;
     const sessionId = activeSessionIdRef.current;
-    const preview = await api.confirmCorosAction(requestId);
-    if (activeSessionIdRef.current === sessionId) {
-      setTimeline(prev => upsertCorosActionEntry(prev, preview));
-    } else if (sessionId) {
-      const saved = await api.getChatSession(sessionId);
-      if (saved) await api.saveChatSession(sessionId, toPersistedEntries(upsertCorosActionEntry(fromPersistedEntries(saved), preview)));
-    }
-    if (preview.state === "saved") onPlanUploaded?.();
-    return preview;
+    if (!api || !sessionId) return;
+    const { entry } = await api.coachConfirm({
+      sessionId,
+      kind: "corosAction",
+      id: requestId,
+      decision: "confirm"
+    });
+    return entry.kind === "corosAction" ? entry.preview : undefined;
   };
 
   const handleConfirmWorkoutDelete = async (requestId: string) => {
-    if (!api || deletingRequestId) return;
+    const sessionId = activeSessionIdRef.current;
+    if (!api || !sessionId || deletingRequestId) return;
     setDeletingRequestId(requestId);
     onError(null);
     try {
-      const result = await api.confirmWorkoutDelete(requestId);
-      setDeletedWorkouts((prev) => ({ ...prev, [requestId]: result }));
-      onPlanUploaded?.();
+      const { entry } = await api.coachConfirm({
+        sessionId,
+        kind: "workoutDelete",
+        id: requestId,
+        decision: "confirm"
+      });
+      if (entry.kind === "workoutDelete" && entry.preview.state === "failed") {
+        onError(entry.preview.message ?? t("Failed to delete workout from COROS."));
+      }
     } catch (caught) {
       onError(
         caught instanceof Error
@@ -3397,52 +3167,30 @@ export function ChatView({
   };
 
   const handleLatestActivityFileRequest = async (trimmed: string) => {
-    if (!api) return;
+    const sessionId = activeSessionIdRef.current;
+    if (!api || !sessionId) return;
 
-    const nextEntries: ChatEntry[] = [
-      ...timeline,
-      { kind: "message", role: "user", content: trimmed }
-    ];
-    setTimeline(nextEntries);
-    persistHistory(activeSessionIdRef.current, nextEntries, true);
+    // The export opens a save dialog here, so this window writes the reply;
+    // the hub still records it like any other turn.
+    const { requestId } = await api.coachBeginLocalTurn(sessionId, crypto.randomUUID(), trimmed);
     setExportingLatestActivity(true);
     onError(null);
 
+    let reply: string;
     try {
       const result = await api.exportLatestTrainingHubActivityFile(4);
-      setTimeline((prev) => {
-        const next: ChatEntry[] = [
-          ...prev,
-          {
-            kind: "message",
-            role: "assistant",
-            content: formatLatestActivityExportMessage(result)
-          }
-        ];
-        persistHistory(activeSessionIdRef.current, next, true);
-        return next;
-      });
+      reply = formatLatestActivityExportMessage(result);
     } catch (caught) {
       const message =
         caught instanceof Error
           ? caught.message
           : t("Latest activity FIT export failed.");
       onError(message);
-      setTimeline((prev) => {
-        const next: ChatEntry[] = [
-          ...prev,
-          {
-            kind: "message",
-            role: "assistant",
-            content: t("I couldn't download the latest activity FIT file: {{p0}}", { p0: message })
-          }
-        ];
-        persistHistory(activeSessionIdRef.current, next, true);
-        return next;
-      });
+      reply = t("I couldn't download the latest activity FIT file: {{p0}}", { p0: message });
     } finally {
       setExportingLatestActivity(false);
     }
+    await api.coachFinishLocalTurn(sessionId, requestId, reply).catch(() => undefined);
   };
 
   const isLocalProvider = chatSettings.provider === "local";
@@ -3451,6 +3199,16 @@ export function ChatView({
   const isChatGptProvider = chatSettings.provider === "chatgpt";
   const localModelConfigured = chatSettings.local.model.trim().length > 0;
   const isBusy = streaming || exportingLatestActivity;
+  // A turn that answers a question card resumes the plan it paused.
+  const resumingCoachPrompt = (() => {
+    if (!activeTurn) return false;
+    for (let index = timeline.length - 1; index >= 0; index -= 1) {
+      const entry = timeline[index];
+      if (entry.kind === "message") return false;
+      if (entry.kind === "coachPrompt") return entry.prompt.answeredAt !== undefined;
+    }
+    return false;
+  })();
   const waitingForCoachAnswer = [...timeline]
     .reverse()
     .some(
@@ -3464,7 +3222,7 @@ export function ChatView({
     isOpenRouterProvider && !chatSettings.openRouter.hasApiKey;
   const showPlanPanel = useMediaQuery("(min-width: 1400px)");
   // Local drafts and official COROS review cards, in timeline order.
-  const creations = listCoachCreations(timeline, uploadedPlans);
+  const creations = listCoachCreations(timeline);
   const latestCreation = creations.at(-1);
   const selectedCreation =
     creations.find((creation) => creation.id === selectedCreationId) ??
@@ -4049,7 +3807,6 @@ export function ChatView({
                     <CoachDraftPreviewCard
                       draft={entry.draft}
                       uploading={uploadingDraftId === entry.draft.draftId}
-                      uploaded={uploadedPlans[entry.draft.draftId]}
                       onUpload={(destination, scheduleDate) =>
                         void handleUploadPlanDraft(
                           entry.draft.draftId,
@@ -4089,7 +3846,6 @@ export function ChatView({
                     <DeletePreviewCard
                       preview={entry.preview}
                       deleting={deletingRequestId === entry.preview.requestId}
-                      deleted={deletedWorkouts[entry.preview.requestId]}
                       onConfirm={() =>
                         void handleConfirmWorkoutDelete(entry.preview.requestId)
                       }
@@ -4214,7 +3970,7 @@ export function ChatView({
                       <span className="chat-stream-status">
                         {activeTool
                           ? t("Using {{p0}}…", { p0: activeTool.replace(/_/g, " ") })
-                          : resumedCoachPromptRef.current
+                          : resumingCoachPrompt
                             ? t("Resuming plan…")
                             : t("Working on it…")}
                       </span>
@@ -4459,7 +4215,6 @@ export function ChatView({
                       uploading={
                         uploadingDraftId === selectedCreation.draft.draftId
                       }
-                      uploaded={uploadedPlans[selectedCreation.draft.draftId]}
                       onUpload={(destination, scheduleDate) =>
                         void handleUploadPlanDraft(
                           selectedCreation.draft.draftId,

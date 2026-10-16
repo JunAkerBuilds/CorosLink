@@ -4212,6 +4212,10 @@ export interface WorkoutDeletePreview {
   scheduleDate?: string;
   programId?: string;
   summary: string;
+  /** Absent on cards staged before approvals were shared across devices: pending. */
+  state?: "pending" | "deleted" | "failed";
+  /** COROS's result, or why the delete failed. */
+  message?: string;
 }
 
 /** One step of a COROS workout as the Coach proposed it, already formatted for display. */

@@ -29,10 +29,22 @@ import {
   deleteDownload,
   getDownloadById,
   hasAvailableDownloadForUrl,
+  getSetting,
   initializeDatabase,
   listDownloads,
-  markDownloadTransferred
+  markDownloadTransferred,
+  setSetting
 } from "./database";
+import {
+  CoachSessionHub,
+  createChatHistorySessionStore,
+  createSqliteCoachEventStore,
+  type CoachConfirmInput,
+  type CoachSendInput
+} from "./coachHub";
+import { workoutEdits } from "./workoutEditRuntime";
+import { RemoteAccess } from "./remote/remoteAccess";
+import { isAuthCallbackUrl } from "./remote/cloud/websiteAccount";
 import { completeOnboarding, isOnboardingPending } from "./onboardingState";
 import {
   downloadAudio,
@@ -406,7 +418,8 @@ import {
   testOpenRouterConnection,
   uploadTrainingPlanDraft,
   confirmWorkoutDelete,
-  confirmCoachCorosAction
+  confirmCoachCorosAction,
+  type ChatStreamSink
 } from "./chatService";
 import {
   listPinnedCoachCharts,
@@ -471,6 +484,63 @@ import type {
 
 let mainWindow: BrowserWindow | undefined;
 let workoutAutomation: ReturnType<typeof registerWorkoutAutomation> | undefined;
+// Owns every Coach conversation; the window (and later phones) are its clients.
+let coachHub: CoachSessionHub | undefined;
+
+function requireCoachHub(): CoachSessionHub {
+  if (!coachHub) throw new Error("Coach is still starting. Try again in a moment.");
+  return coachHub;
+}
+
+// The environment server phones (C-LINK) drive the Coach hub through.
+let remoteAccess: RemoteAccess | undefined;
+
+function requireRemoteAccess(): RemoteAccess {
+  if (!remoteAccess) throw new Error("Remote access is still starting. Try again in a moment.");
+  return remoteAccess;
+}
+
+function createCoachHub(): CoachSessionHub {
+  return new CoachSessionHub({
+    // getChatSessionEntries also reconciles COROS review cards with their saves.
+    sessions: createChatHistorySessionStore(undefined, { load: getChatSessionEntries }),
+    events: createSqliteCoachEventStore(),
+    stream: {
+      start: (sink, requestId, messages, unitSystem, provider) =>
+        streamChat(sink, requestId, messages, unitSystem, { provider }),
+      cancel: cancelChat
+    },
+    actions: {
+      confirmCorosAction: confirmCoachCorosAction,
+      confirmWorkoutDelete,
+      uploadPlanDraft: uploadTrainingPlanDraft,
+      strengthEditStatus: (proposalId) => workoutEdits().status(proposalId),
+      confirmStrengthEdit: (proposalId, reviewHash, selectedIds) =>
+        workoutEdits().confirm(proposalId, reviewHash, selectedIds),
+      cancelStrengthEdit: async (proposalId) => {
+        await workoutEdits().tool("cancel_workout_edit", { proposalId }, "coach");
+        return workoutEdits().status(proposalId);
+      }
+    },
+    settings: getChatSettings,
+    unitSystem: {
+      get: () => {
+        const saved = getSetting("coach.unitSystem");
+        return saved ? normalizeUnitSystem(saved) : undefined;
+      },
+      set: (value) => setSetting("coach.unitSystem", value)
+    }
+  });
+}
+
+/** `chat:send` streams (the Training Library generator) go to the window that asked. */
+function windowChatSink(window: BrowserWindow | undefined): ChatStreamSink {
+  return {
+    send: (channel, payload) => {
+      if (window && !window.isDestroyed()) window.webContents.send(channel, payload);
+    }
+  };
+}
 let watchfaceAutomation: ReturnType<typeof registerWatchfaceAutomation> | undefined;
 let rendererReady = false;
 let pendingCommunityWatchfaceOpen: CommunityWatchfaceOpenRequest | undefined;
@@ -818,6 +888,21 @@ function deepLinkFromArguments(argumentsList: string[]): CommunityWatchfaceOpenR
   return null;
 }
 
+/** The watchfaces.coroslink.com sign-in coming back from the browser (remote access, away from home). */
+function authCallbackFromArguments(argumentsList: string[]): string | null {
+  return argumentsList.find((argument) => isAuthCallbackUrl(argument)) ?? null;
+}
+
+function handleAuthCallback(url: string): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+  // Before startup there is no sign-in waiting for it, so there's nothing to finish.
+  void remoteAccess?.handleAuthCallback(url).catch(() => undefined);
+}
+
 function handleCommunityWatchfaceOpen(request: CommunityWatchfaceOpenRequest): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (mainWindow.isMinimized()) mainWindow.restore();
@@ -867,8 +952,10 @@ if (!hasSingleInstanceLock) {
   const initialDeepLink = deepLinkFromArguments(process.argv);
   if (initialDeepLink) pendingCommunityWatchfaceOpen = initialDeepLink;
   app.on("second-instance", (_event, commandLine) => {
-    const request = deepLinkFromArguments(commandLine);
-    if (request) handleCommunityWatchfaceOpen(request);
+    const authCallback = authCallbackFromArguments(commandLine);
+    const request = authCallback ? null : deepLinkFromArguments(commandLine);
+    if (authCallback) handleAuthCallback(authCallback);
+    else if (request) handleCommunityWatchfaceOpen(request);
     else if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
@@ -877,6 +964,10 @@ if (!hasSingleInstanceLock) {
   });
   app.on("open-url", (event, url) => {
     event.preventDefault();
+    if (isAuthCallbackUrl(url)) {
+      handleAuthCallback(url);
+      return;
+    }
     const request = parseCommunityWatchfaceDeepLink(url);
     if (request) handleCommunityWatchfaceOpen(request);
   });
@@ -935,9 +1026,21 @@ app.whenReady().then(() => {
   hydratePlanDraftStoreFromDatabase();
   prunePlanDraftStore();
   pruneDeleteRequestStore();
+  coachHub = createCoachHub();
+  remoteAccess = new RemoteAccess({
+    hub: coachHub,
+    settings: { get: getSetting, set: setSetting },
+    defaultProvider: () => getChatSettings().provider
+  });
   registerIpcHandlers();
+  remoteAccess.initialize();
   watchfaceAutomation = registerWatchfaceAutomation(() => mainWindow);
-  workoutAutomation = registerWorkoutAutomation(() => mainWindow);
+  workoutAutomation = registerWorkoutAutomation(() => mainWindow, {
+    // A strength review saved from its card updates the Coach entry for every client.
+    onCoachEditChanged: (proposalId) => {
+      void coachHub?.syncStrengthEdit(proposalId).catch(() => undefined);
+    }
+  });
   startGoogleCalendarSync();
   startAppleCalendarSync();
   setJobListener((jobs) => {
@@ -1007,6 +1110,8 @@ app.on("before-quit", event => {
     }
     return;
   }
+  coachHub?.shutdown();
+  void remoteAccess?.stop();
   void corosNativeBle.stop();
   void watchfaceAutomation?.stop();
   void workoutAutomation?.stop();
@@ -1735,10 +1840,16 @@ function registerIpcHandlers(): void {
   ipcMain.handle("chat:logout", () => logoutChat());
 
   // Kicks off streaming; assistant text is pushed via chat:stream* events.
+  // Coach conversations use coach:send instead, which the hub owns.
   ipcMain.handle(
     "chat:send",
-    (_event, requestId: string, messages: ChatMessage[], unitSystem?: UnitSystem) =>
-      streamChat(mainWindow, requestId, messages, normalizeUnitSystem(unitSystem))
+    (event, requestId: string, messages: ChatMessage[], unitSystem?: UnitSystem) =>
+      streamChat(
+        windowChatSink(BrowserWindow.fromWebContents(event.sender) ?? mainWindow),
+        requestId,
+        messages,
+        normalizeUnitSystem(unitSystem)
+      )
   );
 
   ipcMain.handle("chat:cancel", (_event, requestId: string) =>
@@ -1759,12 +1870,150 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "chat:saveSession",
-    (_event, sessionId: string, entries: PersistedChatEntry[]) =>
-      saveChatSessionEntries(sessionId, entries)
+    (_event, sessionId: string, entries: PersistedChatEntry[]) => {
+      const summary = saveChatSessionEntries(sessionId, entries);
+      coachHub?.invalidate(sessionId);
+      return summary;
+    }
   );
 
   ipcMain.handle("chat:deleteSession", (_event, sessionId: string) => {
-    deleteChatSessionById(sessionId);
+    if (coachHub) coachHub.deleteSession(sessionId);
+    else deleteChatSessionById(sessionId);
+  });
+
+  // ----- Coach hub: the window is one client among equals -----
+  // One live subscription per window: the conversation it shows.
+  const coachSubscriptions = new Map<number, { sessionId: string; unsubscribe: () => void }>();
+  const dropCoachSubscription = (contentsId: number) => {
+    coachSubscriptions.get(contentsId)?.unsubscribe();
+    coachSubscriptions.delete(contentsId);
+  };
+  const watchedCoachClients = new Set<number>();
+  requireCoachHub().onSessionsChanged((change) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("coach:sessions", change);
+  });
+  ipcMain.handle("coach:listSessions", (_event, provider?: ChatProvider) =>
+    requireCoachHub().listSessions(provider)
+  );
+  ipcMain.handle("coach:getSession", (_event, sessionId: string) =>
+    requireCoachHub().getSession(sessionId)
+  );
+  ipcMain.handle("coach:createSession", (_event, provider: ChatProvider) =>
+    requireCoachHub().createSession(provider)
+  );
+  ipcMain.handle("coach:deleteSession", (_event, sessionId: string) => {
+    requireCoachHub().deleteSession(sessionId);
+  });
+  ipcMain.handle("coach:subscribe", (event, sessionId: string, afterSeq: number) => {
+    const contents = event.sender;
+    dropCoachSubscription(contents.id);
+    const subscription = requireCoachHub().subscribe(sessionId, afterSeq, (frame) => {
+      if (!contents.isDestroyed()) contents.send("coach:event", frame);
+    });
+    coachSubscriptions.set(contents.id, { sessionId, unsubscribe: subscription.unsubscribe });
+    if (!watchedCoachClients.has(contents.id)) {
+      watchedCoachClients.add(contents.id);
+      const contentsId = contents.id;
+      contents.once("destroyed", () => {
+        watchedCoachClients.delete(contentsId);
+        dropCoachSubscription(contentsId);
+      });
+    }
+    return { response: subscription.response, replay: subscription.replay };
+  });
+  ipcMain.handle("coach:unsubscribe", (event, sessionId: string) => {
+    if (coachSubscriptions.get(event.sender.id)?.sessionId === sessionId) {
+      dropCoachSubscription(event.sender.id);
+    }
+  });
+  ipcMain.handle("coach:send", (_event, input: CoachSendInput) =>
+    requireCoachHub().send({
+      ...input,
+      unitSystem: input.unitSystem ? normalizeUnitSystem(input.unitSystem) : undefined
+    })
+  );
+  ipcMain.handle("coach:cancel", (_event, sessionId: string) =>
+    requireCoachHub().cancel(sessionId)
+  );
+  // Approvals from the desktop come only from its own window; remote clients
+  // reach the hub with their grant's permissions instead (CoachActor).
+  ipcMain.handle("coach:confirm", (event, input: CoachConfirmInput) => {
+    mainWindowSender(event, "Coach approvals");
+    return requireCoachHub().confirm({
+      ...input,
+      options: input.options
+        ? {
+            ...input.options,
+            unitSystem: input.options.unitSystem ? normalizeUnitSystem(input.options.unitSystem) : undefined
+          }
+        : undefined
+    });
+  });
+  ipcMain.handle(
+    "coach:beginLocalTurn",
+    (event, sessionId: string, clientMessageId: string, text: string) => {
+      mainWindowSender(event, "Coach file exports");
+      return requireCoachHub().beginLocalTurn(sessionId, clientMessageId, text);
+    }
+  );
+  ipcMain.handle(
+    "coach:finishLocalTurn",
+    (event, sessionId: string, requestId: string, reply: string) => {
+      mainWindowSender(event, "Coach file exports");
+      requireCoachHub().finishLocalTurn(sessionId, requestId, reply);
+    }
+  );
+
+  // Remote access: only the main window manages devices (access:write).
+  requireRemoteAccess().onStatus((status) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("remote:status", status);
+  });
+  ipcMain.handle("remote:getStatus", (event) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().status();
+  });
+  ipcMain.handle("remote:setNetworkAccess", (event, enabled: unknown) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().setNetworkAccess(enabled === true);
+  });
+  ipcMain.handle("remote:setKeepAwake", (event, enabled: unknown) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().setKeepAwake(enabled === true);
+  });
+  ipcMain.handle("remote:createPairing", (event, input?: { viewOnly?: unknown }) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().createPairing({ viewOnly: input?.viewOnly === true });
+  });
+  ipcMain.handle("remote:cancelPairing", (event, id?: unknown) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().cancelPairing(typeof id === "string" ? id : undefined);
+  });
+  ipcMain.handle("remote:revokeDevice", (event, id: unknown) => {
+    mainWindowSender(event, "Remote access");
+    if (typeof id !== "string") throw new Error("Choose a device to remove.");
+    return requireRemoteAccess().revokeDevice(id);
+  });
+  // Away from home: website sign-in, the relay link and Cloudflare's connector.
+  ipcMain.handle("remote:cloudSignIn", (event) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().cloudSignIn();
+  });
+  ipcMain.handle("remote:cloudCancelSignIn", (event) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().cloudCancelSignIn();
+  });
+  ipcMain.handle("remote:cloudSignOut", (event) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().cloudSignOut();
+  });
+  ipcMain.handle("remote:setCloudLink", (event, input?: { enabled?: unknown; allowDownload?: unknown }) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().setCloudLink(input?.enabled === true, { allowDownload: input?.allowDownload === true });
+  });
+  ipcMain.handle("remote:cloudUnlink", (event) => {
+    mainWindowSender(event, "Remote access");
+    return requireRemoteAccess().cloudUnlink();
   });
 
   ipcMain.handle("chatMcp:getStatus", () => getCorosMcpStatus());

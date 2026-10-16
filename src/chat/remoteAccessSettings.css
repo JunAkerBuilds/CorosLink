@@ -1,0 +1,368 @@
+/* Coach settings → Remote access (RemoteAccessSettings.tsx). Same scope and
+   tokens as chatSettings.css, so both themes follow the settings glass. */
+
+:root .app .chat-settings-backdrop .chat-remote-section {
+  display: grid;
+  gap: 14px;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-alert {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--error-border);
+  border-radius: 12px;
+  background: var(--error-bg);
+  color: var(--error-text);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* ---------- Pairing ---------- */
+
+:root .app .chat-settings-backdrop .chat-remote-pair {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--settings-hairline);
+  border-radius: 12px;
+  background: var(--settings-well);
+}
+
+:root .app .chat-settings-backdrop .chat-remote-pair-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-pair-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-pair-actions .chat-local-tools {
+  display: inline-flex;
+  align-items: center;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-code-block {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-code {
+  margin: 0;
+  padding: 8px;
+  border-radius: 12px;
+  /* The quiet zone stays white in both themes so phones can read it. */
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--settings-hairline), 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+:root .app .chat-settings-backdrop .chat-remote-code img {
+  display: block;
+  width: 176px;
+  height: 176px;
+  image-rendering: pixelated;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-code-copy {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-code-copy strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-code-copy > span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-code-copy .chat-local-actions {
+  display: flex;
+  margin-top: 6px;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-code-copy > .chat-remote-timer {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-tag {
+  padding: 2px 8px;
+  border: 1px solid var(--settings-hairline);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--success-text);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* ---------- Paired devices ---------- */
+
+:root .app .chat-settings-backdrop .chat-remote-devices {
+  display: grid;
+  gap: 8px;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-devices h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-devices .chat-settings-copy {
+  margin: 0;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-devices ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-devices li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--settings-hairline);
+  border-radius: 12px;
+  background: var(--settings-well);
+}
+
+:root .app .chat-settings-backdrop .chat-remote-device-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--settings-tile-border);
+  border-radius: 9px;
+  background: var(--settings-tile);
+  color: var(--text-secondary);
+}
+
+:root .app .chat-settings-backdrop .chat-remote-devices li[data-connected] .chat-remote-device-icon {
+  color: var(--success-text);
+}
+
+:root .app .chat-settings-backdrop .chat-remote-device-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-device-text strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-device-text span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success-dot);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success-dot) 18%, transparent);
+}
+
+:root .app .chat-settings-backdrop .chat-local-action.danger {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+@media (max-width: 860px) {
+  :root .app .chat-settings-backdrop .chat-remote-pair-row,
+  :root .app .chat-settings-backdrop .chat-remote-code-block {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  :root .app .chat-settings-backdrop .chat-remote-code {
+    justify-self: center;
+  }
+}
+
+/* ---------- Away from home ---------- */
+
+:root .app .chat-settings-backdrop .chat-remote-cloud {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--settings-hairline);
+  border-radius: 12px;
+  background: var(--settings-well);
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud > .chat-settings-copy {
+  margin: 0;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-head h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border: 1px solid var(--settings-hairline);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-pill > i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-pill[data-state="online"] {
+  color: var(--success-text);
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-pill[data-state="online"] > i {
+  background: var(--success-dot);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success-dot) 18%, transparent);
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-pill[data-state="error"] {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-pill[data-state="error"] > i {
+  background: var(--error-text);
+}
+
+/* Rows inside the well sit flat, like the pairing row. */
+:root .app .chat-settings-backdrop .chat-remote-cloud .chat-settings-toggle-row {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-consent {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--settings-tile-border);
+  border-radius: 10px;
+  background: var(--settings-tile);
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-consent strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-consent > span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-consent .chat-local-actions {
+  display: flex;
+  margin-top: 4px;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-progress {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-progress progress {
+  width: 100%;
+  height: 6px;
+  accent-color: var(--success-dot);
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-note strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-host {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--settings-hairline);
+  border-radius: 12px;
+  background: var(--settings-tile);
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud[data-state="online"] .chat-remote-cloud-host .chat-remote-device-icon {
+  color: var(--success-text);
+}
+
+:root .app .chat-settings-backdrop .chat-remote-cloud-host code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  font-weight: 500;
+}

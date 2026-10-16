@@ -7,7 +7,12 @@ import { workoutEdits } from "./workoutEditRuntime";
 import { z } from "zod/v4";
 
 /** Separate endpoint, token and consent from watch-face automation. No write tool is registered. */
-export function registerWorkoutAutomation(getWindow: () => BrowserWindow | undefined) {
+export interface WorkoutAutomationHooks {
+  /** A Coach-origin review changed from its card, so the Coach entry can follow. */
+  onCoachEditChanged?: (proposalId: string) => void;
+}
+
+export function registerWorkoutAutomation(getWindow: () => BrowserWindow | undefined, hooks: WorkoutAutomationHooks = {}) {
   let generation = 0;
   let active = false;
   let busy = false;
@@ -56,12 +61,14 @@ export function registerWorkoutAutomation(getWindow: () => BrowserWindow | undef
   ipcMain.handle("workoutAutomation:configure", (event, value) => { trusted(event); return configure(value); });
   ipcMain.handle("workoutEdits:list", event => { trusted(event); return workoutEdits().list(); });
   ipcMain.handle("workoutEdits:status", (event, proposalId) => { trusted(event); return workoutEdits().status(z.string().uuid().parse(proposalId)); });
-  ipcMain.handle("workoutEdits:cancel", (event, proposalId) => {
+  ipcMain.handle("workoutEdits:cancel", async (event, proposalId) => {
     trusted(event);
     const service = workoutEdits();
     const proposal = service.list().find(p => p.proposalId === proposalId);
     if (!proposal) throw new Error("Proposal not found.");
-    return service.tool("cancel_workout_edit", { proposalId }, proposal.origin);
+    const result = await service.tool("cancel_workout_edit", { proposalId }, proposal.origin);
+    if (proposal.origin === "coach") hooks.onCoachEditChanged?.(proposal.proposalId);
+    return result;
   });
   ipcMain.handle("workoutEdits:confirm", async (event, input) => {
     trusted(event);
@@ -70,6 +77,7 @@ export function registerWorkoutAutomation(getWindow: () => BrowserWindow | undef
     if (proposal?.origin === "external" && !active) throw new Error("Workout automation was disabled. Prepare a new review.");
     const result = await workoutEdits().confirm(value.proposalId, value.reviewHash, value.selectedIds);
     getWindow()?.webContents.send("workoutEdits:changed");
+    if (result.origin === "coach") hooks.onCoachEditChanged?.(result.proposalId);
     return result;
   });
   return {

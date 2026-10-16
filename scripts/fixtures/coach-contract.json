@@ -1,0 +1,90 @@
+{
+  "about": "Remote Coach protocol 1 vectors, shared by C-LINK (CorosKit/Sources/CorosKit/Coach) and CorosLink (electron/remote/contract.ts). Entries mirror CorosLink's PersistedChatEntry. DPoP key values come from jose; the proof was made by CorosKit's DPoPKey and verifies with jose.",
+  "descriptor": {
+    "environmentId": "AAECAwQFBgcICQoLDA0ODw",
+    "name": "Aker's MacBook Pro",
+    "platform": "darwin",
+    "appVersion": "2.4.0",
+    "protocol": 1,
+    "capabilities": ["coach"]
+  },
+  "grant": {
+    "sessionToken": "tok_example",
+    "expiresAt": "2026-11-15T10:00:00.000Z",
+    "permissions": ["coach:read", "coach:operate", "coach:approve", "coach:someday"]
+  },
+  "ticket": {
+    "ticket": "wst_7Jq2nRk4",
+    "expiresAt": "2026-10-16T10:00:30.000Z"
+  },
+  "pairing": {
+    "link": "coroslink://remote/1?e=AAECAwQFBgcICQoLDA0ODw&a=192.168.1.20%2C100.101.2.3&p=47123&n=Aker%27s%20MacBook%20Pro#EBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8",
+    "environmentId": "AAECAwQFBgcICQoLDA0ODw",
+    "routes": ["http://192.168.1.20:47123", "http://100.101.2.3:47123"],
+    "name": "Aker's MacBook Pro",
+    "secret": "EBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8"
+  },
+  "dpop": {
+    "privateKey": "AwoRGB8mLTQ7QklQV15lbHN6gYiPlp2kq7K5wMfO1dw",
+    "jwk": { "kty": "EC", "crv": "P-256", "x": "JHWxrL6MWMbpKlF5G-EULYpHJ5M6PnEdleg66V0RCvo", "y": "ZQuEikGWXN5_AKJYN-xh_HjLnqrQG4QpVkzPocFYbJg" },
+    "jkt": "GTjPyZhMPXavgueKuQBGVTul0w_TsugCa5qP_cY9CmY",
+    "method": "POST",
+    "url": "http://192.168.1.20:47123/v1/auth/ws-ticket?x=1#frag",
+    "htu": "http://192.168.1.20:47123/v1/auth/ws-ticket",
+    "accessToken": "tok_example",
+    "ath": "d3ce0LkZ-3WkseD_zu2178dXr35TVZ1BQ6b4Ymq0KaI",
+    "iat": 1792144800,
+    "jti": "vector-jti-0001",
+    "proof": "eyJhbGciOiJFUzI1NiIsImp3ayI6eyJjcnYiOiJQLTI1NiIsImt0eSI6IkVDIiwieCI6IkpIV3hyTDZNV01icEtsRjVHLUVVTFlwSEo1TTZQbkVkbGVnNjZWMFJDdm8iLCJ5IjoiWlF1RWlrR1dYTjVfQUtKWU4teGhfSGpMbnFyUUc0UXBWa3pQb2NGWWJKZyJ9LCJ0eXAiOiJkcG9wK2p3dCJ9.eyJhdGgiOiJkM2NlMExrWi0zV2tzZURfenUyMTc4ZFhyMzVUVloxQlE2YjRZbXEwS2FJIiwiaHRtIjoiUE9TVCIsImh0dSI6Imh0dHA6Ly8xOTIuMTY4LjEuMjA6NDcxMjMvdjEvYXV0aC93cy10aWNrZXQiLCJpYXQiOjE3OTIxNDQ4MDAsImp0aSI6InZlY3Rvci1qdGktMDAwMSJ9.TSiU_RjvtjIykJcZ1Z-stA9yWi5-Y5MfpMaflHxeVyhI8W04GAd2hXQCzJwQWzb1ybpXzo0GErLxSYzvanbGeg"
+  },
+  "snapshot": {
+    "session": {
+      "id": "s1",
+      "title": "Tempo week",
+      "provider": "claude-code",
+      "createdAt": "2026-10-16T08:00:00.000Z",
+      "updatedAt": "2026-10-16T09:30:00.000Z"
+    },
+    "cursor": 12,
+    "activeTurn": null,
+    "entries": [
+      { "kind": "message", "role": "user", "content": "How did my long run go?", "attachment": { "kind": "chart", "label": "HRV, 28 days", "content": "date,hrv\n2026-10-01,62" } },
+      { "kind": "message", "role": "assistant", "content": "Steady and easy.", "source": { "snapshotIncluded": true, "mcpEnabled": true, "mcpUsed": true, "mcpTools": ["querySportRecords"] }, "reasoningSummary": "Compared pace with heart rate." },
+      { "kind": "coachPrompt", "prompt": { "promptId": "p1", "question": "How hard should Sunday be?", "choices": [{ "id": "c1", "label": "Easy", "description": "Zone 2", "response": "Keep Sunday easy." }, { "id": "c2", "label": "Tempo", "response": "Make Sunday a tempo run." }], "allowCustom": true } },
+      { "kind": "corosAction", "preview": { "requestId": "r1", "title": "Save workout", "summary": "45 min easy run", "destination": "Calendar", "date": "2026-10-18", "details": ["45:00 at zone 2"], "createdAt": 1792140000000, "state": "pending", "sport": "run" } },
+      { "kind": "workoutDelete", "preview": { "requestId": "d1", "target": "scheduled", "workoutName": "Tempo", "scheduleDate": "2026-10-19", "summary": "Remove Tempo on Sunday" } },
+      { "kind": "planDraft", "draft": { "draftId": "pd1", "artifactType": "plan", "name": "10K build", "summary": "Four weeks to race day", "entries": [{ "key": "w1", "name": "Easy" }, { "key": "w2", "name": "Intervals" }, { "key": "w3", "name": "Long" }], "conflicts": [], "warnings": ["Two hard days in a row"] } },
+      { "kind": "workoutEdit", "preview": { "proposalId": "se1", "reviewHash": "h-abc", "createdAt": 1792140000000, "expiresAt": 1792143600000, "origin": "coach", "state": "awaiting_confirmation", "scope": "Next week's strength", "items": [{ "id": "i1" }, { "id": "i2" }], "exclusions": [] } },
+      { "kind": "toolNotice", "message": "COROS training data was unavailable." },
+      { "kind": "fitnessTrend", "preview": { "title": "Fitness, six weeks", "points": [] } },
+      { "kind": "routeMap", "preview": { "points": [] } }
+    ]
+  },
+  "events": [
+    { "event": "turn.started", "sessionId": "s1", "seq": 13, "data": { "requestId": "q9" } },
+    { "event": "turn.thinking", "sessionId": "s1", "seq": 14, "data": { "requestId": "q9", "delta": "Checking load" } },
+    { "event": "turn.tool", "sessionId": "s1", "seq": 15, "data": { "requestId": "q9", "tool": "queryTrainingLoad", "status": "call" } },
+    { "event": "turn.delta", "sessionId": "s1", "seq": 16, "data": { "requestId": "q9", "delta": "Load is " } },
+    { "event": "turn.delta", "sessionId": "s1", "seq": 17, "data": { "requestId": "q9", "delta": "steady." } },
+    { "event": "entry.appended", "sessionId": "s1", "seq": 18, "data": { "index": 10, "entry": { "kind": "message", "role": "assistant", "content": "Load is steady." } } },
+    { "event": "turn.completed", "sessionId": "s1", "seq": 19, "data": { "requestId": "q9" } },
+    { "event": "entry.updated", "sessionId": "s1", "seq": 20, "data": { "index": 3, "entry": { "kind": "corosAction", "preview": { "requestId": "r1", "title": "Save workout", "summary": "45 min easy run", "destination": "Calendar", "date": "2026-10-18", "details": ["45:00 at zone 2"], "createdAt": 1792140000000, "state": "saved" } } } },
+    { "event": "session.updated", "sessionId": "s1", "seq": 21, "data": { "session": { "id": "s1", "title": "Tempo week, adjusted", "provider": "claude-code", "createdAt": "2026-10-16T08:00:00.000Z", "updatedAt": "2026-10-16T09:41:00.000Z" } } },
+    { "event": "session.archived", "sessionId": "s1", "seq": 22, "data": {} },
+    { "event": "turn.started", "sessionId": "s1", "seq": 23, "data": { "requestId": "q10" } },
+    { "event": "turn.failed", "sessionId": "s1", "seq": 24, "data": { "requestId": "q10", "message": "Claude Code is signed out.", "authError": true } }
+  ],
+  "requests": {
+    "send": { "id": 7, "method": "coach.send", "params": { "sessionId": "s1", "clientMessageId": "m-1", "text": "Move Sunday to Saturday" } },
+    "answer": { "id": 8, "method": "coach.send", "params": { "sessionId": "s1", "clientMessageId": "m-2", "promptAnswer": { "promptId": "p1", "choiceId": "c1" } } },
+    "confirm": { "id": 9, "method": "coach.confirm", "params": { "sessionId": "s1", "kind": "strengthEdit", "id": "se1", "decision": "confirm", "reviewHash": "h-abc" } },
+    "subscribe": { "id": 10, "method": "coach.subscribe", "params": { "sessionId": "s1", "afterSeq": 12 } },
+    "listSessions": { "id": 11, "method": "coach.listSessions", "params": {} }
+  },
+  "responses": {
+    "subscribeReplay": { "id": 10, "result": { "mode": "replay" } },
+    "forbidden": { "id": 9, "error": { "code": "forbidden", "message": "This iPhone can view Coach but not approve changes.", "requiredPermission": "coach:approve" } },
+    "empty": { "id": 4, "result": {} },
+    "nullResult": { "id": 5, "result": null }
+  }
+}
