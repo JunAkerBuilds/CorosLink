@@ -1,0 +1,32 @@
+{
+  "name": "coroslink-relay",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Setup-only relay for the CorosLink remote Coach: links desktops, provisions Cloudflare Tunnels, brokers one-time credentials and sends push.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --env dev",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build": "wrangler deploy --dry-run --env=\"\" --outdir dist",
+    "check": "tsc --noEmit && vitest run && wrangler deploy --dry-run --env=\"\" --outdir dist",
+    "db:migrate:dev": "wrangler d1 migrations apply coroslink-relay-dev --remote --env dev",
+    "db:migrate": "wrangler d1 migrations apply coroslink-relay --remote --env=\"\"",
+    "deploy:dev": "wrangler deploy --env dev",
+    "deploy": "wrangler deploy --env=\"\""
+  },
+  "dependencies": {
+    "jose": "6.2.12"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.3.5",
+    "@cloudflare/workers-types": "5.20261001.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11",
+    "wrangler": "4.146.0"
+  },
+  "overrides": {
+    "sharp": "0.35.5"
+  }
+}
