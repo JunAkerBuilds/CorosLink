@@ -775,7 +775,7 @@ export function CalendarView({
         .filter((line): line is string => Boolean(line));
       const stats = week.stats;
       const summary = [
-        t("training load {{value1}}{{value2}} TL", { value1: String(stats.actualLoad), value2: String(stats.plannedLoad ? ` of ${stats.plannedLoad} planned` : "") }),
+        t("training load {{value1}}{{value2}} TL", { value1: String(stats.actualLoad), value2: stats.plannedLoad ? t(" of {{value1}} planned", { value1: String(stats.plannedLoad) }) : "" }),
         stats.distanceMeters > 0
           ? formatDistanceMeters(stats.distanceMeters, unitSystem)
           : null,
@@ -900,7 +900,7 @@ export function CalendarView({
             ) : (
               <RefreshCw size={14} className={calendarSyncState === "syncing" ? "spin" : undefined} aria-hidden="true" />
             )}
-            {calendarSyncState === "syncing" ? t("Syncing…") : calendarSyncState === "synced" && !mutating ? t("Synced") : t("Sync now")}
+            {calendarSyncState === "syncing" ? t("Syncing…") : calendarSyncState === "synced" && !mutating ? t("Synced") : t("Sync now", undefined, "calendarToolbar")}
           </button>
           <button
             type="button"
@@ -932,7 +932,7 @@ export function CalendarView({
             disabled={selectionMode}
           >
             <BookOpen size={14} aria-hidden="true" />
-            {t("Workout Library")} </button>
+            {t("Workout Library", undefined, "calendarToolbar")} </button>
           <button
             type="button"
             className="calendar-nav-button calendar-nav-arrow"

@@ -4849,7 +4849,8 @@ function formatExpiry(value: string): string {
 }
 
 function toErrorMessage(error: unknown): string {
+  // Known main-process messages have catalog entries; unknown ones pass through unchanged.
   return error instanceof Error
-    ? error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "")
+    ? t(error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ""))
     : t("Watch-face request failed.");
 }

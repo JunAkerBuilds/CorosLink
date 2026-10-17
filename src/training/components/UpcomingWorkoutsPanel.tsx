@@ -104,7 +104,7 @@ export function UpcomingWorkoutsPanel({ workouts, size }: UpcomingWorkoutsPanelP
                           {workout.name}
                         </strong>
                         <span className="training-upcoming-tag">
-                          {inferUpcomingWorkoutCategory(workout.name)}
+                          {t(inferUpcomingWorkoutCategory(workout.name))}
                         </span>
                       </div>
                       {rowStats ? (
@@ -131,7 +131,7 @@ function TodayWorkoutCard({ workout }: { workout: TrainingHubUpcomingWorkout }) 
   const { unitSystem } = useUnitSystem();
   const category = inferUpcomingWorkoutCategory(workout.name);
   const detailLine = formatUpcomingWorkoutDetailLine(
-    category,
+    t(category),
     workout.volume,
     workout.trainingLoad,
     unitSystem
@@ -145,7 +145,7 @@ function TodayWorkoutCard({ workout }: { workout: TrainingHubUpcomingWorkout }) 
       <div className="training-upcoming-today-copy">
         <div className="training-upcoming-today-heading">
           <span className="training-upcoming-today-pill">{t("Today")}</span>
-          <span className="training-upcoming-today-tag">{category}</span>
+          <span className="training-upcoming-today-tag">{t(category)}</span>
         </div>
         <h3 className="training-upcoming-today-title">{workout.name}</h3>
         <p className="training-upcoming-today-meta">{detailLine}</p>

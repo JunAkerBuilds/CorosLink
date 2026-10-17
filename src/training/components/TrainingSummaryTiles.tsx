@@ -201,8 +201,8 @@ export function TrainingSummaryTiles({
           label={variant === "widget" ? t("Load") : t("Training Load")}
           value={formatOptionalNumber(summary.todayLoad)}
           detail={
-            variant === "widget" ? "today" : summary.weekLoadTotal !== undefined
-              ? t("{{value1}} load over 7 days", { value1: String(Math.round(summary.weekLoadTotal)) }) : "today's load"
+            variant === "widget" ? t("today") : summary.weekLoadTotal !== undefined
+              ? t("{{value1}} load over 7 days", { value1: String(Math.round(summary.weekLoadTotal)) }) : t("today's load")
           }
           context={summary.weekLoadTotal !== undefined ? t("{{value1}} load over 7 days", { value1: String(Math.round(summary.weekLoadTotal)) }) : undefined}
           readings={recentReadings(trendPoints.map((point) => ({ date: point.date, value: point.trainingLoad })))}
@@ -220,7 +220,7 @@ export function TrainingSummaryTiles({
           }
           detail={
             variant === "widget" ? "bpm" : summary.rhrDelta !== undefined
-              ? t("{{value1}} vs 7-day avg", { value1: String(formatSignedDelta(summary.rhrDelta, " bpm")) }) : "beats per minute"
+              ? t("{{value1}} vs 7-day avg", { value1: String(formatSignedDelta(summary.rhrDelta, " bpm")) }) : t("beats per minute")
           }
           context={summary.rhrDelta !== undefined ? t("{{value1}} vs 7-day avg", { value1: String(formatSignedDelta(summary.rhrDelta, " bpm")) }) : undefined}
           readings={recentReadings(trendPoints.map((point) => ({ date: point.date, value: point.rhr !== undefined && point.rhr > 0 ? point.rhr : undefined })))}
@@ -234,7 +234,7 @@ export function TrainingSummaryTiles({
           icon={<Footprints size={iconSize} />}
           label={t("Steps")}
           value={formatWholeNumber(summary.steps)}
-          detail={variant === "widget" ? "today" : "daily step count"}
+          detail={variant === "widget" ? t("today") : t("daily step count")}
           readings={recentReadings(healthRecords.map((record) => ({ date: record.happenDay, value: record.steps })))}
           variant={variant}
           tone="steps"
@@ -246,7 +246,7 @@ export function TrainingSummaryTiles({
           icon={<Zap size={iconSize} />}
           label={t("Calories")}
           value={formatWholeNumber(summary.calories)}
-          detail={variant === "widget" ? "kcal" : "total calories"}
+          detail={variant === "widget" ? "kcal" : t("total calories")}
           readings={recentReadings(healthRecords.map((record) => ({ date: record.happenDay, value: record.calories })))}
           variant={variant}
           tone="calories"

@@ -335,6 +335,6 @@ export function getWeeklyActivityMetricLabel(
   unitSystem: UnitSystem
 ): string {
   return metric === "distance"
-    ? `Distance (${distanceUnit(unitSystem)})`
-    : METRIC_LABELS[metric];
+    ? `${t("Distance")} (${distanceUnit(unitSystem)})`
+    : t(METRIC_LABELS[metric]);
 }

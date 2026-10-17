@@ -537,8 +537,8 @@ export function TrainingTrendCharts({ points, sleepRecords, rangeLabel = "Last 7
               points={rpePoints}
               dataKey="rpeLoad"
               palette={metrics.rpe}
-              formatValue={(value) => `${formatRoundedValue(value)} AU`}
-              formatDelta={(delta) => `${formatRoundedValue(delta)} AU`}
+              formatValue={(value) => `${formatRoundedValue(value)} ${t("AU")}`}
+              formatDelta={(delta) => `${formatRoundedValue(delta)} ${t("AU")}`}
             />
           ) : null}
         </div>
@@ -550,7 +550,7 @@ export function TrainingTrendCharts({ points, sleepRecords, rangeLabel = "Last 7
                   <ChartAreaGradient id="rpeLoadFill" stops={metrics.rpe.stops} />
                 </defs>
                 <TrendChartAxes
-                  tooltipValueFormatter={(value) => `${formatRoundedValue(value)} AU`}
+                  tooltipValueFormatter={(value) => `${formatRoundedValue(value)} ${t("AU")}`}
                 />
                 <Area
                   type="monotone"

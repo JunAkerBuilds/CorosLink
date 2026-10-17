@@ -131,10 +131,10 @@ export function OverviewWeatherCard() {
       <div className="overview-weather-meta">
         <div className="overview-weather-range">
           <span className="overview-weather-high">
-            <b>H</b> {formatTemperature(snapshot.highC, unitSystem)}
+            <b>{t("H", undefined, "weather")}</b> {formatTemperature(snapshot.highC, unitSystem)}
           </span>
           <span className="overview-weather-low">
-            <b>L</b> {formatTemperature(snapshot.lowC, unitSystem)}
+            <b>{t("L", undefined, "weather")}</b> {formatTemperature(snapshot.lowC, unitSystem)}
           </span>
         </div>
         <div className="overview-weather-details">

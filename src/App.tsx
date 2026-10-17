@@ -6414,7 +6414,7 @@ function ApplePodcastsView({
               ) : (
                 <Search size={17} aria-hidden="true" />
               )}
-              {looksLikeApplePodcastInput(input) ? t("Open") : t("Search")}
+              {looksLikeApplePodcastInput(input) ? t("Open", undefined, "podcast") : t("Search")}
             </button>
           </form>
 
