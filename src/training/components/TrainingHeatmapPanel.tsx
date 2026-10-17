@@ -58,7 +58,6 @@ interface TrainingHeatmapPanelProps {
   rpeBackfill?: { pending: number; running: boolean } | null;
 }
 
-const WEEKDAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 const LEGEND_LEVELS = [0, 1, 2, 3, 4] as const;
 const HEATMAP_PROXIMITY_RADIUS = 120;
 const HEATMAP_WAVE_SETTLE_MS = 220;
@@ -173,6 +172,11 @@ function TrainingHeatmapPanelComponent({
     rpeBackfill !== null && (rpeBackfill.pending > 0 || rpeBackfill.running);
   const grid = useMemo(() => buildHeatmapGrid(cells), [cells, getLocale()]);
   const summary = useMemo(() => buildHeatmapSummary(cells), [cells, getLocale()]);
+  // Monday-first narrow weekday names in the app language (2024-01-01 was a Monday).
+  const weekdayLabels = useMemo(() => {
+    const format = new Intl.DateTimeFormat(getLocale(), { weekday: "narrow" });
+    return Array.from({ length: 7 }, (_, day) => format.format(new Date(2024, 0, 1 + day)));
+  }, [getLocale()]);
   // Color each day by the sport of that day's highest-training-load activity.
   const sportByDay = useMemo(
     () => buildDominantSportByDay(activities),
@@ -545,12 +549,12 @@ function TrainingHeatmapPanelComponent({
               </div>
 
               <div className="training-heatmap-weekdays" aria-hidden="true">
-                {WEEKDAY_LABELS.map((label, index) => (
+                {weekdayLabels.map((label, index) => (
                   <span
                     key={`${label}-${index}`}
                     className="training-heatmap-weekday"
                   >
-                    {t(label)}
+                    {label}
                   </span>
                 ))}
               </div>

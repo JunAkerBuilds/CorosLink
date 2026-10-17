@@ -1,4 +1,4 @@
-import { t } from "../i18n/toolsLocale";
+import { formatNumber, t } from "../i18n/toolsLocale";
 import type {
   TrainingHubActivity,
   TrainingHubActivityDetail,
@@ -415,9 +415,9 @@ export function formatOverallDistance(
     return { value: String(Math.round(distance)), unit };
   }
   if (distance >= 10) {
-    return { value: distance.toFixed(1), unit };
+    return { value: formatNumber(distance, { minimumFractionDigits: 1, maximumFractionDigits: 1 }), unit };
   }
-  return { value: distance.toFixed(2), unit };
+  return { value: formatNumber(distance, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), unit };
 }
 
 type DetailFetcher = (
