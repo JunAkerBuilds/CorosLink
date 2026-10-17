@@ -1638,7 +1638,7 @@ export function StrengthView({
                           </strong>
                           {point.sessions > 0 ? (
                             <span>
-                              {point.sessions} {t("session")} {point.sessions === 1 ? "" : "s"}
+                              {point.sessions} {point.sessions === 1 ? t("session") : t("sessions")}
                               {usesWeights ? t(" · {{value1}} sets", { value1: String(point.sets) }) : ""}
                             </span>
                           ) : null}
@@ -1750,8 +1750,8 @@ export function StrengthView({
                           <div className="strength-lift-main">
                             <span className="strength-lift-name">{lift.name}</span>
                             <span className="strength-lift-meta">
-                              {lift.sessions} {t("session")} {lift.sessions === 1 ? "" : "s"} ·{" "}
-                              {formatSets(lift.sets)} {t("sets")} </span>
+                              {lift.sessions}{" "}{lift.sessions === 1 ? t("session") : t("sessions")} ·{" "}
+                              {formatSets(lift.sets)}{" "}{t("sets")}</span>
                           </div>
                           <Sparkline
                             values={loaded.map((point) => point.e1rmKg)}
