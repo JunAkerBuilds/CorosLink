@@ -412,6 +412,7 @@ import {
   logoutChat,
   saveChatSessionEntries,
   saveChatSettings,
+  generateCoachSessionTitle,
   streamChat,
   testClaudeCodeConnection,
   testLocalChatConnection,
@@ -523,6 +524,7 @@ function createCoachHub(): CoachSessionHub {
       }
     },
     settings: getChatSettings,
+    titler: generateCoachSessionTitle,
     unitSystem: {
       get: () => {
         const saved = getSetting("coach.unitSystem");

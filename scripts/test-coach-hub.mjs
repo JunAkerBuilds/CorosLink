@@ -132,7 +132,7 @@ const prompt = {
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-function createHarness({ database = createMemoryDatabase(), events = createMemoryCoachEventStore(), visualizationsEnabled = true, maxRetainedEvents } = {}) {
+function createHarness({ database = createMemoryDatabase(), events = createMemoryCoachEventStore(), visualizationsEnabled = true, maxRetainedEvents, titler } = {}) {
   const stream = createFakeStream();
   const actions = createActions();
   const settings = { visualizationsEnabled };
@@ -142,7 +142,8 @@ function createHarness({ database = createMemoryDatabase(), events = createMemor
     stream,
     actions,
     settings: () => settings,
-    ...(maxRetainedEvents ? { maxRetainedEvents } : {})
+    ...(maxRetainedEvents ? { maxRetainedEvents } : {}),
+    ...(titler ? { titler } : {})
   });
   return { hub, stream, actions, settings, database, events };
 }
@@ -476,4 +477,24 @@ assert.deepEqual(local.stream.cancelled, [local.stream.turns[0].requestId]);
 assert.throws(() => local.hub.getSession(localSession.id), (error) => error.code === "not_found");
 assert.deepEqual(local.events.list(localSession.id, 0), []);
 
-console.log("coach hub tests passed (shared stream, replay/snapshot, idempotent sends, approvals, restarts, contract shapes)");
+// After the first answer the provider names the conversation; later answers leave it.
+const titleCalls = [];
+const named = createHarness({ titler: async (provider, question, answer) => { titleCalls.push([provider, question, answer]); return "Long run review"; } });
+const namedSession = named.hub.createSession("openrouter");
+const namedFrames = record(named.hub, namedSession.id, 0).frames;
+named.hub.send({ sessionId: namedSession.id, clientMessageId: "n-1", text: "How did my long run go?" });
+named.stream.turns[0].send("chat:streamDone", { fullText: "Steady, with a strong finish." });
+named.stream.turns[0].resolve();
+await tick();
+await tick();
+assert.deepEqual(titleCalls, [["openrouter", "How did my long run go?", "Steady, with a strong finish."]]);
+assert.equal(named.hub.getSession(namedSession.id).session.title, "Long run review");
+assert.equal(named.hub.listSessions("openrouter")[0].title, "Long run review", "the new title is saved");
+assert.equal(namedFrames.filter((frame) => frame.event === "session.updated").at(-1).data.session.title, "Long run review");
+named.hub.send({ sessionId: namedSession.id, clientMessageId: "n-2", text: "And my tempo?" });
+named.stream.turns[1].send("chat:streamDone", { fullText: "Right on pace." });
+named.stream.turns[1].resolve();
+await tick();
+assert.equal(titleCalls.length, 1);
+
+console.log("coach hub tests passed (shared stream, replay/snapshot, idempotent sends, approvals, restarts, contract shapes, AI titles)");

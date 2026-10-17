@@ -5,6 +5,7 @@ import {
   getChatSessionSummary,
   listChatSessions,
   normalizePersistedChatEntry,
+  renameChatSession,
   saveChatSession,
   type ChatSessionDatabase
 } from "../chatHistoryStore";
@@ -24,6 +25,8 @@ export interface CoachSessionStore {
   load(id: string): PersistedChatEntry[];
   create(provider: ChatProvider): ChatSessionSummary;
   save(id: string, entries: PersistedChatEntry[]): ChatSessionSummary | null;
+  /** Sets just the title; null when the session is gone. */
+  rename(id: string, title: string): ChatSessionSummary | null;
   remove(id: string): void;
   /** The entry as it reads back after a save, or null when a save would drop it. */
   normalize(entry: PersistedChatEntry): PersistedChatEntry | null;
@@ -39,6 +42,7 @@ export function createChatHistorySessionStore(
     load: (id) => getChatSession(id, database),
     create: (provider) => createChatSession(provider, database),
     save: (id, entries) => saveChatSession(id, entries, database),
+    rename: (id, title) => renameChatSession(id, title, database),
     remove: (id) => deleteChatSession(id, database),
     normalize: normalizePersistedChatEntry,
     ...overrides

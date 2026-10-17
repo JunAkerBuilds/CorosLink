@@ -15,7 +15,9 @@ const {
   migrateLegacyTranscriptRow,
   parseChatTranscriptJson,
   restoreChatPlanDraftSources,
-  saveChatSession
+  saveChatSession,
+  cleanSessionTitle,
+  renameChatSession
 } = await import(`${distUrl("chatHistoryStore.js")}?cacheBust=${Date.now()}`);
 
 function createMemoryDatabase() {
@@ -400,5 +402,21 @@ saveChatSession(
 );
 assert.equal(listChatSessions("openrouter", db).length, 1);
 assert.equal(listChatSessions("chatgpt", db).length, 2);
+
+// AI titles: tidied, and saved without touching the transcript or its place in the list.
+assert.equal(cleanSessionTitle('"Tempo Week Tweaks."\nHope that helps'), "Tempo Week Tweaks");
+assert.equal(cleanSessionTitle("Title: **Knee pain after long run**"), "Knee pain after long run");
+assert.equal(cleanSessionTitle("「膝の痛み」。"), "膝の痛み");
+assert.equal(cleanSessionTitle("  \n "), null);
+assert.ok(cleanSessionTitle("x".repeat(80)).length <= 49);
+{
+  const [row] = listChatSessions("chatgpt", db);
+  const before = getChatSession(row.id, db);
+  const renamed = renameChatSession(row.id, "Long run review", db);
+  assert.equal(renamed.title, "Long run review");
+  assert.equal(renamed.updatedAt, row.updatedAt);
+  assert.deepEqual(getChatSession(row.id, db), before);
+  assert.equal(renameChatSession("missing", "Anything", db), null);
+}
 
 console.log("chat history store tests passed");

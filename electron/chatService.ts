@@ -106,6 +106,7 @@ import {
   type ChatModelOption
 } from "./chatModels";
 import {
+  cleanSessionTitle,
   createChatSession,
   deleteChatSession,
   getChatSession,
@@ -1531,6 +1532,133 @@ async function resolveModelAndOpenStream(
       : `No supported chat model for this ChatGPT account. ${truncate(lastDetail, 600)}`,
     authError: false
   };
+}
+
+const TITLE_TIMEOUT_MS = 30_000;
+const TITLE_INSTRUCTIONS =
+  "You name Coach conversations. Given the athlete's first question and the Coach's answer, " +
+  "reply with a short, specific title of 2 to 5 words in the language of the question, " +
+  "like \"Tempo week tweaks\" or \"Knee pain after long run\". " +
+  "Reply with the title only: no quotes, no emoji, no trailing punctuation.";
+
+/**
+ * A short title for a conversation, written by the session's provider from its first exchange.
+ * Tool-free and one round. Null when the provider can't answer or the reply isn't a usable title.
+ */
+export async function generateCoachSessionTitle(
+  provider: ChatProvider,
+  question: string,
+  answer: string
+): Promise<string | null> {
+  const prompt = `Question:\n${question.slice(0, 1500)}\n\nAnswer:\n${answer.slice(0, 1500)}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TITLE_TIMEOUT_MS);
+  try {
+    const reply = await completeOnce(provider, TITLE_INSTRUCTIONS, prompt, controller.signal);
+    return cleanSessionTitle(reply);
+  } catch (error) {
+    console.warn("[coach] could not name the conversation:", error instanceof Error ? error.message : String(error));
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** One tool-free answer from a provider, as text. */
+async function completeOnce(
+  provider: ChatProvider,
+  instructions: string,
+  prompt: string,
+  signal: AbortSignal
+): Promise<string> {
+  const settings = getChatSettings();
+  const messages: ChatMessage[] = [{ role: "user", content: prompt }];
+  let text = "";
+  const onToken = (delta: string) => {
+    text += delta;
+  };
+  const noTools = {
+    tools: [],
+    maxToolRounds: 1,
+    signal,
+    onToken,
+    onToolCall: async () => "",
+    onToolCallStart: () => undefined,
+    onToolCallError: () => undefined
+  };
+
+  if (provider === "claude-code") {
+    const status = await inspectClaudeCodeStatus(settings.claudeCode.executablePath);
+    if (!status.authenticated || !status.executablePath) throw new Error(status.message);
+    // Naming needs no depth: the small model answers in a moment.
+    const result = await streamClaudeCodeCompletion({
+      executablePath: status.executablePath,
+      instructions,
+      messages,
+      tools: [],
+      signal,
+      timeoutMs: TITLE_TIMEOUT_MS,
+      model: "haiku",
+      onToken,
+      onToolCall: async () => ""
+    });
+    return result.fullText || text;
+  }
+
+  if (provider === "openrouter") {
+    const apiKey = readStoredOpenRouterApiKey();
+    if (!apiKey) throw new Error("No OpenRouter API key.");
+    const result = await streamOpenRouterChatCompletion({
+      ...noTools,
+      config: { model: settings.openRouter.model, apiKey },
+      instructions,
+      messages
+    });
+    return result.fullText || text;
+  }
+
+  if (provider === "local") {
+    const result = await streamLocalChatCompletion({
+      ...noTools,
+      config: { ...getLocalRuntimeConfig(settings.local), toolsEnabled: false },
+      instructions,
+      messages,
+      onToolsDisabled: () => undefined
+    });
+    return result.fullText || text;
+  }
+
+  const token = await getValidToken();
+  const opened = await resolveModelAndOpenStream(
+    token,
+    crypto.randomUUID(),
+    instructions,
+    messages.map(toInputMessageItem),
+    [],
+    signal,
+    settings.chatgpt.model
+  );
+  if ("error" in opened) throw new Error(opened.error);
+  const reader = opened.response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const frames = buffer.split("\n\n");
+    buffer = frames.pop() ?? "";
+    for (const frame of frames) {
+      const data = extractSseData(frame);
+      if (data === null || data === "[DONE]") continue;
+      try {
+        text += extractResponseTextDelta(JSON.parse(data));
+      } catch {
+        // A partial or non-JSON frame.
+      }
+    }
+  }
+  return text;
 }
 
 /**

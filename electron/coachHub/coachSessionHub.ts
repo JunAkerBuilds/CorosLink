@@ -105,6 +105,11 @@ export interface CoachSessionHubOptions {
   stream: CoachStreamDriver;
   actions: CoachActionDriver;
   settings: () => Pick<ChatSettings, "visualizationsEnabled">;
+  /**
+   * Writes a short title from a conversation's first question and answer (the session's
+   * provider, in the app). Null keeps the title the first question gave it.
+   */
+  titler?: (provider: ChatProvider, question: string, answer: string) => Promise<string | null>;
   /** The units remote senders get: the last ones the desktop sent with. */
   unitSystem?: { get(): UnitSystem | undefined; set(value: UnitSystem): void };
   now?: () => number;
@@ -778,6 +783,43 @@ export class CoachSessionHub {
     this.commit(state, changes);
     this.emit(state, "turn.completed", { requestId: turn.requestId });
     this.compact(state);
+    if (finishReason !== "cancelled" && finalText) this.nameSession(state);
+  }
+
+  /**
+   * After the first answer, a short title from the provider replaces the first question.
+   * It comes a few seconds later, so it is saved and announced on its own.
+   */
+  private nameSession(state: SessionState): void {
+    const titler = this.options.titler;
+    if (!titler) return;
+    const messages = state.entries.flatMap((entry) => (entry.kind === "message" ? [entry] : []));
+    const answers = messages.filter((entry) => entry.role === "assistant");
+    const question = messages.find((entry) => entry.role === "user")?.content.trim();
+    if (answers.length !== 1 || !question) return;
+    const sessionId = state.summary.id;
+    const firstTitle = state.summary.title;
+    void titler(state.summary.provider, question, answers[0].content).then(
+      (title) => {
+        if (!title || this.stopped) return;
+        // Deleted meanwhile, or already retitled: leave it.
+        const current = this.cache.get(sessionId)?.summary ?? this.options.sessions.summary(sessionId);
+        if (!current || current.title !== firstTitle || title === firstTitle) return;
+        const renamed = this.options.sessions.rename(sessionId, title);
+        if (!renamed) return;
+        const live = this.cache.get(sessionId);
+        if (live) {
+          live.summary = renamed;
+          this.emit(live, "session.updated", { session: coachSessionInfo(renamed) });
+        } else {
+          // Not in memory: clients replaying from before now get a snapshot with the new title.
+          this.invalidate(sessionId);
+          return;
+        }
+        this.notifySessions({ kind: "upsert", session: renamed });
+      },
+      (error) => console.warn("[coach] could not name the conversation:", error)
+    );
   }
 
   private failTurn(state: SessionState, turn: TurnState, failure: string, authError: boolean): void {

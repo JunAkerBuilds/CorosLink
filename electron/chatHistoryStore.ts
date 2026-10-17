@@ -1073,6 +1073,23 @@ function truncateTitle(text: string): string {
     : trimmed;
 }
 
+const AI_TITLE_MAX = 48;
+
+/** The first line of a model's reply, without the quotes, markup and full stop models add anyway. */
+export function cleanSessionTitle(reply: string): string | null {
+  const line = reply.split("\n").map((part) => part.trim()).find(Boolean) ?? "";
+  const title = line
+    .replace(/^(?:title|titre|titel|título|标题|タイトル)\s*[:：]\s*/i, "")
+    .replace(/[*_`#]/g, "")
+    // Quotes and a full stop, in either order ("Title." or 「タイトル」。).
+    .replace(/[\s.。!！?？,，;；:："'“”‘’「」『』]+$/, "")
+    .replace(/^["'“”‘’「」『』]+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!title) return null;
+  return title.length > AI_TITLE_MAX ? `${title.slice(0, AI_TITLE_MAX).trimEnd()}…` : title;
+}
+
 export function deriveSessionTitleFromEntries(
   entries: PersistedChatEntry[]
 ): string {
@@ -1233,6 +1250,20 @@ export function saveChatSession(
     JSON.stringify(normalizedEntries),
     updatedAt
   );
+  const nextRow = database.getSession(id);
+  return nextRow ? toSessionSummary(nextRow) : null;
+}
+
+/** Retitles a session, keeping its transcript and its place in the list. */
+export function renameChatSession(
+  id: string,
+  title: string,
+  database: ChatSessionDatabase = defaultDatabase
+): ChatSessionSummary | null {
+  const row = database.getSession(id);
+  const trimmed = title.trim();
+  if (!row || !trimmed) return null;
+  database.updateSession(id, truncateTitle(trimmed), row.messages_json, row.updated_at);
   const nextRow = database.getSession(id);
   return nextRow ? toSessionSummary(nextRow) : null;
 }
