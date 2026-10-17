@@ -1,5 +1,6 @@
 import type { CorosWatchfaceAssetReplacement, CorosWatchfaceConfigOverride, CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceResolutionDetails, CorosWatchfaceTemplateDetails } from "../../electron/types";
-import { NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartGroup, nativeChartRepresentation, nativeChartSourceKeys, nativeFieldKeys, nativeConfigPrefix, nativeHasIcon, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
+import type { ChartPageCompanions } from "./recoveredWatchfaceDesign";
+import { NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartDailyPage, nativeChartGroup, nativeChartRepresentation, nativeChartSourceKeys, nativeFieldKeys, nativeConfigPrefix, nativeHasIcon, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
 import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, offsetConfigValue, parseConfigPos, parseConfigRect, pickPreviewResolution, resizeAndTintSprite } from "./watchfaceStudio";
 import { isNativeTime, nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRolePart, nativeRoleIndices, nativeStateCount } from "./nativeDataParts";
 import { parseSimulationDateTime, type WatchfacePreviewScenario } from "./watchfaceSimulation";
@@ -503,10 +504,30 @@ export function nativeLayerHiddenByChartGroup(id: string, data: NativeData): boo
   return false;
 }
 
+/**
+ * A daily-data page shows its other template readouts and divider beside the
+ * chart layer's readout: only readouts of the layer's own page, as the watch
+ * pages stress/stamina/elevation apart from calories/heart rate/steps.
+ */
+async function drawChartPageCompanions(canvas: HTMLCanvasElement, width: number, data: NativeData, scenario?: WatchfacePreviewScenario,
+  chartPage?: ChartPageCompanions | null) {
+  const chart = data.chart, page = nativeChartDailyPage(chart?.chartSource);
+  if (!chartPage || !chart?.enabled || !page) return;
+  const ctx = canvas.getContext("2d"); if (!ctx) return;
+  const ratio = canvas.width / width;
+  if (chartPage.divider) ctx.drawImage(await loadStudioImage(chartPage.divider.dataUrl), chartPage.divider.x * ratio, chartPage.divider.y * ratio);
+  for (const readout of chartPage.readouts) {
+    if (readout.chartSource === chart.chartSource || !page.includes(readout.chartSource ?? "")) continue;
+    await drawNativeDataPreview(canvas, width, { chart: readout }, scenario);
+  }
+}
+
 const SAMPLE_HISTORY = [0.42, 0.51, 0.37, 0.63, 0.58, 0.75, 0.54, 0.68, 0.61, 0.46, 0.52, 0.35];
 /** Sample-only renderer; firmware supplies the live values and chart representation. */
-export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: number, data: NativeData = {}, scenario?: WatchfacePreviewScenario) {
+export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: number, data: NativeData = {}, scenario?: WatchfacePreviewScenario,
+  chartPage?: ChartPageCompanions | null) {
   const ctx = canvas.getContext("2d"); if (!ctx) return;
+  await drawChartPageCompanions(canvas, width, data, scenario, chartPage);
   const ratio = canvas.width / width;
   const history = scenario?.chartHistory ?? SAMPLE_HISTORY;
   const run = minMaxTemperatureRun(data, scenario);
@@ -521,7 +542,10 @@ export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: nu
     const source = style.chartSource ?? "chart_stress", moon = id === "chart" && source === "chart_moon";
     const available = nativeParts(id, style);
     const value = nativeDataPreviewValue(id, style, scenario);
-    if (id === "chart" && part("background").enabled) await draw("background");
+    // The daily-data page shows its readouts without the plot frame (official
+    // faces lay them over chart_bg), so only graph pages draw it.
+    const graph = id === "chart" ? nativeChartRepresentation(source) : undefined;
+    if (graph && graph !== "none" && part("background").enabled) await draw("background");
     if (available.includes("states") && part("states").enabled) {
       // PLANET has eleven stamina frames, from empty (0) to full (100%). UV
       // level artwork is categorical (DASHBOARD: unknown, low, moderate, high,
@@ -558,8 +582,9 @@ export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: nu
     }
     if (field.kind === "solar" && part("progress").enabled) await draw("progress");
     if (id !== "chart") continue;
-    // The watch picks bars or a line by chart group, so the preview does too.
-    const plot = part("plot"), chart = style.chartStyle, line = nativeChartRepresentation(source) === "curve";
+    // The watch picks bars, a line or no graph by chart group, so the preview does too.
+    if (graph === "none") continue;
+    const plot = part("plot"), chart = style.chartStyle, line = graph === "curve";
     if (plot.enabled) {
       ctx.save();
       ctx.beginPath(); ctx.rect(x + plot.x * scale, y + plot.y * scale, plot.width * scale, plot.height * scale); ctx.clip();

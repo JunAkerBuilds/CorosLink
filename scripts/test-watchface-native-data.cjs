@@ -220,7 +220,7 @@ async function renderNativeData(details) {
   const defaultSample=await renderSample();
   // The watch picks bars or a line by chart group; the preview follows the source.
   const catalog=await import('/electron/watchfaceNativeCatalog.ts');
-  check(['chart_sunrise','chart_sun_angle','chart_moonrise','chart_moon','chart_moon_percent'].every(s=>catalog.nativeChartRepresentation(s)==='curve')&&['chart_stress','chart_stamina','chart_step','chart_kcal','chart_elevation','chart_baro','chart_tide'].every(s=>catalog.nativeChartRepresentation(s)==='bars'),'Sun and moon groups draw a line; daily data, barometer and tide draw bars');
+  check(['chart_sunrise','chart_sun_angle','chart_moonrise','chart_moon','chart_moon_percent'].every(s=>catalog.nativeChartRepresentation(s)==='curve')&&['chart_baro','chart_tide'].every(s=>catalog.nativeChartRepresentation(s)==='bars')&&['chart_stress','chart_stamina','chart_step','chart_kcal','chart_elevation'].every(s=>catalog.nativeChartRepresentation(s)==='none'),'Sun and moon groups draw a line; barometer and tide draw bars; daily data shows readouts only');
   check(native.defaultNativeDataStyle('chart').chartStyle===undefined,'New charts carry no preview-only graph type');
   const styled={lineWidth:30,upperColor:'#00ff00',lowerColor:'#ff0000',barWidth:12,barGap:4,selectedBarColor:'#0000ff',unselectedBarColor:'#0000ff'};
   const previewWith=async (chartStyle,scenario,chartSource='chart_stress')=>{const data={...simulatedData,chart:{...simulatedData.chart,chartSource,chartStyle}};const before=JSON.stringify(data);const c=sampleCanvas();await native.drawNativeDataPreview(c,800,data,scenario);check(JSON.stringify(data)===before,'Preview rendering preserves saved chart settings');return c;};

@@ -111,10 +111,31 @@ export function nativeChartGroup(source: string | undefined): "general" | "sun" 
  * (sun and moon groups) set only a line width; SATISFY 3 sets only a bar width
  * for its barometer and tide groups. Barometer and tide pages stay blank until
  * the phone syncs their data, so a blank page says nothing about the style.
+ * The daily-data group (stress, stamina, steps, calories, elevation) is a page
+ * of readouts with no graph: official NOMAD, MARK and NIGHT CLIMBER lay those
+ * readouts across chart_rect and over the chart_bg plot frame, and NOMAD gives
+ * that page its own chart_item3_bg divider.
  */
-export function nativeChartRepresentation(source: string | undefined): "bars" | "curve" {
+export function nativeChartRepresentation(source: string | undefined): "bars" | "curve" | "none" {
   const group = nativeChartGroup(source ?? "chart_stress");
-  return group === "sun" || group === "moon" ? "curve" : "bars";
+  return group === "sun" || group === "moon" ? "curve" : group === "general" ? "none" : "bars";
+}
+
+/**
+ * The daily-data group is two readout pages under one divider, each with a
+ * left, right and lower slot (PACE Pro, official NOMAD, 2026-10-16):
+ * stress / stamina / elevation, then calories / heart rate / steps.
+ */
+export const NATIVE_CHART_DAILY_PAGES = [["chart_stress", "chart_stamina", "chart_elevation"], ["chart_kcal", "chart_heart_rate", "chart_step"]] as const;
+/**
+ * Chart readouts with CorosLink-only config keys (compiler/studioFields.ts).
+ * BIN WFChartInfo.heart_rate has no 4.9.9 key: recovery writes
+ * chart_heart_rate_* so the built-in compiler keeps it, while COROS's compiler
+ * ignores them. They are kept from templates, not offered as chart sources.
+ */
+export const NATIVE_CHART_STUDIO_READOUTS = ["chart_heart_rate"] as const;
+export function nativeChartDailyPage(source: string | undefined): readonly string[] | undefined {
+  return NATIVE_CHART_DAILY_PAGES.find(page => (page as readonly string[]).includes(source ?? "chart_stress"));
 }
 
 export function nativeStatePositionKey(field: NativeDataDefinition): string {

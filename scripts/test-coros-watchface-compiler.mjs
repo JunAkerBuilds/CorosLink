@@ -135,6 +135,13 @@ try {
  await assert.rejects(engine.compile(await make('too-many.dat',tooMany),'Too many'),/too many images/);
  assert.equal(engine.status().phase,'failed');
  assert.throws(()=>compileWatchface(new Map([['info.json',Buffer.from('{}')]]),{faceId:1}),WatchfaceCompileError);
+ // CorosLink-only chart heart rate (WFChartInfo.heart_rate, NOMAD's second daily page): written like chart_step at 0xf86, sharing its font.
+ const heart=new Map([['info.json',Buffer.from('{}')],['watchface_416x416/config.txt',Buffer.from('[chart_rect]={89,273,323,325}\n[chart_step_icon_pos]={147,343}\n[chart_step_icon]=step.png\n[chart_step_rect]={189,343,257,374,hcenter|vcenter}\n[chart_step_font]=num\n[chart_heart_rate_icon_pos]={227,293}\n[chart_heart_rate_icon]=heart.png\n[chart_heart_rate_rect]={270,293,335,328,hcenter|vcenter}\n[chart_heart_rate_font]=num\n')],
+  ['watchface_416x416/step.png',png(3,2)],['watchface_416x416/heart.png',png(2,3)],...Array.from({length:10},(_,d)=>[`watchface_416x416/num/${d}.png`,png(4,5)])]);
+ const heartBin=compileWatchface(heart,{faceId:1}).bin;
+ assert.deepEqual([heartBin.readInt32LE(0xf86),heartBin.readInt32LE(0xf8a),...[0,2,4,6].map(i=>heartBin.readInt16LE(0xf92+i))],[227,293,270,293,335,328]);
+ assert.ok(heartBin.readUInt32LE(0xf8e)>heartBin.readUInt32LE(0xf74),'the heart icon block follows the step icon, as in official NOMAD');
+ assert.equal(heartBin.readUInt32LE(0xf9c),heartBin.readUInt32LE(0xf82),'one font block shared with chart_step');
  console.log(`Built-in compiler units, worker compile (${compiled.durationMs} ms), headers, CRC, AOD, warnings and face errors passed.`);
 
  // Only CorosLink's compiler: the old COROS-compiler switch is ignored, and every watch builds through the same service.

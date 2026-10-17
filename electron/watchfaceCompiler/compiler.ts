@@ -1,7 +1,8 @@
 import { decodePng, type RgbaImage } from "./png";
 import { encodeFramesBlock, encodeImageBlock, encodeMipFramesBlock, encodeMipImageBlock, InsideType, mipBlockOverflows } from "./bitmap";
 import { configPath, parseConfig, parseNumber, parsePos, parseRect, rgb222 } from "./config";
-import { ALIASES, COLORS, FIELDS, VERSIONS, WRITE_ORDER } from "./fields";
+import { ALIASES, COLORS, FIELDS as COROS_FIELDS, VERSIONS as COROS_VERSIONS, WRITE_ORDER as COROS_WRITE_ORDER } from "./fields";
+import { STUDIO_FIELDS, STUDIO_WRITE_AFTER } from "./studioFields";
 import { scaleImage } from "./scale";
 import { getWatchfaceTarget, watchfaceBinTarget, type WatchfaceBinTarget } from "../watchfaceTargets";
 
@@ -119,6 +120,12 @@ function writeRect(header: Buffer, offset: number, value: string): void {
   header.writeInt16LE(rect.x1, offset + 4); header.writeInt16LE(rect.y1, offset + 6);
   header[offset + 8] = rect.align;
 }
+
+// COROS's probed fields plus CorosLink-only ones (studioFields.ts). A face
+// without Studio keys compiles exactly as before.
+const FIELDS: typeof COROS_FIELDS = { ...COROS_FIELDS, ...Object.fromEntries(Object.entries(STUDIO_FIELDS).map(([key, [kind, offset, gates]]) => [key, [kind, offset, gates]])) };
+const VERSIONS: Readonly<Record<string, number>> = { ...COROS_VERSIONS, ...Object.fromEntries(Object.entries(STUDIO_FIELDS).map(([key, field]) => [key, field[3]])) };
+const WRITE_ORDER = COROS_WRITE_ORDER.flatMap(key => [key, ...(STUDIO_WRITE_AFTER[key] ?? [])]);
 
 /** Canonical key → the spelling that fills its slot when the canonical key is absent ("X_on_icon"). */
 const ALIAS_OF = new Map(Object.entries(ALIASES).map(([alias, key]) => [key, alias]));

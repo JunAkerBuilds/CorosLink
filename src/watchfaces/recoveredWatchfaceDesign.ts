@@ -6,7 +6,7 @@ import type {
   CorosWatchfaceTemplateAsset,
   CorosWatchfaceTemplateDetails
 } from "../../electron/types";
-import { NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS, nativeConfigPrefix, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_CHART_DAILY_PAGES, NATIVE_CHART_SOURCES, NATIVE_CHART_STUDIO_READOUTS, NATIVE_DATA_FIELDS, nativeConfigPrefix, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
 import { corosConfigColorToCss, parseConfigPos, parseConfigRect, pickPreviewResolution } from "./watchfaceStudio";
 import { nativeDataSize } from "./nativeData";
 import { getWeatherCapability } from "./weatherAssets";
@@ -227,11 +227,16 @@ const storedWidth = (value: string | undefined, fallback: number) => {
 };
 const chartRectKey = (id: string) => ["chart_sunrise", "chart_moonrise"].includes(id) ? `${id}_hour_rect` : `${id}_rect`;
 
-/** Chart readouts the template itself declares, in the order the layer prefers them. */
-function templateChartSources(config: Record<string, string>, source: (key: string) => CorosWatchfaceSpriteFile[]): string[] {
+const isChartReadout = (id: string, studio: boolean) => NATIVE_CHART_SOURCES.some(item => item.id === id) ||
+  (studio && (NATIVE_CHART_STUDIO_READOUTS as readonly string[]).includes(id));
+/**
+ * Chart readouts the template itself declares, in the order the layer prefers
+ * them; `studio` adds readouts with CorosLink-only keys (chart_heart_rate).
+ */
+function templateChartSources(config: Record<string, string>, source: (key: string) => CorosWatchfaceSpriteFile[], studio = false): string[] {
   const plot = parseConfigRect(config.chart_rect);
   if (!plot || plot.x1 <= plot.x0 || plot.y1 <= plot.y0) return [];
-  return CHART_SOURCE_ORDER.filter(id => NATIVE_CHART_SOURCES.some(item => item.id === id) &&
+  return [...CHART_SOURCE_ORDER, ...(studio ? NATIVE_CHART_STUDIO_READOUTS : [])].filter(id => isChartReadout(id, studio) &&
     // A moon-phase group is a frame table; SATISFY's single blank sun/moon
     // icon is a placeholder, not a readout the watch cycles to.
     (id === "chart_moon" ? source("chart_moon_icon").length > 1 : Boolean(parseConfigRect(config[chartRectKey(id)]) && source(`${id}_font`).length)));
@@ -277,6 +282,31 @@ export async function recoverChartGroup(details: CorosWatchfaceTemplateDetails,
   return recoverChart(template.config, template.source, sprites, chartSource);
 }
 
+/**
+ * The rest of a daily-data page. On the watch, NOMAD's general group is two
+ * readout pages under its chart_item3_bg divider, with no graph: stress,
+ * stamina and elevation, then calories, heart rate and steps (PACE Pro photos,
+ * 2026-10-16). The chart layer edits one of those readouts; export keeps the
+ * template's others and the divider in place, so the preview draws them from
+ * the template too.
+ */
+export interface ChartPageCompanions {
+  divider?: { dataUrl: string; x: number; y: number };
+  readouts: CorosWatchfaceNativeDataStyle[];
+}
+export async function recoverChartPageCompanions(details: CorosWatchfaceTemplateDetails,
+  loadAssets: (paths: string[]) => Promise<CorosWatchfaceTemplateAsset[]>): Promise<ChartPageCompanions | null> {
+  const template = templateSpriteSource(details);
+  if (!template) return null;
+  const daily = NATIVE_CHART_DAILY_PAGES.flat() as string[];
+  const general = templateChartSources(template.config, template.source, true).filter(id => daily.includes(id));
+  const readouts = (await Promise.all(general.map(id => recoverChartGroup(details, loadAssets, id).catch(() => null))))
+    .flatMap(style => style ? [style] : []);
+  const file = template.source("chart_item3_bg")[0], position = parseConfigPos(template.config.chart_item3_bg_pos);
+  const asset = file && position ? (await loadAssets([file.path]))[0] : undefined;
+  return { readouts, ...(asset && position ? { divider: { dataUrl: asset.dataUrl, x: position.x, y: position.y } } : {}) };
+}
+
 async function recoverChart(config: Record<string, string>, source: (key: string) => CorosWatchfaceSpriteFile[],
   sprites: (key: string) => Promise<Record<string, string>>, preferred?: string): Promise<CorosWatchfaceNativeDataStyle | null> {
   const plot = parseConfigRect(config.chart_rect);
@@ -285,7 +315,7 @@ async function recoverChart(config: Record<string, string>, source: (key: string
   // A graph can hide every numeric/icon readout. The build snapshot supplies
   // its sample group in Send to COROS; standalone archives can still preview
   // a curve-only or bar plot without inventing a visible readout.
-  const chartSource = preferred && NATIVE_CHART_SOURCES.some(item => item.id === preferred)
+  const chartSource = preferred && isChartReadout(preferred, true)
     ? preferred : sources[0] ?? (storedWidth(config.chart_bar_width, 8) === 0 && storedWidth(config.chart_curves_width, 2) > 0 ? "chart_sunrise" : "chart_stress");
   const rectKey = chartRectKey;
   const moon = chartSource === "chart_moon", isTime = ["chart_sunrise", "chart_moonrise"].includes(chartSource);

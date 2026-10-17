@@ -2,7 +2,7 @@ import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { createCollapsedWatchfaceLayerSections, watchfaceLayerMatchesSearch } from "./watchfaceLayerSearch";
 import { batteryStateMeaning, batteryReplacementStateCount, COROS_BATTERY_STATE_ORDER } from "./watchfaceBatteryStates";
 import { WatchfaceAddMenu, type WatchfaceAddCategory, type WatchfaceAddFaceOption } from "./WatchfaceAddMenu";
-import { recoverChartGroup, recoveredChartSources, recoverWatchfaceDesign } from "./recoveredWatchfaceDesign";
+import { recoverChartGroup, recoverChartPageCompanions, recoveredChartSources, recoverWatchfaceDesign, type ChartPageCompanions } from "./recoveredWatchfaceDesign";
 import { WATCHFACE_TARGETS } from "../../electron/watchfaceTargets";
 import { WatchfaceSimulationPanel } from "./WatchfaceSimulationPanel";
 import { useWatchfaceSimulation } from "./useWatchfaceSimulation";
@@ -837,6 +837,7 @@ interface WatchfacePreviewRenderRequest {
   options: ReturnType<typeof toStudioOptions>;
   weather: CorosWatchfaceDesignState["weatherIndicator"];
   nativeData: CorosWatchfaceDesignState["nativeData"];
+  chartPage: ChartPageCompanions | null;
   scenario?: WatchfacePreviewScenario;
   previewWidth: number;
   loadAssets: WatchfaceAssetLoader;
@@ -2098,6 +2099,14 @@ export function WatchfaceEditor({
       : null,
     [detailsWithConfigEdits, previewMode]
   );
+  // The template's other daily-data readouts and divider, drawn beside the
+  // chart layer when it shows that page (see recoverChartPageCompanions).
+  const [chartPage, setChartPage] = useState<ChartPageCompanions | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (modeSourceDetails) void recoverChartPageCompanions(modeSourceDetails, loadAssets).then(page => { if (!cancelled) setChartPage(page); }, () => undefined);
+    return () => { cancelled = true; };
+  }, [modeSourceDetails, loadAssets]);
   const designDetails = useMemo(
     () =>
       modeSourceDetails
@@ -3325,7 +3334,7 @@ export function WatchfaceEditor({
       ),
       loadAssets
     );
-    await drawNativeDataPreview(frame, previewWidth, frameDesign.nativeData, simulationScenario);
+    await drawNativeDataPreview(frame, previewWidth, frameDesign.nativeData, simulationScenario, chartPage);
     if (frameDesign.weatherIndicator?.enabled) {
       if (!frameDesign.nativeData?.weather_temp) await drawWeatherTemperaturePreview(frame, previewWidth, frameDesign.weatherIndicator, simulationScenario?.values?.weather_temp);
       const url = await weatherPreviewDataUrl(
@@ -3939,7 +3948,7 @@ export function WatchfaceEditor({
               studioOptionsForResolution(next.options, next.details),
               next.loadAssets
             );
-            await drawNativeDataPreview(frame, next.previewWidth, next.nativeData, next.scenario);
+            await drawNativeDataPreview(frame, next.previewWidth, next.nativeData, next.scenario, next.chartPage);
             if (next.weather?.enabled) {
               if (!next.nativeData?.weather_temp) await drawWeatherTemperaturePreview(frame, next.previewWidth, next.weather, next.scenario?.values?.weather_temp);
               const url = await weatherPreviewDataUrl(
@@ -4029,6 +4038,7 @@ export function WatchfaceEditor({
       scenario: simulationScenario,
       weather: previewMode === "current" ? design.weatherIndicator : undefined,
       nativeData: design.nativeData,
+      chartPage,
       previewWidth,
       loadAssets,
       dragCommitId: dragVisualRef.current?.awaitingCommitId ?? null
@@ -4040,6 +4050,7 @@ export function WatchfaceEditor({
     simulationScenario,
     design.weatherIndicator,
     design.nativeData,
+    chartPage,
     previewMode,
     previewWidth,
     loadAssets,
@@ -6743,7 +6754,7 @@ export function WatchfaceEditor({
       exportOptions,
       loadAssets
     );
-    await drawNativeDataPreview(archivePreview, snapshotBaseResolution?.width ?? previewWidth, designSnapshot.nativeData, scenario);
+    await drawNativeDataPreview(archivePreview, snapshotBaseResolution?.width ?? previewWidth, designSnapshot.nativeData, scenario, chartPage);
     if (designSnapshot.weatherIndicator?.enabled) {
       if (!designSnapshot.nativeData?.weather_temp) await drawWeatherTemperaturePreview(archivePreview, snapshotBaseResolution?.width ?? previewWidth, designSnapshot.weatherIndicator, scenario?.values?.weather_temp);
       const url = await weatherPreviewDataUrl(

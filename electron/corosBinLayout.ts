@@ -401,12 +401,15 @@ const CHART_ICONS: PositionedField[] = [
   ["chart.noDataMask", 0xfc8, 0xfd0, "chart_bar_nodata_mask_pos", "chart_bar_nodata_mask"]
 ];
 // [readout, position, config prefix]; icon pointer = +8, rect = +12, font = +22.
-const CHART_READOUTS: [string, number, string | null][] = [
+const CHART_READOUTS: [string, number, string][] = [
   ["tide", 0xdf2, "chart_tide"], ["barometer", 0xe0c, "chart_baro"], ["sunAngle", 0xe9c, "chart_sun_angle"],
   ["moonPercent", 0xeea, "chart_moon_percent"], ["stress", 0xf04, "chart_stress"], ["stamina", 0xf1e, "chart_stamina"],
   ["elevation", 0xf38, "chart_elevation"], ["kcal", 0xf52, "chart_kcal"], ["step", 0xf6c, "chart_step"],
-  // WFChartInfo.heart_rate is written at 0xf86, but no 4.9.9 config key was found for it.
-  ["heartRate", 0xf86, null]
+  // WFChartInfo.heart_rate (0xf86) has no 4.9.9 config key. Official NOMAD
+  // draws it in the right slot of the second daily-data page (calories / heart
+  // rate / steps), sharing the readout font. The chart_heart_rate_* keys are
+  // CorosLink-only: the built-in compiler writes them, COROS's ignores them.
+  ["heartRate", 0xf86, "chart_heart_rate"]
 ];
 // [readout, position, config prefix, set-icon key]; rise icon = +8, set icon = +12,
 // hour rect = +16, minute rect = +26, shared font = +36.
@@ -566,11 +569,10 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
       add(id, "icon", { position: point(pos), geometryOffset: base + pos }, base + ptr, { position: posKey, asset: assetKey });
     }
     for (const [name, pos, prefix] of CHART_READOUTS) {
-      const note = prefix ? undefined : "WFChartInfo.heart_rate: no 4.9.9 config key was established, so it is omitted from config drafts.";
       add(`chart.${name}.icon`, "icon", { position: point(pos), geometryOffset: base + pos, chart: name }, base + pos + 8,
-        prefix ? { position: `${prefix}_icon_pos`, asset: `${prefix}_icon` } : undefined, "compiler", note);
+        { position: `${prefix}_icon_pos`, asset: `${prefix}_icon` });
       add(`chart.${name}.value`, "number", { rect: rectangle(base + pos + 12), geometryOffset: base + pos + 12, chart: name }, base + pos + 22,
-        prefix ? { rect: `${prefix}_rect`, asset: `${prefix}_font` } : undefined, "compiler", note);
+        { rect: `${prefix}_rect`, asset: `${prefix}_font` });
     }
     for (const [name, pos, prefix, setKey] of CHART_RISE_SET) {
       add(`chart.${name}.icon`, "icon", { position: point(pos), geometryOffset: base + pos, chart: name }, base + pos + 8, { position: `${prefix}_icon_pos`, asset: `${prefix}_icon` });

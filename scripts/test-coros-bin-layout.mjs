@@ -44,7 +44,7 @@ rect(0x532, [215, 19, 283, 49]); pointer(0x53c, 3);
 pointer(0xb00, 0); // A bitmap pointer outside the known schema is retained.
 // WFChartInfo at 0xdc4 (SetChart): graph geometry, a rise/set readout with a
 // shared font, the solar angle in a temperature-like slot, a dormant readout
-// icon without a value rectangle, and the keyless heart-rate member.
+// icon without a value rectangle, and the heart-rate member (CorosLink-only keys).
 rect(0xdd0, [89, 273, 323, 325]);
 bytes.writeUInt16LE(7, 0xdda); bytes.writeUInt16LE(3, 0xddc);
 bytes.writeUInt32LE(0xaaaaaa, 0xdde); bytes.writeUInt32LE(0x15, 0xde2); // RGB888 and rgb222 forms.
@@ -109,7 +109,8 @@ assert.equal(get("normal", "chart.sunAngle.value").config.rect, "chart_sun_angle
 assert.equal(get("normal", "chart.stress.icon").active, false, "a readout icon without a value rectangle is dormant");
 assert.equal(get("normal", "chart.stress.value"), undefined);
 assert.equal(get("normal", "chart.heartRate.value").active, true);
-assert.equal(get("normal", "chart.heartRate.value").config, undefined, "no config key is invented for WFChartInfo.heart_rate");
+assert.deepEqual(get("normal", "chart.heartRate.value").config, { rect: "chart_heart_rate_rect", asset: "chart_heart_rate_font" }, "WFChartInfo.heart_rate maps to the CorosLink-only chart_heart_rate keys");
+assert.deepEqual(get("normal", "chart.heartRate.icon").config, { position: "chart_heart_rate_icon_pos", asset: "chart_heart_rate_icon" });
 assert.equal(get("normal", "chart.colon").config.asset, "chart_colon_icon");
 assert.equal(get("normal", "fish.pointer").config.asset, "fish_pointer_icon");
 assert.equal(get("normal", "fish.pointer").active, false, "a fish pointer without a fishing display stays dormant");
