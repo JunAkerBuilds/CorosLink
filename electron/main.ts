@@ -1030,7 +1030,15 @@ app.whenReady().then(() => {
   remoteAccess = new RemoteAccess({
     hub: coachHub,
     settings: { get: getSetting, set: setSetting },
-    defaultProvider: () => getChatSettings().provider
+    defaultProvider: () => getChatSettings().provider,
+    chatSettings: getChatSettings,
+    // A model picked on the phone shows in the Coach window at once.
+    saveChatSettings: (settings) => {
+      const saved = saveChatSettings(settings);
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("chat:settingsChanged", saved);
+      return saved;
+    },
+    chatModels: listChatModelOptions
   });
   registerIpcHandlers();
   remoteAccess.initialize();

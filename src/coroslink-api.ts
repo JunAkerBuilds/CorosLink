@@ -867,6 +867,8 @@ export interface CorosLinkApi {
   coachFinishLocalTurn: (sessionId: string, requestId: string, reply: string) => Promise<void>;
   onCoachEvent: (callback: (frame: CoachEventFrame) => void) => () => void;
   onCoachSessionsChanged: (callback: (change: CoachSessionsChange) => void) => () => void;
+  /** Coach's provider or model changed outside this window (a phone picked one). */
+  onChatSettingsChanged: (callback: (settings: ChatSettings) => void) => () => void;
   getRemoteAccessStatus: () => Promise<RemoteAccessStatus>;
   setRemoteNetworkAccess: (enabled: boolean) => Promise<RemoteAccessStatus>;
   setRemoteKeepAwake: (enabled: boolean) => Promise<RemoteAccessStatus>;

@@ -2247,9 +2247,15 @@ export function ChatView({
         upsertSessionSummary(change.session);
       }
     });
+    const unsubscribeSettings = api.onChatSettingsChanged?.((settings) => {
+      const providerChanged = settings.provider !== providerRef.current;
+      setChatSettings(settings);
+      if (providerChanged) void ensureActiveSession(settings.provider);
+    });
     return () => {
       unsubscribeEvents();
       unsubscribeSessions();
+      unsubscribeSettings?.();
       const sessionId = activeSessionIdRef.current;
       if (sessionId) void api.coachUnsubscribe(sessionId).catch(() => undefined);
     };

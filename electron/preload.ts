@@ -1368,6 +1368,11 @@ const api = {
     ipcRenderer.on("coach:event", listener);
     return () => ipcRenderer.removeListener("coach:event", listener);
   },
+  onChatSettingsChanged: (callback: (settings: ChatSettings) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, settings: ChatSettings) => callback(settings);
+    ipcRenderer.on("chat:settingsChanged", listener);
+    return () => ipcRenderer.removeListener("chat:settingsChanged", listener);
+  },
   onCoachSessionsChanged: (callback: (change: CoachSessionsChange) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, change: CoachSessionsChange) => callback(change);
     ipcRenderer.on("coach:sessions", listener);

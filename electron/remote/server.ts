@@ -3,7 +3,8 @@ import type { Duplex } from "node:stream";
 import os from "node:os";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 import type { CoachSessionHub } from "../coachHub/coachSessionHub";
-import type { ChatProvider } from "../types";
+import type { ChatProvider, ChatSettings } from "../types";
+import { getChatModelOptions, type ChatModelOption } from "../chatModels";
 import { phoneSendAddresses } from "../watchfacePhoneSend";
 import {
   COACH_RPC_PERMISSIONS,
@@ -60,6 +61,11 @@ export interface RemoteServerOptions {
   descriptor: () => { name: string; appVersion: string; platform?: string };
   /** The provider a remote `coach.createSession` uses. */
   defaultProvider: () => ChatProvider;
+  /** Coach's provider and model settings, for `coach.getModels` and `coach.setModel`. */
+  chatSettings?: () => ChatSettings;
+  saveChatSettings?: (settings: ChatSettings) => ChatSettings;
+  /** The live model catalog for a provider; the static list without it. */
+  chatModels?: (provider: ChatProvider) => Promise<ChatModelOption[]>;
   /** The port to try first (identity.ts saves it). */
   port: number;
   /** The saved port was taken and the server moved; save the new one. */
@@ -285,6 +291,37 @@ function stringParam(params: Record<string, unknown>, key: string, maxLength = 2
 }
 
 const PROVIDERS: ChatProvider[] = ["chatgpt", "claude-code", "openrouter", "local"];
+const PROVIDER_LABELS: Record<ChatProvider, string> = {
+  chatgpt: "ChatGPT",
+  "claude-code": "Claude",
+  openrouter: "OpenRouter",
+  local: "Local model"
+};
+
+/** What `coach.getModels` answers: each provider's model and catalog, and the provider in use. */
+export interface RemoteModelCatalog {
+  provider: ChatProvider;
+  providers: Array<{ id: ChatProvider; label: string; model: string; models: ChatModelOption[] }>;
+}
+
+function currentModel(settings: ChatSettings, provider: ChatProvider): string {
+  switch (provider) {
+    case "claude-code": return settings.claudeCode.model ?? "";
+    case "openrouter": return settings.openRouter.model ?? "";
+    case "local": return settings.local.model ?? "";
+    default: return settings.chatgpt.model ?? "";
+  }
+}
+
+/** Switches Coach to `provider` and, except for a local server, sets that provider's model. */
+export function applyModelChoice(settings: ChatSettings, provider: ChatProvider, model: string): ChatSettings {
+  const next: ChatSettings = { ...settings, provider };
+  const chosen = model || undefined;
+  if (provider === "claude-code") next.claudeCode = { ...settings.claudeCode, model: chosen };
+  else if (provider === "chatgpt") next.chatgpt = { ...settings.chatgpt, model: chosen };
+  else if (provider === "openrouter") next.openRouter = { ...settings.openRouter, model: chosen ?? "openrouter/auto" };
+  return next;
+}
 const CONFIRM_KINDS = ["corosAction", "workoutDelete", "planUpload", "strengthEdit"] as const;
 /** A client this far behind is dropped; it resubscribes from its cursor. */
 const MAX_BUFFERED_BYTES = 4 * 1024 * 1024;
@@ -337,6 +374,21 @@ export class RemoteServer {
       "coach.cancel": (_client, params) => ({
         result: this.options.hub.cancel(stringParam(params, "sessionId")!)
       }),
+      "coach.getModels": async () => ({ result: await this.modelCatalog() }),
+      "coach.setModel": async (_client, params) => {
+        const settings = this.options.chatSettings?.();
+        if (!settings || !this.options.saveChatSettings) {
+          throw new RpcError({ code: "unsupported", message: "This CorosLink can't change Coach's model from a phone." });
+        }
+        const provider = stringParam(params, "provider")!;
+        if (!PROVIDERS.includes(provider as ChatProvider)) throw invalidParams("Unknown Coach provider.");
+        // An empty model means the provider's own default, so it's read without stringParam.
+        const rawModel = params.model ?? "";
+        if (typeof rawModel !== "string" || rawModel.length > 200) throw invalidParams("model must be a string.");
+        const model = rawModel.trim();
+        this.options.saveChatSettings(applyModelChoice(settings, provider as ChatProvider, model));
+        return { result: await this.modelCatalog() };
+      },
       "coach.deleteSession": (client, params) => {
         const sessionId = stringParam(params, "sessionId")!;
         client.subscriptions.get(sessionId)?.();
@@ -900,6 +952,25 @@ export class RemoteServer {
   }
 
   // ----- Methods -----
+
+  /** Every provider with its current model and the models it offers, plus the one in use. */
+  private async modelCatalog(): Promise<RemoteModelCatalog> {
+    const settings = this.options.chatSettings?.();
+    const providers = await Promise.all(
+      PROVIDERS.map(async (id): Promise<RemoteModelCatalog["providers"][number]> => {
+        const current = settings ? currentModel(settings, id) : "";
+        let models: ChatModelOption[];
+        if (id === "local") {
+          models = current ? [{ value: current, label: current }] : [];
+        } else {
+          models = await (this.options.chatModels?.(id) ?? Promise.resolve(getChatModelOptions(id))).catch(() => getChatModelOptions(id));
+          if (!models.length) models = getChatModelOptions(id);
+        }
+        return { id, label: PROVIDER_LABELS[id], model: current, models };
+      })
+    );
+    return { provider: settings?.provider ?? this.options.defaultProvider(), providers };
+  }
 
   private sessionRows(): RemoteSessionRow[] {
     return this.options.hub.listSessions().map((summary) => ({

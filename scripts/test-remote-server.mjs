@@ -32,6 +32,13 @@ const identity = loadOrCreateRemoteIdentity(createSettings(), createFakeSecretBo
 const db = createRemoteDatabase();
 const auth = new RemoteAuth({ database: () => db });
 const { hub, stream } = createHub();
+let chatSettings = {
+  provider: "claude-code",
+  chatgpt: {},
+  claudeCode: { model: "opus" },
+  openRouter: { model: "openrouter/auto" },
+  local: { model: "llama3" }
+};
 let relayTrust = null;
 const portChanges = [];
 let connectionChanges = 0;
@@ -42,6 +49,9 @@ const server = new RemoteServer({
   hub,
   descriptor: () => ({ name: "Test Mac", appVersion: "9.9.9", platform: "darwin" }),
   defaultProvider: () => "claude-code",
+  chatSettings: () => chatSettings,
+  saveChatSettings: (settings) => (chatSettings = settings),
+  chatModels: async (provider) => (provider === "claude-code" ? [{ value: "", label: "Account default" }, { value: "opus", label: "Claude Opus 5.5" }] : []),
   port: 0,
   onPortChanged: (port) => portChanges.push(port),
   lanAddresses: () => [LAN],
@@ -401,12 +411,30 @@ try {
     assert.equal((await view.call("coach.createSession")).error.requiredPermission, "coach:operate");
     assert.equal((await view.call("coach.deleteSession", { sessionId })).error.requiredPermission, "coach:operate");
 
-    // Deleting from the phone removes the conversation for every client.
+    // Provider and model: readable by anyone, changed with coach:operate, and shown to every client.
+    const catalog = (await view.call("coach.getModels")).result;
+    assert.equal(catalog.provider, "claude-code");
+    assert.deepEqual(catalog.providers.map((row) => row.id), ["chatgpt", "claude-code", "openrouter", "local"]);
+    assert.equal(catalog.providers[1].model, "opus");
+    assert.deepEqual(catalog.providers[1].models.map((row) => row.value), ["", "opus"], "the live Claude list");
+    assert.ok(catalog.providers[0].models.length > 1, "ChatGPT falls back to the static list");
+    assert.deepEqual(catalog.providers[3].models, [{ value: "llama3", label: "llama3" }]);
+    assert.equal((await view.call("coach.setModel", { provider: "chatgpt", model: "gpt-5.5" })).error.requiredPermission, "coach:operate");
+    assert.equal((await a.call("coach.setModel", { provider: "nope" })).error.code, "invalid");
+    const changed = (await a.call("coach.setModel", { provider: "chatgpt", model: "gpt-5.5" })).result;
+    assert.equal(changed.provider, "chatgpt");
+    assert.equal(chatSettings.provider, "chatgpt");
+    assert.equal(chatSettings.chatgpt.model, "gpt-5.5");
+    assert.equal(chatSettings.claudeCode.model, "opus", "other providers keep their model");
+    assert.equal((await a.call("coach.setModel", { provider: "claude-code", model: "" })).result.providers[1].model, "", "account default");
+    assert.equal((await a.call("coach.setModel", { provider: "claude-code", model: "opus" })).result.provider, "claude-code");
+
+    // Deleting from the phone removes the conversation for every client, subscribed or not.
     const doomed = (await a.call("coach.createSession")).result.session.id;
-    await b.call("coach.subscribe", { sessionId: doomed });
+    await a.call("coach.subscribe", { sessionId: doomed });
     assert.deepEqual((await a.call("coach.deleteSession", { sessionId: doomed })).result, {});
-    assert.ok(!(await b.call("coach.listSessions")).result.sessions.some((row) => row.id === doomed), "gone for the other client");
-    assert.equal((await b.call("coach.getSession", { sessionId: doomed })).error.code, "not_found");
+    assert.ok(!(await view.call("coach.listSessions")).result.sessions.some((row) => row.id === doomed), "gone for the other client");
+    assert.equal((await view.call("coach.getSession", { sessionId: doomed })).error.code, "not_found");
     assert.equal(stream.turns.length, 2, "nothing ran");
 
     assert.equal((await a.call("coach.nothing")).error.code, "unsupported");

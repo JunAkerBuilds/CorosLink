@@ -1,7 +1,8 @@
 import { app, powerSaveBlocker, safeStorage, shell } from "electron";
 import QRCode from "qrcode";
 import type { CoachSessionHub } from "../coachHub/coachSessionHub";
-import type { ChatProvider } from "../types";
+import type { ChatProvider, ChatSettings } from "../types";
+import type { ChatModelOption } from "../chatModels";
 import { RemoteAuth, remoteDeviceFromRecord } from "./auth";
 import { CloudLink, RELAY_TRUST_KEY, TUNNEL_HOSTNAME_KEY } from "./cloud/cloudLink";
 import { PRODUCTION_RELAY_URL, relayBaseUrl } from "./cloud/relayClient";
@@ -54,6 +55,9 @@ export interface RemoteAccessOptions {
   hub: CoachSessionHub;
   settings: RemoteSettingsStore;
   defaultProvider: () => ChatProvider;
+  chatSettings?: () => ChatSettings;
+  saveChatSettings?: (settings: ChatSettings) => ChatSettings;
+  chatModels?: (provider: ChatProvider) => Promise<ChatModelOption[]>;
 }
 
 export class RemoteAccess {
@@ -174,6 +178,9 @@ export class RemoteAccess {
         hub: this.options.hub,
         descriptor: () => ({ name: computerName(), appVersion: app.getVersion() }),
         defaultProvider: this.options.defaultProvider,
+        chatSettings: this.options.chatSettings,
+        saveChatSettings: this.options.saveChatSettings,
+        chatModels: this.options.chatModels,
         port: preferredRemotePort(settings),
         nextPort: () => randomRemotePort(),
         onPortChanged: (port) => saveRemotePort(settings, port),
