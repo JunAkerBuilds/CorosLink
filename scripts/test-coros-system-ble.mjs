@@ -69,7 +69,7 @@ for(const platform of ['darwin','win32','linux']) {
         worker.stdin={write(line,callback){
           const request=JSON.parse(line);writes.push(request);
           assert.equal(line.includes(credential.privateKeyDer),false,'system workers never receive the account key');
-          let payload, responseError;
+          let payload, responseError, responseDetail;
           if(request.operation==='scan')state={...state,discoveredDevices:[{deviceId:'os-id',deviceName:credential.deviceName}]};
           if(request.operation==='connect')state={...state,phase:'connected',connected:true,deviceName:request.deviceName,deviceId:'os-id',modelNumber:'COROS W332',softwareRevision:'V 3.2008.0'};
           if(request.operation==='exchange') {
@@ -102,12 +102,13 @@ for(const platform of ['darwin','win32','linux']) {
             const header=Buffer.from(request.header,'base64'),block=Buffer.from(request.block,'base64');
             assert.equal(header[2],8);assert.equal(header.readUInt32LE(3),faceFile.length);
             assert.equal(header[16],worker.expectedFaceSlot ?? 1,'use the chosen slot, preserve others');
-            if(worker.rejectFaceBlocks) responseError='The watch rejected the file data block.';
+            if(worker.rejectFaceBlocks) {responseError='The watch rejected the file data block.';
+              responseDetail={site:'main.swift:481 peripheral(_:didUpdateValueFor:error:)',operation:'watchfaceBlock',elapsedMs:12,peripheralState:'connected',errorDomain:'CBATTErrorDomain',errorCode:14};}
             faceFile=Buffer.concat([faceFile,block]);
             if(header.readUInt32LE(9)===block.length) {faceIds[header[16]]=faceFile.readUInt32LE(20);faceFile=Buffer.alloc(0);}
           }
           if(request.operation==='disconnect')state={...state,phase:'disconnected',connected:false};
-          setTimeout(()=>worker.stdout.emit('data',JSON.stringify({id:request.id,result:state,error:responseError,payload:payload?.toString('base64')})+'\n'),2);callback?.();
+          setTimeout(()=>worker.stdout.emit('data',JSON.stringify({id:request.id,result:state,error:responseError,detail:responseDetail,payload:payload?.toString('base64')})+'\n'),2);callback?.();
         },end(){worker.emit('exit',0);setTimeout(()=>worker.emit('close',0),5);}};
         worker.kill=()=>worker.emit('close',1);
         worker.remoteDisconnect=()=>{state={...state,phase:'disconnected',connected:false};};
@@ -193,7 +194,12 @@ for(const platform of ['darwin','win32','linux']) {
     assert.equal((await afterPoll).sent,true,'background status polling does not reject a user message');
     workers.at(-1).resetFaceSlots();workers.at(-1).rejectFaceBlocks=true;
     const beforeFailed=writes.length;
-    await assert.rejects(service.syncWatchface(preview.id),/rejected/);
+    // The error names the helper's failure site and the main-process caller, and carries the recent trail.
+    await assert.rejects(service.syncWatchface(preview.id),error=>/rejected/.test(error.message)&&error.name==='CorosBleOperationError'&&
+      /at \[bluetooth helper\] main\.swift:481 /.test(error.stack)&&/at .*syncWatchface|at .*corosNativeBleService/.test(error.stack)&&
+      error.context.some(line=>/operation=watchfaceBlock .*backend=system/.test(line))&&
+      error.context.some(line=>/helper: site=main\.swift:481 .*errorDomain=CBATTErrorDomain errorCode=14/.test(line))&&
+      error.context.some(line=>/Z watchfaceBlock failed/.test(line)));
     assert.equal(service.watchfaceSyncStatus().phase,'failed');
     assert.equal(writes.slice(beforeFailed).filter(x=>x.operation==='watchfaceBlock').length,1,'failed block stops the transfer');
     assert.ok(writes.slice(beforeFailed).some(x=>x.operation==='disconnect'),'reset an interrupted file transfer');

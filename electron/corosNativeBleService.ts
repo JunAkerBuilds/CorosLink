@@ -6,6 +6,7 @@ import { getSetting, setSetting } from "./database";
 import type { CorosBleBackend, CorosNativeBleConnectOptions, CorosNativeBleSnapshot } from "./corosNativeBleTypes";
 import { CorosBindReplyError, CorosBleAccountAuth, describeBindReply, type CorosAccountCredential } from "./corosBleAuth";
 import { recordDiagnosticError } from "./diagnosticsService";
+import { CorosBleOperationError, CorosBleTrace } from "./corosBleTrace";
 import { COROS_BLE_LOGIN_KEY_SETTING, createCorosLoginCredential, type CorosBleLoginKey } from "./corosBleLoginKey";
 import { decodeWifiMapTasks, encodeWifiMapStart, requireWifiDownloadReady } from "./corosBleWifiProtocol";
 import { createWifiMapTask, previewWifiMap } from "./corosWifiMapService";
@@ -48,7 +49,13 @@ export class CorosNativeBleService {
     resolve: (response: WorkerResponse) => void;
     reject: (error: Error) => void;
     timer: ReturnType<typeof setTimeout>;
+    operation: string;
+    started: number;
+    callSite: Error;
   }>();
+  /** Recent Bluetooth events, attached to every BLE error for the diagnostics report. */
+  private trace = new CorosBleTrace();
+  private stopping?: ChildProcessWithoutNullStreams;
   private connecting?: Promise<CorosNativeBleSnapshot>;
   private polling?: Promise<CorosNativeBleSnapshot>;
   private scanning?: Promise<CorosNativeBleSnapshot>;
@@ -210,6 +217,7 @@ export class CorosNativeBleService {
     const program = backend === "usb" ? python : process.platform === "darwin" ? system.binary : system.python;
     const args = backend === "usb" ? ["-u", script] : process.platform === "darwin" ? [] : ["-u", system.script];
     const worker = spawn(program, args, { env, stdio: "pipe" });
+    this.trace.add("worker start", { backend, pid: worker.pid ?? 0 });
     this.backendInUse = backend;
     this.worker = worker;
     this.buffer = "";
@@ -229,6 +237,14 @@ export class CorosNativeBleService {
         try {
           const response = JSON.parse(line);
           if (response.ready) continue;
+          if (typeof response.event === "string") {
+            this.trace.add(`helper ${response.event}`, response.detail);
+            // A drop with nothing waiting has no IPC error to carry the trail.
+            if (response.event === "disconnected" && this.pending.size === 0) {
+              recordDiagnosticError("corosBle:link", this.bleError("The watch disconnected.", "link", response.detail));
+            }
+            continue;
+          }
           if (response.bondUpdate) {
             setSetting(BOND_SETTING, safeStorage.encryptString(JSON.stringify(response.bondUpdate)).toString("base64"));
             continue;
@@ -237,8 +253,12 @@ export class CorosNativeBleService {
           if (!request) continue;
           clearTimeout(request.timer);
           this.pending.delete(response.id);
-          if (response.error) request.reject(new Error(response.error));
-          else {
+          const elapsedMs = Date.now() - request.started;
+          if (response.error) {
+            this.trace.add(`${request.operation} failed`, { elapsedMs, ...(response.detail && typeof response.detail === "object" ? response.detail : {}) });
+            request.reject(this.bleError(String(response.error), request.operation, response.detail, request.callSite, elapsedMs));
+          } else {
+            if (request.operation !== "status") this.trace.add(`${request.operation} ok`, { elapsedMs, phase: response.result?.phase ?? "" });
             if (response.bond) {
               setSetting(BOND_SETTING, safeStorage.encryptString(JSON.stringify(response.bond)).toString("base64"));
             }
@@ -263,10 +283,19 @@ export class CorosNativeBleService {
       const kinds = ["ModuleNotFoundError", "ImportError", "PermissionError", "FileNotFoundError", "RuntimeError"];
       failureKind = kinds.find(kind => chunk.includes(`${kind}:`)) ?? failureKind;
       if (chunk.includes("libusb") && /assertion|Assertion/.test(chunk)) failureKind = "libusb assertion";
+      if (failureKind) this.trace.add("helper stderr", { kind: failureKind });
     });
-    worker.on("error", () => this.failWorker(worker, "Could not start the Bluetooth worker."));
+    worker.on("error", error => {
+      this.trace.add("worker spawn error", { code: (error as NodeJS.ErrnoException).code ?? error.name });
+      this.failWorker(worker, "Could not start the Bluetooth worker.");
+    });
     worker.on("close", (code, signal) => {
       const details = failureKind || signal || (typeof code === "number" ? `exit ${code}` : "unknown exit");
+      this.trace.add("worker exit", { code: code ?? "", signal: signal ?? "", kind: failureKind ?? "" });
+      const unexpected = this.stopping !== worker && this.worker === worker;
+      if (unexpected && this.pending.size === 0) {
+        recordDiagnosticError("corosBle:worker", this.bleError(`The Bluetooth worker stopped (${details}).`, "worker"));
+      }
       this.failWorker(worker, `The Bluetooth worker stopped (${details}).`);
     });
   }
@@ -309,8 +338,14 @@ export class CorosNativeBleService {
     return { qrDataUrl, issuedAt, expiresAt: issuedAt + PHONE_PAIRING_DISPLAY_MS, account: `•••• ${key.accountUserId.slice(-4)}`, deviceName };
   }
 
+  /** A BLE error carrying the helper's failure site, the issuing call's stack and the recent trail. */
+  private bleError(message: string, operation: string, helperDetail?: unknown, callSite?: Error, elapsedMs?: number): CorosBleOperationError {
+    return new CorosBleOperationError(message, { operation, elapsedMs, backend: this.backendInUse, helperDetail, trace: this.trace.snapshot() }, callSite);
+  }
+
   private failWorker(worker: ChildProcessWithoutNullStreams, message: string): void {
     if (this.worker !== worker) return;
+    this.trace.add("worker failed", { pending: this.pending.size, reason: message });
     this.worker = undefined;
     this.musicInventory = undefined;
     this.state = { ...this.state, phase: this.state.phase === "failed" ? "failed" : "disconnected", connected: false, encrypted: false,
@@ -318,7 +353,7 @@ export class CorosNativeBleService {
       channels: this.state.channels.map(channel => ({ ...channel, subscribed: false })) };
     for (const request of this.pending.values()) {
       clearTimeout(request.timer);
-      request.reject(new Error(message));
+      request.reject(this.bleError(message, request.operation, undefined, request.callSite, Date.now() - request.started));
     }
     this.pending.clear();
   }
@@ -327,14 +362,23 @@ export class CorosNativeBleService {
     const worker = this.worker;
     if (!worker) return Promise.reject(new Error("The Bluetooth worker is not running."));
     const id = ++this.sequence;
+    // Captured before the hop to the worker so the error names its caller.
+    const callSite = new Error();
+    // Results are traced per operation; only link-level requests note when they began.
+    if (["connect", "scan", "disconnect"].includes(operation)) this.trace.add(`${operation} sent`);
     return new Promise((resolve, reject) => {
+      const timeoutMs = operation === "connect" ? 120_000 : operation === "scan" ? 65_000 : operation === "exchange" ? 20_000 : 50_000;
       const timer = setTimeout(() => {
+        this.trace.add(`${operation} timed out`, { timeoutMs });
         this.failWorker(worker, "The Bluetooth operation timed out. Keep the watch nearby and try again.");
         worker.kill();
-      }, operation === "connect" ? 120_000 : operation === "scan" ? 65_000 : operation === "exchange" ? 20_000 : 50_000);
-      this.pending.set(id, { resolve, reject, timer });
+      }, timeoutMs);
+      this.pending.set(id, { resolve, reject, timer, operation, started: Date.now(), callSite });
       worker.stdin.write(JSON.stringify({ id, operation, ...extra }) + "\n", error => {
-        if (error) this.failWorker(worker, "Could not communicate with the Bluetooth worker.");
+        if (error) {
+          this.trace.add("worker stdin error", { code: (error as NodeJS.ErrnoException).code ?? error.name });
+          this.failWorker(worker, "Could not communicate with the Bluetooth worker.");
+        }
       });
     });
   }
@@ -424,8 +468,11 @@ export class CorosNativeBleService {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not connect the watch.";
       this.state = { ...this.state, phase: "failed", connected: false, encrypted: false, error: message };
+      this.trace.add("connect failed", { backend: this.backendInUse ?? "" });
       await this.stop();
-      throw new Error(message);
+      // Helper failures already carry their site and trail; checks made here get the trail too.
+      throw error instanceof CorosBleOperationError ? error
+        : this.bleError(message, "connect", undefined, error instanceof Error ? error : undefined);
     }
   }
 
@@ -460,8 +507,10 @@ export class CorosNativeBleService {
       // what it replied, since only PACE Pro's replies have been checked.
       const watch = `${this.state.modelNumber || "unknown model"} ${this.state.softwareRevision || this.state.firmwareRevision || "unknown firmware"}`;
       const reply = error instanceof CorosBindReplyError ? `watch reply ${error.reply}` : "no watch reply decoded";
+      this.trace.add("authenticate failed", { reply: error instanceof CorosBindReplyError ? error.reply : "" });
       recordDiagnosticError("corosBle:authenticate", Object.assign(new Error(`${message} [${watch}; ${reply}]`), {
-        name: error instanceof Error ? error.name : "Error", stack: error instanceof Error ? error.stack : undefined
+        name: error instanceof Error ? error.name : "Error", stack: error instanceof Error ? error.stack : undefined,
+        context: error instanceof CorosBleOperationError ? error.context : this.bleError(message, "authenticate").context
       }));
     }
   }
@@ -980,6 +1029,8 @@ export class CorosNativeBleService {
     this.musicInventory = undefined;
     const worker = this.worker;
     if (!worker) return;
+    this.stopping = worker;
+    this.trace.add("worker stop");
     worker.stdin.end();
     await new Promise<void>(resolve => {
       const timer = setTimeout(() => {

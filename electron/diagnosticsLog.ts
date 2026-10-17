@@ -15,6 +15,8 @@ interface DiagnosticError {
   hostname?: string;
   syscall?: string;
   stack?: string;
+  /** Extra lines an error carries about its circumstances (e.g. the Bluetooth trail). */
+  context?: string[];
   request?: { method: string; url: string };
   cause?: DiagnosticError;
   errors?: DiagnosticError[];
@@ -127,7 +129,10 @@ export class DiagnosticsLog {
       if (typeof error[key] === "string") result[key] = this.clean(error[key], 200);
     }
     if (typeof error.stack === "string") {
-      result.stack = this.clean(error.stack.split("\n").filter((line) => /^\s*at /.test(line)).slice(0, 8).join("\n"), 1800);
+      result.stack = this.clean(error.stack.split("\n").filter((line) => /^\s*at /.test(line)).slice(0, 20).join("\n"), 3600);
+    }
+    if (Array.isArray(error.context)) {
+      result.context = error.context.slice(-50).flatMap((line) => typeof line === "string" ? [this.clean(line, 300)] : []);
     }
     // Saved records have already been reduced to this shape. Re-sanitize them.
     const request = requests.get(value) ?? error.request;

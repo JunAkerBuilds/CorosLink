@@ -45,6 +45,8 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     var interactionSequence = 0
     var musicReceiver: CorosMusicPageReceiver?
     var musicDeleteReceiver: CorosMusicDeleteReceiver?
+    var operationStarted = Date()
+    var deadlineSite: (line: Int, function: String)?
 
     var operation: String { current?["operation"] as? String ?? "" }
     var connecting: Bool { operation == "connect" }
@@ -58,6 +60,7 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     func pump() {
         guard current == nil, !requests.isEmpty else { return }
         current = requests.removeFirst()
+        operationStarted = Date()
         switch operation {
         case "scan", "connect":
             if operation == "connect", peripheral?.state == .connected {
@@ -172,8 +175,9 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         }
     }
 
-    func deadline(_ seconds: Double, _ message: String?) {
+    func deadline(_ seconds: Double, _ message: String?, line: Int = #line, function: String = #function) {
         timer?.cancel()
+        deadlineSite = (line, function)
         let work = DispatchWorkItem { [weak self] in
             guard let self = self, self.current != nil else { return }
             if self.operation == "scan" {
@@ -186,7 +190,8 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             } else if self.operation == "disconnect" {
                 self.clearConnection(); self.finish()
             } else if let message = message {
-                self.fail(message)
+                let site = self.deadlineSite
+                self.fail(message, timedOut: true, line: site?.line ?? #line, function: site?.function ?? #function)
             } else { self.finish() }
         }
         timer = work
@@ -207,8 +212,43 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         DispatchQueue.main.async { self.pump() }
     }
 
-    func fail(_ message: String) {
+    func peripheralStateName(_ value: CBPeripheralState?) -> String {
+        switch value {
+        case .connected?: return "connected"
+        case .connecting?: return "connecting"
+        case .disconnecting?: return "disconnecting"
+        case .disconnected?: return "disconnected"
+        default: return "none"
+        }
+    }
+
+    /// Where and how a request failed, for the app's diagnostics report. Only
+    /// the source site, states and NSError domain/code: never userInfo, GATT
+    /// payloads or identifiers.
+    func failureDetail(_ error: Error?, timedOut: Bool, line: Int, function: String) -> [String: Any] {
+        var detail: [String: Any] = [
+            "site": "main.swift:\(line) \(function)",
+            "operation": operation,
+            "elapsedMs": Int(Date().timeIntervalSince(operationStarted) * 1000),
+            "timedOut": timedOut,
+            "bluetoothState": state["bluetoothState"] as? String ?? "unknown",
+            "peripheralState": peripheralStateName(peripheral?.state),
+            "characteristics": characteristics.count,
+            "discoveryPending": discoveryPending,
+            "subscriptionsPending": subscriptions.count,
+            "queued": requests.count
+        ]
+        if !routeStage.isEmpty { detail["routeStage"] = routeStage }
+        if let error = error as NSError? {
+            detail["errorDomain"] = error.domain
+            detail["errorCode"] = error.code
+        }
+        return detail
+    }
+
+    func fail(_ message: String, _ error: Error? = nil, timedOut: Bool = false, line: Int = #line, function: String = #function) {
         guard let id = current?["id"] as? Int else { return }
+        let detail = failureDetail(error, timedOut: timedOut, line: line, function: function)
         timer?.cancel(); timer = nil
         if connecting {
             central?.stopScan()
@@ -222,7 +262,7 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         musicDeleteReceiver = nil
         current = nil
         // Error text is static. NSError/userInfo and GATT payloads are never logged.
-        emit(["id": id, "error": message])
+        emit(["id": id, "error": message, "detail": detail])
         DispatchQueue.main.async { self.pump() }
     }
 
@@ -307,14 +347,20 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
 
     func centralManager(_ central: CBCentralManager, didFailToConnect p: CBPeripheral, error: Error?) {
         guard peripheral === p else { return }
-        if connecting { fail("The watch could not connect. Keep it awake in Pair Phone mode and confirm any macOS pairing prompt.") }
+        if connecting { fail("The watch could not connect. Keep it awake in Pair Phone mode and confirm any macOS pairing prompt.", error) }
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral p: CBPeripheral, error: Error?) {
         guard peripheral === p else { return }
         clearConnection()
         if operation == "disconnect" { finish() }
-        else if current != nil { fail("The watch disconnected. Keep it nearby and reconnect.") }
+        else if current != nil { fail("The watch disconnected. Keep it nearby and reconnect.", error) }
+        else {
+            // No request is waiting, so tell the app's diagnostics trail why the link dropped.
+            var detail: [String: Any] = [:]
+            if let error = error as NSError? { detail["errorDomain"] = error.domain; detail["errorCode"] = error.code }
+            emit(["event": "disconnected", "detail": detail])
+        }
     }
 
     func clearConnection() {
@@ -334,7 +380,7 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     func peripheral(_ p: CBPeripheral, didDiscoverServices error: Error?) {
         guard connecting, peripheral === p else { return }
         guard error == nil, let services = p.services, !services.isEmpty else {
-            fail("The watch's Bluetooth services could not be discovered."); return
+            fail("The watch's Bluetooth services could not be discovered.", error); return
         }
         discoveryPending = services.count
         for service in services { p.discoverCharacteristics(nil, for: service) }
@@ -385,7 +431,7 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     func peripheral(_ p: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
         guard connecting, peripheral === p else { return }
         guard error == nil, characteristic.isNotifying else {
-            fail("Bluetooth notifications could not be enabled. Keep the watch in Pair Phone mode and confirm the macOS pairing prompt."); return
+            fail("Bluetooth notifications could not be enabled. Keep the watch in Pair Phone mode and confirm the macOS pairing prompt.", error); return
         }
         var values = state["channels"] as? [[String: Any]] ?? []
         for i in values.indices where (values[i]["serviceUuid"] as? String)?.replacingOccurrences(of: "0001", with: "0003") == characteristic.uuid.uuidString.lowercased() {

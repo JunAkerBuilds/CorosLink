@@ -16,6 +16,7 @@ import os
 import signal
 import sys
 import time
+import traceback
 
 from bumble.core import UUID, AdvertisingData
 from bumble.device import Device, Peer
@@ -280,6 +281,27 @@ class NativeSession:
         self.disconnected(None)
 
 
+def failure_detail(error, operation, started, **extra):
+    """Where a request failed, for the app's diagnostics report. Frames are
+    file:line function only and the cause chain is exception class names:
+    framework messages can carry keys and addresses, so they are never sent."""
+    def site(exception):
+        return [f"{os.path.basename(frame.filename)}:{frame.lineno} {frame.name}"
+                for frame in traceback.extract_tb(exception.__traceback__)]
+    # Outer frames first, then each cause's, so the root failure ends the list.
+    frames, chain, cause = site(error), [], error.__cause__ or error.__context__
+    while cause is not None and len(chain) < 4:
+        chain.append(type(cause).__name__)
+        frames += site(cause)
+        cause = cause.__cause__ or cause.__context__
+    frames = frames[-12:]
+    detail = {'operation': operation, 'exception': type(error).__name__, 'frames': frames,
+              'elapsedMs': int((time.monotonic() - started) * 1000), **extra}
+    if chain:
+        detail['causes'] = chain
+    return detail
+
+
 def emit(value):
     print(json.dumps(value), flush=True)
 
@@ -308,6 +330,8 @@ async def main():
             if not line:
                 break
             request_id = None
+            operation = ""
+            started = time.monotonic()
             try:
                 request = json.loads(line)
                 request_id = request.get("id")
@@ -341,7 +365,8 @@ async def main():
             except Exception as error:
                 # Never serialize framework exceptions that may include keys.
                 # Report the cause before USB teardown can mask it.
-                emit({"id": request_id, "error": operation_error(session.step, error)})
+                emit({"id": request_id, "error": operation_error(session.step, error),
+                      "detail": failure_detail(error, operation, started, step=session.step)})
                 await session.close()
                 session.state.update(phase="failed", error=type(error).__name__)
     finally:
