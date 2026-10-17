@@ -1627,4 +1627,17 @@ export const toolsChinese: Readonly<Record<string, string>> = {
   "Unlink": "取消关联",
   "Cloudflare stops building its connector for Intel Macs in 2027. After that, C-LINK reaches this Mac on the local network only.": "Cloudflare 将在 2027 年停止为 Intel Mac 构建连接器。此后，C-LINK 只能在本地网络中连接这台 Mac。",
   "Not connected to Cloudflare right now. CorosLink keeps trying.": "目前未连接到 Cloudflare。CorosLink 会继续尝试。",
+  // COROS action cards in Coach.
+  "Timed work": "计时训练时长",
+  "Day {{p0}}": "第 {{p0}} 天",
+  "Scheduled": "安排日期",
+  "repeat groups": "重复组",
+  "Saves to your COROS Training Plans{{p0}}.": "保存到您的 COROS 训练计划{{p0}}。",
+  " starting {{p0}}": "，从 {{p0}} 开始",
+  "Adds to your COROS Calendar{{p0}}.": "添加到您的 COROS 日历{{p0}}。",
+  " on {{p0}}": "，日期为 {{p0}}",
+  "Saves to your COROS Workout Library.": "保存到您的 COROS 训练库。",
+  "Save plan to COROS": "保存计划到 COROS",
+  "Add to COROS Calendar": "添加到 COROS 日历",
+  "Coach's note": "教练说明",
 };

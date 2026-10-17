@@ -1602,4 +1602,17 @@ export const toolsFrench: Record<string, string> = {
   "Unlink": "Délier",
   "Cloudflare stops building its connector for Intel Macs in 2027. After that, C-LINK reaches this Mac on the local network only.": "Cloudflare cesse de publier son connecteur pour les Mac Intel en 2027. Ensuite, C-LINK ne joindra ce Mac que sur le réseau local.",
   "Not connected to Cloudflare right now. CorosLink keeps trying.": "Pas connecté à Cloudflare pour l’instant. CorosLink continue d’essayer.",
+  // COROS action cards in Coach.
+  "Timed work": "Durée chronométrée",
+  "Day {{p0}}": "Jour {{p0}}",
+  "Scheduled": "Date prévue",
+  "repeat groups": "groupes de répétitions",
+  "Saves to your COROS Training Plans{{p0}}.": "Enregistre dans vos plans d’entraînement COROS{{p0}}.",
+  " starting {{p0}}": " à partir du {{p0}}",
+  "Adds to your COROS Calendar{{p0}}.": "Ajoute à votre calendrier COROS{{p0}}.",
+  " on {{p0}}": " le {{p0}}",
+  "Saves to your COROS Workout Library.": "Enregistre dans votre bibliothèque de séances COROS.",
+  "Save plan to COROS": "Enregistrer le plan dans COROS",
+  "Add to COROS Calendar": "Ajouter au calendrier COROS",
+  "Coach's note": "Note du coach",
 };
