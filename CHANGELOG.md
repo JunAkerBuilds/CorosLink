@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.56] - 2026-10-17
+
+### Added
+
+- **Help test C-LINK on iPhone, and join the CorosLink Discord.** I'm building C-LINK, the iPhone app for CorosLink. After this update, a one-time note invites iPhone owners to join the [TestFlight beta](https://testflight.apple.com/join/CHeNwjVn) and everyone to join the [CorosLink Discord](https://discord.gg/3x9rErHyjR) for updates, support and feedback. Close it with **Maybe later**. If the welcome tour is open, the note waits for the next launch.
+- **Support in the toolbar.** A new **Support** button next to **Buy me a coffee** opens the Discord and the iPhone beta, plus a link to report an issue on GitHub. Both links are also in **Help & links (?)** under a new **Community** group.
+
+### Fixed
+
+- The workout and plan cards Coach prepares through COROS (stats, destination notes and buttons) are now in French and Chinese instead of English.
+
 ## [0.1.55] - 2026-10-17
 
 ### Added
