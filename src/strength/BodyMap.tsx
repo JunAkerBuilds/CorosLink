@@ -1080,7 +1080,7 @@ export function BodyMap({
           {t("Drag to turn")} </p>
       )}
       <span className="sr-only" aria-live="polite">
-        {hovered ? t(MUSCLE_BY_ID[hovered].label) : ""}
+        {hovered ? t(MUSCLE_BY_ID[hovered].label, undefined, "muscle") : ""}
       </span>
     </div>
   );

@@ -188,7 +188,7 @@ export function Vo2MaxWidget({ snapshot }: Vo2MaxWidgetProps) {
           <strong>{t(status.label)}</strong>
         </div>
         <div>
-          <span>{t("Change")}</span>
+          <span>{t("Change", undefined, "delta")}</span>
           <strong>{formatSignedDelta(delta)}</strong>
         </div>
         <div>

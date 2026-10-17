@@ -145,7 +145,7 @@ export function HealthCheckVitals({ result, days, selected, onSelect }: {
             {vital.key === "stress" ? <StressBands level={level} score={vital.value} />
               : points.length > 0 ? <Sparkline points={points} reference={vital.key === "heartRate" ? resting : undefined} /> : null}
           </span>
-          {foot && <span className={`health-vital-foot${vital.key === "stress" ? " is-level" : ""}`}>{foot}</span>}
+          {foot && <span className={`health-vital-foot${vital.key === "stress" ? " is-level" : ""}`}>{t(foot)}</span>}
         </button>;
       })}
     </div>

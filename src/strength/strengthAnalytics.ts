@@ -552,7 +552,7 @@ export function formatVolumeKg(
   unitSystem: UnitSystem
 ): string {
   if (unitSystem === "metric" && value >= 1000) {
-    return `${formatNumber((value / 1000), { minimumFractionDigits: value >= 10_000 ? 0 : 1, maximumFractionDigits: value >= 10_000 ? 0 : 1 })} tonnes`;
+    return `${formatNumber((value / 1000), { minimumFractionDigits: value >= 10_000 ? 0 : 1, maximumFractionDigits: value >= 10_000 ? 0 : 1 })} ${t("tonnes")}`;
   }
   return `${Math.round(kilogramsToDisplayWeight(value, unitSystem)).toLocaleString(getLocale())} ${weightUnit(unitSystem)}`;
 }

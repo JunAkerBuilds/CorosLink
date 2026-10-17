@@ -1,4 +1,4 @@
-import { t, useLanguage } from "../i18n/training";
+import { formatNumber, t, useLanguage } from "../i18n/training";
 import type { CSSProperties } from "react";
 import type { UnitSystem } from "../../electron/types";
 import { ChevronLeft, Minus, TrendingDown, TrendingUp } from "lucide-react";
@@ -46,7 +46,7 @@ function formatMetric(
   if (metric === "time") {
     return { value: formatDurationSeconds(Math.round(value)) };
   }
-  return { value: formatSets(value), unit: "sets" };
+  return { value: formatSets(value), unit: t("sets") };
 }
 
 function emptyMetricLabel(metric: HeatMetric): string {
@@ -88,14 +88,14 @@ function MuscleRanking({
               type="button"
               className={`muscle-ranking-row${value <= 0 ? " is-empty" : ""}`}
               data-level={level}
-              aria-label={t("{{value1}}, {{value2}}. Show muscle details.", { value1: String(t(meta.label)), value2: String(accessibleValue) })}
+              aria-label={t("{{value1}}, {{value2}}. Show muscle details.", { value1: String(t(meta.label, undefined, "muscle")), value2: String(accessibleValue) })}
               onClick={() => onSelect(stat.muscle)}
               onPointerEnter={() => onHover(stat.muscle)}
               onPointerLeave={() => onHover(null)}
               onFocus={() => onHover(stat.muscle)}
               onBlur={() => onHover(null)}
             >
-              <span className="muscle-ranking-name">{t(meta.label)}</span>
+              <span className="muscle-ranking-name">{t(meta.label, undefined, "muscle")}</span>
               <span className="muscle-ranking-track" aria-hidden="true">
                 <span
                   className="muscle-ranking-fill"
@@ -208,7 +208,7 @@ function MuscleRecovery({ recovery }: { recovery: Recovery | undefined }) {
             style={{ left: `${tick * 100}%` }}
           >
             <i aria-hidden="true" />
-            <em>{t("usually")} {cadenceDays!.toFixed(1)}d</em>
+            <em>{t("usually {{days}}d", { days: formatNumber(cadenceDays!, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })}</em>
           </span>
         ) : null}
       </div>
@@ -263,7 +263,7 @@ function statCells(
     volume: {
       id: "volume",
       label: "Volume",
-      value: stat.volumeKg > 0 ? formatVolumeKg(stat.volumeKg, unitSystem) : "Bodyweight",
+      value: stat.volumeKg > 0 ? formatVolumeKg(stat.volumeKg, unitSystem) : t("Bodyweight"),
       note:
         stat.volumeKg > 0 && stat.sessions > 0
           ? t("{{value1}} per session", { value1: String(formatVolumeKg(stat.volumeKg / stat.sessions, unitSystem)) })
@@ -297,7 +297,7 @@ function statCells(
       id: "perSession",
       label: "Sets per session",
       value: stat.sessions > 0 ? formatSets(stat.sets / stat.sessions) : "—",
-      note: stat.sessions > 0 ? `across ${stat.sessions} sessions` : undefined
+      note: stat.sessions > 0 ? t("across {{value1}} sessions", { value1: String(stat.sessions) }) : undefined
     }
   };
 }
@@ -616,7 +616,7 @@ export function MusclePanel({
           <p className="muscle-detail-taxonomy">
             <span>{t(PATTERN_LABEL[meta.pattern])}</span>
           </p>
-          <h3>{t(meta.label)}</h3>
+          <h3>{t(meta.label, undefined, "muscle")}</h3>
         </div>
         {value > 0 ? (
           <div

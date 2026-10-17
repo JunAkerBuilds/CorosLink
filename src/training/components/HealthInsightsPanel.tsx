@@ -265,7 +265,7 @@ export function HealthInsightsPanel({ api, refreshToken = 0, sampleMode = false,
     } catch (error) { setConnectionError(error instanceof Error ? error.message : "Could not connect to COROS."); }
     finally { setConnecting(false); }
   }
-  return <section className={`health-insights ${kind ? "is-single" : ""}`} aria-label={kind ? cards.find(card => card.kind === kind)?.title : t("Health and recovery")}>
+  return <section className={`health-insights ${kind ? "is-single" : ""}`} aria-label={kind ? t(cards.find(card => card.kind === kind)?.title ?? "") : t("Health and recovery")}>
     {!kind && <div className="health-insights-heading"><div><p className="eyebrow">{t("Health & recovery")}</p><h2>{t("A closer look at your health")}</h2></div></div>}
     {connectionError && <p role="alert" className="health-insight-message">{connectionError}</p>}
     <div className="health-insights-grid">{cards.filter(card => !kind || card.kind === kind).map(card => <InsightCard size={size} key={card.kind} {...card} api={api} refreshToken={refreshToken + connectionRefresh} sampleMode={sampleMode} onConnect={() => void connect()} connecting={connecting} />)}</div>

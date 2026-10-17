@@ -1854,4 +1854,6 @@ export const watchfacesFrench: Record<string, string> = {
   "Back on the watch switches chart pages, and each page uses one of these styles. Barometer and tide pages need data from the phone and stay empty until it syncs. A width of 0 hides that style's graph.": "Le bouton Retour de la montre change de page de graphique ; chaque page utilise l’un de ces styles. Le baromètre et les marées nécessitent les données du téléphone et restent vides avant la synchronisation. Une largeur de 0 masque le graphique de ce style.",
   "An empty face for {{watch}}. Add the time, date and data yourself.": "Un cadran vide pour {{watch}}. Ajoutez vous-même l’heure, la date et les données.",
   "your watch": "votre montre",
+  "Your COROS mobile session expired. Sign in again.": "Votre session mobile COROS a expiré. Reconnectez-vous.",
+  "Sign in to your COROS mobile account to continue.": "Connectez-vous à votre compte mobile COROS pour continuer.",
 };

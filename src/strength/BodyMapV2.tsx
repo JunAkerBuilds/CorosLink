@@ -541,7 +541,7 @@ function createWorld(
   canvas.setAttribute("role", "img");
   canvas.setAttribute(
     "aria-label",
-    "Interactive anatomical muscle model. Use the Front and Back controls to turn the figure, then select a highlighted muscle group."
+    t("Interactive anatomical muscle model. Use the Front and Back controls to turn the figure, then select a highlighted muscle group.")
   );
   container.appendChild(canvas);
 
@@ -1535,7 +1535,7 @@ export function BodyMapV2({
         aria-hidden="true"
       >
         <span className="anatomy-muscle-callout-line" />
-        <strong>{selected ? t(MUSCLE_BY_ID[selected].label) : ""}</strong>
+        <strong>{selected ? t(MUSCLE_BY_ID[selected].label, undefined, "muscle") : ""}</strong>
       </div>
       {showLayerControls ? (
         <div className={`anatomy-layer-control${layersOpen ? " is-open" : ""}`}>
@@ -1620,7 +1620,7 @@ export function BodyMapV2({
         </div>
       ) : null}
       <span className="sr-only" aria-live="polite">
-        {selected ? t("{{value1}} selected", { value1: String(t(MUSCLE_BY_ID[selected].label)) }) : ""}
+        {selected ? t("{{value1}} selected", { value1: String(t(MUSCLE_BY_ID[selected].label, undefined, "muscle")) }) : ""}
       </span>
     </div>
   );

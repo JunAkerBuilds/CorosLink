@@ -37,7 +37,7 @@ export function sleepHrvNightLabel(night: string, now = new Date()): string {
   const start = new Date(end);
   start.setDate(end.getDate() - 1);
   const span = new Intl.DateTimeFormat(getLocale(), { month: "short", day: "numeric" }).formatRange(start, end);
-  return night === localDay(now) ? `Last night · ${span}` : `Night of ${span}`;
+  return night === localDay(now) ? t("Last night · {{span}}", { span }) : t("Night of {{span}}", { span });
 }
 
 /** Lines of the COROS report the card does not already show. */
@@ -91,7 +91,7 @@ export function SleepHrvSummary({ result, part }: { result: HealthInsightResult;
       {part !== "details" && <div className="health-insight-primary">
         <span className="health-insight-value">{formatNumber(average.value)}<small>ms</small></span>
         {night && <span className="health-insight-caption">{sleepHrvNightLabel(night)}</span>}
-        {typeof evaluation?.value === "string" && <span className={`health-insight-badge is-${badgeTone(evaluation.value)}`}>{evaluation.value}</span>}
+        {typeof evaluation?.value === "string" && <span className={`health-insight-badge is-${badgeTone(evaluation.value)}`}>{t(evaluation.value)}</span>}
       </div>}
       {part !== "primary" && stats.length > 0 && <dl className="health-insight-stats" aria-label={week ? t("Nightly averages") : t("Overnight samples")}>
         {stats.map(stat => <div key={stat.label}><dt>{stat.label}</dt><dd>{formatNumber(stat.value)}</dd></div>)}
@@ -100,7 +100,7 @@ export function SleepHrvSummary({ result, part }: { result: HealthInsightResult;
     {part !== "primary" && (range || baseline !== undefined) && <div className="health-hrv-reference">
       <ReferenceGauge value={average.value} range={range} baseline={baseline} />
       <p className="health-insight-legend">
-        {range && <span><i className="is-range" />{t("Normal range")}{range[0]}–{range[1]} ms</span>}
+        {range && <span><i className="is-range" />{t("Normal range")} {range[0]}–{range[1]} ms</span>}
         {baseline !== undefined && <span><i className="is-baseline" />{t("Baseline")}{baseline} ms</span>}
       </p>
     </div>}

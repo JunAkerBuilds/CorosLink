@@ -509,7 +509,7 @@ function TrainingHeatmapPanelComponent({
               {t("RPE")} </button>
           </div>
           <span className="training-range-pill">
-            {t("Last")} {TRAINING_HEATMAP_DAYS} {t("days")} </span>
+            {t("Last {{count}} days", { count: TRAINING_HEATMAP_DAYS })} </span>
         </div>
       </div>
 
@@ -577,7 +577,7 @@ function TrainingHeatmapPanelComponent({
                   }
 
                   const loadLabel = isRpe
-                    ? `${formatOptionalNumber(cell.rpeLoad)} AU`
+                    ? `${formatOptionalNumber(cell.rpeLoad)} ${t("AU")}`
                     : formatOptionalNumber(cell.trainingLoad);
                   const distanceLabel = formatDistanceMeters(cell.distance, unitSystem);
                   const durationLabel = formatDurationSeconds(cell.duration);
@@ -614,7 +614,7 @@ function TrainingHeatmapPanelComponent({
                     >
                       <span className="training-heatmap-tooltip" role="tooltip">
                         <strong>{t(cell.label)}</strong>
-                        <span>{isRpe ? t("RPE load") : t("Load")}: {loadLabel}</span>
+                        <span>{isRpe ? t("RPE load:") : t("Load:")} {loadLabel}</span>
                         <span>{t("Distance:")} {distanceLabel}</span>
                         <span>{t("Duration:")} {durationLabel}</span>
                       </span>
@@ -660,9 +660,17 @@ function TrainingHeatmapPanelComponent({
             </div>
 
             <div className="training-heatmap-summary">
-              <span>{summary.activeDays} {isRpe ? t("rated") : t("active")} {t("days")}</span>
+              <span>
+                {summary.activeDays === 1
+                  ? t(isRpe ? "1 rated day" : "1 active day")
+                  : t(isRpe ? "{{count}} rated days" : "{{count}} active days", { count: summary.activeDays })}
+              </span>
               <span aria-hidden="true">·</span>
-              <span>{summary.currentStreak}{t("-day streak")}</span>
+              <span>
+                {summary.currentStreak === 1
+                  ? t("1-day streak")
+                  : t("{{count}}-day streak", { count: summary.currentStreak })}
+              </span>
               <span aria-hidden="true">·</span>
               <span>
                 {formatOptionalNumber(summary.totalLoad)}

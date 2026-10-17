@@ -938,7 +938,7 @@ export function WatchLibraryPanel({
     >
       <header className="library-panel-header">
         <div>
-          <p className="eyebrow">{presentation.displayName}</p>
+          <p className="eyebrow">{t(presentation.displayName)}</p>
           <h3>{t("On watch")}</h3>
         </div>
         <em>{watchConnected ? countLabel : t("Not connected")}</em>
@@ -952,7 +952,7 @@ export function WatchLibraryPanel({
         <LibraryEmptyState
           title={emptyTitle()}
           subtitle={
-            presentation.connectHint || t("to view and manage your music")
+            (presentation.connectHint && t(presentation.connectHint)) || t("to view and manage your music")
           }
           variant="watch"
         />

@@ -18,6 +18,8 @@ export function ChatSessionRow({
   onDelete: () => void;
 }) {
   useLanguage();
+  // New sessions are stored with the English default title.
+  const title = session.title === "New chat" ? t("New chat") : session.title;
   const handleDelete = (event: MouseEvent) => {
     event.stopPropagation();
     if (disabled) {
@@ -25,7 +27,7 @@ export function ChatSessionRow({
     }
     if (
       session.messageCount === 0 ||
-      window.confirm(t("Delete \"{{p0}}\"?", { p0: session.title }))
+      window.confirm(t("Delete \"{{p0}}\"?", { p0: title }))
     ) {
       onDelete();
     }
@@ -52,13 +54,13 @@ export function ChatSessionRow({
           onSelect();
         }
       }}
-      title={session.preview || session.title}
+      title={session.preview || title}
     >
       {active ? (
         <span className="chat-session-row-indicator" aria-hidden="true" />
       ) : null}
       <span className="chat-session-row-body">
-        <span className="chat-session-row-title">{session.title}</span>
+        <span className="chat-session-row-title">{title}</span>
         {session.preview ? (
           <span className="chat-session-row-preview">{session.preview}</span>
         ) : null}
@@ -70,7 +72,7 @@ export function ChatSessionRow({
         <button
           type="button"
           className="chat-session-row-delete"
-          aria-label={t("Delete {{p0}}", { p0: session.title })}
+          aria-label={t("Delete {{p0}}", { p0: title })}
           onClick={handleDelete}
           disabled={disabled}
         >
