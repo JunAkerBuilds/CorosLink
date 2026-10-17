@@ -50,7 +50,7 @@ export interface RelayTrust {
 
 export type RemoteHub = Pick<
   CoachSessionHub,
-  "listSessions" | "getSession" | "createSession" | "subscribe" | "send" | "cancel" | "confirm"
+  "listSessions" | "getSession" | "createSession" | "subscribe" | "send" | "cancel" | "deleteSession" | "confirm"
 >;
 
 export interface RemoteServerOptions {
@@ -337,6 +337,13 @@ export class RemoteServer {
       "coach.cancel": (_client, params) => ({
         result: this.options.hub.cancel(stringParam(params, "sessionId")!)
       }),
+      "coach.deleteSession": (client, params) => {
+        const sessionId = stringParam(params, "sessionId")!;
+        client.subscriptions.get(sessionId)?.();
+        client.subscriptions.delete(sessionId);
+        this.options.hub.deleteSession(sessionId);
+        return { result: {} };
+      },
       "coach.confirm": async (client, params) => ({
         result: await this.options.hub.confirm(this.confirmInput(params), {
           kind: "remote",

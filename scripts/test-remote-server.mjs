@@ -399,6 +399,14 @@ try {
     assert.equal(confirm.error.code, "forbidden");
     assert.equal(confirm.error.requiredPermission, "coach:approve");
     assert.equal((await view.call("coach.createSession")).error.requiredPermission, "coach:operate");
+    assert.equal((await view.call("coach.deleteSession", { sessionId })).error.requiredPermission, "coach:operate");
+
+    // Deleting from the phone removes the conversation for every client.
+    const doomed = (await a.call("coach.createSession")).result.session.id;
+    await b.call("coach.subscribe", { sessionId: doomed });
+    assert.deepEqual((await a.call("coach.deleteSession", { sessionId: doomed })).result, {});
+    assert.ok(!(await b.call("coach.listSessions")).result.sessions.some((row) => row.id === doomed), "gone for the other client");
+    assert.equal((await b.call("coach.getSession", { sessionId: doomed })).error.code, "not_found");
     assert.equal(stream.turns.length, 2, "nothing ran");
 
     assert.equal((await a.call("coach.nothing")).error.code, "unsupported");

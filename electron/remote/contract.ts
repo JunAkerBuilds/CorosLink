@@ -133,6 +133,7 @@ export const COACH_RPC_PERMISSIONS = {
   "coach.createSession": "coach:operate",
   "coach.send": "coach:operate",
   "coach.cancel": "coach:operate",
+  "coach.deleteSession": "coach:operate",
   "coach.confirm": "coach:approve",
   "environment.info": "coach:read"
 } as const satisfies Record<string, CoachPermission>;
