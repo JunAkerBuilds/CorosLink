@@ -5,7 +5,7 @@ import appLogo from "../../build/icon-animated.svg";
 import "./communityInvite.css";
 
 export const TESTFLIGHT_URL = "https://testflight.apple.com/join/CHeNwjVn";
-export const DISCORD_URL = "https://discord.gg/8FxcVkDTa";
+export const DISCORD_URL = "https://discord.gg/3x9rErHyjR";
 const ISSUES_URL = "https://github.com/JunAkerBuilds/CorosLink/issues";
 
 /**
