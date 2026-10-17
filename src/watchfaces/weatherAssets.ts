@@ -215,7 +215,10 @@ export async function buildWeatherSpriteReplacements(
           Math.max(1, Math.round(original.naturalWidth * scale)),
           Math.max(1, Math.round(original.naturalHeight * scale)), style.color);
         const path = `${resolution.directory}/${outputFolders[set]}/${String(index).padStart(2, "0")}.png`;
-        replacements.push({ path, dataUrl, create: !resolution.icons.some(file => file.path === path) && !resolution.spriteFolders.some(folder => folder.files.some(file => file.path === path)) });
+        // Templates that already ship a weather table (NOMAD's 41×41 icons at
+        // 240px) still take Studio's scaled sprites; weather_icon_pos places
+        // them, so the stock frame size does not have to match.
+        replacements.push({ path, dataUrl, allowDimensionOverride: true, create: !resolution.icons.some(file => file.path === path) && !resolution.spriteFolders.some(folder => folder.files.some(file => file.path === path)) });
       }
     }
   }
