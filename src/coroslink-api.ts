@@ -203,7 +203,7 @@ import type {
 } from "../electron/types";
 
 export interface CorosLinkApi {
-  setLanguage: (language: "en" | "fr" | "zh-CN") => Promise<void>;
+  setLanguage: (language: "en" | "fr" | "pt" | "zh-CN") => Promise<void>;
   getWorkoutAutomationStatus: () => Promise<WatchfaceAutomationStatus>;
   configureWorkoutAutomation: (input: { enabled: boolean; port?: number }) => Promise<WatchfaceAutomationStatus>;
   onWorkoutEditsChanged: (callback: () => void) => () => void;

@@ -148,7 +148,7 @@ function VHead({
 
 /** Each UI language says hello in its own words. Never translated: the point is
     that every reader finds their own greeting. */
-export const GREETINGS: Record<Language, string> = { en: "Hello", fr: "Bonjour", "zh-CN": "你好" };
+export const GREETINGS: Record<Language, string> = { en: "Hello", fr: "Bonjour", pt: "Olá", "zh-CN": "你好" };
 
 const RING_RADIUS = 182;
 
