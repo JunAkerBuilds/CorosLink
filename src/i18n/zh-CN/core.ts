@@ -925,4 +925,22 @@ export const coreChinese: Readonly<Record<string, string>> = {
   "MP3s": "MP3",
   // Messages for the latest desktop screens.
   "Watch Face Studio": "表盘工作室",
+  // Community invite (iPhone beta and Discord).
+  "Support": "支持",
+  "Close": "关闭",
+  "Community": "社区",
+  "From the developer": "来自开发者",
+  "CorosLink is coming to iPhone": "CorosLink 即将登陆 iPhone",
+  "Help test the iPhone app before it launches, and join the Discord for updates and support.": "在 iPhone 应用发布前帮忙测试，并加入 Discord 获取更新和支持。",
+  "Get help with CorosLink": "获取 CorosLink 帮助",
+  "Ask questions, report problems and hear about updates first in the CorosLink Discord.": "在 CorosLink Discord 中提问、报告问题，并第一时间了解更新。",
+  "Test C-LINK on iPhone": "在 iPhone 上测试 C-LINK",
+  "I'm building C-LINK, the iPhone app. Have an iPhone? Join the TestFlight beta and help me test it.": "我正在开发 iPhone 应用 C-LINK。有 iPhone？加入 TestFlight 测试版，帮我一起测试。",
+  "Join the beta": "加入测试版",
+  "Join the Discord": "加入 Discord",
+  "Updates, support, feedback and watch faces from other CorosLink users.": "更新、支持、反馈，以及其他 CorosLink 用户分享的表盘。",
+  "Join Discord": "加入 Discord",
+  "Prefer GitHub? Report an issue": "更习惯 GitHub？报告问题",
+  "Both links stay under Help & links (?) and Support.": "这两个链接随时可在“帮助和链接”(?)和“支持”中找到。",
+  "Maybe later": "以后再说",
 };

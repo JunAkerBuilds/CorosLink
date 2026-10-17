@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Combine,
   Compass,
+  LifeBuoy,
   Copy,
   Download,
   BookOpen,
@@ -103,6 +104,7 @@ import {
   createInitialSidebarExpanded,
 } from "./components/AppSidebar";
 import { ResourcesMenu } from "./components/ResourcesMenu";
+import { CommunityInvite, hasSeenCommunityInvite, rememberCommunityInvite, type CommunityInviteMode } from "./community/CommunityInvite";
 import { StartupViewMenu } from "./components/StartupViewMenu";
 import { ToolbarMoreMenu } from "./components/ToolbarMoreMenu";
 import { ThemeToggle } from "./theme/ThemeToggle";
@@ -428,12 +430,24 @@ export default function App() {
   const [watchMenuOpen, setWatchMenuOpen] = useState(false);
   // The welcome tour: the main process says whether it's been finished or skipped yet.
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  // The iPhone beta / Discord invite: once per INVITE_ID, on a launch where the
+  // tour isn't showing (so a new install sees it the launch after the tour).
+  // Support in the toolbar reopens it any time.
+  const [communityInvite, setCommunityInvite] = useState<CommunityInviteMode | null>(null);
+  const closeCommunityInvite = useCallback(() => {
+    setCommunityInvite((mode) => {
+      if (mode === "announcement") rememberCommunityInvite();
+      return null;
+    });
+  }, []);
   useEffect(() => {
     if (!api?.isOnboardingPending) return;
     let disposed = false;
     api.isOnboardingPending().then(
       (pending) => {
-        if (!disposed && pending) setOnboardingOpen(true);
+        if (disposed) return;
+        if (pending) setOnboardingOpen(true);
+        else if (!hasSeenCommunityInvite()) setCommunityInvite((mode) => mode ?? "announcement");
       },
       () => undefined,
     );
@@ -2362,6 +2376,10 @@ export default function App() {
         </div>
         <div className="app-header-end">
           <div className="app-toolbar-utilities">
+            <button className="support-button" type="button" onClick={() => setCommunityInvite("support")}>
+              <LifeBuoy size={16} aria-hidden="true" />
+              {t("Support")}
+            </button>
             <DonateButton />
             <ThemeToggle />
             <button
@@ -2816,6 +2834,9 @@ export default function App() {
       </main>
       </div>
 
+      {communityInvite && !onboardingOpen ? (
+        <CommunityInvite mode={communityInvite} onClose={closeCommunityInvite} />
+      ) : null}
       {onboardingOpen && api ? (
         <Suspense fallback={null}>
           <LazyOnboardingTour

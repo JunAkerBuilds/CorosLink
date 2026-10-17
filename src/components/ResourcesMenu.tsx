@@ -11,10 +11,13 @@ import {
   LifeBuoy,
   Map as MapIcon,
   MapPin,
+  MessagesSquare,
   Newspaper,
+  Smartphone,
   Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { DISCORD_URL, TESTFLIGHT_URL } from "../community/CommunityInvite";
 
 interface ResourceLink {
   label: string;
@@ -29,6 +32,21 @@ interface ResourceGroup {
 
 // Curated from GitHub issues #7 (CorosLink links) and #8 (COROS resources).
 const LINK_GROUPS: ResourceGroup[] = [
+  {
+    heading: "Community",
+    links: [
+      {
+        label: "Test C-LINK on iPhone",
+        href: TESTFLIGHT_URL,
+        icon: Smartphone,
+      },
+      {
+        label: "Join the Discord",
+        href: DISCORD_URL,
+        icon: MessagesSquare,
+      },
+    ],
+  },
   {
     heading: "CorosLink",
     links: [

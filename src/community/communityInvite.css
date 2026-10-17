@@ -1,0 +1,283 @@
+/* The after-update invite and the Support dialog (CommunityInvite.tsx).
+   Same shell as the update prompt; each card carries its own hue. */
+.community-invite-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 121;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  background: rgba(2, 5, 8, 0.62);
+  -webkit-backdrop-filter: blur(12px) saturate(125%);
+  backdrop-filter: blur(12px) saturate(125%);
+  animation: community-invite-fade 180ms ease-out;
+}
+
+.community-invite {
+  position: relative;
+  width: min(640px, 100%);
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--glass-border));
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at 10% 0%, var(--accent-soft), transparent 36%),
+    color-mix(in srgb, var(--bg-base) 94%, var(--glass-bg-elevated));
+  box-shadow: 0 34px 90px rgba(0, 0, 0, 0.55), var(--glass-inset);
+  animation: community-invite-rise 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.community-invite:focus {
+  outline: none;
+}
+
+.community-invite.is-support {
+  background:
+    radial-gradient(circle at 10% 0%, color-mix(in srgb, #5865f2 18%, transparent), transparent 38%),
+    color-mix(in srgb, var(--bg-base) 94%, var(--glass-bg-elevated));
+  border-color: color-mix(in srgb, #5865f2 26%, var(--glass-border));
+}
+
+.community-invite-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.community-invite-close:hover {
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-primary);
+}
+
+.community-invite-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 26px 64px 20px 28px;
+}
+
+.community-invite-logo {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.community-invite-glyph {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: linear-gradient(160deg, #7983f5, #5865f2);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 8px 20px rgba(88, 101, 242, 0.32);
+}
+
+.community-invite-eyebrow {
+  margin: 0 0 3px;
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.community-invite.is-support .community-invite-eyebrow {
+  color: color-mix(in srgb, #7983f5 72%, var(--text-primary));
+}
+
+.community-invite-header h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: clamp(22px, 3vw, 27px);
+  line-height: 1.15;
+}
+
+.community-invite-header div > p:last-child {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.community-invite-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 4px 28px 22px;
+}
+
+.community-invite-card {
+  --card-hue: var(--accent);
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 6px;
+  min-height: 188px;
+  padding: 18px 18px 16px;
+  border: 1px solid color-mix(in srgb, var(--card-hue) 22%, var(--glass-border));
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(170deg, color-mix(in srgb, var(--card-hue) 11%, transparent), transparent 62%),
+    color-mix(in srgb, var(--glass-bg) 80%, transparent);
+  color: inherit;
+  text-decoration: none;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.community-invite-card.is-discord {
+  --card-hue: #5865f2;
+}
+
+.community-invite-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--card-hue) 48%, var(--glass-border));
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--card-hue) 16%, transparent);
+}
+
+.community-invite-card:focus-visible {
+  outline: 2px solid var(--card-hue);
+  outline-offset: 2px;
+}
+
+.community-invite-card-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-bottom: 6px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--card-hue) 18%, transparent);
+  color: color-mix(in srgb, var(--card-hue) 70%, var(--text-primary));
+}
+
+.community-invite-card-title {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 15.5px;
+  font-weight: 600;
+}
+
+.community-invite-card-body {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.community-invite-card-action {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: var(--card-hue);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+/* White on dark mode's mint accent is too faint; paper's accent is deep enough for white. */
+:root:not([data-theme="paper"]) .community-invite-card.is-testflight .community-invite-card-action {
+  color: #052a1f;
+}
+
+.community-invite-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 28px 22px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.community-invite-footnote {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  text-decoration: none;
+}
+
+a.community-invite-footnote:hover {
+  color: var(--text-primary);
+}
+
+.community-invite-dismiss {
+  min-height: 36px;
+  flex: 0 0 auto;
+}
+
+/* The toolbar's Support pill, beside Buy me a coffee. */
+.support-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 13px 0 11px;
+  border: 1px solid color-mix(in srgb, #5865f2 34%, var(--glass-border));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, #5865f2 12%, var(--glass-bg));
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.support-button svg {
+  color: color-mix(in srgb, #7983f5 75%, var(--text-primary));
+}
+
+.support-button:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, #5865f2 55%, var(--glass-border));
+  background: color-mix(in srgb, #5865f2 20%, var(--glass-bg));
+}
+
+@media (max-width: 640px) {
+  .community-invite-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .community-invite-card {
+    min-height: 0;
+  }
+
+  .community-invite-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+}
+
+@keyframes community-invite-fade {
+  from { opacity: 0; }
+}
+
+@keyframes community-invite-rise {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .community-invite-backdrop,
+  .community-invite {
+    animation: none;
+  }
+}

@@ -793,4 +793,22 @@ export const coreFrench: Record<string, string> = {
   "GB": "Go",
   // Messages for the latest desktop screens.
   "Watch Face Studio": "Atelier de cadrans",
+  // Community invite (iPhone beta and Discord).
+  "Support": "Assistance",
+  "Close": "Fermer",
+  "Community": "Communauté",
+  "From the developer": "Un mot du développeur",
+  "CorosLink is coming to iPhone": "CorosLink arrive sur iPhone",
+  "Help test the iPhone app before it launches, and join the Discord for updates and support.": "Aidez à tester l’app iPhone avant sa sortie, et rejoignez le Discord pour les nouveautés et l’assistance.",
+  "Get help with CorosLink": "Obtenir de l’aide avec CorosLink",
+  "Ask questions, report problems and hear about updates first in the CorosLink Discord.": "Posez vos questions, signalez un problème et découvrez les nouveautés en premier sur le Discord de CorosLink.",
+  "Test C-LINK on iPhone": "Tester C-LINK sur iPhone",
+  "I'm building C-LINK, the iPhone app. Have an iPhone? Join the TestFlight beta and help me test it.": "Je développe C-LINK, l’app iPhone. Vous avez un iPhone ? Rejoignez la bêta TestFlight et aidez-moi à la tester.",
+  "Join the beta": "Rejoindre la bêta",
+  "Join the Discord": "Rejoindre le Discord",
+  "Updates, support, feedback and watch faces from other CorosLink users.": "Nouveautés, assistance, retours et cadrans d’autres utilisateurs de CorosLink.",
+  "Join Discord": "Rejoindre Discord",
+  "Prefer GitHub? Report an issue": "Vous préférez GitHub ? Signalez un problème",
+  "Both links stay under Help & links (?) and Support.": "Ces deux liens restent dans Aide et liens (?) et Assistance.",
+  "Maybe later": "Plus tard",
 };
