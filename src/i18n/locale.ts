@@ -7,6 +7,12 @@ import { coreChinese } from "./zh-CN/core";
 import { trainingChinese } from "./zh-CN/training";
 import { watchfacesChinese } from "./zh-CN/watchfaces";
 import { toolsChinese } from "./zh-CN/tools";
+
+import { corePortuguese } from "./pt/core";
+import { trainingPortuguese } from "./pt/training";
+import { watchfacesPortuguese } from "./pt/watchfaces";
+import { toolsPortuguese } from "./pt/tools";
+
 import { preferredLanguage, resolveLanguage, supportedLanguage, type Language } from "../../electron/appLanguage";
 export { resolveLanguage };
 export type { Language };
@@ -14,6 +20,7 @@ export const LANGUAGE_STORAGE_KEY = "coroslink.language";
 export const LANGUAGES = [
   { value: "en", label: "English" },
   { value: "fr", label: "Français" },
+  { value: "pt", label: "Português" },
   { value: "zh-CN", label: "简体中文" },
 ] as const;
 
@@ -23,11 +30,16 @@ export const frenchMessages: Readonly<Record<string, string>> = {
 export const chineseMessages: Readonly<Record<string, string>> = {
   ...trainingChinese, ...watchfacesChinese, ...toolsChinese, ...coreChinese,
 };
+export const portugueseMessages: Readonly<Record<string, string>> = {
+  ...trainingPortuguese, ...watchfacesPortuguese, ...toolsPortuguese, ...corePortuguese,
+};
+const mergedMessages = { fr: frenchMessages, pt: portugueseMessages, "zh-CN": chineseMessages } as const;
 let language: Language = "en";
 const listeners = new Set<() => void>();
 
 export function getLanguage(): Language { return language; }
-export function getLocale(): string { return { en: "en-US", fr: "fr-FR", "zh-CN": "zh-CN" }[language]; }
+// pt-PT even for Brazilian systems, so dates and numbers match the European Portuguese catalog.
+export function getLocale(): string { return { en: "en-US", fr: "fr-FR", pt: "pt-PT", "zh-CN": "zh-CN" }[language]; }
 export function subscribeLanguage(listener: () => void): () => void {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
@@ -36,7 +48,7 @@ export function subscribeLanguage(listener: () => void): () => void {
 type Values = Record<string, string | number | null | undefined>;
 
 export function translate(source: string, selected: Language, values?: Values, messages?: Readonly<Record<string, string>>, context?: string): string {
-  const fallback = selected === "zh-CN" ? chineseMessages : frenchMessages;
+  const fallback = selected === "en" ? frenchMessages : mergedMessages[selected];
   const catalog = messages ?? fallback;
   const key = context ? `${context}:${source}` : source;
   const localized = Object.hasOwn(catalog, key) ? catalog[key]
@@ -54,8 +66,8 @@ export function t(source: string, values?: Values, context?: string): string {
 }
 
 /** Context matters: a font's Weight and a workout's Weight use different words. */
-export function createTranslator(french: Readonly<Record<string, string>>, chinese: Readonly<Record<string, string>>) {
-  return (source: string, values?: Values, context?: string): string => translate(source, language, values, language === "zh-CN" ? chinese : french, context);
+export function createTranslator(french: Readonly<Record<string, string>>, chinese: Readonly<Record<string, string>>, portuguese: Readonly<Record<string, string>>) {
+  return (source: string, values?: Values, context?: string): string => translate(source, language, values, language === "zh-CN" ? chinese : language === "pt" ? portuguese : french, context);
 }
 
 export function setLanguage(value: Language): void {
