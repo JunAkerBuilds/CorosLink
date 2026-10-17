@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.55] - 2026-10-17
+
+### Added
+
+- **Coach from your iPhone.** **Remote access** in Coach settings pairs C-LINK, the iPhone app, with a QR code so you can chat with your Coach from the phone, pick up any conversation, delete conversations and choose the model. Pairing works on your home network out of the box. Turn on **Away from home** and sign in with your CorosLink website account to reach Coach from anywhere: CorosLink then sets up a private Cloudflare Tunnel for this computer (it asks before downloading Cloudflare's `cloudflared`). Your conversations travel through the tunnel to your computer, not through CorosLink's servers, and phone alerts carry no message text.
+- **Bluetooth error reports that show where a connection failed.** When connecting, syncing a face or route, or any other watch transfer fails, **Copy error report** in **Settings → Error logs** now includes where it failed in the Bluetooth helper (with the Mac's Bluetooth error code), what the app was doing, and the last 40 Bluetooth events with their timings. Watch disconnects and helper crashes are recorded too, even when nothing was in progress. Like the rest of the report, it never includes keys, watch data or device identifiers.
+
+### Changed
+
+- **Activity duration and pace use moving time**, like the COROS app: pauses no longer slow your average pace or speed. The activity list, details, overview and Coach all use it. Activities synced before this update show elapsed time until they sync again.
+- **The Coach workspace got a refresh.** A new conversation starts from a centred box that moves to the bottom when you send, switching conversations or opening a creation slides between views instead of cutting, and messages no longer show avatars. The conversation list and the creations panel run the full height of the window.
+- Workouts and plans the Coach prepares through COROS's own tools show as full workout cards, with the structure bar, each step's target and intensity, and repeat groups, like a scheduled workout in the calendar. The creations list names them after the workout.
+- The Coach knows today's date and time, so "tomorrow" and "next Monday" land on the right day.
+- The Coach can read run power and cadence from your activities, and the model pickers show each model's version.
+- In Watch Faces, the daily-data chart area (stress, stamina, steps, calories, elevation) previews as the readout pages the watch shows instead of a bar graph, and NOMAD keeps its chart heart rate when you export it.
+
+### Fixed
+
+- **Weather on faces that already have weather icons.** Exporting a face built on a template with its own weather icons, such as NOMAD, failed with "The replacement for watchface_240x240/weather/01.png must be a 41×41 PNG like the template's." It exports again, with Studio's weather icons.
+- When the watch refuses to authenticate, the error report now says what the watch replied, along with its model and firmware.
+
 ## [0.1.54] - 2026-10-15
 
 ### Added
