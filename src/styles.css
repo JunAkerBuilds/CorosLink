@@ -22407,6 +22407,10 @@ tr.data-intervals-row-missing {
 .route-studio {
   --route-panel-w: 360px;
   position: relative;
+  /* The floating panels sit at z-index 1150–1300 to clear Leaflet's panes;
+     keep that ladder inside the map so app-level modals (Support, tour) and
+     toasts still layer above it (#142). */
+  isolation: isolate;
   flex: 1;
   min-height: 0;
   border-radius: var(--radius-lg);

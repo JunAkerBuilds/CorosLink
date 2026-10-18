@@ -15,6 +15,7 @@ import {
   X
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type {
   ActivityPaceBaselines,
   DrawnRoutePayload,
@@ -1011,9 +1012,10 @@ export function RouteStudio({
         deletingAll={deletingAll}
       />
 
-      {shareSession ? (
-        <ShareModal session={shareSession} onClose={() => void handleCloseShare()} />
-      ) : null}
+      {/* Portaled out of .route-studio, which isolates its map-panel z-index ladder (#142). */}
+      {shareSession
+        ? createPortal(<ShareModal session={shareSession} onClose={() => void handleCloseShare()} />, document.body)
+        : null}
     </div>
   );
 }
