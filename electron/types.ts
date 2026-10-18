@@ -1198,6 +1198,8 @@ export interface CorosWatchfaceDesignState {
       overwriteLanguages?: string[];
       /** Date-month rendering mode; absent preserves the starter's format. */
       monthFormat?: "digits" | "labels";
+      /** Absent preserves the template's horizontal alignment. */
+      align?: "left" | "center" | "right";
       fontFamily?: string;
       color?: string;
       fontWeight?: number;

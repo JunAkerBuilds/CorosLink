@@ -4045,6 +4045,29 @@ assert.equal(
   "{74,40,206,84,hcenter|vcenter}",
   "native weekday width should expand around the existing center without face clamping"
 );
+const alignedDateStyle = buildDateStyleOverrides(
+  withMetrics,
+  {
+    weekday: { scale: 1, align: "left" },
+    dateMonth: { scale: 1, align: "right", width: 31, height: 47 },
+    dateDay: { scale: 1, align: "center" }
+  },
+  true
+).find((entry) => entry.path.includes("800x800"));
+assert.equal(
+  alignedDateStyle?.values.english_date_week_rect,
+  "{80,320,240,384,left|vcenter}",
+  "weekday alignment should be written into the rect flags like metric numbers"
+);
+assert.equal(
+  alignedDateStyle?.values.english_date_month_rect,
+  "{320,329,384,376,right|vcenter}",
+  "an aligned month keeps its template box and moves the text inside it"
+);
+assert.equal(
+  alignedDateStyle?.values.english_date_day_rect,
+  "{400,320,464,384,hcenter|vcenter}"
+);
 const nativeDateStyleOverrides = buildDateStyleOverrides(withMetrics, {
   dateMonth: { scale: 1, width: 31, height: 47 }
 });

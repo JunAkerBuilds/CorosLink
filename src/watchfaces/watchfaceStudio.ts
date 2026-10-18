@@ -3035,7 +3035,8 @@ export async function renderNativeRasterImageSprite(
 async function centerSpriteOnCanvas(
   dataUrl: string,
   width: number,
-  height: number
+  height: number,
+  align?: WatchfaceHorizontalAlign
 ): Promise<string> {
   const image = await loadStudioImage(dataUrl);
   if (image.naturalWidth === width && image.naturalHeight === height) {
@@ -3050,10 +3051,58 @@ async function centerSpriteOnCanvas(
   }
   context.drawImage(
     image,
-    Math.round((width - image.naturalWidth) / 2),
+    Math.round(horizontalAlignOffset(width, image.naturalWidth, align)),
     Math.round((height - image.naturalHeight) / 2)
   );
   return canvas.toDataURL("image/png");
+}
+
+/**
+ * Slides a sprite's visible pixels to the left or right edge of its own
+ * canvas without rescaling, so labels drawn centered in a fixed-size canvas
+ * still start (or end) exactly at the aligned edge.
+ */
+async function alignVisibleSpriteInCanvas(
+  dataUrl: string,
+  align?: WatchfaceHorizontalAlign
+): Promise<string> {
+  if (align !== "left" && align !== "right") return dataUrl;
+  const image = await loadStudioImage(dataUrl);
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context || canvas.width === 0 || canvas.height === 0) return dataUrl;
+  context.drawImage(image, 0, 0);
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  let left = canvas.width;
+  let right = -1;
+  for (let y = 0; y < canvas.height; y += 1) {
+    for (let x = 0; x < canvas.width; x += 1) {
+      if (pixels[(y * canvas.width + x) * 4 + 3]! < 8) continue;
+      left = Math.min(left, x);
+      right = Math.max(right, x);
+    }
+  }
+  if (right < left) return dataUrl;
+  const shift = align === "left" ? -left : canvas.width - 1 - right;
+  if (shift === 0) return dataUrl;
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, shift, 0);
+  return canvas.toDataURL("image/png");
+}
+
+/** Preview counterpart of `alignVisibleSpriteInCanvas` for an already-loaded image. */
+async function alignedPreviewImage(
+  image: HTMLImageElement,
+  align: WatchfaceHorizontalAlign
+): Promise<HTMLImageElement> {
+  try {
+    const aligned = await alignVisibleSpriteInCanvas(image.src, align);
+    return aligned === image.src ? image : await loadStudioImage(aligned);
+  } catch {
+    return image;
+  }
 }
 
 /**
@@ -3250,7 +3299,8 @@ export async function fitVisibleSpriteToCanvas(
   dataUrl: string,
   width: number,
   height: number,
-  zoom = 1
+  zoom = 1,
+  align?: WatchfaceHorizontalAlign
 ): Promise<string> {
   const image = await loadStudioImage(dataUrl);
   const source = document.createElement("canvas");
@@ -3304,7 +3354,7 @@ export async function fitVisibleSpriteToCanvas(
     top,
     contentWidth,
     contentHeight,
-    Math.round((width - outputWidth) / 2),
+    Math.round(horizontalAlignOffset(width, outputWidth, align)),
     Math.round((height - outputHeight) / 2),
     outputWidth,
     outputHeight
@@ -3772,6 +3822,27 @@ export type WatchfaceTimeStyles = Partial<
 
 export type WatchfaceDatePartId = "weekday" | "dateMonth" | "dateDay";
 
+export type WatchfaceHorizontalAlign = "left" | "center" | "right";
+
+/** Horizontal alignment the firmware reads from a rect's flags; center by default. */
+function configRectHorizontalAlign(value: string | undefined): WatchfaceHorizontalAlign {
+  const flags = value?.match(/,([^,}]*)}\s*$/)?.[1].split("|").map((flag) => flag.trim()) ?? [];
+  if (flags.includes("left")) return "left";
+  if (flags.includes("right")) return "right";
+  return "center";
+}
+
+/** Left padding that places content of `contentWidth` in `width` for an alignment. */
+function horizontalAlignOffset(
+  width: number,
+  contentWidth: number,
+  align?: WatchfaceHorizontalAlign
+): number {
+  if (align === "left") return 0;
+  if (align === "right") return width - contentWidth;
+  return (width - contentWidth) / 2;
+}
+
 export interface WatchfaceDateSpriteStyle {
   /** Export this component with solid glyph pixels after resizing and effects. */
   solidAlpha?: boolean;
@@ -3790,6 +3861,8 @@ export interface WatchfaceDateSpriteStyle {
   overwriteLanguages?: string[];
   /** Date-month rendering mode; absent preserves the starter's format. */
   monthFormat?: "digits" | "labels";
+  /** Absent preserves the template’s horizontal alignment. */
+  align?: WatchfaceHorizontalAlign;
   /** Optional per-layer font; falls back to the design font. */
   fontFamily?: string;
   color?: string;
@@ -3833,6 +3906,7 @@ export function removeWatchfaceDateFontOverride(
     remaining.overwriteLanguages !== undefined ||
     remaining.scale !== 1 ||
     remaining.color !== undefined ||
+    remaining.align !== undefined ||
     remaining.rotation !== undefined ||
     remaining.width !== undefined ||
     remaining.height !== undefined;
@@ -6934,6 +7008,23 @@ export async function buildTimeSpriteReplacements(
   return replacements;
 }
 
+/**
+ * An aligned date keeps at least the template's box, centered where it was,
+ * so alignment moves the text inside the box rather than the box itself.
+ */
+function alignedDateRectWidth(
+  rectValue: string | undefined,
+  contentWidth: number,
+  align?: WatchfaceHorizontalAlign
+): number {
+  const rect = align ? parseConfigRect(rectValue) : null;
+  return rect ? Math.max(contentWidth, rect.x1 - rect.x0) : contentWidth;
+}
+
+function datePartIdForRectKey(rectKey: string): WatchfaceDatePartId | undefined {
+  return WATCHFACE_DATE_PARTS.find((part) => part.rectKey === rectKey)?.id;
+}
+
 /** Isolates date sprite folders and follows exact PNG dimensions when present. */
 export function buildDateStyleOverrides(
   details: CorosWatchfaceTemplateDetails,
@@ -6965,12 +7056,16 @@ export function buildDateStyleOverrides(
       const rect = followsNativeSize
         ? resizeConfigRectValue(
             resolution.config[part.rectKey] ?? "",
-            Math.max(...sizes.map((size) => size.width)) * rectGlyphCount,
+            alignedDateRectWidth(
+              resolution.config[part.rectKey],
+              Math.max(...sizes.map((size) => size.width)) * rectGlyphCount,
+              style.align
+            ),
             Math.max(...sizes.map((size) => size.height))
           )
         : resolution.config[part.rectKey];
       if (!rect) continue;
-      values[part.rectKey] = rect;
+      values[part.rectKey] = alignConfigRectValue(rect, style.align);
       if (style.color) {
         const colorKey = part.fontKey.replace(/_font$/, "_font_color");
         if (
@@ -7040,6 +7135,8 @@ export async function buildDateSpriteComposition(
     rasterized: boolean;
     color?: string;
     rotation?: number;
+    /** Places variable-width labels inside their shared frame canvas. */
+    align?: WatchfaceHorizontalAlign;
     zoom: number;
     exactCanvas: boolean;
     nativeSize: boolean;
@@ -7107,6 +7204,7 @@ export async function buildDateSpriteComposition(
           ),
           color: style.color,
           rotation: style.rotation,
+          align: part.kind === "week" || monthLabels ? style.align : undefined,
           zoom: normalizedScale,
           exactCanvas: canvasSize?.native ?? false,
           nativeSize:
@@ -7219,17 +7317,19 @@ export async function buildDateSpriteComposition(
             baseDataUrl,
             job.width,
             job.height,
-            1
+            1,
+            job.align
           )
         : baseDataUrl
       : await fitVisibleSpriteToCanvas(
           baseDataUrl,
           job.width,
           job.height,
-          job.zoom
+          job.zoom,
+          job.align
         );
     const dataUrl = await rotateSpriteInCanvas(
-      fittedDataUrl,
+      await alignVisibleSpriteInCanvas(fittedDataUrl, job.align),
       job.width,
       job.height,
       job.rotation
@@ -7247,10 +7347,9 @@ export async function buildDateSpriteComposition(
     const width = Math.max(...group.map((entry) => entry.width));
     const height = Math.max(...group.map((entry) => entry.height));
     for (const entry of group) {
-      const centered = await centerSpriteOnCanvas(
-        entry.dataUrl,
-        width,
-        height
+      const centered = await alignVisibleSpriteInCanvas(
+        await centerSpriteOnCanvas(entry.dataUrl, width, height, entry.job.align),
+        entry.job.align
       );
       replacements.push({
         path: entry.job.path,
@@ -7265,15 +7364,16 @@ export async function buildDateSpriteComposition(
       });
     }
     const first = group[0]!;
+    const align = styles[datePartIdForRectKey(first.job.rectKey)!]?.align;
     const rect = resizeConfigRectToCanvas(
       first.job.rectValue,
-      width * first.job.rectGlyphCount,
+      alignedDateRectWidth(first.job.rectValue, width * first.job.rectGlyphCount, align),
       height
     );
     if (rect) {
       configOverrides.push({
         path: first.job.configPath,
-        values: { [first.job.rectKey]: rect }
+        values: { [first.job.rectKey]: alignConfigRectValue(rect, align) }
       });
     }
   }
@@ -9570,7 +9670,8 @@ export async function drawStudioPreview(
               rendered,
               weekWidth,
               weekHeight,
-              weekScale
+              weekScale,
+              weekStyle?.align
             )
       );
     } else if (weekStyle && loadedAssets.get(weekFile.path)?.dataUrl) {
@@ -9598,23 +9699,28 @@ export async function drawStudioPreview(
               spacedDataUrl,
               weekWidth,
               weekHeight,
-              1
+              1,
+              weekStyle?.align
             )
           : await fitVisibleSpriteToCanvas(
               spacedDataUrl,
               weekWidth,
               weekHeight,
-              weekScale
+              weekScale,
+              weekStyle?.align
             )
       );
     }
+    if (image && weekStyle?.align) {
+      image = await alignedPreviewImage(image, weekStyle.align);
+    }
     if (image) {
-      const centerX = ((weekRect.x0 + weekRect.x1) / 2) * scale;
+      const left = (weekRect.x0 + horizontalAlignOffset(weekRect.x1 - weekRect.x0, renderedWeekWidth, configRectHorizontalAlign(config["english_date_week_rect"]))) * scale;
       const centerY = ((weekRect.y0 + weekRect.y1) / 2) * scale;
       drawStudioLayerImage(
         context,
         image,
-        centerX - (renderedWeekWidth * scale) / 2,
+        left,
         centerY - (renderedWeekHeight * scale) / 2,
         renderedWeekWidth * scale,
         renderedWeekHeight * scale,
@@ -9655,7 +9761,8 @@ export async function drawStudioPreview(
               rendered,
               width,
               height,
-              monthStyle.scale
+              monthStyle.scale,
+              monthStyle.align
             )
           : rendered
       );
@@ -9680,17 +9787,21 @@ export async function drawStudioPreview(
               ),
               width,
               height,
-              monthStyle.scale
+              monthStyle.scale,
+              monthStyle.align
             )
       );
     }
+    if (image && monthStyle?.align) {
+      image = await alignedPreviewImage(image, monthStyle.align);
+    }
     if (image) {
-      const centerX = ((monthRect.x0 + monthRect.x1) / 2) * scale;
+      const left = (monthRect.x0 + horizontalAlignOffset(monthRect.x1 - monthRect.x0, width, configRectHorizontalAlign(config["english_date_month_rect"]))) * scale;
       const centerY = ((monthRect.y0 + monthRect.y1) / 2) * scale;
       drawStudioLayerImage(
         context,
         image,
-        centerX - (width * scale) / 2,
+        left,
         centerY - (height * scale) / 2,
         width * scale,
         height * scale,

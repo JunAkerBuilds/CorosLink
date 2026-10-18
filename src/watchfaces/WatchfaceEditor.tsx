@@ -6410,6 +6410,7 @@ export function WatchfaceEditor({
       height?: number;
       aspectLocked?: boolean;
       monthFormat?: "digits" | "labels";
+      align?: "left" | "center" | "right";
       fontFamily?: string;
       color?: string;
       fontWeight?: number;
@@ -12312,6 +12313,7 @@ export function WatchfaceEditor({
                   : t("Added by Studio using this face's digits. This template has no date of its own.")}</p>
                 <div className="wf-config-asset-actions"><button className="secondary-button wf-danger-action" type="button" onClick={() => removeAddedDatePart(partId)}><Trash2 size={15} />{" "}{t("Remove")}{" "}{layer.label.toLowerCase()}</button></div>
               </> : null}
+              <WatchfaceNumberAlignControl value={style?.align} allowTemplateDefault onChange={(align) => setDateStyle(partId, { align })} />
               <LocalFontPicker
                 api={api}
                 label={t("Font")}
