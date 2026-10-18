@@ -1,11 +1,12 @@
 export type CorosRegion = "US" | "EU";
 
 export const SALT = "9y78gpoERW4lBNYL";
-const APP_ID = "1660188068672619112";
-
+// COROS retired the public faq.coros.com/openapi/oss/sts endpoint (404 since
+// Oct 2026). The Training Hub web app now fetches STS through its own
+// same-origin proxy, authenticated by the CPL-coros-token session cookie.
 const REGION_STS = {
-  US: { bucket: "coros-s3", sign: "E34EF0E34A498A54A9C3EAEFC12B7CAF" },
-  EU: { bucket: "eu-coros", sign: "877571111A1EE5316E4B590103D4B5B3" }
+  US: { webOrigin: "https://t.coros.com", bucket: "coros-s3" },
+  EU: { webOrigin: "https://trainingeu.coros.com", bucket: "eu-coros" }
 } as const;
 
 export interface StsCredentials {
@@ -21,15 +22,16 @@ export function regionFromBaseUrl(baseUrl: string): CorosRegion {
 }
 
 export function stsRequestUrl(region: CorosRegion): string {
-  const { bucket, sign } = REGION_STS[region];
-  const params = new URLSearchParams({
-    bucket,
-    service: "aws",
-    v: "2",
-    app_id: APP_ID,
-    sign
-  });
-  return `https://faq.coros.com/openapi/oss/sts?${params.toString()}`;
+  const { webOrigin, bucket } = REGION_STS[region];
+  const params = new URLSearchParams({ bucket, service: "aws", v: "2" });
+  return `${webOrigin}/api/proxy/oss/sts?${params.toString()}`;
+}
+
+export function stsRequestHeaders(accessToken: string): Record<string, string> {
+  return {
+    Cookie: `CPL-coros-token=${accessToken}`,
+    Accept: "application/json, text/plain, */*"
+  };
 }
 
 export function decodeStsCredentials(rawCredentials: string): StsCredentials {

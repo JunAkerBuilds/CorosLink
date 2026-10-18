@@ -6,19 +6,28 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const distUrl = (file) =>
   pathToFileURL(path.join(repoRoot, "dist-electron", file)).href;
 
-const { regionFromBaseUrl, stsRequestUrl, decodeStsCredentials, SALT } =
+const {
+  regionFromBaseUrl,
+  stsRequestUrl,
+  stsRequestHeaders,
+  decodeStsCredentials,
+  SALT
+} =
   await import(`${distUrl("corosUploadConfig.js")}?cacheBust=${Date.now()}`);
 
 assert.equal(regionFromBaseUrl("https://teamapi.coros.com"), "US");
 assert.equal(regionFromBaseUrl("https://teameuapi.coros.com"), "EU");
 
 const usUrl = stsRequestUrl("US");
-assert.ok(usUrl.startsWith("https://faq.coros.com/openapi/oss/sts?"));
+assert.ok(usUrl.startsWith("https://t.coros.com/api/proxy/oss/sts?"));
 assert.match(usUrl, /bucket=coros-s3/);
-assert.match(usUrl, /app_id=1660188068672619112/);
-assert.match(usUrl, /sign=E34EF0E34A498A54A9C3EAEFC12B7CAF/);
+assert.match(usUrl, /service=aws/);
+assert.match(usUrl, /v=2/);
+assert.ok(
+  stsRequestUrl("EU").startsWith("https://trainingeu.coros.com/api/proxy/oss/sts?")
+);
 assert.match(stsRequestUrl("EU"), /bucket=eu-coros/);
-assert.match(stsRequestUrl("EU"), /sign=877571111A1EE5316E4B590103D4B5B3/);
+assert.equal(stsRequestHeaders("abc").Cookie, "CPL-coros-token=abc");
 
 // decode: COROS returns base64(JSON) with the salt appended as a SUFFIX
 // (verified live against faq.coros.com/openapi/oss/sts — the credentials

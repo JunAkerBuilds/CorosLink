@@ -122,6 +122,7 @@ import { signRequest, sha256Hex } from "./awsSigV4";
 import { createStoreZip } from "./zipStore";
 import {
   regionFromBaseUrl,
+  stsRequestHeaders,
   stsRequestUrl,
   decodeStsCredentials
 } from "./corosUploadConfig";
@@ -1599,15 +1600,23 @@ export async function uploadActivityFitToCoros(
   const md5 = crypto.createHash("md5").update(fileBuf).digest("hex");
   const oriFileName = path.basename(fitPath);
 
-  // 1. STS credentials (unauthenticated app-level request).
+  // 1. STS credentials via the Training Hub web proxy (session cookie auth).
   const region = regionFromBaseUrl(auth.baseUrl);
-  const stsResp = await fetch(stsRequestUrl(region));
+  const stsResp = await fetch(stsRequestUrl(region), {
+    headers: stsRequestHeaders(auth.accessToken)
+  });
+  const stsJson = (await stsResp.json().catch(() => ({}))) as {
+    code?: number;
+    data?: { credentials?: string };
+  };
+  if (stsResp.status === 401 || stsJson.code === 401) {
+    throw new Error(
+      "COROS session expired. Sign in to the Training Hub again, then retry the import."
+    );
+  }
   if (!stsResp.ok) {
     throw new Error(`COROS STS request failed: ${stsResp.status}`);
   }
-  const stsJson = (await stsResp.json()) as {
-    data?: { credentials?: string };
-  };
   if (!stsJson.data?.credentials) {
     throw new Error("COROS STS response missing credentials.");
   }
