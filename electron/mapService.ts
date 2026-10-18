@@ -2166,14 +2166,14 @@ async function getDirectoryStats(directoryPath: string): Promise<DirectoryStats>
 function assertNotSameOrNested(sourcePath: string, destinationPath: string): void {
   const source = path.resolve(sourcePath);
   const destination = path.resolve(destinationPath);
-  const destinationInsideSource = path.relative(source, destination);
-  const sourceInsideDestination = path.relative(destination, source);
+  // path.relative compares case-insensitively on Windows, so an empty result
+  // also catches E:\Map vs E:\map (the watch's own folder picked as source).
+  const isInside = (parent: string, child: string) => {
+    const relative = path.relative(parent, child);
+    return !relative.startsWith("..") && !path.isAbsolute(relative);
+  };
 
-  if (
-    source === destination ||
-    (destinationInsideSource && !destinationInsideSource.startsWith("..")) ||
-    (sourceInsideDestination && !sourceInsideDestination.startsWith(".."))
-  ) {
+  if (isInside(source, destination) || isInside(destination, source)) {
     throw new Error("The selected map folder is already on the watch.");
   }
 }
