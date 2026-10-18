@@ -44,7 +44,8 @@ assert.deepEqual(creations.map(c => c.status), ["pending", "saved", "saved", "sa
 assert.deepEqual(creations.map(c => c.date), ["2026-10-16", "2026-10-20", "2026-10-31", "2026-11-02"], "COROS compact dates normalized; drafts use their earliest session");
 assert.deepEqual(creations.map(c => c.destination), ["Calendar", "Workout Library", "Calendar", "Training Plan"]);
 assert.deepEqual(creations.map(c => c.sport), ["run", "run", "bike", undefined]);
-assert.deepEqual(creations.map(c => c.title), ["Review workout", "Tempo Tuesday", "Base build", "Review training plan"]);
+assert.deepEqual(creations.map(c => c.title), ["Easy aerobic run", "Tempo Tuesday", "Base build", "Review training plan"], "COROS cards take the workout name, falling back to the action title");
+assert.deepEqual(creations.map(c => c.kicker), ["Review workout", undefined, undefined, "Review training plan"], "the COROS action title moves to the kicker");
 assert.equal(creations[0].kind === "corosAction" && creations[0].preview, corosWorkout, "the source preview rides along for the detail card");
 assert.equal(creations[2].kind === "planDraft" && creations[2].draft, planDraft);
 
