@@ -1,4 +1,4 @@
-import { formatNumber, t } from "../i18n/trainingLocale";
+import { formatDate, formatNumber, t } from "../i18n/trainingLocale";
 import type {
   TrainingHubActivity,
   TrainingHubDailyMetric
@@ -25,7 +25,6 @@ export interface WeeklyActivitySeries {
   yAxisUnit: string;
 }
 
-const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
 const METRIC_LABELS: Record<WeeklyActivityMetric, string> = {
   distance: "Distance",
@@ -266,7 +265,8 @@ export function buildWeeklyActivitySeries(
 
     return {
       happenDay,
-      weekdayLabel: WEEKDAY_LABELS[index],
+      // Monday-first short weekday in the app language (2024-01-01 was a Monday).
+      weekdayLabel: formatDate(new Date(2024, 0, 1 + index), { weekday: "short" }),
       value: chartValue,
       displayValue: hasValue && raw !== undefined
         ? formatDayDisplayValue(raw, metric, unitSystem)

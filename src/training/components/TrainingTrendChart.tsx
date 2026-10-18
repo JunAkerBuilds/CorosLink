@@ -133,6 +133,13 @@ function formatTooltipHeading(date: unknown, fallback: unknown): string {
   });
 }
 
+/** "20261003" → "03/10" (fr), "10/03" (en): the main process labels points without knowing the app language. */
+function formatAxisDay(value: string): string {
+  if (!/^\d{8}$/.test(value)) return value;
+  const date = new Date(Number(value.slice(0, 4)), Number(value.slice(4, 6)) - 1, Number(value.slice(6, 8)));
+  return new Intl.DateTimeFormat(getLocale(), { day: "2-digit", month: "2-digit" }).format(date);
+}
+
 function TrendChartTooltip({
   active,
   payload,
@@ -335,7 +342,8 @@ function TrendChartAxes({
         strokeDasharray="2 8"
       />
       <XAxis
-        dataKey="label"
+        dataKey="date"
+        tickFormatter={formatAxisDay}
         tick={{ fill: colors.text, fontSize: 11, fontWeight: 500 }}
         axisLine={false}
         tickLine={false}

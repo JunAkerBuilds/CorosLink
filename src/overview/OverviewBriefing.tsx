@@ -325,7 +325,7 @@ function ReadinessRing({ percent, tone, ghost = false }: { percent?: number; ton
           {percent !== undefined ? percent : "–"}
           {percent !== undefined ? <small>%</small> : null}
         </strong>
-        <span>{t("Recovery")}</span>
+        <span>{t("Recovery", undefined, "overviewRing")}</span>
       </div>
     </div>
   );
@@ -1040,7 +1040,7 @@ function OverviewConnectHero({ onConnect }: { onConnect: () => void }) {
                   <span className="overview-week-dot" />
                 )}
               </span>
-              <span className="overview-week-day">{"MTWTFSS"[index]}</span>
+              <span className="overview-week-day">{new Intl.DateTimeFormat(getLocale(), { weekday: "narrow" }).format(new Date(2024, 0, 1 + index))}</span>
             </li>
           ))}
         </ol>
