@@ -1,6 +1,6 @@
 import { WATCHFACE_SIMULATION_CAPABILITIES } from "./watchfaceSimulation";
 import { getNativeDataAutomationCatalog } from "./nativeDataAutomation";
-import { NATIVE_DATA_BY_ID, NATIVE_CHART_SOURCES, NATIVE_ASSET_ROLES, NATIVE_PARTS, nativeAssetCount } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_DATA_BY_ID, NATIVE_CHART_SOURCES, NATIVE_CHART_STUDIO_READOUTS, NATIVE_ASSET_ROLES, NATIVE_PARTS, nativeAssetCount } from "../../electron/watchfaceNativeCatalog";
 import type {
   CorosWatchfaceDesignState,
   CorosWatchfaceTemplateDetails
@@ -65,7 +65,7 @@ const WATCHFACE_SCHEMA_DEFINITIONS = {
   nativeColor: { type: "string", pattern: "^#[0-9a-fA-F]{6}$", description: "Six-digit RGB hex color supported by the native compiler." },
   nativeDataMap: { type: "object", propertyNames: { enum: [...NATIVE_DATA_BY_ID.keys()] }, additionalProperties: { $ref: "#/$defs/nativeDataStyle" } },
   nativeDataStyle: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "scale", "color"], properties: {
-    enabled: {type:"boolean"}, x:{type:"number"}, y:{type:"number"}, scale:{type:"number",minimum:0.1,maximum:4}, color:{$ref:"#/$defs/nativeColor"}, fontFamily:{type:"string"}, previewValue:{type:"string",maxLength:6}, chartSource:{enum:NATIVE_CHART_SOURCES.map(source=>source.id)}, chartWidth:{type:"number",minimum:80,maximum:700}, chartHeight:{type:"number",minimum:16,maximum:500}, stateCount:{type:"integer",minimum:1,maximum:64},
+    enabled: {type:"boolean"}, x:{type:"number"}, y:{type:"number"}, scale:{type:"number",minimum:0.1,maximum:4}, color:{$ref:"#/$defs/nativeColor"}, fontFamily:{type:"string"}, previewValue:{type:"string",maxLength:6}, chartSource:{enum:NATIVE_CHART_SOURCES.map(source=>source.id)}, removedReadouts:{type:"array",uniqueItems:true,items:{enum:[...NATIVE_CHART_SOURCES.map(source=>source.id),...NATIVE_CHART_STUDIO_READOUTS]},description:"Chart only: template readouts taken off their page because they were made fixed; export deletes their keys."}, chartWidth:{type:"number",minimum:80,maximum:700}, chartHeight:{type:"number",minimum:16,maximum:500}, stateCount:{type:"integer",minimum:1,maximum:64},
     assets:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_ASSET_ROLES.map(role=>[role,{type:"object",propertyNames:{pattern:"^(0|[1-9][0-9]?)$"},additionalProperties:{$ref:"#/$defs/pngImageValue"}}]))},
     assetTexts:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_ASSET_ROLES.map(role=>[role,{type:"object",additionalProperties:{type:"string",maxLength:32}}]))},
     parts:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_PARTS.map(part=>[part,{$ref:"#/$defs/nativeDataPart"}]))},

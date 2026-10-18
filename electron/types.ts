@@ -999,6 +999,11 @@ export interface CorosWatchfaceNativeDataStyle {
   fontFamily?: string;
   /** Chart data-field prefix; not a verified selector for the watch's plotted history. */
   chartSource?: string;
+  /**
+   * Chart only: template readouts taken off their page ("Make fixed" moved
+   * them to an always-shown field). Export deletes their config keys.
+   */
+  removedReadouts?: string[];
   /** State-table size when recovered artwork defines fewer frames than the catalog default. */
   stateCount?: number;
   chartWidth?: number;

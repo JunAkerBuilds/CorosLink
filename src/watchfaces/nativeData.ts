@@ -1,6 +1,6 @@
 import type { CorosWatchfaceAssetReplacement, CorosWatchfaceConfigOverride, CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceResolutionDetails, CorosWatchfaceTemplateDetails } from "../../electron/types";
 import type { ChartPageCompanions } from "./recoveredWatchfaceDesign";
-import { NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartDailyPage, nativeChartGroup, nativeChartRepresentation, nativeChartSourceKeys, nativeFieldKeys, nativeConfigPrefix, nativeHasIcon, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_CHART_PAGES, NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartDailyPage, nativeChartGroup, nativeChartRepresentation, nativeChartSourceKeys, nativeFieldKeys, nativeConfigPrefix, nativeHasIcon, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
 import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, offsetConfigValue, parseConfigPos, parseConfigRect, pickPreviewResolution, resizeAndTintSprite } from "./watchfaceStudio";
 import { isNativeTime, nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRolePart, nativeRoleIndices, nativeStateCount } from "./nativeDataParts";
 import { parseSimulationDateTime, type WatchfacePreviewScenario } from "./watchfaceSimulation";
@@ -217,6 +217,8 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
         for (const { id: source } of NATIVE_CHART_SOURCES) {
           if (nativeChartSourceKeys(source).some(key => /^cl_nd_/.test(resolution.config[key] ?? ""))) for (const key of nativeChartSourceKeys(source)) values[key] = COROS_CONFIG_DELETE_VALUE;
         }
+        // Template readouts made fixed leave their page.
+        for (const source of style.removedReadouts ?? []) for (const key of nativeChartSourceKeys(source)) values[key] = COROS_CONFIG_DELETE_VALUE;
       } else for (const key of nativeFieldKeys(field)) values[key] = COROS_CONFIG_DELETE_VALUE;
       if (style.enabled) minWatchFaceVersion = Math.max(minWatchFaceVersion, field.version);
     }
@@ -483,6 +485,33 @@ async function addMinMaxCompanions(
 }
 
 /**
+ * The chart pages a field shows on when it shares a slot with another field
+ * the watch swaps in on other pages (NOMAD's weather row), and those partners.
+ * Null when the field shows on every page. Same rules as
+ * nativeLayerHiddenByChartGroup below.
+ */
+export function nativeLayerChartPages(id: string, data: NativeData): { pages: string[]; partners: string[] } | null {
+  if (!data.chart?.enabled) return null;
+  const collides = (a: string, b: string) => {
+    const p = nativeDataBounds(a, data), q = nativeDataBounds(b, data);
+    return Boolean(p && q && p.x0 < q.x1 && q.x0 < p.x1 && p.y0 < q.y1 && q.y0 < p.y1);
+  };
+  const pages = (keep: (page: string) => boolean) => NATIVE_CHART_PAGES.map(page => page.id).filter(keep);
+  const daily = (page: string) => page.startsWith("daily-");
+  if (id === "chart_sun_angle") return { pages: ["sun"], partners: collides("chart_sun_angle", "weather_temp") ? ["weather_temp"] : [] };
+  if (id === "weather_temp" && collides("weather_temp", "chart_sun_angle")) return { pages: pages(page => page !== "sun"), partners: ["chart_sun_angle"] };
+  if (id === "weather_temp_min" || id === "weather_temp_max") {
+    const partners = ["weather_wind", "weather_direction"].filter(other => nativeLayerStyle(other, data)?.enabled);
+    return collides(id, "weather_wind") ? { pages: pages(daily), partners } : null;
+  }
+  if (id === "weather_wind" || id === "weather_direction") {
+    const partners = ["weather_temp_min", "weather_temp_max"].filter(other => collides("weather_wind", other));
+    return partners.length ? { pages: pages(page => !daily(page)), partners } : null;
+  }
+  return null;
+}
+
+/**
  * Layers the watch shows only in some Back-button chart groups. The preview
  * follows the chart layer's group; without a chart layer everything draws.
  * Suppression only applies where the alternatives actually share a slot.
@@ -515,9 +544,13 @@ async function drawChartPageCompanions(canvas: HTMLCanvasElement, width: number,
   if (!chartPage || !chart?.enabled || !page) return;
   const ctx = canvas.getContext("2d"); if (!ctx) return;
   const ratio = canvas.width / width;
-  if (chartPage.divider) ctx.drawImage(await loadStudioImage(chartPage.divider.dataUrl), chartPage.divider.x * ratio, chartPage.divider.y * ratio);
+  if (chartPage.divider) {
+    // The divider PNG is in face pixels; scale it with the canvas like every other part.
+    const divider = await loadStudioImage(chartPage.divider.dataUrl);
+    ctx.drawImage(divider, chartPage.divider.x * ratio, chartPage.divider.y * ratio, divider.naturalWidth * ratio, divider.naturalHeight * ratio);
+  }
   for (const readout of chartPage.readouts) {
-    if (readout.chartSource === chart.chartSource || !page.includes(readout.chartSource ?? "")) continue;
+    if (readout.chartSource === chart.chartSource || !page.includes(readout.chartSource ?? "") || chart.removedReadouts?.includes(readout.chartSource ?? "")) continue;
     await drawNativeDataPreview(canvas, width, { chart: readout }, scenario);
   }
 }

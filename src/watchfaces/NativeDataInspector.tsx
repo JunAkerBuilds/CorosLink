@@ -5,7 +5,7 @@ import { FolderInput, ImagePlus, RotateCcw, Trash2 } from "lucide-react";
 import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceNativePartStyle } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeDataAsset, nativeDataPreviewValue } from "./nativeData";
-import { nativeChartRepresentation } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_CHART_FIXED_EQUIVALENTS, NATIVE_CHART_PAGES, nativeChartReadoutLabel, nativeChartRepresentation } from "../../electron/watchfaceNativeCatalog";
 import { nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRoleIndices } from "./nativeDataParts";
 import { loadStudioImage, resizeAndTintSprite } from "./watchfaceStudio";
 import { LocalFontPicker } from "./LocalFontPicker";
@@ -22,7 +22,102 @@ const SPRITE_LABELS: Partial<Record<Role, string[]>> = {
   separator: ["Separator"]
 };
 
-const chartSourceLabel = (source: string) => t(NATIVE_CHART_SOURCES.find(item => item.id === source)?.label ?? source);
+const chartSourceLabel = (source: string) => t(nativeChartReadoutLabel(source));
+const nativeFieldLabel = (id: string) => t(NATIVE_DATA_BY_ID.get(id)?.label ?? id);
+const listLabels = (labels: string[]) => labels.join(getLocale().startsWith("zh") ? "、" : ", ");
+
+/**
+ * A field that shares its slot with another the watch swaps in on other
+ * pages. Making it fixed removes those partners, so it has the slot alone.
+ */
+function FieldPagesPanel({ id, pages, partners, disabled, onMakeFixed }: {
+  id: string; pages: string[]; partners: string[]; disabled: boolean; onMakeFixed?: () => void;
+}) {
+  useLanguage();
+  const label = nativeFieldLabel(id), others = listLabels(partners.map(nativeFieldLabel));
+  return <div className="wf-field-pages">
+    <p><strong>{t("Shows on:")}</strong> {listLabels(pages.map(chartPageLabel))}</p>
+    {partners.length ? <p>{t("On the other pages the watch shows {{others}} in this slot.", { others })}</p> : null}
+    {onMakeFixed && partners.length ? <>
+      <p>{t("Make fixed removes {{others}} from this face, so {{label}} has the slot to itself. Not checked on a watch yet: COROS may still hide it on some pages.", { others, label })}</p>
+      <button type="button" className="secondary-button" disabled={disabled} onClick={onMakeFixed}>{t("Make {{label}} fixed", { label })}</button>
+    </> : null}
+  </div>;
+}
+const chartPageLabel = (id: string) => id === "daily-a" ? t("Daily data · A") : id === "daily-b" ? t("Daily data · B") : id === "sun" ? t("Sun") : id === "moon" ? t("Moon") : id === "barometer" ? t("Barometer") : t("Tide");
+
+/**
+ * The chart as the watch shows it: pages that Back cycles through, each with
+ * its readouts in slot order. Clicking a readout edits it on the chart layer;
+ * a readout the layer can't edit (heart rate, CorosLink-only keys) can still
+ * be made fixed. Pages appear only when the face carries one of their readouts.
+ */
+function ChartPageStrip({ current, readouts, editable, removed, disabled, onEdit, onOtherData, onMakeFixed, onRestore, pageFields = {}, onSelectField }: {
+  current: string; readouts: string[]; editable: string[]; removed: string[]; disabled: boolean;
+  /** Other layers that show only on some pages (NOMAD's weather row), by page id. */
+  pageFields?: Record<string, string[]>; onSelectField?: (id: string) => void;
+  onEdit?: (source: string) => void; onOtherData: (source: string) => void;
+  onMakeFixed?: (source: string) => void; onRestore: (source: string) => void;
+}) {
+  useLanguage();
+  const [focused, setFocused] = useState(current);
+  useEffect(() => { setFocused(current); }, [current]);
+  const present = new Set([...readouts, current]);
+  const pages = NATIVE_CHART_PAGES.filter(page => page.sources.some(source => present.has(source)));
+  const live = [...present].filter(source => !removed.includes(source));
+  const focus = present.has(focused) ? focused : current;
+  const isRemoved = removed.includes(focus);
+  const equivalent = NATIVE_CHART_FIXED_EQUIVALENTS[focus];
+  // The firmware draws no graph without a readout (graph-only faces stay blank).
+  const lastReadout = live.length <= 1 && !isRemoved;
+  const others = NATIVE_CHART_SOURCES.filter(source => !present.has(source.id));
+  return <div className="wf-chart-pages">
+    <div className="wf-chart-pages-head"><span>{t("Watch pages")}</span></div>
+    <ol className="wf-chart-page-list">
+      {pages.map((page, index) => {
+        const isCurrent = page.sources.includes(current);
+        return <li key={page.id} className={`wf-chart-page${isCurrent ? " is-current" : ""}`} aria-current={isCurrent ? "true" : undefined}>
+          <span className="wf-chart-page-number" aria-hidden="true">{index + 1}</span>
+          <div className="wf-chart-page-body">
+            <div className="wf-chart-page-title">{chartPageLabel(page.id)}{isCurrent ? <small>{t("Shown in the preview")}</small> : null}</div>
+            <div className="wf-chart-slots" role="group" aria-label={chartPageLabel(page.id)}>
+              {page.sources.filter(source => present.has(source)).map(source => {
+                const gone = removed.includes(source), canEdit = !gone && (source === current || editable.includes(source));
+                return <button key={source} type="button" disabled={disabled}
+                  className={`wf-chart-slot${source === current && !gone ? " is-editing" : ""}${source === focus ? " is-focused" : ""}${gone ? " is-removed" : ""}`}
+                  aria-pressed={source === focus}
+                  title={gone ? t("Made fixed: it shows on every page now") : canEdit ? t("Edit this readout") : t("Kept from the official face")}
+                  onClick={() => { setFocused(source); if (canEdit && source !== current) onEdit?.(source); }}>
+                  {chartSourceLabel(source)}{gone ? <span aria-hidden="true">· {t("Fixed")}</span> : null}
+                </button>;
+              })}
+            </div>
+            {pageFields[page.id]?.length ? <div className="wf-chart-page-also"><span>{t("Also on this page:")}</span>
+              {pageFields[page.id]!.map(field => <button key={field} type="button" className="wf-chart-page-field" onClick={() => onSelectField?.(field)}>{nativeFieldLabel(field)}</button>)}
+            </div> : null}
+          </div>
+        </li>;
+      })}
+    </ol>
+    <div className="wf-chart-slot-actions">
+      {isRemoved ? <>
+        <p>{t("{{label}} was made fixed, so it shows on every page. Put it back to show it only on its page again.", { label: chartSourceLabel(focus) })}</p>
+        <button type="button" className="secondary-button" disabled={disabled} onClick={() => onRestore(focus)}>{t("Put back on its page")}</button>
+      </> : equivalent && onMakeFixed ? <>
+        <p>{lastReadout ? t("The chart needs at least one readout, so {{label}} can't leave it.", { label: chartSourceLabel(focus) })
+          : "metric" in equivalent ? t("Make fixed moves {{label}} off its page into a field that always shows, using the same digits. Its icon becomes an image layer.", { label: chartSourceLabel(focus) })
+            : t("Make fixed moves {{label}} off its page into a field that always shows, with the same artwork.", { label: chartSourceLabel(focus) })}</p>
+        <button type="button" className="secondary-button" disabled={disabled || lastReadout} onClick={() => onMakeFixed(focus)}>{t("Make {{label}} fixed", { label: chartSourceLabel(focus) })}</button>
+      </> : <p>{t("{{label}} has no always-shown version on the watch, so it stays on its page.", { label: chartSourceLabel(focus) })}</p>}
+    </div>
+    {others.length ? <label className="field">{t("Other data")}
+      <select aria-label={t("Show other chart data")} value="" disabled={disabled} onChange={event => { if (event.target.value) onOtherData(event.target.value); }}>
+        <option value="">{t("Choose data…")}</option>
+        {others.map(source => <option key={source.id} value={source.id}>{t(source.category)} · {t(source.label)}</option>)}
+      </select>
+    </label> : null}
+  </div>;
+}
 
 /** Keep a draft so typing a minus sign or clearing the field is not reset. */
 function ComponentOffsetInput({ label, value, coordinateScale, onChange }: {
@@ -71,11 +166,17 @@ type RenderSection = (
  * selected part, and Advanced for preview-only settings. The editor renders
  * the Transform section itself so it matches every other layer.
  */
-export function NativeDataInspector({ id, style, coordinateScale, api, disabled, renderSection, onPatch, onError, onImportStart, onImportFinish, isImportCurrent, chartGroups = [], onChartGroup }: {
+export function NativeDataInspector({ id, style, coordinateScale, api, disabled, renderSection, onPatch, onError, onImportStart, onImportFinish, isImportCurrent, chartGroups = [], chartReadouts = chartGroups, onChartGroup, onMakeFixed, pageFields, onSelectField, fieldPages, onMakeFieldFixed }: {
   id: string; style: Style; api: CorosLinkApi; disabled: boolean; coordinateScale: number;
   renderSection: RenderSection;
-  /** Chart readouts the face itself carries; the watch's Back button cycles between them. */
+  /** Chart readouts the layer can switch to; the watch's Back button cycles between them. */
   chartGroups?: string[]; onChartGroup?: (source: string) => void;
+  /** Every chart readout the face carries, including ones only "Make fixed" can edit (heart rate). */
+  chartReadouts?: string[];
+  onMakeFixed?: (source: string) => void;
+  /** Chart: page-dependent layers by page. Other fields: the pages this one shows on. */
+  pageFields?: Record<string, string[]>; onSelectField?: (id: string) => void;
+  fieldPages?: { pages: string[]; partners: string[] } | null; onMakeFieldFixed?: () => void;
   onPatch: (patch: Partial<Style>) => void; onError: (message: string) => void;
   onImportStart: (target: string) => number | null; onImportFinish: (token: number) => void; isImportCurrent: (token: number) => boolean;
 }) {
@@ -164,8 +265,8 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
 
   const notes = [
     definition.kind === "chart" ? <p key="chart" className="watchface-studio-summary" role="note"><strong>{t("Experimental charts.")}</strong>{" "}{t("This preview uses sample data.")}</p> : null,
-    definition.kind === "chart" && chartGroups.length > 1 ? <p key="chart-groups" className="watchface-studio-summary" role="note"><strong>{t("Selectable on the watch.")}</strong>{" "}{t("Back cycles this graph through its chart groups. This face has readouts for")}{" "}{chartGroups.map(chartSourceLabel).join(", ")}{t(". Choose one under Chart data to preview and edit it. The layer exports the group shown; the others keep the face's original readouts and don't follow a moved graph.")}</p> : null,
-    definition.kind === "chart" && nativeChartRepresentation(style.chartSource) === "none" ? <p key="chart-readouts" className="watchface-studio-summary" role="note"><strong>{t("Readouts only.")}</strong>{" "}{t("The watch shows two pages of numbers with no graph: stress, stamina and elevation, then calories, heart rate and steps. The page's other readouts come from the face. Heart rate has no editable readout, so Studio can't show or export it yet. Bar style applies to the barometer and tide pages.")}</p> : null,
+    definition.kind === "chart" && chartReadouts.length > 1 ? <p key="chart-groups" className="watchface-studio-summary" role="note">{t("Edits apply to the readout you pick under Watch pages. The face's other readouts keep their original artwork and don't follow a moved graph.")}</p> : null,
+    definition.kind === "chart" && nativeChartRepresentation(style.chartSource) === "none" ? <p key="chart-readouts" className="watchface-studio-summary" role="note"><strong>{t("Readouts only.")}</strong>{" "}{t("The watch shows two pages of numbers with no graph: stress, stamina and elevation, then calories, heart rate and steps. The page's other readouts come from the face. Heart rate comes from the face too; to change it, make it fixed. Bar style applies to the barometer and tide pages.")}</p> : null,
     definition.kind === "chart" && nativePart(id, style, "plot").enabled && !nativePart(id, style, style.chartSource === "chart_moon" ? "states" : "value").enabled
       ? <p key="chart-hidden" className="watchface-studio-summary" role="note"><strong>{t("Graph without a number.")}</strong> {t("The watch only draws a graph when the face has a chart number, so the export adds an invisible one. Experimental: check the graph on your watch.")}</p> : null,
     definition.kind === "chart" && style.chartSource !== "chart_moon" ? <p key="chart-pace" className="watchface-studio-summary" role="note">{t("Chart numbers may stay blank on PACE Pro even when Back changes the graph. The sample number here does not confirm watch support. A separate metric layer can show a value, but will not follow chart changes.")}</p> : null,
@@ -202,12 +303,10 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
       {notes}
       {colorControl("Color",style.color,color=>onPatch({color}))}
       <LocalFontPicker api={api} label={t("Font")} value={style.fontFamily ?? ""} emptyLabel={t("Default")} disabled={locked} onChange={fontFamily=>onPatch({fontFamily})} />
-      {definition.kind === "chart" && <label className="field">{t("Chart data")}<select aria-label={t("Chart data field")} value={style.chartSource ?? "chart_stress"} onChange={event=>{ const source = event.target.value; if (onChartGroup && chartGroups.includes(source)) onChartGroup(source); else onPatch({chartSource:source}); }}>
-        {chartGroups.length > 1 ? <>
-          <optgroup label={t("On this face")}>{chartGroups.map(source=><option key={source} value={source}>{chartSourceLabel(source)}</option>)}</optgroup>
-          <optgroup label={t("Other data")}>{NATIVE_CHART_SOURCES.filter(source=>!chartGroups.includes(source.id)).map(source=><option key={source.id} value={source.id}>{t(source.category)} · {t(source.label)}</option>)}</optgroup>
-        </> : NATIVE_CHART_SOURCES.map(source=><option key={source.id} value={source.id}>{t(source.category)} · {t(source.label)}</option>)}
-      </select></label>}
+      {definition.kind === "chart" && <ChartPageStrip current={style.chartSource ?? "chart_stress"} readouts={chartReadouts} editable={chartGroups}
+        removed={style.removedReadouts ?? []} disabled={locked} onEdit={onChartGroup} onOtherData={chartSource=>onPatch({chartSource})} onMakeFixed={onMakeFixed}
+        onRestore={source=>onPatch({removedReadouts:(style.removedReadouts ?? []).filter(item=>item!==source)})} pageFields={pageFields} onSelectField={onSelectField} />}
+      {definition.kind !== "chart" && fieldPages ? <FieldPagesPanel id={id} pages={fieldPages.pages} partners={fieldPages.partners} disabled={locked} onMakeFixed={onMakeFieldFixed} /> : null}
       <p className="watchface-studio-summary">{t("Every component uses this color and font unless it sets its own below.")}</p>
     </div>, { disabled: locked })}
 

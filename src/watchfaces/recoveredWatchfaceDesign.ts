@@ -266,6 +266,12 @@ export function recoveredChartSources(details: CorosWatchfaceTemplateDetails): s
   return template ? templateChartSources(template.config, template.source) : [];
 }
 
+/** Every chart readout the face carries, including CorosLink-only ones (chart_heart_rate). */
+export function recoveredChartReadouts(details: CorosWatchfaceTemplateDetails): string[] {
+  const template = templateSpriteSource(details);
+  return template ? templateChartSources(template.config, template.source, true) : [];
+}
+
 /** Rebuild the chart layer on another of the face's own chart readouts. */
 export async function recoverChartGroup(details: CorosWatchfaceTemplateDetails,
   loadAssets: (paths: string[]) => Promise<CorosWatchfaceTemplateAsset[]>, chartSource: string): Promise<CorosWatchfaceNativeDataStyle | null> {

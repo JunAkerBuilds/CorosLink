@@ -1,0 +1,269 @@
+/* Metric kinds (watchfaceMetricKinds.tsx) and the chart page strip
+   (NativeDataInspector). Fixed stays neutral; the two kinds the watch
+   switches at runtime use the accent, so they read as "this changes". */
+
+.watchface-shell .wf-metric-kind {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 38%, transparent);
+  border-radius: 999px;
+  padding: 0 6px;
+  color: var(--text-secondary);
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.watchface-shell .wf-metric-kind--selectable,
+.watchface-shell .wf-metric-kind--pages {
+  border-color: var(--wf-accent-border, color-mix(in srgb, var(--accent) 45%, transparent));
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+/* In the layer list the tag sits right after the name and gives way to it. */
+.watchface-shell .watchface-layer-row .wf-metric-kind {
+  margin-left: auto;
+}
+
+/* Sits above the inspector sections, inset and ruled like them. */
+.watchface-shell .wf-metric-kind-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  border-bottom: 1px solid var(--wf-border);
+  padding: 12px 14px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.watchface-shell .wf-metric-kind-note .wf-metric-kind {
+  margin-top: 1px;
+}
+
+/* Chart page strip: one card per page the watch cycles through. */
+.watchface-shell .wf-chart-pages {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.watchface-shell .wf-chart-pages-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.watchface-shell .wf-chart-pages-hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.watchface-shell .wf-chart-page-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.watchface-shell .wf-chart-page {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
+  gap: 4px 8px;
+  border: 1px solid var(--wf-border);
+  border-radius: var(--wf-control-radius);
+  background: var(--wf-surface-raised);
+  padding: 7px 8px;
+}
+
+.watchface-shell .wf-chart-page.is-current {
+  border-color: var(--wf-accent-border, color-mix(in srgb, var(--accent) 45%, transparent));
+}
+
+.watchface-shell .wf-chart-page-number {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--wf-insp-control, color-mix(in srgb, var(--text-primary) 6%, transparent));
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.watchface-shell .wf-chart-page.is-current .wf-chart-page-number {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.watchface-shell .wf-chart-page-body {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.watchface-shell .wf-chart-page-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.watchface-shell .wf-chart-page-title small {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.watchface-shell .wf-chart-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.watchface-shell .wf-chart-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: var(--wf-insp-control, color-mix(in srgb, var(--text-primary) 4.5%, transparent));
+  color: var(--text-secondary);
+  padding: 0 9px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 550;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.watchface-shell .wf-chart-slot:hover:not(:disabled) {
+  border-color: var(--wf-border-strong);
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-chart-slot.is-focused {
+  border-color: var(--wf-border-strong);
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-chart-slot.is-editing {
+  border-color: var(--wf-accent-border, color-mix(in srgb, var(--accent) 45%, transparent));
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.watchface-shell .wf-chart-slot.is-removed {
+  border-style: dashed;
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.watchface-shell .wf-chart-slot:focus-visible {
+  outline: 1px solid var(--wf-focus);
+  outline-offset: 1px;
+}
+
+.watchface-shell .wf-chart-slot-actions {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--text-muted) 28%, transparent);
+  padding-top: 8px;
+}
+
+.watchface-shell .wf-chart-slot-actions p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.watchface-shell .wf-chart-slot-actions .secondary-button {
+  justify-self: start;
+}
+
+/* Page-dependent layers listed under a page card, and a field's own page panel. */
+.watchface-shell .wf-chart-page-also {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.watchface-shell .wf-chart-page-field {
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  border: 0;
+  background: none;
+  padding: 0;
+  line-height: 1.4;
+  color: var(--accent-strong);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.watchface-shell .wf-chart-page-field:hover {
+  text-decoration: underline;
+}
+
+.watchface-shell .wf-chart-page-field:focus-visible {
+  outline: 1px solid var(--wf-focus);
+  outline-offset: 1px;
+}
+
+.watchface-shell .wf-field-pages {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--wf-border);
+  border-radius: var(--wf-control-radius);
+  background: var(--wf-surface-raised);
+  padding: 8px 10px 10px;
+}
+
+.watchface-shell .wf-field-pages p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.watchface-shell .wf-field-pages strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.watchface-shell .wf-field-pages .secondary-button {
+  justify-self: start;
+}
+
+.watchface-shell .wf-chart-page-field:not(:last-child)::after {
+  content: "·";
+  margin-left: 6px;
+  color: var(--text-secondary);
+  font-weight: 400;
+}

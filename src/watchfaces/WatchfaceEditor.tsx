@@ -2,7 +2,7 @@ import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { createCollapsedWatchfaceLayerSections, watchfaceLayerMatchesSearch } from "./watchfaceLayerSearch";
 import { batteryStateMeaning, batteryReplacementStateCount, COROS_BATTERY_STATE_ORDER } from "./watchfaceBatteryStates";
 import { WatchfaceAddMenu, type WatchfaceAddCategory, type WatchfaceAddFaceOption } from "./WatchfaceAddMenu";
-import { recoverChartGroup, recoverChartPageCompanions, recoveredChartSources, recoverWatchfaceDesign, type ChartPageCompanions } from "./recoveredWatchfaceDesign";
+import { recoverChartGroup, recoverChartPageCompanions, recoveredChartReadouts, recoveredChartSources, recoverWatchfaceDesign, type ChartPageCompanions } from "./recoveredWatchfaceDesign";
 import { WATCHFACE_TARGETS } from "../../electron/watchfaceTargets";
 import { WatchfaceSimulationPanel } from "./WatchfaceSimulationPanel";
 import { useWatchfaceSimulation } from "./useWatchfaceSimulation";
@@ -10,9 +10,12 @@ import { WATCHFACE_SIMULATION_CAPABILITIES, activeSimulationScenario, createWatc
 import { WatchfaceColorInput, flushWatchfaceColorInputs } from "./WatchfaceColorInput";
 import { WatchfaceNumberAlignControl } from "./WatchfaceNumberAlignControl";
 import { NativeDataInspector } from "./NativeDataInspector";
+import { MetricKindNote, watchfaceMetricKind } from "./watchfaceMetricKinds";
+import { NATIVE_CHART_FIXED_EQUIVALENTS, nativeChartReadoutLabel } from "../../electron/watchfaceNativeCatalog";
+import { nativePart, nativeParts } from "./nativeDataParts";
 import { describeNativeDataComponents } from "./nativeDataAutomation";
 import { watchfaceAutomationAssetContracts } from "./watchfaceAutomationAssetContracts";
-import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES, defaultNativeDataStyle, drawNativeDataPreview, minMaxTemperatureRun, nativeDataSize, nativeLayerStyle } from "./nativeData";
+import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES, defaultNativeDataStyle, drawNativeDataPreview, minMaxTemperatureRun, nativeDataSize, nativeLayerChartPages, nativeLayerStyle } from "./nativeData";
 import { glyphBaselineMovements, visibleGlyphBounds } from "./watchfaceGlyphLayout";
 import { WatchfaceExportPreview } from "./WatchfaceExportPreview";
 import {
@@ -472,6 +475,7 @@ import {
   mergeConfigOverrides,
   parseConfigPos,
   pickPreviewResolution,
+  watchfaceFixedMetricDigitSize,
   templateHasSeconds,
   ADDED_DATE_PART_FLAGS,
   ADDED_WEEKDAY_FALLBACK_FONT,
@@ -5777,6 +5781,10 @@ export function WatchfaceEditor({
     () => modeSourceDetails ? recoveredChartSources(modeSourceDetails) : [],
     [modeSourceDetails]
   );
+  const chartReadouts = useMemo(
+    () => modeSourceDetails ? recoveredChartReadouts(modeSourceDetails) : [],
+    [modeSourceDetails]
+  );
   async function selectChartGroup(source: string) {
     if (!modeSourceDetails || isPositionLocked("native:chart")) return;
     const recovered = await recoverChartGroup(modeSourceDetails, loadAssets, source).catch(() => null);
@@ -5790,7 +5798,8 @@ export function WatchfaceEditor({
       });
       const from = plotAt(recovered, 1), to = plotAt(current, scale);
       const next = { ...recovered, x: Math.round(recovered.x + to.x - from.x), y: Math.round(recovered.y + to.y - from.y),
-        enabled: current.enabled, color: current.color, fontFamily: current.fontFamily, chartStyle: current.chartStyle ?? recovered.chartStyle };
+        enabled: current.enabled, color: current.color, fontFamily: current.fontFamily, chartStyle: current.chartStyle ?? recovered.chartStyle,
+        ...(current.removedReadouts?.length ? { removedReadouts: current.removedReadouts } : {}) };
       // At 1:1 the shared graph components (resized plot, replaced backdrop)
       // carry over; they are drawn by every group.
       if (scale === 1) {
@@ -5806,6 +5815,138 @@ export function WatchfaceEditor({
       return { ...prev, nativeData: { ...prev.nativeData, chart: next } };
     });
   }
+
+  /**
+   * "Make fixed": the readout leaves its chart page and becomes the always-shown
+   * field for the same data, with the same artwork. Pages share slots (heart
+   * rate sits where stamina does), so leaving the readout on its page as well
+   * would draw two values in one spot. Stress, stamina and barometer are native
+   * fields with the readout's own parts. Steps, calories, elevation and heart
+   * rate are Studio's fixed metrics: a number only, set in the readout's digit
+   * art, so the icon becomes an image layer; pendingFixedMetric then sizes and
+   * centers the number on the readout once the editor has measured it.
+   */
+  const pendingFixedMetric = useRef<{ metricId: WatchfaceMetricId; center: { x: number; y: number } } | null>(null);
+  async function makeChartReadoutFixed(source: string) {
+    const equivalent = NATIVE_CHART_FIXED_EQUIVALENTS[source];
+    const chart = design.nativeData?.chart;
+    if (!equivalent || !chart || !modeSourceDetails || isPositionLocked("native:chart")) return;
+    const label = t(nativeChartReadoutLabel(source));
+    const taken = "nativeData" in equivalent
+      ? design.nativeData?.[equivalent.nativeData]?.enabled
+      : layers.some(layer => layer.metricId === equivalent.metric && layer.visible);
+    if (taken) { onError(t("This face already shows a fixed {{label}}. Edit that layer instead.", { label })); return; }
+    const readout = (chart.chartSource ?? "chart_stress") === source ? chart
+      : await recoverChartGroup(modeSourceDetails, loadAssets, source).catch(() => null);
+    if (!readout) { onError(t("Could not read {{label}} from this face.", { label })); return; }
+    const scale = readout.scale ?? 1;
+    const place = (part: "value" | "icon") => {
+      const p = nativePart("chart", readout, part);
+      return { ...p, x: readout.x + p.x * scale, y: readout.y + p.y * scale, width: p.width * scale, height: p.height * scale };
+    };
+    const value = place("value"), icon = place("icon");
+    const iconArt = icon.enabled ? readout.assets?.icon?.["0"] : undefined;
+    // The layer itself moves on to another readout of the face first.
+    if ((chart.chartSource ?? "chart_stress") === source) {
+      const next = chartGroups.find(item => item !== source && !chart.removedReadouts?.includes(item));
+      if (!next) { onError(t("The chart needs at least one readout, so {{label}} can't leave it.", { label })); return; }
+      await selectChartGroup(next);
+    }
+    const iconImage = iconArt && !("nativeData" in equivalent) ? await loadStudioImage(iconArt).catch(() => null) : null;
+    // The metric's digit cell has its own shape (often a borrowed template folder),
+    // so the copied digits carry their measured ink height and baseline.
+    const digitArt = readout.assets?.digits?.["0"];
+    const digitImage = digitArt && !("nativeData" in equivalent) ? await loadStudioImage(digitArt).catch(() => null) : null;
+    const digitInk = digitImage ? await measureDigitInk(Object.values(readout.assets?.digits ?? {})) : null;
+    setDesign(prev => {
+      const current = prev.nativeData?.chart;
+      const removedReadouts = [...new Set([...(current?.removedReadouts ?? []), source])];
+      const nativeData: NonNullable<CorosWatchfaceDesignState["nativeData"]> = { ...prev.nativeData, ...(current ? { chart: { ...current, removedReadouts } } : {}) };
+      if ("nativeData" in equivalent) {
+        const id = equivalent.nativeData, base = defaultNativeDataStyle(id);
+        const shown = [value, ...(icon.enabled ? [icon] : [])];
+        const x = Math.min(...shown.map(item => item.x)), y = Math.min(...shown.map(item => item.y));
+        const part = (item: typeof value) => ({ enabled: true, x: (item.x - x) / scale, y: (item.y - y) / scale, width: item.width / scale,
+          height: item.height / scale, digitWidth: item.digitWidth, align: item.align, ...(readout.parts?.value?.color ? { color: readout.parts.value.color } : {}) });
+        const parts: NonNullable<typeof base.parts> = Object.fromEntries(nativeParts(id, base).map(name => [name, { enabled: false }]));
+        parts.value = part(value);
+        if (icon.enabled && nativeParts(id, base).includes("icon")) parts.icon = part(icon);
+        if (readout.parts?.symbols) parts.symbols = readout.parts.symbols;
+        const assets = Object.fromEntries((["digits", "icon", "symbols"] as const).flatMap(role => readout.assets?.[role] ? [[role, readout.assets[role]]] : []));
+        nativeData[id] = { ...base, enabled: true, x, y, scale, color: readout.color, fontFamily: readout.fontFamily, parts, assets };
+        return { ...prev, nativeData, removedLayerIds: (prev.removedLayerIds ?? []).filter(layerId => layerId !== `native:${id}`) };
+      }
+      const metricId = equivalent.metric;
+      const digits = readout.assets?.digits;
+      // Generated digits are the metric's digit cell times its scale: match the readout's digit art.
+      const cell = previewResolution ? watchfaceFixedMetricDigitSize(previewResolution, metricId) : null;
+      const frameHeight = digitImage ? digitImage.naturalHeight * scale : value.height;
+      // Studio previews metric scales below 0.5 at 0.5, so stay at or above it and
+      // let the glyph layout carry the digit size: the copied ink keeps its height
+      // and sits where it sat in its frame (both are centered on the readout).
+      const metricScale = cell ? Math.max(0.5, Math.round(frameHeight / cell.height * 100) / 100) : prev.metricStyles?.[metricId]?.scale ?? 1;
+      const cellHeight = cell ? cell.height * metricScale : frameHeight;
+      // Numbers advance by digit PNG width; sprite spacing trims the borrowed cell to the readout's.
+      const letterSpacing = cell && digitImage
+        ? Math.max(-0.35, Math.min(0.25, Math.round((digitImage.naturalWidth * scale - cell.width * metricScale) / cellHeight * 1000) / 1000)) : undefined;
+      const glyphLayout = digitInk ? {
+        height: Math.round(digitInk.height * frameHeight / cellHeight * 1000) / 1000,
+        baseline: Math.round((0.5 + (digitInk.baseline - 0.5) * frameHeight / cellHeight) * 1000) / 1000
+      } : undefined;
+      const sprites = digits && Array.from({ length: 10 }, (_, digit) => digits[String(digit)]).every(Boolean) ? digits : undefined;
+      const metricStyles = { ...prev.metricStyles, [metricId]: { ...prev.metricStyles?.[metricId], scale: metricScale,
+        align: "center" as const, color: readout.color, fontFamily: sprites ? undefined : readout.fontFamily,
+        ...(sprites && letterSpacing !== undefined ? { letterSpacing } : {}),
+        rasterFont: sprites ? { label: t("{{label}} chart digits", { label }), dataUrl: "", glyphs: "0123456789", columns: 10,
+          sprites: Object.fromEntries(Array.from({ length: 10 }, (_, digit) => [String(digit), sprites[String(digit)]!])), tint: false,
+          ...(glyphLayout ? { glyphLayout } : {}) } : undefined } };
+      const designSprites = iconImage && iconArt ? [...(prev.designSprites ?? []), {
+        id: window.crypto.randomUUID(), name: t("{{label}} icon", { label }), dataUrl: iconArt,
+        sourceWidth: iconImage.naturalWidth, sourceHeight: iconImage.naturalHeight, width: iconImage.naturalWidth, height: iconImage.naturalHeight,
+        x: Math.round(icon.x + iconImage.naturalWidth * scale / 2), y: Math.round(icon.y + iconImage.naturalHeight * scale / 2), scale, rotation: 0,
+        opacity: 1, aspectLocked: true, origin: { x: 0.5, y: 0.5 }, visible: true
+      }] : prev.designSprites;
+      pendingFixedMetric.current = { metricId, center: { x: value.x + value.width / 2, y: value.y + value.height / 2 } };
+      return { ...prev, nativeData, metricStyles, designSprites, metricChanges: { ...prev.metricChanges, [metricId]: true },
+        removedLayerIds: (prev.removedLayerIds ?? []).filter(layerId => layerId !== metricId) };
+    });
+    selectEditorItem("nativeData" in equivalent ? `native:${equivalent.nativeData}` : equivalent.metric);
+    onNotice(t("{{label}} is fixed now and shows on every page, in the slot it shared with other readouts. Move it if it covers one.", { label }));
+  }
+  // Weather fields that share a slot with one the watch swaps in on other pages, by page.
+  const chartPageFields = useMemo(() => {
+    const byPage: Record<string, string[]> = {};
+    for (const id of Object.keys(design.nativeData ?? {})) {
+      if (id === "chart" || id === "chart_sun_angle" || !design.nativeData?.[id]?.enabled) continue;
+      for (const page of nativeLayerChartPages(id, design.nativeData)?.pages ?? []) (byPage[page] ??= []).push(id);
+    }
+    return byPage;
+  }, [design.nativeData]);
+  // "Make fixed" for a page-dependent field: its slot partners leave the face.
+  function makeFieldFixed(id: string) {
+    const partners = nativeLayerChartPages(id, design.nativeData ?? {})?.partners ?? [];
+    if (!partners.length || isPositionLocked(`native:${id}`)) return;
+    setDesign(prev => ({ ...prev, nativeData: Object.fromEntries(Object.entries(prev.nativeData ?? {}).map(([key, style]) =>
+      [key, partners.includes(key) ? { ...style, enabled: false } : style])) }));
+    const label = t(NATIVE_DATA_FIELDS.find(field => field.id === id)?.label ?? id);
+    onNotice(t("{{label}} is fixed now. Check it on your watch: COROS may still hide it on some chart pages.", { label }));
+  }
+
+  // Center the new fixed metric on the readout once the editor has measured it.
+  useEffect(() => {
+    const pending = pendingFixedMetric.current;
+    if (!pending) return;
+    const layer = layers.find(item => item.metricId === pending.metricId);
+    if (!layer?.bounds || !layer.layoutGroupId) return;
+    pendingFixedMetric.current = null;
+    const bounds = layer.bounds, groupId = layer.layoutGroupId;
+    const dx = Math.round(pending.center.x - (bounds.x0 + bounds.x1) / 2), dy = Math.round(pending.center.y - (bounds.y0 + bounds.y1) / 2);
+    if (!dx && !dy) return;
+    setDesign(prev => {
+      const offset = prev.layoutOffsets?.[groupId] ?? { dx: 0, dy: 0 };
+      return { ...prev, layoutOffsets: { ...prev.layoutOffsets, [groupId]: { dx: offset.dx + dx, dy: offset.dy + dy } } };
+    });
+  }, [layers]);
 
   // Offered only on the Current face: the template must lack seconds itself
   // (not merely have them added by this design).
@@ -10182,7 +10323,9 @@ export function WatchfaceEditor({
     ) {
       return "Indicators";
     }
-    return "Metrics";
+    // The section says how the watch shows the value (watchfaceMetricKinds).
+    const kind = watchfaceMetricKind(layer, design.nativeData);
+    return kind === "selectable" ? "Selectable" : kind === "pages" ? "Chart pages" : "Fixed metrics";
   }
 
   function groupLayersForDisplay(
@@ -10219,8 +10362,7 @@ export function WatchfaceEditor({
             "staticColon"
           ],
           Date: ["weekday", "dateMonth", "dateDay", "staticDateSlash"],
-          Metrics: [
-            "complication",
+          "Fixed metrics": [
             "battery",
             "heartRate",
             "steps",
@@ -10307,7 +10449,9 @@ export function WatchfaceEditor({
     const sectionOrder = [
       "Time",
       "Date",
-      "Metrics",
+      "Fixed metrics",
+      "Selectable",
+      "Chart pages",
       "Indicators",
       "Artwork",
       "Template assets",
@@ -11654,8 +11798,11 @@ export function WatchfaceEditor({
   }
 
   function renderInspector(layer: EditorLayer) {
+    const group = layerGroupLabel(layer);
+    const metricKind = group === "Fixed metrics" || group === "Selectable" || group === "Chart pages" ? watchfaceMetricKind(layer, design.nativeData) : null;
     return (
       <>
+        {metricKind ? <MetricKindNote kind={metricKind} /> : null}
         {renderLayerSection(layer)}
         {renderInspectorBody(layer)}
       </>
@@ -11677,7 +11824,13 @@ export function WatchfaceEditor({
             renderSection={renderPropertySection}
             onPatch={patch => updateNativeData(layer.nativeDataId!, patch)}
             chartGroups={layer.nativeDataId === "chart" ? chartGroups : undefined}
+            chartReadouts={layer.nativeDataId === "chart" ? chartReadouts : undefined}
+            pageFields={layer.nativeDataId === "chart" ? chartPageFields : undefined}
+            onSelectField={id => { selectEditorItem(`native:${id}`); }}
+            fieldPages={layer.nativeDataId !== "chart" ? nativeLayerChartPages(layer.nativeDataId, design.nativeData) : undefined}
+            onMakeFieldFixed={previewMode === "current" ? () => makeFieldFixed(layer.nativeDataId!) : undefined}
             onChartGroup={layer.nativeDataId === "chart" ? source => { void selectChartGroup(source); } : undefined}
+            onMakeFixed={layer.nativeDataId === "chart" && previewMode === "current" ? source => { void makeChartReadoutFixed(source); } : undefined}
             onError={onError}
             onImportStart={beginSpriteImport}
             onImportFinish={finishSpriteImport}
@@ -13994,4 +14147,24 @@ export function WatchfaceEditor({
       </>
     );
   }
+}
+
+/** Union ink box of a digit set, as fractions of the frame height: glyph height and baseline. */
+async function measureDigitInk(urls: string[]): Promise<{ height: number; baseline: number } | null> {
+  let top = Infinity, bottom = -Infinity, frame = 0;
+  for (const url of urls) {
+    const image = await loadStudioImage(url).catch(() => null);
+    if (!image?.naturalHeight) continue;
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+    const context = canvas.getContext("2d");
+    if (!context) continue;
+    context.drawImage(image, 0, 0);
+    const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    frame = Math.max(frame, canvas.height);
+    for (let y = 0; y < canvas.height; y++) for (let x = 0; x < canvas.width; x++) {
+      if (data[(y * canvas.width + x) * 4 + 3]! > 32) { top = Math.min(top, y); bottom = Math.max(bottom, y + 1); }
+    }
+  }
+  return frame && bottom > top ? { height: (bottom - top) / frame, baseline: bottom / frame } : null;
 }

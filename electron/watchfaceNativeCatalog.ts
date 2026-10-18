@@ -138,6 +138,38 @@ export function nativeChartDailyPage(source: string | undefined): readonly strin
   return NATIVE_CHART_DAILY_PAGES.find(page => (page as readonly string[]).includes(source ?? "chart_stress"));
 }
 
+/**
+ * Every page the watch's Back button cycles through, in COROS's group order.
+ * Each page lists its readouts in slot order; the daily pages lay theirs out
+ * left / right / lower. A face shows only the pages it carries.
+ */
+export const NATIVE_CHART_PAGES: ReadonlyArray<{ id: string; label: string; sources: readonly string[] }> = [
+  { id: "daily-a", label: "Daily data · A", sources: NATIVE_CHART_DAILY_PAGES[0] },
+  { id: "daily-b", label: "Daily data · B", sources: NATIVE_CHART_DAILY_PAGES[1] },
+  { id: "sun", label: "Sun", sources: ["chart_sunrise", "chart_sun_angle"] },
+  { id: "moon", label: "Moon", sources: ["chart_moonrise", "chart_moon", "chart_moon_percent"] },
+  { id: "barometer", label: "Barometer", sources: ["chart_baro"] },
+  { id: "tide", label: "Tide", sources: ["chart_tide"] }
+];
+export function nativeChartReadoutLabel(source: string): string {
+  return source === "chart_heart_rate" ? "Heart rate" : NATIVE_CHART_SOURCES.find(item => item.id === source)?.label ?? source;
+}
+
+/**
+ * The always-shown field that carries the same data as a chart readout, for
+ * "Make fixed": a native data field (same parts and artwork), or one of
+ * Studio's fixed metrics (a number only, so its icon becomes an image layer).
+ */
+export const NATIVE_CHART_FIXED_EQUIVALENTS: Readonly<Record<string, { nativeData: string } | { metric: "steps" | "calories" | "elevation" | "heartRate" }>> = {
+  chart_stress: { nativeData: "stress" },
+  chart_stamina: { nativeData: "stamina" },
+  chart_baro: { nativeData: "baro" },
+  chart_step: { metric: "steps" },
+  chart_kcal: { metric: "calories" },
+  chart_elevation: { metric: "elevation" },
+  chart_heart_rate: { metric: "heartRate" }
+};
+
 export function nativeStatePositionKey(field: NativeDataDefinition): string {
   return field.positionKey ?? `${field.id}_pos`;
 }

@@ -6017,6 +6017,16 @@ function metricFontFolder(
     : null;
 }
 
+/** The unscaled digit cell a fixed metric is built from (its own font, else a borrowed template folder). */
+export function watchfaceFixedMetricDigitSize(
+  resolution: CorosWatchfaceResolutionDetails,
+  metricId: WatchfaceMetricId
+): { width: number; height: number } | null {
+  const metric = WATCHFACE_FIXED_METRICS.find((candidate) => candidate.id === metricId);
+  const sample = metric ? metricFontFolder(resolution, metric)?.files[0] : undefined;
+  return sample ? { width: sample.width, height: sample.height } : null;
+}
+
 function configHexColor(color: string): string {
   return `0x${color.replace(/^#/, "").toUpperCase()}`;
 }
