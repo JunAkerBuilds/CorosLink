@@ -38,7 +38,9 @@ function FieldPagesPanel({ id, pages, partners, disabled, onMakeFixed }: {
   return <div className="wf-field-pages">
     <p><strong>{t("Shows on:")}</strong> {listLabels(pages.map(chartPageLabel))}</p>
     {partners.length ? <p>{t("On the other pages the watch shows {{others}} in this slot.", { others })}</p> : null}
-    {onMakeFixed && partners.length ? <>
+    {id === "weather_wind" || id === "weather_direction"
+      ? <p>{t("The watch hides wind on the daily-data pages wherever it sits, so it can't be fixed on a face with a chart. On those pages, minimum and maximum temperature can fill this row instead, as on official NOMAD.")}</p>
+      : onMakeFixed && partners.length ? <>
       <p>{t("Make fixed removes {{others}} from this face, so {{label}} has the slot to itself. Not checked on a watch yet: COROS may still hide it on some pages.", { others, label })}</p>
       <button type="button" className="secondary-button" disabled={disabled} onClick={onMakeFixed}>{t("Make {{label}} fixed", { label })}</button>
     </> : null}
@@ -295,6 +297,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
       <div className="watchface-position-inputs">{numberControl("Line thickness",style.chartStyle?.lineWidth ?? 2,lineWidth=>patchChart({lineWidth}),0,40,true)}</div>
       {colorControl("Upper curve",style.chartStyle?.upperColor ?? component.color,upperColor=>patchChart({upperColor}))}
       {colorControl("Lower curve",style.chartStyle?.lowerColor ?? "#555555",lowerColor=>patchChart({lowerColor}))}
+      <p className="watchface-studio-summary">{t("The watch draws the horizon line and the dot that marks now in white. No face setting changes their color.")}</p>
     </>)
   ];
 

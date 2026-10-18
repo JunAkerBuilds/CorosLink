@@ -1929,4 +1929,6 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "On the other pages the watch shows {{others}} in this slot.": "在其他页面上，手表会在此位置显示 {{others}}。",
   "Make fixed removes {{others}} from this face, so {{label}} has the slot to itself. Not checked on a watch yet: COROS may still hide it on some pages.": "“设为固定”会从此表盘移除 {{others}}，让 {{label}} 独占此位置。尚未在手表上验证：COROS 可能仍会在某些页面隐藏它。",
   "{{label}} is fixed now. Check it on your watch: COROS may still hide it on some chart pages.": "{{label}} 现已固定。请在手表上确认：COROS 可能仍会在某些图表页面隐藏它。",
+  "The watch hides wind on the daily-data pages wherever it sits, so it can't be fixed on a face with a chart. On those pages, minimum and maximum temperature can fill this row instead, as on official NOMAD.": "无论风速放在哪里，手表都会在每日数据页面隐藏它，因此在带图表的表盘上无法将其设为固定。在这些页面上，可以像官方 NOMAD 一样改用最低和最高温度填充这一行。",
+  "The watch draws the horizon line and the dot that marks now in white. No face setting changes their color.": "手表会将地平线和标记当前时间的圆点绘制为白色，表盘设置无法更改它们的颜色。",
 };

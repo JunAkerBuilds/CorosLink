@@ -504,9 +504,10 @@ export function nativeLayerChartPages(id: string, data: NativeData): { pages: st
     const partners = ["weather_wind", "weather_direction"].filter(other => nativeLayerStyle(other, data)?.enabled);
     return collides(id, "weather_wind") ? { pages: pages(daily), partners } : null;
   }
+  // The watch hides wind on the daily-data pages wherever it sits (PACE Pro,
+  // NOMAD export with min/max off: the row went blank there, 2026-10-18).
   if (id === "weather_wind" || id === "weather_direction") {
-    const partners = ["weather_temp_min", "weather_temp_max"].filter(other => collides("weather_wind", other));
-    return partners.length ? { pages: pages(page => !daily(page)), partners } : null;
+    return { pages: pages(page => !daily(page)), partners: ["weather_temp_min", "weather_temp_max"].filter(other => collides("weather_wind", other)) };
   }
   return null;
 }
@@ -526,10 +527,11 @@ export function nativeLayerHiddenByChartGroup(id: string, data: NativeData): boo
   };
   if (id === "chart_sun_angle") return group !== "sun";
   if (id === "weather_temp") return group === "sun" && collides("weather_temp", "chart_sun_angle");
-  // NOMAD keeps min/max temperature and wind in one row; COROS lists wind and
-  // direction in every group except general daily data.
+  // NOMAD keeps min/max temperature and wind in one row. The watch hides wind
+  // and direction on the general daily-data pages wherever they sit (confirmed
+  // on PACE Pro, 2026-10-18).
   if (id === "weather_temp_min" || id === "weather_temp_max") return group !== "general" && collides(id, "weather_wind");
-  if (id === "weather_wind" || id === "weather_direction") return group === "general" && (collides("weather_wind", "weather_temp_min") || collides("weather_wind", "weather_temp_max"));
+  if (id === "weather_wind" || id === "weather_direction") return group === "general";
   return false;
 }
 
@@ -635,7 +637,8 @@ export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: nu
           const position = t * (history.length - 1), index = Math.floor(position), next = Math.min(history.length - 1, index + 1);
           return history[index] + (history[next] - history[index]) * (position - index);
         })();
-        if (arc) { ctx.strokeStyle = lower; ctx.lineWidth = Math.max(1, scale); ctx.beginPath(); ctx.moveTo(px(0), py(split)); ctx.lineTo(px(1), py(split)); ctx.stroke(); }
+        // The watch draws the horizon white, like the "now" marker below (PACE Pro, 2026-10-18).
+        if (arc) { ctx.strokeStyle = "#ffffff"; ctx.lineWidth = Math.max(1, scale); ctx.beginPath(); ctx.moveTo(px(0), py(split)); ctx.lineTo(px(1), py(split)); ctx.stroke(); }
         ctx.lineWidth = lineWidth; ctx.lineCap = "round"; ctx.lineJoin = "round";
         const steps = Math.max(2, Math.round(plot.width / 2));
         for (const [color, above] of [[lower, false], [upper, true]] as const) {
@@ -649,7 +652,9 @@ export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: nu
           ctx.stroke();
         }
         const progress = Math.max(0, Math.min(1, scenario?.chartProgress ?? 0.3));
-        ctx.fillStyle = plot.color; ctx.beginPath(); ctx.arc(px(progress), py(curve(progress)), Math.max(3 * scale, lineWidth * 1.5), 0, Math.PI * 2); ctx.fill();
+        // The firmware draws this "now" marker white: curve, bar and graph colors
+        // don't reach it (PACE Pro, official NOMAD export, 2026-10-18).
+        ctx.fillStyle = "#ffffff"; ctx.beginPath(); ctx.arc(px(progress), py(curve(progress)), Math.max(3 * scale, lineWidth * 1.5), 0, Math.PI * 2); ctx.fill();
       } else {
         const barWidth = chart?.barWidth ?? 8, gap = chart?.barGap ?? 4;
         const count = Math.ceil(plot.width / (barWidth + gap));
