@@ -350,7 +350,7 @@ export function FitnessTrendPanel({
                       })}
                     </span>
                     <span className="training-fitness-date">
-                      {dayInfo.weekdayLabel}
+                      {t(dayInfo.weekdayLabel)}
                     </span>
                     <span className="training-fitness-tooltip" role="tooltip">
                       <strong>{fullLabel}</strong>

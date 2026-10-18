@@ -140,7 +140,7 @@ function formatVolume(kg: number, unitSystem: UnitSystem, empty = "—"): string
   if (kg <= 0) return empty;
   const display = kilogramsToDisplayWeight(kg, unitSystem);
   if (unitSystem === "metric" && display >= 1000) {
-    return `${formatNumber((display / 1000), { minimumFractionDigits: display >= 10_000 ? 0 : 1, maximumFractionDigits: display >= 10_000 ? 0 : 1 })} tonnes`;
+    return `${formatNumber((display / 1000), { minimumFractionDigits: display >= 10_000 ? 0 : 1, maximumFractionDigits: display >= 10_000 ? 0 : 1 })} ${t("tonnes")}`;
   }
   return `${Math.round(display).toLocaleString(getLocale())} ${weightUnit(unitSystem)}`;
 }
@@ -443,7 +443,7 @@ export function ExerciseExplorer({
               <h2 id="exercise-explorer-title">{data.name}</h2>
               {exercise.muscles.length > 0 ? (
                 <p className="exercise-explorer-muscles">
-                  {exercise.muscles.map((muscle) => MUSCLE_BY_ID[muscle].label).join(" · ")}
+                  {exercise.muscles.map((muscle) => t(MUSCLE_BY_ID[muscle].label, undefined, "muscle")).join(" · ")}
                 </p>
               ) : null}
             </div>

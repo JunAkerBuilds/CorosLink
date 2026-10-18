@@ -206,7 +206,7 @@ function usePrefersReducedMotion() {
 }
 
 function formatPercent(value: number): string {
-  return `${Math.round(value * 10) / 10}%`;
+  return (value / 100).toLocaleString(getLocale(), { style: "percent", maximumFractionDigits: 1 });
 }
 
 function formatDisplayLabel(label: string): string {
@@ -220,7 +220,10 @@ function formatDisplayLabel(label: string): string {
     return `${plusMatch[1]}+ km`;
   }
 
-  return label.replace(/km/gi, " km").replace(/\s+/g, " ").trim();
+  const zone = label.match(/^Zone (\d+)$/);
+  if (zone) return t("Zone {{count}}", { count: zone[1] });
+
+  return t(label.replace(/km/gi, " km").replace(/\s+/g, " ").trim());
 }
 
 function heartRateZoneCaption(zoneIndex: number): string {
@@ -535,7 +538,7 @@ function formatDistanceMetricValue(
   }
 
   const count = Math.round(value);
-  return count === 1 ? "1 run" : `${count} runs`;
+  return count === 1 ? t("1 run") : t("{{count}} runs", { count });
 }
 
 function buildDistanceData(
@@ -610,7 +613,7 @@ function formatRpeMetricValue(value: number, metric: RpeMetric): string {
     return `${Math.round(value / 60)} min`;
   }
   const count = Math.round(value);
-  return count === 1 ? "1 session" : `${count} sessions`;
+  return count === 1 ? t("1 session") : t("{{count}} sessions", { count });
 }
 
 function rpeLevelCaption(level: number): string {
@@ -817,7 +820,7 @@ function ZoneDistributionPanel({
               </p>
               <p className="training-zone-hero-detail">{t(topZone.detail)}</p>
               <p className="training-zone-hero-caption">
-                {getCaption(topZone)}
+                {t(getCaption(topZone))}
               </p>
             </div>
           ) : null}
@@ -939,7 +942,7 @@ function MetricDropdown<TValue extends string>({
         onKeyDown={handleTriggerKeyDown}
       >
         <span className="training-zone-select-value" id={valueId}>
-          {selectedLabel}
+          {t(selectedLabel)}
         </span>
         <ChevronDown
           className="training-zone-select-icon"
@@ -1070,7 +1073,7 @@ export function PerceivedEffortPanel({
   const coverage = distribution?.coverage;
   const coverageNote =
     coverage && coverage.total > 0
-      ? `${coverage.rated} rated / ${coverage.total} sessions`
+      ? t("{{rated}} rated / {{total}} sessions", { rated: coverage.rated, total: coverage.total })
       : undefined;
 
   return (

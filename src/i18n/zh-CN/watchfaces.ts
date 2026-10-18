@@ -1891,4 +1891,6 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   // Messages for the latest desktop screens.
   "Could not prepare the face for your iPhone.": "无法为 iPhone 准备表盘。",
   "Could not open AirDrop.": "无法打开 AirDrop。",
+  "Your COROS mobile session expired. Sign in again.": "您的 COROS 移动会话已过期。请重新登录。",
+  "Sign in to your COROS mobile account to continue.": "请登录您的 COROS 移动账户以继续。",
 };

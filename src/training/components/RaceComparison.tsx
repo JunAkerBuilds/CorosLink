@@ -114,7 +114,7 @@ export function RaceComparison({
             <th scope="col">{older.name}</th>
             <th scope="col">{t("Measure")}</th>
             <th scope="col">{newer.name}</th>
-            <th scope="col">{t("Change")}</th>
+            <th scope="col">{t("Change", undefined, "delta")}</th>
           </tr>
         </thead>
         <tbody>

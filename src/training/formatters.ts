@@ -395,7 +395,7 @@ export function formatUpcomingWorkoutVolumeDisplay(
 ): string {
   if (!volume) return "--";
   const sets = volume.match(/^(\d+)\s*set\(s\)$/i);
-  if (sets) return `${sets[1]} ${sets[1] === "1" ? "set" : "sets"}`;
+  if (sets) return `${sets[1]} ${sets[1] === "1" ? t("set") : t("sets")}`;
   const km = volume.match(/^([\d.]+)\s*km$/i);
   if (km) {
     const meters = Number(km[1]) * 1000;

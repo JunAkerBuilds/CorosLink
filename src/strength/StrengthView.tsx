@@ -83,11 +83,12 @@ interface StrengthViewProps {
   initialAccountSetup?: boolean;
 }
 
+// Phrases include their preposition so each language can choose its own ("au cours des", "在…内").
 const WINDOW_OPTIONS = [
-  { days: 30, label: "30 days", phrase: "the last 30 days" },
-  { days: 90, label: "3 months", phrase: "the last 3 months" },
-  { days: 180, label: "6 months", phrase: "the last 6 months" },
-  { days: 365, label: "1 year", phrase: "the last year" }
+  { days: 30, label: "30 days", phrase: "in the last 30 days" },
+  { days: 90, label: "3 months", phrase: "in the last 3 months" },
+  { days: 180, label: "6 months", phrase: "in the last 6 months" },
+  { days: 365, label: "1 year", phrase: "in the last year" }
 ];
 
 const METRIC_OPTIONS: { id: HeatMetric; label: string }[] = [
@@ -284,7 +285,7 @@ function totalWeightParts(kg: number, unitSystem: UnitSystem): FigurePart[] {
     return [
       {
         value: tonnes >= 10 ? Math.round(tonnes).toLocaleString(getLocale()) : formatNumber(tonnes, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
-        unit: "tonnes"
+        unit: t("tonnes")
       }
     ];
   }
@@ -992,7 +993,7 @@ export function StrengthView({
     }
     return value >= 1000
       ? unitSystem === "metric"
-        ? `${Math.round(value / 1000)} tonnes`
+        ? `${Math.round(value / 1000)} ${t("tonnes")}`
         : `${Math.round(value / 1000)}k`
       : String(value);
   };
@@ -1182,8 +1183,8 @@ export function StrengthView({
           {!withControls
             ? t("Your lifting, muscle by muscle.")
             : hasSessions
-              ? t("You trained {{value1}} {{value2}} in {{value3}}.", { value1: String(summary.sessions), value2: String(summary.sessions === 1 ? t("time") : t("times")), value3: String(activeWindow.phrase) })
-              : t("Your lifting from {{value1}}, muscle by muscle.", { value1: String(activeWindow.phrase) })}
+              ? t("You trained {{value1}} {{value2}} {{value3}}.", { value1: String(summary.sessions), value2: String(summary.sessions === 1 ? t("time", undefined, "sessionCount") : t("times")), value3: t(activeWindow.phrase) })
+              : t("Your lifting {{value1}}, muscle by muscle.", { value1: t(activeWindow.phrase) })}
         </p>
       </div>
       <div className="strength-header-controls">
@@ -1427,7 +1428,7 @@ export function StrengthView({
                 aria-pressed={view === "back"}
                 onClick={() => requestView("back")}
               >
-                {t("Back")} </button>
+                {t("Back", undefined, "bodyView")} </button>
             </div>
             <button
               type="button"
@@ -1510,7 +1511,7 @@ export function StrengthView({
 
       {!hasSessions ? (
         <section className="panel strength-card strength-blank">
-          <h3>{t("No strength sessions in")} {activeWindow.phrase}</h3>
+          <h3>{t("No strength sessions {{value1}}", { value1: t(activeWindow.phrase) })}</h3>
           <p>
             {t("Sessions appear here a few minutes after they sync from your watch. Try a longer stretch of time if you know you've been lifting.")} </p>
         </section>

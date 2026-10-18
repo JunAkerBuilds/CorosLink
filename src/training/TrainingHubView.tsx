@@ -237,10 +237,11 @@ function TrainingHubContent({
                 <Monitor size={18} aria-hidden="true" />
                 <p className="eyebrow">{t("Training Hub")}</p>
               </div>
+              {/* Split only for the italic; productName keys keep "Training Hub" instead of translating each word. */}
               <h2>
                 <span>COROS</span>
                 <span>
-                  <em>{t("Training")}</em> {t("Hub")} </span>
+                  <em>{t("Training", undefined, "productName")}</em> {t("Hub", undefined, "productName")} </span>
               </h2>
               <p className="training-signin-lead">
                 {t("Desktop access to training load, recovery, activity detail, and race readiness.")} </p>
