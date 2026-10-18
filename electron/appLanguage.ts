@@ -1,11 +1,13 @@
 /** Canonical UI languages, shared by the renderer and native process. */
-export type Language = "en" | "fr" | "zh-CN";
+export type Language = "en" | "fr" | "pt" | "zh-CN";
 
 export function supportedLanguage(value: unknown): Language | undefined {
   if (typeof value !== "string") return undefined;
   const locale = value.replaceAll("_", "-");
   if (/^en(?:-|$)/i.test(locale)) return "en";
   if (/^fr(?:-|$)/i.test(locale)) return "fr";
+  // One Portuguese catalog, in European Portuguese, serves every Portuguese locale, Brazilian included.
+  if (/^pt(?:-|$)/i.test(locale)) return "pt";
   // Do not silently present Simplified Chinese to Traditional Chinese locales.
   if (/^zh(?:-Hans(?:-|$)|-(?:CN|SG)(?:-|$)|$)/i.test(locale)) return "zh-CN";
   return undefined;

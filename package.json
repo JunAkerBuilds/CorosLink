@@ -176,7 +176,7 @@
     "website:build": "npm run build --prefix website",
     "test:strength-workout-edits": "npm run build:electron && node --test scripts/test-strength-workout-edits.mjs && node scripts/test-workout-automation.mjs && electron scripts/test-strength-training-hub.cjs",
     "test:strength-review-ui": "npm run build:electron && electron scripts/test-strength-review-ui.cjs",
-    "test:localization": "npm run build:electron && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-localization.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-chinese-localization.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-watchface-layer-search.mjs && electron scripts/test-localization-ui.cjs && electron scripts/test-calendar-language-drafts.cjs && electron scripts/test-chinese-local-screens.cjs"
+    "test:localization": "npm run build:electron && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-localization.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-chinese-localization.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-portuguese-localization.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-watchface-layer-search.mjs && electron scripts/test-localization-ui.cjs && electron scripts/test-calendar-language-drafts.cjs && electron scripts/test-chinese-local-screens.cjs"
   },
   "build": {
     "appId": "app.coroslink",
@@ -295,6 +295,10 @@
         {
           "from": "build/zh-Hans.lproj",
           "to": "zh-Hans.lproj"
+        },
+        {
+          "from": "build/pt.lproj",
+          "to": "pt.lproj"
         }
       ]
     },

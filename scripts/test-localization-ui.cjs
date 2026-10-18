@@ -141,6 +141,14 @@ async function main() {
     console.log(`Chinese desktop screenshot: ${screenshotPath}`);
     await win.reload();
     await until(`document.querySelector('.settings-language-panel h2')?.textContent === '应用语言'`);
+    await click('.settings-language-panel button[lang="pt"]');
+    await until(`document.querySelector('.settings-language-panel h2').textContent === 'Idioma da aplicação'`);
+    assert.equal(await js('document.querySelector("#fixture-values span").textContent'), '1234,5');
+    assert.equal(database.getSetting('app.language'), 'pt');
+    await new Promise(resolve => setTimeout(resolve, 500)); // Let the switched language paint before capture.
+    const portugueseScreenshot = path.join(app.getPath('userData'), 'portuguese-desktop.png');
+    await fs.writeFile(portugueseScreenshot, (await win.webContents.capturePage()).toPNG());
+    console.log(`Portuguese desktop screenshot: ${portugueseScreenshot}`);
     await click('.settings-language-panel button[lang=en]');
     await until(`document.querySelector('.settings-language-panel h2').textContent === 'App language'`);
     assert.equal(await js('document.querySelector(".app-select-value-label").textContent'), 'Overview');
