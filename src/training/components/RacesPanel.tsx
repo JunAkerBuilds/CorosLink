@@ -484,7 +484,7 @@ function RaceProgress({
       <div className="races-chart-head">
         <p className="races-chart-title">
           {all ? t("Every race as a 5K") : t("{{p0}} finish times", { p0: String(group.label) })}
-          {all ? <span>{t("scaled with Riegel's formula, so distances share one line")}</span> : null}
+          {all ? <>{" "}<span>{t("scaled with Riegel's formula, so distances share one line")}</span></> : null}
         </p>
         <ul className="races-chart-legend" aria-label={t("Legend")}>
           <li>
