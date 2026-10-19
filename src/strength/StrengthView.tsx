@@ -239,14 +239,19 @@ function sourceIsAvailable(
 function pendingNotice(pending: { coros: number; strava: number }): string | null {
   const total = pending.coros + pending.strava;
   if (total <= 0) return null;
-  const sessions = `${total} more session${total === 1 ? "" : "s"}`;
+  const params = { count: String(total) };
+  // Both sources pending means at least two sessions, so this sentence has no singular.
   if (pending.coros > 0 && pending.strava > 0) {
-    return `Reading ${sessions} from COROS and Strava. The map fills in as they arrive.`;
+    return t("Reading {{count}} more sessions from COROS and Strava. The map fills in as they arrive.", params);
   }
   if (pending.coros > 0) {
-    return `Reading ${sessions} from COROS. The map fills in as they arrive.`;
+    return total === 1
+      ? t("Reading 1 more session from COROS. The map fills in as it arrives.")
+      : t("Reading {{count}} more sessions from COROS. The map fills in as they arrive.", params);
   }
-  return `Reading notes for ${sessions} from Strava.`;
+  return total === 1
+    ? t("Reading notes for 1 more session from Strava.")
+    : t("Reading notes for {{count}} more sessions from Strava.", params);
 }
 
 /**
