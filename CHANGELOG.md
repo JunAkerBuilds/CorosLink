@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.58] - 2026-10-19
+
 ### Added
 
 - **Hide features you don't use.** Right-click the sidebar to hide a feature or bring one back, or switch features on and off in **Settings → Sidebar**. Overview and Settings always stay. If you hide your startup view, CorosLink opens on Overview instead.
@@ -15,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Make watch faces without signing in to COROS.** **Watch Faces → Create** lists the editable templates for every supported watch without a COROS sign-in, and **Start blank** and **Change watch** work signed out too. You still sign in for **Official faces**, **My faces**, sending a face to the COROS app, and getting your watch key the first time you install over Bluetooth.
 - **Distance markers on the route map.** An activity's route shows numbered chips at every kilometre, or every mile in imperial units, at the points where the watch counted them. Long rides space them out (every 5 or 10 km) so the map stays readable.
 
+### Changed
+
+- **Maps add to what's already on the watch.** When the COROS app has already installed part of a region, **Transfer selected** copies only the tiles the watch is missing, and the free-space check counts only those. Before, the watch needed room for the whole package.
+- **Choose Local Map Folder is gone.** Maps install from the COROS packages you download in **Maps → COROS Maps**.
+
 ### Fixed
 
 - **The calendar dialog fits small windows.** Adding a plan to the calendar or removing it no longer cuts off the title or the confirm button. Workouts are grouped by week with their sport, the summary shows the date range, and the button says how many workouts it adds or removes.
@@ -22,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Delete plans you sent to COROS.** Coach plans saved as a COROS Plan now have a delete button in **Training Library → Plans**. It deletes the plan from your COROS account, not just from CorosLink. If the plan is on your COROS calendar, CorosLink ends it there first, which removes its upcoming workouts; past days stay. Before, only the COROS app could remove them.
 - **Plans deleted in the COROS app leave the Training Library.** A COROS plan you deleted in the COROS app used to stay in **Training Library → Plans**, marked as synced. Now it disappears the next time the Library refreshes, along with any tags or notes you gave it in CorosLink.
 - **Short laps show the right time.** Laps under 100 seconds, such as interval rests and 400 m repeats, showed a hundred times too long (a 60 s rest read 1:40:00). Their pace and the dialog's pacing note were wrong too.
+- On macOS, the **Import GPX** file picker in Route Studio opens attached to the CorosLink window. It could open behind the window, making the app look frozen.
 
 ## [0.1.57] - 2026-10-18
 
