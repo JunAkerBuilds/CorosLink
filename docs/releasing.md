@@ -26,7 +26,7 @@ Because `better-sqlite3` is native, build Windows installers on Windows or in CI
 
 **Publishing a release (maintainers):**
 
-1. Prepare the version in `package.json` and `package-lock.json` so they match the tag you are about to create:
+1. Add a `## [0.1.18] - YYYY-MM-DD` section to [CHANGELOG.md](CHANGELOG.md). The publish job turns it into the release notes and fails without it. Check it with `node scripts/extract-release-notes.mjs v0.1.18 /tmp/notes.md`. Then prepare the version in `package.json` and `package-lock.json` so they match the tag you are about to create:
 
 ```sh
 npm run release:prepare -- v0.1.18
