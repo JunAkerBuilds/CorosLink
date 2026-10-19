@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.57] - 2026-10-18
+
+### Added
+
+- **CorosLink in Portuguese.** Pick **Português** in the language menu or the welcome tour.
+- **Align the date in Watch Faces.** Weekday, month and day each get left, centre or right alignment, like the number readouts. The text moves inside the template's box, so a left-aligned weekday starts at the same spot every day.
+- **Chart pages in Watch Faces.** The layer list now groups metrics into **Fixed metrics**, **Selectable** and **Chart pages**. The chart inspector lists the pages **Back** cycles through, with the readouts and weather fields on each page. **Make fixed** turns a chart readout into an always-shown field with the same artwork. This hasn't been checked on a watch yet.
+
+### Changed
+
+- **Coach names your conversations.** After the first answer, Coach gives the conversation a short title instead of using your first question. The new title also shows in C-LINK.
+- **A smaller download.** The installed app is about 300 MB smaller.
+- Chart dates, weekdays and distances follow the app language.
+- In Watch Faces, wind speed and direction count as chart-page fields, because the watch hides them on its daily-data pages. The preview draws the curve pages' horizon line and "now" dot in white, as the watch does.
+
+### Fixed
+
+- **intervals.icu import works again.** COROS retired an endpoint and every upload failed with "COROS STS request failed: 404". If your Training Hub session has expired, CorosLink now asks you to sign in again.
+- Route Studio's panels no longer cover the Support dialog and other app windows, and **Share to phone** opens on top.
+- On Windows, picking the watch's own map folder as the source is caught even when its capitalisation differs.
+- Labels that stayed in English are now translated, and some Chinese translations that had the wrong meaning are corrected.
+- Strength no longer shows "session s", and the races chart caption is spaced properly.
+- The daily-data divider in the Watch Faces preview no longer shrinks under the time.
+
 ## [0.1.56] - 2026-10-17
 
 ### Added
