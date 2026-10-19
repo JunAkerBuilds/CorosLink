@@ -1881,6 +1881,8 @@ export const trainingPortuguese: Record<string, string> = {
   "Selection": "Selecção",
   "Visible range": "Intervalo visível",
   "Whole activity": "Actividade inteira",
+  "Group laps by": "Agrupar voltas por",
+  "Fastest": "Mais rápida",
   "Grade-adjusted pace": "Ritmo ajustado à inclinação",
   "GAP": "GAP",
   "Stride": "Passada",

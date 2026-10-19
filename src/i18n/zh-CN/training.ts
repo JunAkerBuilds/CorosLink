@@ -2019,6 +2019,8 @@ export const trainingChinese: Readonly<Record<string, string>> = {
   "Selection": "选择",
   "Visible range": "可见区间",
   "Whole activity": "整个活动",
+  "Group laps by": "计圈分组方式",
+  "Fastest": "最快",
   "Runs in the {{p0}} weeks before": "赛前 {{p0}} 周的跑步次数",
   "Distance in the {{p0}} weeks before": "赛前 {{p0}} 周的跑步距离",
   "{{p0}} in {{p1}}": "{{p0}} 用时 {{p1}}",

@@ -2412,6 +2412,21 @@ export interface TrainingHubActivityLap {
   maxCadence?: number;
 }
 
+/**
+ * One way of slicing an activity, from the detail payload's lapList. COROS
+ * sends several at once (verified on live runs, rides and workouts):
+ * type 2 = the laps the watch recorded (auto-lap, manual or workout steps),
+ * 10/11/12 = 1/5/10 km splits, -1 = the whole activity as one row.
+ */
+export interface TrainingHubActivityLapGroup {
+  kind: "laps" | "split" | "whole";
+  /** Split length in metres; split groups only. */
+  splitDistance?: number;
+  laps: TrainingHubActivityLap[];
+  /** Zero-based positions COROS marks as the fastest (fastLapIndexList). */
+  fastestLaps: number[];
+}
+
 export interface TrainingHubTrackPoint {
   lat?: number;
   lon?: number;
@@ -2613,6 +2628,11 @@ export interface TrainingHubActivityDetail {
   avgCadence?: number;
   maxCadence?: number;
   laps: TrainingHubActivityLap[];
+  /**
+   * The lap table's alternative groupings, ordered laps → splits → whole.
+   * Empty when COROS sends fewer than two distinct ones.
+   */
+  lapGroups?: TrainingHubActivityLapGroup[];
   track?: TrainingHubActivityTrack;
   series?: TrainingHubActivitySeriesPoint[];
   strength?: StrengthDetail;

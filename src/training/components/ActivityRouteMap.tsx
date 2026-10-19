@@ -14,7 +14,10 @@ import {
 } from "../../maps/routes/constants";
 import { MapLayerControl } from "../../maps/routes/panels";
 import { useTheme } from "../../theme/ThemeProvider";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
 import type { RouteCursor } from "../routeCursor";
+import { routeDistanceMarkers, type RouteDistanceMarker } from "../routeDistanceMarkers";
+import "../activityRouteMarkers.css";
 import {
   defineSelectionPreference,
   selectionIsArrayOf,
@@ -45,6 +48,9 @@ const MARKER_RING = "#ffffff";
 const CURSOR_SEGMENT_COLOR = "#ffc857";
 const CURSOR_DOT_RING = "#0b1015";
 const ROUTE_ANIMATION_MS = 2200;
+// Above the distance chips in the marker pane (600), so the chart cursor
+// never hides under one.
+const CURSOR_PANE = "activity-route-cursor";
 const ACTIVITY_BASE_LAYERS: RouteBaseLayer[] = ["street", "outdoors", "topo", "satellite", "light", "dark"];
 
 const ACTIVITY_ROUTE_BASE_LAYER_PREFERENCE =
@@ -167,8 +173,18 @@ function resolveMapStyle(theme: string, baseLayer?: RouteBaseLayer, cartoApiKey 
   };
 }
 
+function distanceMarkerIcon(label: string): L.DivIcon {
+  // A zero-size anchor; the chip centres itself so two-digit labels stay on the point.
+  return L.divIcon({
+    className: "activity-route-distance-marker",
+    html: `<span>${label}</span>`,
+    iconSize: [0, 0]
+  });
+}
+
 function RouteMapCanvas({
   route,
+  distanceMarkers,
   scrollWheelZoom = false,
   baseLayer,
   overlays,
@@ -176,6 +192,7 @@ function RouteMapCanvas({
   cursor
 }: {
   route: RouteGeometry;
+  distanceMarkers: RouteDistanceMarker[];
   scrollWheelZoom?: boolean;
   baseLayer?: RouteBaseLayer;
   overlays?: RouteOverlayId[];
@@ -215,6 +232,7 @@ function RouteMapCanvas({
       attributionControl: true,
       scrollWheelZoom
     });
+    map.createPane(CURSOR_PANE).style.zIndex = "650";
 
     const tileLayer = L.tileLayer(tile.url, {
       className: "activity-route-base-tile",
@@ -269,6 +287,16 @@ function RouteMapCanvas({
     let animationFrame = 0;
     let animationStart: number | undefined;
     let endMarker: L.CircleMarker | undefined;
+    // Shown with the finish dot: chips ahead of the drawing line look stray.
+    const distanceLayer = L.layerGroup(
+      distanceMarkers.map((marker) =>
+        L.marker(marker.latLng, {
+          icon: distanceMarkerIcon(marker.label),
+          interactive: false,
+          keyboard: false
+        })
+      )
+    );
 
     const animateRoute = (timestamp: number) => {
       if (animationStart === undefined) {
@@ -294,6 +322,7 @@ function RouteMapCanvas({
           fillOpacity: 1,
           weight: 2
         }).addTo(map);
+        distanceLayer.addTo(map);
       }
     };
 
@@ -308,6 +337,7 @@ function RouteMapCanvas({
           cursorSegment.setLatLngs(segment);
         } else {
           cursorSegment = L.polyline(segment, {
+            pane: CURSOR_PANE,
             color: CURSOR_SEGMENT_COLOR,
             weight: 6,
             opacity: 0.95,
@@ -326,6 +356,7 @@ function RouteMapCanvas({
           cursorDot.setLatLng(point);
         } else {
           cursorDot = L.circleMarker(point, {
+            pane: CURSOR_PANE,
             radius: 7,
             color: CURSOR_DOT_RING,
             weight: 3,
@@ -362,7 +393,7 @@ function RouteMapCanvas({
       routeLineRef.current = null;
       overlayLayersRef.current.clear();
     };
-  }, [route, theme, scrollWheelZoom, cartoApiKey, cursor]);
+  }, [route, distanceMarkers, theme, scrollWheelZoom, cartoApiKey, cursor]);
 
   // Swap the base tile layer in place so zoom/pan and the route animation
   // survive a layer change.
@@ -472,6 +503,11 @@ export function ActivityRouteMap({
     () => (track?.points ? buildRouteGeometry(track.points) : null),
     [track, getLocale()]
   );
+  const { unitSystem } = useUnitSystem();
+  const distanceMarkers = useMemo(
+    () => (track?.points ? routeDistanceMarkers(track.points, unitSystem) : []),
+    [track, unitSystem]
+  );
 
   useEffect(() => {
     if (!expanded) {
@@ -499,7 +535,7 @@ export function ActivityRouteMap({
 
   return (
     <div className="activity-route-map" ref={containerRef}>
-      <RouteMapCanvas route={route} baseLayer={baseLayer} ariaLabel="Activity route map" cursor={cursor} />
+      <RouteMapCanvas route={route} distanceMarkers={distanceMarkers} baseLayer={baseLayer} ariaLabel="Activity route map" cursor={cursor} />
       <div className="activity-route-footer">
         <RouteLegend />
         <button
@@ -541,6 +577,7 @@ export function ActivityRouteMap({
                 <div className="activity-route-modal-map">
                   <RouteMapCanvas
                     route={route}
+                    distanceMarkers={distanceMarkers}
                     scrollWheelZoom
                     baseLayer={baseLayer}
                     overlays={overlays}

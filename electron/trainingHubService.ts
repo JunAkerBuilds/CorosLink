@@ -42,6 +42,7 @@ import type {
   TrainingHubActivityDetail,
   TrainingHubActivityFileType,
   TrainingHubActivityLap,
+  TrainingHubActivityLapGroup,
   TrainingHubExportFormat,
   TrainingHubActivityTrack,
   TrainingHubTrackPoint,
@@ -5084,6 +5085,86 @@ function extractActivityLaps(raw: Record<string, unknown>): TrainingHubActivityL
   return bestLaps.map((lap, index) => ({ ...lap, index: index + 1 }));
 }
 
+// lapList group types, read from live runs, rides and workouts (2026-10-19).
+// On a structured workout type 2 holds the workout steps and type 10 the
+// 1 km splits; on a plain run with 1 km auto-lap COROS omits type 10.
+const LAP_GROUP_KIND_BY_TYPE = new Map<number, TrainingHubActivityLapGroup["kind"]>([
+  [2, "laps"],
+  [10, "split"],
+  [11, "split"],
+  [12, "split"],
+  [-1, "whole"]
+]);
+const LAP_GROUP_KIND_ORDER: TrainingHubActivityLapGroup["kind"][] = ["laps", "split", "whole"];
+
+function extractActivityLapGroups(raw: Record<string, unknown>): TrainingHubActivityLapGroup[] {
+  const summary = pickObject(raw, ["summaryInfo", "summary", "activitySummary"]) ?? raw;
+  const lapList =
+    pickArray(raw, ["lapList", "laps", "lapInfoList"]) ??
+    pickArray(summary, ["lapList", "laps", "lapInfoList"]) ??
+    [];
+  const candidates: TrainingHubActivityLapGroup[] = [];
+
+  for (const entry of lapList) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+
+    const group = entry as Record<string, unknown>;
+    const type = toOptionalNumber(group.type);
+    const kind = type === undefined ? undefined : LAP_GROUP_KIND_BY_TYPE.get(type);
+    const items = pickArray(group, ["lapItemList", "itemList", "items"]);
+    if (!kind || !items?.length) {
+      continue;
+    }
+
+    const laps = items.map((item, index) => parseActivityLap(item, index));
+    // A one-row lap or split group (a 10 km split of a 10 km run) only
+    // repeats the whole activity.
+    if (!laps.some(isPopulatedActivityLap) || (kind !== "whole" && laps.length < 2)) {
+      continue;
+    }
+
+    const fastestLaps =
+      kind === "whole"
+        ? []
+        : (pickArray(group, ["fastLapIndexList"]) ?? [])
+            .map((value) => toOptionalNumber(value))
+            .filter(
+              (value): value is number =>
+                value !== undefined && Number.isInteger(value) && value >= 0 && value < laps.length
+            );
+
+    candidates.push({
+      kind,
+      splitDistance:
+        kind === "split"
+          ? normalizeCorosDetailDistanceMeters(toOptionalNumber(group.lapDistance)) ?? laps[0]?.distance
+          : undefined,
+      laps,
+      fastestLaps
+    });
+  }
+
+  candidates.sort(
+    (a, b) =>
+      LAP_GROUP_KIND_ORDER.indexOf(a.kind) - LAP_GROUP_KIND_ORDER.indexOf(b.kind) ||
+      (a.splitDistance ?? 0) - (b.splitDistance ?? 0)
+  );
+
+  const seen = new Set<string>();
+  const groups = candidates.filter((group) => {
+    const signature = JSON.stringify(group.laps.map((lap) => [lap.distance, lap.duration]));
+    if (seen.has(signature)) {
+      return false;
+    }
+    seen.add(signature);
+    return true;
+  });
+
+  return groups.length > 1 ? groups : [];
+}
+
 function normalizeGpsCoordinate(value: number): number | undefined {
   if (!Number.isFinite(value) || value === 0) {
     return undefined;
@@ -6127,6 +6208,7 @@ export function parseActivityDetail(raw: Record<string, unknown>): TrainingHubAc
     avgCadence: pickRecordedActivityMetric(raw, summary, "avgCadence"),
     maxCadence: pickRecordedActivityMetric(raw, summary, "maxCadence"),
     laps,
+    lapGroups: extractActivityLapGroups(raw),
     track,
     series: parseActivitySeries(raw),
     strength: parseStrengthDetail(raw),
@@ -6142,12 +6224,15 @@ function parseActivityLap(raw: unknown, index: number): TrainingHubActivityLap {
   const lap = raw as Record<string, unknown>;
   const distanceRaw =
     toOptionalNumber(lap.distance) ?? toOptionalNumber(lap.totalDistance);
-  const durationRaw =
-    toOptionalNumber(lap.totalTime) ??
-    toOptionalNumber(lap.time) ??
-    toOptionalNumber(lap.duration);
+  // Detail laps keep time and timestamps at 0.01 s, like distance. The
+  // ">= 10,000 means centiseconds" guess read every lap under 100 s (a 60 s
+  // rest, a 400 m rep) as that many seconds: 6000 → 1:40:00.
+  const centiseconds = toOptionalNumber(lap.totalTime) ?? toOptionalNumber(lap.time);
 
-  let duration = normalizeActivityDuration(durationRaw);
+  let duration =
+    centiseconds !== undefined && centiseconds > 0
+      ? Math.round(centiseconds / 100)
+      : normalizeActivityDuration(toOptionalNumber(lap.duration));
 
   if (!duration) {
     const startTimestamp = toOptionalNumber(lap.startTimestamp);
@@ -6158,7 +6243,7 @@ function parseActivityLap(raw: unknown, index: number): TrainingHubActivityLap {
       endTimestamp !== undefined &&
       endTimestamp > startTimestamp
     ) {
-      duration = normalizeActivityDuration(endTimestamp - startTimestamp);
+      duration = Math.round((endTimestamp - startTimestamp) / 100);
     }
   }
 

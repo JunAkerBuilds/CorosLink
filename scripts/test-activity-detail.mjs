@@ -280,5 +280,127 @@ assert.equal(walkDetail.distance, 3460);
 assert.equal(walkDetail.laps.length, 4);
 assert.equal(walkDetail.laps[0]?.distance, 865);
 assert.equal(walkDetail.laps[1]?.distance, 863);
+assert.deepEqual(walkDetail.lapGroups, []);
+
+// lapList carries every grouping Training Hub offers: type 2 = the watch's
+// laps, 10/11/12 = 1/5/10 km splits, -1 = whole activity. Shapes and order
+// from a live 16.2 km PACE Pro run, 2026-10-19.
+const kmLap = (time, avgHr) => ({ distance: 100000, time, avgHr });
+const splitRun = parseActivityDetail({
+  summary: { totalTime: 773000, workoutTime: 726358, distance: 1624537 },
+  lapList: [
+    {
+      type: 11,
+      lapDistance: 500000,
+      fastLapIndexList: [0],
+      lapItemList: [
+        { distance: 500000, time: 211995, avgHr: 166 },
+        { distance: 500000, time: 225465, avgHr: 161 },
+        { distance: 500000, time: 230810, avgHr: 152 },
+        { distance: 124537, time: 58088, avgHr: 150 }
+      ]
+    },
+    {
+      type: 12,
+      lapDistance: 1000000,
+      fastLapIndexList: [0],
+      lapItemList: [
+        { distance: 1000000, time: 437460, avgHr: 164 },
+        { distance: 624537, time: 288898, avgHr: 152 }
+      ]
+    },
+    {
+      type: 2,
+      lapDistance: 100000,
+      fastLapIndexList: [1],
+      lapItemList: [kmLap(43754, 155), kmLap(42346, 165), kmLap(42589, 173)]
+    },
+    {
+      type: -1,
+      lapDistance: 1624537,
+      fastLapIndexList: [1],
+      lapItemList: [{ distance: 1624537, time: 726358, avgHr: 159 }]
+    }
+  ]
+});
+
+assert.deepEqual(
+  splitRun.lapGroups.map((group) => [group.kind, group.splitDistance, group.laps.length]),
+  [
+    ["laps", undefined, 3],
+    ["split", 5000, 4],
+    ["split", 10000, 2],
+    ["whole", undefined, 1]
+  ]
+);
+assert.deepEqual(splitRun.lapGroups[0].fastestLaps, [1]);
+assert.deepEqual(splitRun.lapGroups[3].fastestLaps, []);
+assert.equal(splitRun.lapGroups[1].laps[3]?.distance, 1245.37);
+assert.equal(splitRun.lapGroups[3].laps[0]?.duration, 7264);
+assert.equal(splitRun.laps.length, 4, "detail.laps keeps its most-populated pick");
+
+// A ride without auto-lap: its one watch lap is the whole ride, so only the
+// 1 km splits and the whole activity remain. Unknown types are ignored.
+const ride = parseActivityDetail({
+  summary: { totalTime: 101739, distance: 307064 },
+  lapList: [
+    {
+      type: 10,
+      lapDistance: 100000,
+      fastLapIndexList: [1, 9],
+      lapItemList: [
+        { distance: 100000, time: 29340 },
+        { distance: 100000, time: 24733 },
+        { distance: 107064, time: 47666 }
+      ]
+    },
+    { type: 2, lapDistance: 500000, lapItemList: [{ distance: 307064, time: 101739 }] },
+    { type: 7, lapItemList: [{ distance: 1, time: 1 }, { distance: 2, time: 2 }] },
+    { type: -1, lapItemList: [{ distance: 307064, time: 101739 }] }
+  ]
+});
+
+assert.deepEqual(
+  ride.lapGroups.map((group) => [group.kind, group.splitDistance]),
+  [
+    ["split", 1000],
+    ["whole", undefined]
+  ]
+);
+assert.deepEqual(ride.lapGroups[0].fastestLaps, [1], "out-of-range fastest indexes are dropped");
+
+// Workout steps under 100 s are still 0.01 s: a 60 s rest is 6000, a 400 m
+// rep 9880 (live "Taper 400s", 2026-07-02), not 1:40:00 and 2:44:40.
+const intervals = parseActivityDetail({
+  summary: { totalTime: 310000, distance: 648857 },
+  lapList: [
+    {
+      type: 2,
+      lapItemList: [
+        { distance: 250000, time: 107460 },
+        { distance: 5980, time: 6000 },
+        { distance: 40000, time: 9880 },
+        { distance: 1437, time: 521 },
+        { distance: 9305, startTimestamp: 178302874500, endTimestamp: 178302883500 }
+      ]
+    }
+  ]
+});
+
+assert.deepEqual(
+  intervals.laps.map((lap) => lap.duration),
+  [1075, 60, 99, 5, 90]
+);
+
+// One lap and the whole activity are the same row: no grouping to offer.
+const openWater = parseActivityDetail({
+  summary: { totalTime: 162840, distance: 18321 },
+  lapList: [
+    { type: 2, lapDistance: 50000, lapItemList: [{ distance: 18321, time: 162840 }] },
+    { type: -1, lapItemList: [{ distance: 18321, time: 162840 }] }
+  ]
+});
+
+assert.deepEqual(openWater.lapGroups, []);
 
 console.log("Activity detail parser tests passed.");
