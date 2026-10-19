@@ -7,6 +7,8 @@ from coros_ble_music import MusicPageReceiver, music_frames, valid_music_delete_
 from coros_ble_route import send_file_block, validate_file_block, WATCHFACE_FILE, MUSIC_DELETE_FILE
 
 sys.modules.setdefault('bleak', SimpleNamespace(BleakClient=object, BleakScanner=object))
+sys.modules.setdefault('bleak.exc', SimpleNamespace(BleakError=Exception, BleakGATTProtocolError=Exception,
+                                                  BleakBluetoothNotAvailableError=Exception, BleakGATTProtocolErrorCode=int))
 spec = importlib.util.spec_from_file_location('system_ble', Path(__file__).with_name('coros-system-ble.py'))
 worker = importlib.util.module_from_spec(spec); spec.loader.exec_module(worker)
 

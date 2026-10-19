@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Windows WinRT / Linux BlueZ GATT transport, using native OS pairing.
+"""Windows WinRT / Linux BlueZ GATT transport. BlueZ pairs natively while
+connecting; Windows pairs only when the watch refuses an unpaired request.
 
 JSON operations arrive only over Electron's private stdin. This worker never
 receives account keys. Notifications and control replies stay in the parent pipe.
@@ -11,12 +12,14 @@ import base64
 import json
 import logging
 import os
+import re
 import signal
 import sys
 import time
 import traceback
 
 from bleak import BleakClient, BleakScanner
+from bleak.exc import BleakBluetoothNotAvailableError, BleakError, BleakGATTProtocolError, BleakGATTProtocolErrorCode
 from coros_ble_protocol import Decoder, ProtocolError, frames
 from coros_ble_route import MUSIC_DELETE_FILE, ROUTE_FILE, WATCHFACE_FILE, send_file_block
 from coros_ble_music import MusicDeleteReceiver, MusicPageReceiver, decode_watch_interaction
@@ -36,10 +39,69 @@ def standard_uuid(short):
 
 
 FILE_OPERATIONS = {'routeBlock': ROUTE_FILE, 'watchfaceBlock': WATCHFACE_FILE, 'musicDelete': MUSIC_DELETE_FILE}
+# GATT errors a watch returns until the link is paired: insufficient
+# authentication, authorization, encryption key size and encryption.
+PAIRING_REQUIRED_CODES = {0x05, 0x08, 0x0c, 0x0f}
+# What a connect was doing when it failed, for the error message.
+STEPS = {'scan': 'scanning for the watch', 'connect': 'connecting to the watch',
+         'pair': 'pairing with the watch', 'subscribe': 'turning on watch notifications'}
+# bleak messages without device details, reported as they are.
+FIXED_REASONS = {'Device does not support pairing': 'pairing not supported',
+                 'device does not support GATT sessions': 'GATT sessions not supported',
+                 'Failure trying to pair with device!': 'pairing request failed',
+                 'Not connected': 'not connected'}
+
+
+def pairing_required(error):
+    """Whether the watch refused a GATT request until Windows pairs with it."""
+    if isinstance(error, BleakGATTProtocolError):
+        return error.args[0] in PAIRING_REQUIRED_CODES
+    return isinstance(error, BleakError) and str(error).endswith(': Access Denied')
+
+
+def failure_reason(error):
+    """A short label for a Bluetooth stack failure. Only timeouts, GATT codes,
+    WinRT status names and bleak's fixed messages are used: other bleak text can
+    carry device addresses, so it is reported by exception class alone."""
+    if isinstance(error, asyncio.TimeoutError):
+        return 'timed out'
+    if isinstance(error, BleakGATTProtocolError):
+        try:
+            return 'GATT ' + BleakGATTProtocolErrorCode(error.args[0]).name.lower().replace('_', ' ')
+        except ValueError:
+            return f'GATT error 0x{error.args[0]:02X}'
+    if isinstance(error, BleakBluetoothNotAvailableError):
+        return 'Bluetooth ' + error.reason.name.lower().replace('_', ' ')
+    text = str(error)
+    match = (re.search(r': (Unreachable|Access Denied|Unexpected status code 0x[0-9A-F]{2})$', text) or
+             re.fullmatch(r'Could not pair with device: ([A-Z_]+)', text))
+    if match:
+        return match.group(1).replace('_', ' ').lower()
+    return FIXED_REASONS.get(text, type(error).__name__)
+
+
+def failure_message(step, reason, windows):
+    where = f' while {STEPS[step]}' if step in STEPS else ''
+    if not windows:
+        hint = ('Check that Bluetooth is on, the watch is awake, and any OS pairing prompt is confirmed. '
+                'On Linux, BlueZ and a pairing agent must be running.')
+    elif step == 'pair':
+        hint = ('Confirm any Windows pairing prompt. If pairing keeps failing, remove the watch under '
+                'Settings → Bluetooth & devices and try again.')
+    elif step in ('connect', 'subscribe'):
+        hint = ('Keep the watch awake and nearby. If it is listed under Settings → Bluetooth & devices '
+                'from an earlier attempt, remove it there and try again.')
+    else:
+        hint = 'Check that Bluetooth is on and the watch is awake.'
+    return f'System Bluetooth failed{where} ({reason}). {hint}'
 
 
 class SystemSession:
     def __init__(self):
+        # BlueZ pairs while connecting. Windows connects unpaired, like the macOS
+        # helper, and pairs only when the watch asks for it (see connect).
+        self.pair_on_connect = sys.platform != 'win32'
+        self.step = None
         self.client = None
         self.queue = None
         # Music inventory reads listen on control and bulk: (is_control, bytes).
@@ -87,7 +149,9 @@ class SystemSession:
 
     async def scan(self):
         self.state['phase'] = 'scanning'
+        self.step = 'scan'
         self.state['discoveredDevices'] = await self.discover()
+        self.step = None
         self.state['phase'] = 'idle'
         return self.state
 
@@ -97,15 +161,37 @@ class SystemSession:
         if not isinstance(name, str) or not name.startswith('COROS'):
             raise ProtocolError('Find and select your COROS watch before connecting.')
         self.state.update(phase='connecting', systemBind='unavailable')
+        self.step = 'scan'
         device, label, rssi = await self.discover(name)
-        # Native pairing includes OS dialogs/agents. No automatic unpair or
-        # replacement of keys: reconnecting preserves the OS-managed bond.
-        self.client = BleakClient(device, disconnected_callback=self.disconnected, pair=True, timeout=60)
+        # The COROS channels work without an OS bond (the macOS helper never
+        # bonds), and a watch can refuse a bond it was not asked for, so Windows
+        # pairs only when a GATT request is refused below. No automatic unpair or
+        # replacement of keys: reconnecting preserves any OS-managed bond.
+        self.step = 'connect'
+        self.client = BleakClient(device, disconnected_callback=self.disconnected, pair=self.pair_on_connect, timeout=60)
         await asyncio.wait_for(self.client.connect(), 75)
         self.write = self.client.services.get_characteristic(CHANNELS['control'].replace('0001', '0002', 1))
         if self.write is None:
             raise ProtocolError('This watch does not expose the supported COROS control channel.')
         self.state.update(deviceName=label, deviceId=device.address, rssiDbm=rssi, channels=[])
+        try:
+            await self.prepare()
+        except Exception as error:
+            if self.pair_on_connect or not pairing_required(error):
+                raise
+            self.step = 'pair'
+            await asyncio.wait_for(self.client.pair(), 60)
+            await self.prepare()
+        if not self.client.is_connected:
+            raise ProtocolError('The watch disconnected during setup.')
+        self.step = None
+        self.state.update(phase='connected', connected=True, maximumWriteBytes=self.write.max_write_without_response_size)
+        return self.state
+
+    async def prepare(self):
+        """Device information and channel notifications. Repeated after pairing,
+        so channels that are already subscribed are left as they are."""
+        self.step = 'subscribe'
         for label, uuid in READS.items():
             char = self.client.services.get_characteristic(standard_uuid(uuid))
             if char is None or 'read' not in char.properties:
@@ -124,14 +210,14 @@ class SystemSession:
             write = self.client.services.get_characteristic(uuid.replace('0001', '0002', 1))
             if notify is None or write is None:
                 continue
-            channel = {'name': label, 'serviceUuid': uuid, 'notifications': 0, 'receivedBytes': 0, 'subscribed': False}
-            self.state['channels'].append(channel)
+            channel = next((item for item in self.state['channels'] if item['name'] == label), None)
+            if channel is None:
+                channel = {'name': label, 'serviceUuid': uuid, 'notifications': 0, 'receivedBytes': 0, 'subscribed': False}
+                self.state['channels'].append(channel)
+            if channel['subscribed']:
+                continue
             await asyncio.wait_for(self.client.start_notify(notify, lambda sender, data, ch=channel: self.notification(ch, data)), 30)
             channel['subscribed'] = True
-        if not self.client.is_connected:
-            raise ProtocolError('The watch disconnected during setup.')
-        self.state.update(phase='connected', connected=True, maximumWriteBytes=self.write.max_write_without_response_size)
-        return self.state
 
     def notification(self, channel, data):
         channel['notifications'] += 1
@@ -341,6 +427,7 @@ async def main():
             request_id = None
             operation = ''
             started = time.monotonic()
+            session.step = None
             try:
                 request = json.loads(line)
                 request_id = request.get('id')
@@ -381,9 +468,13 @@ async def main():
                 result['updatedAt'] = int(time.time() * 1000)
                 emit({'id': request_id, 'result': result, **extra})
             except Exception as error:
+                reason = failure_reason(error)
                 message = str(error) if isinstance(error, ProtocolError) else (
-                    'System Bluetooth failed (' + type(error).__name__ + '). Check that Bluetooth is on, the watch is awake, and any OS pairing prompt is confirmed. On Linux, BlueZ and a pairing agent must be running.')
-                emit({'id': request_id, 'error': message, 'detail': failure_detail(error, operation, started)})
+                    failure_message(session.step, reason, session.state['transport'] == 'winrt'))
+                extra = {'step': session.step} if session.step else {}
+                if reason != type(error).__name__:
+                    extra['reason'] = reason
+                emit({'id': request_id, 'error': message, 'detail': failure_detail(error, operation, started, **extra)})
                 if operation == 'connect':
                     await session.close()
     finally:
