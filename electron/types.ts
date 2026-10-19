@@ -3471,6 +3471,13 @@ export interface LocalTrainingPlanDeleteResult {
   removedCalendarWorkouts: number;
 }
 
+/** A native plan running on the calendar: its own instance ID, linked to the library plan by originId. */
+export interface ActiveNativeTrainingPlanInstance {
+  id: string;
+  originId: string;
+  startDay?: string;
+}
+
 export interface CorosTrainingPlanDeleteResult {
   remoteId: string;
   /** Active calendar instances ended (their upcoming workouts removed) before the delete. */
@@ -3514,6 +3521,8 @@ export interface TrainingLibrarySnapshot {
   offline: boolean;
   partialFailures: string[];
   nativePlanWrites: TrainingPlanWriteCapabilities;
+  /** Library plan remoteId → its active calendar instance. Missing when COROS couldn't be asked. */
+  nativePlansOnCalendar?: Record<string, { startDay?: string }>;
 }
 
 export interface WorkoutMetadataPatch {

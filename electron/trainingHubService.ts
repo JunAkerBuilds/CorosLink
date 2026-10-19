@@ -34,6 +34,7 @@ import {
 import { activityMovingSeconds } from "./activityTime";
 import { buildRpeDistribution, dailyRpeLoad } from "./rpeLoad";
 import type {
+  ActiveNativeTrainingPlanInstance,
   ActivityPaceBaseline,
   ActivityPaceBaselines,
   RouteActivityType,
@@ -3056,13 +3057,11 @@ async function rollBackNativeTrainingPlan(planId: string): Promise<boolean> {
 }
 
 /**
- * IDs of the active calendar instances created from a library plan.
- * executeSubPlan never marks the library plan itself; it creates a separate
- * plan whose originId points back at it, and quitSubPlan needs that ID.
+ * Native plans currently running on the calendar. executeSubPlan never marks
+ * the library plan itself; it creates a separate plan whose originId points
+ * back at it, and quitSubPlan needs that instance ID.
  */
-export async function listActiveNativeTrainingPlanInstanceIds(
-  libraryPlanId: string
-): Promise<string[]> {
+export async function listActiveNativeTrainingPlanInstances(): Promise<ActiveNativeTrainingPlanInstance[]> {
   const active = await readNativeTrainingPlanEndpoint<unknown>("/training/plan/query", {
     method: "POST",
     body: { statusList: [1] }
@@ -3072,8 +3071,21 @@ export async function listActiveNativeTrainingPlanInstanceIds(
     throw new Error("COROS returned an unexpected list of active plans.");
   }
   return ((active ?? []) as Record<string, unknown>[])
-    .filter((plan) => String(plan.originId ?? "") === libraryPlanId && plan.id != null)
-    .map((plan) => String(plan.id));
+    .filter((plan) => plan.id != null)
+    .map((plan) => ({
+      id: String(plan.id),
+      originId: String(plan.originId ?? ""),
+      startDay: plan.startDay != null ? String(plan.startDay) : undefined
+    }));
+}
+
+/** IDs of the active calendar instances created from one library plan. */
+export async function listActiveNativeTrainingPlanInstanceIds(
+  libraryPlanId: string
+): Promise<string[]> {
+  return (await listActiveNativeTrainingPlanInstances())
+    .filter((instance) => instance.originId === libraryPlanId)
+    .map((instance) => instance.id);
 }
 
 export async function activateNativeTrainingPlan(

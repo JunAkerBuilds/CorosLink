@@ -999,6 +999,37 @@
 }
 
 /* Sync state is shown only when it needs attention. */
+/* A plan running on the COROS calendar (a CorosLink install or an active COROS plan). */
+.tl-live {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px 1px 6px;
+  border-radius: var(--radius-pill);
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tl-live::before {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
+  content: "";
+}
+
+.tl-card.is-on-calendar { border-color: color-mix(in srgb, var(--accent) 34%, var(--glass-border)); }
+.tl-card.is-on-calendar::before { opacity: 0.7; }
+.tl-plan-card-footer > span.is-live { color: var(--accent-strong); font-weight: 600; }
+
 .tl-flag {
   flex: none;
   padding: 1px 6px;
@@ -3493,18 +3524,31 @@
   margin-top: 20px;
 }
 
-.tl-dialog .primary-button.danger {
+/* Destructive confirms in the library's dialogs. White text stays >= 4.5:1:
+   #dc2626 is 4.8:1 on paper; the dark fill mirrors the flat dark primary. */
+.training-library-view .primary-button.danger {
   color: #fff;
-  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    0 6px 18px rgba(239, 68, 68, 0.32);
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 6px 18px rgba(220, 38, 38, 0.28);
 }
 
-.tl-dialog .primary-button.danger:hover:not(:disabled) {
+.training-library-view .primary-button.danger:hover:not(:disabled) {
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.26),
-    0 10px 26px rgba(239, 68, 68, 0.4);
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 10px 26px rgba(220, 38, 38, 0.36);
+}
+
+:root:not([data-theme="paper"]) .training-library-view .primary-button.danger {
+  background: color-mix(in srgb, #ef4444 62%, #0c0e11);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 2px 8px rgba(0, 0, 0, 0.24);
+}
+
+:root:not([data-theme="paper"]) .training-library-view .primary-button.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, #ef4444 70%, #0c0e11);
 }
 
 /* ----------------------------------------------- Plan editor and comparison */
@@ -4928,17 +4972,20 @@
 }
 
 /* Guided Coach plan generation and owned-calendar previews share the library's
-   dense, review-first modal language. */
+   dense, review-first modal language. `main.content` has `contain: layout`, so
+   this "fixed" backdrop only covers the content panel; the dialog sizes against
+   the backdrop (max-height: 100%), not the window, or it overflows short windows. */
 .plan-generator-backdrop,
 .plan-calendar-backdrop {
   position: fixed;
   inset: 0;
   z-index: 120;
-  display: grid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 20px;
   background: var(--tl-scrim);
   backdrop-filter: blur(10px);
-  place-items: center;
   animation: tl-fade-in 180ms ease both;
 }
 
@@ -4946,7 +4993,7 @@
 .plan-calendar-dialog {
   display: flex;
   width: min(1080px, 100%);
-  max-height: calc(100dvh - 40px);
+  max-height: 100%;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--glass-border);
@@ -4960,7 +5007,7 @@
 }
 
 .plan-calendar-dialog {
-  width: min(680px, 100%);
+  width: min(640px, 100%);
 }
 
 .plan-generator > header,
@@ -5517,8 +5564,7 @@
 .plan-calendar-start p,
 .plan-calendar-loading p,
 .plan-calendar-offline p,
-.plan-calendar-error p,
-.plan-calendar-safety {
+.plan-calendar-error p {
   margin: 0;
   color: var(--text-secondary);
   font-size: 11px;
@@ -5545,16 +5591,53 @@
 .plan-calendar-error strong { color: var(--text-primary); font-size: 12px; }
 .plan-calendar-error .ghost-button { flex: none; margin-left: auto; }
 
-.plan-calendar-preview {
+.plan-calendar-dialog > header { padding: 18px 22px 15px; }
+.plan-calendar-dialog > header p:last-child { margin-top: 4px; }
+
+.plan-calendar-heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 13px;
+}
+
+.plan-calendar-title-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  margin-top: 2px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 10px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  place-items: center;
+}
+
+.plan-calendar-dialog.is-remove .plan-calendar-title-icon {
+  border-color: var(--error-border);
+  color: var(--error-text);
+  background: color-mix(in srgb, var(--error-text) 10%, transparent);
+}
+
+/* Header and footer stay put; only the body scrolls. */
+.plan-calendar-body {
   min-height: 0;
-  padding: 22px 24px;
+  flex: 1 1 auto;
   overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.plan-calendar-preview {
+  padding: 16px 22px 22px;
 }
 
 .plan-calendar-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-block: 1px solid var(--tl-rule);
+  border: 1px solid var(--tl-rule);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 42%, transparent);
 }
 
 .plan-calendar-summary > span {
@@ -5562,32 +5645,108 @@
   min-width: 0;
   flex-direction: column;
   gap: 2px;
-  padding: 12px;
-  border-left: 1px solid var(--tl-rule);
+  padding: 9px 13px 10px;
+  border-left: 1px solid var(--tl-rule-soft);
 }
 
 .plan-calendar-summary > span:first-child { border-left: 0; }
-.plan-calendar-summary strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
-.plan-calendar-summary small { color: var(--text-muted); font-size: 9.5px; }
+.plan-calendar-summary strong { overflow: hidden; font-family: var(--font-display); font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; text-overflow: ellipsis; white-space: nowrap; }
+.plan-calendar-summary small { color: var(--text-secondary); font-size: 10.5px; }
 .plan-calendar-summary .has-conflict strong { color: var(--warning-text); }
 
+.plan-calendar-safety {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.plan-calendar-safety svg { flex: none; margin-top: 1px; color: var(--accent); }
+
 .plan-calendar-blockers {
-  margin-top: 15px;
+  margin-top: 12px;
   padding: 12px;
   border: 1px solid var(--warning-border);
   border-radius: var(--radius-sm);
   background: var(--warning-bg);
 }
 
-.plan-calendar-blockers strong { display: flex; align-items: center; gap: 7px; color: var(--warning-text); font-size: 11px; }
-.plan-calendar-blockers p { margin: 6px 0 0; color: var(--text-secondary); font-size: 10.5px; }
-.plan-calendar-dates { margin-top: 16px; border-top: 1px solid var(--tl-rule); }
-.plan-calendar-dates article { display: grid; align-items: start; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--tl-rule-soft); }
-.plan-calendar-dates time { color: var(--text-secondary); font-size: 10.5px; font-variant-numeric: tabular-nums; }
-.plan-calendar-dates article > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
-.plan-calendar-dates strong { overflow: hidden; font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
-.plan-calendar-dates small { display: flex; align-items: center; gap: 4px; color: var(--text-muted); font-size: 9.5px; }
-.plan-calendar-safety { margin-top: 14px; padding-left: 10px; border-left: 2px solid var(--accent); }
+.plan-calendar-blockers strong { display: flex; align-items: center; gap: 7px; color: var(--warning-text); font-size: 11.5px; }
+.plan-calendar-blockers p { margin: 6px 0 0; color: var(--text-secondary); font-size: 11px; }
+
+.plan-calendar-weeks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Week headings stay pinned while their rows scroll under them. */
+.plan-calendar-week-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 8px 2px 7px;
+  border-bottom: 1px solid var(--tl-rule);
+  background: var(--tl-reader-bg, var(--bg-base));
+}
+
+.plan-calendar-week-head strong { color: var(--text-primary); font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.plan-calendar-week-head span { color: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+.plan-calendar-week-head small { margin-left: auto; color: var(--text-secondary); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+
+.plan-calendar-week ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-calendar-week li {
+  display: grid;
+  min-height: 34px;
+  align-items: center;
+  grid-template-columns: 92px 16px minmax(0, 1fr);
+  column-gap: 10px;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--tl-rule-soft);
+}
+
+.plan-calendar-week li:last-child { border-bottom: 0; }
+.plan-calendar-week time { color: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.plan-calendar-week li > svg { color: var(--tl-sport, var(--text-secondary)); }
+.plan-calendar-week li > strong { overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.plan-calendar-week li > small { display: flex; align-items: center; gap: 5px; grid-column: 3; margin-top: 3px; color: var(--warning-text); font-size: 10.5px; }
+.plan-calendar-week li.has-conflict { border-radius: 6px; background: linear-gradient(90deg, color-mix(in srgb, var(--warning-text) 8%, transparent), transparent 75%); }
+
+/* A confirm that is running reads as busy, not as a faded disabled control. */
+.training-library-view :is(.plan-calendar-dialog > footer, .tl-dialog footer) .primary-button[aria-busy="true"]:disabled {
+  opacity: 1;
+  cursor: progress;
+}
+
+.plan-calendar-footer-hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 auto 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.plan-calendar-footer-hint svg { flex: none; color: var(--accent); }
+.plan-calendar-dialog.is-remove .plan-calendar-footer-hint svg { color: var(--error-text); }
 
 .plan-entry-card .plan-entry-actions {
   display: inline-flex;
@@ -5670,7 +5829,7 @@
   .plan-generator-backdrop,
   .plan-calendar-backdrop { padding: 0; }
   .plan-generator,
-  .plan-calendar-dialog { width: 100%; max-height: 100dvh; border-radius: 0; }
+  .plan-calendar-dialog { width: 100%; max-height: 100%; border-radius: 0; }
   .plan-generator-grid,
   .plan-generator-grid.is-bottom { grid-template-columns: 1fr; }
   .plan-generator-segmented { grid-template-columns: repeat(2, minmax(0, 1fr)); }

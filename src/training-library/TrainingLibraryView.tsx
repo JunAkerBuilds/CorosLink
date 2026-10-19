@@ -160,6 +160,35 @@ function planStartLabel(plan: TrainingPlanDocument): string {
   return Number.isNaN(date.valueOf()) ? t("Unscheduled") : `Starts ${shortDate(date)}`;
 }
 
+type NativePlansOnCalendar = Record<string, { startDay?: string }>;
+const NO_NATIVE_PLANS_ON_CALENDAR: NativePlansOnCalendar = {};
+
+/**
+ * The calendar run a plan is part of: a CorosLink calendar install for local
+ * plans, or an active COROS instance (executeSubPlan) for native plans.
+ */
+function planOnCalendar(
+  plan: TrainingPlanDocument,
+  nativeOnCalendar: NativePlansOnCalendar
+): { startDay?: string } | undefined {
+  if (plan.source === "coros") return plan.remoteId ? nativeOnCalendar[plan.remoteId] : undefined;
+  const install = activeTrainingPlanCalendarInstall(plan);
+  return install ? { startDay: install.startDate } : undefined;
+}
+
+/** "Week 3 of 14" once a calendar run has started; undefined before it starts or after it ends. */
+function planCalendarWeekLabel(plan: TrainingPlanDocument, startDay?: string): string | undefined {
+  const digits = startDay?.replaceAll("-", "");
+  if (!digits || !/^\d{8}$/.test(digits)) return undefined;
+  const start = new Date(`${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}T12:00:00`);
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const days = Math.round((today.valueOf() - start.valueOf()) / 86_400_000);
+  const week = Math.floor(days / 7) + 1;
+  if (days < 0 || week > plan.weekCount) return undefined;
+  return t("Week {{value1}} of {{value2}}", { value1: String(week), value2: String(plan.weekCount) });
+}
+
 function sourceLabel(source: TrainingPlanDocument["source"]): string {
   return planSourceLabel(source);
 }
@@ -435,6 +464,7 @@ export function TrainingLibraryView({
               api={api}
               noun="plan"
               plans={plans}
+              nativeOnCalendar={current.nativePlansOnCalendar}
               collections={current.collections}
               onCreate={() => createPlan("local")}
               onGenerate={() => setGeneratorOpen(true)}
@@ -530,7 +560,7 @@ export function TrainingLibraryView({
             <footer>
               <button type="button" className="ghost-button" disabled={deletingPlan} onClick={() => setPendingPlanDelete(null)}>
                 {t("Cancel")} </button>
-              <button type="button" className="primary-button danger" disabled={deletingPlan} onClick={() => void deletePlan()}>
+              <button type="button" className="primary-button danger" aria-busy={deletingPlan} disabled={deletingPlan} onClick={() => void deletePlan()}>
                 {pendingPlanDelete.source === "coros"
                   ? deletingPlan ? t("Deleting from COROS…") : t("Delete from COROS")
                   : deleteRemovesCalendar
@@ -575,14 +605,14 @@ const PLAN_SCOPE_PREFERENCES = {
     defaultValue: "all",
     validate: (value): value is string =>
       typeof value === "string" &&
-      ["all", "favorite", "coros", "local", "coach", "unsettled", "archived"].includes(value)
+      ["all", "favorite", "calendar", "coros", "local", "coach", "unsettled", "archived"].includes(value)
   }),
   template: defineSelectionPreference<string>({
     key: "trainingLibrary.templates.scope",
     defaultValue: "all",
     validate: (value): value is string =>
       typeof value === "string" &&
-      ["all", "favorite", "coros", "local", "coach", "unsettled", "archived"].includes(value)
+      ["all", "favorite", "calendar", "coros", "local", "coach", "unsettled", "archived"].includes(value)
   })
 } satisfies Record<PlanIndexNoun, unknown>;
 
@@ -658,6 +688,8 @@ interface PlanIndexProps {
   api: CorosLinkApi;
   noun: PlanIndexNoun;
   plans: TrainingPlanDocument[];
+  /** Native plans running on the COROS calendar, keyed by library plan remoteId. */
+  nativeOnCalendar?: NativePlansOnCalendar;
   collections: TrainingCollection[];
   onCreate: () => void;
   onGenerate?: () => void;
@@ -675,6 +707,7 @@ function PlanIndex({
   api,
   noun,
   plans,
+  nativeOnCalendar = NO_NATIVE_PLANS_ON_CALENDAR,
   collections,
   onCreate,
   onGenerate,
@@ -703,8 +736,17 @@ function PlanIndex({
     [plans, getLocale()]
   );
 
+  const calendarRuns = useMemo(
+    () => new Map(plans.flatMap((plan) => {
+      const state = planOnCalendar(plan, nativeOnCalendar);
+      return state ? [[plan.id, state] as const] : [];
+    })),
+    [plans, nativeOnCalendar]
+  );
+
   const scopes = useMemo(() => {
     const options = [{ id: "all", label: "All" }];
+    if (calendarRuns.size > 0) options.push({ id: "calendar", label: "On calendar" });
     if (plans.some((plan) => plan.favorite)) options.push({ id: "favorite", label: "Favorites" });
     for (const source of ["coros", "local", "coach"] as const) {
       if (plans.some((plan) => plan.source === source)) {
@@ -716,7 +758,7 @@ function PlanIndex({
     }
     if (plans.some((plan) => plan.archived)) options.push({ id: "archived", label: "Archived" });
     return options;
-  }, [plans, getLocale()]);
+  }, [plans, calendarRuns, getLocale()]);
 
   const scopeAvailable = scopes.some((option) => option.id === scope);
   useEffect(() => {
@@ -730,6 +772,7 @@ function PlanIndex({
         const haystack = `${plan.name} ${plan.description} ${plan.goal} ${plan.tags.join(" ")} ${plan.sportMix.join(" ")}`;
         if (!haystack.toLowerCase().includes(needle)) return false;
       }
+      if (scope === "calendar") return calendarRuns.has(plan.id) && !plan.archived;
       if (scope === "favorite") return plan.favorite;
       if (scope === "unsettled") return UNSETTLED_SYNC.has(plan.syncState);
       if (scope === "archived") return plan.archived;
@@ -751,7 +794,7 @@ function PlanIndex({
       }
       return left.updatedAt.localeCompare(right.updatedAt) * direction;
     });
-  }, [plans, query, scope, sort, summaries, getLocale()]);
+  }, [plans, query, scope, sort, summaries, calendarRuns, getLocale()]);
 
   const update = async (planId: string, patch: TrainingPlanMetadataPatch) => {
     try {
@@ -983,10 +1026,12 @@ function PlanIndex({
           {visible.map((plan) => {
             const view = planView(plan, summaries.get(plan.id), noun);
             const isSelected = selected.includes(plan.id);
+            const calendarRun = calendarRuns.get(plan.id);
+            const calendarWeek = calendarRun ? planCalendarWeekLabel(plan, calendarRun.startDay) : undefined;
 
             return (
               <li
-                className={`tl-card${isSelected ? " is-selected" : ""}`}
+                className={`tl-card${isSelected ? " is-selected" : ""}${calendarRun ? " is-on-calendar" : ""}`}
                 key={plan.id}
                 data-accent={view.dominant ?? undefined}
                 style={view.dominant ? sportAccentStyle(view.dominant) : undefined}
@@ -998,6 +1043,7 @@ function PlanIndex({
                       <Heart size={11} fill="currentColor" strokeWidth={0} aria-label={t("Favorite")} />
                     ) : null}
                     <PlanSourceBadge source={plan.source} />
+                    {calendarRun ? <i className="tl-live">{t("On calendar")}</i> : null}
                     {UNSETTLED_SYNC.has(plan.syncState) ? (
                       <i className="tl-flag">{plan.syncState}</i>
                     ) : null}
@@ -1029,7 +1075,7 @@ function PlanIndex({
                   </span>
                 </button>
                 <div className="tl-plan-card-footer">
-                  <span><CalendarClock size={12} aria-hidden="true" />{planStartLabel(plan)}</span>
+                  <span className={calendarWeek ? "is-live" : undefined}><CalendarClock size={12} aria-hidden="true" />{calendarWeek ?? planStartLabel(plan)}</span>
                   <div className="tl-card-actions">{planActions(plan)}</div>
                 </div>
               </li>
@@ -1069,10 +1115,11 @@ function PlanIndex({
             {visible.map((plan) => {
               const view = planView(plan, summaries.get(plan.id), noun);
               const isSelected = selected.includes(plan.id);
+              const calendarRun = calendarRuns.get(plan.id);
 
               return (
                 <li
-                  className={`tl-plan-row tl-row${isSelected ? " is-selected" : ""}`}
+                  className={`tl-plan-row tl-row${isSelected ? " is-selected" : ""}${calendarRun ? " is-on-calendar" : ""}`}
                   key={plan.id}
                   data-accent={view.dominant ?? undefined}
                   style={view.dominant ? sportAccentStyle(view.dominant) : undefined}
@@ -1091,6 +1138,7 @@ function PlanIndex({
                         <em key={index}>{detail}</em>
                       ))}
                       <PlanSourceBadge source={plan.source} />
+                      {calendarRun ? <i className="tl-live">{t("On calendar")}</i> : null}
                       {UNSETTLED_SYNC.has(plan.syncState) ? (
                         <i className="tl-flag">{plan.syncState}</i>
                       ) : null}

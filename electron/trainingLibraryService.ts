@@ -23,6 +23,7 @@ import {
   deleteNativeTrainingPlan,
   deleteWorkoutProgram,
   listActiveNativeTrainingPlanInstanceIds,
+  listActiveNativeTrainingPlanInstances,
   listLibraryWorkouts,
   listScheduledWorkoutEntries,
   listTrainingHubActivities,
@@ -314,10 +315,11 @@ export async function getTrainingLibrarySnapshot(): Promise<TrainingLibrarySnaps
   const cachedAt = new Date().toISOString();
   const partialFailures: string[] = [];
   const localPlans = listTrainingPlanDocuments();
-  const [workoutsResult, nativeResult, scheduleResult] = await Promise.allSettled([
+  const [workoutsResult, nativeResult, scheduleResult, activeNativeResult] = await Promise.allSettled([
     listLibraryWorkouts(),
     listNativeCorosPlans(),
-    listScheduledWorkoutEntries(relativeDateKey(-180), relativeDateKey(365))
+    listScheduledWorkoutEntries(relativeDateKey(-180), relativeDateKey(365)),
+    listActiveNativeTrainingPlanInstances()
   ]);
 
   let baseWorkouts: TrainingHubLibraryWorkout[];
@@ -398,7 +400,15 @@ export async function getTrainingLibrarySnapshot(): Promise<TrainingLibrarySnaps
       nativeResult.status === "rejected" &&
       scheduleResult.status === "rejected",
     partialFailures,
-    nativePlanWrites: getNativePlanWriteCapabilities()
+    nativePlanWrites: getNativePlanWriteCapabilities(),
+    // Only a badge depends on this, so a failed query just leaves it out.
+    nativePlansOnCalendar: activeNativeResult.status === "fulfilled"
+      ? Object.fromEntries(
+          activeNativeResult.value
+            .filter((instance) => instance.originId)
+            .map((instance) => [instance.originId, { startDay: instance.startDay }])
+        )
+      : undefined
   };
 }
 

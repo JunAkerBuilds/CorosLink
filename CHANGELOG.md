@@ -11,10 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Hide features you don't use.** Right-click the sidebar to hide a feature or bring one back, or switch features on and off in **Settings → Sidebar**. Overview and Settings always stay. If you hide your startup view, CorosLink opens on Overview instead.
 - **Group the lap table by distance.** In an activity's **Laps** table, switch between the watch's own laps, 1 km, 5 km or 10 km splits, and the whole activity, like Training Hub. Only the groupings COROS sends for that activity appear. The fastest lap or split in each view is marked **Fastest**.
+- **See which plans are on your calendar.** In **Training Library → Plans**, plans with workouts on your COROS calendar show **On calendar** and the week you're in ("Week 3 of 14"). This includes COROS Plans the Coach put on your calendar. Filter by **On calendar** to see only those.
 - **Distance markers on the route map.** An activity's route shows numbered chips at every kilometre, or every mile in imperial units, at the points where the watch counted them. Long rides space them out (every 5 or 10 km) so the map stays readable.
 
 ### Fixed
 
+- **The calendar dialog fits small windows.** Adding a plan to the calendar or removing it no longer cuts off the title or the confirm button. Workouts are grouped by week with their sport, the summary shows the date range, and the button says how many workouts it adds or removes.
 - **Delete plans that are on your calendar.** In **Training Library → Plans**, a plan you added to the COROS calendar, such as a Coach plan saved to the calendar, had a greyed-out delete button until you removed its workouts yourself. Delete now removes its upcoming workouts from the calendar first, then the plan. Past days stay.
 - **Delete plans you sent to COROS.** Coach plans saved as a COROS Plan now have a delete button in **Training Library → Plans**. It deletes the plan from your COROS account, not just from CorosLink. If the plan is on your COROS calendar, CorosLink ends it there first, which removes its upcoming workouts; past days stay. Before, only the COROS app could remove them.
 - **Short laps show the right time.** Laps under 100 seconds, such as interval rests and 400 m repeats, showed a hundred times too long (a 60 s rest read 1:40:00). Their pace and the dialog's pacing note were wrong too.
