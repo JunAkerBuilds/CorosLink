@@ -24,7 +24,7 @@ import {
   CalendarDays,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type { AppInfo, AppUpdateSnapshot } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { formatBytes } from "../media/libraryUtils";
@@ -42,6 +42,7 @@ import { useUnitSystem } from "../units/UnitSystemProvider";
 import { AccountsSettings, type AccountDestination } from "./AccountsSettings";
 import { DiagnosticsSettings } from "./DiagnosticsSettings";
 import { LanguageSettings } from "./LanguageSettings";
+import { SidebarSettings } from "./SidebarSettings";
 
 const ABOUT_LINKS = [
   {
@@ -111,6 +112,10 @@ interface SettingsViewProps {
   onError: (message: string) => void;
   initialAccountScreen?: boolean;
   onOpenAccount?: (destination: AccountDestination) => void;
+  showDevelopmentItems?: boolean;
+  /** Scroll to a section once, then report it so a later visit starts at the top. */
+  focusSection?: "sidebar" | null;
+  onFocusSectionHandled?: () => void;
 }
 
 export function SettingsView({
@@ -121,6 +126,9 @@ export function SettingsView({
   onError,
   onOpenAccount,
   initialAccountScreen = false,
+  showDevelopmentItems = false,
+  focusSection = null,
+  onFocusSectionHandled,
 }: SettingsViewProps) {
   useLanguage();
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
@@ -133,6 +141,27 @@ export function SettingsView({
   );
   const [sportColors, setSportColors] = useState(() => readStoredSportColors());
   const { unitSystem, setUnitSystem } = useUnitSystem();
+  const sidebarPanelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (focusSection !== "sidebar") {
+      return;
+    }
+    if (settingsPage !== "main") {
+      setSettingsPage("main");
+      return;
+    }
+
+    const panel = sidebarPanelRef.current;
+    if (panel) {
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      panel.scrollIntoView({ block: "start", behavior: reducedMotion ? "auto" : "smooth" });
+      panel.classList.remove("is-spotlit");
+      void panel.offsetWidth;
+      panel.classList.add("is-spotlit");
+    }
+    onFocusSectionHandled?.();
+  }, [focusSection, onFocusSectionHandled, settingsPage]);
 
   function updateSportColor(cat: SportColorCategory, value: string) {
     const next = { ...sportColors, [cat]: value };
@@ -407,6 +436,8 @@ export function SettingsView({
           ))}
         </div>
       </div>
+
+      <SidebarSettings ref={sidebarPanelRef} showDevelopmentItems={showDevelopmentItems} />
 
       <div className="panel settings-sport-panel">
         <div className="section-heading settings-sport-heading">

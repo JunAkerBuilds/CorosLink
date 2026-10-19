@@ -943,4 +943,18 @@ export const corePortuguese: Record<string, string> = {
   "Maybe later": "Talvez mais tarde",
   "weather:H": "Máx.",
   "weather:L": "Mín.",
+  // Sidebar customization.
+  "Sidebar": "Barra lateral",
+  "Navigation": "Navegação",
+  "Hidden": "Ocultos",
+  "Show": "Mostrar",
+  "Show all": "Mostrar tudo",
+  "Always shown": "Sempre visível",
+  "Customize sidebar…": "Personalizar barra lateral…",
+  "Hide {{value0}}": "Ocultar {{value0}}",
+  "Show {{value0}}": "Mostrar {{value0}}",
+  "Show {{value0}} in the sidebar": "Mostrar {{value0}} na barra lateral",
+  "Overview and Settings always stay in the sidebar.": "Visão geral e Definições ficam sempre na barra lateral.",
+  "Hide the features you don't use. Nothing is removed, and you can bring them back here or by right-clicking the sidebar.": "Oculte as funcionalidades que não usa. Nada é removido: pode voltar a mostrá-las aqui ou clicando com o botão direito na barra lateral.",
+  "{{value0}} is hidden, so CorosLink will open on Overview.": "{{value0}} está oculto, por isso o CorosLink vai abrir na Visão geral.",
 };

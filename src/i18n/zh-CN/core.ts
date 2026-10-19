@@ -946,4 +946,18 @@ export const coreChinese: Readonly<Record<string, string>> = {
   "Prefer GitHub? Report an issue": "更习惯 GitHub？报告问题",
   "Both links stay under Help & links (?) and Support.": "这两个链接随时可在“帮助和链接”(?)和“支持”中找到。",
   "Maybe later": "以后再说",
+  // Sidebar customization.
+  "Sidebar": "侧边栏",
+  "Navigation": "导航",
+  "Hidden": "已隐藏",
+  "Show": "显示",
+  "Show all": "全部显示",
+  "Always shown": "始终显示",
+  "Customize sidebar…": "自定义侧边栏…",
+  "Hide {{value0}}": "隐藏{{value0}}",
+  "Show {{value0}}": "显示{{value0}}",
+  "Show {{value0}} in the sidebar": "在侧边栏中显示{{value0}}",
+  "Overview and Settings always stay in the sidebar.": "概览和设置始终保留在侧边栏中。",
+  "Hide the features you don't use. Nothing is removed, and you can bring them back here or by right-clicking the sidebar.": "隐藏不使用的功能。不会删除任何内容，可随时在这里或右键点击侧边栏重新显示。",
+  "{{value0}} is hidden, so CorosLink will open on Overview.": "{{value0}}已隐藏，CorosLink 启动时将打开概览。",
 };

@@ -39,10 +39,18 @@ export interface PrimaryNavItem {
   developmentOnly?: boolean;
   /** Hidden from the startup-view picker (e.g. Settings). */
   excludeFromStartup?: boolean;
+  /** Cannot be hidden from the sidebar. */
+  alwaysVisible?: boolean;
 }
 
 export const PRIMARY_NAV_ITEMS: PrimaryNavItem[] = [
-  { id: "overview", label: "Overview", icon: SquaresFour, sectionLabel: "Workspace" },
+  {
+    id: "overview",
+    label: "Overview",
+    icon: SquaresFour,
+    sectionLabel: "Workspace",
+    alwaysVisible: true,
+  },
   { id: "media", label: "Media", icon: MusicNotes },
   { id: "maps", label: "Maps", icon: MapTrifold, beta: true },
   { id: "watchfaces", label: "Watch Faces", icon: Watch, beta: true },
@@ -70,14 +78,18 @@ export const PRIMARY_NAV_ITEMS: PrimaryNavItem[] = [
     label: "Settings",
     icon: GearSix,
     excludeFromStartup: true,
+    alwaysVisible: true,
   },
 ];
 
 export function visiblePrimaryNavItems(
   showDevelopmentItems: boolean,
+  hiddenItems: ReadonlySet<PrimaryView> = new Set(),
 ): PrimaryNavItem[] {
   return PRIMARY_NAV_ITEMS.filter(
-    (item) => !item.developmentOnly || showDevelopmentItems,
+    (item) =>
+      (!item.developmentOnly || showDevelopmentItems) &&
+      !hiddenItems.has(item.id),
   );
 }
 

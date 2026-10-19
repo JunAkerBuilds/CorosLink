@@ -814,4 +814,18 @@ export const coreFrench: Record<string, string> = {
   "Prefer GitHub? Report an issue": "Vous préférez GitHub ? Signalez un problème",
   "Both links stay under Help & links (?) and Support.": "Ces deux liens restent dans Aide et liens (?) et Assistance.",
   "Maybe later": "Plus tard",
+  // Sidebar customization.
+  "Sidebar": "Barre latérale",
+  "Navigation": "Navigation",
+  "Hidden": "Masqués",
+  "Show": "Afficher",
+  "Show all": "Tout afficher",
+  "Always shown": "Toujours affiché",
+  "Customize sidebar…": "Personnaliser la barre latérale…",
+  "Hide {{value0}}": "Masquer {{value0}}",
+  "Show {{value0}}": "Afficher {{value0}}",
+  "Show {{value0}} in the sidebar": "Afficher {{value0}} dans la barre latérale",
+  "Overview and Settings always stay in the sidebar.": "Vue d’ensemble et Paramètres restent toujours dans la barre latérale.",
+  "Hide the features you don't use. Nothing is removed, and you can bring them back here or by right-clicking the sidebar.": "Masquez les fonctionnalités que vous n’utilisez pas. Rien n’est supprimé : vous pouvez les réafficher ici ou d’un clic droit sur la barre latérale.",
+  "{{value0}} is hidden, so CorosLink will open on Overview.": "{{value0}} est masqué : CorosLink s’ouvrira donc sur Vue d’ensemble.",
 };

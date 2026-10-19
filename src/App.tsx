@@ -116,6 +116,7 @@ import {
   readStartupView,
   saveStartupView,
 } from "./navigation/startupView";
+import { useHiddenNavItems } from "./navigation/hiddenNav";
 import { SettingsView } from "./settings/SettingsView";
 import type { AccountDestination } from "./settings/AccountsSettings";
 import { DataView } from "./data/DataView";
@@ -373,6 +374,9 @@ export default function App() {
     if (accountSetupView && activeView !== accountSetupView) setAccountSetupView(null);
   }, [activeView, accountSetupView]);
   const [startupView, setStartupView] = useState<View>(readStartupView);
+  const hiddenNavItems = useHiddenNavItems();
+  const [settingsFocus, setSettingsFocus] = useState<"sidebar" | null>(null);
+  const clearSettingsFocus = useCallback(() => setSettingsFocus(null), []);
   const [sidebarExpanded, setSidebarExpanded] = useState(
     createInitialSidebarExpanded,
   );
@@ -2339,6 +2343,24 @@ export default function App() {
     );
   }
 
+  // A hidden feature shouldn't be where the app opens.
+  useEffect(() => {
+    if (!hiddenNavItems.has(startupView)) {
+      return;
+    }
+    const hiddenView = startupView;
+    setStartupView("overview");
+    saveStartupView("overview");
+    setMessage(
+      localizedText(() => t("{{value0}} is hidden, so CorosLink will open on Overview.", { value0: getPrimaryViewLabel(hiddenView) })),
+    );
+  }, [hiddenNavItems, startupView]);
+
+  function openSidebarSettings() {
+    setSettingsFocus("sidebar");
+    setActiveView("settings");
+  }
+
   function handleDevelopmentViewToggle() {
     const nextVisible = !showDevelopmentTools;
     setShowDevelopmentTools(nextVisible);
@@ -2479,6 +2501,7 @@ export default function App() {
           onExpandedChange={setSidebarExpanded}
           overlayOpen={sidebarOverlayOpen}
           onOverlayOpenChange={setSidebarOverlayOpen}
+          onCustomize={openSidebarSettings}
           footer={
             <AppUpdateControls
               snapshot={appUpdateSnapshot}
@@ -2777,6 +2800,9 @@ export default function App() {
                 updateBusy={busy === "update-check"}
                 onCheckForUpdates={() => void handleCheckForUpdates()}
                 onError={setError}
+                showDevelopmentItems={showDevelopmentTools}
+                focusSection={settingsFocus}
+                onFocusSectionHandled={clearSettingsFocus}
               />
             ) : null}
             {activeView === "calendar" ? (

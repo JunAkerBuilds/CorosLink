@@ -2,6 +2,7 @@ import { t, useLanguage } from "../i18n";
 import { SidebarSimple } from "@phosphor-icons/react";
 import { motion } from "motion/react";
 import {
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -12,9 +13,16 @@ import {
 import {
   SIDEBAR_COLLAPSED_WIDTH,
   SIDEBAR_EXPANDED_WIDTH,
+  type PrimaryNavItem,
   type PrimaryView,
   visiblePrimaryNavItems,
 } from "../navigation/primaryNav";
+import {
+  canHideNavItem,
+  setNavItemHidden,
+  useHiddenNavItems,
+} from "../navigation/hiddenNav";
+import { SidebarNavMenu } from "./SidebarNavMenu";
 import logoBase from "../../build/icon-base.svg";
 import logoSync from "../../build/icon-sync.svg";
 
@@ -118,6 +126,14 @@ export interface AppSidebarProps {
   onExpandedChange: (expanded: boolean) => void;
   overlayOpen: boolean;
   onOverlayOpenChange: (open: boolean) => void;
+  /** Opens the sidebar section of Settings. */
+  onCustomize: () => void;
+}
+
+interface NavMenuState {
+  x: number;
+  y: number;
+  target: PrimaryNavItem | null;
 }
 
 export function AppSidebar({
@@ -130,10 +146,16 @@ export function AppSidebar({
   onExpandedChange,
   overlayOpen,
   onOverlayOpenChange,
+  onCustomize,
 }: AppSidebarProps) {
   useLanguage();
   const overlayMode = useMediaQuery("(max-width: 720px)");
-  const navItems = visiblePrimaryNavItems(showDevelopmentItems);
+  const hiddenNavItems = useHiddenNavItems();
+  const availableItems = visiblePrimaryNavItems(showDevelopmentItems);
+  const navItems = availableItems.filter((item) => !hiddenNavItems.has(item.id));
+  const hiddenItems = availableItems.filter((item) => hiddenNavItems.has(item.id));
+  const [navMenu, setNavMenu] = useState<NavMenuState | null>(null);
+  const closeNavMenu = useCallback(() => setNavMenu(null), []);
   const reducedMotion = useReducedMotion();
   const navRef = useRef<HTMLElement>(null);
   const itemRefs = useRef(new Map<PrimaryView, HTMLButtonElement>());
@@ -154,7 +176,14 @@ export function AppSidebar({
   const updateIndicator = useCallback(() => {
     const nav = navRef.current;
     const activeItem = itemRefs.current.get(activeView);
-    if (!nav || !activeItem || !isOpen) {
+    if (!nav || !isOpen) {
+      return;
+    }
+    // A hidden feature can still be open; leave no stale highlight behind.
+    if (!activeItem) {
+      setIndicator((current) =>
+        current.ready ? { ...current, ready: false } : current,
+      );
       return;
     }
 
@@ -163,7 +192,7 @@ export function AppSidebar({
       height: activeItem.offsetHeight,
       ready: true,
     });
-  }, [activeView, coachBusy, expanded, isOpen, overlayMode]);
+  }, [activeView, coachBusy, expanded, hiddenNavItems, isOpen, overlayMode]);
 
   useLayoutEffect(() => {
     updateIndicator();
@@ -210,6 +239,32 @@ export function AppSidebar({
     if (overlayMode) {
       onOverlayOpenChange(false);
       document.getElementById("navigation-toggle")?.focus();
+    }
+  };
+
+  const handleNavContextMenu = (event: ReactMouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    const itemElement = (event.target as Element).closest<HTMLElement>(
+      "[data-nav-id]",
+    );
+    const target =
+      navItems.find((item) => item.id === itemElement?.dataset.navId) ?? null;
+    // The context-menu key reports the focused element's corner, not a pointer.
+    const anchor =
+      event.clientX === 0 && event.clientY === 0 && itemElement
+        ? itemElement.getBoundingClientRect()
+        : null;
+    setNavMenu({
+      x: anchor ? anchor.left + 24 : event.clientX,
+      y: anchor ? anchor.bottom : event.clientY,
+      target,
+    });
+  };
+
+  const handleCustomize = () => {
+    onCustomize();
+    if (overlayMode) {
+      onOverlayOpenChange(false);
     }
   };
 
@@ -287,6 +342,7 @@ export function AppSidebar({
           className="app-sidebar-nav"
           aria-label={t("Primary")}
           ref={navRef}
+          onContextMenu={handleNavContextMenu}
         >
           <span
             className="app-sidebar-indicator"
@@ -308,6 +364,7 @@ export function AppSidebar({
               <button
                 key={item.id}
                 type="button"
+                data-nav-id={item.id}
                 className={[
                   "app-sidebar-nav-item",
                   isActive ? "active" : "",
@@ -395,6 +452,19 @@ export function AppSidebar({
           ) : null}
         </div>
       </div>
+      {navMenu ? (
+        <SidebarNavMenu
+          x={navMenu.x}
+          y={navMenu.y}
+          target={navMenu.target}
+          targetHideable={navMenu.target ? canHideNavItem(navMenu.target.id) : false}
+          hiddenItems={hiddenItems}
+          onHide={(item) => setNavItemHidden(item.id, true)}
+          onShow={(item) => setNavItemHidden(item.id, false)}
+          onCustomize={handleCustomize}
+          onClose={closeNavMenu}
+        />
+      ) : null}
     </motion.aside>
   );
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Hide features you don't use.** Right-click the sidebar to hide a feature or bring one back, or switch features on and off in **Settings → Sidebar**. Overview and Settings always stay. If you hide your startup view, CorosLink opens on Overview instead.
+
 ## [0.1.57] - 2026-10-18
 
 ### Added
