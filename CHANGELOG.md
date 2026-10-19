@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Delete plans you sent to COROS.** Coach plans saved as a COROS Plan now have a delete button in **Training Library → Plans**. It deletes the plan from your COROS account, not just from CorosLink. If the plan is on your COROS calendar, CorosLink ends it there first, which removes its upcoming workouts; past days stay. Before, only the COROS app could remove them.
 - **Short laps show the right time.** Laps under 100 seconds, such as interval rests and 400 m repeats, showed a hundred times too long (a 60 s rest read 1:40:00). Their pace and the dialog's pacing note were wrong too.
 
 ## [0.1.57] - 2026-10-18

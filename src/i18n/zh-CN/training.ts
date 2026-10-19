@@ -2210,4 +2210,12 @@ export const trainingChinese: Readonly<Record<string, string>> = {
   "RPE 3 · Moderate": "RPE 3 · 中等",
   "RPE 4 · Hard": "RPE 4 · 吃力",
   "RPE 5 · Very hard": "RPE 5 · 非常吃力",
+  "Deleted \"{{value1}}\" from COROS and removed its upcoming workouts from your calendar.": "已从 COROS 删除“{{value1}}”，并从日历中移除了其即将进行的训练。",
+  "Deleted \"{{value1}}\" from COROS.": "已从 COROS 删除“{{value1}}”。",
+  "This deletes the plan from your COROS account, not just from CorosLink.": "这会从您的 COROS 账户中删除该计划，而不仅仅是从 CorosLink 中删除。",
+  "If the plan is on your COROS calendar, its upcoming workouts are removed too. Past days stay. This can’t be undone.": "如果该计划在您的 COROS 日历上，其即将进行的训练也会被移除。过去的日期会保留。此操作无法撤销。",
+  "Deleting from COROS…": "正在从 COROS 删除…",
+  "Delete from COROS": "从 COROS 中删除",
+  "Reconnect to COROS to delete this plan": "重新连接 COROS 以删除此计划",
+  "Delete {{value1}} from COROS": "从 COROS 中删除{{value1}}",
 };

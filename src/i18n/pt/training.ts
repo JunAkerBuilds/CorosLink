@@ -2208,4 +2208,12 @@ export const trainingPortuguese: Record<string, string> = {
   "RPE 3 · Moderate": "RPE 3 · Moderado",
   "RPE 4 · Hard": "RPE 4 · Difícil",
   "RPE 5 · Very hard": "RPE 5 · Muito difícil",
+  "Deleted \"{{value1}}\" from COROS and removed its upcoming workouts from your calendar.": "«{{value1}}» eliminado da COROS; os seus treinos futuros foram removidos do calendário.",
+  "Deleted \"{{value1}}\" from COROS.": "«{{value1}}» eliminado da COROS.",
+  "This deletes the plan from your COROS account, not just from CorosLink.": "Isto elimina o plano da sua conta COROS, não apenas do CorosLink.",
+  "If the plan is on your COROS calendar, its upcoming workouts are removed too. Past days stay. This can’t be undone.": "Se o plano estiver no seu calendário COROS, os treinos futuros também são removidos. Os dias passados mantêm-se. Esta acção não pode ser anulada.",
+  "Deleting from COROS…": "A eliminar da COROS…",
+  "Delete from COROS": "Eliminar da COROS",
+  "Reconnect to COROS to delete this plan": "Volte a ligar à COROS para eliminar este plano",
+  "Delete {{value1}} from COROS": "Eliminar {{value1}} da COROS",
 };

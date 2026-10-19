@@ -3466,6 +3466,12 @@ export interface TrainingPlanWriteCapabilities {
   verifiedAt?: string;
 }
 
+export interface CorosTrainingPlanDeleteResult {
+  remoteId: string;
+  /** Active calendar instances ended (their upcoming workouts removed) before the delete. */
+  endedCalendarPlans: number;
+}
+
 export interface TrainingActivityMatch {
   id: string;
   planId?: string;

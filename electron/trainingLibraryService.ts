@@ -19,7 +19,10 @@ import {
 } from "./corosTrainingPlanAdapter";
 import {
   createAndScheduleWorkout,
+  deactivateNativeTrainingPlan,
+  deleteNativeTrainingPlan,
   deleteWorkoutProgram,
+  listActiveNativeTrainingPlanInstanceIds,
   listLibraryWorkouts,
   listScheduledWorkoutEntries,
   listTrainingHubActivities,
@@ -34,6 +37,7 @@ import {
   workoutSportFromType
 } from "./trainingPlanDomain";
 import type {
+  CorosTrainingPlanDeleteResult,
   NativeCorosPlanDetail,
   NativeCorosPlanSummary,
   TrainingActivityMatch,
@@ -58,20 +62,21 @@ import type {
   WorkoutSport
 } from "./types";
 
-const UNVERIFIED_WRITE_REASON =
-  "Editing, duplicating, deleting, or removing native COROS plans from the Calendar isn't available in CorosLink yet. Use the COROS app.";
+const UNSUPPORTED_NATIVE_WRITE_REASON =
+  "Editing native COROS plans, or duplicating them on COROS, isn't available in CorosLink yet. Use the COROS app.";
 
 export function getNativePlanWriteCapabilities(): TrainingPlanWriteCapabilities {
   return {
-    // Create/activate are live from chat (uploadNativeTrainingPlan); the
-    // Library has no native edit/delete/deactivate flow wired yet.
+    // Create/activate are live from chat (uploadNativeTrainingPlan). The
+    // Library deletes plans, ending an active calendar instance first
+    // (deleteCorosTrainingPlan); native edit/copy aren't wired yet.
     create: true,
     update: false,
     duplicate: false,
-    delete: false,
+    delete: true,
     activate: true,
-    removeActive: false,
-    reason: UNVERIFIED_WRITE_REASON
+    removeActive: true,
+    reason: UNSUPPORTED_NATIVE_WRITE_REASON
   };
 }
 
@@ -458,12 +463,95 @@ export function deleteLocalTrainingPlan(id: string, confirmed: boolean): void {
   const plan = getTrainingPlanDocument(id);
   if (!plan) return;
   if (plan.source === "coros") {
-    throw new Error(UNVERIFIED_WRITE_REASON);
+    throw new Error("This plan is stored on COROS. Delete it from your COROS account instead.");
   }
   if (activeTrainingPlanCalendarInstall(plan)) {
     throw new Error("Remove this plan's future calendar workouts before deleting the plan.");
   }
   deleteTrainingPlanDocument(id);
+}
+
+interface NativeTrainingPlanWriter {
+  listActiveInstanceIds: typeof listActiveNativeTrainingPlanInstanceIds;
+  deactivate: typeof deactivateNativeTrainingPlan;
+  delete: typeof deleteNativeTrainingPlan;
+}
+
+const defaultNativeTrainingPlanWriter: NativeTrainingPlanWriter = {
+  listActiveInstanceIds: listActiveNativeTrainingPlanInstanceIds,
+  deactivate: deactivateNativeTrainingPlan,
+  delete: deleteNativeTrainingPlan
+};
+
+let nativeTrainingPlanWriter = defaultNativeTrainingPlanWriter;
+
+/** Test seam for native plan delete simulations. Never used by the renderer. */
+export function setNativeTrainingPlanWriterForTests(
+  overrides?: Partial<NativeTrainingPlanWriter>
+): void {
+  nativeTrainingPlanWriter = overrides
+    ? { ...defaultNativeTrainingPlanWriter, ...overrides }
+    : defaultNativeTrainingPlanWriter;
+}
+
+function errorReason(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Deletes a native plan from the athlete's COROS account. If the plan is on
+ * the calendar, its active instance is ended first (quitSubPlan removes only
+ * upcoming workouts; past days stay), so no workouts outlive a plan that
+ * CorosLink no longer lists. Any failure before plan/delete leaves the plan in
+ * place.
+ */
+export async function deleteCorosTrainingPlan(
+  remoteId: string,
+  confirmed: boolean
+): Promise<CorosTrainingPlanDeleteResult> {
+  if (!confirmed) throw new Error("Deleting a training plan requires confirmation.");
+  const id = remoteId.trim();
+  const local = listTrainingPlanDocuments().filter(
+    (plan) => plan.source === "coros" && plan.remoteId === id
+  );
+  if (!id || local.length === 0) {
+    throw new Error("This COROS plan isn't in the Training Library. Refresh and try again.");
+  }
+
+  let instanceIds: string[];
+  try {
+    instanceIds = await nativeTrainingPlanWriter.listActiveInstanceIds(id);
+  } catch (error) {
+    throw new Error(
+      `${errorReason(error)} CorosLink couldn't check whether this plan is on your COROS ` +
+        "calendar, so nothing was deleted.",
+      { cause: error }
+    );
+  }
+  for (const instanceId of instanceIds) {
+    try {
+      await nativeTrainingPlanWriter.deactivate(instanceId);
+    } catch (error) {
+      throw new Error(
+        `${errorReason(error)} CorosLink couldn't remove this plan's upcoming workouts from ` +
+          "your COROS calendar, so the plan wasn't deleted.",
+        { cause: error }
+      );
+    }
+  }
+  try {
+    await nativeTrainingPlanWriter.delete(id);
+  } catch (error) {
+    if (instanceIds.length === 0) throw error;
+    throw new Error(
+      `${errorReason(error)} The plan's upcoming workouts were removed from your COROS ` +
+        "calendar, but the plan itself wasn't deleted. Try again.",
+      { cause: error }
+    );
+  }
+
+  for (const plan of local) deleteTrainingPlanDocument(plan.id);
+  return { remoteId: id, endedCalendarPlans: instanceIds.length };
 }
 
 interface StoredPlanCalendarPreview {

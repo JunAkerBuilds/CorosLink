@@ -3045,25 +3045,35 @@ export async function uploadNativeTrainingPlan(
  */
 async function rollBackNativeTrainingPlan(planId: string): Promise<boolean> {
   try {
-    const active = await readNativeTrainingPlanEndpoint<unknown>("/training/plan/query", {
-      method: "POST",
-      body: { statusList: [1] }
-    });
-    // An empty list may come back as null; any other non-array is unexpected.
-    if (active != null && !Array.isArray(active)) {
-      return false;
-    }
-    const instances = ((active ?? []) as Record<string, unknown>[]).filter(
-      (plan) => String(plan.originId ?? "") === planId && plan.id != null
-    );
-    for (const instance of instances) {
-      await deactivateNativeTrainingPlan(String(instance.id));
+    for (const instanceId of await listActiveNativeTrainingPlanInstanceIds(planId)) {
+      await deactivateNativeTrainingPlan(instanceId);
     }
     await deleteNativeTrainingPlan(planId);
     return true;
   } catch {
     return false;
   }
+}
+
+/**
+ * IDs of the active calendar instances created from a library plan.
+ * executeSubPlan never marks the library plan itself; it creates a separate
+ * plan whose originId points back at it, and quitSubPlan needs that ID.
+ */
+export async function listActiveNativeTrainingPlanInstanceIds(
+  libraryPlanId: string
+): Promise<string[]> {
+  const active = await readNativeTrainingPlanEndpoint<unknown>("/training/plan/query", {
+    method: "POST",
+    body: { statusList: [1] }
+  });
+  // An empty list may come back as null; any other non-array is unexpected.
+  if (active != null && !Array.isArray(active)) {
+    throw new Error("COROS returned an unexpected list of active plans.");
+  }
+  return ((active ?? []) as Record<string, unknown>[])
+    .filter((plan) => String(plan.originId ?? "") === libraryPlanId && plan.id != null)
+    .map((plan) => String(plan.id));
 }
 
 export async function activateNativeTrainingPlan(

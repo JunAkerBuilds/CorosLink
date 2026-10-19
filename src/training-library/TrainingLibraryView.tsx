@@ -184,6 +184,7 @@ export function TrainingLibraryView({
   const [compareOpen, setCompareOpen] = useState(false);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [pendingPlanDelete, setPendingPlanDelete] = useState<TrainingPlanDocument | null>(null);
+  const [deletingPlan, setDeletingPlan] = useState(false);
   const [generatorOpen, setGeneratorOpen] = useState(false);
   const [calendarTarget, setCalendarTarget] = useState<{ plan: TrainingPlanDocument; operation?: "install" | "remove" } | null>(null);
 
@@ -317,14 +318,25 @@ export function TrainingLibraryView({
   };
 
   const deletePlan = async () => {
-    if (!pendingPlanDelete) return;
+    if (!pendingPlanDelete || deletingPlan) return;
+    const plan = pendingPlanDelete;
+    setDeletingPlan(true);
     try {
-      await api.deleteLocalTrainingPlan(pendingPlanDelete.id, true);
-      onMessage(`Deleted "${pendingPlanDelete.name}".`);
+      if (plan.source === "coros" && plan.remoteId) {
+        const result = await api.deleteCorosTrainingPlan(plan.remoteId, true);
+        onMessage(result.endedCalendarPlans
+          ? t("Deleted \"{{value1}}\" from COROS and removed its upcoming workouts from your calendar.", { value1: String(plan.name) })
+          : t("Deleted \"{{value1}}\" from COROS.", { value1: String(plan.name) }));
+      } else {
+        await api.deleteLocalTrainingPlan(plan.id, true);
+        onMessage(`Deleted "${plan.name}".`);
+      }
       setPendingPlanDelete(null);
       await load();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setDeletingPlan(false);
     }
   };
 
@@ -483,13 +495,22 @@ export function TrainingLibraryView({
             <h2 id="plan-delete-title">
               {t("Delete “")}{pendingPlanDelete.name}&rdquo;?
             </h2>
-            <p>
-              {t("This removes the local copy and its")} {pendingPlanDelete.entries.length} {t("item")} {pendingPlanDelete.entries.length === 1 ? "" : "s"}{t(". Plans stored on COROS are not touched.")} </p>
+            {pendingPlanDelete.source === "coros" ? (
+              <>
+                <p>{t("This deletes the plan from your COROS account, not just from CorosLink.")}</p>
+                <p>{t("If the plan is on your COROS calendar, its upcoming workouts are removed too. Past days stay. This can’t be undone.")}</p>
+              </>
+            ) : (
+              <p>
+                {t("This removes the local copy and its")} {pendingPlanDelete.entries.length} {t("item")} {pendingPlanDelete.entries.length === 1 ? "" : "s"}{t(". Plans stored on COROS are not touched.")} </p>
+            )}
             <footer>
-              <button type="button" className="ghost-button" onClick={() => setPendingPlanDelete(null)}>
+              <button type="button" className="ghost-button" disabled={deletingPlan} onClick={() => setPendingPlanDelete(null)}>
                 {t("Cancel")} </button>
-              <button type="button" className="primary-button danger" onClick={() => void deletePlan()}>
-                {t("Delete plan")} </button>
+              <button type="button" className="primary-button danger" disabled={deletingPlan} onClick={() => void deletePlan()}>
+                {pendingPlanDelete.source === "coros"
+                  ? deletingPlan ? t("Deleting from COROS…") : t("Delete from COROS")
+                  : t("Delete plan")} </button>
             </footer>
           </section>
         </div>
@@ -782,7 +803,18 @@ function PlanIndex({
         </button>
       ) : null}
       {noun === "plan" && plan.source !== "coros" && onCalendar && retryingInstall ? <button type="button" disabled={offline} aria-label={t("Remove partial installation of {{value1}} from calendar", { value1: String(plan.name) })} onClick={() => onCalendar(plan, "remove")}><CalendarX size={14} /></button> : null}
-      {plan.source !== "coros" ? (
+      {plan.source === "coros" ? (
+        <button
+          type="button"
+          className="danger"
+          disabled={offline || !plan.remoteId}
+          title={offline ? t("Reconnect to COROS to delete this plan") : t("Delete from COROS")}
+          aria-label={t("Delete {{value1}} from COROS", { value1: String(plan.name) })}
+          onClick={() => onDelete(plan)}
+        >
+          <Trash2 size={14} />
+        </button>
+      ) : (
         <button
           type="button"
           className="danger"
@@ -793,7 +825,7 @@ function PlanIndex({
         >
           <Trash2 size={14} />
         </button>
-      ) : null}
+      )}
     </>;
   };
 

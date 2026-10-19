@@ -585,7 +585,82 @@ await assert.rejects(
 );
 assert.equal(library.getNativePlanWriteCapabilities().create, true);
 assert.equal(library.getNativePlanWriteCapabilities().activate, true);
-assert.equal(library.getNativePlanWriteCapabilities().delete, false);
+assert.equal(library.getNativePlanWriteCapabilities().delete, true);
+assert.equal(library.getNativePlanWriteCapabilities().removeActive, true);
+assert.equal(library.getNativePlanWriteCapabilities().update, false);
+
+const saveNativeForDelete = (remoteId) => {
+  const document = library.nativePlanToDocument(
+    adapter.parseNativeCorosPlan({ ...rawNative, id: remoteId }, "2026-07-29T00:00:00.000Z")
+  );
+  databaseModule.saveTrainingPlanDocument(document);
+  return document;
+};
+const nativeWrites = [];
+let activeInstances = {};
+let failQuit = false;
+let failDelete = false;
+library.setNativeTrainingPlanWriterForTests({
+  listActiveInstanceIds: async (planId) => {
+    nativeWrites.push(`list:${planId}`);
+    if (activeInstances[planId] instanceof Error) throw activeInstances[planId];
+    return activeInstances[planId] ?? [];
+  },
+  deactivate: async (instanceId) => {
+    nativeWrites.push(`quit:${instanceId}`);
+    if (failQuit) throw new Error("mock quit failure");
+  },
+  delete: async (planId) => {
+    nativeWrites.push(`delete:${planId}`);
+    if (failDelete) throw new Error("mock delete failure");
+  }
+});
+
+const activeNative = saveNativeForDelete("remote-active");
+assert.throws(
+  () => library.deleteLocalTrainingPlan(activeNative.id, true),
+  /stored on COROS/i,
+  "the local delete path never touches native plans"
+);
+await assert.rejects(library.deleteCorosTrainingPlan("remote-active", false), /confirmation/i);
+await assert.rejects(library.deleteCorosTrainingPlan("remote-unknown", true), /isn't in the Training Library/i);
+assert.deepEqual(nativeWrites, [], "unconfirmed or unknown deletes make no COROS calls");
+
+activeInstances = { "remote-active": new Error("mock query failure") };
+await assert.rejects(library.deleteCorosTrainingPlan("remote-active", true), /nothing was deleted/i);
+assert.deepEqual(nativeWrites, ["list:remote-active"], "an unverifiable calendar state blocks the delete");
+
+nativeWrites.length = 0;
+activeInstances = { "remote-active": ["instance-1", "instance-2"] };
+failQuit = true;
+await assert.rejects(library.deleteCorosTrainingPlan("remote-active", true), /wasn't deleted/i);
+assert.deepEqual(nativeWrites, ["list:remote-active", "quit:instance-1"], "a failed quit stops before plan/delete");
+failQuit = false;
+
+nativeWrites.length = 0;
+failDelete = true;
+await assert.rejects(library.deleteCorosTrainingPlan("remote-active", true), /upcoming workouts were removed/i);
+assert.ok(databaseModule.getTrainingPlanDocument(activeNative.id), "a failed plan/delete keeps the plan listed");
+failDelete = false;
+
+nativeWrites.length = 0;
+const activeResult = await library.deleteCorosTrainingPlan("remote-active", true);
+assert.deepEqual(
+  nativeWrites,
+  ["list:remote-active", "quit:instance-1", "quit:instance-2", "delete:remote-active"],
+  "active calendar instances are quit by instance ID before the library plan is deleted"
+);
+assert.deepEqual(activeResult, { remoteId: "remote-active", endedCalendarPlans: 2 });
+assert.equal(databaseModule.getTrainingPlanDocument(activeNative.id), undefined, "the cached native plan is removed");
+
+const idleNative = saveNativeForDelete("remote-idle");
+nativeWrites.length = 0;
+activeInstances = {};
+const idleResult = await library.deleteCorosTrainingPlan("remote-idle", true);
+assert.deepEqual(nativeWrites, ["list:remote-idle", "delete:remote-idle"]);
+assert.equal(idleResult.endedCalendarPlans, 0);
+assert.equal(databaseModule.getTrainingPlanDocument(idleNative.id), undefined);
+library.setNativeTrainingPlanWriterForTests();
 
 db.close();
 fs.rmSync(tempRoot, { recursive: true, force: true });
