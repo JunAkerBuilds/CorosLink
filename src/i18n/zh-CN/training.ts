@@ -2218,4 +2218,11 @@ export const trainingChinese: Readonly<Record<string, string>> = {
   "Delete from COROS": "从 COROS 中删除",
   "Reconnect to COROS to delete this plan": "重新连接 COROS 以删除此计划",
   "Delete {{value1}} from COROS": "从 COROS 中删除{{value1}}",
+  "Deleted \"{{value1}}\" and removed 1 upcoming workout from your COROS calendar.": "已删除“{{value1}}”，并从您的 COROS 日历中移除了 1 个即将进行的训练。",
+  "Deleted \"{{value1}}\" and removed {{value2}} upcoming workouts from your COROS calendar.": "已删除“{{value1}}”，并从您的 COROS 日历中移除了 {{value2}} 个即将进行的训练。",
+  "This deletes the plan from CorosLink and removes its 1 upcoming workout from your COROS calendar. Past days stay.": "这会从 CorosLink 中删除该计划，并从您的 COROS 日历中移除其 1 个即将进行的训练。过去的日期会保留。",
+  "This deletes the plan from CorosLink and removes its {{value1}} upcoming workouts from your COROS calendar. Past days stay.": "这会从 CorosLink 中删除该计划，并从您的 COROS 日历中移除其 {{value1}} 个即将进行的训练。过去的日期会保留。",
+  "This deletes the plan from CorosLink and removes its upcoming workouts from your COROS calendar. Past days stay.": "这会从 CorosLink 中删除该计划，并从您的 COROS 日历中移除其即将进行的训练。过去的日期会保留。",
+  "Removing workouts…": "正在移除训练…",
+  "Remove workouts and delete": "移除训练并删除",
 };

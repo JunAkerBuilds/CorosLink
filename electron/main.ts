@@ -158,7 +158,7 @@ import type {
 import {
   addTrainingPlanToCalendar,
   deleteCorosTrainingPlan,
-  deleteLocalTrainingPlan,
+  deleteLocalTrainingPlanAndCalendar,
   deleteTrainingLibraryWorkouts,
   getNativeTrainingPlan,
   getTrainingLibrarySnapshot,
@@ -2233,7 +2233,7 @@ function registerIpcHandlers(): void {
   );
   ipcMain.handle(
     "trainingLibrary:deletePlan",
-    (_event, id: string, confirmed: boolean) => deleteLocalTrainingPlan(id, confirmed)
+    (_event, id: string, confirmed: boolean) => deleteLocalTrainingPlanAndCalendar(id, confirmed)
   );
   ipcMain.handle(
     "trainingLibrary:deleteCorosPlan",

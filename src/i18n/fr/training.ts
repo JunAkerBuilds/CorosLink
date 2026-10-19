@@ -2155,4 +2155,11 @@ export const trainingFrench: Record<string, string> = {
   "Delete from COROS": "Supprimer de COROS",
   "Reconnect to COROS to delete this plan": "Reconnectez COROS pour supprimer ce plan",
   "Delete {{value1}} from COROS": "Supprimer {{value1}} de COROS",
+  "Deleted \"{{value1}}\" and removed 1 upcoming workout from your COROS calendar.": "« {{value1}} » supprimé ; 1 séance à venir a été retirée de votre calendrier COROS.",
+  "Deleted \"{{value1}}\" and removed {{value2}} upcoming workouts from your COROS calendar.": "« {{value1}} » supprimé ; {{value2}} séances à venir ont été retirées de votre calendrier COROS.",
+  "This deletes the plan from CorosLink and removes its 1 upcoming workout from your COROS calendar. Past days stay.": "Le plan sera supprimé de CorosLink et sa séance à venir retirée de votre calendrier COROS. Les jours passés restent.",
+  "This deletes the plan from CorosLink and removes its {{value1}} upcoming workouts from your COROS calendar. Past days stay.": "Le plan sera supprimé de CorosLink et ses {{value1}} séances à venir retirées de votre calendrier COROS. Les jours passés restent.",
+  "This deletes the plan from CorosLink and removes its upcoming workouts from your COROS calendar. Past days stay.": "Le plan sera supprimé de CorosLink et ses séances à venir retirées de votre calendrier COROS. Les jours passés restent.",
+  "Removing workouts…": "Retrait des séances…",
+  "Remove workouts and delete": "Retirer les séances et supprimer",
 };

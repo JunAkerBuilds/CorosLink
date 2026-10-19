@@ -575,6 +575,44 @@ const partialRemovalPreview = await library.previewTrainingPlanCalendarRemoval(p
 const partialRemoval = await library.removeTrainingPlanFromCalendar(partialRemovalPreview.previewId, true);
 assert.equal(partialRemoval.removedCount, 1, "known occurrences remain removable after a partial install");
 assert.equal(partialRemoval.failures.some((failure) => failure.writeMayHaveSucceeded), true, "unverified writes remain recorded instead of being retried by name");
+
+mockCalendar = [];
+let failCalendarRemove = false;
+library.setTrainingPlanCalendarAdapterForTests({
+  listScheduled: async (startDay, endDay) => mockCalendar.filter((entry) => entry.happenDay >= startDay && entry.happenDay <= endDay),
+  createAndSchedule: async (entry, happenDay) => {
+    appendMockOccurrence(entry.name, happenDay);
+    return {};
+  },
+  removeScheduled: async (entry) => {
+    if (failCalendarRemove) throw new Error("mock remove failure");
+    mockCalendar = mockCalendar.filter((candidate) => !(candidate.planId === entry.planId && candidate.idInPlan === entry.idInPlan));
+  }
+});
+const deleteInstalled = structuredClone(generated);
+deleteInstalled.id = "plan:delete-installed";
+deleteInstalled.startDate = "2099-08-03";
+deleteInstalled.weekCount = 1;
+deleteInstalled.entries = deleteInstalled.entries.slice(0, 2).map((entry, index) => ({ ...entry, weekIndex: 0, dayIndex: index * 2, programId: undefined }));
+deleteInstalled.calendarInstalls = [];
+databaseModule.saveTrainingPlanDocument(deleteInstalled);
+const deleteInstallPreview = await library.previewTrainingPlanCalendar(deleteInstalled.id, "2099-08-03");
+await library.addTrainingPlanToCalendar(deleteInstallPreview.previewId, true, "metric");
+assert.equal(domain.upcomingTrainingPlanCalendarWorkoutCount(databaseModule.getTrainingPlanDocument(deleteInstalled.id), "20990101"), 2);
+await assert.rejects(library.deleteLocalTrainingPlanAndCalendar(deleteInstalled.id, false), /confirmation/i);
+failCalendarRemove = true;
+await assert.rejects(library.deleteLocalTrainingPlanAndCalendar(deleteInstalled.id, true), /wasn't deleted/i);
+assert.ok(databaseModule.getTrainingPlanDocument(deleteInstalled.id), "a failed calendar removal keeps the plan");
+assert.equal(mockCalendar.length, 2);
+failCalendarRemove = false;
+const installedDelete = await library.deleteLocalTrainingPlanAndCalendar(deleteInstalled.id, true);
+assert.equal(installedDelete.removedCalendarWorkouts, 2, "upcoming plan-owned workouts are removed before the delete");
+assert.equal(mockCalendar.length, 0);
+assert.equal(databaseModule.getTrainingPlanDocument(deleteInstalled.id), undefined);
+const plainDelete = domain.createTrainingPlan("Plain delete", "local");
+databaseModule.saveTrainingPlanDocument(plainDelete);
+assert.deepEqual(await library.deleteLocalTrainingPlanAndCalendar(plainDelete.id, true), { removedCalendarWorkouts: 0 });
+assert.equal(databaseModule.getTrainingPlanDocument(plainDelete.id), undefined);
 library.setTrainingPlanCalendarAdapterForTests();
 
 assert.throws(() => library.deleteLocalTrainingPlan(first.id, false), /confirmation/i);

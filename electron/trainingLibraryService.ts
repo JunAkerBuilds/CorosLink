@@ -38,6 +38,7 @@ import {
 } from "./trainingPlanDomain";
 import type {
   CorosTrainingPlanDeleteResult,
+  LocalTrainingPlanDeleteResult,
   NativeCorosPlanDetail,
   NativeCorosPlanSummary,
   TrainingActivityMatch,
@@ -469,6 +470,35 @@ export function deleteLocalTrainingPlan(id: string, confirmed: boolean): void {
     throw new Error("Remove this plan's future calendar workouts before deleting the plan.");
   }
   deleteTrainingPlanDocument(id);
+}
+
+/**
+ * Library delete for local plans. A plan that still owns upcoming calendar
+ * workouts has them removed first, through the same owned-occurrence removal
+ * as the calendar button (past days stay), and is kept if any can't be
+ * confirmed removed.
+ */
+export async function deleteLocalTrainingPlanAndCalendar(
+  id: string,
+  confirmed: boolean
+): Promise<LocalTrainingPlanDeleteResult> {
+  if (!confirmed) throw new Error("Deleting a training plan requires confirmation.");
+  const plan = getTrainingPlanDocument(id);
+  let removedCalendarWorkouts = 0;
+  if (plan && plan.source !== "coros" && activeTrainingPlanCalendarInstall(plan)) {
+    const preview = await previewTrainingPlanCalendarRemoval(plan.id);
+    const result = await removeTrainingPlanFromCalendar(preview.previewId, true);
+    removedCalendarWorkouts = result.removedCount;
+    if (activeTrainingPlanCalendarInstall(result.plan)) {
+      throw new Error(
+        `Removed ${result.removedCount} upcoming workout${result.removedCount === 1 ? "" : "s"} ` +
+          `from your COROS calendar, but ${result.failures.length} couldn't be confirmed removed, ` +
+          "so the plan wasn't deleted. Retry from the plan's calendar button, then delete it."
+      );
+    }
+  }
+  deleteLocalTrainingPlan(id, true);
+  return { removedCalendarWorkouts };
 }
 
 interface NativeTrainingPlanWriter {

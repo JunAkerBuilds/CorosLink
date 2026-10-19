@@ -146,6 +146,7 @@ import type {
   McpServerInput,
   McpServerStatus,
   CorosTrainingPlanDeleteResult,
+  LocalTrainingPlanDeleteResult,
   CorosTrainingPlanDraftInput,
   UploadPlanResult,
   IntervalsStatus,
@@ -783,7 +784,7 @@ const api = {
     patch: TrainingPlanMetadataPatch
   ): Promise<TrainingPlanDocument> =>
     ipcRenderer.invoke("trainingLibrary:updatePlanMetadata", id, patch),
-  deleteLocalTrainingPlan: (id: string, confirmed: boolean): Promise<void> =>
+  deleteLocalTrainingPlan: (id: string, confirmed: boolean): Promise<LocalTrainingPlanDeleteResult> =>
     ipcRenderer.invoke("trainingLibrary:deletePlan", id, confirmed),
   deleteCorosTrainingPlan: (
     remoteId: string,

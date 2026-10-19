@@ -146,6 +146,7 @@ import type {
   McpServerInput,
   McpServerStatus,
   CorosTrainingPlanDeleteResult,
+  LocalTrainingPlanDeleteResult,
   CorosTrainingPlanDraftInput,
   UploadPlanResult,
   IntervalsStatus,
@@ -551,7 +552,7 @@ export interface CorosLinkApi {
     id: string,
     patch: TrainingPlanMetadataPatch
   ) => Promise<TrainingPlanDocument>;
-  deleteLocalTrainingPlan: (id: string, confirmed: boolean) => Promise<void>;
+  deleteLocalTrainingPlan: (id: string, confirmed: boolean) => Promise<LocalTrainingPlanDeleteResult>;
   deleteCorosTrainingPlan: (
     remoteId: string,
     confirmed: boolean
