@@ -20,6 +20,7 @@
     "assets:harvest": "npm run build:electron && electron scripts/harvest-coros-official-assets.cjs",
     "assets:library": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/build-coros-asset-library.mjs",
     "assets:publish": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/publish-coros-asset-library.mjs",
+    "watchfaces:snapshot": "npm run build:electron && electron scripts/snapshot-coros-watchface-catalogs.cjs",
     "build:renderer": "tsc -p tsconfig.json --noEmit && vite build",
     "smoke:watch": "npm run build:electron && node scripts/smoke-watch-service.mjs",
     "test:watch-detection": "npm run build:electron && node scripts/test-watch-detection.mjs",

@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Hide features you don't use.** Right-click the sidebar to hide a feature or bring one back, or switch features on and off in **Settings → Sidebar**. Overview and Settings always stay. If you hide your startup view, CorosLink opens on Overview instead.
 - **Group the lap table by distance.** In an activity's **Laps** table, switch between the watch's own laps, 1 km, 5 km or 10 km splits, and the whole activity, like Training Hub. Only the groupings COROS sends for that activity appear. The fastest lap or split in each view is marked **Fastest**.
 - **See which plans are on your calendar.** In **Training Library → Plans**, plans with workouts on your COROS calendar show **On calendar** and the week you're in ("Week 3 of 14"). This includes COROS Plans the Coach put on your calendar. Filter by **On calendar** to see only those.
+- **Make watch faces without signing in to COROS.** **Watch Faces → Create** lists the editable templates for every supported watch without a COROS sign-in, and **Start blank** and **Change watch** work signed out too. You still sign in for **Official faces**, **My faces**, sending a face to the COROS app, and getting your watch key the first time you install over Bluetooth.
 - **Distance markers on the route map.** An activity's route shows numbered chips at every kilometre, or every mile in imperial units, at the points where the watch counted them. Long rides space them out (every 5 or 10 km) so the map stays readable.
 
 ### Fixed

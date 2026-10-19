@@ -73,8 +73,12 @@ source archive while the renderer preserves the editable scene.
 
 1. Resolve an official destination carrier automatically. It supplies the
    destination template identity and per-resolution watchface IDs. First use
-   requires COROS sign-in and connectivity; a private cache supports later
-   offline conversions.
+   needs connectivity and picks from the destination's editable templates:
+   COROS's live catalog when signed in, otherwise the snapshot bundled with the
+   app (`electron/watchfaceCatalogSnapshot.ts`, refreshed with
+   `npm run watchfaces:snapshot`). A private cache supports later offline
+   conversions. Signed out with neither, a local carrier is used: the face
+   installs over Bluetooth but has no COROS template to publish.
 2. Carry forward the source 800px config, original PNGs, font/state folders,
    language variants and manifest metadata. Generate the destination device
    sizes from that master. The destination's visual defaults are never overlaid.

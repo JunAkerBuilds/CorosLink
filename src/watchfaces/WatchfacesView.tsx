@@ -683,13 +683,6 @@ export function WatchfacesView({
    */
   async function handleStartScratch() {
     if (startingScratch) return;
-    if (!connected) {
-      setNewFaceOpen(false);
-      setError(localizedText(() => t("Sign in to your COROS account before creating a watch face.")));
-      setNotice(null);
-      setSurface("sign-in");
-      return;
-    }
     // Same shape and key order as themeQuery, so the caches are shared.
     const query = {
       firmwareType,
@@ -721,7 +714,12 @@ export function WatchfacesView({
       }
       await handleDownloadTheme(base, true, "editable");
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      if (!connected && isWatchfaceSignInRequired(caught)) {
+        setError(localizedText(() => t("Sign in to COROS to load templates for this watch.")));
+        setSurface("sign-in");
+      } else {
+        setError(toErrorMessage(caught));
+      }
     } finally {
       setStartingScratch(false);
       setNewFaceOpen(false);
@@ -1063,6 +1061,8 @@ export function WatchfacesView({
   const themeQueryKeyRef = useRef(themeQueryKey);
   themeQueryKeyRef.current = themeQueryKey;
   const themeRequestsRef = useRef(new Set<string>());
+  /** A signed-out query with no bundled templates (a watch the snapshot lacks). */
+  const [themeSignInKey, setThemeSignInKey] = useState<string | null>(null);
 
   function showThemeList(key: string, entry: CorosWatchfaceThemeCacheEntry) {
     if (themeQueryKeyRef.current !== key) return;
@@ -1080,12 +1080,9 @@ export function WatchfacesView({
     options: { force?: boolean } = {}
   ) {
     event?.preventDefault();
-    if (!connected) {
-      setError(localizedText(() => t("Sign in to your COROS account before creating a watch face.")));
-      setNotice(null);
-      setSurface("sign-in");
-      return;
-    }
+    // Signed out, only the editable templates bundled with the app list; the
+    // panel asks for sign-in for the rest.
+    if (!connected && themeQuery.catalog !== "editable") return;
     const key = themeQueryKey;
     const query = themeQuery;
     let shown = themeListMemory.get(key) ?? null;
@@ -1094,8 +1091,9 @@ export function WatchfacesView({
       if (shown) themeListMemory.set(key, shown);
     }
     if (shown) showThemeList(key, shown);
-    const fresh =
-      shown !== null && Date.now() - Date.parse(shown.savedAt) < THEME_CACHE_FRESH_MS;
+    // Signed out there is nothing newer than the bundled list to fetch.
+    const fresh = shown !== null &&
+      (!connected || Date.now() - Date.parse(shown.savedAt) < THEME_CACHE_FRESH_MS);
     if ((fresh && !options.force) || themeRequestsRef.current.has(key)) return;
 
     themeRequestsRef.current.add(key);
@@ -1116,8 +1114,13 @@ export function WatchfacesView({
         );
       }
     } catch (caught) {
-      // A cached list is still usable; only surface the failure when asked.
-      if (!shown || options.force) setError(localizedText(() => toErrorMessage(caught)));
+      if (!connected && isWatchfaceSignInRequired(caught)) {
+        // No bundled templates for this watch: the panel offers sign-in.
+        setThemeSignInKey(key);
+      } else if (!shown || options.force) {
+        // A cached list is still usable; only surface the failure when asked.
+        setError(localizedText(() => toErrorMessage(caught)));
+      }
     } finally {
       themeRequestsRef.current.delete(key);
       if (shown) setThemesRefreshing(false);
@@ -1137,7 +1140,7 @@ export function WatchfacesView({
   useEffect(() => {
     if (
       status === null ||
-      !connected ||
+      (!connected && (themeCatalog !== "editable" || themeSignInKey === themeQueryKey)) ||
       surface !== "hub" ||
       hubTab !== "templates" ||
       busy !== null
@@ -1147,7 +1150,7 @@ export function WatchfacesView({
     // Advanced fields are typed, so let them settle before querying.
     const timeout = window.setTimeout(() => void handleLoadThemes(), 250);
     return () => window.clearTimeout(timeout);
-  }, [busy, connected, hubTab, status, surface, themeQueryKey]);
+  }, [busy, connected, hubTab, status, surface, themeCatalog, themeQueryKey, themeSignInKey]);
 
   async function handleDownloadTheme(
     theme: CorosWatchfaceTheme,
@@ -1612,7 +1615,7 @@ export function WatchfacesView({
               <KeyRound size={20} />
             </span>
             <h2 id="watchface-login-title">{t("Sign in to COROS")}</h2>
-            <p>{t("Sign in to choose a template, create a watch face, and authenticate your PACE Pro over Bluetooth.")}</p>
+            <p>{t("Sign in to send faces to the COROS app, browse official faces, and authenticate your watch over Bluetooth.")}</p>
             <form
               className="watchface-auth-form"
               onSubmit={(event) => void handleLogin(event)}
@@ -1703,7 +1706,7 @@ export function WatchfacesView({
                 }}
               >{t("Browse without signing in")}</button>
             </form>
-            <p className="watchface-auth-local-note">{t("You can browse community faces and manage saved projects without signing in.")}</p>
+            <p className="watchface-auth-local-note">{t("You can create faces from templates, browse community faces, and manage saved projects without signing in.")}</p>
             {!status.secureStorageAvailable ? (
               <p className="watchface-auth-warning">{t("Your sign-in will be removed when you close CorosLink.")}</p>
             ) : null}
@@ -1754,6 +1757,7 @@ export function WatchfacesView({
           ) : (
             <TemplatesPanel
               accountConnected={connected}
+              needsSignIn={!connected && (themeCatalog !== "editable" || themeSignInKey === themeQueryKey)}
               busy={busy}
               catalog={themeCatalog}
               watchModel={templateWatchModel}
@@ -2046,7 +2050,7 @@ function AccountStatusMenu({
               <span>
                 {accountConnected
                   ? t("Templates, publishing and watch sign-in")
-                  : t("Sign in to create a new watch face")}
+                  : t("Sign in to send faces to the COROS app")}
               </span>
             </div>
           </div>
@@ -2088,7 +2092,7 @@ function AccountStatusMenu({
               <KeyRound size={15} aria-hidden="true" />
               <span>
                 <strong>{t("Sign in to COROS")}</strong>
-                <small>{t("Required to create a new watch face")}</small>
+                <small>{t("Needed to send faces to the COROS app")}</small>
               </span>
             </button>
           )}
@@ -3671,6 +3675,8 @@ interface TemplatesPanelProps {
   downloadingBlank: boolean;
   openingThemeUrl: string | null;
   sharingThemeId: string | null;
+  /** Signed out on a catalog only COROS can list (official, mine, or no bundled templates). */
+  needsSignIn: boolean;
   onSignIn: () => void;
   onCatalogChange: (catalog: CorosWatchfaceThemeCatalog) => void;
   onWatchModelChange: (model: WatchModelId) => void;
@@ -3737,6 +3743,26 @@ function TemplatesPanel(props: TemplatesPanelProps) {
   const filtered = Boolean(props.search.trim() || activeCategory);
   const actionsBusy =
     props.busy !== null || props.downloadingThemeUrl !== null || props.openingThemeUrl !== null;
+  const signInCallout = (
+    <section
+      className="watchface-create-auth-required"
+      aria-labelledby="watchface-signin-required-title"
+    >
+      <span aria-hidden="true"><KeyRound size={24} /></span>
+      <div>
+        <h3 id="watchface-signin-required-title">{t("Sign in to see this catalog")}</h3>
+        <p>
+          {props.catalog === "editable"
+            ? t("CorosLink doesn’t include templates for this watch yet. Sign in to load them from COROS, or pick another watch.")
+            : props.catalog === "official"
+              ? t("Official faces are listed by your COROS account. Editable templates work without signing in.")
+              : t("Your saved faces live in your COROS account. Editable templates work without signing in.")}
+        </p>
+      </div>
+      <button className="primary-button" type="button" onClick={props.onSignIn}>
+        <KeyRound size={16} aria-hidden="true" />{t("Sign in to COROS")}</button>
+    </section>
+  );
   const renderCard = (theme: CorosWatchfaceTheme, index: number) => (
     <TemplateCard
       key={theme.id ?? `${theme.name}-${index}`}
@@ -3772,11 +3798,7 @@ function TemplatesPanel(props: TemplatesPanelProps) {
             <span>{t("Make it yours.")}<HubHeadingUnderline />
             </span>
           </h2>
-          <p className="wf-hub-gallery-lead">
-            {props.accountConnected
-              ? t("Choose a compatible design, customize every layer, then export it to your watch.")
-              : t("Sign in to your COROS account to choose a template and start creating.")}
-          </p>
+          <p className="wf-hub-gallery-lead">{t("Choose a compatible design, customize every layer, then export it to your watch.")}</p>
           <ol className="wf-hub-hero-facts wf-hub-create-steps" aria-label={t("Watch face creation steps")}>
             <li>
               <Watch size={16} aria-hidden="true" />
@@ -3804,27 +3826,14 @@ function TemplatesPanel(props: TemplatesPanelProps) {
           <img src={kineticEnergyFace} alt="" draggable={false} />
         </div>
       </section>
-      {!props.accountConnected ? (
-        <section
-          className="watchface-create-auth-required"
-          aria-labelledby="watchface-signin-required-title"
-        >
-          <span aria-hidden="true"><KeyRound size={24} /></span>
-          <div>
-            <h3 id="watchface-signin-required-title">{t("Sign in before you create")}</h3>
-            <p>{t("Your COROS account is required to browse starter templates and create a new watch face.")}</p>
-          </div>
-          <button className="primary-button" type="button" onClick={props.onSignIn}>
-            <KeyRound size={16} aria-hidden="true" />{t("Sign in to COROS")}</button>
-        </section>
-      ) : (
+      <HubQuickFilters
+        label={t("Template catalog")}
+        chips={TEMPLATE_CATALOG_CHIPS}
+        active={props.catalog}
+        onChange={props.onCatalogChange}
+      />
+      {props.needsSignIn && props.catalog !== "editable" ? signInCallout : (
         <>
-          <HubQuickFilters
-            label={t("Template catalog")}
-            chips={TEMPLATE_CATALOG_CHIPS}
-            active={props.catalog}
-            onChange={props.onCatalogChange}
-          />
           <form className="wf-hub-toolbar-form" onSubmit={props.onSubmit}>
             <HubToolbar label={t("Filter templates")}>
               <HubSearchField
@@ -3884,19 +3893,21 @@ function TemplatesPanel(props: TemplatesPanelProps) {
                 <option value="name">{t("Name A–Z")}</option>
                 <option value="version">{t("Newest format")}</option>
               </HubSelectField>
-              <button
-                className="primary-button wf-hub-toolbar-action"
-                type="button"
-                disabled={props.busy !== null || props.refreshing}
-                onClick={props.onRefresh}
-              >
-                {props.busy === "themes" || props.refreshing ? (
-                  <Loader2 className="spin" size={16} aria-hidden="true" />
-                ) : (
-                  <RefreshCw size={16} aria-hidden="true" />
-                )}
-                {props.busy === "themes" ? t("Loading") : props.refreshing ? t("Refreshing") : t("Refresh")}
-              </button>
+              {props.accountConnected ? (
+                <button
+                  className="primary-button wf-hub-toolbar-action"
+                  type="button"
+                  disabled={props.busy !== null || props.refreshing}
+                  onClick={props.onRefresh}
+                >
+                  {props.busy === "themes" || props.refreshing ? (
+                    <Loader2 className="spin" size={16} aria-hidden="true" />
+                  ) : (
+                    <RefreshCw size={16} aria-hidden="true" />
+                  )}
+                  {props.busy === "themes" ? t("Loading") : props.refreshing ? t("Refreshing") : t("Refresh")}
+                </button>
+              ) : null}
             </HubToolbar>
             <details className="watchface-template-advanced">
               <summary>{t("Advanced filters")}</summary>
@@ -3943,7 +3954,7 @@ function TemplatesPanel(props: TemplatesPanelProps) {
             </details>
           </form>
 
-          {props.busy === "themes" && !props.themesLoaded ? (
+          {props.needsSignIn ? signInCallout : props.busy === "themes" && !props.themesLoaded ? (
             <div className="wf-hub-grid" aria-label={t("Loading templates")} aria-busy="true">
               {Array.from({ length: 8 }, (_, index) => (
                 <div className="wf-hub-card wf-hub-card--skeleton" key={index} />
