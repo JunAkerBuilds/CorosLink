@@ -14,7 +14,7 @@ import {
   saveTrainingWorkoutMetadata
 } from "./database";
 import {
-  listNativeCorosPlans,
+  queryNativeCorosPlanLibrary,
   readNativeCorosPlan
 } from "./corosTrainingPlanAdapter";
 import {
@@ -311,13 +311,48 @@ function mergeWorkout(
   };
 }
 
+let queryNativePlanLibrary = queryNativeCorosPlanLibrary;
+
+/** Test seam for the snapshot's plan/query read. Never used by the renderer. */
+export function setNativePlanLibraryQueryForTests(
+  query?: typeof queryNativeCorosPlanLibrary
+): void {
+  queryNativePlanLibrary = query ?? queryNativeCorosPlanLibrary;
+}
+
+/**
+ * Drops cached native plans that a complete plan/query no longer returns, such
+ * as plans deleted in the COROS app. Only documents cached before the query
+ * are candidates, so a plan saved while it was in flight isn't mistaken for a
+ * deleted one. Local tags, notes, favorite, and collection go with the
+ * document; if the plan reappears, the next refresh rebuilds it from COROS
+ * with default metadata.
+ */
+function pruneDeletedNativePlans(
+  cached: TrainingPlanDocument[],
+  fetched: NativeCorosPlanSummary[],
+  partialFailures: string[]
+): void {
+  const live = new Set(fetched.map((plan) => plan.remoteId));
+  for (const plan of cached) {
+    if (plan.source !== "coros" || !plan.remoteId || live.has(plan.remoteId)) continue;
+    try {
+      deleteTrainingPlanDocument(plan.id);
+    } catch (error) {
+      partialFailures.push(
+        `Training plan "${plan.name}" (${plan.remoteId}): ${errorReason(error)}`
+      );
+    }
+  }
+}
+
 export async function getTrainingLibrarySnapshot(): Promise<TrainingLibrarySnapshot> {
   const cachedAt = new Date().toISOString();
   const partialFailures: string[] = [];
   const localPlans = listTrainingPlanDocuments();
   const [workoutsResult, nativeResult, scheduleResult, activeNativeResult] = await Promise.allSettled([
     listLibraryWorkouts(),
-    listNativeCorosPlans(),
+    queryNativePlanLibrary(),
     listScheduledWorkoutEntries(relativeDateKey(-180), relativeDateKey(365)),
     listActiveNativeTrainingPlanInstances()
   ]);
@@ -363,8 +398,9 @@ export async function getTrainingLibrarySnapshot(): Promise<TrainingLibrarySnaps
       lastSyncedAt: plan.lastSyncedAt
     }));
   if (nativeResult.status === "fulfilled") {
-    nativePlans = nativeResult.value;
-    for (const native of nativeResult.value) {
+    const { plans: fetched, complete } = nativeResult.value;
+    nativePlans = fetched;
+    for (const native of fetched) {
       try {
         saveTrainingPlanDocument(nativePlanToDocument(native), native.rawPayload);
       } catch (error) {
@@ -374,6 +410,14 @@ export async function getTrainingLibrarySnapshot(): Promise<TrainingLibrarySnaps
           }`
         );
       }
+    }
+    if (complete) {
+      pruneDeletedNativePlans(localPlans, fetched, partialFailures);
+    } else {
+      partialFailures.push(
+        "Training plans: COROS sent a plan list CorosLink couldn't fully read, so plans " +
+          "deleted on COROS may still be listed."
+      );
     }
   } else {
     partialFailures.push(`Training plans: ${String(nativeResult.reason?.message ?? nativeResult.reason)}`);

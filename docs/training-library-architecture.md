@@ -36,6 +36,14 @@ source contributes a human-readable partial failure while cached workouts and
 plans remain visible. Items distinguish `local`, `synced`, `pending`,
 `conflicted`, `failed`, and `stale` states.
 
+`POST /training/plan/query` with `{}` sends no paging fields and returns the
+whole native library as one bare array. When that array comes back and every
+record has an ID, the snapshot drops cached `coros:*` plan documents that it no
+longer lists, such as plans deleted in the COROS app. Their local tags, notes,
+favorite, and collection go too; a plan that reappears is rebuilt with default
+metadata. A failed query, a non-array response, or a record without an ID
+prunes nothing.
+
 Remote plan logic stays in `corosTrainingPlanAdapter.ts` and
 `trainingLibraryService.ts`; React does not call COROS endpoints. Snapshot
 refresh is explicit and shared across tabs to avoid per-card API waterfalls.

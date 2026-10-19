@@ -700,6 +700,88 @@ assert.equal(idleResult.endedCalendarPlans, 0);
 assert.equal(databaseModule.getTrainingPlanDocument(idleNative.id), undefined);
 library.setNativeTrainingPlanWriterForTests();
 
+const parsedLibrary = adapter.parseNativeCorosPlanLibrary([rawNative]);
+assert.equal(parsedLibrary.complete, true);
+assert.equal(parsedLibrary.plans[0].remoteId, "remote-1");
+assert.equal(
+  adapter.parseNativeCorosPlanLibrary([rawNative, { name: "No id" }]).complete,
+  false,
+  "a record without an id makes the list incomplete"
+);
+assert.equal(
+  adapter.parseNativeCorosPlanLibrary({ dataList: [rawNative] }).complete,
+  false,
+  "a non-array response is never treated as the whole library"
+);
+assert.equal(adapter.parseNativeCorosPlanLibrary([]).complete, true, "an empty array is a real (empty) library");
+
+const realFetch = globalThis.fetch;
+globalThis.fetch = async () => {
+  throw new Error("Network is disabled in test-training-library.");
+};
+const nativeLibraryFor = (...remoteIds) =>
+  adapter.parseNativeCorosPlanLibrary(
+    remoteIds.map((remoteId) => ({ ...rawNative, id: remoteId })),
+    "2026-07-29T00:00:00.000Z"
+  );
+const keptNative = saveNativeForDelete("remote-kept");
+const goneNative = saveNativeForDelete("remote-gone");
+library.updateTrainingPlanMetadata(goneNative.id, { favorite: true, tags: ["race"], archived: true });
+databaseModule.saveTrainingPlanDocument({ ...databaseModule.getTrainingPlanDocument(goneNative.id), notes: "Local note" });
+
+library.setNativePlanLibraryQueryForTests(async () => ({ plans: [], complete: false }));
+let pruneSnapshot = await library.getTrainingLibrarySnapshot();
+assert.ok(databaseModule.getTrainingPlanDocument(goneNative.id), "an incomplete plan list prunes nothing");
+assert.ok(
+  pruneSnapshot.partialFailures.some((failure) => /couldn't fully read/i.test(failure)),
+  "an incomplete plan list is reported"
+);
+
+library.setNativePlanLibraryQueryForTests(async () => {
+  throw new Error("mock plan/query failure");
+});
+pruneSnapshot = await library.getTrainingLibrarySnapshot();
+assert.ok(databaseModule.getTrainingPlanDocument(goneNative.id), "a failed plan/query prunes nothing");
+assert.equal(pruneSnapshot.nativePlans.some((plan) => plan.remoteId === "remote-gone"), true, "cached plans stay listed offline");
+
+let savedDuringQuery;
+library.setNativePlanLibraryQueryForTests(async () => {
+  savedDuringQuery = saveNativeForDelete("remote-in-flight");
+  return nativeLibraryFor("remote-kept");
+});
+pruneSnapshot = await library.getTrainingLibrarySnapshot();
+assert.equal(databaseModule.getTrainingPlanDocument(goneNative.id), undefined, "a plan deleted on COROS is pruned");
+assert.equal(pruneSnapshot.plans.some((plan) => plan.id === goneNative.id), false, "the pruned plan leaves the Library");
+assert.ok(databaseModule.getTrainingPlanDocument(keptNative.id), "plans still on COROS stay");
+assert.ok(databaseModule.getTrainingPlanDocument(savedDuringQuery.id), "a plan cached while plan/query ran isn't pruned");
+assert.ok(databaseModule.getTrainingPlanDocument(first.id), "local plans are never pruned");
+assert.ok(databaseModule.getTrainingPlanDocument(persistedGroupedPlan.id), "coach plans are never pruned");
+assert.deepEqual(pruneSnapshot.nativePlans.map((plan) => plan.remoteId), ["remote-kept"]);
+assert.match(pruneSnapshot.partialFailures.join("\n"), /log in/i, "workouts and schedule fail locally without a session");
+
+library.setNativePlanLibraryQueryForTests(async () => nativeLibraryFor("remote-kept", "remote-gone"));
+pruneSnapshot = await library.getTrainingLibrarySnapshot();
+const restored = databaseModule.getTrainingPlanDocument(goneNative.id);
+assert.ok(restored, "a plan that was only missing for a while comes back");
+assert.equal(restored.source, "coros");
+assert.equal(restored.syncState, "synced");
+assert.deepEqual(restored.tags, []);
+assert.equal(restored.favorite, false);
+assert.equal(restored.archived, false);
+assert.equal(restored.notes, "");
+assert.equal(restored.collectionId, undefined);
+assert.equal(restored.entries.length, goneNative.entries.length, "the plan is rebuilt from COROS");
+
+library.setNativePlanLibraryQueryForTests(async () => nativeLibraryFor());
+await library.getTrainingLibrarySnapshot();
+assert.equal(
+  databaseModule.listTrainingPlanDocuments().some((plan) => plan.source === "coros"),
+  false,
+  "an empty library prunes every cached native plan"
+);
+library.setNativePlanLibraryQueryForTests();
+globalThis.fetch = realFetch;
+
 db.close();
 fs.rmSync(tempRoot, { recursive: true, force: true });
 

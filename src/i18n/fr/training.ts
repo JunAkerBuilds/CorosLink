@@ -1162,7 +1162,7 @@ export const trainingFrench: Record<string, string> = {
   "this activity": "cette activité",
   "This cannot be undone. Calendar copies stay in place, and plan references will remain but point at nothing.": "Cette action est irréversible. Les copies du calendrier restent en place et les références des plans sont conservées, mais ne pointent plus vers une séance.",
   "This COROS sport is not supported by the workout editor": "Ce sport COROS n’est pas pris en charge par l’éditeur de séance",
-  "This edit will be saved as a local plan. Native plan writes remain disabled until verified.": "Cette modification sera enregistrée comme plan local. L’écriture des plans natifs reste désactivée jusqu’à vérification.",
+  "This edit will be saved as a local plan. CorosLink can't edit plans on COROS yet.": "Cette modification sera enregistrée comme plan local. CorosLink ne peut pas encore modifier les plans sur COROS.",
   "This plan entry has no editable workout definition.": "Cette entrée du plan ne contient aucune séance modifiable.",
   "This removes the local copy and its": "Cette action supprime la copie locale et ses",
   "Threshold": "Seuil",

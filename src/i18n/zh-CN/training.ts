@@ -1162,7 +1162,7 @@ export const trainingChinese: Readonly<Record<string, string>> = {
   "this activity": "这次活动",
   "This cannot be undone. Calendar copies stay in place, and plan references will remain but point at nothing.": "此操作无法撤消。日历中的副本保留不变，计划引用也会保留，但不再指向任何内容。",
   "This COROS sport is not supported by the workout editor": "训练编辑器不支持这项 COROS 运动",
-  "This edit will be saved as a local plan. Native plan writes remain disabled until verified.": "此编辑将保存为本地计划。本机计划写入在验证之前保持禁用状态。",
+  "This edit will be saved as a local plan. CorosLink can't edit plans on COROS yet.": "此编辑将保存为本地计划。CorosLink 暂时无法在 COROS 上编辑计划。",
   "This plan entry has no editable workout definition.": "该计划条目没有可编辑的训练定义。",
   "This removes the local copy and its": "这将删除本地副本及其",
   "Threshold": "阈值",
