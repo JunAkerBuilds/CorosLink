@@ -1,4 +1,5 @@
 import { app, dialog, shell, safeStorage } from "electron";
+import type { BrowserWindow, OpenDialogOptions } from "electron";
 import { localizeDialogOptions } from "./localization";
 import crypto from "node:crypto";
 import { once } from "node:events";
@@ -453,12 +454,6 @@ export async function installCachedCorosMap(
     throw new Error("Connect a COROS watch before installing maps.");
   }
 
-  if (status.freeBytes !== undefined && cached.sizeBytes > status.freeBytes) {
-    throw new Error(
-      "The cached map package is larger than the free space on the watch."
-    );
-  }
-
   beginCorosMapInstall();
   try {
     assertCorosMapInstallNotCancelled();
@@ -513,11 +508,6 @@ export async function installCachedCorosMaps(
     (sum, cached) => sum + cached.sizeBytes,
     0
   );
-  if (status.freeBytes !== undefined && totalSizeBytes > status.freeBytes) {
-    throw new Error(
-      "The selected map packages are larger than the free space on the watch."
-    );
-  }
 
   const preparedPackages: Array<{
     cached: CachedCorosMapPackage;
@@ -563,6 +553,21 @@ export async function installCachedCorosMaps(
     let aggregateFileCount = 0;
 
     try {
+      if (status.freeBytes !== undefined) {
+        let bytesNeeded = 0;
+        for (const { selection } of preparedPackages) {
+          bytesNeeded += await getMapBytesStillNeeded(
+            selection.mapPath,
+            installedPath
+          );
+        }
+        if (bytesNeeded > status.freeBytes) {
+          throw new Error(
+            "The selected map packages are larger than the free space on the watch."
+          );
+        }
+      }
+
       await fs.promises.mkdir(installedPath, { recursive: true });
 
       for (let index = 0; index < preparedPackages.length; index += 1) {
@@ -787,21 +792,6 @@ export async function downloadCorosMapPackageToCache(
   };
 }
 
-export async function chooseCorosMapFolder(): Promise<
-  CorosMapLocalSelection | undefined
-> {
-  const result = await dialog.showOpenDialog(localizeDialogOptions({
-    title: "Choose extracted COROS map folder",
-    properties: ["openDirectory"]
-  }));
-
-  if (result.canceled || result.filePaths.length === 0) {
-    return undefined;
-  }
-
-  return inspectCorosMapFolder(result.filePaths[0]!);
-}
-
 export async function inspectCorosMapFolder(
   sourcePath: string
 ): Promise<CorosMapLocalSelection> {
@@ -847,18 +837,19 @@ export async function installCorosMapFolder(
           ? 1
           : 0;
 
+    const installedPath = status.mapPath ?? path.join(status.rootPath, "Map");
+    assertNotSameOrNested(selection.mapPath, installedPath);
+
     if (
       !progressContext &&
       status.freeBytes !== undefined &&
-      selection.sizeBytes > status.freeBytes
+      (await getMapBytesStillNeeded(selection.mapPath, installedPath)) >
+        status.freeBytes
     ) {
       throw new Error(
         `The selected map folder is larger than the free space on the watch.`
       );
     }
-
-    const installedPath = status.mapPath ?? path.join(status.rootPath, "Map");
-    assertNotSameOrNested(selection.mapPath, installedPath);
     const label = options.label ?? path.basename(selection.sourcePath);
 
     if (publishLifecycle) {
@@ -1687,13 +1678,14 @@ export async function readGpxRouteFiles(
  * does not abort the rest. Resolves null when the dialog is cancelled.
  */
 export async function importRouteFromGpx(
-  activityType: RouteActivityType = "running"
+  activityType: RouteActivityType = "running",
+  owner?: BrowserWindow | null
 ): Promise<GpxImportSummary | null> {
-  const result = await dialog.showOpenDialog(localizeDialogOptions({
+  const result = await showOwnedOpenDialog(owner, {
     title: "Import GPX route",
     filters: [{ name: "GPX", extensions: ["gpx"] }],
     properties: ["openFile", "multiSelections"]
-  }));
+  });
   if (result.canceled || result.filePaths.length === 0) {
     return null;
   }
@@ -2112,6 +2104,19 @@ function titleFromMapKey(value: string): string {
     .replace(/([A-Za-z]+)(\d+)$/, "$1 - $2");
 }
 
+// A parentless open dialog on macOS runs an app-modal loop that can sit behind
+// the main window, so the app looks frozen until the hidden panel is closed.
+// Attaching it to the calling window shows it as a sheet instead.
+function showOwnedOpenDialog(
+  owner: BrowserWindow | null | undefined,
+  options: OpenDialogOptions
+) {
+  const localized = localizeDialogOptions(options);
+  return owner && !owner.isDestroyed()
+    ? dialog.showOpenDialog(owner, localized)
+    : dialog.showOpenDialog(localized);
+}
+
 async function resolveMapSourcePath(sourcePath: string): Promise<string> {
   const stats = await fs.promises.stat(sourcePath).catch(() => undefined);
   if (!stats?.isDirectory()) {
@@ -2163,6 +2168,47 @@ async function getDirectoryStats(directoryPath: string): Promise<DirectoryStats>
   return { sizeBytes, fileCount };
 }
 
+/**
+ * Bytes the watch still has to take on to hold this map folder. The COROS app
+ * can install part of a region, so tiles already on the watch only count for
+ * the size difference (zero when the same tile is there).
+ */
+async function getMapBytesStillNeeded(
+  sourcePath: string,
+  destinationPath: string
+): Promise<number> {
+  let bytesNeeded = 0;
+
+  async function walk(source: string, destination: string): Promise<void> {
+    const entries = await fs.promises.readdir(source, { withFileTypes: true });
+    for (const entry of entries) {
+      const sourceEntry = path.join(source, entry.name);
+      const destinationEntry = path.join(destination, entry.name);
+      if (entry.isDirectory()) {
+        await walk(sourceEntry, destinationEntry);
+        continue;
+      }
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      const sourceStats = await fs.promises.stat(sourceEntry);
+      const existing = await statFileIfPresent(destinationEntry);
+      bytesNeeded += Math.max(0, sourceStats.size - (existing?.size ?? 0));
+    }
+  }
+
+  await walk(sourcePath, destinationPath);
+  return bytesNeeded;
+}
+
+async function statFileIfPresent(
+  filePath: string
+): Promise<fs.Stats | undefined> {
+  const stats = await fs.promises.stat(filePath).catch(() => undefined);
+  return stats?.isFile() ? stats : undefined;
+}
+
 function assertNotSameOrNested(sourcePath: string, destinationPath: string): void {
   const source = path.resolve(sourcePath);
   const destination = path.resolve(destinationPath);
@@ -2200,7 +2246,12 @@ async function copyDirectoryContents(
 
     if (entry.isFile()) {
       const stats = await fs.promises.stat(source);
-      await fs.promises.copyFile(source, destination);
+      // Tiles the watch already holds (e.g. part of a region installed from
+      // the COROS app) are left alone when name and size match.
+      const existing = await statFileIfPresent(destination);
+      if (existing?.size !== stats.size) {
+        await fs.promises.copyFile(source, destination);
+      }
       progress.copiedBytes += stats.size;
       progress.copiedFiles += 1;
       options.onProgress({

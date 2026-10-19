@@ -6540,34 +6540,6 @@ td span {
   line-height: 1.45;
 }
 
-.local-map-install {
-  display: grid;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.local-map-selection {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.04);
-  padding: 10px 12px;
-}
-
-.local-map-selection strong,
-.local-map-selection span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.local-map-selection span {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
 .map-install-progress {
   display: grid;
   gap: 8px;

@@ -40,7 +40,6 @@ const french: Record<string, string> = {
   "Export here": "Exporter ici", "Choose a backup folder": "Choisir un dossier de sauvegarde",
   "Choose an audiobook (select several files to join them)": "Choisir un livre audio (sélectionnez plusieurs fichiers pour les réunir)",
   "Audiobook": "Livre audio",
-  "Choose extracted COROS map folder": "Choisir le dossier de cartes COROS extraites",
   "Export GPX": "Exporter le GPX", "Import GPX route": "Importer un itinéraire GPX",
 };
 

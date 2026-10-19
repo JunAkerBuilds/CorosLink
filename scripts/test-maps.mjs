@@ -270,6 +270,18 @@ try {
     () => installCorosMapFolder(watchMap),
     /already on the watch/
   );
+
+  // Part of the region already on the watch (the COROS app installs subsets):
+  // a same-size tile is left alone, a different-size tile is replaced.
+  const watchTile = path.join(watchMap, "north-america", "tile.dat");
+  const watchIndex = path.join(watchMap, "index.dat");
+  await fs.promises.writeFile(watchTile, "TILE-DATA");
+  await fs.promises.writeFile(watchIndex, "stale");
+  const rerun = await installCorosMapFolder(sourceRoot);
+  assert.equal(await fs.promises.readFile(watchTile, "utf8"), "TILE-DATA");
+  assert.equal(await fs.promises.readFile(watchIndex, "utf8"), "map-index");
+  assert.equal(rerun.fileCount, 2);
+  assert.equal(getCorosMapInstallProgress()?.progress, 1);
 } finally {
   delete process.env.COROS_WATCH_PATH;
   await fs.promises.rm(tempRoot, { recursive: true, force: true });

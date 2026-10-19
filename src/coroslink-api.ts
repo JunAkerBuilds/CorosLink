@@ -29,7 +29,6 @@ import type {
   CorosMapDownloadJob,
   CorosMapInstallResult,
   CorosMapInstallProgress,
-  CorosMapLocalSelection,
   CorosMapManifest,
   CorosMapPackage,
   DownloadAudioResult,
@@ -737,10 +736,6 @@ export interface CorosLinkApi {
   deleteCachedCorosMap: (
     packageId: string
   ) => Promise<CachedCorosMapPackage[]>;
-  chooseCorosMapFolder: () => Promise<CorosMapLocalSelection | undefined>;
-  installCorosMapFolder: (
-    sourcePath: string
-  ) => Promise<CorosMapInstallResult>;
   getRouteBuilderConfig: () => Promise<RouteBuilderConfig>;
   saveRouteBuilderConfig: (
     config: RouteBuilderConfig

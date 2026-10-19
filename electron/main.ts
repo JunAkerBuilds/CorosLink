@@ -235,7 +235,6 @@ import { buildManualTcx } from "./tcxBuilder";
 import {
   cancelCorosMapDownload,
   cancelCorosMapInstall,
-  chooseCorosMapFolder,
   clearCorosMapDownloadJob,
   deleteAllGeneratedRoutes,
   deleteCachedCorosMap,
@@ -252,7 +251,6 @@ import {
   importRouteFromGpx,
   installCachedCorosMap,
   installCachedCorosMaps,
-  installCorosMapFolder,
   listCachedCorosMaps,
   listCorosMapDownloadJobs,
   listGeneratedRoutes,
@@ -2756,16 +2754,6 @@ function registerIpcHandlers(): void {
     deleteCachedCorosMap(packageId)
   );
 
-  ipcMain.handle("maps:chooseCorosMapFolder", () => chooseCorosMapFolder());
-
-  ipcMain.handle("maps:installCorosMapFolder", async (_event, sourcePath: string) => {
-    try {
-      return await installCorosMapFolder(sourcePath);
-    } catch (error) {
-      throw toCorosMapInstallIpcError(error);
-    }
-  });
-
   ipcMain.handle("maps:getRouteBuilderConfig", () => getRouteBuilderConfig());
 
   ipcMain.handle(
@@ -2806,8 +2794,11 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "maps:importRouteGpx",
-    (_event, activityType?: RouteActivityType) =>
-      importRouteFromGpx(activityType)
+    (event, activityType?: RouteActivityType) =>
+      importRouteFromGpx(
+        activityType,
+        BrowserWindow.fromWebContents(event.sender)
+      )
   );
 
   ipcMain.handle("maps:saveDrawnRoute", (_event, payload: DrawnRoutePayload) =>

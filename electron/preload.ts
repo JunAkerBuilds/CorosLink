@@ -29,7 +29,6 @@ import type {
   CorosMapDownloadJob,
   CorosMapInstallResult,
   CorosMapInstallProgress,
-  CorosMapLocalSelection,
   CorosMapManifest,
   CorosMapPackage,
   DownloadAudioResult,
@@ -1104,12 +1103,6 @@ const api = {
     packageId: string
   ): Promise<CachedCorosMapPackage[]> =>
     ipcRenderer.invoke("maps:deleteCachedCorosMap", packageId),
-  chooseCorosMapFolder: (): Promise<CorosMapLocalSelection | undefined> =>
-    ipcRenderer.invoke("maps:chooseCorosMapFolder"),
-  installCorosMapFolder: (
-    sourcePath: string
-  ): Promise<CorosMapInstallResult> =>
-    ipcRenderer.invoke("maps:installCorosMapFolder", sourcePath),
   getRouteBuilderConfig: (): Promise<RouteBuilderConfig> =>
     ipcRenderer.invoke("maps:getRouteBuilderConfig"),
   saveRouteBuilderConfig: (

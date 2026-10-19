@@ -57,7 +57,6 @@ export const nativeChinese: Readonly<Record<string, string>> = {
   "Choose a backup folder": "选择备份文件夹",
   "Choose an audiobook (select several files to join them)": "选择有声书（可选择多个文件进行合并）",
   "Audiobook": "有声书",
-  "Choose extracted COROS map folder": "选择已解压的 COROS 地图文件夹",
   "Export GPX": "导出 GPX",
   "Import GPX route": "导入 GPX 路线",
   "Export activity-page backup": "导出活动页面备份",
