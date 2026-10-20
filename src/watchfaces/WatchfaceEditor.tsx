@@ -10299,6 +10299,9 @@ export function WatchfaceEditor({
       layer.kind === "backgroundElement" ||
       layer.kind === "customSprite"
     ) return "Artwork";
+    // Analog hands are config images, but they show the time, so they sit
+    // with the other time parts (the Add menu files them under Time too).
+    if (layer.layoutGroupId === "analogCenter") return "Time";
     if (layer.kind === "configAsset") {
       return previewMode === "aod" ? "Always-on assets" : "Template assets";
     }
@@ -10360,7 +10363,12 @@ export function WatchfaceEditor({
             "seconds",
             "ampm",
             "separators",
-            "staticColon"
+            "staticColon",
+            "configAsset:config:time_hour_icon",
+            "configAsset:config:time_minute_icon",
+            "configAsset:config:time_second_icon",
+            "configAsset:config:time_center_polygon_icon1",
+            "configAsset:config:time_center_polygon_icon2"
           ],
           Date: ["weekday", "dateMonth", "dateDay", "staticDateSlash"],
           "Fixed metrics": [
