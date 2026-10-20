@@ -1,3 +1,4 @@
+import { confineMainWindow, requireMainWindowSender } from "./mainWindowGuard";
 import { getCalendarWorkoutEvent, updateCalendarWorkoutEvent, syncEditedCalendarWorkout } from "./calendarWorkoutEventService";
 import { initializeNativeLanguage, localizeDialogOptions, setNativeLanguage } from "./localization";
 import { listCalendarWorkoutEntries } from "./calendarWorkoutEventStorage";
@@ -22,6 +23,7 @@ import { resolveWifiMusicLibraryFiles } from "./corosWifiMusicLibrary";
 import { getCorosWatchfaceCompiler } from "./corosWatchfaceCompiler";
 import { getWatchfaceTarget } from "./watchfaceTargets";
 import { isWebUrl } from "./externalLinks";
+import { pathToFileURL } from "node:url";
 import { registerWatchfaceAutomation } from "./watchfaceAutomation";
 import { onWatchfaceRendererNavigation } from "./watchfaceRendererLifecycle";
 import {
@@ -872,6 +874,9 @@ function createWindow(): void {
     notifyWindowFullscreen(false);
   });
 
+  // The window stays on this page: a dropped file or link would otherwise get the whole preload API.
+  const appPage = process.env.VITE_DEV_SERVER_URL || pathToFileURL(path.join(__dirname, "../dist/index.html")).href;
+  confineMainWindow(mainWindow.webContents, appPage, url => { void shell.openExternal(url); });
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools({ mode: "detach" });
@@ -1138,7 +1143,10 @@ function registerIpcHandlers(): void {
     setNativeLanguage(language);
   });
   ipcMain.handle("corosBle:status", () => corosNativeBle.status());
-  ipcMain.handle("corosBle:connect", (_event, input?: import("./corosNativeBleTypes").CorosNativeBleConnectOptions) => corosNativeBle.connect(input?.pair === true, input));
+  ipcMain.handle("corosBle:connect", (event, input?: import("./corosNativeBleTypes").CorosNativeBleConnectOptions) => {
+    mainWindowSender(event, "the watch connection");
+    return corosNativeBle.connect(input?.pair === true, input);
+  });
   ipcMain.handle("corosBle:scan", () => corosNativeBle.scan());
   ipcMain.handle("corosBle:refresh", () => corosNativeBle.refresh());
   // Bluetooth music (library reads, deletes, Wi-Fi send) isn't supported in release builds yet.
@@ -1147,14 +1155,9 @@ function registerIpcHandlers(): void {
   };
   ipcMain.handle("corosBle:musicInventory", () => { requireBleMusic(); return corosNativeBle.listMusic(); });
   ipcMain.handle("corosBle:wifiMusicStatus", () => { requireBleMusic(); return corosNativeBle.wifiMusicStatus(); });
-  /** The main window, when it (not a subframe or another window) sent the request. */
-  const mainWindowSender = (event: Electron.IpcMainInvokeEvent, action: string) => {
-    const owner = BrowserWindow.fromWebContents(event.sender);
-    if (!owner || owner !== mainWindow || owner.isDestroyed() || event.senderFrame !== event.sender.mainFrame) {
-      throw new Error(`Use ${action} from CorosLink's main window.`);
-    }
-    return owner;
-  };
+  /** The main window, when it (not a subframe or another window) sent the request. Every watch write checks it. */
+  const mainWindowSender = (event: Electron.IpcMainInvokeEvent, action: string) =>
+    requireMainWindowSender(event, mainWindow, `Use ${action} from CorosLink's main window.`);
   const audioOwner = (event: Electron.IpcMainInvokeEvent) => {
     requireBleMusic();
     return mainWindowSender(event, "audio sync");
@@ -1249,7 +1252,10 @@ function registerIpcHandlers(): void {
     }));
     return result.response === 1 ? forgetCorosWatchKey() : getCorosWatchfaceStatus();
   });
-  ipcMain.handle("corosBle:sendNotification", (_event, input: import("./corosBleNotificationProtocol").CorosNotificationInput) => corosNativeBle.sendNotification(input));
+  ipcMain.handle("corosBle:sendNotification", (event, input: import("./corosBleNotificationProtocol").CorosNotificationInput) => {
+    mainWindowSender(event, "watch messages");
+    return corosNativeBle.sendNotification(input);
+  });
   ipcMain.handle("corosBle:chooseWatchface", async () => {
     const options: OpenDialogOptions = { title: "Choose a compiled COROS watch face", properties: ["openFile"],
       filters: [{ name: "Compiled watch face", extensions: ["bin"] }] };
@@ -1259,7 +1265,10 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle("corosBle:watchfaceStatus", () => corosNativeBle.watchfaceSyncStatus());
   ipcMain.handle("corosBle:watchfaceSlots", () => corosNativeBle.listWatchfaceSlots());
-  ipcMain.handle("corosBle:watchfaceSync", (_event, previewId: string, target?: import("./corosBleWatchfaceTypes").CorosDirectWatchfaceTarget) => corosNativeBle.syncWatchface(previewId, target));
+  ipcMain.handle("corosBle:watchfaceSync", (event, previewId: string, target?: import("./corosBleWatchfaceTypes").CorosDirectWatchfaceTarget) => {
+    mainWindowSender(event, "watch face sync");
+    return corosNativeBle.syncWatchface(previewId, target);
+  });
   ipcMain.handle("corosBle:watchfaceCancel", () => corosNativeBle.cancelWatchfaceSync());
   ipcMain.handle("corosBle:compilerStatus", () => getCorosWatchfaceCompiler().status());
   ipcMain.handle("corosBle:compileWatchface", async () => {
@@ -1301,10 +1310,14 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle("corosBle:mapStatus", () => corosNativeBle.wifiMapStatus());
   ipcMain.handle("corosBle:mapPreview", (_event, tiles: unknown) => corosNativeBle.previewWifiMap(tiles));
-  ipcMain.handle("corosBle:mapDownload", (_event, previewId: string) => corosNativeBle.downloadWifiMap(previewId));
+  ipcMain.handle("corosBle:mapDownload", (event, previewId: string) => {
+    mainWindowSender(event, "map downloads");
+    return corosNativeBle.downloadWifiMap(previewId);
+  });
   ipcMain.handle("corosBle:routeStatus", () => corosNativeBle.routeSyncStatus());
   ipcMain.handle("corosBle:routeCancel", () => corosNativeBle.cancelRouteSync());
-  ipcMain.handle("corosBle:routeSync", async (_event, routeId: unknown) => {
+  ipcMain.handle("corosBle:routeSync", async (event, routeId: unknown) => {
+    mainWindowSender(event, "route sync");
     if (typeof routeId !== "string" || routeId.length > 128) throw new Error("Invalid saved route.");
     const route = await getGeneratedRouteDetails(routeId);
     if (!route) throw new Error("The saved route was not found.");
