@@ -156,7 +156,7 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
             {options.map(option => {
               const [field, source] = option.id.split(":");
               const existing = design.nativeData?.[field];
-              const added = existing?.enabled && (!source || (existing.chartSource ?? "chart_stress") === source);
+              const added = existing?.enabled && (!source || (existing.chartSource ?? "chart_stress") === source || Boolean(existing.readouts?.[source]));
               return <button type="button" key={option.id} data-add-option data-native-data={option.id} aria-label={t("{{value1}} {{value2}}{{value3}}", { value1: t(added ? "Select" : "Add"), value2: t(option.label), value3: group === "Charts" ? t(" chart") : "" })} aria-describedby={option.availability ? `${id}-${option.id}-availability` : undefined} onClick={() => choose(() => onAddData(option.id))}>
                 <span className="wf-layer-picker-option-label">{t(option.label)}{option.availability && <small id={`${id}-${option.id}-availability`} className="wf-layer-picker-availability">{t(option.availability.label)}</small>}</span>{added ? <span className="wf-layer-picker-added"><Check size={12} />{t("On face")}</span> : <Plus size={13} className="wf-layer-picker-plus" aria-hidden="true" />}
               </button>;
@@ -165,7 +165,7 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
         })}
         {!visible.length && !visibleFace.length && <div className="wf-layer-picker-empty"><Search size={22} aria-hidden="true" /><strong>{t("No matching data fields")}</strong><span>{t("Try another name or category.")}</span><button type="button" onClick={() => { setQuery(""); setCategory("All"); search.current?.focus(); }}>{t("Clear filters")}</button></div>}
       </div>
-      <div className="wf-layer-picker-footer">{design.nativeData?.chart?.enabled && (category === "Charts" || normalized.includes("chart")) ? t("Choosing another chart replaces the current one.") : t("Add a layer, then customize it in the inspector.")}</div>
+      <div className="wf-layer-picker-footer">{design.nativeData?.chart?.enabled && (category === "Charts" || normalized.includes("chart")) ? t("More chart data joins the current chart. The watch's Back button pages through it.") : t("Add a layer, then customize it in the inspector.")}</div>
     </div>
   </div>;
 }

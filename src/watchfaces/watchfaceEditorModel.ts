@@ -1,5 +1,5 @@
 import { batteryReplacementStateCount } from "./watchfaceBatteryStates";
-import { NATIVE_DATA_BY_ID, NATIVE_CHART_SOURCES, nativeDataBounds } from "./nativeData";
+import { NATIVE_DATA_BY_ID, nativeDataBounds } from "./nativeData";
 import type {
   CorosWatchfaceDesignState,
   CorosWatchfaceTemplateDetails
@@ -584,7 +584,8 @@ export function deriveEditorLayers(
   for (const [id, style] of Object.entries(design.nativeData ?? {})) {
     const field = NATIVE_DATA_BY_ID.get(id);
     if (!field) continue;
-    const label = field.kind === "chart" ? `${NATIVE_CHART_SOURCES.find(source => source.id === style.chartSource)?.label ?? "Native"} chart` : field.label;
+    // The chart is one layer; its readouts are listed under it in the layer list.
+    const label = field.kind === "chart" ? "Chart" : field.label;
     const box = nativeDataBounds(id, design.nativeData ?? {});
     layers.splice(1, 0, { id: `native:${id}`, nativeDataId: id, kind: "metric", label,
       visible: style.enabled, canHide: true, present: true,

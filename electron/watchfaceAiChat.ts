@@ -109,7 +109,7 @@ const INSTRUCTIONS = [
   "- apply_commands takes sessionId, baseRevision (the document's current revision) and a commands array. Batch one coherent change into a single call with a short human label.",
   "- Layer ids come from get_document capabilities.layers[].id. Movement and sizes are in the master-pixel frame described by capabilities.placement; never assume 800 x 800.",
   "- Position: move_layer {id, dx, dy}, place_layers {layerIds, x, y, anchor}, align_layers {layerIds, alignment, reference}.",
-  "- Size and typography of digits: set /design/timeStyles/<hours|minutes|seconds>/scale, /design/dateStyles/<id>/scale, /design/metricStyles/<id>/scale (each typography object requires scale). Font: /design/fontFamily or a per-style fontFamily (list_fonts for choices).",
+  "- Size and typography of digits: set /design/timeStyles/<hours|minutes|seconds>/scale, /design/dateStyles/<id>/scale, /design/metricStyles/<id>/scale (each typography object requires scale); a fixed metric can instead take /design/metricStyles/<id>/fontSize, an exact font size in master pixels. Font: /design/fontFamily or a per-style fontFamily (list_fonts for choices).",
   "- Color: set_style {id, color, opacity}, /design/digitColor, /design/accentColor, /design/backgroundColor, /design/layerColors/<id>. Native data colors must be #RRGGBB.",
   "- Visibility: set_visibility {id, visible}. Effects and strokes: set_style {id, effects, strokes}.",
   "- Shapes and text: add_element / update_element with backgroundElements shapes (rect, ellipse, line, text). Images: add_sprite with dataUrl {assetId}.",

@@ -136,6 +136,7 @@
     "legacy614a:patch": "npm run build:electron && node scripts/patch-legacy614a.mjs",
     "legacy614a:slender": "npm run build:electron && node scripts/build-slender-multidata-legacy.mjs",
     "test:watchface-studio": "node --experimental-strip-types scripts/test-watchface-studio.mjs",
+    "test:watchface-chart-readouts": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-watchface-chart-readouts.mjs",
     "test:watchface-font-snapshots": "node --experimental-strip-types scripts/test-watchface-font-snapshots.mjs",
     "test:watchface-weekday-languages": "node --experimental-strip-types scripts/test-watchface-weekday-languages.mjs",
     "test:watchface-conversion": "npm run build:electron && electron scripts/test-watchface-conversion.cjs",

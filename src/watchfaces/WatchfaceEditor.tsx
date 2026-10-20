@@ -11,8 +11,9 @@ import { WatchfaceColorInput, flushWatchfaceColorInputs } from "./WatchfaceColor
 import { WatchfaceNumberAlignControl } from "./WatchfaceNumberAlignControl";
 import { NativeDataInspector } from "./NativeDataInspector";
 import { MetricKindNote, watchfaceMetricKind } from "./watchfaceMetricKinds";
-import { NATIVE_CHART_FIXED_EQUIVALENTS, nativeChartReadoutLabel } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_CHART_FIXED_EQUIVALENTS, NATIVE_CHART_PAGES, nativeChartReadoutLabel } from "../../electron/watchfaceNativeCatalog";
 import { nativePart, nativeParts } from "./nativeDataParts";
+import { addChartPage, chartDragSplit, chartGraphBounds, chartReadoutBounds, chartReadoutHidden, chartReadoutPage, chartSourceOf, chartStoredReadout, dropChartReadout, hiddenChartReadout, moveChartGraph, moveChartReadout, newChartReadout, removeChartPage, setChartReadoutShown, storedChartReadouts, swapChartReadout } from "./chartReadouts";
 import { describeNativeDataComponents } from "./nativeDataAutomation";
 import { watchfaceAutomationAssetContracts } from "./watchfaceAutomationAssetContracts";
 import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES, defaultNativeDataStyle, drawNativeDataPreview, minMaxTemperatureRun, nativeDataSize, nativeLayerChartPages, nativeLayerStyle } from "./nativeData";
@@ -310,6 +311,7 @@ import type {
   CorosWatchfaceExerciseProgressStyle,
   CorosWatchfaceExerciseSeparatorStyle,
   CorosWatchfaceKcalProgressStyle,
+  CorosWatchfaceNativeDataStyle,
   CorosWatchfaceShadowEffect,
   CorosWatchfaceStroke,
   CorosWatchfaceProject,
@@ -475,7 +477,22 @@ import {
   mergeConfigOverrides,
   parseConfigPos,
   pickPreviewResolution,
+  parseConfigRect,
+  templateHasDatePart,
   watchfaceFixedMetricDigitSize,
+  watchfaceSelectableDigitSize,
+  watchfaceTimeDigitSize,
+  selectableMetricFontSize,
+  selectableMetricStyleForFontSize,
+  dateFontSize,
+  dateMonthShowsLabels,
+  dateSizeForFontSize,
+  watchfaceDateLabels,
+  fixedMetricCurrentFontSize,
+  fixedMetricFontSize,
+  styleFontSize,
+  resolveWatchfaceComponentTypography,
+  shouldRenderWatchfaceText,
   templateHasSeconds,
   ADDED_DATE_PART_FLAGS,
   ADDED_WEEKDAY_FALLBACK_FONT,
@@ -500,6 +517,7 @@ import {
   type WatchfaceComplicationDefinition,
   type WatchfaceComplicationId,
   type WatchfaceMetricId,
+  type WatchfaceMetricSpriteStyle,
   type WatchfacePreviewMode,
   type WatchfaceStudioOptions,
   type WatchfaceStaticSeparatorId,
@@ -795,6 +813,8 @@ interface WatchfaceDragState {
   baseBounds: WatchfaceEditorBounds;
   /** The complete unlocked selection translated by this gesture. */
   selectionIds?: string[];
+  /** Chart only: the edited readout or the graph, whichever was grabbed. */
+  chartPart?: "readout" | "graph";
   spriteTransform?: {
     initial: WatchfaceSpriteTransform;
     scale: number;
@@ -2289,14 +2309,20 @@ export function WatchfaceEditor({
           configAssetOverrides: design.configAssetOverrides,
           timeStyles: design.timeStyles,
           letterSpacing: design.letterSpacing,
-          rasterFont: design.rasterFont
+          rasterFont: design.rasterFont,
+          fontFamily: design.fontFamily,
+          fontWeight: design.fontWeight,
+          fontStyle: design.fontStyle
         })
       : {};
   }, [
     designDetails,
     design.timeStyles,
     design.letterSpacing,
-    design.rasterFont
+    design.rasterFont,
+    design.fontFamily,
+    design.fontWeight,
+    design.fontStyle
   ]);
   const baseLayoutBounds = useMemo(() => {
     const base = designDetails
@@ -2307,14 +2333,20 @@ export function WatchfaceEditor({
           configAssetOverrides: design.configAssetOverrides,
           timeStyles: design.timeStyles,
           letterSpacing: design.letterSpacing,
-          rasterFont: design.rasterFont
+          rasterFont: design.rasterFont,
+          fontFamily: design.fontFamily,
+          fontWeight: design.fontWeight,
+          fontStyle: design.fontStyle
         })
       : [];
   }, [
     designDetails,
     design.timeStyles,
     design.letterSpacing,
-    design.rasterFont
+    design.rasterFont,
+    design.fontFamily,
+    design.fontWeight,
+    design.fontStyle
   ]);
   const layers = useMemo(() => {
     if (!modeSourceDetails) return [];
@@ -3200,7 +3232,8 @@ export function WatchfaceEditor({
         movesAmPm && design.ampmIndicator
           ? { ...design.ampmIndicator, enabled: false }
           : design.ampmIndicator,
-      nativeData: Object.fromEntries(Object.entries(design.nativeData ?? {}).map(([id, style]) => [id, {...style, enabled: style.enabled && !movingNativeIds.has(id)}])),
+      nativeData: Object.fromEntries(Object.entries(design.nativeData ?? {}).map(([id, style]) => [id, id === "chart" && movingNativeIds.has(id)
+        ? chartDragSplit(style, drag.chartPart ?? "readout", false) : {...style, enabled: style.enabled && !movingNativeIds.has(id)}])),
       weatherIndicator:
         movesWeather && design.weatherIndicator
           ? { ...design.weatherIndicator, enabled: false }
@@ -3256,7 +3289,8 @@ export function WatchfaceEditor({
       ampmIndicator: design.ampmIndicator
         ? { ...design.ampmIndicator, enabled: movesAmPm }
         : undefined,
-      nativeData: Object.fromEntries(Object.entries(design.nativeData ?? {}).map(([id, style]) => [id, {...style, enabled: style.enabled && movingNativeIds.has(id)}])),
+      nativeData: Object.fromEntries(Object.entries(design.nativeData ?? {}).map(([id, style]) => [id, id === "chart" && movingNativeIds.has(id)
+        ? chartDragSplit(style, drag.chartPart ?? "readout", true) : {...style, enabled: style.enabled && movingNativeIds.has(id)}])),
       weatherIndicator: design.weatherIndicator
         ? { ...design.weatherIndicator, enabled: movesWeather }
         : undefined,
@@ -3360,11 +3394,16 @@ export function WatchfaceEditor({
     return frame;
   }
 
+  /** Precomposed drag frames are reused per moving set; a chart drag also splits by part. */
+  function dragFramesKey(drag: Pick<WatchfaceDragState, "chartPart">, ids: string[]) {
+    return `${ids.slice().sort().join("|")}${ids.includes("native:chart") ? `#${drag.chartPart ?? "readout"}` : ""}`;
+  }
+
   function prepareDragVisual(drag: WatchfaceDragState) {
     if (!details) return;
     const preparationId = ++dragPreparationIdRef.current;
     const isolated = isolateDragDesigns(drag);
-    const selectionKey = dragMovementIds(drag).slice().sort().join("|");
+    const selectionKey = dragFramesKey(drag, dragMovementIds(drag));
     const cached = precomposedDragRef.current;
     const cacheMatches = Boolean(
       drag.kind !== "selectorIcon" &&
@@ -3455,7 +3494,7 @@ export function WatchfaceEditor({
     };
     const isolated = isolateDragDesigns(synthetic);
     const revision = ++precomposeRevisionRef.current;
-    const selectionKey = selectionIds.slice().sort().join("|");
+    const selectionKey = dragFramesKey(synthetic, selectionIds);
     const previewDirectory = watchPreviewResolution?.directory ?? "";
     void Promise.all([
       renderDragFrame(isolated.base),
@@ -3481,7 +3520,7 @@ export function WatchfaceEditor({
         active.drag.kind !== "selectorIcon" &&
         dragRef.current === active.drag &&
         active.baseFrame === null &&
-        dragMovementIds(active.drag).slice().sort().join("|") === selectionKey
+        dragFramesKey(active.drag, dragMovementIds(active.drag)) === selectionKey
       ) {
         active.baseFrame = baseFrame;
         active.movingFrame = movingFrame;
@@ -4608,6 +4647,57 @@ export function WatchfaceEditor({
     return true;
   }
 
+  /**
+   * The chart part under the pointer: the edited readout or the graph (which
+   * move apart), or another readout drawn on the shown page, which the layer
+   * switches to. The smallest box wins, as for layers.
+   */
+  function chartTargetAtPoint(point: { x: number; y: number }) {
+    const chart = design.nativeData?.chart;
+    if (!chart?.enabled || isMovementLockedForId("native:chart")) return null;
+    type Box = { x0: number; y0: number; x1: number; y1: number };
+    const inside = (box: Box | null): box is Box => Boolean(box && point.x >= box.x0 && point.x <= box.x1 && point.y >= box.y0 && point.y <= box.y1);
+    const page = chartReadoutPage(chartSourceOf(chart));
+    const hits: { kind: "edited" | "stored" | "template"; part: "readout" | "graph"; source: string; box: Box }[] = [];
+    const own = chartReadoutBounds(chart), graph = chartGraphBounds(chart);
+    if (inside(own)) hits.push({ kind: "edited", part: "readout", source: chartSourceOf(chart), box: own });
+    if (inside(graph)) hits.push({ kind: "edited", part: "graph", source: chartSourceOf(chart), box: graph });
+    for (const readout of storedChartReadouts(chart)) {
+      const source = chartSourceOf(readout), box = chartReadoutBounds(readout);
+      if (chartReadoutPage(source) === page && !design.nativeData?.[source]?.enabled && inside(box)) hits.push({ kind: "stored", part: "readout", source, box });
+    }
+    for (const readout of chartPage?.readouts ?? []) {
+      const source = chartSourceOf(readout), box = chartReadoutBounds(readout);
+      if (source === chartSourceOf(chart) || chart.readouts?.[source] || chart.removedReadouts?.includes(source) || chartReadoutPage(source) !== page) continue;
+      if (inside(box)) hits.push({ kind: "template", part: "readout", source, box });
+    }
+    const area = (box: Box) => (box.x1 - box.x0) * (box.y1 - box.y0);
+    return hits.sort((a, b) => area(a.box) - area(b.box))[0] ?? null;
+  }
+
+  /** Drags the grabbed chart part; another readout of the page becomes the edited one first. */
+  function startChartGesture(event: React.PointerEvent<Element>, point: { x: number; y: number }, hit: NonNullable<ReturnType<typeof chartTargetAtPoint>>) {
+    const chart = design.nativeData?.chart;
+    if (!chart) return;
+    if (!selectedIds.includes("native:chart")) selectEditorItem("native:chart");
+    if (hit.kind === "template") { void selectChartGroup(hit.source); return; }
+    let layer = chart;
+    const hitReadout = hit.kind === "stored" ? chartStoredReadout(chart, hit.source) : undefined;
+    if (hitReadout) {
+      layer = swapChartReadout(chart, hitReadout);
+      setDesign(prev => {
+        const current = prev.nativeData?.chart, stored = current && chartStoredReadout(current, hit.source);
+        return current && stored ? { ...prev, nativeData: { ...prev.nativeData, chart: swapChartReadout(current, stored) } } : prev;
+      });
+    }
+    const plot = hit.part === "graph" ? chartGraphBounds(layer) : null;
+    startElementDrag(event, {
+      kind: "nativeData", targetId: "chart", chartPart: hit.part, startX: point.x, startY: point.y,
+      baseX: plot ? plot.x0 : layer.x, baseY: plot ? plot.y0 : layer.y,
+      snapId: "native:chart", baseBounds: hit.box, selectionIds: movableIdsForGesture("native:chart")
+    });
+  }
+
   function handlePointerDown(event: React.PointerEvent<Element>) {
     if (!canEditActiveMode || event.button !== 0) return;
     const point = toResolutionPoint(event);
@@ -4657,7 +4747,11 @@ export function WatchfaceEditor({
       point.x,
       point.y
     );
-    const liveIsElement = liveHit !== null && liveHit.kind !== "background";
+    const chartHit = chartTargetAtPoint(point);
+    const hitArea = (box: { x0: number; y0: number; x1: number; y1: number }) => (box.x1 - box.x0) * (box.y1 - box.y0);
+    const chartWins = chartHit !== null && (!liveHit || liveHit.kind === "background" || liveHit.nativeDataId === "chart" ||
+      !liveHit.bounds || hitArea(chartHit.box) <= hitArea(liveHit.bounds));
+    const liveIsElement = (liveHit !== null && liveHit.kind !== "background") || chartWins;
     if (backgroundContext || !liveIsElement) {
       const bgHit = backgroundElementAtPoint(
         backgroundElements.filter(
@@ -4689,6 +4783,10 @@ export function WatchfaceEditor({
       }
     }
 
+    if (chartWins && chartHit) {
+      startChartGesture(event, point, chartHit);
+      return;
+    }
     if (!liveHit || liveHit.kind === "background") {
       startMarqueeSelection(event, point, false);
       return;
@@ -4698,7 +4796,9 @@ export function WatchfaceEditor({
     if (liveHit.nativeDataId && design.nativeData?.[liveHit.nativeDataId]) {
       // Where the layer draws: a maximum temperature follows the minimum.
       const style = nativeLayerStyle(liveHit.nativeDataId, design.nativeData)!;
-      startElementDrag(event, {kind: "nativeData", targetId: liveHit.nativeDataId, startX: point.x, startY: point.y, baseX: style.x, baseY: style.y, snapId: liveHit.id, baseBounds: liveHit.bounds!, selectionIds: movementIds});
+      const chartReadout = liveHit.nativeDataId === "chart" ? chartReadoutBounds(style) : null;
+      startElementDrag(event, {kind: "nativeData", targetId: liveHit.nativeDataId, startX: point.x, startY: point.y, baseX: style.x, baseY: style.y, snapId: liveHit.id,
+        baseBounds: chartReadout ?? liveHit.bounds!, selectionIds: movementIds, ...(liveHit.nativeDataId === "chart" ? { chartPart: "readout" as const } : {})});
       return;
     }
     if (liveHit.weatherIndicator && design.weatherIndicator) {
@@ -4841,6 +4941,14 @@ export function WatchfaceEditor({
         Math.max(0, Math.min(previewHeight - height, drag.baseY + movement.dy))
       );
       return { dx: x - drag.baseX, dy: y - drag.baseY };
+    }
+    if (drag.kind === "nativeData" && drag.targetId === "chart") {
+      // The grabbed part (readout or graph) stays on the face.
+      const box = drag.baseBounds;
+      return {
+        dx: Math.max(-box.x0, Math.min(previewWidth - box.x1, movement.dx)),
+        dy: Math.max(-box.y0, Math.min(previewHeight - box.y1, movement.dy))
+      };
     }
     if (drag.kind === "nativeData") {
       const style = nativeLayerStyle(drag.targetId, design.nativeData ?? {});
@@ -5055,6 +5163,14 @@ export function WatchfaceEditor({
       });
       return;
     }
+    if (drag.kind === "nativeData" && drag.targetId === "chart" && drag.chartPart === "graph") {
+      if (isPositionLocked("native:chart")) return;
+      setDesign(prev => {
+        const chart = prev.nativeData?.chart;
+        return chart ? { ...prev, nativeData: { ...prev.nativeData, chart: moveChartGraph(chart, drag.baseX + movement.dx, drag.baseY + movement.dy) } } : prev;
+      });
+      return;
+    }
     if (drag.kind === "nativeData") { updateNativeData(drag.targetId, {x: drag.baseX + movement.dx, y: drag.baseY + movement.dy}); return; }
     if (drag.kind === "weather") {
       const capability = details ? getWeatherCapability(details) : null;
@@ -5189,7 +5305,9 @@ export function WatchfaceEditor({
       if (layer.nativeDataId && next.nativeData?.[layer.nativeDataId]) {
         const style = next.nativeData[layer.nativeDataId];
         const size = nativeDataSize(layer.nativeDataId, style);
-        next = {...next, nativeData: {...next.nativeData, [layer.nativeDataId]: {...style, x:Math.max(0,Math.min(previewWidth-size.width,style.x+movement.dx)), y:Math.max(0,Math.min(previewHeight-size.height,style.y+movement.dy))}}};
+        next = {...next, nativeData: {...next.nativeData, [layer.nativeDataId]: layer.nativeDataId === "chart"
+          ? moveChartReadout(style, style.x + movement.dx, style.y + movement.dy)
+          : {...style, x:Math.max(0,Math.min(previewWidth-size.width,style.x+movement.dx)), y:Math.max(0,Math.min(previewHeight-size.height,style.y+movement.dy))}}};
         continue;
       }
       if (layer.weatherIndicator && next.weatherIndicator) {
@@ -5770,13 +5888,22 @@ export function WatchfaceEditor({
 
   function updateNativeData(id: string, patch: Partial<NonNullable<CorosWatchfaceDesignState["nativeData"]>[string]>) {
     if (isPositionLocked(`native:${id}`)) return;
+    // Moving the chart layer moves the readout it edits; the graph stays put.
+    if (id === "chart" && Object.keys(patch).length && Object.keys(patch).every(key => key === "x" || key === "y")) {
+      setDesign(prev => {
+        const chart = prev.nativeData?.chart;
+        return chart ? { ...prev, nativeData: { ...prev.nativeData, chart: moveChartReadout(chart, patch.x ?? chart.x, patch.y ?? chart.y) } } : prev;
+      });
+      return;
+    }
     setDesign(prev => ({ ...prev, nativeData: { ...prev.nativeData, [id]: { ...defaultNativeDataStyle(id), ...prev.nativeData?.[id], ...patch } } }));
   }
 
-  // The watch's Back button cycles the graph through its chart groups, like a
-  // selectable metric. Switching to another group the face carries rebuilds
-  // the readout from its own recovered artwork and geometry, shifted by however
-  // far the shared graph was moved, and keeps the graph's appearance.
+  // The watch's Back button pages through the chart's readouts, like a
+  // selectable metric. The layer edits one at a time: picking another swaps it
+  // in from the readouts Studio stores, or rebuilds it from the template's own
+  // artwork and geometry, shifted by however far the shared graph was moved.
+  // The graph stays where it is either way (swapChartReadout).
   const chartGroups = useMemo(
     () => modeSourceDetails ? recoveredChartSources(modeSourceDetails) : [],
     [modeSourceDetails]
@@ -5785,34 +5912,87 @@ export function WatchfaceEditor({
     () => modeSourceDetails ? recoveredChartReadouts(modeSourceDetails) : [],
     [modeSourceDetails]
   );
+  function swapInChartReadout(readout: (layer: CorosWatchfaceNativeDataStyle) => CorosWatchfaceNativeDataStyle | undefined) {
+    setDesign(prev => {
+      const current = prev.nativeData?.chart, next = current && readout(current);
+      return current && next ? { ...prev, nativeData: { ...prev.nativeData, chart: swapChartReadout(current, next) } } : prev;
+    });
+  }
   async function selectChartGroup(source: string) {
-    if (!modeSourceDetails || isPositionLocked("native:chart")) return;
-    const recovered = await recoverChartGroup(modeSourceDetails, loadAssets, source).catch(() => null);
-    if (!recovered) { updateNativeData("chart", { chartSource: source }); return; }
+    if (isPositionLocked("native:chart")) return;
+    if (design.nativeData?.chart?.readouts?.[source]) { swapInChartReadout(layer => chartStoredReadout(layer, source)); return; }
+    const recovered = modeSourceDetails ? await recoverChartGroup(modeSourceDetails, loadAssets, source).catch(() => null) : null;
+    if (!recovered) { addChartReadout(source); return; }
     setDesign(prev => {
       const current = prev.nativeData?.chart;
       if (!current) return { ...prev, nativeData: { ...prev.nativeData, chart: recovered } };
-      const scale = current.scale ?? 1;
-      const plotAt = (style: typeof recovered, s: number) => ({
-        x: style.x + (style.parts?.plot?.x ?? 0) * s, y: style.y + (style.parts?.plot?.y ?? 0) * s
+      const plotAt = (style: CorosWatchfaceNativeDataStyle) => {
+        const plot = nativePart("chart", style, "plot");
+        return { x: style.x + plot.x * style.scale, y: style.y + plot.y * style.scale };
+      };
+      const from = plotAt(recovered), to = plotAt(current);
+      const readout = { ...recovered, x: Math.round(recovered.x + to.x - from.x), y: Math.round(recovered.y + to.y - from.y),
+        color: current.color, fontFamily: current.fontFamily };
+      return { ...prev, nativeData: { ...prev.nativeData, chart: swapChartReadout(current, readout) } };
+    });
+  }
+  /** Add data: a readout for `source` joins the chart beside its page's others, and the layer edits it. */
+  function addChartReadout(source: string) {
+    if (isPositionLocked("native:chart")) return;
+    swapInChartReadout(layer => chartSourceOf(layer) === source ? undefined
+      : chartStoredReadout(layer, source) ?? newChartReadout(layer, source, { width: previewWidth, height: previewHeight }));
+  }
+  /**
+   * Shows or hides a readout on its page. A template readout is copied in
+   * hidden first, so export can replace its keys with an invisible readout.
+   */
+  async function showChartReadout(source: string, shown: boolean) {
+    const chart = design.nativeData?.chart;
+    if (!chart || isPositionLocked("native:chart")) return;
+    if (!shown && chartSourceOf(chart) !== source && !chart.readouts?.[source]) {
+      const recovered = modeSourceDetails ? await recoverChartGroup(modeSourceDetails, loadAssets, source).catch(() => null) : null;
+      if (!recovered) return;
+      setDesign(prev => {
+        const current = prev.nativeData?.chart;
+        return current ? { ...prev, nativeData: { ...prev.nativeData, chart: { ...current, readouts: { ...current.readouts, [source]: hiddenChartReadout(recovered) } } } } : prev;
       });
-      const from = plotAt(recovered, 1), to = plotAt(current, scale);
-      const next = { ...recovered, x: Math.round(recovered.x + to.x - from.x), y: Math.round(recovered.y + to.y - from.y),
-        enabled: current.enabled, color: current.color, fontFamily: current.fontFamily, chartStyle: current.chartStyle ?? recovered.chartStyle,
-        ...(current.removedReadouts?.length ? { removedReadouts: current.removedReadouts } : {}) };
-      // At 1:1 the shared graph components (resized plot, replaced backdrop)
-      // carry over; they are drawn by every group.
-      if (scale === 1) {
-        const parts = { ...next.parts }, assets = { ...next.assets };
-        for (const role of ["plot", "background", "mask", "noDataMask"] as const) {
-          const part = current.parts?.[role];
-          if (!part) continue;
-          parts[role] = { ...part, ...(part.x !== undefined ? { x: current.x + part.x - next.x } : {}), ...(part.y !== undefined ? { y: current.y + part.y - next.y } : {}) };
-          if (role !== "plot" && current.assets?.[role]) assets[role] = current.assets[role];
-        }
-        next.parts = parts; next.assets = assets;
-      }
-      return { ...prev, nativeData: { ...prev.nativeData, chart: next } };
+      return;
+    }
+    setDesign(prev => {
+      const current = prev.nativeData?.chart;
+      return current ? { ...prev, nativeData: { ...prev.nativeData, chart: setChartReadoutShown(current, source, shown, { width: previewWidth, height: previewHeight }) } } : prev;
+    });
+  }
+  /** Add page: the page's required readouts join the chart, and the layer edits the first. */
+  function addChartPageToFace(pageId: string) {
+    if (isPositionLocked("native:chart")) return;
+    setDesign(prev => {
+      const current = prev.nativeData?.chart;
+      return current ? { ...prev, nativeData: { ...prev.nativeData, chart: addChartPage(current, pageId, { width: previewWidth, height: previewHeight }) } } : prev;
+    });
+  }
+  function removeChartPageFromFace(pageId: string) {
+    const chart = design.nativeData?.chart;
+    if (!chart || isPositionLocked("native:chart")) return;
+    if (!removeChartPage(chart, pageId)) { onError(t("The chart needs at least one page. Delete the chart layer to remove it.")); return; }
+    setDesign(prev => {
+      const current = prev.nativeData?.chart, next = current && removeChartPage(current, pageId);
+      return next ? { ...prev, nativeData: { ...prev.nativeData, chart: next } } : prev;
+    });
+  }
+  /** Takes a readout Studio added off the chart; the template's own readouts stay. */
+  async function removeChartReadout(source: string) {
+    const chart = design.nativeData?.chart;
+    if (!chart || isPositionLocked("native:chart")) return;
+    if (chartSourceOf(chart) === source && !dropChartReadout(chart, source)) {
+      // Only the face's own readouts are left: the layer edits one of those first.
+      const next = chartGroups.find(item => item !== source && !chart.removedReadouts?.includes(item));
+      if (!next) { onError(t("The chart needs at least one readout, so {{label}} can't leave it.", { label: t(nativeChartReadoutLabel(source)) })); return; }
+      await selectChartGroup(next);
+    }
+    setDesign(prev => {
+      const current = prev.nativeData?.chart, next = current && dropChartReadout(current, source);
+      return next ? { ...prev, nativeData: { ...prev.nativeData, chart: next } } : prev;
     });
   }
 
@@ -5836,8 +6016,9 @@ export function WatchfaceEditor({
       ? design.nativeData?.[equivalent.nativeData]?.enabled
       : layers.some(layer => layer.metricId === equivalent.metric && layer.visible);
     if (taken) { onError(t("This face already shows a fixed {{label}}. Edit that layer instead.", { label })); return; }
-    const readout = (chart.chartSource ?? "chart_stress") === source ? chart
-      : await recoverChartGroup(modeSourceDetails, loadAssets, source).catch(() => null);
+    const editing = chartSourceOf(chart) === source;
+    const readout = editing ? chart : chartStoredReadout(chart, source)
+      ?? await recoverChartGroup(modeSourceDetails, loadAssets, source).catch(() => null);
     if (!readout) { onError(t("Could not read {{label}} from this face.", { label })); return; }
     const scale = readout.scale ?? 1;
     const place = (part: "value" | "icon") => {
@@ -5846,9 +6027,10 @@ export function WatchfaceEditor({
     };
     const value = place("value"), icon = place("icon");
     const iconArt = icon.enabled ? readout.assets?.icon?.["0"] : undefined;
-    // The layer itself moves on to another readout of the face first.
-    if ((chart.chartSource ?? "chart_stress") === source) {
-      const next = chartGroups.find(item => item !== source && !chart.removedReadouts?.includes(item));
+    // The layer itself moves on to another readout of the face first; this one
+    // stays stored, off its page, so "Put back on its page" can restore it.
+    if (editing) {
+      const next = [...Object.keys(chart.readouts ?? {}), ...chartGroups].find(item => item !== source && !chart.removedReadouts?.includes(item));
       if (!next) { onError(t("The chart needs at least one readout, so {{label}} can't leave it.", { label })); return; }
       await selectChartGroup(next);
     }
@@ -5894,7 +6076,8 @@ export function WatchfaceEditor({
         baseline: Math.round((0.5 + (digitInk.baseline - 0.5) * frameHeight / cellHeight) * 1000) / 1000
       } : undefined;
       const sprites = digits && Array.from({ length: 10 }, (_, digit) => digits[String(digit)]).every(Boolean) ? digits : undefined;
-      const metricStyles = { ...prev.metricStyles, [metricId]: { ...prev.metricStyles?.[metricId], scale: metricScale,
+      // An earlier font size would win over the scale measured from the readout.
+      const metricStyles = { ...prev.metricStyles, [metricId]: { ...prev.metricStyles?.[metricId], fontSize: undefined, scale: metricScale,
         align: "center" as const, color: readout.color, fontFamily: sprites ? undefined : readout.fontFamily,
         ...(sprites && letterSpacing !== undefined ? { letterSpacing } : {}),
         rasterFont: sprites ? { label: t("{{label}} chart digits", { label }), dataUrl: "", glyphs: "0123456789", columns: 10,
@@ -5913,24 +6096,40 @@ export function WatchfaceEditor({
     selectEditorItem("nativeData" in equivalent ? `native:${equivalent.nativeData}` : equivalent.metric);
     onNotice(t("{{label}} is fixed now and shows on every page, in the slot it shared with other readouts. Move it if it covers one.", { label }));
   }
-  // Weather fields that share a slot with one the watch swaps in on other pages, by page.
+  // The chart's pages in Back order, each with its readouts, listed under its
+  // layer row. Required readouts the page hides still list, so every page
+  // shows its full set (NATIVE_CHART_PAGES).
+  const chartLayerPages = useMemo(() => {
+    const chart = design.nativeData?.chart;
+    if (!chart) return [];
+    const current = chartSourceOf(chart);
+    const present = new Set([current, ...Object.keys(chart.readouts ?? {}), ...chartReadouts].filter(source => !chart.removedReadouts?.includes(source)));
+    const barsOn = (chart.chartStyle?.barWidth ?? 8) > 0;
+    const hiddenOf = (source: string) => {
+      const style = source === current ? chart : chart.readouts?.[source];
+      return Boolean(style && chartReadoutHidden({ ...style, chartSource: source }));
+    };
+    return NATIVE_CHART_PAGES.flatMap(page => {
+      const rows = page.sources.filter(source => present.has(source) || page.required.includes(source)).map(source => ({
+        source, editing: source === current, hidden: !present.has(source) || hiddenOf(source), missing: !present.has(source)
+      }));
+      const bars = page.id === "barometer" || page.id === "tide";
+      const on = bars ? barsOn : rows.some(row => !row.hidden);
+      if (!on && !rows.some(row => !row.missing)) return [];
+      return [{ page: page.id, on, rows: on || bars ? rows.filter(row => !row.missing || on) : rows.filter(row => !row.missing) }];
+    });
+  }, [design.nativeData, chartReadouts]);
+  // Fields the watch hides on some chart pages (weather on the sun and moon pages), by page.
   const chartPageFields = useMemo(() => {
     const byPage: Record<string, string[]> = {};
     for (const id of Object.keys(design.nativeData ?? {})) {
       if (id === "chart" || id === "chart_sun_angle" || !design.nativeData?.[id]?.enabled) continue;
-      for (const page of nativeLayerChartPages(id, design.nativeData)?.pages ?? []) (byPage[page] ??= []).push(id);
+      const shows = nativeLayerChartPages(id, design.nativeData)?.pages;
+      if (!shows) continue;
+      for (const page of NATIVE_CHART_PAGES) if (!shows.includes(page.id)) (byPage[page.id] ??= []).push(id);
     }
     return byPage;
   }, [design.nativeData]);
-  // "Make fixed" for a page-dependent field: its slot partners leave the face.
-  function makeFieldFixed(id: string) {
-    const partners = nativeLayerChartPages(id, design.nativeData ?? {})?.partners ?? [];
-    if (!partners.length || isPositionLocked(`native:${id}`)) return;
-    setDesign(prev => ({ ...prev, nativeData: Object.fromEntries(Object.entries(prev.nativeData ?? {}).map(([key, style]) =>
-      [key, partners.includes(key) ? { ...style, enabled: false } : style])) }));
-    const label = t(NATIVE_DATA_FIELDS.find(field => field.id === id)?.label ?? id);
-    onNotice(t("{{label}} is fixed now. Check it on your watch: COROS may still hide it on some chart pages.", { label }));
-  }
 
   // Center the new fixed metric on the readout once the editor has measured it.
   useEffect(() => {
@@ -6054,6 +6253,122 @@ export function WatchfaceEditor({
     setSelectedIds([]);
   }
 
+  /**
+   * Whether the day can switch to the other calendar slot. COROS has no
+   * spelled-out date, so the day's "Words" is the weekday slot and back.
+   */
+  function canSwitchDaySlot(to: "weekday" | "dateDay"): boolean {
+    if (previewMode !== "current" || !templateSecondsResolution) return false;
+    if (layers.some((layer) => layer.layoutGroupId === to && layer.visible && layer.present)) return false;
+    return templateHasDatePart(templateSecondsResolution, to) || addableDateParts.has(to);
+  }
+
+  /**
+   * Moves the day into the weekday slot (or back) at the same spot with the
+   * same color, font and height, and deletes the slot it leaves; Add brings
+   * that one back.
+   */
+  function switchDaySlot(to: "weekday" | "dateDay") {
+    const from: WatchfaceDatePartId = to === "weekday" ? "dateDay" : "weekday";
+    const templateResolution = templateSecondsResolution;
+    if (!modeSourceDetails || !templateResolution || !canSwitchDaySlot(to)) return;
+    const rectKey = (partId: WatchfaceDatePartId) =>
+      WATCHFACE_DATE_PARTS.find((part) => part.id === partId)!.rectKey;
+    setDesign((prev) => {
+      const templateHasTarget = templateHasDatePart(templateResolution, to);
+      const fromAdded = isAddedDatePart(from);
+      const dateStyles = { ...prev.dateStyles };
+      const layoutOffsets = { ...prev.layoutOffsets };
+      const layerVisibility = { ...prev.layerVisibility };
+      delete layerVisibility[to];
+      delete layoutOffsets[to];
+      delete dateStyles[to];
+      const shown: CorosWatchfaceDesignState = {
+        ...prev,
+        ...(templateHasTarget ? {} : { [ADDED_DATE_PART_FLAGS[to]]: true }),
+        dateStyles,
+        layoutOffsets,
+        layerVisibility
+      };
+      // Measure in master pixels: the old slot where it is drawn now, the new
+      // one where it lands before any offset.
+      const before = pickPreviewResolution(deriveDesignDetails(modeSourceDetails, prev).styledMetricDetails);
+      const after = pickPreviewResolution(deriveDesignDetails(modeSourceDetails, shown).styledMetricDetails);
+      const fromRect = parseConfigRect(before?.config[rectKey(from)]);
+      const toRect = parseConfigRect(after?.config[rectKey(to)]);
+      const fromOffset = prev.layoutOffsets?.[from] ?? { dx: 0, dy: 0 };
+      // Carry the look over and match the drawn height.
+      const source = prev.dateStyles?.[from];
+      if (fromRect && toRect) {
+        // The value starts (or ends) at the old slot's aligned edge; the two
+        // slots differ in width, so centering them can run into the month.
+        const flags = /,([^,}]*)\}\s*$/.exec(before?.config[rectKey(from)] ?? "")?.[1] ?? "";
+        const edge = source?.align ?? (/\bleft\b/.test(flags) ? "left" : /\bright\b/.test(flags) ? "right" : "center");
+        layoutOffsets[to] = {
+          dx: Math.round(
+            (edge === "left"
+              ? fromRect.x0 - toRect.x0
+              : edge === "right"
+                ? fromRect.x1 - toRect.x1
+                : (fromRect.x0 + fromRect.x1 - toRect.x0 - toRect.x1) / 2) + fromOffset.dx
+          ),
+          dy: Math.round((fromRect.y0 + fromRect.y1 - toRect.y0 - toRect.y1) / 2 + fromOffset.dy)
+        };
+      }
+      const sourceCanvas = before ? dateSpriteCanvasSize(before, from, source, 0) : null;
+      const sourceHeight = sourceCanvas
+        ? sourceCanvas.height * (sourceCanvas.native ? 1 : source?.scale ?? 1)
+        : null;
+      const targetCanvas = after ? dateSpriteCanvasSize(after, to, undefined, 0) : null;
+      const scale = sourceHeight && targetCanvas?.height
+        ? Math.max(0.1, Math.round((sourceHeight / targetCanvas.height) * 100) / 100)
+        : 1;
+      const family = source?.fontFamily ?? prev.fontFamily ?? "";
+      // A weekday Studio adds has no label art, and digit PNGs can't spell it.
+      const needsFont = Boolean(family) || (to === "weekday" && !templateHasTarget);
+      const font = needsFont ? family || ADDED_WEEKDAY_FALLBACK_FONT : "";
+      dateStyles[to] = {
+        scale,
+        ...(source?.color ? { color: source.color } : {}),
+        ...(source?.fontWeight !== undefined ? { fontWeight: source.fontWeight } : {}),
+        ...(source?.fontStyle ? { fontStyle: source.fontStyle } : {}),
+        ...(source?.letterSpacing !== undefined ? { letterSpacing: source.letterSpacing } : {}),
+        ...(source?.align ? { align: source.align } : {}),
+        ...(font ? { fontFamily: font, nativeSize: true } : {})
+      };
+      // An explicit font size carries over with a box fitted to the new set.
+      const sourceFontSize = styleFontSize(source);
+      if (font && sourceFontSize !== undefined) {
+        Object.assign(dateStyles[to]!, {
+          scale: 1,
+          fontSize: sourceFontSize,
+          ...dateSizeForFontSize(to, false, sourceFontSize, font, resolveWatchfaceComponentTypography(
+            { fontWeight: prev.fontWeight, fontStyle: prev.fontStyle, letterSpacing: prev.letterSpacing, rasterFont: prev.rasterFont },
+            dateStyles[to]
+          ))
+        });
+      }
+      if (fromAdded) {
+        delete dateStyles[from];
+        delete layoutOffsets[from];
+        delete layerVisibility[from];
+      } else {
+        layerVisibility[from] = false;
+      }
+      return {
+        ...shown,
+        ...(fromAdded ? { [ADDED_DATE_PART_FLAGS[from]]: false } : {}),
+        dateStyles,
+        layoutOffsets,
+        layerVisibility,
+        removedLayerIds: [
+          ...new Set([...(prev.removedLayerIds ?? []).filter((id) => id !== to), ...(fromAdded ? [] : [from])])
+        ]
+      };
+    });
+    selectEditorItem(to);
+  }
+
   // Every DIY template declares the analog keys (usually blank), so hands can
   // be added to any face. Template-backed hands are re-enabled as they are.
   const analogHandsOnFace = layers.some(
@@ -6141,8 +6456,16 @@ export function WatchfaceEditor({
     const [id, chartSource] = value.split(":");
     if (!id) return;
     const existing = design.nativeData?.[id];
-    if (existing?.enabled && (!chartSource || (existing.chartSource ?? "chart_stress") === chartSource)) {
+    if (existing?.enabled && (!chartSource || (existing.chartSource ?? "chart_stress") === chartSource || existing.removedReadouts?.includes(chartSource))) {
       selectQuickStartItem(`native:${id}`);
+      return;
+    }
+    // More chart data joins the chart as another readout the watch pages to.
+    if (id === "chart" && chartSource && existing?.enabled) {
+      if (existing.readouts?.[chartSource] || chartGroups.includes(chartSource)) void selectChartGroup(chartSource);
+      else addChartReadout(chartSource);
+      selectEditorItem("native:chart");
+      openQuickStartProperties();
       return;
     }
     const initialStyle = defaultNativeDataStyle(id);
@@ -6188,13 +6511,16 @@ export function WatchfaceEditor({
 
   function setMetricStyle(
     metricId: WatchfaceMetricId,
-    patch: { align?: "left" | "center" | "right"; color?: string; scale?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
+    patch: { align?: "left" | "center" | "right"; color?: string; scale?: number; fontSize?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
   ) {
     setDesign((prev) => {
       const current = prev.metricStyles?.[metricId] ?? { scale: 1 };
+      const next = { ...current, ...patch };
+      // Editing Scale hands sizing back from an explicit font size.
+      if ("fontSize" in patch && patch.fontSize === undefined) delete next.fontSize;
       return {
         ...prev,
-        metricStyles: { ...prev.metricStyles, [metricId]: { ...current, ...patch } }
+        metricStyles: { ...prev.metricStyles, [metricId]: next }
       };
     });
   }
@@ -6344,7 +6670,7 @@ export function WatchfaceEditor({
 
   function setTimeStyle(
     partId: WatchfaceTimePartId,
-    patch: { color?: string; scale?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
+    patch: { color?: string; scale?: number; fontSize?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
   ) {
     setDesign((prev) => {
       const current = prev.timeStyles?.[partId] ?? { scale: 1 };
@@ -6421,15 +6747,38 @@ export function WatchfaceEditor({
       /** Additional language prefixes to replace when all languages is off. */
       overwriteLanguages?: string[];
       nativeSize?: boolean;
+      fontSize?: number;
+      labelStyle?: "upper" | "title" | "full";
+      translateLabels?: boolean;
     }
   ) {
     setDesign((prev) => {
       const current = prev.dateStyles?.[partId] ?? { scale: 1 };
+      const next = { ...current, ...patch };
+      // A font size owns the box: refit it to the font that now draws the set.
+      const fontSize = styleFontSize(next);
+      const family = next.fontFamily ?? prev.fontFamily ?? "";
+      const master = fontSize !== undefined && family && modeSourceDetails
+        ? pickPreviewResolution(deriveDesignDetails(modeSourceDetails, prev).metricDetails)
+        : null;
+      if (fontSize !== undefined && family && master) {
+        Object.assign(next, dateSizeForFontSize(
+          partId,
+          partId === "dateMonth" && dateMonthShowsLabels(master, next),
+          fontSize,
+          family,
+          resolveWatchfaceComponentTypography(
+            { fontWeight: prev.fontWeight, fontStyle: prev.fontStyle, letterSpacing: prev.letterSpacing, rasterFont: prev.rasterFont },
+            next
+          ),
+          next.labelStyle
+        ));
+      }
       return {
         ...prev,
         dateStyles: {
           ...prev.dateStyles,
-          [partId]: { ...current, ...patch }
+          [partId]: next
         }
       };
     });
@@ -9187,8 +9536,8 @@ export function WatchfaceEditor({
                         ? layerDropTarget.placement
                         : null;
                     return (
+                    <Fragment key={layer.id}>
                     <li
-                      key={layer.id}
                       className={[
                         "wf-layer-item",
                         reorderable ? "is-reorderable" : "",
@@ -9294,6 +9643,48 @@ export function WatchfaceEditor({
                         ) : null}
                       </span>
                     </li>
+                    {layer.nativeDataId === "chart" ? chartLayerPages.map(({ page, on, rows }) => {
+                      const first = rows.find(row => !row.missing && !row.hidden) ?? rows.find(row => !row.missing);
+                      const showsPage = rows.some(row => row.editing);
+                      return (
+                      <Fragment key={`${layer.id}:${page}`}>
+                        <li className="wf-layer-item wf-layer-subitem">
+                          <button
+                            type="button"
+                            className={`watchface-layer-row wf-layer-subrow wf-layer-subpage${showsPage ? " is-editing" : ""}${on ? "" : " is-off"}`}
+                            title={on ? t("Show this page in the preview") : t("The watch skips this page.")}
+                            onClick={() => {
+                              selectEditorItem(layer.id);
+                              setPropertiesOpen(true);
+                              if (first && !first.editing && !showsPage) void selectChartGroup(first.source);
+                            }}
+                          >
+                            <span className="watchface-layer-name">{page === "daily-a" ? t("Daily A") : page === "daily-b" ? t("Daily B") : page === "sun" ? t("Sun") : page === "moon" ? t("Moon") : page === "barometer" ? t("Barometer") : t("Tide")}</span>
+                            <span className="wf-layer-subrow-page">{!on ? t("Off") : rows.length ? "" : t("Graph only")}</span>
+                          </button>
+                        </li>
+                        {rows.map((row) => (
+                          <li key={`${layer.id}:${page}:${row.source}`} className="wf-layer-item wf-layer-subitem">
+                            <button
+                              type="button"
+                              className={`watchface-layer-row wf-layer-subrow wf-layer-subreadout${row.editing ? " is-editing" : ""}`}
+                              aria-current={row.editing ? "true" : undefined}
+                              title={row.hidden ? t("Hidden on the watch") : t("Edit this readout")}
+                              onClick={() => {
+                                selectEditorItem(layer.id);
+                                setPropertiesOpen(true);
+                                if (!row.editing && !row.missing) void selectChartGroup(row.source);
+                              }}
+                            >
+                              <span className={`watchface-layer-name${row.hidden ? " is-hidden" : ""}`}>{t(nativeChartReadoutLabel(row.source))}</span>
+                              <span className="wf-layer-subrow-page">{row.hidden ? t("Hidden") : ""}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </Fragment>
+                      );
+                    }) : null}
+                    </Fragment>
                     );
                     })}
                   </Fragment>
@@ -10320,10 +10711,12 @@ export function WatchfaceEditor({
     ) {
       return "Time";
     }
+    // Weather keeps its own section: on a face with a chart the watch hides
+    // some of it on some pages, which each field's inspector explains.
+    if (layer.kind === "weather" || layer.nativeDataId?.startsWith("weather_")) return "Weather";
     if (
       layer.kind === "batteryIcon" ||
-      layer.kind === "controlBatteryIcon" ||
-      layer.kind === "weather"
+      layer.kind === "controlBatteryIcon"
     ) {
       return "Indicators";
     }
@@ -10460,6 +10853,7 @@ export function WatchfaceEditor({
       "Date",
       "Fixed metrics",
       "Selectable",
+      "Weather",
       "Chart pages",
       "Indicators",
       "Artwork",
@@ -11837,8 +12231,13 @@ export function WatchfaceEditor({
             pageFields={layer.nativeDataId === "chart" ? chartPageFields : undefined}
             onSelectField={id => { selectEditorItem(`native:${id}`); }}
             fieldPages={layer.nativeDataId !== "chart" ? nativeLayerChartPages(layer.nativeDataId, design.nativeData) : undefined}
-            onMakeFieldFixed={previewMode === "current" ? () => makeFieldFixed(layer.nativeDataId!) : undefined}
             onChartGroup={layer.nativeDataId === "chart" ? source => { void selectChartGroup(source); } : undefined}
+            onAddReadout={layer.nativeDataId === "chart" ? addChartReadout : undefined}
+            onRemoveReadout={layer.nativeDataId === "chart" ? source => { void removeChartReadout(source); } : undefined}
+            onShowReadout={layer.nativeDataId === "chart" ? (source, shown) => { void showChartReadout(source, shown); } : undefined}
+            onAddPage={layer.nativeDataId === "chart" ? addChartPageToFace : undefined}
+            onRemovePage={layer.nativeDataId === "chart" ? removeChartPageFromFace : undefined}
+            takenReadouts={layer.nativeDataId === "chart" ? NATIVE_CHART_SOURCES.filter(source => design.nativeData?.[source.id]?.enabled).map(source => source.id) : undefined}
             onMakeFixed={layer.nativeDataId === "chart" && previewMode === "current" ? source => { void makeChartReadoutFixed(source); } : undefined}
             onError={onError}
             onImportStart={beginSpriteImport}
@@ -11982,7 +12381,10 @@ export function WatchfaceEditor({
               <WatchfaceNumberAlignControl value={style?.align} allowTemplateDefault onChange={(align) => setMetricStyle("battery", { align })} />
               <LocalFontPicker api={api} label={t("Font")} value={style?.fontFamily ?? design.fontFamily} emptyLabel={t("Keep template font")} preview={renderFontPreview("battery", style)} onChange={(fontFamily) => setMetricStyle("battery", { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle("battery", typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle("battery", { letterSpacing })} />
               <div className="watchface-position-inputs">
-                <label>{t("Scale")}<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle("battery", { scale: Math.max(0.01, scale) })} /></label>
+                {(() => {
+                  const cell = previewResolution ? watchfaceFixedMetricDigitSize(previewResolution, "battery") : null;
+                  return cell ? renderFontSizeField(digitLayerFontSize(cell, style), (fontSize) => setMetricStyle("battery", { fontSize })) : null;
+                })()}
                 <label>{t("Rotation")}<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle("battery", { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               </div>
               <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel="Battery data" onActivate={() => setMetricStyle("battery", { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont })} />
@@ -12017,7 +12419,10 @@ export function WatchfaceEditor({
               </> : null}
               <LocalFontPicker api={api} label={t("Font")} value={style?.fontFamily ?? design.fontFamily} emptyLabel={t("Keep template font")} preview={renderFontPreview(layer.timePartId!, style)} onChange={(fontFamily) => setTimeStyle(layer.timePartId!, { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setTimeStyle(layer.timePartId!, typography)} onLetterSpacingChange={(letterSpacing) => setTimeStyle(layer.timePartId!, { letterSpacing })} />
               <div className="watchface-position-inputs">
-                <label>{t("Scale")}<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setTimeStyle(layer.timePartId!, { scale: Math.max(0.01, scale) })} /></label>
+                {(() => {
+                  const cell = previewResolution ? watchfaceTimeDigitSize(previewResolution, layer.timePartId!) : null;
+                  return cell ? renderFontSizeField(digitLayerFontSize(cell, style), (fontSize) => setTimeStyle(layer.timePartId!, { fontSize })) : null;
+                })()}
                 <label>{t("Rotation")}<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setTimeStyle(layer.timePartId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               </div>
               <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel={layer.label} onActivate={() => setTimeStyle(layer.timePartId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont })} />
@@ -12031,6 +12436,12 @@ export function WatchfaceEditor({
 
     if (layer.kind === "metric" && layer.metricId) {
       const style = design.metricStyles?.[layer.metricId];
+      // Compat temperature keeps the template's digits, so it has no font size.
+      const metricFontSizeField = (() => {
+        const cell = previewResolution ? watchfaceFixedMetricDigitSize(previewResolution, layer.metricId) : null;
+        if (!cell || fixedMetricFontSize(layer.metricId, { fontSize: 1 }) === undefined) return null;
+        return { value: digitLayerFontSize(cell, style) };
+      })();
       const progress =
         layer.metricId === "calories" && previewResolution
           ? kcalProgressStyleForResolution(
@@ -12133,7 +12544,9 @@ export function WatchfaceEditor({
               <WatchfaceNumberAlignControl value={style?.align} allowTemplateDefault onChange={(align) => setMetricStyle(layer.metricId!, { align })} />
               <LocalFontPicker api={api} label={t("Font")} value={style?.fontFamily ?? design.fontFamily} emptyLabel={t("Keep template font")} preview={renderFontPreview(layer.metricId!, style)} onChange={(fontFamily) => setMetricStyle(layer.metricId!, { fontFamily })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle(layer.metricId!, typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle(layer.metricId!, { letterSpacing })} />
               <div className="watchface-position-inputs">
-                <label>{t("Scale")}<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle(layer.metricId!, { scale: Math.max(0.01, scale) })} /></label>
+                {metricFontSizeField
+                  ? renderFontSizeField(metricFontSizeField.value, (fontSize) => setMetricStyle(layer.metricId!, { fontSize }))
+                  : <label>{t("Scale")}<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle(layer.metricId!, { scale: Math.max(0.01, scale) })} /></label>}
                 {supportsWatchfaceSpriteRotation(layer.metricId) ? <label>{t("Rotation")}<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle(layer.metricId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label> : null}
               </div>
               <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel={layer.label} onActivate={() => setMetricStyle(layer.metricId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont })} />
@@ -12301,6 +12714,84 @@ export function WatchfaceEditor({
         : 1;
       const sizeOverridden =
         style?.width !== undefined || style?.height !== undefined;
+      // A desktop font sizes by font size; PNG artwork keeps its pixel box.
+      const dateFamily = style?.fontFamily ?? design.fontFamily;
+      const dateTypography = resolveWatchfaceComponentTypography(
+        { fontWeight: design.fontWeight, fontStyle: design.fontStyle, letterSpacing: design.letterSpacing, rasterFont: design.rasterFont },
+        style
+      );
+      const dateFontDrawn = Boolean(dateFamily);
+      // Month words are a 12-frame JAN–DEC table; the day's words are the
+      // weekday slot, since COROS watches can't spell out the date.
+      const showsWords = partId === "weekday" || usesMonthLabels;
+      const monthFamily = style?.fontFamily ?? design.fontFamily;
+      const monthRaster = style?.rasterFont ?? design.rasterFont;
+      const setMonthWords = (words: boolean) => {
+        if (words === usesMonthLabels) return;
+        const needsFont = !monthFamily &&
+          !rasterFontSupportsText(monthRaster, words ? "JAN" : "0123456789");
+        const font = needsFont
+          ? { fontFamily: design.fontFamily || ADDED_WEEKDAY_FALLBACK_FONT, rasterFont: undefined }
+          : {};
+        // A label spans about three digit cells; the export collapses its box
+        // to the point rect the watch reads as a month table.
+        setDateStyle("dateMonth", words === Boolean(starterUsesMonthLabels)
+          ? { monthFormat: undefined, width: undefined, height: undefined }
+          : words
+            ? { monthFormat: "labels", width: Math.round(nativeWidth * 3), height: nativeHeight, ...font }
+            : { monthFormat: "digits", width: Math.max(1, Math.round(nativeWidth / 2)), height: nativeHeight, ...font });
+      };
+      // Template digit art can't draw words: dropping the font returns the
+      // month to numbers, so drop the wider label box Words gave it too.
+      const restoreMonthDigitBox = () => {
+        if (partId === "dateMonth" && usesMonthLabels && !starterUsesMonthLabels) {
+          setDateStyle("dateMonth", { width: undefined, height: undefined });
+        }
+      };
+      const switchTarget = partId === "weekday" ? "dateDay" : "weekday";
+      const canSwitch = partId !== "dateMonth" && canSwitchDaySlot(switchTarget);
+      const showAsHint = partId === "dateMonth"
+        ? usesMonthLabels ? t("Shows JAN to DEC in this font.") : null
+        : partId === "dateDay"
+          ? canSwitch
+            ? t("Words shows the weekday name (TUE). COROS watches can't spell out the date.")
+            : t("The weekday is already on this face.")
+          : canSwitch
+            ? t("Number shows the date (20) in this spot instead.")
+            : t("The date is already on this face.");
+      const showAs = (
+        <>
+          <div className="field wf-number-align-field">
+            <span>{t("Show as")}</span>
+            <div className="wf-number-align" role="group" aria-label={t("Show as")}>
+              <button type="button" aria-pressed={!showsWords} disabled={partId === "weekday" && !canSwitch} onClick={() => partId === "dateMonth" ? setMonthWords(false) : partId === "weekday" ? switchDaySlot("dateDay") : undefined}>{t("Number")}</button>
+              <button type="button" aria-pressed={showsWords} disabled={partId === "dateDay" && !canSwitch} onClick={() => partId === "dateMonth" ? setMonthWords(true) : partId === "dateDay" ? switchDaySlot("weekday") : undefined}>{t("Words")}</button>
+            </div>
+          </div>
+          {showAsHint ? <p className="watchface-studio-summary">{showAsHint}</p> : null}
+          {dateFontDrawn && showsWords ? (
+            <>
+              <div className="field wf-number-align-field">
+                <span>{t("Letters")}</span>
+                <div className="wf-number-align" role="group" aria-label={t("Letters")}>
+                  {(["upper", "title", "full"] as const).map((option) => {
+                    // Today's word in each style is its own label: TUE, Tue, Tuesday.
+                    const today = new Date();
+                    const sample = partId === "weekday"
+                      ? watchfaceDateLabels("week", option)[(today.getDay() + 6) % 7]
+                      : watchfaceDateLabels("month", option)[today.getMonth()];
+                    return (
+                      <button key={option} type="button" aria-pressed={(style?.labelStyle ?? "upper") === option} onClick={() => setDateStyle(partId, { labelStyle: option === "upper" ? undefined : option })}>{sample}</button>
+                    );
+                  })}
+                </div>
+              </div>
+              <label className="watchface-studio-toggle"><input type="checkbox" checked={style?.translateLabels === true} onChange={(event) => setDateStyle(partId, { translateLabels: event.target.checked ? true : undefined })} />{t("Translate for watch languages")}</label>
+              {style?.translateLabels ? <p className="watchface-studio-summary">{t("Watches set to a language picked in Send show these words in that language. The font needs that language's letters.")}</p> : null}
+            </>
+          ) : null}
+        </>
+      );
       return (
         <>
           {renderPositionReadout(layer)}
@@ -12321,6 +12812,7 @@ export function WatchfaceEditor({
                   : t("Added by Studio using this face's digits. This template has no date of its own.")}</p>
                 <div className="wf-config-asset-actions"><button className="secondary-button wf-danger-action" type="button" onClick={() => removeAddedDatePart(partId)}><Trash2 size={15} />{" "}{t("Remove")}{" "}{layer.label.toLowerCase()}</button></div>
               </> : null}
+              {showAs}
               <WatchfaceNumberAlignControl value={style?.align} allowTemplateDefault onChange={(align) => setDateStyle(partId, { align })} />
               <LocalFontPicker
                 api={api}
@@ -12330,17 +12822,19 @@ export function WatchfaceEditor({
                 preview={renderFontPreview(partId, style, {
                   rasterFontRequiredText: partId === "weekday" ? "MON" : usesMonthLabels ? "JAN" : undefined,
                   sampleText: partId === "weekday"
-                    ? "MON TUE WED"
+                    ? (dateFontDrawn ? watchfaceDateLabels("week", style?.labelStyle).slice(0, 3).join(" ") : "MON TUE WED")
                     : usesMonthLabels
-                      ? "JAN FEB MAR"
+                      ? (dateFontDrawn ? watchfaceDateLabels("month", style?.labelStyle).slice(0, 3).join(" ") : "JAN FEB MAR")
                       : "0123456789"
                 })}
                 onChange={(fontFamily) => {
                   if (!fontFamily) {
+                    restoreMonthDigitBox();
                     restoreDateTemplateFont(partId);
                     return;
                   }
-                  setDateStyle(partId, { fontFamily, rasterFont: undefined, ...(supportsNativeSize ? { nativeSize: true } : {}), ...(partId === "dateMonth" ? { monthFormat: undefined } : {}) });
+                  // Number / Words stays as chosen: a font draws either.
+                  setDateStyle(partId, { fontFamily, rasterFont: undefined, ...(supportsNativeSize ? { nativeSize: true } : {}) });
                 }}
                 rasterFont={style?.rasterFont ?? design.rasterFont}
                 rasterFontRequiredText={partId === "weekday" ? "MON" : usesMonthLabels ? "JAN" : undefined}
@@ -12356,6 +12850,18 @@ export function WatchfaceEditor({
                   })
                 }
               />
+              {dateFontDrawn ? (
+                <div className="watchface-position-inputs">
+                  {renderFontSizeField(
+                    Math.round(
+                      (sourceResolution
+                        ? dateFontSize(sourceResolution, partId, style, dateFamily, dateTypography)
+                        : null) ?? nativeHeight
+                    ),
+                    (fontSize) => setDateStyle(partId, { fontSize })
+                  )}
+                </div>
+              ) : <>
               <div className="field wf-sprite-size">
                 <span>{t("Size")}</span>
                 <LinkedDimensionInputs
@@ -12385,6 +12891,7 @@ export function WatchfaceEditor({
                   </button>
                 </p>
               ) : null}
+              </>}
               <label className="watchface-inspector-field"><span>{t("Rotation")}</span><EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setDateStyle(partId, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               <CustomPngFontPanel
                 api={api}
@@ -12404,6 +12911,7 @@ export function WatchfaceEditor({
                 onRasterFontChange={setRasterFont}
                 onComponentRasterFontChange={(rasterFont) => {
                   if (!rasterFont) {
+                    restoreMonthDigitBox();
                     restoreDateTemplateFont(partId);
                     return;
                   }
@@ -12897,31 +13405,27 @@ export function WatchfaceEditor({
             </button>
           </span>
         </label>
-        <label className="watchface-studio-toggle">
-          <input
-            type="checkbox"
-            checked={
-              design.selectableMetricStyle?.nativeSize ?? false
-            }
-            onChange={(event) =>
-              setSelectableMetricStyle({ nativeSize: event.target.checked })
-            }
-          />{t("Native width (no template bound)")}</label>
-        <label className="field">{t("Artwork zoom")}<EditableNumberInput
-            min="0.01"
-            step="0.01"
-            value={design.selectableMetricStyle?.scale ?? 1}
-            fallback={1}
-            onValueChange={(value) =>
-              setSelectableMetricStyle({ scale: Math.max(0.01, value) })
-            }
-          />
-          <span className="watchface-studio-summary">
-            {(design.selectableMetricStyle?.nativeSize ?? false)
-              ? t("Changes digit height while preserving each digit's natural width.")
-            : t("Scales digits inside the selectable value's fixed COROS canvas.")}
-          </span>
-        </label>
+        {(() => {
+          // Same Font size field as every other number; it draws digits at
+          // their natural width (see selectableMetricFontSize).
+          const style = design.selectableMetricStyle;
+          const cell = previewResolution ? watchfaceSelectableDigitSize(previewResolution) : null;
+          if (!cell) return null;
+          const family = style?.fontFamily ?? design.fontFamily;
+          const typography = resolveWatchfaceComponentTypography(
+            { fontWeight: design.fontWeight, fontStyle: design.fontStyle, letterSpacing: design.letterSpacing, rasterFont: design.rasterFont },
+            style
+          );
+          const drawn = shouldRenderWatchfaceText("0", family, typography) ? family : "";
+          return (
+            <div className="watchface-position-inputs">
+              {renderFontSizeField(
+                Math.round(selectableMetricFontSize(cell, style, drawn, typography)),
+                (fontSize) => setSelectableMetricStyle(selectableMetricStyleForFontSize(cell, style, drawn, fontSize))
+              )}
+            </div>
+          );
+        })()}
         {renderFirmwareSpriteRotation(
           design.selectableMetricStyle?.rotation,
           (rotation) => setSelectableMetricStyle({ rotation })
@@ -13101,6 +13605,40 @@ export function WatchfaceEditor({
    * The glyphs a text layer draws with, under its font picker: the imported
    * PNG set, the template sprite folder, or a sample of the local font.
    */
+  /**
+   * The size a digit layer draws at, in master pixels: its font size, or the
+   * size its template cell (times the legacy scale) gives the font. PNG
+   * digits report their height.
+   */
+  function digitLayerFontSize(
+    cell: { width: number; height: number },
+    style: WatchfaceMetricSpriteStyle | undefined
+  ): number {
+    const typography = resolveWatchfaceComponentTypography(
+      { fontWeight: design.fontWeight, fontStyle: design.fontStyle, letterSpacing: design.letterSpacing, rasterFont: design.rasterFont },
+      style
+    );
+    const family = style?.fontFamily ?? design.fontFamily;
+    const drawn = shouldRenderWatchfaceText("0", family, typography) ? family : "";
+    return Math.round(fixedMetricCurrentFontSize(cell, style, styleFontSize(style), drawn, typography));
+  }
+
+  /**
+   * The one size control every layer of numbers shares: font size in pixels,
+   * which PNG digits read as their height.
+   */
+  function renderFontSizeField(value: number, onChange: (fontSize: number) => void) {
+    return (
+      <label title={t("Font size in pixels. PNG digits use it as their height.")}>
+        {t("Font size")}
+        <span className="wf-input-with-unit">
+          <EditableNumberInput min="4" max="400" step="1" value={value} fallback={value} onValueChange={(fontSize) => onChange(Math.max(4, Math.min(400, Math.round(fontSize))))} />
+          <span>px</span>
+        </span>
+      </label>
+    );
+  }
+
   function renderFontPreview(
     layerId: string,
     style:

@@ -19,7 +19,8 @@
 }
 
 .watchface-shell .wf-metric-kind--selectable,
-.watchface-shell .wf-metric-kind--pages {
+.watchface-shell .wf-metric-kind--pages,
+.watchface-shell .wf-metric-kind--paged {
   border-color: var(--wf-accent-border, color-mix(in srgb, var(--accent) 45%, transparent));
   background: var(--accent-soft);
   color: var(--accent-strong);
@@ -174,6 +175,56 @@
   color: var(--accent-strong);
 }
 
+/* Hidden: on the page but not drawn (export keeps it invisibly). Optional: can be added. */
+.watchface-shell .wf-chart-slot.is-hidden {
+  border-style: dashed;
+  background: transparent;
+}
+
+.watchface-shell .wf-chart-slot.is-hidden span {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.watchface-shell .wf-chart-slot.is-optional {
+  gap: 3px;
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-secondary);
+  padding-left: 7px;
+}
+
+.watchface-shell .wf-chart-slot.is-optional:hover:not(:disabled) {
+  border-style: solid;
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-chart-page-title .wf-chart-page-remove {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  min-width: 0;
+  min-height: 0;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.watchface-shell .wf-chart-page-title .wf-chart-page-remove:hover:not(:disabled) {
+  background: var(--wf-insp-control, color-mix(in srgb, var(--text-primary) 6%, transparent));
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-chart-page-title .wf-chart-page-remove:focus-visible {
+  outline: 1px solid var(--wf-focus);
+  outline-offset: 1px;
+}
+
 .watchface-shell .wf-chart-slot.is-removed {
   border-style: dashed;
   color: var(--text-secondary);
@@ -201,6 +252,33 @@
 
 .watchface-shell .wf-chart-slot-actions .secondary-button {
   justify-self: start;
+}
+
+.watchface-shell .wf-chart-slot-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.watchface-shell .wf-chart-page.is-off {
+  border-style: dashed;
+}
+
+.watchface-shell .wf-chart-page.is-off .wf-chart-page-title {
+  color: var(--text-secondary);
+}
+
+.watchface-shell .wf-chart-page-off {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+
+.watchface-shell .wf-chart-page-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 /* Page-dependent layers listed under a page card, and a field's own page panel. */
@@ -266,4 +344,48 @@
   margin-left: 6px;
   color: var(--text-secondary);
   font-weight: 400;
+}
+
+/* The chart's readouts, listed under its layer row in Back order. */
+/* :root outranks the Atelier skin's row rule, which loads last. No icon column. */
+:root .watchface-shell .wf-layer-subitem .watchface-layer-row.wf-layer-subrow {
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 26px;
+  margin-left: 26px;
+  width: calc(100% - 26px);
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* The readout the chart layer edits: its row reads like the selection. */
+:root .watchface-shell .wf-layer-subitem .watchface-layer-row.wf-layer-subrow.is-editing {
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-layer-subrow .watchface-layer-name.is-hidden {
+  font-style: italic;
+}
+
+/* Page rows sit one step in under Chart; their readouts one step further. */
+:root .watchface-shell .wf-layer-subitem .watchface-layer-row.wf-layer-subpage {
+  font-weight: 600;
+}
+
+:root .watchface-shell .wf-layer-subitem .watchface-layer-row.wf-layer-subpage.is-off .watchface-layer-name {
+  color: var(--text-muted);
+}
+
+:root .watchface-shell .wf-layer-subitem .watchface-layer-row.wf-layer-subreadout {
+  margin-left: 42px;
+  width: calc(100% - 42px);
+  font-weight: 500;
+}
+
+.watchface-shell .wf-layer-subrow-page {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
 }

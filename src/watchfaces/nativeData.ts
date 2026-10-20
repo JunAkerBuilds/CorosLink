@@ -1,8 +1,9 @@
 import type { CorosWatchfaceAssetReplacement, CorosWatchfaceConfigOverride, CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceResolutionDetails, CorosWatchfaceTemplateDetails } from "../../electron/types";
 import type { ChartPageCompanions } from "./recoveredWatchfaceDesign";
-import { NATIVE_CHART_PAGES, NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartDailyPage, nativeChartGroup, nativeChartRepresentation, nativeChartSourceKeys, nativeFieldKeys, nativeConfigPrefix, nativeHasIcon, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_CHART_DAILY_PAGES, NATIVE_CHART_PAGES, NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartDailyPage, nativeChartGroup, nativeChartRepresentation, nativeChartSourceKeys, nativeFieldKeys, nativeConfigPrefix, nativeHasIcon, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
 import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, offsetConfigValue, parseConfigPos, parseConfigRect, pickPreviewResolution, resizeAndTintSprite } from "./watchfaceStudio";
 import { isNativeTime, nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRolePart, nativeRoleIndices, nativeStateCount } from "./nativeDataParts";
+import { chartGraphBounds, chartPageFillers, chartReadoutBounds, chartReadoutFolder, chartReadoutPage, chartSourceOf, storedChartReadouts } from "./chartReadouts";
 import { parseSimulationDateTime, type WatchfacePreviewScenario } from "./watchfaceSimulation";
 import { fillWatchfaceText, setWatchfaceCanvasFont } from "./watchfaceFontSnapshots";
 export { NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS, NATIVE_DATA_BY_ID } from "../../electron/watchfaceNativeCatalog";
@@ -103,6 +104,11 @@ export function nativeLayerStyle(id: string, data: NativeData, scenario?: Watchf
 export function nativeDataBounds(id: string, data: NativeData) {
   const style = nativeLayerStyle(id, data);
   if (!style?.enabled) return null;
+  if (id === "chart") {
+    // The chart layer is the readout it edits, plus the graph on pages that draw one.
+    const boxes = [chartReadoutBounds(style), chartGraphBounds(style)].flatMap(box => box ? [box] : []);
+    return boxes.length ? { x0: Math.min(...boxes.map(box => box.x0)), y0: Math.min(...boxes.map(box => box.y0)), x1: Math.max(...boxes.map(box => box.x1)), y1: Math.max(...boxes.map(box => box.y1)) } : null;
+  }
   const size = nativeDataSize(id, style);
   const separator = id === "weather_temp_min" ? minMaxTemperatureRun(data)?.separator : undefined;
   return {
@@ -214,15 +220,56 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
         // are alternatives the watch cycles through, so they stay; only this
         // editor's own earlier output for another source is cleared.
         for (const key of [...NATIVE_CHART_SHARED_KEYS, ...nativeChartSourceKeys(style.chartSource ?? "chart_stress")]) values[key] = COROS_CONFIG_DELETE_VALUE;
+        // A readout in its own stored-readout folders came from an earlier
+        // export of several readouts and nothing overwrites it.
         for (const { id: source } of NATIVE_CHART_SOURCES) {
-          if (nativeChartSourceKeys(source).some(key => /^cl_nd_/.test(resolution.config[key] ?? ""))) for (const key of nativeChartSourceKeys(source)) values[key] = COROS_CONFIG_DELETE_VALUE;
+          const own = new RegExp(`^${chartReadoutFolder(source)}(_[a-z]+)?(\\\\|$)`);
+          if (nativeChartSourceKeys(source).some(key => { const value = resolution.config[key] ?? ""; return /^cl_nd_/.test(value) && !own.test(value) && !value.startsWith("cl_nd_blank_icon\\"); })) {
+            for (const key of nativeChartSourceKeys(source)) values[key] = COROS_CONFIG_DELETE_VALUE;
+          }
         }
-        // Template readouts made fixed leave their page.
-        for (const source of style.removedReadouts ?? []) for (const key of nativeChartSourceKeys(source)) values[key] = COROS_CONFIG_DELETE_VALUE;
+        // Stored readouts are written below; template readouts made fixed leave their page.
+        for (const source of [...Object.keys(style.readouts ?? {}), ...style.removedReadouts ?? []]) for (const key of nativeChartSourceKeys(source)) values[key] = COROS_CONFIG_DELETE_VALUE;
       } else for (const key of nativeFieldKeys(field)) values[key] = COROS_CONFIG_DELETE_VALUE;
       if (style.enabled) minWatchFaceVersion = Math.max(minWatchFaceVersion, field.version);
     }
-    for (const [id, authored] of Object.entries(data)) {
+    // The 4.9.9 parser reads each icon+value block only when its `_icon_pos`
+    // key exists (LoadConfig 0x1e7e38 for stamina, 0x1e42a8 for UV, likewise
+    // wind, rain, humidity, AQI, training load, stress, barometer, activity
+    // totals and sunrise/sunset). A missing `_icon` key is skipped on its own,
+    // so a hidden icon still writes the position, or the value never reaches
+    // the watch. The chart helpers look every key up independently.
+    // Every official humidity readout (and all but two UV ones) carries an
+    // icon, blank where the face draws none. A converted SATISFY 3 whose
+    // humidity and UV kept only the position showed neither value on a PACE
+    // Pro while rainfall, with its icon, did (2026-09-26). So a hidden icon
+    // becomes an invisible one rather than a missing key.
+    const blankIcon = () => {
+      const folder = "cl_nd_blank_icon", path = `${resolution.directory}/${folder}/00.png`;
+      if (!written.has(path)) {
+        written.add(path);
+        assetReplacements.push({ path, dataUrl: canvasImage(1, 1, () => undefined), create: !existing.has(path), allowDimensionOverride: true });
+      }
+      return `${folder}\\00.png`;
+    };
+    /** A folder of transparent 1x1 frames: a font or state table that draws nothing. */
+    const blankFrames = (folder: string, count: number) => {
+      for (let i = 0; i < count; i++) {
+        const path = `${resolution.directory}/${folder}/${String(i).padStart(2, "0")}.png`;
+        if (written.has(path)) continue;
+        written.add(path);
+        assetReplacements.push({ path, dataUrl: canvasImage(1, 1, () => undefined), create: !existing.has(path), allowDimensionOverride: true });
+      }
+      return folder;
+    };
+    // The chart's stored readouts follow every field, each in its own folders.
+    // A source another layer already shows (NOMAD's solar angle) stays with it.
+    const chartReadouts = data.chart?.enabled ? storedChartReadouts(data.chart).filter(readout => !data[chartSourceOf(readout)]?.enabled) : [];
+    let chartSymbolsWritten = false;
+    for (const [id, authored, folderPrefix] of [
+      ...Object.entries(data).map(([id, style]) => [id, style, undefined] as const),
+      ...chartReadouts.map(readout => ["chart", readout, chartReadoutFolder(chartSourceOf(readout))] as const)
+    ]) {
       const field = NATIVE_DATA_BY_ID.get(id)!;
       if (!authored.enabled) continue;
       // Written where the watch draws it, so the config matches the preview.
@@ -239,8 +286,9 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
         const align = authoredAlign === "center" ? "hcenter" : authoredAlign ?? originalChartAlign ?? "left";
         return `{${Math.round(x + (p.x + dx) * scale)},${Math.round(y + p.y * scale)},${Math.round(x + (p.x + dx + width) * scale)},${Math.round(y + (p.y + p.height) * scale)},${align}|vcenter}`;
       };
+      const prefix = folderPrefix ?? `cl_nd_${id}`;
       const folders: Record<Role, string> = {
-        digits: `cl_nd_${id}_d`, icon: `cl_nd_${id}_i`, states: `cl_nd_${id}`, unit: `cl_nd_${id}_u`, symbols: `cl_nd_${id}_s`, progress: `cl_nd_${id}_p`, decimal: `cl_nd_${id}_m`, background: `cl_nd_${id}_bg`, mask: `cl_nd_${id}_mask`, noDataMask: `cl_nd_${id}_nodata`, separator: "cl_nd_temp_separator"
+        digits: `${prefix}_d`, icon: `${prefix}_i`, states: prefix, unit: `${prefix}_u`, symbols: `${prefix}_s`, progress: `${prefix}_p`, decimal: `${prefix}_m`, background: `${prefix}_bg`, mask: `${prefix}_mask`, noDataMask: `${prefix}_nodata`, separator: "cl_nd_temp_separator"
       };
       const sprite = async (role: Role, index = 0, sourceStyle = style, folder = folders[role]) => {
         const file = `${String(index).padStart(2, "0")}.png`, path = `${resolution.directory}/${folder}/${file}`;
@@ -251,35 +299,6 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
         return `${folder}\\${file}`;
       };
       const font = async () => { for (let i = 0; i < 10; i++) await sprite("digits", i); return folders.digits; };
-      // The 4.9.9 parser reads each icon+value block only when its `_icon_pos`
-      // key exists (LoadConfig 0x1e7e38 for stamina, 0x1e42a8 for UV, likewise
-      // wind, rain, humidity, AQI, training load, stress, barometer, activity
-      // totals and sunrise/sunset). A missing `_icon` key is skipped on its own,
-      // so a hidden icon still writes the position, or the value never reaches
-      // the watch. The chart helpers look every key up independently.
-      // Every official humidity readout (and all but two UV ones) carries an
-      // icon, blank where the face draws none. A converted SATISFY 3 whose
-      // humidity and UV kept only the position showed neither value on a PACE
-      // Pro while rainfall, with its icon, did (2026-09-26). So a hidden icon
-      // becomes an invisible one rather than a missing key.
-      const blankIcon = () => {
-        const folder = "cl_nd_blank_icon", path = `${resolution.directory}/${folder}/00.png`;
-        if (!written.has(path)) {
-          written.add(path);
-          assetReplacements.push({ path, dataUrl: canvasImage(1, 1, () => undefined), create: !existing.has(path), allowDimensionOverride: true });
-        }
-        return `${folder}\\00.png`;
-      };
-      /** A folder of transparent 1x1 frames: a font or state table that draws nothing. */
-      const blankFrames = (folder: string, count: number) => {
-        for (let i = 0; i < count; i++) {
-          const path = `${resolution.directory}/${folder}/${String(i).padStart(2, "0")}.png`;
-          if (written.has(path)) continue;
-          written.add(path);
-          assetReplacements.push({ path, dataUrl: canvasImage(1, 1, () => undefined), create: !existing.has(path), allowDimensionOverride: true });
-        }
-        return folder;
-      };
       const icon = async (prefix: string, riseKey?: string, setKey?: string, hasValue = part("value").enabled) => {
         if (!part("icon").enabled) {
           if (!hasValue) return;
@@ -359,6 +378,11 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
         ] as const) {
           if (part(role).enabled) { values[imageKey] = await sprite(role); values[positionKey] = point(role); }
         }
+        // Every official chart face (70 NOMAD, MARK, NIGHT CLIMBER and SATISFY
+        // configs) declares chart_bg, so a hidden backdrop becomes an invisible
+        // one at the plot, like hidden icons. Adding it did not by itself make
+        // a Studio chart page with Back on a PACE Pro (2026-10-20).
+        if (!folderPrefix && !part("background").enabled) { values.chart_bg = blankIcon(); values.chart_pos = point("plot"); }
         // The watch draws the graph only when the face declares a chart readout.
         // A graph-only face sent through C-LINK showed no graph until its number
         // was turned on (2026-10-13), although COROS's compiler and ours write the
@@ -386,13 +410,43 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
           else if (invisible) { values[`${source}_rect`] = hiddenRect(); values[`${source}_font`] = blankFrames("cl_nd_chart_blank_digits", 10); }
           await icon(source, undefined, undefined, part("value").enabled || invisible);
         }
-        if (part("value").enabled && source !== "chart_moon") {
+        // Every readout shares one set of chart symbols: the edited readout's,
+        // or the first stored one with a number.
+        if (part("value").enabled && source !== "chart_moon" && !chartSymbolsWritten) {
+          chartSymbolsWritten = true;
           values.chart_point_icon = await sprite("decimal");
           for (const [i, key] of ["chart_negasign_icon", "chart_dgree_icon", "chart_percent_icon", "chart_colon_icon"].entries()) {
             // The solar-angle readout supplies the shared degree artwork when present.
             if (key === "chart_dgree_icon" && data.chart_sun_angle?.enabled) continue;
             values[key] = await sprite("symbols", i);
           }
+        }
+      }
+    }
+    // Keep every page the face has readouts on (chartPageFillers): invisible
+    // readouts at the plot corner, like a hidden chart number.
+    const chart = data.chart;
+    if (chart?.enabled) {
+      const set = (key: string) => {
+        const value = key in values ? values[key] : resolution.config[key];
+        return Boolean(value?.trim()) && value !== COROS_CONFIG_DELETE_VALUE;
+      };
+      const time = (source: string) => source === "chart_sunrise" || source === "chart_moonrise";
+      const shown = (source: string) => source === "chart_moon" ? set("chart_moon_icon")
+        : set(`${source}_${time(source) ? "hour_rect" : "rect"}`) && set(`${source}_font`);
+      const missing = chartPageFillers(NATIVE_CHART_PAGES.flatMap(page => page.sources).filter(shown));
+      if (missing.length) {
+        const plot = nativePart("chart", chart, "plot");
+        const x = Math.round((chart.x + plot.x * chart.scale) * ratio), y = Math.round((chart.y + plot.y * chart.scale) * ratio);
+        const tiny = (dx = 0) => `{${x + dx},${y},${x + dx + 8},${y + 4},left|vcenter}`;
+        for (const source of missing) {
+          values[`${source}_icon_pos`] = `{${x},${y}}`;
+          values[`${source}_icon`] = blankIcon();
+          values[`${source}_font`] = blankFrames("cl_nd_chart_blank_digits", 10);
+          if (time(source)) {
+            values[`${source}_hour_rect`] = tiny(); values[`${source}_minute_rect`] = tiny(10);
+            values[source === "chart_sunrise" ? "chart_sunset_icon" : "chart_moonset_icon"] = blankIcon();
+          } else values[`${source}_rect`] = tiny();
         }
       }
     }
@@ -485,54 +539,34 @@ async function addMinMaxCompanions(
 }
 
 /**
- * The chart pages a field shows on when it shares a slot with another field
- * the watch swaps in on other pages (NOMAD's weather row), and those partners.
- * Null when the field shows on every page. Same rules as
- * nativeLayerHiddenByChartGroup below.
+ * Fields the watch draws only on some chart pages, wherever they sit. PACE Pro
+ * firmware 3.2008.0 (chart routine around 0x454776): on the sun and moon pages
+ * it skips the whole weather block (current, minimum and maximum temperature,
+ * rain, humidity, UV and AQI) and draws the page's readouts and wind instead;
+ * on the other pages it draws minimum and maximum only on the daily pages and
+ * wind only elsewhere. The solar angle field is the sun page's readout.
  */
-export function nativeLayerChartPages(id: string, data: NativeData): { pages: string[]; partners: string[] } | null {
-  if (!data.chart?.enabled) return null;
-  const collides = (a: string, b: string) => {
-    const p = nativeDataBounds(a, data), q = nativeDataBounds(b, data);
-    return Boolean(p && q && p.x0 < q.x1 && q.x0 < p.x1 && p.y0 < q.y1 && q.y0 < p.y1);
-  };
-  const pages = (keep: (page: string) => boolean) => NATIVE_CHART_PAGES.map(page => page.id).filter(keep);
-  const daily = (page: string) => page.startsWith("daily-");
-  if (id === "chart_sun_angle") return { pages: ["sun"], partners: collides("chart_sun_angle", "weather_temp") ? ["weather_temp"] : [] };
-  if (id === "weather_temp" && collides("weather_temp", "chart_sun_angle")) return { pages: pages(page => page !== "sun"), partners: ["chart_sun_angle"] };
-  if (id === "weather_temp_min" || id === "weather_temp_max") {
-    const partners = ["weather_wind", "weather_direction"].filter(other => nativeLayerStyle(other, data)?.enabled);
-    return collides(id, "weather_wind") ? { pages: pages(daily), partners } : null;
-  }
-  // The watch hides wind on the daily-data pages wherever it sits (PACE Pro,
-  // NOMAD export with min/max off: the row went blank there, 2026-10-18).
-  if (id === "weather_wind" || id === "weather_direction") {
-    return { pages: pages(page => !daily(page)), partners: ["weather_temp_min", "weather_temp_max"].filter(other => collides("weather_wind", other)) };
-  }
-  return null;
+const PAGE_DEPENDENT_FIELDS: Record<string, (page: string) => boolean> = {
+  chart_sun_angle: page => page === "sun",
+  ...Object.fromEntries(["weather_temp", "weather_rainfall", "weather_humidity", "weather_uv", "weather_aqi"].map(id => [id, (page: string) => page !== "sun" && page !== "moon"])),
+  weather_temp_min: page => page.startsWith("daily-"),
+  weather_temp_max: page => page.startsWith("daily-"),
+  weather_wind: page => !page.startsWith("daily-"),
+  weather_direction: page => !page.startsWith("daily-")
+};
+
+/** The chart pages a field shows on; null when the face has no chart or the field shows on every page. */
+export function nativeLayerChartPages(id: string, data: NativeData): { pages: string[] } | null {
+  const shows = PAGE_DEPENDENT_FIELDS[id];
+  if (!data.chart?.enabled || !shows) return null;
+  return { pages: NATIVE_CHART_PAGES.map(page => page.id).filter(shows) };
 }
 
-/**
- * Layers the watch shows only in some Back-button chart groups. The preview
- * follows the chart layer's group; without a chart layer everything draws.
- * Suppression only applies where the alternatives actually share a slot.
- */
+/** Layers the watch hides on the chart page the preview shows (the edited readout's page). */
 export function nativeLayerHiddenByChartGroup(id: string, data: NativeData): boolean {
-  const chart = data.chart?.enabled ? data.chart : undefined;
-  const group = nativeChartGroup(chart ? chart.chartSource ?? "chart_stress" : undefined);
-  if (!group) return false;
-  const collides = (a: string, b: string) => {
-    const p = nativeDataBounds(a, data), q = nativeDataBounds(b, data);
-    return Boolean(p && q && p.x0 < q.x1 && q.x0 < p.x1 && p.y0 < q.y1 && q.y0 < p.y1);
-  };
-  if (id === "chart_sun_angle") return group !== "sun";
-  if (id === "weather_temp") return group === "sun" && collides("weather_temp", "chart_sun_angle");
-  // NOMAD keeps min/max temperature and wind in one row. The watch hides wind
-  // and direction on the general daily-data pages wherever they sit (confirmed
-  // on PACE Pro, 2026-10-18).
-  if (id === "weather_temp_min" || id === "weather_temp_max") return group !== "general" && collides(id, "weather_wind");
-  if (id === "weather_wind" || id === "weather_direction") return group === "general";
-  return false;
+  const chart = data.chart?.enabled ? data.chart : undefined, shows = PAGE_DEPENDENT_FIELDS[id];
+  const page = chart ? chartReadoutPage(chartSourceOf(chart)) : undefined;
+  return Boolean(page && shows && !shows(page));
 }
 
 /**
@@ -542,17 +576,28 @@ export function nativeLayerHiddenByChartGroup(id: string, data: NativeData): boo
  */
 async function drawChartPageCompanions(canvas: HTMLCanvasElement, width: number, data: NativeData, scenario?: WatchfacePreviewScenario,
   chartPage?: ChartPageCompanions | null) {
-  const chart = data.chart, page = nativeChartDailyPage(chart?.chartSource);
-  if (!chartPage || !chart?.enabled || !page) return;
+  const chart = data.chart;
+  if (!chart?.enabled) return;
+  const source = chartSourceOf(chart), page = nativeChartDailyPage(source);
   const ctx = canvas.getContext("2d"); if (!ctx) return;
   const ratio = canvas.width / width;
-  if (chartPage.divider) {
-    // The divider PNG is in face pixels; scale it with the canvas like every other part.
-    const divider = await loadStudioImage(chartPage.divider.dataUrl);
-    ctx.drawImage(divider, chartPage.divider.x * ratio, chartPage.divider.y * ratio, divider.naturalWidth * ratio, divider.naturalHeight * ratio);
+  if (chartPage && page) {
+    if (chartPage.divider) {
+      // The divider PNG is in face pixels; scale it with the canvas like every other part.
+      const divider = await loadStudioImage(chartPage.divider.dataUrl);
+      ctx.drawImage(divider, chartPage.divider.x * ratio, chartPage.divider.y * ratio, divider.naturalWidth * ratio, divider.naturalHeight * ratio);
+    }
+    for (const readout of chartPage.readouts) {
+      const other = readout.chartSource ?? "";
+      // A stored copy (edited or moved in Studio) replaces the template's.
+      if (other === source || !page.includes(other) || chart.removedReadouts?.includes(other) || chart.readouts?.[other]) continue;
+      await drawNativeDataPreview(canvas, width, { chart: readout }, scenario);
+    }
   }
-  for (const readout of chartPage.readouts) {
-    if (readout.chartSource === chart.chartSource || !page.includes(readout.chartSource ?? "") || chart.removedReadouts?.includes(readout.chartSource ?? "")) continue;
+  // Readouts Studio stores beside the edited one, on any page.
+  const shown = chartReadoutPage(source);
+  for (const readout of storedChartReadouts(chart)) {
+    if (chartReadoutPage(chartSourceOf(readout)) !== shown || data[chartSourceOf(readout)]?.enabled) continue;
     await drawNativeDataPreview(canvas, width, { chart: readout }, scenario);
   }
 }

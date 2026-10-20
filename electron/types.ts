@@ -1004,6 +1004,12 @@ export interface CorosWatchfaceNativeDataStyle {
    * them to an always-shown field). Export deletes their config keys.
    */
   removedReadouts?: string[];
+  /**
+   * Chart only: the face's other readouts, by chart source, each where it sits
+   * on the face. The layer edits one readout at a time (chartSource) and swaps
+   * another in when it is picked; the graph parts stay with the layer.
+   */
+  readouts?: Record<string, CorosWatchfaceNativeDataStyle>;
   /** State-table size when recovered artwork defines fewer frames than the catalog default. */
   stateCount?: number;
   chartWidth?: number;
@@ -1119,7 +1125,7 @@ export interface CorosWatchfaceDesignState {
   previewComplication: string;
   nativeData?: Record<string, CorosWatchfaceNativeDataStyle>;
   metricChanges: Record<string, boolean>;
-  metricStyles: Record<string, { solidAlpha?: boolean; align?: "left" | "center" | "right"; color?: string; scale: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
+  metricStyles: Record<string, { solidAlpha?: boolean; align?: "left" | "center" | "right"; color?: string; scale: number; fontSize?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Optional native calorie goal arc/bar configuration. */
   kcalProgress?: CorosWatchfaceKcalProgressStyle;
   /** Optional native exercise-goal bar configuration. */
@@ -1177,7 +1183,7 @@ export interface CorosWatchfaceDesignState {
   addWeekday?: boolean;
   addDateMonth?: boolean;
   addDateDay?: boolean;
-  timeStyles: Record<string, { solidAlpha?: boolean; color?: string; scale: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
+  timeStyles: Record<string, { solidAlpha?: boolean; color?: string; scale: number; fontSize?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Weekday/month/day sizing; absent in projects saved before resizing. */
   dateStyles?: Record<
     string,
@@ -1185,6 +1191,12 @@ export interface CorosWatchfaceDesignState {
       /** Export solid glyph pixels after all resizing and effects. */
       solidAlpha?: boolean;
       scale: number;
+      /** Desktop fonts: font size in master pixels, drawn inside width/height. */
+      fontSize?: number;
+      /** Desktop-font words: TUE/OCT (default), Tue/Oct or Tuesday/October. */
+      labelStyle?: "upper" | "title" | "full";
+      /** Desktop-font words: translate them for the watch languages picked in Send. */
+      translateLabels?: boolean;
       /** Clockwise rotation applied inside each firmware sprite canvas. */
       rotation?: number;
       /** Exact exported PNG dimensions when set. */
