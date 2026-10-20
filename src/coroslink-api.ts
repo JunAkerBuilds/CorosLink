@@ -1,5 +1,7 @@
 import type { CalendarEventTiming, CalendarWorkoutEventRef, CalendarWorkoutEventSaveResult } from "../electron/calendarSyncTypes";
 import type { CorosNativeBleSnapshot } from "../electron/corosNativeBleTypes";
+import type { DataModeStatus, LocalOnlyActivationOptions, NetworkAccessReport } from "../electron/privacy/dataModeTypes";
+import type { LocalBackupResult, LocalDataOverview, LocalImportResult, LocalRestoreResult, WatchSyncProbe, WatchSyncProgress } from "../electron/localSync/localDataTypes";
 import type { ChatGptModelInfo, ChatModelOption } from "../electron/chatModels";
 import type { StrengthEditPreview } from "../electron/workoutEditTypes";
 import type { HealthInsightKind, HealthInsightResult } from "../electron/healthInsightsTypes";
@@ -903,6 +905,28 @@ export interface CorosLinkApi {
   setWindowBackground: (color: string) => Promise<void>;
   isWindowFullscreen: () => Promise<boolean>;
   onWindowFullscreenChange: (callback: (fullscreen: boolean) => void) => () => void;
+  // Local-Only Mode (Settings → Privacy).
+  /** CorosLink started in Local-Only Mode (known before the first data-mode status arrives). */
+  localOnlyAtLaunch?: boolean;
+  getDataModeStatus: () => Promise<DataModeStatus>;
+  activateLocalOnlyMode: (options: LocalOnlyActivationOptions) => Promise<DataModeStatus>;
+  /** Asks for native confirmation, then saves Connected Mode and restarts CorosLink. */
+  returnToConnectedMode: () => Promise<DataModeStatus>;
+  getNetworkAccessReport: () => Promise<NetworkAccessReport>;
+  clearNetworkAccessReport: () => Promise<NetworkAccessReport>;
+  onDataModeChange: (callback: (status: DataModeStatus) => void) => () => void;
+  getLocalDataOverview: () => Promise<LocalDataOverview>;
+  importLocalFitFiles: (folder?: boolean) => Promise<LocalImportResult>;
+  syncWatchLocally: () => Promise<WatchSyncProgress>;
+  getWatchSyncProgress: () => Promise<WatchSyncProgress>;
+  cancelWatchSync: () => Promise<WatchSyncProgress>;
+  readWatchDayTotals: () => Promise<unknown>;
+  /** Reads the first activity block without acknowledging it, then disconnects (developer capture mode). */
+  probeWatchSync: (options?: { allBlocks?: boolean; selector?: number; fileIndex?: number }) => Promise<WatchSyncProbe>;
+  onWatchSyncProgress: (callback: (progress: WatchSyncProgress) => void) => () => void;
+  exportLocalBackup: (passphrase?: string) => Promise<LocalBackupResult>;
+  chooseLocalBackup: () => Promise<{ chosen: boolean; encrypted?: boolean }>;
+  restoreLocalBackup: (passphrase?: string) => Promise<LocalRestoreResult>;
 }
 
 declare global {

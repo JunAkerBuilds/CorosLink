@@ -81,3 +81,12 @@ export interface CorosPhonePairingCode {
   account: string;
   deviceName?: string;
 }
+
+/** One local-sync transport operation as captured for protocol debugging (developer mode only). */
+export interface CorosSyncCaptureEntry {
+  operation: string;
+  ok: boolean;
+  error?: string;
+  /** d: tx/rx, c: control/bulk channel, t: ms since the operation began, x: frame hex. */
+  frames: Array<{ d: "tx" | "rx"; c: "control" | "bulk"; t: number; x: string }>;
+}

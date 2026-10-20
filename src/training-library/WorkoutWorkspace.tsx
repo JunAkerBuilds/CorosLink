@@ -1,5 +1,6 @@
 import { formatWorkoutSport } from "../calendar/workoutLabels";
 import { getLocale, t, useLanguage } from "../i18n/training";
+import { useLocalOnlyView } from "../privacy/localOnlyView";
 import {
   CalendarPlus,
   Copy,
@@ -302,6 +303,7 @@ export function WorkoutWorkspace({
   onError
 }: WorkoutWorkspaceProps) {
   useLanguage();
+  const localOnly = useLocalOnlyView();
   const { unitSystem } = useUnitSystem();
   const [query, setQuery] = useState("");
   const [scope, setScope] = useSelectionPreference(
@@ -593,7 +595,9 @@ export function WorkoutWorkspace({
     setBusy("delete");
     try {
       await api.deleteTrainingLibraryWorkouts({ programIds: pendingDelete, confirmed: true });
-      onMessage(t("Deleted {{value1}} workout{{value2}} from COROS.", { value1: String(pendingDelete.length), value2: String(pendingDelete.length === 1 ? "" : "s") }));
+      onMessage(localOnly
+        ? t("Deleted {{value1}} workout{{value2}} from this computer.", { value1: String(pendingDelete.length), value2: String(pendingDelete.length === 1 ? "" : "s") })
+        : t("Deleted {{value1}} workout{{value2}} from COROS.", { value1: String(pendingDelete.length), value2: String(pendingDelete.length === 1 ? "" : "s") }));
       setSelected([]);
       setPendingDelete([]);
       setActiveId(null);
@@ -1121,7 +1125,7 @@ export function WorkoutWorkspace({
                   </span>
                   <span>
                     <strong>{t("Schedule workout")}</strong>
-                    <small>{t("Add it to your COROS calendar")}</small>
+                    <small>{localOnly ? t("Add it to your calendar") : t("Add it to your COROS calendar")}</small>
                   </span>
                 </div>
                 <div className="tl-reader-schedule-controls">
@@ -1198,7 +1202,7 @@ export function WorkoutWorkspace({
             aria-labelledby="workout-delete-title"
           >
             <h2 id="workout-delete-title">
-              {t("Delete")} {pendingDelete.length} {t("workout")}{pendingDelete.length === 1 ? "" : "s"} {t("from COROS?")} </h2>
+              {t("Delete")} {pendingDelete.length} {t("workout")}{pendingDelete.length === 1 ? "" : "s"} {localOnly ? t("from this computer?") : t("from COROS?")} </h2>
             <p>
               {t("This cannot be undone. Calendar copies stay in place, and plan references will remain but point at nothing.")} </p>
             <ul>

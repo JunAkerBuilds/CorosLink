@@ -360,6 +360,11 @@
   text-wrap: pretty;
 }
 
+.overview-readiness-sync {
+  justify-self: start;
+  margin-top: 4px;
+}
+
 .overview-ring {
   --ring-tone: var(--text-muted);
   position: relative;

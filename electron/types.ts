@@ -2136,7 +2136,10 @@ export interface SpotifySyncResult {
 }
 
 export interface TrainingHubStatus {
+  /** True when training data can be shown: a COROS session, or local data in Local-Only Mode. */
   authenticated: boolean;
+  /** "local" in Local-Only Mode (set by the renderer); absent means the COROS cloud. */
+  dataSource?: "cloud" | "local";
   userId?: string;
   regionId?: string;
   baseUrl?: string;
@@ -2368,6 +2371,12 @@ export interface TrainingHubDailyMetric {
   vo2max?: number;
   distance?: number;
   duration?: number;
+  /** Local-Only Mode, from the watch: when it counts you as fully recovered (Unix seconds), as of the day's last activity. */
+  recoveredAt?: number;
+  /** Local-Only Mode, from the watch: Base Fitness and Load Impact (training-load points), fatigue (%). */
+  baseFitness?: number;
+  loadImpact?: number;
+  fatigue?: number;
 }
 
 export interface TrainingHubDailyMetrics {
@@ -2623,6 +2632,44 @@ export interface StravaConfigInput {
   clientSecret?: string;
 }
 
+/** Heart rate after the workout ended, measured by the watch (Local-Only Mode, from its daily history). */
+export interface TrainingHubHeartRateRecovery {
+  /** bpm one second after the workout ended. */
+  startBpm: number;
+  /** bpm 60 and 120 seconds after the workout ended. */
+  oneMinuteBpm: number;
+  twoMinuteBpm: number;
+  /** How far heart rate fell in those times (startBpm − later value). */
+  dropOneMinute: number;
+  dropTwoMinutes: number;
+  /** bpm once a second; sample i is i + 1 seconds after the workout ended; 0 means no reading. */
+  samples: number[];
+}
+
+/** The watch's own training analysis of a workout (Local-Only Mode, from the activity file). */
+export interface TrainingHubTrainingEffect {
+  /** 0–5.9, as the COROS app shows it. */
+  aerobic?: number;
+  anaerobic?: number;
+  /** 1 Easy, 2 Base, 3 Tempo, 4 Threshold, 5 VO2 Max, 6 Anaerobic. */
+  focus?: number;
+  aerobicLoad?: number;
+  anaerobicLoad?: number;
+  /** Training load of the 7 days up to this workout, and the watch's recommended range for it. */
+  sevenDayLoad?: number;
+  recommendedLoadMin?: number;
+  recommendedLoadMax?: number;
+}
+
+/** Running-dynamics averages measured by the watch. */
+export interface TrainingHubRunningDynamics {
+  groundTimeMs?: number;
+  verticalOscillationMm?: number;
+  /** Percent. */
+  verticalRatio?: number;
+  stepLengthMm?: number;
+}
+
 export interface TrainingHubActivityDetail {
   activityId?: string;
   name?: string;
@@ -2651,6 +2698,12 @@ export interface TrainingHubActivityDetail {
   track?: TrainingHubActivityTrack;
   series?: TrainingHubActivitySeriesPoint[];
   strength?: StrengthDetail;
+  heartRateRecovery?: TrainingHubHeartRateRecovery;
+  trainingEffect?: TrainingHubTrainingEffect;
+  runningDynamics?: TrainingHubRunningDynamics;
+  minHr?: number;
+  /** °C. */
+  avgTemperature?: number;
   raw: Record<string, unknown>;
 }
 

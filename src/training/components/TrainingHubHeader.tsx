@@ -15,6 +15,8 @@ export type TrainingHubTab = typeof trainingHubTabs[number]["id"];
 interface TrainingHubHeaderProps {
   dashboardToolbarRef?: (element: HTMLDivElement | null) => void;
   connected: boolean;
+  /** Local-Only Mode: without a COROS sign-in there is no account chip. */
+  localOnly?: boolean;
   status: TrainingHubStatus | null;
   busy: string | null;
   sampleMode: boolean;
@@ -30,7 +32,7 @@ interface TrainingHubHeaderProps {
 }
 
 export function TrainingHubHeader({
-  connected, status, busy, sampleMode, activeTab, tabIdPrefix, activityCount,
+  connected, localOnly = false, status, busy, sampleMode, activeTab, tabIdPrefix, activityCount,
   onTabChange, onRefresh, onLogout, onToggleSample, onTestPrCelebration, dashboardToolbarRef
 }: TrainingHubHeaderProps) {
   useLanguage();
@@ -97,7 +99,8 @@ export function TrainingHubHeader({
           ) : null}
           {connected && !sampleMode ? (
             <>
-              <div className="training-hub-account" ref={accountRef}>
+              {/* Local-Only Mode without a COROS sign-in has no account to show; the toolbar already says Local-Only. */}
+              {localOnly && !status?.userId ? null : <div className="training-hub-account" ref={accountRef}>
                 <button
                   ref={accountButtonRef}
                   className="training-hub-account-button"
@@ -131,7 +134,7 @@ export function TrainingHubHeader({
                     </button>
                   </div>
                 ) : null}
-              </div>
+              </div>}
               <button
                 className="training-hub-refresh-button"
                 type="button"

@@ -1,0 +1,60 @@
+/* The two data modes: radio cards like the Units panel. The chosen one stays at full strength. */
+.privacy-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.privacy-modes button { display: grid; grid-template-columns: 16px 18px minmax(0, 1fr); align-items: start; gap: 10px; padding: 12px 14px; border: 1px solid var(--glass-border); border-radius: var(--radius-md); background: var(--glass-bg); color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; transition: border-color 140ms ease, background 140ms ease; }
+.privacy-modes button > svg { margin-top: 1px; color: var(--text-secondary); }
+.privacy-modes button:hover:not(:disabled), .privacy-modes button.is-active { border-color: color-mix(in srgb, var(--accent) 48%, var(--glass-border)); background: color-mix(in srgb, var(--accent) 9%, var(--glass-bg)); }
+.privacy-modes button.is-active { cursor: default; }
+.privacy-modes button.is-active > svg { color: var(--accent); }
+.privacy-modes button.is-active .settings-unit-radio { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 3px var(--bg-base); }
+.privacy-modes button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.privacy-modes button:disabled { cursor: default; }
+.privacy-modes button[aria-checked="true"], .privacy-modes button[aria-checked="true"]:disabled { opacity: 1; }
+.privacy-modes span:last-child { display: grid; gap: 3px; }
+.privacy-modes strong { font-size: 14px; }
+.privacy-modes small { color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.privacy-confirm { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent-soft); font-size: 13px; }
+.privacy-confirm label { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; }
+.privacy-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.privacy-section { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--glass-border); }
+.privacy-section h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; }
+.privacy-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 16px; margin: 0; font-size: 13px; }
+.privacy-facts div { display: grid; gap: 2px; align-content: start; }
+.privacy-facts dt { color: var(--text-secondary); font-size: 12px; }
+.privacy-facts dd { margin: 0; }
+.privacy-facts dd small { display: block; color: var(--text-secondary); font-size: 12px; }
+.privacy-switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; cursor: pointer; }
+.privacy-switch > span { display: grid; gap: 2px; min-width: 0; }
+.privacy-switch small { color: var(--text-secondary); font-size: 12px; }
+.privacy-sync-button { position: relative; overflow: hidden; font-variant-numeric: tabular-nums; }
+.privacy-sync-button.is-busy:disabled { opacity: 1; }
+.privacy-passphrase-label { margin-bottom: -4px; color: var(--text-secondary); font-size: 12px; }
+.privacy-passphrase { min-width: 260px; flex: 1; min-height: 36px; padding: 7px 10px; border: 1px solid var(--glass-border); border-radius: var(--radius-sm); background: var(--bg-base); color: var(--text-primary); font: inherit; font-size: 13px; }
+.privacy-passphrase:focus-visible { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 1px; }
+.privacy-passphrase[aria-invalid="true"] { border-color: var(--warning-text, var(--accent)); }
+.privacy-failures { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 4px; color: var(--error-text); font-size: 12px; }
+.privacy-failures li { display: flex; align-items: center; gap: 6px; }
+.privacy-report summary { display: flex; align-items: center; gap: 6px; width: fit-content; border-radius: 4px; font-size: 14px; font-weight: 600; list-style: none; cursor: pointer; }
+.privacy-report summary::-webkit-details-marker { display: none; }
+.privacy-report summary > svg { flex: none; color: var(--text-secondary); }
+.privacy-report[open] .watch-settings-chevron { transform: rotate(90deg); }
+.privacy-count { color: var(--text-secondary); font-weight: 500; font-variant-numeric: tabular-nums; }
+.privacy-report .privacy-actions { margin-top: 8px; }
+.privacy-report summary:focus-visible, .app-privacy-indicator:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.privacy-attempts { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.privacy-attempts th, .privacy-attempts td { padding: 4px 8px; border-bottom: 1px solid var(--glass-border); text-align: left; }
+.privacy-attempts td:last-child { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; word-break: break-all; }
+.privacy-progress { color: var(--text-secondary); }
+.privacy-capture { display: grid; gap: 8px; padding: 10px 12px; border: 1px dashed var(--glass-border); border-radius: 8px; }
+.privacy-capture .privacy-progress { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+/* Narrow panels: the passphrase takes its own line and buttons pair up instead of stacking one per row. */
+@container settings-panel (max-width: 560px) {
+  .privacy-settings .privacy-passphrase { flex: 1 1 100%; min-width: 0; }
+  .privacy-settings .privacy-actions > button { flex: 1 1 auto; }
+  .privacy-facts { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .privacy-facts div { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
+  .privacy-facts dd { text-align: right; }
+}
+/* Toolbar button into this panel: the size of its Support neighbour, neutral, with the accent shield (green stays for live watch state). */
+.app-privacy-indicator { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 13px 0 11px; border: 1px solid var(--glass-border); border-radius: var(--radius-pill, 999px); background: var(--glass-bg); color: var(--text-primary); font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.app-privacy-indicator > svg { flex: none; color: var(--accent); }
+.app-privacy-indicator:hover { background: var(--glass-bg-hover, var(--glass-bg)); }

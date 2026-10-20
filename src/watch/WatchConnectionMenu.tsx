@@ -2,7 +2,7 @@ import { t, useLanguage, getLocale, formatDate } from "../i18n/tools";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   AlertCircle, BatteryMedium, Bluetooth, ChevronDown, ChevronLeft, ChevronRight, Download, Info, KeyRound, LayoutGrid, Loader2,
-  MessageSquare, RefreshCw, Search, Send, Smartphone, Unplug, Upload, Usb, Watch, type LucideIcon
+  MessageSquare, RefreshCw, RotateCw, Search, Send, Smartphone, Unplug, Upload, Usb, Watch, type LucideIcon
 } from "lucide-react";
 import type { CorosWatchKeySummary, CorosWatchfaceStatus, WatchStatus } from "../../electron/types";
 import type { CorosNativeBleDeviceChoice, CorosNativeBleSnapshot } from "../../electron/corosNativeBleTypes";
@@ -15,6 +15,9 @@ import {
 } from "../watchfaces/watchLink";
 import "../watchfaces/watchLink.css";
 import "./watchConnection.css";
+import { EXPERIMENTAL_SYNC_MODELS } from "../../electron/localSync/watchSyncModels";
+import { WatchSyncResult } from "./WatchSyncResult";
+import { runWatchSync, useWatchSync } from "./watchSyncState";
 
 type WatchMenuPage = "home" | "message" | "iphone" | "details";
 
@@ -29,6 +32,11 @@ interface WatchConnectionMenuProps {
   onOpenChange: (open: boolean) => void;
   onOpenWatchFaces: () => void;
   onSignIn: () => void;
+  /** Local-Only Mode: the Training Hub shows what a watch sync reads, so the menu offers one. */
+  localOnly?: boolean;
+  /** Set when another view asks for "Sync watch now": the menu opens and starts it. */
+  syncRequest?: number | null;
+  onSyncRequestHandled?: () => void;
 }
 
 /** The toolbar's watch button: every way CorosLink reaches the watch, from any view. */
@@ -49,11 +57,19 @@ export function WatchConnectionMenu(props: WatchConnectionMenuProps) {
       onOpenChange(false);
       triggerRef.current?.focus();
     };
+    // Tabbing past the panel closes it, as a click outside does; leaving the window doesn't.
+    const handleFocusOut = (event: FocusEvent) => {
+      const next = event.relatedTarget as Node | null;
+      if (next && !containerRef.current?.contains(next)) onOpenChange(false);
+    };
+    const container = containerRef.current;
     document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
+    container?.addEventListener("focusout", handleFocusOut);
     return () => {
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
+      container?.removeEventListener("focusout", handleFocusOut);
     };
   }, [open, onOpenChange]);
 
@@ -104,12 +120,16 @@ function triggerState(snapshot: CorosNativeBleSnapshot | null, usbWatch: WatchSt
 }
 
 function WatchMenuPanel({
-  id, api, snapshot, onSnapshotChange, usbWatch, onOpenChange, onOpenWatchFaces, onSignIn
+  id, api, snapshot, onSnapshotChange, usbWatch, onOpenChange, onOpenWatchFaces, onSignIn, localOnly, syncRequest, onSyncRequestHandled
 }: WatchConnectionMenuProps & { id: string }) {
   useLanguage();
   const [page, setPage] = useState<WatchMenuPage>("home");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // The sync and its result belong to the window, so closing the menu mid-sync loses nothing.
+  const watchSync = useWatchSync(api);
+  const syncing = watchSync.manual || watchSync.reading;
+  const syncPercent = watchSync.percent;
   const [choosing, setChoosing] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<CorosNativeBleDeviceChoice | undefined>();
   const [watchKeySaved, setWatchKeySaved] = useState<boolean | null>(null);
@@ -144,7 +164,7 @@ function WatchMenuPanel({
   const connected = Boolean(snapshot?.connected);
   const state = watchConnectionState(snapshot);
   const linking = snapshot?.phase === "connecting" || snapshot?.phase === "scanning";
-  const disabled = busy || linking;
+  const disabled = busy || linking || watchSync.manual;
   const waitedSeconds = useWaitTimer(!connected && disabled);
   const devices = snapshot?.discoveredDevices ?? [];
   const needsSignIn = connected
@@ -182,7 +202,7 @@ function WatchMenuPanel({
     return found;
   }
 
-  const connect = () => run(async () => {
+  async function connectWatch(): Promise<CorosNativeBleSnapshot> {
     // Always the computer's own Bluetooth; this replaces a saved USB-adapter choice.
     if (choosing && selectedDevice) return api!.connectCorosNativeBle({ backend: "system", device: selectedDevice });
     try {
@@ -192,15 +212,60 @@ function WatchMenuPanel({
       if (!/find and select/i.test(apiErrorMessage(error, ""))) throw error;
     }
     return findWatches(true);
+  }
+
+  const connect = () => run(connectWatch);
+
+  /** Connects first when needed, then reads activities and health history; the watch stays connected. */
+  const sync = () => run(async () => {
+    await runWatchSync(api!, connected ? undefined : async () => {
+      const linked = await connectWatch();
+      onSnapshotChange(linked);
+      // Several watches nearby, or the watch needs a sign-in: stop here; the panel shows what to do.
+      return linked.connected && linked.systemBind === "authenticated";
+    });
+    return api!.getCorosNativeBleStatus();
   });
 
+  // Progress shows on the button that started it: during a sync, Connect stays put
+  // and the Sync button reports finding, connecting, then syncing.
+  const phaseLabel = snapshot?.phase === "scanning" ? t("Finding watch…") : snapshot?.phase === "connecting" ? t("Connecting…") : null;
+  const connecting = !syncing && (busy || linking);
+  const syncLabel = !syncing ? t("Sync watch now")
+    : connected ? syncPercent === null ? t("Syncing…") : t("Syncing… {{p0}}%", { p0: syncPercent })
+    : phaseLabel ?? t("Connecting…");
+  // A watch that is not signed in cannot sync, nor can one without a saved watch key; the callout above asks for the sign-in.
+  const syncBlocked = connected ? snapshot?.systemBind !== "authenticated" : watchKeySaved === false || (choosing && !selectedDevice);
   // Connected before (the key signed in to a watch, or the last connection left its name): no first-time pairing hint.
   const pairedBefore = watchKeySaved !== false && Boolean(watchKey?.lastUsed || snapshot?.deviceName || snapshot?.identityMismatch);
+  // Only in Local-Only Mode, and not for a connected watch whose sync files haven't been checked.
+  const offerSync = Boolean(localOnly) && !(connected && snapshot?.watchModel && !EXPERIMENTAL_SYNC_MODELS.has(snapshot.watchModel));
+
+  // Another view asked for a sync (the Training Hub before the first one): start it once the menu is open.
+  const syncNow = useRef(sync);
+  syncNow.current = sync;
+  const canSync = supported && offerSync && !syncing && !disabled && !syncBlocked;
+  useEffect(() => {
+    if (!syncRequest) return;
+    onSyncRequestHandled?.();
+    if (canSync) void syncNow.current();
+  }, [syncRequest]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // In Local-Only Mode, Sync is the menu's one main button: it connects first when needed.
+  const syncButton = (
+    <button className={`primary-button watch-link-button watch-menu-sync-button${syncing ? " is-busy" : ""}`} type="button"
+      disabled={disabled || syncing || syncBlocked} aria-describedby={syncBlocked && needsSignIn ? `${id}-sign-in` : undefined}
+      onClick={() => void sync()}>
+      {syncing ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <RefreshCw size={15} aria-hidden="true" />}
+      {syncLabel}
+      {syncing && syncPercent !== null ? <span className="watch-menu-sync-meter" style={{ width: `${syncPercent}%` }} aria-hidden="true" /> : null}
+    </button>
+  );
+
   const openWatchFaces = () => { onOpenChange(false); onOpenWatchFaces(); };
   const signIn = () => { onOpenChange(false); onSignIn(); };
 
-  const connectLabel = snapshot?.phase === "scanning" ? t("Finding watch…")
-    : snapshot?.phase === "connecting" || busy ? t("Connecting…")
+  const connectLabel = connecting ? phaseLabel ?? t("Connecting…")
     : choosing && selectedDevice ? t("Connect to {{p0}}", { p0: watchDisplayName(selectedDevice.deviceName) }) : t("Connect watch");
 
   const home = (
@@ -218,7 +283,7 @@ function WatchMenuPanel({
         {connected ? <button className="watch-link-icon-button" type="button" disabled={disabled}
           aria-label={t("Refresh battery and status")} title={t("Refresh battery and status")}
           onClick={() => void run(() => api!.refreshCorosNativeBle())}>
-          <RefreshCw size={15} className={busy ? "spin" : undefined} aria-hidden="true" />
+          <RotateCw size={14} className={busy && !syncing ? "spin" : undefined} aria-hidden="true" />
         </button> : null}
       </header>
 
@@ -229,7 +294,7 @@ function WatchMenuPanel({
         <KeyRound size={16} aria-hidden="true" />
         <div>
           <strong>{connected && snapshot?.systemBind === "failed" ? t("The watch didn’t accept this account") : t("Sign in to COROS")}</strong>
-          <p>{connected && snapshot?.systemBind === "failed" && snapshot.authenticationError ? snapshot.authenticationError
+          <p id={`${id}-sign-in`}>{connected && snapshot?.systemBind === "failed" && snapshot.authenticationError ? snapshot.authenticationError
             : t("Your watch only trusts CorosLink after you sign in with the COROS account it’s paired to.")}</p>
         </div>
         <button className="secondary-button watch-link-button" type="button" onClick={signIn}>{t("Sign in")}</button>
@@ -260,18 +325,26 @@ function WatchMenuPanel({
             <span>{watchDisplayName(device.deviceName)}<small>{device.deviceName}</small></span>
           </label>)}
         </fieldset> : null}
-        <button className="primary-button watch-link-button watch-menu-connect-button" type="button"
+        {offerSync ? syncButton : <button className={`primary-button watch-link-button watch-menu-connect-button${connecting ? " is-busy" : ""}`} type="button"
           disabled={disabled || (choosing && !selectedDevice)} onClick={() => void connect()}>
-          {busy || linking ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <Bluetooth size={15} aria-hidden="true" />}
+          {connecting ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <Bluetooth size={15} aria-hidden="true" />}
           {connectLabel}
-        </button>
+        </button>}
         {waitedSeconds >= 8 ? <p className="watch-menu-hint" role="status">
           {t("Still looking for your watch ·")} {Math.floor(waitedSeconds / 60)}:{String(waitedSeconds % 60).padStart(2, "0")}{t(". Wake it and open System → Pair Phone. CorosLink stops trying after about a minute.")}</p>
           : !pairedBefore ? <p className="watch-menu-hint">
           {t("First time? On the watch, open System → Pair Phone, then connect and accept the pairing prompt.")}</p> : null}
       </div> : null}
 
-      {message || (snapshot?.phase === "failed" && snapshot.error) ? <p className="watch-link-note is-error" role="alert">{message ?? snapshot?.error}</p> : null}
+      {supported && connected && offerSync ? <div className="watch-menu-connect">
+        {syncButton}
+      </div> : null}
+
+      {/* Results sit under the button that asked for them. */}
+      {offerSync && watchSync.last && !watchSync.manual ? <WatchSyncResult api={api} last={watchSync.last} disabled={disabled || syncing}
+        onSync={() => void sync()} /> : null}
+      {message || (snapshot?.phase === "failed" && snapshot.error) ? <p className="watch-link-note watch-menu-result is-error" role="alert">
+        <AlertCircle size={15} aria-hidden="true" /><span>{message ?? snapshot?.error}</span></p> : null}
 
 
       {supported ? <ul className="watch-menu-list" aria-label={t("Watch features")}>
@@ -295,10 +368,17 @@ function WatchMenuPanel({
       {supported ? <footer className="watch-menu-footer">
         {connected ? <button className="secondary-button watch-link-button" type="button" disabled={disabled}
           onClick={() => void run(() => api!.disconnectCorosNativeBle())}>
-          <Unplug size={15} aria-hidden="true" />  {t("Disconnect")}</button> : <button className="watch-menu-text-button" type="button" disabled={disabled}
-          onClick={() => void run(() => findWatches(false))}>
-          <Search size={14} aria-hidden="true" /> {choosing ? t("Search again") : t("Choose a watch")}
-        </button>}
+          <Unplug size={15} aria-hidden="true" />  {t("Disconnect")}</button> : <>
+          {/* Sync connects first; this connects without syncing (for watch faces or a message). */}
+          {offerSync && !snapshot?.identityMismatch ? <button className="watch-menu-text-button watch-menu-connect-only" type="button"
+            disabled={disabled || (choosing && !selectedDevice)} onClick={() => void connect()}>
+            {connecting ? <Loader2 className="spin" size={14} aria-hidden="true" /> : <Bluetooth size={14} aria-hidden="true" />} {connecting || (choosing && selectedDevice) ? connectLabel : t("Connect only")}
+          </button> : null}
+          <button className="watch-menu-text-button" type="button" disabled={disabled}
+            onClick={() => void run(() => findWatches(false))}>
+            <Search size={14} aria-hidden="true" /> {choosing ? t("Search again") : t("Choose a watch")}
+          </button>
+        </>}
       </footer> : null}
     </>
   );
@@ -334,6 +414,18 @@ function useWaitTimer(waiting: boolean): number {
     return () => window.clearInterval(timer);
   }, [waiting]);
   return startedAt === null ? 0 : Math.max(0, Math.floor((now - startedAt) / 1000));
+}
+
+/** Developer diagnostics show only when CorosLink runs with COROSLINK_SYNC_CAPTURE=1 (the flag behind the capture tools). */
+function useDeveloperTools(api: CorosLinkApi | undefined): boolean {
+  const [enabled, setEnabled] = useState(false);
+  useEffect(() => {
+    if (typeof api?.getLocalDataOverview !== "function") return;
+    let live = true;
+    void api.getLocalDataOverview().then(overview => { if (live) setEnabled(Boolean(overview.captureEnabled)); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [api]);
+  return enabled;
 }
 
 function MenuRow({ icon: Icon, title, detail, onClick, page }: { icon: LucideIcon; title: string; detail: ReactNode; onClick: () => void; page?: WatchMenuPage }) {
@@ -560,6 +652,7 @@ function WatchConnectionDetails({ snapshot, api, watchKeySaved, watchKey: watchK
   onSignIn: () => void;
 }) {
   useLanguage();
+  const developerTools = useDeveloperTools(api);
   const watchKey = <WatchKeySection api={api} saved={watchKeySaved} info={watchKeyInfo} onStatus={onWatchKeyStatus} onSignIn={onSignIn} />;
   if (!snapshot) return <div className="watch-link-details"><p className="watch-menu-hint">{t("Reading the watch connection…")}</p>{watchKey}</div>;
   const details = [
@@ -577,7 +670,8 @@ function WatchConnectionDetails({ snapshot, api, watchKeySaved, watchKey: watchK
     <div className="watch-link-details">
       <dl>{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd title={value}>{value}</dd></div>)}</dl>
       {watchKey}
-      {onSystemBluetooth(snapshot) ? <section className="watch-link-events" aria-label={t("Watch controls")}>
+      {/* Developer diagnostics: only with COROSLINK_SYNC_CAPTURE=1, like the capture tools in Privacy settings. */}
+      {developerTools && onSystemBluetooth(snapshot) ? <section className="watch-link-events" aria-label={t("Watch controls")}>
         <h3>{t("Watch controls")}</h3>
         <p>{t("Press the watch’s phone music controls to see the commands it sends.")}</p>
         {snapshot.watchEvents?.length ? <ul>{snapshot.watchEvents.slice().reverse().map(event => <li key={event.id}>
@@ -585,7 +679,7 @@ function WatchConnectionDetails({ snapshot, api, watchKeySaved, watchKey: watchK
           {event.kind === "call-rejected" ? t("Call rejected") : t("Media command {{p0}}, value {{p1}}", { p0: event.action, p1: event.value })}
         </li>)}</ul> : <p>{t("No watch commands received in this connection.")}</p>}
       </section> : null}
-      {snapshot.channels.length ? <details className="watch-link-channels">
+      {developerTools && snapshot.channels.length ? <details className="watch-link-channels">
         <summary>{t("Live BLE channels")}</summary>
         <p>{snapshot.pairingManagedByOS ? t("{{p0}} COROS control writes · pairing managed by your operating system", { p0: (snapshot.controlWrites ?? 0).toLocaleString(getLocale()) })
           : t("Computer → adapter {{p0}} packets · adapter → computer {{p1}} packets", { p0: (snapshot.hostToAdapterPackets ?? 0).toLocaleString(getLocale()), p1: (snapshot.adapterToHostPackets ?? 0).toLocaleString(getLocale()) })}</p>

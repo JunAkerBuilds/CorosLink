@@ -21,6 +21,7 @@ export const widgetCatalog = [
   { id: 'zones-heart', title: 'Heart rate zones', description: 'Threshold heart rate zone distribution.', sizes: [3, 4, 6, 8, 12], size: 6 },
   { id: 'zones-distance', title: 'Distance zones', description: 'Distribution of your running distances.', sizes: [3, 4, 6, 8, 12], size: 6 },
   { id: 'scores', title: 'Fitness scores', description: 'Your current performance profile.', sizes: [3, 4, 6, 8, 12], size: 3 },
+  { id: 'load-balance', title: 'Fitness and fatigue', description: 'Base Fitness, Load Impact and fatigue from your watch.', sizes: [3, 4, 6], size: 4 },
   { id: 'race', title: 'Race predictions', description: 'Estimated finish times across distances.', sizes: [3, 4, 6, 8, 12], size: 3 },
   { id: 'effort', title: 'Perceived effort', description: 'How demanding your training feels.', sizes: [3, 4, 6, 8, 12], size: 3 },
   { id: 'upcoming', title: 'Upcoming workouts', description: 'Your next scheduled training sessions.', sizes: [3, 4, 6, 8, 12], size: 12 }
@@ -35,13 +36,21 @@ export function defaultWidget(id: WidgetId): DashboardWidget {
 /**
  * Adds a widget to the saved dashboard when it is not there yet, so a feature
  * that produces content for it (pinning a coach chart) is visible without a
- * trip through Edit dashboard. Returns true when the layout changed.
+ * trip through Edit dashboard. A saved Local-Only layout gets it too.
+ * Returns true when a layout changed.
  */
 export function ensureDashboardWidget(id: WidgetId, storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage): boolean {
-  const layout = parseLayout(storage.getItem(dashboardStorageKey));
-  if (layout.some(widget => widget.id === id)) return false;
-  storage.setItem(dashboardStorageKey, JSON.stringify({ version: 3, widgets: [...layout, { ...defaultWidget(id), startRow: true }] }));
-  return true;
+  const savedRaw = storage.getItem(dashboardStorageKey);
+  const localRaw = storage.getItem(localDashboardStorageKey);
+  const layouts: [string, DashboardWidget[]][] = [[dashboardStorageKey, parseLayout(savedRaw)]];
+  if (localRaw !== null) layouts.push([localDashboardStorageKey, parseLocalLayout(localRaw, savedRaw)]);
+  let changed = false;
+  for (const [key, layout] of layouts) {
+    if (layout.some(widget => widget.id === id)) continue;
+    storage.setItem(key, JSON.stringify({ version: 3, widgets: [...layout, { ...defaultWidget(id), startRow: true }] }));
+    changed = true;
+  }
+  return changed;
 }
 const defaultPlacements: { id: WidgetId; preset: string; startRow?: boolean }[] = [
   { id: 'recovery', preset: '3-standard' },
@@ -68,17 +77,73 @@ const defaultPlacements: { id: WidgetId; preset: string; startRow?: boolean }[] 
   { id: 'upcoming', preset: '3-short' }
 ];
 export function defaultLayout(): DashboardWidget[] {
-  return defaultPlacements.map(placement => ({
+  return placeWidgets(defaultPlacements);
+}
+/**
+ * Widgets whose values only COROS calculates or stores (resting HR, scores,
+ * race predictions, threshold zones, perceived effort, scheduled workouts,
+ * cycle). The watch's sync files don't carry them, so Local-Only Mode leaves
+ * them out of its dashboard; they stay in the widget library and show COROS
+ * account data when there is some. VO₂ max and recovery aren't: the watch
+ * stores its own VO₂ max and recovery time with each activity.
+ */
+const corosOnlyWidgets: readonly WidgetId[] = ['daily-heart', 'scores', 'race', 'effort', 'trend-rpe', 'zones-heart', 'upcoming', 'cycle'];
+export function isCorosOnlyWidget(id: WidgetId): boolean {
+  return corosOnlyWidgets.includes(id);
+}
+/** Local-Only Mode keeps its own layout, so switching modes never rewrites the saved one. */
+export const localDashboardStorageKey = `${dashboardStorageKey}.local`;
+const localDefaultPlacements: { id: WidgetId; preset: string; startRow?: boolean }[] = [
+  { id: 'sleep', preset: '6-standard' },
+  { id: 'healthCheck', preset: '3-mini' },
+  { id: 'daily-load', preset: '3-standard' },
+  { id: 'daily-steps', preset: 'compact-square' },
+  { id: 'daily-calories', preset: 'compact-square' },
+  { id: 'fitness', preset: '6-standard', startRow: true },
+  { id: 'vo2', preset: '3-standard' },
+  { id: 'recovery', preset: '3-standard' },
+  { id: 'load-balance', preset: '4-standard', startRow: true },
+  { id: 'trend-load', preset: '8-short' },
+  { id: 'heatmap', preset: '12-standard', startRow: true },
+  { id: 'stress', preset: '6-standard', startRow: true },
+  { id: 'sleepHrv', preset: '6-standard' },
+  // The HRV trend is left out: the Sleep HRV card shows the same nights, and there is no baseline locally.
+  { id: 'trend-sleep', preset: '6-short', startRow: true },
+  { id: 'zones-distance', preset: '6-short' }
+];
+function placeWidgets(placements: typeof defaultPlacements): DashboardWidget[] {
+  return placements.map(placement => ({
     ...defaultWidget(placement.id),
     ...placement,
     size: widgetPresets(placement.id).find(preset => preset.id === placement.preset)!.columns
   }));
 }
-export function parseLayout(raw: string | null): DashboardWidget[] {
-  if (!raw) return defaultLayout();
+/** What Local-Only Mode starts with: the cards the watch's data fills, daily snapshot first. */
+export function localDefaultLayout(): DashboardWidget[] {
+  return placeWidgets(localDefaultPlacements);
+}
+/**
+ * The Local-Only layout. Until one is saved, it starts from the saved layout
+ * without the COROS-only widgets; an unchanged default starts from the
+ * Local-Only default instead, keeping anything added to it (a pinned chart).
+ */
+export function parseLocalLayout(localRaw: string | null, savedRaw: string | null): DashboardWidget[] {
+  if (localRaw !== null) return parseLayout(localRaw, localDefaultLayout);
+  if (savedRaw === null) return localDefaultLayout();
+  const kept = parseLayout(savedRaw).filter(widget => !isCorosOnlyWidget(widget.id));
+  const standard = defaultLayout().filter(widget => !isCorosOnlyWidget(widget.id));
+  const unchanged = standard.every((widget, index) => JSON.stringify(widget) === JSON.stringify(kept[index]));
+  if (unchanged) {
+    const local = localDefaultLayout();
+    return [...local, ...kept.slice(standard.length).filter(widget => !local.some(item => item.id === widget.id))];
+  }
+  return kept.length ? kept : localDefaultLayout();
+}
+export function parseLayout(raw: string | null, fallback: () => DashboardWidget[] = defaultLayout): DashboardWidget[] {
+  if (!raw) return fallback();
   try {
     const value = JSON.parse(raw);
-    if (![1, 2, 3].includes(value.version) || !Array.isArray(value.widgets)) return defaultLayout();
+    if (![1, 2, 3].includes(value.version) || !Array.isArray(value.widgets)) return fallback();
     if (value.version === 1) {
       value.widgets = value.widgets.flatMap((item: Record<string, unknown> | null) => {
         if (!item || typeof item !== 'object') return [];
@@ -115,7 +180,7 @@ export function parseLayout(raw: string | null): DashboardWidget[] {
         metrics: Array.isArray(item.metrics) ? base.metrics.filter(metric => item.metrics!.includes(metric)) : base.metrics
       }];
     });
-  } catch { return defaultLayout(); }
+  } catch { return fallback(); }
 }
 export function moveWidget(layout: DashboardWidget[], id: WidgetId, target: number, startRow = false, atBottom = false): DashboardWidget[] {
   const from = layout.findIndex(widget => widget.id === id);

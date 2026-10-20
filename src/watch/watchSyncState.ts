@@ -1,0 +1,106 @@
+import { useEffect, useSyncExternalStore } from "react";
+import type { CorosLinkApi } from "../coroslink-api";
+import { ipcErrorText } from "../ipcErrorText";
+import type { WatchSyncProgress } from "../../electron/localSync/localDataTypes";
+
+/**
+ * The watch sync as the whole window sees it: whether one is running, how far it got, and how the
+ * last one ended. It lives outside the watch menu so closing the menu mid-sync loses nothing.
+ */
+export type LastWatchSync =
+  | { ok: true; result: WatchSyncProgress; at: number; automatic: boolean }
+  | { ok: false; error: string; at: number; automatic: boolean };
+
+export interface WatchSyncView {
+  /** A sync started from this window is running (it may still be connecting). */
+  manual: boolean;
+  /** A sync is reading from the watch. */
+  reading: boolean;
+  /** How much of the activity file has been read, while that is known. */
+  percent: number | null;
+  last: LastWatchSync | null;
+}
+
+const EMPTY: WatchSyncView = { manual: false, reading: false, percent: null, last: null };
+let view: WatchSyncView = EMPTY;
+const listeners = new Set<() => void>();
+
+function update(next: Partial<WatchSyncView>): void {
+  view = { ...view, ...next };
+  listeners.forEach(listener => listener());
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+/** A newer result replaces the shown one; an older one (an automatic run that started earlier) doesn't. */
+function record(last: LastWatchSync): void {
+  if (view.last && view.last.at > last.at) return;
+  update({ last });
+}
+
+const ACTIVE = new Set<WatchSyncProgress["state"]>(["connecting", "reading", "saving", "decoding"]);
+
+function onProgress(progress: WatchSyncProgress): void {
+  const reading = ACTIVE.has(progress.state);
+  const percent = progress.state === "reading" && progress.totalBytes
+    ? Math.min(100, Math.floor(progress.receivedBytes / progress.totalBytes * 100)) : null;
+  update({ reading, percent: reading ? percent : null });
+}
+
+let tracked: CorosLinkApi | null = null;
+let trackers = 0;
+let stopTracking: (() => void) | null = null;
+
+/** Listens for sync progress while anything shows it. */
+function track(api: CorosLinkApi): () => void {
+  if (tracked !== api) {
+    stopTracking?.();
+    tracked = api;
+    let live = true;
+    const offProgress = typeof api.onWatchSyncProgress === "function" ? api.onWatchSyncProgress(onProgress) : () => undefined;
+    if (typeof api.getWatchSyncProgress === "function") void api.getWatchSyncProgress().then(progress => { if (live) onProgress(progress); }).catch(() => undefined);
+    stopTracking = () => { live = false; offProgress(); tracked = null; stopTracking = null; };
+  }
+  trackers += 1;
+  return () => {
+    trackers -= 1;
+    if (trackers === 0) stopTracking?.();
+  };
+}
+
+/** The window's watch sync; pass the API to keep it up to date while the component is mounted. */
+export function useWatchSync(api?: CorosLinkApi): WatchSyncView {
+  useEffect(() => (api ? track(api) : undefined), [api]);
+  return useSyncExternalStore(subscribe, () => view);
+}
+
+/**
+ * "Sync watch now": `connect` first when given (it resolves false when the watch needs the user, and
+ * throws when it can't be reached; that error is the caller's to show). How the sync ended is kept
+ * here, so it outlives whatever started it.
+ */
+export async function runWatchSync(api: CorosLinkApi, connect?: () => Promise<boolean>): Promise<void> {
+  if (view.manual) return;
+  update({ manual: true, percent: null });
+  let last: LastWatchSync | null = null;
+  try {
+    if (connect && !await connect()) return;
+    try {
+      last = { ok: true, result: await api.syncWatchLocally(), at: Date.now(), automatic: false };
+    } catch (error) {
+      last = { ok: false, error: ipcErrorText(error), at: Date.now(), automatic: false };
+    }
+  } finally {
+    update({ manual: false, reading: false, percent: null });
+    if (last) record(last);
+  }
+}
+
+/** Test fixtures start each scenario from nothing. */
+export function resetWatchSync(): void {
+  view = EMPTY;
+  listeners.forEach(listener => listener());
+}

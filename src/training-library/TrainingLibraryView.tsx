@@ -1,5 +1,6 @@
 import { formatWorkoutSport } from "../calendar/workoutLabels";
 import { getLocale, t, useLanguage } from "../i18n/training";
+import { useLocalOnlyView } from "../privacy/localOnlyView";
 import {
   AlertTriangle,
   BookOpen,
@@ -174,6 +175,7 @@ export function TrainingLibraryView({
   onError
 }: TrainingLibraryViewProps) {
   useLanguage();
+  const localOnly = useLocalOnlyView();
   const [section, setSection] = useSelectionPreference(
     LIBRARY_SECTION_PREFERENCE
   );
@@ -184,6 +186,7 @@ export function TrainingLibraryView({
   const [compareOpen, setCompareOpen] = useState(false);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [pendingPlanDelete, setPendingPlanDelete] = useState<TrainingPlanDocument | null>(null);
+  const [deletingPlan, setDeletingPlan] = useState(false);
   const [generatorOpen, setGeneratorOpen] = useState(false);
   const [calendarTarget, setCalendarTarget] = useState<{ plan: TrainingPlanDocument; operation?: "install" | "remove" } | null>(null);
 
@@ -316,16 +319,34 @@ export function TrainingLibraryView({
     await savePlan(duplicate);
   };
 
+  // A plan still on the calendar takes its upcoming workouts with it: they're removed first, then the plan.
   const deletePlan = async () => {
-    if (!pendingPlanDelete) return;
+    if (!pendingPlanDelete || deletingPlan) return;
+    setDeletingPlan(true);
     try {
+      if (activeTrainingPlanCalendarInstall(pendingPlanDelete)) {
+        const preview = await api.previewTrainingPlanCalendarRemoval(pendingPlanDelete.id);
+        const removal = await api.removeTrainingPlanFromCalendar(preview.previewId, true);
+        if (removal.failures.length) {
+          onError(t("Some of its calendar workouts couldn't be removed. Try again."));
+          await load();
+          return;
+        }
+      }
       await api.deleteLocalTrainingPlan(pendingPlanDelete.id, true);
-      onMessage(`Deleted "${pendingPlanDelete.name}".`);
+      onMessage(t("Deleted “{{value1}}”.", { value1: pendingPlanDelete.name }));
       setPendingPlanDelete(null);
       await load();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setDeletingPlan(false);
     }
+  };
+  const upcomingCalendarWorkouts = (plan: TrainingPlanDocument) => {
+    const today = new Date();
+    const key = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
+    return activeTrainingPlanCalendarInstall(plan)?.occurrences.filter(occurrence => !occurrence.removedAt && occurrence.happenDay >= key).length ?? 0;
   };
 
   const stateLabel = current.offline ? "Offline · cached" : current.stale ? "Partial sync" : "Synced";
@@ -467,7 +488,9 @@ export function TrainingLibraryView({
         setCalendarTarget(null);
         if (editingPlan?.id === result.plan.id) setEditingPlan(result.plan);
         if (result.failures.length) onMessage(t("Updated {{value1}} calendar workout{{value2}}; {{value3}} need retry.", { value1: String(result.scheduledCount + result.removedCount), value2: String(result.scheduledCount + result.removedCount === 1 ? "" : "s"), value3: String(result.failures.length) }));
-        else if (result.scheduledCount) onMessage(t("Added {{value1}} workouts from \"{{value2}}\" to the COROS calendar.", { value1: String(result.scheduledCount), value2: String(result.plan.name) }));
+        else if (result.scheduledCount) onMessage(localOnly
+          ? t("Added {{value1}} workouts from \"{{value2}}\" to the calendar.", { value1: String(result.scheduledCount), value2: String(result.plan.name) })
+          : t("Added {{value1}} workouts from \"{{value2}}\" to the COROS calendar.", { value1: String(result.scheduledCount), value2: String(result.plan.name) }));
         else onMessage(t("Removed {{value1}} future workouts owned by \"{{value2}}\".", { value1: String(result.removedCount), value2: String(result.plan.name) }));
         void load();
       }} /> : null}
@@ -483,13 +506,16 @@ export function TrainingLibraryView({
             <h2 id="plan-delete-title">
               {t("Delete “")}{pendingPlanDelete.name}&rdquo;?
             </h2>
-            <p>
-              {t("This removes the local copy and its")} {pendingPlanDelete.entries.length} {t("item")} {pendingPlanDelete.entries.length === 1 ? "" : "s"}{t(". Plans stored on COROS are not touched.")} </p>
+            {upcomingCalendarWorkouts(pendingPlanDelete) ? <p>
+              {upcomingCalendarWorkouts(pendingPlanDelete) === 1
+                ? t("Its upcoming workout is removed from your calendar too.")
+                : t("Its {{value1}} upcoming workouts are removed from your calendar too.", { value1: String(upcomingCalendarWorkouts(pendingPlanDelete)) })}
+            </p> : null}
             <footer>
-              <button type="button" className="ghost-button" onClick={() => setPendingPlanDelete(null)}>
+              <button type="button" className="ghost-button" disabled={deletingPlan} onClick={() => setPendingPlanDelete(null)}>
                 {t("Cancel")} </button>
-              <button type="button" className="primary-button danger" onClick={() => void deletePlan()}>
-                {t("Delete plan")} </button>
+              <button type="button" className="primary-button danger" disabled={deletingPlan} onClick={() => void deletePlan()}>
+                {deletingPlan ? t("Deleting…") : t("Delete plan")} </button>
             </footer>
           </section>
         </div>
@@ -642,6 +668,7 @@ function PlanIndex({
   onCompare
 }: PlanIndexProps) {
   useLanguage();
+  const localOnly = useLocalOnlyView();
   const [query, setQuery] = useState("");
   const [scope, setScope] = useSelectionPreference(
     PLAN_SCOPE_PREFERENCES[noun]
@@ -786,8 +813,8 @@ function PlanIndex({
         <button
           type="button"
           className="danger"
-          disabled={Boolean(activeTrainingPlanCalendarInstall(plan))}
-          title={activeTrainingPlanCalendarInstall(plan) ? t("Remove future plan-owned calendar workouts before deleting this plan") : undefined}
+          disabled={offline && Boolean(activeTrainingPlanCalendarInstall(plan))}
+          title={offline && activeTrainingPlanCalendarInstall(plan) ? t("Reconnect to COROS to change the calendar") : undefined}
           aria-label={t("Delete {{value1}}", { value1: String(plan.name) })}
           onClick={() => onDelete(plan)}
         >
@@ -917,7 +944,7 @@ function PlanIndex({
             {query || scope !== "all"
               ? t("Clear the search or choose another filter.")
               : noun === "plan"
-                ? t("Build a plan here, or refresh to pull plans from COROS.")
+                ? localOnly ? t("Build a plan here, or ask the Coach to draft one.") : t("Build a plan here, or refresh to pull plans from COROS.")
                 : t("Save a plan as a template, or turn a completed activity into one.")}
           </p>
         </div>

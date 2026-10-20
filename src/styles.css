@@ -11315,6 +11315,14 @@ td span {
   letter-spacing: 0;
 }
 
+/* Where a card's figures come from ("From your watch"), under its title. */
+.card-source-note {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .vo2-widget-icon {
   display: grid;
   width: 34px;
@@ -11644,6 +11652,16 @@ td span {
   color: var(--text-primary);
   font-size: 1.05rem;
   font-weight: 700;
+}
+
+/* Local-Only Mode has no sleep score, so the duration takes its place. */
+.sleep-panel-hero.is-duration-only .sleep-panel-duration strong {
+  margin-top: 6px;
+  font-size: clamp(2rem, 3vw, 2.6rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 1;
 }
 
 .sleep-stage-stack {
@@ -13430,6 +13448,31 @@ td span {
   background: rgba(255, 255, 255, 0.025);
   padding: 24px 12px;
   text-align: center;
+}
+
+/* An empty week drops the legend, so the empty state takes the remaining height. */
+.training-fitness-panel.is-empty {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+/* Weekly activity with data in another metric: the note and its switch sit together in the middle. */
+.training-fitness-empty {
+  align-content: center;
+  gap: 8px;
+}
+
+.training-fitness-empty p {
+  margin: 0;
+}
+
+.training-fitness-empty .text-button {
+  font-size: 13px;
+}
+
+.training-fitness-empty .text-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
 }
 
 .training-zone-panel {
@@ -24795,6 +24838,11 @@ tr.data-intervals-row-missing {
   --ring-glow: rgba(168, 162, 158, 0.2);
 }
 
+/* The light ring tone is too pale for text: "Waiting" uses the secondary text colour (at least 4.5:1). */
+:root[data-theme="paper"] .training-ring-panel.tone-neutral .storage-ring-label span {
+  color: var(--text-secondary);
+}
+
 :root[data-theme="paper"] .training-recovery-ring .storage-ring-track {
   stroke: color-mix(in srgb, var(--ring-color) 18%, rgba(38, 34, 28, 0.05));
 }
@@ -30993,6 +31041,25 @@ tr.data-intervals-row-missing {
   flex-direction: column;
   gap: 18px;
   max-width: 980px;
+}
+
+/* A section opened from elsewhere (watch menu, weather card, Local-Only button): briefly outlined. */
+.settings-section-anchor {
+  scroll-margin-top: 16px;
+  outline: none;
+}
+
+.settings-section-anchor.is-targeted > .panel {
+  animation: settings-section-flash 1.6s ease-out;
+}
+
+@keyframes settings-section-flash {
+  0%, 45% { outline: 2px solid color-mix(in srgb, var(--accent) 75%, transparent); outline-offset: 3px; }
+  100% { outline: 2px solid transparent; outline-offset: 3px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-section-anchor.is-targeted > .panel { animation: none; outline: 2px solid color-mix(in srgb, var(--accent) 75%, transparent); outline-offset: 3px; }
 }
 
 .settings-units-panel {

@@ -1,5 +1,6 @@
 import { formatWorkoutSport } from "../calendar/workoutLabels";
 import { useLanguage, getLocale, t } from "../i18n/training";
+import { useLocalOnlyView } from "../privacy/localOnlyView";
 import {
   AlertTriangle,
   ArrowRight,
@@ -128,6 +129,7 @@ function Stepper({ value, min, max, disabled, decreaseLabel, increaseLabel, onCh
 }
 export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }: TrainingPlanGeneratorProps) {
   useLanguage();
+  const localOnly = useLocalOnlyView();
   const { unitSystem } = useUnitSystem();
   const [goal, setGoal] = useState("");
   const [sports, setSports] = useState<WorkoutSport[]>(["run"]);
@@ -339,7 +341,7 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
             <h2 id="plan-generator-title">
               <span className="plan-generator-title-icon"><Sparkles size={16} /></span>
               {t("Generate a training plan")} </h2>
-            <p>{t("Build a structured draft from your current training and recovery context. Nothing is sent to COROS until you install the saved plan.")}</p>
+            <p>{localOnly ? t("Build a structured draft from your current training and recovery context. It stays a draft until you add the saved plan to your calendar.") : t("Build a structured draft from your current training and recovery context. Nothing is sent to COROS until you install the saved plan.")}</p>
           </div>
           <button type="button" className="icon-button" aria-label={t("Close plan generator")} disabled={generating} onClick={close}><X size={17} /></button>
         </header>

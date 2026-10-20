@@ -44,6 +44,8 @@ interface TrainingTrendChartsProps {
   sleepRecords?: TrainingHubSleepRecord[];
   rangeLabel?: string;
   metric?: "load" | "rpe" | "hrv" | "sleep";
+  /** Local-Only Mode: data comes from watch syncs in CorosLink, not from COROS. */
+  local?: boolean;
 }
 
 type ChartValueFormatter = (value: number) => string;
@@ -297,16 +299,16 @@ function ChartLatestStat({
   );
 }
 
-function HrvChartLegend() {
+function HrvChartLegend({ baseline }: { baseline: boolean }) {
   useLanguage();
   return (
     <div className="training-chart-legend" aria-hidden="true">
       <span className="training-chart-legend-item">
         <span className="training-chart-legend-dot is-accent" />
         {t("HRV")} </span>
-      <span className="training-chart-legend-item">
+      {baseline ? <span className="training-chart-legend-item">
         <span className="training-chart-legend-line is-gold" />
-        {t("Baseline")} </span>
+        {t("Baseline")} </span> : null}
     </div>
   );
 }
@@ -373,7 +375,7 @@ function TrendChartAxes({
   );
 }
 
-function SleepDurationCard({ points, sleepRecords, reducedMotion, size }: TrainingTrendChartsProps & { reducedMotion: boolean }) {
+function SleepDurationCard({ points, sleepRecords, reducedMotion, size, local }: TrainingTrendChartsProps & { reducedMotion: boolean }) {
   useLanguage();
   const gradientId = useId();
   const { colors, metrics } = useChartColors();
@@ -450,13 +452,13 @@ function SleepDurationCard({ points, sleepRecords, reducedMotion, size }: Traini
         </>
       ) : (
         <EmptyChartNotice icon={MoonStar} palette={metrics.sleep} title={t("No sleep data")}>
-          {t("Sync sleep sessions from COROS to see duration trends.")} </EmptyChartNotice>
+          {local ? t("No data yet.") : t("Sync sleep sessions from COROS to see duration trends.")} </EmptyChartNotice>
       )}
     </section>
   );
 }
 
-export function TrainingTrendCharts({ points, sleepRecords, rangeLabel = "Last 7 days", metric, size }: TrainingTrendChartsProps) {
+export function TrainingTrendCharts({ points, sleepRecords, rangeLabel = "Last 7 days", metric, size, local = false }: TrainingTrendChartsProps) {
   useLanguage();
   const reducedMotion = usePrefersReducedMotion();
   const { colors, metrics } = useChartColors();
@@ -479,6 +481,8 @@ export function TrainingTrendCharts({ points, sleepRecords, rangeLabel = "Last 7
   const hrvPoints = points.filter(
     (point) => point.avgSleepHrv !== undefined || point.sleepHrvBase !== undefined
   );
+  // The baseline comes from COROS; Local-Only Mode (and a new account) has none to draw.
+  const hasHrvBaseline = hrvPoints.some((point) => point.sleepHrvBase !== undefined);
 
   return (
     <div className={metric ? "training-chart-single" : "training-chart-grid"}>
@@ -530,7 +534,7 @@ export function TrainingTrendCharts({ points, sleepRecords, rangeLabel = "Last 7
             palette={metrics.load}
             title={t("No training load yet")}
           >
-            {t("Complete a workout and sync from COROS to see your load trend.")} </EmptyChartNotice>
+            {local ? t("No data yet.") : t("Complete a workout and sync from COROS to see your load trend.")} </EmptyChartNotice>
         )}
       </section>}
 
@@ -589,7 +593,7 @@ export function TrainingTrendCharts({ points, sleepRecords, rangeLabel = "Last 7
       {(!metric || metric === "hrv") && <section className="panel training-chart-panel" data-metric="hrv" data-chart-size={size}>
         <div className="section-heading compact training-chart-heading">
           <div>
-            <p className="eyebrow">{t("HRV vs Baseline · ms")}</p>
+            <p className="eyebrow">{hasHrvBaseline ? t("HRV vs Baseline · ms") : t("Sleep HRV · ms")}</p>
             <h2>{t(rangeLabel)}</h2>
           </div>
           <div className="training-chart-heading-side">
@@ -602,7 +606,7 @@ export function TrainingTrendCharts({ points, sleepRecords, rangeLabel = "Last 7
                 formatDelta={(delta) => `${formatRoundedValue(delta)} ms`}
               />
             ) : null}
-            <HrvChartLegend />
+            <HrvChartLegend baseline={hasHrvBaseline} />
           </div>
         </div>
         {hrvPoints.length > 0 ? (
@@ -658,7 +662,7 @@ export function TrainingTrendCharts({ points, sleepRecords, rangeLabel = "Last 7
         )}
       </section>}
 
-      {(!metric || metric === "sleep") && <SleepDurationCard size={size} points={points} sleepRecords={sleepRecords} reducedMotion={reducedMotion} />}
+      {(!metric || metric === "sleep") && <SleepDurationCard size={size} points={points} sleepRecords={sleepRecords} reducedMotion={reducedMotion} local={local} />}
     </div>
   );
 }

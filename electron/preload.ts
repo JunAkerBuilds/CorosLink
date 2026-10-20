@@ -2,6 +2,8 @@ import type { CalendarEventTiming, CalendarWorkoutEventRef, CalendarWorkoutEvent
 import type { ChatGptModelInfo, ChatModelOption } from "./chatModels";
 import type { HealthInsightKind, HealthInsightResult } from "./healthInsightsTypes";
 import { contextBridge, ipcRenderer } from "electron";
+import type { DataModeStatus, LocalOnlyActivationOptions, NetworkAccessReport } from "./privacy/dataModeTypes";
+import type { LocalBackupResult, LocalDataOverview, LocalImportResult, LocalRestoreResult, WatchSyncProbe, WatchSyncProgress } from "./localSync/localDataTypes";
 import type { CorosNativeBleSnapshot } from "./corosNativeBleTypes";
 import type { DiagnosticsSnapshot, RendererDiagnosticError } from "./diagnosticsTypes";
 import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "./watchfaceAutomationTypes";
@@ -264,6 +266,8 @@ const api = {
   // Host OS, so the renderer can reserve space for the macOS traffic lights.
   platform: process.platform,
   nativeSidebarGlass: process.platform === "darwin" && process.argv.includes("--coros-native-sidebar-glass"),
+  /** CorosLink started in Local-Only Mode (known before the first data-mode status arrives). */
+  localOnlyAtLaunch: process.argv.includes("--coroslink-local-only"),
   getWatchStatus: (): Promise<WatchStatus> =>
     ipcRenderer.invoke("watch:getStatus"),
   getCorosWatchfaceStatus: (): Promise<CorosWatchfaceStatus> =>
@@ -1445,7 +1449,35 @@ const api = {
       callback(fullscreen);
     ipcRenderer.on("window:fullscreenChanged", listener);
     return () => ipcRenderer.removeListener("window:fullscreenChanged", listener);
-  }
+  },
+  getDataModeStatus: (): Promise<DataModeStatus> => ipcRenderer.invoke("dataMode:getStatus"),
+  activateLocalOnlyMode: (options: LocalOnlyActivationOptions): Promise<DataModeStatus> =>
+    ipcRenderer.invoke("dataMode:activateLocalOnly", options),
+  returnToConnectedMode: (): Promise<DataModeStatus> => ipcRenderer.invoke("dataMode:returnToConnected"),
+  getNetworkAccessReport: (): Promise<NetworkAccessReport> => ipcRenderer.invoke("dataMode:getNetworkReport"),
+  clearNetworkAccessReport: (): Promise<NetworkAccessReport> => ipcRenderer.invoke("dataMode:clearNetworkReport"),
+  onDataModeChange: (callback: (status: DataModeStatus) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: DataModeStatus) => callback(status);
+    ipcRenderer.on("dataMode:changed", listener);
+    return () => ipcRenderer.removeListener("dataMode:changed", listener);
+  },
+  getLocalDataOverview: (): Promise<LocalDataOverview> => ipcRenderer.invoke("localData:getOverview"),
+  importLocalFitFiles: (folder?: boolean): Promise<LocalImportResult> => ipcRenderer.invoke("localData:importFitFiles", folder === true),
+  syncWatchLocally: (): Promise<WatchSyncProgress> => ipcRenderer.invoke("localData:syncWatch"),
+  getWatchSyncProgress: (): Promise<WatchSyncProgress> => ipcRenderer.invoke("localData:getSyncProgress"),
+  cancelWatchSync: (): Promise<WatchSyncProgress> => ipcRenderer.invoke("localData:cancelSync"),
+  readWatchDayTotals: (): Promise<unknown> => ipcRenderer.invoke("localData:readDayTotals"),
+  probeWatchSync: (options?: { allBlocks?: boolean; selector?: number; fileIndex?: number }): Promise<WatchSyncProbe> => ipcRenderer.invoke("localData:probeWatchSync", options),
+  onWatchSyncProgress: (callback: (progress: WatchSyncProgress) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: WatchSyncProgress) => callback(progress);
+    ipcRenderer.on("localData:syncProgress", listener);
+    return () => ipcRenderer.removeListener("localData:syncProgress", listener);
+  },
+  exportLocalBackup: (passphrase?: string): Promise<LocalBackupResult> =>
+    ipcRenderer.invoke("localData:exportBackup", { passphrase }),
+  chooseLocalBackup: (): Promise<{ chosen: boolean; encrypted?: boolean }> => ipcRenderer.invoke("localData:chooseBackup"),
+  restoreLocalBackup: (passphrase?: string): Promise<LocalRestoreResult> =>
+    ipcRenderer.invoke("localData:restoreBackup", { passphrase })
 };
 
 contextBridge.exposeInMainWorld("corosLink", api);

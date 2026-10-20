@@ -33,6 +33,7 @@
     "test:download-progress": "npm run build:electron && node scripts/test-download-progress.mjs",
     "test:route-location": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-route-location.mjs",
     "test:overview-weather": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-overview-weather.mjs",
+    "test:overview-briefing": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-overview-briefing.mjs",
     "test:route-overlap": "node --experimental-strip-types scripts/test-route-overlap.mjs",
     "test:route-engine": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-route-engine.mjs",
     "test:sketch": "npm run build:electron && node scripts/test-sketch-geometry.mjs",
@@ -129,7 +130,9 @@
     "test:coros-system-ble": "npm run build:electron && node scripts/test-coros-system-ble.mjs",
     "test:coros-notification-ui": "electron scripts/test-coros-notification-ui.cjs",
     "test:coros-wifi-maps": "npm run build:electron && node scripts/test-coros-wifi-maps.mjs",
-    "test:security": "npm run build:electron && electron scripts/test-security-electron.cjs",
+    "smoke:local-only": "npm run build && electron scripts/smoke-local-only-startup.cjs",
+    "test:security": "npm run build:electron && node scripts/test-security-decoders.mjs && electron scripts/test-security-electron.cjs",
+    "test:coros-ble-activity": "npm run build:electron && node scripts/test-coros-corebluetooth-sync.mjs && cd scripts && python3 test-coros-ble-activity.py",
     "test:coros-ble-python": "cd scripts && python3 test-coros-ble-route.py && python3 test-coros-system-ble-transfers.py && python3 test-coros-system-ble.py",
     "test:coros-ble-auth-needs-bumble": "cd scripts && python3 test-coros-ble-auth.py",
     "test:coros-ble-music": "npm run build:electron && node scripts/test-coros-ble-music.mjs && electron scripts/test-coros-music-ui.cjs",
@@ -235,6 +238,10 @@
       {
         "from": "scripts/coros_ble_music.py",
         "to": "ble/coros_ble_music.py"
+      },
+      {
+        "from": "scripts/coros_ble_activity.py",
+        "to": "ble/coros_ble_activity.py"
       },
       {
         "from": "skills",

@@ -1450,10 +1450,11 @@ function median(values: number[]): number | undefined {
  * estimates reflect *your* running/walking/hiking/cycling pace. Sports without
  * enough matching activities are omitted, so callers fall back to a default.
  */
-export async function getActivityPaceBaselines(): Promise<ActivityPaceBaselines> {
-  let activities = listStoredTrainingActivities();
+/** `offline` (Local-Only Mode) uses the given activities and never contacts COROS. */
+export async function getActivityPaceBaselines(offline?: { activities: TrainingHubActivity[] }): Promise<ActivityPaceBaselines> {
+  let activities = offline?.activities ?? listStoredTrainingActivities();
   // Seed the local store from COROS on first use if the user is logged in.
-  if (activities.length < 5 && getStoredAuth()) {
+  if (!offline && activities.length < 5 && getStoredAuth()) {
     try {
       await listTrainingHubActivities(1, 50);
       activities = listStoredTrainingActivities();
@@ -1468,7 +1469,7 @@ export async function getActivityPaceBaselines(): Promise<ActivityPaceBaselines>
   // Resolve sport type → name; the activity list doesn't carry names itself.
   const sportNames = new Map<number, string>();
   try {
-    for (const sport of await getSportTypeMap()) {
+    for (const sport of offline ? mergeSportTypeEntries([]) : await getSportTypeMap()) {
       sportNames.set(sport.sportType, sport.sportName);
     }
   } catch {
@@ -6421,10 +6422,25 @@ async function trainingHubFetch<T>(
   return trainingHubRequest<T>(path, options);
 }
 
+/** Local-Only Mode answers the training and account calls from this computer (localSync/localTrainingBackend.ts). */
+interface LocalTrainingHandler {
+  handles(path: string): boolean;
+  request(path: string, options: { method?: string; body?: unknown; params?: Record<string, string | number> }): unknown;
+}
+let localTraining: (() => LocalTrainingHandler | undefined) | undefined;
+
+export function configureLocalTraining(resolver: () => LocalTrainingHandler | undefined): void {
+  localTraining = resolver;
+}
+
 async function trainingHubRequest<T>(
   path: string,
   options: TrainingHubRequestOptions = {}
 ): Promise<T> {
+  const local = localTraining?.();
+  if (local?.handles(path)) {
+    return local.request(path, { method: options.method, body: options.body, params: options.params }) as T;
+  }
   const auth = getStoredAuth();
   if (!auth) {
     throw new Error("Log in to COROS Training Hub first.");

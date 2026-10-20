@@ -1,4 +1,6 @@
-import { listScheduledWorkoutEntries, listTrainingHubActivities, getTrainingHubStatus } from "./trainingHubService";
+import { listScheduledWorkoutEntries } from "./trainingHubService";
+import { currentActivitySource } from "./localSync/activitySource";
+import { trainingDataAvailable } from "./localSync/trainingDataAccess";
 import { coachMayReplaceBrief, formatJournalEntryForCoach, normalizeHappenDay } from "./workoutJournalModel";
 import { getWorkoutJournalEntry, listWorkoutJournal, saveWorkoutJournal } from "./workoutJournalService";
 import type { CorosMcpTool, TrainingHubActivity, TrainingHubScheduledWorkoutEntry } from "./types";
@@ -24,7 +26,7 @@ const WORKOUT_MATCH = {
 } as const;
 
 export function getChatJournalTools(): CorosMcpTool[] {
-  if (!getTrainingHubStatus().authenticated) return [];
+  if (!trainingDataAvailable()) return [];
   return [
     {
       name: "read_workout_journal",
@@ -247,7 +249,7 @@ async function logDebrief(args: Record<string, unknown>): Promise<string> {
   if (pickedScheduled) {
     ref = { ...scheduledRef(pickedScheduled), ...(optionalString(args.activity_id) ? { activityId: optionalString(args.activity_id) } : {}) };
   } else {
-    const activities = await listTrainingHubActivities(1, 20, day, day);
+    const activities = await currentActivitySource().listActivities(1, 20, day, day);
     const activity = pickActivity(activities, args);
     if (activity) {
       ref = { happenDay: day, activityId: activity.activityId, workoutName: activity.name ?? activity.sportName, sportType: activity.sportType };

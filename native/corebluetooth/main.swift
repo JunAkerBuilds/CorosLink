@@ -44,6 +44,10 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     var routeStage = ""
     var interactionSequence = 0
     var musicReceiver: CorosMusicPageReceiver?
+    var syncReceiver: CorosSyncBlockReceiver?
+    // Developer capture of local-sync frames (never authentication), bounded under Electron's 256 KB line limit.
+    var capture: [[String: Any]]?
+    var captureChars = 0
     var musicDeleteReceiver: CorosMusicDeleteReceiver?
     var operationStarted = Date()
     var deadlineSite: (line: Int, function: String)?
@@ -67,6 +71,8 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         guard current == nil, !requests.isEmpty else { return }
         current = requests.removeFirst()
         operationStarted = Date()
+        capture = current?["capture"] as? Bool == true && ["syncFileBlock", "exchange"].contains(operation) ? [] : nil
+        captureChars = 0
         switch operation {
         case "scan", "connect":
             otherIdentity = nil; pinnedSeen = false
@@ -127,6 +133,20 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             writeTarget = controlWrite()
             writeFrames = musicReceiver!.requestFrames()
             deadline(30, "The watch did not return its music inventory.")
+            flushWrites()
+        case "syncFileBlock":
+            // Read-only local activity sync: one CRC-checked block, returned unacknowledged.
+            guard let p = peripheral, p.state == .connected,
+                  let fileIndex = current?["fileIndex"] as? Int, let offset = current?["offset"] as? Int,
+                  let receiver = CorosSyncBlockReceiver(fileIndex: fileIndex, offset: offset, selector: current?["selector"] as? Int ?? 0),
+                  controlWrite() != nil,
+                  characteristics[channels[1].1.replacingOccurrences(of: "0001", with: "0002")] != nil else {
+                fail("The watch sync request is invalid or the watch is disconnected."); return
+            }
+            syncReceiver = receiver
+            writeTarget = controlWrite()
+            writeFrames = receiver.requestFrames()
+            deadline(30, "The watch did not send the requested records.")
             flushWrites()
         case "sendNotification":
             guard let p = peripheral, p.state == .connected,
@@ -205,16 +225,26 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
     }
 
+    func record(_ direction: String, _ channel: String, _ data: Data) {
+        guard capture != nil, captureChars < 120_000 else { return }
+        let hex = data.map { String(format: "%02x", $0) }.joined()
+        captureChars += hex.count
+        capture!.append(["d": direction, "c": channel, "t": Int(Date().timeIntervalSince(operationStarted) * 1000), "x": hex])
+    }
+
     func finish(extra: [String: Any] = [:]) {
         guard let id = current?["id"] as? Int else { return }
         timer?.cancel(); timer = nil
         state["updatedAt"] = Int64(Date().timeIntervalSince1970 * 1000)
         var response: [String: Any] = ["id": id, "result": state]
         extra.forEach { response[$0.key] = $0.value }
+        if let frames = capture { response["capture"] = frames }
+        capture = nil
         current = nil
         writeTarget = nil; routeBlock = Data(); routeStage = ""
         musicReceiver = nil
         musicDeleteReceiver = nil
+        syncReceiver = nil
         emit(response)
         DispatchQueue.main.async { self.pump() }
     }
@@ -267,10 +297,14 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         writeTarget = nil; routeBlock = Data(); routeStage = ""
         musicReceiver = nil
         musicDeleteReceiver = nil
+        syncReceiver = nil
         current = nil
-        // Error text is static. NSError/userInfo and GATT payloads are never logged.
+        // Error text is static. NSError/userInfo and GATT payloads are never logged;
+        // a developer capture travels separately and is written only to the local archive.
         var failure: [String: Any] = ["id": id, "error": message, "detail": detail]
         extra.forEach { failure[$0.key] = $0.value }
+        if let frames = capture { failure["capture"] = frames }
+        capture = nil
         emit(failure)
         DispatchQueue.main.async { self.pump() }
     }
@@ -493,6 +527,7 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         state["channels"] = values
         let controlNotify = channels[0].1.replacingOccurrences(of: "0001", with: "0003")
         let bulkNotify = channels[1].1.replacingOccurrences(of: "0001", with: "0003")
+        if uuid == controlNotify || uuid == bulkNotify { record("rx", uuid == controlNotify ? "control" : "bulk", data) }
         if operation == "musicInventoryPage", uuid == controlNotify || uuid == bulkNotify {
             do {
                 guard let receiver = musicReceiver else { return }
@@ -506,6 +541,22 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
                     flushWrites()
                 }
             } catch { fail("The watch returned an invalid or incomplete music inventory.") }
+            return
+        }
+        if operation == "syncFileBlock", uuid == controlNotify || uuid == bulkNotify {
+            do {
+                guard let receiver = syncReceiver else { return }
+                let result = try receiver.accept(data, control: uuid == controlNotify)
+                if let payload = result.payload {
+                    syncReceiver = nil
+                    finish(extra: ["payload": payload.base64EncodedString()]); return
+                }
+                if !result.frames.isEmpty {
+                    writeTarget = result.bulk ? characteristics[channels[1].1.replacingOccurrences(of: "0001", with: "0002")] : controlWrite()
+                    writeFrames = result.frames
+                    flushWrites()
+                }
+            } catch { fail("The watch returned invalid or incomplete records.") }
             return
         }
         // Decode only the bounded unsolicited events traced in the W332 firmware.
@@ -598,6 +649,7 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         guard let p = peripheral, let characteristic = writeTarget ?? controlWrite() else { return }
         while !writeFrames.isEmpty, p.canSendWriteWithoutResponse {
             let frame = writeFrames.removeFirst()
+            record("tx", characteristic === controlWrite() ? "control" : "bulk", frame)
             p.writeValue(frame, for: characteristic, type: .withoutResponse)
             if characteristic === controlWrite() { state["controlWrites"] = (state["controlWrites"] as? Int ?? 0) + 1 }
         }
@@ -759,6 +811,117 @@ final class CorosMusicPageReceiver {
         if sequence == Int(header[14]) {
             sequence = 0
             return CorosMusicReadResult(frames: [Data([0x7c, 0, 93])], bulk: true)
+        }
+        return CorosMusicReadResult()
+    }
+}
+
+// Read-only SyncData blocks for local activity sync (twin of scripts/coros_ble_activity.py).
+// One request returns [remaining u32][block] after the CRC check. Nothing is ever
+// acknowledged (0x7D moves the watch's sync pointer), so there is no operation for it.
+let readOnlySyncFiles: Set<Int> = [14, 5]
+let syncMaxBlockBytes = 12_288
+let syncMaxFileBytes = 64 * 1024 * 1024
+
+func syncFrames(_ opcode: UInt8, _ payload: Data) -> [Data] {
+    var logical = payload
+    logical.append(payload.reduce(UInt8(0)) { $0 &+ $1 })
+    let count = (logical.count + 17) / 18
+    return stride(from: 0, to: logical.count, by: 18).enumerated().map { index, offset in
+        Data([opcode, UInt8(count - index - 1)]) + logical.subdata(in: offset..<min(offset + 18, logical.count))
+    }
+}
+
+func syncLittle(_ data: Data, _ offset: Int, _ size: Int) -> Int {
+    (0..<size).reduce(0) { $0 | Int(data[data.startIndex + offset + $1]) << ($1 * 8) }
+}
+
+func syncInteger(_ value: Int, _ size: Int) -> Data {
+    Data((0..<size).map { UInt8(truncatingIfNeeded: value >> ($0 * 8)) })
+}
+
+func syncCrc16(_ data: Data) -> Int {
+    var crc: UInt16 = 0xffff
+    for byte in data {
+        crc ^= UInt16(byte) << 8
+        for _ in 0..<8 { crc = (crc &<< 1) ^ (crc & 0x8000 == 0 ? 0 : 0x1021) }
+    }
+    return Int(crc)
+}
+
+final class CorosSyncControlReply {
+    let opcode: UInt8
+    let limit: Int
+    var bytes = Data()
+    var remaining: UInt8?
+    init(opcode: UInt8, limit: Int) { self.opcode = opcode; self.limit = limit }
+
+    func accept(_ data: Data) throws -> Data? {
+        guard data.first == opcode else { return nil }
+        guard data.count >= 3, remaining == nil || (remaining! > 0 && data[data.startIndex + 1] == remaining! - 1) else { throw CorosMusicReadError.invalid }
+        remaining = data[data.startIndex + 1]; bytes.append(data.dropFirst(2))
+        guard bytes.count <= limit else { throw CorosMusicReadError.invalid }
+        if remaining != 0 { return nil }
+        guard bytes.dropLast().reduce(UInt8(0), { $0 &+ $1 }) == bytes.last else { throw CorosMusicReadError.invalid }
+        let payload = Data(bytes.dropLast())
+        bytes = Data(); remaining = nil
+        return payload
+    }
+}
+
+final class CorosSyncBlockReceiver {
+    let fileIndex: UInt8
+    let offset: Int
+    let selector: Int
+    let now: Int
+    let utcOffset: Int
+    let control = CorosSyncControlReply(opcode: 0x7c, limit: 512)
+    var header = Data()
+    var block = Data()
+    var sequence = 0
+    var stage = "header"
+
+    init?(fileIndex: Int, offset: Int, selector: Int, now: Int? = nil, utcOffset: Int? = nil) {
+        guard readOnlySyncFiles.contains(fileIndex), (0..<syncMaxFileBytes).contains(offset),
+              (0...0xffff_ffff).contains(selector) else { return nil }
+        self.fileIndex = UInt8(fileIndex); self.offset = offset; self.selector = selector
+        self.now = now ?? Int(Date().timeIntervalSince1970)
+        self.utcOffset = utcOffset ?? TimeZone.current.secondsFromGMT()
+    }
+
+    func requestFrames() -> [Data] {
+        // Mobile's epoch is 2014-01-01; timezone is in fifteen-minute units.
+        let payload = Data([fileIndex]) + syncInteger(offset, 4) + Data([0]) + syncInteger(now - 1_388_534_400, 4)
+            + Data([UInt8(truncatingIfNeeded: utcOffset / 900), 3]) + syncInteger(0, 4) + syncInteger(selector, 4)
+        return syncFrames(0x7c, payload)
+    }
+
+    func accept(_ data: Data, control isControl: Bool) throws -> CorosMusicReadResult {
+        if isControl {
+            guard let payload = try control.accept(data) else { return CorosMusicReadResult() }
+            guard stage == "header", payload.count >= 19, payload[payload.startIndex + 12] == 0,
+                  payload[payload.startIndex + 15] == fileIndex, payload[payload.startIndex + 16] == 3 else { throw CorosMusicReadError.invalid }
+            let size = syncLittle(payload, 4, 2), remaining = syncLittle(payload, 6, 4)
+            guard size > 0, size <= syncMaxBlockBytes, size <= remaining, remaining <= syncMaxFileBytes,
+                  offset + remaining <= syncMaxFileBytes,
+                  payload[payload.startIndex + 13] >= 20, payload[payload.startIndex + 14] > 0 else { throw CorosMusicReadError.invalid }
+            header = payload; block = Data(); sequence = 0; stage = "bulk"
+            // Window requests use the bulk channel and have no SUM byte.
+            return CorosMusicReadResult(frames: [Data([0x7c, 0, fileIndex])], bulk: true)
+        }
+        guard data.count >= 3, data.first == 0x7c, data[data.startIndex + 2] == fileIndex else { return CorosMusicReadResult() }
+        let size = header.isEmpty ? 0 : syncLittle(header, 4, 2)
+        guard stage == "bulk", data.count > 3, Int(data[data.startIndex + 1]) == sequence,
+              data.count <= Int(header[header.startIndex + 13]), block.count + data.count - 3 <= size else { throw CorosMusicReadError.invalid }
+        block.append(data.dropFirst(3)); sequence += 1
+        if block.count == size {
+            guard syncCrc16(block) == syncLittle(header, 10, 2) else { throw CorosMusicReadError.invalid }
+            stage = "done"
+            return CorosMusicReadResult(payload: syncInteger(syncLittle(header, 6, 4), 4) + block)
+        }
+        if sequence == Int(header[header.startIndex + 14]) {
+            sequence = 0
+            return CorosMusicReadResult(frames: [Data([0x7c, 0, fileIndex])], bulk: true)
         }
         return CorosMusicReadResult()
     }

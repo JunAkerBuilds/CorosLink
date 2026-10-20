@@ -16,6 +16,8 @@ interface TrainingSummaryTilesProps {
   layout?: "row" | "stack";
   metrics?: TrainingSummaryMetric[];
   className?: string;
+  /** Local-Only Mode: resting HR is calculated by COROS and isn't in the watch's sync data. */
+  local?: boolean;
 }
 
 type TrainingSummaryMetric = "load" | "heart" | "steps" | "calories";
@@ -25,12 +27,12 @@ interface StatReading {
   value?: number;
 }
 
-function StatChart({ readings, bars }: { readings: StatReading[]; bars: boolean }) {
+function StatChart({ readings, bars, emptyLabel = "No history" }: { readings: StatReading[]; bars: boolean; emptyLabel?: string }) {
   useLanguage();
   const gradientId = useId();
   const values = readings.flatMap(({ value }) => value === undefined ? [] : [value]);
   if (values.length === 0) {
-    return <span className="training-stat-card__chart-empty">{t("No history")}</span>;
+    return <span className="training-stat-card__chart-empty">{t(emptyLabel)}</span>;
   }
 
   const min = bars ? 0 : Math.min(...values);
@@ -96,6 +98,8 @@ interface StatCardProps {
   readings?: StatReading[];
   variant?: "bar" | "widget";
   tone?: "load" | "heart" | "steps" | "calories";
+  /** No source can fill this reading, so the card says why instead of promising history. */
+  unavailable?: boolean;
 }
 
 function StatCard({
@@ -106,7 +110,8 @@ function StatCard({
   context,
   readings = [],
   variant = "bar",
-  tone = "load"
+  tone = "load",
+  unavailable = false
 }: StatCardProps) {
   useLanguage();
   if (variant === "widget") {
@@ -131,7 +136,8 @@ function StatCard({
             <span className="training-stat-card__detail">{detail}</span>
           </span>
           <span className="training-stat-card__chart" aria-hidden="true">
-            <StatChart readings={readings} bars={tone === "steps" || tone === "calories"} />
+            <StatChart readings={readings} bars={tone === "steps" || tone === "calories"}
+              emptyLabel={unavailable ? "Not available" : undefined} />
           </span>
         </summary>
         <div className="training-stat-card__history">
@@ -148,7 +154,7 @@ function StatCard({
                 ))}
               </dl>
             </>
-          ) : <p>{t("Recent history will appear after syncing.")}</p>}
+          ) : unavailable ? null : <p>{t("Recent history will appear after syncing.")}</p>}
         </div>
       </details>
     );
@@ -180,9 +186,11 @@ export function TrainingSummaryTiles({
   healthRecords = [],
   layout = "row",
   metrics = ["load", "heart"],
-  className
+  className,
+  local = false
 }: TrainingSummaryTilesProps) {
   useLanguage();
+  const restingHrUnavailable = local && summary.latestRhr === undefined;
   const variant = layout === "stack" ? "widget" : "bar";
   const iconSize = variant === "widget" ? 17 : 16;
   const tilesClassName = [
@@ -222,10 +230,13 @@ export function TrainingSummaryTiles({
             variant === "widget" ? "bpm" : summary.rhrDelta !== undefined
               ? t("{{value1}} vs 7-day avg", { value1: String(formatSignedDelta(summary.rhrDelta, " bpm")) }) : t("beats per minute")
           }
-          context={summary.rhrDelta !== undefined ? t("{{value1}} vs 7-day avg", { value1: String(formatSignedDelta(summary.rhrDelta, " bpm")) }) : undefined}
+          context={restingHrUnavailable
+            ? t("Not available in Local-Only Mode.")
+            : summary.rhrDelta !== undefined ? t("{{value1}} vs 7-day avg", { value1: String(formatSignedDelta(summary.rhrDelta, " bpm")) }) : undefined}
           readings={recentReadings(trendPoints.map((point) => ({ date: point.date, value: point.rhr !== undefined && point.rhr > 0 ? point.rhr : undefined })))}
           variant={variant}
           tone="heart"
+          unavailable={restingHrUnavailable}
         />
       ) : null}
 
@@ -244,7 +255,7 @@ export function TrainingSummaryTiles({
       {metrics.includes("calories") ? (
         <StatCard
           icon={<Zap size={iconSize} />}
-          label={t("Calories")}
+          label={local ? t("Active calories") : t("Calories")}
           value={formatWholeNumber(summary.calories)}
           detail={variant === "widget" ? "kcal" : t("total calories")}
           readings={recentReadings(healthRecords.map((record) => ({ date: record.happenDay, value: record.calories })))}

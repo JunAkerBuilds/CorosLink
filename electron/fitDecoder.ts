@@ -4,7 +4,8 @@
  * raw field values by field number; profile scaling happens in fitActivity.ts.
  *
  * Handles normal and compressed-timestamp record headers, both architectures,
- * developer fields (skipped by size), arrays, and base-type invalid sentinels.
+ * developer fields (read by the name their field_description gives them),
+ * arrays, and base-type invalid sentinels.
  */
 
 export type FitFieldValue = number | string | (number | undefined)[] | undefined;
@@ -13,6 +14,8 @@ export interface FitMessage {
   globalNum: number;
   /** Raw values by field definition number; arrays for multi-element fields. */
   fields: Map<number, FitFieldValue>;
+  /** Developer field values by field name (from field_description), when the message has any. */
+  developerFields?: Map<string, FitFieldValue>;
 }
 
 export interface FitDecodeResult {
@@ -31,13 +34,22 @@ interface FieldDefinition {
   baseType: number;
 }
 
+interface DeveloperFieldDefinition {
+  num: number;
+  size: number;
+  developerIndex: number;
+}
+
 interface LocalDefinition {
   globalNum: number;
   littleEndian: boolean;
   fields: FieldDefinition[];
+  developerFields: DeveloperFieldDefinition[];
   developerBytes: number;
   totalSize: number;
 }
+
+const FIELD_DESCRIPTION = 206;
 
 const BASE_TYPE_SIZE: Record<number, number> = {
   0x00: 1, // enum
@@ -213,6 +225,8 @@ export function decodeFit(
   const dataEnd = Math.min(bytes.length, headerSize + dataSize);
 
   const locals = new Map<number, LocalDefinition>();
+  /** field_description messages: "developerIndex:fieldNumber" → name and base type. */
+  const descriptions = new Map<string, { name: string; baseType: number }>();
   const messages: FitMessage[] = [];
   const skipped = new Set<number>();
   let lastTimestamp: number | undefined;
@@ -248,12 +262,15 @@ export function decodeFit(
       }
 
       let developerBytes = 0;
+      const developerFields: DeveloperFieldDefinition[] = [];
       if (hasDeveloper) {
         const developerCount = view.getUint8(offset);
         offset += 1;
         for (let index = 0; index < developerCount; index += 1) {
           if (offset + 3 > dataEnd) break;
-          developerBytes += view.getUint8(offset + 1);
+          const field = { num: view.getUint8(offset), size: view.getUint8(offset + 1), developerIndex: view.getUint8(offset + 2) };
+          developerFields.push(field);
+          developerBytes += field.size;
           offset += 3;
         }
       }
@@ -262,6 +279,7 @@ export function decodeFit(
         globalNum,
         littleEndian,
         fields,
+        developerFields,
         developerBytes,
         totalSize: totalSize + developerBytes
       });
@@ -287,7 +305,8 @@ export function decodeFit(
       lastTimestamp = compressedTimestamp;
     }
 
-    const decode = wanted.has(definition.globalNum);
+    // Field descriptions are always read: they name the developer fields of later messages.
+    const decode = wanted.has(definition.globalNum) || definition.globalNum === FIELD_DESCRIPTION;
     if (!decode) {
       skipped.add(definition.globalNum);
       // Still track full timestamps so later compressed headers stay correct.
@@ -318,7 +337,27 @@ export function decodeFit(
     if (compressedTimestamp !== undefined && !fields.has(TIMESTAMP_FIELD)) {
       fields.set(TIMESTAMP_FIELD, compressedTimestamp);
     }
-    messages.push({ globalNum: definition.globalNum, fields });
+    let developerValues: Map<string, FitFieldValue> | undefined;
+    for (const field of definition.developerFields) {
+      const description = descriptions.get(`${field.developerIndex}:${field.num}`);
+      if (description && BASE_TYPE_SIZE[description.baseType] !== undefined) {
+        const value = readField(view, cursor, { num: field.num, size: field.size, baseType: description.baseType }, definition.littleEndian);
+        if (value !== undefined) (developerValues ??= new Map()).set(description.name, value);
+      }
+      cursor += field.size;
+    }
+    if (definition.globalNum === FIELD_DESCRIPTION) {
+      const developerIndex = fields.get(0);
+      const number = fields.get(1);
+      const baseType = fields.get(2);
+      const name = fields.get(3);
+      if (typeof developerIndex === "number" && typeof number === "number" && typeof baseType === "number" && typeof name === "string") {
+        descriptions.set(`${developerIndex}:${number}`, { name, baseType });
+      }
+    }
+    if (wanted.has(definition.globalNum)) {
+      messages.push({ globalNum: definition.globalNum, fields, ...(developerValues ? { developerFields: developerValues } : {}) });
+    }
     offset += definition.totalSize;
   }
 

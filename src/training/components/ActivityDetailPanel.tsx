@@ -15,6 +15,8 @@ import {
   Zap,
   type LucideIcon
 } from "lucide-react";
+import { ActivityHeartRateRecovery } from "./ActivityHeartRateRecovery";
+import { ActivityRunningDynamics, ActivityTrainingEffect } from "./ActivityTrainingEffect";
 import type {
   TrainingHubActivity,
   TrainingHubActivityDetail,
@@ -345,6 +347,13 @@ export function ActivityDetailPanel({
           </div>
 
           {zones.hr || zones.pace ? <ActivityTimeInZones zones={zones} /> : null}
+          {detail.trainingEffect || detail.runningDynamics || detail.heartRateRecovery ? (
+            <div className="activity-detail-insights">
+              {detail.trainingEffect ? <ActivityTrainingEffect effect={detail.trainingEffect} /> : null}
+              {detail.runningDynamics ? <ActivityRunningDynamics dynamics={detail.runningDynamics} /> : null}
+              {detail.heartRateRecovery ? <ActivityHeartRateRecovery recovery={detail.heartRateRecovery} /> : null}
+            </div>
+          ) : null}
           {streams ? (
             <ActivityChannels
               key={detail.activityId ?? "activity"}

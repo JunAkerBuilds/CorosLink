@@ -20,6 +20,7 @@ from bleak import BleakClient, BleakScanner
 from coros_ble_protocol import Decoder, ProtocolError, frames
 from coros_ble_route import MUSIC_DELETE_FILE, ROUTE_FILE, WATCHFACE_FILE, send_file_block
 from coros_ble_music import MusicDeleteReceiver, MusicPageReceiver, decode_watch_interaction
+from coros_ble_activity import SyncBlockReceiver
 
 CHANNELS = {
     'control': '6e400001-b5a3-f393-e0a9-77656c6f6f70',
@@ -49,6 +50,10 @@ class IdentityMismatch(ProtocolError):
 
 
 FILE_OPERATIONS = {'routeBlock': ROUTE_FILE, 'watchfaceBlock': WATCHFACE_FILE, 'musicDelete': MUSIC_DELETE_FILE}
+# Developer capture of local-sync frames (never authentication). Bounded to stay
+# well under Electron's 256 KB response-line limit.
+CAPTURE_OPERATIONS = ('syncFileBlock', 'exchange')
+CAPTURE_HEX_LIMIT = 120_000
 
 
 class SystemSession:
@@ -58,6 +63,9 @@ class SystemSession:
         # Music inventory reads listen on control and bulk: (is_control, bytes).
         self.music_queue = None
         self.interaction_sequence = 0
+        self.capture = None
+        self.capture_chars = 0
+        self.capture_started = 0.0
         self.write = None
         self.state = {'phase': 'idle', 'backend': 'system', 'connected': False,
                       'encrypted': False, 'pairingManagedByOS': True,
@@ -157,7 +165,25 @@ class SystemSession:
         self.state.update(phase='connected', connected=True, maximumWriteBytes=self.write.max_write_without_response_size)
         return self.state
 
+    def start_capture(self, enabled):
+        self.capture = [] if enabled else None
+        self.capture_chars = 0
+        self.capture_started = time.monotonic()
+
+    def record(self, direction, channel, data):
+        if self.capture is None or self.capture_chars >= CAPTURE_HEX_LIMIT:
+            return
+        value = bytes(data).hex()
+        self.capture_chars += len(value)
+        self.capture.append({'d': direction, 'c': channel, 't': int((time.monotonic() - self.capture_started) * 1000), 'x': value})
+
+    async def write_bulk(self, characteristic, value):
+        self.record('tx', 'bulk', value)
+        await self.client.write_gatt_char(characteristic, value, response=False)
+
     def notification(self, channel, data):
+        if channel['name'] in ('control', 'bulk'):
+            self.record('rx', channel['name'], data)
         channel['notifications'] += 1
         channel['receivedBytes'] += len(data)
         channel['lastNotificationAt'] = int(time.time() * 1000)
@@ -180,6 +206,7 @@ class SystemSession:
         decoder = Decoder(opcode)
         try:
             for frame in frames(opcode, payload, min(maximum, self.write.max_write_without_response_size, 255)):
+                self.record('tx', 'control', frame)
                 await self.client.write_gatt_char(self.write, frame, response=False)
                 self.state['controlWrites'] = self.state.get('controlWrites', 0) + 1
             async def receive():
@@ -211,6 +238,7 @@ class SystemSession:
         return bulk
 
     async def write_control(self, value):
+        self.record('tx', 'control', value)
         await self.client.write_gatt_char(self.write, value, response=False)
         self.state['controlWrites'] = self.state.get('controlWrites', 0) + 1
 
@@ -304,6 +332,35 @@ class SystemSession:
         finally:
             self.music_queue = None
 
+    async def sync_file_block(self, file_index, offset, selector):
+        """One verified, unacknowledged block of a read-only SyncData file (local activity sync)."""
+        receiver = SyncBlockReceiver(file_index, offset, selector)
+        bulk = self.connected_channels()
+        self.music_queue = asyncio.Queue(maxsize=512)
+        try:
+            for frame in receiver.request_frames():
+                await self.write_control(frame)
+
+            async def receive():
+                while True:
+                    item = await self.music_queue.get()
+                    if item is None:
+                        raise ProtocolError('The watch disconnected while sending its records.')
+                    result = receiver.accept(item[1], item[0])
+                    if result.payload is not None:
+                        return result.payload
+                    for frame in result.frames:
+                        if result.bulk:
+                            await self.write_bulk(bulk, frame)
+                        else:
+                            await self.write_control(frame)
+            try:
+                return await asyncio.wait_for(receive(), 30)
+            except asyncio.TimeoutError:
+                raise ProtocolError('The watch did not send the requested records.') from None
+        finally:
+            self.music_queue = None
+
     async def refresh(self):
         if self.client and self.client.is_connected:
             data = await self.client.read_gatt_char(standard_uuid('2a19'))
@@ -370,6 +427,7 @@ async def main():
                 request_id = request.get('id')
                 operation = request['operation']
                 extra = {}
+                session.start_capture(request.get('capture') is True and operation in CAPTURE_OPERATIONS)
                 if operation == 'scan':
                     result = await session.scan()
                 elif operation == 'connect':
@@ -397,20 +455,30 @@ async def main():
                     payload = await session.music_inventory_page(request.get('page'))
                     result = session.state
                     extra['payload'] = base64.b64encode(payload).decode()
+                elif operation == 'syncFileBlock':
+                    payload = await session.sync_file_block(request.get('fileIndex'), request.get('offset'), request.get('selector', 0))
+                    result = session.state
+                    extra['payload'] = base64.b64encode(payload).decode()
                 elif operation == 'disconnect':
                     await session.close()
                     result = session.state
                 else:
                     raise ProtocolError('Unsupported Bluetooth operation.')
                 result['updatedAt'] = int(time.time() * 1000)
+                if session.capture is not None:
+                    extra['capture'] = session.capture
                 emit({'id': request_id, 'result': result, **extra})
+                session.start_capture(False)
             except Exception as error:
                 message = str(error) if isinstance(error, ProtocolError) else (
                     'System Bluetooth failed (' + type(error).__name__ + '). Check that Bluetooth is on, the watch is awake, and any OS pairing prompt is confirmed. On Linux, BlueZ and a pairing agent must be running.')
                 failure = {'id': request_id, 'error': message, 'detail': failure_detail(error, operation, started)}
                 if isinstance(error, IdentityMismatch):
                     failure['mismatch'] = {'deviceId': error.address}
+                if session.capture is not None:
+                    failure['capture'] = session.capture
                 emit(failure)
+                session.start_capture(False)
                 if operation == 'connect':
                     await session.close()
     finally:

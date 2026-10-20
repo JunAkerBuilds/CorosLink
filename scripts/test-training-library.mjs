@@ -529,6 +529,9 @@ assert.equal(removalResult.removedCount, 1, "already-absent owned occurrences ar
 assert.equal(mockCalendar.some((entry) => entry.planId === "unrelated" && entry.idInPlan === "same-name"), true, "same-name unrelated workouts are preserved");
 assert.equal(mockCalendar.some((entry) => entry.planId === "past-owned"), true, "past owned workouts are preserved");
 assert.equal(databaseModule.getTrainingPlanDocument(mutationPlan.id).calendarInstalls[0].state, "removed");
+// Deleting a plan that was on the calendar (the Library removes its upcoming workouts first, as above) then succeeds.
+library.deleteLocalTrainingPlan(mutationPlan.id, true);
+assert.equal(databaseModule.getTrainingPlanDocument(mutationPlan.id), undefined, "a plan whose calendar workouts were removed can be deleted");
 
 const stalePlan = structuredClone(mutationPlan);
 stalePlan.id = "plan:stale-preview";

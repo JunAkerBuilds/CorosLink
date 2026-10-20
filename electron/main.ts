@@ -1,4 +1,11 @@
+// Must stay the first import: reads the persisted data mode and installs the
+// network guards before any other module can open a connection.
+import { networkPolicy } from "./privacy/bootstrap";
 import { confineMainWindow, requireMainWindowSender } from "./mainWindowGuard";
+import { LocalOnlyFeatureError } from "./privacy/remoteFeatures";
+import { registerLocalOnlyMode } from "./privacy/localOnlyMain";
+import { currentActivitySource, currentHealthSource, usingLocalSources } from "./localSync/activitySource";
+import type { LocalDataService } from "./localSync/localDataService";
 import { getCalendarWorkoutEvent, updateCalendarWorkoutEvent, syncEditedCalendarWorkout } from "./calendarWorkoutEventService";
 import { initializeNativeLanguage, localizeDialogOptions, nativeText, setNativeLanguage } from "./localization";
 import { listCalendarWorkoutEntries } from "./calendarWorkoutEventStorage";
@@ -89,15 +96,12 @@ import { getAppInfo, openAppStorageLocation } from "./appInfoService";
 import {
   backfillFeelTypes,
   getActivityPaceBaselines,
-  getDailyMetrics,
   getRacePredictor,
   getRpeBackfillStatus,
   getRpeLoadByDay,
   getSportTypeMap,
   getTrainingAnalytics,
   getTrainingDashboard,
-  fetchTrainingHubActivityFile,
-  getTrainingHubActivityDetail,
   getTrainingHubStatus,
   getUpcomingWorkouts,
   listTrainingHubActivities,
@@ -472,10 +476,7 @@ import {
   setMcpBearer,
   updateMcpServer
 } from "./mcpServersStore";
-import { getTrainingHealthInsight } from "./healthInsightsService";
 import type { HealthInsightKind } from "./healthInsightsTypes";
-import { getTrainingDailyHealthData } from "./dailyHealthDataService";
-import { getTrainingSleepData } from "./sleepDataService";
 import type {
   ChatMessage,
   ChatProvider,
@@ -501,6 +502,8 @@ function requireCoachHub(): CoachSessionHub {
 
 // The environment server phones (C-LINK) drive the Coach hub through.
 let remoteAccess: RemoteAccess | undefined;
+// Activities and health data held on this computer (watch sync, FIT imports, backups).
+let localData: LocalDataService | undefined;
 
 function requireRemoteAccess(): RemoteAccess {
   if (!remoteAccess) throw new Error("Remote access is still starting. Try again in a moment.");
@@ -699,7 +702,7 @@ async function exportTrainingHubActivityFileToDisk(
   fileType: TrainingHubActivityFileType,
   suggestedName?: string
 ): Promise<TrainingHubExportResult> {
-  const { format, content } = await fetchTrainingHubActivityFile(
+  const { format, content } = await currentActivitySource().readActivityFile(
     activity.activityId,
     activity.sportType,
     fileType
@@ -838,7 +841,10 @@ function createWindow(): void {
       : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
-      additionalArguments: process.platform === "darwin" ? ["--coros-native-sidebar-glass"] : [],
+      additionalArguments: [
+        ...(process.platform === "darwin" ? ["--coros-native-sidebar-glass"] : []),
+        ...(networkPolicy.enforcing ? ["--coroslink-local-only"] : [])
+      ],
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: true,
@@ -1033,6 +1039,8 @@ app.whenReady().then(() => {
     }
   });
   initializeDatabase(app.getPath("userData"));
+  // Local-Only Mode is known before anything below can upload to COROS.
+  localData = registerLocalOnlyMode({ getWindow: () => mainWindow });
   initializeNativeLanguage();
   hydratePlanDraftStoreFromDatabase();
   prunePlanDraftStore();
@@ -1130,6 +1138,7 @@ app.on("before-quit", event => {
     return;
   }
   coachHub?.shutdown();
+  localData?.cancelSync();
   void remoteAccess?.stop();
   void corosNativeBle.stop();
   void watchfaceAutomation?.stop();
@@ -1978,6 +1987,10 @@ function registerIpcHandlers(): void {
   // reach the hub with their grant's permissions instead (CoachActor).
   ipcMain.handle("coach:confirm", (event, input: CoachConfirmInput) => {
     mainWindowSender(event, "Coach approvals");
+    // Plans and deletes are served locally in Local-Only Mode; COROS actions and strength edits would write to COROS.
+    if (networkPolicy.enforcing && input?.decision === "confirm" && (input.kind === "corosAction" || input.kind === "strengthEdit")) {
+      throw new LocalOnlyFeatureError("Saving Coach changes to COROS");
+    }
     return requireCoachHub().confirm({
       ...input,
       options: input.options
@@ -2230,7 +2243,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "trainingHub:listActivities",
     (_event, page: number, size: number, startDay?: string, endDay?: string) =>
-      listTrainingHubActivities(page, size, startDay, endDay)
+      currentActivitySource().listActivities(page, size, startDay, endDay)
   );
 
   ipcMain.handle(
@@ -2424,7 +2437,7 @@ function registerIpcHandlers(): void {
       activityId: string,
       sportType: number,
       listActivity?: TrainingHubActivity
-    ) => getTrainingHubActivityDetail(activityId, sportType, listActivity)
+    ) => currentActivitySource().getActivityDetail(activityId, sportType, listActivity)
   );
 
   ipcMain.handle(
@@ -2451,10 +2464,10 @@ function registerIpcHandlers(): void {
       fileType: TrainingHubActivityFileType = 4
     ): Promise<TrainingHubExportResult> => {
       const latest = pickLatestTrainingHubActivity(
-        await listTrainingHubActivities(1, 50)
+        await currentActivitySource().listActivities(1, 50)
       );
       if (!latest) {
-        throw new Error("No COROS activities were found to export.");
+        throw new Error(usingLocalSources() ? "No activities are stored on this computer yet." : "No COROS activities were found to export.");
       }
       return exportTrainingHubActivityFileToDisk(latest, fileType, latest.name);
     }
@@ -2524,7 +2537,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle("trainingHub:getDashboard", () => getTrainingDashboard());
 
   ipcMain.handle("trainingHub:getDailyMetrics", (_event, dateList: string[]) =>
-    getDailyMetrics(dateList)
+    currentHealthSource().getDailyMetrics(dateList)
   );
 
   ipcMain.handle(
@@ -2580,8 +2593,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("trainingHub:getSportTypeMap", () => getSportTypeMap());
 
-  ipcMain.handle("trainingHub:getActivityPaceBaselines", () =>
-    getActivityPaceBaselines()
+  ipcMain.handle("trainingHub:getActivityPaceBaselines", async () =>
+    usingLocalSources()
+      ? getActivityPaceBaselines({ activities: await currentActivitySource().listActivities(1, 1000) })
+      : getActivityPaceBaselines()
   );
 
   ipcMain.handle("trainingHub:getUpcomingWorkouts", (_event, days?: number) =>
@@ -2589,15 +2604,15 @@ function registerIpcHandlers(): void {
   );
 
   ipcMain.handle("trainingHub:getSleepData", (_event, days?: number) =>
-    getTrainingSleepData(mainWindow, days ?? 7)
+    currentHealthSource().getSleep(days ?? 7)
   );
 
   ipcMain.handle("trainingHub:getHealthInsight", (_event, kind: HealthInsightKind, days?: number) =>
-    getTrainingHealthInsight(kind, days ?? 7)
+    currentHealthSource().getInsight(kind, days ?? 7)
   );
 
   ipcMain.handle("trainingHub:getDailyHealthData", (_event, days?: number) =>
-    getTrainingDailyHealthData(mainWindow, days ?? 1)
+    currentHealthSource().getDailyHealth(days ?? 1)
   );
 
   ipcMain.handle("intervals:getStatus", () => getIntervalsStatus());

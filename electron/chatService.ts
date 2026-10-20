@@ -6,10 +6,10 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { activityMovingSeconds, activitySignificantElapsedSeconds } from "./activityTime";
 import { deleteSettings, getSetting, setSetting } from "./database";
+import { currentActivitySource, usingLocalSources } from "./localSync/activitySource";
 import {
   formatScheduledExercisesForChat,
   getTrainingHubStatus,
-  listTrainingHubActivities,
   getTrainingDashboard,
   getUpcomingWorkouts
 } from "./trainingHubService";
@@ -2107,7 +2107,7 @@ async function buildTrainingContext(
   } catch {
     status = { authenticated: false };
   }
-  if (!status.authenticated) {
+  if (!status.authenticated && !usingLocalSources()) {
     return {
       hasData: false,
       text:
@@ -2122,7 +2122,7 @@ async function buildTrainingContext(
   const includeUpcoming = permissions?.upcomingWorkouts !== false;
   const [activities, dashboard, upcoming] = await Promise.allSettled([
     includeActivities
-      ? listTrainingHubActivities(1, 25)
+      ? currentActivitySource().listActivities(1, 25)
       : Promise.resolve([] as TrainingHubActivity[]),
     includeMetrics
       ? getTrainingDashboard()

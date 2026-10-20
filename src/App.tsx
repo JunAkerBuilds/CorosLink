@@ -1,4 +1,5 @@
 import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage, getLocale } from "./i18n";
+import { setLocalOnlyView } from "./privacy/localOnlyView";
 import {
   AlertCircle,
   ArrowLeft,
@@ -29,12 +30,14 @@ import {
   RefreshCw,
   Search,
   Settings,
+  ShieldCheck,
   Sparkles,
   Trash2,
   Upload,
   Watch,
   X,
 } from "lucide-react";
+import type { DataModeStatus } from "../electron/privacy/dataModeTypes";
 import {
   Component,
   type ErrorInfo,
@@ -116,7 +119,7 @@ import {
   readStartupView,
   saveStartupView,
 } from "./navigation/startupView";
-import { SettingsView } from "./settings/SettingsView";
+import { SettingsView, type SettingsSection } from "./settings/SettingsView";
 import type { AccountDestination } from "./settings/AccountsSettings";
 import { DataView } from "./data/DataView";
 import {
@@ -128,6 +131,7 @@ import {
 import { AudiobooksView } from "./media/AudiobooksView";
 import { WatchMusicSourcePanel } from "./media/WatchMusicSourcePanel";
 import { WatchConnectionMenu } from "./watch/WatchConnectionMenu";
+import { useWatchSync } from "./watch/watchSyncState";
 import type { WatchfacesNavigationRequest } from "./watchfaces/WatchfacesView";
 import type { OnboardingExit } from "./onboarding/OnboardingTour";
 import { CorosWifiMusicPanel } from "./media/CorosWifiMusicPanel";
@@ -357,6 +361,11 @@ export default function App() {
   useLanguage();
   const api: CorosLinkApi | undefined = window.corosLink;
   const [activeView, setActiveView] = useState<View>(readStartupView);
+  const [settingsFocus, setSettingsFocus] = useState<{ section: SettingsSection; key: number } | null>(null);
+  const openSettingsSection = useCallback((section: SettingsSection) => {
+    setActiveView("settings");
+    setSettingsFocus({ section, key: Date.now() });
+  }, []);
   const [returnToAccountSettings, setReturnToAccountSettings] = useState(false);
   const [accountSetupView, setAccountSetupView] = useState<View | null>(null);
   const [coachAccountSetupRequest, setCoachAccountSetupRequest] = useState(0);
@@ -428,6 +437,13 @@ export default function App() {
     useState<(CommunityWatchfaceOpenRequest & { requestId: number }) | null>(null);
   const communityWatchfaceRequestSequence = useRef(0);
   const [watchMenuOpen, setWatchMenuOpen] = useState(false);
+  // "Sync watch now" from another view (the empty Training Hub): opens the watch menu, which starts it.
+  const [watchSyncRequest, setWatchSyncRequest] = useState<number | null>(null);
+  const requestWatchSync = useCallback(() => {
+    setWatchSyncRequest(Date.now());
+    setWatchMenuOpen(true);
+  }, []);
+  const clearWatchSyncRequest = useCallback(() => setWatchSyncRequest(null), []);
   // The welcome tour: the main process says whether it's been finished or skipped yet.
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   // The iPhone beta / Discord invite: once per INVITE_ID, on a launch where the
@@ -511,6 +527,15 @@ export default function App() {
   const trainingWellnessLoadSequenceRef = useRef(0);
   const [trainingHubStatus, setTrainingHubStatus] =
     useState<TrainingHubStatus | null>(null);
+  // Local-Only Mode: activities and health data come from this computer, and nothing is uploaded to COROS.
+  const [dataModeStatus, setDataModeStatus] = useState<DataModeStatus | null>(null);
+  const localOnly = dataModeStatus?.enforcing === true || (dataModeStatus === null && Boolean(window.corosLink?.localOnlyAtLaunch));
+  const localOnlyRef = useRef(false);
+  localOnlyRef.current = localOnly;
+  // Whether a COROS Training Hub session exists, for loads that don't receive a fresh status.
+  const trainingHubSignedInRef = useRef(false);
+  trainingHubSignedInRef.current = trainingHubStatus?.authenticated === true;
+  useEffect(() => setLocalOnlyView(localOnly), [localOnly]);
   const [trainingHubEmail, setTrainingHubEmail] = useState("");
   const [trainingHubPassword, setTrainingHubPassword] = useState("");
   const [trainingHubRemember, setTrainingHubRemember] = useState(true);
@@ -780,10 +805,13 @@ export default function App() {
     setTrainingHubRemember(status.rememberCredentials ?? true);
   }, []);
 
-  const loadTrainingHubData = useCallback(async () => {
+  const loadTrainingHubData = useCallback(async (signedIn?: boolean) => {
     if (!api) {
       return;
     }
+    // Analytics and the dashboard are worked out by COROS. In Local-Only Mode without a
+    // COROS session there is nothing to read, so they aren't requested (and can't fail).
+    const cloudSummaries = !localOnlyRef.current || (signedIn ?? trainingHubSignedInRef.current);
 
     const loadSequence = ++trainingCoreLoadSequenceRef.current;
     const publish = <T,>(
@@ -813,12 +841,12 @@ export default function App() {
         () => setTrainingHubActivities([]),
       ),
       publish(
-        api.getTrainingAnalytics(),
+        cloudSummaries ? api.getTrainingAnalytics() : Promise.resolve<TrainingHubAnalytics | null>(null),
         setTrainingHubAnalytics,
         () => setTrainingHubAnalytics(null),
       ),
       publish(
-        fetchTrainingDashboard(api),
+        cloudSummaries ? fetchTrainingDashboard(api) : Promise.resolve<TrainingHubDashboard | null>(null),
         setTrainingHubDashboard,
         () => setTrainingHubDashboard(null),
       ),
@@ -876,14 +904,19 @@ export default function App() {
     setSleepConnecting(true);
 
     try {
-      await ensureTrainingHubMcp();
+      // Local-Only Mode reads sleep and daily totals from this computer, so it doesn't wait for COROS data access.
+      const local = localOnlyRef.current;
+      if (!local) {
+        await ensureTrainingHubMcp();
+      }
       if (trainingWellnessLoadSequenceRef.current !== loadSequence) {
         return;
       }
 
       const [sleepResult, dailyHealthResult] = await Promise.allSettled([
         api.getTrainingSleepData(14),
-        api.getTrainingDailyHealthData(1),
+        // The tiles chart up to ten recent days; locally that history costs nothing to read.
+        api.getTrainingDailyHealthData(local ? 10 : 1),
       ]);
 
       if (trainingWellnessLoadSequenceRef.current !== loadSequence) {
@@ -914,9 +947,9 @@ export default function App() {
       const status = await api.getTrainingHubStatus();
       applyTrainingHubStatus(status);
 
-      if (status.authenticated) {
+      if (status.authenticated || localOnlyRef.current) {
         void loadTrainingHubWellnessData();
-        await loadTrainingHubData();
+        await loadTrainingHubData(status.authenticated);
       } else {
         clearTrainingHubData();
       }
@@ -930,6 +963,72 @@ export default function App() {
     loadTrainingHubData,
     loadTrainingHubWellnessData,
   ]);
+
+  useEffect(() => {
+    if (!api?.getDataModeStatus) {
+      return;
+    }
+    let active = true;
+    void api.getDataModeStatus().then((status) => {
+      if (active) setDataModeStatus(status);
+    }).catch(() => undefined);
+    const unsubscribe = api.onDataModeChange((status) => setDataModeStatus(status));
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [api]);
+
+  // Switching data source reloads the Training Hub from the cloud or from this computer.
+  const previousLocalOnlyRef = useRef<boolean | null>(null);
+  const dataModeKnown = dataModeStatus !== null;
+  useEffect(() => {
+    if (!api || !dataModeKnown) {
+      return;
+    }
+    // The mount refresh already loaded data for the mode CorosLink launched in.
+    const previous = previousLocalOnlyRef.current ?? Boolean(api.localOnlyAtLaunch);
+    previousLocalOnlyRef.current = localOnly;
+    if (previous !== localOnly) {
+      void refreshTrainingHub().catch((caught) => {
+        setError(localizedText(() => toErrorMessage(caught)));
+      });
+    }
+  }, [api, dataModeKnown, localOnly, refreshTrainingHub]);
+
+  // Keeps the window's sync state (progress and the last result) while the watch menu is closed.
+  useWatchSync(api ?? undefined);
+  // What a sync read shows straight away: the Training Hub and the Overview reload when any sync ends,
+  // from the watch menu or Settings. Health cards that fetch for themselves follow localDataVersion.
+  const [localDataVersion, setLocalDataVersion] = useState(0);
+  useEffect(() => {
+    if (!api || typeof api.onWatchSyncProgress !== "function") {
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const reload = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = undefined;
+        if (!localOnlyRef.current) return;
+        setLocalDataVersion((version) => version + 1);
+        void refreshTrainingHub().catch(() => undefined);
+      }, 400);
+    };
+    const offProgress = api.onWatchSyncProgress((progress) => {
+      if (progress.state === "done" || progress.state === "failed" || progress.state === "cancelled") reload();
+    });
+    return () => {
+      if (timer) clearTimeout(timer);
+      offProgress();
+    };
+  }, [api, refreshTrainingHub]);
+
+  /** What the training views gate on: a COROS session, or data on this computer in Local-Only Mode. */
+  const trainingDataStatus = useMemo<TrainingHubStatus | null>(
+    () => (localOnly ? { ...trainingHubStatus, authenticated: true, dataSource: "local" } : trainingHubStatus),
+    [localOnly, trainingHubStatus],
+  );
 
   useEffect(() => {
     if (!api || activeView !== "training") {
@@ -1695,7 +1794,7 @@ export default function App() {
     setTrainingHub2faCode("");
     setMessage(localizedText(() => successMessage));
     void loadTrainingHubWellnessData();
-    await loadTrainingHubData();
+    await loadTrainingHubData(status.authenticated);
   }
 
   async function handleTrainingHubLogin(event: FormEvent<HTMLFormElement>) {
@@ -2237,10 +2336,13 @@ export default function App() {
 
   const isOverviewDashboard = activeView === "overview";
   const trainingHubSnapshot = useMemo<TrainingHubSnapshot | null>(() => {
+    // Local-Only Mode has no COROS analytics or dashboard; sleep and daily totals from the watch still count.
     if (
       !trainingHubAnalytics &&
       !trainingHubDashboard &&
-      !trainingHubDailyMetrics
+      !trainingHubDailyMetrics &&
+      !trainingHubSleepData &&
+      !trainingHubDailyHealthData
     ) {
       return null;
     }
@@ -2376,6 +2478,18 @@ export default function App() {
         </div>
         <div className="app-header-end">
           <div className="app-toolbar-utilities">
+            {localOnly ? (
+              <button
+                className="app-privacy-indicator"
+                type="button"
+                aria-label={t("Local-Only Mode: privacy settings")}
+                title={t("Privacy & local data")}
+                onClick={() => openSettingsSection("privacy")}
+              >
+                <ShieldCheck size={16} aria-hidden="true" />
+                {t("Local-Only")}
+              </button>
+            ) : null}
             <button className="support-button" type="button" onClick={() => setCommunityInvite("support")}>
               <LifeBuoy size={16} aria-hidden="true" />
               {t("Support")}
@@ -2450,6 +2564,9 @@ export default function App() {
               onOpenChange={setWatchMenuOpen}
               onOpenWatchFaces={() => openWatchfacesTarget("watch")}
               onSignIn={() => openWatchfacesTarget("sign-in")}
+              localOnly={localOnly}
+              syncRequest={watchSyncRequest}
+              onSyncRequestHandled={clearWatchSyncRequest}
             />
             <button
               className="icon-button app-toolbar-refresh"
@@ -2524,7 +2641,7 @@ export default function App() {
                 watchStatus={watchStatus}
                 storage={storage}
                 watchConnected={Boolean(watchStatus?.connected)}
-                trainingConnected={Boolean(trainingHubStatus?.authenticated)}
+                trainingConnected={Boolean(trainingDataStatus?.authenticated)}
                 trainingStatusKnown={trainingHubStatus !== null || trainingHubLoaded}
                 trainingLoading={!trainingHubLoaded}
                 trainingSnapshot={trainingHubSnapshot}
@@ -2537,6 +2654,7 @@ export default function App() {
                 onDeleteDownload={handleDeleteDownload}
                 onOpenLibrary={() => openMediaTab("library")}
                 onNavigate={setActiveView}
+                onSyncWatch={localOnly && trainingHubLoaded ? requestWatchSync : undefined}
                 onOpenTrainingActivity={openTrainingHubActivity}
                 onSelectTrainingActivity={handleTrainingHubActivityDetail}
               />
@@ -2684,7 +2802,9 @@ export default function App() {
               <Suspense fallback={<DeferredSurfaceFallback label={t("training")} />}>
                 <LazyTrainingHubView
                   api={api}
-                  status={trainingHubStatus}
+                  status={trainingDataStatus}
+                  onSyncWatch={localOnly && trainingHubLoaded ? requestWatchSync : undefined}
+                  localDataVersion={localDataVersion}
                   email={trainingHubEmail}
                   password={trainingHubPassword}
                   remember={trainingHubRemember}
@@ -2734,7 +2854,7 @@ export default function App() {
                 <Suspense fallback={<DeferredSurfaceFallback label={t("Training Library")} />}>
                   <LazyTrainingLibraryView
                     api={api}
-                    status={trainingHubStatus}
+                    status={trainingDataStatus}
                     onOpenTraining={() => setActiveView("training")}
                     onOpenCoach={(prompt) => {
                       setCoachPrefill(prompt ? { text: prompt } : null);
@@ -2770,6 +2890,8 @@ export default function App() {
             ) : null}
             {activeView === "settings" ? (
               <SettingsView
+                focusSection={settingsFocus ?? undefined}
+                onSectionFocused={() => setSettingsFocus(null)}
                 initialAccountScreen={returnToAccountSettings}
                 onOpenAccount={openAccountSetup}
                 api={api}
@@ -2783,7 +2905,7 @@ export default function App() {
               <Suspense fallback={<DeferredSurfaceFallback label={t("calendar")} />}>
                 <LazyCalendarView
                   api={api}
-                  status={trainingHubStatus}
+                  status={trainingDataStatus}
                   sportTypes={trainingHubSportTypes}
                   refreshToken={calendarRefreshToken}
                   onMessage={setMessage}
@@ -2840,7 +2962,7 @@ export default function App() {
       {onboardingOpen && api ? (
         <Suspense fallback={null}>
           <LazyOnboardingTour
-            trainingConnected={Boolean(trainingHubStatus?.authenticated)}
+            trainingConnected={Boolean(trainingDataStatus?.authenticated)}
             watchConnected={
               Boolean(watchStatus?.connected) || Boolean(nativeBleStatus?.connected)
             }
@@ -3240,6 +3362,8 @@ interface MediaOverviewTabProps {
   onDeleteDownload: (track: LocalTrack) => void;
   onOpenLibrary: () => void;
   onNavigate: (view: View) => void;
+  /** Local-Only Mode: opens the watch menu and starts a sync. */
+  onSyncWatch?: () => void;
   onOpenTrainingActivity: (activity: TrainingHubActivity) => void;
   onSelectTrainingActivity: (activity: TrainingHubActivity) => void;
 }
@@ -3263,6 +3387,7 @@ function MediaOverviewTab({
   onDeleteDownload,
   onOpenLibrary,
   onNavigate,
+  onSyncWatch,
   onOpenTrainingActivity,
   onSelectTrainingActivity,
 }: MediaOverviewTabProps) {
@@ -3356,6 +3481,7 @@ function MediaOverviewTab({
           sportTypes={trainingSportTypes}
           onNavigate={onNavigate}
           onOpenActivity={onOpenTrainingActivity}
+          onSyncWatch={onSyncWatch}
         />
       </div>
 

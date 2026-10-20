@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { app, safeStorage } from "electron";
 import { getSetting, setSetting } from "./database";
-import type { CorosBleBackend, CorosNativeBleConnectOptions, CorosNativeBleSnapshot } from "./corosNativeBleTypes";
+import type { CorosBleBackend, CorosNativeBleConnectOptions, CorosNativeBleSnapshot, CorosSyncCaptureEntry } from "./corosNativeBleTypes";
 import { BIND_MESSAGES, BIND_REASON, BIND_STATUS, bindRefusalMessage, CorosBindReplyError, CorosBleAccountAuth, describeBindReply, formatCorosWatchKeyId, watchReportsKeyId, type CorosAccountCredential } from "./corosBleAuth";
 import { recordDiagnosticError, recordDiagnosticNotice } from "./diagnosticsService";
 import {
@@ -30,6 +30,8 @@ import { CorosWifiMusicService } from "./corosWifiMusicService";
 import { encodePhonePairingCode, PHONE_PAIRING_DISPLAY_MS } from "./corosBlePhonePairing";
 import type { CorosPhonePairingCode } from "./corosNativeBleTypes";
 import QRCode from "qrcode";
+import { assertReadableSyncFile, PEDOMETER_OPCODE } from "./localSync/activityProtocol";
+import type { WatchModelId } from "./watchModels";
 import type { CorosWifiMusicIdentity, CorosWifiMusicStatus } from "./corosWifiMusicTypes";
 import { connectedWatchfaceTarget, isValidatedWatch, watchfaceBinTarget, watchfaceTargetHardware, watchfaceTargetsForMagic, type WatchfaceTarget } from "./watchfaceTargets";
 
@@ -48,7 +50,7 @@ const emptyState = (): CorosNativeBleSnapshot => ({
 type ConnectMode = "user" | "internal" | "background";
 
 /** Everything that holds the watch link. busyWith() checks them all, so a new task can't be missed by one guard. */
-type LinkTask = "wifiMusic" | "wifiMusicRestore" | "activityScreen" | "musicInventory" | "musicDelete" |
+type LinkTask = "wifiMusic" | "wifiMusicRestore" | "activityScreen" | "localSync" | "musicInventory" | "musicDelete" |
   "route" | "watchface" | "watchfaceInventory" | "mapStarting" | "connecting" | "scanning";
 
 /** What the user is told when the watch is busy with a task (shown in the app as is). */
@@ -56,6 +58,7 @@ const BUSY_MESSAGE: Record<LinkTask, string> = {
   wifiMusic: "Wait for the audio sync over Wi-Fi to finish.",
   wifiMusicRestore: "Wait for CorosLink to restore the watch's settings after the audio sync.",
   activityScreen: "Wait for the activity screens to finish syncing.",
+  localSync: "Wait for the watch sync to finish.",
   musicInventory: "Wait for CorosLink to finish with the music on the watch.",
   musicDelete: "Wait for CorosLink to finish with the music on the watch.",
   route: "Wait for the route to finish sending to the watch.",
@@ -94,6 +97,11 @@ export class CorosNativeBleService {
   private watchfaceTask?: Promise<CorosDirectWatchfaceStatus>;
   private watchfaceInventoryTask?: Promise<CorosDirectWatchfaceInventory>;
   private musicInventoryTask?: Promise<CorosBleMusicInventory>;
+  /** A local-data watch sync owns the link for its whole run (SyncData reads must not interleave). */
+  private localSyncTask?: Promise<unknown>;
+  private localSyncSessionKey?: string;
+  /** Developer capture of local-sync frames; set only when COROSLINK_SYNC_CAPTURE is on. */
+  private syncCapture?: (entry: CorosSyncCaptureEntry) => void;
   private musicDeleteTask?: Promise<CorosBleMusicDeleteResult>;
   private musicConfirming = false;
   private wifiMusicTask?: Promise<CorosWifiMusicStatus>;
@@ -144,6 +152,7 @@ export class CorosNativeBleService {
       wifiMusic: () => this.wifiMusicTask,
       wifiMusicRestore: () => this.wifiMusic.hasPendingRestore(),
       activityScreen: () => this.activityScreenTask,
+      localSync: () => this.localSyncTask,
       musicInventory: () => this.musicInventoryTask,
       musicDelete: () => this.musicDeleteTask,
       route: () => this.routeTask,
@@ -300,6 +309,12 @@ export class CorosNativeBleService {
           if (!request) continue;
           clearTimeout(request.timer);
           this.pending.delete(response.id);
+          // Kept out of `detail`, which reaches the diagnostics log; frames can hold activity data.
+          if (Array.isArray(response.capture)) {
+            try {
+              this.syncCapture?.({ operation: request.operation, ok: !response.error, ...(response.error ? { error: String(response.error) } : {}), frames: response.capture });
+            } catch { /* capture never affects the operation */ }
+          }
           const elapsedMs = Date.now() - request.started;
           if (response.error) {
             this.trace.add(`${request.operation} failed`, { elapsedMs, ...(response.detail && typeof response.detail === "object" ? response.detail : {}) });
@@ -667,7 +682,7 @@ export class CorosNativeBleService {
 
   refresh(): Promise<CorosNativeBleSnapshot> {
     const busy = this.busyWith("wifiMusicRestore");
-    if (busy === "musicInventory" || busy === "musicDelete") return Promise.reject(new Error(BUSY_MESSAGE[busy]));
+    if (busy === "localSync" || busy === "musicInventory" || busy === "musicDelete") return Promise.reject(new Error(BUSY_MESSAGE[busy]));
     if (busy) return Promise.resolve(this.publicState());
     return this.request("refresh");
   }
@@ -694,6 +709,73 @@ export class CorosNativeBleService {
       return this.readMusicInventory();
     })().finally(() => { this.musicInventoryTask = undefined; });
     return this.musicInventoryTask;
+  }
+
+  /**
+   * Runs a local-data sync (activities or day totals) with exclusive use of the
+   * link. Only read-only SyncData files and the step summary are reachable.
+   */
+  runLocalSync<T>(task: () => Promise<T>): Promise<T> {
+    if (this.localSyncTask) return Promise.reject(new Error("A watch sync is already running."));
+    const busy = this.busyWith();
+    if (busy) return Promise.reject(new Error(BUSY_MESSAGE[busy]));
+    const run = (async () => {
+      await this.polling;
+      await this.mapPolling;
+      this.requireMusicSession();
+      this.localSyncSessionKey = this.musicSession();
+      return task();
+    })();
+    const tracked = run.finally(() => { this.localSyncTask = undefined; this.localSyncSessionKey = undefined; });
+    this.localSyncTask = tracked;
+    return tracked;
+  }
+
+  isLocalSyncRunning(): boolean { return Boolean(this.localSyncTask); }
+
+  setLocalSyncCapture(sink: ((entry: CorosSyncCaptureEntry) => void) | undefined): void {
+    this.syncCapture = sink;
+  }
+
+  private captureFlag(): { capture?: true } {
+    return this.syncCapture ? { capture: true } : {};
+  }
+
+  /** The connected, authenticated watch as local sync sees it (no serial number leaves this method). */
+  localSyncWatch(): { serialOrName: string; name?: string; model?: WatchModelId; firmware?: string } | undefined {
+    if (!this.state.connected || this.state.systemBind !== "authenticated" || this.backendInUse !== "system") return undefined;
+    const serialOrName = this.state.serialNumber || this.state.watchAddress || this.state.deviceName;
+    if (!serialOrName) return undefined;
+    // The model is recognised in publicState(); the raw worker state never carries it.
+    return { serialOrName, name: this.state.deviceName, model: connectedWatchfaceTarget(this.state)?.target.model, firmware: this.state.firmwareRevision ?? this.state.softwareRevision };
+  }
+
+  private requireLocalSyncSession(): void {
+    if (!this.localSyncTask) throw new Error("Watch sync reads run only inside a local sync.");
+    this.requireMusicSession();
+    if (this.localSyncSessionKey !== this.musicSession()) throw new Error("The connected watch changed during sync. Sync again.");
+  }
+
+  /** One verified SyncData block, never acknowledged (no transport can). The worker replies [remaining u32][block]. */
+  async readSyncFileBlock(fileIndex: number, offset: number, selector: number): Promise<{ block: Buffer; remaining: number }> {
+    this.requireLocalSyncSession();
+    assertReadableSyncFile(fileIndex);
+    const response = await this.send("syncFileBlock", { fileIndex, offset, selector, ...this.captureFlag() });
+    this.requireLocalSyncSession();
+    if (typeof response.payload !== "string") throw new Error("The watch did not return the requested records.");
+    const payload = Buffer.from(response.payload, "base64");
+    if (payload.length < 5) throw new Error("The watch returned an empty record block.");
+    return { remaining: payload.readUInt32LE(0), block: payload.subarray(4) };
+  }
+
+  /** Today's running totals (GetPedometer, 0x90). */
+  async readPedometer(payload: Buffer): Promise<Buffer> {
+    this.requireLocalSyncSession();
+    this.requireTransferSession();
+    if (payload.length > 4) throw new Error("Invalid step summary request.");
+    const response = await this.send("exchange", { opcode: PEDOMETER_OPCODE, payload: payload.toString("base64"), maximumWriteBytes: 20, ...this.captureFlag() });
+    if (typeof response.payload !== "string") throw new Error("The watch did not answer the step summary request.");
+    return Buffer.from(response.payload, "base64");
   }
 
   private requireMusicSession(): void {

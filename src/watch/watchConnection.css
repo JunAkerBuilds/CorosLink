@@ -209,14 +209,53 @@
   gap: 8px;
 }
 
-.watch-menu-panel .watch-menu-connect-button {
+/* Sync sits under Connect (or alone once connected) at the same size. */
+.watch-menu-panel :is(.watch-menu-connect-button, .watch-menu-sync-button) {
   width: 100%;
   height: 40px;
   min-height: 40px;
   min-width: 0;
 }
 
-.watch-menu-panel .watch-menu-connect-button:disabled:not(.is-busy) { opacity: 0.6; }
+.watch-menu-panel :is(.watch-menu-connect-button, .watch-menu-sync-button):disabled:not(.is-busy) { opacity: 0.6; }
+
+/* How much of the activity file a sync has read, along the button's lower edge. */
+.watch-menu-panel .watch-menu-sync-button { position: relative; overflow: hidden; font-variant-numeric: tabular-nums; }
+
+.watch-menu-sync-meter {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--accent);
+  transition: width 240ms ease;
+}
+
+/* Sync and connection results: an icon as well as a colour says how it went. Also used by
+   Settings → Privacy & local data, so the rules aren't tied to the menu panel. */
+.watch-sync-result {
+  display: grid;
+  gap: 6px;
+}
+
+.watch-menu-result {
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.watch-menu-result > svg { margin-top: 2px; }
+.watch-menu-result.is-success { color: var(--text-secondary); }
+.watch-menu-result.is-success > svg { color: var(--watch-link-ok, var(--success-text)); }
+.watch-menu-result.is-warning { color: var(--text-primary); }
+.watch-menu-result.is-warning > svg { color: var(--warning-text); }
+.watch-menu-result.is-error { color: var(--error-text); }
+:root[data-theme="paper"] .watch-menu-result.is-warning > svg { color: #8a5a00; }
 
 .watch-menu-devices {
   display: grid;
@@ -458,6 +497,7 @@
 
 .watch-menu-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
@@ -588,6 +628,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .watch-menu-trigger.is-busy .watch-menu-lamp { animation: none; }
+  .watch-menu-sync-meter { transition: none; }
   .watch-menu-row > svg:last-child,
   .watch-menu-trigger-status > svg { transition: none; }
 }
