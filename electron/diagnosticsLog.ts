@@ -6,7 +6,11 @@ const MAX_ENTRIES = 200;
 const MAX_BYTES = 512 * 1024;
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const REDACTED = "[redacted]";
+/** The same failure again within this window is counted on the earlier entry instead of added. */
+const REPEAT_WINDOW_MS = 10 * 60 * 1000;
+const REPEAT_LOOKBACK = 10;
 const requests = new WeakMap<object, { method: string; url: string }>();
+const EXPECTED = Symbol.for("coroslink.diagnostics.expected");
 
 interface DiagnosticError {
   name: string;
@@ -23,11 +27,19 @@ interface DiagnosticError {
 }
 
 interface DiagnosticEntry {
+  /** When this failure was first recorded. */
   timestamp: string;
   appVersion: string;
   source: string;
+  /** The latest occurrence; `count` says how many there were. */
   error: DiagnosticError;
+  count?: number;
+  lastSeen?: string;
+  /** Set on a notice that is not an error (e.g. the watch's Bluetooth identity changed). */
+  level?: DiagnosticLevel;
 }
+
+export type DiagnosticLevel = "info" | "warning";
 
 export interface DiagnosticsEnvironment {
   appVersion: string;
@@ -45,6 +57,20 @@ export function annotateDiagnosticRequest(error: unknown, method: string, url: s
   return error;
 }
 
+/**
+ * Marks an outcome the user chose or the app expects (a sign-in window closed,
+ * a request cut short by quitting) so it still reaches the caller but is not
+ * recorded as an error.
+ */
+export function expectedError<T extends Error>(error: T): T {
+  Object.defineProperty(error, EXPECTED, { value: true });
+  return error;
+}
+
+export function isExpectedError(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && (error as Record<symbol, unknown>)[EXPECTED] === true);
+}
+
 /** Redact before persistence as well as before export. No IPC arguments are logged. */
 export function redactDiagnosticText(value: string, privatePaths: string[] = []): string {
   let text = value;
@@ -54,11 +80,11 @@ export function redactDiagnosticText(value: string, privatePaths: string[] = [])
     text = text.split(encodeURI(privatePath)).join("[local path]");
   }
   text = text
-    .replace(/\b(password|passwd|pwd(?:Hash)?|p1|p2|secret|client[_-]?secret|app[_-]?password|(?:access|refresh|id|auth)[_-]?token|token|api[_-]?key|appKey|loginTicket|account|email|user[_-]?id)\b\\["']\s*[:=][^\r\n]*/gi, `$1=${REDACTED}`)
+    .replace(/\b(password|passwd|pwd(?:Hash)?|p1|p2|secret|client[_-]?secret|app[_-]?password|(?:access|refresh|id|auth)[_-]?token|token|api[_-]?key|appKey|watch[_-]?key|passphrase|loginTicket|account|email|user[_-]?id|serial(?:[_-]?(?:no|number))?|latitude|longitude|lat|lon|lng)\b\\["']\s*[:=][^\r\n]*/gi, `$1=${REDACTED}`)
     // Full header values can contain several cookies or authentication fields.
     .replace(/\b(?:authorization|proxy-authorization|cookie|set-cookie)\s*["']?\s*[:=][^\r\n]*/gi, `credentials: ${REDACTED}`)
     .replace(/\b(?:Bearer|Basic)\s+[^\s,;"']+/gi, `credentials ${REDACTED}`)
-    .replace(/\b(password|passwd|pwd(?:Hash)?|p1|p2|secret|client[_-]?secret|app[_-]?password|(?:access|refresh|id|auth)[_-]?token|token|api[_-]?key|appKey|loginTicket|account|email|user[_-]?id)\b["']?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n,;\]}]+)/gi, `$1=${REDACTED}`)
+    .replace(/\b(password|passwd|pwd(?:Hash)?|p1|p2|secret|client[_-]?secret|app[_-]?password|(?:access|refresh|id|auth)[_-]?token|token|api[_-]?key|appKey|watch[_-]?key|passphrase|loginTicket|account|email|user[_-]?id|serial(?:[_-]?(?:no|number))?|latitude|longitude|lat|lon|lng)\b["']?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n,;\]}]+)/gi, `$1=${REDACTED}`)
     // Remove credentials, query parameters, and fragments from every URL.
     .replace(/https?:\/\/[^\s<>"')]+/gi, (value) => {
       try {
@@ -72,6 +98,8 @@ export function redactDiagnosticText(value: string, privatePaths: string[] = [])
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?/g, REDACTED)
     .replace(/[A-Za-z0-9_+/=-]{32,}/g, REDACTED)
     .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, REDACTED)
+    // Bluetooth hardware addresses identify the watch (and its owner) as well as a serial does.
+    .replace(/\b[0-9a-f]{2}(?::[0-9a-f]{2}){5}\b/gi, REDACTED)
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
   return text;
 }
@@ -92,11 +120,16 @@ export class DiagnosticsLog {
       if (Array.isArray(saved)) {
         this.entries = saved.slice(-MAX_ENTRIES).flatMap((entry) => {
           if (!entry || typeof entry.timestamp !== "string" || !Number.isFinite(Date.parse(entry.timestamp))) return [];
+          const count = Number.isSafeInteger(entry.count) && entry.count > 1 ? entry.count as number : undefined;
+          const lastSeen = count && typeof entry.lastSeen === "string" && Number.isFinite(Date.parse(entry.lastSeen)) ? entry.lastSeen : undefined;
           return [{
             timestamp: entry.timestamp,
             appVersion: this.clean(entry.appVersion, 80),
             source: this.clean(entry.source, 120),
-            error: this.describeError(entry.error)
+            error: this.describeError(entry.error),
+            ...(entry.level === "info" || entry.level === "warning" ? { level: entry.level as DiagnosticLevel } : {}),
+            ...(count ? { count } : {}),
+            ...(lastSeen ? { lastSeen } : {})
           }];
         });
       }
@@ -147,7 +180,7 @@ export class DiagnosticsLog {
 
   private prune(): void {
     const cutoff = this.now() - MAX_AGE_MS;
-    this.entries = this.entries.filter((entry) => Date.parse(entry.timestamp) >= cutoff).slice(-MAX_ENTRIES);
+    this.entries = this.entries.filter((entry) => Date.parse(entry.lastSeen ?? entry.timestamp) >= cutoff).slice(-MAX_ENTRIES);
     while (Buffer.byteLength(JSON.stringify(this.entries)) > MAX_BYTES) this.entries.shift();
   }
 
@@ -163,14 +196,39 @@ export class DiagnosticsLog {
     }
   }
 
-  record(source: string, error: unknown): void {
+  /** A notice that isn't an error, redacted like one: `name` is "Info" or "Warning". */
+  note(source: string, message: string, level: DiagnosticLevel = "info"): void {
+    this.record(source, { name: level === "warning" ? "Warning" : "Info", message }, level);
+  }
+
+  record(source: string, error: unknown, level?: DiagnosticLevel): void {
+    if (isExpectedError(error)) return;
     try {
-      this.entries.push({
-        timestamp: new Date(this.now()).toISOString(),
+      const now = this.now();
+      const entry: DiagnosticEntry = {
+        timestamp: new Date(now).toISOString(),
         appVersion: this.environment.appVersion,
         source: this.clean(source, 120),
-        error: this.describeError(error)
-      });
+        error: this.describeError(error),
+        ...(level ? { level } : {})
+      };
+      // A failure that keeps coming back (each reload of a screen) is one entry with a count,
+      // so it can't push everything else out of the log.
+      const repeat = this.entries.slice(-REPEAT_LOOKBACK).reverse().find((previous) =>
+        previous.source === entry.source && previous.appVersion === entry.appVersion &&
+        previous.error.name === entry.error.name && previous.error.message === entry.error.message &&
+        previous.error.code === entry.error.code &&
+        now - Date.parse(previous.lastSeen ?? previous.timestamp) <= REPEAT_WINDOW_MS);
+      if (repeat) {
+        repeat.count = (repeat.count ?? 1) + 1;
+        repeat.lastSeen = entry.timestamp;
+        repeat.error = entry.error;
+        // Keep the log in time order: the entry moves to where it last happened.
+        this.entries.splice(this.entries.indexOf(repeat), 1);
+        this.entries.push(repeat);
+      } else {
+        this.entries.push(entry);
+      }
       this.prune();
       this.persist();
     } catch { /* Error objects from dependencies may contain throwing getters. */ }
@@ -196,7 +254,7 @@ export class DiagnosticsLog {
       `App: ${this.environment.appVersion}`,
       `System: ${this.environment.platform} ${this.environment.osVersion} (${this.environment.arch})`,
       `Electron: ${this.environment.electronVersion} | Chromium: ${this.environment.chromeVersion} | Node: ${this.environment.nodeVersion}`,
-      "Retention: latest 200 errors, up to 7 days (512 KB maximum)",
+      "Retention: latest 200 errors, up to 7 days (512 KB maximum); a repeat within 10 minutes adds to the earlier entry's count",
       "Request bodies, headers, and input arguments are not collected.",
       "",
       this.entries.length ? JSON.stringify(this.entries, null, 2) : "No errors recorded."
@@ -214,7 +272,7 @@ export function withDiagnosticLogging<T extends unknown[], R>(
   return async (...args) => {
     try { return await listener(...args); }
     catch (error) {
-      try { log.record(source, error); } catch { /* Preserve the original failure. */ }
+      try { if (!isExpectedError(error)) log.record(source, error); } catch { /* Preserve the original failure. */ }
       throw error;
     }
   };

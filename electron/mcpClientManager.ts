@@ -2,6 +2,7 @@ import { app, BrowserWindow, safeStorage, shell } from "electron";
 import crypto from "node:crypto";
 import http from "node:http";
 import { isWebUrl } from "./externalLinks";
+import { expectedError } from "./diagnosticsLog";
 import type { AddressInfo } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -350,7 +351,8 @@ class McpOAuthProvider implements OAuthClientProvider {
       if (this.closingWindow) return;
       this.finishCode({
         ok: false,
-        error: new Error(`${this.config.serverName} connection window was closed.`)
+        // Closing the sign-in window is the user's choice, not a failure to report.
+        error: expectedError(new Error(`${this.config.serverName} connection window was closed.`))
       });
     });
     this.authWindow.webContents.setWindowOpenHandler(({ url }) => {

@@ -1,5 +1,6 @@
 import { isWorkoutEditTool } from "./workoutEditService";
 import { BrowserWindow, safeStorage, shell } from "electron";
+import { expectedError } from "./diagnosticsLog";
 import crypto from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -539,7 +540,8 @@ function waitForAuthorizationCode(
       });
       authWindow.on("closed", () => {
         authWindow = undefined;
-        rejectOnce(new Error("ChatGPT sign-in window was closed."));
+        // Closing the sign-in window is the user's choice, not a failure to report.
+        rejectOnce(expectedError(new Error("ChatGPT sign-in window was closed.")));
       });
       // Some OpenAI flows hop to an external verification page; keep it in-window.
       authWindow.webContents.setWindowOpenHandler(({ url }) => {

@@ -6,6 +6,7 @@ import { getSetting, setSetting } from "./database";
 import type { CorosBleBackend, CorosNativeBleConnectOptions, CorosNativeBleSnapshot } from "./corosNativeBleTypes";
 import { CorosBindReplyError, CorosBleAccountAuth, describeBindReply, type CorosAccountCredential } from "./corosBleAuth";
 import { recordDiagnosticError } from "./diagnosticsService";
+import { expectedError } from "./diagnosticsLog";
 import { CorosBleOperationError, CorosBleTrace } from "./corosBleTrace";
 import { COROS_BLE_LOGIN_KEY_SETTING, createCorosLoginCredential, type CorosBleLoginKey } from "./corosBleLoginKey";
 import { decodeWifiMapTasks, encodeWifiMapStart, requireWifiDownloadReady } from "./corosBleWifiProtocol";
@@ -239,8 +240,9 @@ export class CorosNativeBleService {
           if (response.ready) continue;
           if (typeof response.event === "string") {
             this.trace.add(`helper ${response.event}`, response.detail);
-            // A drop with nothing waiting has no IPC error to carry the trail.
-            if (response.event === "disconnected" && this.pending.size === 0) {
+            // A drop with nothing waiting has no IPC error to carry the trail. Closing
+            // the helper (quit, disconnect) ends the link on purpose: not a drop.
+            if (response.event === "disconnected" && this.pending.size === 0 && this.stopping !== worker) {
               recordDiagnosticError("corosBle:link", this.bleError("The watch disconnected.", "link", response.detail));
             }
             continue;
@@ -275,6 +277,12 @@ export class CorosNativeBleService {
         }
       }
     });
+    // Without a listener, a write the helper can no longer take (it exited, or
+    // stdin was ended) is thrown as an uncaught exception in the main process.
+    worker.stdin.on("error", error => {
+      this.trace.add("worker stdin error", { code: (error as NodeJS.ErrnoException).code ?? error.name });
+      this.failWorker(worker, "Could not communicate with the Bluetooth worker.");
+    });
     // Framework stderr can contain keys. Keep only a recognized exception
     // class or native-crash marker; never retain or log the raw text.
     let failureKind: string | undefined;
@@ -296,7 +304,8 @@ export class CorosNativeBleService {
       if (unexpected && this.pending.size === 0) {
         recordDiagnosticError("corosBle:worker", this.bleError(`The Bluetooth worker stopped (${details}).`, "worker"));
       }
-      this.failWorker(worker, `The Bluetooth worker stopped (${details}).`);
+      // Requests cut short by a stop CorosLink asked for (quit, disconnect) are not failures to report.
+      this.failWorker(worker, `The Bluetooth worker stopped (${details}).`, this.stopping === worker);
     });
   }
 
@@ -343,9 +352,9 @@ export class CorosNativeBleService {
     return new CorosBleOperationError(message, { operation, elapsedMs, backend: this.backendInUse, helperDetail, trace: this.trace.snapshot() }, callSite);
   }
 
-  private failWorker(worker: ChildProcessWithoutNullStreams, message: string): void {
+  private failWorker(worker: ChildProcessWithoutNullStreams, message: string, deliberate = false): void {
     if (this.worker !== worker) return;
-    this.trace.add("worker failed", { pending: this.pending.size, reason: message });
+    this.trace.add(deliberate ? "worker closed" : "worker failed", { pending: this.pending.size, reason: message });
     this.worker = undefined;
     this.musicInventory = undefined;
     this.state = { ...this.state, phase: this.state.phase === "failed" ? "failed" : "disconnected", connected: false, encrypted: false,
@@ -353,7 +362,8 @@ export class CorosNativeBleService {
       channels: this.state.channels.map(channel => ({ ...channel, subscribed: false })) };
     for (const request of this.pending.values()) {
       clearTimeout(request.timer);
-      request.reject(this.bleError(message, request.operation, undefined, request.callSite, Date.now() - request.started));
+      const error = this.bleError(message, request.operation, undefined, request.callSite, Date.now() - request.started);
+      request.reject(deliberate ? expectedError(error) : error);
     }
     this.pending.clear();
   }
@@ -361,6 +371,8 @@ export class CorosNativeBleService {
   private send(operation: string, extra: Record<string, unknown> = {}): Promise<WorkerResponse> {
     const worker = this.worker;
     if (!worker) return Promise.reject(new Error("The Bluetooth worker is not running."));
+    // stop() has ended the helper's stdin; it is only waiting for the helper to exit.
+    if (this.stopping === worker || worker.stdin.writableEnded) return Promise.reject(expectedError(new Error("The Bluetooth worker is stopping.")));
     const id = ++this.sequence;
     // Captured before the hop to the worker so the error names its caller.
     const callSite = new Error();
@@ -390,7 +402,8 @@ export class CorosNativeBleService {
   async status(): Promise<CorosNativeBleSnapshot> {
     if (this.connecting || this.scanning) return { ...this.publicState(), phase: this.connecting ? "connecting" : "scanning" };
     if (this.activityScreenTask || this.wifiMusicTask || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.musicInventoryTask || (this.musicDeleteTask && !this.musicConfirming)) return this.publicState();
-    if (!this.worker) {
+    // A helper being stopped (app quit, disconnect) takes no more requests; report what is known.
+    if (!this.worker || this.stopping === this.worker) {
       const state = this.publicState();
       return { ...state, phase: state.available ? state.phase : "unavailable" };
     }
