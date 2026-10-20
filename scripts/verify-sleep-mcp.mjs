@@ -1,4 +1,4 @@
-// Probe live COROS MCP querySleepData response shape using stored app tokens.
+// Probe live COROS MCP querySleepOverview response shape using stored app tokens.
 // Usage: npm run build:electron && npx electron scripts/verify-sleep-mcp.mjs
 
 import { app } from "electron";
@@ -29,9 +29,9 @@ app.whenReady().then(async () => {
   }
 
   const tools = getCorosMcpTools();
-  const sleepTool = tools.find((tool) => tool.name === "querySleepData");
+  const sleepTool = tools.find((tool) => tool.name === "querySleepOverview");
   console.log(
-    "querySleepData schema:",
+    "querySleepOverview schema:",
     JSON.stringify(sleepTool?.inputSchema ?? null, null, 2)
   );
 
@@ -46,7 +46,7 @@ app.whenReady().then(async () => {
 
     for (const args of argVariants) {
       try {
-        const response = await callCorosMcpTool("querySleepData", args);
+        const response = await callCorosMcpTool("querySleepOverview", args);
         const parsed = parseSleepDataResponse(response);
         console.log("\n--- args:", JSON.stringify(args));
         console.log("parsed count:", parsed.length);

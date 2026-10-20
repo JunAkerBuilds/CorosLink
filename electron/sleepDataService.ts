@@ -14,7 +14,8 @@ import type {
   TrainingHubSleepSummary
 } from "./types";
 
-const PREFERRED_SLEEP_TOOL = "querySleepData";
+// COROS renamed querySleepData in 2026-10; the /sleep/ match in resolveSleepTool still finds the old name.
+const PREFERRED_SLEEP_TOOL = "querySleepOverview";
 const FALLBACK_SLEEP_TOOL = "get_sleep_data";
 
 function toOptionalNumber(value: unknown): number | undefined {
@@ -1245,7 +1246,8 @@ function parseProseSleepSection(section: string): TrainingHubSleepRecord | undef
   const isoDateMatch = section.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
   const compactDateMatch = section.match(/\b(20\d{6})\b/);
   const scoreMatch = section.match(/Sleep score:\s*(\d+(?:\.\d+)?)/i);
-  const mainSleepMatch = section.match(/Main sleep:\s*([^\n]+)/i);
+  // querySleepOverview labels it "Main Sleep (asleep):", beside "Main Sleep Period (incl. awake):".
+  const mainSleepMatch = section.match(/Main sleep(?:\s*\(asleep\))?:\s*([^\n]+)/i);
   const awakeMatch = section.match(/Awake time:\s*([^\n]+)/i);
   const awakePercentMatch = section.match(/Awake (?:ratio|percent(?:age)?):\s*(\d+(?:\.\d+)?)\s*%/i);
   const awakeCountMatch = section.match(/(?:Awake count|Wake-ups?|Wakeups?)\s*(?:\(?\s*>?\s*5\s*min(?:utes?)?\s*\)?)?:\s*(\d+)/i);
@@ -1263,6 +1265,11 @@ function parseProseSleepSection(section: string): TrainingHubSleepRecord | undef
   const [napStart, napEnd] = parseSleepClockRange(napText);
 
   if (!scoreMatch && !mainSleepMatch) {
+    return undefined;
+  }
+  // querySleepOverview lists a night the phone hasn't synced as "Sleep Score: 0" with no
+  // sleep lines; skip it like the old "No data" days so last night's record stays latest.
+  if (!mainSleepMatch && Number(scoreMatch?.[1]) === 0) {
     return undefined;
   }
 

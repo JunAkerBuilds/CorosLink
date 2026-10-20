@@ -298,6 +298,50 @@ assert.equal(fullTimestampProseLatest?.sleepStart, "22:58");
 assert.equal(fullTimestampProseLatest?.sleepEnd, "05:43");
 assert.equal(fullTimestampProseLatest?.windowMinutes, 405);
 
+// querySleepOverview (2026-10): asleep vs in-bed lines, and an empty day before the real one.
+const sleepOverviewPayload = JSON.stringify([
+  "Sleep Overview",
+  "========================",
+  "Note: each record below is dated by its wake-up day.",
+  "",
+  "2026-10-19",
+  "Sleep Score: 0",
+  "Sleep detail for this day is not available yet.",
+  "",
+  "2026-10-20",
+  "Sleep Score: 62",
+  "Daily Sleep: 5h 56min (incl. naps)",
+  "Main Sleep (asleep): 5h 56min",
+  "Main Sleep Period (incl. awake): 7h 32min",
+  "Sleep metrics scope: daily",
+  "Deep Sleep Ratio: 14%",
+  "Light Sleep Ratio: 57%",
+  "REM Ratio: 8%",
+  "Awake Ratio: 21%",
+  "Awake Time: 1h 36min",
+  "Awake Count (>5 min): 3",
+  "Main Sleep Window: 2026-10-20 00:57 - 2026-10-20 08:29",
+  "Naps Total: 0 min"
+].join("\n"));
+const sleepOverviewLatest = pickLatestSleepRecord(parseSleepDataResponse(sleepOverviewPayload));
+assert.equal(sleepOverviewLatest?.happenDay, "20261020");
+assert.equal(sleepOverviewLatest?.totalMinutes, 356);
+assert.equal(sleepOverviewLatest?.awakeMinutes, 96);
+assert.equal(sleepOverviewLatest?.windowMinutes, 452);
+assert.equal(sleepOverviewLatest?.completeness, "complete");
+// The morning before a phone sync, today's empty day comes after last night's.
+const sleepOverviewUnsyncedToday = parseSleepDataResponse(JSON.stringify([
+  "2026-10-20",
+  "Sleep Score: 62",
+  "Main Sleep (asleep): 5h 56min",
+  "",
+  "2026-10-21",
+  "Sleep Score: 0",
+  "Sleep detail for this day is not available yet."
+].join("\n")));
+assert.deepEqual(sleepOverviewUnsyncedToday.map((record) => record.happenDay), ["20261020"]);
+assert.equal(pickLatestSleepRecord(sleepOverviewUnsyncedToday)?.totalMinutes, 356);
+
 const rangeStringPayload = JSON.stringify({
   happenDay: 20260721,
   sleepScore: 93,
