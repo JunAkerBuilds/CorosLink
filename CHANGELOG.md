@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Watches connect on Windows again without removing them first.** CorosLink 0.1.57 and 0.1.58 paired the watch with Windows on every connect. Once the watch forgot that pairing, for example after pairing with your phone again, every connect failed until you removed the watch under **Settings → Bluetooth & devices**. CorosLink now connects without pairing unless the watch asks for it. If an old pairing is what's failing, it removes that pairing and tries once more.
+
 ## [0.1.58] - 2026-10-19
 
 ### Added
