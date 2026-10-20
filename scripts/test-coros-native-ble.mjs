@@ -44,6 +44,7 @@ vm.runInNewContext(fs.readFileSync(filename, "utf8"), {
       worker.stderr = new EventEmitter();
       worker.stderr.setEncoding = () => {};
       worker.stdin = {
+        on() {},
         write(line, callback) {
           if (worker.killed) return;
           const request = JSON.parse(line);
@@ -130,4 +131,29 @@ assert.equal((await service.status()).connected, false, "a helper that ignores s
 assert.equal((await service.connect()).connected, true);
 assert.notEqual(workers.at(-1), hung, "reconnecting starts a new helper instead of reusing the dying one");
 await service.stop();
-console.log("Direct COROS BLE lifecycle, hung-helper shutdown and key-boundary checks passed.");
+// The USB adapter's identity is the bonded watch address (the bond's key encrypts the link): remembered on the
+// user's first authenticated connection, checked before the worker is even started.
+{
+  const saveBond = bond => settings.set("coros.ble.bond", Buffer.from(`encrypted:${JSON.stringify(bond)}`).toString("base64"));
+  const pinned = () => JSON.parse(settings.get("coros.ble.watchIdentity") ?? "{}").usb?.deviceId;
+  settings.delete("coros.ble.watchIdentity");
+  await service.connect();
+  await service.disconnect();
+  assert.equal(pinned(), undefined, "a connection CorosLink made doesn't remember the watch");
+  assert.equal((await service.userConnect()).systemBind, "authenticated");
+  assert.equal(pinned(), fakeBond.watchAddress);
+  await service.disconnect();
+  // Another bond (an imported or re-paired watch): asked first, nothing started.
+  saveBond({ ...fakeBond, watchAddress: "66:55:44:33:22:11" });
+  const before = writes.length, started = workers.length;
+  const asked = await service.userConnect();
+  assert.deepEqual([asked.identityMismatch, asked.connected], [true, false]);
+  assert.deepEqual([writes.length, workers.length], [before, started], "no worker, no connection, no authentication");
+  await assert.rejects(service.connect(), error => error.watchIdentity === "mismatch");
+  assert.equal((await service.userConnect()).identityMismatch, true);
+  const anyway = await service.userConnect(false, { confirmIdentity: true });
+  assert.deepEqual([anyway.connected, anyway.systemBind, anyway.identityMismatch], [true, "authenticated", undefined]);
+  assert.equal(pinned(), "66:55:44:33:22:11", "Connect anyway re-pins");
+  await service.stop();
+}
+console.log("Direct COROS BLE lifecycle, hung-helper shutdown, key-boundary and watch identity checks passed.");

@@ -264,6 +264,14 @@ export interface CorosLinkApi {
   logoutCorosWatchfaces: () => Promise<CorosWatchfaceStatus>;
   /** Asks to confirm, then removes the saved watch key; resolves with the status either way. */
   forgetCorosWatchKey?: () => Promise<CorosWatchfaceStatus>;
+  /** Asks where to save, then writes the saved watch key encrypted with `passphrase`. */
+  backupCorosWatchKey?: (passphrase: string) => Promise<import("../electron/types").CorosWatchKeyBackupResult>;
+  /** Opens a native dialog to choose a watch key backup; the file stays in the main process. */
+  chooseCorosWatchKeyBackup?: () => Promise<import("../electron/types").CorosWatchKeyBackupChoice>;
+  /** Decrypts the chosen backup with `passphrase`; main confirms before replacing a different key. */
+  restoreCorosWatchKey?: (passphrase: string) => Promise<import("../electron/types").CorosWatchKeyRestoreResult>;
+  /** Forgets the chosen backup without restoring it. */
+  cancelCorosWatchKeyRestore?: () => Promise<void>;
   listCorosPairedDevices: () => Promise<CorosPairedDevice[]>;
   selectCorosBluetoothDevice: (deviceId: string) => Promise<void>;
   getCorosNativeBleStatus: () => Promise<CorosNativeBleSnapshot>;

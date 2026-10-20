@@ -42,6 +42,16 @@ const french: Record<string, string> = {
   "Audiobook": "Livre audio",
   "Choose extracted COROS map folder": "Choisir le dossier de cartes COROS extraites",
   "Export GPX": "Exporter le GPX", "Import GPX route": "Importer un itinéraire GPX",
+  "Back up watch key": "Sauvegarder la clé de la montre",
+  "CorosLink watch key backup": "Sauvegarde de clé de montre CorosLink",
+  "Restore watch key": "Restaurer la clé de la montre",
+  "Replace watch key": "Remplacer la clé de la montre",
+  "Replace the saved watch key?": "Remplacer la clé de la montre enregistrée ?",
+  "Restore a watch key from another COROS account?": "Restaurer une clé de montre d’un autre compte COROS ?",
+  "Saved now: key {{p0}}, {{p1}}.": "Enregistrée actuellement : clé {{p0}}, {{p1}}.",
+  "In the backup: key {{p0}}, {{p1}}.": "Dans la sauvegarde : clé {{p0}}, {{p1}}.",
+  "COROS account {{p0}}": "Compte COROS {{p0}}",
+  "You're signed in to COROS with another account. Restoring signs you out, so one account's key is never used with another's sign-in.": "Vous êtes connecté à COROS avec un autre compte. La restauration vous déconnecte, pour que la clé d’un compte ne serve jamais avec la connexion d’un autre.",
 };
 
 export function nativeText(source: string): string {

@@ -1,13 +1,13 @@
 import { confineMainWindow, requireMainWindowSender } from "./mainWindowGuard";
 import { getCalendarWorkoutEvent, updateCalendarWorkoutEvent, syncEditedCalendarWorkout } from "./calendarWorkoutEventService";
-import { initializeNativeLanguage, localizeDialogOptions, setNativeLanguage } from "./localization";
+import { initializeNativeLanguage, localizeDialogOptions, nativeText, setNativeLanguage } from "./localization";
 import { listCalendarWorkoutEntries } from "./calendarWorkoutEventStorage";
 import type { CalendarEventTiming, CalendarWorkoutEventRef } from "./calendarSyncTypes";
 import { registerWorkoutAutomation } from "./workoutAutomation";
 import { followRescheduledWorkout, listWorkoutJournal, onWorkoutJournalChanged, saveWorkoutJournal } from "./workoutJournalService";
 import type { WorkoutJournalSaveInput } from "./workoutJournalTypes";
 import { app, BrowserWindow, dialog, nativeTheme, session, shell, ShareMenu } from "electron";
-import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow } from "./diagnosticsService";
+import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow, recordDiagnosticNotice } from "./diagnosticsService";
 import { googleCalendar, startGoogleCalendarSync, stopGoogleCalendarSync } from "./googleCalendarService";
 import type { GoogleCalendarConfigInput } from "./googleCalendarTypes";
 import { appleCalendar, startAppleCalendarSync, stopAppleCalendarSync } from "./appleCalendarService";
@@ -19,6 +19,7 @@ import path from "node:path";
 import { listLocalFontFamilies } from "./fontService";
 import { corosNativeBle } from "./corosNativeBleService";
 import { registerCorosActivityScreenIpc } from "./corosActivityScreenIpc";
+import { registerCorosWatchKeyBackupIpc } from "./corosWatchKeyBackupIpc";
 import { resolveWifiMusicLibraryFiles } from "./corosWifiMusicLibrary";
 import { getCorosWatchfaceCompiler } from "./corosWatchfaceCompiler";
 import { getWatchfaceTarget } from "./watchfaceTargets";
@@ -186,6 +187,9 @@ import {
   exportCorosWatchfaceProject,
   exportCorosWatchfaceArchive,
   forgetCorosWatchKey,
+  createCorosWatchKeyBackup,
+  openCorosWatchKeyBackup,
+  saveRestoredCorosWatchKey,
   getCorosBatteryReport,
   getCorosWatchfaceStatus,
   importCorosWatchfaceShareLink,
@@ -1143,9 +1147,10 @@ function registerIpcHandlers(): void {
     setNativeLanguage(language);
   });
   ipcMain.handle("corosBle:status", () => corosNativeBle.status());
+  // Counted as the user's connection (see userConnect).
   ipcMain.handle("corosBle:connect", (event, input?: import("./corosNativeBleTypes").CorosNativeBleConnectOptions) => {
     mainWindowSender(event, "the watch connection");
-    return corosNativeBle.connect(input?.pair === true, input);
+    return corosNativeBle.userConnect(input?.pair === true, input);
   });
   ipcMain.handle("corosBle:scan", () => corosNativeBle.scan());
   ipcMain.handle("corosBle:refresh", () => corosNativeBle.refresh());
@@ -1251,6 +1256,16 @@ function registerIpcHandlers(): void {
       noLink: true,
     }));
     return result.response === 1 ? forgetCorosWatchKey() : getCorosWatchfaceStatus();
+  });
+  // A passphrase-protected copy of the watch key: the key stays here, the renderer sends only the passphrase.
+  registerCorosWatchKeyBackupIpc({
+    ipc: ipcMain, owner: event => mainWindowSender(event, "watch key backup"),
+    service: { status: getCorosWatchfaceStatus, createBackup: createCorosWatchKeyBackup, openBackup: openCorosWatchKeyBackup, saveRestored: saveRestoredCorosWatchKey },
+    saveDialog: (owner, options) => dialog.showSaveDialog(owner, localizeDialogOptions(options)),
+    openDialog: (owner, options) => dialog.showOpenDialog(owner, localizeDialogOptions(options)),
+    confirm: async (owner, options) => (await dialog.showMessageBox(owner, localizeDialogOptions(options))).response,
+    text: nativeText,
+    notice: message => recordDiagnosticNotice("watchKey:backup", message)
   });
   ipcMain.handle("corosBle:sendNotification", (event, input: import("./corosBleNotificationProtocol").CorosNotificationInput) => {
     mainWindowSender(event, "watch messages");

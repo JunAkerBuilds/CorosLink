@@ -35,6 +35,19 @@ def standard_uuid(short):
     return '0000' + short + '-0000-1000-8000-00805f9b34fb'
 
 
+# How long a connect with a remembered identity waits for that device once a
+# same-named device with another address has been seen.
+PINNED_GRACE_SECONDS = 10
+
+
+class IdentityMismatch(ProtocolError):
+    """A device advertising the remembered name, but with another address. It is
+    never connected to; its address goes back outside `detail` (see main)."""
+    def __init__(self, address):
+        super().__init__('This doesn\u2019t look like the watch you connected before.')
+        self.address = address
+
+
 FILE_OPERATIONS = {'routeBlock': ROUTE_FILE, 'watchfaceBlock': WATCHFACE_FILE, 'musicDelete': MUSIC_DELETE_FILE}
 
 
@@ -62,17 +75,26 @@ class SystemSession:
         if self.music_queue is not None and not self.music_queue.full():
             self.music_queue.put_nowait(None)
 
-    async def discover(self, name=None):
+    async def discover(self, name=None, pinned=None):
         results = {}
-        found = asyncio.get_running_loop().create_future()
+        loop = asyncio.get_running_loop()
+        found = loop.create_future()
+        other = {}
 
         def report(device, advertisement):
             label = advertisement.local_name or device.name or ''
             if not label.startswith('COROS'):
                 return
             results[device.address] = (device, label, advertisement.rssi)
-            if name == label and not found.done():
-                found.set_result(results[device.address])
+            if name != label or found.done():
+                return
+            # With a remembered identity, only that device; a same-named one is reported, never used.
+            if pinned is not None and device.address.upper() != pinned:
+                if 'address' not in other:
+                    other['address'] = device.address
+                    loop.call_later(PINNED_GRACE_SECONDS, lambda: found.done() or found.set_exception(IdentityMismatch(other['address'])))
+                return
+            found.set_result(results[device.address])
 
         async with BleakScanner(report):
             if name is None:
@@ -91,13 +113,15 @@ class SystemSession:
         self.state['phase'] = 'idle'
         return self.state
 
-    async def connect(self, name):
+    async def connect(self, name, pinned=None):
         if self.client:
             await self.close()
         if not isinstance(name, str) or not name.startswith('COROS'):
             raise ProtocolError('Find and select your COROS watch before connecting.')
+        if pinned is not None and (not isinstance(pinned, str) or not pinned or len(pinned) > 128):
+            raise ProtocolError('The remembered watch identity is invalid.')
         self.state.update(phase='connecting', systemBind='unavailable')
-        device, label, rssi = await self.discover(name)
+        device, label, rssi = await self.discover(name, pinned.upper() if pinned else None)
         # Native pairing includes OS dialogs/agents. No automatic unpair or
         # replacement of keys: reconnecting preserves the OS-managed bond.
         self.client = BleakClient(device, disconnected_callback=self.disconnected, pair=True, timeout=60)
@@ -349,7 +373,7 @@ async def main():
                 if operation == 'scan':
                     result = await session.scan()
                 elif operation == 'connect':
-                    result = await session.connect(request.get('deviceName'))
+                    result = await session.connect(request.get('deviceName'), request.get('pinnedId'))
                 elif operation == 'status':
                     result = await session.status()
                 elif operation == 'refresh':
@@ -383,7 +407,10 @@ async def main():
             except Exception as error:
                 message = str(error) if isinstance(error, ProtocolError) else (
                     'System Bluetooth failed (' + type(error).__name__ + '). Check that Bluetooth is on, the watch is awake, and any OS pairing prompt is confirmed. On Linux, BlueZ and a pairing agent must be running.')
-                emit({'id': request_id, 'error': message, 'detail': failure_detail(error, operation, started)})
+                failure = {'id': request_id, 'error': message, 'detail': failure_detail(error, operation, started)}
+                if isinstance(error, IdentityMismatch):
+                    failure['mismatch'] = {'deviceId': error.address}
+                emit(failure)
                 if operation == 'connect':
                     await session.close()
     finally:

@@ -48,6 +48,31 @@ class SystemTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn('rssiDbm',await session.status())
             await session.close();self.assertFalse(session.state['connected'])
             self.assertEqual(session.state['systemBind'],'not_authenticated')
+    async def test_remembered_identity_only(self):
+        # Two devices share the watch's name: with a remembered address only that one is used,
+        # and another one alone is reported back, never connected to.
+        made=[]
+        class Recording(FakeClient):
+            def __init__(self,device,**kwargs):made.append(device.address);super().__init__(device,**kwargs)
+        def scanner(addresses):
+            class Scanner(FakeScanner):
+                async def __aenter__(self):
+                    for address in addresses:
+                        self.callback(SimpleNamespace(address=address,name='COROS PACE 4 TEST'),SimpleNamespace(local_name='COROS PACE 4 TEST',rssi=-50))
+                    return self
+            return Scanner
+        original=(worker.BleakScanner,worker.BleakClient,worker.PINNED_GRACE_SECONDS)
+        worker.BleakClient=Recording;worker.PINNED_GRACE_SECONDS=0.05
+        try:
+            worker.BleakScanner=scanner(['AA:AA:AA:AA:AA:01','AA:AA:AA:AA:AA:02'])
+            state=await worker.SystemSession().connect('COROS PACE 4 TEST','aa:aa:aa:aa:aa:02')
+            self.assertEqual(state['deviceId'],'AA:AA:AA:AA:AA:02');self.assertEqual(made,['AA:AA:AA:AA:AA:02'])
+            worker.BleakScanner=scanner(['AA:AA:AA:AA:AA:01'])
+            with self.assertRaises(worker.IdentityMismatch) as caught:
+                await worker.SystemSession().connect('COROS PACE 4 TEST','AA:AA:AA:AA:AA:02')
+            self.assertEqual(caught.exception.address,'AA:AA:AA:AA:AA:01');self.assertEqual(made,['AA:AA:AA:AA:AA:02'],'nothing connected')
+            with self.assertRaises(ProtocolError):await worker.SystemSession().connect('COROS PACE 4 TEST',7)
+        finally:worker.BleakScanner,worker.BleakClient,worker.PINNED_GRACE_SECONDS=original
     def test_reply_validation_and_frame_sizes(self):
         for size in [20,182,240]:
             payload=bytes(range(255));decoder=Decoder(0xa5);result=None

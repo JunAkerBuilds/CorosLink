@@ -4,11 +4,15 @@ import path from "node:path";
 import { app, safeStorage } from "electron";
 import { getSetting, setSetting } from "./database";
 import type { CorosBleBackend, CorosNativeBleConnectOptions, CorosNativeBleSnapshot } from "./corosNativeBleTypes";
-import { CorosBindReplyError, CorosBleAccountAuth, describeBindReply, type CorosAccountCredential } from "./corosBleAuth";
-import { recordDiagnosticError } from "./diagnosticsService";
+import { BIND_MESSAGES, BIND_REASON, BIND_STATUS, bindRefusalMessage, CorosBindReplyError, CorosBleAccountAuth, describeBindReply, formatCorosWatchKeyId, watchReportsKeyId, type CorosAccountCredential } from "./corosBleAuth";
+import { recordDiagnosticError, recordDiagnosticNotice } from "./diagnosticsService";
+import {
+  IDENTITY_CONFIRM_MS, identityTag, normalizeIdentity, parsePinnedWatches, sameIdentity, WATCH_IDENTITY_SETTING, WatchIdentityError,
+  watchIdentityProblem, type PinnedWatch, type WatchIdentityProblem
+} from "./watchIdentity";
 import { expectedError } from "./diagnosticsLog";
 import { CorosBleOperationError, CorosBleTrace } from "./corosBleTrace";
-import { COROS_BLE_LOGIN_KEY_SETTING, createCorosLoginCredential, type CorosBleLoginKey } from "./corosBleLoginKey";
+import { COROS_BLE_LOGIN_KEY_SETTING, COROS_WATCH_KEY_CHECK_SETTING, corosBleLoginKeyId, createCorosLoginCredential, nextWatchKeyCheck, type CorosBleLoginKey } from "./corosBleLoginKey";
 import { decodeWifiMapTasks, encodeWifiMapStart, requireWifiDownloadReady } from "./corosBleWifiProtocol";
 import { createWifiMapTask, previewWifiMap } from "./corosWifiMapService";
 import type { CorosWifiMapPreview, CorosWifiMapStatus } from "./corosWifiMapTypes";
@@ -39,6 +43,28 @@ const emptyState = (): CorosNativeBleSnapshot => ({
   phase: "idle", available: false, connected: false, encrypted: false,
   systemBind: "unavailable", channels: []
 });
+
+/** Who asked for a connection: the user (watch menu), CorosLink for a task the user started, or background sync. */
+type ConnectMode = "user" | "internal" | "background";
+
+/** Everything that holds the watch link. busyWith() checks them all, so a new task can't be missed by one guard. */
+type LinkTask = "wifiMusic" | "wifiMusicRestore" | "activityScreen" | "musicInventory" | "musicDelete" |
+  "route" | "watchface" | "watchfaceInventory" | "mapStarting" | "connecting" | "scanning";
+
+/** What the user is told when the watch is busy with a task (shown in the app as is). */
+const BUSY_MESSAGE: Record<LinkTask, string> = {
+  wifiMusic: "Wait for the audio sync over Wi-Fi to finish.",
+  wifiMusicRestore: "Wait for CorosLink to restore the watch's settings after the audio sync.",
+  activityScreen: "Wait for the activity screens to finish syncing.",
+  musicInventory: "Wait for CorosLink to finish with the music on the watch.",
+  musicDelete: "Wait for CorosLink to finish with the music on the watch.",
+  route: "Wait for the route to finish sending to the watch.",
+  watchface: "Wait for the watch face to finish sending to the watch.",
+  watchfaceInventory: "Wait for CorosLink to finish reading the watch faces on the watch.",
+  mapStarting: "Wait for the map download to start.",
+  connecting: "Wait for the watch to finish connecting.",
+  scanning: "Wait for the Bluetooth scan to finish."
+};
 
 export class CorosNativeBleService {
   private worker?: ChildProcessWithoutNullStreams;
@@ -111,6 +137,24 @@ export class CorosNativeBleService {
     temporaryDirectory: () => app.getPath("temp"),
   });
   private get wifiMusicBusy(): boolean { return Boolean(this.wifiMusicTask) || this.wifiMusic.hasPendingRestore(); }
+
+  /** The first task holding the link, other than those in `except`; undefined when the link is free. */
+  private busyWith(...except: LinkTask[]): LinkTask | undefined {
+    const running: Record<LinkTask, () => unknown> = {
+      wifiMusic: () => this.wifiMusicTask,
+      wifiMusicRestore: () => this.wifiMusic.hasPendingRestore(),
+      activityScreen: () => this.activityScreenTask,
+      musicInventory: () => this.musicInventoryTask,
+      musicDelete: () => this.musicDeleteTask,
+      route: () => this.routeTask,
+      watchface: () => this.watchfaceTask,
+      watchfaceInventory: () => this.watchfaceInventoryTask,
+      mapStarting: () => this.mapStarting,
+      connecting: () => this.connecting,
+      scanning: () => this.scanning
+    };
+    return (Object.keys(running) as LinkTask[]).find(task => !except.includes(task) && Boolean(running[task]()));
+  }
   private musicInventory?: { inventory: CorosBleMusicInventory; session: string; expires: number };
   private watchfaceInventory?: { id: string; ids: number[]; device: string; expires: number };
   private watchfaceCancelled = false;
@@ -164,7 +208,8 @@ export class CorosNativeBleService {
     const backends = this.backends();
     const recognized = connectedWatchfaceTarget(this.state);
     return { ...this.state, backend, backends, available: backends.find(item => item.id === backend)?.available ?? false,
-      watchModel: recognized?.target.model, watchModelSource: recognized?.source, watchValidated: isValidatedWatch(this.state) };
+      watchModel: recognized?.target.model, watchModelSource: recognized?.source, watchValidated: isValidatedWatch(this.state),
+      identityMismatch: this.pendingIdentity && Date.now() - this.pendingIdentity.at < IDENTITY_CONFIRM_MS ? true : undefined };
   }
 
   /** The connected watch, when CorosLink supports it: by model number, else by advertised name. */
@@ -258,7 +303,10 @@ export class CorosNativeBleService {
           const elapsedMs = Date.now() - request.started;
           if (response.error) {
             this.trace.add(`${request.operation} failed`, { elapsedMs, ...(response.detail && typeof response.detail === "object" ? response.detail : {}) });
-            request.reject(this.bleError(String(response.error), request.operation, response.detail, request.callSite, elapsedMs));
+            const failure = this.bleError(String(response.error), request.operation, response.detail, request.callSite, elapsedMs);
+            // A same-named device that isn't the remembered watch (never connected to). Its identity stays out of `detail`.
+            const other = normalizeIdentity(response.mismatch?.deviceId);
+            request.reject(other ? Object.assign(expectedError(failure), { identityMismatch: other }) : failure);
           } else {
             if (request.operation !== "status") this.trace.add(`${request.operation} ok`, { elapsedMs, phase: response.result?.phase ?? "" });
             if (response.bond) {
@@ -401,7 +449,8 @@ export class CorosNativeBleService {
 
   async status(): Promise<CorosNativeBleSnapshot> {
     if (this.connecting || this.scanning) return { ...this.publicState(), phase: this.connecting ? "connecting" : "scanning" };
-    if (this.activityScreenTask || this.wifiMusicTask || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.musicInventoryTask || (this.musicDeleteTask && !this.musicConfirming)) return this.publicState();
+    // A music delete waiting on the user's confirmation keeps the connection status live.
+    if (this.busyWith("wifiMusicRestore", ...(this.musicConfirming ? ["musicDelete" as const] : []))) return this.publicState();
     // A helper being stopped (app quit, disconnect) takes no more requests; report what is known.
     if (!this.worker || this.stopping === this.worker) {
       const state = this.publicState();
@@ -411,14 +460,29 @@ export class CorosNativeBleService {
     return this.polling;
   }
 
-  connect(pair = false, options: CorosNativeBleConnectOptions = {}): Promise<CorosNativeBleSnapshot> {
-    if (this.wifiMusicTask) return Promise.reject(new Error("Wait for audio sync to restore the watch settings before reconnecting."));
-    if (this.activityScreenTask) return Promise.reject(new Error("Wait for the activity-page operation to finish before reconnecting."));
-    if (this.musicInventoryTask || this.musicDeleteTask) return Promise.reject(new Error("Wait for the Bluetooth music operation to finish before reconnecting."));
+  /**
+   * Connects for the user (the watch menu). Counted, so a background sync that was
+   * connecting at the same moment leaves the connection up (watchAutoSyncService).
+   */
+  userConnect(pair = false, options: CorosNativeBleConnectOptions = {}): Promise<CorosNativeBleSnapshot> {
+    this.userConnects += 1;
+    return this.connect(pair, { backend: options.backend, device: options.device, confirmIdentity: options.confirmIdentity === true }, "user");
+  }
+
+  private userConnects = 0;
+
+  /** How many times the user has asked to connect since CorosLink started. */
+  userConnectCount(): number { return this.userConnects; }
+
+  connect(pair = false, options: CorosNativeBleConnectOptions = {}, mode: ConnectMode = "internal"): Promise<CorosNativeBleSnapshot> {
+    // Transfers that connect on their own (routes) and an open connection a face or map
+    // operation is using are left as they are: connecting then only reads the status.
+    const busy = this.busyWith("wifiMusicRestore", "route", "watchface", "watchfaceInventory", "mapStarting", "connecting", "scanning");
+    if (busy) return Promise.reject(new Error(BUSY_MESSAGE[busy]));
     this.musicInventory = undefined;
     if (this.connecting) return this.connecting;
     this.connecting = (async () => {
-      await this.connectOnce(pair, options);
+      await this.connectOnce(pair, options, mode);
       if (this.state.connected && this.state.systemBind === "authenticated" && this.wifiMusic.hasPendingRestore()) {
         this.wifiMusicTask = this.wifiMusic.restore().finally(() => { this.wifiMusicTask = undefined; });
         await this.wifiMusicTask;
@@ -428,7 +492,7 @@ export class CorosNativeBleService {
     return this.connecting;
   }
 
-  private async connectOnce(pair: boolean, options: CorosNativeBleConnectOptions): Promise<CorosNativeBleSnapshot> {
+  private async connectOnce(pair: boolean, options: CorosNativeBleConnectOptions, mode: ConnectMode = "internal"): Promise<CorosNativeBleSnapshot> {
     try {
       const backend = options.backend ?? this.currentBackend();
       if (backend !== "system" && backend !== "usb") throw new Error("Unsupported Bluetooth backend.");
@@ -452,11 +516,26 @@ export class CorosNativeBleService {
         if (!target || typeof target.deviceName !== "string" || !target.deviceName.startsWith("COROS") || target.deviceName.length > 128) {
           throw new Error("Find and select your COROS watch before connecting.");
         }
+        // The remembered watch's identity is checked before anything is signed for or sent (watchIdentity.ts).
+        const expected = this.identityToExpect("system", mode, options.confirmIdentity === true, options.device?.deviceId);
+        if (expected.refused !== undefined) return await this.refuseIdentity("system", mode, expected.refused, target.deviceName);
         this.state = { ...emptyState(), backend, phase: "connecting", available: true };
         this.startWorker(backend);
-        await this.request("connect", { deviceName: target.deviceName, deviceId: target.deviceId });
+        try {
+          // With an identity to expect, the helper connects to that device only.
+          await this.request("connect", { deviceName: target.deviceName, deviceId: target.deviceId, ...(expected.deviceId ? { pinnedId: expected.deviceId } : {}) });
+        } catch (error) {
+          const other = (error as { identityMismatch?: string }).identityMismatch;
+          if (other) return await this.refuseIdentity("system", mode, other, target.deviceName);
+          throw error;
+        }
+        // Checked again here, whatever the helper did, before the sign-in challenge is answered.
+        if (expected.deviceId && !sameIdentity(this.state.deviceId, expected.deviceId)) {
+          return await this.refuseIdentity("system", mode, this.state.deviceId ?? "", target.deviceName);
+        }
         setSetting(DEVICE_SETTING, JSON.stringify({ deviceName: this.state.deviceName, deviceId: this.state.deviceId }));
         await this.authenticateSystem();
+        if (this.state.systemBind === "authenticated") this.rememberIdentity("system", mode, this.state.deviceId, expected.confirmed);
         return this.publicState();
       }
       const { stateDirectory } = this.paths();
@@ -474,18 +553,42 @@ export class CorosNativeBleService {
         }
       }
       const bond = this.loadBond();
+      // The bond's key encrypts the link, so its watch address is this backend's identity. A new pairing replaces it.
+      const bondIdentity = (bond as { watchAddress?: string }).watchAddress;
+      const expected = pair ? { confirmed: true } : this.identityToExpect("usb", mode, options.confirmIdentity === true, bondIdentity);
+      if ("refused" in expected && expected.refused !== undefined) return await this.refuseIdentity("usb", mode, expected.refused, (bond as { deviceName?: string }).deviceName);
       const usbAuth = this.loadAuth((bond as { deviceName: string }).deviceName);
       this.state = { ...emptyState(), phase: "connecting", available: true };
       this.startWorker(backend);
-      return await this.request("connect", { bond, pair, auth: usbAuth, transport: process.env.COROS_BLE_TRANSPORT || "usb:0b05:17cb!" });
+      const linked = await this.request("connect", { bond, pair, auth: usbAuth, transport: process.env.COROS_BLE_TRANSPORT || "usb:0b05:17cb!" });
+      // The helper says what its sign-in learned about the key ("ok", "mismatch", "rejected").
+      const keyCheck = (linked as { keyCheck?: unknown }).keyCheck;
+      if (usbAuth && (keyCheck === "ok" || keyCheck === "mismatch" || keyCheck === "rejected")) {
+        let keyId: string | undefined;
+        try { keyId = corosBleLoginKeyId(usbAuth); } catch { keyId = undefined; }
+        if (keyId) this.recordKeyCheck(keyCheck, keyId, linked.deviceName ?? (bond as { deviceName?: string }).deviceName);
+      }
+      if (linked.systemBind === "authenticated") {
+        this.rememberIdentity("usb", mode, pair ? (this.loadBond() as { watchAddress?: string }).watchAddress : bondIdentity, expected.confirmed);
+      }
+      return linked;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not connect the watch.";
       this.state = { ...this.state, phase: "failed", connected: false, encrypted: false, error: message };
       this.trace.add("connect failed", { backend: this.backendInUse ?? "" });
       await this.stop();
       // Helper failures already carry their site and trail; checks made here get the trail too.
-      throw error instanceof CorosBleOperationError ? error
+      throw error instanceof CorosBleOperationError || watchIdentityProblem(error) ? error
         : this.bleError(message, "connect", undefined, error instanceof Error ? error : undefined);
+    }
+  }
+
+  /** Remembers, for Connection details, which watch last accepted or refused the saved key. Best effort. */
+  private recordKeyCheck(outcome: "ok" | "mismatch" | "rejected", keyId: string, watch: string | undefined): void {
+    try {
+      setSetting(COROS_WATCH_KEY_CHECK_SETTING, nextWatchKeyCheck(getSetting(COROS_WATCH_KEY_CHECK_SETTING), outcome, watch || "COROS watch", keyId));
+    } catch (error) {
+      recordDiagnosticError("corosBle:keyCheck", error instanceof Error ? error : new Error(String(error)));
     }
   }
 
@@ -498,21 +601,34 @@ export class CorosNativeBleService {
           authenticationError: "Sign in to your COROS account in Watch Faces, then reconnect to authenticate your watch." };
         return;
       }
-      const account = new CorosBleAccountAuth(credential, this.state.deviceName ?? "");
+      // The PACE 4 always reports its key's checksum: 0000 there means it holds no key, and nothing is signed.
+      const account = new CorosBleAccountAuth(credential, this.state.deviceName ?? "", { keyIdReported: watchReportsKeyId(this.watchTarget()?.model) });
       const base = account.initialPayload();
       const exchange = async (payload: Buffer, maximumWriteBytes: number) => {
         const reply = await this.send("exchange", { opcode: 0xa5, payload: payload.toString("base64"), maximumWriteBytes });
         if (typeof reply.payload !== "string") throw new Error("The watch did not return a COROS authentication response.");
         return Buffer.from(reply.payload, "base64");
       };
+      const keyId = formatCorosWatchKeyId(account.keyId);
       const challenge = await exchange(base, 20);
-      const authenticated = account.authenticatedPayload(base, challenge);
-      const bound = await exchange(authenticated, Math.min(240, this.state.maximumWriteBytes ?? 20));
-      if (bound.length !== 17 || (bound[0]! & 7) !== 1 || !this.state.connected) {
-        throw new CorosBindReplyError("The watch rejected COROS authentication. Sign in with the account paired to this watch, then reconnect.",
-          describeBindReply(bound));
+      let authenticated: Buffer;
+      try {
+        authenticated = account.authenticatedPayload(base, challenge);
+      } catch (error) {
+        // Refused unsigned: the watch holds a different key, and signing would make it erase that one.
+        if (error instanceof CorosBindReplyError && error.keyMismatch) this.recordKeyCheck("mismatch", keyId, this.state.deviceName);
+        throw error;
       }
+      const bound = await exchange(authenticated, Math.min(240, this.state.maximumWriteBytes ?? 20));
+      if (bound.length !== 17 || (bound[0]! & 7) !== BIND_STATUS.success) {
+        if (bound.length === 17 && (bound[0]! & 7) === BIND_STATUS.authFailed && bound[10] === BIND_REASON.signatureRejected) {
+          this.recordKeyCheck("rejected", keyId, this.state.deviceName);
+        }
+        throw new CorosBindReplyError(bindRefusalMessage(bound), describeBindReply(bound));
+      }
+      if (!this.state.connected) throw new CorosBindReplyError(BIND_MESSAGES.rejected, describeBindReply(bound));
       this.state = { ...this.state, systemBind: "authenticated", authenticatedAt: Date.now() };
+      this.recordKeyCheck("ok", keyId, this.state.deviceName);
     } catch (error) {
       const message = error instanceof Error ? error.message : "COROS authentication did not complete.";
       this.state = { ...this.state, systemBind: "failed", authenticationError: message };
@@ -529,9 +645,9 @@ export class CorosNativeBleService {
   }
 
   scan(): Promise<CorosNativeBleSnapshot> {
-    if (this.wifiMusicTask) return Promise.reject(new Error("Wait for audio sync and settings restoration before scanning."));
-    if (this.activityScreenTask) return Promise.reject(new Error("Wait for the activity-page operation to finish before scanning."));
     if (this.scanning) return this.scanning;
+    const busy = this.busyWith("wifiMusicRestore", "connecting");
+    if (busy) return Promise.reject(new Error(BUSY_MESSAGE[busy]));
     this.scanning = (async () => {
       if (this.connecting) await this.connecting;
       if (this.state.connected) throw new Error("Disconnect the watch before scanning.");
@@ -540,14 +656,19 @@ export class CorosNativeBleService {
       this.backendInUse = "system";
       this.state = { ...emptyState(), backend: "system", phase: "scanning" };
       this.startWorker("system");
-      return await this.request("scan");
+      const found = await this.request("scan");
+      const pinned = this.pinnedWatch("system");
+      if (!pinned || !this.state.discoveredDevices) return found;
+      this.state.discoveredDevices = this.state.discoveredDevices.map(device => ({ ...device, remembered: sameIdentity(device.deviceId, pinned.deviceId) }));
+      return this.publicState();
     })().finally(() => { this.scanning = undefined; });
     return this.scanning;
   }
 
   refresh(): Promise<CorosNativeBleSnapshot> {
-    if (this.activityScreenTask || this.wifiMusicTask) return Promise.resolve(this.publicState());
-    if (this.musicInventoryTask || this.musicDeleteTask) return Promise.reject(new Error("Wait for the Bluetooth music operation to finish before refreshing the connection."));
+    const busy = this.busyWith("wifiMusicRestore");
+    if (busy === "musicInventory" || busy === "musicDelete") return Promise.reject(new Error(BUSY_MESSAGE[busy]));
+    if (busy) return Promise.resolve(this.publicState());
     return this.request("refresh");
   }
 
@@ -564,7 +685,7 @@ export class CorosNativeBleService {
   listMusic(): Promise<CorosBleMusicInventory> {
     if (this.wifiMusicBusy) return Promise.reject(new Error("Wait for Wi-Fi audio sync and settings restoration before reading music."));
     if (this.musicInventoryTask) return this.musicInventoryTask;
-    if (this.activityScreenTask || this.musicDeleteTask || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.mapStarting || this.connecting || this.scanning) {
+    if (this.busyWith()) {
       return Promise.reject(new Error("Wait for the current Bluetooth operation to finish before reading music."));
     }
     this.musicInventoryTask = (async () => {
@@ -591,8 +712,7 @@ export class CorosNativeBleService {
   }
 
   private requireWifiMusicIdle(): void {
-    if (this.activityScreenTask || this.wifiMusicBusy || this.connecting || this.scanning || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask ||
-        this.musicInventoryTask || this.musicDeleteTask || this.mapStarting) throw new Error("Wait for the current Bluetooth operation and settings restoration to finish.");
+    if (this.busyWith()) throw new Error("Wait for the current Bluetooth operation and settings restoration to finish.");
     this.requireMusicSession();
   }
 
@@ -623,7 +743,7 @@ export class CorosNativeBleService {
   }
 
   restoreWifiMusicSettings(): Promise<CorosWifiMusicStatus> {
-    if (this.activityScreenTask || this.wifiMusicTask || this.connecting || this.scanning || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.musicInventoryTask || this.musicDeleteTask || this.mapStarting) {
+    if (this.busyWith("wifiMusicRestore")) {
       return Promise.reject(new Error("Wait for the current Bluetooth operation to finish."));
     }
     this.requireMusicSession();
@@ -679,7 +799,7 @@ export class CorosNativeBleService {
 
   deleteMusic(target: CorosBleMusicDeleteTarget, confirm: (track: CorosBleMusicTrack) => Promise<boolean>): Promise<CorosBleMusicDeleteResult> {
     if (this.wifiMusicBusy) return Promise.reject(new Error("Wait for Wi-Fi audio sync and settings restoration before deleting music."));
-    if (this.activityScreenTask || this.musicDeleteTask || this.musicInventoryTask || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.mapStarting || this.connecting || this.scanning) {
+    if (this.busyWith()) {
       return Promise.reject(new Error("Wait for the current Bluetooth operation to finish before deleting music."));
     }
     const cached = this.musicInventory;
@@ -738,7 +858,7 @@ export class CorosNativeBleService {
     // Keep the busy guard for transfers and other writes.
     if (this.polling) await this.polling;
     await this.mapPolling?.catch(() => {});
-    if (this.activityScreenTask || this.connecting || this.scanning || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.musicInventoryTask || this.musicDeleteTask || this.mapStarting || this.pending.size) {
+    if (this.busyWith() || this.pending.size) {
       throw new Error("Wait for the current Bluetooth operation to finish before sending a message.");
     }
     if (!this.state.connected || this.state.systemBind !== "authenticated") {
@@ -766,9 +886,7 @@ export class CorosNativeBleService {
 
   private activityScreenOperation<T>(task: () => Promise<T> | T): Promise<T> {
     if (app.isPackaged) return Promise.reject(new Error("Activity-screen sync is available only in development builds."));
-    if (this.activityScreenTask || this.wifiMusicBusy || this.connecting || this.scanning || this.routeTask || this.watchfaceTask ||
-        this.watchfaceInventoryTask || this.musicInventoryTask || this.musicDeleteTask || this.mapStarting ||
-        (this.pending.size && !this.polling && !this.mapPolling)) {
+    if (this.busyWith() || (this.pending.size && !this.polling && !this.mapPolling)) {
       return Promise.reject(new Error("Wait for the current Bluetooth operation before working on activity pages."));
     }
     const operation = (async () => {
@@ -807,7 +925,8 @@ export class CorosNativeBleService {
       const result: CorosWifiMapStatus = { supported: Boolean(recognized), watchLabel: recognized?.label, validated: isValidatedWatch(state),
         connected: state.connected, authenticated: state.systemBind === "authenticated", deviceName: state.deviceName,
         tasks: [], updatedAt: Date.now() };
-      if (!result.supported || !result.connected || !result.authenticated || this.activityScreenTask || this.wifiMusicBusy || this.routeTask || this.watchfaceTask || this.watchfaceInventoryTask || this.musicInventoryTask || this.musicDeleteTask) return result;
+      // A map download being started reads this status itself.
+      if (!result.supported || !result.connected || !result.authenticated || this.busyWith("mapStarting", "connecting", "scanning")) return result;
       const wifi = await this.controlCommand(0xb2, Buffer.from([5]));
       if (wifi.length !== 2 || wifi[0] !== 1) throw new Error("The watch returned an unsupported Wi-Fi status.");
       result.wifiStateCode = wifi[1];
@@ -818,12 +937,9 @@ export class CorosNativeBleService {
   }
 
   downloadWifiMap(previewId: string): Promise<{ taskId: string; status: CorosWifiMapStatus }> {
-    if (this.wifiMusicBusy) throw new Error("Wait for Wi-Fi audio sync and settings restoration before downloading maps.");
-    if (this.activityScreenTask) throw new Error("Wait for activity-page sync to finish before starting a map download.");
-    if (this.musicInventoryTask || this.musicDeleteTask) throw new Error("Wait for the Bluetooth music operation to finish.");
-    if (this.watchfaceTask || this.watchfaceInventoryTask) throw new Error("Wait for watch face sync to finish before starting a map download.");
-    if (this.routeTask) throw new Error("Wait for route sync to finish before starting a map download.");
-    if (this.mapStarting) throw new Error("A map download is already being prepared.");
+    const busy = this.busyWith();
+    if (busy === "mapStarting") throw new Error("A map download is already being prepared.");
+    if (busy) throw new Error(BUSY_MESSAGE[busy]);
     this.mapStarting = (async () => {
       this.requireTransferSession();
       await this.mapPolling?.catch(() => {});
@@ -840,13 +956,84 @@ export class CorosNativeBleService {
 
   cancelRouteSync(): void { if (this.routeTask) this.routeCancelled = true; }
 
+  /** A device that answered with the remembered name but another identity, until the user decides. */
+  private pendingIdentity?: { backend: CorosBleBackend; deviceId: string; deviceName?: string; at: number };
+  private identityListeners = new Set<() => void>();
+
+  private pinnedWatch(backend: CorosBleBackend): PinnedWatch | undefined {
+    return parsePinnedWatches(getSetting(WATCH_IDENTITY_SETTING))[backend];
+  }
+
+  /**
+   * Which identity this connection must have. A "Connect anyway" for the device just refused trusts that one;
+   * otherwise the remembered one, if any. A device the user chose that isn't it is refused before connecting.
+   */
+  private identityToExpect(backend: CorosBleBackend, mode: ConnectMode, confirm: boolean, chosen?: string):
+    { deviceId?: string; refused?: string; confirmed?: boolean } {
+    const pending = this.pendingIdentity?.backend === backend && Date.now() - this.pendingIdentity.at < IDENTITY_CONFIRM_MS ? this.pendingIdentity : undefined;
+    // A background attempt leaves the question in the watch menu as it is.
+    if (mode !== "background") this.pendingIdentity = undefined;
+    const pinned = this.pinnedWatch(backend);
+    if (mode === "background" && !pinned) throw expectedError(new WatchIdentityError("unpinned"));
+    if (mode === "user" && confirm && pending) return { deviceId: pending.deviceId, confirmed: true };
+    if (!pinned) return {};
+    if (normalizeIdentity(chosen) && !sameIdentity(chosen, pinned.deviceId)) return { refused: normalizeIdentity(chosen) };
+    return { deviceId: pinned.deviceId };
+  }
+
+  /**
+   * Another device answered: nothing was signed for or sent, and the link is closed. The user is asked
+   * in the watch menu; a background or app-started connection fails instead.
+   */
+  private async refuseIdentity(backend: CorosBleBackend, mode: ConnectMode, other: string, deviceName?: string): Promise<CorosNativeBleSnapshot> {
+    const pinned = this.pinnedWatch(backend);
+    recordDiagnosticNotice("corosBle:identity", `A device with the remembered watch's name has another Bluetooth identity (${backend}, ` +
+      `remembered ${pinned ? identityTag(pinned.deviceId) : "none"}, found ${other ? identityTag(other) : "unknown"}). It was not authenticated.`, "warning");
+    this.trace.add("identity mismatch", { backend, mode });
+    await this.stop();
+    this.state = { ...emptyState(), backend, phase: "disconnected", available: true };
+    if (mode !== "background" && normalizeIdentity(other)) this.pendingIdentity = { backend, deviceId: normalizeIdentity(other)!, deviceName, at: Date.now() };
+    if (mode !== "user" || !this.pendingIdentity) throw expectedError(new WatchIdentityError("mismatch"));
+    return this.publicState();
+  }
+
+  /**
+   * After the watch accepted a connection the user made: remember its identity the first time (an existing
+   * remembered watch included), or the new one the user confirmed. Background sync can then resume.
+   */
+  private rememberIdentity(backend: CorosBleBackend, mode: ConnectMode, deviceId: string | undefined, confirmed?: boolean): void {
+    const identity = normalizeIdentity(deviceId);
+    if (mode !== "user" || !identity) return;
+    const pinned = this.pinnedWatch(backend);
+    if (!pinned || (confirmed && !sameIdentity(pinned.deviceId, identity))) {
+      const watch: PinnedWatch = {
+        deviceId: identity, deviceName: this.state.deviceName, serialNumber: this.state.serialNumber || undefined,
+        modelNumber: this.state.modelNumber || undefined, model: this.watchTarget()?.model, pinnedAt: Date.now()
+      };
+      setSetting(WATCH_IDENTITY_SETTING, JSON.stringify({ ...parsePinnedWatches(getSetting(WATCH_IDENTITY_SETTING)), [backend]: watch }));
+      if (pinned) recordDiagnosticNotice("corosBle:identity", `The remembered watch's Bluetooth identity changed after the user confirmed it (${backend}, ${identityTag(pinned.deviceId)} to ${identityTag(identity)}).`, "warning");
+      else recordDiagnosticNotice("corosBle:identity", `Remembered the watch's Bluetooth identity (${backend}, ${identityTag(identity)}).`, "info");
+    } else if (!sameIdentity(pinned.deviceId, identity)) return;
+    for (const listener of this.identityListeners) {
+      try { listener(); } catch { /* a listener never affects the connection */ }
+    }
+  }
+
+  /** Called after each connection the user made to the remembered watch (background sync resumes). */
+  onWatchConfirmed(listener: () => void): () => void {
+    this.identityListeners.add(listener);
+    return () => this.identityListeners.delete(listener);
+  }
+
+  /** A watch has been connected before over the computer's Bluetooth, so it can be found again by name. */
+  hasRememberedWatch(): boolean {
+    return Boolean(getSetting(DEVICE_SETTING));
+  }
+
   syncRoute(route: GeneratedRoute): Promise<CorosRouteSyncStatus> {
-    if (this.wifiMusicBusy) return Promise.reject(new Error("Wait for Wi-Fi audio sync and settings restoration before syncing routes."));
-    if (this.activityScreenTask) return Promise.reject(new Error("Wait for activity-page sync to finish before syncing a route."));
-    if (this.musicInventoryTask || this.musicDeleteTask) return Promise.reject(new Error("Wait for the Bluetooth music operation to finish."));
-    if (this.watchfaceTask || this.watchfaceInventoryTask) return Promise.reject(new Error("Wait for watch face sync to finish before syncing a route."));
-    if (this.routeTask) return Promise.reject(new Error("A route sync is already running."));
-    if (this.mapStarting) return Promise.reject(new Error("Wait for the map download to start before syncing a route."));
+    const busy = this.busyWith();
+    if (busy === "route") return Promise.reject(new Error("A route sync is already running."));
+    if (busy) return Promise.reject(new Error(BUSY_MESSAGE[busy]));
     this.routeCancelled = false;
     this.routeProgress = { phase: "connecting", routeId: route.id, routeName: route.name, sentBytes: 0, totalBytes: 0 };
     this.routeTask = (async () => {
@@ -944,7 +1131,7 @@ export class CorosNativeBleService {
   listWatchfaceSlots(): Promise<CorosDirectWatchfaceInventory> {
     if (this.wifiMusicBusy) return Promise.reject(new Error("Wait for Wi-Fi audio sync and settings restoration before reading watch faces."));
     if (this.watchfaceInventoryTask) return this.watchfaceInventoryTask;
-    if (this.activityScreenTask || this.watchfaceTask || this.routeTask || this.musicInventoryTask || this.musicDeleteTask || this.mapStarting || this.connecting || this.scanning) {
+    if (this.busyWith()) {
       return Promise.reject(new Error("Wait for the current Bluetooth transfer to finish before reading watch face slots."));
     }
     this.watchfaceInventoryTask = (async () => {
@@ -965,7 +1152,7 @@ export class CorosNativeBleService {
 
   syncWatchface(previewId: string, target?: CorosDirectWatchfaceTarget): Promise<CorosDirectWatchfaceStatus> {
     if (this.wifiMusicBusy) return Promise.reject(new Error("Wait for Wi-Fi audio sync and settings restoration before installing a watch face."));
-    if (this.activityScreenTask || this.watchfaceTask || this.watchfaceInventoryTask || this.musicInventoryTask || this.musicDeleteTask || this.routeTask || this.mapStarting || this.connecting || this.scanning) {
+    if (this.busyWith()) {
       return Promise.reject(new Error("Wait for the current Bluetooth transfer to finish before syncing a watch face."));
     }
     const prepared = this.preparedFace(previewId);
@@ -1033,6 +1220,8 @@ export class CorosNativeBleService {
       await this.wifiMusicTask.catch(() => undefined);
     }
     this.musicInventory = undefined;
+    // Also the watch menu's Cancel for a device that didn't match the remembered watch.
+    this.pendingIdentity = undefined;
     if (this.worker) await this.request("disconnect");
     await this.stop();
     return this.publicState();

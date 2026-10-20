@@ -4,12 +4,16 @@ export interface CorosNativeBleDeviceChoice {
   deviceId: string;
   deviceName: string;
   rssiDbm?: number;
+  /** The watch CorosLink remembers (its Bluetooth identity matches), when several share a name. */
+  remembered?: boolean;
 }
 
 export interface CorosNativeBleConnectOptions {
   pair?: boolean;
   backend?: CorosBleBackend;
   device?: CorosNativeBleDeviceChoice;
+  /** "Connect anyway": trust the device that didn't match the remembered watch (asked for in the watch menu). */
+  confirmIdentity?: boolean;
 }
 
 export interface CorosNativeBleChannel {
@@ -42,6 +46,8 @@ export interface CorosNativeBleSnapshot {
   systemBind: "unavailable" | "not_authenticated" | "authenticating" | "authenticated" | "failed";
   authenticatedAt?: number;
   authenticationError?: string;
+  /** A device with the remembered watch's name but another Bluetooth identity answered; nothing was sent to it. */
+  identityMismatch?: boolean;
   channels: CorosNativeBleChannel[];
   deviceName?: string;
   watchAddress?: string;

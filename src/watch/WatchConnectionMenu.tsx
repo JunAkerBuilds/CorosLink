@@ -1,10 +1,10 @@
-import { t, useLanguage, getLocale } from "../i18n/tools";
+import { t, useLanguage, getLocale, formatDate } from "../i18n/tools";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
-  BatteryMedium, Bluetooth, ChevronDown, ChevronLeft, ChevronRight, Info, KeyRound, LayoutGrid, Loader2,
-  MessageSquare, RefreshCw, Search, Send, Smartphone, Unplug, Usb, Watch, type LucideIcon
+  AlertCircle, BatteryMedium, Bluetooth, ChevronDown, ChevronLeft, ChevronRight, Download, Info, KeyRound, LayoutGrid, Loader2,
+  MessageSquare, RefreshCw, Search, Send, Smartphone, Unplug, Upload, Usb, Watch, type LucideIcon
 } from "lucide-react";
-import type { WatchStatus } from "../../electron/types";
+import type { CorosWatchKeySummary, CorosWatchfaceStatus, WatchStatus } from "../../electron/types";
 import type { CorosNativeBleDeviceChoice, CorosNativeBleSnapshot } from "../../electron/corosNativeBleTypes";
 import type { CorosLinkApi } from "../coroslink-api";
 import { formatBytes } from "../media/libraryUtils";
@@ -13,7 +13,6 @@ import {
   apiErrorMessage, connectedWatch, onSystemBluetooth, watchConnectionState, watchDisplayName, watchFirmware, watchLinkSupported, watchMessagingReady,
   type WatchLinkTone
 } from "../watchfaces/watchLink";
-import { isValidatedWatch } from "../../electron/watchfaceTargets";
 import "../watchfaces/watchLink.css";
 import "./watchConnection.css";
 
@@ -114,25 +113,31 @@ function WatchMenuPanel({
   const [choosing, setChoosing] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<CorosNativeBleDeviceChoice | undefined>();
   const [watchKeySaved, setWatchKeySaved] = useState<boolean | null>(null);
+  const [watchKey, setWatchKey] = useState<CorosWatchKeySummary | undefined>();
   const panelRef = useRef<HTMLDivElement>(null);
+  const applyKeyStatus = (status: CorosWatchfaceStatus) => {
+    setWatchKeySaved(Boolean(status.watchAuthenticationAvailable));
+    setWatchKey(status.watchKey);
+  };
   const shownPage = useRef<WatchMenuPage | null>(null);
 
   useEffect(() => {
     if (typeof api?.getCorosWatchfaceStatus !== "function") return;
     let disposed = false;
     void api.getCorosWatchfaceStatus()
-      .then(status => { if (!disposed) setWatchKeySaved(Boolean(status.watchAuthenticationAvailable)); })
+      .then(status => { if (!disposed) applyKeyStatus(status); })
       .catch(() => {});
     return () => { disposed = true; };
-  }, [api]);
+    // A watch sign-in updates when the key was last used.
+  }, [api, snapshot?.systemBind, snapshot?.authenticatedAt]);
 
-  // Opening focuses the panel; each page change focuses its first control.
+  // Opening focuses the panel; a sub-page focuses Back, and Back returns to the row that opened it.
   useEffect(() => {
     const previous = shownPage.current;
     shownPage.current = page;
     if (previous === page) return;
     if (previous === null) panelRef.current?.focus();
-    else panelRef.current?.querySelector<HTMLElement>(page === "home" ? ".watch-menu-row" : ".watch-menu-back")?.focus();
+    else panelRef.current?.querySelector<HTMLElement>(page === "home" ? `.watch-menu-row[data-page="${previous}"]` : ".watch-menu-back")?.focus();
   }, [page]);
 
   const supported = Boolean(api && typeof api.connectCorosNativeBle === "function" && watchLinkSupported(snapshot));
@@ -171,7 +176,9 @@ function WatchMenuPanel({
       return api!.connectCorosNativeBle({ backend: "system", device: nearby[0] });
     }
     setChoosing(true);
-    setSelectedDevice(current => nearby.find(item => item.deviceId === current?.deviceId) ?? (nearby.length === 1 ? nearby[0] : undefined));
+    // Several watches with one name: the remembered one is chosen, never another automatically.
+    setSelectedDevice(current => nearby.find(item => item.deviceId === current?.deviceId) ?? nearby.find(item => item.remembered)
+      ?? (nearby.length === 1 ? nearby[0] : undefined));
     return found;
   }
 
@@ -187,6 +194,8 @@ function WatchMenuPanel({
     return findWatches(true);
   });
 
+  // Connected before (the key signed in to a watch, or the last connection left its name): no first-time pairing hint.
+  const pairedBefore = watchKeySaved !== false && Boolean(watchKey?.lastUsed || snapshot?.deviceName || snapshot?.identityMismatch);
   const openWatchFaces = () => { onOpenChange(false); onOpenWatchFaces(); };
   const signIn = () => { onOpenChange(false); onSignIn(); };
 
@@ -226,7 +235,22 @@ function WatchMenuPanel({
         <button className="secondary-button watch-link-button" type="button" onClick={signIn}>{t("Sign in")}</button>
       </div> : null}
 
-      {supported && !connected ? <div className="watch-menu-connect">
+      {/* Another device answered with the watch's name: nothing was sent to it until the user says so. */}
+      {supported && !connected && snapshot?.identityMismatch ? <div className="watch-menu-callout is-identity" role="alert">
+        <AlertCircle size={16} aria-hidden="true" />
+        <div>
+          <strong>{t("This doesn’t look like the watch you connected before.")}</strong>
+          <div className="watch-menu-callout-actions">
+            <button className="secondary-button watch-link-button" type="button" disabled={disabled}
+              onClick={() => void run(() => api!.connectCorosNativeBle({ backend: "system", confirmIdentity: true }))}>{t("Connect anyway")}</button>
+            <button className="watch-menu-text-button" type="button" disabled={disabled}
+              onClick={() => void run(() => api!.disconnectCorosNativeBle())}>{t("Cancel")}</button>
+          </div>
+        </div>
+      </div> : null}
+
+      {/* While another device's answer waits for the user, the callout above is the only choice. */}
+      {supported && !connected && !snapshot?.identityMismatch ? <div className="watch-menu-connect">
         {choosing && devices.length ? <fieldset className="watch-menu-devices" disabled={disabled}>
           <legend>{t("Watches nearby")}</legend>
           {devices.map(device => <label key={device.deviceId} className={selectedDevice?.deviceId === device.deviceId ? "is-selected" : undefined}>
@@ -242,8 +266,9 @@ function WatchMenuPanel({
           {connectLabel}
         </button>
         {waitedSeconds >= 8 ? <p className="watch-menu-hint" role="status">
-          {t("Still looking for your watch ·")} {Math.floor(waitedSeconds / 60)}:{String(waitedSeconds % 60).padStart(2, "0")}{t(". Wake it and open System → Pair Phone. CorosLink stops trying after about a minute.")}</p> : <p className="watch-menu-hint">
-          {t("First time? On the watch, open System → Pair Phone, then connect and accept the pairing prompt.")}</p>}
+          {t("Still looking for your watch ·")} {Math.floor(waitedSeconds / 60)}:{String(waitedSeconds % 60).padStart(2, "0")}{t(". Wake it and open System → Pair Phone. CorosLink stops trying after about a minute.")}</p>
+          : !pairedBefore ? <p className="watch-menu-hint">
+          {t("First time? On the watch, open System → Pair Phone, then connect and accept the pairing prompt.")}</p> : null}
       </div> : null}
 
       {message || (snapshot?.phase === "failed" && snapshot.error) ? <p className="watch-link-note is-error" role="alert">{message ?? snapshot?.error}</p> : null}
@@ -251,10 +276,10 @@ function WatchMenuPanel({
 
       {supported ? <ul className="watch-menu-list" aria-label={t("Watch features")}>
         <MenuRow icon={LayoutGrid} title={t("Watch faces")} detail={t("Install and replace faces on the watch")} onClick={openWatchFaces} />
-        <MenuRow icon={MessageSquare} title={t("Send a message")} detail={watchMessagingReady(snapshot) ? t("Appears as a notification on the watch") : t("Needs a connected, supported COROS watch")}
+        <MenuRow page="message" icon={MessageSquare} title={t("Send a message")} detail={watchMessagingReady(snapshot) ? t("Appears as a notification on the watch") : t("Needs a connected, supported COROS watch")}
           onClick={() => setPage("message")} />
-        <MenuRow icon={Smartphone} title={t("iPhone app")} detail={t("Pair C-LINK with a QR code")} onClick={() => setPage("iphone")} />
-        <MenuRow icon={Info} title={t("Connection details")} detail={t("Firmware, signal, watch key and diagnostics")} onClick={() => setPage("details")} />
+        <MenuRow page="iphone" icon={Smartphone} title={t("iPhone app")} detail={t("Pair C-LINK with a QR code")} onClick={() => setPage("iphone")} />
+        <MenuRow page="details" icon={Info} title={t("Connection details")} detail={t("Firmware, signal and watch key")} onClick={() => setPage("details")} />
       </ul> : null}
 
       {usbWatch?.connected || usbWatch?.error ? <div className="watch-menu-usb">
@@ -289,7 +314,8 @@ function WatchMenuPanel({
         </header>
         {page === "message" ? <WatchMessageComposer api={api} snapshot={snapshot} busy={disabled} onBusy={setBusy} />
           : page === "iphone" ? api ? <CorosPhonePairingPanel api={api} /> : null
-          : <WatchConnectionDetails snapshot={snapshot} api={api} watchKeySaved={watchKeySaved} onWatchKeySavedChange={setWatchKeySaved} />}
+          : <WatchConnectionDetails snapshot={snapshot} api={api} watchKeySaved={watchKeySaved} watchKey={watchKey}
+            onWatchKeyStatus={applyKeyStatus} onSignIn={signIn} />}
       </div>}
     </div>
   );
@@ -310,11 +336,11 @@ function useWaitTimer(waiting: boolean): number {
   return startedAt === null ? 0 : Math.max(0, Math.floor((now - startedAt) / 1000));
 }
 
-function MenuRow({ icon: Icon, title, detail, onClick }: { icon: LucideIcon; title: string; detail: ReactNode; onClick: () => void }) {
+function MenuRow({ icon: Icon, title, detail, onClick, page }: { icon: LucideIcon; title: string; detail: ReactNode; onClick: () => void; page?: WatchMenuPage }) {
   useLanguage();
   return (
     <li>
-      <button className="watch-menu-row" type="button" onClick={onClick}>
+      <button className="watch-menu-row" type="button" data-page={page} onClick={onClick}>
         <span className="watch-menu-row-icon" aria-hidden="true"><Icon size={16} /></span>
         <span className="watch-menu-row-text"><strong>{title}</strong><small>{detail}</small></span>
         <ChevronRight size={15} aria-hidden="true" />
@@ -378,63 +404,171 @@ function WatchMessageComposer({ api, snapshot, busy, onBusy }: {
 }
 
 /**
- * The watch account key CorosLink saved at COROS sign-in. Signing out keeps it; this
- * removes it (main asks to confirm), and a sign-in with another account replaces it.
+ * The watch account key CorosLink saved at COROS sign-in. Signing out keeps it; Remove
+ * deletes it (main asks to confirm), and a sign-in with another account replaces it.
+ * It doesn't expire; it stops working once the watch is given another key.
+ * Back up saves it encrypted with a passphrase; Restore reads such a file back (main
+ * asks before replacing a different key). The passphrase is sent once and then cleared;
+ * the key itself never reaches this page.
  */
-function WatchKeySection({ api, saved, onSavedChange }: {
-  api: CorosLinkApi | undefined; saved: boolean | null; onSavedChange: (saved: boolean) => void;
+function WatchKeySection({ api, saved, info, onStatus, onSignIn }: {
+  api: CorosLinkApi | undefined; saved: boolean | null; info: CorosWatchKeySummary | undefined;
+  onStatus: (status: CorosWatchfaceStatus) => void; onSignIn: () => void;
 }) {
   useLanguage();
-  const [removing, setRemoving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const id = useId();
+  const [working, setWorking] = useState<"remove" | "backup" | "choose" | "restore" | null>(null);
+  const [form, setForm] = useState<"backup" | "restore" | null>(null);
+  const [passphrase, setPassphrase] = useState("");
+  const [repeat, setRepeat] = useState("");
+  const [note, setNote] = useState<{ error: boolean; text: string } | null>(null);
   const canRemove = typeof api?.forgetCorosWatchKey === "function";
+  const canBackUp = typeof api?.backupCorosWatchKey === "function";
+  const canRestore = typeof api?.chooseCorosWatchKeyBackup === "function" && typeof api?.restoreCorosWatchKey === "function";
+  const when = (at: number) => formatDate(at, { dateStyle: "medium", timeStyle: "short" });
+  const tooShort = passphrase.length > 0 && passphrase.length < 8;
+  const mismatch = form === "backup" && repeat.length > 0 && repeat !== passphrase;
+  const clearPassphrases = () => { setPassphrase(""); setRepeat(""); };
+  const closeForm = () => {
+    if (form === "restore") void api?.cancelCorosWatchKeyRestore?.().catch(() => {});
+    clearPassphrases(); setForm(null);
+  };
 
-  async function remove() {
-    if (removing || !api?.forgetCorosWatchKey) return;
-    setRemoving(true);
-    setError(null);
+  async function attempt(kind: NonNullable<typeof working>, task: () => Promise<void>, fallback: string) {
+    if (working) return;
+    setWorking(kind);
+    setNote(null);
     try {
-      onSavedChange(Boolean((await api.forgetCorosWatchKey()).watchAuthenticationAvailable));
+      await task();
     } catch (caught) {
-      setError(apiErrorMessage(caught, t("Could not remove the watch key.")));
+      setNote({ error: true, text: apiErrorMessage(caught, fallback) });
     } finally {
-      setRemoving(false);
+      setWorking(null);
     }
   }
+
+  const remove = () => attempt("remove", async () => { onStatus(await api!.forgetCorosWatchKey!()); }, t("Could not remove the watch key."));
+
+  const backUp = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (passphrase.length < 8 || repeat !== passphrase) return;
+    const secret = passphrase;
+    clearPassphrases();
+    void attempt("backup", async () => {
+      const result = await api!.backupCorosWatchKey!(secret);
+      if (!result.saved) return;
+      setForm(null);
+      setNote({ error: false, text: t("Watch key backup saved.") });
+    }, t("Could not back up the watch key."));
+  };
+
+  const choose = () => attempt("choose", async () => {
+    clearPassphrases(); setForm(null);
+    const choice = await api!.chooseCorosWatchKeyBackup!();
+    if (choice.chosen) setForm("restore");
+  }, t("Could not open the watch key backup."));
+
+  const restore = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!passphrase) return;
+    const secret = passphrase;
+    clearPassphrases();
+    void attempt("restore", async () => {
+      const result = await api!.restoreCorosWatchKey!(secret);
+      onStatus(result.status);
+      setForm(null);
+      if (result.outcome === "restored") setNote({ error: false, text: t("Watch key restored.") });
+      else if (result.outcome === "alreadySaved") setNote({ error: false, text: t("This watch key is already saved.") });
+    }, t("Could not restore the watch key."));
+  };
+
+  const rows: Array<[string, string]> = info ? [
+    [t("Account"), info.accountEmail ?? t("COROS account {{p0}}", { p0: info.accountId })],
+    [t("Saved", undefined, "watchKey"), info.savedAt ? when(info.savedAt) : t("Unknown")],
+    [t("Last used"), info.lastUsed ? `${watchDisplayName(info.lastUsed.watch)} · ${when(info.lastUsed.at)}` : "—"],
+    [t("Key ID"), info.keyId]
+  ] : [];
+  const problem = info?.problem;
+  const icon = (kind: NonNullable<typeof working>, Icon: LucideIcon) => working === kind
+    ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <Icon size={15} aria-hidden="true" />;
 
   return (
     <section className="watch-link-key" aria-label={t("Watch key")}>
       <h3>{t("Watch key")}</h3>
-      <p role="status">{saved === null ? t("Checking for a saved watch key…")
-        : saved ? t("Saved on this computer from your COROS sign-in. Signing out of COROS keeps it; signing in with another account replaces it.")
-        : t("Not saved. Sign in to COROS to authenticate with your watch.")}</p>
-      {saved && canRemove ? <button className="secondary-button watch-link-button" type="button" disabled={removing} onClick={() => void remove()}>
-        {removing ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <KeyRound size={15} aria-hidden="true" />}
-        {t("Remove watch key")}</button> : null}
-      {error ? <p className="watch-link-note is-error" role="alert">{error}</p> : null}
+      {/* A key that no longer works leads with the problem, in place of the reassuring status line. */}
+      {saved && problem ? <div className="watch-menu-callout" role="alert">
+        <AlertCircle size={16} aria-hidden="true" />
+        <div>
+          <p>{problem.result === "mismatch"
+            ? t("{{p0}} has a different key ({{p1}}). Sign in to COROS again to get the current one.", { p0: watchDisplayName(problem.watch), p1: when(problem.at) })
+            : t("{{p0}} didn’t accept this key ({{p1}}). Connect the watch to the COROS app once, then sign in to COROS again.", { p0: watchDisplayName(problem.watch), p1: when(problem.at) })}</p>
+        </div>
+        <button className="secondary-button watch-link-button" type="button" onClick={onSignIn}>{t("Sign in")}</button>
+      </div> : <p role="status">{saved === null ? t("Checking for a saved watch key…")
+        : saved ? t("Saved on this computer. It doesn’t expire.")
+        : t("Not saved. Sign in to COROS to authenticate with your watch.")}</p>}
+      {saved && rows.length ? <dl>{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl> : null}
+      {saved && !problem ? <p className="watch-menu-hint">{t("It stops working if you pair or reset your watch in the COROS app. Sign in here again to get the new key.")}</p> : null}
+      {form === "backup" ? <form className="watch-link-key-form" aria-label={t("Back up watch key")} onSubmit={backUp}>
+        <p>{t("Keep this file and passphrase safe: anyone with both can sign in to your watch. The passphrase can’t be recovered.")}</p>
+        <label htmlFor={`${id}-passphrase`}>{t("Passphrase")}</label>
+        <input id={`${id}-passphrase`} type="password" autoComplete="new-password" maxLength={1024} value={passphrase}
+          aria-invalid={tooShort || undefined} aria-describedby={`${id}-rule`} disabled={working !== null}
+          onChange={event => { setPassphrase(event.target.value); setNote(null); }} />
+        <label htmlFor={`${id}-repeat`}>{t("Repeat passphrase")}</label>
+        <input id={`${id}-repeat`} type="password" autoComplete="new-password" maxLength={1024} value={repeat}
+          aria-invalid={mismatch || undefined} aria-describedby={`${id}-rule`} disabled={working !== null}
+          onChange={event => { setRepeat(event.target.value); setNote(null); }} />
+        <p id={`${id}-rule`} className={mismatch ? "watch-link-note is-error" : undefined}>
+          {mismatch ? t("The passphrases don’t match.") : t("At least 8 characters")}</p>
+        <div className="watch-link-key-actions">
+          <button className="primary-button watch-link-button" type="submit" disabled={working !== null || passphrase.length < 8 || repeat !== passphrase}>
+            {icon("backup", Download)}{t("Save backup…")}</button>
+          <button className="secondary-button watch-link-button" type="button" disabled={working !== null} onClick={closeForm}>{t("Cancel")}</button>
+        </div>
+      </form> : null}
+      {form === "restore" ? <form className="watch-link-key-form" aria-label={t("Restore watch key")} onSubmit={restore}>
+        <label htmlFor={`${id}-restore`}>{t("Backup passphrase")}</label>
+        <input id={`${id}-restore`} type="password" autoComplete="off" maxLength={1024} value={passphrase} disabled={working !== null}
+          onChange={event => { setPassphrase(event.target.value); setNote(null); }} />
+        <div className="watch-link-key-actions">
+          <button className="primary-button watch-link-button" type="submit" disabled={working !== null || !passphrase}>
+            {icon("restore", Upload)}{t("Restore")}</button>
+          <button className="secondary-button watch-link-button" type="button" disabled={working !== null} onClick={closeForm}>{t("Cancel")}</button>
+        </div>
+      </form> : null}
+      {saved !== null && form === null ? <div className="watch-link-key-actions">
+        {saved && canBackUp ? <button className="secondary-button watch-link-button" type="button" disabled={working !== null}
+          onClick={() => { setNote(null); clearPassphrases(); setForm("backup"); }}>
+          <Download size={15} aria-hidden="true" />{t("Back up watch key")}</button> : null}
+        {canRestore ? <button className="secondary-button watch-link-button" type="button" disabled={working !== null} onClick={() => void choose()}>
+          {icon("choose", Upload)}{t("Restore watch key…")}</button> : null}
+        {saved && canRemove ? <button className="secondary-button watch-link-button" type="button" disabled={working !== null} onClick={() => void remove()}>
+          {icon("remove", KeyRound)}{t("Remove watch key")}</button> : null}
+      </div> : null}
+      {note ? <p className={`watch-link-note${note.error ? " is-error" : " is-success"}`} role={note.error ? "alert" : "status"}>{note.text}</p> : null}
     </section>
   );
 }
 
-function WatchConnectionDetails({ snapshot, api, watchKeySaved, onWatchKeySavedChange }: {
+function WatchConnectionDetails({ snapshot, api, watchKeySaved, watchKey: watchKeyInfo, onWatchKeyStatus, onSignIn }: {
   snapshot: CorosNativeBleSnapshot | null;
   api: CorosLinkApi | undefined;
   watchKeySaved: boolean | null;
-  onWatchKeySavedChange: (saved: boolean) => void;
+  watchKey: CorosWatchKeySummary | undefined;
+  onWatchKeyStatus: (status: CorosWatchfaceStatus) => void;
+  onSignIn: () => void;
 }) {
   useLanguage();
-  const watchKey = <WatchKeySection api={api} saved={watchKeySaved} onSavedChange={onWatchKeySavedChange} />;
+  const watchKey = <WatchKeySection api={api} saved={watchKeySaved} info={watchKeyInfo} onStatus={onWatchKeyStatus} onSignIn={onSignIn} />;
   if (!snapshot) return <div className="watch-link-details"><p className="watch-menu-hint">{t("Reading the watch connection…")}</p>{watchKey}</div>;
   const details = [
     [t("Battery"), snapshot.batteryPercent === undefined ? "—" : `${snapshot.batteryPercent}%`],
     [t("Model"), snapshot.modelNumber || "—"],
-    [t("Recognized as"), connectedWatch(snapshot) ? `${connectedWatch(snapshot)!.label}${snapshot.watchModelSource === "name" ? t(" (from its name)") : ""}${(snapshot.watchValidated ?? isValidatedWatch(snapshot)) ? "" : t(" · beta")}`
+    [t("Recognized as"), connectedWatch(snapshot) ? connectedWatch(snapshot)!.label
       : snapshot.connected ? t("Not supported yet") : "—"],
     [t("Software"), watchFirmware(snapshot) || "—"],
     [t("Signal"), snapshot.connected && snapshot.rssiDbm !== undefined ? t("{{p0}} dBm", { p0: snapshot.rssiDbm }) : "—"],
-    [snapshot.pairingManagedByOS ? t("Maximum write") : "MTU", snapshot.pairingManagedByOS
-      ? snapshot.maximumWriteBytes === undefined ? "—" : t("{{p0}} bytes", { p0: snapshot.maximumWriteBytes })
-      : snapshot.mtu === undefined ? "—" : t("{{p0}} bytes", { p0: snapshot.mtu })],
     [t("Connection"), snapshot.connected ? "Bluetooth" : t("Disconnected")],
     [t("COROS session"), snapshot.connected && snapshot.systemBind === "authenticated" ? t("Authenticated")
       : snapshot.systemBind === "failed" ? t("Authentication failed") : t("Not authenticated")]
@@ -445,7 +579,7 @@ function WatchConnectionDetails({ snapshot, api, watchKeySaved, onWatchKeySavedC
       {watchKey}
       {onSystemBluetooth(snapshot) ? <section className="watch-link-events" aria-label={t("Watch controls")}>
         <h3>{t("Watch controls")}</h3>
-        <p>{t("Press the watch’s phone music controls to see the commands it sends. Action mapping is still being investigated.")}</p>
+        <p>{t("Press the watch’s phone music controls to see the commands it sends.")}</p>
         {snapshot.watchEvents?.length ? <ul>{snapshot.watchEvents.slice().reverse().map(event => <li key={event.id}>
           <time>{new Date(event.receivedAt).toLocaleTimeString(getLocale())}</time>
           {event.kind === "call-rejected" ? t("Call rejected") : t("Media command {{p0}}, value {{p1}}", { p0: event.action, p1: event.value })}
@@ -460,9 +594,10 @@ function WatchConnectionDetails({ snapshot, api, watchKeySaved, onWatchKeySavedC
           <span>{channel.subscribed ? t("Listening") : t("Disconnected")} · {channel.notifications.toLocaleString(getLocale())}  {t("notifications ·")} {channel.receivedBytes.toLocaleString(getLocale())}  {t("bytes")}</span>
         </li>)}</ul>
       </details> : null}
-      <p className="watch-menu-hint">{snapshot.connected && snapshot.systemBind === "authenticated"
-        ? t("The watch accepted a fresh COROS authentication challenge from CorosLink.")
-        : t("Sign in to the COROS account paired with this watch, then connect. CorosLink gets your watch account key from that sign-in.")}</p>
+      {/* Only when the watch needs a sign-in; a saved key with the watch away needs nothing more than connecting. */}
+      {(snapshot.connected && snapshot.systemBind !== "authenticated") || (!snapshot.connected && watchKeySaved === false)
+        ? <p className="watch-menu-hint">{t("Sign in to the COROS account paired with this watch, then connect.")}</p>
+        : null}
     </div>
   );
 }

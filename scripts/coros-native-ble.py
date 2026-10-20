@@ -25,7 +25,7 @@ from bumble.keys import MemoryKeyStore, PairingKeys
 from bumble.pairing import PairingConfig, PairingDelegate
 from bumble.snoop import Snooper
 from bumble.transport import open_transport
-from coros_ble_auth import AccountAuth, AuthError, MessageDecoder, OPCODE, bind_status, frame_message
+from coros_ble_auth import AccountAuth, AuthError, KeyMismatchError, MessageDecoder, OPCODE, bind_status, frame_message, refusal_message, reports_key_id
 from coros_ble_route import send_route_block
 
 CHANNELS = {
@@ -230,18 +230,24 @@ class NativeSession:
 
     async def authenticate(self, credential, device_name):
         self.state["systemBind"] = "authenticating"
+        # What this attempt learned about the saved key: "ok", "mismatch" or "rejected". No key material.
+        self.state.pop("keyCheck", None)
         try:
-            account = AccountAuth(credential, device_name)
+            account = AccountAuth(credential, device_name, reports_key_id(self.state.get("modelNumber"), device_name))
             base = account.initial_payload()
             challenge = bind_status(await self.control_exchange(base, 20))
             payload = account.authenticated_payload(base, challenge)
             response = bind_status(await self.control_exchange(payload, min(240, self.state["mtu"] - 3)))
             if response["status"] != 1:
-                raise AuthError("The watch rejected COROS authentication. Sign in with the account paired to this watch, then reconnect.")
+                if response["status"] == 5 and response["reason"] == 4:
+                    self.state["keyCheck"] = "rejected"
+                raise AuthError(refusal_message(response))
             if not self.state["connected"] or not self.connection.is_encrypted:
                 raise AuthError("The watch disconnected during COROS authentication.")
-            self.state.update(systemBind="authenticated", authenticatedAt=int(time.time() * 1000))
+            self.state.update(systemBind="authenticated", authenticatedAt=int(time.time() * 1000), keyCheck="ok")
         except Exception as error:
+            if isinstance(error, KeyMismatchError):
+                self.state["keyCheck"] = "mismatch"
             self.state.update(systemBind="failed", authenticationError=str(error) if isinstance(error, AuthError)
                               else "COROS authentication did not complete. Keep the watch nearby and reconnect.")
 

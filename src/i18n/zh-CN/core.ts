@@ -946,4 +946,6 @@ export const coreChinese: Readonly<Record<string, string>> = {
   "Prefer GitHub? Report an issue": "更习惯 GitHub？报告问题",
   "Both links stay under Help & links (?) and Support.": "这两个链接随时可在“帮助和链接”(?)和“支持”中找到。",
   "Maybe later": "以后再说",
+  "Backup passphrase": "备份密码短语",
+  "At least 8 characters": "至少 8 个字符",
 };

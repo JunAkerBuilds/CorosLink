@@ -47,6 +47,12 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     var musicDeleteReceiver: CorosMusicDeleteReceiver?
     var operationStarted = Date()
     var deadlineSite: (line: Int, function: String)?
+    // A connect with a remembered identity ("pinnedId") goes to that peripheral only. A same-named
+    // peripheral with another identity is never connected to; it is reported if the remembered one
+    // doesn't show up (its identifier travels outside `detail`, which reaches diagnostics).
+    var otherIdentity: String?
+    var pinnedSeen = false
+    var pinnedIdentity: UUID? { (current?["pinnedId"] as? String).flatMap { UUID(uuidString: $0) } }
 
     var operation: String { current?["operation"] as? String ?? "" }
     var connecting: Bool { operation == "connect" }
@@ -63,6 +69,7 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         operationStarted = Date()
         switch operation {
         case "scan", "connect":
+            otherIdentity = nil; pinnedSeen = false
             if operation == "connect", peripheral?.state == .connected {
                 finish(); return
             }
@@ -246,7 +253,7 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         return detail
     }
 
-    func fail(_ message: String, _ error: Error? = nil, timedOut: Bool = false, line: Int = #line, function: String = #function) {
+    func fail(_ message: String, _ error: Error? = nil, timedOut: Bool = false, extra: [String: Any] = [:], line: Int = #line, function: String = #function) {
         guard let id = current?["id"] as? Int else { return }
         let detail = failureDetail(error, timedOut: timedOut, line: line, function: function)
         timer?.cancel(); timer = nil
@@ -262,7 +269,9 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         musicDeleteReceiver = nil
         current = nil
         // Error text is static. NSError/userInfo and GATT payloads are never logged.
-        emit(["id": id, "error": message, "detail": detail])
+        var failure: [String: Any] = ["id": id, "error": message, "detail": detail]
+        extra.forEach { failure[$0.key] = $0.value }
+        emit(failure)
         DispatchQueue.main.async { self.pump() }
     }
 
@@ -282,13 +291,18 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
                 // can also be stale: the watch isn't bonded to the Mac and
                 // rotates its address, so keep scanning and switch to the
                 // watch if it advertises under a new identity.
+                // With a remembered identity, only that peripheral; never another one by name.
+                let pinned = pinnedIdentity
+                guard current?["pinnedId"] == nil || pinned != nil else {
+                    fail("The remembered watch identity is invalid."); return
+                }
                 let connected = central.retrieveConnectedPeripherals(withServices: channels.map { CBUUID(string: $0.1) })
-                if let known = connected.first(where: { $0.name == name }) {
+                if let known = connected.first(where: { pinned == nil ? $0.name == name : $0.identifier == pinned }) {
                     connectPeripheral(known, name: name); return
                 }
-                if let text = current?["deviceId"] as? String, let id = UUID(uuidString: text),
+                if let id = pinned ?? (current?["deviceId"] as? String).flatMap({ UUID(uuidString: $0) }),
                    let known = central.retrievePeripherals(withIdentifiers: [id]).first,
-                   known.name == name {
+                   pinned != nil || known.name == name {
                     connectPeripheral(known, name: name, keepScanning: true)
                 }
             } else { deadline(8, nil) }
@@ -319,6 +333,22 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         let choice: [String: Any] = ["deviceId": p.identifier.uuidString, "deviceName": name, "rssiDbm": RSSI.intValue]
         discovered[p.identifier.uuidString] = choice
         guard connecting, name == current?["deviceName"] as? String else { return }
+        if let pinned = pinnedIdentity {
+            guard p.identifier == pinned else {
+                if otherIdentity == nil {
+                    otherIdentity = p.identifier.uuidString
+                    let request = current?["id"] as? Int
+                    // Give the remembered watch a moment to advertise before reporting the other device.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+                        guard let self = self, self.connecting, self.current?["id"] as? Int == request, !self.pinnedSeen,
+                              self.peripheral?.state != .connected, let other = self.otherIdentity else { return }
+                        self.fail("This doesn’t look like the watch you connected before.", extra: ["mismatch": ["deviceId": other]])
+                    }
+                }
+                return
+            }
+            pinnedSeen = true
+        }
         if let pending = peripheral {
             // The remembered identity is still pending; prefer the one advertising now.
             guard pending.identifier != p.identifier, pending.state != .connected else { return }

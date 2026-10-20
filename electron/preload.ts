@@ -285,6 +285,15 @@ const api = {
     ipcRenderer.invoke("watchfaces:logout"),
   forgetCorosWatchKey: (): Promise<CorosWatchfaceStatus> =>
     ipcRenderer.invoke("watchfaces:forgetWatchKey"),
+  // The passphrase goes to the main process once per operation; the key never comes back.
+  backupCorosWatchKey: (passphrase: string): Promise<import("./types").CorosWatchKeyBackupResult> =>
+    ipcRenderer.invoke("watchfaces:backupWatchKey", { passphrase }),
+  chooseCorosWatchKeyBackup: (): Promise<import("./types").CorosWatchKeyBackupChoice> =>
+    ipcRenderer.invoke("watchfaces:chooseWatchKeyBackup"),
+  restoreCorosWatchKey: (passphrase: string): Promise<import("./types").CorosWatchKeyRestoreResult> =>
+    ipcRenderer.invoke("watchfaces:restoreWatchKey", { passphrase }),
+  cancelCorosWatchKeyRestore: (): Promise<void> =>
+    ipcRenderer.invoke("watchfaces:cancelWatchKeyRestore"),
   listCorosPairedDevices: (): Promise<CorosPairedDevice[]> =>
     ipcRenderer.invoke("watchfaces:listPairedDevices"),
   selectCorosBluetoothDevice: (deviceId: string): Promise<void> =>

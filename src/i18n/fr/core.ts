@@ -814,4 +814,6 @@ export const coreFrench: Record<string, string> = {
   "Prefer GitHub? Report an issue": "Vous préférez GitHub ? Signalez un problème",
   "Both links stay under Help & links (?) and Support.": "Ces deux liens restent dans Aide et liens (?) et Assistance.",
   "Maybe later": "Plus tard",
+  "Backup passphrase": "Phrase secrète de la sauvegarde",
+  "At least 8 characters": "8 caractères minimum",
 };

@@ -20,7 +20,11 @@ import { finalizeWatchfaceDeviceLayout, restoreWatchfaceDateLayout } from "./wat
 import { convertWatchfaceEntries, type WatchfaceConversionEntry, prepareRecoveredWatchfaceExport, normalizeConversionPath, RETAINED_AOD_CONFIG } from "./watchfaceArchiveConversion";
 import { standardizeWatchfacePackage } from "./watchfaceDistribution";
 import { getWatchfaceTarget, type WatchfaceTarget } from "./watchfaceTargets";
-import { COROS_BLE_LOGIN_KEY_SETTING, COROS_BLE_IMPORTED_KEY_SETTING, decodeCorosBleLoginKey } from "./corosBleLoginKey";
+import {
+  COROS_BLE_LOGIN_KEY_SETTING, COROS_BLE_IMPORTED_KEY_SETTING, COROS_WATCH_KEY_CHECK_SETTING, corosBleLoginKeyId, decodeCorosBleLoginKey,
+  maskCorosEmail, sameCorosBleLoginKey, summarizeCorosBleLoginKey, type CorosBleLoginKey
+} from "./corosBleLoginKey";
+import { openWatchKeyBackup, sealWatchKeyBackup } from "./corosWatchKeyBackup";
 import type {
   CorosWatchfaceArchive,
   CorosWatchfaceConversionInput,
@@ -44,6 +48,7 @@ import type {
   CorosWatchfaceSpriteFile,
   CorosWatchfaceSpriteFolder,
   CorosWatchfaceStatus,
+  CorosWatchKeySummary,
   CorosWatchfaceTemplateAsset,
   CorosWatchfaceTemplateAssetOptions,
   CorosWatchfaceTemplateDetails,
@@ -280,15 +285,36 @@ export function encryptMobileLoginField(value: string): string {
   );
 }
 
+/** The last summary, by the encrypted key and check record it was made from. */
+let watchKeySummaryCache: { saved: string; check: string | undefined; summary: CorosWatchKeySummary | undefined } | undefined;
+
+/** What Connection details shows about the saved key; no key material leaves this function. */
+function savedWatchKeySummary(): CorosWatchKeySummary | undefined {
+  const saved = getSetting(COROS_BLE_LOGIN_KEY_SETTING);
+  if (!saved || !safeStorage.isEncryptionAvailable()) return undefined;
+  const check = getSetting(COROS_WATCH_KEY_CHECK_SETTING);
+  if (watchKeySummaryCache?.saved === saved && watchKeySummaryCache.check === check) return watchKeySummaryCache.summary;
+  let summary: CorosWatchKeySummary | undefined;
+  try {
+    summary = summarizeCorosBleLoginKey(JSON.parse(safeStorage.decryptString(Buffer.from(saved, "base64"))) as CorosBleLoginKey, check);
+  } catch {
+    summary = undefined;
+  }
+  watchKeySummaryCache = { saved, check, summary };
+  return summary;
+}
+
 export function getCorosWatchfaceStatus(): CorosWatchfaceStatus {
   const session = readStoredSession();
   const credentials = getStoredCorosCredentials();
+  const watchKey = savedWatchKeySummary();
   return {
     authenticated: Boolean(session),
     secureStorageAvailable: safeStorage.isEncryptionAvailable(),
     savedCredentialsAvailable: Boolean(credentials),
     savedEmail: credentials?.account,
     watchAuthenticationAvailable: Boolean(safeStorage.isEncryptionAvailable() && getSetting(COROS_BLE_LOGIN_KEY_SETTING)),
+    ...(watchKey ? { watchKey } : {}),
     watchAuthenticationError,
     region: session?.region,
     suggestedRegion: session?.region ?? suggestWatchfaceRegion()
@@ -379,7 +405,8 @@ async function establishCorosWatchfaceSession(
   });
   watchAuthenticationError = undefined;
   try {
-    const key = decodeCorosBleLoginKey(envelope.data, userId ?? "");
+    // savedAt and accountEmail are optional fields, which CorosLink 0.1.57 ignores.
+    const key: CorosBleLoginKey = { ...decodeCorosBleLoginKey(envelope.data, userId ?? ""), savedAt: Date.now(), accountEmail: account };
     if (!safeStorage.isEncryptionAvailable()) throw new Error("OS secure storage is required to save your COROS watch account key.");
     deleteSettings(WATCH_KEY_SETTINGS);
     setSetting(COROS_BLE_LOGIN_KEY_SETTING, safeStorage.encryptString(JSON.stringify(key)).toString("base64"));
@@ -423,7 +450,83 @@ export function logoutCorosWatchfaces(): CorosWatchfaceStatus {
  */
 export function forgetCorosWatchKey(): CorosWatchfaceStatus {
   watchAuthenticationError = undefined;
-  deleteSettings(WATCH_KEY_SETTINGS);
+  deleteSettings([...WATCH_KEY_SETTINGS, COROS_WATCH_KEY_CHECK_SETTING]);
+  return getCorosWatchfaceStatus();
+}
+
+const SECURE_STORAGE_REQUIRED = "OS secure storage is required to save your COROS watch account key.";
+
+/** The saved key itself. Main process only: never return it, or anything derived from it but its summary, over IPC. */
+function readSavedWatchKey(): CorosBleLoginKey | undefined {
+  const saved = getSetting(COROS_BLE_LOGIN_KEY_SETTING);
+  if (!saved || !safeStorage.isEncryptionAvailable()) return undefined;
+  try {
+    return JSON.parse(safeStorage.decryptString(Buffer.from(saved, "base64"))) as CorosBleLoginKey;
+  } catch {
+    return undefined;
+  }
+}
+
+/** How a dialog names a key's account: the masked email, else the last four digits of its ID. */
+export interface CorosWatchKeyLabel { keyId: string; accountEmail?: string; accountId: string }
+
+function watchKeyLabel(key: CorosBleLoginKey): CorosWatchKeyLabel {
+  const accountEmail = maskCorosEmail(key.accountEmail);
+  return { keyId: corosBleLoginKeyId(key), accountId: `•••• ${key.accountUserId.slice(-4)}`, ...(accountEmail ? { accountEmail } : {}) };
+}
+
+/** The saved key encrypted under `passphrase`, for a `.coroswatchkey` file. The key never leaves the main process unencrypted. */
+export async function createCorosWatchKeyBackup(passphrase: string): Promise<{ data: Buffer; keyId: string }> {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error(SECURE_STORAGE_REQUIRED);
+  const key = readSavedWatchKey();
+  if (!key) throw new Error("No watch key is saved on this computer. Sign in to COROS first.");
+  return { data: await sealWatchKeyBackup(key, passphrase), keyId: corosBleLoginKeyId(key) };
+}
+
+/**
+ * A backup opened and checked, ready to save. `key` stays in the main process;
+ * the rest says what saving it would change.
+ */
+export interface CorosWatchKeyRestore {
+  key: CorosBleLoginKey;
+  backup: CorosWatchKeyLabel;
+  /** The key saved now, when it is a different one. */
+  replaces?: CorosWatchKeyLabel;
+  /** The backup holds the key already saved. */
+  alreadySaved: boolean;
+  /** Signed in to COROS with another account (or one CorosLink can't tell): saving signs it out. */
+  signsOutOtherAccount: boolean;
+}
+
+export async function openCorosWatchKeyBackup(data: Buffer, passphrase: string): Promise<CorosWatchKeyRestore> {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error(SECURE_STORAGE_REQUIRED);
+  const key = await openWatchKeyBackup(data, passphrase);
+  const saved = readSavedWatchKey();
+  const alreadySaved = Boolean(saved && sameCorosBleLoginKey(saved, key));
+  const session = readStoredSession();
+  return {
+    key, backup: watchKeyLabel(key), alreadySaved,
+    ...(saved && !alreadySaved ? { replaces: watchKeyLabel(saved) } : {}),
+    signsOutOtherAccount: Boolean(session && session.userId !== key.accountUserId)
+  };
+}
+
+/**
+ * Saves a restored key in place of any saved one, through OS secure storage
+ * only. Its "last used" record belonged to the old key, so it goes. One
+ * account's key never sits beside another account's COROS sign-in: a session
+ * for another account is signed out first.
+ */
+export function saveRestoredCorosWatchKey(restore: CorosWatchKeyRestore): CorosWatchfaceStatus {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error(SECURE_STORAGE_REQUIRED);
+  const session = readStoredSession();
+  if (session && session.userId !== restore.key.accountUserId) logoutCorosWatchfaces();
+  const { savedAt: _ignored, ...key } = restore.key;
+  const stored: CorosBleLoginKey = { ...key, savedAt: Date.now() };
+  const encrypted = safeStorage.encryptString(JSON.stringify(stored)).toString("base64");
+  watchAuthenticationError = undefined;
+  deleteSettings([...WATCH_KEY_SETTINGS, COROS_WATCH_KEY_CHECK_SETTING]);
+  setSetting(COROS_BLE_LOGIN_KEY_SETTING, encrypted);
   return getCorosWatchfaceStatus();
 }
 

@@ -101,6 +101,39 @@ export interface WatchStatus {
 /** COROS account region, selecting the regional mobile API host. */
 export type CorosWatchfaceRegion = "eu" | "us" | "cn";
 
+/**
+ * The saved COROS watch key, as the renderer may show it. The key doesn't expire;
+ * it stops working when the watch is given another key.
+ */
+export interface CorosWatchKeySummary {
+  /** Four hex digits: the checksum a watch reports for the key it stores. */
+  keyId: string;
+  /** The masked account ID, "•••• 1234". */
+  accountId: string;
+  /** The masked email, when the key was saved by this version or later. */
+  accountEmail?: string;
+  /** When CorosLink saved the key; missing for keys saved by 0.1.57. */
+  savedAt?: number;
+  /** When COROS issued the key. */
+  issuedAt?: number;
+  /** The last watch that accepted this key. */
+  lastUsed?: { at: number; watch: string };
+  /** A watch that held a different key, or rejected this one, since it was last accepted. */
+  problem?: { at: number; watch: string; result: "mismatch" | "rejected" };
+}
+
+/** A watch key backup export: whether a file was saved (no path, no key material). */
+export interface CorosWatchKeyBackupResult { saved: boolean }
+
+/** Whether a watch key backup file was chosen in the native dialog; its contents stay in the main process. */
+export interface CorosWatchKeyBackupChoice { chosen: boolean }
+
+/** A watch key restore: what happened, and the status (with the key's summary only). */
+export interface CorosWatchKeyRestoreResult {
+  outcome: "restored" | "alreadySaved" | "cancelled";
+  status: CorosWatchfaceStatus;
+}
+
 /** COROS mobile-app session for catalogs, sharing, and watch authentication. */
 export interface CorosWatchfaceStatus {
   authenticated: boolean;
@@ -111,6 +144,8 @@ export interface CorosWatchfaceStatus {
   savedEmail?: string;
   /** Saved Bluetooth key availability, independent of cloud sign-in; key material remains private. */
   watchAuthenticationAvailable?: boolean;
+  /** About the saved watch key, when one is saved and readable. Never key material. */
+  watchKey?: CorosWatchKeySummary;
   watchAuthenticationError?: string;
   /** Region of the active mobile session, when signed in. */
   region?: CorosWatchfaceRegion;

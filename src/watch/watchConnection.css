@@ -287,11 +287,13 @@
 
 /* Sign-in callout ---------------------------------------------------------- */
 
+/* The panel is narrow, so the button sits under the text rather than squeezing it into a thin
+   column (long French and Portuguese text especially). */
 .watch-menu-callout {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 8px 10px;
   padding: 11px 12px;
   border: 1px solid var(--warning-border);
   border-radius: 12px;
@@ -318,6 +320,18 @@
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.watch-menu-callout.is-identity { grid-template-columns: auto minmax(0, 1fr); }
+
+.watch-menu-callout > .watch-link-button { grid-column: 2; justify-self: start; }
+
+.watch-menu-callout-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .watch-menu-panel .watch-menu-callout .watch-link-button {
@@ -381,12 +395,11 @@
   font-weight: 600;
 }
 
+/* Details wrap: longer translations and "Needs a connected, supported COROS watch" stay readable. */
 .watch-menu-row-text small {
-  overflow: hidden;
   color: var(--text-secondary);
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.4;
 }
 
 .watch-menu-row > svg:last-child {
