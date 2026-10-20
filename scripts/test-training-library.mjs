@@ -15,6 +15,8 @@ const databaseModule = await import(distUrl("database.js"));
 const library = await import(distUrl("trainingLibraryService.js"));
 const planWorkoutEditor = await import(distUrl("planWorkoutEditor.js"));
 const chatWorkoutTools = await import(distUrl("chatWorkoutTools.js"));
+const recordedRefreshFailures = [];
+library.setRefreshFailureRecorderForTests((source, error) => recordedRefreshFailures.push({ source, error }));
 
 const makeWorkout = (name, load, seconds = 1_800) => ({
   key: name.toLowerCase().replaceAll(" ", "-"),
@@ -780,6 +782,126 @@ assert.equal(
   "an empty library prunes every cached native plan"
 );
 library.setNativePlanLibraryQueryForTests();
+
+const libraryWorkout = (id) => ({ id, name: `Workout ${id}`, sportType: 4, createTimestamp: 1 });
+const cacheWorkout = (id) =>
+  databaseModule.saveTrainingWorkoutMetadata(
+    { programId: id, favorite: true, tags: ["strength"], source: "coros", syncState: "synced" },
+    libraryWorkout(id)
+  );
+const cachedWorkoutIds = () =>
+  databaseModule.listTrainingWorkoutMetadata().map((metadata) => metadata.programId).sort();
+cacheWorkout("w-kept");
+cacheWorkout("w-gone");
+
+library.setLibraryWorkoutQueryForTests(async () => {
+  throw new Error("mock program/query failure");
+});
+let workoutSnapshot = await library.getTrainingLibrarySnapshot();
+assert.deepEqual(workoutSnapshot.workouts.map((workout) => workout.id).sort(), ["w-gone", "w-kept"], "a failed program/query lists the cache");
+assert.deepEqual(cachedWorkoutIds(), ["w-gone", "w-kept"], "a failed program/query prunes nothing");
+const workoutFailureRecords = () =>
+  recordedRefreshFailures.filter(({ error }) => error.message === "Workouts: mock program/query failure");
+assert.equal(workoutFailureRecords().length, 1, "a refresh failure goes to the error report");
+assert.equal(workoutFailureRecords()[0].source, "trainingLibrary:snapshot");
+assert.equal(workoutFailureRecords()[0].error.cause.message, "mock program/query failure", "the original error is kept as the cause");
+await library.getTrainingLibrarySnapshot();
+assert.equal(workoutFailureRecords().length, 1, "a failure that repeats on every refresh is recorded once");
+
+library.setLibraryWorkoutQueryForTests(async () => ({ workouts: [libraryWorkout("w-kept")], complete: false }));
+workoutSnapshot = await library.getTrainingLibrarySnapshot();
+assert.deepEqual(cachedWorkoutIds(), ["w-gone", "w-kept"], "an incomplete workout list prunes nothing");
+assert.ok(
+  workoutSnapshot.partialFailures.some((failure) => /workout list CorosLink couldn't fully read/i.test(failure)),
+  "an incomplete workout list is reported"
+);
+
+library.setLibraryWorkoutQueryForTests(async () => {
+  cacheWorkout("w-in-flight");
+  return { workouts: [libraryWorkout("w-kept")], complete: true };
+});
+workoutSnapshot = await library.getTrainingLibrarySnapshot();
+assert.deepEqual(workoutSnapshot.workouts.map((workout) => workout.id), ["w-kept"]);
+assert.deepEqual(cachedWorkoutIds(), ["w-in-flight", "w-kept"], "a workout deleted on COROS leaves the cache");
+assert.equal(
+  databaseModule.listTrainingWorkoutMetadata().find((metadata) => metadata.programId === "w-kept").favorite,
+  true,
+  "workouts still on COROS keep their local metadata"
+);
+
+library.setLibraryWorkoutQueryForTests(async () => {
+  throw new Error("mock program/query failure");
+});
+workoutSnapshot = await library.getTrainingLibrarySnapshot();
+assert.equal(
+  workoutSnapshot.workouts.some((workout) => workout.id === "w-gone"),
+  false,
+  "a pruned workout doesn't come back when program/query later fails"
+);
+assert.equal(workoutFailureRecords().length, 2, "a failure that clears and comes back is recorded again");
+
+const hub = await import(distUrl("trainingHubService.js"));
+databaseModule.setSetting("trainingHub.accessToken", "test-token");
+databaseModule.setSetting("trainingHub.userId", "test-user");
+databaseModule.setSetting("trainingHub.regionId", "1");
+databaseModule.setSetting("trainingHub.baseUrl", "https://teamapi.example.test");
+let hubResponse;
+const hubRequests = [];
+globalThis.fetch = async (url, init) => {
+  hubRequests.push({ url: String(url), init });
+  return hubResponse();
+};
+const corosReply = (body) => () => new Response(JSON.stringify(body), { status: 200 });
+
+hubResponse = corosReply({ result: "0000", data: [{ id: 7, name: "Lift" }] });
+assert.deepEqual((await hub.queryLibraryWorkouts()).complete, true);
+assert.ok(hubRequests.at(-1).init.signal instanceof AbortSignal, "Training Hub requests carry a timeout signal");
+hubResponse = corosReply({ result: "0000", data: [] });
+assert.deepEqual(await hub.queryLibraryWorkouts(), { workouts: [], complete: true }, "an empty array is a real (empty) library");
+hubResponse = corosReply({ result: "0000", data: [{ id: 7 }, { name: "No id" }] });
+assert.equal((await hub.queryLibraryWorkouts()).complete, false, "a record without an id makes the list incomplete");
+hubResponse = corosReply({ result: "0000", data: { dataList: [{ id: 7 }] } });
+assert.equal((await hub.queryLibraryWorkouts()).complete, false, "a non-array response is never treated as the whole library");
+
+hubResponse = corosReply({ result: "1001", message: "Mock delete rejected" });
+await assert.rejects(
+  library.deleteTrainingLibraryWorkouts({ programIds: ["w-kept"], confirmed: true }),
+  /Mock delete rejected/
+);
+assert.ok(cachedWorkoutIds().includes("w-kept"), "a rejected delete keeps the cached workout");
+
+hubResponse = () => {
+  throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+};
+await assert.rejects(
+  library.deleteTrainingLibraryWorkouts({ programIds: ["w-kept"], confirmed: true }),
+  /didn't respond within 30 seconds/
+);
+assert.ok(cachedWorkoutIds().includes("w-kept"), "a timed-out delete keeps the cached workout");
+
+hubResponse = corosReply({ result: "0000" });
+assert.deepEqual(
+  await library.deleteTrainingLibraryWorkouts({ programIds: ["w-kept"], confirmed: true }),
+  ["w-kept"]
+);
+assert.match(hubRequests.at(-1).url, /\/training\/program\/delete$/);
+assert.equal(hubRequests.at(-1).init.body, JSON.stringify(["w-kept"]));
+assert.deepEqual(cachedWorkoutIds(), ["w-in-flight"], "a deleted workout leaves the cache");
+workoutSnapshot = await library.getTrainingLibrarySnapshot();
+assert.equal(
+  workoutSnapshot.workouts.some((workout) => workout.id === "w-kept"),
+  false,
+  "a deleted workout stays gone while program/query fails"
+);
+
+databaseModule.deleteSettings([
+  "trainingHub.accessToken",
+  "trainingHub.userId",
+  "trainingHub.regionId",
+  "trainingHub.baseUrl"
+]);
+library.setLibraryWorkoutQueryForTests();
+library.setRefreshFailureRecorderForTests();
 globalThis.fetch = realFetch;
 
 db.close();

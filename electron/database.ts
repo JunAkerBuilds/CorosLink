@@ -2622,6 +2622,13 @@ export function listCachedTrainingLibraryWorkouts(): TrainingHubLibraryWorkout[]
     .filter((item): item is TrainingHubLibraryWorkout => Boolean(item?.id));
 }
 
+/** Drops a library workout's cached copy and its local tags, favorite, and collection. */
+export function deleteTrainingWorkoutMetadata(programId: string): void {
+  requireDatabase()
+    .prepare("DELETE FROM training_workout_metadata WHERE program_id = ?")
+    .run(programId);
+}
+
 export function saveTrainingWorkoutMetadata(
   metadata: TrainingWorkoutMetadata,
   cachedPayload?: Record<string, unknown>

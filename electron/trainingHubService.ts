@@ -20,6 +20,7 @@ import {
   countTrainingActivitiesMissingFeelType,
   countTrainingActivitiesSince,
   deleteSettings,
+  deleteTrainingWorkoutMetadata,
   getSetting,
   listStoredStrengthSessions,
   listStoredTrainingActivities,
@@ -143,6 +144,7 @@ interface LoginResult {
 
 const GLOBAL_BASE_URL = "https://teamapi.coros.com";
 const RESULT_SUCCESS = "0000";
+const TRAINING_HUB_REQUEST_TIMEOUT_MS = 30_000;
 const AUTH_ERROR_CODES = new Set(["0101", "0102", "1006"]);
 
 // Email verification code for the 2FA login challenge: codeType 20, 6 digits.
@@ -1846,6 +1848,8 @@ export async function deleteWorkoutProgram(programId: string): Promise<void> {
     throw new Error("A program ID is required to delete a library workout.");
   }
   await trainingHubPostVoid("/training/program/delete", [id]);
+  // Otherwise an offline Library falls back to the cached copy and the workout reappears.
+  deleteTrainingWorkoutMetadata(id);
 }
 
 export async function listWorkoutPrograms(): Promise<Record<string, unknown>[]> {
@@ -1853,9 +1857,30 @@ export async function listWorkoutPrograms(): Promise<Record<string, unknown>[]> 
 }
 
 export async function listLibraryWorkouts(): Promise<TrainingHubLibraryWorkout[]> {
-  const programs = await listLibraryWorkoutPrograms();
+  return (await queryLibraryWorkouts()).workouts;
+}
+
+/**
+ * The library plus whether COROS sent the whole of it: an array whose every
+ * record has an id. Only a complete list may prune the local workout cache.
+ */
+export async function queryLibraryWorkouts(): Promise<{
+  workouts: TrainingHubLibraryWorkout[];
+  complete: boolean;
+}> {
+  const data = await trainingHubPost<unknown>("/training/program/query", {});
+  const programs = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
+  const complete =
+    Array.isArray(data) &&
+    programs.every((program) => program?.id !== undefined && program?.id !== null);
+  return { workouts: libraryWorkoutsFromPrograms(programs), complete };
+}
+
+function libraryWorkoutsFromPrograms(
+  programs: Record<string, unknown>[]
+): TrainingHubLibraryWorkout[] {
   return programs
-    .filter((program) => program.id !== undefined && program.id !== null)
+    .filter((program) => program?.id !== undefined && program?.id !== null)
     .map((program) => ({
       id: String(program.id),
       name: pickString(program, ["name"]) ?? "Workout",
@@ -6760,14 +6785,28 @@ async function fetchJson<T>(
   options: RequestInit,
   fetchOptions?: { allowEmptyData?: boolean; contextPath?: string }
 ): Promise<T> {
-  const response = await fetch(url, options);
-  if (!response.ok) {
-    throw new Error(
-      `COROS API request failed: ${response.status} ${response.statusText}`
-    );
+  let payload: TrainingHubApiResponse<T>;
+  try {
+    // A stalled COROS call would otherwise hold its button ("Deleting") for minutes.
+    const response = await fetch(url, {
+      ...options,
+      signal: options.signal ?? AbortSignal.timeout(TRAINING_HUB_REQUEST_TIMEOUT_MS)
+    });
+    if (!response.ok) {
+      throw new Error(
+        `COROS API request failed: ${response.status} ${response.statusText}`
+      );
+    }
+    payload = (await response.json()) as TrainingHubApiResponse<T>;
+  } catch (error) {
+    if ((error as { name?: unknown } | null)?.name === "TimeoutError") {
+      throw new Error(
+        "COROS didn't respond within 30 seconds. Check your connection and try again."
+      );
+    }
+    throw error;
   }
 
-  const payload = (await response.json()) as TrainingHubApiResponse<T>;
   const data = parseTrainingHubApiResponse<T>(payload, fetchOptions);
   return data as T;
 }

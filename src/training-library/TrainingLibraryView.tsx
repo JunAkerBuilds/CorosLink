@@ -274,7 +274,7 @@ export function TrainingLibraryView({
     return (
       <section className="training-library-gate">
         <AlertTriangle size={30} strokeWidth={1.5} />
-        <h1>{t("The library didn&rsquo;t load")}</h1>
+        <h1>{t("The library didn’t load")}</h1>
         <p>{fatalError}</p>
         <button type="button" className="primary-button" onClick={() => void load()}>
           {t("Try again")} </button>
@@ -411,7 +411,7 @@ export function TrainingLibraryView({
         <details className="tl-notice">
           <summary>
             <AlertTriangle size={14} />
-            {t("Some COROS data didn&rsquo;t refresh. Cached items are still shown.")} </summary>
+            {t("Some COROS data didn’t refresh. Cached items are still shown.")} </summary>
           {current.partialFailures.map((failure) => (
             <p key={failure}>{failure}</p>
           ))}

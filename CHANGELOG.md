@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Watches connect on Windows again without removing them first.** CorosLink 0.1.57 and 0.1.58 paired the watch with Windows on every connect. Once the watch forgot that pairing, for example after pairing with your phone again, every connect failed until you removed the watch under **Settings → Bluetooth & devices**. CorosLink now connects without pairing unless the watch asks for it. If an old pairing is what's failing, it removes that pairing and tries once more.
+- **Workouts deleted in the COROS app leave the Training Library.** A workout you deleted in the COROS app, or in CorosLink, could come back in **Training Library → Workouts** whenever COROS didn't answer and the Library showed its saved copy. Now it disappears the next time the Library refreshes, along with any tags you gave it in CorosLink.
+- **A stalled COROS request gives up after 30 seconds.** Training Hub and Library actions such as **Delete** no longer spin for minutes when COROS stops responding. They stop with a message to check your connection and try again.
 
 ## [0.1.58] - 2026-10-19
 

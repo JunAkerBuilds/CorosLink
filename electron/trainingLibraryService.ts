@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import {
   deleteTrainingCollection,
   deleteTrainingPlanDocument,
+  deleteTrainingWorkoutMetadata,
   getTrainingPlanDocument,
   listCachedTrainingLibraryWorkouts,
   listTrainingActivityMatches,
@@ -17,6 +18,7 @@ import {
   queryNativeCorosPlanLibrary,
   readNativeCorosPlan
 } from "./corosTrainingPlanAdapter";
+import { recordDiagnosticError } from "./diagnosticsService";
 import {
   createAndScheduleWorkout,
   deactivateNativeTrainingPlan,
@@ -24,9 +26,9 @@ import {
   deleteWorkoutProgram,
   listActiveNativeTrainingPlanInstanceIds,
   listActiveNativeTrainingPlanInstances,
-  listLibraryWorkouts,
   listScheduledWorkoutEntries,
   listTrainingHubActivities,
+  queryLibraryWorkouts,
   removeScheduledWorkout,
   scheduleLibraryWorkout
 } from "./trainingHubService";
@@ -312,12 +314,64 @@ function mergeWorkout(
 }
 
 let queryNativePlanLibrary = queryNativeCorosPlanLibrary;
+let queryLibraryWorkoutList = queryLibraryWorkouts;
 
 /** Test seam for the snapshot's plan/query read. Never used by the renderer. */
 export function setNativePlanLibraryQueryForTests(
   query?: typeof queryNativeCorosPlanLibrary
 ): void {
   queryNativePlanLibrary = query ?? queryNativeCorosPlanLibrary;
+}
+
+/** Test seam for the snapshot's program/query read. Never used by the renderer. */
+export function setLibraryWorkoutQueryForTests(query?: typeof queryLibraryWorkouts): void {
+  queryLibraryWorkoutList = query ?? queryLibraryWorkouts;
+}
+
+let recordRefreshFailure: (source: string, error: unknown) => void = recordDiagnosticError;
+let reportedRefreshFailures = new Set<string>();
+
+/** Test seam for the error-report recorder. Never used by the renderer. */
+export function setRefreshFailureRecorderForTests(
+  record?: (source: string, error: unknown) => void
+): void {
+  recordRefreshFailure = record ?? recordDiagnosticError;
+  reportedRefreshFailures = new Set();
+}
+
+/**
+ * Puts Library refresh failures in the error report. The snapshot catches them
+ * for its banner, so no IPC handler ever sees them. A failure that repeats on
+ * every refresh is recorded once, until it clears or changes.
+ */
+function reportRefreshFailures(failures: string[], causes: Map<string, unknown>): void {
+  for (const failure of failures) {
+    if (reportedRefreshFailures.has(failure)) continue;
+    recordRefreshFailure("trainingLibrary:snapshot", new Error(failure, { cause: causes.get(failure) }));
+  }
+  reportedRefreshFailures = new Set(failures);
+}
+
+/**
+ * Drops cached workouts that a complete program/query no longer returns, such
+ * as workouts deleted in the COROS app. Without this, a later failed query
+ * falls back to the cache and shows them again, and deleting them can't make
+ * them go away. Only rows cached before the query are candidates.
+ */
+function pruneDeletedWorkouts(
+  cachedProgramIds: string[],
+  fetched: TrainingHubLibraryWorkout[],
+  partialFailures: string[]
+): void {
+  const live = new Set(fetched.map((workout) => workout.id));
+  for (const programId of cachedProgramIds) {
+    if (live.has(programId)) continue;
+    try {
+      deleteTrainingWorkoutMetadata(programId);
+    } catch (error) {
+      partialFailures.push(`Workout ${programId}: ${errorReason(error)}`);
+    }
+  }
 }
 
 /**
@@ -349,9 +403,17 @@ function pruneDeletedNativePlans(
 export async function getTrainingLibrarySnapshot(): Promise<TrainingLibrarySnapshot> {
   const cachedAt = new Date().toISOString();
   const partialFailures: string[] = [];
+  // The original errors go to the error report as causes, so their stacks survive.
+  const failureCauses = new Map<string, unknown>();
+  const addRejected = (section: string, reason: unknown) => {
+    const failure = `${section}: ${String((reason as { message?: unknown } | undefined)?.message ?? reason)}`;
+    partialFailures.push(failure);
+    failureCauses.set(failure, reason);
+  };
   const localPlans = listTrainingPlanDocuments();
+  const cachedProgramIds = listTrainingWorkoutMetadata().map((metadata) => metadata.programId);
   const [workoutsResult, nativeResult, scheduleResult, activeNativeResult] = await Promise.allSettled([
-    listLibraryWorkouts(),
+    queryLibraryWorkoutList(),
     queryNativePlanLibrary(),
     listScheduledWorkoutEntries(relativeDateKey(-180), relativeDateKey(365)),
     listActiveNativeTrainingPlanInstances()
@@ -359,7 +421,16 @@ export async function getTrainingLibrarySnapshot(): Promise<TrainingLibrarySnaps
 
   let baseWorkouts: TrainingHubLibraryWorkout[];
   if (workoutsResult.status === "fulfilled") {
-    baseWorkouts = workoutsResult.value;
+    const { workouts: fetchedWorkouts, complete } = workoutsResult.value;
+    baseWorkouts = fetchedWorkouts;
+    if (complete) {
+      pruneDeletedWorkouts(cachedProgramIds, fetchedWorkouts, partialFailures);
+    } else {
+      partialFailures.push(
+        "Workouts: COROS sent a workout list CorosLink couldn't fully read, so workouts " +
+          "deleted on COROS may still be listed."
+      );
+    }
     const previous = metadataByProgram();
     for (const workout of baseWorkouts) {
       const metadata = previous.get(workout.id);
@@ -379,7 +450,7 @@ export async function getTrainingLibrarySnapshot(): Promise<TrainingLibrarySnaps
       );
     }
   } else {
-    partialFailures.push(`Workouts: ${String(workoutsResult.reason?.message ?? workoutsResult.reason)}`);
+    addRejected("Workouts", workoutsResult.reason);
     baseWorkouts = listCachedTrainingLibraryWorkouts();
   }
 
@@ -420,13 +491,14 @@ export async function getTrainingLibrarySnapshot(): Promise<TrainingLibrarySnaps
       );
     }
   } else {
-    partialFailures.push(`Training plans: ${String(nativeResult.reason?.message ?? nativeResult.reason)}`);
+    addRejected("Training plans", nativeResult.reason);
   }
 
   const schedule = scheduleResult.status === "fulfilled" ? scheduleResult.value : [];
   if (scheduleResult.status === "rejected") {
-    partialFailures.push(`Schedule: ${String(scheduleResult.reason?.message ?? scheduleResult.reason)}`);
+    addRejected("Schedule", scheduleResult.reason);
   }
+  reportRefreshFailures(partialFailures, failureCauses);
   const plans = listTrainingPlanDocuments();
   const metadata = metadataByProgram();
   return {
