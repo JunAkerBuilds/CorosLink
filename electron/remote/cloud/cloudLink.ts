@@ -147,6 +147,11 @@ export class CloudLink {
   private trustRefresh: Promise<RelayTrust | null> | null = null;
   private readonly clients = new Map<string, RelayClient>();
 
+  /** The website account this computer signs in with (also used to open the member's private faces). */
+  get account(): WebsiteAccount {
+    return this.options.account;
+  }
+
   constructor(private readonly options: CloudLinkOptions) {
     this.now = options.now ?? Date.now;
     this.live = new LiveActivityFeed({ send: (report) => this.sendLive(report), now: this.now, ...options.liveActivity });

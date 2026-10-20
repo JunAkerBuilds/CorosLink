@@ -229,6 +229,7 @@ import {
   cleanupCommunityWatchfaceImports,
   getCommunityWatchface,
   importCommunityWatchface,
+  setCommunityWatchfaceAccountToken,
   listCommunityWatchfaces,
   parseCommunityWatchfaceDeepLink,
   setCommunityWatchfaceProgressListener
@@ -1072,6 +1073,9 @@ app.whenReady().then(() => {
     },
     chatModels: listChatModelOptions
   });
+  // Opening one's own private face from the website: the catalog may ask with the account token.
+  const account = remoteAccess.cloud.account;
+  setCommunityWatchfaceAccountToken((origin) => account.tokenFor(origin));
   registerIpcHandlers();
   remoteAccess.initialize();
   watchfaceAutomation = registerWatchfaceAutomation(() => mainWindow);

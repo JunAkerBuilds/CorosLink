@@ -229,8 +229,14 @@ try {
   const fourth = await begin();
   await account.handleCallback(callback(`?code=${code}&state=${fourth}`));
   assert.equal(account.status().signedIn, true);
+  // The token also opens the member's private faces, on this website only.
+  assert.equal(account.tokenFor(origin), appToken);
+  assert.equal(account.tokenFor(`${origin}/api/v1/watch-faces/night-trail`), appToken);
+  assert.equal(account.tokenFor("https://attacker.test"), null);
+  assert.equal(account.tokenFor("not a url"), null);
   await account.signOut();
   assert.equal(account.status().signedIn, false);
+  assert.equal(account.tokenFor(origin), null);
   const signOut = requests.at(-1);
   assert.deepEqual([signOut.method, signOut.url, signOut.authorization], ["DELETE", "/api/v1/app/session", `Bearer ${appToken}`]);
 
