@@ -20,8 +20,8 @@ A one-time COROS sign-in is still needed to save the account-derived watch key t
 - **After a sync** the watch stays connected, so a second sync or any other watch feature works straight away. The result is one line ("Synced · 2 new activities") plus a short row for each part that didn't work: health data not read, a COROS-app plan on the watch (with **Replace it**), calendar not sent, satellite data not updated, or activities that can't be shown yet. The sync state lives outside the watch menu (`src/watch/watchSyncState.ts`), so closing the menu loses nothing, and the Training Hub and Overview reload when any sync ends, including a background one.
 - **Where it shows:** in Local-Only Mode the Training Hub shows the activities and health data stored on this computer. In Connected Mode it shows the COROS account. Sync and FIT import are offered only in Local-Only Mode; a restored backup shows once the mode is on.
 - **Training Hub dashboard:** Local-Only Mode keeps its own layout (`coroslink.training-dashboard.v1.local`), so the Connected Mode layout is never rewritten (`src/training/dashboardLayout.ts`).
-  - The first time, it starts from the saved layout without the COROS-only cards. An unchanged default layout starts from the Local-Only default instead: sleep, health check, load, steps and active calories first, then weekly activity, VO₂ max, recovery, fitness and fatigue, the training load trend, calendar, stress, sleep HRV, sleep duration and distance zones.
-  - COROS-only cards are resting heart rate, fitness scores, race predictions, threshold heart-rate zones, perceived effort, upcoming workouts and menstrual cycle. They stay in the widget library. If added, a card shows COROS account data when COROS is signed in and has some, and otherwise says it isn't available in Local-Only Mode.
+  - The first time, it starts from the saved layout without the COROS-only cards. An unchanged default layout starts from the Local-Only default instead: sleep, health check, load, resting heart rate, steps and active calories first, then weekly activity, VO₂ max, recovery, fitness and fatigue, the training load trend, calendar, stress, sleep HRV, sleep duration and distance zones.
+  - COROS-only cards are fitness scores, race predictions, threshold heart-rate zones, perceived effort, upcoming workouts and menstrual cycle. They stay in the widget library. If added, a card shows COROS account data when COROS is signed in and has some, and otherwise says it isn't available in Local-Only Mode.
   - The Training Hub header shows the **COROS connected** account chip only when a COROS account is signed in.
 - **Recorded data stays on the watch.** Sync never deletes records or marks them as synced. If the COROS app is also used with the watch, it will still sync the same records to COROS. A sync does write the training calendar and satellite data, and every connection (in both modes) sets the clock and sends the weather (see What CorosLink writes to the watch).
 
@@ -207,12 +207,19 @@ Storage:
 - Sleep segments go into `local_sleep_sessions`.
 - Backups include all three.
 
-In Local-Only Mode the Training Hub's sleep, sleep-HRV and stress views, and daily steps and calories, come from this data (`localSync/localHealthViews.ts`). The Sleep HRV card uses the same nightly-average layout as the COROS reading. The Health check card shows each Health Check taken on the watch (heart rate, HRV, stress and level, breathing rate, SpO2), stored in `local_health_checks` and included in backups; the watch's resting-HR setting it records alongside is left out. COROS-computed values (sleep score, HRV baseline, normal range and status, recovery) stay unavailable, and so does the Menstrual cycle card: cycle information comes from the COROS account.
+In Local-Only Mode the Training Hub's sleep, sleep-HRV and stress views, and daily steps and calories, come from this data (`localSync/localHealthViews.ts`). The Sleep HRV card uses the same nightly-average layout as the COROS reading. The Health check card shows each Health Check taken on the watch (heart rate, HRV, stress and level, breathing rate, SpO2), stored in `local_health_checks` and included in backups; the watch's resting-HR setting it records alongside is left out. COROS-computed values (sleep score, HRV baseline, normal range and status, recovery) stay unavailable (resting heart rate is CorosLink's own, below), and so does the Menstrual cycle card: cycle information comes from the COROS account.
 
-The per-day training list behind the Weekly activity, Training calendar, Load and load-trend cards also comes from local data (`localSync/localTrainingMetrics.ts`). Each day sums its activities' training load (the watch's own figure, read once from each FIT file and cached in `local_activity_training` by file hash), distance and moving time, and carries the night's sleep HRV.
+The per-day training list behind the Weekly activity, Training calendar, Load and load-trend cards also comes from local data (`localSync/localTrainingMetrics.ts`). Each day sums its activities' training load (the watch's own figure, read once from each FIT file and cached in `local_activity_training` by file hash), distance and moving time, and carries the night's sleep HRV and resting heart rate.
 - A day the watch's daily history covers without any activity is a rest day: zero load, distance and time, as COROS reports it. So the Load card's "today" and its 7-day total count calendar days.
 - Days with no data at all (not synced yet, watch not worn) are left out rather than shown as rest days.
 - The Calories card is labelled **Active calories** in Local-Only Mode, because that is the total the watch keeps.
+
+**Resting heart rate** is CorosLink's own figure, worked out from the watch's per-minute heart rate (`localSync/localRestingHeartRate.ts`), because the watch's and COROS's values never reach CorosLink (see below). It is the lowest 30-minute average during the night's main sleep, the definition Garmin publishes and close to the "lowest during sleep" other wearables use. COROS instead estimates a seated morning value from your sleep heart rate with a model it doesn't publish, so the two can differ.
+- The night is the main sleep as the Sleep card shows it: from the first segment's start to the last one's end, naps left out. It counts for the morning you wake up and needs at least 3 hours asleep (light, deep and REM).
+- Only the per-minute readings of the watch that recorded the night are used (not one-off readings), from 30 to 220 bpm. A reading at least 10 bpm below the median of the 5 readings on each side is an optical dropout and is left out.
+- A 30-minute window counts when it holds at least 80% of the readings the night's own interval gives it (24 of 30 at one a minute, so a watch set to measure less often still gets a value). The lowest window average, rounded, is the day's figure; without a qualifying window the day has none, and the card asks you to wear the watch to bed.
+- With two watches the same night, the one with more sleep is used.
+- It is worked out when the Training Hub asks for it, from the stored readings and sleep, so nothing extra is stored or backed up. The card compares today's figure with the average of the previous days in the week, as in Connected Mode; there is no normal range.
 
 ### Where the remaining metrics live
 
@@ -228,7 +235,7 @@ On a PACE 4 (firmware V3.2008.0), from the watch's own files:
 
   Only the fields confirmed against COROS's decoding are shown (training load, effect, focus, 7-day load, recommended range).
 - **In the daily file.** 8/6 records (every 5 minutes) carry, at byte 8, the resting HR the watch's algorithms use (the same value as the activity record's @0x25). It is the user-info value the COROS app sends from the COROS account (0x8B, `rest_hr` with an "is default" flag), not the training profile's resting HR, which can differ. 55 is the default when none has been sent, so it isn't shown; VO₂ max (@0x27) stays 0 until the watch has one.
-- **Resting heart rate.** The watch's heart-rate widget records one during sleep ("No RHR data. Wear watch during sleep to record it.", a normal range after 7 recordings) and keeps it on the watch; no sync file carries it. The COROS app's resting-HR card comes from COROS's server: the daily-file upload returns `testRhr`, `avgRhr` and `rhrRange` per day.
+- **Resting heart rate.** The watch's heart-rate widget records one during sleep ("No RHR data. Wear watch during sleep to record it.", a normal range after 7 recordings) and keeps it on the watch; no sync file carries it. The COROS app's resting-HR card comes from COROS's server: the daily-file upload returns `testRhr`, `avgRhr` and `rhrRange` per day. CorosLink works out its own from the per-minute heart rate (see Resting heart rate above).
 
 **How it was validated.** CorosLink's decoding was compared with COROS's own decoding of the same two-day file. Every value matches:
 - every heart-rate reading and five-minute activity slot
@@ -251,7 +258,7 @@ A second recording, with a Health Check, was checked the same way: heart rate in
 | kind 11 / 7 (hourly) | Battery level and power counters | Not health data |
 | kind 13 (other fields) | A second series of 120 values and hourly follow-ups next to the recovery curve | Not identified |
 
-A measured resting heart rate doesn't appear in this file (only the value the watch's algorithms use), so it isn't shown; SpO2 appears only in Health Checks. Active minutes are left out because one day's total also counts minutes from another record type.
+A measured resting heart rate doesn't appear in this file (only the value the watch's algorithms use), so CorosLink works out its own from the per-minute heart rate; SpO2 appears only in Health Checks. Active minutes are left out because one day's total also counts minutes from another record type.
 
 ## What CorosLink writes to the watch
 

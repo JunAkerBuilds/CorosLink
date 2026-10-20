@@ -65,6 +65,7 @@ assert.deepEqual(parseLocalLayout(null, JSON.stringify({ version: 3, widgets: ['
 for (const id of ['vo2', 'recovery', 'load-balance']) {
   assert.ok(!isCorosOnlyWidget(id) && localDefaults.some(w => w.id === id), `${id} comes from the watch's activities`);
 }
+assert.ok(!isCorosOnlyWidget('daily-heart') && localDefaults.some(w => w.id === 'daily-heart'), "resting HR comes from the watch's sleep heart rate");
 assert.deepEqual(parseLocalLayout(JSON.stringify({ version: 3, widgets: ['recovery'].map(defaultWidgetFor) }), null).map(w => w.id), ['recovery'], 'a saved Local-Only layout is used as is, including widgets added back');
 assert.deepEqual(parseLocalLayout('broken', null), localDefaults);
 const localStore = new Map([[dashboardStorageKey, JSON.stringify({ version: 3, widgets: [defaultWidgetFor('sleep')] })], [localDashboardStorageKey, JSON.stringify({ version: 3, widgets: [defaultWidgetFor('stress')] })]]);

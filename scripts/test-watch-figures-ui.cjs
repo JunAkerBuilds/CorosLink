@@ -1,5 +1,6 @@
 // Local-Only Mode cards for the watch's own figures: VO₂ max, the recovery-time countdown (injected clock), and
-// Base Fitness / Load Impact / fatigue; then the Overview's readiness card built on the same recovery time.
+// Base Fitness / Load Impact / fatigue; the resting-HR card CorosLink fills from the watch's sleep heart rate;
+// then the Overview's readiness card built on the same recovery time.
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const os = require('node:os');
@@ -80,6 +81,21 @@ async function main() {
     await setClock('2026-10-19T08:00:00Z', ['14 h', 'Recovered in 14 h']);
     assert.equal(await text('#days-recovery .storage-ring-label strong'), '14 h', 'the summary takes the latest day with a recovery time');
     assert.deepEqual((await grid('days-balance')).slice(0, 3), [['Base Fitness', '41'], ['Load Impact', '33'], ['Fatigue', '80%']]);
+
+    // Resting HR: today's figure against the earlier days', with no source line; an empty card asks for a night's sleep, once.
+    const hint = 'Wear your watch to bed to measure it';
+    const restingCard = (id) => js(`(() => { const card = document.querySelector('#${id} .training-stat-card');
+      return { value: card.querySelector('.training-stat-card__value').textContent, notes: Array.from(card.querySelectorAll('.training-stat-card__history > p:not(.training-stat-card__history-label)')).map(p => p.textContent),
+        readings: Array.from(card.querySelectorAll('dd')).map(dd => dd.textContent), text: card.textContent }; })()`);
+    const rhr = await restingCard('rhr');
+    assert.deepEqual([rhr.value, rhr.notes, rhr.readings], ['59', ['-2 bpm vs 7-day avg'], ['62', '60', '59']]);
+    assert.ok(!rhr.text.includes(hint) && !rhr.text.includes('Not available') && !rhr.text.includes('From your'), 'no hint or source line with a figure');
+    const gap = await restingCard('rhr-gap');
+    assert.deepEqual([gap.value, gap.notes, gap.readings], ['–', [hint], ['62', '60', '–']], "no figure for today: the hint above the earlier days'");
+    const none = await restingCard('rhr-none');
+    assert.deepEqual([none.value, none.notes, none.readings], ['–', [hint], []], 'nothing yet: the hint in place of the history');
+    assert.ok(!none.text.includes('Not available'));
+    assert.deepEqual((await restingCard('rhr-cloud')).notes, ['Recent history will appear after syncing.'], 'Connected Mode keeps its wording');
     assert.deepEqual(errors, []);
 
     // Overview readiness: the watch's recovery time, or a sync in CorosLink, never the COROS app.
@@ -103,7 +119,7 @@ async function main() {
     assert.equal(await text('#recovering .overview-readiness-copy h2'), 'Waiting for a sync');
     assert.equal(await text('#empty .overview-today .overview-card-sub'), 'From your COROS calendar');
     assert.deepEqual(errors, []);
-    console.log('Watch figures (Local-Only Mode): VO2 max, recovery countdown, Base Fitness / Load Impact / fatigue, Overview readiness');
+    console.log('Watch figures (Local-Only Mode): VO2 max, recovery countdown, Base Fitness / Load Impact / fatigue, resting HR, Overview readiness');
   } finally {
     await vite.close();
   }

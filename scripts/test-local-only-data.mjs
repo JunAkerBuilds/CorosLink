@@ -29,6 +29,8 @@ const { SyncCaptureLog, syncCaptureEnabled } = await load("localSync/syncCapture
 const protocol = await load("localSync/activityProtocol.js");
 const { FIT_EPOCH_OFFSET_SECONDS, FIT_MSG } = await load("fitDecoder.js");
 const { LocalTrainingMetrics } = await load("localSync/localTrainingMetrics.js");
+const { nightlyRestingHeartRate, restingHeartRateByDay } = await load("localSync/localRestingHeartRate.js");
+const { sleepDays } = await load("localSync/localHealthViews.js");
 const { corosSessionToFit } = await load("localSync/syncPayloadDecoder.js");
 const { CorosSportRecordFormatError, decodeCorosSportRecordFile } = await load("localSync/corosSportRecord.js");
 const { pages, startRecord, syntheticRun } = await import("./fixtures/coros-sport-record-fixture.mjs");
@@ -809,7 +811,7 @@ try {
     assert.deepEqual(records.map((record) => record.sportType), [100, 200, 100, 100, 100]);
     const metrics = new LocalTrainingMetrics(db,
       { listActivities: ({ page }) => (page === 1 ? records : []) },
-      { listDays: () => [] },
+      { listDays: () => [], sleepsBetweenDays: () => [], listSamples: () => [] },
       { resolve: (file) => path.join(dir, file) });
     const dayOf = (ts) => { const date = new Date(ts * 1000); return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`; };
     const pick = ({ happenDay, vo2max, recoveredAt, baseFitness, loadImpact, fatigue }) => ({ happenDay, vo2max, recoveredAt, baseFitness, loadImpact, fatigue });
@@ -821,6 +823,54 @@ try {
         { happenDay: dayOf(day + 86_400), vo2max: undefined, recoveredAt: records[3].endTime, baseFitness: undefined, loadImpact: undefined, fatigue: undefined }
       ], `pass ${pass}: each figure from the day's last activity; the ride's cycling VO₂ max and the imported file left out`);
     }
+  });
+
+  await test("resting heart rate: the lowest 30-minute average of the main sleep's per-minute heart rate, filed under the wake-up day", () => {
+    // Synthetic nights in UTC (offset 0): 23:00 on 1 January to 07:00 on 2 January unless stated.
+    const at = (day, hour, minute = 0) => Date.UTC(2026, 0, day, hour, minute) / 1000;
+    const segment = (startTs, endTs, { deviceId = "watch-a", day = "20260102", asleep = (endTs - startTs) / 60 } = {}) => ({
+      deviceId, startTs, endTs, day, utcOffsetMinutes: 0, totalMinutes: (endTs - startTs) / 60, awakeMinutes: (endTs - startTs) / 60 - asleep,
+      lightMinutes: asleep, deepMinutes: 0, remMinutes: 0, awakeCount: 0, ranges: [], source: "test"
+    });
+    /** One reading a minute (or every `step` seconds) from `from` to `to`, `bpm(ts)` each. */
+    const minutes = (from, to, bpm, step = 60) => Array.from({ length: Math.floor((to - from) / step) + 1 }, (_, i) => ({ ts: from + i * step, bpm: bpm(from + i * step) }));
+    const nightOf = (sessions) => sleepDays(sessions)[0].night;
+    const start = at(1, 23);
+    const end = at(2, 7);
+    const main = [segment(start, end)];
+    const flat = minutes(start, end, () => 60);
+    const between = (from, to, bpm, base = 60) => (ts) => (ts >= from && ts < to ? bpm : base);
+
+    assert.equal(nightlyRestingHeartRate(nightOf(main), flat), 60);
+    assert.equal(nightlyRestingHeartRate(nightOf(main), minutes(start, end, between(at(2, 4), at(2, 4, 40), 52))), 52, "a 40-minute low stretch");
+    assert.equal(nightlyRestingHeartRate(nightOf(main), minutes(start, end, between(at(2, 3), at(2, 3, 5), 54))), 59,
+      "a 5-minute dip only lowers its window's average (25 × 60 + 5 × 54) / 30");
+    assert.equal(nightlyRestingHeartRate(nightOf(main), minutes(start, end, between(at(2, 3), at(2, 3, 3), 35))), 60, "a 3-minute optical dropout is left out");
+    assert.equal(nightlyRestingHeartRate(nightOf(main), minutes(start, end, between(at(2, 3), at(2, 3, 30), 20))), 60, "readings under 30 bpm are left out");
+    assert.equal(nightlyRestingHeartRate(nightOf(main), [...flat, ...minutes(at(2, 2, 0) + 12, at(2, 2, 50) + 12, () => 40)]), 60,
+      "one-off readings (at an exact second) are left out");
+    assert.equal(nightlyRestingHeartRate(nightOf(main), minutes(start, end, between(at(2, 6, 45), at(2, 7, 1), 45))), 52,
+      "every window ends inside the night: the last 16 minutes at 45 share the night's last window (14 × 60 + 16 × 45) / 30");
+    assert.equal(nightlyRestingHeartRate(nightOf(main), minutes(start, end, () => 58, 600)), 58, "a watch measuring every 10 minutes: 3 readings a window");
+    assert.equal(nightlyRestingHeartRate(nightOf(main), flat.filter(({ ts }) => (ts / 60) % 30 < 20)), undefined, "20 of every 30 minutes: under 80% coverage");
+    assert.equal(nightlyRestingHeartRate(nightOf(main), flat.filter(({ ts }) => (ts / 60) % 30 < 24)), 60, "24 of every 30 minutes is enough");
+    assert.equal(nightlyRestingHeartRate(nightOf([segment(at(2, 4), end)]), minutes(at(2, 4), end, () => 55)), 55, "3 hours asleep is enough");
+    assert.equal(nightlyRestingHeartRate(nightOf([segment(at(2, 4, 1), end)]), minutes(at(2, 4, 1), end, () => 55)), undefined, "under 3 hours asleep: no value");
+    assert.equal(nightlyRestingHeartRate(nightOf([segment(start, end, { asleep: 170 })]), flat), undefined, "a long night mostly awake: no value");
+
+    const readingsFrom = (byDevice) => (deviceId, from, to) => (byDevice[deviceId] ?? []).filter(({ ts }) => ts >= from && ts <= to);
+    // A night split where you woke up, plus an afternoon nap with a lower heart rate: the night counts, the nap doesn't.
+    const split = [segment(start, at(2, 2)), segment(at(2, 2, 20), end), segment(at(2, 14), at(2, 15))];
+    const splitReadings = minutes(start, at(2, 15), (ts) => (ts >= at(2, 14) ? 45 : ts >= at(2, 5) && ts < at(2, 6) ? 53 : 61));
+    assert.deepEqual([...restingHeartRateByDay(split, readingsFrom({ "watch-a": splitReadings }))], [["20260102", 53]],
+      "filed under the morning you wake up; the nap left out");
+    // Two watches the same night: the one with more sleep; each night uses its own watch's readings only.
+    const twoWatches = [segment(at(2, 2), end, { deviceId: "watch-a" }), segment(start, end, { deviceId: "watch-b" })];
+    assert.deepEqual([...restingHeartRateByDay(twoWatches, readingsFrom({ "watch-a": minutes(start, end, () => 50), "watch-b": minutes(start, end, () => 57) }))],
+      [["20260102", 57]]);
+    assert.deepEqual([...restingHeartRateByDay(main, readingsFrom({ "watch-b": flat }))], [], "no readings from the night's watch: no value");
+    assert.deepEqual([...restingHeartRateByDay([...main, segment(at(2, 23), at(3, 7), { day: "20260103" })],
+      readingsFrom({ "watch-a": [...flat, ...minutes(at(2, 23), at(3, 7), () => 64)] }))].sort(), [["20260102", 60], ["20260103", 64]]);
   });
 
   await test("watch sync reads the daily history (never acknowledged) and serves sleep, HRV and stress locally", async () => {
@@ -925,6 +975,9 @@ try {
     assert.equal(runMetric.distance, run.distance);
     assert.ok(runMetric.duration > 0);
     assert.equal(metrics.dayList.find((day) => day.happenDay === "20260102").avgSleepHrv, 35);
+    // The fixture's heart rate climbs 55…74 bpm every 20 minutes; each 55, right after a 74, is 10 bpm under its neighbours' median and is left out.
+    assert.equal(metrics.dayList.find((day) => day.happenDay === "20260102").rhr, 63, "resting HR from the night's per-minute heart rate");
+    assert.equal(metrics.dayList.find((day) => day.happenDay === runDay).rhr, undefined, "no resting HR without a night's sleep");
     // A day the watch's history covers without activities is a rest day (zero, as in COROS); a day without any data is left out.
     const restDay = metrics.dayList.find((day) => day.happenDay === "20260102");
     assert.deepEqual([restDay.trainingLoad, restDay.distance, restDay.duration], [0, 0, 0]);

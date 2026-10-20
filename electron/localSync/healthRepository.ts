@@ -118,6 +118,12 @@ export class HealthRepository {
     ).all(limit) as Array<Record<string, unknown>>).map(sleepFromRow);
   }
 
+  /** Sleep segments ending on days from `startDay` to `endDay` (YYYYMMDD, inclusive), oldest first. */
+  sleepsBetweenDays(startDay: string, endDay: string): LocalSleepSession[] {
+    return (this.db.prepare("SELECT * FROM local_sleep_sessions WHERE day BETWEEN ? AND ? ORDER BY start_ts")
+      .all(startDay, endDay) as Array<Record<string, unknown>>).map(sleepFromRow);
+  }
+
   allSleeps(): LocalSleepSession[] {
     return (this.db.prepare("SELECT * FROM local_sleep_sessions ORDER BY start_ts").all() as Array<Record<string, unknown>>).map(sleepFromRow);
   }

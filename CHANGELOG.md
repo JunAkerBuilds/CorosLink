@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Weather on your watch.** The forecast, including air quality (US AQI), comes from Open-Meteo for the place you choose in **Settings → Weather location**, or the Overview's location.
 - **Send to watch** in the Training Library puts a workout on the watch over Bluetooth.
 - In Local-Only Mode, the Training Hub shows the figures your watch stores with each activity: **VO₂ max**, the time until you're **recovered**, and **Base Fitness, Load Impact and fatigue**. The Overview's readiness card counts down the same recovery time.
+- In Local-Only Mode, the **Resting HR** card shows CorosLink's own figure: the lowest 30-minute average of your heart rate while you sleep, on the morning you wake up. It can differ from the figure on your watch or in the COROS app.
 - **Back up the watch key.** In the watch menu, **Connection details → Watch key → Back up watch key** saves the key to a file protected by a passphrase. **Restore watch key…** puts it back on this or another computer without signing in to COROS again. Keep the file and the passphrase safe: anyone with both can sign in to your watch, and the passphrase can't be recovered.
 
 ### Changed

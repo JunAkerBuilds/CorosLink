@@ -929,6 +929,7 @@ export const trainingChinese: Readonly<Record<string, string>> = {
   "Rest days": "休息日",
   "Resting heart rate": "静息心率",
   "Resting HR": "静息心率",
+  "Wear your watch to bed to measure it": "佩戴手表入睡以进行测量",
   "Retry": "重试",
   "Retry adding": "重试添加",
   "Retry calendar install": "重试日历安装",

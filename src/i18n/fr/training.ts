@@ -927,6 +927,7 @@ export const trainingFrench: Record<string, string> = {
   "Rest days": "Jours de repos",
   "Resting heart rate": "Fréquence cardiaque au repos",
   "Resting HR": "FC au repos",
+  "Wear your watch to bed to measure it": "Portez votre montre pour dormir afin de la mesurer",
   "Retry": "Réessayer",
   "Retry adding": "Réessayer l’ajout",
   "Retry calendar install": "Réessayer l’installation du calendrier",

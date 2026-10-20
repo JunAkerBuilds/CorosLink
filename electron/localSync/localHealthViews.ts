@@ -36,23 +36,42 @@ function weightedHr(sessions: LocalSleepSession[]): number | undefined {
   return minutes > 0 ? Math.round(rated.reduce((sum, session) => sum + session.avgHr! * session.totalMinutes, 0) / minutes) : undefined;
 }
 
-/**
- * One main record per night, merging the watch's sleep segments (it splits a
- * night where you briefly wake up), plus separate naps. The window runs from
- * the first segment's start to the last one's end; time between segments
- * counts as awake.
- */
-export function sleepRecordsFromSessions(sessions: LocalSleepSession[]): TrainingHubSleepRecord[] {
+/** A night's main sleep: the watch's segments (it splits a night where you briefly wake up), naps left out. */
+export interface SleepNight {
+  /** The local day the night ends on (the morning you wake up), YYYYMMDD. */
+  day: string;
+  /** Oldest first. */
+  segments: LocalSleepSession[];
+  /** From the first segment's start to the last one's end. */
+  startTs: number;
+  endTs: number;
+}
+
+/** Each day's main night (when it has one) and naps, newest day first. */
+export function sleepDays(sessions: LocalSleepSession[]): Array<{ day: string; night?: SleepNight; naps: LocalSleepSession[] }> {
   const byDay = new Map<string, LocalSleepSession[]>();
   for (const session of sessions) byDay.set(session.day, [...(byDay.get(session.day) ?? []), session]);
-  const records: TrainingHubSleepRecord[] = [];
-  for (const [day, daySessions] of [...byDay.entries()].sort(([a], [b]) => b.localeCompare(a))) {
+  return [...byDay.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([day, daySessions]) => {
     const ordered = [...daySessions].sort((a, b) => a.startTs - b.startTs);
-    const night = ordered.filter((session) => !isNap(session));
-    if (night.length) {
+    const segments = ordered.filter((session) => !isNap(session));
+    const night = segments.length ? { day, segments, startTs: segments[0]!.startTs, endTs: segments[segments.length - 1]!.endTs } : undefined;
+    return { day, ...(night ? { night } : {}), naps: ordered.filter(isNap) };
+  });
+}
+
+/**
+ * One main record per night plus separate naps. The window runs from the
+ * first segment's start to the last one's end; time between segments counts
+ * as awake.
+ */
+export function sleepRecordsFromSessions(sessions: LocalSleepSession[]): TrainingHubSleepRecord[] {
+  const records: TrainingHubSleepRecord[] = [];
+  for (const { day, night: main, naps } of sleepDays(sessions)) {
+    if (main) {
+      const night = main.segments;
       const first = night[0]!;
       const last = night[night.length - 1]!;
-      const windowMinutes = Math.round((last.endTs - first.startTs) / 60);
+      const windowMinutes = Math.round((main.endTs - main.startTs) / 60);
       const deepMinutes = night.reduce((sum, session) => sum + session.deepMinutes, 0);
       const lightMinutes = night.reduce((sum, session) => sum + session.lightMinutes, 0);
       const remMinutes = night.reduce((sum, session) => sum + session.remMinutes, 0);
@@ -80,7 +99,7 @@ export function sleepRecordsFromSessions(sessions: LocalSleepSession[]): Trainin
         sleepEnd: clock(last.endTs, last.utcOffsetMinutes)
       });
     }
-    for (const nap of ordered.filter(isNap)) {
+    for (const nap of naps) {
       const asleep = nap.deepMinutes + nap.lightMinutes + nap.remMinutes;
       records.push({
         happenDay: day,

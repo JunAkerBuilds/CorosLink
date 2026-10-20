@@ -80,14 +80,15 @@ export function defaultLayout(): DashboardWidget[] {
   return placeWidgets(defaultPlacements);
 }
 /**
- * Widgets whose values only COROS calculates or stores (resting HR, scores,
- * race predictions, threshold zones, perceived effort, scheduled workouts,
- * cycle). The watch's sync files don't carry them, so Local-Only Mode leaves
- * them out of its dashboard; they stay in the widget library and show COROS
- * account data when there is some. VO₂ max and recovery aren't: the watch
- * stores its own VO₂ max and recovery time with each activity.
+ * Widgets whose values only COROS calculates or stores (scores, race
+ * predictions, threshold zones, perceived effort, scheduled workouts, cycle).
+ * The watch's sync files don't carry them, so Local-Only Mode leaves them out
+ * of its dashboard; they stay in the widget library and show COROS account
+ * data when there is some. VO₂ max and recovery aren't: the watch stores its
+ * own VO₂ max and recovery time with each activity. Nor is resting heart rate:
+ * CorosLink works it out from the watch's sleep heart rate.
  */
-const corosOnlyWidgets: readonly WidgetId[] = ['daily-heart', 'scores', 'race', 'effort', 'trend-rpe', 'zones-heart', 'upcoming', 'cycle'];
+const corosOnlyWidgets: readonly WidgetId[] = ['scores', 'race', 'effort', 'trend-rpe', 'zones-heart', 'upcoming', 'cycle'];
 export function isCorosOnlyWidget(id: WidgetId): boolean {
   return corosOnlyWidgets.includes(id);
 }
@@ -97,6 +98,7 @@ const localDefaultPlacements: { id: WidgetId; preset: string; startRow?: boolean
   { id: 'sleep', preset: '6-standard' },
   { id: 'healthCheck', preset: '3-mini' },
   { id: 'daily-load', preset: '3-standard' },
+  { id: 'daily-heart', preset: 'compact-square' },
   { id: 'daily-steps', preset: 'compact-square' },
   { id: 'daily-calories', preset: 'compact-square' },
   { id: 'fitness', preset: '6-standard', startRow: true },

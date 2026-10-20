@@ -229,9 +229,7 @@ function TrainingHubContent({
       case "trend-rpe": return (snapshot?.trendPoints ?? []).some(point => point.rpeLoad !== undefined);
       case "zones-heart": return Boolean(snapshot?.analytics) || (snapshot?.dashboard?.lthrZones?.length ?? 0) > 0;
       case "upcoming": return corosSignedIn;
-      // Resting HR comes from COROS; the watch's own files don't hold it.
-      case "daily-heart": return summary.latestRhr !== undefined;
-      // Cycle says it in its card.
+      // Resting HR and cycle say it in their own cards.
       default: return true;
     }
   };
