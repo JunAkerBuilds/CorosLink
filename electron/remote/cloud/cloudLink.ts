@@ -15,6 +15,7 @@ import {
   type ConnectorSnapshot,
   type ResolvedCloudflared
 } from "./cloudflaredManager";
+import { LiveActivityFeed, type LiveTurnReport } from "./liveActivityFeed";
 import { RelayClient, RelayRequestError } from "./relayClient";
 import {
   ENVIRONMENT_PLATFORMS,
@@ -123,12 +124,15 @@ export interface CloudLinkOptions {
   findCloudflared?: typeof findInstalledCloudflared;
   downloadCloudflared?: typeof downloadPinnedCloudflared;
   supervisor?: Partial<CloudflaredSupervisorOptions>;
+  /** Tests: the Live Activity feed's clock, timers and intervals. */
+  liveActivity?: Partial<Omit<ConstructorParameters<typeof LiveActivityFeed>[0], "send">>;
   onChange?: () => void;
 }
 
 export class CloudLink {
   private readonly supervisor: CloudflaredSupervisor;
   private readonly throttle = new ActivityThrottle();
+  private readonly live: LiveActivityFeed;
   private readonly now: () => number;
   private busy: "linking" | "unlinking" | null = null;
   private error: string | undefined;
@@ -145,6 +149,7 @@ export class CloudLink {
 
   constructor(private readonly options: CloudLinkOptions) {
     this.now = options.now ?? Date.now;
+    this.live = new LiveActivityFeed({ send: (report) => this.sendLive(report), now: this.now, ...options.liveActivity });
     this.supervisor = new CloudflaredSupervisor({
       ...options.supervisor,
       onChange: () => this.changed(),
@@ -641,8 +646,13 @@ export class CloudLink {
 
   // ----- Activity -----
 
-  /** A Coach event from the hub. Turns and staged approvals become text-free pushes. */
+  /**
+   * A Coach event from the hub. Turns and staged approvals become text-free
+   * alerts, and running turns keep C-LINK's Live Activity current.
+   */
   noteCoachEvent(frame: CoachEventFrame): void {
+    // Only turns that start while linked are followed; sending checks the link again.
+    if (frame.event !== "turn.started" || (this.enabled && this.storedLink())) this.live.note(frame);
     const event = activityForCoachEvent(frame);
     if (!event || !this.enabled || !SESSION_ID_PATTERN.test(frame.sessionId)) return;
     const link = this.storedLink();
@@ -653,6 +663,18 @@ export class CloudLink {
       .catch((error) => {
         console.warn("[remote] activity push failed:", error instanceof RelayRequestError ? error.code : "error");
       });
+  }
+
+  /** A turn's phase, for the relay to push to the Live Activities following it. */
+  private async sendLive(report: LiveTurnReport): Promise<void> {
+    const link = this.storedLink();
+    if (!link || !this.enabled) return;
+    try {
+      const { identity } = await this.options.environment();
+      await this.client(identity, link.relayOrigin).liveActivity(report);
+    } catch (error) {
+      console.warn("[remote] live activity push failed:", error instanceof RelayRequestError ? error.code : "error");
+    }
   }
 
   /** For tests and diagnostics. */

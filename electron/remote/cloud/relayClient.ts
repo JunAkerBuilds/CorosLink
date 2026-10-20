@@ -5,7 +5,9 @@ import {
   ENVIRONMENT_NONCE_BYTES,
   ENVIRONMENT_SIGNATURE_HEADER,
   ENVIRONMENT_SIGNATURE_TYP,
+  MAX_LIVE_WORDS,
   RELAY_ROUTES,
+  REQUEST_ID_PATTERN,
   SESSION_ID_PATTERN,
   TUNNEL_HOSTNAME_PATTERN,
   type ActivityEvent,
@@ -16,6 +18,8 @@ import {
   type EnvironmentSignaturePayload,
   type LinkRequest,
   type LinkResponse,
+  type LiveActivityRequest,
+  type LiveActivityResponse,
   type RecoveryRequest,
   type RecoveryResponse,
   type RelayErrorBody,
@@ -195,6 +199,22 @@ export class RelayClient {
     if (!SESSION_ID_PATTERN.test(input.sessionId)) throw new Error("That conversation id can't be sent to the relay.");
     const body: ActivityRequest = { environmentId: this.identity.environmentId, sessionId: input.sessionId, event: input.event };
     return (await this.call(RELAY_ROUTES.activity, "environment.activity", body)) as unknown as ActivityResponse;
+  }
+
+  /** A turn's phase for C-LINK's Live Activity: the phase and a word count, never text. */
+  async liveActivity(input: Omit<LiveActivityRequest, "environmentId">): Promise<LiveActivityResponse> {
+    if (!SESSION_ID_PATTERN.test(input.sessionId) || !REQUEST_ID_PATTERN.test(input.requestId)) {
+      throw new Error("That conversation id can't be sent to the relay.");
+    }
+    const body: LiveActivityRequest = {
+      environmentId: this.identity.environmentId,
+      sessionId: input.sessionId,
+      requestId: input.requestId,
+      event: input.event,
+      phase: input.phase,
+      words: Math.min(Math.max(0, Math.floor(input.words)), MAX_LIVE_WORDS)
+    };
+    return (await this.call(RELAY_ROUTES.live, "environment.live", body)) as unknown as LiveActivityResponse;
   }
 
   /** The relay's mint-request signing keys. */

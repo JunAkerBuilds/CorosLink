@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Coach keeps C-LINK's Lock Screen up to date.** While a linked computer runs a Coach answer, C-LINK's Live Activity now shows whether Coach is thinking, looking at your data or writing, and how the answer ended (replied, waiting for you, or failed), even with the iPhone locked. CorosLink sends the relay only the step and a word count, never what Coach writes or which data it reads.
+
 ### Fixed
 
 - **Watches connect on Windows again without removing them first.** CorosLink 0.1.57 and 0.1.58 paired the watch with Windows on every connect. Once the watch forgot that pairing, for example after pairing with your phone again, every connect failed until you removed the watch under **Settings → Bluetooth & devices**. CorosLink now connects without pairing unless the watch asks for it. If an old pairing is what's failing, it removes that pairing and tries once more.

@@ -1,5 +1,5 @@
 // The parts of the relay's wire contract the desktop uses: environment request
-// signatures, link, recovery, unlink, activity and the relay's JWKS. Copied
+// signatures, link, recovery, unlink, activity, live activity and the relay's JWKS. Copied
 // from relay/src/protocol.ts (relay protocol version 1, written on
 // claude/coach-relay-c1e389) the way P2 copied the mint types into
 // ../contract.ts. Keep the two in step; relay/PROTOCOL.md explains them.
@@ -24,7 +24,8 @@ export const ENVIRONMENT_OPERATIONS = [
   "environment.link",
   "environment.recovery",
   "environment.unlink",
-  "environment.activity"
+  "environment.activity",
+  "environment.live"
 ] as const;
 export type EnvironmentOperation = (typeof ENVIRONMENT_OPERATIONS)[number];
 
@@ -50,6 +51,7 @@ export const RELAY_ROUTES = {
   recovery: "/v1/environments/recovery",
   unlink: "/v1/environments/unlink",
   activity: "/v1/activity",
+  live: "/v1/activity/live",
   jwks: "/.well-known/jwks.json"
 } as const;
 
@@ -140,6 +142,44 @@ export interface ActivityResponse {
   sent: number;
   failed: number;
   removed: number;
+}
+
+// ----- Coach Live Activities on C-LINK -----
+
+/** What Coach is doing while a turn runs. */
+export const LIVE_RUNNING_PHASES = ["thinking", "usingTool", "writing"] as const;
+/** How a turn ended: `needsYou` is an approval card or a question nobody answered yet. */
+export const LIVE_FINAL_PHASES = ["replied", "needsYou", "failed"] as const;
+export type LiveRunningPhase = (typeof LIVE_RUNNING_PHASES)[number];
+export type LiveFinalPhase = (typeof LIVE_FINAL_PHASES)[number];
+export type LivePhase = LiveRunningPhase | LiveFinalPhase;
+export const LIVE_EVENTS = ["update", "end"] as const;
+export type LiveEvent = (typeof LIVE_EVENTS)[number];
+export const REQUEST_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
+export const MAX_LIVE_WORDS = 1_000_000;
+/** The relay pushes an activity at most this often and answers `skipped` for the rest. */
+export const LIVE_UPDATE_MIN_INTERVAL_SECONDS = 5;
+
+/**
+ * `POST /v1/activity/live`: signature (op live). A turn's phase for C-LINK's
+ * Live Activity: `update` with a running phase, then one `end` with a final
+ * phase. Never text, never tool names.
+ */
+export interface LiveActivityRequest {
+  environmentId: string;
+  sessionId: string;
+  requestId: string;
+  event: LiveEvent;
+  phase: LivePhase;
+  /** Words of the reply so far. */
+  words: number;
+}
+
+export interface LiveActivityResponse {
+  sent: number;
+  failed: number;
+  removed: number;
+  skipped: number;
 }
 
 /** A key in `GET /.well-known/jwks.json`. */
