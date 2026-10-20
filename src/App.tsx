@@ -3050,6 +3050,8 @@ interface WatchOverviewPanelProps {
   libraryCount: number;
   librarySize: string;
   onOpenLibrary: () => void;
+  /** False while Media is hidden from the sidebar; the music counts go with it. */
+  showMusic: boolean;
 }
 
 /** The connected watch in one panel: product, storage and the music on it. */
@@ -3062,6 +3064,7 @@ function WatchOverviewPanel({
   libraryCount,
   librarySize,
   onOpenLibrary,
+  showMusic,
 }: WatchOverviewPanelProps) {
   useLanguage();
   const productName = presentation
@@ -3133,34 +3136,36 @@ function WatchOverviewPanel({
           {storage ? (
             <StorageBar storage={storage} />
           ) : null}
-          <div className="overview-watch-stats">
-            {stats.map((stat) => {
-              const content = (
-                <>
-                  <span className="overview-watch-stat-label">
-                    <span className="overview-watch-stat-icon">{stat.icon}</span>
-                    {t(stat.label)}
-                  </span>
-                  <strong>{stat.value}</strong>
-                  <span className="overview-watch-stat-detail">{t(stat.detail)}</span>
-                </>
-              );
-              return stat.open ? (
-                <button
-                  key={stat.hue}
-                  type="button"
-                  className={`overview-watch-stat is-${stat.hue} is-button`}
-                  onClick={onOpenLibrary}
-                >
-                  {content}
-                </button>
-              ) : (
-                <div key={stat.hue} className={`overview-watch-stat is-${stat.hue}`}>
-                  {content}
-                </div>
-              );
-            })}
-          </div>
+          {showMusic ? (
+            <div className="overview-watch-stats">
+              {stats.map((stat) => {
+                const content = (
+                  <>
+                    <span className="overview-watch-stat-label">
+                      <span className="overview-watch-stat-icon">{stat.icon}</span>
+                      {t(stat.label)}
+                    </span>
+                    <strong>{stat.value}</strong>
+                    <span className="overview-watch-stat-detail">{t(stat.detail)}</span>
+                  </>
+                );
+                return stat.open ? (
+                  <button
+                    key={stat.hue}
+                    type="button"
+                    className={`overview-watch-stat is-${stat.hue} is-button`}
+                    onClick={onOpenLibrary}
+                  >
+                    {content}
+                  </button>
+                ) : (
+                  <div key={stat.hue} className={`overview-watch-stat is-${stat.hue}`}>
+                    {content}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
       </div>
     </section>
@@ -3294,6 +3299,7 @@ function MediaOverviewTab({
 }: MediaOverviewTabProps) {
   useLanguage();
   const greeting = useTimeOfDayGreeting();
+  const musicHidden = useHiddenNavItems().has("media");
   const watchTracks = watchStatus?.tracks ?? [];
   const recentDownloads = useMemo(
     () =>
@@ -3367,6 +3373,7 @@ function MediaOverviewTab({
             libraryCount={downloads.length}
             librarySize={formatBytes(librarySize)}
             onOpenLibrary={onOpenLibrary}
+            showMusic={!musicHidden}
           />
         </div>
       ) : null}
@@ -3396,7 +3403,7 @@ function MediaOverviewTab({
       </div>
 
 
-      {downloads.length > 0 ? (
+      {downloads.length > 0 && !musicHidden ? (
         <section className="panel dashboard-recent dashboard-block">
           <div className="section-heading">
             <div>
