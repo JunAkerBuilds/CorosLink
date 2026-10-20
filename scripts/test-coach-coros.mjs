@@ -76,7 +76,8 @@ assert.ok(corosInputSchema(tools.find(t => t.name.endsWith('createSingleWorkout'
   } finally { tools.find(tool => tool.name === bad.name).inputSchema = originalSchema; }
 }
 const allPermissions = { recentActivities: true, trainingMetrics: true, upcomingWorkouts: true, sleepData: true, fullActivityFiles: true };
-for (const name of ['querySportRecords', 'queryRecoveryStatus', 'querySleepData', 'querySleepOverview', 'queryWorkoutDetails', 'createSingleWorkout']) assert.equal(claudeCanUseCorosTool(name, allPermissions), true, name);
+for (const name of ['querySportRecords', 'queryRecoveryStatus', 'querySleepOverview', 'querySleepData', 'queryWorkoutDetails', 'createSingleWorkout']) assert.equal(claudeCanUseCorosTool(name, allPermissions), true, name);
+assert.equal(claudeCanUseCorosTool('querySleepOverview', { ...allPermissions, sleepData: false }), false);
 assert.equal(claudeCanUseCorosTool('createSingleWorkout', { ...allPermissions, upcomingWorkouts: false }), false);
 assert.equal(claudeCanUseCorosTool('queryDailyHealthData', { ...allPermissions, sleepData: false }), false);
 assert.equal(claudeCanUseCorosTool('unknownWriteTool', allPermissions), false);

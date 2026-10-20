@@ -22,6 +22,7 @@ const READ_PERMISSIONS: Record<keyof ClaudeCodePermissions, readonly string[]> =
     "queryScheduledWorkoutDetails", "queryTrainingPlanLibrary", "queryTrainingPlanDetails",
     "get_upcoming_workouts", "get_training_calendar", ...COROS_WORKOUT_WRITES
   ],
+  // COROS renamed querySleepData to querySleepOverview in 2026-10; keep both for older servers.
   sleepData: ["querySleepOverview", "querySleepData", "querySleepHrv", "get_sleep_summary", "get_sleep_data"],
   fullActivityFiles: ["downloadActivityFitFiles", "queryActivityFitFileDownloadUrls"]
 };
