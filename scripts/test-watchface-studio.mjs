@@ -4526,6 +4526,51 @@ try {
     "weekday export should render into the exact inspector W/H canvas"
   );
 
+  // Translated weekday and month words follow one language choice: the one
+  // Send writes onto the weekday style, not "all" for months.
+  const languageResolution = structuredClone(withMetrics.resolutions[1]);
+  for (const language of ["french", "germany"]) {
+    for (const field of ["week", "month"]) {
+      languageResolution.config[`${language}_date_${field}_font`] =
+        languageResolution.config[`english_date_${field}_font`];
+      languageResolution.config[`${language}_date_${field}_rect`] =
+        languageResolution.config[`english_date_${field}_rect`];
+    }
+  }
+  const translatedFolders = async (weekdayLanguages, watchLanguages) => {
+    const composition = await buildDateSpriteComposition(
+      { archiveId: "translated-words", resolutions: [languageResolution] },
+      {
+        ...(weekdayLanguages ? { weekday: {
+          scale: 1, width: 90, height: 36, fontFamily: "Fixture Sans", translateLabels: true, ...weekdayLanguages
+        } } : {}),
+        dateMonth: {
+          scale: 1, width: 51, height: 26, monthFormat: "labels", fontFamily: "Fixture Sans", translateLabels: true
+        }
+      },
+      { fontFamily: "", digitColor: "#ffffff", tintLabels: false, watchLanguages },
+      async () => []
+    );
+    return [...new Set(composition.replacements
+      .map(({ path }) => /\/(cl_(?:weekday|date_month)_(?:french|germany))\//.exec(path)?.[1])
+      .filter(Boolean))].sort();
+  };
+  assert.deepEqual(
+    await translatedFolders({ overwriteAllLanguages: false, overwriteLanguages: ["french"] }),
+    ["cl_date_month_french", "cl_weekday_french"],
+    "months translate into the weekday's languages only"
+  );
+  assert.deepEqual(
+    await translatedFolders({ overwriteAllLanguages: false }),
+    [],
+    "English only keeps both word sets untranslated"
+  );
+  assert.deepEqual(
+    await translatedFolders(undefined, ["germany"]),
+    ["cl_date_month_germany"],
+    "without a custom weekday, months follow the project's languages"
+  );
+
   const nativeControlIconReplacements =
     await buildWatchfaceConfigAssetReplacements(
       detailsWithControlIcon,

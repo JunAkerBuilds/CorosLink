@@ -7735,6 +7735,21 @@ export function resizeConfigRectToCanvas(
   return `{${x0},${y0},${x0 + normalizedWidth},${y0 + normalizedHeight}${match[5]}}`;
 }
 
+/**
+ * The watch languages whose weekday and month tables get translated words:
+ * one choice for both, the one picked in Send. withWatchLanguages writes it
+ * onto a custom weekday's style, which the weekday copies also follow
+ * (applyWeekdayLanguageOverrides); a face without one keeps the project's.
+ */
+function dateWordLanguages(
+  styles: WatchfaceDateStyles,
+  watchLanguages: "all" | "english" | string[] | undefined
+): "all" | "english" | string[] {
+  const weekday = styles.weekday;
+  if (!weekday) return watchLanguages ?? "all";
+  return weekday.overwriteAllLanguages ? "all" : weekday.overwriteLanguages ?? [];
+}
+
 /** Generates isolated date sprites and any native-size date rectangles. */
 export async function buildDateSpriteComposition(
   details: CorosWatchfaceTemplateDetails,
@@ -7743,7 +7758,7 @@ export async function buildDateSpriteComposition(
     WatchfaceStudioOptions,
     "fontFamily" | "digitColor" | "tintLabels" | "fontWeight" | "fontStyle" | "letterSpacing" | "rasterFont"
   > & {
-    /** Watch languages whose month table gets translated words. */
+    /** The project's watch languages, for a face without a custom weekday (see dateWordLanguages). */
     watchLanguages?: "all" | "english" | string[];
   },
   loadAssets: WatchfaceAssetLoader
@@ -7868,9 +7883,7 @@ export async function buildDateSpriteComposition(
       if (!wordKind || !style.translateLabels) continue;
       // Each watch language the template declares gets its own word table.
       const tableField = part.rectKey.replace(/^english_date_|_rect$/g, "");
-      const chosen = wordKind === "week"
-        ? style.overwriteAllLanguages ? "all" : style.overwriteLanguages ?? []
-        : options.watchLanguages ?? "all";
+      const chosen = dateWordLanguages(styles, options.watchLanguages);
       const englishJobs = jobs.slice(firstJob);
       const styledRect = styledDateRects
         .filter((override) => override.path === `${resolution.directory}/config.txt`)
