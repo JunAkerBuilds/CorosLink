@@ -64,6 +64,7 @@
     "test:website-sign-in": "npm run build:electron && node scripts/test-website-sign-in.mjs",
     "test:coach-coros": "npm run build:electron && node scripts/test-coach-coros.mjs",
     "test:coach-coros-ui": "npm run build:electron && electron scripts/test-coach-coros-ui.cjs",
+    "test:chat-transcript-follow": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-chat-transcript-follow.mjs",
     "test:coach-creations": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-coach-creations.mjs",
     "test:claude-code": "npm run build:electron && node scripts/test-claude-code-provider.mjs",
     "test:chat-history-store": "npm run build:electron && node scripts/test-chat-history-store.mjs",
