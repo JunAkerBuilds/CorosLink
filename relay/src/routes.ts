@@ -361,7 +361,7 @@ export async function handleActivity(request: Request, ctx: RelayContext): Promi
     sessionId,
     event,
   });
-  log("info", "activity_pushed", { environmentId: signed.environmentId, event, ...result });
+  log("info", "activity_pushed", { environmentId: signed.environmentId, alert: event, ...result });
   return json(result);
 }
 
@@ -451,7 +451,8 @@ export async function handleLiveActivity(request: Request, ctx: RelayContext): P
     phase,
     words,
   });
-  if (activities.length > 0) log("info", "live_activity_pushed", { environmentId: turn.environmentId, event, phase, ...result });
+  // `liveEvent`, not `event`: that key names the log line itself.
+  if (activities.length > 0) log("info", "live_activity_pushed", { environmentId: turn.environmentId, liveEvent: event, phase, ...result });
   return json(result);
 }
 
