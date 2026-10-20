@@ -92,7 +92,7 @@ export function getNativeDataAutomationCatalog() {
   return {
     path: "/design/nativeData",
     layerIdPrefix: "native:",
-    coordinates: "Layer x/y use capabilities.placement master pixels. Part offsets, dimensions, line widths and bar spacing use master pixels before the layer scale. Units, symbols and decimal points have firmware-controlled positions.",
+    coordinates: "Layer x/y use capabilities.placement master pixels. Part offsets, dimensions, line widths and bar spacing use master pixels before the layer scale. Units, symbols and decimal points have firmware-controlled positions. Moving native:chart (move_layer, place_layers, align_layers) moves the readout it edits, as in the editor; the graph and the stored readouts stay put.",
     editing: "Use add_native_field with id, x, y and optional style to create any catalog field absent from the current mode, even when the starting template has no corresponding config or sprites. Export creates these bindings and assets. Use set/merge/unset for existing fields. Pointer parents must exist and merge is shallow. Unset optional overrides to restore defaults. Use mode:'aod' with the same /design paths for AOD.",
     artwork: "assets[role][stateIndex] accepts a PNG assetId from import_asset or get_document. State keys are canonical unpadded strings such as '0'. Missing states use defaults. assetTexts uses the same role/index map. Replacement images take precedence over text. Decimal is a numeric decimal point.",
     limits: [

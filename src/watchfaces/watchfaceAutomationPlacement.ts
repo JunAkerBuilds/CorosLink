@@ -3,6 +3,7 @@ import type {
   CorosWatchfaceTemplateDetails
 } from "../../electron/types";
 import { deriveDesignDetails } from "./watchfaceCompose";
+import { moveChartReadout } from "./chartReadouts";
 import { BACKGROUND_SPACE } from "./watchfaceBackgroundElements";
 import type { WatchfaceEditorBounds } from "./watchfaceEditorGeometry";
 import { deriveEditorLayers } from "./watchfaceEditorModel";
@@ -167,7 +168,10 @@ export function resolveWatchfacePlacementScene(
         configAssetOverrides: design.configAssetOverrides,
         timeStyles: design.timeStyles,
         letterSpacing: design.letterSpacing,
-        rasterFont: design.rasterFont
+        rasterFont: design.rasterFont,
+        fontFamily: design.fontFamily,
+        fontWeight: design.fontWeight,
+        fontStyle: design.fontStyle
       })
     : {};
   for (const [id, limit] of Object.entries(limits)) {
@@ -441,7 +445,12 @@ export function moveWatchfacePlacementLayers(
     if (key.startsWith("native:")) {
       const id = key.slice(7), style = next.nativeData?.[id];
       if (!style) placementFail("placement.unsupported", "Native data layer is missing.");
-      next = {...next, nativeData: {...next.nativeData, [id]: {...style, x: style.x + requested.dx, y: style.y + requested.dy}}}; continue;
+      // As in the editor, the chart layer moves the readout it edits; the
+      // graph and the stored readouts stay where they are.
+      const moved = id === "chart"
+        ? moveChartReadout(style, style.x + requested.dx, style.y + requested.dy)
+        : {...style, x: style.x + requested.dx, y: style.y + requested.dy};
+      next = {...next, nativeData: {...next.nativeData, [id]: moved}}; continue;
     }
     if (key === "weather") {
       const bounds = scene.layers.find((layer) => layer.id === "weather")?.bounds;

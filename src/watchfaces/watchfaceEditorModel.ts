@@ -304,10 +304,16 @@ export function deriveEditorLayers(
   const resolution = pickPreviewResolution(offsetDetails);
   const boundsById = new Map<string, WatchfaceLayoutGroupBounds>();
   if (resolution) {
+    // Same face font as the editor's limits, so a time font size measures the
+    // drawn digits rather than the template PNG.
     for (const box of computeLayoutGroupBounds(resolution, {
       configAssetOverrides: design.configAssetOverrides,
       timeStyles: design.timeStyles,
-      letterSpacing: design.letterSpacing
+      letterSpacing: design.letterSpacing,
+      rasterFont: design.rasterFont,
+      fontFamily: design.fontFamily,
+      fontWeight: design.fontWeight,
+      fontStyle: design.fontStyle
     })) {
       if (box.id === "batteryIcon") {
         const batteryOverride = design.configAssetOverrides?.["config:battery_icon"];
