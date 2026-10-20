@@ -1130,6 +1130,8 @@ app.on("window-all-closed", () => {
 
 let wifiMusicQuitPending = false;
 let wifiMusicQuitReady = false;
+let watchWorkQuitPending = false;
+let watchWorkQuitReady = false;
 app.on("before-quit", event => {
   if (!wifiMusicQuitReady && corosNativeBle.isWifiMusicActive()) {
     event.preventDefault();
@@ -1138,6 +1140,18 @@ app.on("before-quit", event => {
       // Bounded: an unfinished restore stays journaled and runs on the next connection.
       void Promise.race([corosNativeBle.finishWifiMusicBeforeQuit(), new Promise(resolve => setTimeout(resolve, 30_000))])
         .finally(() => { wifiMusicQuitReady = true; app.quit(); });
+    }
+    return;
+  }
+  // A sync, transfer or settings write to the watch finishes first (bounded): cut short, it can leave
+  // the watch without its training plan until the next sync. A sync's reads stop at the next block.
+  if (!watchWorkQuitReady && corosNativeBle.hasWatchWork()) {
+    event.preventDefault();
+    if (!watchWorkQuitPending) {
+      watchWorkQuitPending = true;
+      localData?.cancelSync();
+      void corosNativeBle.finishBeforeQuit().catch(() => undefined)
+        .finally(() => { watchWorkQuitReady = true; app.quit(); });
     }
     return;
   }

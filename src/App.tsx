@@ -999,10 +999,10 @@ export default function App() {
     }
   }, [api, dataModeKnown, localOnly, refreshTrainingHub]);
 
-  // Keeps the window's sync state (progress and the last result) while the watch menu is closed.
+  // Keeps the window's sync state (progress, the last result, background runs) while the watch menu is closed.
   useWatchSync(api ?? undefined);
   // What a sync read shows straight away: the Training Hub and the Overview reload when any sync ends,
-  // from the watch menu or Settings. Health cards that fetch for themselves follow localDataVersion.
+  // from the watch menu, Settings or in the background. Health cards that fetch for themselves follow localDataVersion.
   const [localDataVersion, setLocalDataVersion] = useState(0);
   useEffect(() => {
     if (!api || typeof api.onWatchSyncProgress !== "function") {
@@ -1021,9 +1021,13 @@ export default function App() {
     const offProgress = api.onWatchSyncProgress((progress) => {
       if (progress.state === "done" || progress.state === "failed" || progress.state === "cancelled") reload();
     });
+    const offAuto = typeof api.onWatchAutoSyncChange === "function"
+      ? api.onWatchAutoSyncChange((state) => { if (state.lastSuccessAt !== undefined && state.lastAttemptAt !== undefined && state.lastSuccessAt >= state.lastAttemptAt) reload(); })
+      : () => undefined;
     return () => {
       if (timer) clearTimeout(timer);
       offProgress();
+      offAuto();
     };
   }, [api, refreshTrainingHub]);
 

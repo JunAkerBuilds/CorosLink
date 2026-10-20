@@ -174,7 +174,7 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             flushWrites()
         case "routeBlock", "watchfaceBlock", "musicDelete", "officialOtaBlock", "lightMapOtaBlock", "dataFileBlock":
             let ota = operation == "officialOtaBlock" || operation == "lightMapOtaBlock"
-            // Files the phone app pushes: a workout (41) or weather (80); nothing else.
+            // Files the phone app pushes: a workout (41), weather (80), the training calendar (42) or GPS assistance (13, 68, 70); nothing else.
             let dataFile = UInt8(exactly: current?["fileId"] as? Int ?? 255) ?? 255
             let fileIndex: UInt8 = ota ? (UInt8(exactly: current?["fileId"] as? Int ?? 255) ?? 255)
                 : operation == "dataFileBlock" ? (pushedDataFiles.contains(dataFile) ? dataFile : 255)
@@ -690,18 +690,22 @@ func decodeWatchInteraction(_ data: Data) -> [String: Any]? {
     return nil
 }
 
-/// Files CorosLink pushes like the phone app: workout and weather.
-let pushedDataFiles: Set<UInt8> = [41, 80]
+/// Files CorosLink pushes like the phone app: workout, weather, training calendar and GPS assistance.
+let pushedDataFiles: Set<UInt8> = [41, 80, 42, 13, 68, 70]
+/// GPS assistance: 13 (ELPO, LTO), 68 (second ELPO file), 70 (RTO ephemeris). The firmware takes up to 256 KB each.
+let satelliteDataFiles: Set<UInt8> = [13, 68, 70]
 
 func fileLimit(_ fileIndex: UInt8) -> Int {
-    fileIndex == 9 ? 7025507 : fileIndex == 8 ? 0x320000
+    fileIndex == 9 ? 7025507 : fileIndex == 8 ? 0x320000 : satelliteDataFiles.contains(fileIndex) ? 262_144
         : pushedDataFiles.contains(fileIndex) ? 65_536 : 2_000_000
 }
 
 func validFileBlock(_ header: Data, _ block: Data, _ fileIndex: UInt8) -> Bool {
     guard header.count == 21, block.count > 0, block.count <= 4096,
           (fileIndex == 8 || fileIndex == 0x14 || fileIndex == 93 || fileIndex == 9 || fileIndex == 50 || pushedDataFiles.contains(fileIndex)), Array(header.prefix(3)) == [0x78, 0, fileIndex],
-          (fileIndex != 8 || header[16] < 10), Array(header[17..<20]) == [0, 0, 3] else { return false }
+          (fileIndex != 8 || header[16] < 10),
+          // GPS assistance (13, 68, 70) carries a 24-bit hour in bytes 16–18; other files a single byte.
+          satelliteDataFiles.contains(fileIndex) ? header[19] == 3 : Array(header[17..<20]) == [0, 0, 3] else { return false }
     func little(_ offset: Int, _ count: Int) -> Int {
         (0..<count).reduce(0) { $0 | Int(header[offset + $1]) << ($1 * 8) }
     }

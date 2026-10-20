@@ -1476,8 +1476,21 @@ const api = {
   syncWatchLocally: (): Promise<WatchSyncProgress> => ipcRenderer.invoke("localData:syncWatch"),
   getWatchSyncProgress: (): Promise<WatchSyncProgress> => ipcRenderer.invoke("localData:getSyncProgress"),
   cancelWatchSync: (): Promise<WatchSyncProgress> => ipcRenderer.invoke("localData:cancelSync"),
+  allowWatchPlanReplacement: (): Promise<void> => ipcRenderer.invoke("localData:allowWatchPlanReplacement"),
+  getWatchPlanReplacement: (): Promise<boolean> => ipcRenderer.invoke("localData:getWatchPlanReplacement"),
+  setWatchPlanReplacement: (allowed: boolean): Promise<boolean> => ipcRenderer.invoke("localData:setWatchPlanReplacement", allowed),
   readWatchDayTotals: (): Promise<unknown> => ipcRenderer.invoke("localData:readDayTotals"),
+  /** Developer test (COROSLINK_SYNC_CAPTURE=1): send satellite data to the watch now. */
+  sendSatelliteDataNow: (): Promise<NonNullable<WatchSyncProgress["satellite"]>> => ipcRenderer.invoke("localData:sendSatelliteDataNow"),
   probeWatchSync: (options?: { allBlocks?: boolean; selector?: number; fileIndex?: number }): Promise<WatchSyncProbe> => ipcRenderer.invoke("localData:probeWatchSync", options),
+  getWatchAutoSync: (): Promise<import("./watchAutoSyncService").WatchAutoSyncState> => ipcRenderer.invoke("watch:getAutoSync"),
+  setWatchAutoSync: (input: { enabled?: boolean; intervalHours?: number }): Promise<import("./watchAutoSyncService").WatchAutoSyncState> =>
+    ipcRenderer.invoke("watch:setAutoSync", input),
+  onWatchAutoSyncChange: (callback: (state: import("./watchAutoSyncService").WatchAutoSyncState) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: import("./watchAutoSyncService").WatchAutoSyncState) => callback(state);
+    ipcRenderer.on("watch:autoSyncChanged", listener);
+    return () => ipcRenderer.removeListener("watch:autoSyncChanged", listener);
+  },
   onWatchSyncProgress: (callback: (progress: WatchSyncProgress) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, progress: WatchSyncProgress) => callback(progress);
     ipcRenderer.on("localData:syncProgress", listener);

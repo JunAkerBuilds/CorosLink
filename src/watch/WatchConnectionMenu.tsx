@@ -16,6 +16,7 @@ import {
 import "../watchfaces/watchLink.css";
 import "./watchConnection.css";
 import { EXPERIMENTAL_SYNC_MODELS } from "../../electron/localSync/watchSyncModels";
+import { WatchAutoSyncControl } from "./WatchAutoSyncControl";
 import { WatchSyncResult } from "./WatchSyncResult";
 import { runWatchSync, useWatchSync } from "./watchSyncState";
 
@@ -347,12 +348,13 @@ function WatchMenuPanel({
         {syncButton}
       </div> : null}
 
-      {/* Results sit under the button that asked for them. */}
+      {/* Results sit under the button that asked for them; a background sync reports here too. */}
       {offerSync && watchSync.last && !watchSync.manual ? <WatchSyncResult api={api} last={watchSync.last} disabled={disabled || syncing}
         onSync={() => void sync()} /> : null}
       {message || (snapshot?.phase === "failed" && snapshot.error) ? <p className="watch-link-note watch-menu-result is-error" role="alert">
         <AlertCircle size={15} aria-hidden="true" /><span>{message ?? snapshot?.error}</span></p> : null}
 
+      {supported && offerSync && api ? <WatchAutoSyncControl api={api} disabled={disabled || syncing} /> : null}
 
       {supported ? <ul className="watch-menu-list" aria-label={t("Watch features")}>
         <MenuRow icon={LayoutGrid} title={t("Watch faces")} detail={t("Install and replace faces on the watch")} onClick={openWatchFaces} />
@@ -684,6 +686,9 @@ function WatchConnectionDetails({ snapshot, api, watchKeySaved, watchKey: watchK
         ? <button type="button" className="watch-link-inline-button" onClick={onChoosePlace}>{t("Choose a place")}</button>
         : t("Choose a place in Settings → Weather location, or open the Overview once")
       : "—"],
+    [t("Satellite data"), developerTools
+      ? <>{satelliteData(snapshot.gpsAssistance, snapshot.connected)}<SatelliteDeveloperTools api={api} assist={snapshot.gpsAssistance} connected={snapshot.connected} /></>
+      : satelliteData(snapshot.gpsAssistance, snapshot.connected)]
   ] satisfies Array<[string, ReactNode]>;
   // With the watch away, rows that would only read "—" are left out.
   const rows = snapshot.connected ? details : details.filter(([, value]) => value !== "—");
@@ -715,4 +720,39 @@ function WatchConnectionDetails({ snapshot, api, watchKeySaved, watchKey: watchK
         : null}
     </div>
   );
+}
+
+/**
+ * Developer only (COROSLINK_SYNC_CAPTURE=1): the raw bytes the satellite format is read from (bind
+ * reply bytes 11–14, then settings type 13 once a sync has read it), and a test send that doesn't
+ * wait for the usual rule. The send itself is refused in the main process without the flag.
+ */
+function SatelliteDeveloperTools({ api, assist, connected }: { api: CorosLinkApi | undefined; assist: CorosNativeBleSnapshot["gpsAssistance"]; connected: boolean }) {
+  useLanguage();
+  const [outcome, setOutcome] = useState<{ sending?: boolean; sent?: boolean; error?: string }>({});
+  const send = api?.sendSatelliteDataNow;
+  return (
+    <small className="watch-menu-detail-sub">
+      <code>{assist ? `${assist.raw || "—"}${assist.settingsRaw ? ` · ${assist.settingsRaw}` : ""}` : "—"}</code>{" "}
+      {send ? <button type="button" className="watch-link-inline-button" disabled={!connected || outcome.sending} onClick={() => {
+        setOutcome({ sending: true });
+        void send().then(
+          result => setOutcome(result.ok ? { sent: true } : { error: result.error ?? "—" }),
+          error => setOutcome({ error: error instanceof Error ? error.message : String(error) }));
+      }}>{outcome.sending ? t("Sending…") : t("Send satellite data now")}</button> : null}{" "}
+      {outcome.sent ? t("Sent") : outcome.error ?? null}
+    </small>
+  );
+}
+
+/** When the watch's GPS assistance data runs out, as read on the last connection. */
+function satelliteData(assist: CorosNativeBleSnapshot["gpsAssistance"], connected: boolean): ReactNode {
+  // A reply in an unknown format, or a date far from today, wasn't read as expected: shown as no data (the bytes stay in the snapshot).
+  const plausible = !assist?.validUntil || Math.abs(assist.validUntil - Date.now()) < 400 * 86_400_000;
+  if (!assist || assist.format === "unknown" || !plausible) return "—";
+  const until = assist.validUntil && new Date(assist.validUntil).toLocaleString(getLocale(), { dateStyle: "medium", timeStyle: "short" });
+  const value = !assist.validUntil ? t("None on the watch")
+    : assist.validUntil > Date.now() ? t("Valid until {{p0}}", { p0: until }) : t("Expired {{p0}}", { p0: until });
+  // With the watch away it may have been updated since (by the COROS app, say), so say when this was read.
+  return connected ? value : <>{value}<small className="watch-menu-detail-sub">{t("as read at the last connection")}</small></>;
 }

@@ -58,6 +58,11 @@ export function PrivacySettings({ api }: { api: CorosLinkApi }) {
   const [restorePassphrase, setRestorePassphrase] = useState("");
   const watchSync = useWatchSync(api);
   const syncing = watchSync.manual || watchSync.reading;
+  // Whether a sync may replace a training plan the COROS app put on the watch (agreed once in a sync result); off asks again.
+  const [planReplacement, setPlanReplacement] = useState<boolean | null>(null);
+  const refreshPlanReplacement = useCallback(() => {
+    if (typeof api.getWatchPlanReplacement === "function") void api.getWatchPlanReplacement().then(setPlanReplacement).catch(() => undefined);
+  }, [api]);
   const modeRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const refreshOverview = useCallback(async () => {
@@ -69,12 +74,12 @@ export function PrivacySettings({ api }: { api: CorosLinkApi }) {
     void api.getDataModeStatus().then(next => { if (active) setStatus(next); }).catch(() => undefined);
     void refreshOverview().catch(() => undefined);
     const offMode = api.onDataModeChange(next => { if (active) setStatus(next); });
-    // A sync started from the toolbar's watch menu also lands here; refresh the counts when it ends.
+    // A sync started from the toolbar's watch menu (or in the background) also lands here; refresh the counts when it ends.
     const offSync = api.onWatchSyncProgress(next => {
-      if (active && (next.state === "done" || next.state === "failed" || next.state === "cancelled")) void refreshOverview().catch(() => undefined);
+      if (active && (next.state === "done" || next.state === "failed" || next.state === "cancelled")) { void refreshOverview().catch(() => undefined); refreshPlanReplacement(); }
     });
     return () => { active = false; offMode(); offSync(); };
-  }, [api, refreshOverview]);
+  }, [api, refreshOverview, refreshPlanReplacement]);
 
   async function run(kind: Exclude<Busy, null>, section: Section, task: () => Promise<LocalizableText | void>) {
     setBusy(kind);
@@ -91,6 +96,8 @@ export function PrivacySettings({ api }: { api: CorosLinkApi }) {
   }
 
   const localOnly = status?.mode === "local_only";
+  // The switch is in the watch section, which shows only in Local-Only Mode.
+  useEffect(() => { if (localOnly) refreshPlanReplacement(); }, [localOnly, refreshPlanReplacement]);
   const enforcing = status?.enforcing === true;
   const current: Mode = localOnly ? "local" : "connected";
   const modeLocked = busy !== null || !status;
@@ -133,8 +140,8 @@ export function PrivacySettings({ api }: { api: CorosLinkApi }) {
   const notice = (section: Section) => <Notice message={message?.section === section ? message : null} />;
   const syncLabel = !syncing ? t("Sync watch now")
     : watchSync.percent === null ? t("Syncing…") : t("Syncing… {{p0}}%", { p0: watchSync.percent });
-  // After a sync, the counts are read again.
-  const syncNow = () => { setMessage(null); void runWatchSync(api).then(refreshOverview).catch(() => undefined); };
+  // After a sync (the Replace answer in its result included), the counts and the plan switch are read again.
+  const syncNow = () => { setMessage(null); void runWatchSync(api).then(() => { refreshPlanReplacement(); return refreshOverview(); }).catch(() => undefined); };
   const shortPassphrase = backupPassphrase.length > 0 && backupPassphrase.length < 8;
 
   const modeCard = (mode: Mode, index: number) => {
@@ -211,6 +218,16 @@ export function PrivacySettings({ api }: { api: CorosLinkApi }) {
           <div><dt>{t("Days of health data")}</dt><dd>{overview ? formatNumber(overview.healthDays) : "—"}</dd></div>
           <div><dt>{t("Local storage")}</dt><dd>{overview ? formatBytes(overview.storageBytes) : "—"}</dd></div>
         </dl>
+        {planReplacement !== null ? <label className="privacy-switch">
+          <span>{t("Replace COROS-app plans on the watch")}<small>{t("When off, CorosLink asks first.")}</small></span>
+          <input type="checkbox" role="switch" className="watch-setting-switch" checked={planReplacement} disabled={busy !== null}
+            onChange={event => {
+              const allowed = event.target.checked;
+              setMessage(null);
+              void api.setWatchPlanReplacement(allowed).then(setPlanReplacement)
+                .catch(() => setMessage({ section: "watch", text: localizedText(() => t("Couldn't save that. Try again.")), error: true }));
+            }} />
+        </label> : null}
         {/* Only when Sync watch now is unavailable: what to do about it. */}
         {overview && overview.watchSyncSupport !== "experimental" ? (
           <p className="settings-hint">

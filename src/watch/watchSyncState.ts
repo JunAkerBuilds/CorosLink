@@ -2,10 +2,12 @@ import { useEffect, useSyncExternalStore } from "react";
 import type { CorosLinkApi } from "../coroslink-api";
 import { ipcErrorText } from "../ipcErrorText";
 import type { WatchSyncProgress } from "../../electron/localSync/localDataTypes";
+import type { WatchAutoSyncState } from "../../electron/watchAutoSyncService";
 
 /**
  * The watch sync as the whole window sees it: whether one is running, how far it got, and how the
- * last one ended. It lives outside the watch menu so closing the menu mid-sync loses nothing.
+ * last one ended. It lives outside the watch menu so closing the menu mid-sync loses nothing, and a
+ * background (automatic) sync reports here too.
  */
 export type LastWatchSync =
   | { ok: true; result: WatchSyncProgress; at: number; automatic: boolean }
@@ -14,7 +16,7 @@ export type LastWatchSync =
 export interface WatchSyncView {
   /** A sync started from this window is running (it may still be connecting). */
   manual: boolean;
-  /** A sync is reading from the watch. */
+  /** Any sync is reading from the watch, including an automatic one. */
   reading: boolean;
   /** How much of the activity file has been read, while that is known. */
   percent: number | null;
@@ -50,19 +52,33 @@ function onProgress(progress: WatchSyncProgress): void {
   update({ reading, percent: reading ? percent : null });
 }
 
+/** The last automatic run, as a result: what it found, or that it didn't reach the watch. */
+function onAutoSync(state: WatchAutoSyncState): void {
+  // With automatic sync off, an old background result is no news.
+  if (!state.enabled || state.lastAttemptAt === undefined) return;
+  if (state.lastSuccessAt !== undefined && state.lastSuccessAt >= state.lastAttemptAt) {
+    const result: WatchSyncProgress = { state: "done", receivedBytes: 0, undecodedPayloads: 0, ...state.lastResult, newActivities: state.lastResult?.newActivities ?? 0 };
+    record({ ok: true, result, at: state.lastSuccessAt, automatic: true });
+  } else {
+    record({ ok: false, error: state.lastError ?? "", at: state.lastAttemptAt, automatic: true });
+  }
+}
+
 let tracked: CorosLinkApi | null = null;
 let trackers = 0;
 let stopTracking: (() => void) | null = null;
 
-/** Listens for sync progress while anything shows it. */
+/** Listens for sync progress and automatic-sync results while anything shows them. */
 function track(api: CorosLinkApi): () => void {
   if (tracked !== api) {
     stopTracking?.();
     tracked = api;
     let live = true;
     const offProgress = typeof api.onWatchSyncProgress === "function" ? api.onWatchSyncProgress(onProgress) : () => undefined;
+    const offAuto = typeof api.onWatchAutoSyncChange === "function" ? api.onWatchAutoSyncChange(onAutoSync) : () => undefined;
     if (typeof api.getWatchSyncProgress === "function") void api.getWatchSyncProgress().then(progress => { if (live) onProgress(progress); }).catch(() => undefined);
-    stopTracking = () => { live = false; offProgress(); tracked = null; stopTracking = null; };
+    if (typeof api.getWatchAutoSync === "function") void api.getWatchAutoSync().then(state => { if (live) onAutoSync(state); }).catch(() => undefined);
+    stopTracking = () => { live = false; offProgress(); offAuto(); tracked = null; stopTracking = null; };
   }
   trackers += 1;
   return () => {

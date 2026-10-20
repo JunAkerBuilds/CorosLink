@@ -976,6 +976,8 @@ export const corePortuguese: Record<string, string> = {
   "Passphrase (optional)": "Frase-passe (opcional)",
   "Encrypts the backup": "Encripta a cópia de segurança",
   "Reading your watch…": "A ler o seu relógio…",
+  "Replace COROS-app plans on the watch": "Substituir no relógio os planos da aplicação COROS",
+  "When off, CorosLink asks first.": "Desligado: o CorosLink pergunta primeiro.",
   "Local-Only Mode starts empty: it shows what you sync from the watch or import. Your COROS workouts, calendar and activities stay in your COROS account and show again in Connected Mode.": "O Modo apenas local começa vazio: mostra o que sincroniza a partir do relógio ou importa. Os seus treinos, calendário e actividades da COROS ficam na sua conta COROS e voltam a aparecer no Modo ligado.",
   "Backup passphrase": "Frase-passe da cópia de segurança",
   "Export backup": "Exportar cópia de segurança",

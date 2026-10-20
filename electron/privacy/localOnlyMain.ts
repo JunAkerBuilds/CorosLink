@@ -2,7 +2,7 @@ import path from "node:path";
 import { app, dialog, type BrowserWindow } from "electron";
 import { corosNativeBle } from "../corosNativeBleService";
 import { forgetCorosWatchKey, getCorosWatchfaceStatus, logoutCorosWatchfaces } from "../corosWatchfaceService";
-import { requireDatabase } from "../database";
+import { deleteSettings, getSetting, requireDatabase, setSetting } from "../database";
 import { requireMainWindowSender } from "../mainWindowGuard";
 import { diagnosticIpcMain as ipcMain } from "../diagnosticsService";
 import { indexFitFile } from "../fitIndexService";
@@ -16,6 +16,11 @@ import { disconnectMcpServer } from "../mcpClientManager";
 import { configureLocalTraining, logoutTrainingHub } from "../trainingHubService";
 import { dataMode, networkPolicy } from "./bootstrap";
 import { localAccountFromWatchProfile } from "../watchProfileService";
+import { configureCepCache, cepSatelliteData } from "../watchCepService";
+import { pushSatelliteData } from "../localSync/satelliteSync";
+import { recordDiagnosticNotice } from "../diagnosticsService";
+import { autoSyncState, setAutoSync, WatchAutoSync } from "../watchAutoSyncService";
+import { EXPERIMENTAL_SYNC_MODELS } from "../localSync/watchSyncModels";
 import type { DataModeStatus, LocalOnlyActivationOptions } from "./dataModeTypes";
 
 /**
@@ -29,6 +34,31 @@ export interface LocalOnlyMainOptions {
 }
 
 const COROS_MCP_ID = "coros";
+/** "allowed" once the user agreed to replace a training plan on the watch that CorosLink didn't put there. */
+const PLAN_REPLACEMENT_SETTING = "watch.planReplacement";
+/** The calendar last confirmed on each watch (content hash by local device id), so an unchanged one isn't resent. */
+const SENT_CALENDAR_SETTING = "watch.sentCalendar";
+
+/** Whether a sync may replace a training plan on the watch that CorosLink didn't put there. */
+export function watchPlanReplacementAllowed(): boolean {
+  return getSetting(PLAN_REPLACEMENT_SETTING) === "allowed";
+}
+
+/** Allows replacing such a plan, or asks again before the next one (false). Returns the setting now. */
+export function setWatchPlanReplacement(allowed: boolean): boolean {
+  if (allowed) setSetting(PLAN_REPLACEMENT_SETTING, "allowed");
+  else deleteSettings([PLAN_REPLACEMENT_SETTING]);
+  return watchPlanReplacementAllowed();
+}
+
+function sentCalendars(): Record<string, string> {
+  try {
+    const value = JSON.parse(getSetting(SENT_CALENDAR_SETTING) || "{}") as unknown;
+    return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, string> : {};
+  } catch {
+    return {};
+  }
+}
 
 /**
  * The optional credential clean-up on activation. User-started uploads are
@@ -78,6 +108,7 @@ export function registerLocalOnlyMode(options: LocalOnlyMainOptions): LocalDataS
     console.warn(`[sync-capture] Recording watch-sync frames to ${directory}`);
   }
 
+  configureCepCache(app.getPath("userData"));
   const localData = new LocalDataService({
     capture,
     database: requireDatabase(),
@@ -88,13 +119,38 @@ export function registerLocalOnlyMode(options: LocalOnlyMainOptions): LocalDataS
       runExclusive: task => corosNativeBle.runLocalSync(task),
       readSyncBlock: (fileIndex, offset, selector) => corosNativeBle.readSyncFileBlock(fileIndex, offset, selector),
       readPedometer: payload => corosNativeBle.readPedometer(payload),
-      disconnect: () => corosNativeBle.disconnect(),
+      // Used from inside the sync, to reset a block request that failed partway: it doesn't wait for the sync.
+      disconnect: () => corosNativeBle.resetLinkInSync(),
       watchKeySaved: () => getCorosWatchfaceStatus().watchAuthenticationAvailable === true,
+      listTrainingPlans: () => corosNativeBle.listTrainingPlansInSync(),
+      sendTrainingPlan: (file, replace) => corosNativeBle.sendTrainingPlanInSync(file, replace),
+      // What the watch takes (settings type 13) decides the file; formats not checked for the model are never sent (satelliteSync.ts).
+      sendSatelliteData: options => pushSatelliteData({
+        model: () => corosNativeBle.localSyncWatch()?.model,
+        readAssistance: async () => {
+          const assist = await corosNativeBle.readGpsAssistanceInSync().catch(() => corosNativeBle.localSyncGpsAssistance());
+          // Developer capture: the raw bytes, so the type and chip bits can be checked against what each model is known to report.
+          if (capture && assist) recordDiagnosticNotice("corosBle:satelliteData", `bind 11-14 ${assist.raw || "-"}; settings 13 ${assist.settingsRaw ?? "-"}`);
+          return assist;
+        },
+        sendFile: file => corosNativeBle.sendSatelliteFileInSync(file)
+      }, { cepFile: cepSatelliteData }, options)
     },
+    // In Connected Mode the COROS app keeps the watch's calendar; Local-Only Mode sends this computer's.
+    pushTrainingCalendar: () => networkPolicy.enforcing,
+    watchCalendar: {
+      replaceForeignPlan: () => watchPlanReplacementAllowed(),
+      lastSent: deviceId => sentCalendars()[deviceId],
+      recordSent: (deviceId, contentHash) => setSetting(SENT_CALENDAR_SETTING, JSON.stringify({ ...sentCalendars(), [deviceId]: contentHash }))
+    },
+    pushSatelliteData: () => networkPolicy.enforcing,
     accountProfile: () => localAccountFromWatchProfile(),
     indexSummary: (absolutePath, meta) => indexFitFile(absolutePath, meta),
     onSyncProgress: progress => send("localData:syncProgress", progress)
   });
+
+  // Disconnect and quitting stop a sync's reads at the next block, then wait for what it is writing.
+  corosNativeBle.setLocalSyncCancel(() => { localData.cancelSync(); });
 
   configureDataSources({
     useLocal: () => networkPolicy.enforcing,
@@ -108,6 +164,27 @@ export function registerLocalOnlyMode(options: LocalOnlyMainOptions): LocalDataS
   configureLocalTraining(() => networkPolicy.enforcing ? localData.trainingBackend : undefined);
 
   registerCredentialActions();
+
+  // Background sync with the watch last used (off until turned on in the watch menu).
+  const autoSync = new WatchAutoSync({
+    active: () => networkPolicy.enforcing,
+    idle: () => corosNativeBle.idleForBackgroundSync(),
+    ready: () => corosNativeBle.hasRememberedWatch() && getCorosWatchfaceStatus().watchAuthenticationAvailable === true,
+    // Only the watch whose Bluetooth identity a connection from the watch menu remembered.
+    trusted: () => corosNativeBle.watchIdentityForBackgroundSync(),
+    connected: () => corosNativeBle.isConnected(),
+    userConnects: () => corosNativeBle.userConnectCount(),
+    connect: async () => {
+      const watch = await corosNativeBle.connectForBackgroundSync();
+      return watch.connected && watch.systemBind === "authenticated" && (!watch.watchModel || EXPERIMENTAL_SYNC_MODELS.has(watch.watchModel));
+    },
+    sync: () => localData.syncWatch(),
+    disconnect: () => corosNativeBle.disconnect(),
+    onChange: state => send("watch:autoSyncChanged", state)
+  });
+  autoSync.start();
+  corosNativeBle.onWatchConfirmed(() => autoSync.resume());
+  app.once("before-quit", () => autoSync.stop());
 
   // Payloads synced before their format could be decoded become activities now, without reconnecting the watch.
   void localData.redecodeArchivedPayloads()
@@ -163,6 +240,29 @@ export function registerLocalOnlyMode(options: LocalOnlyMainOptions): LocalDataS
     mainWindowOnly(event, "Watch sync");
     return localData.syncWatch();
   });
+  ipcMain.handle("watch:getAutoSync", () => autoSyncState());
+  ipcMain.handle("watch:setAutoSync", (event, input?: { enabled?: unknown; intervalHours?: unknown }) => {
+    mainWindowOnly(event, "Automatic sync");
+    const state = setAutoSync(input ?? {});
+    // Turning it on syncs soon rather than at the next five-minute check.
+    if (state.enabled) void autoSync.tick();
+    return state;
+  });
+  // The user agreed to replace a training plan on the watch that CorosLink didn't put there (asked once).
+  ipcMain.handle("localData:allowWatchPlanReplacement", event => {
+    mainWindowOnly(event, "Watch sync");
+    setWatchPlanReplacement(true);
+  });
+  ipcMain.handle("localData:getWatchPlanReplacement", event => {
+    mainWindowOnly(event, "Watch sync");
+    return watchPlanReplacementAllowed();
+  });
+  // Turned off again: the next sync asks before replacing such a plan.
+  ipcMain.handle("localData:setWatchPlanReplacement", (event, allowed: unknown) => {
+    mainWindowOnly(event, "Watch sync");
+    if (typeof allowed !== "boolean") throw new Error("Invalid watch plan setting.");
+    return setWatchPlanReplacement(allowed);
+  });
   ipcMain.handle("localData:cancelSync", event => {
     mainWindowOnly(event, "Watch sync");
     return localData.cancelSync();
@@ -178,6 +278,11 @@ export function registerLocalOnlyMode(options: LocalOnlyMainOptions): LocalDataS
   ipcMain.handle("localData:readDayTotals", event => {
     mainWindowOnly(event, "Watch sync");
     return localData.readDayTotals();
+  });
+  // Developer test (COROSLINK_SYNC_CAPTURE=1 only, refused otherwise): send satellite data now.
+  ipcMain.handle("localData:sendSatelliteDataNow", event => {
+    mainWindowOnly(event, "Watch sync");
+    return localData.sendSatelliteDataNow();
   });
   ipcMain.handle("localData:importFitFiles", async (event, folder?: unknown) => {
     const window = mainWindowOnly(event, "FIT import");

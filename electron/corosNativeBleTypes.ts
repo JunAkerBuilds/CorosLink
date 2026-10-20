@@ -54,6 +54,8 @@ export interface CorosNativeBleSnapshot {
   weatherSentAt?: number;
   /** When the watch didn't take the forecast on this connection (it's sent again on the next one). */
   weatherFailedAt?: number;
+  /** Satellite data on the watch, as of the last connection (kept after disconnecting). */
+  gpsAssistance?: import("./corosWatchGpsAssist").WatchGpsAssistance;
   channels: CorosNativeBleChannel[];
   deviceName?: string;
   watchAddress?: string;

@@ -982,6 +982,8 @@ export const coreChinese: Readonly<Record<string, string>> = {
   "Passphrase (optional)": "密码短语（可选）",
   "Encrypts the backup": "用于加密备份",
   "Reading your watch…": "正在读取手表…",
+  "Replace COROS-app plans on the watch": "替换手表上来自 COROS App 的训练计划",
+  "When off, CorosLink asks first.": "关闭时，CorosLink 会先询问。",
   "Local-Only Mode starts empty: it shows what you sync from the watch or import. Your COROS workouts, calendar and activities stay in your COROS account and show again in Connected Mode.": "仅本地模式开始时是空的：只显示您从手表同步或导入的数据。您的 COROS 训练、日程和活动仍保留在 COROS 账户中，切换回联网模式后会再次显示。",
   "Backup passphrase": "备份密码短语",
   "Export backup": "导出备份",

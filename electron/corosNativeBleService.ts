@@ -32,13 +32,15 @@ import type { CorosPhonePairingCode } from "./corosNativeBleTypes";
 import QRCode from "qrcode";
 import { assertReadableSyncFile, PEDOMETER_OPCODE } from "./localSync/activityProtocol";
 import { decodeSettings, encodeSettings, encodeSettingsRequest, SETTING_SWITCH, SETTING_USER_INFO, SETTINGS_GET_OPCODE, SETTINGS_SET_OPCODE } from "./corosWatchProfile";
+import { applyFwInfoGpsAssistance, decodeBindGpsAssistance, SETTING_FW_INFO, type WatchGpsAssistance } from "./corosWatchGpsAssist";
+import { encodeCepTransfer, unixMsOfWatchHour, type CepFile } from "./corosWatchCep";
 import { decodeSwitches, decodeSwitchWord, SETTING_SWITCH_EXT } from "./corosWatchSettings";
 import { encodeSyncTime, nearLocalMidnight, requireWatchAcknowledgement, SYNC_TIME_OPCODE, systemUsesHour12 } from "./corosWatchCommands";
-import { NOT_AVAILABLE_ON_WATCH, watchSupports, type WatchFeature } from "./localSync/watchSyncModels";
+import { NOT_AVAILABLE_ON_WATCH, watchSupports, watchTakesSatelliteFormat, type WatchFeature } from "./localSync/watchSyncModels";
 import type { WatchModelId } from "./watchModels";
 import {
-  CONFIG_TRAINING_OPCODE, decodeTrainingList, encodeProgramLite, encodeTrainingBlockHeader,
-  encodeTrainingListRequest, encodeWatchFile, TRAINING_BLOCK_BYTES, TRAINING_KIND,
+  CONFIG_TRAINING_OPCODE, decodeTrainingList, encodeProgramLite, encodeTrainingBlockHeader, encodeTrainingDeleteRequest,
+  encodeTrainingListRequest, encodeWatchFile, LOCAL_PLAN_ID, TRAINING_BLOCK_BYTES, TRAINING_KIND, TRAINING_PLAN_FILE, TRAINING_PLAN_SYNC_FLAG,
   WEATHER_FILE, WORKOUT_FILE, WorkoutNotSendableError, workoutSlot,
   type WatchTrainingList
 } from "./corosBleTrainingProtocol";
@@ -61,7 +63,7 @@ type ConnectMode = "user" | "internal" | "background";
 
 /** Everything that holds the watch link. busyWith() checks them all, so a new task can't be missed by one guard. */
 type LinkTask = "wifiMusic" | "wifiMusicRestore" | "activityScreen" | "localSync" | "push" | "musicInventory" | "musicDelete" |
-  "route" | "watchface" | "watchfaceInventory" | "mapStarting" | "connecting" | "scanning";
+  "route" | "watchface" | "watchfaceInventory" | "mapStarting" | "connecting" | "scanning" | "closing";
 
 /** What the user is told when the watch is busy with a task (shown in the app as is). */
 const BUSY_MESSAGE: Record<LinkTask, string> = {
@@ -77,8 +79,16 @@ const BUSY_MESSAGE: Record<LinkTask, string> = {
   watchfaceInventory: "Wait for CorosLink to finish reading the watch faces on the watch.",
   mapStarting: "Wait for the map download to start.",
   connecting: "Wait for the watch to finish connecting.",
-  scanning: "Wait for the Bluetooth scan to finish."
+  scanning: "Wait for the Bluetooth scan to finish.",
+  closing: "Wait for the watch to disconnect."
 };
+
+/**
+ * How long Disconnect and quitting wait for a sync, transfer or settings write to finish before the
+ * link is cut. A cut can leave the watch without its training plan until the next sync (the old one
+ * is removed first) or a setting written without the app knowing.
+ */
+const FINISH_WATCH_WORK_MS = 30_000;
 
 export class CorosNativeBleService {
   private worker?: ChildProcessWithoutNullStreams;
@@ -103,7 +113,7 @@ export class CorosNativeBleService {
   private mapPolling?: Promise<CorosWifiMapStatus>;
   private mapStarting?: Promise<{ taskId: string; status: CorosWifiMapStatus }>;
   private routeTask?: Promise<CorosRouteSyncStatus>;
-  /** Files and settings pushed like the phone app does: workouts and weather (CONFIG_TRAINING, SendFile 41/80), settings. */
+  /** Files and settings pushed like the phone app does: workouts, weather, calendar (CONFIG_TRAINING, SendFile 41/80/42). */
   private pushTask?: Promise<unknown>;
   private routeCancelled = false;
   private notificationSequence = 0;
@@ -174,7 +184,8 @@ export class CorosNativeBleService {
       watchfaceInventory: () => this.watchfaceInventoryTask,
       mapStarting: () => this.mapStarting,
       connecting: () => this.connecting,
-      scanning: () => this.scanning
+      scanning: () => this.scanning,
+      closing: () => this.closing || this.quitting
     };
     return (Object.keys(running) as LinkTask[]).find(task => !except.includes(task) && Boolean(running[task]()));
   }
@@ -346,7 +357,8 @@ export class CorosNativeBleService {
               authenticationError: this.state.authenticationError, clockSetAt: this.state.clockSetAt, weatherSentAt: this.state.weatherSentAt,
               weatherFailedAt: this.state.weatherFailedAt
             } : {};
-            this.state = { ...response.result, ...authenticated, backend, available: true };
+            const gpsAssistance = this.state.gpsAssistance ? { gpsAssistance: this.state.gpsAssistance } : {};
+            this.state = { ...response.result, ...authenticated, ...gpsAssistance, backend, available: true };
             request.resolve({ result: this.publicState(), payload: response.payload });
           }
         } catch {
@@ -503,6 +515,15 @@ export class CorosNativeBleService {
 
   /** How many times the user has asked to connect since CorosLink started. */
   userConnectCount(): number { return this.userConnects; }
+
+  /**
+   * Background sync's connection: only to the remembered watch's Bluetooth identity, never by name alone,
+   * and never before one is remembered (watchIdentity.ts).
+   */
+  connectForBackgroundSync(): Promise<CorosNativeBleSnapshot> {
+    if (!this.pinnedWatch("system")) return Promise.reject(expectedError(new WatchIdentityError("unpinned")));
+    return this.connect(false, { backend: "system" }, "background");
+  }
 
   connect(pair = false, options: CorosNativeBleConnectOptions = {}, mode: ConnectMode = "internal"): Promise<CorosNativeBleSnapshot> {
     // Transfers that connect on their own (pushes, routes) and an open connection a face or map
@@ -661,7 +682,8 @@ export class CorosNativeBleService {
         throw new CorosBindReplyError(bindRefusalMessage(bound), describeBindReply(bound));
       }
       if (!this.state.connected) throw new CorosBindReplyError(BIND_MESSAGES.rejected, describeBindReply(bound));
-      this.state = { ...this.state, systemBind: "authenticated", authenticatedAt: Date.now() };
+      // The reply also says which satellite data the watch takes and when its current data runs out.
+      this.state = { ...this.state, systemBind: "authenticated", authenticatedAt: Date.now(), gpsAssistance: decodeBindGpsAssistance(bound) };
       this.recordKeyCheck("ok", keyId, this.state.deviceName);
     } catch (error) {
       const message = error instanceof Error ? error.message : "COROS authentication did not complete.";
@@ -791,6 +813,23 @@ export class CorosNativeBleService {
 
   isLocalSyncRunning(): boolean { return Boolean(this.localSyncTask); }
 
+  /** Stops a local sync's reads at the next block (localDataService.cancelSync), so a disconnect doesn't wait for them. */
+  private localSyncCancel?: () => void;
+
+  setLocalSyncCancel(cancel: () => void): void {
+    this.localSyncCancel = cancel;
+  }
+
+  /** From inside a local sync: closes the link now, without waiting for the sync (a block request that failed partway). */
+  resetLinkInSync(): Promise<CorosNativeBleSnapshot> {
+    return this.closeLink();
+  }
+
+  /** Once Disconnect or quitting has started, a sync starts nothing more on the watch. */
+  private refuseWhileClosing(): void {
+    if (this.closing || this.quitting) throw expectedError(new Error(BUSY_MESSAGE.closing));
+  }
+
   setLocalSyncCapture(sink: ((entry: CorosSyncCaptureEntry) => void) | undefined): void {
     this.syncCapture = sink;
   }
@@ -817,6 +856,7 @@ export class CorosNativeBleService {
   /** One verified SyncData block, never acknowledged (no transport can). The worker replies [remaining u32][block]. */
   async readSyncFileBlock(fileIndex: number, offset: number, selector: number): Promise<{ block: Buffer; remaining: number }> {
     this.requireLocalSyncSession();
+    this.refuseWhileClosing();
     assertReadableSyncFile(fileIndex);
     const response = await this.send("syncFileBlock", { fileIndex, offset, selector, ...this.captureFlag() });
     this.requireLocalSyncSession();
@@ -826,9 +866,124 @@ export class CorosNativeBleService {
     return { remaining: payload.readUInt32LE(0), block: payload.subarray(4) };
   }
 
+  /** The training plans the watch holds (CONFIG_TRAINING, kind plan), by id, inside a local sync. Read-only. */
+  async listTrainingPlansInSync(): Promise<string[]> {
+    this.requireLocalSyncSession();
+    this.refuseWhileClosing();
+    this.requireTransferSession();
+    return (await this.readTrainingList(TRAINING_KIND.plan)).entries.map(entry => entry.id);
+  }
+
+  /**
+   * Puts the training calendar on the watch (SendFile 42) inside a local sync and reports
+   * whether the watch lists it afterwards. The watch keeps one plan, so the plan it holds is
+   * removed first, as the app does, but only when the caller named it in `replace`: CorosLink's own, or one the user agreed to replace. Any
+   * other plan stops the push before anything changes. A transfer that fails once blocks
+   * have gone out is reset by disconnecting.
+   */
+  async sendTrainingPlanInSync(file: Buffer, replace: readonly string[]): Promise<{ listed: boolean }> {
+    this.requireLocalSyncSession();
+    this.refuseWhileClosing();
+    this.requireTransferSession();
+    this.requireWatchFeature("calendar");
+    const before = await this.readTrainingList(TRAINING_KIND.plan);
+    if (before.entries.some(entry => !replace.includes(entry.id))) throw new Error("The watch's training plan changed during the sync. Sync again.");
+    if (before.entries.length) {
+      const held = before.entries.map(entry => ({ id: entry.id, slot: 0 }));
+      requireWatchAcknowledgement(await this.controlCommand(CONFIG_TRAINING_OPCODE, encodeTrainingDeleteRequest(TRAINING_KIND.plan, held)), "training calendar update");
+    }
+    let started = false;
+    try {
+      for (let offset = 0; offset < file.length; offset += TRAINING_BLOCK_BYTES) {
+        this.requireLocalSyncSession();
+        const block = file.subarray(offset, offset + TRAINING_BLOCK_BYTES);
+        started = true;
+        await this.send("dataFileBlock", { fileId: TRAINING_PLAN_FILE, header: encodeTrainingBlockHeader(TRAINING_PLAN_FILE, block, offset, file.length, TRAINING_PLAN_SYNC_FLAG).toString("base64"), block: block.toString("base64") });
+      }
+    } catch (error) {
+      // The old plan is gone and the new one is half sent: reset the transfer, as other failed transfers do.
+      if (started) await this.closeLink().catch(() => this.stop());
+      recordDiagnosticError("corosBle:trainingCalendar", error instanceof Error ? error : new Error(String(error)));
+      throw new Error("The training calendar didn't finish sending. Sync again to send it.");
+    }
+    // The watch parses the plan after the last block; give it a moment, as for a single workout.
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const plans = await this.readTrainingList(TRAINING_KIND.plan);
+      if (plans.entries.some(entry => entry.id === LOCAL_PLAN_ID.toString())) return { listed: true };
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+    const after = await this.readTrainingList(TRAINING_KIND.plan).catch(() => undefined);
+    const describe = (list?: WatchTrainingList) => list ? `${list.entries.length}/${list.maxCount} [${list.entries.map(entry => `${entry.id}@${entry.slot}v${entry.version}`).join(",")}] max ${list.maxBytes} B` : "unreadable";
+    recordDiagnosticError("corosBle:trainingCalendar", new Error(`The watch did not list the training calendar [file ${file.length} B; plans before ${describe(before)}; after ${describe(after)}]`));
+    return { listed: false };
+  }
+
+  /** The watch's satellite data as read on this connection (bind reply, then settings type 13 once a sync has read it). */
+  localSyncGpsAssistance(): WatchGpsAssistance | undefined {
+    return this.state.connected ? this.state.gpsAssistance : undefined;
+  }
+
+  /**
+   * Reads settings type 13 (FW_INFO) inside a local sync, as the app does after binding: which
+   * satellite files the watch takes and the start of what it holds. Read-only. A reply without
+   * satellite figures leaves the bind reply's in place.
+   */
+  async readGpsAssistanceInSync(): Promise<WatchGpsAssistance | undefined> {
+    this.requireLocalSyncSession();
+    this.refuseWhileClosing();
+    this.requireTransferSession();
+    const payload = decodeSettings(await this.controlCommand(SETTINGS_GET_OPCODE, encodeSettingsRequest([SETTING_FW_INFO]))).get(SETTING_FW_INFO);
+    if (payload?.length) {
+      const updated = applyFwInfoGpsAssistance(this.state.gpsAssistance, payload);
+      if (updated) this.state = { ...this.state, gpsAssistance: updated };
+    }
+    return this.state.gpsAssistance;
+  }
+
+  /**
+   * Sends one COROS satellite file (corosWatchCep.ts) inside a local sync, as the app does: the whole
+   * file in an HF header, in 4 KB blocks, the start hour in every block header. Only a format checked
+   * in this model's firmware (watchSyncModels.ts) is sent. A transfer that fails once blocks have gone
+   * out is reset by disconnecting; the watch's CRC check keeps it from using a partial file.
+   */
+  async sendSatelliteFileInSync(file: CepFile): Promise<void> {
+    this.requireLocalSyncSession();
+    this.refuseWhileClosing();
+    this.requireTransferSession();
+    this.requireWatchFeature("satelliteData");
+    if (!watchTakesSatelliteFormat(file.format, this.watchTarget()?.model)) throw new Error(NOT_AVAILABLE_ON_WATCH);
+    const { fileId, bytes, extra } = encodeCepTransfer(file);
+    let started = false;
+    try {
+      for (let offset = 0; offset < bytes.length; offset += TRAINING_BLOCK_BYTES) {
+        this.requireLocalSyncSession();
+        const block = bytes.subarray(offset, offset + TRAINING_BLOCK_BYTES);
+        started = true;
+        await this.send("dataFileBlock", { fileId, header: encodeTrainingBlockHeader(fileId, block, offset, bytes.length, extra).toString("base64"), block: block.toString("base64") });
+      }
+    } catch (error) {
+      if (started) await this.closeLink().catch(() => this.stop());
+      recordDiagnosticError("corosBle:satelliteData", error instanceof Error ? error : new Error(String(error)));
+      throw new Error("The satellite data didn't finish sending. Sync again to send it.");
+    }
+    // What the watch now holds, until it reports its own figure: a later sync on this connection
+    // sends this file again only if COROS has a newer one, and Connection details shows it.
+    const assist = this.state.gpsAssistance;
+    if (assist) {
+      const sent = { ...assist.sent, [file.format]: file.startHour };
+      const holds: Partial<WatchGpsAssistance> = file.format === "synaptics-rto"
+        ? { eph: { fileType: assist.eph?.fileType ?? 0x10001, epoType: assist.eph?.epoType ?? 1, durationHours: assist.eph?.durationHours ?? file.hours, startHour: file.startHour } }
+        : file.format === "elpo-ahead"
+          ? { second: { durationHours: assist.second?.durationHours ?? file.hours, startHour: file.startHour } }
+          : { startHour: file.startHour, durationHours: file.hours, validUntil: unixMsOfWatchHour(file.startHour + file.hours) };
+      this.state = { ...this.state, gpsAssistance: { ...assist, ...holds, sent } };
+    }
+  }
+
   /** Today's running totals (GetPedometer, 0x90). */
   async readPedometer(payload: Buffer): Promise<Buffer> {
     this.requireLocalSyncSession();
+    this.refuseWhileClosing();
     this.requireTransferSession();
     if (payload.length > 4) throw new Error("Invalid step summary request.");
     const response = await this.send("exchange", { opcode: PEDOMETER_OPCODE, payload: payload.toString("base64"), maximumWriteBytes: 20, ...this.captureFlag() });
@@ -932,7 +1087,7 @@ export class CorosNativeBleService {
       throw new Error("The watch's music library exceeds the supported listing size.");
     } catch (error) {
       // Release an interrupted SFT read before another transfer can start.
-      await this.disconnect().catch(() => undefined);
+      await this.closeLink().catch(() => undefined);
       throw error;
     }
   }
@@ -985,7 +1140,7 @@ export class CorosNativeBleService {
         return { deleted: true, inventory: after };
       } catch (error) {
         this.musicInventory = undefined;
-        if (started && !transportFinished && this.state.connected && cached.session === this.musicSession()) await this.disconnect().catch(() => undefined);
+        if (started && !transportFinished && this.state.connected && cached.session === this.musicSession()) await this.closeLink().catch(() => undefined);
         throw error;
       }
     })().finally(() => { this.musicDeleteTask = undefined; });
@@ -1125,13 +1280,27 @@ export class CorosNativeBleService {
         accepted += 1;
       }
     } catch (error) {
-      if (accepted > 0) await this.disconnect().catch(() => this.stop());
+      if (accepted > 0) await this.closeLink().catch(() => this.stop());
       throw error;
     }
   }
 
   /** Called after each authenticated connection (the clock is already set): weather, for one. */
   private connectedHook?: () => Promise<Buffer | undefined>;
+
+  /**
+   * Nothing is in progress, so a background sync can't interrupt the user. The watch may be
+   * connected: the sync then uses that connection and leaves it up (watchAutoSyncService).
+   */
+  idleForBackgroundSync(): boolean {
+    // A worker can outlive a remote disconnect; connect() restarts it.
+    return this.pending.size === 0 && !this.busyWith("wifiMusicRestore");
+  }
+
+  /** A watch link is up (any backend); a background sync then leaves it connected. */
+  isConnected(): boolean {
+    return this.state.connected;
+  }
 
   /** A device that answered with the remembered name but another identity, until the user decides. */
   private pendingIdentity?: { backend: CorosBleBackend; deviceId: string; deviceName?: string; at: number };
@@ -1200,6 +1369,14 @@ export class CorosNativeBleService {
   onWatchConfirmed(listener: () => void): () => void {
     this.identityListeners.add(listener);
     return () => this.identityListeners.delete(listener);
+  }
+
+  /** Whether background sync may use the watch: one is remembered, and a connected one is that watch. */
+  watchIdentityForBackgroundSync(): "ok" | WatchIdentityProblem {
+    const pinned = this.pinnedWatch("system");
+    if (!pinned) return "unpinned";
+    if (this.state.connected && (this.backendInUse !== "system" || !sameIdentity(this.state.deviceId, pinned.deviceId))) return "mismatch";
+    return "ok";
   }
 
   /** A watch has been connected before over the computer's Bluetooth, so it can be found again by name. */
@@ -1422,7 +1599,7 @@ export class CorosNativeBleService {
         this.routeProgress = { ...this.routeProgress, phase: this.routeCancelled ? "cancelled" : "failed",
           error: this.routeCancelled ? undefined : error instanceof Error ? error.message : "Could not sync the route." };
         // Reset an interrupted SFT transfer before accepting another command.
-        if (started) await this.disconnect().catch(() => this.stop());
+        if (started) await this.closeLink().catch(() => this.stop());
         if (this.routeCancelled) return this.routeSyncStatus();
         throw error;
       }
@@ -1550,7 +1727,7 @@ export class CorosNativeBleService {
       } catch (error) {
         this.watchfaceProgress = { ...this.watchfaceProgress, phase: this.watchfaceCancelled ? "cancelled" : "failed",
           error: this.watchfaceCancelled ? undefined : error instanceof Error ? error.message : "Could not sync the watch face." };
-        if (started) await this.disconnect().catch(() => this.stop());
+        if (started) await this.closeLink().catch(() => this.stop());
         if (this.watchfaceCancelled) return this.watchfaceSyncStatus();
         throw error;
       }
@@ -1558,7 +1735,49 @@ export class CorosNativeBleService {
     return this.watchfaceTask;
   }
 
-  async disconnect(): Promise<CorosNativeBleSnapshot> {
+  /** Disconnect has started: new work is refused while what is running finishes (FINISH_WATCH_WORK_MS). */
+  private closing?: Promise<CorosNativeBleSnapshot>;
+  /** The app is quitting: nothing new starts on the watch. */
+  private quitting = false;
+
+  /** A sync, transfer or settings write holds the link (quitting waits for it). */
+  hasWatchWork(): boolean {
+    return Boolean(this.pushTask || this.localSyncTask || this.routeTask || this.watchfaceTask);
+  }
+
+  /**
+   * Lets a sync, transfer or settings write that is under way finish, up to `timeoutMs`; a sync's reads
+   * stop at the next block and it starts no write after them. Never called from inside one of them.
+   */
+  private async finishWatchWork(timeoutMs: number): Promise<void> {
+    const running = [this.pushTask, this.localSyncTask, this.routeTask, this.watchfaceTask].filter(task => task !== undefined);
+    if (!running.length) return;
+    if (this.localSyncTask) {
+      try { this.localSyncCancel?.(); } catch { /* the wait below still applies */ }
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finished = await Promise.race([Promise.allSettled(running).then(() => true), new Promise<false>(resolve => { timer = setTimeout(() => resolve(false), timeoutMs); })]);
+    clearTimeout(timer);
+    if (!finished) this.trace.add("watch work cut", { timeoutMs });
+  }
+
+  /** Before the app quits: nothing new starts, and what is under way finishes (bounded). Then stop(). */
+  async finishBeforeQuit(timeoutMs = FINISH_WATCH_WORK_MS): Promise<void> {
+    this.quitting = true;
+    await this.finishWatchWork(timeoutMs);
+  }
+
+  /** Disconnect for the user (watch menu) and background sync: what is under way finishes first (bounded). */
+  disconnect(): Promise<CorosNativeBleSnapshot> {
+    this.closing ??= (async () => {
+      await this.finishWatchWork(FINISH_WATCH_WORK_MS);
+      return this.closeLink();
+    })().finally(() => { this.closing = undefined; });
+    return this.closing;
+  }
+
+  /** Closes the link now. Used from inside a task to reset a transfer that failed partway. */
+  private async closeLink(): Promise<CorosNativeBleSnapshot> {
     if (this.activityScreenTask) await this.activityScreenTask.catch(() => undefined);
     if (this.wifiMusicTask) {
       this.wifiMusic.cancel();

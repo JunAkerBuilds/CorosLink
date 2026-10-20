@@ -8,12 +8,17 @@ import binascii
 from coros_ble_protocol import ProtocolError
 
 ROUTE_FILE, WATCHFACE_FILE, MUSIC_DELETE_FILE = 0x14, 8, 93
-# Small files pushed like the phone app does: a workout (41) and weather (80).
-WORKOUT_FILE, WEATHER_FILE = 41, 80
-DATA_FILES = frozenset({WORKOUT_FILE, WEATHER_FILE})
+# Small files pushed like the phone app does: a workout (41), weather (80), the training calendar (42), GPS assistance
+# (13 ELPO or LTO, 68 the second ELPO file, 70 the RTO ephemeris).
+WORKOUT_FILE, WEATHER_FILE, TRAINING_PLAN_FILE, EPO_FILE, ELPO_AHEAD_FILE, RTO_FILE = 41, 80, 42, 13, 68, 70
+SATELLITE_FILES = frozenset({EPO_FILE, ELPO_AHEAD_FILE, RTO_FILE})
+DATA_FILES = frozenset({WORKOUT_FILE, WEATHER_FILE, TRAINING_PLAN_FILE}) | SATELLITE_FILES
 DATA_FILE_LIMIT = 65_536
+# The firmware takes satellite files up to 256 KB (SendFile descriptors of 13, 68 and 70).
+SATELLITE_FILE_LIMIT = 262_144
 NAMES = {ROUTE_FILE: 'route', WATCHFACE_FILE: 'watch face', MUSIC_DELETE_FILE: 'music delete',
-         WORKOUT_FILE: 'workout', WEATHER_FILE: 'weather'}
+         WORKOUT_FILE: 'workout', WEATHER_FILE: 'weather', TRAINING_PLAN_FILE: 'training calendar', EPO_FILE: 'satellite data',
+         ELPO_AHEAD_FILE: 'satellite data', RTO_FILE: 'satellite data'}
 
 
 def little(data, offset, size):
@@ -23,8 +28,8 @@ def little(data, offset, size):
 def validate_file_block(header, block, file_index):
     # Imported lazily: the music module imports this one for `little`.
     from coros_ble_music import valid_music_delete_file
-    limit = (0x320000 if file_index == WATCHFACE_FILE else DATA_FILE_LIMIT if file_index in DATA_FILES
-             else 2_000_000)
+    limit = (0x320000 if file_index == WATCHFACE_FILE else SATELLITE_FILE_LIMIT if file_index in SATELLITE_FILES
+             else DATA_FILE_LIMIT if file_index in DATA_FILES else 2_000_000)
     if (file_index not in NAMES or len(header) != 21 or header[:3] != bytes([0x78, 0, file_index]) or
             not 0 < len(block) <= 4096 or little(header, 7, 2) != len(block) or
             little(header, 9, 4) < len(block) or little(header, 9, 4) > limit or
@@ -32,7 +37,8 @@ def validate_file_block(header, block, file_index):
             (file_index == WATCHFACE_FILE and header[16] >= 10) or
             (file_index == MUSIC_DELETE_FILE and (header[16] != 0 or little(header, 3, 4) != 0 or
                                                   little(header, 9, 4) != len(block) or not valid_music_delete_file(block))) or
-            header[17:20] != b'\x00\x00\x03' or
+            # GPS assistance carries a 24-bit hour in bytes 16-18; other files a single byte.
+            (header[19] != 3 if file_index in SATELLITE_FILES else header[17:20] != b'\x00\x00\x03') or
             sum(header[2:20]) & 255 != header[20] or sum(block) & 255 != header[15] or
             binascii.crc_hqx(block, 0xffff) != little(header, 13, 2)):
         raise ProtocolError('Invalid COROS ' + NAMES.get(file_index, 'file') + ' block.')

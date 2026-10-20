@@ -929,9 +929,23 @@ export interface CorosLinkApi {
   syncWatchLocally: () => Promise<WatchSyncProgress>;
   getWatchSyncProgress: () => Promise<WatchSyncProgress>;
   cancelWatchSync: () => Promise<WatchSyncProgress>;
+  /**
+   * The user agrees, once, that a sync may replace a training plan on the watch that CorosLink
+   * didn't put there (a sync result's `calendar.foreignPlan`). Remembered; the next sync replaces it.
+   */
+  allowWatchPlanReplacement: () => Promise<void>;
+  /** Whether that agreement is on (the watch section of Privacy & local data shows it as a switch). */
+  getWatchPlanReplacement: () => Promise<boolean>;
+  /** Turns the agreement on or off; off, the next sync asks again. Resolves with the setting now. */
+  setWatchPlanReplacement: (allowed: boolean) => Promise<boolean>;
   readWatchDayTotals: () => Promise<unknown>;
+  /** Developer test (COROSLINK_SYNC_CAPTURE=1): send satellite data to the watch now. */
+  sendSatelliteDataNow?: () => Promise<NonNullable<WatchSyncProgress["satellite"]>>;
   /** Reads the first activity block without acknowledging it, then disconnects (developer capture mode). */
   probeWatchSync: (options?: { allBlocks?: boolean; selector?: number; fileIndex?: number }) => Promise<WatchSyncProbe>;
+  getWatchAutoSync: () => Promise<import("../electron/watchAutoSyncService").WatchAutoSyncState>;
+  setWatchAutoSync: (input: { enabled?: boolean; intervalHours?: number }) => Promise<import("../electron/watchAutoSyncService").WatchAutoSyncState>;
+  onWatchAutoSyncChange: (callback: (state: import("../electron/watchAutoSyncService").WatchAutoSyncState) => void) => () => void;
   onWatchSyncProgress: (callback: (progress: WatchSyncProgress) => void) => () => void;
   exportLocalBackup: (passphrase?: string) => Promise<LocalBackupResult>;
   chooseLocalBackup: () => Promise<{ chosen: boolean; encrypted?: boolean }>;

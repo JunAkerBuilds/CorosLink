@@ -2133,6 +2133,18 @@ async function buildTrainingContext(
   ]);
 
   const sections: string[] = [coachInstructions, "", timeInstruction, "", unitInstruction, ""];
+  if (usingLocalSources()) {
+    sections.push(
+      "## Local-Only Mode",
+      "CorosLink is in Local-Only Mode: nothing is sent to COROS. Workouts and plans you draft and the athlete saves go into " +
+        "CorosLink's own workout library and training calendar on this computer, not the COROS app or COROS calendar. " +
+        "They reach the watch over Bluetooth: Send to watch in the Training Library puts one workout in the watch's workout list, " +
+        "and Sync watch now (watch menu) puts the next five weeks of the calendar on the watch. Never tell the athlete to use the COROS app. " +
+        "Use exact paces, heart rates or power for steps rather than zones or percentages, which the watch can't take from CorosLink yet. " +
+        "COROS's exercise catalog isn't available, so strength workouts can't be drafted.",
+      ""
+    );
+  }
   let hasData = false;
 
   if (activities.status === "fulfilled" && activities.value.length > 0) {

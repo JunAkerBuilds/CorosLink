@@ -444,7 +444,7 @@ async def main():
                 elif operation in FILE_OPERATIONS or operation == 'dataFileBlock':
                     file_index = FILE_OPERATIONS.get(operation, request.get('fileId'))
                     if operation == 'dataFileBlock' and file_index not in DATA_FILES:
-                        raise ProtocolError('Only workout and weather files can be sent this way.')
+                        raise ProtocolError('Only workout, weather, training-calendar and satellite-data files can be sent this way.')
                     reply = await session.file_block(base64.b64decode(request['header'], validate=True),
                                                      base64.b64decode(request['block'], validate=True),
                                                      file_index)
