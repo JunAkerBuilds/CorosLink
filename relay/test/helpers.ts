@@ -608,6 +608,8 @@ export async function resetDatabase(db: D1Database): Promise<void> {
     db.prepare("DELETE FROM allocations"),
     db.prepare("DELETE FROM environment_links"),
     db.prepare("DELETE FROM push_devices"),
+    db.prepare("DELETE FROM live_activities"),
+    db.prepare("DELETE FROM live_turn_ends"),
     db.prepare("DELETE FROM nonces"),
     db.prepare("DELETE FROM tunnel_status_cache"),
     db.prepare("DELETE FROM apns_provider_tokens"),

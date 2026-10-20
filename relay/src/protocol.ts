@@ -58,6 +58,7 @@ export const ENVIRONMENT_OPERATIONS = [
   "environment.recovery",
   "environment.unlink",
   "environment.activity",
+  "environment.live",
 ] as const;
 export type EnvironmentOperation = (typeof ENVIRONMENT_OPERATIONS)[number];
 
@@ -331,6 +332,117 @@ export interface CoachPushUserInfo {
   sessionId: string;
   environmentId: string;
   event: ActivityEvent;
+}
+
+// ---------------------------------------------------------------------------
+// Coach Live Activities (ActivityKit pushes to C-LINK's Lock Screen)
+// ---------------------------------------------------------------------------
+
+/** What Coach is doing while a turn runs. */
+export const LIVE_RUNNING_PHASES = ["thinking", "usingTool", "writing"] as const;
+/** How a turn ended: `needsYou` is an approval card or a question nobody answered yet. */
+export const LIVE_FINAL_PHASES = ["replied", "needsYou", "failed"] as const;
+export type LiveRunningPhase = (typeof LIVE_RUNNING_PHASES)[number];
+export type LiveFinalPhase = (typeof LIVE_FINAL_PHASES)[number];
+export type LivePhase = LiveRunningPhase | LiveFinalPhase;
+export const LIVE_EVENTS = ["update", "end"] as const;
+export type LiveEvent = (typeof LIVE_EVENTS)[number];
+/** Turn request ids, as the desktop numbers them. */
+export const REQUEST_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
+/** ActivityKit push tokens, hex. Apple doesn't fix their length. */
+export const LIVE_ACTIVITY_TOKEN_PATTERN = /^[0-9a-f]{32,512}$/;
+export const MAX_LIVE_WORDS = 1_000_000;
+
+/**
+ * `POST /v1/live-activities`. Auth: website JWT (client_id c-link-ios). The
+ * phone registers the ActivityKit push token of the Live Activity that follows
+ * one turn (`requestId`) of one session on one of its linked computers.
+ * Answers 404 environment_not_linked for a computer the account hasn't linked.
+ */
+export interface RegisterLiveActivityRequest {
+  token: string;
+  environment: "sandbox" | "production";
+  environmentId: string;
+  sessionId: string;
+  requestId: string;
+}
+
+export interface RegisterLiveActivityResponse {
+  registered: true;
+  /** The turn had already ended: the relay sent its end push now and kept no token. */
+  ended: boolean;
+}
+
+/** `DELETE /v1/live-activities`. Auth: website JWT (c-link-ios). A token ActivityKit replaced. */
+export interface UnregisterLiveActivityRequest {
+  token: string;
+}
+
+/**
+ * `POST /v1/activity/live`. Auth: environment signature with op
+ * "environment.live". The desktop reports a turn's phase: `update` with a
+ * running phase while it runs, `end` with a final phase once. It never sends
+ * reply text or tool names.
+ */
+export interface LiveActivityRequest {
+  environmentId: string;
+  sessionId: string;
+  requestId: string;
+  event: LiveEvent;
+  phase: LivePhase;
+  /** Words of the reply so far, 0 to MAX_LIVE_WORDS. */
+  words: number;
+}
+
+export interface LiveActivityResponse {
+  sent: number;
+  failed: number;
+  removed: number;
+  /** Activities the throttle held back: the desktop's next update carries the newest state. */
+  skipped: number;
+}
+
+/**
+ * The relay's push budget per activity. ActivityKit throttles priority 10
+ * beyond an hourly budget; priority 5 doesn't count against it.
+ * - An update goes at most every LIVE_UPDATE_MIN_INTERVAL_SECONDS; the
+ *   desktop coalesces to its own, longer interval, so none is lost.
+ * - A phase change goes at priority 10 at most every
+ *   LIVE_HIGH_PRIORITY_INTERVAL_SECONDS, otherwise at 5, as do word counts.
+ * - An end always goes at priority 10.
+ */
+export const LIVE_UPDATE_MIN_INTERVAL_SECONDS = 5;
+export const LIVE_HIGH_PRIORITY_INTERVAL_SECONDS = 60;
+/** Each update moves `stale-date` this far ahead; C-LINK then says Coach carries on on the computer. */
+export const LIVE_STALE_AFTER_SECONDS = 20 * 60;
+/** An ended activity stays on the Lock Screen this long (`dismissal-date`). */
+export const LIVE_DISMISS_AFTER_SECONDS = 15 * 60;
+/** ActivityKit ends an activity after 8 hours; registrations expire with it. */
+export const LIVE_ACTIVITY_TTL_SECONDS = 8 * 60 * 60;
+
+/**
+ * The ActivityKit `content-state`: C-LINK's `CoachActivityAttributes.ContentState`
+ * without its optional `tool`, which never passes through the relay.
+ */
+export interface LiveContentState {
+  phase: LivePhase;
+  words: number;
+}
+
+/**
+ * The APNs payload, sent with `apns-push-type: liveactivity` to topic
+ * `<APNS_BUNDLE_ID>.push-type.liveactivity`. Times are Unix seconds.
+ */
+export interface LiveActivityPayload {
+  aps: {
+    timestamp: number;
+    event: LiveEvent;
+    "content-state": LiveContentState;
+    /** Updates only. */
+    "stale-date"?: number;
+    /** Ends only. */
+    "dismissal-date"?: number;
+  };
 }
 
 // ---------------------------------------------------------------------------

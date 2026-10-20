@@ -6,7 +6,7 @@ import {
   cloudflare,
   type RelayContext,
 } from "./allocations";
-import { sendCoachAlert } from "./apns";
+import { sendCoachAlert, sendLiveActivity, type LiveUpdate } from "./apns";
 import { verifyDpopProof } from "./auth/dpop";
 import { hasEnvironmentSignature, verifyEnvironmentRequest } from "./auth/environmentSignatures";
 import { verifyUserToken } from "./auth/userTokens";
@@ -19,14 +19,20 @@ import {
   getActiveLinkByKey,
   getAllocation,
   getCachedTunnelStatus,
+  getLiveTurnEnd,
   listActiveLinks,
   listAllocationsForLink,
+  listLiveActivities,
   listPushDevices,
   putCachedTunnelStatus,
+  recordLiveTurnEnd,
+  registerLiveActivity,
   registerPushDevice,
   revokeLink,
+  unregisterLiveActivity,
   unregisterPushDevice,
   type AllocationKey,
+  type LiveTurnKey,
   type LinkKey,
   type AllocationRow,
   type LinkRow,
@@ -46,10 +52,20 @@ import {
   ENVIRONMENT_ID_PATTERN,
   ENVIRONMENT_PLATFORMS,
   httpBaseUrlForHostname,
+  LIVE_ACTIVITY_TOKEN_PATTERN,
+  LIVE_ACTIVITY_TTL_SECONDS,
+  LIVE_EVENTS,
+  LIVE_FINAL_PHASES,
+  LIVE_RUNNING_PHASES,
   MAX_LINKED_ENVIRONMENTS_PER_USER,
+  MAX_LIVE_WORDS,
+  REQUEST_ID_PATTERN,
   SESSION_ID_PATTERN,
   WEBSITE_CLIENT_IDS,
   type ActivityResponse,
+  type LiveActivityResponse,
+  type LivePhase,
+  type RegisterLiveActivityResponse,
   type CloudflareTunnelStatus,
   type EnvironmentPublicJwk,
   type EnvironmentSummary,
@@ -346,6 +362,96 @@ export async function handleActivity(request: Request, ctx: RelayContext): Promi
     event,
   });
   log("info", "activity_pushed", { environmentId: signed.environmentId, event, ...result });
+  return json(result);
+}
+
+// --- Live Activities ----------------------------------------------------------------------
+
+function requireLiveToken(body: Record<string, unknown>): string {
+  const token = requireString(body, "token", { min: 32, max: 512 }).toLowerCase();
+  if (!LIVE_ACTIVITY_TOKEN_PATTERN.test(token)) throw new RelayError("invalid_request", "token has an invalid format.");
+  return token;
+}
+
+/** `POST /v1/live-activities`: the phone's ActivityKit token for one turn's Live Activity. */
+export async function handleRegisterLiveActivity(request: Request, ctx: RelayContext): Promise<Response> {
+  const user = await verifyUserToken(request, ctx.config, ctx.deps, [WEBSITE_CLIENT_IDS.ios]);
+  const body = asObject((await readJsonBody(request)).value);
+  const token = requireLiveToken(body);
+  const environment = requireOneOf(body, "environment", ["sandbox", "production"] as const);
+  const turn: LiveTurnKey = {
+    userId: user.userId,
+    environmentId: requireString(body, "environmentId", { pattern: ENVIRONMENT_ID_PATTERN, max: 64 }),
+    sessionId: requireString(body, "sessionId", { pattern: SESSION_ID_PATTERN, max: 128 }),
+    requestId: requireString(body, "requestId", { pattern: REQUEST_ID_PATTERN, max: 128 }),
+  };
+  if (!(await getActiveLink(ctx.db, turn))) {
+    throw new RelayError("environment_not_linked", "This computer is not linked to your account.");
+  }
+  const now = ctx.deps.now();
+  // The turn may have ended while the phone was registering: end the activity now.
+  const ended = await getLiveTurnEnd(ctx.db, turn, now);
+  if (ended && ctx.config.apns) {
+    const update: LiveUpdate = { event: "end", phase: ended.phase as LivePhase, words: ended.words };
+    const target = { token, apns_environment: environment, last_phase: null, last_sent_at: null, last_high_priority_at: null, last_timestamp: null };
+    await sendLiveActivity(ctx.config.apns, ctx.deps, ctx.db, [target], update);
+    log("info", "live_activity_registered", { environmentId: turn.environmentId, ended: true });
+    const answer: RegisterLiveActivityResponse = { registered: true, ended: true };
+    return json(answer);
+  }
+  await registerLiveActivity(ctx.db, {
+    ...turn,
+    token,
+    environment,
+    now,
+    expiresAt: now + LIVE_ACTIVITY_TTL_SECONDS * 1000,
+  });
+  log("info", "live_activity_registered", { environmentId: turn.environmentId, ended: false });
+  const answer: RegisterLiveActivityResponse = { registered: true, ended: false };
+  return json(answer);
+}
+
+/** `DELETE /v1/live-activities`: a token ActivityKit replaced. */
+export async function handleUnregisterLiveActivity(request: Request, ctx: RelayContext): Promise<Response> {
+  const user = await verifyUserToken(request, ctx.config, ctx.deps, [WEBSITE_CLIENT_IDS.ios]);
+  const body = asObject((await readJsonBody(request)).value);
+  await unregisterLiveActivity(ctx.db, user.userId, requireLiveToken(body));
+  return json({ unregistered: true });
+}
+
+/** `POST /v1/activity/live`: the desktop reports a turn's phase; the relay pushes it. */
+export async function handleLiveActivity(request: Request, ctx: RelayContext): Promise<Response> {
+  const signed = await verifyEnvironmentRequest(request, {
+    config: ctx.config,
+    deps: ctx.deps,
+    db: ctx.db,
+    op: "environment.live",
+    resolveKey: (environmentId, kid) => linkForSignature(ctx, environmentId, kid),
+  });
+  const turn: LiveTurnKey = {
+    userId: signed.context.user_id,
+    environmentId: signed.environmentId,
+    sessionId: requireString(signed.body, "sessionId", { pattern: SESSION_ID_PATTERN, max: 128 }),
+    requestId: requireString(signed.body, "requestId", { pattern: REQUEST_ID_PATTERN, max: 128 }),
+  };
+  const event = requireOneOf(signed.body, "event", LIVE_EVENTS);
+  const phase = requireOneOf<LivePhase>(signed.body, "phase", event === "end" ? LIVE_FINAL_PHASES : LIVE_RUNNING_PHASES);
+  const words = signed.body.words;
+  if (typeof words !== "number" || !Number.isInteger(words) || words < 0 || words > MAX_LIVE_WORDS) {
+    throw new RelayError("invalid_request", `words must be an integer from 0 to ${MAX_LIVE_WORDS}.`);
+  }
+  if (!ctx.config.apns) {
+    throw new RelayError("not_configured", "Push is not configured on this relay.");
+  }
+  const now = ctx.deps.now();
+  if (event === "end") await recordLiveTurnEnd(ctx.db, { ...turn, phase, words, now });
+  const activities = await listLiveActivities(ctx.db, turn, now);
+  const result: LiveActivityResponse = await sendLiveActivity(ctx.config.apns, ctx.deps, ctx.db, activities, {
+    event,
+    phase,
+    words,
+  });
+  if (activities.length > 0) log("info", "live_activity_pushed", { environmentId: turn.environmentId, event, phase, ...result });
   return json(result);
 }
 

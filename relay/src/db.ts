@@ -387,6 +387,157 @@ export async function markPushSent(db: D1Database, tokens: string[], now: number
   await db.batch(tokens.map((token) => db.prepare("UPDATE push_devices SET last_sent_at = ? WHERE token = ?").bind(now, token)));
 }
 
+// --- live activities ----------------------------------------------------------------
+
+export interface LiveActivityRow {
+  token: string;
+  user_id: string;
+  environment_id: string;
+  session_id: string;
+  request_id: string;
+  apns_environment: "sandbox" | "production";
+  created_at: number;
+  expires_at: number;
+  last_phase: string | null;
+  last_sent_at: number | null;
+  last_high_priority_at: number | null;
+  last_timestamp: number | null;
+}
+
+export interface LiveTurnKey {
+  userId: string;
+  environmentId: string;
+  sessionId: string;
+  requestId: string;
+}
+
+export interface LiveTurnEndRow {
+  request_id: string;
+  phase: string;
+  words: number;
+  ended_at: number;
+}
+
+/** An iPhone follows a few turns at a time; this caps what one account can register. */
+export const MAX_LIVE_ACTIVITIES_PER_USER = 20;
+/** How long the relay remembers how a turn ended, for activities that register late. */
+export const LIVE_TURN_END_TTL_MS = 60 * 60 * 1000;
+
+export async function registerLiveActivity(
+  db: D1Database,
+  input: LiveTurnKey & { token: string; environment: "sandbox" | "production"; now: number; expiresAt: number },
+): Promise<void> {
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO live_activities
+           (token, user_id, environment_id, session_id, request_id, apns_environment, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (token) DO UPDATE SET
+           user_id = excluded.user_id,
+           environment_id = excluded.environment_id,
+           session_id = excluded.session_id,
+           request_id = excluded.request_id,
+           apns_environment = excluded.apns_environment,
+           created_at = excluded.created_at,
+           expires_at = excluded.expires_at,
+           last_phase = NULL,
+           last_sent_at = NULL,
+           last_high_priority_at = NULL`,
+      )
+      .bind(
+        input.token,
+        input.userId,
+        input.environmentId,
+        input.sessionId,
+        input.requestId,
+        input.environment,
+        input.now,
+        input.expiresAt,
+      ),
+    db
+      .prepare(
+        `DELETE FROM live_activities WHERE user_id = ? AND token NOT IN (
+           SELECT token FROM live_activities WHERE user_id = ? ORDER BY created_at DESC LIMIT ?
+         )`,
+      )
+      .bind(input.userId, input.userId, MAX_LIVE_ACTIVITIES_PER_USER),
+  ]);
+}
+
+export async function unregisterLiveActivity(db: D1Database, userId: string, token: string): Promise<void> {
+  await db.prepare("DELETE FROM live_activities WHERE token = ? AND user_id = ?").bind(token, userId).run();
+}
+
+export async function deleteLiveActivity(db: D1Database, token: string): Promise<void> {
+  await db.prepare("DELETE FROM live_activities WHERE token = ?").bind(token).run();
+}
+
+/** The unexpired activities following this turn. */
+export async function listLiveActivities(db: D1Database, key: LiveTurnKey, now: number): Promise<LiveActivityRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT * FROM live_activities
+       WHERE user_id = ? AND environment_id = ? AND session_id = ? AND request_id = ? AND expires_at > ?
+       LIMIT ?`,
+    )
+    .bind(key.userId, key.environmentId, key.sessionId, key.requestId, now, MAX_LIVE_ACTIVITIES_PER_USER)
+    .all<LiveActivityRow>();
+  return results;
+}
+
+export async function markLiveActivitySent(
+  db: D1Database,
+  input: { token: string; phase: string; now: number; highPriority: boolean; timestamp: number },
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE live_activities SET
+         last_phase = ?,
+         last_sent_at = ?,
+         last_high_priority_at = CASE WHEN ? THEN ? ELSE last_high_priority_at END,
+         last_timestamp = ?
+       WHERE token = ?`,
+    )
+    .bind(input.phase, input.now, input.highPriority ? 1 : 0, input.now, input.timestamp, input.token)
+    .run();
+}
+
+export async function recordLiveTurnEnd(
+  db: D1Database,
+  input: LiveTurnKey & { phase: string; words: number; now: number },
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO live_turn_ends (user_id, environment_id, session_id, request_id, phase, words, ended_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, environment_id, session_id) DO UPDATE SET
+         request_id = excluded.request_id, phase = excluded.phase, words = excluded.words, ended_at = excluded.ended_at`,
+    )
+    .bind(input.userId, input.environmentId, input.sessionId, input.requestId, input.phase, input.words, input.now)
+    .run();
+}
+
+/** How this turn ended, if it ended within LIVE_TURN_END_TTL_MS. */
+export async function getLiveTurnEnd(db: D1Database, key: LiveTurnKey, now: number): Promise<LiveTurnEndRow | null> {
+  return db
+    .prepare(
+      `SELECT request_id, phase, words, ended_at FROM live_turn_ends
+       WHERE user_id = ? AND environment_id = ? AND session_id = ? AND request_id = ? AND ended_at > ?`,
+    )
+    .bind(key.userId, key.environmentId, key.sessionId, key.requestId, now - LIVE_TURN_END_TTL_MS)
+    .first<LiveTurnEndRow>();
+}
+
+/** Drops expired registrations and old turn ends; returns how many rows went. */
+export async function pruneLiveActivities(db: D1Database, now: number): Promise<number> {
+  const [activities, ends] = await db.batch([
+    db.prepare("DELETE FROM live_activities WHERE expires_at <= ?").bind(now),
+    db.prepare("DELETE FROM live_turn_ends WHERE ended_at <= ?").bind(now - LIVE_TURN_END_TTL_MS),
+  ]);
+  return (activities?.meta.changes ?? 0) + (ends?.meta.changes ?? 0);
+}
+
 // --- APNs provider token ----------------------------------------------------------
 
 export async function getStoredProviderToken(

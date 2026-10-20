@@ -1,19 +1,31 @@
 import type { ApnsConfig, Deps } from "./env";
 import { importEs256Pkcs8 } from "./crypto";
 import {
+  deleteLiveActivity,
   deletePushDevice,
   getStoredProviderToken,
+  markLiveActivitySent,
   markPushSent,
   storeProviderToken,
+  type LiveActivityRow,
   type PushDeviceRow,
 } from "./db";
 import { log } from "./log";
 import {
   ACTIVITY_ALERTS,
   base64UrlEncode,
+  LIVE_ACTIVITY_TTL_SECONDS,
+  LIVE_DISMISS_AFTER_SECONDS,
+  LIVE_HIGH_PRIORITY_INTERVAL_SECONDS,
+  LIVE_STALE_AFTER_SECONDS,
+  LIVE_UPDATE_MIN_INTERVAL_SECONDS,
   type ActivityEvent,
   type ActivityResponse,
   type CoachPushUserInfo,
+  type LiveActivityPayload,
+  type LiveActivityResponse,
+  type LiveEvent,
+  type LivePhase,
 } from "./protocol";
 
 const PRODUCTION_HOST = "https://api.push.apple.com";
@@ -135,42 +147,55 @@ export function coachAlertPayload(input: { environmentId: string; sessionId: str
 }
 
 /** Reasons that mean the token will never work again for this topic and environment. */
-const DEAD_TOKEN_REASONS = new Set(["Unregistered", "BadDeviceToken", "DeviceTokenNotForTopic"]);
+const DEAD_TOKEN_REASONS = new Set(["Unregistered", "BadDeviceToken", "DeviceTokenNotForTopic", "ExpiredToken"]);
 const PROVIDER_TOKEN_REASONS = new Set(["ExpiredProviderToken", "InvalidProviderToken"]);
 
-interface SendOutcome {
-  status: "sent" | "failed" | "removed";
+interface ApnsTarget {
+  token: string;
+  apns_environment: "sandbox" | "production";
 }
 
-async function sendOne(
+interface ApnsMessage {
+  pushType: "alert" | "liveactivity";
+  topic: string;
+  priority: 5 | 10;
+  /** Unix seconds after which APNs stops trying. */
+  expiration: number;
+  body: string;
+}
+
+/** `dead`: APNs says the token will never work again; the caller forgets it. */
+type Delivery = "sent" | "failed" | "dead";
+
+async function deliver(
   config: ApnsConfig,
   deps: Deps,
   db: D1Database,
-  device: PushDeviceRow,
-  body: string,
+  target: ApnsTarget,
+  message: ApnsMessage,
   staleIssuedAt?: number,
-): Promise<SendOutcome> {
-  const host = device.apns_environment === "production" ? PRODUCTION_HOST : SANDBOX_HOST;
+): Promise<Delivery> {
+  const host = target.apns_environment === "production" ? PRODUCTION_HOST : SANDBOX_HOST;
   const provider = await providerToken(config, db, deps.now(), staleIssuedAt);
   let response: Response;
   try {
-    response = await deps.fetch(`${host}/3/device/${device.token}`, {
+    response = await deps.fetch(`${host}/3/device/${target.token}`, {
       method: "POST",
       headers: {
         authorization: `bearer ${provider.token}`,
-        "apns-topic": config.bundleId,
-        "apns-push-type": "alert",
-        "apns-priority": "10",
-        "apns-expiration": String(Math.floor(deps.now() / 1000) + ALERT_EXPIRY_SECONDS),
+        "apns-topic": message.topic,
+        "apns-push-type": message.pushType,
+        "apns-priority": String(message.priority),
+        "apns-expiration": String(message.expiration),
         "content-type": "application/json",
       },
-      body,
+      body: message.body,
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
   } catch {
-    return { status: "failed" };
+    return "failed";
   }
-  if (response.status === 200) return { status: "sent" };
+  if (response.status === 200) return "sent";
   let reason = "";
   try {
     reason = ((await response.json()) as { reason?: string }).reason ?? "";
@@ -178,16 +203,15 @@ async function sendOne(
     // APNs always sends a JSON reason; tolerate a missing one.
   }
   if (response.status === 410 || DEAD_TOKEN_REASONS.has(reason)) {
-    await deletePushDevice(db, device.token);
-    log("info", "apns_token_removed", { status: response.status, reason });
-    return { status: "removed" };
+    log("info", "apns_token_removed", { pushType: message.pushType, status: response.status, reason });
+    return "dead";
   }
   if (response.status === 403 && PROVIDER_TOKEN_REASONS.has(reason) && staleIssuedAt === undefined) {
     // Retry once with a token newer than the one APNs refused.
-    return sendOne(config, deps, db, device, body, provider.issuedAt);
+    return deliver(config, deps, db, target, message, provider.issuedAt);
   }
-  log("warn", "apns_send_failed", { status: response.status, reason });
-  return { status: "failed" };
+  log("warn", "apns_send_failed", { pushType: message.pushType, status: response.status, reason });
+  return "failed";
 }
 
 export async function sendCoachAlert(
@@ -197,15 +221,110 @@ export async function sendCoachAlert(
   devices: PushDeviceRow[],
   input: { environmentId: string; sessionId: string; event: ActivityEvent },
 ): Promise<ActivityResponse> {
-  const body = JSON.stringify(coachAlertPayload(input));
+  const message: ApnsMessage = {
+    pushType: "alert",
+    topic: config.bundleId,
+    priority: 10,
+    expiration: Math.floor(deps.now() / 1000) + ALERT_EXPIRY_SECONDS,
+    body: JSON.stringify(coachAlertPayload(input)),
+  };
   // Resolve the shared token once before the fan-out.
   if (devices.length > 0) await providerToken(config, db, deps.now());
-  const outcomes = await Promise.all(devices.map((device) => sendOne(config, deps, db, device, body)));
-  const sentTokens = devices.filter((_, index) => outcomes[index]!.status === "sent").map((device) => device.token);
+  const outcomes = await Promise.all(devices.map((device) => deliver(config, deps, db, device, message)));
+  const dead = devices.filter((_, index) => outcomes[index] === "dead");
+  for (const device of dead) await deletePushDevice(db, device.token);
+  const sentTokens = devices.filter((_, index) => outcomes[index] === "sent").map((device) => device.token);
   await markPushSent(db, sentTokens, deps.now());
   return {
     sent: sentTokens.length,
-    failed: outcomes.filter((outcome) => outcome.status === "failed").length,
-    removed: outcomes.filter((outcome) => outcome.status === "removed").length,
+    failed: outcomes.filter((outcome) => outcome === "failed").length,
+    removed: dead.length,
   };
+}
+
+// --- Live Activities ------------------------------------------------------------------
+
+export interface LiveUpdate {
+  event: LiveEvent;
+  phase: LivePhase;
+  words: number;
+}
+
+type LivePushHistory = Pick<LiveActivityRow, "last_phase" | "last_sent_at" | "last_high_priority_at" | "last_timestamp">;
+
+export type LivePlan = { send: false } | { send: true; priority: 5 | 10; timestamp: number };
+
+/**
+ * Whether and how to push `update` to one activity, given what it got last.
+ * Each push's `timestamp` is newer than the last, since ActivityKit keeps the
+ * newest content. See LIVE_UPDATE_MIN_INTERVAL_SECONDS for the budget.
+ */
+export function liveActivityPlan(history: LivePushHistory, update: LiveUpdate, now: number): LivePlan {
+  const timestamp = Math.max(Math.floor(now / 1000), (history.last_timestamp ?? 0) + 1);
+  if (update.event === "end") return { send: true, priority: 10, timestamp };
+  if (history.last_sent_at !== null && now - history.last_sent_at < LIVE_UPDATE_MIN_INTERVAL_SECONDS * 1000) {
+    return { send: false };
+  }
+  const phaseChanged = history.last_phase !== update.phase;
+  const budgetAllows =
+    history.last_high_priority_at === null ||
+    now - history.last_high_priority_at >= LIVE_HIGH_PRIORITY_INTERVAL_SECONDS * 1000;
+  return { send: true, priority: phaseChanged && budgetAllows ? 10 : 5, timestamp };
+}
+
+export function liveActivityPayload(update: LiveUpdate, timestamp: number): LiveActivityPayload {
+  const state = { phase: update.phase, words: update.words };
+  return update.event === "end"
+    ? { aps: { timestamp, event: "end", "content-state": state, "dismissal-date": timestamp + LIVE_DISMISS_AFTER_SECONDS } }
+    : { aps: { timestamp, event: "update", "content-state": state, "stale-date": timestamp + LIVE_STALE_AFTER_SECONDS } };
+}
+
+/**
+ * Pushes one turn's phase to the activities following it. An end, or a token
+ * APNs calls dead, removes the registration; an update records what was sent.
+ */
+export async function sendLiveActivity(
+  config: ApnsConfig,
+  deps: Deps,
+  db: D1Database,
+  activities: Array<ApnsTarget & LivePushHistory>,
+  update: LiveUpdate,
+): Promise<LiveActivityResponse> {
+  const result: LiveActivityResponse = { sent: 0, failed: 0, removed: 0, skipped: 0 };
+  const now = deps.now();
+  const planned = activities.map((activity) => ({ activity, plan: liveActivityPlan(activity, update, now) }));
+  if (planned.some(({ plan }) => plan.send)) await providerToken(config, db, now);
+  await Promise.all(
+    planned.map(async ({ activity, plan }) => {
+      if (!plan.send) {
+        result.skipped += 1;
+        return;
+      }
+      const ttl = update.event === "end" ? LIVE_ACTIVITY_TTL_SECONDS : LIVE_STALE_AFTER_SECONDS;
+      const outcome = await deliver(config, deps, db, activity, {
+        pushType: "liveactivity",
+        topic: `${config.bundleId}.push-type.liveactivity`,
+        priority: plan.priority,
+        expiration: Math.floor(now / 1000) + ttl,
+        body: JSON.stringify(liveActivityPayload(update, plan.timestamp)),
+      });
+      if (outcome === "failed") {
+        result.failed += 1;
+      } else if (outcome === "dead" || update.event === "end") {
+        // An ended activity takes no more pushes.
+        await deleteLiveActivity(db, activity.token);
+        result[outcome === "dead" ? "removed" : "sent"] += 1;
+      } else {
+        await markLiveActivitySent(db, {
+          token: activity.token,
+          phase: update.phase,
+          now,
+          highPriority: plan.priority === 10,
+          timestamp: plan.timestamp,
+        });
+        result.sent += 1;
+      }
+    }),
+  );
+  return result;
 }

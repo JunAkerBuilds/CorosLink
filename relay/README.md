@@ -5,7 +5,7 @@ A Cloudflare Worker at `relay.coroslink.com` that sets up the remote Coach. The 
 - **Linking:** connects a desktop to a website account (watchfaces.coroslink.com).
 - **Tunnels:** gives each linked desktop a Cloudflare Tunnel and a DNS name, re-provisions it when it disappears, and deletes idle ones.
 - **Credentials:** asks a desktop to mint a one-time credential for a phone, bound to the phone's DPoP key, and verifies the desktop's signed answer.
-- **Push:** sends text-free APNs alerts ("Coach replied", "Coach needs your approval").
+- **Push:** sends text-free APNs alerts ("Coach replied", "Coach needs your approval") and keeps C-LINK's Coach Live Activity current (phase and word count only).
 
 The wire contract, including what the website, the desktop and the phone must implement, is in [PROTOCOL.md](PROTOCOL.md), with the types in [`src/protocol.ts`](src/protocol.ts). The design follows T3 Code's T3 Connect relay (MIT), reimplemented without Effect and Alchemy.
 
@@ -65,7 +65,7 @@ Binding: `DB` is the D1 database `coroslink-relay` (dev: `coroslink-relay-dev`).
 
 Missing configuration fails only the endpoints that need it:
 - without the tunnel vars or token, link, recovery and connect answer 503 `not_configured`;
-- without the APNs vars, activity answers 503;
+- without the APNs vars, activity and live activity answer 503;
 - `GET /health` reports what is configured.
 
 ## Before the first deploy
@@ -108,6 +108,8 @@ Only the tunnel zone exists so far. The rest still needs creating in the Cloudfl
 7. **Website.** `watchfaces.coroslink.com` must serve `/.well-known/relay-jwks.json` and issue relay tokens (CorosLink-web, P4).
 
 ## Deploy
+
+Apply any new migration (such as `0002_live_activities.sql`) to a stage before deploying code that uses it: `npm run db:migrate:dev`, then `npm run db:migrate`.
 
 Deploy `relay-dev` first and link a real desktop to it:
 

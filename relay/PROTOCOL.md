@@ -8,8 +8,8 @@ The relay at `relay.coroslink.com` handles **setup only**: it links desktops to 
 
 | Caller | Proves itself with | Endpoints |
 | --- | --- | --- |
-| Desktop (CorosLink, "environment") | Environment signature, plus a website relay token when linking | link, recovery, unlink, activity |
-| Phone (C-LINK) | Website relay token and a DPoP proof | list, connect, devices, unlink |
+| Desktop (CorosLink, "environment") | Environment signature, plus a website relay token when linking | link, recovery, unlink, activity, live activity |
+| Phone (C-LINK) | Website relay token and a DPoP proof | list, connect, devices, live activities, unlink |
 | Relay → desktop | Relay mint request, signed with `RELAY_SIGNING_KEY` | `POST https://<hostname>/v1/relay/mint` |
 
 ## Credentials
@@ -41,7 +41,7 @@ protected header: { "alg": "ES256", "typ": "coroslink-env-request+jws", "kid": <
 payload: {
   "aud": "https://relay.coroslink.com",      // RELAY_ORIGIN of the relay being called
   "environmentId": "<same as the body>",
-  "op": "environment.link" | "environment.recovery" | "environment.unlink" | "environment.activity",
+  "op": "environment.link" | "environment.recovery" | "environment.unlink" | "environment.activity" | "environment.live",
   "nonce": "<≥16 random bytes, base64url, fresh per call>",
   "iat": <unix seconds>,
   "bodySha256": "<base64url(SHA-256(the exact request body bytes))>"
@@ -146,6 +146,9 @@ Every response is JSON. Every non-2xx body is `{ "error": { "code", "message", "
 | `POST /v1/devices` | Bearer (`c-link-ios`) | `{token: <APNs hex>, environment: "sandbox" \| "production"}` → `{registered: true}` |
 | `DELETE /v1/devices` | Bearer (any client) | `{token}` → `{unregistered: true}` |
 | `POST /v1/activity` | env signature, `op` activity | `{environmentId, sessionId, event: "replied" \| "approval"}` → `{sent, failed, removed}` |
+| `POST /v1/live-activities` | Bearer (`c-link-ios`) | `{token: <ActivityKit hex>, environment, environmentId, sessionId, requestId}` → `{registered: true, ended}` |
+| `DELETE /v1/live-activities` | Bearer (`c-link-ios`) | `{token}` → `{unregistered: true}` |
+| `POST /v1/activity/live` | env signature, `op` live | `{environmentId, sessionId, requestId, event: "update" \| "end", phase, words}` → `{sent, failed, removed, skipped}` |
 | `GET /.well-known/jwks.json` | none | → `{keys}` |
 | `GET /health` | none | → `{service, stage, protocol, tunnels, push, cleanupMode}` |
 
@@ -228,9 +231,32 @@ The relay sends APNs alerts to every device the linked user registered:
 - **Device limit:** an account keeps its 20 most recently registered devices. Registering a token another account holds moves it, since tokens are not secret enough to prove ownership.
 - **Provider token:** one ES256 token per APNs key, stored in D1 so every isolate reuses it for ~50 minutes. Apple refuses tokens that change too often. On `ExpiredProviderToken` or `InvalidProviderToken` the relay retries once with a newer one.
 
+### Live Activities
+
+C-LINK shows a Coach turn on the Lock Screen as a Live Activity. While the app runs it updates the activity itself; once iOS suspends the app, the relay keeps it current with ActivityKit pushes, which carry the phase and a word count and nothing Coach writes.
+
+- **Registering (phone):** C-LINK starts the activity with `pushType: .token` and sends each token from `pushTokenUpdates` to `POST /v1/live-activities`, naming the computer (`environmentId`), the conversation (`sessionId`) and the turn (`requestId`) it follows. A token ActivityKit replaced goes to `DELETE /v1/live-activities`.
+  - The computer must be linked to the account (404 `environment_not_linked` otherwise).
+  - If that turn already ended within the last hour, the relay pushes the end at once, keeps nothing, and answers `ended: true`.
+  - Registrations expire after 8 hours, as ActivityKit ends activities then. An account keeps its 20 newest.
+- **Reporting (desktop):** CorosLink calls `POST /v1/activity/live` as a turn runs: `event: "update"` with `phase` `thinking`, `usingTool` or `writing`, and once `event: "end"` with `replied`, `needsYou` (an approval card or an unanswered question) or `failed`. `words` counts the reply so far. It never sends text or tool names; tool names say which health data Coach is reading, so they stay between the computer and the phone.
+  - The desktop coalesces to one update per conversation every 10 s (30 s when only the word count changed) and sends the end at once.
+- **Pushes:** to every unexpired registration for that user, computer, session and turn. Topic `APNS_BUNDLE_ID` + `.push-type.liveactivity`, `apns-push-type: liveactivity`.
+
+```
+{ "aps": { "timestamp": <s>, "event": "update", "content-state": { "phase": "writing", "words": 142 }, "stale-date": <timestamp + 1200> } }
+{ "aps": { "timestamp": <s>, "event": "end", "content-state": { "phase": "replied", "words": 260 }, "dismissal-date": <timestamp + 900> } }
+```
+
+  - `content-state` decodes as C-LINK's `CoachActivityAttributes.ContentState`, whose optional `tool` is left out.
+  - **Budget:** an activity gets at most one update every 5 s; the throttle answers `skipped` for the rest. A phase change goes at priority 10 at most once a minute, otherwise at 5, which ActivityKit doesn't count against its hourly budget; word counts always go at 5. The end always goes at 10.
+  - `timestamp` increases with every push to a token. An update expires with its stale date; an end is kept for 8 hours.
+  - The end deletes the registration. Dead tokens (`410`, `Unregistered`, `BadDeviceToken`, `DeviceTokenNotForTopic`, `ExpiredToken`) are deleted too.
+
 ## Cleanup (cron, every 5 minutes)
 
 - **Replay guards:** expired nonces are purged.
+- **Live Activities:** expired registrations and turn ends older than an hour are purged.
 - **Unlinks:** failed unlink teardowns are retried, up to 10 per run.
 - **Idle tunnels:** when `RELAY_TUNNEL_CLEANUP_MODE` is `dry-run` or `enabled`, idle tunnels are reaped.
   - **Candidates:**
