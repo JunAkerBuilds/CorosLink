@@ -55,10 +55,12 @@ Vars live in `wrangler.jsonc`, with one block per stage. Secrets are set with `w
 | `RELAY_SIGNING_KEY` | secret | ES256 private key, PKCS8 PEM. Signs mint requests; desktops pin its public key. |
 | `RELAY_SIGNING_KEY_ID` | var | Its `kid`, e.g. `relay-2026-10`. Change it whenever the key changes. |
 | `RELAY_EXTRA_JWKS` | var, optional | JSON array of extra public JWKs to publish during a key rotation |
-| `APNS_KEY_ID` | var | The APNs auth key id (10 characters) |
+| `APNS_KEY_ID` | var | The APNs auth key id (10 characters) for production device tokens |
 | `APNS_TEAM_ID` | var | Apple team id |
 | `APNS_BUNDLE_ID` | var | `com.akerrules.clink`. The APNs topic. |
-| `APNS_PRIVATE_KEY` | secret | The APNs `.p8` key (PKCS8 PEM), the same one the website uses |
+| `APNS_PRIVATE_KEY` | secret | That key's `.p8` (PKCS8 PEM) |
+| `APNS_SANDBOX_KEY_ID` | var, optional | A separate key for sandbox device tokens (Xcode builds). Without it, sandbox pushes use `APNS_KEY_ID`, which must then be a Sandbox & Production key. |
+| `APNS_SANDBOX_PRIVATE_KEY` | secret, optional | That key's `.p8` |
 | `RELAY_TUNNEL_CLEANUP_MODE` | var | `off` (default), `dry-run` or `enabled`. It is read at deploy time, so changing it means a deploy. |
 
 Binding: `DB` is the D1 database `coroslink-relay` (dev: `coroslink-relay-dev`).
@@ -103,7 +105,7 @@ Only the tunnel zone exists so far. The rest still needs creating in the Cloudfl
    npx wrangler secret put RELAY_SIGNING_KEY --env dev < relay-dev-signing-key.pem
    ```
    Repeat for production with `--env=""` and a new file. Keep the PEM files out of the repo.
-5. **APNs.** Set `APNS_KEY_ID` and `APNS_TEAM_ID`, then `wrangler secret put APNS_PRIVATE_KEY` with the `.p8` contents. One token-based key works for both the sandbox and production APNs hosts. The device registration picks which host to use.
+5. **APNs.** The team allows only two team-scoped Sandbox & Production keys, and both are taken (the website's and Expo's), so the relay has topic-specific keys for `com.akerrules.clink`, one per environment. Set `APNS_KEY_ID` (production) and `APNS_SANDBOX_KEY_ID`, then `wrangler secret put APNS_PRIVATE_KEY` and `APNS_SANDBOX_PRIVATE_KEY` with each `.p8`. A device's registration says which environment, and so which host and key, its pushes use. `GET /health` reports `pushSandbox` and `pushProduction`.
 6. **Custom domains.** `relay.coroslink.com` and `relay-dev.coroslink.com` are declared as `custom_domain` routes on the `coroslink.com` zone. The first deploy creates them.
 7. **Website.** `watchfaces.coroslink.com` must serve `/.well-known/relay-jwks.json` and issue relay tokens (CorosLink-web, P4).
 

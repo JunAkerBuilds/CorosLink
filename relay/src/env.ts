@@ -23,6 +23,9 @@ export interface Env {
   APNS_TEAM_ID: string;
   APNS_BUNDLE_ID: string;
   APNS_PRIVATE_KEY?: string;
+  /** Optional: a separate key for sandbox device tokens (environment-specific keys). */
+  APNS_SANDBOX_KEY_ID?: string;
+  APNS_SANDBOX_PRIVATE_KEY?: string;
 
   RELAY_TUNNEL_CLEANUP_MODE: string;
 }
@@ -49,11 +52,23 @@ export interface TunnelConfig {
   apiToken: string;
 }
 
-export interface ApnsConfig {
+/** An APNs auth key (.p8): its id and PKCS8 PEM. */
+export interface ApnsKey {
   keyId: string;
+  privateKey: string;
+}
+
+export interface ApnsConfig {
   teamId: string;
   bundleId: string;
-  privateKey: string;
+  /** Signs pushes to production device tokens: APNS_KEY_ID and APNS_PRIVATE_KEY. */
+  production: ApnsKey | null;
+  /**
+   * Signs pushes to sandbox device tokens: APNS_SANDBOX_KEY_ID and
+   * APNS_SANDBOX_PRIVATE_KEY when set, otherwise the production key, which
+   * then has to be a key for both environments.
+   */
+  sandbox: ApnsKey | null;
 }
 
 export interface RelayConfig {
@@ -109,20 +124,23 @@ export function loadConfig(env: Env): RelayConfig {
         ? { pem: env.RELAY_SIGNING_KEY, kid: env.RELAY_SIGNING_KEY_ID.trim() }
         : null,
     extraJwks: present(env.RELAY_EXTRA_JWKS) ? env.RELAY_EXTRA_JWKS : undefined,
-    apns:
-      present(env.APNS_KEY_ID) &&
-      present(env.APNS_TEAM_ID) &&
-      present(env.APNS_BUNDLE_ID) &&
-      present(env.APNS_PRIVATE_KEY)
-        ? {
-            keyId: env.APNS_KEY_ID.trim(),
-            teamId: env.APNS_TEAM_ID.trim(),
-            bundleId: env.APNS_BUNDLE_ID.trim(),
-            privateKey: env.APNS_PRIVATE_KEY,
-          }
-        : null,
+    apns: apnsConfig(env),
     cleanupMode: cleanupModeFrom(env.RELAY_TUNNEL_CLEANUP_MODE),
   };
+}
+
+function apnsConfig(env: Env): ApnsConfig | null {
+  if (!present(env.APNS_TEAM_ID) || !present(env.APNS_BUNDLE_ID)) return null;
+  const production =
+    present(env.APNS_KEY_ID) && present(env.APNS_PRIVATE_KEY)
+      ? { keyId: env.APNS_KEY_ID.trim(), privateKey: env.APNS_PRIVATE_KEY }
+      : null;
+  const sandbox =
+    present(env.APNS_SANDBOX_KEY_ID) && present(env.APNS_SANDBOX_PRIVATE_KEY)
+      ? { keyId: env.APNS_SANDBOX_KEY_ID.trim(), privateKey: env.APNS_SANDBOX_PRIVATE_KEY }
+      : production;
+  if (!production && !sandbox) return null;
+  return { teamId: env.APNS_TEAM_ID.trim(), bundleId: env.APNS_BUNDLE_ID.trim(), production, sandbox };
 }
 
 /** Tunnel names are `<prefix><16 hex>`; the prefix separates stages in one account. */

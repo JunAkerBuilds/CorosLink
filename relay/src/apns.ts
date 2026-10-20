@@ -1,4 +1,4 @@
-import type { ApnsConfig, Deps } from "./env";
+import type { ApnsConfig, ApnsKey, Deps } from "./env";
 import { importEs256Pkcs8 } from "./crypto";
 import {
   deleteLiveActivity,
@@ -32,6 +32,13 @@ const PRODUCTION_HOST = "https://api.push.apple.com";
 const SANDBOX_HOST = "https://api.sandbox.push.apple.com";
 /** Apple accepts a provider token for an hour and throttles refreshes under 20 minutes. */
 export const PROVIDER_TOKEN_TTL_MS = 50 * 60 * 1000;
+/**
+ * Apple answers TooManyProviderTokenUpdates to a team whose token changes more
+ * often than this, and that refusal then fails every push. A token APNs calls
+ * invalid or expired is replaced only once it is at least this old: a younger
+ * one was refused for its key or configuration, which a new token can't fix.
+ */
+export const PROVIDER_TOKEN_MIN_REFRESH_MS = 20 * 60 * 1000;
 const SEND_TIMEOUT_MS = 10_000;
 const ALERT_EXPIRY_SECONDS = 60 * 60;
 
@@ -42,15 +49,40 @@ interface CachedProviderToken {
   teamId: string;
 }
 
-let providerTokenCache: CachedProviderToken | null = null;
-let signingKeyCache: { pem: string; key: CryptoKey } | null = null;
-/** One signing in flight at a time, so a fan-out to many devices shares a token. */
-let inflight: Promise<CachedProviderToken> | null = null;
+/** An APNs key and its team: what signs a provider token. */
+export type ApnsSigner = ApnsKey & { teamId: string };
+
+type ApnsEnvironment = "sandbox" | "production";
+
+/** Everything below is per key id: a relay may hold one key per APNs environment. */
+const providerTokenCache = new Map<string, CachedProviderToken>();
+const signingKeyCache = new Map<string, { pem: string; key: CryptoKey }>();
+/** One signing in flight per key, so a fan-out to many devices shares a token. */
+const inflight = new Map<string, Promise<CachedProviderToken>>();
 
 export function resetApnsCaches(): void {
-  providerTokenCache = null;
-  signingKeyCache = null;
-  inflight = null;
+  providerTokenCache.clear();
+  signingKeyCache.clear();
+  inflight.clear();
+}
+
+/** The key that signs pushes to device tokens of `environment`, if the relay has one. */
+export function apnsSigner(config: ApnsConfig, environment: ApnsEnvironment): ApnsSigner | null {
+  const key = environment === "production" ? config.production : config.sandbox;
+  return key ? { ...key, teamId: config.teamId } : null;
+}
+
+/** Resolves each environment's shared token once before a fan-out. */
+async function prepareProviderTokens(
+  config: ApnsConfig,
+  db: D1Database,
+  now: number,
+  targets: Array<{ apns_environment: ApnsEnvironment }>,
+): Promise<void> {
+  for (const environment of new Set(targets.map((target) => target.apns_environment))) {
+    const signer = apnsSigner(config, environment);
+    if (signer) await providerToken(signer, db, now);
+  }
 }
 
 const encoder = new TextEncoder();
@@ -62,25 +94,29 @@ const encoder = new TextEncoder();
  * `staleIssuedAt` forces a replacement for a token APNs called expired.
  */
 export async function providerToken(
-  config: ApnsConfig,
+  signer: ApnsSigner,
   db: D1Database,
   now: number,
   staleIssuedAt?: number,
 ): Promise<CachedProviderToken> {
-  inflight ??= resolveProviderToken(config, db, now, staleIssuedAt).finally(() => {
-    inflight = null;
-  });
-  return inflight;
+  let pending = inflight.get(signer.keyId);
+  if (!pending) {
+    pending = resolveProviderToken(signer, db, now, staleIssuedAt).finally(() => {
+      inflight.delete(signer.keyId);
+    });
+    inflight.set(signer.keyId, pending);
+  }
+  return pending;
 }
 
 function usable(
-  candidate: { token: string; issuedAt: number; keyId: string; teamId: string } | null,
-  config: ApnsConfig,
+  candidate: { token: string; issuedAt: number; keyId: string; teamId: string } | null | undefined,
+  config: ApnsSigner,
   now: number,
   staleIssuedAt: number | undefined,
 ): boolean {
   return (
-    candidate !== null &&
+    candidate != null &&
     candidate.keyId === config.keyId &&
     candidate.teamId === config.teamId &&
     now - candidate.issuedAt < PROVIDER_TOKEN_TTL_MS &&
@@ -89,22 +125,25 @@ function usable(
 }
 
 async function resolveProviderToken(
-  config: ApnsConfig,
+  config: ApnsSigner,
   db: D1Database,
   now: number,
   staleIssuedAt: number | undefined,
 ): Promise<CachedProviderToken> {
-  if (usable(providerTokenCache, config, now, staleIssuedAt)) return providerTokenCache!;
+  const cached = providerTokenCache.get(config.keyId);
+  if (usable(cached, config, now, staleIssuedAt)) return cached!;
   const stored = await getStoredProviderToken(db, config.keyId);
   const shared = stored
     ? { token: stored.token, issuedAt: stored.issued_at, keyId: config.keyId, teamId: stored.team_id }
     : null;
   if (usable(shared, config, now, staleIssuedAt)) {
-    providerTokenCache = shared;
+    providerTokenCache.set(config.keyId, shared!);
     return shared!;
   }
-  if (!signingKeyCache || signingKeyCache.pem !== config.privateKey) {
-    signingKeyCache = { pem: config.privateKey, key: await importEs256Pkcs8(config.privateKey) };
+  let signingKey = signingKeyCache.get(config.keyId);
+  if (!signingKey || signingKey.pem !== config.privateKey) {
+    signingKey = { pem: config.privateKey, key: await importEs256Pkcs8(config.privateKey) };
+    signingKeyCache.set(config.keyId, signingKey);
   }
   const header = base64UrlEncode(encoder.encode(JSON.stringify({ alg: "ES256", kid: config.keyId })));
   const claims = base64UrlEncode(
@@ -114,7 +153,7 @@ async function resolveProviderToken(
   // WebCrypto ECDSA signatures are raw r||s, which is exactly what JWS ES256 wants.
   const signature = await crypto.subtle.sign(
     { name: "ECDSA", hash: "SHA-256" },
-    signingKeyCache.key,
+    signingKey.key,
     encoder.encode(signingInput),
   );
   // If another isolate stored a fresh token meanwhile, use theirs instead.
@@ -125,8 +164,9 @@ async function resolveProviderToken(
     issuedAt: now,
     replaceBefore: staleIssuedAt !== undefined ? staleIssuedAt + 1 : now - PROVIDER_TOKEN_TTL_MS,
   });
-  providerTokenCache = { token: winner.token, issuedAt: winner.issued_at, keyId: config.keyId, teamId: config.teamId };
-  return providerTokenCache;
+  const fresh = { token: winner.token, issuedAt: winner.issued_at, keyId: config.keyId, teamId: config.teamId };
+  providerTokenCache.set(config.keyId, fresh);
+  return fresh;
 }
 
 export function coachAlertPayload(input: { environmentId: string; sessionId: string; event: ActivityEvent }) {
@@ -176,7 +216,12 @@ async function deliver(
   staleIssuedAt?: number,
 ): Promise<Delivery> {
   const host = target.apns_environment === "production" ? PRODUCTION_HOST : SANDBOX_HOST;
-  const provider = await providerToken(config, db, deps.now(), staleIssuedAt);
+  const signer = apnsSigner(config, target.apns_environment);
+  if (!signer) {
+    log("warn", "apns_send_failed", { pushType: message.pushType, reason: "NoKeyForEnvironment", environment: target.apns_environment });
+    return "failed";
+  }
+  const provider = await providerToken(signer, db, deps.now(), staleIssuedAt);
   let response: Response;
   try {
     response = await deps.fetch(`${host}/3/device/${target.token}`, {
@@ -206,7 +251,12 @@ async function deliver(
     log("info", "apns_token_removed", { pushType: message.pushType, status: response.status, reason });
     return "dead";
   }
-  if (response.status === 403 && PROVIDER_TOKEN_REASONS.has(reason) && staleIssuedAt === undefined) {
+  if (
+    response.status === 403 &&
+    PROVIDER_TOKEN_REASONS.has(reason) &&
+    staleIssuedAt === undefined &&
+    deps.now() - provider.issuedAt >= PROVIDER_TOKEN_MIN_REFRESH_MS
+  ) {
     // Retry once with a token newer than the one APNs refused.
     return deliver(config, deps, db, target, message, provider.issuedAt);
   }
@@ -228,8 +278,7 @@ export async function sendCoachAlert(
     expiration: Math.floor(deps.now() / 1000) + ALERT_EXPIRY_SECONDS,
     body: JSON.stringify(coachAlertPayload(input)),
   };
-  // Resolve the shared token once before the fan-out.
-  if (devices.length > 0) await providerToken(config, db, deps.now());
+  await prepareProviderTokens(config, db, deps.now(), devices);
   const outcomes = await Promise.all(devices.map((device) => deliver(config, deps, db, device, message)));
   const dead = devices.filter((_, index) => outcomes[index] === "dead");
   for (const device of dead) await deletePushDevice(db, device.token);
@@ -293,7 +342,7 @@ export async function sendLiveActivity(
   const result: LiveActivityResponse = { sent: 0, failed: 0, removed: 0, skipped: 0 };
   const now = deps.now();
   const planned = activities.map((activity) => ({ activity, plan: liveActivityPlan(activity, update, now) }));
-  if (planned.some(({ plan }) => plan.send)) await providerToken(config, db, now);
+  await prepareProviderTokens(config, db, now, planned.filter(({ plan }) => plan.send).map(({ activity }) => activity));
   await Promise.all(
     planned.map(async ({ activity, plan }) => {
       if (!plan.send) {

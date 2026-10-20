@@ -468,6 +468,8 @@ export async function handleHealth(ctx: RelayContext): Promise<Response> {
     protocol: 1,
     tunnels: ctx.config.tunnel !== null,
     push: ctx.config.apns !== null,
+    pushSandbox: ctx.config.apns?.sandbox != null,
+    pushProduction: ctx.config.apns?.production != null,
     cleanupMode: ctx.config.cleanupMode,
   });
 }

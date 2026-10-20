@@ -150,7 +150,7 @@ Every response is JSON. Every non-2xx body is `{ "error": { "code", "message", "
 | `DELETE /v1/live-activities` | Bearer (`c-link-ios`) | `{token}` → `{unregistered: true}` |
 | `POST /v1/activity/live` | env signature, `op` live | `{environmentId, sessionId, requestId, event: "update" \| "end", phase, words}` → `{sent, failed, removed, skipped}` |
 | `GET /.well-known/jwks.json` | none | → `{keys}` |
-| `GET /health` | none | → `{service, stage, protocol, tunnels, push, cleanupMode}` |
+| `GET /health` | none | → `{service, stage, protocol, tunnels, push, pushSandbox, pushProduction, cleanupMode}` |
 
 ### Link
 
@@ -229,7 +229,7 @@ The relay sends APNs alerts to every device the linked user registered:
 
 - **Dead tokens:** a token APNs reports as `410`/`Unregistered`, `BadDeviceToken` or `DeviceTokenNotForTopic` is deleted.
 - **Device limit:** an account keeps its 20 most recently registered devices. Registering a token another account holds moves it, since tokens are not secret enough to prove ownership.
-- **Provider token:** one ES256 token per APNs key, stored in D1 so every isolate reuses it for ~50 minutes. Apple refuses tokens that change too often. On `ExpiredProviderToken` or `InvalidProviderToken` the relay retries once with a newer one.
+- **Provider token:** one ES256 token per APNs key (the relay may hold one key per APNs environment), stored in D1 so every isolate reuses it for ~50 minutes. Apple refuses tokens that change too often. On `ExpiredProviderToken` or `InvalidProviderToken` the relay retries once with a newer token, but only if the refused one is at least 20 minutes old: a younger one was refused for its key, and replacing it would only trip `TooManyProviderTokenUpdates`.
 
 ### Live Activities
 
