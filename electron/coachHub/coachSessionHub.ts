@@ -254,6 +254,13 @@ export class CoachSessionHub {
     this.notifySessions({ kind: "delete", sessionId });
   }
 
+  /** Deletes every conversation of one provider; returns how many went. */
+  deleteAllSessions(provider: ChatProvider): number {
+    const ids = this.options.sessions.list(provider).map((session) => session.id);
+    for (const id of ids) this.deleteSession(id);
+    return ids.length;
+  }
+
   /**
    * The transcript changed outside the hub (the legacy chat:saveSession path).
    * Reload it, and send any client that replays from before now a snapshot.

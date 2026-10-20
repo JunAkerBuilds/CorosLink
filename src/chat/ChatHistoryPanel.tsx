@@ -1,6 +1,6 @@
 import { t, useLanguage } from "../i18n/tools";
 import { useMemo, useState } from "react";
-import { Loader2, PanelLeftClose, Plus, Search } from "lucide-react";
+import { Loader2, PanelLeftClose, Plus, Search, Trash2 } from "lucide-react";
 import type { ChatSessionSummary } from "../../electron/types";
 import { ChatSessionRow } from "./ChatSessionRow";
 import { groupChatSessions } from "./chatSessionGroups";
@@ -12,7 +12,8 @@ export function ChatHistoryPanel({
   onCollapse,
   onNewChat,
   onSelectSession,
-  onDeleteSession
+  onDeleteSession,
+  onDeleteAllSessions
 }: {
   sessions: ChatSessionSummary[];
   activeSessionId: string | null;
@@ -21,6 +22,7 @@ export function ChatHistoryPanel({
   onNewChat: () => void;
   onSelectSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
+  onDeleteAllSessions: () => void;
 }) {
   const { language } = useLanguage();
   const [query, setQuery] = useState("");
@@ -41,6 +43,20 @@ export function ChatHistoryPanel({
     () => groupChatSessions(filteredSessions),
     [filteredSessions, language]
   );
+
+  // Only worth offering once something has been said; a lone blank chat stays.
+  const canClear = sessions.some((session) => session.messageCount > 0);
+  const handleDeleteAll = () => {
+    if (busy) return;
+    const count = sessions.length;
+    const question =
+      count === 1
+        ? t("Delete this conversation? This can’t be undone.")
+        : t("Delete all {{count}} conversations? This can’t be undone.", { count });
+    if (window.confirm(question)) {
+      onDeleteAllSessions();
+    }
+  };
 
   return (
     <div className="chat-history-panel">
@@ -105,6 +121,19 @@ export function ChatHistoryPanel({
           ))
         )}
       </div>
+
+      {canClear ? (
+        <div className="chat-history-footer">
+          <button
+            type="button"
+            className="chat-history-clear"
+            onClick={handleDeleteAll}
+            disabled={busy}
+          >
+            <Trash2 size={13} aria-hidden="true" />
+            {t("Clear all chats")}</button>
+        </div>
+      ) : null}
 
       {busy ? (
         <div className="chat-sidebar-busy" aria-hidden="true">

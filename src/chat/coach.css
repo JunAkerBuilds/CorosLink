@@ -442,6 +442,55 @@
   font-size: 12px;
 }
 
+.chat-history-footer {
+  flex: none;
+  padding: 6px 10px 10px;
+  border-top: 1px solid var(--coach-glass-edge);
+}
+
+.chat-history-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: none;
+  transition: background 160ms var(--coach-ease-soft), color 160ms var(--coach-ease-soft);
+}
+
+.chat-history-clear svg {
+  color: var(--text-muted);
+  transition: color 160ms var(--coach-ease-soft);
+}
+
+.chat-history-clear:hover:not(:disabled),
+.chat-history-clear:focus-visible {
+  background: var(--error-bg);
+  /* Pure --error-text on the tinted paper rail is ~4:1; a touch of ink keeps it ≥4.5:1. */
+  color: color-mix(in srgb, var(--error-text) 80%, var(--text-primary));
+}
+
+.chat-history-clear:hover:not(:disabled) svg,
+.chat-history-clear:focus-visible svg {
+  color: currentColor;
+}
+
+.chat-history-clear:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Keep the busy spinner clear of the footer's (long, in French) label. */
+.chat-history-footer ~ .chat-sidebar-busy {
+  bottom: 58px;
+}
+
 /* ---------- Reading column ---------- */
 
 :root .app .chat-view .chat-thread {

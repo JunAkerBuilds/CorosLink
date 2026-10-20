@@ -478,6 +478,25 @@ assert.deepEqual(local.stream.cancelled, [local.stream.turns[0].requestId]);
 assert.throws(() => local.hub.getSession(localSession.id), (error) => error.code === "not_found");
 assert.deepEqual(local.events.list(localSession.id, 0), []);
 
+// Clearing a provider's chats deletes each one, running turns included, and leaves other providers alone.
+const clearing = createHarness();
+const clearChanges = [];
+clearing.hub.onSessionsChanged((change) => clearChanges.push(change));
+const clearA = clearing.hub.createSession("chatgpt");
+const clearB = clearing.hub.createSession("chatgpt");
+const keptSession = clearing.hub.createSession("claude-code");
+clearing.hub.send({ sessionId: clearA.id, clientMessageId: "c-1", text: "Still thinking" });
+clearChanges.length = 0;
+assert.equal(clearing.hub.deleteAllSessions("chatgpt"), 2);
+assert.deepEqual(clearing.stream.cancelled, [clearing.stream.turns[0].requestId]);
+assert.deepEqual(clearing.hub.listSessions("chatgpt"), []);
+assert.deepEqual(clearing.hub.listSessions("claude-code").map((summary) => summary.id), [keptSession.id]);
+assert.deepEqual(
+  clearChanges.map((change) => [change.kind, change.sessionId]).sort(),
+  [["delete", clearA.id], ["delete", clearB.id]].sort()
+);
+assert.equal(clearing.hub.deleteAllSessions("chatgpt"), 0);
+
 // After the first answer the provider names the conversation; later answers leave it.
 const titleCalls = [];
 const named = createHarness({ titler: async (provider, question, answer) => { titleCalls.push([provider, question, answer]); return "Long run review"; } });

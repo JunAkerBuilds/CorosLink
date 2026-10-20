@@ -1343,6 +1343,8 @@ const api = {
     ipcRenderer.invoke("coach:createSession", provider),
   coachDeleteSession: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke("coach:deleteSession", sessionId),
+  coachDeleteAllSessions: (provider: ChatProvider): Promise<number> =>
+    ipcRenderer.invoke("coach:deleteAllSessions", provider),
   coachSubscribe: (
     sessionId: string,
     afterSeq: number

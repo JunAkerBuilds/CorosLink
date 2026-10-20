@@ -2925,6 +2925,19 @@ export function ChatView({
     }
   };
 
+  const handleDeleteAllSessions = async () => {
+    if (!api || streaming || exportingLatestActivity) return;
+    onError(null);
+    try {
+      await api.coachDeleteAllSessions(chatSettings.provider);
+      const created = await api.coachCreateSession(chatSettings.provider);
+      setSessions([created]);
+      await loadSession(created.id);
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : t("Could not clear chats."));
+    }
+  };
+
   const handleProviderChange = async (provider: ChatProvider) => {
     if (!api || provider === chatSettings.provider) return;
     const nextSettings: ChatSettings = { ...chatSettings, provider };
@@ -3682,7 +3695,8 @@ export function ChatView({
     onOpen: () => void handleUpdateChatSettings({ sidebarOpen: true }),
     onNewChat: () => void handleNewChat(),
     onSelectSession: (sessionId: string) => void handleSelectSession(sessionId),
-    onDeleteSession: (sessionId: string) => void handleDeleteSession(sessionId)
+    onDeleteSession: (sessionId: string) => void handleDeleteSession(sessionId),
+    onDeleteAllSessions: () => void handleDeleteAllSessions()
   };
 
   const settingsModalProps = {

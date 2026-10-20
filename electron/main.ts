@@ -1937,6 +1937,9 @@ function registerIpcHandlers(): void {
   ipcMain.handle("coach:deleteSession", (_event, sessionId: string) => {
     requireCoachHub().deleteSession(sessionId);
   });
+  ipcMain.handle("coach:deleteAllSessions", (_event, provider: ChatProvider) =>
+    requireCoachHub().deleteAllSessions(provider)
+  );
   ipcMain.handle("coach:subscribe", (event, sessionId: string, afterSeq: number) => {
     const contents = event.sender;
     dropCoachSubscription(contents.id);

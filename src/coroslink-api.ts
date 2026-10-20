@@ -857,6 +857,7 @@ export interface CorosLinkApi {
   coachGetSession: (sessionId: string) => Promise<CoachSnapshot>;
   coachCreateSession: (provider: ChatProvider) => Promise<ChatSessionSummary>;
   coachDeleteSession: (sessionId: string) => Promise<void>;
+  coachDeleteAllSessions: (provider: ChatProvider) => Promise<number>;
   coachSubscribe: (
     sessionId: string,
     afterSeq: number
