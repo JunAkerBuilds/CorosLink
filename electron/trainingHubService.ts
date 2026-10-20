@@ -286,6 +286,7 @@ interface RawDailyMetric {
   day?: string | number;
   trainingLoad?: number;
   rhr?: number;
+  testRhr?: number;
   avgSleepHrv?: number;
   sleepHrvBase?: number;
   tiredRateNew?: number;
@@ -3643,7 +3644,10 @@ function parseDailyMetric(raw: RawDailyMetric): TrainingHubDailyMetric {
   return {
     happenDay: String(raw.happenDay ?? raw.date ?? raw.day ?? ""),
     trainingLoad: toOptionalNumber(raw.trainingLoad),
-    rhr: toOptionalNumber(raw.rhr),
+    // COROS's Resting Heart Rate (Training Hub chart, MCP queryRestingHeartRate)
+    // is testRhr, present only on measured nights. The daily `rhr` beside it
+    // is a different, lower all-day value COROS never labels as resting HR.
+    rhr: toOptionalNumber(raw.testRhr),
     avgSleepHrv: toOptionalNumber(raw.avgSleepHrv),
     sleepHrvBase: toOptionalNumber(raw.sleepHrvBase),
     tiredRateNew: toOptionalNumber(raw.tiredRateNew),

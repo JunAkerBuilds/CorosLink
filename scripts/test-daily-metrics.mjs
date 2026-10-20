@@ -30,4 +30,14 @@ const listScale = parseDailyMetrics({
 assert.equal(listScale.dayList[0]?.distance, 8200);
 assert.equal(listScale.dayList[0]?.duration, 2700);
 
+const restingHr = parseDailyMetrics({
+  dayList: [
+    { happenDay: "20261019", rhr: 53, testRhr: 57 },
+    { happenDay: "20261020", rhr: 63 }
+  ]
+});
+
+assert.equal(restingHr.dayList[0]?.rhr, 57, "resting HR is COROS's testRhr");
+assert.equal(restingHr.dayList[1]?.rhr, undefined, "the all-day rhr is not resting HR");
+
 console.log("daily metrics parser tests passed");
