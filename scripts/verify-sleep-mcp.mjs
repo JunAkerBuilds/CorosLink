@@ -1,5 +1,8 @@
-// Probe live COROS MCP querySleepOverview response shape using stored app tokens.
+// Probe the live COROS MCP sleep tool (querySleepOverview, or whatever resolveSleepTool picks)
+// using stored app tokens. Prints the schema, the planned args, every call the app makes, and
+// the parsed summary.
 // Usage: npm run build:electron && npx electron scripts/verify-sleep-mcp.mjs
+// Override COROSLINK_USER_DATA only when testing another saved CorosLink profile.
 
 import { app } from "electron";
 import path from "node:path";
@@ -9,14 +12,25 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const distUrl = (file) =>
   pathToFileURL(path.join(repoRoot, "dist-electron", file)).href;
 
+// safeStorage only decrypts the saved tokens under the app's own name.
+app.setName("coroslink");
+app.setPath(
+  "userData",
+  process.env.COROSLINK_USER_DATA || path.join(app.getPath("appData"), "coroslink")
+);
+
 app.whenReady().then(async () => {
+  app.dock?.hide();
   const { initializeDatabase } = await import(`${distUrl("database.js")}`);
   const { connectCorosMcp, getCorosMcpTools, callCorosMcpTool } = await import(
     `${distUrl("corosMcpService.js")}`
   );
-  const { getTrainingSleepData, parseSleepDataResponse } = await import(
-    `${distUrl("sleepDataService.js")}`
-  );
+  const {
+    buildSleepToolArgs,
+    getTrainingSleepData,
+    resolveSleepTool,
+    setSleepToolCallerForTests
+  } = await import(`${distUrl("sleepDataService.js")}`);
 
   initializeDatabase(app.getPath("userData"));
 
@@ -28,40 +42,31 @@ app.whenReady().then(async () => {
     return;
   }
 
-  const tools = getCorosMcpTools();
-  const sleepTool = tools.find((tool) => tool.name === "querySleepOverview");
-  console.log(
-    "querySleepOverview schema:",
-    JSON.stringify(sleepTool?.inputSchema ?? null, null, 2)
-  );
-
-  if (sleepTool) {
-    const argVariants = [
-      {},
-      { startDate: "2026-07-01", endDate: "2026-07-07" },
-      { startDate: "20260701", endDate: "20260707" },
-      { startDay: "20260701", endDay: "20260707" },
-      { weeks: 1 }
-    ];
-
-    for (const args of argVariants) {
-      try {
-        const response = await callCorosMcpTool("querySleepOverview", args);
-        const parsed = parseSleepDataResponse(response);
-        console.log("\n--- args:", JSON.stringify(args));
-        console.log("parsed count:", parsed.length);
-        console.log("response preview:", response.slice(0, 1200));
-        if (parsed.length > 0) {
-          console.log("first record:", JSON.stringify(parsed[0], null, 2));
-        }
-      } catch (error) {
-        console.log("\n--- args:", JSON.stringify(args), "FAILED:", error);
-      }
-    }
+  const days = 7;
+  const sleepTool = resolveSleepTool(getCorosMcpTools());
+  if (!sleepTool) {
+    console.error("No sleep tool in the COROS MCP tool list.");
+    app.exit(1);
+    return;
   }
 
-  const summary = await getTrainingSleepData(null, 7);
-  console.log("\ngetTrainingSleepData summary:", JSON.stringify(summary, null, 2));
+  console.log(`${sleepTool.name} schema:`, JSON.stringify(sleepTool.inputSchema, null, 2));
+  console.log("planned args:", JSON.stringify(buildSleepToolArgs(sleepTool, days), null, 2));
+
+  // Log the calls the app actually sends instead of probing extra variants.
+  let callCount = 0;
+  setSleepToolCallerForTests(async (name, args) => {
+    callCount += 1;
+    const response = await callCorosMcpTool(name, args);
+    console.log(`\n--- call ${callCount}: ${name} ${JSON.stringify(args)}`);
+    console.log("response preview:", response.slice(0, 600));
+    return response;
+  });
+
+  const summary = await getTrainingSleepData(null, days);
+  console.log(`\n${callCount} call(s); ${summary.records.length} record(s):`,
+    summary.records.map((record) => record.happenDay).join(", "));
+  console.log("latest:", JSON.stringify(summary.latest ?? null, null, 2));
 
   app.exit(0);
 });
