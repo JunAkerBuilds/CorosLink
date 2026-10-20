@@ -1,5 +1,5 @@
 import { t, useLanguage } from "../i18n/tools";
-import { Cloud, Droplets, MapPin, RefreshCw, Wind } from "lucide-react";
+import { Cloud, Droplets, MapPin, RefreshCw, Settings, Wind } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import {
@@ -16,7 +16,7 @@ import {
 import { WeatherIcon } from "./WeatherIcon";
 import "./overviewWeather.css";
 
-export function OverviewWeatherCard() {
+export function OverviewWeatherCard({ onOpenSettings }: { onOpenSettings?: () => void }) {
   useLanguage();
   const { unitSystem } = useUnitSystem();
   const [snapshot, setSnapshot] = useState<OverviewWeatherSnapshot | null>(
@@ -60,6 +60,18 @@ export function OverviewWeatherCard() {
     };
   }, [refresh]);
 
+  const settingsButton = onOpenSettings ? (
+    <button
+      type="button"
+      className="overview-weather-refresh overview-weather-settings"
+      onClick={onOpenSettings}
+      aria-label={t("Weather settings")}
+      title={t("Weather settings")}
+    >
+      <Settings size={13} aria-hidden="true" />
+    </button>
+  ) : null;
+
   if (!snapshot) {
     return (
       <div
@@ -79,16 +91,20 @@ export function OverviewWeatherCard() {
             <span className="overview-weather-error">{error}</span>
           ) : null}
         </div>
-        {!loading ? (
-          <button
-            type="button"
-            className="overview-weather-refresh"
-            onClick={() => refresh(true)}
-            aria-label={t("Retry loading weather")}
-          >
-            <RefreshCw size={13} aria-hidden="true" />
-          </button>
-        ) : null}
+        <div className="overview-weather-actions">
+          {!loading ? (
+            <button
+              type="button"
+              className="overview-weather-refresh"
+              onClick={() => refresh(true)}
+              aria-label={t("Retry loading weather")}
+              title={t("Retry loading weather")}
+            >
+              <RefreshCw size={13} aria-hidden="true" />
+            </button>
+          ) : null}
+          {settingsButton}
+        </div>
       </div>
     );
   }
@@ -154,15 +170,19 @@ export function OverviewWeatherCard() {
           </div>
         ) : null}
       </div>
-      <button
-        type="button"
-        className="overview-weather-refresh"
-        onClick={() => refresh(true)}
-        disabled={loading}
-        aria-label={t("Refresh weather")}
-      >
-        <RefreshCw size={13} aria-hidden="true" />
-      </button>
+      <div className="overview-weather-actions">
+        <button
+          type="button"
+          className="overview-weather-refresh"
+          onClick={() => refresh(true)}
+          disabled={loading}
+          aria-label={t("Refresh weather")}
+          title={t("Refresh weather")}
+        >
+          <RefreshCw size={13} aria-hidden="true" />
+        </button>
+        {settingsButton}
+      </div>
     </div>
   );
 }

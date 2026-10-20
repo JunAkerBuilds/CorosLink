@@ -48,6 +48,12 @@ export interface CorosNativeBleSnapshot {
   authenticationError?: string;
   /** A device with the remembered watch's name but another Bluetooth identity answered; nothing was sent to it. */
   identityMismatch?: boolean;
+  /** When CorosLink last set the watch's clock and time zone (on every authenticated connection). */
+  clockSetAt?: number;
+  /** When CorosLink last sent the weather forecast to the watch. */
+  weatherSentAt?: number;
+  /** When the watch didn't take the forecast on this connection (it's sent again on the next one). */
+  weatherFailedAt?: number;
   channels: CorosNativeBleChannel[];
   deviceName?: string;
   watchAddress?: string;

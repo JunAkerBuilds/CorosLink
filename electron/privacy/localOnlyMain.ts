@@ -15,6 +15,7 @@ import { SyncCaptureLog, syncCaptureEnabled } from "../localSync/syncCapture";
 import { disconnectMcpServer } from "../mcpClientManager";
 import { configureLocalTraining, logoutTrainingHub } from "../trainingHubService";
 import { dataMode, networkPolicy } from "./bootstrap";
+import { localAccountFromWatchProfile } from "../watchProfileService";
 import type { DataModeStatus, LocalOnlyActivationOptions } from "./dataModeTypes";
 
 /**
@@ -90,6 +91,7 @@ export function registerLocalOnlyMode(options: LocalOnlyMainOptions): LocalDataS
       disconnect: () => corosNativeBle.disconnect(),
       watchKeySaved: () => getCorosWatchfaceStatus().watchAuthenticationAvailable === true,
     },
+    accountProfile: () => localAccountFromWatchProfile(),
     indexSummary: (absolutePath, meta) => indexFitFile(absolutePath, meta),
     onSyncProgress: progress => send("localData:syncProgress", progress)
   });

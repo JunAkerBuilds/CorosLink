@@ -172,9 +172,13 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             writeTarget = write; writeFrames = values
             deadline(5, "Bluetooth did not finish sending the notification.")
             flushWrites()
-        case "routeBlock", "watchfaceBlock", "musicDelete", "officialOtaBlock", "lightMapOtaBlock":
+        case "routeBlock", "watchfaceBlock", "musicDelete", "officialOtaBlock", "lightMapOtaBlock", "dataFileBlock":
             let ota = operation == "officialOtaBlock" || operation == "lightMapOtaBlock"
-            let fileIndex: UInt8 = ota ? (UInt8(exactly: current?["fileId"] as? Int ?? 255) ?? 255) : operation == "musicDelete" ? 93 : operation == "watchfaceBlock" ? 8 : 0x14
+            // Files the phone app pushes: a workout (41) or weather (80); nothing else.
+            let dataFile = UInt8(exactly: current?["fileId"] as? Int ?? 255) ?? 255
+            let fileIndex: UInt8 = ota ? (UInt8(exactly: current?["fileId"] as? Int ?? 255) ?? 255)
+                : operation == "dataFileBlock" ? (pushedDataFiles.contains(dataFile) ? dataFile : 255)
+                : operation == "musicDelete" ? 93 : operation == "watchfaceBlock" ? 8 : 0x14
             guard peripheral?.state == .connected, let headerText = current?["header"] as? String,
                   let blockText = current?["block"] as? String, let header = Data(base64Encoded: headerText),
                   let block = Data(base64Encoded: blockText), validFileBlock(header, block, fileIndex),
@@ -576,8 +580,13 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             return
         }
         let ota = operation == "officialOtaBlock" || operation == "lightMapOtaBlock"
-        if (operation == "routeBlock" || operation == "watchfaceBlock" || operation == "musicDelete" || ota), uuid == controlNotify, data.first == 0x78 {
-            let fileIndex: UInt8 = ota ? (UInt8(exactly: current?["fileId"] as? Int ?? 255) ?? 255) : operation == "musicDelete" ? 93 : operation == "watchfaceBlock" ? 8 : 0x14
+        let dataFile = operation == "dataFileBlock"
+        if (operation == "routeBlock" || operation == "watchfaceBlock" || operation == "musicDelete" || ota || dataFile), uuid == controlNotify, data.first == 0x78 {
+            let fileIndex: UInt8 = ota || dataFile ? (UInt8(exactly: current?["fileId"] as? Int ?? 255) ?? 255) : operation == "musicDelete" ? 93 : operation == "watchfaceBlock" ? 8 : 0x14
+            // A refusal is a single status byte (firmware: 2 busy, 3 bad header, 0x14/0x2b/0xfd file not accepted now).
+            if data.count == 4, data[1] == 0, data[2] == data[3] {
+                fail("The watch refused the file transfer (code \(data[2]))."); return
+            }
             guard (data.count == 6 || data.count == 9), data[1] == 0,
                   data.dropFirst(2).dropLast().reduce(UInt8(0), { $0 &+ $1 }) == data.last else {
                 fail("Invalid COROS file acknowledgement."); return
@@ -681,9 +690,17 @@ func decodeWatchInteraction(_ data: Data) -> [String: Any]? {
     return nil
 }
 
+/// Files CorosLink pushes like the phone app: workout and weather.
+let pushedDataFiles: Set<UInt8> = [41, 80]
+
+func fileLimit(_ fileIndex: UInt8) -> Int {
+    fileIndex == 9 ? 7025507 : fileIndex == 8 ? 0x320000
+        : pushedDataFiles.contains(fileIndex) ? 65_536 : 2_000_000
+}
+
 func validFileBlock(_ header: Data, _ block: Data, _ fileIndex: UInt8) -> Bool {
     guard header.count == 21, block.count > 0, block.count <= 4096,
-          (fileIndex == 8 || fileIndex == 0x14 || fileIndex == 93 || fileIndex == 9 || fileIndex == 50), Array(header.prefix(3)) == [0x78, 0, fileIndex],
+          (fileIndex == 8 || fileIndex == 0x14 || fileIndex == 93 || fileIndex == 9 || fileIndex == 50 || pushedDataFiles.contains(fileIndex)), Array(header.prefix(3)) == [0x78, 0, fileIndex],
           (fileIndex != 8 || header[16] < 10), Array(header[17..<20]) == [0, 0, 3] else { return false }
     func little(_ offset: Int, _ count: Int) -> Int {
         (0..<count).reduce(0) { $0 | Int(header[offset + $1]) << ($1 * 8) }
@@ -695,7 +712,7 @@ func validFileBlock(_ header: Data, _ block: Data, _ fileIndex: UInt8) -> Bool {
         for _ in 0..<8 { crc = (crc &<< 1) ^ (crc & 0x8000 == 0 ? 0 : 0x1021) }
     }
     return little(7, 2) == block.count && little(9, 4) >= block.count &&
-        little(9, 4) <= (fileIndex == 9 ? 7025507 : fileIndex == 8 ? 0x320000 : 2_000_000) && little(3, 4) + little(9, 4) <= (fileIndex == 9 ? 7025507 : fileIndex == 8 ? 0x320000 : 2_000_000) &&
+        little(9, 4) <= fileLimit(fileIndex) && little(3, 4) + little(9, 4) <= fileLimit(fileIndex) &&
         little(13, 2) == Int(crc) && block.reduce(UInt8(0), { $0 &+ $1 }) == header[15] &&
         header[2..<20].reduce(UInt8(0), { $0 &+ $1 }) == header[20]
 }

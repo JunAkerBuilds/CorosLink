@@ -31,7 +31,17 @@ import { encodePhonePairingCode, PHONE_PAIRING_DISPLAY_MS } from "./corosBlePhon
 import type { CorosPhonePairingCode } from "./corosNativeBleTypes";
 import QRCode from "qrcode";
 import { assertReadableSyncFile, PEDOMETER_OPCODE } from "./localSync/activityProtocol";
+import { decodeSettings, encodeSettings, encodeSettingsRequest, SETTING_SWITCH, SETTING_USER_INFO, SETTINGS_GET_OPCODE, SETTINGS_SET_OPCODE } from "./corosWatchProfile";
+import { decodeSwitches, decodeSwitchWord, SETTING_SWITCH_EXT } from "./corosWatchSettings";
+import { encodeSyncTime, nearLocalMidnight, requireWatchAcknowledgement, SYNC_TIME_OPCODE, systemUsesHour12 } from "./corosWatchCommands";
+import { NOT_AVAILABLE_ON_WATCH, watchSupports, type WatchFeature } from "./localSync/watchSyncModels";
 import type { WatchModelId } from "./watchModels";
+import {
+  CONFIG_TRAINING_OPCODE, decodeTrainingList, encodeProgramLite, encodeTrainingBlockHeader,
+  encodeTrainingListRequest, encodeWatchFile, TRAINING_BLOCK_BYTES, TRAINING_KIND,
+  WEATHER_FILE, WORKOUT_FILE, WorkoutNotSendableError, workoutSlot,
+  type WatchTrainingList
+} from "./corosBleTrainingProtocol";
 import type { CorosWifiMusicIdentity, CorosWifiMusicStatus } from "./corosWifiMusicTypes";
 import { connectedWatchfaceTarget, isValidatedWatch, watchfaceBinTarget, watchfaceTargetHardware, watchfaceTargetsForMagic, type WatchfaceTarget } from "./watchfaceTargets";
 
@@ -50,7 +60,7 @@ const emptyState = (): CorosNativeBleSnapshot => ({
 type ConnectMode = "user" | "internal" | "background";
 
 /** Everything that holds the watch link. busyWith() checks them all, so a new task can't be missed by one guard. */
-type LinkTask = "wifiMusic" | "wifiMusicRestore" | "activityScreen" | "localSync" | "musicInventory" | "musicDelete" |
+type LinkTask = "wifiMusic" | "wifiMusicRestore" | "activityScreen" | "localSync" | "push" | "musicInventory" | "musicDelete" |
   "route" | "watchface" | "watchfaceInventory" | "mapStarting" | "connecting" | "scanning";
 
 /** What the user is told when the watch is busy with a task (shown in the app as is). */
@@ -59,6 +69,7 @@ const BUSY_MESSAGE: Record<LinkTask, string> = {
   wifiMusicRestore: "Wait for CorosLink to restore the watch's settings after the audio sync.",
   activityScreen: "Wait for the activity screens to finish syncing.",
   localSync: "Wait for the watch sync to finish.",
+  push: "Wait for the transfer to the watch to finish.",
   musicInventory: "Wait for CorosLink to finish with the music on the watch.",
   musicDelete: "Wait for CorosLink to finish with the music on the watch.",
   route: "Wait for the route to finish sending to the watch.",
@@ -92,6 +103,8 @@ export class CorosNativeBleService {
   private mapPolling?: Promise<CorosWifiMapStatus>;
   private mapStarting?: Promise<{ taskId: string; status: CorosWifiMapStatus }>;
   private routeTask?: Promise<CorosRouteSyncStatus>;
+  /** Files and settings pushed like the phone app does: workouts and weather (CONFIG_TRAINING, SendFile 41/80), settings. */
+  private pushTask?: Promise<unknown>;
   private routeCancelled = false;
   private notificationSequence = 0;
   private watchfaceTask?: Promise<CorosDirectWatchfaceStatus>;
@@ -153,6 +166,7 @@ export class CorosNativeBleService {
       wifiMusicRestore: () => this.wifiMusic.hasPendingRestore(),
       activityScreen: () => this.activityScreenTask,
       localSync: () => this.localSyncTask,
+      push: () => this.pushTask,
       musicInventory: () => this.musicInventoryTask,
       musicDelete: () => this.musicDeleteTask,
       route: () => this.routeTask,
@@ -329,7 +343,8 @@ export class CorosNativeBleService {
             }
             const authenticated = backend === "system" && response.result.connected ? {
               systemBind: this.state.systemBind, authenticatedAt: this.state.authenticatedAt,
-              authenticationError: this.state.authenticationError
+              authenticationError: this.state.authenticationError, clockSetAt: this.state.clockSetAt, weatherSentAt: this.state.weatherSentAt,
+              weatherFailedAt: this.state.weatherFailedAt
             } : {};
             this.state = { ...response.result, ...authenticated, backend, available: true };
             request.resolve({ result: this.publicState(), payload: response.payload });
@@ -421,7 +436,7 @@ export class CorosNativeBleService {
     this.worker = undefined;
     this.musicInventory = undefined;
     this.state = { ...this.state, phase: this.state.phase === "failed" ? "failed" : "disconnected", connected: false, encrypted: false,
-      systemBind: this.state.systemBind === "unavailable" ? "unavailable" : "not_authenticated", authenticatedAt: undefined, watchEvents: undefined,
+      systemBind: this.state.systemBind === "unavailable" ? "unavailable" : "not_authenticated", authenticatedAt: undefined, clockSetAt: undefined, weatherSentAt: undefined, weatherFailedAt: undefined, watchEvents: undefined,
       channels: this.state.channels.map(channel => ({ ...channel, subscribed: false })) };
     for (const request of this.pending.values()) {
       clearTimeout(request.timer);
@@ -490,9 +505,9 @@ export class CorosNativeBleService {
   userConnectCount(): number { return this.userConnects; }
 
   connect(pair = false, options: CorosNativeBleConnectOptions = {}, mode: ConnectMode = "internal"): Promise<CorosNativeBleSnapshot> {
-    // Transfers that connect on their own (routes) and an open connection a face or map
+    // Transfers that connect on their own (pushes, routes) and an open connection a face or map
     // operation is using are left as they are: connecting then only reads the status.
-    const busy = this.busyWith("wifiMusicRestore", "route", "watchface", "watchfaceInventory", "mapStarting", "connecting", "scanning");
+    const busy = this.busyWith("wifiMusicRestore", "push", "route", "watchface", "watchfaceInventory", "mapStarting", "connecting", "scanning");
     if (busy) return Promise.reject(new Error(BUSY_MESSAGE[busy]));
     this.musicInventory = undefined;
     if (this.connecting) return this.connecting;
@@ -551,6 +566,10 @@ export class CorosNativeBleService {
         setSetting(DEVICE_SETTING, JSON.stringify({ deviceName: this.state.deviceName, deviceId: this.state.deviceId }));
         await this.authenticateSystem();
         if (this.state.systemBind === "authenticated") this.rememberIdentity("system", mode, this.state.deviceId, expected.confirmed);
+        // The watch's own 12/24-hour setting is read before the clock is set, so setting it keeps that format.
+        const switches = await this.readProfileOnConnect();
+        await this.setWatchClock(switches);
+        await this.pushOnConnect();
         return this.publicState();
       }
       const { stateDirectory } = this.paths();
@@ -659,6 +678,40 @@ export class CorosNativeBleService {
     }
   }
 
+  /**
+   * Sets the watch's clock and time zone from this computer, as the phone app
+   * does on every connection. The message also carries the 12/24-hour format:
+   * the watch's own setting, as read on this connection, so setting the clock
+   * never changes it. When it can't be read, the clock isn't set on this
+   * connection. Best effort: a refusal is recorded and never fails the connection.
+   */
+  private async setWatchClock(switches?: Buffer): Promise<void> {
+    if (!this.state.connected || this.state.systemBind !== "authenticated" || this.backendInUse !== "system") return;
+    try {
+      let hour12: boolean;
+      // Bit 13 means 12-hour only where the firmware was checked; other watches get this computer's format, as from the phone app.
+      if (watchSupports("clockFormat", this.watchTarget()?.model)) {
+        const own = hour12From(switches) ?? hour12From(await this.readSwitches().then(read => read.word, () => undefined));
+        if (own === undefined) {
+          this.trace.add("clock not set", { reason: "12/24-hour format unknown" });
+          recordDiagnosticNotice("corosBle:setClock", "The watch's 12/24-hour format couldn't be read, so its clock wasn't set on this connection.", "warning");
+          return;
+        }
+        hour12 = own;
+      } else {
+        hour12 = systemUsesHour12();
+      }
+      while (nearLocalMidnight(new Date())) await new Promise(resolve => setTimeout(resolve, 2_000));
+      const reply = await this.send("exchange", { opcode: SYNC_TIME_OPCODE, payload: encodeSyncTime(new Date(), hour12).toString("base64"), maximumWriteBytes: 20 });
+      requireWatchAcknowledgement(Buffer.from(typeof reply.payload === "string" ? reply.payload : "", "base64"), "time and time zone");
+      this.state = { ...this.state, clockSetAt: Date.now() };
+      this.trace.add("clock set", {});
+    } catch (error) {
+      this.trace.add("clock set failed", {});
+      recordDiagnosticError("corosBle:setClock", error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
   scan(): Promise<CorosNativeBleSnapshot> {
     if (this.scanning) return this.scanning;
     const busy = this.busyWith("wifiMusicRestore", "connecting");
@@ -685,6 +738,11 @@ export class CorosNativeBleService {
     if (busy === "localSync" || busy === "musicInventory" || busy === "musicDelete") return Promise.reject(new Error(BUSY_MESSAGE[busy]));
     if (busy) return Promise.resolve(this.publicState());
     return this.request("refresh");
+  }
+
+  /** Writes CorosLink has checked only against some watches' firmware (localSync/watchSyncModels.ts). */
+  private requireWatchFeature(feature: WatchFeature): void {
+    if (!watchSupports(feature, this.watchTarget()?.model)) throw new Error(NOT_AVAILABLE_ON_WATCH);
   }
 
   /** Validated on PACE Pro 3.2008.0; every other watch CorosLink recognizes is open as beta. */
@@ -1038,6 +1096,43 @@ export class CorosNativeBleService {
 
   cancelRouteSync(): void { if (this.routeTask) this.routeCancelled = true; }
 
+  private pushOperation<T>(task: () => Promise<T>): Promise<T> {
+    const busy = this.busyWith();
+    if (busy) return Promise.reject(new Error(BUSY_MESSAGE[busy]));
+    const operation = (async () => {
+      await this.mapPolling?.catch(() => {});
+      await this.polling?.catch(() => {});
+      if (!this.state.connected) await this.connect(false);
+      this.requireTransferSession();
+      return task();
+    })().finally(() => { this.pushTask = undefined; });
+    this.pushTask = operation;
+    return operation;
+  }
+
+  /**
+   * Sends one pushed file block by block. A transfer the watch broke off after
+   * accepting data is reset by disconnecting; a refused first header leaves
+   * nothing open on the watch, so the connection stays.
+   */
+  private async pushDataFile(fileId: number, file: Buffer, slot: number): Promise<void> {
+    let accepted = 0;
+    try {
+      for (let offset = 0; offset < file.length; offset += TRAINING_BLOCK_BYTES) {
+        this.requireTransferSession();
+        const block = file.subarray(offset, offset + TRAINING_BLOCK_BYTES);
+        await this.send("dataFileBlock", { fileId, header: encodeTrainingBlockHeader(fileId, block, offset, file.length, slot).toString("base64"), block: block.toString("base64") });
+        accepted += 1;
+      }
+    } catch (error) {
+      if (accepted > 0) await this.disconnect().catch(() => this.stop());
+      throw error;
+    }
+  }
+
+  /** Called after each authenticated connection (the clock is already set): weather, for one. */
+  private connectedHook?: () => Promise<Buffer | undefined>;
+
   /** A device that answered with the remembered name but another identity, until the user decides. */
   private pendingIdentity?: { backend: CorosBleBackend; deviceId: string; deviceName?: string; at: number };
   private identityListeners = new Set<() => void>();
@@ -1110,6 +1205,174 @@ export class CorosNativeBleService {
   /** A watch has been connected before over the computer's Bluetooth, so it can be found again by name. */
   hasRememberedWatch(): boolean {
     return Boolean(getSetting(DEVICE_SETTING));
+  }
+
+  /** What to push on every connection, as the phone app does: the weather file, when there is one. */
+  setConnectedPush(hook: () => Promise<Buffer | undefined>): void {
+    this.connectedHook = hook;
+  }
+
+  /** Where the watch's training profile goes after each connection (watchProfileService). */
+  private profileSink?: (profile: Buffer, model?: WatchModelId) => void;
+
+  setProfileSink(sink: (profile: Buffer, model?: WatchModelId) => void): void {
+    this.profileSink = sink;
+  }
+
+  /** The training profile (setting 10); the watch sends its system switches (setting 0) in the same reply. */
+  private async readProfileReply(): Promise<Map<number, Buffer>> {
+    return decodeSettings(await this.controlCommand(SETTINGS_GET_OPCODE, encodeSettingsRequest([SETTING_USER_INFO])));
+  }
+
+  private async readProfile(): Promise<Buffer> {
+    const profile = (await this.readProfileReply()).get(SETTING_USER_INFO);
+    if (!profile?.length) throw new Error("The watch did not return its training profile.");
+    return profile;
+  }
+
+  /** Where the watch's system switches go after each connection (watchSettingsService). */
+  private switchesSink?: (switches: Buffer, ext?: Buffer, model?: WatchModelId) => void;
+
+  setSwitchesSink(sink: (switches: Buffer, ext?: Buffer, model?: WatchModelId) => void): void {
+    this.switchesSink = sink;
+  }
+
+  /**
+   * Reads the training profile and system switches (read-only), as the phone app reads
+   * settings on connect. Returns the switches, which carry the watch's 12/24-hour format.
+   */
+  private async readProfileOnConnect(): Promise<Buffer | undefined> {
+    if (!this.state.connected || this.state.systemBind !== "authenticated" || this.backendInUse !== "system") return undefined;
+    const failed = (source: string, error: unknown) => { recordDiagnosticError(source, error instanceof Error ? error : new Error(String(error))); };
+    let reply: Map<number, Buffer>;
+    try { reply = await this.readProfileReply(); } catch (error) { failed("corosBle:readProfile", error); return undefined; }
+    const model = this.watchTarget()?.model;
+    // Each part on its own: a profile that doesn't decode keeps the switches, and with them the watch's 12/24-hour format.
+    try {
+      const profile = reply.get(SETTING_USER_INFO);
+      if (!profile?.length) throw new Error("The watch did not return its training profile.");
+      this.profileSink?.(profile, model);
+    } catch (error) { failed("corosBle:readProfile", error); }
+    const switches = reply.get(SETTING_SWITCH);
+    if (!switches?.length) return undefined;
+    if (this.switchesSink) {
+      try {
+        // The extended switches (type 31) are a separate read; older watches don't send them.
+        const ext = await this.controlCommand(SETTINGS_GET_OPCODE, encodeSettingsRequest([SETTING_SWITCH_EXT]))
+          .then(answer => decodeSettings(answer).get(SETTING_SWITCH_EXT)).catch(() => undefined);
+        this.switchesSink(switches, ext?.length ? ext : undefined, model);
+      } catch (error) { failed("corosBle:readSettings", error); }
+    }
+    return switches;
+  }
+
+  /** The watch's training profile now (UserInfo protobuf). */
+  readWatchProfile(): Promise<Buffer> {
+    return this.pushOperation(() => this.readProfile());
+  }
+
+  /** Writes a training profile (SYSTEM_SETTINGS_SET, setting 10) and returns what the watch holds afterwards. */
+  writeWatchProfile(profile: Buffer): Promise<Buffer> {
+    return this.pushOperation(async () => {
+      this.requireWatchFeature("profile");
+      const stored = await this.writeThenRead("profile", () => this.controlCommand(SETTINGS_SET_OPCODE, encodeSettings([[SETTING_USER_INFO, profile]])), () => this.readProfile());
+      this.profileSink?.(stored, this.watchTarget()?.model);
+      return stored;
+    });
+  }
+
+  /**
+   * A settings write, then what the watch holds. A write whose reply didn't arrive may still have been
+   * applied, so the watch is read before it is reported as failed; the caller compares what it holds.
+   */
+  private async writeThenRead<T>(what: string, write: () => Promise<unknown>, read: () => Promise<T>): Promise<T> {
+    try {
+      await write();
+    } catch (error) {
+      const stored = await read().catch(() => undefined);
+      if (stored === undefined) throw error;
+      recordDiagnosticNotice("corosBle:settingsWrite", `The watch didn't answer the ${what} write; what it holds was read back instead.`, "warning");
+      return stored;
+    }
+    return read();
+  }
+
+  /** The system switches (type 0) and extended switches (type 31), as stored on the watch, with the watch's model (its fields differ by model). */
+  private async readSwitches(): Promise<{ word: Buffer; ext?: Buffer; model?: WatchModelId }> {
+    const reply = decodeSettings(await this.controlCommand(SETTINGS_GET_OPCODE, encodeSettingsRequest([SETTING_SWITCH_EXT])));
+    const word = reply.get(SETTING_SWITCH);
+    if (!word || word.length < 4) throw new Error("The watch did not return its settings.");
+    const ext = reply.get(SETTING_SWITCH_EXT);
+    const model = this.watchTarget()?.model;
+    return { word, ...(ext && ext.length >= 8 ? { ext } : {}), ...(model ? { model } : {}) };
+  }
+
+  readWatchSwitches(): Promise<{ word: Buffer; ext?: Buffer; model?: WatchModelId }> {
+    return this.pushOperation(() => this.readSwitches());
+  }
+
+  /** Writes the switch records (whole, as the app does), then reads them back. */
+  writeWatchSwitches(word: Buffer, ext?: Buffer): Promise<{ word: Buffer; ext?: Buffer; model?: WatchModelId }> {
+    return this.pushOperation(async () => {
+      this.requireWatchFeature("settings");
+      const settings: Array<[number, Buffer]> = [[SETTING_SWITCH, word]];
+      if (ext) settings.push([SETTING_SWITCH_EXT, ext]);
+      const stored = await this.writeThenRead("settings", () => this.controlCommand(SETTINGS_SET_OPCODE, encodeSettings(settings)), () => this.readSwitches());
+      this.switchesSink?.(stored.word, stored.ext, this.watchTarget()?.model);
+      return stored;
+    });
+  }
+
+  private async pushOnConnect(): Promise<void> {
+    // Sent only once a weather location is known (watchWeatherFile returns nothing otherwise).
+    if (!this.connectedHook || !this.state.connected || this.state.systemBind !== "authenticated" || this.backendInUse !== "system") return;
+    // Only watches whose weather decoder was checked against the file CorosLink builds.
+    if (!watchSupports("weather", this.watchTarget()?.model)) return;
+    try {
+      const weather = await Promise.race([this.connectedHook(), new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), 20_000))]);
+      if (!weather) return;
+      // One block (the encoder keeps it under TRAINING_BLOCK_BYTES), so a failure never leaves a
+      // transfer half done and pushDataFile keeps the link. Not retried: the watch that didn't
+      // answer a header once (15 s) didn't on the next connection either; the next one sends it.
+      await this.pushDataFile(WEATHER_FILE, weather, 0);
+      this.state = { ...this.state, weatherSentAt: Date.now(), weatherFailedAt: undefined };
+      this.trace.add("weather sent", { bytes: weather.length });
+    } catch (error) {
+      // Weather is optional: the connection carries on without it.
+      if (this.state.connected) this.state = { ...this.state, weatherFailedAt: Date.now() };
+      this.trace.add("weather failed", {});
+      recordDiagnosticError("corosBle:weather", error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
+  private async readTrainingList(kind: number): Promise<WatchTrainingList> {
+    return decodeTrainingList(await this.controlCommand(CONFIG_TRAINING_OPCODE, encodeTrainingListRequest(kind)));
+  }
+
+  /**
+   * Sends one workout (a COROS program as the Training Library stores it) to the
+   * watch's workout list, replacing an older copy of the same workout, and
+   * checks the watch lists it afterwards.
+   */
+  sendWorkoutToWatch(program: Record<string, unknown>): Promise<{ slot: number; bytes: number }> {
+    return this.pushOperation(async () => {
+      this.requireWatchFeature("workouts");
+      const programId = String(program.id ?? "");
+      if (!/^\d+$/.test(programId)) throw new WorkoutNotSendableError("Save the workout before sending it to the watch.");
+      const list = await this.readTrainingList(TRAINING_KIND.workouts);
+      const slot = workoutSlot(list, programId);
+      const file = encodeWatchFile(encodeProgramLite(program), WORKOUT_FILE, Number(program.createTimestamp) || 0);
+      if (list.maxBytes && file.length > list.maxBytes) {
+        throw new WorkoutNotSendableError("This workout is too long for the watch. Remove some steps, then send it again.");
+      }
+      await this.pushDataFile(WORKOUT_FILE, file, slot);
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const after = await this.readTrainingList(TRAINING_KIND.workouts);
+        if (after.entries.some(entry => entry.id === programId)) return { slot, bytes: file.length };
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+      throw new Error("The watch did not list the workout after the transfer. Reconnect and try again.");
+    });
   }
 
   syncRoute(route: GeneratedRoute): Promise<CorosRouteSyncStatus> {
@@ -1327,6 +1590,12 @@ export class CorosNativeBleService {
       worker.once("close", () => { clearTimeout(timer); resolve(); });
     });
   }
+}
+
+/** The 12-hour switch (bit 13) in the watch's system switches, or undefined when they can't be read. */
+function hour12From(switches: Buffer | undefined): boolean | undefined {
+  if (!switches?.length) return undefined;
+  try { return decodeSwitches(decodeSwitchWord(switches)).timeFormat === 1; } catch { return undefined; }
 }
 
 export const corosNativeBle = new CorosNativeBleService();

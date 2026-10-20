@@ -1,6 +1,9 @@
 // Must stay the first import: reads the persisted data mode and installs the
 // network guards before any other module can open a connection.
 import { networkPolicy } from "./privacy/bootstrap";
+import { getWatchSettings, storeWatchSwitches, updateWatchSettings } from "./watchSettingsService";
+import { chooseWeatherLocation, getWeatherLocation, searchWeatherPlaces, setWatchWeatherLocation, watchWeatherFile } from "./watchWeatherService";
+import { getWatchProfile, storeWatchProfile, updateWatchProfile } from "./watchProfileService";
 import { confineMainWindow, requireMainWindowSender } from "./mainWindowGuard";
 import { LocalOnlyFeatureError } from "./privacy/remoteFeatures";
 import { registerLocalOnlyMode } from "./privacy/localOnlyMain";
@@ -119,6 +122,7 @@ import {
   getWorkoutForEdit,
   previewWorkoutEdit,
   saveWorkoutEdit,
+  getWorkoutProgramDetail,
   loginTrainingHub,
   verifyTrainingHubTwoFactor,
   resendTrainingHubTwoFactorCode,
@@ -1156,7 +1160,7 @@ function registerIpcHandlers(): void {
     setNativeLanguage(language);
   });
   ipcMain.handle("corosBle:status", () => corosNativeBle.status());
-  // Counted as the user's connection (see userConnect).
+  // Connecting sets the watch's clock and sends weather; counted as the user's (see userConnect).
   ipcMain.handle("corosBle:connect", (event, input?: import("./corosNativeBleTypes").CorosNativeBleConnectOptions) => {
     mainWindowSender(event, "the watch connection");
     return corosNativeBle.userConnect(input?.pair === true, input);
@@ -1340,6 +1344,45 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle("corosBle:routeStatus", () => corosNativeBle.routeSyncStatus());
   ipcMain.handle("corosBle:routeCancel", () => corosNativeBle.cancelRouteSync());
+  corosNativeBle.setConnectedPush(() => watchWeatherFile());
+  corosNativeBle.setProfileSink((profile, model) => storeWatchProfile(profile, new Date(), model));
+  corosNativeBle.setSwitchesSink((switches, ext, model) => storeWatchSwitches(switches, ext, new Date(), model));
+  ipcMain.handle("watch:getProfile", () => getWatchProfile() ?? null);
+  ipcMain.handle("watch:updateProfile", (event, edits: unknown) => {
+    mainWindowSender(event, "watch settings");
+    return updateWatchProfile(edits, {
+      read: () => corosNativeBle.readWatchProfile(),
+      write: profile => corosNativeBle.writeWatchProfile(profile)
+    });
+  });
+  ipcMain.handle("watch:setWeatherLocation", (event, location: unknown) => {
+    mainWindowSender(event, "the weather location");
+    return setWatchWeatherLocation(location);
+  });
+  ipcMain.handle("watch:getWeatherLocation", () => getWeatherLocation() ?? null);
+  ipcMain.handle("watch:getSettings", () => getWatchSettings() ?? null);
+  ipcMain.handle("watch:updateSettings", (event, edits: unknown) => {
+    mainWindowSender(event, "watch settings");
+    return updateWatchSettings(edits, {
+      read: () => corosNativeBle.readWatchSwitches(),
+      write: (word, ext) => corosNativeBle.writeWatchSwitches(word, ext)
+    });
+  });
+  ipcMain.handle("watch:chooseWeatherLocation", (event, location: unknown) => {
+    mainWindowSender(event, "the weather location");
+    return chooseWeatherLocation(location) ?? null;
+  });
+  ipcMain.handle("watch:searchWeatherPlaces", (event, query: unknown, language: unknown) => {
+    mainWindowSender(event, "the weather location");
+    return searchWeatherPlaces(query, typeof language === "string" ? language : "en");
+  });
+  ipcMain.handle("corosBle:sendWorkout", async (event, programId: unknown) => {
+    mainWindowSender(event, "Send to watch");
+    if (typeof programId !== "string" || !/^\d{1,20}$/.test(programId)) throw new Error("Invalid workout.");
+    const program = await getWorkoutProgramDetail(programId);
+    if (!program) throw new Error("The workout was not found.");
+    return corosNativeBle.sendWorkoutToWatch(program);
+  });
   ipcMain.handle("corosBle:routeSync", async (event, routeId: unknown) => {
     mainWindowSender(event, "route sync");
     if (typeof routeId !== "string" || routeId.length > 128) throw new Error("Invalid saved route.");

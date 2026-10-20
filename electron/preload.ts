@@ -350,6 +350,16 @@ const api = {
   downloadCorosWifiMap: (previewId: string): Promise<{ taskId: string; status: import("./corosWifiMapTypes").CorosWifiMapStatus }> => ipcRenderer.invoke("corosBle:mapDownload", previewId),
   getCorosRouteSyncStatus: (): Promise<import("./corosBleRouteTypes").CorosRouteSyncStatus> => ipcRenderer.invoke("corosBle:routeStatus"),
   syncCorosRoute: (routeId: string): Promise<import("./corosBleRouteTypes").CorosRouteSyncStatus> => ipcRenderer.invoke("corosBle:routeSync", routeId),
+  getWatchProfile: (): Promise<import("./watchProfileService").WatchProfileSummary | null> => ipcRenderer.invoke("watch:getProfile"),
+  updateWatchProfile: (edits: { maxHr?: number; restingHr?: number; thresholdHr?: number; hrZoneType?: number; thresholdPaceSecondsPerKm?: number }): Promise<import("./watchProfileService").WatchProfileSummary> => ipcRenderer.invoke("watch:updateProfile", edits),
+  setWatchWeatherLocation: (location: { latitude: number; longitude: number; place?: string }): Promise<void> => ipcRenderer.invoke("watch:setWeatherLocation", location),
+  getWatchSettings: (): Promise<import("./watchSettingsService").WatchSettingsSummary | null> => ipcRenderer.invoke("watch:getSettings"),
+  updateWatchSettings: (edits: Record<string, number>): Promise<import("./watchSettingsService").WatchSettingsSummary> => ipcRenderer.invoke("watch:updateSettings", edits),
+  getWeatherLocation: (): Promise<import("./watchWeatherService").WeatherLocation | null> => ipcRenderer.invoke("watch:getWeatherLocation"),
+  chooseWeatherLocation: (location: { latitude: number; longitude: number; place?: string } | null): Promise<import("./watchWeatherService").WeatherLocation | null> =>
+    ipcRenderer.invoke("watch:chooseWeatherLocation", location),
+  searchWeatherPlaces: (query: string, language: string): Promise<import("./watchWeatherService").WeatherPlace[]> => ipcRenderer.invoke("watch:searchWeatherPlaces", query, language),
+  sendWorkoutToWatch: (programId: string): Promise<{ slot: number; bytes: number }> => ipcRenderer.invoke("corosBle:sendWorkout", programId),
   cancelCorosRouteSync: (): Promise<void> => ipcRenderer.invoke("corosBle:routeCancel"),
   cancelCorosBluetoothDeviceSelection: (): Promise<void> =>
     ipcRenderer.invoke("watchfaces:cancelBluetoothDevice"),

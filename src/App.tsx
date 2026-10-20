@@ -142,6 +142,7 @@ import {
 import { trackAvatarColor, trackInitial } from "./media/trackAvatar";
 import { useTimeOfDayGreeting } from "./hooks/useTimeOfDayGreeting";
 import { OverviewWeatherCard } from "./overview/OverviewWeatherCard";
+import { readCachedOverviewWeather, shareWeatherLocationWithWatch } from "./overview/overviewWeather";
 import {
   OverviewBriefing,
   OverviewLaunchpad,
@@ -381,6 +382,8 @@ export default function App() {
   useEffect(() => {
     if (accountSetupView && activeView !== accountSetupView) setAccountSetupView(null);
   }, [activeView, accountSetupView]);
+  // The watch's forecast is for the place the Overview's weather last used.
+  useEffect(() => { shareWeatherLocationWithWatch(readCachedOverviewWeather()); }, []);
   const [startupView, setStartupView] = useState<View>(readStartupView);
   const [sidebarExpanded, setSidebarExpanded] = useState(
     createInitialSidebarExpanded,
@@ -2564,6 +2567,7 @@ export default function App() {
               onOpenChange={setWatchMenuOpen}
               onOpenWatchFaces={() => openWatchfacesTarget("watch")}
               onSignIn={() => openWatchfacesTarget("sign-in")}
+              onOpenSettings={openSettingsSection}
               localOnly={localOnly}
               syncRequest={watchSyncRequest}
               onSyncRequestHandled={clearWatchSyncRequest}
@@ -2654,6 +2658,7 @@ export default function App() {
                 onDeleteDownload={handleDeleteDownload}
                 onOpenLibrary={() => openMediaTab("library")}
                 onNavigate={setActiveView}
+                onOpenWeatherSettings={() => openSettingsSection("weather")}
                 onSyncWatch={localOnly && trainingHubLoaded ? requestWatchSync : undefined}
                 onOpenTrainingActivity={openTrainingHubActivity}
                 onSelectTrainingActivity={handleTrainingHubActivityDetail}
@@ -3362,6 +3367,7 @@ interface MediaOverviewTabProps {
   onDeleteDownload: (track: LocalTrack) => void;
   onOpenLibrary: () => void;
   onNavigate: (view: View) => void;
+  onOpenWeatherSettings: () => void;
   /** Local-Only Mode: opens the watch menu and starts a sync. */
   onSyncWatch?: () => void;
   onOpenTrainingActivity: (activity: TrainingHubActivity) => void;
@@ -3387,6 +3393,7 @@ function MediaOverviewTab({
   onDeleteDownload,
   onOpenLibrary,
   onNavigate,
+  onOpenWeatherSettings,
   onSyncWatch,
   onOpenTrainingActivity,
   onSelectTrainingActivity,
@@ -3451,7 +3458,7 @@ function MediaOverviewTab({
             <p className="dashboard-subtitle">{briefing.brief}</p>
           ) : null}
         </div>
-        <OverviewWeatherCard />
+        <OverviewWeatherCard onOpenSettings={onOpenWeatherSettings} />
       </header>
 
       {/* A connected watch is the live thing on the desk, so it leads. */}

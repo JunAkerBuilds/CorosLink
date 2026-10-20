@@ -321,6 +321,15 @@ export interface CorosLinkApi {
   downloadCorosWifiMap: (previewId: string) => Promise<{ taskId: string; status: import("../electron/corosWifiMapTypes").CorosWifiMapStatus }>;
   getCorosRouteSyncStatus: () => Promise<import("../electron/corosBleRouteTypes").CorosRouteSyncStatus>;
   syncCorosRoute: (routeId: string) => Promise<import("../electron/corosBleRouteTypes").CorosRouteSyncStatus>;
+  getWatchProfile: () => Promise<import("../electron/watchProfileService").WatchProfileSummary | null>;
+  updateWatchProfile: (edits: { maxHr?: number; restingHr?: number; thresholdHr?: number; hrZoneType?: number; thresholdPaceSecondsPerKm?: number }) => Promise<import("../electron/watchProfileService").WatchProfileSummary>;
+  setWatchWeatherLocation: (location: { latitude: number; longitude: number; place?: string }) => Promise<void>;
+  getWatchSettings: () => Promise<import("../electron/watchSettingsService").WatchSettingsSummary | null>;
+  updateWatchSettings: (edits: Record<string, number>) => Promise<import("../electron/watchSettingsService").WatchSettingsSummary>;
+  getWeatherLocation: () => Promise<import("../electron/watchWeatherService").WeatherLocation | null>;
+  chooseWeatherLocation: (location: { latitude: number; longitude: number; place?: string } | null) => Promise<import("../electron/watchWeatherService").WeatherLocation | null>;
+  searchWeatherPlaces: (query: string, language: string) => Promise<import("../electron/watchWeatherService").WeatherPlace[]>;
+  sendWorkoutToWatch: (programId: string) => Promise<{ slot: number; bytes: number }>;
   cancelCorosRouteSync: () => Promise<void>;
   cancelCorosBluetoothDeviceSelection: () => Promise<void>;
   onCorosBluetoothDevices: (

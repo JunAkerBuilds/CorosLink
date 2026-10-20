@@ -8,7 +8,12 @@ import binascii
 from coros_ble_protocol import ProtocolError
 
 ROUTE_FILE, WATCHFACE_FILE, MUSIC_DELETE_FILE = 0x14, 8, 93
-NAMES = {ROUTE_FILE: 'route', WATCHFACE_FILE: 'watch face', MUSIC_DELETE_FILE: 'music delete'}
+# Small files pushed like the phone app does: a workout (41) and weather (80).
+WORKOUT_FILE, WEATHER_FILE = 41, 80
+DATA_FILES = frozenset({WORKOUT_FILE, WEATHER_FILE})
+DATA_FILE_LIMIT = 65_536
+NAMES = {ROUTE_FILE: 'route', WATCHFACE_FILE: 'watch face', MUSIC_DELETE_FILE: 'music delete',
+         WORKOUT_FILE: 'workout', WEATHER_FILE: 'weather'}
 
 
 def little(data, offset, size):
@@ -18,7 +23,8 @@ def little(data, offset, size):
 def validate_file_block(header, block, file_index):
     # Imported lazily: the music module imports this one for `little`.
     from coros_ble_music import valid_music_delete_file
-    limit = 0x320000 if file_index == WATCHFACE_FILE else 2_000_000
+    limit = (0x320000 if file_index == WATCHFACE_FILE else DATA_FILE_LIMIT if file_index in DATA_FILES
+             else 2_000_000)
     if (file_index not in NAMES or len(header) != 21 or header[:3] != bytes([0x78, 0, file_index]) or
             not 0 < len(block) <= 4096 or little(header, 7, 2) != len(block) or
             little(header, 9, 4) < len(block) or little(header, 9, 4) > limit or
@@ -56,6 +62,9 @@ async def send_file_block(header, block, queue, write_control, write_bulk, maxim
                 if value and on_frame is not None:
                     on_frame(value)
                 continue
+            # A refusal is a single status byte (firmware: 2 busy, 3 bad header, others file not accepted now).
+            if len(value) == 4 and value[1] == 0 and value[2] == value[3]:
+                raise ProtocolError('The watch refused the ' + name + ' transfer (code ' + str(value[2]) + ').')
             if len(value) not in (6, 9) or value[1] != 0 or sum(value[2:-1]) & 255 != value[-1]:
                 raise ProtocolError('Invalid COROS ' + name + ' acknowledgement.')
             if stage == 'ready':

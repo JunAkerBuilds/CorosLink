@@ -599,7 +599,8 @@
 
 .watch-menu-panel .watch-link-details dl > div + div { border-top: 1px solid var(--watch-link-rule); }
 .watch-menu-panel .watch-link-details dt { flex: none; font-size: 12.5px; }
-.watch-menu-panel .watch-link-details dd { margin: 0; text-align: right; }
+/* Long values (clock, weather, satellite data) wrap instead of being cut off. */
+.watch-menu-panel .watch-link-details dd { min-width: 0; margin: 0; overflow: visible; text-align: right; text-overflow: clip; white-space: normal; overflow-wrap: break-word; }
 /* The page title names the composer; keep the label for assistive tech. */
 .watch-menu-panel .watch-link-composer label {
   position: absolute;
@@ -631,4 +632,22 @@
   .watch-menu-sync-meter { transition: none; }
   .watch-menu-row > svg:last-child,
   .watch-menu-trigger-status > svg { transition: none; }
+}
+
+/* A link-styled action inside a details value, e.g. "Choose a place". */
+.watch-link-inline-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.watch-link-inline-button:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

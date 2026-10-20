@@ -18,7 +18,7 @@ import traceback
 
 from bleak import BleakClient, BleakScanner
 from coros_ble_protocol import Decoder, ProtocolError, frames
-from coros_ble_route import MUSIC_DELETE_FILE, ROUTE_FILE, WATCHFACE_FILE, send_file_block
+from coros_ble_route import DATA_FILES, MUSIC_DELETE_FILE, ROUTE_FILE, WATCHFACE_FILE, send_file_block
 from coros_ble_music import MusicDeleteReceiver, MusicPageReceiver, decode_watch_interaction
 from coros_ble_activity import SyncBlockReceiver
 
@@ -441,10 +441,13 @@ async def main():
                     response = await session.exchange(data, request['maximumWriteBytes'], request.get('opcode', 0xa5))
                     result = session.state
                     extra['payload'] = base64.b64encode(response).decode()
-                elif operation in FILE_OPERATIONS:
+                elif operation in FILE_OPERATIONS or operation == 'dataFileBlock':
+                    file_index = FILE_OPERATIONS.get(operation, request.get('fileId'))
+                    if operation == 'dataFileBlock' and file_index not in DATA_FILES:
+                        raise ProtocolError('Only workout and weather files can be sent this way.')
                     reply = await session.file_block(base64.b64decode(request['header'], validate=True),
                                                      base64.b64decode(request['block'], validate=True),
-                                                     FILE_OPERATIONS[operation])
+                                                     file_index)
                     result = session.state
                     if reply is not None:
                         extra['payload'] = base64.b64encode(reply).decode()

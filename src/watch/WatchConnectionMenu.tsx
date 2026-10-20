@@ -2,7 +2,7 @@ import { t, useLanguage, getLocale, formatDate } from "../i18n/tools";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   AlertCircle, BatteryMedium, Bluetooth, ChevronDown, ChevronLeft, ChevronRight, Download, Info, KeyRound, LayoutGrid, Loader2,
-  MessageSquare, RefreshCw, RotateCw, Search, Send, Smartphone, Unplug, Upload, Usb, Watch, type LucideIcon
+  MessageSquare, RefreshCw, RotateCw, Search, Send, Settings, Smartphone, Unplug, Upload, Usb, Watch, type LucideIcon
 } from "lucide-react";
 import type { CorosWatchKeySummary, CorosWatchfaceStatus, WatchStatus } from "../../electron/types";
 import type { CorosNativeBleDeviceChoice, CorosNativeBleSnapshot } from "../../electron/corosNativeBleTypes";
@@ -32,6 +32,8 @@ interface WatchConnectionMenuProps {
   onOpenChange: (open: boolean) => void;
   onOpenWatchFaces: () => void;
   onSignIn: () => void;
+  /** Opens a section of Settings ("watch", "weather"). */
+  onOpenSettings?: (section: "watch" | "weather") => void;
   /** Local-Only Mode: the Training Hub shows what a watch sync reads, so the menu offers one. */
   localOnly?: boolean;
   /** Set when another view asks for "Sync watch now": the menu opens and starts it. */
@@ -120,7 +122,7 @@ function triggerState(snapshot: CorosNativeBleSnapshot | null, usbWatch: WatchSt
 }
 
 function WatchMenuPanel({
-  id, api, snapshot, onSnapshotChange, usbWatch, onOpenChange, onOpenWatchFaces, onSignIn, localOnly, syncRequest, onSyncRequestHandled
+  id, api, snapshot, onSnapshotChange, usbWatch, onOpenChange, onOpenWatchFaces, onSignIn, onOpenSettings, localOnly, syncRequest, onSyncRequestHandled
 }: WatchConnectionMenuProps & { id: string }) {
   useLanguage();
   const [page, setPage] = useState<WatchMenuPage>("home");
@@ -264,6 +266,7 @@ function WatchMenuPanel({
 
   const openWatchFaces = () => { onOpenChange(false); onOpenWatchFaces(); };
   const signIn = () => { onOpenChange(false); onSignIn(); };
+  const openSettings = (section: "watch" | "weather") => { onOpenChange(false); onOpenSettings?.(section); };
 
   const connectLabel = connecting ? phaseLabel ?? t("Connecting…")
     : choosing && selectedDevice ? t("Connect to {{p0}}", { p0: watchDisplayName(selectedDevice.deviceName) }) : t("Connect watch");
@@ -280,6 +283,10 @@ function WatchMenuPanel({
               <BatteryMedium size={14} aria-hidden="true" />{snapshot.batteryPercent}%</span> : null}
           </p>
         </div>
+        {onOpenSettings ? <button className="watch-link-icon-button" type="button"
+          aria-label={t("Watch settings")} title={t("Watch settings")} onClick={() => openSettings("watch")}>
+          <Settings size={15} aria-hidden="true" />
+        </button> : null}
         {connected ? <button className="watch-link-icon-button" type="button" disabled={disabled}
           aria-label={t("Refresh battery and status")} title={t("Refresh battery and status")}
           onClick={() => void run(() => api!.refreshCorosNativeBle())}>
@@ -395,7 +402,8 @@ function WatchMenuPanel({
         {page === "message" ? <WatchMessageComposer api={api} snapshot={snapshot} busy={disabled} onBusy={setBusy} />
           : page === "iphone" ? api ? <CorosPhonePairingPanel api={api} /> : null
           : <WatchConnectionDetails snapshot={snapshot} api={api} watchKeySaved={watchKeySaved} watchKey={watchKey}
-            onWatchKeyStatus={applyKeyStatus} onSignIn={signIn} />}
+            onWatchKeyStatus={applyKeyStatus} onSignIn={signIn}
+            onChoosePlace={onOpenSettings ? () => openSettings("weather") : undefined} />}
       </div>}
     </div>
   );
@@ -643,13 +651,14 @@ function WatchKeySection({ api, saved, info, onStatus, onSignIn }: {
   );
 }
 
-function WatchConnectionDetails({ snapshot, api, watchKeySaved, watchKey: watchKeyInfo, onWatchKeyStatus, onSignIn }: {
+function WatchConnectionDetails({ snapshot, api, watchKeySaved, watchKey: watchKeyInfo, onWatchKeyStatus, onSignIn, onChoosePlace }: {
   snapshot: CorosNativeBleSnapshot | null;
   api: CorosLinkApi | undefined;
   watchKeySaved: boolean | null;
   watchKey: CorosWatchKeySummary | undefined;
   onWatchKeyStatus: (status: CorosWatchfaceStatus) => void;
   onSignIn: () => void;
+  onChoosePlace?: () => void;
 }) {
   useLanguage();
   const developerTools = useDeveloperTools(api);
@@ -664,11 +673,23 @@ function WatchConnectionDetails({ snapshot, api, watchKeySaved, watchKey: watchK
     [t("Signal"), snapshot.connected && snapshot.rssiDbm !== undefined ? t("{{p0}} dBm", { p0: snapshot.rssiDbm }) : "—"],
     [t("Connection"), snapshot.connected ? "Bluetooth" : t("Disconnected")],
     [t("COROS session"), snapshot.connected && snapshot.systemBind === "authenticated" ? t("Authenticated")
-      : snapshot.systemBind === "failed" ? t("Authentication failed") : t("Not authenticated")]
-  ];
+      : snapshot.systemBind === "failed" ? t("Authentication failed") : t("Not authenticated")],
+    [t("Clock"), snapshot.connected && snapshot.clockSetAt
+      ? t("Set from this computer at {{p0}}", { p0: new Date(snapshot.clockSetAt).toLocaleTimeString(getLocale(), { hour: "numeric", minute: "2-digit" }) })
+      : "—"],
+    [t("Weather"), snapshot.connected && snapshot.weatherSentAt
+      ? t("Forecast sent at {{p0}}", { p0: new Date(snapshot.weatherSentAt).toLocaleTimeString(getLocale(), { hour: "numeric", minute: "2-digit" }) })
+      : snapshot.connected && snapshot.weatherFailedAt ? t("The watch didn't take the forecast this time. CorosLink sends it again next time the watch connects.")
+      : snapshot.connected ? onChoosePlace
+        ? <button type="button" className="watch-link-inline-button" onClick={onChoosePlace}>{t("Choose a place")}</button>
+        : t("Choose a place in Settings → Weather location, or open the Overview once")
+      : "—"],
+  ] satisfies Array<[string, ReactNode]>;
+  // With the watch away, rows that would only read "—" are left out.
+  const rows = snapshot.connected ? details : details.filter(([, value]) => value !== "—");
   return (
     <div className="watch-link-details">
-      <dl>{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd title={value}>{value}</dd></div>)}</dl>
+      <dl>{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
       {watchKey}
       {/* Developer diagnostics: only with COROSLINK_SYNC_CAPTURE=1, like the capture tools in Privacy settings. */}
       {developerTools && onSystemBluetooth(snapshot) ? <section className="watch-link-events" aria-label={t("Watch controls")}>

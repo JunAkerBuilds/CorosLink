@@ -42,6 +42,9 @@ import { useUnitSystem } from "../units/UnitSystemProvider";
 import { AccountsSettings, type AccountDestination } from "./AccountsSettings";
 import { DiagnosticsSettings } from "./DiagnosticsSettings";
 import { PrivacySettings } from "./PrivacySettings";
+import { WatchProfileSettings } from "./WatchProfileSettings";
+import { WeatherLocationSettings } from "./WeatherLocationSettings";
+import { WatchSystemSettings } from "./WatchSystemSettings";
 import { LanguageSettings } from "./LanguageSettings";
 
 const ABOUT_LINKS = [
@@ -105,7 +108,7 @@ function platformLabel(info: AppInfo): string {
 }
 
 /** Settings sections other screens link straight to. */
-export type SettingsSection = "privacy";
+export type SettingsSection = "watch" | "weather" | "privacy";
 
 interface SettingsViewProps {
   api: CorosLinkApi;
@@ -141,7 +144,7 @@ export function SettingsView({
     initialAccountScreen && onOpenAccount ? "accounts" : "main",
   );
 
-  // A link from elsewhere (the Local-Only button) opens the main page at its section.
+  // A link from elsewhere (watch menu, weather card, Local-Only button) opens the main page at its section.
   const [pendingSection, setPendingSection] = useState<SettingsSection | null>(null);
   useEffect(() => {
     if (!focusSection) return;
@@ -506,6 +509,12 @@ export function SettingsView({
             <strong>{t("Tip:")}</strong> {t("These colors are used in your training load heatmap and calendar.")} </p>
         </div>
       </div>
+
+      <WatchProfileSettings api={api} />
+
+      <SettingsAnchor section="weather"><WeatherLocationSettings api={api} /></SettingsAnchor>
+
+      <SettingsAnchor section="watch"><WatchSystemSettings api={api} /></SettingsAnchor>
 
       <SettingsAnchor section="privacy"><PrivacySettings api={api} /></SettingsAnchor>
 

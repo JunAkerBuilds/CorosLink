@@ -19,7 +19,8 @@ import {
   Tag,
   Trash2,
   Unlink,
-  X
+  X,
+  Watch
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -552,6 +553,20 @@ export function WorkoutWorkspace({
       await api.updateWorkoutMetadata([active.id], { lastUsedAt: new Date().toISOString() });
       onMessage(`Scheduled "${active.name}" on ${formatHappenDayLabel(happenDay)}.`);
       await onRefresh();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** Puts the workout in the watch's workout list over Bluetooth (no COROS account needed). */
+  const sendToWatch = async () => {
+    if (!active) return;
+    setBusy("watch");
+    try {
+      await api.sendWorkoutToWatch(active.id);
+      onMessage(t("Sent \"{{value1}}\" to your watch. Find it under Workouts on the watch.", { value1: String(active.name) }));
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -1157,6 +1172,13 @@ export function WorkoutWorkspace({
                     onClick={() => setEditId(active.id)}
                   >
                     <Pencil size={14} /> {t("Edit")} </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={busy === "watch"}
+                    onClick={() => void sendToWatch()}
+                  >
+                    <Watch size={14} /> {busy === "watch" ? t("Sending to watch…") : t("Send to watch")} </button>
                   <div className="tl-reader-duplicate">
                     <button
                       type="button"
