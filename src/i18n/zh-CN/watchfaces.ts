@@ -1918,8 +1918,6 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Show this page in the preview": "在预览中显示此页面",
   "The watch skips this page.": "手表会跳过此页面。",
   "Chart": "图表",
-  "Some pages": "部分页面",
-  "The watch hides this on some chart pages. The list below says where.": "手表会在部分图表页面隐藏此项。下方列表说明了具体页面。",
   "Daily A": "每日 A",
   "Daily B": "每日 B",
   "The watch skips this page while all its readouts are hidden.": "所有数值都隐藏时，手表会跳过此页面。",

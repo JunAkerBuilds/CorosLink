@@ -19,8 +19,7 @@
 }
 
 .watchface-shell .wf-metric-kind--selectable,
-.watchface-shell .wf-metric-kind--pages,
-.watchface-shell .wf-metric-kind--paged {
+.watchface-shell .wf-metric-kind--pages {
   border-color: var(--wf-accent-border, color-mix(in srgb, var(--accent) 45%, transparent));
   background: var(--accent-soft);
   color: var(--accent-strong);

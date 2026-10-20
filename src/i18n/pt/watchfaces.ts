@@ -1917,8 +1917,6 @@ export const watchfacesPortuguese: Record<string, string> = {
   "Show this page in the preview": "Mostrar esta página na pré-visualização",
   "The watch skips this page.": "O relógio salta esta página.",
   "Chart": "Gráfico",
-  "Some pages": "Algumas páginas",
-  "The watch hides this on some chart pages. The list below says where.": "O relógio oculta isto em algumas páginas do gráfico. A lista abaixo indica quais.",
   "Daily A": "Diário A",
   "Daily B": "Diário B",
   "The watch skips this page while all its readouts are hidden.": "O relógio salta esta página enquanto todas as leituras estiverem ocultas.",

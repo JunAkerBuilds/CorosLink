@@ -10721,7 +10721,7 @@ export function WatchfaceEditor({
       return "Indicators";
     }
     // The section says how the watch shows the value (watchfaceMetricKinds).
-    const kind = watchfaceMetricKind(layer, design.nativeData);
+    const kind = watchfaceMetricKind(layer);
     return kind === "selectable" ? "Selectable" : kind === "pages" ? "Chart pages" : "Fixed metrics";
   }
 
@@ -12202,7 +12202,7 @@ export function WatchfaceEditor({
 
   function renderInspector(layer: EditorLayer) {
     const group = layerGroupLabel(layer);
-    const metricKind = group === "Fixed metrics" || group === "Selectable" || group === "Chart pages" ? watchfaceMetricKind(layer, design.nativeData) : null;
+    const metricKind = group === "Fixed metrics" || group === "Selectable" || group === "Chart pages" ? watchfaceMetricKind(layer) : null;
     return (
       <>
         {metricKind ? <MetricKindNote kind={metricKind} /> : null}
