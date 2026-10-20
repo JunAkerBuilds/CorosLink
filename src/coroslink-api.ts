@@ -79,6 +79,7 @@ import type {
   TrainingHubScheduledWorkoutEntry,
   TrainingHubLibraryWorkout,
   TrainingActivityMatch,
+  ManualActivityLink,
   TrainingCollection,
   TrainingLibraryDeleteRequest,
   TrainingLibrarySnapshot,
@@ -585,6 +586,15 @@ export interface CorosLinkApi {
   saveManualActivityMatch: (
     match: TrainingActivityMatch
   ) => Promise<TrainingActivityMatch>;
+  listManualActivityLinks: (
+    startDay: string,
+    endDay: string
+  ) => Promise<ManualActivityLink[]>;
+  saveManualActivityLink: (
+    entry: Pick<TrainingHubScheduledWorkoutEntry, "planId" | "idInPlan" | "happenDay" | "trainingLoad">,
+    activity?: Pick<TrainingHubActivity, "activityId" | "duration" | "distance" | "trainingLoad">
+  ) => Promise<ManualActivityLink>;
+  clearManualActivityLink: (planId: string, idInPlan: string) => Promise<void>;
   listWorkoutExercises: (sport: WorkoutSport) => Promise<WorkoutExerciseOption[]>;
   getWorkoutEditorContext: (unitSystem: UnitSystem) => Promise<WorkoutEditorContext>;
   getWorkoutForEdit: (

@@ -2582,7 +2582,8 @@ export function parseScheduledWorkoutEntries(
       volume: formatUpcomingWorkoutVolume(program, entity),
       trainingLoad: resolveUpcomingWorkoutLoad(program, entity),
       exercises: parseScheduledExercises(program),
-      rawProgram: program
+      rawProgram: program,
+      corosActivity: resolveCorosActivity(entity)
     });
   });
 
@@ -3416,6 +3417,10 @@ function resolveScheduledProgram(
   );
 }
 
+// `entity.sportData` is the activity COROS credited to the workout (its web
+// calendar shows reached/missed from its presence), so it describes what was
+// done, not what was planned. Planned values come from the program; sportData
+// is only a last resort for a missing program.
 function resolveUpcomingWorkoutName(
   program: Record<string, unknown> | undefined,
   entity: Record<string, unknown>
@@ -3423,9 +3428,9 @@ function resolveUpcomingWorkoutName(
   const sportData = pickObject(entity, ["sportData"]);
 
   return (
-    (sportData ? pickString(sportData, ["name"]) : undefined) ??
     (program ? pickString(program, ["name"]) : undefined) ??
     pickString(entity, ["name"]) ??
+    (sportData ? pickString(sportData, ["name"]) : undefined) ??
     "Scheduled workout"
   );
 }
@@ -3437,11 +3442,33 @@ function resolveUpcomingWorkoutLoad(
   const sportData = pickObject(entity, ["sportData"]);
 
   return (
-    (sportData ? toOptionalNumber(sportData.trainingLoad) : undefined) ??
     (program ? toOptionalNumber(program.trainingLoad) : undefined) ??
     (program ? toOptionalNumber(program.essence) : undefined) ??
-    (program ? toOptionalNumber(program.estimatedValue) : undefined)
+    (program ? toOptionalNumber(program.estimatedValue) : undefined) ??
+    (sportData ? toOptionalNumber(sportData.trainingLoad) : undefined)
   );
+}
+
+/** COROS's own plan↔activity link: `entity.sportData` + `entity.completeRate`. */
+function resolveCorosActivity(
+  entity: Record<string, unknown>
+): TrainingHubScheduledWorkoutEntry["corosActivity"] {
+  const sportData = pickObject(entity, ["sportData"]);
+  if (!sportData) {
+    return undefined;
+  }
+  const activityId = pickString(sportData, ["labelIdStr", "labelId", "activityId"]);
+  const startTime = toOptionalNumber(sportData.startTime);
+  if (!activityId && !startTime) {
+    return undefined;
+  }
+  const completeRate = toOptionalNumber(entity.completeRate);
+  return {
+    activityId,
+    startTime,
+    // "-1.00" = no rate.
+    completeRate: completeRate !== undefined && completeRate >= 0 ? completeRate : undefined
+  };
 }
 
 function corosWorkoutDistanceToMeters(value?: number): number {
@@ -3465,8 +3492,8 @@ function formatUpcomingWorkoutVolume(
   }
 
   const distanceMeters =
-    corosWorkoutDistanceToMeters(toOptionalNumber(sportData?.distance)) ||
-    resolveWorkoutDistanceMeters(program);
+    resolveWorkoutDistanceMeters(program) ||
+    corosWorkoutDistanceToMeters(toOptionalNumber(sportData?.distance));
 
   if (distanceMeters > 0) {
     return `${(distanceMeters / 1000).toFixed(2)}km`;

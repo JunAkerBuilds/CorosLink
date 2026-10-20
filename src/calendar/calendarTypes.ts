@@ -3,14 +3,17 @@ import type {
   TrainingHubDailyMetric,
   TrainingHubScheduledWorkoutEntry
 } from "../../electron/types";
+import type { ActivityLinkSource } from "../../electron/activityLinks";
 import type { WorkoutJournalEntry } from "../../electron/workoutJournalTypes";
 import type { WeekSportTotals } from "./weekSportBreakdown";
 
-/** A scheduled workout matched (or not) to the completed activity on the same day. */
+/** A scheduled workout and the activity COROS or the user linked to it, if any. */
 export interface PlannedActualPair {
   scheduled: TrainingHubScheduledWorkoutEntry;
   activity?: TrainingHubActivity;
-  /** actual / planned, in percent (load first, then distance, then duration). */
+  /** Who linked them: COROS (started from the plan) or the user in CorosLink. */
+  linkSource?: ActivityLinkSource;
+  /** actual / planned, in percent (COROS's rate, else load, else distance). */
   completionPct?: number;
 }
 
@@ -23,7 +26,7 @@ export interface CalendarDay {
   activities: TrainingHubActivity[];
   metric?: TrainingHubDailyMetric;
   pairs: PlannedActualPair[];
-  /** Activities not matched to any scheduled workout. */
+  /** Activities not linked to any scheduled workout. */
   unplannedActivities: TrainingHubActivity[];
   /** Briefs and debriefs saved for this day's workouts. */
   journal?: WorkoutJournalEntry[];

@@ -4150,6 +4150,27 @@ export interface TrainingHubScheduledWorkoutEntry {
   exercises?: TrainingHubScheduledExercise[];
   /** Raw program payload from schedule/query — required to re-add the workout when rescheduling. */
   rawProgram?: Record<string, unknown>;
+  /**
+   * The activity COROS itself credited to this workout (`entity.sportData`).
+   * COROS only links one when the workout was started from the plan; it never
+   * pairs a freestyle activity, and neither does CorosLink.
+   */
+  corosActivity?: {
+    activityId?: string;
+    /** Epoch seconds, for when `labelId` is missing. */
+    startTime?: number;
+    /** `entity.completeRate`, 1 = 100% of plan. */
+    completeRate?: number;
+  };
+}
+
+/** A plan↔activity link the user made in CorosLink (local only — COROS has no API for it). */
+export interface ManualActivityLink {
+  planId: string;
+  idInPlan: string;
+  happenDay: string;
+  /** Undefined = the user said no activity belongs to this workout. */
+  activityId?: string;
 }
 
 export interface TrainingHubLibraryWorkout {

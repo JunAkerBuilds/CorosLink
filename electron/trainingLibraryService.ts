@@ -18,6 +18,7 @@ import {
   queryNativeCorosPlanLibrary,
   readNativeCorosPlan
 } from "./corosTrainingPlanAdapter";
+import { resolveActivityLinks, scheduledLinkKey } from "./activityLinks";
 import { recordDiagnosticError } from "./diagnosticsService";
 import {
   createAndScheduleWorkout,
@@ -42,6 +43,7 @@ import {
 import type {
   CorosTrainingPlanDeleteResult,
   LocalTrainingPlanDeleteResult,
+  ManualActivityLink,
   NativeCorosPlanDetail,
   NativeCorosPlanSummary,
   TrainingActivityMatch,
@@ -1231,27 +1233,20 @@ export async function deleteTrainingLibraryWorkouts(
   return ids;
 }
 
-export function activityDay(activity: TrainingHubActivity): string | undefined {
-  if (!activity.startTime) return undefined;
-  const raw = activity.startTime > 10_000_000_000 ? activity.startTime : activity.startTime * 1000;
-  return dateKey(new Date(raw));
+function toManualActivityLink(match: TrainingActivityMatch): ManualActivityLink {
+  return {
+    planId: match.schedulePlanId,
+    idInPlan: match.scheduleIdInPlan,
+    happenDay: match.happenDay,
+    activityId: match.activityId
+  };
 }
 
-export function scheduledActivityScore(
-  scheduled: TrainingHubScheduledWorkoutEntry,
-  activity: TrainingHubActivity
-): number {
-  let score = 0.35;
-  if (scheduled.sportType && scheduled.sportType === activity.sportType) score += 0.35;
-  const plannedLoad = scheduled.trainingLoad;
-  if (plannedLoad && activity.trainingLoad !== undefined) {
-    score += 0.2 * Math.max(0, 1 - Math.abs(activity.trainingLoad - plannedLoad) / plannedLoad);
-  }
-  const normalizedName = scheduled.name.trim().toLowerCase();
-  if (normalizedName && activity.name?.trim().toLowerCase() === normalizedName) score += 0.1;
-  return Math.min(1, score);
-}
-
+/**
+ * Plan adherence from links only — COROS's (the workout was started from the
+ * plan) or the user's. A same-day activity nobody linked doesn't count, the
+ * same rule the calendar and COROS's own calendar use.
+ */
 export function buildTrainingActivityMatches(
   scheduled: TrainingHubScheduledWorkoutEntry[],
   activities: TrainingHubActivity[],
@@ -1264,31 +1259,38 @@ export function buildTrainingActivityMatches(
       match
     ])
   );
-  const usedActivities = new Set<string>();
+  const links = resolveActivityLinks(
+    scheduled,
+    activities,
+    previous.filter((match) => match.manual).map(toManualActivityLink)
+  );
+  const fetched = new Set(activities.map((activity) => activity.activityId));
   const results: TrainingActivityMatch[] = [];
   for (const entry of scheduled) {
-    const key = `${entry.planId}:${entry.idInPlan}`;
+    const key = scheduledLinkKey(entry);
     const manual = existing.get(key);
-    let activity = manual?.manual
-      ? activities.find((candidate) => candidate.activityId === manual.activityId)
-      : undefined;
-    let confidence = manual?.manual ? manual.confidence : undefined;
-    if (!manual?.manual) {
-      const candidates = activities
-        .filter((candidate) => activityDay(candidate) === entry.happenDay)
-        .filter((candidate) => !usedActivities.has(candidate.activityId))
-        .map((candidate) => ({ candidate, score: scheduledActivityScore(entry, candidate) }))
-        .sort((left, right) => right.score - left.score);
-      if (candidates[0]?.score >= 0.5) {
-        activity = candidates[0].candidate;
-        confidence = candidates[0].score;
-      }
+    const link = links.get(key);
+    if (
+      manual?.manual &&
+      manual.activityId &&
+      link?.source !== "manual" &&
+      (!fetched.has(manual.activityId) || manual.status === "skipped")
+    ) {
+      // The user's activity is outside this fetch (range or page cap), or they
+      // skipped the session: keep their row as it is.
+      results.push(manual);
+      continue;
     }
-    if (activity) usedActivities.add(activity.activityId);
-    const ratio = entry.trainingLoad && activity?.trainingLoad !== undefined
+    // A user link that no longer resolves (other day, or another workout has the
+    // activity) stops counting; don't save whatever resolved instead as theirs.
+    const keepsManual = manual?.manual === true && (link?.source === "manual" || !manual.activityId);
+    const activity = link?.activity;
+    const confidence = link ? (link.source === "manual" ? manual?.confidence ?? 1 : 1) : undefined;
+    const corosRate = link?.source === "coros" ? entry.corosActivity?.completeRate : undefined;
+    const ratio = corosRate ?? (entry.trainingLoad && activity?.trainingLoad !== undefined
       ? activity.trainingLoad / entry.trainingLoad
-      : undefined;
-    const status: TrainingActivityMatch["status"] = manual?.status === "skipped"
+      : undefined);
+    const status: TrainingActivityMatch["status"] = keepsManual && manual?.status === "skipped"
       ? "skipped"
       : activity
         ? ratio !== undefined && ratio < 0.75 ? "partial" : "completed"
@@ -1303,7 +1305,7 @@ export function buildTrainingActivityMatches(
       happenDay: entry.happenDay,
       status,
       confidence,
-      manual: manual?.manual ?? false,
+      manual: keepsManual,
       completedDurationSeconds: activity?.duration,
       completedDistanceMeters: activity?.distance,
       plannedTrainingLoad: entry.trainingLoad,
@@ -1337,4 +1339,68 @@ export function saveManualActivityMatch(match: TrainingActivityMatch): TrainingA
   const next = { ...match, manual: true, updatedAt: new Date().toISOString() };
   saveTrainingActivityMatch(next);
   return next;
+}
+
+/** The user's own plan↔activity links in a range (manual rows only). */
+export function listManualActivityLinks(startDay: string, endDay: string): ManualActivityLink[] {
+  return listTrainingActivityMatches()
+    .filter((match) => match.manual && match.happenDay >= startDay && match.happenDay <= endDay)
+    .map(toManualActivityLink);
+}
+
+/**
+ * Link an activity to a scheduled workout, or with no `activity` say that none
+ * belongs to it (this also hides COROS's own link). Local only: COROS has no
+ * API for linking.
+ */
+export function saveManualActivityLink(
+  entry: Pick<TrainingHubScheduledWorkoutEntry, "planId" | "idInPlan" | "happenDay" | "trainingLoad">,
+  activity?: Pick<TrainingHubActivity, "activityId" | "duration" | "distance" | "trainingLoad">
+): ManualActivityLink {
+  const existing = listTrainingActivityMatches().find(
+    (match) => match.schedulePlanId === entry.planId && match.scheduleIdInPlan === entry.idInPlan
+  );
+  const ratio = activity && entry.trainingLoad && activity.trainingLoad !== undefined
+    ? activity.trainingLoad / entry.trainingLoad
+    : undefined;
+  const match: TrainingActivityMatch = {
+    id: existing?.id ?? crypto.randomUUID(),
+    planId: existing?.planId,
+    planEntryId: existing?.planEntryId,
+    schedulePlanId: entry.planId,
+    scheduleIdInPlan: entry.idInPlan,
+    activityId: activity?.activityId,
+    happenDay: entry.happenDay,
+    status: activity
+      ? ratio !== undefined && ratio < 0.75 ? "partial" : "completed"
+      : entry.happenDay < dateKey(new Date()) ? "missed" : "upcoming",
+    confidence: activity ? 1 : undefined,
+    manual: true,
+    completedDurationSeconds: activity?.duration,
+    completedDistanceMeters: activity?.distance,
+    plannedTrainingLoad: entry.trainingLoad ?? existing?.plannedTrainingLoad,
+    completedTrainingLoad: activity?.trainingLoad,
+    updatedAt: new Date().toISOString()
+  };
+  saveTrainingActivityMatch(match);
+  return toManualActivityLink(match);
+}
+
+/** Drop the user's link so the workout goes back to COROS's own (or none). */
+export function clearManualActivityLink(planId: string, idInPlan: string): void {
+  const existing = listTrainingActivityMatches().find(
+    (match) => match.schedulePlanId === planId && match.scheduleIdInPlan === idInPlan
+  );
+  if (!existing?.manual) return;
+  saveTrainingActivityMatch({
+    ...existing,
+    activityId: undefined,
+    confidence: undefined,
+    manual: false,
+    status: existing.happenDay < dateKey(new Date()) ? "missed" : "upcoming",
+    completedDurationSeconds: undefined,
+    completedDistanceMeters: undefined,
+    completedTrainingLoad: undefined,
+    updatedAt: new Date().toISOString()
+  });
 }

@@ -46,6 +46,7 @@ import {
   workoutSportFromType
 } from "../../electron/trainingPlanDomain";
 import type { CorosLinkApi } from "../coroslink-api";
+import { activityHappenDay } from "../../electron/activityLinks";
 
 import {
   PlanSourceBadge,
@@ -1377,17 +1378,27 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
     if (!stateAvailable) setState("all");
   }, [setState, stateAvailable]);
 
-  const activityOptions = useMemo(
-    () => [
+  // A link only counts when the activity is on the workout's day, so offer just those.
+  const activitiesByDay = useMemo(() => {
+    const byDay = new Map<string, TrainingHubActivity[]>();
+    for (const activity of activities) {
+      const day = activityHappenDay(activity);
+      if (day) byDay.set(day, [...(byDay.get(day) ?? []), activity]);
+    }
+    return byDay;
+  }, [activities]);
+  const activityOptionsFor = (match: TrainingActivityMatch) => {
+    const linked = activities.find((activity) => activity.activityId === match.activityId);
+    const sameDay = activitiesByDay.get(match.happenDay) ?? [];
+    return [
       { value: "", label: "Match an activity" },
-      ...activities.map((activity) => ({
+      ...(linked && !sameDay.includes(linked) ? [linked, ...sameDay] : sameDay).map((activity) => ({
         value: activity.activityId,
         label: `${activity.name ?? activity.sportName ?? t("Activity")} · ${activityDate(activity)}`,
         translate: false
       }))
-    ],
-    [activities, getLocale()]
-  );
+    ];
+  };
 
   const createTemplate = async (activity: TrainingHubActivity) => {
     const plan = createTrainingPlan(
@@ -1560,7 +1571,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
                         className="tl-quiet-select is-wide"
                         label={t("Completed activity for {{value1}}", { value1: String(shortDate(date)) })}
                         value={match.activityId ?? ""}
-                        options={activityOptions}
+                        options={activityOptionsFor(match)}
                         onChange={(value) => void linkActivity(match, value || undefined)}
                       />
                       {completedParts.length ? <small>{completedParts.join(" · ")}</small> : null}

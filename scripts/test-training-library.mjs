@@ -327,17 +327,33 @@ assert.equal(duplicateNative.entities.length, 5, "the lossless adapter retains e
 
 const day = new Date(2099, 11, 1, 12, 0, 0).valueOf();
 const scheduled = [
-  { planId: "schedule", idInPlan: "one", planProgramId: "pp", happenDay: "20991201", name: "Easy", sportType: 1, trainingLoad: 40 },
+  { planId: "schedule", idInPlan: "one", planProgramId: "pp", happenDay: "20991201", name: "Easy", sportType: 1, trainingLoad: 40, corosActivity: { activityId: "activity-1", completeRate: 0.95 } },
   { planId: "schedule", idInPlan: "two", planProgramId: "pp2", happenDay: "20991202", name: "Restored", sportType: 1, trainingLoad: 30 }
 ];
 const activities = [
   { activityId: "activity-1", name: "Easy", sportType: 1, startTime: day, duration: 1_800, distance: 5_000, trainingLoad: 38 }
 ];
 const matches = library.buildTrainingActivityMatches(scheduled, activities, [], "20991202");
-assert.equal(matches[0].status, "completed");
+assert.equal(matches[0].status, "completed", "COROS's own link completes the workout");
 assert.equal(matches[0].activityId, "activity-1");
-assert.equal(matches[0].confidence >= 0.9, true);
+assert.equal(matches[0].confidence, 1);
 assert.equal(matches[1].status, "upcoming");
+const unlinked = library.buildTrainingActivityMatches(
+  [{ ...scheduled[0], corosActivity: undefined }],
+  activities,
+  [],
+  "20991202"
+);
+assert.equal(unlinked[0].status, "missed", "a same-day activity nobody linked doesn't count");
+assert.equal(unlinked[0].activityId, undefined);
+const linkedByUser = library.buildTrainingActivityMatches(
+  [{ ...scheduled[0], corosActivity: undefined }],
+  activities,
+  [{ ...unlinked[0], activityId: "activity-1", manual: true }],
+  "20991202"
+);
+assert.equal(linkedByUser[0].activityId, "activity-1", "the user's link counts");
+assert.equal(linkedByUser[0].status, "completed");
 const manual = library.buildTrainingActivityMatches(
   scheduled,
   activities,
@@ -345,6 +361,23 @@ const manual = library.buildTrainingActivityMatches(
   "21000101"
 );
 assert.equal(manual[1].status, "skipped");
+const otherDay = { ...activities[0], activityId: "activity-2", startTime: day + 86_400_000 };
+const staleUserLink = library.buildTrainingActivityMatches(
+  [scheduled[0]],
+  [...activities, otherDay],
+  [{ ...matches[0], activityId: "activity-2", manual: true }],
+  "20991202"
+);
+assert.equal(staleUserLink[0].activityId, "activity-1", "a user link to another day yields to COROS's");
+assert.equal(staleUserLink[0].manual, false, "COROS's link isn't saved as the user's");
+const unfetchedUserLink = library.buildTrainingActivityMatches(
+  [{ ...scheduled[0], corosActivity: undefined }],
+  activities,
+  [{ ...matches[0], activityId: "activity-elsewhere", manual: true }],
+  "20991202"
+);
+assert.equal(unfetchedUserLink[0].activityId, "activity-elsewhere", "a link to an activity outside the fetch is kept");
+assert.equal(unfetchedUserLink[0].manual, true);
 
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "coroslink-training-library-"));
 const legacyPath = path.join(tempRoot, "coros-desktop.sqlite");

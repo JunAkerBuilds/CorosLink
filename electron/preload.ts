@@ -79,6 +79,7 @@ import type {
   TrainingHubScheduledWorkoutEntry,
   TrainingHubLibraryWorkout,
   TrainingActivityMatch,
+  ManualActivityLink,
   TrainingCollection,
   TrainingLibraryDeleteRequest,
   TrainingLibrarySnapshot,
@@ -829,6 +830,18 @@ const api = {
     match: TrainingActivityMatch
   ): Promise<TrainingActivityMatch> =>
     ipcRenderer.invoke("trainingLibrary:saveManualMatch", match),
+  listManualActivityLinks: (
+    startDay: string,
+    endDay: string
+  ): Promise<ManualActivityLink[]> =>
+    ipcRenderer.invoke("trainingLibrary:listManualLinks", startDay, endDay),
+  saveManualActivityLink: (
+    entry: Pick<TrainingHubScheduledWorkoutEntry, "planId" | "idInPlan" | "happenDay" | "trainingLoad">,
+    activity?: Pick<TrainingHubActivity, "activityId" | "duration" | "distance" | "trainingLoad">
+  ): Promise<ManualActivityLink> =>
+    ipcRenderer.invoke("trainingLibrary:saveManualLink", entry, activity),
+  clearManualActivityLink: (planId: string, idInPlan: string): Promise<void> =>
+    ipcRenderer.invoke("trainingLibrary:clearManualLink", planId, idInPlan),
   listWorkoutExercises: (sport: WorkoutSport): Promise<WorkoutExerciseOption[]> =>
     ipcRenderer.invoke("trainingHub:listWorkoutExercises", sport),
   getWorkoutEditorContext: (unitSystem: UnitSystem): Promise<WorkoutEditorContext> =>

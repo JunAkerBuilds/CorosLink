@@ -177,6 +177,9 @@ import {
   removeTrainingCollection,
   saveLocalTrainingPlan,
   saveManualActivityMatch,
+  listManualActivityLinks,
+  saveManualActivityLink,
+  clearManualActivityLink,
   updateWorkoutMetadata,
   updateTrainingPlanMetadata,
   upsertTrainingCollection
@@ -2346,6 +2349,17 @@ function registerIpcHandlers(): void {
   );
   ipcMain.handle("trainingLibrary:saveManualMatch", (_event, match) =>
     saveManualActivityMatch(match)
+  );
+  ipcMain.handle(
+    "trainingLibrary:listManualLinks",
+    (_event, startDay: string, endDay: string) => listManualActivityLinks(startDay, endDay)
+  );
+  ipcMain.handle("trainingLibrary:saveManualLink", (_event, entry, activity) =>
+    saveManualActivityLink(entry, activity)
+  );
+  ipcMain.handle(
+    "trainingLibrary:clearManualLink",
+    (_event, planId: string, idInPlan: string) => clearManualActivityLink(planId, idInPlan)
   );
 
   ipcMain.handle(

@@ -41,6 +41,7 @@ interface CalendarGridProps {
     y: number;
     dayKey: string;
     workoutKey?: string;
+    activityId?: string;
   }) => void;
 }
 
@@ -121,12 +122,14 @@ export function CalendarGrid({
           if (!dayEl?.dataset.calendarDay) return;
           event.preventDefault();
           const workoutEl = target.closest<HTMLElement>("[data-calendar-workout]");
-          (workoutEl ?? dayEl).focus({ preventScroll: true });
+          const activityEl = target.closest<HTMLElement>("[data-calendar-activity]");
+          (workoutEl ?? activityEl ?? dayEl).focus({ preventScroll: true });
           onContextMenu({
             x: event.clientX,
             y: event.clientY,
             dayKey: dayEl.dataset.calendarDay,
-            workoutKey: workoutEl?.dataset.calendarWorkout
+            workoutKey: workoutEl?.dataset.calendarWorkout,
+            activityId: activityEl?.dataset.calendarActivity
           });
         }}
       >
