@@ -5,6 +5,7 @@
 // file safe for the renderer bundle.
 import type { ChatEntry } from "../chatTranscript";
 import type {
+  ChatFileAttachment,
   ChatMessageAttachment,
   ChatProvider,
   ChatSessionSummary,
@@ -93,6 +94,11 @@ export interface CoachSendInput {
   promptAnswer?: CoachPromptAnswer;
   /** Desktop only: a chart or table dropped into the composer. */
   attachment?: ChatMessageAttachment;
+  /**
+   * Desktop only: files already in the attachment store. The main process sets
+   * these after storing the window's uploads; a message may be only files.
+   */
+  files?: ChatFileAttachment[];
   /** The sender's units; remote senders get the last ones the desktop used. */
   unitSystem?: UnitSystem;
 }

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Attach files to Coach.** Click the paperclip, drop files on the conversation, or paste a screenshot to send Coach a PDF, Word document (.docx), text, CSV or Markdown file, or an image, up to six at a time. Coach reads a document's text, tables included, and looks at scanned pages and images, so you can hand it a training plan you made elsewhere and ask it to put the plan on COROS. It drafts the workouts for you to review before anything is saved. Files go to the Coach provider you chose with each message; CorosLink keeps a copy with the conversation, so you can open it from the transcript, and deletes it with the conversation.
 - **Coach keeps C-LINK's Lock Screen up to date.** While a linked computer runs a Coach answer, C-LINK's Live Activity now shows whether Coach is thinking, looking at your data or writing, and how the answer ended (replied, waiting for you, or failed), even with the iPhone locked. CorosLink sends the relay only the step and a word count, never what Coach writes or which data it reads.
 
 ### Fixed

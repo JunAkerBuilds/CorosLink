@@ -66,7 +66,8 @@ import { isWebUrl } from "./externalLinks";
 import {
   buildResponsesRequest,
   extractReasoningSummaryDelta,
-  extractResponseTextDelta
+  extractResponseTextDelta,
+  toInputMessageItem
 } from "./chatResponsesProtocol";
 import {
   detectLocalChatServersRequest,
@@ -1841,20 +1842,6 @@ export async function listChatModelOptions(
     return chatGptModelOptionsFromCatalog(await listChatGptModels());
   }
   return getChatModelOptions(provider);
-}
-
-/** A COROS message turned into a Responses-API input item. */
-function toInputMessageItem(message: ChatMessage): Record<string, unknown> {
-  return {
-    type: "message",
-    role: message.role,
-    content: [
-      {
-        type: message.role === "assistant" ? "output_text" : "input_text",
-        text: message.content
-      }
-    ]
-  };
 }
 
 /** Exposes connected MCP and local workout tools to the model as functions. */

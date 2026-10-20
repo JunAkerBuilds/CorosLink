@@ -2817,6 +2817,65 @@ export type ChatRole = "user" | "assistant";
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  /** Files the athlete attached to this message, as the transcript records them. */
+  files?: ChatFileAttachment[];
+  /**
+   * Pixels for the model: attached images and page renders of documents with
+   * no text layer. Filled from the attachment store just before a request.
+   */
+  images?: ChatMessageImage[];
+}
+
+export interface ChatMessageImage {
+  /** Names the image for the model, such as "plan.pdf, page 2". */
+  label: string;
+  mimeType: "image/jpeg" | "image/png";
+  base64: string;
+}
+
+/**
+ * A file attached to a Coach message. The transcript keeps only this summary;
+ * the bytes stay in the desktop's attachment store under the conversation.
+ */
+export interface ChatFileAttachment {
+  id: string;
+  name: string;
+  /** Images reach the model as pixels; documents as their text, or page images when they have none. */
+  kind: "image" | "document";
+  /** The original file's type. */
+  mimeType: string;
+  sizeBytes: number;
+  pageCount?: number;
+  /** Characters of document text the model reads. */
+  textChars?: number;
+  /** The text was cut to fit the model's context. */
+  truncated?: boolean;
+  /** Pages sent as images, for a document without a text layer. */
+  pageImages?: number;
+  width?: number;
+  height?: number;
+}
+
+/** A file the Coach window prepared, sent once with the message it belongs to. */
+export interface CoachFileUpload {
+  name: string;
+  mimeType: string;
+  kind: "image" | "document";
+  /** The file as the athlete picked it, kept so it can be opened again. */
+  original: Uint8Array;
+  /** A document's text, already extracted. */
+  text?: string;
+  pageCount?: number;
+  truncated?: boolean;
+  /** What the model sees as pixels: the downscaled image, or page renders. */
+  images?: CoachFileUploadImage[];
+}
+
+export interface CoachFileUploadImage {
+  mimeType: "image/jpeg" | "image/png";
+  data: Uint8Array;
+  width: number;
+  height: number;
 }
 
 /** Optional assistant attribution metadata stored with a message. */
@@ -2843,6 +2902,7 @@ export interface PersistedChatMessageEntry {
   role: ChatRole;
   content: string;
   attachment?: ChatMessageAttachment;
+  files?: ChatFileAttachment[];
   source?: PersistedChatSource;
   /** Display-safe provider reasoning summary, never raw chain-of-thought. */
   reasoningSummary?: string;

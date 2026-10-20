@@ -43,6 +43,14 @@ import {
   type CoachSendInput
 } from "./coachHub";
 import { workoutEdits } from "./workoutEditRuntime";
+import {
+  CoachAttachmentError,
+  MAX_COACH_UPLOADS_PER_MESSAGE,
+  createCoachAttachmentStore,
+  expandCoachAttachments,
+  type CoachAttachmentStore
+} from "./coachAttachments";
+import type { ChatFileAttachment, CoachFileUpload } from "./types";
 import { RemoteAccess } from "./remote/remoteAccess";
 import { isAuthCallbackUrl } from "./remote/cloud/websiteAccount";
 import { completeOnboarding, isOnboardingPending } from "./onboardingState";
@@ -500,16 +508,31 @@ function requireRemoteAccess(): RemoteAccess {
   return remoteAccess;
 }
 
+// Files attached to Coach messages, one folder per conversation.
+let coachAttachmentStore: CoachAttachmentStore | undefined;
+
+function coachAttachments(): CoachAttachmentStore {
+  coachAttachmentStore ??= createCoachAttachmentStore(
+    path.join(app.getPath("userData"), "coach-attachments")
+  );
+  return coachAttachmentStore;
+}
+
 function createCoachHub(): CoachSessionHub {
   return new CoachSessionHub({
     // getChatSessionEntries also reconciles COROS review cards with their saves.
     sessions: createChatHistorySessionStore(undefined, { load: getChatSessionEntries }),
     events: createSqliteCoachEventStore(),
     stream: {
-      start: (sink, requestId, messages, unitSystem, provider) =>
-        streamChat(sink, requestId, messages, unitSystem, { provider }),
+      start: async (sink, requestId, messages, unitSystem, provider, sessionId) => {
+        const withFiles = await expandCoachAttachments(messages, (file) =>
+          coachAttachments().load(sessionId, file.id)
+        );
+        return streamChat(sink, requestId, withFiles, unitSystem, { provider });
+      },
       cancel: cancelChat
     },
+    attachments: { removeSession: (sessionId) => coachAttachments().removeSession(sessionId) },
     actions: {
       confirmCorosAction: confirmCoachCorosAction,
       confirmWorkoutDelete,
@@ -1936,12 +1959,54 @@ function registerIpcHandlers(): void {
       dropCoachSubscription(event.sender.id);
     }
   });
-  ipcMain.handle("coach:send", (_event, input: CoachSendInput) =>
-    requireCoachHub().send({
-      ...input,
-      unitSystem: input.unitSystem ? normalizeUnitSystem(input.unitSystem) : undefined
-    })
+  ipcMain.handle(
+    "coach:send",
+    async (event, input: CoachSendInput & { uploads?: CoachFileUpload[] }) => {
+      // Files come only as uploads from the main window, stored before the hub
+      // sees them; a `files` list the window made up is dropped.
+      const { uploads, files: _ignored, ...message } = input;
+      const files: ChatFileAttachment[] = [];
+      if (Array.isArray(uploads) && uploads.length > 0) {
+        mainWindowSender(event, "Coach attachments");
+        if (uploads.length > MAX_COACH_UPLOADS_PER_MESSAGE) {
+          throw new Error(`Attach up to ${MAX_COACH_UPLOADS_PER_MESSAGE} files at a time.`);
+        }
+        try {
+          for (const upload of uploads) {
+            files.push(await coachAttachments().save(message.sessionId, upload));
+          }
+        } catch (error) {
+          await coachAttachments().remove(message.sessionId, files.map((file) => file.id));
+          if (error instanceof CoachAttachmentError) throw new Error(error.message);
+          throw error;
+        }
+      }
+      try {
+        return requireCoachHub().send({
+          ...message,
+          ...(files.length ? { files } : {}),
+          unitSystem: message.unitSystem ? normalizeUnitSystem(message.unitSystem) : undefined
+        });
+      } catch (error) {
+        if (files.length) {
+          await coachAttachments().remove(message.sessionId, files.map((file) => file.id));
+        }
+        throw error;
+      }
+    }
   );
+  ipcMain.handle("coach:attachmentPreview", (_event, sessionId: string, attachmentId: string) =>
+    coachAttachments().preview(String(sessionId), String(attachmentId)).catch(() => null)
+  );
+  ipcMain.handle("coach:openAttachment", async (event, sessionId: string, attachmentId: string) => {
+    mainWindowSender(event, "Coach attachments");
+    const file = await coachAttachments()
+      .originalPath(String(sessionId), String(attachmentId))
+      .catch(() => null);
+    if (!file) throw new Error("This file is no longer available.");
+    const failure = await shell.openPath(file);
+    if (failure) throw new Error(failure);
+  });
   ipcMain.handle("coach:cancel", (_event, sessionId: string) =>
     requireCoachHub().cancel(sessionId)
   );

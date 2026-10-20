@@ -79,7 +79,9 @@ export interface CoachStreamDriver {
     requestId: string,
     messages: ChatMessage[],
     unitSystem: UnitSystem,
-    provider: ChatProvider
+    provider: ChatProvider,
+    /** The conversation, for resolving the files its messages carry. */
+    sessionId: string
   ): Promise<void>;
   cancel(requestId: string): void;
 }
@@ -112,6 +114,8 @@ export interface CoachSessionHubOptions {
   titler?: (provider: ChatProvider, question: string, answer: string) => Promise<string | null>;
   /** The units remote senders get: the last ones the desktop sent with. */
   unitSystem?: { get(): UnitSystem | undefined; set(value: UnitSystem): void };
+  /** Where attached files live; a deleted conversation takes its files with it. */
+  attachments?: { removeSession(sessionId: string): Promise<void> | void };
   now?: () => number;
   randomId?: () => string;
   /** Idle sessions kept in memory. */
@@ -244,6 +248,9 @@ export class CoachSessionHub {
     this.cache.delete(sessionId);
     this.options.sessions.remove(sessionId);
     this.options.events.remove(sessionId);
+    void Promise.resolve(this.options.attachments?.removeSession(sessionId)).catch((error) =>
+      console.warn("[coach] could not remove a conversation's files:", error)
+    );
     this.notifySessions({ kind: "delete", sessionId });
   }
 
@@ -315,6 +322,7 @@ export class CoachSessionHub {
     if (input.unitSystem) this.rememberUnitSystem(input.unitSystem);
 
     const text = (input.text ?? "").trim();
+    const files = input.files?.length ? input.files : undefined;
     let promptIndex = -1;
     let answer = text;
     let choiceId: string | undefined;
@@ -339,10 +347,10 @@ export class CoachSessionHub {
       }
       if (!answer) throw new CoachHubError("invalid", "Write an answer first.");
     } else {
-      if (!text) throw new CoachHubError("invalid", "Write a message first.");
+      if (!text && !files) throw new CoachHubError("invalid", "Write a message first.");
       // Free text answers the newest open question, unless it carries an
-      // attachment: then it is its own request.
-      if (!input.attachment) {
+      // attachment or files: then it is its own request.
+      if (!input.attachment && !files) {
         for (let index = state.entries.length - 1; index >= 0; index -= 1) {
           const entry = state.entries[index];
           if (entry.kind === "coachPrompt" && entry.prompt.answeredAt === undefined) {
@@ -368,7 +376,8 @@ export class CoachSessionHub {
         kind: "message",
         role: "user",
         content: text,
-        ...(input.attachment ? { attachment: input.attachment } : {})
+        ...(input.attachment ? { attachment: input.attachment } : {}),
+        ...(files ? { files } : {})
       }, changes);
     }
     this.commit(state, changes);
@@ -384,7 +393,8 @@ export class CoachSessionHub {
         requestId,
         toWireMessages(state.entries),
         this.unitSystem(input.unitSystem),
-        state.summary.provider
+        state.summary.provider,
+        state.summary.id
       );
     } catch (error) {
       running = Promise.reject(error);
@@ -795,7 +805,9 @@ export class CoachSessionHub {
     if (!titler) return;
     const messages = state.entries.flatMap((entry) => (entry.kind === "message" ? [entry] : []));
     const answers = messages.filter((entry) => entry.role === "assistant");
-    const question = messages.find((entry) => entry.role === "user")?.content.trim();
+    const asked = messages.find((entry) => entry.role === "user");
+    // A question that is only files is about those files.
+    const question = asked?.content.trim() || asked?.files?.map((file) => file.name).join(", ");
     if (answers.length !== 1 || !question) return;
     const sessionId = state.summary.id;
     const firstTitle = state.summary.title;

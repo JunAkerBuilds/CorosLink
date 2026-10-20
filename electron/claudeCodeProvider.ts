@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { constants as fsConstants } from "node:fs";
 import { z } from "zod";
 import type { ClaudeCliModel } from "./chatModels";
+import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" };
 import type {
   ChatMessage,
   ClaudeCodeConnectionTest,
@@ -471,7 +472,7 @@ export async function streamClaudeCodeCompletion(
     );
 
     const stream = sdk.query({
-      prompt: formatClaudePrompt(options.messages),
+      prompt: claudePrompt(options.messages),
       options: {
         abortController: controller,
         pathToClaudeCodeExecutable: options.executablePath,
@@ -617,9 +618,42 @@ function jsonSchemaToZodShape(
   return shape;
 }
 
+/**
+ * The conversation as one Claude turn. Attached images follow the transcript
+ * as image blocks, which only streaming input can carry.
+ */
+export function claudePrompt(messages: ChatMessage[]): string | AsyncIterable<SDKUserMessage> {
+  const recent = messages.slice(-CLAUDE_PROMPT_MESSAGES);
+  const text = formatClaudePrompt(recent);
+  const images = recent.flatMap((message) => message.images ?? []);
+  if (images.length === 0) return text;
+  const message: SDKUserMessage = {
+    type: "user",
+    parent_tool_use_id: null,
+    message: {
+      role: "user",
+      content: [
+        { type: "text", text },
+        ...images.flatMap((image) => [
+          { type: "text" as const, text: `Image: ${image.label}` },
+          {
+            type: "image" as const,
+            source: { type: "base64" as const, media_type: image.mimeType, data: image.base64 }
+          }
+        ])
+      ]
+    }
+  };
+  return (async function* () {
+    yield message;
+  })();
+}
+
+const CLAUDE_PROMPT_MESSAGES = 30;
+
 function formatClaudePrompt(messages: ChatMessage[]): string {
   const transcript = messages
-    .slice(-30)
+    .slice(-CLAUDE_PROMPT_MESSAGES)
     .map(
       (message) =>
         `${message.role === "assistant" ? "Assistant" : "Athlete"}: ${message.content}`

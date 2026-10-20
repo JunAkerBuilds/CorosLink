@@ -1,3 +1,5 @@
+import type { ChatMessage } from "./types";
+
 /** Build the ChatGPT Responses request with safe reasoning summaries enabled. */
 export function buildResponsesRequest(
   model: string,
@@ -45,4 +47,27 @@ export function extractReasoningSummaryDelta(event: unknown): string {
     typeof evt.delta === "string"
     ? evt.delta
     : "";
+}
+
+/** A COROS message turned into a Responses-API input item. */
+export function toInputMessageItem(message: ChatMessage): Record<string, unknown> {
+  if (message.role === "assistant") {
+    return {
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: message.content }]
+    };
+  }
+  return {
+    type: "message",
+    role: "user",
+    content: [
+      { type: "input_text", text: message.content },
+      // Attached images follow the text, each named so the model can refer to it.
+      ...(message.images ?? []).flatMap((image) => [
+        { type: "input_text", text: `Image: ${image.label}` },
+        { type: "input_image", image_url: `data:${image.mimeType};base64,${image.base64}` }
+      ])
+    ]
+  };
 }

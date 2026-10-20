@@ -54,11 +54,11 @@ function createFakeStream() {
   return {
     turns,
     cancelled,
-    start(sink, requestId, messages, unitSystem, provider) {
+    start(sink, requestId, messages, unitSystem, provider, sessionId) {
       let resolve;
       const done = new Promise((settle) => { resolve = settle; });
       turns.push({
-        requestId, messages, unitSystem, provider, resolve,
+        requestId, messages, unitSystem, provider, sessionId, resolve,
         send: (channel, payload = {}) => sink.send(channel, { requestId, ...payload }),
         info: (payload) => sink.send("chat:streamInfo", { requestId, ...payload })
       });
@@ -132,7 +132,7 @@ const prompt = {
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-function createHarness({ database = createMemoryDatabase(), events = createMemoryCoachEventStore(), visualizationsEnabled = true, maxRetainedEvents, titler } = {}) {
+function createHarness({ database = createMemoryDatabase(), events = createMemoryCoachEventStore(), visualizationsEnabled = true, maxRetainedEvents, titler, attachments } = {}) {
   const stream = createFakeStream();
   const actions = createActions();
   const settings = { visualizationsEnabled };
@@ -143,7 +143,8 @@ function createHarness({ database = createMemoryDatabase(), events = createMemor
     actions,
     settings: () => settings,
     ...(maxRetainedEvents ? { maxRetainedEvents } : {}),
-    ...(titler ? { titler } : {})
+    ...(titler ? { titler } : {}),
+    ...(attachments ? { attachments } : {})
   });
   return { hub, stream, actions, settings, database, events };
 }
@@ -497,4 +498,51 @@ named.stream.turns[1].resolve();
 await tick();
 assert.equal(titleCalls.length, 1);
 
-console.log("coach hub tests passed (shared stream, replay/snapshot, idempotent sends, approvals, restarts, contract shapes, AI titles)");
+// A message may be only files. They reach the provider with the conversation's
+// id, survive a reload, and leave with the conversation.
+const removedAttachments = [];
+const filed = createHarness({ attachments: { removeSession: (sessionId) => { removedAttachments.push(sessionId); } } });
+const planFile = {
+  id: "8f8c8d6e-0000-4000-8000-000000000001", name: "Marathon plan.pdf", kind: "document",
+  mimeType: "application/pdf", sizeBytes: 52_000, pageCount: 6, textChars: 9_000
+};
+const photo = {
+  id: "8f8c8d6e-0000-4000-8000-000000000002", name: "Track session.jpg", kind: "image",
+  mimeType: "image/jpeg", sizeBytes: 210_000, width: 1568, height: 1176
+};
+const filedSession = filed.hub.createSession("claude-code");
+assert.throws(() => filed.hub.send({ sessionId: filedSession.id, clientMessageId: "f-0", text: "  " }), (error) => error.code === "invalid");
+filed.hub.send({ sessionId: filedSession.id, clientMessageId: "f-1", files: [planFile] });
+assert.equal(filed.stream.turns[0].sessionId, filedSession.id);
+assert.deepEqual(filed.stream.turns[0].messages, [{ role: "user", content: "", files: [planFile] }]);
+assert.deepEqual(filed.hub.getSession(filedSession.id).entries[0], { kind: "message", role: "user", content: "", files: [planFile] });
+assert.equal(filed.hub.listSessions("claude-code")[0].title, "Marathon plan.pdf", "a files-only question is titled by its file");
+filed.stream.turns[0].send("chat:streamInfo", { kind: "coachPrompt", prompt });
+filed.stream.turns[0].send("chat:streamDone", { fullText: "Six weeks of build. When do you want to start?" });
+filed.stream.turns[0].resolve();
+await tick();
+// Files sent while a question is open are their own request, not its answer.
+filed.hub.send({ sessionId: filedSession.id, clientMessageId: "f-2", text: "Here is last week too", files: [photo] });
+const openPrompt = filed.hub.getSession(filedSession.id).entries.find((entry) => entry.kind === "coachPrompt");
+assert.equal(openPrompt.prompt.answeredAt, undefined);
+assert.deepEqual(filed.stream.turns[1].messages.at(-1), { role: "user", content: "Here is last week too", files: [photo] });
+filed.stream.turns[1].send("chat:streamDone", { fullText: "Looks good." });
+filed.stream.turns[1].resolve();
+await tick();
+const reloadedFiles = createHarness({ database: filed.database });
+assert.deepEqual(
+  reloadedFiles.hub.getSession(filedSession.id).entries.filter((entry) => entry.files).map((entry) => entry.files),
+  [[planFile], [photo]],
+  "file summaries are saved with the transcript"
+);
+// A summary without an id or a known kind is dropped when the transcript is read back.
+const filedRow = filed.database.rows.get(filedSession.id);
+const forged = JSON.parse(filedRow.messages_json);
+forged[0].files.push({ name: "run.exe", kind: "program", mimeType: "application/octet-stream" });
+filed.database.rows.set(filedSession.id, { ...filedRow, messages_json: JSON.stringify(forged) });
+assert.deepEqual(fromPersistedEntries(getChatSession(filedSession.id, filed.database))[0].files, [planFile]);
+filed.hub.deleteSession(filedSession.id);
+await tick();
+assert.deepEqual(removedAttachments, [filedSession.id]);
+
+console.log("coach hub tests passed (shared stream, replay/snapshot, idempotent sends, approvals, restarts, contract shapes, AI titles, files)");

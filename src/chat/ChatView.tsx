@@ -31,6 +31,7 @@ import {
   ExternalLink,
   FileText,
   HeartPulse,
+  Image as ImageIcon,
   Info,
   KeyRound,
   Layers,
@@ -38,6 +39,7 @@ import {
   LogOut,
   MessageCircle,
   Network,
+  Paperclip,
   Plus,
   RefreshCw,
   Settings2,
@@ -54,6 +56,13 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { CorosLinkApi } from "../coroslink-api";
 import { morph } from "./coachMorph";
+import {
+  COACH_FILE_ACCEPT,
+  CoachFileError,
+  MAX_COACH_FILES,
+  isImageFile,
+  prepareCoachFile
+} from "./coachFiles";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import {
   POUNDS_PER_KILOGRAM,
@@ -68,12 +77,14 @@ import {
 } from "../units/units";
 import type {
   ChatAuthStatus,
+  ChatFileAttachment,
   ChatMessageAttachment,
   ChatProvider,
   ChatSessionSummary,
   ChatSettings,
   ClaudeCodeStatus,
   CoachChartPreview,
+  CoachFileUpload,
   CoachInputChoice,
   CoachInputPrompt,
   LocalChatConnectionTest,
@@ -1682,6 +1693,220 @@ interface ChatComposerHandle {
   focus: () => void;
   /** Replaces the whole draft, including any attachment. */
   setDraft: (value: string, attachment?: ChatMessageAttachment) => void;
+  /** Reads files dropped on the conversation into the draft. */
+  addFiles: (files: File[]) => void;
+}
+
+/** A file in the composer: read in the window, uploaded with the message. */
+interface ComposerFile {
+  key: string;
+  name: string;
+  image: boolean;
+  status: "reading" | "ready";
+  upload?: CoachFileUpload;
+  /** Object URL of the picked image, for its thumbnail. */
+  previewUrl?: string;
+}
+
+const FILE_TYPE_LABELS: Record<string, string> = {
+  pdf: "PDF",
+  docx: "Word",
+  txt: "Text",
+  md: "Markdown",
+  markdown: "Markdown",
+  csv: "CSV",
+  tsv: "TSV",
+  json: "JSON"
+};
+
+/** "PDF · 6 pages", plus how the model gets it when that is not plain text. */
+function describeFile(
+  name: string,
+  details: { pageCount?: number; scanned?: boolean; truncated?: boolean }
+): string {
+  const extension = /\.([A-Za-z0-9]+)$/.exec(name)?.[1]?.toLowerCase() ?? "";
+  const parts = [FILE_TYPE_LABELS[extension] ?? extension.toUpperCase()];
+  if (details.pageCount) {
+    parts.push(
+      details.pageCount === 1
+        ? t("1 page")
+        : t("{{count}} pages", { count: details.pageCount })
+    );
+  }
+  if (details.scanned) parts.push(t("read as images"));
+  if (details.truncated) parts.push(t("trimmed to fit"));
+  return parts.filter(Boolean).join(" · ");
+}
+
+function ComposerFileChip({
+  file,
+  onRemove
+}: {
+  file: ComposerFile;
+  onRemove: () => void;
+}) {
+  useLanguage();
+  const reading = file.status === "reading";
+  const removeLabel = t("Remove {{label}} from this message", { label: file.name });
+  if (file.image) {
+    return (
+      <span
+        className={`chat-file-thumb chat-file-thumb-draft${reading ? " is-reading" : ""}`}
+        title={file.name}
+      >
+        {file.previewUrl ? <img src={file.previewUrl} alt={file.name} /> : <ImageIcon size={18} aria-hidden="true" />}
+        {reading ? (
+          <span className="chat-file-thumb-status" aria-label={t("Reading {{name}}…", { name: file.name })}>
+            <Loader2 size={16} className="chat-file-spinner" aria-hidden="true" />
+          </span>
+        ) : null}
+        <button
+          type="button"
+          className="chat-file-remove"
+          onClick={onRemove}
+          aria-label={removeLabel}
+          title={removeLabel}
+        >
+          <X size={11} aria-hidden="true" />
+        </button>
+      </span>
+    );
+  }
+  const upload = file.upload;
+  return (
+    <span className={`chat-file-card chat-file-card-draft${reading ? " is-reading" : ""}`} title={file.name}>
+      <span className="chat-file-card-icon" aria-hidden="true">
+        {reading ? <Loader2 size={16} className="chat-file-spinner" /> : <FileText size={16} />}
+      </span>
+      <span className="chat-file-card-text">
+        <span className="chat-file-card-name">{file.name}</span>
+        <span className="chat-file-card-meta">
+          {reading || !upload
+            ? t("Reading…")
+            : describeFile(upload.name, {
+                pageCount: upload.pageCount,
+                scanned: Boolean(upload.images?.length),
+                truncated: upload.truncated
+              })}
+        </span>
+      </span>
+      <button
+        type="button"
+        className="chat-file-remove"
+        onClick={onRemove}
+        aria-label={removeLabel}
+        title={removeLabel}
+      >
+        <X size={11} aria-hidden="true" />
+      </button>
+    </span>
+  );
+}
+
+const attachmentPreviews = new Map<string, Promise<string | null>>();
+
+function useAttachmentPreview(
+  api: CorosLinkApi | undefined,
+  sessionId: string | null,
+  attachmentId: string
+): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!api || !sessionId) return;
+    const key = `${sessionId}:${attachmentId}`;
+    let request = attachmentPreviews.get(key);
+    if (!request) {
+      request = api.coachAttachmentPreview(sessionId, attachmentId).catch(() => null);
+      attachmentPreviews.set(key, request);
+    }
+    let live = true;
+    void request.then((value) => {
+      if (live) setUrl(value);
+    });
+    return () => {
+      live = false;
+    };
+  }, [api, sessionId, attachmentId]);
+  return url;
+}
+
+/** Files sent with a user message; opening one hands the kept original to the system. */
+function MessageFiles({
+  files,
+  api,
+  sessionId,
+  onError
+}: {
+  files: ChatFileAttachment[];
+  api: CorosLinkApi | undefined;
+  sessionId: string | null;
+  onError: (message: string | null) => void;
+}) {
+  useLanguage();
+  const open = (file: ChatFileAttachment) => {
+    if (!api || !sessionId) return;
+    void api.coachOpenAttachment(sessionId, file.id).catch((caught) =>
+      onError(caught instanceof Error ? caught.message : t("This file could not be opened."))
+    );
+  };
+  return (
+    <div className="chat-message-files">
+      {files.map((file) =>
+        file.kind === "image" ? (
+          <MessageImage key={file.id} file={file} api={api} sessionId={sessionId} onOpen={() => open(file)} />
+        ) : (
+          <button
+            key={file.id}
+            type="button"
+            className="chat-file-card"
+            onClick={() => open(file)}
+            title={t("Open {{name}}", { name: file.name })}
+          >
+            <span className="chat-file-card-icon" aria-hidden="true">
+              <FileText size={16} />
+            </span>
+            <span className="chat-file-card-text">
+              <span className="chat-file-card-name">{file.name}</span>
+              <span className="chat-file-card-meta">
+                {describeFile(file.name, {
+                  pageCount: file.pageCount,
+                  scanned: Boolean(file.pageImages) && !file.textChars,
+                  truncated: file.truncated
+                })}
+              </span>
+            </span>
+          </button>
+        )
+      )}
+    </div>
+  );
+}
+
+function MessageImage({
+  file,
+  api,
+  sessionId,
+  onOpen
+}: {
+  file: ChatFileAttachment;
+  api: CorosLinkApi | undefined;
+  sessionId: string | null;
+  onOpen: () => void;
+}) {
+  useLanguage();
+  const url = useAttachmentPreview(api, sessionId, file.id);
+  const ratio = file.width && file.height ? `${file.width} / ${file.height}` : undefined;
+  return (
+    <button
+      type="button"
+      className="chat-file-thumb"
+      onClick={onOpen}
+      title={t("Open {{name}}", { name: file.name })}
+      style={ratio ? ({ "--chat-file-ratio": ratio } as CSSProperties) : undefined}
+    >
+      {url ? <img src={url} alt={file.name} /> : <ImageIcon size={18} aria-hidden="true" />}
+    </button>
+  );
 }
 
 interface ChatComposerProps {
@@ -1695,8 +1920,13 @@ interface ChatComposerProps {
   localModelConfigured: boolean;
   onDraftChange: (value: string) => void;
   onNewChat: () => void;
-  onSend: (message: string, attachment?: ChatMessageAttachment) => Promise<boolean>;
+  onSend: (
+    message: string,
+    attachment?: ChatMessageAttachment,
+    uploads?: CoachFileUpload[]
+  ) => Promise<boolean>;
   onStop: () => void;
+  onFileError: (message: string) => void;
 }
 
 const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
@@ -1713,7 +1943,8 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       onDraftChange,
       onNewChat,
       onSend,
-      onStop
+      onStop,
+      onFileError
     },
     ref
   ) {
@@ -1721,10 +1952,20 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     const [draft, setDraft] = useState(initialDraft);
     const draftRef = useRef(initialDraft);
     const [attachment, setAttachment] = useState<ChatMessageAttachment | null>(null);
+    const [files, setFiles] = useState<ComposerFile[]>([]);
+    const filesRef = useRef<ComposerFile[]>([]);
+    filesRef.current = files;
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const submittingRef = useRef(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const trimmedDraft = draft.trim();
-    const latestActivityFileRequest = isLatestActivityFileRequest(trimmedDraft);
+    const readingFiles = files.some((file) => file.status === "reading");
+    const uploads = files.flatMap((file) =>
+      file.status === "ready" && file.upload ? [file.upload] : []
+    );
+    const hasMessage = Boolean(trimmedDraft) || uploads.length > 0;
+    const latestActivityFileRequest =
+      files.length === 0 && isLatestActivityFileRequest(trimmedDraft);
     const localProviderBlocked =
       isLocalProvider &&
       !localModelConfigured &&
@@ -1739,6 +1980,69 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       [onDraftChange]
     );
 
+    const addFiles = useCallback(
+      (incoming: File[]) => {
+        if (incoming.length === 0) return;
+        const room = MAX_COACH_FILES - filesRef.current.length;
+        if (incoming.length > room) {
+          onFileError(t("Attach up to {{count}} files per message.", { count: MAX_COACH_FILES }));
+        }
+        const accepted = incoming.slice(0, Math.max(0, room));
+        if (accepted.length === 0) return;
+        const added = accepted.map((file): ComposerFile => {
+          const image = isImageFile(file);
+          return {
+            key: crypto.randomUUID(),
+            name: file.name,
+            image,
+            status: "reading",
+            ...(image ? { previewUrl: URL.createObjectURL(file) } : {})
+          };
+        });
+        filesRef.current = [...filesRef.current, ...added];
+        setFiles(filesRef.current);
+        added.forEach((entry, index) => {
+          prepareCoachFile(accepted[index]).then(
+            (upload) =>
+              setFiles((current) =>
+                current.map((item) =>
+                  item.key === entry.key
+                    ? { ...item, name: upload.name, status: "ready", upload }
+                    : item
+                )
+              ),
+            (error) => {
+              setFiles((current) => current.filter((item) => item.key !== entry.key));
+              if (entry.previewUrl) URL.revokeObjectURL(entry.previewUrl);
+              onFileError(
+                error instanceof CoachFileError
+                  ? error.message
+                  : t("{{name}} could not be attached.", { name: entry.name })
+              );
+            }
+          );
+        });
+        textareaRef.current?.focus();
+      },
+      [onFileError]
+    );
+
+    const removeFile = (key: string) => {
+      const file = filesRef.current.find((item) => item.key === key);
+      if (file?.previewUrl) URL.revokeObjectURL(file.previewUrl);
+      setFiles((current) => current.filter((item) => item.key !== key));
+      textareaRef.current?.focus();
+    };
+
+    useEffect(
+      () => () => {
+        for (const file of filesRef.current) {
+          if (file.previewUrl) URL.revokeObjectURL(file.previewUrl);
+        }
+      },
+      []
+    );
+
     useImperativeHandle(
       ref,
       () => ({
@@ -1746,15 +2050,17 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
         setDraft: (value, nextAttachment) => {
           updateDraft(value);
           setAttachment(nextAttachment ?? null);
-        }
+        },
+        addFiles
       }),
-      [updateDraft]
+      [updateDraft, addFiles]
     );
 
     const submitDraft = async () => {
       if (
         !apiAvailable ||
-        !trimmedDraft ||
+        !hasMessage ||
+        readingFiles ||
         exportingLatestActivity ||
         localProviderBlocked ||
         submittingRef.current
@@ -1764,14 +2070,27 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
 
       const submittedDraft = draft;
       const submittedAttachment = attachment;
+      const submittedFiles = files;
       submittingRef.current = true;
       updateDraft("");
       setAttachment(null);
+      setFiles([]);
       try {
-        const accepted = await onSend(trimmedDraft, submittedAttachment ?? undefined);
+        const accepted = await onSend(
+          trimmedDraft,
+          submittedAttachment ?? undefined,
+          uploads.length ? uploads : undefined
+        );
         if (!accepted && !draftRef.current) {
           updateDraft(submittedDraft);
           setAttachment(submittedAttachment);
+        }
+        if (!accepted) {
+          setFiles((current) => (current.length ? current : submittedFiles));
+        } else {
+          for (const file of submittedFiles) {
+            if (file.previewUrl) URL.revokeObjectURL(file.previewUrl);
+          }
         }
       } finally {
         submittingRef.current = false;
@@ -1781,15 +2100,24 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     return (
       <div className="chat-composer">
         <div className="chat-composer-inner">
-          {attachment ? (
+          {attachment || files.length ? (
             <div className="chat-composer-attachments">
-              <MessageAttachmentChip
-                attachment={attachment}
-                onRemove={() => {
-                  setAttachment(null);
-                  textareaRef.current?.focus();
-                }}
-              />
+              {attachment ? (
+                <MessageAttachmentChip
+                  attachment={attachment}
+                  onRemove={() => {
+                    setAttachment(null);
+                    textareaRef.current?.focus();
+                  }}
+                />
+              ) : null}
+              {files.map((file) => (
+                <ComposerFileChip
+                  key={file.key}
+                  file={file}
+                  onRemove={() => removeFile(file.key)}
+                />
+              ))}
             </div>
           ) : null}
           <div className="chat-composer-entry">
@@ -1808,6 +2136,13 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
                   event.preventDefault();
                   void submitDraft();
                 }
+              }}
+              onPaste={(event) => {
+                // Pasted screenshots and copied files attach; pasted text stays text.
+                const pasted = [...event.clipboardData.files];
+                if (pasted.length === 0 || event.clipboardData.getData("text/plain")) return;
+                event.preventDefault();
+                addFiles(pasted);
               }}
               placeholder={
                 waitingForCoachAnswer
@@ -1831,7 +2166,8 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
               disabled={
                 !streaming &&
                 (!apiAvailable ||
-                  !trimmedDraft ||
+                  !hasMessage ||
+                  readingFiles ||
                   exportingLatestActivity ||
                   localProviderBlocked)
               }
@@ -1840,7 +2176,9 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
                   ? t("Stop")
                   : localProviderBlocked
                     ? t("Enter a local model first")
-                    : t("Send")
+                    : readingFiles
+                      ? t("Reading your files…")
+                      : t("Send")
               }
               aria-label={streaming ? t("Stop") : t("Send")}
             >
@@ -1853,6 +2191,28 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
             </button>
           </div>
           <div className="chat-composer-toolbar">
+            <button
+              type="button"
+              className="chat-composer-attach"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!apiAvailable || exportingLatestActivity || files.length >= MAX_COACH_FILES}
+              aria-label={t("Attach files")}
+              title={t("Attach a plan, document, or image")}
+            >
+              <Paperclip size={15} aria-hidden="true" />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={COACH_FILE_ACCEPT}
+              hidden
+              tabIndex={-1}
+              onChange={(event) => {
+                addFiles([...(event.target.files ?? [])]);
+                event.target.value = "";
+              }}
+            />
             {providerControls}
             <button
               type="button"
@@ -1911,6 +2271,7 @@ export function ChatView({
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [fileDragActive, setFileDragActive] = useState(false);
   useEffect(() => {
     if (accountSetupRequest > 0) setSettingsOpen(true);
   }, [accountSetupRequest]);
@@ -2943,10 +3304,11 @@ export function ChatView({
   const sendMessage = async (
     trimmed: string,
     answeredPrompt?: { promptId: string; choiceId: string },
-    attachment?: ChatMessageAttachment
+    attachment?: ChatMessageAttachment,
+    uploads?: CoachFileUpload[]
   ): Promise<boolean> => {
-    if (!api || !trimmed || streaming || exportingLatestActivity) return false;
-    if (isLatestActivityFileRequest(trimmed)) {
+    if (!api || (!trimmed && !uploads?.length) || streaming || exportingLatestActivity) return false;
+    if (!uploads?.length && isLatestActivityFileRequest(trimmed)) {
       await handleLatestActivityFileRequest(trimmed);
       return true;
     }
@@ -3012,6 +3374,7 @@ export function ChatView({
         text: trimmed,
         ...(answeredPrompt ? { promptAnswer: answeredPrompt } : {}),
         ...(attachment ? { attachment } : {}),
+        ...(uploads?.length ? { uploads } : {}),
         unitSystem
       });
     } catch (caught) {
@@ -3582,7 +3945,26 @@ export function ChatView({
     <div className="chat-view">
       <div className="chat-layout">
         <ChatSidebar {...sidebarProps} />
-        <div className="chat-main">
+        <div
+          className={`chat-main${fileDragActive ? " is-file-drag" : ""}`}
+          onDragOver={(event) => {
+            if (!api || !event.dataTransfer.types.includes("Files")) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
+            setFileDragActive(true);
+          }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              setFileDragActive(false);
+            }
+          }}
+          onDrop={(event) => {
+            if (!event.dataTransfer.types.includes("Files")) return;
+            event.preventDefault();
+            setFileDragActive(false);
+            composerRef.current?.addFiles([...event.dataTransfer.files]);
+          }}
+        >
           <div className="chat-header">
             <div className="chat-header-title">
               <span>{t("Training Coach")}</span>
@@ -3924,16 +4306,28 @@ export function ChatView({
               );
             }
 
+            const userFiles = entry.role === "user" ? entry.files ?? [] : [];
             return (
               <div
                 key={`message-${index}`}
                 className={`chat-row chat-row-${entry.role}${
+                  userFiles.length ? " has-files" : ""
+                }${
                   highlightedChatEntryIndex === index
                     ? " is-chat-jump-target"
                     : ""
                 }`}
                 data-chat-entry-index={index}
               >
+                {userFiles.length ? (
+                  <MessageFiles
+                    files={userFiles}
+                    api={api}
+                    sessionId={activeSessionId}
+                    onError={onError}
+                  />
+                ) : null}
+                {entry.role === "user" && userFiles.length && !entry.content && !entry.attachment ? null : (
                 <div className="chat-bubble">
                   {entry.role === "assistant" ? (
                     <>
@@ -3956,6 +4350,7 @@ export function ChatView({
                     </>
                   )}
                 </div>
+                )}
               </div>
             );
           })}
@@ -4011,11 +4406,23 @@ export function ChatView({
             localModelConfigured={localModelConfigured}
             onDraftChange={handleComposerDraftChange}
             onNewChat={() => void handleNewChat()}
-            onSend={(message, attachment) =>
-              sendMessage(message, undefined, attachment)
+            onSend={(message, attachment, uploads) =>
+              sendMessage(message, undefined, attachment, uploads)
             }
             onStop={handleStop}
+            onFileError={onError}
           />
+          {fileDragActive ? (
+            <div className="chat-dropzone" aria-hidden="true">
+              <span className="chat-dropzone-badge">
+                <Paperclip size={18} />
+                {t("Drop to attach to your message")}
+              </span>
+              <span className="chat-dropzone-hint">
+                {t("PDF, Word, text, or images")}
+              </span>
+            </div>
+          ) : null}
         </div>
         {showPlanPanel && selectedCreation ? (
           <aside

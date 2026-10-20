@@ -118,6 +118,7 @@ import type {
   ChatMessage,
   ChatProvider,
   ChatSessionSummary,
+  CoachFileUpload,
   ChatSettings,
   ClaudeCodeConnectionTest,
   ClaudeCodeStatus,
@@ -1349,8 +1350,12 @@ const api = {
     ipcRenderer.invoke("coach:subscribe", sessionId, afterSeq),
   coachUnsubscribe: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke("coach:unsubscribe", sessionId),
-  coachSend: (input: CoachSendInput): Promise<{ requestId: string }> =>
+  coachSend: (input: CoachSendInput & { uploads?: CoachFileUpload[] }): Promise<{ requestId: string }> =>
     ipcRenderer.invoke("coach:send", input),
+  coachAttachmentPreview: (sessionId: string, attachmentId: string): Promise<string | null> =>
+    ipcRenderer.invoke("coach:attachmentPreview", sessionId, attachmentId),
+  coachOpenAttachment: (sessionId: string, attachmentId: string): Promise<void> =>
+    ipcRenderer.invoke("coach:openAttachment", sessionId, attachmentId),
   coachCancel: (sessionId: string): Promise<{ cancelled: boolean }> =>
     ipcRenderer.invoke("coach:cancel", sessionId),
   coachConfirm: (input: CoachConfirmInput): Promise<CoachConfirmResult> =>

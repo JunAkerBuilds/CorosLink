@@ -118,6 +118,7 @@ import type {
   ChatMessage,
   ChatProvider,
   ChatSessionSummary,
+  CoachFileUpload,
   ChatSettings,
   ClaudeCodeConnectionTest,
   ClaudeCodeStatus,
@@ -861,7 +862,9 @@ export interface CorosLinkApi {
     afterSeq: number
   ) => Promise<{ response: CoachSubscribeResult; replay: CoachEventFrame[] }>;
   coachUnsubscribe: (sessionId: string) => Promise<void>;
-  coachSend: (input: CoachSendInput) => Promise<{ requestId: string }>;
+  coachSend: (input: CoachSendInput & { uploads?: CoachFileUpload[] }) => Promise<{ requestId: string }>;
+  coachAttachmentPreview: (sessionId: string, attachmentId: string) => Promise<string | null>;
+  coachOpenAttachment: (sessionId: string, attachmentId: string) => Promise<void>;
   coachCancel: (sessionId: string) => Promise<{ cancelled: boolean }>;
   coachConfirm: (input: CoachConfirmInput) => Promise<CoachConfirmResult>;
   coachBeginLocalTurn: (sessionId: string, clientMessageId: string, text: string) => Promise<{ requestId: string }>;
