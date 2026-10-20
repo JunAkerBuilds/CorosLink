@@ -1048,6 +1048,7 @@ export const corePortuguese: Record<string, string> = {
   "Screen lock": "Bloqueio do ecrã",
   "Raise to wake during activities": "Levantar para activar durante actividades",
   "All-day HRV and stress": "VFC e stress ao longo do dia",
+  "Normal": "Normal",
   "Standard": "Padrão",
   "Reversed": "Invertido",
   "All day": "Todo o dia",

@@ -922,6 +922,7 @@ export const coreFrench: Record<string, string> = {
   "Screen lock": "Verrouillage de l’écran",
   "Raise to wake during activities": "Lever pour activer pendant les activités",
   "All-day HRV and stress": "VFC et stress toute la journée",
+  "Normal": "Normal",
   "Standard": "Standard",
   "Reversed": "Inversé",
   "All day": "Toute la journée",

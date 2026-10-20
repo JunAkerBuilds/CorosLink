@@ -1054,6 +1054,7 @@ export const coreChinese: Readonly<Record<string, string>> = {
   "Screen lock": "锁屏",
   "Raise to wake during activities": "运动中抬腕亮屏",
   "All-day HRV and stress": "全天 HRV 与压力",
+  "Normal": "正常",
   "Standard": "标准",
   "Reversed": "反向",
   "All day": "全天",
