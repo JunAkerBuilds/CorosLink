@@ -95,6 +95,15 @@ try {
   assert.equal(restored.find((entry) => entry.count)?.count, 3, "counts survive restart");
   assert.deepEqual(restored[0].via, ["trainingHub:getActivities", "trainingLibrary:snapshot"], "via survives restart");
 
+  // "fetch failed" for a new reason (only in its cause) is a new entry, not another repeat.
+  const networkFailure = (code) => new TypeError("fetch failed", { cause: Object.assign(new Error(`connect ${code}`), { code }) });
+  grouped.record("calendarSync:apple", networkFailure("ENOTFOUND"));
+  grouped.record("calendarSync:apple", networkFailure("ENOTFOUND"));
+  grouped.record("calendarSync:apple", networkFailure("CERT_HAS_EXPIRED"));
+  entries = JSON.parse(grouped.snapshot().report.slice(grouped.snapshot().report.indexOf("[")));
+  const apple = entries.filter((entry) => entry.source === "calendarSync:apple");
+  assert.deepEqual(apple.map((entry) => [entry.error.cause.code, entry.count]), [["ENOTFOUND", 2], ["CERT_HAS_EXPIRED", undefined]]);
+
   // Account status lines sit above the entries and are redacted like errors.
   const withStatus = grouped.snapshot(["COROS accounts", "- Training Hub: signed in · teameuapi.coros.com · person@example.com"]).report;
   assert.match(withStatus, /COROS accounts\n- Training Hub: signed in · teameuapi\.coros\.com · \[email\]/);

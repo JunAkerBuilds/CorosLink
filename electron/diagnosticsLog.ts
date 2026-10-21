@@ -263,9 +263,15 @@ export class DiagnosticsLog {
   }
 }
 
-/** Same place, same failure: what decides that a new error is a repeat of an entry. */
+/**
+ * Same place, same failure: what decides that a new error is a repeat of an entry. The cause
+ * counts too: every network failure is "fetch failed", with the real reason only in its cause.
+ */
 function repeatSignature(source: string, error: DiagnosticError): string {
-  return JSON.stringify([source, error.name, error.message, error.code, error.request?.method, error.request?.url]);
+  return JSON.stringify([
+    source, error.name, error.message, error.code, error.request?.method, error.request?.url,
+    error.cause?.name, error.cause?.message, error.cause?.code
+  ]);
 }
 
 /** Field order for the report: when, how often, where, then the error itself. */

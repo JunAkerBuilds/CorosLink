@@ -968,12 +968,14 @@ export async function callMcpTool(
     );
   }
 
-  // Health cards and the Coach turn most tool failures into an empty state or chat
-  // text, so every failed call is recorded here.
+  // Health cards and the Coach turn most COROS tool failures into an empty state or chat
+  // text, so every failed COROS call is recorded here. Other servers' tool text can carry
+  // the user's own content (documents, mail), so it stays out of the shareable report.
   const source = `mcp:${split.serverId}/${split.toolName}`;
+  const recordsFailures = split.serverId === "coros";
   const failed = (message: string, cause?: unknown): Error => {
     const error = new Error(message, cause === undefined ? undefined : { cause });
-    recordDiagnosticError(source, error);
+    if (recordsFailures) recordDiagnosticError(source, error);
     return error;
   };
 
@@ -1009,7 +1011,7 @@ export async function callMcpTool(
     throw failed(formatToolFailure(serverName, split.serverId, split.toolName, combined || text));
   }
   // COROS answers some bad calls with this notice instead of an error; callers decide what it means.
-  if (/tool call anomalies detected/i.test(combined || text)) {
+  if (recordsFailures && /tool call anomalies detected/i.test(combined || text)) {
     recordDiagnosticError(source, new Error(`${serverName} MCP ${split.toolName} returned an anomaly notice instead of data.`));
   }
   return combined || text;
