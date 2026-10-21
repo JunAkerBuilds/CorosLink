@@ -55,6 +55,20 @@ export function annotateDiagnosticRequest(error: unknown, method: string, url: s
   return error;
 }
 
+/**
+ * A long run that is an API path, file, or function name (`/activity/fit/getImportSportList`,
+ * `/dist-electron/trainingHubService`): whole words. Keys and hashes break into one- and
+ * two-letter fragments between digits, or are one unbroken lowercase string.
+ */
+function readsAsWords(run: string): boolean {
+  if (/[+=]/.test(run) || !/[/_-]|[a-z][A-Z]/.test(run)) return false;
+  const words = run.match(/[A-Z]?[a-z]+|[A-Z]+(?![a-z])/g) ?? [];
+  const letters = words.reduce((sum, word) => sum + word.length, 0);
+  const fragments = words.filter((word) => word.length <= 2).length;
+  return words.length > 0 && fragments * 4 <= words.length && letters >= words.length * 3 &&
+    (run.match(/\d+/g)?.length ?? 0) <= 3 && words.every((word) => word.length <= 24);
+}
+
 /** Redact before persistence as well as before export. No IPC arguments are logged. */
 export function redactDiagnosticText(value: string, privatePaths: string[] = []): string {
   let text = value;
@@ -80,7 +94,7 @@ export function redactDiagnosticText(value: string, privatePaths: string[] = [])
     .replace(/(?:\b[A-Z]:[\\/]|\/(?:Users|home|Volumes|tmp|private|var)\/)[^\r\n"')]+/gi, "[local path]")
     .replace(/[A-Z0-9._%+-]+(?:@|%40)[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?/g, REDACTED)
-    .replace(/[A-Za-z0-9_+/=-]{32,}/g, REDACTED)
+    .replace(/[A-Za-z0-9_+/=-]{32,}/g, (run) => readsAsWords(run) ? run : REDACTED)
     .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, REDACTED)
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
   return text;

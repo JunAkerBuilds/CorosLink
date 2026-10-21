@@ -61,6 +61,26 @@ try {
   assert.match(report, /\[redacted\]/);
   assert.equal(fs.statSync(file).mode & 0o777, 0o600);
   assert.equal(redactDiagnosticText("ENOTFOUND apieu.coros.com"), "ENOTFOUND apieu.coros.com");
+  // Long API paths, file names, and function names stay readable; long keys and hashes don't.
+  for (const readable of [
+    "trainingHub:/activity/fit/getImportSportList",
+    "GET https://teamapi.coros.com/activity/fit/getImportSportList",
+    "/coros/v2/userInfo/getWatchFaceThemeList",
+    "getHTTPServerConnectionTimeoutError",
+    "chart_heart_rate_icon_pos, chart_heart_rate_icon"
+  ]) assert.equal(redactDiagnosticText(readable), readable);
+  assert.equal(
+    redactDiagnosticText("    at assertTemplateDefinesRequiredKeys (/Users/test-person/app/dist-electron/trainingHubService.js:4855:29)", ["/Users/test-person/app"]),
+    "    at assertTemplateDefinesRequiredKeys ([local path]/dist-electron/trainingHubService.js:4855:29)"
+  );
+  assert.equal(redactDiagnosticText("https://teamapi.coros.com/activity/fit/getImportSportList?size=20"), "https://teamapi.coros.com/activity/fit/getImportSportList");
+  for (const key of [
+    "5f2b9c0e1a7d4e3f8b6a2c9d0e1f3a4b",
+    "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    "sk-proj-AbCdEf123456GhIjKl789012MnOpQr",
+    "QFFIV27AUZgiIMKbzxkpTAqw_mmnSimIPx9",
+    "lzpap7ujfqcb7etuudgd0fphhm16kajny"
+  ]) assert.equal(redactDiagnosticText(`rejected ${key} here`), "rejected [redacted] here", key);
 
   // A sync failure recorded where it happened, then rethrown to IPC, stays one entry.
   const grouped = open(path.join(directory, "grouped", "errors.json"));
