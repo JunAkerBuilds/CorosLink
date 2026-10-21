@@ -42,6 +42,7 @@ import {
   buildWatchfaceConfigAssetReplacements,
   computeLayoutGroupBounds,
   computeLayoutOffsetLimits,
+  configAssetCanScaleTemplateImage,
   configAssetCanUseNativeSize,
   configAssetCanvasSize,
   configAssetSupportsNativeSize,
@@ -2070,6 +2071,17 @@ assert.deepEqual(
   "both status icons should expose independent hit-test bounds"
 );
 assert.deepEqual(
+  computeLayoutGroupBounds(statusPreviewResolution, {
+    configAssetOverrides: {
+      "config:control_bluetooth_off_icon": { nativeSize: true, scale: 1.5 }
+    }
+  })
+    .filter(({ id }) => id === "bluetoothOff")
+    .map(({ x0, y0, x1, y1 }) => ({ x0, y0, x1, y1 })),
+  [{ x0: 126, y0: 551, x1: 189, y1: 614 }],
+  "a resized template status icon should grow its layout bounds from the same corner"
+);
+assert.deepEqual(
   buildLayoutOverrides(
     {
       archiveId: "control-status",
@@ -2379,6 +2391,34 @@ assert.deepEqual(
   { width: 80, height: 48, native: true },
   "standalone Do Not Disturb indicators should be able to use their imported PNG size"
 );
+assert.deepEqual(
+  configAssetCanvasSize(
+    "bluetooth_on_icon",
+    { nativeSize: true, scale: 1.5 },
+    { width: 24, height: 20 },
+    416 / 800
+  ),
+  { width: 36, height: 30, native: true },
+  "a template Bluetooth icon should resize its own per-tree PNG without an import"
+);
+assert.deepEqual(
+  configAssetCanvasSize(
+    "control_hr_icon",
+    { nativeSize: true, scale: 2 },
+    { width: 37, height: 37 }
+  ),
+  { width: 37, height: 37, native: false },
+  "only status icons resize their template PNG without an import"
+);
+assert.equal(configAssetCanScaleTemplateImage("bluetooth_off_icon"), true);
+assert.equal(configAssetCanScaleTemplateImage("no_disturb_on_icon"), true);
+assert.equal(configAssetCanScaleTemplateImage("control_bluetooth_on_icon"), true);
+assert.equal(
+  configAssetCanScaleTemplateImage("touch_lock_icon"),
+  false,
+  "touch lock keeps its template box"
+);
+assert.equal(configAssetCanScaleTemplateImage("control_hr_icon"), false);
 assert.deepEqual(
   configAssetCanvasSize(
     "control_hr_icon",
@@ -4436,6 +4476,7 @@ globalThis.document = {
         renderedText = text;
       },
       drawImage: () => {},
+      fillRect: () => {},
       getImageData: (_x, _y, width, height) => ({
         width,
         height,
@@ -4594,6 +4635,57 @@ try {
     nativeFullControlIcon?.dataUrl ?? "",
     /W96H48/,
     "native selectable icons should export their imported canvas instead of the template slot"
+  );
+
+  // A template Bluetooth icon resized in Studio exports its own PNG at the
+  // new size in every tree, with Tint icons still applied.
+  const detailsWithBluetoothIcon = {
+    ...details,
+    resolutions: details.resolutions.map((candidate) => ({
+      ...candidate,
+      config: {
+        ...candidate.config,
+        bluetooth_on_icon: "icon\\bt.png",
+        bluetooth_icon_pos: "{10,10}"
+      },
+      icons: [
+        ...candidate.icons,
+        { path: `${candidate.directory}/icon/bt.png`, width: 20, height: 16 }
+      ]
+    }))
+  };
+  const loadBluetoothIcon = async (paths) => paths.map((path) => ({
+    path,
+    width: 20,
+    height: 16,
+    dataUrl: "data:image/png;base64,W20H16"
+  }));
+  const resizedTemplateIcons = await buildWatchfaceConfigAssetReplacements(
+    detailsWithBluetoothIcon,
+    { "config:bluetooth_on_icon": { nativeSize: true, scale: 1.5 } },
+    { loadAssets: loadBluetoothIcon, tintIcons: true, accentColor: "#ff0000" }
+  );
+  for (const resolution of details.resolutions) {
+    const icon = resizedTemplateIcons.find(({ path }) =>
+      path === `${resolution.directory}/icon/bt.png`
+    );
+    assert.equal(icon?.allowDimensionOverride, true);
+    assert.match(
+      icon?.dataUrl ?? "",
+      /W30H24/,
+      "a resized template status icon should export at its scaled PNG size"
+    );
+  }
+  assert.equal(
+    (
+      await buildWatchfaceConfigAssetReplacements(
+        detailsWithBluetoothIcon,
+        { "config:bluetooth_on_icon": { enabled: true } },
+        { loadAssets: loadBluetoothIcon }
+      )
+    ).some(({ path }) => path.endsWith("/icon/bt.png")),
+    false,
+    "an unsized template status icon should stay untouched"
   );
 
   // A template that only declares control_*_icon_pos (2607304 "SIMPLE"):

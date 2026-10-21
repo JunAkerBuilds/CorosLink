@@ -1117,6 +1117,18 @@ export function configAssetDefaultsToNativeSize(configKey: string): boolean {
 }
 
 /**
+ * Bluetooth and Do Not Disturb icons take their size from the PNG, so the
+ * template's own image can be resized without importing one: `nativeSize`
+ * with no replacement scales the template PNG by `scale`.
+ */
+export function configAssetCanScaleTemplateImage(configKey: string): boolean {
+  return (
+    NATIVE_CONFIG_ICON_KEYS.has(configKey) &&
+    controlStatusLayoutGroupId(configKey) !== null
+  );
+}
+
+/**
  * Existing direct icons can replace their template canvas. Standalone status
  * icons can also use native sizing when Studio creates their missing config
  * entry and PNG, while virtual selectable-control icons remain slot-sized.
@@ -1143,7 +1155,8 @@ function normalizePositiveScale(scale: number | undefined): number {
 /**
  * Resolves a config asset's exported/preview canvas without mutating its
  * position. Imported replacement dimensions are authored in the master
- * resolution; `nativeScale` converts them to the target tree.
+ * resolution; `nativeScale` converts them to the target tree. A resized
+ * template image scales `fallback`, which is already that tree's PNG.
  */
 export function configAssetCanvasSize(
   configKey: string,
@@ -1151,6 +1164,18 @@ export function configAssetCanvasSize(
   fallback: { width: number; height: number },
   nativeScale = 1
 ): { width: number; height: number; native: boolean } {
+  if (
+    override?.nativeSize &&
+    !override.replacement &&
+    configAssetCanScaleTemplateImage(configKey)
+  ) {
+    const scale = normalizePositiveScale(override.scale);
+    return {
+      width: Math.max(1, Math.round(fallback.width * scale)),
+      height: Math.max(1, Math.round(fallback.height * scale)),
+      native: true
+    };
+  }
   if (
     !override?.nativeSize ||
     !override.replacement ||
@@ -1674,6 +1699,29 @@ export function buildDisabledWatchfaceConfigAssetOverrides(
 }
 
 /** Builds native-sized created PNGs for every customized config reference. */
+/**
+ * The color the export's recolor passes give a template icon: Tint icons
+ * paints every icon, then a complication color repaints control-slot icons.
+ */
+function templateIconTint(
+  options: {
+    tintIcons?: boolean;
+    accentColor?: string;
+    layerColors?: Record<string, string>;
+  },
+  configKey: string,
+  file: CorosWatchfaceSpriteFile
+): string | null {
+  const complicationColor = options.layerColors?.complication;
+  if (complicationColor && /^control_[a-z_]+_icon$/.test(configKey)) {
+    return complicationColor;
+  }
+  if (!options.tintIcons || !options.accentColor) return null;
+  return isAodSprite(file)
+    ? dimHexColor(options.accentColor, AOD_DIM_FACTOR)
+    : options.accentColor;
+}
+
 export async function buildWatchfaceConfigAssetReplacements(
   details: CorosWatchfaceTemplateDetails,
   overrides: Record<string, CorosWatchfaceConfigAssetOverride> = {},
@@ -1689,6 +1737,10 @@ export async function buildWatchfaceConfigAssetReplacements(
      * rects, so the export must too or the label ships at a different size.
      */
     layoutDetails?: CorosWatchfaceTemplateDetails;
+    /** Face icon tint, repeated on template icons this pass resizes. */
+    tintIcons?: boolean;
+    accentColor?: string;
+    layerColors?: Record<string, string>;
   } = {}
 ): Promise<CorosWatchfaceAssetReplacement[]> {
   const replacements: CorosWatchfaceAssetReplacement[] = [];
@@ -1766,27 +1818,43 @@ export async function buildWatchfaceConfigAssetReplacements(
             assetLayerId
           ) *
           resolveWatchfaceLayerOpacity(options, componentLayerId);
+        const relativePath = rawPath.replace(/\\/g, "/").replace(/^\.\//, "");
+        const source = resolution.icons.find(
+          (file) => file.path === `${resolution.directory}/${relativePath}`
+        );
+        const templateCanvas = source && !override?.replacement
+          ? configAssetCanvasSize(configKey, override, source)
+          : null;
         if (
-          (!override?.replacement && opacity === 1 && !hasDecorations) ||
+          (!override?.replacement &&
+            !templateCanvas?.native &&
+            opacity === 1 &&
+            !hasDecorations) ||
           override?.enabled === false
         ) {
           continue;
         }
         if (scope === "config" && configKey === "background_icon") continue;
-        const relativePath = rawPath.replace(/\\/g, "/").replace(/^\.\//, "");
-        const source = resolution.icons.find(
-          (file) => file.path === `${resolution.directory}/${relativePath}`
-        );
         const virtual = !source && configKey.startsWith("control_");
         const sourceAsset = !override?.replacement && source && options.loadAssets
           ? (await options.loadAssets([source.path]))[0]
           : undefined;
         if (!override?.replacement && !sourceAsset) continue;
         if (!override?.replacement && source && sourceAsset) {
+          // This output replaces what the recolor passes wrote to the same
+          // path, so a resized icon repeats their tint before resizing.
+          const sizedDataUrl = templateCanvas?.native
+            ? await resizeAndTintSprite(
+                sourceAsset.dataUrl,
+                templateCanvas.width,
+                templateCanvas.height,
+                templateIconTint(options, configKey, source) ?? undefined
+              )
+            : sourceAsset.dataUrl;
           const dataUrl = hasDecorations
             ? (
                 await renderWatchfaceDataUrlDecorations(
-                  sourceAsset.dataUrl,
+                  sizedDataUrl,
                   strokes,
                   effects,
                   nativeScale,
@@ -1794,10 +1862,11 @@ export async function buildWatchfaceConfigAssetReplacements(
                   false
                 )
               ).dataUrl
-            : await applyWatchfaceDataUrlOpacity(sourceAsset.dataUrl, opacity);
+            : await applyWatchfaceDataUrlOpacity(sizedDataUrl, opacity);
           replacements.push({
             path: source.path,
-            dataUrl
+            dataUrl,
+            ...(templateCanvas?.native ? { allowDimensionOverride: true } : {})
           });
           continue;
         }
@@ -8696,7 +8765,18 @@ export function computeLayoutGroupBounds(
       // preview layers; the hit-test box covers all of them.
       const groupLayers = getWatchfaceControlStatusPreviewLayers(
         resolution
-      ).filter((candidate) => candidate.layoutGroupId === group.id);
+      )
+        .filter((candidate) => candidate.layoutGroupId === group.id)
+        .map((layer) => ({
+          position: layer.position,
+          size: configAssetCanvasSize(
+            layer.configKey,
+            geometry.configAssetOverrides?.[
+              watchfaceConfigAssetId("config", layer.configKey)
+            ],
+            layer.source
+          )
+        }));
       if (groupLayers.length > 0) {
         bounds.push({
           id: group.id,
@@ -8704,10 +8784,10 @@ export function computeLayoutGroupBounds(
           x0: Math.min(...groupLayers.map((layer) => layer.position.x)),
           y0: Math.min(...groupLayers.map((layer) => layer.position.y)),
           x1: Math.max(
-            ...groupLayers.map((layer) => layer.position.x + layer.source.width)
+            ...groupLayers.map((layer) => layer.position.x + layer.size.width)
           ),
           y1: Math.max(
-            ...groupLayers.map((layer) => layer.position.y + layer.source.height)
+            ...groupLayers.map((layer) => layer.position.y + layer.size.height)
           )
         });
       }
@@ -10092,8 +10172,8 @@ export async function drawStudioPreview(
           )
       : await resizeAndTintSprite(
           sourceDataUrl,
-          file.width,
-          file.height,
+          canvasSize.width,
+          canvasSize.height,
           color ?? undefined
         );
     const hasAssetDecorations =

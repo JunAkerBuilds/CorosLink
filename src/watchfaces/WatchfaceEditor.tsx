@@ -447,9 +447,11 @@ import {
 import {
   computeLayoutGroupBounds,
   computeLayoutOffsetLimits,
+  configAssetCanScaleTemplateImage,
   configAssetCanUseNativeSize,
   configAssetCanvasSize,
   configAssetDefaultsToNativeSize,
+  controlStatusLayoutGroupId,
   applyConfigTextEditsToDetails,
   buildDisabledControlComplicationOverrides,
   buildDisabledWatchfaceConfigAssetOverrides,
@@ -3006,6 +3008,72 @@ export function WatchfaceEditor({
     );
   }
 
+  /** Visible ink of one selection unit drawn alone, in master pixels; strokes and effects left out. */
+  async function measureSelectionInk(item: ReturnType<typeof selectedLayoutItems>[number]) {
+    const isolated = isolateDragDesigns({ kind: "layout", targetId: item.layerIds[0]!,
+      startX: 0, startY: 0, baseX: 0, baseY: 0, snapId: item.id,
+      baseBounds: item.bounds, selectionIds: item.layerIds });
+    const frame = await renderDragFrame({ ...isolated.moving, layerStrokes: {}, layerEffects: {} });
+    const bounds = visibleGlyphBounds(frame);
+    return bounds
+      ? { top: bounds.top * previewHeight / frame.height, bottom: bounds.bottom * previewHeight / frame.height }
+      : null;
+  }
+
+  /** The resizable Bluetooth or Do Not Disturb icon a layer draws, if any. */
+  function resizableStatusIcon(layerId: string): WatchfaceConfigAssetReference | null {
+    const layer = layers.find((candidate) => candidate.id === layerId);
+    const reference = layer?.kind === "configAsset" && layer.configAssetId
+      ? configAssetsById.get(layer.configAssetId)
+      : undefined;
+    return reference &&
+      statusIconHeight(reference, design.configAssetOverrides?.[reference.id]) !== null
+      ? reference
+      : null;
+  }
+
+  /** Match height needs a status icon and something else to measure against. */
+  function heightMatchSelection() {
+    const items = selectedLayoutItems();
+    const icons = items.filter((item) => item.layerIds.every((id) => resizableStatusIcon(id)));
+    return { icons, others: items.filter((item) => !icons.includes(item)) };
+  }
+
+  /**
+   * Resizes the selected Bluetooth / Do Not Disturb icons so their visible
+   * height equals the tallest visible glyphs among the other selected layers.
+   */
+  async function matchStatusIconHeights() {
+    const { icons, others } = heightMatchSelection();
+    if (icons.length === 0 || others.length === 0 || aligningGlyphs) return;
+    const snapshot = historyRef.current.present.value.design;
+    setAligningGlyphs(true);
+    try {
+      let target = 0;
+      for (const item of others) {
+        const ink = await measureSelectionInk(item);
+        if (ink) target = Math.max(target, ink.bottom - ink.top);
+      }
+      if (target <= 0) throw new Error(t("Could not measure the selected text."));
+      // Both states of a status icon draw in one isolated frame, so one ratio per group.
+      const ratios = new Map<string, { reference: WatchfaceConfigAssetReference; ratio: number }>();
+      for (const item of icons) {
+        const reference = resizableStatusIcon(item.layerIds[0]!)!;
+        const groupId = controlStatusLayoutGroupId(reference.configKey) ?? reference.id;
+        if (ratios.has(groupId)) continue;
+        const ink = await measureSelectionInk(item);
+        if (ink && ink.bottom > ink.top) ratios.set(groupId, { reference, ratio: target / (ink.bottom - ink.top) });
+      }
+      if (mountedRef.current && previewSessionRef.current === sessionId && historyRef.current.present.value.design === snapshot && automationModeRef.current === previewMode) {
+        for (const { reference, ratio } of ratios.values()) {
+          resizeStatusIcons(reference, (current) => current * ratio);
+        }
+      }
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : t("Could not measure the selected text."));
+    } finally { setAligningGlyphs(false); }
+  }
+
   async function alignGlyphBaselines() {
     const items = selectedLayoutItems();
     if (items.length < 2 || aligningGlyphs) return;
@@ -3014,14 +3082,10 @@ export function WatchfaceEditor({
     try {
       const measured = [];
       for (const item of items) {
-        const isolated = isolateDragDesigns({ kind: "layout", targetId: item.layerIds[0]!,
-          startX: 0, startY: 0, baseX: 0, baseY: 0, snapId: item.id,
-          baseBounds: item.bounds, selectionIds: item.layerIds });
-        const frame = await renderDragFrame({ ...isolated.moving, layerStrokes: {}, layerEffects: {} });
-        const bounds = visibleGlyphBounds(frame);
+        const bounds = await measureSelectionInk(item);
         if (bounds) measured.push({ id: item.id,
-          top: bounds.top * previewHeight / frame.height,
-          bottom: bounds.bottom * previewHeight / frame.height,
+          top: bounds.top,
+          bottom: bounds.bottom,
           colon: item.layerIds.every((id) => {
             const layer = layers.find((candidate) => candidate.id === id);
             return layer?.staticSeparatorId === "colon" || /colon/i.test(layer?.label ?? "");
@@ -5658,6 +5722,84 @@ export function WatchfaceEditor({
         };
       }
       return nextDesign;
+    });
+  }
+
+  /**
+   * A Bluetooth or Do Not Disturb icon's drawn height in master pixels, or
+   * null when its PNG size is fixed by a template box. Template images and
+   * native imports can both be resized.
+   */
+  function statusIconHeight(
+    reference: WatchfaceConfigAssetReference,
+    override: NonNullable<CorosWatchfaceDesignState["configAssetOverrides"]>[string] | undefined
+  ): number | null {
+    if (!configAssetCanScaleTemplateImage(reference.configKey)) return null;
+    const replacement = override?.replacement;
+    if (
+      replacement &&
+      !configAssetCanUseNativeSize(reference.configKey, Boolean(reference.source))
+    ) {
+      return null;
+    }
+    const fallback = reference.source ?? replacement;
+    return fallback
+      ? configAssetCanvasSize(reference.configKey, override, fallback).height
+      : null;
+  }
+
+  /** The on and off icons share one spot on the face, so they share one size. */
+  function statusIconPartners(reference: WatchfaceConfigAssetReference) {
+    const groupId = controlStatusLayoutGroupId(reference.configKey);
+    return configAssetReferences.filter((candidate) =>
+      candidate.id === reference.id ||
+      (groupId !== null &&
+        candidate.scope === reference.scope &&
+        controlStatusLayoutGroupId(candidate.configKey) === groupId)
+    );
+  }
+
+  /** Resizes a status icon and its partner state; `height` maps each icon's current height to its new one. */
+  function resizeStatusIcons(
+    reference: WatchfaceConfigAssetReference,
+    height: (current: number) => number
+  ) {
+    const partners = statusIconPartners(reference);
+    setDesign((prev) => {
+      const configAssetOverrides = { ...(prev.configAssetOverrides ?? {}) };
+      for (const partner of partners) {
+        const current = configAssetOverrides[partner.id];
+        const currentHeight = statusIconHeight(partner, current);
+        const base = current?.replacement?.height ?? partner.source?.height;
+        if (currentHeight === null || !base) continue;
+        const next = Math.max(4, Math.min(400, Math.round(height(currentHeight))));
+        configAssetOverrides[partner.id] = {
+          ...current,
+          nativeSize: true,
+          scale: Math.round((next / base) * 10000) / 10000
+        };
+      }
+      return { ...prev, configAssetOverrides };
+    });
+  }
+
+  function resetStatusIconSize(reference: WatchfaceConfigAssetReference) {
+    const partners = statusIconPartners(reference);
+    setDesign((prev) => {
+      const configAssetOverrides = { ...(prev.configAssetOverrides ?? {}) };
+      for (const partner of partners) {
+        const current = configAssetOverrides[partner.id];
+        if (!current) continue;
+        const { scale: _scale, nativeSize, ...rest } = current;
+        if (current.replacement) {
+          configAssetOverrides[partner.id] = { ...rest, nativeSize };
+        } else if (Object.keys(rest).length > 0) {
+          configAssetOverrides[partner.id] = rest;
+        } else {
+          delete configAssetOverrides[partner.id];
+        }
+      }
+      return { ...prev, configAssetOverrides };
     });
   }
 
@@ -9186,6 +9328,7 @@ export function WatchfaceEditor({
   const paneLayerCount = listedLayers.filter(
     (layer) => !layerIsSelectableSlotAsset(layer)
   ).length;
+  const heightMatch = heightMatchSelection();
 
   return (
     <section ref={editorRef} className={`watchface-editor wf-studio${stageFullscreen ? " is-editor-fullscreen" : ""}`} aria-label={t("Watch face studio")} inert={conversionBusy}>
@@ -9885,6 +10028,7 @@ export function WatchfaceEditor({
               <button type="button" title={t("Align vertical centers")} aria-label={t("Align vertical centers")} onClick={() => alignSelection("center-y")}><AlignVerticalJustifyCenter size={15} /></button>
               <button type="button" title={t("Align bottom")} aria-label={t("Align bottom")} onClick={() => alignSelection("bottom")}><AlignVerticalJustifyEnd size={15} /></button>
               <button type="button" title={t("Align visible glyph baselines; center colons beside the tallest glyphs")} aria-label={t("Align glyph baselines")} disabled={aligningGlyphs || selectedLayoutItems().length < 2} onClick={() => void alignGlyphBaselines()}>{t("Baseline", undefined, "alignToolbar")}</button>
+              {heightMatch.icons.length > 0 ? <button type="button" title={t("Resize the selected Bluetooth and Do Not Disturb icons to the visible height of the other selected layers")} aria-label={t("Match icon height to the selected text")} disabled={aligningGlyphs || heightMatch.others.length === 0} onClick={() => void matchStatusIconHeights()}>{t("Match height")}</button> : null}
               <span aria-hidden="true" />
               <button type="button" title={t("Distribute horizontal spacing")} aria-label={t("Distribute horizontal spacing")} disabled={selectedLayoutItems().length < 3} onClick={() => distributeSelection("horizontal")}><AlignHorizontalSpaceBetween size={15} /></button>
               <button type="button" title={t("Distribute vertical spacing")} aria-label={t("Distribute vertical spacing")} disabled={selectedLayoutItems().length < 3} onClick={() => distributeSelection("vertical")}><AlignVerticalSpaceBetween size={15} /></button>
@@ -11929,6 +12073,14 @@ export function WatchfaceEditor({
     );
     const nativeSize = supportsNativeSize && override?.nativeSize === true;
     const previewDataUrl = configAssetPreviewDataUrl(reference);
+    // Bluetooth and Do Not Disturb icons can resize their template image too.
+    const iconHeight = statusIconHeight(reference, override);
+    const showsIconHeight =
+      iconHeight !== null && (!override?.replacement || nativeSize);
+    const templateResized = !override?.replacement && override?.nativeSize === true;
+    const sharesSize = statusIconPartners(reference).filter((partner) =>
+      statusIconHeight(partner, design.configAssetOverrides?.[partner.id]) !== null
+    ).length > 1;
     return (
       <div className="wf-property-stack wf-config-asset-inspector">
         <div className={`wf-config-asset-preview${enabled ? "" : " is-disabled"}`}>{previewDataUrl ? <img src={previewDataUrl} alt={t("{{value1}} preview", { value1: t(reference.label) })} /> : <Image size={24} aria-hidden="true" />}</div>
@@ -11936,12 +12088,16 @@ export function WatchfaceEditor({
           <button type="button" className="secondary-button" onClick={() => void chooseConfigAsset(reference)}><ImagePlus size={15} /> {override?.replacement ? t("Replace again") : previewDataUrl ? t("Replace image") : t("Import image")}</button>
           <button type="button" className="secondary-button" onClick={() => browseOfficialConfigAsset(reference)}><Sparkles size={15} />{" "}{t("Official")}</button>
           {override?.replacement ? <button type="button" className="secondary-button" onClick={() => restoreConfigAsset(reference)}><RotateCcw size={15} /> {reference.source ? t("Restore original") : t("Remove image")}</button> : null}
+          {templateResized ? <button type="button" className="secondary-button" onClick={() => resetStatusIconSize(reference)}><RotateCcw size={15} /> {t("Reset size")}</button> : null}
         </div>
-        {override?.replacement ? (
+        {override?.replacement && supportsNativeSize ? <label className="watchface-studio-toggle"><input type="checkbox" checked={nativeSize} onChange={(event) => updateConfigAsset(reference, { nativeSize: event.target.checked })} />{t("Native PNG size")}</label> : null}
+        {showsIconHeight ? (
           <>
-            {supportsNativeSize ? <label className="watchface-studio-toggle"><input type="checkbox" checked={nativeSize} onChange={(event) => updateConfigAsset(reference, { nativeSize: event.target.checked })} />{t("Native PNG size")}</label> : null}
-            <label className="watchface-inspector-field"><span>{nativeSize ? t("Native scale") : t("Artwork zoom")}</span><span className="wf-input-with-unit"><EditableNumberInput min="0.1" step="0.01" value={artworkZoom} fallback={1} onValueChange={(scale) => updateConfigAsset(reference, { scale: Math.max(0.1, scale) })} /><span>×</span></span></label>
+            <label className="watchface-inspector-field" title={t("Icon height in pixels. The width keeps the image's proportions.")}><span>{t("Height")}</span><span className="wf-input-with-unit"><EditableNumberInput min="4" max="400" step="1" value={iconHeight} fallback={iconHeight} onValueChange={(height) => resizeStatusIcons(reference, () => height)} /><span>px</span></span></label>
+            <p className="watchface-studio-summary">{sharesSize ? t("Sizes the on and off icons together. ") : ""}{t("To match text, select this icon and the text, then choose Match height above the face.")}</p>
           </>
+        ) : override?.replacement ? (
+          <label className="watchface-inspector-field"><span>{nativeSize ? t("Native scale") : t("Artwork zoom")}</span><span className="wf-input-with-unit"><EditableNumberInput min="0.1" step="0.01" value={artworkZoom} fallback={1} onValueChange={(scale) => updateConfigAsset(reference, { scale: Math.max(0.1, scale) })} /><span>×</span></span></label>
         ) : null}
       </div>
     );

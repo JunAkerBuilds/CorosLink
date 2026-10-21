@@ -824,7 +824,10 @@ export async function composeWatchfaceReplacements(
         effectStyles: design.effectStyles ?? [],
         layerEffects: design.layerEffects ?? {},
         layerStrokes: design.layerStrokes ?? {},
-        layoutDetails: styledMetricDetails
+        layoutDetails: styledMetricDetails,
+        tintIcons: design.tintIcons,
+        accentColor: design.accentColor,
+        layerColors: design.layerColors
       }
     ),
     batteryIconEffectSources.replacements,

@@ -12498,6 +12498,8 @@ body.wf-value-scrubbing * {
   padding: 0 6px;
   font-size: var(--wf-text-sm);
   font-weight: 500;
+  /* The bar is centered from left: 50%, which caps its width; keep labels on one line. */
+  white-space: nowrap;
 }
 
 /*
