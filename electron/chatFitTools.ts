@@ -1,5 +1,6 @@
 import { getFitIndexRow, listStoredTrainingActivities } from "./database";
 import {
+  DECOUPLING_WARMUP_SEC,
   POWER_CURVE_DURATIONS,
   routeSimilarity,
   type FitSplit
@@ -256,7 +257,8 @@ export function getChatFitTools(): CorosMcpTool[] {
     {
       name: "get_activity_splits",
       description:
-        "Per-km or per-mile splits (pace, HR, power, cadence, elevation) plus aerobic decoupling, " +
+        "Per-km or per-mile splits (pace, HR, power, cadence, elevation) plus aerobic decoupling " +
+        "(road, treadmill and track runs and rides with power; first 10 min excluded), " +
         "normalized power, best efforts and a power curve for one activity, from its FIT file. " +
         "Prefer this over get_activity_detail when the athlete asks about pacing, fade, drift, or negative splits.",
       inputSchema: {
@@ -561,7 +563,7 @@ function describeDecoupling(summary: FitActivitySummary): string | undefined {
       : d.percent <= 10
         ? "moderate drift"
         : "significant drift (fatigue, heat, or pace above aerobic threshold)";
-  return `Aerobic decoupling (${label}): ${d.percent > 0 ? "+" : ""}${d.percent}% — ${verdict}.`;
+  return `Aerobic decoupling (${label}, after a ${DECOUPLING_WARMUP_SEC / 60}-min warm-up): ${d.percent > 0 ? "+" : ""}${d.percent}% — ${verdict}.`;
 }
 
 async function handleActivitySplits(

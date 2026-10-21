@@ -213,39 +213,77 @@ export function timeAtDistance(records: FitRecord[], target: number): number | n
   return null;
 }
 
-/** Fastest time to cover each distance anywhere inside the activity. */
+type DistanceTrack = ReturnType<typeof distanceTrack>;
+
+/**
+ * Split the track wherever one step covers more ground than `maxSpeedMps`
+ * allows (a GPS jump), so no effort window can span it.
+ */
+function plausibleSegments(track: DistanceTrack, maxSpeedMps?: number): DistanceTrack[] {
+  if (!maxSpeedMps) return [track];
+  const segments: DistanceTrack[] = [];
+  let current: DistanceTrack = [track[0]];
+  for (let index = 1; index < track.length; index += 1) {
+    const prev = track[index - 1];
+    const next = track[index];
+    if (next.d - prev.d > maxSpeedMps * Math.max(next.t - prev.t, 1)) {
+      if (current.length >= 2) segments.push(current);
+      current = [next];
+    } else {
+      current.push(next);
+    }
+  }
+  if (current.length >= 2) segments.push(current);
+  return segments;
+}
+
+function fastestWindow(track: DistanceTrack, distance: number): BestEffort | null {
+  if (distance > track[track.length - 1].d - track[0].d) return null;
+  let best: BestEffort | null = null;
+  let j = 0;
+  for (let i = 0; i < track.length; i += 1) {
+    const startD = track[i].d;
+    const targetD = startD + distance;
+    while (j < track.length && track[j].d < targetD) j += 1;
+    if (j >= track.length) break;
+    const prev = track[j - 1] ?? track[j];
+    const next = track[j];
+    const span = next.d - prev.d;
+    const ratio = span > 0 ? (targetD - prev.d) / span : 1;
+    const endT = prev.t + (next.t - prev.t) * ratio;
+    const seconds = endT - track[i].t;
+    if (seconds > 0 && (!best || seconds < best.seconds)) {
+      best = {
+        distanceM: distance,
+        seconds,
+        paceSecPerKm: (seconds / distance) * 1000,
+        startT: track[i].t
+      };
+    }
+  }
+  return best;
+}
+
+/**
+ * Fastest time to cover each distance anywhere inside the activity. With
+ * `maxSpeedMps`, a step faster than the sport allows breaks the window, so a
+ * GPS jump cannot become a best effort.
+ */
 export function bestEfforts(
   records: FitRecord[],
-  distances: readonly number[] = BEST_EFFORT_DISTANCES
+  distances: readonly number[] = BEST_EFFORT_DISTANCES,
+  maxSpeedMps?: number
 ): BestEffort[] {
   const track = distanceTrack(records);
   if (track.length < 2) return [];
-  const total = track[track.length - 1].d - track[0].d;
+  const segments = plausibleSegments(track, maxSpeedMps);
   const efforts: BestEffort[] = [];
 
   for (const distance of distances) {
-    if (distance > total) continue;
     let best: BestEffort | null = null;
-    let j = 0;
-    for (let i = 0; i < track.length; i += 1) {
-      const startD = track[i].d;
-      const targetD = startD + distance;
-      while (j < track.length && track[j].d < targetD) j += 1;
-      if (j >= track.length) break;
-      const prev = track[j - 1] ?? track[j];
-      const next = track[j];
-      const span = next.d - prev.d;
-      const ratio = span > 0 ? (targetD - prev.d) / span : 1;
-      const endT = prev.t + (next.t - prev.t) * ratio;
-      const seconds = endT - track[i].t;
-      if (seconds > 0 && (!best || seconds < best.seconds)) {
-        best = {
-          distanceM: distance,
-          seconds,
-          paceSecPerKm: (seconds / distance) * 1000,
-          startT: track[i].t
-        };
-      }
+    for (const segment of segments) {
+      const candidate = fastestWindow(segment, distance);
+      if (candidate && (!best || candidate.seconds < best.seconds)) best = candidate;
     }
     if (best) {
       efforts.push({
@@ -371,16 +409,27 @@ export function computeSplits(records: FitRecord[], splitM: number): FitSplit[] 
   return splits;
 }
 
-/** Aerobic decoupling (Pa:HR or Pw:HR) between the two halves of moving time. */
+/** Timer seconds left out of decoupling: HR is still climbing during the warm-up. */
+export const DECOUPLING_WARMUP_SEC = 600;
+/** Steady timer seconds needed after the warm-up for two halves to compare. */
+export const DECOUPLING_MIN_STEADY_SEC = 1200;
+
+/**
+ * Aerobic decoupling (Pa:HR or Pw:HR) between the two halves of moving time
+ * after the warm-up.
+ */
 export function decoupling(records: FitRecord[]): Decoupling | undefined {
+  const warmupEndT = (records[0]?.t ?? 0) + DECOUPLING_WARMUP_SEC;
   const usable = records.filter(
     (record) =>
+      record.t >= warmupEndT &&
       record.hr !== undefined &&
       record.hr > 0 &&
       ((record.power !== undefined && record.power > 0) ||
         (record.speed !== undefined && record.speed > 0))
   );
-  if (usable.length < 600) return undefined; // need ~10 min of data
+  if (usable.length < 600) return undefined; // need ~10 min of samples
+  if (usable[usable.length - 1].t - usable[0].t < DECOUPLING_MIN_STEADY_SEC) return undefined;
   const powerCount = usable.filter((record) => record.power !== undefined).length;
   const metric: Decoupling["metric"] =
     powerCount / usable.length > 0.8 ? "power" : "pace";

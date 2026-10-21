@@ -277,9 +277,44 @@ const gain = elevationGainLoss(activity.records.map((r) => r.alt));
 assert.ok(gain.gain >= 47 && gain.gain <= 51, `total gain ${gain.gain}`);
 assert.equal(gain.loss, 0);
 
-const drift = decoupling(activity.records);
-assert.equal(drift.metric, "power");
-assert.ok(drift.percent < 0, "second half has more power per beat here, so decoupling is negative");
+// 19 min of timer time leaves 9 min after the warm-up: too short to compare halves.
+assert.equal(decoupling(activity.records), undefined);
+
+// Synthetic 1 Hz records: { t, dist, speed, hr, power }.
+const steadyRun = (seconds, { hr = () => 145, speed = 3, power } = {}) =>
+  Array.from({ length: seconds }, (_, t) => ({
+    t,
+    ts: START + t,
+    dist: t * speed,
+    speed,
+    hr: hr(t),
+    ...(power ? { power: power(t) } : {})
+  }));
+
+// 40 min at a constant 3 m/s; HR climbs 110 → 140 over the warm-up, then
+// drifts from 140 to 147 at half time. Only the drift after minute 10 counts.
+const drifting = steadyRun(2400, {
+  hr: (t) => (t < 600 ? 110 + (t / 600) * 30 : t < 1500 ? 140 : 147)
+});
+const warmDrift = decoupling(drifting);
+assert.equal(warmDrift.metric, "pace");
+assert.equal(warmDrift.percent, 4.8, `warm-up excluded: ${warmDrift.percent}`);
+assert.equal(decoupling(steadyRun(1500)), undefined, "15 min after the warm-up is under the 20 min needed");
+const powered = decoupling(steadyRun(2400, { hr: (t) => (t < 1500 ? 140 : 135), power: () => 220 }));
+assert.equal(powered.metric, "power");
+assert.ok(powered.percent < 0, "second half has more power per beat here, so decoupling is negative");
+
+// A 300 m GPS jump at minute 5 of a 3 m/s run: without a speed cap it makes a
+// 34 s "400 m"; with one, windows break at the jump.
+const jumped = steadyRun(600).map((record) =>
+  record.t >= 300 ? { ...record, dist: record.dist + 300 } : record
+);
+const jumpEffort = bestEfforts(jumped, [400])[0];
+assert.ok(jumpEffort.seconds < 40, `uncapped jump effort ${jumpEffort.seconds}s`);
+const capped = bestEfforts(jumped, [400, 1000], 12.5);
+assert.ok(Math.abs(capped[0].seconds - 400 / 3) < 1.5, `capped 400 m ${capped[0].seconds}s`);
+assert.ok(!capped.some((effort) => effort.distanceM === 1000), "no 1 km window survives on either side of the jump");
+assert.equal(bestEfforts(steadyRun(600), [1000], 12.5)[0].seconds, bestEfforts(steadyRun(600), [1000])[0].seconds);
 
 const route = routeSignature(activity.records);
 assert.equal(route.polyline.length, 64);
@@ -314,6 +349,21 @@ assert.equal(summary.splitsMi.length, 3);
 assert.equal(summary.laps.length, 2);
 assert.equal(summary.series.length, 400);
 assert.ok(summary.powerCurve.length > 0 && summary.bestEfforts.length > 0);
+
+// Summaries cap best efforts per sport and keep decoupling to steady terrain.
+const summarize = (records, sportType) =>
+  summarizeFitActivity({ records, laps: [], activeWindows: [] }, { activityId: `s-${sportType}`, sportType });
+assert.ok(Math.abs(summarize(jumped, 100).bestEfforts[0].seconds - 400 / 3) < 1.5, "road run is capped");
+assert.ok(summarize(jumped, 300).bestEfforts[0].seconds < 40, "pool swims have no cap (lengths jump 25 m)");
+assert.equal(summarize(drifting, 100).decoupling?.percent, 4.8);
+assert.equal(summarize(drifting, 102).decoupling, undefined, "trail run: terrain drives pace");
+assert.equal(summarize(drifting, 104).decoupling, undefined, "hike");
+assert.equal(summarize(drifting, 200).decoupling, undefined, "ride without power");
+assert.equal(
+  summarize(steadyRun(2400, { power: () => 220 }), 200).decoupling?.metric,
+  "power",
+  "ride with power keeps Pw:HR"
+);
 
 // Truncated / non-FIT input fails loudly instead of returning garbage.
 assert.throws(() => decodeFit(new Uint8Array(4)), /too small/);

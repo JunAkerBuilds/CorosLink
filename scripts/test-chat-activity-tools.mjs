@@ -331,4 +331,30 @@ const poweredRide = formatActivityDetailForChat({
 assert.match(poweredRide, /Avg cadence: 88 rpm/);
 assert.match(poweredRide, /\| 180 W \| 88 rpm$/m);
 
+// Strength: the gym lap list holds work sets, rests, a roll-up per exercise
+// (sets > 0, the sum of its sets) and section-rest markers (S3618). A lap
+// table would repeat every set in the roll-up, so Coach gets the parsed sets.
+const strengthDetail = parseActivityDetail({
+  summary: { sportType: 402, totalTime: 100000, workoutTime: 100000, avgHr: 129, trainingLoad: 57 },
+  lapList: [
+    {
+      lapItemList: [
+        { exerciseIndex: 1, exerciseNameKey: "T1178", sets: 0, reps: 15, weight: 32000, time: 3487 },
+        { exerciseIndex: 1, exerciseNameKey: "T1178", sets: 0, reps: 0, weight: 32000, time: 12000 },
+        { exerciseIndex: 1, exerciseNameKey: "T1178", sets: 0, reps: 15, weight: 32000, time: 3009 },
+        { exerciseIndex: 1, exerciseNameKey: "T1178", sets: 2, reps: 30, weight: 960000, time: 6496 },
+        { exerciseIndex: 1, exerciseNameKey: "S3618", sets: 2, reps: 0, weight: 960000, time: 18496 },
+        { exerciseIndex: 8, exerciseNameKey: "T1176", sets: 0, reps: 6, weight: 0, time: 5773 },
+        { exerciseIndex: 8, exerciseNameKey: "T1176", sets: 1, reps: 6, weight: 0, time: 5773 }
+      ]
+    }
+  ]
+});
+assert.equal(strengthDetail.laps.length, 7, "raw lap rows include roll-ups and markers");
+const strengthText = formatActivityDetailForChat(strengthDetail, false);
+assert.match(strengthText, /^- T1178: 2 sets, 30 reps · 15 × 32 kg, 15 × 32 kg$/m);
+assert.match(strengthText, /^- T1176: 1 set, 6 reps · 6 reps$/m);
+assert.doesNotMatch(strengthText, /Laps:/);
+assert.match(formatActivityDetailForChat(strengthDetail, false, "imperial"), /15 × 71 lb/);
+
 console.log("test-chat-activity-tools: ok");

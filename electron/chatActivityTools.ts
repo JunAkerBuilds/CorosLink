@@ -15,6 +15,7 @@ import type {
   ActivityVisualLapPoint,
   ActivityVisualPreview,
   CorosMcpTool,
+  StrengthDetail,
   TrainingHubActivity,
   TrainingHubActivityDetail,
   TrainingHubActivityLap,
@@ -24,7 +25,8 @@ import {
   formatDistanceValue,
   formatElevationValue,
   formatPaceValue,
-  formatSpeedValue
+  formatSpeedValue,
+  formatWeightValue
 } from "./unitSystem.js";
 
 export const CHAT_ACTIVITY_TOOL_NAMES = [
@@ -447,7 +449,11 @@ export function formatActivityDetailForChat(
 
   const sections = ["Activity detail", summaryParts.join("\n")];
 
-  if (detail.laps.length > 0) {
+  // A gym lap list mixes work sets, rests and per-exercise roll-ups, so a lap
+  // table would count every set twice; list the parsed sets instead.
+  if (detail.strength && detail.strength.exercises.length > 0) {
+    sections.push("", formatStrengthSets(detail.strength, unitSystem));
+  } else if (detail.laps.length > 0) {
     sections.push("", formatLapTable(detail.laps, unitSystem, swim, cycling));
   } else {
     sections.push("", "Laps: none recorded for this activity.");
@@ -473,6 +479,24 @@ export function formatActivityDetailForChat(
   }
 
   return sections.join("\n");
+}
+
+function formatStrengthSets(strength: StrengthDetail, unitSystem: UnitSystem): string {
+  const lines = ["Strength sets (rest rows and per-exercise roll-ups left out):"];
+  for (const exercise of strength.exercises) {
+    const sets = exercise.entries
+      .map((set) =>
+        set.weightKg > 0 ? `${set.reps} × ${formatWeightValue(set.weightKg, unitSystem)}` : `${set.reps} reps`
+      )
+      .join(", ");
+    lines.push(
+      `- ${exercise.rawName ?? exercise.nameKey}: ${exercise.entries.length} ${
+        exercise.entries.length === 1 ? "set" : "sets"
+      }, ${exercise.totalReps} reps · ${sets}`
+    );
+  }
+  lines.push("Names in T####/S#### form are COROS exercise catalog codes.");
+  return lines.join("\n");
 }
 
 function formatLapTable(

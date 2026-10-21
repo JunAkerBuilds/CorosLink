@@ -15,8 +15,30 @@ import {
   type SeriesPoint
 } from "./fitAnalytics";
 
-export const FIT_SUMMARY_VERSION = 1;
+// 2: best efforts break at GPS jumps; decoupling skips the warm-up and terrain sports.
+export const FIT_SUMMARY_VERSION = 2;
 const MILE_M = 1609.344;
+
+/**
+ * Fastest believable step per COROS sport, in m/s: past a sprint on foot or
+ * ~110 km/h on a bike, the distance jumped (a GPS jump), not the athlete.
+ */
+export function maxPlausibleSpeedMps(sportType: number): number | undefined {
+  if ((sportType >= 100 && sportType <= 106) || sportType === 900) return 12.5;
+  if (sportType >= 200 && sportType <= 299) return 30;
+  return undefined;
+}
+
+/**
+ * Decoupling compares output per heartbeat across two halves, so terrain must
+ * not drive the output: road, treadmill and track runs, and rides with power.
+ * Trail runs, hikes and rides without power are left out.
+ */
+function decouplingFor(sportType: number, drift: Decoupling | undefined): Decoupling | undefined {
+  if (!drift) return undefined;
+  if (sportType === 100 || sportType === 101 || sportType === 103) return drift;
+  return sportType >= 200 && sportType <= 299 && drift.metric === "power" ? drift : undefined;
+}
 
 /** Everything the coach tools need per activity, precomputed once at index time. */
 export interface FitActivitySummary {
@@ -132,8 +154,10 @@ export function summarizeFitActivity(
     splitsKm: computeSplits(records, 1000),
     splitsMi: computeSplits(records, MILE_M),
     powerCurve: hasPower ? powerCurve(records) : [],
-    bestEfforts: distanceM ? bestEfforts(records) : [],
-    decoupling: decoupling(records),
+    bestEfforts: distanceM
+      ? bestEfforts(records, undefined, maxPlausibleSpeedMps(meta.sportType))
+      : [],
+    decoupling: decouplingFor(meta.sportType, decoupling(records)),
     series: downsampleSeries(records)
   };
 }
