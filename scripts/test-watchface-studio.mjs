@@ -142,6 +142,17 @@ const inheritedComponentTypography = resolveWatchfaceComponentTypography(
 );
 assert.equal(inheritedComponentTypography.fontWeight, 700);
 assert.equal(inheritedComponentTypography.fontStyle, "italic");
+// A component's own tint color recolors a PNG font that keeps its colors elsewhere.
+const keptColorFont = { label: "Official", dataUrl: "data:image/png;base64,", glyphs: "0123456789", columns: 10, tint: false };
+assert.equal(resolveWatchfaceComponentTypography({ rasterFont: keptColorFont }, {}).rasterFont, keptColorFont);
+const tintedTypography = resolveWatchfaceComponentTypography({ rasterFont: keptColorFont }, { color: "#ff6a00" });
+assert.equal(tintedTypography.rasterFont.tint, true, "a tint color should recolor the PNG font");
+assert.equal(keptColorFont.tint, false, "the shared font keeps its own colors for other layers");
+assert.equal(
+  resolveWatchfaceComponentTypography({ rasterFont: keptColorFont }, { color: "#3aa0ff" }).rasterFont,
+  tintedTypography.rasterFont,
+  "one tinted copy per font keeps font-keyed caches warm"
+);
 
 const rasterFolderSprite = (relativePath, dataUrl = relativePath) => ({
   name: relativePath.split("/").at(-1),

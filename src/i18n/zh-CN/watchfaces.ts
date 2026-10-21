@@ -90,7 +90,7 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Order matches the sheet: left to right, then the next row.": "顺序与图集一致：从左到右，然后是下一行。",
   "Use layer color": "使用图层颜色",
   "The PNGs are recolored to match the digit color.": "PNG 被重新着色以匹配数字颜色。",
-  "The PNGs keep their own colors. Turn on to recolor them with the digit color.": "PNG 保留自己的颜色。打开以使用数字颜色重新着色它们。",
+  "The PNGs keep their own colors unless a layer sets a Tint color. Turn on to recolor them with the digit color everywhere.": "PNG 保留自己的颜色，除非图层设置了色调颜色。打开后，所有位置都使用数字颜色重新着色。",
   "Replace with": "替换为",
   "Remove": "移除",
   "This set has 0–9, so the month shows as a number (1–12).": "该集合有 0–9，因此月份显示为数字 (1–12)。",

@@ -581,7 +581,7 @@ export function CustomPngFontPanel({
             <p className="wf-png-font-note">
               {activeRasterFont.tint
                 ? t("The PNGs are recolored to match the digit color.")
-                : t("The PNGs keep their own colors. Turn on to recolor them with the digit color.")}
+                : t("The PNGs keep their own colors unless a layer sets a Tint color. Turn on to recolor them with the digit color everywhere.")}
             </p>
           </div>
 

@@ -254,11 +254,16 @@ function normalizeSpriteScale(scale: number | undefined): number {
   return Number.isFinite(scale) && scale! > 0 ? scale! : 1;
 }
 
-/** Component styles override face-wide typography without affecting other layers. */
+/**
+ * Component styles override face-wide typography without affecting other
+ * layers. A component's own tint color recolors its PNG font, as it recolors
+ * template PNGs, even when the font keeps its colors elsewhere.
+ */
 export function resolveWatchfaceComponentTypography(
   typography: WatchfaceTypography,
   style:
     | {
+        color?: string;
         fontWeight?: number;
         fontStyle?: "normal" | "italic";
         rasterFont?: CorosWatchfaceRasterFont;
@@ -266,13 +271,27 @@ export function resolveWatchfaceComponentTypography(
       }
     | undefined
 ): WatchfaceTypography {
+  const rasterFont = style?.rasterFont ?? typography.rasterFont;
   return {
     ...typography,
     fontWeight: style?.fontWeight ?? typography.fontWeight,
     fontStyle: style?.fontStyle ?? typography.fontStyle,
-    rasterFont: style?.rasterFont ?? typography.rasterFont,
+    rasterFont: rasterFont && tintedForComponent(rasterFont, style?.color),
     letterSpacing: style?.letterSpacing ?? typography.letterSpacing
   };
+}
+
+/** One tinted copy per font, so caches keyed by the font object keep working. */
+const tintedRasterFonts = new WeakMap<CorosWatchfaceRasterFont, CorosWatchfaceRasterFont>();
+/** A PNG font as a component with its own tint `color` draws it: recolored. */
+function tintedForComponent(font: CorosWatchfaceRasterFont, color: string | undefined): CorosWatchfaceRasterFont {
+  if (!color || font.tint) return font;
+  let tinted = tintedRasterFonts.get(font);
+  if (!tinted) {
+    tinted = { ...font, tint: true };
+    tintedRasterFonts.set(font, tinted);
+  }
+  return tinted;
 }
 
 /** Parses COROS config.txt / AODconfig.txt bodies into key→value maps. */
@@ -2490,7 +2509,7 @@ export async function buildAmPmSpriteReplacements(
             style.color ?? "#ffffff"
           )
         : style.rasterFont && rasterFontSupportsText(style.rasterFont, job.label)
-          ? await renderRasterFontSprite(job.label, width, height, style.rasterFont, style.color ?? "#ffffff")
+          ? await renderRasterFontSprite(job.label, width, height, tintedForComponent(style.rasterFont, style.color), style.color ?? "#ffffff")
           : await resizeAndTintSprite(
             assetsByPath.get(job.source.path)?.dataUrl ?? "",
             width,
@@ -11304,7 +11323,7 @@ export async function drawStudioPreview(
             ampmStyle.color ?? options.digitColor
           )
         : ampmStyle.rasterFont && rasterFontSupportsText(ampmStyle.rasterFont, now.getHours() < 12 ? "AM" : "PM")
-          ? await renderRasterFontSprite(now.getHours() < 12 ? "AM" : "PM", width, height, ampmStyle.rasterFont, ampmStyle.color ?? options.digitColor)
+          ? await renderRasterFontSprite(now.getHours() < 12 ? "AM" : "PM", width, height, tintedForComponent(ampmStyle.rasterFont, ampmStyle.color), ampmStyle.color ?? options.digitColor)
           : await resizeAndTintSprite(
             sourceDataUrl!,
             width,

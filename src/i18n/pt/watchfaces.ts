@@ -90,7 +90,7 @@ export const watchfacesPortuguese: Record<string, string> = {
   "Order matches the sheet: left to right, then the next row.": "A ordem segue a folha: da esquerda para a direita e depois a linha seguinte.",
   "Use layer color": "Usar cor da camada",
   "The PNGs are recolored to match the digit color.": "Os PNGs são recoloridos com a cor dos dígitos.",
-  "The PNGs keep their own colors. Turn on to recolor them with the digit color.": "Os PNGs mantêm as suas cores. Active para os recolorir com a cor dos dígitos.",
+  "The PNGs keep their own colors unless a layer sets a Tint color. Turn on to recolor them with the digit color everywhere.": "Os PNGs mantêm as suas cores, excepto numa camada com cor de tonalidade. Active para os recolorir sempre com a cor dos dígitos.",
   "Replace with": "Substituir por",
   "Remove": "Remover",
   "This set has 0–9, so the month shows as a number (1–12).": "Este conjunto tem 0–9, por isso o mês aparece como número (1–12).",
