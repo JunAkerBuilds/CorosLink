@@ -12,6 +12,7 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const dist = (file) => `${pathToFileURL(path.join(repoRoot, "dist-electron", file)).href}?cacheBust=${Date.now()}`;
 
 const {
+  COACH_DOCUMENT_TURNS,
   createCoachAttachmentStore,
   expandCoachAttachments,
   MAX_COACH_DOCUMENT_CHARS,
@@ -146,6 +147,29 @@ try {
   assert.equal(budgeted[0].images, undefined);
   assert.match(budgeted[0].content, /\[Image shared earlier in the conversation: photo-0\.png\]/);
   assert.equal(budgeted.slice(1).every((message) => message.images?.length === 1), true);
+
+  // A document's contents travel only with the athlete's latest few messages.
+  const loadedIds = [];
+  const followUps = Array.from({ length: COACH_DOCUMENT_TURNS }, (_, index) => [
+    { role: "assistant", content: `Answer ${index}` },
+    { role: "user", content: `Follow-up ${index}` }
+  ]).flat();
+  const loadPlan = async (file) => {
+    loadedIds.push(file.id);
+    return { attachment: file, text: "Week 1\nTue | 8 km easy", images: [] };
+  };
+  const aged = await expandCoachAttachments(
+    [{ role: "user", content: "Load this", files: [plan] }, ...followUps],
+    loadPlan
+  );
+  assert.deepEqual(loadedIds, [], "an older document is not even read");
+  assert.match(aged[0].content, /^Load this\n\n<attached_file name="Marathon plan.pdf" pages="2">\n\[Shared earlier in the conversation; its contents are not repeated here\./);
+  assert.ok(!aged[0].content.includes("8 km easy"));
+  const recent = await expandCoachAttachments(
+    [{ role: "user", content: "Load this", files: [plan] }, ...followUps.slice(2)],
+    loadPlan
+  );
+  assert.match(recent[0].content, /8 km easy/, "within the window the text is sent again");
 
   // ----- What each provider receives -----
   const withImage = { role: "user", content: "Look at this", images: [{ label: "Track.png", mimeType: "image/png", base64: "AAAA" }] };

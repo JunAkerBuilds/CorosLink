@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
+import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
 
@@ -15,12 +16,16 @@ const settings = new Map([
   })).toString("base64")]
 ]);
 const captured = [];
+const settingWrites = [];
+const userData = mkdtempSync(path.join(os.tmpdir(), "coroslink-chat-routing-"));
 const remoteTools = JSON.parse(readFileSync(new URL('./fixtures/coros-mcp-workout-schemas.json', import.meta.url))).tools;
 const remoteCalls = [];
 let requestedTool;
 let expectedToolStatus = 'awaiting_confirmation';
+let claudeStatusChecks = 0;
+let mcpSetup = async () => {};
 const capture = (provider) => async (options) => {
-  captured.push({ provider, instructions: options.instructions, fallback: options.fallbackInstructions, tools: options.tools });
+  captured.push({ provider, instructions: options.instructions, fallback: options.fallbackInstructions, tools: options.tools, messages: options.messages, workspaceDir: options.workspaceDir });
   if (requestedTool) {
     const result = provider === 'claude-code'
       ? await options.onToolCall(requestedTool.name, requestedTool.args)
@@ -30,18 +35,24 @@ const capture = (provider) => async (options) => {
   return { fullText: "Test response" };
 };
 const mocks = {
-  electron: { safeStorage: {
-    isEncryptionAvailable: () => true,
-    decryptString: (buffer) => buffer.toString()
-  } },
+  electron: {
+    app: { getPath: () => userData },
+    safeStorage: {
+      isEncryptionAvailable: () => true,
+      decryptString: (buffer) => buffer.toString()
+    }
+  },
   "./database": {
     getSetting: (key) => settings.get(key),
-    setSetting: (key, value) => settings.set(key, value),
+    setSetting: (key, value) => {
+      settingWrites.push(key);
+      settings.set(key, value);
+    },
     deleteSettings: (keys) => keys.forEach((key) => settings.delete(key))
   },
   "./trainingHubService": { getTrainingHubStatus: () => ({ authenticated: false }) },
   "./mcpClientManager": {
-    ensureAllMcpConnected: async () => {},
+    ensureAllMcpConnected: () => mcpSetup(),
     getMcpAuthorizationKey: () => 'test-authorization',
     getAllMcpTools: () => remoteTools,
     getMcpServerCachedTools: () => remoteTools.filter(t => t.name.startsWith('coros__')).map(t => ({ ...t, name: t.name.slice(7) })),
@@ -57,7 +68,10 @@ const mocks = {
   "./openRouterProvider": { ...require("./openRouterProvider"), streamOpenRouterChatCompletion: capture("openrouter") },
   "./claudeCodeProvider": {
     ClaudeCodeProviderError: class extends Error {},
-    getClaudeCodeStatus: async () => ({ authenticated: true, installed: true, executablePath: "/test/claude", state: "connected" }),
+    getClaudeCodeStatus: async () => {
+      claudeStatusChecks += 1;
+      return { authenticated: true, installed: true, executablePath: "/test/claude", state: "connected", checkedAt: new Date().toISOString() };
+    },
     streamClaudeCodeCompletion: capture("claude-code")
   }
 };
@@ -77,7 +91,7 @@ vm.runInNewContext(readFileSync(servicePath, "utf8"), {
 const events = [];
 // streamChat writes to a sink (the window for chat:send, a Coach session in the hub).
 const window = { send: (channel, payload) => events.push({ channel, payload }) };
-const { streamChat, getChatSettings, saveChatSettings } = module.exports;
+const { streamChat, cancelChat, getChatSettings, saveChatSettings } = module.exports;
 
 for (const provider of ["chatgpt", "openrouter", "local", "claude-code"]) {
   settings.set("chat.provider", provider);
@@ -101,7 +115,78 @@ for (const provider of ["chatgpt", "openrouter", "local", "claude-code"]) {
       else assert.ok(!prompt.includes("<athlete_custom_instructions>"), `${provider} retained cleared instructions`);
       if (preference !== "Only run on Tuesdays.") assert.ok(!prompt.includes("Only run on Tuesdays."));
     }
+    // Stable parts first, so providers can cache the prefix: rules, tools, units, clock, snapshot.
+    const order = [
+      "multi-sport endurance",
+      "## Live training data and tools",
+      "The athlete selected Metric units",
+      "## Current date and time",
+      "NOTE: The athlete is not signed in"
+    ].map((marker) => request.instructions.indexOf(marker));
+    assert.ok(order.every((index, position) => index >= 0 && (position === 0 || index > order[position - 1])), `${provider} prompt order ${order}`);
+    if (request.fallback) {
+      assert.ok(!request.fallback.includes("## Live training data and tools"));
+      assert.ok(request.fallback.indexOf("The athlete selected Metric units") < request.fallback.indexOf("## Current date and time"));
+    }
+    assert.equal(request.instructions.match(/call request_coach_input/g)?.length ?? 0, request.tools.some((tool) => tool.name === "request_coach_input") ? 1 : 0);
   }
+}
+
+// A turn reuses a passing Claude check, and saves no settings when nothing changed.
+settings.set("chat.provider", "claude-code");
+claudeStatusChecks = 0;
+settingWrites.length = 0;
+await streamChat(window, "claude-reuse-1", [{ role: "user", content: "Hi" }]);
+await streamChat(window, "claude-reuse-2", [{ role: "user", content: "Hi again" }]);
+assert.equal(claudeStatusChecks, 0, "a recent passing check is reused instead of launching Claude Code");
+assert.deepEqual(settingWrites, [], "an unchanged status writes nothing");
+assert.equal(captured.at(-1).workspaceDir, path.join(userData, "claude-coach", "workspace"));
+
+// Long conversations keep their newest messages and the model is told.
+const longChat = Array.from({ length: 400 }, (_, index) => ({ role: index % 2 ? "assistant" : "user", content: `${index} `.padEnd(1_200, "x") }));
+for (const provider of ["chatgpt", "claude-code", "local"]) {
+  settings.set("chat.provider", provider);
+  const before = captured.length;
+  await streamChat(window, `${provider}-long`, longChat);
+  assert.equal(captured.length, before + 1);
+  const request = captured.at(-1);
+  if (provider === "chatgpt") {
+    assert.ok(request.instructions.includes("earliest messages of this conversation were left out"));
+    continue;
+  }
+  assert.ok(request.messages.length < longChat.length, provider);
+  assert.equal(request.messages.at(-1), longChat.at(-1));
+  assert.match(request.instructions, new RegExp(`The ${longChat.length - request.messages.length} earliest messages`));
+}
+
+// Stop pressed before the turn registered (its files still loading): it never starts.
+for (const provider of ["claude-code", "local"]) {
+  settings.set("chat.provider", provider);
+  events.length = 0;
+  const before = captured.length;
+  cancelChat(`${provider}-early-stop`);
+  await streamChat(window, `${provider}-early-stop`, [{ role: "user", content: "Plan my week." }]);
+  assert.equal(captured.length, before, `${provider} reached the model after Stop`);
+  assert.equal(events.at(-1).channel, "chat:streamDone");
+  assert.equal(events.at(-1).payload.finishReason, "cancelled");
+}
+
+// Stop during a slow setup step ends the turn at once, without waiting for it.
+{
+  settings.set("chat.provider", "claude-code");
+  let releaseSetup;
+  mcpSetup = () => new Promise((resolve) => { releaseSetup = resolve; });
+  events.length = 0;
+  const before = captured.length;
+  const running = streamChat(window, "claude-slow-setup", [{ role: "user", content: "Plan my week." }]);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  cancelChat("claude-slow-setup");
+  await running;
+  assert.equal(events.at(-1).payload.finishReason, "cancelled");
+  releaseSetup();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(captured.length, before, "the provider never started");
+  mcpSetup = async () => {};
 }
 
 // One malformed write schema must not prevent any provider from starting a chat.
@@ -184,4 +269,5 @@ settings.set('chat.provider', 'local');
 await streamChat(window, 'hevy-disconnected', [{ role: 'user', content: 'List my Hevy routines.' }]);
 assert.ok(!captured.at(-1).tools.some(tool => tool.name.startsWith('hevy__')));
 assert.ok(!captured.at(-1).instructions.includes('Hevy tools (hevy__ prefix)'));
-console.log("chat instruction routing tests passed (all 4 providers, COROS reviews, Hevy discovery/dispatch/disconnect)");
+rmSync(userData, { recursive: true, force: true });
+console.log("chat instruction routing tests passed (all 4 providers, prompt order, history window, Stop during setup, COROS reviews, Hevy discovery/dispatch/disconnect)");

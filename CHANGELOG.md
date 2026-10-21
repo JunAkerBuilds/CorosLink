@@ -22,6 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Two Portuguese watch face labels used post-1990 spelling.
+- **Stop works while Coach is still getting ready.** Pressing Stop while Coach was checking its connection, reaching COROS or reading your attached files used to be lost, and Claude or Gemini then answered the whole turn anyway. The turn now ends at once and nothing is sent.
+- **Changing a Claude setting no longer hides the conversation.** Picking a model or changing what Claude may see used to swap the conversation for the sign-in screen until you reopened Coach. Only a new Claude executable path checks the connection again, once you stop typing it.
+- **Claude Code starts less often.** Coach no longer launches Claude Code twice to check its version and sign-in before every answer and every conversation title; a recent check is reused, and a lapsed sign-in still shows when an answer fails. Waiting for a Claude sign-in now checks every 3 seconds for up to 3 minutes.
+- **Coach uses your newest Claude Code.** CorosLink used to keep the first Claude Code it found as if you had typed its path, so an updated or second install was never used. It now picks the newest version among the installs it finds (on Windows, the `.exe`, including the one npm installs), and keeps only a path you type yourself. A path it saved for you earlier is let go once. Gemini CLI no longer saves a path for you either.
+- **Claude Code runs in its own empty folder.** Opened from the Dock or Finder, CorosLink used to start Claude Code in the system's root folder. It now runs in a folder of its own inside CorosLink's data.
+- **Long Coach conversations stay within limits.** ChatGPT and Local used to receive the whole conversation every time, and Claude and Gemini silently dropped everything before the last 30 messages. Every provider now gets the newest messages that fit its budget (smallest for Local models), and Coach is told when earlier messages were left out. An attached document's text travels with your next three messages; after that Coach knows it was shared and can ask you to attach it again.
+- **Coach's instructions are shorter and steadier.** Each tool rule is stated once, and only when that tool is available (for example, nothing about deleting workouts when Claude may not touch your calendar). The parts that never change come first and the date, time and training snapshot last, so providers can reuse what they cached from your previous message.
+- The conversations list no longer rebuilds every row's date for each word Coach writes.
 
 ## [0.1.59] - 2026-10-20
 

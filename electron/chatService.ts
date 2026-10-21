@@ -85,12 +85,14 @@ import {
   detectClaudeCodeExecutable,
   getClaudeCodeStatus as inspectClaudeCodeStatus,
   launchClaudeCodeLogin,
+  listClaudeCodeInstalls,
   listClaudeCodeModels,
   streamClaudeCodeCompletion,
   testClaudeCodeConnection as runClaudeCodeConnectionTest
 } from "./claudeCodeProvider";
 import {
   GeminiCliProviderError,
+  detectGeminiCliExecutable,
   getGeminiCliStatus as inspectGeminiCliStatus,
   getGeminiSessionModels,
   launchGeminiCliLogin,
@@ -103,9 +105,15 @@ import {
   CHAT_SETTINGS_KEYS,
   readChatSettingsFromStore,
   saveChatSettingsToStore,
+  saveCliConnectionStatus,
   type ChatApiKeyStore,
   type ChatSettingsStore
 } from "./chatSettingsStore";
+import {
+  CHAT_HISTORY_TOKEN_BUDGETS,
+  chatHistoryNote,
+  fitChatHistory
+} from "./chatHistoryWindow";
 import {
   CHATGPT_AUTO_CATALOG,
   CHATGPT_FALLBACK_MODELS,
@@ -158,9 +166,10 @@ import {
   normalizeUnitSystem
 } from "./unitSystem.js";
 import {
+  buildAthleteQuestionGuide,
   buildCoachInstructions,
   buildCurrentTimeInstruction,
-  buildCoachSportCapabilityGuide,
+  buildWorkoutToolGuide,
   formatCoachDashboard,
   formatRecentActivityMix,
   formatUpcomingWorkoutSport
@@ -208,6 +217,33 @@ const SETTINGS = {
 
 // requestId -> AbortController for in-flight streams.
 const activeStreams = new Map<string, AbortController>();
+// Stop can arrive while a turn is still being prepared (its files loading),
+// before streamChat registers it. Such a turn starts already cancelled.
+const cancelledBeforeStart = new Set<string>();
+const CANCELLED_BEFORE_START_MS = 60_000;
+
+function cancelledError(): Error {
+  return new Error("Chat request cancelled.");
+}
+
+/** Settles with `work`, or rejects as soon as the turn is cancelled, so Stop never waits on setup. */
+function unlessCancelled<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(cancelledError());
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(cancelledError());
+    signal.addEventListener("abort", onAbort, { once: true });
+    work.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      }
+    );
+  });
+}
 
 // ----- Provider settings -----
 
@@ -228,10 +264,17 @@ export function saveChatSettings(settings: ChatSettings): ChatSettings {
   );
 }
 
+/** Where Claude Code runs for Coach: an empty folder, never `/` or the athlete's files. */
+function claudeWorkspaceDir(): string {
+  return path.join(app.getPath("userData"), "claude-coach", "workspace");
+}
+
 export async function getClaudeCodeConnectionStatus(): Promise<ClaudeCodeStatus> {
+  await releaseDetectedCliPaths();
   const settings = getChatSettings();
   const status = await inspectClaudeCodeStatus(
-    settings.claudeCode.executablePath
+    settings.claudeCode.executablePath,
+    claudeWorkspaceDir()
   );
   recordClaudeCodeStatus(status);
   return status;
@@ -240,7 +283,8 @@ export async function getClaudeCodeConnectionStatus(): Promise<ClaudeCodeStatus>
 export async function connectClaudeCode(): Promise<ClaudeCodeStatus> {
   const settings = getChatSettings();
   const status = await launchClaudeCodeLogin(
-    settings.claudeCode.executablePath
+    settings.claudeCode.executablePath,
+    claudeWorkspaceDir()
   );
   recordClaudeCodeStatus(status);
   return status;
@@ -249,24 +293,84 @@ export async function connectClaudeCode(): Promise<ClaudeCodeStatus> {
 export async function testClaudeCodeConnection(): Promise<ClaudeCodeConnectionTest> {
   const settings = getChatSettings();
   const result = await runClaudeCodeConnectionTest(
-    settings.claudeCode.executablePath
+    settings.claudeCode.executablePath,
+    claudeWorkspaceDir()
   );
   recordClaudeCodeStatus(result.status);
   return result;
 }
 
+// A turn reuses a recent passing check rather than launching the CLI twice more
+// first. A sign-in that lapsed since fails the turn, which records it and ends the reuse.
+const CLAUDE_STATUS_REUSE_MS = 15 * 60_000;
+let claudeTurnStatus: { status: ClaudeCodeStatus; customPath: string; at: number } | undefined;
+
+async function claudeCodeStatusForTurn(): Promise<ClaudeCodeStatus> {
+  await releaseDetectedCliPaths();
+  const customPath = getChatSettings().claudeCode.executablePath;
+  const reusable = claudeTurnStatus;
+  if (
+    reusable &&
+    reusable.customPath === (customPath ?? "") &&
+    Date.now() - reusable.at < CLAUDE_STATUS_REUSE_MS
+  ) {
+    return reusable.status;
+  }
+  const status = await inspectClaudeCodeStatus(customPath, claudeWorkspaceDir());
+  recordClaudeCodeStatus(status);
+  return status;
+}
+
+async function geminiCliStatusForTurn(): Promise<GeminiCliStatus> {
+  await releaseDetectedCliPaths();
+  const status = await inspectGeminiCliStatus(getChatSettings().geminiCli.executablePath);
+  recordGeminiCliStatus(status);
+  return status;
+}
+
+/**
+ * Remembers the CLI's last state. Settings are written only when the state
+ * changes, and a detected path is never saved: only one the athlete typed is kept.
+ */
 function recordClaudeCodeStatus(status: ClaudeCodeStatus): void {
-  const current = getChatSettings();
-  saveChatSettings({
-    ...current,
-    claudeCode: {
-      ...current.claudeCode,
-      executablePath:
-        current.claudeCode.executablePath || status.executablePath,
-      lastConnectionStatus: status.state,
-      lastCheckedAt: status.checkedAt
+  claudeTurnStatus =
+    status.state === "connected" && status.executablePath
+      ? {
+          status,
+          customPath: getChatSettings().claudeCode.executablePath ?? "",
+          at: Date.now()
+        }
+      : undefined;
+  saveCliConnectionStatus(chatSettingsStore, "claude-code", status.state, status.checkedAt);
+}
+
+// Earlier releases saved the first install they found as if the athlete had
+// typed it, pinning that copy for good. A saved path that detection finds on
+// its own anyway is released once, so the newest install is used again.
+const DETECTED_CLI_PATHS_RELEASED = "chat.detectedCliPathsReleased";
+let releasingDetectedPaths: Promise<void> | undefined;
+
+function releaseDetectedCliPaths(): Promise<void> {
+  releasingDetectedPaths ??= (async () => {
+    if (getSetting(DETECTED_CLI_PATHS_RELEASED)) return;
+    const { claudeCode, geminiCli } = getChatSettings();
+    if (
+      claudeCode.executablePath &&
+      (await listClaudeCodeInstalls()).includes(claudeCode.executablePath)
+    ) {
+      deleteSettings([CHAT_SETTINGS_KEYS.claudeExecutablePath]);
     }
+    if (
+      geminiCli.executablePath &&
+      geminiCli.executablePath === (await detectGeminiCliExecutable())
+    ) {
+      deleteSettings([CHAT_SETTINGS_KEYS.geminiExecutablePath]);
+    }
+    setSetting(DETECTED_CLI_PATHS_RELEASED, new Date().toISOString());
+  })().catch((error: unknown) => {
+    console.warn("[chat] could not check saved CLI paths:", error instanceof Error ? error.message : error);
   });
+  return releasingDetectedPaths;
 }
 
 /** Where Gemini CLI runs for Coach: its workspace settings keep it to Coach tools. */
@@ -275,6 +379,7 @@ function geminiWorkspaceDir(): string {
 }
 
 export async function getGeminiCliConnectionStatus(): Promise<GeminiCliStatus> {
+  await releaseDetectedCliPaths();
   const settings = getChatSettings();
   const status = await inspectGeminiCliStatus(settings.geminiCli.executablePath);
   recordGeminiCliStatus(status);
@@ -312,17 +417,9 @@ export async function testGeminiCliConnection(): Promise<GeminiCliConnectionTest
   return result;
 }
 
+/** As recordClaudeCodeStatus: written on a change of state, path never pinned. */
 function recordGeminiCliStatus(status: GeminiCliStatus): void {
-  const current = getChatSettings();
-  saveChatSettings({
-    ...current,
-    geminiCli: {
-      ...current.geminiCli,
-      executablePath: current.geminiCli.executablePath || status.executablePath,
-      lastConnectionStatus: status.state,
-      lastCheckedAt: status.checkedAt
-    }
-  });
+  saveCliConnectionStatus(chatSettingsStore, "gemini-cli", status.state, status.checkedAt);
 }
 
 export function listChatSessionsForProvider(provider: ChatProvider) {
@@ -808,16 +905,21 @@ export async function streamChat(
 
   const controller = new AbortController();
   activeStreams.set(requestId, controller);
+  if (cancelledBeforeStart.delete(requestId)) controller.abort();
+  const { signal } = controller;
 
   let fullText = "";
   const provider = options.provider ?? getChatSettings().provider;
+  // Long conversations send their newest messages, and the model hears what was left out.
+  const history = fitChatHistory(messages, CHAT_HISTORY_TOKEN_BUDGETS[provider]);
+  const historyNote = chatHistoryNote(history.omitted);
   try {
     const settings: ChatSettings = { ...getChatSettings(), provider };
     if (settings.provider === "claude-code") {
-      const status = await inspectClaudeCodeStatus(
-        settings.claudeCode.executablePath
+      const status = await unlessCancelled(
+        claudeCodeStatusForTurn(),
+        signal
       );
-      recordClaudeCodeStatus(status);
       if (!status.authenticated || !status.executablePath) {
         throw new ClaudeCodeProviderError(
           status.message,
@@ -825,17 +927,18 @@ export async function streamChat(
         );
       }
 
-      await ensureAllMcpConnected();
+      await unlessCancelled(ensureAllMcpConnected(), signal);
       const chatTools = getClaudeCodeTools(settings.claudeCode.permissions);
-      const { text: instructions, hasData } = await buildTrainingContext(
-        settings.claudeCode.permissions,
-        unitSystem,
-        settings.customInstructions
+      const prompt = await unlessCancelled(
+        buildTrainingContext(
+          settings.claudeCode.permissions,
+          unitSystem,
+          settings.customInstructions
+        ),
+        signal
       );
-      const effectiveInstructions = withLiveToolInstructions(
-        instructions,
-        chatTools
-      );
+      const effectiveInstructions = composeCoachInstructions(prompt, chatTools, historyNote);
+      const { hasData } = prompt;
 
       send("chat:streamStart", { requestId });
       send("chat:streamInfo", {
@@ -847,10 +950,11 @@ export async function streamChat(
 
       const result = await streamClaudeCodeCompletion({
         executablePath: status.executablePath,
+        workspaceDir: claudeWorkspaceDir(),
         instructions: effectiveInstructions,
-        messages,
+        messages: history.messages,
         tools: chatTools,
-        signal: controller.signal,
+        signal,
         model: settings.claudeCode.model,
         onToken: (delta) => {
           fullText += delta;
@@ -902,8 +1006,10 @@ export async function streamChat(
     }
 
     if (settings.provider === "gemini-cli") {
-      const status = await inspectGeminiCliStatus(settings.geminiCli.executablePath);
-      recordGeminiCliStatus(status);
+      const status = await unlessCancelled(
+        geminiCliStatusForTurn(),
+        signal
+      );
       if (!status.authenticated || !status.executablePath) {
         throw new GeminiCliProviderError(
           status.message,
@@ -911,17 +1017,14 @@ export async function streamChat(
         );
       }
 
-      await ensureAllMcpConnected();
+      await unlessCancelled(ensureAllMcpConnected(), signal);
       const chatTools = getAllChatTools();
-      const { text: instructions, hasData } = await buildTrainingContext(
-        undefined,
-        unitSystem,
-        settings.customInstructions
+      const prompt = await unlessCancelled(
+        buildTrainingContext(undefined, unitSystem, settings.customInstructions),
+        signal
       );
-      const effectiveInstructions = withLiveToolInstructions(
-        instructions,
-        chatTools
-      );
+      const effectiveInstructions = composeCoachInstructions(prompt, chatTools, historyNote);
+      const { hasData } = prompt;
 
       send("chat:streamStart", { requestId });
       send("chat:streamInfo", {
@@ -935,9 +1038,9 @@ export async function streamChat(
         executablePath: status.executablePath,
         workspaceDir: geminiWorkspaceDir(),
         instructions: effectiveInstructions,
-        messages,
+        messages: history.messages,
         tools: chatTools,
-        signal: controller.signal,
+        signal,
         model: settings.geminiCli.model,
         onToken: (delta) => {
           fullText += delta;
@@ -985,18 +1088,16 @@ export async function streamChat(
       if (!apiKey) {
         throw new Error("Add an OpenRouter API key in Coach settings first.");
       }
-      const { text: instructions, hasData } = await buildTrainingContext(
-        undefined,
-        unitSystem,
-        settings.customInstructions
+      const prompt = await unlessCancelled(
+        buildTrainingContext(undefined, unitSystem, settings.customInstructions),
+        signal
       );
+      const { hasData } = prompt;
 
-      await ensureAllMcpConnected();
+      await unlessCancelled(ensureAllMcpConnected(), signal);
       const chatTools = getAllChatTools();
-      const effectiveInstructions = withLiveToolInstructions(
-        instructions,
-        chatTools
-      );
+      const effectiveInstructions = composeCoachInstructions(prompt, chatTools, historyNote);
+      const instructions = composeCoachInstructions(prompt, [], historyNote);
 
       send("chat:streamStart", { requestId });
       send("chat:streamInfo", {
@@ -1013,10 +1114,10 @@ export async function streamChat(
         },
         instructions: effectiveInstructions,
         fallbackInstructions: instructions,
-        messages,
+        messages: history.messages,
         tools: chatTools,
         maxToolRounds: MAX_TOOL_ROUNDS,
-        signal: controller.signal,
+        signal,
         onToken: (delta) => {
           fullText += delta;
           send("chat:streamToken", { requestId, delta });
@@ -1051,23 +1152,21 @@ export async function streamChat(
     }
 
     if (settings.provider === "local") {
-      const { text: instructions, hasData } = await buildTrainingContext(
-        undefined,
-        unitSystem,
-        settings.customInstructions
+      const prompt = await unlessCancelled(
+        buildTrainingContext(undefined, unitSystem, settings.customInstructions),
+        signal
       );
+      const { hasData } = prompt;
       const runtimeConfig = getLocalRuntimeConfig(settings.local);
 
       if (runtimeConfig.toolsEnabled) {
-        await ensureAllMcpConnected();
+        await unlessCancelled(ensureAllMcpConnected(), signal);
       }
       const chatTools = runtimeConfig.toolsEnabled
         ? getAllChatTools()
         : [...getChatWorkoutTools(), ...getChatInteractionTools()];
-      const effectiveInstructions = withLiveToolInstructions(
-        instructions,
-        chatTools
-      );
+      const effectiveInstructions = composeCoachInstructions(prompt, chatTools, historyNote);
+      const instructions = composeCoachInstructions(prompt, [], historyNote);
 
       send("chat:streamStart", { requestId });
       send("chat:streamInfo", {
@@ -1081,10 +1180,10 @@ export async function streamChat(
         config: runtimeConfig,
         instructions: effectiveInstructions,
         fallbackInstructions: instructions,
-        messages,
+        messages: history.messages,
         tools: chatTools,
         maxToolRounds: MAX_TOOL_ROUNDS,
-        signal: controller.signal,
+        signal,
         onToken: (delta) => {
           fullText += delta;
           send("chat:streamToken", { requestId, delta });
@@ -1126,24 +1225,21 @@ export async function streamChat(
       return;
     }
 
-    const token = await getValidToken();
-    const { text: instructions, hasData } = await buildTrainingContext(
-      undefined,
-      unitSystem,
-      settings.customInstructions
+    const token = await unlessCancelled(getValidToken(), signal);
+    const prompt = await unlessCancelled(
+      buildTrainingContext(undefined, unitSystem, settings.customInstructions),
+      signal
     );
+    const { hasData } = prompt;
 
     // Reconnect a previously-authorized COROS MCP session, then expose its tools
     // to the model as function tools so it can pull data on demand.
-    await ensureAllMcpConnected();
+    await unlessCancelled(ensureAllMcpConnected(), signal);
     const tools = buildChatFunctionTools();
 
     // When live tools are available, steer the model to use them rather than
-    // leaning on the brief snapshot in `instructions`.
-    const effectiveInstructions = withLiveToolInstructions(
-      instructions,
-      getAllChatTools()
-    );
+    // leaning on the brief snapshot in the instructions.
+    const effectiveInstructions = composeCoachInstructions(prompt, getAllChatTools(), historyNote);
 
     send("chat:streamStart", { requestId });
     send("chat:streamInfo", {
@@ -1155,7 +1251,7 @@ export async function streamChat(
 
     // Responses-API input items, extended each round with the model's tool calls
     // and our tool results.
-    const input: Record<string, unknown>[] = messages.map(toInputMessageItem);
+    const input: Record<string, unknown>[] = history.messages.map(toInputMessageItem);
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const opened = await resolveModelAndOpenStream(
@@ -1164,7 +1260,7 @@ export async function streamChat(
         effectiveInstructions,
         input,
         tools,
-        controller.signal,
+        signal,
         settings.chatgpt.model
       );
       if ("error" in opened) {
@@ -1343,8 +1439,14 @@ export async function streamChat(
 }
 
 export function cancelChat(requestId: string): void {
-  activeStreams.get(requestId)?.abort();
-  activeStreams.delete(requestId);
+  const controller = activeStreams.get(requestId);
+  if (controller) {
+    controller.abort();
+    activeStreams.delete(requestId);
+    return;
+  }
+  cancelledBeforeStart.add(requestId);
+  setTimeout(() => cancelledBeforeStart.delete(requestId), CANCELLED_BEFORE_START_MS).unref?.();
 }
 
 export async function uploadTrainingPlanDraft(
@@ -1758,11 +1860,12 @@ async function completeOnce(
   };
 
   if (provider === "claude-code") {
-    const status = await inspectClaudeCodeStatus(settings.claudeCode.executablePath);
+    const status = await claudeCodeStatusForTurn();
     if (!status.authenticated || !status.executablePath) throw new Error(status.message);
     // Naming needs no depth: the small model answers in a moment.
     const result = await streamClaudeCodeCompletion({
       executablePath: status.executablePath,
+      workspaceDir: claudeWorkspaceDir(),
       instructions,
       messages,
       tools: [],
@@ -1776,7 +1879,7 @@ async function completeOnce(
   }
 
   if (provider === "gemini-cli") {
-    const status = await inspectGeminiCliStatus(settings.geminiCli.executablePath);
+    const status = await geminiCliStatusForTurn();
     if (!status.authenticated || !status.executablePath) throw new Error(status.message);
     // Naming needs no depth: the fast tier answers in a moment.
     const result = await streamGeminiCliCompletion({
@@ -1989,8 +2092,10 @@ let claudeModelCache:
   | null = null;
 
 async function listClaudeModelOptions(): Promise<ChatModelOption[]> {
+  await releaseDetectedCliPaths();
   const executablePath = await detectClaudeCodeExecutable(
-    getChatSettings().claudeCode.executablePath
+    getChatSettings().claudeCode.executablePath,
+    claudeWorkspaceDir()
   );
   if (!executablePath) return CLAUDE_MODEL_OPTIONS;
   if (
@@ -2000,7 +2105,7 @@ async function listClaudeModelOptions(): Promise<ChatModelOption[]> {
     return claudeModelCache.options;
   }
   // Cache the pending lookup so pickers mounting together share one CLI launch.
-  const options = listClaudeCodeModels(executablePath)
+  const options = listClaudeCodeModels(executablePath, claudeWorkspaceDir())
     .then((models) => {
       const listed = claudeModelOptionsFromCli(models);
       if (listed.length < 2) throw new Error("empty model list");
@@ -2081,12 +2186,25 @@ function buildChatFunctionTools(): Record<string, unknown>[] {
   }));
 }
 
-function withLiveToolInstructions(
-  instructions: string,
-  tools: CorosMcpTool[]
+/**
+ * The system prompt, stable parts first so a provider can reuse its cached
+ * prefix between turns: rules, the tool guide, then units, the clock, the
+ * training snapshot, and a note when early messages were left out.
+ */
+function composeCoachInstructions(
+  prompt: CoachPromptParts,
+  tools: CorosMcpTool[],
+  historyNote = ""
 ): string {
+  return [prompt.rules, buildToolGuide(tools), prompt.context, historyNote]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+/** How to use the tools on offer, each rule stated once and only for a tool that is offered. */
+function buildToolGuide(tools: CorosMcpTool[]): string {
   if (tools.length === 0) {
-    return instructions;
+    return "";
   }
   const activityTools = tools.filter((tool) => isChatActivityTool(tool.name));
   const analyticsTools = tools.filter((tool) => isChatAnalyticsTool(tool.name));
@@ -2111,7 +2229,7 @@ function withLiveToolInstructions(
     (tool) => !tool.name.startsWith("coros__")
   );
   const planTools = tools.filter((tool) => isChatWorkoutTool(tool.name));
-  const sections = [instructions, "", "## Live training data and tools"];
+  const sections = ["## Live training data and tools"];
   if (activityTools.length > 0) {
     sections.push(
       `Local Training Hub tools (preferred for laps/splits): ${activityTools
@@ -2194,34 +2312,7 @@ function withLiveToolInstructions(
     );
   }
   if (planTools.length > 0) {
-    sections.push(
-      "",
-      "## Workout and training plan tools",
-      `Authoring tools: ${planTools.map((tool) => tool.name).join(", ")}. ` +
-        "Use draft_workout for exactly one standalone workout when using the local authoring route described above. Its card lets the athlete choose Workout Library or Calendar; set calendar_date only when the athlete names a date. " +
-        "Use draft_training_plan only for multi-day or multi-week local schedules. Never wrap a one-off workout in a plan. " +
-        "Before drafting Strength or HYROX workouts, call search_coros_exercises once with all intended " +
-        "exercise queries, or with target muscles, movement patterns, and known equipment; then use the " +
-        "returned exact exercise IDs and names. A COROS naming mismatch alone never requires an athlete question. " +
-        "For Strength exercises, set sets explicitly, use target_reps or target_duration_seconds per set, " +
-        "and set rest_type=1 plus rest_value in seconds. Do not hide the prescription only in the step name. " +
-        "Always provide sport on every new workout, including sport=run. " +
-        "Use distance_km only for a simple Run or Trail Run; use steps for anything structured. " +
-        "Pick each step's target " +
-        "deliberately: distance for easy/long/tempo blocks, time for duration-based reps " +
-        "and recovery jogs, load only when prescribing by training-load budget, and open " +
-        "(no value, run-until-lap) for by-feel warmups/cooldowns or fartlek surges. Put every " +
-        "prescribed HR, pace, effort pace, power, cadence, stroke, weight, RPE, or grade in " +
-        "the typed intensity field; do not leave it only in workout prose or the name. " +
-        "For draft_training_plan entries intended for calendar placement, include schedule_date " +
-        "(YYYYMMDD). A multi-workout draft is saved as a grouped local Training Plan by default; the athlete may instead choose individual COROS workouts or Calendar. " +
-        "The athlete must confirm the destination and any one-off workout date before saving. " +
-        "Use list_scheduled_workouts + delete_workout to stage deletions. " +
-        "The athlete confirms via the Delete from COROS button in chat.",
-      "",
-      "Supported workout capabilities (generated from the validator):",
-      buildCoachSportCapabilityGuide()
-    );
+    sections.push("", buildWorkoutToolGuide(planTools.map((tool) => tool.name)));
   }
   if (journalTools.length > 0) {
     const names = new Set(journalTools.map((tool) => tool.name));
@@ -2249,14 +2340,8 @@ function withLiveToolInstructions(
     }
     sections.push(guidance.join("\n"));
   }
-  if (interactionTools.length > 0) {
-    sections.push(
-      "",
-      "## Athlete questions",
-      "When you need an answer before continuing, call request_coach_input with one concise question and 2–5 distinct choices. " +
-        "Put the recommended choice first and explain important tradeoffs in each choice description. " +
-        "Do not ask a clarification question only in prose. After calling request_coach_input, stop and wait for the athlete's next message."
-    );
+  if (interactionTools.some((tool) => tool.name === "request_coach_input")) {
+    sections.push("", buildAthleteQuestionGuide());
   }
   return sections.join("\n");
 }
@@ -2300,13 +2385,21 @@ export function extractSseData(frame: string): string | null {
 
 // ----- Training-data context assembly -----
 
+interface CoachPromptParts {
+  /** The coach rules and the athlete's own instructions: the same on every turn. */
+  rules: string;
+  /** Units, then the clock and the training snapshot, which change between turns. */
+  context: string;
+  hasData: boolean;
+}
+
 async function buildTrainingContext(
   permissions?: ClaudeCodePermissions,
   unitSystem: UnitSystem = "metric",
   customInstructions?: string
-): Promise<{ text: string; hasData: boolean }> {
+): Promise<CoachPromptParts> {
   // Rebuilt per request so edits to the athlete's custom instructions apply live.
-  const coachInstructions = buildCoachInstructions(customInstructions);
+  const rules = buildCoachInstructions(customInstructions);
   const timeInstruction = buildCurrentTimeInstruction();
   const unitInstruction =
     `The athlete selected ${unitSystem === "imperial" ? "Imperial" : "Metric"} units. ` +
@@ -2320,9 +2413,10 @@ async function buildTrainingContext(
   }
   if (!status.authenticated) {
     return {
+      rules,
       hasData: false,
-      text:
-        `${coachInstructions}\n\n${timeInstruction}\n\n${unitInstruction}\n\n` +
+      context:
+        `${unitInstruction}\n\n${timeInstruction}\n\n` +
         "NOTE: The athlete is not signed in to COROS Training Hub, so no training " +
         "data is available. Encourage them to connect it for personalised advice."
     };
@@ -2343,7 +2437,7 @@ async function buildTrainingContext(
       : Promise.resolve([] as TrainingHubUpcomingWorkout[])
   ]);
 
-  const sections: string[] = [coachInstructions, "", timeInstruction, "", unitInstruction, ""];
+  const sections: string[] = [unitInstruction, "", timeInstruction, ""];
   let hasData = false;
 
   if (activities.status === "fulfilled" && activities.value.length > 0) {
@@ -2385,7 +2479,7 @@ async function buildTrainingContext(
     );
   }
 
-  return { text: sections.join("\n").trim(), hasData };
+  return { rules, context: sections.join("\n").trim(), hasData };
 }
 
 /** Moving time, plus elapsed once pauses reach a minute (as COROS shows it). */

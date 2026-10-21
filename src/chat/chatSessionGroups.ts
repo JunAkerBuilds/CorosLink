@@ -64,6 +64,27 @@ export function groupChatSessions(
   })).filter((group) => group.sessions.length > 0);
 }
 
+const SESSION_TIME_FORMATS = {
+  time: { hour: "numeric", minute: "2-digit" },
+  weekday: { weekday: "short" },
+  date: { month: "short", day: "numeric" }
+} satisfies Record<string, Intl.DateTimeFormatOptions>;
+
+// Building a formatter is costly and the list renders while Coach streams, so
+// each one is kept per locale; the language can change while the app runs.
+const sessionFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function sessionFormatter(style: keyof typeof SESSION_TIME_FORMATS): Intl.DateTimeFormat {
+  const locale = getLocale();
+  const key = `${locale}|${style}`;
+  let formatter = sessionFormatters.get(key);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, SESSION_TIME_FORMATS[style]);
+    sessionFormatters.set(key, formatter);
+  }
+  return formatter;
+}
+
 export function formatSessionRelativeTime(updatedAt: string): string {
   const updated = new Date(updatedAt);
   if (Number.isNaN(updated.getTime())) {
@@ -76,19 +97,13 @@ export function formatSessionRelativeTime(updatedAt: string): string {
   const dayDiff = Math.floor((todayStart - updatedStart) / 86_400_000);
 
   if (dayDiff <= 0) {
-    return updated.toLocaleTimeString(getLocale(), {
-      hour: "numeric",
-      minute: "2-digit"
-    });
+    return sessionFormatter("time").format(updated);
   }
   if (dayDiff === 1) {
     return t("Yesterday");
   }
   if (dayDiff < 7) {
-    return updated.toLocaleDateString(getLocale(), { weekday: "short" });
+    return sessionFormatter("weekday").format(updated);
   }
-  return updated.toLocaleDateString(getLocale(), {
-    month: "short",
-    day: "numeric"
-  });
+  return sessionFormatter("date").format(updated);
 }

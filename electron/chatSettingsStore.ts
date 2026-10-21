@@ -255,6 +255,27 @@ export function saveChatSettingsToStore(
   );
 }
 
+/**
+ * Records a CLI provider's connection state, writing only when it changed, so
+ * a status check or a finished turn doesn't rewrite every chat setting.
+ * Returns whether anything was written.
+ */
+export function saveCliConnectionStatus(
+  store: ChatSettingsStore,
+  provider: "claude-code" | "gemini-cli",
+  state: NonNullable<ChatSettings["claudeCode"]["lastConnectionStatus"]>,
+  checkedAt: string
+): boolean {
+  const keys =
+    provider === "claude-code"
+      ? [CHAT_SETTINGS_KEYS.claudeLastConnectionStatus, CHAT_SETTINGS_KEYS.claudeLastCheckedAt]
+      : [CHAT_SETTINGS_KEYS.geminiLastConnectionStatus, CHAT_SETTINGS_KEYS.geminiLastCheckedAt];
+  if (store.get(keys[0]) === state) return false;
+  store.set(keys[0], state);
+  store.set(keys[1], checkedAt);
+  return true;
+}
+
 function normalizeProvider(value: unknown): ChatProvider {
   if (
     value === "local" ||

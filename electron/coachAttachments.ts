@@ -21,6 +21,8 @@ const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 const MAX_IMAGES_PER_UPLOAD = 12;
 /** Images a single request carries; older ones are named instead of resent. */
 export const MAX_COACH_MODEL_IMAGES = 12;
+/** Document contents travel with the athlete's latest few messages; older documents are named instead. */
+export const COACH_DOCUMENT_TURNS = 3;
 
 /** What the athlete may attach, by extension; also what Open may hand to the system. */
 const DOCUMENT_EXTENSIONS = new Set([".pdf", ".docx", ".txt", ".md", ".markdown", ".csv", ".tsv", ".json"]);
@@ -268,7 +270,8 @@ export type CoachAttachmentLoader = (attachment: ChatFileAttachment) => Promise<
 /**
  * Turns attached files into what every provider understands: document text in
  * <attached_file> blocks inside the message, and images on `images`. Only the
- * newest MAX_COACH_MODEL_IMAGES images are sent; older ones are named instead.
+ * newest MAX_COACH_MODEL_IMAGES images are sent, and documents only with the
+ * athlete's latest COACH_DOCUMENT_TURNS messages; older ones are named instead.
  */
 export async function expandCoachAttachments(
   messages: ChatMessage[],
@@ -276,9 +279,11 @@ export async function expandCoachAttachments(
 ): Promise<ChatMessage[]> {
   if (!messages.some((message) => message.files?.length)) return messages;
   let imageBudget = MAX_COACH_MODEL_IMAGES;
+  let athleteTurns = 0;
   const expanded: ChatMessage[] = [];
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
+    if (message.role === "user") athleteTurns += 1;
     if (!message.files?.length) {
       expanded.unshift(message);
       continue;
@@ -286,6 +291,10 @@ export async function expandCoachAttachments(
     const blocks: string[] = [];
     const images: ChatMessageImage[] = [];
     for (const file of message.files) {
+      if (file.kind === "document" && athleteTurns > COACH_DOCUMENT_TURNS) {
+        blocks.push(earlierDocumentBlock(file));
+        continue;
+      }
       const loaded = await load(file).catch(() => null);
       if (!loaded) {
         blocks.push(`[Attached file no longer available: ${file.name}]`);
@@ -311,6 +320,21 @@ export async function expandCoachAttachments(
   return expanded;
 }
 
+function fileAttributes(file: ChatFileAttachment): string {
+  const attributes = [`name="${file.name}"`];
+  if (file.pageCount) attributes.push(`pages="${file.pageCount}"`);
+  return attributes.join(" ");
+}
+
+function earlierDocumentBlock(file: ChatFileAttachment): string {
+  return (
+    `<attached_file ${fileAttributes(file)}>\n` +
+    "[Shared earlier in the conversation; its contents are not repeated here. " +
+    "If you need them again, ask the athlete to attach the file again.]\n" +
+    "</attached_file>"
+  );
+}
+
 function attachedFileBlock(
   file: ChatFileAttachment,
   text: string | undefined,
@@ -322,8 +346,6 @@ function attachedFileBlock(
       ? `[Attached image: ${file.name}]`
       : `[Image shared earlier in the conversation: ${file.name}]`;
   }
-  const attributes = [`name="${file.name}"`];
-  if (file.pageCount) attributes.push(`pages="${file.pageCount}"`);
   const body: string[] = [];
   if (text) body.push(text.replace(/<\/attached_file/gi, "<\\/attached_file"));
   if (file.truncated) body.push("[The text was cut here to fit; the rest of the file is not included.]");
@@ -334,5 +356,5 @@ function attachedFileBlock(
         : "[This file's pages were sent as images earlier in the conversation.]"
     );
   }
-  return `<attached_file ${attributes.join(" ")}>\n${body.join("\n\n")}\n</attached_file>`;
+  return `<attached_file ${fileAttributes(file)}>\n${body.join("\n\n")}\n</attached_file>`;
 }

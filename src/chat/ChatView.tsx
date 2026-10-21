@@ -2432,6 +2432,8 @@ export function ChatView({
   const autoDetectLocalRef = useRef(false);
   const claudePollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const geminiPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const claudePathCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const geminiPathCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const mcpRef = useRef<HTMLDivElement>(null);
   const chatHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -2690,6 +2692,12 @@ export function ChatView({
         clearTimeout(geminiPollTimerRef.current);
         geminiPollTimerRef.current = null;
       }
+      for (const timer of [claudePathCheckTimerRef, geminiPathCheckTimerRef]) {
+        if (timer.current) {
+          clearTimeout(timer.current);
+          timer.current = null;
+        }
+      }
       if (chatHighlightTimeoutRef.current) {
         clearTimeout(chatHighlightTimeoutRef.current);
         chatHighlightTimeoutRef.current = null;
@@ -2831,8 +2839,9 @@ export function ChatView({
     }
   };
 
+  // Each check runs `claude auth status`; every 3 s for up to 3 minutes covers a browser sign-in.
   const pollClaudeCodeStatus = (attempt = 0) => {
-    if (!api || attempt >= 40) return;
+    if (!api || attempt >= 60) return;
     if (claudePollTimerRef.current) {
       clearTimeout(claudePollTimerRef.current);
     }
@@ -2846,7 +2855,19 @@ export function ChatView({
           }
         })
         .catch(() => pollClaudeCodeStatus(attempt + 1));
-    }, 1500);
+    }, 3000);
+  };
+
+  // The path field saves on every keystroke; the new install is checked once typing pauses.
+  const recheckCliAfterPathChange = (
+    timer: { current: ReturnType<typeof setTimeout> | null },
+    check: () => Promise<void>
+  ) => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      void check().catch(() => undefined);
+    }, 800);
   };
 
   const handleConnectClaudeCode = async () => {
@@ -2900,11 +2921,19 @@ export function ChatView({
     };
     const nextSettings = { ...chatSettings, claudeCode: nextClaudeCode };
     setChatSettings(nextSettings);
-    setClaudeStatus(null);
+    // Only another executable can change the connection; a model or permission
+    // change keeps the conversation on screen.
+    const pathChanged = patch.executablePath !== undefined;
+    if (pathChanged) setClaudeStatus(null);
     if (!api) return;
     try {
       const saved = await api.saveChatSettings(nextSettings);
       setChatSettings(saved);
+      if (pathChanged) {
+        recheckCliAfterPathChange(claudePathCheckTimerRef, () =>
+          api.getClaudeCodeStatus().then(setClaudeStatus)
+        );
+      }
     } catch (caught) {
       onError(
         caught instanceof Error
@@ -3000,11 +3029,17 @@ export function ChatView({
       geminiCli: { ...chatSettings.geminiCli, ...patch }
     };
     setChatSettings(nextSettings);
-    if (patch.executablePath !== undefined) setGeminiStatus(null);
+    const pathChanged = patch.executablePath !== undefined;
+    if (pathChanged) setGeminiStatus(null);
     if (!api) return;
     try {
       const saved = await api.saveChatSettings(nextSettings);
       setChatSettings(saved);
+      if (pathChanged) {
+        recheckCliAfterPathChange(geminiPathCheckTimerRef, () =>
+          api.getGeminiCliStatus().then(setGeminiStatus)
+        );
+      }
     } catch (caught) {
       onError(
         caught instanceof Error

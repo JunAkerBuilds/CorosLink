@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { access } from "node:fs/promises";
+import { access, mkdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -62,6 +62,8 @@ export interface ClaudeCodeToolCallbacks {
 
 export interface StreamClaudeCodeOptions extends ClaudeCodeToolCallbacks {
   executablePath: string;
+  /** Empty directory the CLI runs in, so it never starts in `/` or the athlete's files. */
+  workspaceDir?: string;
   instructions: string;
   messages: ChatMessage[];
   tools: CorosMcpTool[];
@@ -95,6 +97,9 @@ export function getClaudeExecutableCandidates(
         path.join(env.LOCALAPPDATA, "Claude", "claude.exe")
       );
     }
+    if (env.APPDATA) {
+      candidates.push(npmPackageClaudeExe(path.join(env.APPDATA, "npm")));
+    }
     candidates.push(
       path.join(home, ".local", "bin", "claude.exe"),
       path.join(home, ".claude", "local", "claude.exe")
@@ -124,38 +129,122 @@ async function isExecutable(filePath: string): Promise<boolean> {
   }
 }
 
-async function findClaudeOnPath(): Promise<string | undefined> {
+/** The native binary npm installs under a global prefix (where its `claude.cmd` shim lives). */
+function npmPackageClaudeExe(prefix: string): string {
+  return path.join(prefix, "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe");
+}
+
+/** Every `claude` on PATH, in PATH order. */
+async function findClaudeOnPath(): Promise<string[]> {
   try {
-    const command = process.platform === "win32" ? "where.exe" : "which";
-    const { stdout } = await execFileAsync(command, ["claude"], {
-      timeout: DETECTION_TIMEOUT_MS,
-      windowsHide: true
-    });
+    const { stdout } = await execFileAsync(
+      process.platform === "win32" ? "where.exe" : "which",
+      process.platform === "win32" ? ["claude"] : ["-a", "claude"],
+      { timeout: DETECTION_TIMEOUT_MS, windowsHide: true }
+    );
     return stdout
       .split(/\r?\n/)
       .map((value) => value.trim())
-      .find(Boolean);
+      .filter(Boolean);
   } catch {
-    return undefined;
+    return [];
   }
 }
 
+/** Every Claude Code install on this computer, in the order they were found. */
+export async function listClaudeCodeInstalls(): Promise<string[]> {
+  const onPath = await findClaudeOnPath();
+  const found = [
+    ...getClaudeExecutableCandidates(),
+    ...onPath,
+    // An npm install puts shims on PATH that can't be launched directly; its binary sits beside them.
+    ...(process.platform === "win32"
+      ? onPath.map((shim) => npmPackageClaudeExe(path.dirname(shim)))
+      : [])
+  ];
+  const installs: string[] = [];
+  for (const candidate of new Set(found)) {
+    if (await isExecutable(candidate)) installs.push(candidate);
+  }
+  return installs;
+}
+
+/** Orders `claude --version` answers like "2.1.3 (Claude Code)"; an unknown version sorts first. */
+export function compareClaudeCodeVersions(left?: string, right?: string): number {
+  const parts = (value?: string) =>
+    value?.match(/\d+(?:\.\d+)*/)?.[0].split(".").map(Number) ?? [];
+  const a = parts(left);
+  const b = parts(right);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const difference = (a[index] ?? -1) - (b[index] ?? -1);
+    if (difference !== 0) return Math.sign(difference);
+  }
+  return 0;
+}
+
+/**
+ * The install to use: the newest version, and on Windows an `.exe` over a
+ * shim of the same version. Ties keep the order the installs were found in.
+ */
+export function pickClaudeCodeInstall(
+  installs: Array<{ path: string; version?: string }>,
+  platform = process.platform
+): string | undefined {
+  const exe = (candidate: string) =>
+    platform === "win32" && /\.exe$/i.test(candidate) ? 1 : 0;
+  return [...installs].sort(
+    (left, right) =>
+      compareClaudeCodeVersions(right.version, left.version) ||
+      exe(right.path) - exe(left.path)
+  )[0]?.path;
+}
+
 export async function detectClaudeCodeExecutable(
-  customPath?: string
+  customPath?: string,
+  workspaceDir?: string
 ): Promise<string | undefined> {
   const explicitPath = customPath?.trim();
   if (explicitPath) {
     return (await isExecutable(explicitPath)) ? explicitPath : undefined;
   }
 
-  for (const candidate of getClaudeExecutableCandidates(customPath)) {
-    if (await isExecutable(candidate)) {
-      return candidate;
-    }
-  }
+  const installs = await listClaudeCodeInstalls();
+  if (installs.length <= 1) return installs[0];
+  const versions = await Promise.all(
+    installs.map((install) =>
+      readClaudeCodeVersion(install, workspaceDir).catch(() => undefined)
+    )
+  );
+  return pickClaudeCodeInstall(
+    installs.map((install, index) => ({ path: install, version: versions[index] }))
+  );
+}
 
-  const fromPath = await findClaudeOnPath();
-  return fromPath && (await isExecutable(fromPath)) ? fromPath : undefined;
+// `--version` launches the CLI, so its answer is kept until the installed file changes.
+const versionCache = new Map<string, Promise<string | undefined>>();
+
+async function readClaudeCodeVersion(
+  executablePath: string,
+  workspaceDir?: string
+): Promise<string | undefined> {
+  const file = await stat(executablePath);
+  const key = `${executablePath}\0${file.size}\0${file.mtimeMs}`;
+  let version = versionCache.get(key);
+  if (!version) {
+    version = execClaude(executablePath, ["--version"], {
+      timeout: DETECTION_TIMEOUT_MS,
+      cwd: workspaceDir
+    }).then((result) => result.stdout.trim() || undefined);
+    versionCache.set(key, version);
+    // A launch that failed is tried again next time.
+    version.catch(() => versionCache.delete(key));
+  }
+  return version;
+}
+
+/** The empty folder Claude Code runs in; created on first use. */
+async function prepareWorkspace(workspaceDir?: string): Promise<void> {
+  if (workspaceDir) await mkdir(workspaceDir, { recursive: true, mode: 0o700 });
 }
 
 export function createClaudeSubscriptionEnvironment(): NodeJS.ProcessEnv {
@@ -190,10 +279,12 @@ export function parseClaudeAuthStatusOutput(
 }
 
 export async function getClaudeCodeStatus(
-  customPath?: string
+  customPath?: string,
+  workspaceDir?: string
 ): Promise<ClaudeCodeStatus> {
   const checkedAt = new Date().toISOString();
-  const executablePath = await detectClaudeCodeExecutable(customPath);
+  await prepareWorkspace(workspaceDir);
+  const executablePath = await detectClaudeCodeExecutable(customPath, workspaceDir);
   if (!executablePath) {
     return {
       state: "not-installed",
@@ -207,10 +298,7 @@ export async function getClaudeCodeStatus(
 
   let version: string | undefined;
   try {
-    const result = await execClaude(executablePath, ["--version"], {
-      timeout: DETECTION_TIMEOUT_MS
-    });
-    version = result.stdout.trim() || undefined;
+    version = await readClaudeCodeVersion(executablePath, workspaceDir);
   } catch (caught) {
     return {
       state: "connection-failed",
@@ -224,7 +312,8 @@ export async function getClaudeCodeStatus(
 
   try {
     const result = await execClaude(executablePath, ["auth", "status"], {
-      timeout: AUTH_TIMEOUT_MS
+      timeout: AUTH_TIMEOUT_MS,
+      cwd: workspaceDir
     });
     const payload = parseClaudeAuthStatusOutput(result.stdout);
     const usesSubscription =
@@ -274,15 +363,17 @@ export async function getClaudeCodeStatus(
 }
 
 export async function launchClaudeCodeLogin(
-  customPath?: string
+  customPath?: string,
+  workspaceDir?: string
 ): Promise<ClaudeCodeStatus> {
-  const status = await getClaudeCodeStatus(customPath);
+  const status = await getClaudeCodeStatus(customPath, workspaceDir);
   if (!status.installed || !status.executablePath || status.authenticated) {
     return status;
   }
 
   try {
     const child = spawn(status.executablePath, ["auth", "login"], {
+      cwd: workspaceDir,
       detached: true,
       stdio: "ignore",
       windowsHide: false,
@@ -306,9 +397,10 @@ export async function launchClaudeCodeLogin(
 }
 
 export async function testClaudeCodeConnection(
-  customPath?: string
+  customPath?: string,
+  workspaceDir?: string
 ): Promise<ClaudeCodeConnectionTest> {
-  const status = await getClaudeCodeStatus(customPath);
+  const status = await getClaudeCodeStatus(customPath, workspaceDir);
   if (!status.authenticated || !status.executablePath) {
     return { ok: false, status, message: status.message };
   }
@@ -318,6 +410,7 @@ export async function testClaudeCodeConnection(
     let reply = "";
     await streamClaudeCodeCompletion({
       executablePath: status.executablePath,
+      workspaceDir,
       instructions:
         "You are performing a connection check. Reply with exactly: Connected",
       messages: [{ role: "user", content: "Test the connection." }],
@@ -365,9 +458,11 @@ export async function testClaudeCodeConnection(
  * initializes, reports its catalog, and closes. Spends no usage.
  */
 export async function listClaudeCodeModels(
-  executablePath: string
+  executablePath: string,
+  workspaceDir?: string
 ): Promise<ClaudeCliModel[]> {
   const sdk = await import("@anthropic-ai/claude-agent-sdk");
+  await prepareWorkspace(workspaceDir);
   const controller = new AbortController();
   // Streaming-input mode keeps the session open with no prompt to answer.
   async function* noPrompt(): AsyncGenerator<never> {
@@ -380,6 +475,7 @@ export async function listClaudeCodeModels(
     options: {
       abortController: controller,
       pathToClaudeCodeExecutable: executablePath,
+      ...(workspaceDir ? { cwd: workspaceDir } : {}),
       tools: [],
       settingSources: [],
       persistSession: false,
@@ -471,11 +567,15 @@ export async function streamClaudeCodeCompletion(
       (sourceTool) => `mcp__coroslink__${sourceTool.name}`
     );
 
+    await prepareWorkspace(options.workspaceDir);
+    // An abort that came before the listener existed never fires it.
+    if (options.signal.aborted) throw new Error("cancelled");
     const stream = sdk.query({
       prompt: claudePrompt(options.messages),
       options: {
         abortController: controller,
         pathToClaudeCodeExecutable: options.executablePath,
+        ...(options.workspaceDir ? { cwd: options.workspaceDir } : {}),
         systemPrompt: options.instructions,
         ...(options.model ? { model: options.model } : {}),
         tools: [],
@@ -620,12 +720,12 @@ function jsonSchemaToZodShape(
 
 /**
  * The conversation as one Claude turn. Attached images follow the transcript
- * as image blocks, which only streaming input can carry.
+ * as image blocks, which only streaming input can carry. Coach trims long
+ * conversations to its history budget before they get here.
  */
 export function claudePrompt(messages: ChatMessage[]): string | AsyncIterable<SDKUserMessage> {
-  const recent = messages.slice(-CLAUDE_PROMPT_MESSAGES);
-  const text = formatClaudePrompt(recent);
-  const images = recent.flatMap((message) => message.images ?? []);
+  const text = formatClaudePrompt(messages);
+  const images = messages.flatMap((message) => message.images ?? []);
   if (images.length === 0) return text;
   const message: SDKUserMessage = {
     type: "user",
@@ -649,11 +749,8 @@ export function claudePrompt(messages: ChatMessage[]): string | AsyncIterable<SD
   })();
 }
 
-const CLAUDE_PROMPT_MESSAGES = 30;
-
 function formatClaudePrompt(messages: ChatMessage[]): string {
   const transcript = messages
-    .slice(-CLAUDE_PROMPT_MESSAGES)
     .map(
       (message) =>
         `${message.role === "assistant" ? "Assistant" : "Athlete"}: ${message.content}`
@@ -669,9 +766,10 @@ function formatClaudePrompt(messages: ChatMessage[]): string {
 async function execClaude(
   executablePath: string,
   args: string[],
-  options: { timeout: number }
+  options: { timeout: number; cwd?: string }
 ): Promise<{ stdout: string; stderr: string }> {
   const result = await execFileAsync(executablePath, args, {
+    cwd: options.cwd,
     timeout: options.timeout,
     windowsHide: true,
     env: createClaudeSubscriptionEnvironment(),

@@ -41,10 +41,12 @@ const {
   `${distUrl("chatResponsesProtocol.js")}?cacheBust=${Date.now()}`
 );
 const {
+  buildAthleteQuestionGuide,
   buildBaseCoachInstructions,
   buildCoachInstructions,
   buildCurrentTimeInstruction,
   buildCoachSportCapabilityGuide,
+  buildWorkoutToolGuide,
   formatCoachDashboard,
   formatRecentActivityMix,
   formatUpcomingWorkoutSport
@@ -55,15 +57,63 @@ assert.match(coachInstructions, /multi-sport endurance and strength-training coa
 assert.match(coachInstructions, /Honor every sport the athlete explicitly requests/);
 assert.match(coachInstructions, /Never add an unfamiliar sport merely for variety/);
 assert.match(coachInstructions, /Open Water Swim is not Pool Swim/);
-assert.match(coachInstructions, /exactly one standalone workout/);
-assert.match(coachInstructions, /call draft_workout/);
-assert.match(coachInstructions, /Workout Library or Calendar/);
-assert.match(coachInstructions, /never disguise it as a one-workout training plan/);
-assert.match(coachInstructions, /exercise_resolution_required/);
-assert.match(coachInstructions, /call search_coros_exercises first/);
-assert.match(coachInstructions, /naming mismatch alone is never a reason/);
-assert.match(coachInstructions, /call the same draft tool again in the same response/);
-assert.match(coachInstructions, /request_coach_input/);
+assert.match(coachInstructions, /Never trigger a write until the athlete confirms/);
+// Tool rules belong to the tool guide, which states them only when the tool is offered.
+for (const tool of ["draft_workout", "search_coros_exercises", "list_scheduled_workouts", "delete_workout", "request_coach_input"]) {
+  assert.ok(!coachInstructions.includes(tool), `the base prompt names ${tool}`);
+}
+
+const workoutGuide = buildWorkoutToolGuide([
+  "draft_workout",
+  "draft_training_plan",
+  "search_coros_exercises",
+  "upload_training_plan",
+  "list_scheduled_workouts",
+  "delete_workout"
+]);
+assert.match(workoutGuide, /exactly one standalone workout/);
+assert.match(workoutGuide, /call draft_workout/);
+assert.match(workoutGuide, /Workout Library or Calendar/);
+assert.match(workoutGuide, /Never disguise it as a one-workout training plan/);
+assert.match(workoutGuide, /exercise_resolution_required/);
+assert.match(workoutGuide, /call search_coros_exercises first/);
+assert.match(workoutGuide, /naming mismatch alone is never a reason/);
+assert.match(workoutGuide, /call the same draft tool again in the same response/);
+assert.match(workoutGuide, /stage a confirmation card/);
+assert.ok(workoutGuide.includes(buildCoachSportCapabilityGuide()));
+// Each rule once: the guide repeats nothing the base prompt says.
+for (const rule of [/typed intensity field/g, /rest_type=1/g, /search_coros_exercises first/g, /Delete from COROS/g]) {
+  assert.equal(workoutGuide.match(rule)?.length, 1, String(rule));
+}
+// Without the calendar permission there are no delete tools, so no delete rule either.
+const draftOnlyGuide = buildWorkoutToolGuide(["draft_workout", "draft_training_plan", "search_coros_exercises"]);
+assert.ok(!draftOnlyGuide.includes("delete_workout"));
+assert.ok(!draftOnlyGuide.includes("list_scheduled_workouts"));
+assert.equal(buildWorkoutToolGuide([]), "");
+assert.match(buildAthleteQuestionGuide(), /call request_coach_input/);
+assert.match(buildAthleteQuestionGuide(), /at most once per turn/);
+
+// ----- Conversation history budget -----
+const {
+  CHAT_HISTORY_TOKEN_BUDGETS,
+  chatHistoryNote,
+  estimateChatMessageTokens,
+  fitChatHistory
+} = await import(`${distUrl("chatHistoryWindow.js")}?cacheBust=${Date.now()}`);
+const turn = (index) => ({ role: index % 2 ? "assistant" : "user", content: `${index}`.padEnd(400, "x") });
+const shortChat = Array.from({ length: 6 }, (_, index) => turn(index));
+assert.deepEqual(fitChatHistory(shortChat, 10_000), { messages: shortChat, omitted: 0 });
+assert.equal(chatHistoryNote(0), "");
+const longChat = Array.from({ length: 50 }, (_, index) => turn(index));
+const fitted = fitChatHistory(longChat, 1_000);
+assert.equal(fitted.messages.length, 10, "100-token messages fill a 1,000-token budget ten at a time");
+assert.equal(fitted.omitted, 40);
+assert.equal(fitted.messages.at(-1), longChat.at(-1), "the newest message is always kept");
+assert.match(chatHistoryNote(fitted.omitted), /40 earliest messages of this conversation were left out/);
+const huge = { role: "user", content: "x".repeat(400_000) };
+assert.deepEqual(fitChatHistory([...shortChat, huge], 1_000).messages, [huge], "the latest message goes even over budget");
+assert.equal(estimateChatMessageTokens({ role: "user", content: "abcd", images: [{ label: "a", mimeType: "image/png", base64: "x".repeat(90_000) }] }), 1_001);
+assert.ok(CHAT_HISTORY_TOKEN_BUDGETS.local < CHAT_HISTORY_TOKEN_BUDGETS.chatgpt);
 
 const { MAX_CUSTOM_COACH_INSTRUCTIONS } = await import(
   `${distUrl("types.js")}?cacheBust=${Date.now()}`

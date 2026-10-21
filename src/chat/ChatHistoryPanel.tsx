@@ -1,5 +1,5 @@
 import { t, useLanguage } from "../i18n/tools";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Loader2, PanelLeftClose, Plus, Search, Trash2 } from "lucide-react";
 import type { ChatSessionSummary } from "../../electron/types";
 import { ChatSessionRow } from "./ChatSessionRow";
@@ -42,6 +42,18 @@ export function ChatHistoryPanel({
   const groups = useMemo(
     () => groupChatSessions(filteredSessions),
     [filteredSessions, language]
+  );
+
+  // Rows are memoized, so they get stable callbacks that always call the latest handlers.
+  const handlersRef = useRef({ onSelectSession, onDeleteSession });
+  handlersRef.current = { onSelectSession, onDeleteSession };
+  const selectSession = useCallback(
+    (sessionId: string) => handlersRef.current.onSelectSession(sessionId),
+    []
+  );
+  const deleteSession = useCallback(
+    (sessionId: string) => handlersRef.current.onDeleteSession(sessionId),
+    []
   );
 
   // Only worth offering once something has been said; a lone blank chat stays.
@@ -112,8 +124,8 @@ export function ChatHistoryPanel({
                     session={session}
                     active={session.id === activeSessionId}
                     disabled={busy}
-                    onSelect={() => onSelectSession(session.id)}
-                    onDelete={() => onDeleteSession(session.id)}
+                    onSelect={selectSession}
+                    onDelete={deleteSession}
                   />
                 ))}
               </div>

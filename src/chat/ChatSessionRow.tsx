@@ -1,23 +1,30 @@
 import { t, useLanguage } from "../i18n/tools";
 import { Trash2 } from "lucide-react";
-import type { MouseEvent } from "react";
+import { memo, type MouseEvent } from "react";
 import type { ChatSessionSummary } from "../../electron/types";
 import { formatSessionRelativeTime } from "./chatSessionGroups";
 
-export function ChatSessionRow({
+/**
+ * One conversation in the sidebar. Memoized: Coach re-renders on every streamed
+ * token, and a row only changes with its session, so its callbacks take the id
+ * and must stay stable.
+ */
+export const ChatSessionRow = memo(function ChatSessionRow({
   session,
   active,
   disabled,
-  onSelect,
-  onDelete
+  onSelect: selectSession,
+  onDelete: deleteSession
 }: {
   session: ChatSessionSummary;
   active: boolean;
   disabled?: boolean;
-  onSelect: () => void;
-  onDelete: () => void;
+  onSelect: (sessionId: string) => void;
+  onDelete: (sessionId: string) => void;
 }) {
   useLanguage();
+  const onSelect = () => selectSession(session.id);
+  const onDelete = () => deleteSession(session.id);
   // New sessions are stored with the English default title.
   const title = session.title === "New chat" ? t("New chat") : session.title;
   const handleDelete = (event: MouseEvent) => {
@@ -81,4 +88,4 @@ export function ChatSessionRow({
       </span>
     </div>
   );
-}
+});

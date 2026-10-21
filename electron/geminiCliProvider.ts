@@ -829,12 +829,12 @@ async function sessionStartError(
   return refusal;
 }
 
-const GEMINI_PROMPT_MESSAGES = 30;
-
-/** The conversation as one ACP prompt: the transcript, then any attached images. */
+/**
+ * The conversation as one ACP prompt: the transcript, then any attached images.
+ * Coach trims long conversations to its history budget before they get here.
+ */
 export function geminiPrompt(messages: ChatMessage[]): Array<Record<string, unknown>> {
-  const recent = messages.slice(-GEMINI_PROMPT_MESSAGES);
-  const transcript = recent
+  const transcript = messages
     .map(
       (message) =>
         `${message.role === "assistant" ? "Assistant" : "Athlete"}: ${message.content}`
@@ -846,7 +846,7 @@ export function geminiPrompt(messages: ChatMessage[]): Array<Record<string, unkn
     transcript;
   return [
     { type: "text", text },
-    ...recent.flatMap((message) => message.images ?? []).flatMap((image) => [
+    ...messages.flatMap((message) => message.images ?? []).flatMap((image) => [
       { type: "text", text: `Image: ${image.label}` },
       { type: "image", mimeType: image.mimeType, data: image.base64 }
     ])
