@@ -28,7 +28,11 @@ const humanize = (s) =>
     .replace(/\b\w/g, (c) => c.toUpperCase())
     .trim();
 
-const dict = {};
+// Built-in codes whose catalogue overview is not an sid_ key. T1016's is
+// COROS's Chinese name, 坐姿肩上哑铃推举 (seated dumbbell shoulder press).
+const OVERRIDES = { T1016: "Seated Dumbbell Shoulder Press" };
+
+const dict = { ...OVERRIDES };
 for (const it of items) {
   const key = it.name;
   if (!key || !/^[TS]\d/.test(key)) continue;

@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Saving a strength workout made in the COROS app keeps its exercises' names.** The workout editor saved every exercise you hadn't swapped as "Training" with a generic description, replacing the name and description COROS had stored, so CorosLink showed "Training" when you opened the workout again. HYROX stations had the same problem.
+- **Distance zones use COROS's 5 km steps.** Training Hub's distance chart labelled COROS's buckets 0–10, 10–20 km and so on. They are 0–5, 5–10 km and so on up to 25+ km, so a 7 km run no longer shows under 0–10 km.
+- Seated Dumbbell Shoulder Press (T1016) shows its name in strength sessions and the workout editor instead of its code. COROS's catalog gives it only a Chinese name.
 
 ## [0.1.66] - 2026-10-25
 

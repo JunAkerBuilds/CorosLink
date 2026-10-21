@@ -9,6 +9,8 @@ const { resolveExerciseName } = await import(`${modUrl.href}?cacheBust=${Date.no
 // Known library code resolves to English name.
 assert.equal(resolveExerciseName("T1178"), "Two Arm Kettlebell Swings");
 assert.equal(resolveExerciseName("T1310"), "Farmers Walk");
+// T1016 is the one built-in code whose catalogue overview is Chinese, not an sid_ key.
+assert.equal(resolveExerciseName("T1016"), "Seated Dumbbell Shoulder Press");
 
 // Custom exercise: rawName is human-readable and not a T#/S# code → use it.
 assert.equal(resolveExerciseName("Chaise", "Chaise"), "Chaise");

@@ -114,13 +114,17 @@ const DISTANCE_ZONE_COLORS = [
   "#6f7487"
 ];
 
+// COROS's distance*AreaList entries are unlabelled 5 km buckets. A live
+// /analyse/query reply (2026-10-21) put a 3.1 km run in entry 0, 5.0 and
+// 7.0 km runs in entry 1 and a 10.0 km run in entry 2; the six entries
+// continue in 5 km steps, the last one open-ended.
 const DISTANCE_BUCKETS: DistanceBucket[] = [
-  { label: "0–10 km", minMeters: 0, maxMeters: 10_000 },
-  { label: "10–20 km", minMeters: 10_000, maxMeters: 20_000 },
-  { label: "20–30 km", minMeters: 20_000, maxMeters: 30_000 },
-  { label: "30–40 km", minMeters: 30_000, maxMeters: 40_000 },
-  { label: "40–50 km", minMeters: 40_000, maxMeters: 50_000 },
-  { label: "50+ km", minMeters: 50_000 }
+  { label: "0–5 km", minMeters: 0, maxMeters: 5_000 },
+  { label: "5–10 km", minMeters: 5_000, maxMeters: 10_000 },
+  { label: "10–15 km", minMeters: 10_000, maxMeters: 15_000 },
+  { label: "15–20 km", minMeters: 15_000, maxMeters: 20_000 },
+  { label: "20–25 km", minMeters: 20_000, maxMeters: 25_000 },
+  { label: "25+ km", minMeters: 25_000 }
 ];
 
 const DISTANCE_METRIC_LABELS: Record<DistanceMetric, string> = {

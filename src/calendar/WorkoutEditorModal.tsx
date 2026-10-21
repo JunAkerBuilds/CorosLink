@@ -60,6 +60,7 @@ import {
 } from "../units/units";
 import { ExerciseCombobox } from "./ExerciseCombobox";
 import { ExercisePreview } from "./ExercisePreview";
+import { resolveExerciseName } from "../training/exerciseNames";
 import { CLIMB_GRADES, CLIMB_SYSTEM_IDS, FTP_PRESETS, HEART_RATE_PRESETS, PACE_PRESETS, RUNNING_POWER_PRESETS, SWIM_STROKE_IDS, WORKOUT_SPORT_CAPABILITIES, validateWorkoutDraftShared, workoutIntensitiesForStep, workoutTargetsForStep } from "../../electron/workoutCapabilities";
 
 interface WorkoutEditorModalProps {
@@ -1018,7 +1019,7 @@ function StepCard({ step, context, sport, exerciseOptions, exerciseOptionsLoadin
   const heading = (
     <div className="workout-strength-step-heading">
       <strong>{strengthExercise
-        ? step.exerciseName?.trim() || t("Choose an exercise")
+        ? resolveExerciseName(step.exerciseName?.trim() ?? "") || t("Choose an exercise")
         : step.name.trim() || stepKindLabel(step.kind, sport)}</strong>
       <span>{strengthExercise ? strengthStepSummary(step) : strengthTargetSummary(step.target)}</span>
     </div>
@@ -1037,7 +1038,7 @@ function StepCard({ step, context, sport, exerciseOptions, exerciseOptionsLoadin
       <TargetFields step={step} context={context} sport={sport} disabled={locked} onChange={onChange} />
       <IntensityFields step={step} context={context} sport={sport} disabled={locked} onChange={onChange} />
       {step.kind === "sendOff" ? <label className="workout-control-group"><span>{t("Send-off interval")}</span><ClockInput label={t("Send-off interval")} seconds={step.sendOffSeconds ?? 120} disabled={locked} onChange={(seconds) => onChange({ ...step, sendOffSeconds: seconds })} /></label> : null}
-      {capability.requiresExercise && step.kind === "training" ? <div className="workout-control-group workout-exercise-control"><span>{t("Exercise")}</span><ExerciseCombobox value={step.exerciseName ?? ""} selectedId={step.exerciseId} options={exerciseOptions} placeholder={t("Search by COROS exercise name")} label={t("Exercise")} loading={exerciseOptionsLoading} disabled={locked} onChange={(selection) => onChange({ ...step, exerciseName: selection.name, exerciseId: selection.id, exerciseKind: selection.exerciseKind })} />{step.exerciseId ? <small>{t("COROS exercise selected")}</small> : <small>{t("Select one exact COROS exercise before saving.")}</small>}</div> : null}
+      {capability.requiresExercise && step.kind === "training" ? <div className="workout-control-group workout-exercise-control"><span>{t("Exercise")}</span><ExerciseCombobox value={resolveExerciseName(step.exerciseName ?? "")} selectedId={step.exerciseId} options={exerciseOptions} placeholder={t("Search by COROS exercise name")} label={t("Exercise")} loading={exerciseOptionsLoading} disabled={locked} onChange={(selection) => onChange({ ...step, exerciseName: selection.name, exerciseId: selection.id, exerciseKind: selection.exerciseKind })} />{step.exerciseId ? <small>{t("COROS exercise selected")}</small> : <small>{t("Select one exact COROS exercise before saving.")}</small>}</div> : null}
     </div>
   );
   return (
@@ -1194,7 +1195,7 @@ function StrengthStepFields({
         <section className="strength-block">
           <h4>{t("Movement")}</h4>
           <ExerciseCombobox
-            value={step.exerciseName ?? ""}
+            value={resolveExerciseName(step.exerciseName ?? "")}
             selectedId={step.exerciseId}
             options={exerciseOptions}
             placeholder={t("Search the COROS exercise library")}
@@ -1369,7 +1370,7 @@ function StrengthStepFields({
         <aside className="workout-strength-preview">
           <ExercisePreview
             option={selectedExercise}
-            name={step.exerciseName ?? selectedExercise.name}
+            name={resolveExerciseName(step.exerciseName ?? selectedExercise.name)}
             showTargets
           />
         </aside>
