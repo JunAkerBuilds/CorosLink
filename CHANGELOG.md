@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Fonts for template weather and health fields.** In Watch Face Studio, the Font picker now redraws a template's Current weather, UV, barometer, humidity and wind digits in the font you pick. **Keep template font** puts the template's own digits back.
 - **Size the status icons.** Studio's Height field and Reset size now work on the template's own Bluetooth and Do Not Disturb icons, and **Match height** in the align bar sizes them to the text beside them.
 - **Tint PNG fonts.** A layer's Tint color now recolors its PNG font, official COROS fonts included. **Remove tint** brings back the font's own colors.
-- **Every font weight.** A weight the font family doesn't include, such as Arial Light or SemiBold, is now drawn thinner or bolder instead of as Regular or Bold.
+- **Every font weight.** A weight the font family doesn't include, such as Arial Light or SemiBold, is now drawn thinner or bolder instead of as Regular or Bold. A font that comes in only one weight, such as DIN Condensed, draws as it is.
 
 ### Changed
 

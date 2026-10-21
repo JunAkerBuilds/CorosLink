@@ -473,7 +473,9 @@ function roundMetric(value: number): number {
  * Requests that draw the same face share its weight. A shared face holding
  * 400 or 700 is taken as Regular or Bold, so those requests never change;
  * any other is placed by its ink between them (Roboto's 800 and 900 draw its
- * Black, Open Sans's draw its ExtraBold).
+ * Black, Open Sans's draw its ExtraBold). A family that draws one face for
+ * every weight (DIN Condensed is only Bold, Impact only Black) gives nothing
+ * to place it by, so it draws as it is at every weight.
  */
 function drawnFaceWeight(face: WatchfaceFontFace): number {
   const key = faceKey(face);
@@ -504,6 +506,10 @@ function drawnFaceWeight(face: WatchfaceFontFace): number {
   } catch {
     // A canvas that cannot be read back draws every weight as requested.
     drawnFaceWeights.set(key, face.weight);
+    return face.weight;
+  }
+  if (new Set(prints.values()).size === 1) {
+    for (const weight of prints.keys()) drawnFaceWeights.set(faceKey({ ...face, weight }), weight);
     return face.weight;
   }
   const regularInk = inks.get(400)!;

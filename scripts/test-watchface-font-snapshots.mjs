@@ -3,6 +3,7 @@ import {
   attachWatchfaceFontSnapshots,
   collectWatchfaceFontUses,
   findMissingWatchfaceFonts,
+  isSyntheticWatchfaceWeight,
   measureWatchfaceText,
   normalizeWatchfaceFontFamily,
   setWatchfaceCanvasFont,
@@ -84,5 +85,44 @@ assert.equal(context.font, '20px "Futura"');
 const metrics = measureWatchfaceText(context, "12");
 assert.equal(metrics.width, 20);
 assert.equal(metrics.actualBoundingBoxAscent, 7);
+
+// A weight is drawn thinner or bolder only when the family has other faces to place it by.
+{
+  // Each family's faces by the weights the browser draws them for.
+  const faces = {
+    "Two Face": (weight) => (weight <= 500 ? 100 : 200),
+    "One Face Bold": () => 200
+  };
+  const nativeDocument = globalThis.document;
+  globalThis.document = {
+    createElement: () => {
+      const probe = {
+        font: "",
+        clearRect: () => {},
+        fillText: () => {},
+        measureText: (text) => ({ width: text.length * 10 }),
+        getImageData: (_x, _y, width, height) => {
+          const [, weight, family] = /(\d{3}) \d+px "(.+)"/.exec(probe.font);
+          const data = new Uint8ClampedArray(width * height * 4);
+          data[3] = faces[family](Number(weight));
+          return { data };
+        }
+      };
+      return { width: 0, height: 0, getContext: () => probe };
+    }
+  };
+  try {
+    const synthetic = (family, weight) => isSyntheticWatchfaceWeight({ family, weight, style: "normal" });
+    assert.equal(synthetic("Two Face", 300), true, "a weight between faces is drawn thinner");
+    assert.equal(synthetic("Two Face", 400), false);
+    assert.equal(synthetic("Two Face", 700), false);
+    assert.equal(synthetic("Two Face", 900), true, "a weight past the boldest face is drawn bolder");
+    for (const weight of [100, 400, 700, 900]) {
+      assert.equal(synthetic("One Face Bold", weight), false, `a single-face family draws as it is at ${weight}`);
+    }
+  } finally {
+    globalThis.document = nativeDocument;
+  }
+}
 
 console.log("Watchface font snapshot tests passed");
