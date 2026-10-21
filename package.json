@@ -82,6 +82,8 @@
     "test:activity-detail": "npm run build:electron && node scripts/test-activity-detail.mjs",
     "test:training-activity-store": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-training-activity-store.cjs",
     "test:activity-streams": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-activity-streams.mjs",
+    "test:training-labels": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-training-labels.mjs",
+    "test:run-efficiency": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-run-efficiency.mjs",
     "test:training-activities-ui": "electron scripts/test-training-activities-ui.cjs",
     "test:weekly-activity": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-weekly-activity.mjs",
     "test:units": "npm run build:electron && node scripts/test-unit-system.mjs",
@@ -171,7 +173,7 @@
     "dist": "npm run binaries:prepare && npm run build && electron-builder --publish never",
     "dist:mac": "npm run binaries:prepare:mac && npm run build && electron-builder --mac --arm64 --x64 --publish never",
     "dist:win": "npm run binaries:prepare:win && npm run build && electron-builder --win nsis --x64 --publish never",
-    "dist:linux": "npm run binaries:prepare:linux && npm run build && electron-builder --linux AppImage --x64 --publish never",
+    "dist:linux": "npm run binaries:prepare:linux && npm run build && electron-builder --linux AppImage deb --x64 --publish never",
     "release:prepare": "node scripts/prepare-release.mjs",
     "release:check-version": "node scripts/sync-release-version.mjs --check",
     "release:verify-artifacts": "node scripts/verify-release-artifacts.mjs",
@@ -321,10 +323,15 @@
     },
     "linux": {
       "target": [
-        "AppImage"
+        "AppImage",
+        "deb"
       ],
       "category": "AudioVideo",
-      "icon": "build/icon.png"
+      "icon": "build/icons",
+      "artifactName": "${productName}-${version}.${ext}",
+      "maintainer": "CorosLink <JunAkerBuilds@users.noreply.github.com>",
+      "synopsis": "Unofficial COROS companion: training analytics, watch faces and watch sync",
+      "syncDesktopName": true
     }
   },
   "dependencies": {

@@ -182,7 +182,8 @@ export function getChatAnalyticsTools(): CorosMcpTool[] {
       name: "get_fitness_trends",
       description:
         "Fetch daily training load, resting HR, HRV vs baseline, and sleep score " +
-        "for the last N days (default 7, up to 90) for recovery and fitness analysis. " +
+        "for the last N days (default 7, up to 90) for recovery and fitness analysis, " +
+        "plus the latest running and cycling VO2max. " +
         "Windows longer than 14 days also include weekly averages.",
       inputSchema: {
         type: "object",
@@ -270,6 +271,30 @@ export function buildWeeklyTrendSummary(points: TrainingTrendPoint[]): string[] 
   return lines;
 }
 
+/**
+ * VO2max moves in plateaus (COROS re-estimates it after a qualifying run or
+ * ride), so name the latest value and the one before it, not every day.
+ */
+export function buildVo2maxSummary(points: TrainingTrendPoint[]): string[] {
+  const describe = (label: string, pick: (point: TrainingTrendPoint) => number | undefined) => {
+    const readings = points
+      .map((point) => ({ label: point.label, value: pick(point) }))
+      .filter((reading): reading is { label: string; value: number } =>
+        typeof reading.value === "number" && Number.isFinite(reading.value) && reading.value > 0
+      );
+    const latest = readings.at(-1);
+    if (!latest) return undefined;
+    const rounded = (value: number) => Math.round(value * 10) / 10;
+    const previous = [...readings].reverse().find((reading) => rounded(reading.value) !== rounded(latest.value));
+    return `- ${label}: ${rounded(latest.value)} on ${latest.label}` +
+      (previous ? ` (was ${rounded(previous.value)} on ${previous.label})` : "");
+  };
+  return [
+    describe("Running VO2max", (point) => point.vo2max),
+    describe("Cycling VO2max", (point) => point.cycleVo2max)
+  ].filter((line): line is string => line !== undefined);
+}
+
 export function formatFitnessTrendLines(
   points: TrainingTrendPoint[],
   days: number
@@ -290,6 +315,10 @@ export function formatFitnessTrendLines(
         : undefined
     ].filter(Boolean);
     lines.push(`- ${parts.join(" · ")}`);
+  }
+  const vo2max = buildVo2maxSummary(points);
+  if (vo2max.length > 0) {
+    lines.push("", "VO2max (COROS estimate; running from runs, cycling from rides):", ...vo2max);
   }
   if (days > 14 && points.length > 7) {
     lines.push("", "Weekly summary:", ...buildWeeklyTrendSummary(points));

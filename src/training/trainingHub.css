@@ -363,3 +363,13 @@
     transition: none;
   }
 }
+
+/* VO2 max widget: run/ride switch once COROS has a cycling estimate. */
+.vo2-sport-switch {
+  flex: 0 0 auto;
+}
+
+.vo2-sport-switch .library-filter-option {
+  min-height: 26px;
+  padding: 0 8px;
+}

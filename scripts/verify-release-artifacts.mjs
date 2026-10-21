@@ -35,8 +35,9 @@ const PLATFORM_CHECKS = {
   linux: {
     label: "Linux",
     metadataFile: "latest-linux.yml",
-    requiredPatterns: [/\.AppImage$/i],
-    // AppImage blockmaps are embedded in the file, not written as *.AppImage.blockmap.
+    requiredPatterns: [/\.AppImage$/i, /\.deb$/i],
+    // AppImage blockmaps are embedded in the file, not written as
+    // *.AppImage.blockmap, and a deb has none.
     blockmapPatterns: []
   }
 };
@@ -135,6 +136,39 @@ function verifyWindowsMetadataReferences(metadataFile, contents, files, errors) 
   }
 }
 
+function readFileUrls(contents) {
+  const filesIndex = contents.search(/^files:\s*$/m);
+  if (filesIndex === -1) {
+    return [];
+  }
+
+  return [...contents.slice(filesIndex).matchAll(/^\s*-?\s*url:\s*(.+)$/gm)].map(
+    (match) => cleanYamlScalar(match[1])
+  );
+}
+
+/**
+ * A deb install updates from the deb and an AppImage from the AppImage
+ * (electron-updater checks for `resources/package-type`), so latest-linux.yml
+ * has to name both. Building the deb leaves `package-type` in linux-unpacked;
+ * if the AppImage were built after it, the AppImage would carry the file and
+ * try to update through dpkg, so `AppImage` is listed first.
+ */
+function verifyLinuxMetadataReferences(metadataFile, contents, files, errors) {
+  const listed = readFileUrls(contents);
+  for (const pattern of [/\.AppImage$/i, /\.deb$/i]) {
+    const installer = files.find((file) => pattern.test(file));
+    if (installer && !listed.includes(installer)) {
+      errors.push(`${metadataFile} does not list ${installer}, the file the updater downloads`);
+    }
+  }
+  for (const url of listed) {
+    if (!files.includes(url)) {
+      errors.push(`${metadataFile} references missing installer ${url}`);
+    }
+  }
+}
+
 function readMetadata(metadataPath) {
   const contents = fs.readFileSync(metadataPath, "utf8");
   const match = readYamlField(contents, "version");
@@ -187,6 +221,15 @@ export function verifyPlatform(platform, options = {}) {
 
     if (platform === "windows") {
       verifyWindowsMetadataReferences(
+        check.metadataFile,
+        metadata.contents,
+        files,
+        errors
+      );
+    }
+
+    if (platform === "linux") {
+      verifyLinuxMetadataReferences(
         check.metadataFile,
         metadata.contents,
         files,

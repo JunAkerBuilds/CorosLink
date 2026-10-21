@@ -1,9 +1,17 @@
 import { useLanguage, t } from "../../i18n/training";
 import { useEffect, useState } from "react";
-import { Activity } from "lucide-react";
+import { Activity, Bike } from "lucide-react";
+import type { TrainingHubDailyMetric } from "../../../electron/types";
 import { formatHappenDayLabel, formatSignedDelta } from "../formatters";
 import { mergeTrainingDayLists } from "../parsers";
 import type { TrainingHubSnapshot } from "../types";
+
+type Vo2Sport = "run" | "ride";
+
+const VO2_SPORT_FIELD: Record<Vo2Sport, "vo2max" | "cycleVo2max"> = {
+  run: "vo2max",
+  ride: "cycleVo2max"
+};
 
 interface Vo2MaxWidgetProps {
   snapshot: TrainingHubSnapshot | null;
@@ -93,14 +101,12 @@ function isFocusedBand(value: number | undefined, band: Vo2Band): boolean {
   );
 }
 
-function latestVo2Readings(snapshot: TrainingHubSnapshot | null): Vo2Reading[] {
-  return mergeTrainingDayLists(
-    snapshot?.dailyMetrics ?? null,
-    snapshot?.analytics ?? null
-  )
+function latestVo2Readings(days: TrainingHubDailyMetric[], sport: Vo2Sport): Vo2Reading[] {
+  const field = VO2_SPORT_FIELD[sport];
+  return days
     .map((day) => ({
       happenDay: day.happenDay,
-      value: day.vo2max
+      value: day[field]
     }))
     .filter(
       (reading): reading is Vo2Reading =>
@@ -111,7 +117,19 @@ function latestVo2Readings(snapshot: TrainingHubSnapshot | null): Vo2Reading[] {
 export function Vo2MaxWidget({ snapshot }: Vo2MaxWidgetProps) {
   useLanguage();
   const [isReady, setIsReady] = useState(false);
-  const readings = latestVo2Readings(snapshot);
+  const [pickedSport, setPickedSport] = useState<Vo2Sport>("run");
+  const days = mergeTrainingDayLists(
+    snapshot?.dailyMetrics ?? null,
+    snapshot?.analytics ?? null
+  );
+  const runReadings = latestVo2Readings(days, "run");
+  const rideReadings = latestVo2Readings(days, "ride");
+  // The switch appears once COROS has a cycling estimate; an athlete who only
+  // rides opens on it.
+  const sport: Vo2Sport =
+    rideReadings.length === 0 ? "run" : runReadings.length === 0 ? "ride" : pickedSport;
+  const readings = sport === "ride" ? rideReadings : runReadings;
+  const showSwitch = runReadings.length > 0 && rideReadings.length > 0;
   const latest = readings.at(-1);
   const previous = readings.at(-2);
   const value = latest?.value;
@@ -136,11 +154,29 @@ export function Vo2MaxWidget({ snapshot }: Vo2MaxWidgetProps) {
       <div className="vo2-widget-header">
         <div>
           <p className="eyebrow">VO2 Max</p>
-          <h2>{t("Running engine")}</h2>
+          <h2>{sport === "ride" ? t("Cycling engine") : t("Running engine")}</h2>
         </div>
-        <span className="vo2-widget-icon" aria-hidden="true">
-          <Activity size={16} />
-        </span>
+        {showSwitch ? (
+          <div className="library-filter-group vo2-sport-switch" role="group" aria-label={t("VO2 max sport")}>
+            {(["run", "ride"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                className={`library-filter-option${sport === option ? " active" : ""}`}
+                aria-pressed={sport === option}
+                title={option === "run" ? t("Running VO2 max") : t("Cycling VO2 max")}
+                onClick={() => setPickedSport(option)}
+              >
+                {option === "run" ? <Activity size={13} aria-hidden="true" /> : <Bike size={13} aria-hidden="true" />}
+                {option === "run" ? t("Run") : t("Ride")}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span className="vo2-widget-icon" aria-hidden="true">
+            {sport === "ride" ? <Bike size={16} /> : <Activity size={16} />}
+          </span>
+        )}
       </div>
 
       <div className="vo2-gauge" aria-label={t("VO2 max gauge")}>

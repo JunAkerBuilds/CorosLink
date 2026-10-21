@@ -1,5 +1,6 @@
 import { t, useLanguage, getLocale, formatNumber } from "../../i18n/training";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -9,7 +10,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent
 } from "react";
-import { Activity, Layers, RotateCcw, Rows3, X, ZoomIn } from "lucide-react";
+import { Activity, Layers, RotateCcw, Rows2, Rows3, X, ZoomIn } from "lucide-react";
 import type { UnitSystem } from "../../../electron/types";
 import {
   defineSelectionPreference,
@@ -47,7 +48,7 @@ import { formatDurationSeconds } from "../formatters";
 import type { RouteCursor } from "../routeCursor";
 import "../activityChannels.css";
 
-type ChannelLayout = "overlay" | "stacked";
+type ChannelLayout = "overlay" | "split" | "stacked";
 type ChannelAxis = "time" | "distance";
 const SMOOTHING_OPTIONS = [0, 5, 15, 30] as const;
 type Smoothing = (typeof SMOOTHING_OPTIONS)[number];
@@ -62,7 +63,7 @@ const CHANNELS_PREFERENCE = defineSelectionPreference<StreamChannelKey[]>({
 const LAYOUT_PREFERENCE = defineSelectionPreference<ChannelLayout>({
   key: "training.activityChannels.layout",
   defaultValue: "overlay",
-  validate: selectionIsOneOf(["overlay", "stacked"])
+  validate: selectionIsOneOf(["overlay", "split", "stacked"])
 });
 const AXIS_PREFERENCE = defineSelectionPreference<ChannelAxis>({
   key: "training.activityChannels.axis",
@@ -90,6 +91,15 @@ const LANE_PLOT = 78;
 const ELEVATION_LANE_PLOT = 56;
 const LANE_GAP = 8;
 const NAVIGATOR_HEIGHT = 38;
+const SPLIT_PLOT = 150;
+
+/**
+ * Split layout: what the athlete produced on top, what it cost the body below,
+ * on one clock. Grade sits with output, as the terrain the pace was run on;
+ * elevation is drawn behind both plots.
+ */
+const OUTPUT_CHANNELS = new Set<StreamChannelKey>(["pace", "gap", "power", "grade"]);
+const SPLIT_PLOT_TITLES = ["Output", "Body & form"] as const;
 const MIN_VIEW_SAMPLES = 20;
 const PAUSE_MARKER_SECONDS = 10;
 
@@ -182,7 +192,8 @@ function buildChannelSpecs(
 
   return {
     pace,
-    gap: runPace("gap", "Grade-adjusted pace", "GAP"),
+    // COROS calls its grade-adjusted pace "effort pace".
+    gap: runPace("gap", "Effort pace", "Effort"),
     hr: plain("hr", "Heart rate", "HR", "bpm", 12),
     cadence: plain("cadence", cycling ? t("Cycling cadence") : t("Cadence"), "Cadence", cycling ? "rpm" : "spm", 10),
     power: plain("power", "Power", "Power", "W", 40),
@@ -324,8 +335,10 @@ interface Lane {
   area: boolean;
   path: string;
   fill?: string;
-  /** Stacked layout: y of the lane title row. */
+  /** Stacked and split layouts: y of the lane title row. */
   titleY?: number;
+  /** Split layout: 0 the output plot, 1 the body plot. */
+  plot?: number;
 }
 
 function laneY(lane: Pick<Lane, "top" | "height" | "domain">, inverted: boolean, value: number): number {
@@ -416,25 +429,32 @@ export function ActivityChannels({ streams, cycling, elevationGain, cursor }: Ac
     return () => observer.disconnect();
   }, []);
 
-  const right = layout === "overlay" ? RIGHT_OVERLAY : RIGHT_STACKED;
+  const lines = useMemo(() => selected.filter((key) => key !== "elevation"), [selected]);
+  const showElevation = selected.includes("elevation");
+  // Split needs something on each side; with one side empty it draws as overlay.
+  const splitGroups = useMemo(() => {
+    const output = lines.filter((key) => OUTPUT_CHANNELS.has(key));
+    const body = lines.filter((key) => !OUTPUT_CHANNELS.has(key));
+    return output.length > 0 && body.length > 0 ? [output, body] : null;
+  }, [lines]);
+  const shownLayout: ChannelLayout = layout === "split" && !splitGroups ? "overlay" : layout;
+
+  const right = shownLayout === "stacked" ? RIGHT_STACKED : RIGHT_OVERLAY;
   const plotWidth = Math.max(40, width - LEFT - right);
   const hasLaps = streams.laps.length > 0;
   // Overlay needs the strip for its axis unit labels even without laps.
-  const plotTop = hasLaps || layout === "overlay" ? LAP_STRIP : 6;
+  const plotTop = hasLaps || shownLayout === "overlay" ? LAP_STRIP : 6;
   const [v0, v1] = view;
   const x0 = xs[v0]!;
   const x1 = xs[v1]!;
   const xSpan = x1 - x0 || 1;
   const sx = useCallback((x: number) => LEFT + ((x - x0) / xSpan) * plotWidth, [x0, xSpan, plotWidth]);
 
-  const lines = useMemo(() => selected.filter((key) => key !== "elevation"), [selected]);
-  const showElevation = selected.includes("elevation");
-
   const lanes = useMemo<Lane[]>(() => {
     if (width === 0) return [];
     const domainOf = (key: StreamChannelKey) => channelDomain(specs[key], display[key]!, v0, v1);
     const result: Lane[] = [];
-    const build = (key: StreamChannelKey, top: number, height: number, axisSide: Lane["axis"], area: boolean, tickTarget: number, titleY?: number) => {
+    const build = (key: StreamChannelKey, top: number, height: number, axisSide: Lane["axis"], area: boolean, tickTarget: number, titleY?: number, plot?: number) => {
       const domain = domainOf(key);
       if (!domain) return;
       const spec = specs[key];
@@ -453,11 +473,28 @@ export function ActivityChannels({ streams, cycling, elevationGain, cursor }: Ac
         area,
         path: linePath(segments),
         fill: area ? areaPath(segments, top + height) : undefined,
-        titleY
+        titleY,
+        plot
       });
     };
 
-    if (layout === "overlay") {
+    if (shownLayout === "split" && splitGroups) {
+      let top = plotTop;
+      splitGroups.forEach((group, plot) => {
+        const plotY = top + LANE_TITLE;
+        if (showElevation) {
+          const height = SPLIT_PLOT * OVERLAY_ELEVATION_SHARE;
+          build("elevation", plotY + SPLIT_PLOT - height, height, "none", true, 4, undefined, plot);
+        }
+        group.forEach((key, position) => {
+          build(key, plotY, SPLIT_PLOT, position === 0 ? "left" : position === 1 ? "right" : "none", false, 4, top + 15, plot);
+        });
+        top = plotY + SPLIT_PLOT + LANE_GAP;
+      });
+      return result;
+    }
+
+    if (shownLayout === "overlay") {
       if (showElevation) {
         const height = lines.length > 0 ? OVERLAY_PLOT * OVERLAY_ELEVATION_SHARE : OVERLAY_PLOT;
         build("elevation", plotTop + OVERLAY_PLOT - height, height, lines.length > 0 ? "none" : "left", true, 4);
@@ -475,13 +512,13 @@ export function ActivityChannels({ streams, cycling, elevationGain, cursor }: Ac
       top += LANE_TITLE + height + LANE_GAP;
     }
     return result;
-  }, [width, layout, lines, showElevation, specs, display, v0, v1, xs, sx, plotWidth, plotTop]);
+  }, [width, shownLayout, splitGroups, lines, showElevation, specs, display, v0, v1, xs, sx, plotWidth, plotTop]);
 
   const plotBottom =
-    layout === "overlay"
+    shownLayout === "overlay"
       ? plotTop + OVERLAY_PLOT
       : lanes.length > 0
-        ? lanes[lanes.length - 1]!.top + lanes[lanes.length - 1]!.height
+        ? Math.max(...lanes.map((lane) => lane.top + lane.height))
         : plotTop + LANE_PLOT;
   const height = plotBottom + AXIS_HEIGHT;
 
@@ -709,10 +746,19 @@ export function ActivityChannels({ streams, cycling, elevationGain, cursor }: Ac
       ? { start: sx(xs[Math.max(selection[0], v0)]!), end: sx(xs[Math.min(selection[1], v1)]!) }
       : null;
   const leftLane = lanes.find((lane) => lane.axis === "left" && lane.key !== "elevation") ?? lanes.find((lane) => lane.axis === "left");
-  const gridLane = layout === "overlay" ? leftLane : undefined;
+  const gridLane = shownLayout === "overlay" ? leftLane : undefined;
+  // Split: each plot's bed, title row and grid, from its left-axis lane.
+  const splitPlots =
+    shownLayout === "split" && splitGroups
+      ? splitGroups.map((group, plot) => {
+          const axisLane = lanes.find((lane) => lane.plot === plot && lane.axis === "left");
+          const anyLane = lanes.find((lane) => lane.plot === plot && lane.key !== "elevation") ?? axisLane;
+          return { plot, group, axisLane, top: anyLane?.top, height: anyLane?.height, titleY: anyLane?.titleY };
+        })
+      : [];
   const hrZones = streams.zones.hr?.zones;
   const zoneBands = (lane: Lane) => {
-    if (lane.key !== "hr" || layout !== "stacked" || !hrZones) return null;
+    if (lane.key !== "hr" || shownLayout !== "stacked" || !hrZones) return null;
     return hrZones.map((zone: StreamZone, position) => {
       const lower = zone.start ?? Number.NEGATIVE_INFINITY;
       const upper = hrZones[position + 1]?.start ?? Number.POSITIVE_INFINITY;
@@ -735,17 +781,27 @@ export function ActivityChannels({ streams, cycling, elevationGain, cursor }: Ac
   };
 
   return (
-    <section className="activity-detail-visual-panel activity-channels" data-layout={layout}>
+    <section className="activity-detail-visual-panel activity-channels" data-layout={shownLayout}>
       <div className="activity-detail-visual-heading">
         <h3>
           <Activity size={17} aria-hidden="true" />
           {t("Channels")}</h3>
         <div className="activity-channels-controls">
           <div className="library-filter-group" role="group" aria-label={t("Chart layout")}>
-            <button type="button" className={`library-filter-option${layout === "overlay" ? " active" : ""}`} aria-pressed={layout === "overlay"} onClick={() => setLayout("overlay")}>
+            <button type="button" className={`library-filter-option${shownLayout === "overlay" ? " active" : ""}`} aria-pressed={shownLayout === "overlay"} onClick={() => setLayout("overlay")}>
               <Layers size={13} aria-hidden="true" />
               {t("Overlay")}</button>
-            <button type="button" className={`library-filter-option${layout === "stacked" ? " active" : ""}`} aria-pressed={layout === "stacked"} onClick={() => setLayout("stacked")}>
+            <button
+              type="button"
+              className={`library-filter-option${shownLayout === "split" ? " active" : ""}`}
+              aria-pressed={shownLayout === "split"}
+              disabled={!splitGroups}
+              title={splitGroups ? t("Output on top, what it cost the body below, on one clock") : t("Pick an output channel, such as pace or power, and a body channel, such as heart rate, to split them")}
+              onClick={() => setLayout("split")}
+            >
+              <Rows2 size={13} aria-hidden="true" />
+              {t("Split")}</button>
+            <button type="button" className={`library-filter-option${shownLayout === "stacked" ? " active" : ""}`} aria-pressed={shownLayout === "stacked"} onClick={() => setLayout("stacked")}>
               <Rows3 size={13} aria-hidden="true" />
               {t("Stacked")}</button>
           </div>
@@ -872,12 +928,32 @@ export function ActivityChannels({ streams, cycling, elevationGain, cursor }: Ac
               <line key={`grid-${tick}`} className="activity-channels-grid" x1={LEFT} x2={LEFT + plotWidth} y1={laneY(gridLane, specs[gridLane.key].inverted, tick)} y2={laneY(gridLane, specs[gridLane.key].inverted, tick)} />
             ))}
 
+            {splitPlots.map(({ plot, group, axisLane, top, height: plotHeight, titleY }) =>
+              top === undefined || plotHeight === undefined ? null : (
+                <g key={`plot-${plot}`} className="activity-channels-split-plot">
+                  <rect className="activity-channels-lane-bed" x={LEFT} y={top} width={plotWidth} height={plotHeight} />
+                  {axisLane?.ticks.map((tick) => (
+                    <line key={tick} className="activity-channels-grid" x1={LEFT} x2={LEFT + plotWidth} y1={laneY(axisLane, specs[axisLane.key].inverted, tick)} y2={laneY(axisLane, specs[axisLane.key].inverted, tick)} />
+                  ))}
+                  <text className="activity-channels-lane-title" x={LEFT} y={titleY}>
+                    <tspan>{t(SPLIT_PLOT_TITLES[plot]!)}</tspan>
+                    {group.map((key) => (
+                      <Fragment key={key}>
+                        <tspan dx={12} style={{ fill: colors[key] }}>●</tspan>
+                        <tspan dx={5} className="is-unit">{specs[key].short} {specs[key].unit}</tspan>
+                      </Fragment>
+                    ))}
+                  </text>
+                </g>
+              )
+            )}
+
             {lanes.map((lane) => {
               const spec = specs[lane.key];
               const color = colors[lane.key];
               return (
-                <g key={lane.key} className={`activity-channels-lane is-${lane.key}`}>
-                  {layout === "stacked" ? (
+                <g key={`${lane.key}-${lane.plot ?? 0}`} className={`activity-channels-lane is-${lane.key}`}>
+                  {shownLayout === "stacked" ? (
                     <>
                       <rect className="activity-channels-lane-bed" x={LEFT} y={lane.top} width={plotWidth} height={lane.height} />
                       {zoneBands(lane)}
@@ -902,13 +978,13 @@ export function ActivityChannels({ streams, cycling, elevationGain, cursor }: Ac
                           y={laneY(lane, spec.inverted, tick)}
                           dy="0.35em"
                           textAnchor={lane.axis === "left" ? "end" : "start"}
-                          style={layout === "overlay" ? { fill: color } : undefined}
+                          style={shownLayout === "stacked" ? undefined : { fill: color }}
                         >
                           {spec.format(tick)}
                         </text>
                       ))
                     : null}
-                  {layout === "overlay" && lane.axis !== "none" ? (
+                  {shownLayout === "overlay" && lane.axis !== "none" ? (
                     <text
                       className="activity-channels-axis-unit"
                       x={lane.axis === "left" ? LEFT - 8 : LEFT + plotWidth + 8}
@@ -972,7 +1048,7 @@ export function ActivityChannels({ streams, cycling, elevationGain, cursor }: Ac
                 {lanes.map((lane) => {
                   const value = display[lane.key]![hover]!;
                   return Number.isFinite(value) ? (
-                    <circle key={lane.key} cx={hoverX} cy={laneY(lane, specs[lane.key].inverted, value)} r={4} style={{ fill: colors[lane.key] }} />
+                    <circle key={`${lane.key}-${lane.plot ?? 0}`} cx={hoverX} cy={laneY(lane, specs[lane.key].inverted, value)} r={4} style={{ fill: colors[lane.key] }} />
                   ) : null;
                 })}
                 <g transform={`translate(${Math.min(LEFT + plotWidth - 28, Math.max(LEFT + 28, hoverX))} ${plotBottom + 14})`}>

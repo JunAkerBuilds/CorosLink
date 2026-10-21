@@ -2,7 +2,7 @@ import { useLanguage, t } from "../../i18n/training";
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Plus, RotateCcw, Settings2, Undo2, X } from 'lucide-react';
-import { dashboardStorageKey, defaultLayout, defaultWidget, moveWidget, parseLayout, widgetCatalog, widgetPreset, widgetPresets, type DashboardWidget, type WidgetId } from '../dashboardLayout';
+import { availableWidgetCatalog, dashboardStorageKey, defaultLayout, defaultWidget, moveWidget, parseLayout, widgetCatalog, widgetPreset, widgetPresets, type DashboardWidget, type WidgetId } from '../dashboardLayout';
 import '../dashboardLayout.css';
 import { usePackedDashboard } from '../usePackedDashboard';
 import { WidgetResizeHandle } from './WidgetResizeHandle';
@@ -96,11 +96,11 @@ export function CustomizableDashboard({ renderWidget, sampleMode = false, toolba
     <dialog ref={dialog} className="hub-widget-library" aria-labelledby={libraryTitle} onCancel={() => setLibrary(false)} onClose={() => setLibrary(false)} onClick={event => { if (event.target === event.currentTarget) setLibrary(false); }}>
       <div className="hub-library-inner"><div className="hub-dashboard-toolbar"><div><p className="eyebrow">{t("Make it yours")}</p><h2 id={libraryTitle}>{t("Widget library")}</h2></div><button type="button" aria-label={t("Close widget library")} onClick={() => setLibrary(false)}><X size={18} /></button></div>
         <input autoFocus type="search" aria-label={t("Search widgets")} placeholder={t("Search widgets…")} value={query} onChange={event => setQuery(event.target.value)} />
-        <div className="hub-library-list">{widgetCatalog.filter(item => `${t(item.title)} ${t(item.description)}`.toLowerCase().includes(query.toLowerCase())).map(item => {
+        <div className="hub-library-list">{availableWidgetCatalog.filter(item => `${t(item.title)} ${t(item.description)}`.toLowerCase().includes(query.toLowerCase())).map(item => {
           const added = layout.some(widget => widget.id === item.id);
           return <div key={item.id}><div><strong>{t(item.title)}</strong><p>{t(item.description)}</p></div><button type="button" disabled={added} aria-label={`${added ? t("Added") : t("Add")} ${t(item.title)}`} onClick={() => update([...layout, defaultWidget(item.id)], t("{{title}} added", { title: t(item.title) }))}>{added ? <Check size={16} /> : <Plus size={16} />}{added ? t("Added") : t("Add")}</button></div>;
         })}</div>
-        {!widgetCatalog.some(item => `${t(item.title)} ${t(item.description)}`.toLowerCase().includes(query.toLowerCase())) && <p>{t("No widgets match your search.")}</p>}
+        {!availableWidgetCatalog.some(item => `${t(item.title)} ${t(item.description)}`.toLowerCase().includes(query.toLowerCase())) && <p>{t("No widgets match your search.")}</p>}
       </div>
     </dialog>
   </section>;

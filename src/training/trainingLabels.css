@@ -1,0 +1,88 @@
+/* Training label chips: the label in its zone's colour, the session's shape outlined beside it. */
+.training-label-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.training-label-chip {
+  --label-color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--label-color) 42%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--label-color) 14%, transparent);
+  color: color-mix(in srgb, var(--label-color) 78%, var(--text-primary));
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.training-label-chip.is-shape {
+  border-color: var(--glass-border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 550;
+}
+
+:root[data-theme="paper"] .training-label-chip {
+  color: color-mix(in srgb, var(--label-color) 62%, var(--text-primary));
+}
+
+:root[data-theme="paper"] .training-label-chip.is-shape {
+  border-color: color-mix(in srgb, var(--text-muted) 45%, transparent);
+  color: var(--text-secondary);
+}
+
+.training-label-reason {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Activity detail: the label above the zones it was read from. */
+.training-label-summary {
+  display: grid;
+  gap: 7px;
+}
+
+.training-label-summary-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.training-label-summary-heading h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+/* Activity cards and list rows: the label under the title, kept to one line. */
+.activity-card-label,
+.training-activity-label {
+  display: flex;
+  min-width: 0;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.training-activity-label .training-label-chip,
+.activity-card-label .training-label-chip {
+  min-height: 18px;
+  padding: 0 7px;
+  font-size: 10px;
+}
+
+.activity-card-label:empty,
+.training-activity-label:empty {
+  display: none;
+}

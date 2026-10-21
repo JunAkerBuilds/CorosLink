@@ -88,9 +88,18 @@ export interface StreamZone {
   end?: number;
 }
 
+export type StreamZoneKind = "hr" | "pace" | "gap";
+
+/** COROS's heart-rate zone model (`zoneType` 1 Max HR, 2 HR reserve, 3 LTHR). */
+export type StreamHrZoneModel = "maxHr" | "reserve" | "lthr";
+
 export interface StreamZoneDistribution {
-  kind: "hr" | "pace";
+  kind: StreamZoneKind;
   zones: StreamZone[];
+  /** Heart rate only, when the activity names its model (it can say 0). */
+  model?: StreamHrZoneModel;
+  /** Pace only: COROS's seven buckets folded into its six named zones. */
+  named?: boolean;
 }
 
 export interface ActivityStreams {
@@ -110,7 +119,7 @@ export interface ActivityStreams {
   structured: boolean;
   laps: StreamLap[];
   pauses: StreamPause[];
-  zones: { hr?: StreamZoneDistribution; pace?: StreamZoneDistribution };
+  zones: Partial<Record<StreamZoneKind, StreamZoneDistribution>>;
 }
 
 export interface StreamParseOptions {
@@ -354,11 +363,34 @@ function parseLaps(
   return { laps: laps.length >= 2 ? laps : [], structured: structured && laps.length >= 2 };
 }
 
+const HR_ZONE_MODELS: Readonly<Record<number, StreamHrZoneModel>> = { 1: "maxHr", 2: "reserve", 3: "lthr" };
+
+/**
+ * COROS's pace zone list has seven entries for the six zones its app names:
+ * the Threshold zone is recorded as two entries, below and above threshold
+ * speed. Entries 3 and 4 are merged back into it; lists of any other length
+ * are shown as they come.
+ */
+function foldPaceBuckets(zones: StreamZone[]): { zones: StreamZone[]; named: boolean } {
+  if (zones.length !== 7) return { zones, named: false };
+  const [z0, z1, z2, low, high, z5, z6] = zones as [StreamZone, StreamZone, StreamZone, StreamZone, StreamZone, StreamZone, StreamZone];
+  const threshold: StreamZone = {
+    index: low.index,
+    seconds: low.seconds + high.seconds,
+    share: low.share + high.share,
+    start: low.start,
+    end: high.end
+  };
+  return { zones: [z0, z1, z2, threshold, z5, z6], named: true };
+}
+
 function parseZones(raw: RawRecord, speedKind: StreamSpeedKind): ActivityStreams["zones"] {
   const zones: ActivityStreams["zones"] = {};
   for (const group of asRecords(raw.zoneList)) {
     const type = toNumber(group.type);
-    const kind = type === 126 ? "hr" : type === 130 && speedKind === "pace" ? "pace" : undefined;
+    // 126 heart rate, 130 pace, 173 grade-adjusted ("effort") pace, in ms/km.
+    const kind: StreamZoneKind | undefined =
+      type === 126 ? "hr" : speedKind === "pace" ? (type === 130 ? "pace" : type === 173 ? "gap" : undefined) : undefined;
     if (!kind) continue;
     const items = asRecords(group.zoneItemList)
       .map((item) => ({
@@ -371,22 +403,25 @@ function parseZones(raw: RawRecord, speedKind: StreamSpeedKind): ActivityStreams
     if (items.length < 2 || total <= 0) continue;
     // COROS repeats zone 2's leftScope on zone 1, so each zone's real bounds are
     // its own leftScope (from zone 2 on) and the next zone's leftScope.
-    const scale = kind === "pace" ? 1000 : 1;
+    const scale = kind === "hr" ? 1 : 1000;
     const bound = (value: number | undefined) => (value === undefined ? undefined : value / scale);
-    zones[kind] = {
-      kind,
-      zones: items.map((item, position) => {
-        const next = items[position + 1];
-        const nextStart = bound(next?.left);
-        return {
-          index: item.index,
-          seconds: item.seconds,
-          share: item.seconds / total,
-          start: position === 0 ? undefined : bound(item.left),
-          end: next ? (kind === "hr" && nextStart !== undefined ? nextStart - 1 : nextStart) : undefined
-        };
-      })
-    };
+    const list: StreamZone[] = items.map((item, position) => {
+      const next = items[position + 1];
+      const nextStart = bound(next?.left);
+      return {
+        index: item.index,
+        seconds: item.seconds,
+        share: item.seconds / total,
+        start: position === 0 ? undefined : bound(item.left),
+        end: next ? (kind === "hr" && nextStart !== undefined ? nextStart - 1 : nextStart) : undefined
+      };
+    });
+    if (kind === "hr") {
+      const model = HR_ZONE_MODELS[toNumber(group.zoneType) ?? 0];
+      zones.hr = { kind, zones: list, ...(model ? { model } : {}) };
+    } else {
+      zones[kind] = { kind, ...foldPaceBuckets(list) };
+    }
   }
   return zones;
 }

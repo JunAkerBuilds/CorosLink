@@ -1,5 +1,5 @@
 import { formatNumber, getLocale, useLanguage, t } from "../../i18n/training";
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   Braces,
   Flame,
@@ -41,12 +41,16 @@ import { isCyclingSportType, isSwimSportType, resolveSportName } from "../sportT
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import { formatSpeedValue } from "../../units/units";
 import { parseActivityStreams, parseActivityZones } from "../activityStreams";
+import { deriveActivityInsight, lastKnownZoneModel, rememberActivityInsight, useActivityInsights } from "../activityInsights";
+import { trainingLabel } from "../trainingBenefit";
 import { createRouteCursor } from "../routeCursor";
 import { ActivityChannels } from "./ActivityChannels";
 import { ActivityElevationChart } from "./ActivityElevationChart";
 import { ActivityRouteMap } from "./ActivityRouteMap";
 import { ActivityTimeInZones } from "./ActivityTimeInZones";
+import { RunEfficiencyPanel } from "./RunEfficiency";
 import { StrengthDetailPanel } from "./StrengthDetailPanel";
+import { TrainingLabelChips, TrainingLabelReason } from "./TrainingLabelChip";
 import { ExportMenu } from "./TrainingActivityTable";
 import "../activityLaps.css";
 
@@ -206,10 +210,21 @@ export function ActivityDetailPanel({
     () => (showcase && detail && !detail.strength ? parseActivityStreams(detail.raw, streamOptions) : null),
     [showcase, detail, streamOptions]
   );
-  const zones = useMemo(
-    () => (showcase && detail && !detail.strength ? parseActivityZones(detail.raw, streamOptions) : {}),
-    [showcase, detail, streamOptions]
-  );
+  // COROS's own time-in-zone totals, on every layout. A strength session is
+  // scored on heart rate alone.
+  const zones = useMemo(() => {
+    if (!detail) return {};
+    const parsed = parseActivityZones(detail.raw, streamOptions);
+    return detail.strength ? { hr: parsed.hr } : parsed;
+  }, [detail, streamOptions]);
+  // The session's training label, read once from its samples and kept so the
+  // activity list can show it too.
+  useActivityInsights();
+  const insight = useMemo(() => (detail ? deriveActivityInsight(detail, listActivity) : null), [detail, listActivity]);
+  useEffect(() => {
+    if (detail) rememberActivityInsight(detail, listActivity);
+  }, [detail, listActivity]);
+  const labelReading = insight ? trainingLabel(insight.sportType, insight.intensity, lastKnownZoneModel()) : undefined;
 
   const isLoading =
     listActivity &&
@@ -335,7 +350,10 @@ export function ActivityDetailPanel({
       )}
 
       {detail.strength ? (
-        <StrengthDetailPanel strength={detail.strength} />
+        <>
+          <StrengthDetailPanel strength={detail.strength} />
+          {zones.hr ? <ActivityTimeInZones zones={zones} /> : null}
+        </>
       ) : (
         <>
           <div className="activity-detail-grid">
@@ -389,7 +407,25 @@ export function ActivityDetailPanel({
             </section>
           </div>
 
-          {zones.hr || zones.pace ? <ActivityTimeInZones zones={zones} /> : null}
+          {labelReading ? (
+            <div className="training-label-summary">
+              <div className="training-label-summary-heading">
+                <span className="activity-detail-visual-note">{t("Trained")}</span>
+                <TrainingLabelChips reading={labelReading} />
+              </div>
+              <TrainingLabelReason reading={labelReading} />
+            </div>
+          ) : null}
+          {zones.hr || zones.pace || zones.gap ? (
+            <ActivityTimeInZones
+              key={detail.activityId ?? "activity"}
+              zones={zones}
+              // On a trail the ground sets the pace; effort pace is the fair scale.
+              initialKind={streamSportType === 102 ? "gap" : undefined}
+            />
+          ) : null}
+          {/* Running efficiency is still being tried out: development builds only. */}
+          {import.meta.env.DEV ? <RunEfficiencyPanel detail={detail} listActivity={listActivity} /> : null}
           {streams ? (
             <ActivityChannels
               key={detail.activityId ?? "activity"}

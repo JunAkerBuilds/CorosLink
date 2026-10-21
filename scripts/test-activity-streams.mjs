@@ -142,6 +142,41 @@ const pace = streams.zones.pace.zones;
 assert.deepEqual([pace[0].start, pace[0].end], [undefined, 395]);
 assert.deepEqual([pace[1].start, pace[1].end], [395, 327]);
 assert.deepEqual(parseActivityZones(run), streams.zones, "zones parse without samples too");
+assert.equal(streams.zones.hr.model, "reserve", "zoneType 2 is the HR reserve model");
+assert.equal(streams.zones.pace.named, false, "three pace buckets are not COROS's six zones");
+
+// COROS keeps seven pace buckets for six named zones: Threshold is stored split
+// at 100% of threshold speed, so buckets 3 and 4 are one zone. Type 173 is the
+// same scale on grade-adjusted ("effort") pace, and an HR zoneType of 0 names
+// no model.
+const paceBuckets = [480, 400, 360, 330, 318, 300, 280].map((leftSeconds, index) => ({
+  zoneIndex: index,
+  leftScope: (index === 0 ? 400 : leftSeconds) * 1000,
+  rightScope: 0,
+  second: 60 * (index + 1)
+}));
+const sevenBuckets = parseActivityZones({
+  zoneList: [
+    { type: 126, zoneType: 0, zoneItemList: run.zoneList[0].zoneItemList },
+    { type: 130, zoneItemList: paceBuckets },
+    { type: 173, zoneItemList: paceBuckets }
+  ]
+});
+assert.equal(sevenBuckets.hr.model, undefined, "zoneType 0 names no model");
+const folded = sevenBuckets.pace.zones;
+assert.equal(sevenBuckets.pace.named, true);
+assert.equal(folded.length, 6);
+assert.equal(folded[3].seconds, 60 * 4 + 60 * 5, "Threshold holds both halves");
+assert.deepEqual([folded[3].start, folded[3].end], [330, 300], "Threshold runs from bucket 3's slow edge to bucket 4's fast edge");
+assert.deepEqual([folded[2].start, folded[2].end], [360, 330]);
+assert.deepEqual([folded[4].start, folded[4].end], [300, 280]);
+assert.ok(Math.abs(folded.reduce((sum, zone) => sum + zone.share, 0) - 1) < 1e-9);
+assert.deepEqual(sevenBuckets.gap.zones, folded, "effort pace zones read like pace zones");
+assert.equal(
+  parseActivityZones({ zoneList: [{ type: 173, zoneItemList: paceBuckets }] }, { cycling: true }).gap,
+  undefined,
+  "a ride has no effort pace"
+);
 
 // Range summary: pace is distance over moving time.
 const whole = summarizeRange(streams, 0, 599);

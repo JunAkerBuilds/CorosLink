@@ -22,7 +22,7 @@ export interface WidgetSizePreset {
 
 /** Heights are minimums: loading, long labels and accessibility text never get clipped. */
 export function sizePresets(id: string, widths: readonly number[]): WidgetSizePreset[] {
-  if (['stress', 'sleepHrv', 'trend-load', 'trend-rpe', 'trend-hrv', 'trend-sleep', 'zones-heart', 'zones-distance', 'scores', 'race', 'effort', 'upcoming', 'cycle', 'coach'].includes(id)) {
+  if (['stress', 'sleepHrv', 'trend-load', 'trend-rpe', 'trend-hrv', 'trend-sleep', 'zones-heart', 'zones-distance', 'efficiency', 'scores', 'race', 'effort', 'upcoming', 'cycle', 'coach'].includes(id)) {
     return widths.flatMap(columns => (['standard', 'tall', 'mini', 'short'] as const).map(chartSize => ({
       id: `${columns}-${chartSize}`,
       label: `${columns === 3 ? 'Small' : columns === 4 ? 'Compact' : columns === 6 ? 'Medium' : columns === 8 ? 'Wide' : 'Full width'} · ${chartSize}`,

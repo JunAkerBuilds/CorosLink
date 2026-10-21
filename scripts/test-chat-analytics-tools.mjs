@@ -81,6 +81,21 @@ assert.equal(weekly.length, 3);
 assert.match(weekly[0], /^- 09\/01–09\/07: load 70 total · HRV 61 · RHR 48 · sleep 80$/);
 const longLines = formatFitnessTrendLines(longPoints, 21);
 assert.ok(longLines.includes("Weekly summary:"), "long windows include a weekly block");
+assert.ok(!longLines.some((line) => line.includes("VO2max")), "no VO2max block without a reading");
+
+// VO2max moves in plateaus: the latest value and the one before it, per sport.
+const vo2Lines = formatFitnessTrendLines(
+  [
+    { date: "20260909", label: "09/09", vo2max: 47, cycleVo2max: 51 },
+    { date: "20260910", label: "09/10", vo2max: 47 },
+    { date: "20260911", label: "09/11", cycleVo2max: 52 }
+  ],
+  7
+);
+assert.ok(vo2Lines.includes("- Running VO2max: 47 on 09/10"), vo2Lines.join("\n"));
+assert.ok(vo2Lines.includes("- Cycling VO2max: 52 on 09/11 (was 51 on 09/09)"), vo2Lines.join("\n"));
+const [onlyRunning] = buildTrendPoints([{ happenDay: "20260909", vo2max: 47 }]);
+assert.equal(onlyRunning.cycleVo2max, undefined, "a day without a ride reading carries none");
 
 const zonePreview = buildHrZonePreview(
   {

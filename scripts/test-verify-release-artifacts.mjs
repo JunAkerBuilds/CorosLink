@@ -131,4 +131,55 @@ withReleaseDir((releaseDir) => {
   });
 });
 
+function writeLatestLinuxYml(releaseDir, urls) {
+  writeReleaseFile(
+    releaseDir,
+    "latest-linux.yml",
+    [
+      `version: ${version}`,
+      "files:",
+      ...urls.flatMap((url) => [`  - url: ${url}`, "    sha512: test-sha", "    size: 123"]),
+      `path: ${urls[0]}`,
+      "sha512: test-sha",
+      "releaseDate: '2026-06-30T00:00:00.000Z'",
+      ""
+    ].join("\n")
+  );
+}
+
+withReleaseDir((releaseDir) => {
+  const appImage = `CorosLink-${version}.AppImage`;
+  const deb = `CorosLink-${version}.deb`;
+  writeReleaseFile(releaseDir, appImage);
+  writeReleaseFile(releaseDir, deb);
+  writeLatestLinuxYml(releaseDir, [appImage, deb]);
+
+  verifyPlatform("linux", { releaseDir, expectedVersion: version, logger });
+});
+
+withReleaseDir((releaseDir) => {
+  const appImage = `CorosLink-${version}.AppImage`;
+  writeReleaseFile(releaseDir, appImage);
+  writeLatestLinuxYml(releaseDir, [appImage]);
+
+  assert.throws(
+    () => verifyPlatform("linux", { releaseDir, expectedVersion: version, logger }),
+    /missing installer matching \/\\\.deb\$\/i/
+  );
+});
+
+withReleaseDir((releaseDir) => {
+  // A deb install downloads the deb, so latest-linux.yml has to name it.
+  const appImage = `CorosLink-${version}.AppImage`;
+  const deb = `CorosLink-${version}.deb`;
+  writeReleaseFile(releaseDir, appImage);
+  writeReleaseFile(releaseDir, deb);
+  writeLatestLinuxYml(releaseDir, [appImage]);
+
+  assert.throws(
+    () => verifyPlatform("linux", { releaseDir, expectedVersion: version, logger }),
+    /latest-linux\.yml does not list CorosLink-1\.2\.3\.deb/
+  );
+});
+
 console.log("release artifact verifier tests passed");

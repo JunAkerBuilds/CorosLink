@@ -4,14 +4,12 @@ import { HeartPulse } from "lucide-react";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import { distanceUnit, secondsPerKmToDisplayPace } from "../../units/units";
-import type { ActivityStreams, StreamZone } from "../activityStreams";
+import type { ActivityStreams, StreamZone, StreamZoneDistribution, StreamZoneKind } from "../activityStreams";
 import { getIntensityZoneColors } from "../chartConfig";
 import "../activityChannels.css";
 
-type ZoneKind = "hr" | "pace";
-
-// COROS's lactate-threshold heart-rate model has six named zones.
-const LTHR_ZONE_NAMES = [
+// COROS's heart-rate reserve and LTHR models and its pace zones share six names.
+const THRESHOLD_ZONE_NAMES = [
   "Recovery",
   "Aerobic Endurance",
   "Aerobic Power",
@@ -19,6 +17,24 @@ const LTHR_ZONE_NAMES = [
   "Anaerobic Endurance",
   "Anaerobic Power"
 ];
+
+// The Max HR model names its six zones differently.
+const MAX_HR_ZONE_NAMES = ["Recovery", "Warm Up", "Fat Burn", "Aerobic", "Threshold", "Anaerobic"];
+
+const ZONE_KIND_LABELS: Record<StreamZoneKind, string> = {
+  hr: "Heart rate",
+  pace: "Pace",
+  gap: "Effort pace"
+};
+
+/** COROS's names for a scale's zones, or none when the model or the bucket count is not COROS's. */
+function zoneNames(distribution: StreamZoneDistribution): readonly string[] | undefined {
+  if (distribution.kind === "hr") {
+    if (distribution.zones.length !== 6) return undefined;
+    return distribution.model === "maxHr" ? MAX_HR_ZONE_NAMES : THRESHOLD_ZONE_NAMES;
+  }
+  return distribution.named ? THRESHOLD_ZONE_NAMES : undefined;
+}
 
 function formatZoneDuration(seconds: number): string {
   if (seconds <= 0) return "0m";
@@ -34,22 +50,26 @@ function clock(seconds: number): string {
 
 interface ActivityTimeInZonesProps {
   zones: ActivityStreams["zones"];
+  /** Which scale opens first when the session has more than one. */
+  initialKind?: StreamZoneKind;
 }
 
-export function ActivityTimeInZones({ zones }: ActivityTimeInZonesProps) {
+export function ActivityTimeInZones({ zones, initialKind }: ActivityTimeInZonesProps) {
   useLanguage();
   const { theme } = useTheme();
   const { unitSystem } = useUnitSystem();
   const colors = getIntensityZoneColors(theme);
-  const kinds = (["hr", "pace"] as const).filter((kind) => zones[kind]);
-  const [picked, setPicked] = useState<ZoneKind>(kinds[0] ?? "hr");
+  const kinds = (["hr", "pace", "gap"] as const).filter((kind) => zones[kind]);
+  const [picked, setPicked] = useState<StreamZoneKind>(
+    initialKind && zones[initialKind] ? initialKind : kinds[0] ?? "hr"
+  );
   const [active, setActive] = useState<number | null>(null);
   const kind = zones[picked] ? picked : kinds[0];
   const distribution = kind ? zones[kind] : undefined;
   if (!kind || !distribution) return null;
 
   const list = distribution.zones;
-  const named = kind === "hr" && list.length === LTHR_ZONE_NAMES.length;
+  const names = zoneNames(distribution);
   const paceUnit = `/${distanceUnit(unitSystem)}`;
   const pace = (value: number) => clock(secondsPerKmToDisplayPace(value, unitSystem));
 
@@ -86,13 +106,13 @@ export function ActivityTimeInZones({ zones }: ActivityTimeInZonesProps) {
                   setActive(null);
                 }}
               >
-                {option === "hr" ? t("Heart rate") : t("Pace")}
+                {t(ZONE_KIND_LABELS[option])}
               </button>
             ))}
           </div>
         ) : (
           <span className="activity-detail-visual-note">
-            {t("Mostly")}<strong>Z{dominantPosition + 1}{named ? ` ${t(LTHR_ZONE_NAMES[dominantPosition])}` : ""}</strong>
+            {t("Mostly")}<strong>Z{dominantPosition + 1}{names?.[dominantPosition] ? ` ${t(names[dominantPosition])}` : ""}</strong>
           </span>
         )}
       </div>
@@ -130,7 +150,7 @@ export function ActivityTimeInZones({ zones }: ActivityTimeInZonesProps) {
             <span className="activity-zones-name">
               <i aria-hidden="true" />
               <b>Z{position + 1}</b>
-              {named ? <span>{t(LTHR_ZONE_NAMES[position])}</span> : null}
+              {names?.[position] ? <span>{t(names[position])}</span> : null}
             </span>
             <span className="activity-zones-time">
               <strong>{formatZoneDuration(zone.seconds)}</strong>

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Training labels.** Runs and rides in Training Hub now say what they trained: Recovery, Aerobic, Tempo, Threshold, VO2 Max or Anaerobic, with the session's shape beside it, such as **Intervals 6 × 1 km**, strides or a long run. The activity's page says why it got its label. CorosLink reads it from COROS's own heart-rate and pace zones after a ten-minute warm-up, and from the reps of a structured workout or the laps you pressed. A hot easy run whose heart rate drifts up still reads as Aerobic when its pace stayed easy. Activity cards and the list show a session's label once you've opened it.
+- **Cycling VO2 max.** COROS now estimates a VO2 max from rides. Once it has one, the VO2 max widget gets a **Run** / **Ride** switch, and Coach's fitness trends include both.
+- **Split chart.** An activity's chart has a **Split** layout: pace, effort pace, power and grade on top, heart rate, cadence and running form below, on one clock, with elevation behind both.
+- **A .deb for Debian and Ubuntu.** Linux releases now include a `.deb` beside the AppImage. It updates in-app too and asks for your password to install an update.
+
+### Changed
+
+- **Time in zones** now shows on every activity page, including the calendar's, and on strength sessions (heart rate only). Pace zones read as COROS's six named zones: COROS stores Threshold in two halves, which now show as one. Accounts on the Max HR model see that model's zone names, and runs get an **Effort pace** scale, which trail runs open on.
+- Grade-adjusted pace is now called **Effort pace**, as COROS calls it.
+
+### Fixed
+
+- Two Portuguese watch face labels used post-1990 spelling.
+
 ## [0.1.59] - 2026-10-20
 
 ### Added

@@ -109,6 +109,8 @@ export function createTrainingHubSampleData(now = new Date()): TrainingHubSample
       sleepHrvBase: 61,
       staminaLevel: Math.round(78 - offset / 65),
       vo2max: Math.round((53.4 - offset / 110 + 0.5 * Math.sin(offset / 7)) * 10) / 10,
+      // COROS added a cycling estimate in September 2026; the sample has the last 60 days of it.
+      cycleVo2max: offset < 60 ? Math.round((50.6 - offset / 150) * 10) / 10 : undefined,
       trainingLoadRatio: 1.12,
       tiredRateNew: 34,
       tiredRateStateNew: 2

@@ -59,7 +59,8 @@ export function buildTrendPoints(
     rhr: day.rhr,
     trainingLoadRatio: day.trainingLoadRatio,
     staminaLevel: day.staminaLevel,
-    vo2max: day.vo2max
+    vo2max: day.vo2max,
+    cycleVo2max: day.cycleVo2max
   }));
 }
 

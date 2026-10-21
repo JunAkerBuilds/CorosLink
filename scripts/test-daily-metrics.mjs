@@ -40,4 +40,15 @@ const restingHr = parseDailyMetrics({
 assert.equal(restingHr.dayList[0]?.rhr, 57, "resting HR is COROS's testRhr");
 assert.equal(restingHr.dayList[1]?.rhr, undefined, "the all-day rhr is not resting HR");
 
+const vo2 = parseDailyMetrics({
+  dayList: [
+    { happenDay: "20261009", vo2max: 47, cycleVo2max: 0 },
+    { happenDay: "20261010", vo2max: 47, cycleVo2max: 51 }
+  ]
+});
+
+assert.equal(vo2.dayList[0]?.cycleVo2max, undefined, "COROS sends 0 for no cycling VO2max");
+assert.equal(vo2.dayList[1]?.cycleVo2max, 51, "cycling VO2max is its own field");
+assert.equal(vo2.dayList[1]?.vo2max, 47, "vo2max stays the running one");
+
 console.log("daily metrics parser tests passed");

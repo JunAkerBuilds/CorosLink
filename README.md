@@ -136,11 +136,12 @@ Grab the latest installer from **[GitHub Releases](https://github.com/JunAkerBui
 | macOS (Apple Silicon) | `CorosLink-*-arm64.dmg`       |
 | macOS (Intel)         | `CorosLink-*-x64.dmg`         |
 | Windows               | `CorosLink Setup *.exe`       |
-| Linux (x64)           | `CorosLink-*-x86_64.AppImage` |
+| Linux (x64)           | `CorosLink-*.AppImage`        |
+| Debian / Ubuntu (x64) | `CorosLink-*.deb`             |
 
 - **macOS** builds are signed and notarized. If an older or self-built copy says it's damaged, run `xattr -cr "/Applications/CorosLink.app"`.
 - **Windows** may show SmartScreen — click **More info → Run anyway**.
-- **Linux**: `chmod +x CorosLink-*.AppImage`, then run it.
+- **Linux**: `chmod +x CorosLink-*.AppImage`, then run it. On Debian or Ubuntu you can install the deb instead: `sudo apt install ./CorosLink-*.deb`. Both update in-app; the deb asks for your password to install an update.
 
 Everything beyond USB music/map sync is optional and needs only what you use: a COROS account (Training Hub, Coach), an OpenRouteService key (routes), an OpenRouter key or local LLM (Coach), Spotify/Google OAuth apps, or Python 3.10+ with `ytmusicapi` (YouTube Music).
 

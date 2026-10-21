@@ -41,6 +41,8 @@ import {
 } from "./components/TrainingZoneDistributionCharts";
 import { UpcomingWorkoutsPanel } from "./components/UpcomingWorkoutsPanel";
 import { Vo2MaxWidget } from "./components/Vo2MaxWidget";
+import { RunningEfficiencyWidget } from "./components/RunEfficiency";
+import { rememberEfficiencyProfile, setEfficiencySource } from "./activityInsights";
 import { TrainingHubHeader, type TrainingHubTab } from "./components/TrainingHubHeader";
 import "./trainingHub.css";
 import { CustomizableDashboard } from "./components/CustomizableDashboard";
@@ -140,6 +142,16 @@ function TrainingHubContent({
     return api.getTrainingHubActivityDetail(activity.activityId, activity.sportType, activity);
   }, [api, sampleDetails]);
   const connected = sampleMode || Boolean(status?.authenticated);
+  // A run's page reads the six weeks before it from this list, and its figure
+  // from the account's heart-rate profile, also when it opens from the calendar.
+  useEffect(() => {
+    if (!import.meta.env.DEV || sampleMode || !status?.authenticated) return;
+    setEfficiencySource({ activities, loadDetail: loadActivityPreview });
+    return () => setEfficiencySource(null);
+  }, [activities, loadActivityPreview, sampleMode, status?.authenticated]);
+  useEffect(() => {
+    if (!sampleMode) rememberEfficiencyProfile(snapshot?.dashboard?.fitnessMaxHr, snapshot?.dashboard?.rhr);
+  }, [sampleMode, snapshot?.dashboard?.fitnessMaxHr, snapshot?.dashboard?.rhr]);
   // Sample records are regenerated relative to today, so never celebrate them.
   const prCelebration = usePersonalRecordCelebration(
     snapshot?.dashboard ?? null,
@@ -499,6 +511,7 @@ function TrainingHubContent({
                 case "fitness": return <FitnessTrendPanel snapshot={snapshot} activities={activities} />;
                 case "sleep": return <SleepSummaryPanel sleep={snapshot?.sleep} connecting={sleepConnecting} refreshing={busy === "training-refresh"} />;
                 case "vo2": return <Vo2MaxWidget snapshot={snapshot} />;
+                case "efficiency": return <RunningEfficiencyWidget size={widgetPreset(widget).chartSize} snapshot={snapshot} activities={activities} loadDetail={loadActivityPreview} sampleMode={sampleMode} />;
                 case "heatmap": return <TrainingHeatmapPanel snapshot={snapshot} activities={activities} rpeBackfill={rpeBackfill} />;
                 case "stress": case "sleepHrv": case "healthCheck": case "cycle": return <HealthInsightsPanel size={widgetPreset(widget).chartSize} kind={widget.id} api={api} refreshToken={hubRefreshCount} sampleMode={sampleMode} />;
                 case "trend-load": case "trend-rpe": case "trend-hrv": case "trend-sleep": {

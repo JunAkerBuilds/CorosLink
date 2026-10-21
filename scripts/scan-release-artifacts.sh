@@ -99,7 +99,7 @@ clamscan --version
 # signed app and are unpacked below.
 scan "release files" "$release_dir"
 
-for installer in "$release_dir"/**/*.{zip,AppImage,exe}; do
+for installer in "$release_dir"/**/*.{zip,AppImage,deb,exe}; do
   name=$(basename "$installer")
   destination="$work/$name"
   echo "Unpacking $name"
@@ -118,6 +118,11 @@ for installer in "$release_dir"/**/*.{zip,AppImage,exe}; do
         console.log(Number(header.readBigUInt64LE(0x28)) + header.readUInt16LE(0x3a) * header.readUInt16LE(0x3c));
       ' "$installer")
       unsquashfs -no-progress -no-xattrs -offset "$offset" -dest "$destination" "$installer" >/dev/null
+      ;;
+    *.deb)
+      # A deb is an ar archive; the app sits in its data.tar.* member.
+      mkdir -p "$destination"
+      (cd "$destination" && ar x "$installer" && tar -xf data.tar.* && rm -f data.tar.* control.tar.* debian-binary)
       ;;
     *.exe)
       # 7-Zip opens the NSIS installer, which carries the app as a nested 7z.
@@ -141,7 +146,7 @@ for installer in "$release_dir"/**/*.{zip,AppImage,exe}; do
 done
 
 if ((unpacked == 0)); then
-  failures+=("no installers (.zip, .AppImage, .exe) found in $release_dir")
+  failures+=("no installers (.zip, .AppImage, .deb, .exe) found in $release_dir")
 fi
 
 if ((${#failures[@]} > 0)); then

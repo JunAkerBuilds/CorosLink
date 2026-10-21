@@ -75,7 +75,7 @@ jobs:
             release/latest-mac.yml
 
   linux:
-    name: Linux AppImage
+    name: Linux AppImage and deb
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -103,7 +103,7 @@ jobs:
       - name: Rebuild native modules
         run: npm run rebuild
 
-      - name: Build AppImage
+      - name: Build AppImage and deb
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: npm run dist:linux
@@ -117,6 +117,7 @@ jobs:
           name: coroslink-linux
           path: |
             release/*.AppImage
+            release/*.deb
             release/latest-linux.yml
 
   windows:

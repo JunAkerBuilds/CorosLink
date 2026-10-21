@@ -298,6 +298,7 @@ interface RawDailyMetric {
   trainingLoadRatio?: number;
   staminaLevel?: number;
   vo2max?: number;
+  cycleVo2max?: number;
   distance?: number;
   totalDistance?: number;
   dis?: number;
@@ -3702,6 +3703,11 @@ function normalizeDailyDurationSeconds(value?: number): number | undefined {
   return normalized === undefined ? undefined : Math.round(normalized);
 }
 
+function positiveDailyMetric(value: unknown): number | undefined {
+  const parsed = toOptionalNumber(value);
+  return parsed !== undefined && parsed > 0 ? parsed : undefined;
+}
+
 function parseDailyMetric(raw: RawDailyMetric): TrainingHubDailyMetric {
   const record = raw as Record<string, unknown>;
   const distanceRaw = pickDailyMetricNumber(record, [
@@ -3733,6 +3739,9 @@ function parseDailyMetric(raw: RawDailyMetric): TrainingHubDailyMetric {
     trainingLoadRatio: toOptionalNumber(raw.trainingLoadRatio),
     staminaLevel: toOptionalNumber(raw.staminaLevel),
     vo2max: toOptionalNumber(raw.vo2max),
+    // `cycleVo2max` is COROS's ride-based estimate (added in late 2026), separate
+    // from `vo2max`, the running one. Days without an estimate carry 0.
+    cycleVo2max: positiveDailyMetric(raw.cycleVo2max),
     distance: normalizeDailyDistanceMeters(distanceRaw),
     duration: normalizeDailyDurationSeconds(durationRaw)
   };

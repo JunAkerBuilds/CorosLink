@@ -2342,7 +2342,10 @@ export interface TrainingHubDailyMetric {
   tiredRateStateNew?: number;
   trainingLoadRatio?: number;
   staminaLevel?: number;
+  /** Running VO2max; COROS fills it in only on days with a run. */
   vo2max?: number;
+  /** Cycling VO2max, absent until COROS has a reading from a ride. */
+  cycleVo2max?: number;
   distance?: number;
   duration?: number;
 }
@@ -3660,6 +3663,7 @@ export interface TrainingTrendPoint {
   trainingLoadRatio?: number;
   staminaLevel?: number;
   vo2max?: number;
+  cycleVo2max?: number;
   /** Daily totals from COROS MCP daily health. */
   steps?: number;
   calories?: number;

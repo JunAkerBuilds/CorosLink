@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { sizePresets, nearestSizePreset, sizePresetHeight, sizePresetWidth } from '../src/training/widgetSizing.ts';
-import { parseLayout, defaultWidget, widgetPresets } from '../src/training/dashboardLayout.ts';
+import { parseLayout, defaultWidget, widgetPresets, isWidgetAvailable, defaultLayout } from '../src/training/dashboardLayout.ts';
 const presets = sizePresets('daily-steps', [3, 4, 6]);
 const choices = presets.map(preset => ({ preset, width: sizePresetWidth(preset, 1184), height: sizePresetHeight(preset, sizePresetWidth(preset, 1184)) }));
 assert.equal(nearestSizePreset(choices, 284, 152, '3-standard').id, '3-standard');
@@ -75,17 +75,22 @@ for (const preset of widgetPresets('healthCheck')) {
 }
 console.log('Health check proportions and saved sizes passed');
 
-for (const id of ['stress', 'sleepHrv', 'trend-load', 'trend-rpe', 'trend-hrv', 'trend-sleep', 'zones-heart', 'zones-distance', 'scores', 'race', 'effort', 'upcoming', 'cycle', 'coach']) {
+for (const id of ['stress', 'sleepHrv', 'trend-load', 'trend-rpe', 'trend-hrv', 'trend-sleep', 'zones-heart', 'zones-distance', 'efficiency', 'scores', 'race', 'effort', 'upcoming', 'cycle', 'coach']) {
   const presets = widgetPresets(id);
   assert.equal(presets.length, 20);
   for (const preset of presets) {
     const widget = { ...defaultWidget(id), size: preset.columns, preset: preset.id };
-    assert.deepEqual(parseLayout(JSON.stringify({ version: 3, widgets: [widget] })), [widget]);
+    // A development-only widget is dropped from a saved layout outside a development build.
+    assert.deepEqual(parseLayout(JSON.stringify({ version: 3, widgets: [widget] })), isWidgetAvailable(id) ? [widget] : []);
     const choices = presets.map(p => ({ preset: p, width: sizePresetWidth(p, 1500), height: sizePresetHeight(p, sizePresetWidth(p, 1500)) }));
     assert.equal(nearestSizePreset(choices, sizePresetWidth(preset, 1500), preset.minHeight, '6-standard').id, preset.id);
   }
 }
 console.log('All chart sizes snap and persist across shared height tiers');
+
+// Running efficiency is development-only: tests run without Vite's env, as a release build does.
+assert.equal(isWidgetAvailable('efficiency'), false);
+assert.ok(!defaultLayout().some(widget => widget.id === 'efficiency'), 'release builds do not lay out the efficiency widget');
 
 const savedCoach = parseLayout(JSON.stringify({ version: 3, widgets: [{ id: 'coach', size: 12, preset: '12-standard' }] }));
 assert.equal(savedCoach[0].preset, '12-standard', 'Full-width coach charts saved before resizing keep their size');

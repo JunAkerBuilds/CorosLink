@@ -18,6 +18,7 @@ import { formatSpeedValue, metersToSwimDistance, swimDistanceUnit } from "../../
 import { ActivityCardRoute, createActivityPreviewLoader, type ActivityPreviewLoader } from "./ActivityCardRoute";
 import { ActivityDetailPanel } from "./ActivityDetailPanel";
 import { ExportMenu, TrainingActivityTable } from "./TrainingActivityTable";
+import { ActivityLabelChips } from "./TrainingLabelChip";
 import "../trainingActivities.css";
 
 const sports = [
@@ -104,7 +105,8 @@ function ActivityCard({ activity, sportTypes, busy, sampleMode, onLoadDetail, on
     <header className="activity-card-heading">
       <span className="activity-card-sport-icon"><Icon size={29} aria-hidden="true" /></span>
       <div className="activity-card-title"><h3><button type="button" onClick={() => onLoadDetail(activity)} title={name}>{name}</button></h3>
-        <time dateTime={activityTimestamp(activity.startTime) ? new Date(activityTimestamp(activity.startTime)).toISOString() : undefined}>{formatTrainingTimestamp(activity.startTime)}</time></div>
+        <time dateTime={activityTimestamp(activity.startTime) ? new Date(activityTimestamp(activity.startTime)).toISOString() : undefined}>{formatTrainingTimestamp(activity.startTime)}</time>
+        <span className="activity-card-label"><ActivityLabelChips activityId={activity.activityId} sportType={activity.sportType} /></span></div>
       {isRace ? <span className="activity-card-race" title={t("Marked as a race")}><Flag size={12} aria-hidden="true" />{t("Race")}</span> : null}
       <span className="activity-card-badge">{t(sport.label)}</span>
       <ExportMenu activity={activity} activityName={name} busy={busy} disabled={sampleMode} compact onExportFile={onExportFile} />

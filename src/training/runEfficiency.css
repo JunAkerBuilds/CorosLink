@@ -1,0 +1,177 @@
+/* Running efficiency: a run's page panel and the dashboard widget. */
+.run-efficiency-verdict {
+  --verdict-color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--verdict-color) 40%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--verdict-color) 12%, transparent);
+  color: var(--verdict-color);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.run-efficiency-verdict.is-better {
+  --verdict-color: var(--success-text);
+}
+
+.run-efficiency-verdict.is-worse {
+  --verdict-color: var(--warning-text);
+}
+
+.run-efficiency-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.run-efficiency-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.run-efficiency-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 26px;
+}
+
+.run-efficiency-figure {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.run-efficiency-figure strong {
+  color: var(--text-primary);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.run-efficiency-figure.is-usual strong,
+.run-efficiency-figure.is-durability strong {
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.run-efficiency-figure small {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.run-efficiency-chart {
+  min-height: 92px;
+}
+
+.run-efficiency-chart svg,
+.run-efficiency-trend svg {
+  display: block;
+  overflow: visible;
+}
+
+.run-efficiency-band {
+  fill: color-mix(in srgb, var(--text-muted) 14%, transparent);
+}
+
+.run-efficiency-usual {
+  stroke: color-mix(in srgb, var(--text-muted) 80%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.run-efficiency-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.run-efficiency-grid {
+  stroke: color-mix(in srgb, var(--text-muted) 22%, transparent);
+  stroke-width: 1;
+}
+
+.run-efficiency-axis {
+  fill: var(--text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.run-efficiency-dot {
+  fill: var(--text-secondary);
+  stroke: var(--surface, var(--bg-base));
+  stroke-width: 1.5;
+}
+
+.run-efficiency-dot.is-better {
+  fill: var(--success-text);
+}
+
+.run-efficiency-dot.is-worse {
+  fill: var(--warning-text);
+}
+
+/* As usual stays quiet so the runs that beat or missed the usual stand out. */
+.run-efficiency-dot.is-usual {
+  fill: var(--text-secondary);
+}
+
+.run-efficiency-dot.is-unrated {
+  fill: var(--text-muted);
+}
+
+/* Dashboard widget. */
+.run-efficiency-widget {
+  display: grid;
+  align-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.run-efficiency-widget-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.run-efficiency-widget-header .eyebrow {
+  margin: 0;
+}
+
+.run-efficiency-widget-header h2 {
+  margin: 4px 0 0;
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.run-efficiency-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.run-efficiency-trend {
+  min-height: var(--chart-height, 150px);
+}
+
+.run-efficiency-footer strong em {
+  color: var(--text-secondary);
+  font-style: normal;
+  font-weight: 600;
+}
+
+:root[data-theme="paper"] .run-efficiency-footer {
+  border-top-color: color-mix(in srgb, var(--text-muted) 30%, transparent);
+}

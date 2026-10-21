@@ -19,6 +19,7 @@ import {
 } from "../formatters";
 import { isSwimSportType, resolveSportName } from "../sportTypes";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
+import { ActivityLabelChips } from "./TrainingLabelChip";
 
 interface TrainingActivityTableProps {
   activities: TrainingHubActivity[];
@@ -299,6 +300,9 @@ export function TrainingActivityTable({
                     <strong title={activityName}>{activityName}</strong>
                     <span className="sport-chip">
                       {(sportName == null ? sportName : t(String(sportName)))}
+                    </span>
+                    <span className="training-activity-label">
+                      <ActivityLabelChips activityId={activity.activityId} sportType={activity.sportType} />
                     </span>
                   </div>
                   </div>

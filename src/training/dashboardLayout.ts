@@ -20,12 +20,20 @@ export const widgetCatalog = [
   { id: 'coach', title: 'Coach charts', description: 'Charts pinned from your coach conversations.', sizes: [3, 4, 6, 8, 12], size: 12 },
   { id: 'zones-heart', title: 'Heart rate zones', description: 'Threshold heart rate zone distribution.', sizes: [3, 4, 6, 8, 12], size: 6 },
   { id: 'zones-distance', title: 'Distance zones', description: 'Distribution of your running distances.', sizes: [3, 4, 6, 8, 12], size: 6 },
+  { id: 'efficiency', title: 'Running efficiency', description: 'Speed for the heart rate it cost, against your usual.', sizes: [3, 4, 6, 8, 12], size: 6 },
   { id: 'scores', title: 'Fitness scores', description: 'Your current performance profile.', sizes: [3, 4, 6, 8, 12], size: 3 },
   { id: 'race', title: 'Race predictions', description: 'Estimated finish times across distances.', sizes: [3, 4, 6, 8, 12], size: 3 },
   { id: 'effort', title: 'Perceived effort', description: 'How demanding your training feels.', sizes: [3, 4, 6, 8, 12], size: 3 },
   { id: 'upcoming', title: 'Upcoming workouts', description: 'Your next scheduled training sessions.', sizes: [3, 4, 6, 8, 12], size: 12 }
 ] as const;
 export type WidgetId = typeof widgetCatalog[number]['id'];
+/** Widgets still being tried out: offered in development builds only. */
+const DEVELOPMENT_ONLY_WIDGETS: ReadonlySet<WidgetId> = new Set<WidgetId>(['efficiency']);
+export function isWidgetAvailable(id: WidgetId): boolean {
+  return !DEVELOPMENT_ONLY_WIDGETS.has(id) || Boolean(import.meta.env?.DEV);
+}
+/** The widget library: the catalog without what this build does not offer. */
+export const availableWidgetCatalog = widgetCatalog.filter(widget => isWidgetAvailable(widget.id));
 export type DashboardWidget = { id: WidgetId; size: number; preset: string; title: string; days: number; metrics: ('load' | 'heart' | 'steps' | 'calories')[]; startRow?: boolean; atBottom?: boolean };
 export const dashboardStorageKey = 'coroslink.training-dashboard.v1';
 export function defaultWidget(id: WidgetId): DashboardWidget {
@@ -62,13 +70,14 @@ const defaultPlacements: { id: WidgetId; preset: string; startRow?: boolean }[] 
   { id: 'trend-sleep', preset: '3-short' },
   { id: 'zones-heart', preset: '6-standard' },
   { id: 'zones-distance', preset: '6-standard' },
+  { id: 'efficiency', preset: '6-standard' },
   { id: 'scores', preset: '3-standard' },
   { id: 'race', preset: '3-standard' },
   { id: 'effort', preset: '3-standard' },
   { id: 'upcoming', preset: '3-short' }
 ];
 export function defaultLayout(): DashboardWidget[] {
-  return defaultPlacements.map(placement => ({
+  return defaultPlacements.filter(placement => isWidgetAvailable(placement.id)).map(placement => ({
     ...defaultWidget(placement.id),
     ...placement,
     size: widgetPresets(placement.id).find(preset => preset.id === placement.preset)!.columns
@@ -98,7 +107,7 @@ export function parseLayout(raw: string | null): DashboardWidget[] {
     const seen = new Set<string>();
     return value.widgets.flatMap((item: Partial<DashboardWidget> | null) => {
       const definition = widgetCatalog.find(widget => widget.id === item?.id);
-      if (!definition || !item || seen.has(definition.id)) return [];
+      if (!definition || !item || seen.has(definition.id) || !isWidgetAvailable(definition.id)) return [];
       seen.add(definition.id);
       const base = defaultWidget(definition.id);
       const presets = widgetPresets(definition.id);
