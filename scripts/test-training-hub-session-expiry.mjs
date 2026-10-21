@@ -70,8 +70,8 @@ function signedInWith(token) {
   requests.length = 0;
   announced.length = 0;
   recorded.length = 0;
-  // Each case starts outside the throttle windows of the previous one.
-  now += 60 * 60_000;
+  // Each case starts outside the throttle and back-off windows of the previous one.
+  now += 48 * 60 * 60_000;
 }
 
 // Reads for the fresh token succeed; everything else depends on the case.
@@ -124,10 +124,43 @@ try {
   assert.equal(announced.length, 1);
   assert.equal(announced[0].authenticated, true);
 
-  // A renewed token that also comes back empty ends the session: one login, no loop.
+  // A renewed token whose account also comes back empty is kept: COROS just
+  // issued it, and login treats an empty account as merely unavailable. The
+  // error report hears about it, and the check backs off instead of minting a
+  // token every minute: one login, no loop.
   signedInWith("dead-token");
   respond = ({ path }) =>
     path === "/account/login" ? success({ accessToken: "fresh-token", userId: "42", regionId: 1 }) : success(null);
+  await checkTrainingHubSession({ force: true });
+  status = getTrainingHubStatus();
+  assert.equal(requests.filter(({ path }) => path === "/account/login").length, 1);
+  assert.equal(status.authenticated, true);
+  assert.equal(status.sessionExpired, undefined);
+  assert.equal(settings.get("trainingHub.accessToken"), "fresh-token");
+  assert.deepEqual(announced.map(({ authenticated }) => authenticated), [true], "reads made with the old token reload");
+  assert.ok(recorded.some(({ error }) => error.code === "COROS_EMPTY_RENEWED_ACCOUNT"));
+  assert.ok(!recorded.some(({ source }) => source === "trainingHub:session"));
+  requests.length = 0;
+  now += 59 * 60_000;
+  await checkTrainingHubSession({ force: true });
+  await assert.rejects(getTrainingDashboard(), /succeeded but returned no data/);
+  await checkTrainingHubSession();
+  assert.deepEqual(requests.map(({ path }) => path), ["/dashboard/query"], "no check for an hour");
+  now += 2 * 60_000;
+  await checkTrainingHubSession({ force: true });
+  assert.equal(requests.filter(({ path }) => path === "/account/login").length, 1, "checked again after the hour");
+  assert.equal(getTrainingHubStatus().authenticated, true);
+  requests.length = 0;
+  now += 90 * 60_000;
+  await checkTrainingHubSession({ force: true });
+  assert.equal(requests.length, 0, "the next wait is longer");
+
+  // A renewed token COROS refuses with a real auth code still ends the session.
+  signedInWith("dead-token");
+  respond = ({ path, token }) => {
+    if (path === "/account/login") return success({ accessToken: "fresh-token", userId: "42", regionId: 1 });
+    return token === "fresh-token" ? loginExpired() : success(null);
+  };
   await checkTrainingHubSession({ force: true });
   status = getTrainingHubStatus();
   assert.equal(requests.filter(({ path }) => path === "/account/login").length, 1);
@@ -135,6 +168,31 @@ try {
   assert.equal(status.sessionExpired, true);
   assert.equal(status.reloginNeedsCode, false);
   assert.deepEqual(announced.map(({ authenticated }) => authenticated), [false]);
+
+  // A slower read refused with the same dead token, after another request
+  // ended the session, stays signed out instead of quietly logging in again.
+  signedInWith("dead-token");
+  let releaseSlowRead;
+  const slowReadHeld = new Promise((resolve) => {
+    releaseSlowRead = resolve;
+  });
+  let logins = 0;
+  respond = async ({ path, token }) => {
+    if (path === "/account/login") {
+      logins += 1;
+      return logins === 1 ? twoFactorChallenge() : success({ accessToken: "fresh-token", userId: "42", regionId: 1 });
+    }
+    if (path === "/analyse/query") await slowReadHeld;
+    return token === "fresh-token" ? freshSession(path) : loginExpired();
+  };
+  const slowRead = getTrainingAnalytics();
+  await assert.rejects(getTrainingDashboard(), /COROS session expired/);
+  releaseSlowRead();
+  await assert.rejects(slowRead, /Log in to COROS Training Hub first/);
+  assert.equal(logins, 1);
+  assert.equal(settings.has("trainingHub.accessToken"), false);
+  assert.equal(getTrainingHubStatus().sessionExpired, true);
+  assert.equal(announced.length, 1);
 
   // A sign-in that lands during the check is kept and used, never cleared.
   signedInWith("dead-token");

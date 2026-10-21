@@ -899,7 +899,7 @@ let hubResponse;
 const hubRequests = [];
 globalThis.fetch = async (url, init) => {
   hubRequests.push({ url: String(url), init });
-  return hubResponse();
+  return hubResponse(String(url));
 };
 const corosReply = (body) => () => new Response(JSON.stringify(body), { status: 200 });
 
@@ -943,12 +943,21 @@ assert.deepEqual(
 assert.match(hubRequests.at(-1).url, /\/training\/program\/delete$/);
 assert.equal(hubRequests.at(-1).init.body, JSON.stringify(["w-kept"]));
 assert.deepEqual(cachedWorkoutIds(), ["w-in-flight"], "a deleted workout leaves the cache");
+// The snapshot's empty schedule read starts a background session check. The
+// account answers, and the check is awaited so it can't land in a later count.
+const emptySuccess = corosReply({ result: "0000" });
+const liveAccount = corosReply({ result: "0000", data: { userId: "test-user" } });
+hubResponse = (url) => (new URL(url).pathname === "/account/query" ? liveAccount() : emptySuccess());
 workoutSnapshot = await library.getTrainingLibrarySnapshot();
 assert.equal(
   workoutSnapshot.workouts.some((workout) => workout.id === "w-kept"),
   false,
   "a deleted workout stays gone while program/query fails"
 );
+await hub.checkTrainingHubSession();
+assert.ok(hubRequests.some(({ url }) => new URL(url).pathname === "/account/query"), "the empty read started a session check");
+assert.equal(databaseModule.getSetting("trainingHub.accessToken"), "test-token", "a live account keeps the session");
+assert.ok(!hubDiagnosticEntries().some((entry) => entry.source === "trainingHub:session"));
 
 databaseModule.deleteSettings([
   "trainingHub.accessToken",

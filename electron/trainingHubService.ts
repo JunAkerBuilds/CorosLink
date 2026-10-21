@@ -155,6 +155,10 @@ const AUTH_ERROR_CODES = new Set(["0101", "0102", "1006", "1019", "ACCESS_TOKEN_
 // again needs the emailed code, "1" otherwise.
 const SESSION_EXPIRED_SETTING = "trainingHub.sessionExpired";
 const SESSION_CHECK_INTERVAL_MS = 60_000;
+// After COROS answers a just-renewed token's account query empty too, the check
+// can't tell a dead token from this account's answer: wait 1 h, then 2 h, … 24 h.
+const SESSION_CHECK_BACKOFF_MS = 60 * 60_000;
+const SESSION_CHECK_MAX_BACKOFF_MS = 24 * 60 * 60_000;
 
 // Email verification code for the 2FA login challenge: codeType 20, 6 digits.
 const TWO_FACTOR_CODE_TYPE = 20;
@@ -359,6 +363,8 @@ type TrainingHubSessionListener = (status: TrainingHubStatus) => void;
 const sessionListeners = new Set<TrainingHubSessionListener>();
 let sessionCheck: Promise<void> | null = null;
 let lastSessionCheckAt = Number.NEGATIVE_INFINITY;
+let sessionCheckBackoffMs = 0;
+let sessionCheckResumesAt = Number.NEGATIVE_INFINITY;
 
 /** Hears when COROS ends the session, and when CorosLink renews a dead one on its own. */
 export function onTrainingHubSessionChange(
@@ -396,6 +402,7 @@ export function checkTrainingHubSession(
   const now = Date.now();
   if (
     !getStoredAuth() ||
+    now < sessionCheckResumesAt ||
     (!options.force && now - lastSessionCheckAt < SESSION_CHECK_INTERVAL_MS)
   ) {
     return Promise.resolve();
@@ -422,10 +429,20 @@ async function runTrainingHubSessionCheck(): Promise<void> {
       method: "GET",
       emptyMeansExpired: true
     });
-  } catch {
+    sessionCheckBackoffMs = 0;
+  } catch (error) {
     // An ended session was announced on its way out of trainingHubRequest. An
     // outage or being offline says nothing about the session.
-    return;
+    if ((error as { code?: unknown } | null)?.code !== EMPTY_RENEWED_ACCOUNT_CODE) {
+      return;
+    }
+    // The renewed session is kept (the error report has the empty answer), and
+    // checking again soon would only mint another token.
+    sessionCheckBackoffMs = Math.min(
+      SESSION_CHECK_MAX_BACKOFF_MS,
+      sessionCheckBackoffMs ? sessionCheckBackoffMs * 2 : SESSION_CHECK_BACKOFF_MS
+    );
+    sessionCheckResumesAt = Date.now() + sessionCheckBackoffMs;
   }
 
   // Renewed: reads made with the dead token came back empty, so reload them.
@@ -949,6 +966,8 @@ async function queryTrainingHubAccount(
 
 export function logoutTrainingHub(): TrainingHubStatus {
   trainingHubSessionGeneration += 1;
+  sessionCheckBackoffMs = 0;
+  sessionCheckResumesAt = Number.NEGATIVE_INFINITY;
   pendingTwoFactor = null;
   clearTrainingHubAuth();
   clearStoredCorosCredentials();
@@ -6943,6 +6962,14 @@ async function recoverExpiredTrainingHubSession<T>(
   try {
     return await executeTrainingHubRequest<T>(refreshed, path, options);
   } catch (error) {
+    // Login treats an empty account as merely unavailable, and COROS just issued
+    // this token: the empty answer is about the account, not the session.
+    if ((error as { code?: unknown } | null)?.code === EMPTY_ACCOUNT_CODE) {
+      throw Object.assign(
+        new Error(`COROS ${path} returned nothing even for the session just renewed from the saved login; kept it.`, { cause: error }),
+        { code: EMPTY_RENEWED_ACCOUNT_CODE }
+      );
+    }
     if (getTrainingHubRetryReason(error) === "token") {
       clearExpiredTrainingHubAuth(refreshed.accessToken);
       throw trainingHubSessionExpired(error);
@@ -6952,6 +6979,10 @@ async function recoverExpiredTrainingHubSession<T>(
 }
 
 const SESSION_EXPIRED_CODE = "COROS_SESSION_EXPIRED";
+// The session check's empty account read (emptyMeansExpired), and the same
+// answer for a token renewed because of it.
+const EMPTY_ACCOUNT_CODE = "COROS_EMPTY_ACCOUNT";
+const EMPTY_RENEWED_ACCOUNT_CODE = "COROS_EMPTY_RENEWED_ACCOUNT";
 
 /** Same message as before; the cause tells the error report why re-login didn't work. */
 function trainingHubSessionExpired(cause: unknown): Error {
@@ -6997,7 +7028,10 @@ async function executeTrainingHubRequest<T>(
   });
   if (emptyMeansExpired && (result === undefined || result === null)) {
     throw annotateDiagnosticRequest(
-      new InvalidTrainingHubTokenError(`COROS ${path} returned nothing for the saved session.`),
+      Object.assign(
+        new InvalidTrainingHubTokenError(`COROS ${path} returned nothing for the saved session.`),
+        { code: EMPTY_ACCOUNT_CODE }
+      ),
       requestOptions.method ?? "GET",
       url.toString()
     );
@@ -7208,9 +7242,14 @@ function clearTrainingHubAuth(): void {
   ]);
 }
 
-/** Signs out only a session that still holds the refused token, never a newer one. */
+/**
+ * Signs out only a session that still holds the refused token, never a newer
+ * one. Like signing out, it moves the generation on, so a slower request that
+ * failed with the same token doesn't sign in again behind the window's back.
+ */
 function clearExpiredTrainingHubAuth(deadToken: string): void {
   if (getSetting(SETTINGS.accessToken) === deadToken) {
+    trainingHubSessionGeneration += 1;
     clearTrainingHubAuth();
   }
 }
