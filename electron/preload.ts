@@ -831,8 +831,8 @@ const api = {
     confirmed: boolean
   ): Promise<CorosTrainingPlanDeleteResult> =>
     ipcRenderer.invoke("trainingLibrary:deleteCorosPlan", remoteId, confirmed),
-  previewTrainingPlanCalendar: (planId: string, startDate: string): Promise<TrainingPlanCalendarPreview> =>
-    ipcRenderer.invoke("trainingLibrary:previewPlanCalendar", planId, startDate),
+  previewTrainingPlanCalendar: (planId: string, startDate: string, fromDate?: string): Promise<TrainingPlanCalendarPreview> =>
+    ipcRenderer.invoke("trainingLibrary:previewPlanCalendar", planId, startDate, fromDate),
   addTrainingPlanToCalendar: (
     previewId: string,
     confirmed: boolean,

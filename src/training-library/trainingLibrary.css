@@ -5554,12 +5554,23 @@
   margin: 24px;
 }
 
+/* Two date fields and the preview button; subgrid rows keep the button level with the inputs when a hint wraps. */
 .plan-calendar-start {
   display: grid;
-  align-items: end;
-  grid-template-columns: 190px minmax(0, 1fr) auto;
-  gap: 15px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
+  column-gap: 15px;
+  row-gap: 6px;
 }
+
+.plan-calendar-start label {
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+}
+
+.plan-calendar-start > .primary-button { grid-column: 3; grid-row: 2; align-self: center; }
+.plan-calendar-start > p { grid-column: 1 / -1; padding-top: 6px; }
 
 .plan-calendar-start p,
 .plan-calendar-loading p,
@@ -5585,6 +5596,7 @@
 .plan-calendar-loading strong { color: var(--text-primary); font-size: 13px; }
 .plan-calendar-start input[aria-invalid="true"] { border-color: var(--warning-border); }
 .plan-calendar-date-error { color: var(--warning-text); font-size: 10.5px; font-weight: 400; }
+.plan-calendar-date-hint { color: var(--text-secondary); font-size: 10.5px; font-weight: 400; line-height: 1.4; }
 .plan-calendar-offline,
 .plan-calendar-error { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border: 1px solid var(--warning-border); border-radius: var(--radius-sm); color: var(--warning-text); background: var(--warning-bg); }
 .plan-calendar-offline strong,
@@ -5729,6 +5741,10 @@
 .plan-calendar-week li > strong { overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .plan-calendar-week li > small { display: flex; align-items: center; gap: 5px; grid-column: 3; margin-top: 3px; color: var(--warning-text); font-size: 10.5px; }
 .plan-calendar-week li.has-conflict { border-radius: 6px; background: linear-gradient(90deg, color-mix(in srgb, var(--warning-text) 8%, transparent), transparent 75%); }
+/* Before the first day to add: listed so the plan visibly keeps its days, but quieter than the workouts being written. */
+.plan-calendar-week li.is-skipped > :is(strong, svg) { color: var(--text-secondary); }
+.plan-calendar-week li.is-skipped > strong { font-weight: 500; text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--text-secondary) 55%, transparent); }
+.plan-calendar-week li.is-skipped > small { color: var(--text-secondary); }
 
 /* A confirm that is running reads as busy, not as a faded disabled control. */
 .training-library-view :is(.plan-calendar-dialog > footer, .tl-dialog footer) .primary-button[aria-busy="true"]:disabled {
@@ -5819,6 +5835,7 @@
   .plan-generator-status { border-top: 1px solid var(--tl-rule); border-left: 0; overflow: visible; }
   .plan-generator-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .plan-calendar-start { grid-template-columns: 1fr; }
+  .plan-calendar-start > .primary-button { grid-column: auto; grid-row: auto; justify-self: start; }
 }
 
 @media (max-width: 560px) {

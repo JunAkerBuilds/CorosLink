@@ -3487,6 +3487,8 @@ export interface TrainingPlanCalendarFailure {
 export interface TrainingPlanCalendarInstall {
   id: string;
   startDate: string;
+  /** First calendar day written; plan workouts dated earlier were skipped. Absent on older installs (= startDate). */
+  fromDate?: string;
   planRevision: string;
   state: "active" | "partial" | "removed";
   lastOperation?: "install" | "remove";
@@ -3550,7 +3552,11 @@ export interface TrainingPlanCalendarPreview {
   planName: string;
   planRevision: string;
   startDate: string;
+  /** Install only: plan workouts dated before this day stay off the calendar. */
+  fromDate?: string;
   entries: TrainingPlanCalendarPreviewEntry[];
+  /** Install only: plan workouts dated before fromDate, listed so the preview shows the plan kept its days. */
+  skipped?: TrainingPlanCalendarPreviewEntry[];
   conflicts: TrainingPlanCalendarConflict[];
   blockers: string[];
   expiresAt: string;

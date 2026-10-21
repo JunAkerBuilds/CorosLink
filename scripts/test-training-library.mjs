@@ -268,6 +268,18 @@ assert.match(library.buildTrainingPlanCalendarProjection(holdingPlan, "2099-08-0
 const anyDayProjection = library.buildTrainingPlanCalendarProjection(calendarPlan, "2099-08-04", [], "20990101");
 assert.equal(anyDayProjection.startDate, "2099-08-04");
 assert.deepEqual(anyDayProjection.entries.map((entry) => entry.happenDay), ["20990804", "20990806"]);
+// A plan you're partway through keeps its days: Week 1 began Monday, today is Wednesday, add from Thursday.
+const midWeekPlan = structuredClone(calendarPlan);
+midWeekPlan.entries = [0, 2, 3, 5].map((dayIndex, index) => ({ ...calendarPlan.entries[index % 2], id: `mid:${dayIndex}`, weekIndex: 0, dayIndex }));
+const midWeekProjection = library.buildTrainingPlanCalendarProjection(midWeekPlan, "2099-08-03", [], "20990805", "2099-08-06");
+assert.equal(midWeekProjection.startDate, "2099-08-03", "Week 1 may start before today");
+assert.equal(midWeekProjection.fromDate, "2099-08-06");
+assert.deepEqual(midWeekProjection.entries.map((entry) => entry.happenDay), ["20990806", "20990808"], "workouts keep their plan dates from the first day on");
+assert.deepEqual(midWeekProjection.skipped.map((entry) => entry.happenDay), ["20990803", "20990805"]);
+assert.equal(midWeekProjection.blockers.length, 0);
+assert.deepEqual(library.buildTrainingPlanCalendarProjection(midWeekPlan, "2099-08-03", [], "20990805").entries.map((entry) => entry.happenDay), ["20990805", "20990806", "20990808"], "the first day defaults to today");
+assert.throws(() => library.buildTrainingPlanCalendarProjection(midWeekPlan, "2099-08-03", [], "20990805", "2099-08-04"), /past dates/i);
+assert.match(library.buildTrainingPlanCalendarProjection(midWeekPlan, "2099-08-03", [], "20990805", "2099-08-20").blockers[0], /No plan workouts fall on or after 2099-08-20/);
 const revisionBefore = domain.trainingPlanCalendarRevision(calendarPlan);
 calendarPlan.entries[0].title = "Edited after install";
 assert.notEqual(domain.trainingPlanCalendarRevision(calendarPlan), revisionBefore);

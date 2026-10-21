@@ -2470,7 +2470,7 @@ function registerIpcHandlers(): void {
   );
   ipcMain.handle(
     "trainingLibrary:previewPlanCalendar",
-    (_event, planId: string, startDate: string) => previewTrainingPlanCalendar(planId, startDate)
+    (_event, planId: string, startDate: string, fromDate?: string) => previewTrainingPlanCalendar(planId, startDate, fromDate)
   );
   ipcMain.handle(
     "trainingLibrary:addPlanToCalendar",

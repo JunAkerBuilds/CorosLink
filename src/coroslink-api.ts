@@ -584,7 +584,7 @@ export interface CorosLinkApi {
     remoteId: string,
     confirmed: boolean
   ) => Promise<CorosTrainingPlanDeleteResult>;
-  previewTrainingPlanCalendar: (planId: string, startDate: string) => Promise<TrainingPlanCalendarPreview>;
+  previewTrainingPlanCalendar: (planId: string, startDate: string, fromDate?: string) => Promise<TrainingPlanCalendarPreview>;
   addTrainingPlanToCalendar: (
     previewId: string,
     confirmed: boolean,

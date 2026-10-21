@@ -36,10 +36,16 @@ function calendarDay(value = new Date()): string {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }
 
-function installDateProblem(value: string, today: string): string | null {
+function startDateProblem(value: string): string | null {
   const date = new Date(`${value}T12:00:00`);
   if (!value || Number.isNaN(date.valueOf())) return "Choose a start date.";
-  if (value < today) return "A training plan cannot start in the past.";
+  return null;
+}
+
+function fromDateProblem(value: string, today: string): string | null {
+  const date = new Date(`${value}T12:00:00`);
+  if (!value || Number.isNaN(date.valueOf())) return "Choose the first day to add.";
+  if (value < today) return "Workouts can't be added to past dates.";
   return null;
 }
 
@@ -71,6 +77,8 @@ interface PreviewRow {
   entry: TrainingPlanCalendarPreviewEntry;
   sport?: WorkoutSport;
   conflict?: TrainingPlanCalendarConflict;
+  /** Dated before the first day to add, so it stays off the calendar. */
+  skipped?: boolean;
 }
 
 interface PreviewWeek {
@@ -84,15 +92,19 @@ function groupPreviewWeeks(preview: TrainingPlanCalendarPreview, plan: TrainingP
   const start = parseDay(preview.startDate);
   const sports = new Map(plan.entries.map((entry) => [entry.id, entry.workout?.sport]));
   const weeks = new Map<number, PreviewRow[]>();
-  const sorted = [...preview.entries].sort((left, right) => left.happenDay.localeCompare(right.happenDay));
-  for (const entry of sorted) {
+  const sorted = [
+    ...preview.entries.map((entry) => ({ entry, skipped: false })),
+    ...(preview.skipped ?? []).map((entry) => ({ entry, skipped: true }))
+  ].sort((left, right) => left.entry.happenDay.localeCompare(right.entry.happenDay));
+  for (const { entry, skipped } of sorted) {
     const day = parseDay(entry.happenDay);
     const index = start && day ? Math.max(0, Math.floor(Math.round((day.valueOf() - start.valueOf()) / 86_400_000) / 7)) : 0;
     const rows = weeks.get(index) ?? [];
     rows.push({
       entry,
       sport: sports.get(entry.planEntryId) ?? entry.sport,
-      conflict: preview.conflicts.find((item) => item.happenDay === entry.happenDay && item.existing.length > 0)
+      conflict: skipped ? undefined : preview.conflicts.find((item) => item.happenDay === entry.happenDay && item.existing.length > 0),
+      skipped
     });
     weeks.set(index, rows);
   }
@@ -103,16 +115,29 @@ function groupPreviewWeeks(preview: TrainingPlanCalendarPreview, plan: TrainingP
   });
 }
 
+/** Keeps the plan's own Week 1 while any of it is still ahead, so a plan you're partway through keeps its days. */
 function initialInstallDate(plan: TrainingPlanDocument): string {
-  const value = plan.startDate?.replaceAll("-", "");
-  if (value && /^\d{8}$/.test(value)) {
-    const dashed = `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6)}`;
-    const date = new Date(`${dashed}T12:00:00`);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (!Number.isNaN(date.valueOf()) && date >= today) return dashed;
+  const start = plan.startDate ? parseDay(plan.startDate) : undefined;
+  if (start) {
+    const lastDay = new Date(start);
+    lastDay.setDate(lastDay.getDate() + Math.max(1, plan.weekCount) * 7 - 1);
+    if (calendarDay(lastDay) >= calendarDay()) return calendarDay(start);
   }
   return calendarDay();
+}
+
+/** A retried install keeps the first day it was started with, matching the main process. */
+function initialFromDate(plan: TrainingPlanDocument, today: string): string {
+  const partial = [...(plan.calendarInstalls ?? [])]
+    .filter((install) => install.state === "partial" && install.lastOperation === "install")
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+  const value = partial ? parseDay(partial.fromDate ?? partial.startDate) : undefined;
+  const day = value ? calendarDay(value) : today;
+  return day > today ? day : today;
+}
+
+function weekdayName(value: Date): string {
+  return value.toLocaleDateString(getLocale(), { weekday: "long" });
 }
 
 export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperation, onClose, onComplete }: TrainingPlanCalendarDialogProps) {
@@ -123,11 +148,20 @@ export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperat
   const operation = requestedOperation ?? (install && !(install.state === "partial" && install.lastOperation === "install") ? "remove" : "install");
   const [startDate, setStartDate] = useState(() => initialInstallDate(plan));
   const [today] = useState(() => calendarDay());
+  const [fromDate, setFromDate] = useState(() => initialFromDate(plan, today));
   const [preview, setPreview] = useState<TrainingPlanCalendarPreview | null>(null);
   const [loading, setLoading] = useState(operation === "remove" && !offline);
   const [mutating, setMutating] = useState(false);
   const [error, setError] = useState<{ title: string; message: string } | null>(null);
-  const startDateProblem = operation === "install" ? installDateProblem(startDate, today) : null;
+  const startProblem = operation === "install" ? startDateProblem(startDate) : null;
+  const fromProblem = operation === "install" ? fromDateProblem(fromDate, today) : null;
+  // Re-anchoring Week 1 to another weekday moves every workout; say so before the preview.
+  const weekdayShift = useMemo(() => {
+    const original = plan.startDate ? parseDay(plan.startDate) : undefined;
+    const chosen = startDate ? parseDay(startDate) : undefined;
+    if (!original || !chosen || original.getDay() === chosen.getDay()) return null;
+    return t("Weekdays shift: the plan’s {{value1}} becomes {{value2}}.", { value1: weekdayName(original), value2: weekdayName(chosen) });
+  }, [plan.startDate, startDate, getLocale()]);
 
   const conflictCount = useMemo(
     () => preview?.conflicts.reduce((sum, conflict) => sum + conflict.existing.length, 0) ?? 0,
@@ -141,13 +175,13 @@ export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperat
   const workoutCount = preview?.entries.length ?? 0;
 
   const loadPreview = async () => {
-    if (offline || startDateProblem) return;
+    if (offline || startProblem || fromProblem) return;
     setLoading(true);
     setError(null);
     setPreview(null);
     try {
       setPreview(operation === "install"
-        ? await api.previewTrainingPlanCalendar(plan.id, startDate)
+        ? await api.previewTrainingPlanCalendar(plan.id, startDate, fromDate)
         : await api.previewTrainingPlanCalendarRemoval(plan.id));
     } catch (cause) {
       setError({ title: "Couldn’t preview calendar", message: userFacingError(cause) });
@@ -212,7 +246,12 @@ export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperat
       <div className="plan-calendar-body">
         {offline ? <div className="plan-calendar-offline"><AlertTriangle size={18} /><div><strong>{t("Calendar actions are unavailable offline")}</strong><p>{t("Reconnect to COROS, refresh the Training Library, and try again.")}</p></div></div> : null}
 
-        {!offline && operation === "install" && !preview ? <div className="plan-calendar-start"><label><span>{t("Plan start date")}</span><input autoFocus type="date" value={startDate} min={today} aria-invalid={Boolean(startDateProblem)} aria-describedby={startDateProblem ? "plan-calendar-date-error" : undefined} disabled={loading} onChange={(event) => { setStartDate(event.target.value); setError(null); }} />{startDateProblem ? <small id="plan-calendar-date-error" className="plan-calendar-date-error" role="alert">{startDateProblem}</small> : null}</label><p>{t("Day 1 starts on the selected date. The preview checks exact dates and shows same-day workouts; existing workouts are kept.")}</p><button type="button" className="primary-button" disabled={loading || Boolean(startDateProblem)} onClick={() => void loadPreview()}>{loading ? <LoaderCircle className="is-spinning" size={15} /> : <CalendarPlus size={15} />}{loading ? t("Checking calendar...") : t("Preview dates")}</button></div> : null}
+        {!offline && operation === "install" && !preview ? <div className="plan-calendar-start">
+          <label><span>{t("Week 1 starts")}</span><input autoFocus type="date" value={startDate} aria-invalid={Boolean(startProblem)} aria-describedby={startProblem ? "plan-calendar-start-error" : weekdayShift ? "plan-calendar-start-hint" : undefined} disabled={loading} onChange={(event) => { setStartDate(event.target.value); setError(null); }} />{startProblem ? <small id="plan-calendar-start-error" className="plan-calendar-date-error" role="alert">{t(startProblem)}</small> : weekdayShift ? <small id="plan-calendar-start-hint" className="plan-calendar-date-hint">{weekdayShift}</small> : null}</label>
+          <label><span>{t("Add workouts from")}</span><input type="date" value={fromDate} min={today} aria-invalid={Boolean(fromProblem)} aria-describedby={fromProblem ? "plan-calendar-from-error" : undefined} disabled={loading} onChange={(event) => { setFromDate(event.target.value); setError(null); }} />{fromProblem ? <small id="plan-calendar-from-error" className="plan-calendar-date-error" role="alert">{t(fromProblem)}</small> : null}</label>
+          <button type="button" className="primary-button" disabled={loading || Boolean(startProblem) || Boolean(fromProblem)} onClick={() => void loadPreview()}>{loading ? <LoaderCircle className="is-spinning" size={15} /> : <CalendarPlus size={15} />}{loading ? t("Checking calendar...") : t("Preview dates")}</button>
+          <p>{t("Week 1 sets the plan’s dates. Workouts before the first day are skipped, so a plan you’re partway through keeps its days. Existing workouts stay.")}</p>
+        </div> : null}
 
         {!offline && loading ? <div className="plan-calendar-loading"><LoaderCircle className="is-spinning" size={22} /><strong>{localOnly ? t("Checking the calendar") : t("Checking the COROS calendar")}</strong><p>{t("Comparing plan dates with current scheduled workouts.")}</p></div> : null}
 
@@ -232,18 +271,24 @@ export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperat
             ? t("Only workouts this plan added for today or later are removed. Past, completed and unrelated workouts stay on your calendar.")
             : t("Existing workouts stay. Plan workouts are added next to them.")}</p>
           {preview.blockers.length ? <div className="plan-calendar-blockers"><strong><AlertTriangle size={15} /> {t("Resolve before continuing")}</strong>{preview.blockers.map((blocker) => <p key={blocker}>{blocker}</p>)}</div> : null}
-          <ol className="plan-calendar-weeks">{weeks.map((week) => <li key={week.number} className="plan-calendar-week">
-            <div className="plan-calendar-week-head"><strong>{t("Week {{value1}}", { value1: String(week.number) })}</strong><span>{week.range}</span><small>{week.rows.length === 1 ? t("1 workout") : t("{{value1}} workouts", { value1: String(week.rows.length) })}</small></div>
-            <ul>{week.rows.map(({ entry, sport, conflict }) => {
-              const SportIcon = sportTheme(sport).icon;
-              return <li key={`${entry.planEntryId}:${entry.happenDay}`} className={conflict ? "has-conflict" : undefined} style={sportChipStyle(sport)}>
-                <time dateTime={entry.happenDay}>{displayDay(entry.happenDay)}</time>
-                <SportIcon size={14} aria-hidden="true" />
-                <strong title={entry.name}>{entry.name}</strong>
-                {conflict ? <small><AlertTriangle size={12} aria-hidden="true" />{t("Same day as {{value1}}", { value1: conflict.existing.map((item) => item.name).join(", ") })}</small> : null}
-              </li>;
-            })}</ul>
-          </li>)}</ol>
+          <ol className="plan-calendar-weeks">{weeks.map((week) => {
+            const added = week.rows.filter((row) => !row.skipped).length;
+            const skipped = week.rows.length - added;
+            const addedLabel = added === 1 ? t("1 workout") : t("{{value1}} workouts", { value1: String(added) });
+            const skippedLabel = t("{{value1}} skipped", { value1: String(skipped) });
+            return <li key={week.number} className="plan-calendar-week">
+              <div className="plan-calendar-week-head"><strong>{t("Week {{value1}}", { value1: String(week.number) })}</strong><span>{week.range}</span><small>{!added ? skippedLabel : skipped ? `${addedLabel} · ${skippedLabel}` : addedLabel}</small></div>
+              <ul>{week.rows.map(({ entry, sport, conflict, skipped: isSkipped }) => {
+                const SportIcon = sportTheme(sport).icon;
+                return <li key={`${entry.planEntryId}:${entry.happenDay}`} className={isSkipped ? "is-skipped" : conflict ? "has-conflict" : undefined} style={sportChipStyle(sport)}>
+                  <time dateTime={entry.happenDay}>{displayDay(entry.happenDay)}</time>
+                  <SportIcon size={14} aria-hidden="true" />
+                  <strong title={entry.name}>{entry.name}</strong>
+                  {isSkipped ? <small>{t("Skipped")}</small> : conflict ? <small><AlertTriangle size={12} aria-hidden="true" />{t("Same day as {{value1}}", { value1: conflict.existing.map((item) => item.name).join(", ") })}</small> : null}
+                </li>;
+              })}</ul>
+            </li>;
+          })}</ol>
         </div> : null}
       </div>
 

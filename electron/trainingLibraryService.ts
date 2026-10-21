@@ -793,19 +793,31 @@ function latestInstallForPlan(plan: TrainingPlanDocument): TrainingPlanCalendarI
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
 }
 
+/** Older installs never skipped days, so their first written day is their start date (or today, whichever is later). */
+function installFromDay(install: TrainingPlanCalendarInstall, today: string): string {
+  const fromDay = normalizedCalendarDay(install.fromDate ?? install.startDate);
+  return fromDay > today ? fromDay : today;
+}
+
+/**
+ * Week 1 may start in the past so a plan you are partway through keeps its days;
+ * only workouts dated on or after `fromDate` (today by default) are written.
+ */
 export function buildTrainingPlanCalendarProjection(
   plan: TrainingPlanDocument,
   startDate: string,
   scheduled: TrainingHubScheduledWorkoutEntry[],
-  today = dateKey(new Date())
-): Pick<TrainingPlanCalendarPreview, "startDate" | "entries" | "conflicts" | "blockers"> & {
+  today = dateKey(new Date()),
+  fromDate?: string
+): Pick<TrainingPlanCalendarPreview, "startDate" | "fromDate" | "entries" | "skipped" | "conflicts" | "blockers"> & {
   projectedPlan: TrainingPlanDocument;
 } {
   if (plan.source === "coros") {
     throw new Error("Native COROS plans are read-only in the Training Library.");
   }
   const startDay = normalizedCalendarDay(startDate);
-  if (startDay < today) throw new Error("A training plan cannot be installed in the past.");
+  const fromDay = fromDate ? normalizedCalendarDay(fromDate) : today;
+  if (fromDay < today) throw new Error("Workouts can't be added to past dates.");
   const projectedPlan = shiftTrainingPlan(plan, dashedCalendarDay(startDay));
   const planRevision = trainingPlanCalendarRevision(projectedPlan);
   const existingInstall = latestInstallForPlan(plan);
@@ -816,7 +828,7 @@ export function buildTrainingPlanCalendarProjection(
     if (existingInstall.lastOperation === "remove") {
       blockers.push("Finish removing the partial calendar installation before reinstalling.");
     }
-    if (normalizedCalendarDay(existingInstall.startDate) !== startDay) {
+    if (normalizedCalendarDay(existingInstall.startDate) !== startDay || installFromDay(existingInstall, today) !== fromDay) {
       blockers.push("Remove the partial calendar installation before choosing a new start date.");
     }
     if (existingInstall.planRevision !== planRevision) {
@@ -832,6 +844,7 @@ export function buildTrainingPlanCalendarProjection(
       .map((occurrence) => `${occurrence.planEntryId}:${occurrence.happenDay}`) ?? []
   );
   const entries: TrainingPlanCalendarPreviewEntry[] = [];
+  const skipped: TrainingPlanCalendarPreviewEntry[] = [];
   for (const entry of projectedPlan.entries) {
     if (entry.kind !== "workout") continue;
     if (entry.dayIndex === undefined) {
@@ -840,16 +853,24 @@ export function buildTrainingPlanCalendarProjection(
     }
     const happenDay = addCalendarDays(startDay, entry.weekIndex * 7 + entry.dayIndex);
     if (owned.has(`${entry.id}:${happenDay}`)) continue;
-    if (!entry.programId && !entry.workout) {
-      blockers.push(`"${entry.title ?? "Untitled workout"}" has no workout definition.`);
-      continue;
-    }
-    entries.push({
+    const previewEntry: TrainingPlanCalendarPreviewEntry = {
       planEntryId: entry.id,
       name: entry.title ?? entry.workout?.name ?? "Workout",
       happenDay,
       sport: entry.workout?.sport
-    });
+    };
+    if (happenDay < fromDay) {
+      skipped.push(previewEntry);
+      continue;
+    }
+    if (!entry.programId && !entry.workout) {
+      blockers.push(`"${entry.title ?? "Untitled workout"}" has no workout definition.`);
+      continue;
+    }
+    entries.push(previewEntry);
+  }
+  if (entries.length === 0 && skipped.length > 0) {
+    blockers.push(`No plan workouts fall on or after ${dashedCalendarDay(fromDay)}. Choose an earlier first day or a later Week 1.`);
   }
   const conflicts = [...new Set(entries.map((entry) => entry.happenDay))]
     .map((happenDay) => ({
@@ -866,7 +887,9 @@ export function buildTrainingPlanCalendarProjection(
   return {
     projectedPlan,
     startDate: dashedCalendarDay(startDay),
+    fromDate: dashedCalendarDay(fromDay),
     entries,
+    skipped,
     conflicts,
     blockers: [...new Set(blockers)]
   };
@@ -902,14 +925,20 @@ function rememberPlanCalendarPreview(
 
 export async function previewTrainingPlanCalendar(
   planId: string,
-  startDate: string
+  startDate: string,
+  fromDate?: string
 ): Promise<TrainingPlanCalendarPreview> {
   const plan = getTrainingPlanDocument(planId);
   if (!plan) throw new Error("Training plan was not found.");
+  const today = dateKey(new Date());
   const startDay = normalizedCalendarDay(startDate);
-  const rangeEnd = addCalendarDays(startDay, Math.max(0, plan.weekCount * 7 - 1));
-  const scheduled = await trainingPlanCalendarAdapter.listScheduled(startDay, rangeEnd);
-  const projection = buildTrainingPlanCalendarProjection(plan, startDate, scheduled);
+  const fromDay = fromDate ? normalizedCalendarDay(fromDate) : today;
+  // Conflicts only matter on the days that will be written.
+  const rangeStart = fromDay > startDay ? fromDay : startDay;
+  const planEnd = addCalendarDays(startDay, Math.max(0, plan.weekCount * 7 - 1));
+  const rangeEnd = planEnd > rangeStart ? planEnd : rangeStart;
+  const scheduled = await trainingPlanCalendarAdapter.listScheduled(rangeStart, rangeEnd);
+  const projection = buildTrainingPlanCalendarProjection(plan, startDate, scheduled, today, fromDate);
   return rememberPlanCalendarPreview(
     {
       operation: "install",
@@ -917,13 +946,15 @@ export async function previewTrainingPlanCalendar(
       planName: plan.name,
       planRevision: trainingPlanCalendarRevision(projection.projectedPlan),
       startDate: projection.startDate,
+      fromDate: projection.fromDate,
       entries: projection.entries,
+      skipped: projection.skipped,
       conflicts: projection.conflicts,
       blockers: projection.blockers
     },
     projection.projectedPlan,
     scheduled,
-    startDay,
+    rangeStart,
     rangeEnd,
     latestInstallForPlan(plan)?.id
   );
@@ -1032,6 +1063,7 @@ export async function addTrainingPlanToCalendar(
     install = {
       id: crypto.randomUUID(),
       startDate: record.preview.startDate,
+      fromDate: record.preview.fromDate,
       planRevision: record.preview.planRevision,
       state: "partial",
       lastOperation: "install",
