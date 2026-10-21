@@ -159,6 +159,18 @@ export async function listNativeCorosPlans(): Promise<NativeCorosPlanDetail[]> {
   return (await queryNativeCorosPlanLibrary()).plans;
 }
 
+/** A COROS plan's workouts as plan/detail returns them: complete, exercises included. */
+export async function readNativeCorosPlanPrograms(remoteId: string): Promise<RawPlan[]> {
+  const rawDetail = await readNativeTrainingPlanEndpoint<RawPlan>(
+    "/training/plan/detail",
+    {
+      method: "GET",
+      params: { id: remoteId, supportRestExercise: 1 }
+    }
+  );
+  return objectArray(rawDetail?.programs);
+}
+
 export async function readNativeCorosPlan(
   remoteId: string
 ): Promise<NativeCorosPlanDetail> {

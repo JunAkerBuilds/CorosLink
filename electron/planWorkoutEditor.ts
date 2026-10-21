@@ -182,6 +182,7 @@ export function replaceTrainingPlanEntryWorkout(
     title: workout.name,
     workout: structuredClone(workout),
     programId: undefined,
+    corosProgram: undefined,
     plannedDurationSeconds: undefined,
     plannedDistanceMeters: undefined,
     plannedTrainingLoad: undefined,

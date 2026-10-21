@@ -664,6 +664,160 @@ const plainDelete = domain.createTrainingPlan("Plain delete", "local");
 databaseModule.saveTrainingPlanDocument(plainDelete);
 assert.deepEqual(await library.deleteLocalTrainingPlanAndCalendar(plainDelete.id, true), { removedCalendarWorkouts: 0 });
 assert.equal(databaseModule.getTrainingPlanDocument(plainDelete.id), undefined);
+
+// A copy of a COROS plan schedules that plan's own workouts: their IDs exist only inside the plan.
+const fullCorosProgram = (id, idInPlan, name) => ({
+  id,
+  idInPlan,
+  planId: "remote-full",
+  planIdIndex: 0,
+  name,
+  sportType: 1,
+  exercises: [{ id: "1", name: "Run", targetType: 5, targetValue: 400_000 }],
+  exerciseBarChart: [{ name: "Run" }]
+});
+const fullNativeDocument = library.nativePlanToDocument(adapter.parseNativeCorosPlan({
+  id: "remote-full",
+  name: "COROS 5K",
+  totalDay: 7,
+  entities: [
+    { id: "full-entity-1", idInPlan: "1", dayNo: 0, happenDay: "20990803" },
+    { id: "full-entity-2", idInPlan: "2", dayNo: 2, happenDay: "20990805" }
+  ],
+  programs: [
+    fullCorosProgram("full-program-1", "1", "Easy Run 4 km"),
+    { id: "full-program-2", idInPlan: "2", name: "Intervals", sportType: 1 }
+  ]
+}, "2026-07-29T00:00:00.000Z"));
+assert.equal(fullNativeDocument.entries[0].corosProgram?.exercises.length, 1, "a COROS plan keeps the workouts COROS sent in full");
+assert.equal(fullNativeDocument.entries[1].corosProgram, undefined, "a lightweight workout record isn't kept as a workout");
+const editedCorosEntry = planWorkoutEditor.replaceTrainingPlanEntryWorkout(fullNativeDocument.entries[0], makeWorkout("Edited run", 30));
+assert.equal(editedCorosEntry.corosProgram, undefined, "editing a workout drops the COROS workout it replaced");
+
+mockCalendar = [];
+const corosCopies = [];
+let corosPlanReads = 0;
+let failCorosPlanRead = false;
+library.setTrainingPlanCalendarAdapterForTests({
+  listScheduled: async (startDay, endDay) => mockCalendar.filter((entry) => entry.happenDay >= startDay && entry.happenDay <= endDay),
+  scheduleLibrary: async () => {
+    throw new Error("a COROS plan's workout IDs aren't library workouts");
+  },
+  scheduleCorosProgram: async (program, happenDay, name) => {
+    corosCopies.push({ id: program.id, happenDay, name });
+    appendMockOccurrence(name, happenDay);
+  },
+  readCorosPlanPrograms: async (remoteId) => {
+    corosPlanReads += 1;
+    if (failCorosPlanRead) throw new Error("mock offline");
+    assert.equal(remoteId, "remote-full", "an older copy reads the plan it was copied from");
+    return [fullCorosProgram("full-program-2", "2", "Intervals")];
+  },
+  removeScheduled: async (entry) => {
+    mockCalendar = mockCalendar.filter((candidate) => !(candidate.planId === entry.planId && candidate.idInPlan === entry.idInPlan));
+  }
+});
+const corosCopy = library.saveLocalTrainingPlan(fullNativeDocument);
+assert.equal(corosCopy.source, "local");
+const corosCopyPreview = await library.previewTrainingPlanCalendar(corosCopy.id, "2099-08-03");
+assert.deepEqual(corosCopyPreview.blockers, []);
+assert.deepEqual(corosCopyPreview.entries.map((entry) => entry.happenDay), ["20990803", "20990805"]);
+assert.equal(corosPlanReads, 1, "only the workout the copy lacks is read from the COROS plan");
+const corosCopyResult = await library.addTrainingPlanToCalendar(corosCopyPreview.previewId, true, "metric");
+assert.equal(corosCopyResult.scheduledCount, 2);
+assert.equal(corosCopyResult.failures.length, 0);
+assert.deepEqual(
+  corosCopies.map((copy) => [copy.id, copy.happenDay, copy.name]),
+  [["full-program-1", "20990803", "Easy Run 4 km"], ["full-program-2", "20990805", "Intervals"]],
+  "each workout is scheduled from the COROS plan's own workout, under the plan's name for it"
+);
+assert.ok(
+  databaseModule.getTrainingPlanDocument(corosCopy.id).entries.every((entry) => entry.kind !== "workout" || entry.corosProgram),
+  "a workout read for an older copy is kept for the next install"
+);
+
+failCorosPlanRead = true;
+const unreadableCopy = structuredClone(corosCopy);
+unreadableCopy.id = "plan:unreadable-coros-copy";
+unreadableCopy.calendarInstalls = [];
+unreadableCopy.entries = unreadableCopy.entries.map(({ corosProgram: _corosProgram, ...entry }) => entry);
+databaseModule.saveTrainingPlanDocument(unreadableCopy);
+const unreadablePreview = await library.previewTrainingPlanCalendar(unreadableCopy.id, "2099-08-03");
+assert.equal(unreadablePreview.entries.length, 0);
+assert.equal(unreadablePreview.blockers.length, 2, "the preview names every workout it can't schedule");
+assert.match(unreadablePreview.blockers[0], /"Easy Run 4 km" came from a COROS plan, and CorosLink couldn't read that workout from COROS/);
+
+const stepless = domain.createTrainingPlan("Stepless", "local");
+stepless.startDate = "2099-08-03";
+stepless.weekCount = 1;
+stepless.entries = [{ id: "stepless-run", kind: "workout", weekIndex: 0, dayIndex: 0, sortOrder: 0, title: "Placeholder run", workout: { key: "placeholder", name: "Placeholder run", sport: "run" } }];
+assert.match(
+  library.buildTrainingPlanCalendarProjection(stepless, "2099-08-03", [], "20990101").blockers[0],
+  /"Placeholder run" has no workout steps/,
+  "a workout with nothing to build is named before anything is written"
+);
+stepless.entries[0].workout.distance_km = 5;
+assert.deepEqual(library.buildTrainingPlanCalendarProjection(stepless, "2099-08-03", [], "20990101").blockers, [], "a distance-only run can be scheduled");
+
+// A workout that failed before anything was sent isn't on the calendar, so it doesn't hold the plan.
+mockCalendar = [];
+library.setTrainingPlanCalendarAdapterForTests({
+  listScheduled: async (startDay, endDay) => mockCalendar.filter((entry) => entry.happenDay >= startDay && entry.happenDay <= endDay),
+  scheduleLibrary: async () => {
+    throw Object.assign(new Error("Library workout not found."), { calendarUnchanged: true });
+  },
+  createAndSchedule: async () => {
+    throw new Error("mock write failure");
+  }
+});
+const unsentPlan = structuredClone(generated);
+unsentPlan.id = "plan:unsent-writes";
+unsentPlan.startDate = "2099-08-03";
+unsentPlan.weekCount = 1;
+unsentPlan.entries = unsentPlan.entries.slice(0, 2).map((entry, index) => ({ ...entry, weekIndex: 0, dayIndex: index * 2, programId: index === 0 ? "missing-library-workout" : undefined }));
+unsentPlan.calendarInstalls = [];
+databaseModule.saveTrainingPlanDocument(unsentPlan);
+const unsentPreview = await library.previewTrainingPlanCalendar(unsentPlan.id, "2099-08-03");
+const unsentResult = await library.addTrainingPlanToCalendar(unsentPreview.previewId, true, "metric");
+assert.deepEqual(
+  unsentResult.failures.map((failure) => failure.writeMayHaveSucceeded),
+  [false, true],
+  "only a write that may have reached COROS is left unverified"
+);
+
+// Refreshing the calendar settles writes that may have landed: none of that name on its day means it didn't.
+const settleNow = new Date("2099-08-02T12:00:00.000Z");
+const stuckInstall = {
+  id: "install-stuck",
+  startDate: "2099-08-03",
+  planRevision: "rev",
+  state: "partial",
+  lastOperation: "remove",
+  occurrences: [],
+  failures: [
+    { planEntryId: unsentPlan.entries[0].id, happenDay: "20990803", message: "Library workout not found.", writeMayHaveSucceeded: true },
+    { planEntryId: unsentPlan.entries[1].id, happenDay: "20990805", message: "timeout", writeMayHaveSucceeded: true }
+  ],
+  createdAt: "2099-08-01T00:00:00.000Z",
+  updatedAt: "2099-08-01T00:00:00.000Z"
+};
+const stuckPlan = { ...structuredClone(unsentPlan), calendarInstalls: [stuckInstall] };
+const secondName = stuckPlan.entries[1].title;
+const halfSettled = library.settleUnverifiedCalendarWrites(stuckPlan, [{ planId: "p", idInPlan: "i", happenDay: "20990805", name: secondName }], "20990101", "20991231", settleNow);
+assert.deepEqual(
+  halfSettled.calendarInstalls[0].failures.map((failure) => failure.writeMayHaveSucceeded),
+  [false, true],
+  "a workout of that name on its day may be the plan's, so it stays unverified"
+);
+assert.equal(halfSettled.calendarInstalls[0].state, "partial");
+const settled = library.settleUnverifiedCalendarWrites(stuckPlan, [], "20990101", "20991231", settleNow);
+assert.equal(settled.calendarInstalls[0].state, "removed", "an install with nothing on the calendar is finished");
+assert.deepEqual(library.buildTrainingPlanCalendarProjection(settled, "2099-08-03", [], "20990802").blockers, [], "the plan can be added again");
+assert.equal(
+  library.settleUnverifiedCalendarWrites({ ...stuckPlan, calendarInstalls: [{ ...stuckInstall, updatedAt: "2099-08-02T11:59:00.000Z" }] }, [], "20990101", "20991231", settleNow),
+  undefined,
+  "a write from the last two minutes may still be on its way to the calendar"
+);
 library.setTrainingPlanCalendarAdapterForTests();
 
 assert.throws(() => library.deleteLocalTrainingPlan(first.id, false), /confirmation/i);

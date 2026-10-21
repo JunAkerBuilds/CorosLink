@@ -332,7 +332,12 @@ export function TrainingLibraryView({
     }
   };
 
-  const duplicatePlan = async (plan: TrainingPlanDocument) => {
+  const duplicatePlan = async (listed: TrainingPlanDocument) => {
+    // The list holds a COROS plan without its workouts; the copy needs them to go on the calendar.
+    const fromCoros = listed.source === "coros" && Boolean(listed.remoteId);
+    const plan = fromCoros
+      ? await api.getNativeTrainingPlan(listed.remoteId!).catch(() => listed)
+      : listed;
     const duplicate = createTrainingPlan(
       `${plan.name} Copy`,
       plan.source === "template" ? "template" : "local"
@@ -351,7 +356,9 @@ export function TrainingLibraryView({
     duplicate.entries = structuredClone(plan.entries).map((entry, index) => ({
       ...entry,
       id: `${duplicate.id}:entry:${index}`,
-      remotePlanProgramId: undefined
+      remotePlanProgramId: undefined,
+      // A COROS plan's workout IDs exist only inside that plan; the copy schedules corosProgram.
+      ...(fromCoros ? { programId: undefined } : {})
     }));
     duplicate.calendarInstalls = [];
     await savePlan(duplicate);

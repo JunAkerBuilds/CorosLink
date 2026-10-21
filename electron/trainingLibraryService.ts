@@ -16,7 +16,8 @@ import {
 } from "./database";
 import {
   queryNativeCorosPlanLibrary,
-  readNativeCorosPlan
+  readNativeCorosPlan,
+  readNativeCorosPlanPrograms
 } from "./corosTrainingPlanAdapter";
 import { resolveActivityLinks, scheduledLinkKey } from "./activityLinks";
 import { recordDiagnosticError } from "./diagnosticsService";
@@ -30,7 +31,9 @@ import {
   listScheduledWorkoutEntries,
   listTrainingHubActivities,
   queryLibraryWorkouts,
+  leftCalendarUnchanged,
   removeScheduledWorkout,
+  scheduleCorosPlanWorkoutCopy,
   scheduleLibraryWorkout
 } from "./trainingHubService";
 import {
@@ -60,6 +63,7 @@ import type {
   TrainingPlanCalendarMutationResult,
   TrainingPlanCalendarPreview,
   TrainingPlanCalendarPreviewEntry,
+  TrainingPlanEntry,
   TrainingPlanMetadataPatch,
   TrainingPlanWriteCapabilities,
   TrainingWorkoutMetadata,
@@ -196,6 +200,24 @@ function nativePlanEntitiesWithIdentity(plan: NativeCorosPlanDetail): Array<{
   }));
 }
 
+/** A plan's workouts that COROS sent in full (exercises included), by their ID in that plan. */
+function corosProgramsById(value: unknown): Map<string, Record<string, unknown>> {
+  const programs = new Map<string, Record<string, unknown>>();
+  for (const item of Array.isArray(value) ? value : []) {
+    if (!item || typeof item !== "object") continue;
+    const program = item as Record<string, unknown>;
+    if (program.id === undefined || program.id === null) continue;
+    if (!Array.isArray(program.exercises) || program.exercises.length === 0) continue;
+    programs.set(String(program.id), program);
+  }
+  return programs;
+}
+
+/** The COROS plan an entry was copied from, read from the entry IDs copies keep. */
+function corosPlanSourceId(entry: TrainingPlanEntry): string | undefined {
+  return /^coros:([^:]+):/.exec(entry.id)?.[1];
+}
+
 export function nativePlanToDocument(plan: NativeCorosPlanDetail): TrainingPlanDocument {
   const existing = getTrainingPlanDocument(`coros:${plan.remoteId}`);
   const now = new Date().toISOString();
@@ -205,6 +227,7 @@ export function nativePlanToDocument(plan: NativeCorosPlanDetail): TrainingPlanD
       if (id) programByPlanId.set(id, program);
     }
   }
+  const fullPrograms = corosProgramsById(plan.rawPayload.programs);
   const firstOccurrence = plan.entities
     .map((entity) => entity.happenDay)
     .filter((value): value is string => Boolean(value))
@@ -225,6 +248,7 @@ export function nativePlanToDocument(plan: NativeCorosPlanDetail): TrainingPlanD
           )
         : entity.dayNo ?? index;
       const sport = workoutSportFromType(program?.sportType);
+      const fullProgram = program?.id ? fullPrograms.get(program.id) : undefined;
       const usesLegacyIdentity = identityKey === entity.idInPlan;
       return {
         id: `coros:${plan.remoteId}:${identityKey}`,
@@ -245,6 +269,7 @@ export function nativePlanToDocument(plan: NativeCorosPlanDetail): TrainingPlanD
         },
         programId: program?.id,
         remotePlanProgramId: entity.planProgramId ?? program?.planProgramId,
+        ...(fullProgram ? { corosProgram: structuredClone(fullProgram) } : {}),
         plannedDurationSeconds: program?.planDuration,
         plannedDistanceMeters: program?.planDistance,
         plannedTrainingLoad: program?.planTrainingLoad,
@@ -499,6 +524,12 @@ export async function getTrainingLibrarySnapshot(): Promise<TrainingLibrarySnaps
   const schedule = scheduleResult.status === "fulfilled" ? scheduleResult.value : [];
   if (scheduleResult.status === "rejected") {
     addRejected("Schedule", scheduleResult.reason);
+  } else {
+    // The calendar just read settles plan installs left waiting on a write that may have landed.
+    for (const plan of listTrainingPlanDocuments()) {
+      const settled = settleUnverifiedCalendarWrites(plan, schedule, relativeDateKey(-180), relativeDateKey(365));
+      if (settled) saveTrainingPlanDocument(settled);
+    }
   }
   reportRefreshFailures(partialFailures, failureCauses);
   const plans = listTrainingPlanDocuments();
@@ -719,12 +750,16 @@ interface StoredPlanCalendarPreview {
   rangeStart: string;
   rangeEnd: string;
   installId?: string;
+  /** COROS workouts the preview read for entries of an older plan copy, by entry ID. */
+  corosPrograms?: Map<string, Record<string, unknown>>;
 }
 
 interface TrainingPlanCalendarAdapter {
   listScheduled: typeof listScheduledWorkoutEntries;
   scheduleLibrary: typeof scheduleLibraryWorkout;
   createAndSchedule: typeof createAndScheduleWorkout;
+  scheduleCorosProgram: typeof scheduleCorosPlanWorkoutCopy;
+  readCorosPlanPrograms: typeof readNativeCorosPlanPrograms;
   removeScheduled: typeof removeScheduledWorkout;
 }
 
@@ -732,6 +767,8 @@ const defaultTrainingPlanCalendarAdapter: TrainingPlanCalendarAdapter = {
   listScheduled: listScheduledWorkoutEntries,
   scheduleLibrary: scheduleLibraryWorkout,
   createAndSchedule: createAndScheduleWorkout,
+  scheduleCorosProgram: scheduleCorosPlanWorkoutCopy,
+  readCorosPlanPrograms: readNativeCorosPlanPrograms,
   removeScheduled: removeScheduledWorkout
 };
 
@@ -791,6 +828,116 @@ function latestInstallForPlan(plan: TrainingPlanDocument): TrainingPlanCalendarI
       install.state !== "removed" && install.occurrences.some((occurrence) => !occurrence.removedAt && occurrence.happenDay >= today)
     ))
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+}
+
+/**
+ * Why a plan workout can't be written to the calendar, or undefined when it
+ * can, so the preview says so before anything is written.
+ */
+function planWorkoutSchedulingProblem(entry: TrainingPlanEntry): string | undefined {
+  const title = entry.title ?? entry.workout?.name ?? "Untitled workout";
+  if (entry.corosProgram) return undefined;
+  // A COROS plan's workout IDs exist only inside that plan, not in the library.
+  if (entry.programId && corosPlanSourceId(entry)) {
+    return `"${title}" came from a COROS plan, and CorosLink couldn't read that workout from COROS. Check your connection, or open the COROS plan and save a new copy.`;
+  }
+  if (entry.programId) return undefined;
+  if (!entry.workout) return `"${title}" has no workout definition.`;
+  if (!entry.workout.steps?.length && !(entry.workout.distance_km !== undefined && entry.workout.distance_km > 0)) {
+    return `"${title}" has no workout steps. Edit it before adding the plan.`;
+  }
+  return undefined;
+}
+
+/**
+ * Copies of a COROS plan saved before copies kept their workouts have only the
+ * plan's own workout IDs. Reads those workouts from the plan they came from;
+ * a plan that can't be read is left out, and the preview names its workouts.
+ */
+async function readMissingCorosPrograms(
+  plan: TrainingPlanDocument
+): Promise<Map<string, Record<string, unknown>>> {
+  const wanted = new Map<string, TrainingPlanEntry[]>();
+  for (const entry of plan.entries) {
+    const sourceId = corosPlanSourceId(entry);
+    if (entry.kind !== "workout" || entry.corosProgram || !entry.programId || !sourceId) continue;
+    wanted.set(sourceId, [...(wanted.get(sourceId) ?? []), entry]);
+  }
+  const found = new Map<string, Record<string, unknown>>();
+  for (const [sourceId, entries] of wanted) {
+    let programs: Map<string, Record<string, unknown>>;
+    try {
+      programs = corosProgramsById(await trainingPlanCalendarAdapter.readCorosPlanPrograms(sourceId));
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const program = programs.get(entry.programId!);
+      if (program) found.set(entry.id, program);
+    }
+  }
+  return found;
+}
+
+function withCorosPrograms(
+  plan: TrainingPlanDocument,
+  programs: Map<string, Record<string, unknown>> | undefined
+): TrainingPlanDocument {
+  if (!programs?.size) return plan;
+  return {
+    ...plan,
+    entries: plan.entries.map((entry) => {
+      const program = programs.get(entry.id);
+      return program && !entry.corosProgram ? { ...entry, corosProgram: structuredClone(program) } : entry;
+    })
+  };
+}
+
+const UNVERIFIED_WRITE_SETTLE_MS = 2 * 60_000;
+
+/**
+ * Settles calendar writes that failed in a way that may have reached COROS,
+ * against a calendar read covering `startDay`–`endDay`: with no workout of that
+ * name on its day, the write didn't land. An unfinished install left with
+ * nothing on the calendar is finished, so the plan can be added again.
+ * Returns the plan when anything changed.
+ */
+export function settleUnverifiedCalendarWrites(
+  plan: TrainingPlanDocument,
+  scheduled: TrainingHubScheduledWorkoutEntry[],
+  startDay: string,
+  endDay: string,
+  now = new Date()
+): TrainingPlanDocument | undefined {
+  const today = dateKey(now);
+  let changed = false;
+  const calendarInstalls = (plan.calendarInstalls ?? []).map((install) => {
+    // A write COROS is still adding may not be on the calendar yet.
+    if (install.state === "removed" || now.valueOf() - Date.parse(install.updatedAt) < UNVERIFIED_WRITE_SETTLE_MS) {
+      return install;
+    }
+    let settled = false;
+    const failures = install.failures.map((failure) => {
+      if (!failure.writeMayHaveSucceeded || failure.happenDay < startDay || failure.happenDay > endDay) return failure;
+      const entry = plan.entries.find((candidate) => candidate.id === failure.planEntryId);
+      const name = entry?.title ?? entry?.workout?.name ?? "Workout";
+      if (scheduled.some((item) => item.happenDay === failure.happenDay && item.name === name)) return failure;
+      settled = true;
+      return { ...failure, writeMayHaveSucceeded: false };
+    });
+    const onCalendar = install.occurrences.some((occurrence) => !occurrence.removedAt);
+    const unverified = failures.some((failure) => failure.writeMayHaveSucceeded && failure.happenDay >= today);
+    const finished = install.state === "partial" && !onCalendar && !unverified;
+    if (!settled && !finished) return install;
+    changed = true;
+    return {
+      ...install,
+      failures,
+      state: finished ? "removed" as const : install.state,
+      updatedAt: now.toISOString()
+    };
+  });
+  return changed ? { ...plan, calendarInstalls } : undefined;
 }
 
 /** Older installs never skipped days, so their first written day is their start date (or today, whichever is later). */
@@ -863,8 +1010,9 @@ export function buildTrainingPlanCalendarProjection(
       skipped.push(previewEntry);
       continue;
     }
-    if (!entry.programId && !entry.workout) {
-      blockers.push(`"${entry.title ?? "Untitled workout"}" has no workout definition.`);
+    const problem = planWorkoutSchedulingProblem(entry);
+    if (problem) {
+      blockers.push(problem);
       continue;
     }
     entries.push(previewEntry);
@@ -901,7 +1049,8 @@ function rememberPlanCalendarPreview(
   calendarEntries: TrainingHubScheduledWorkoutEntry[],
   rangeStart: string,
   rangeEnd: string,
-  installId?: string
+  installId?: string,
+  corosPrograms?: Map<string, Record<string, unknown>>
 ): TrainingPlanCalendarPreview {
   for (const [id, record] of planCalendarPreviews) {
     if (Date.parse(record.preview.expiresAt) <= Date.now()) planCalendarPreviews.delete(id);
@@ -918,7 +1067,8 @@ function rememberPlanCalendarPreview(
     calendarFingerprint: fingerprintCalendar(calendarEntries),
     rangeStart,
     rangeEnd,
-    installId
+    installId,
+    corosPrograms
   });
   return saved;
 }
@@ -938,7 +1088,14 @@ export async function previewTrainingPlanCalendar(
   const planEnd = addCalendarDays(startDay, Math.max(0, plan.weekCount * 7 - 1));
   const rangeEnd = planEnd > rangeStart ? planEnd : rangeStart;
   const scheduled = await trainingPlanCalendarAdapter.listScheduled(rangeStart, rangeEnd);
-  const projection = buildTrainingPlanCalendarProjection(plan, startDate, scheduled, today, fromDate);
+  const corosPrograms = await readMissingCorosPrograms(plan);
+  const projection = buildTrainingPlanCalendarProjection(
+    withCorosPrograms(plan, corosPrograms),
+    startDate,
+    scheduled,
+    today,
+    fromDate
+  );
   return rememberPlanCalendarPreview(
     {
       operation: "install",
@@ -956,7 +1113,8 @@ export async function previewTrainingPlanCalendar(
     scheduled,
     rangeStart,
     rangeEnd,
-    latestInstallForPlan(plan)?.id
+    latestInstallForPlan(plan)?.id,
+    corosPrograms
   );
 }
 
@@ -1056,7 +1214,8 @@ export async function addTrainingPlanToCalendar(
   unitSystem: UnitSystem
 ): Promise<TrainingPlanCalendarMutationResult> {
   const { record, plan } = await requireCurrentCalendarPreview(previewId, "install", confirmed);
-  const projectedPlan = shiftTrainingPlan(plan, record.preview.startDate);
+  // Workouts the preview read for an older copy are kept, so the next install doesn't need COROS's plan.
+  const projectedPlan = withCorosPrograms(shiftTrainingPlan(plan, record.preview.startDate), record.corosPrograms);
   const now = new Date().toISOString();
   let install = projectedPlan.calendarInstalls?.find((item) => item.id === record.installId && item.state === "partial");
   if (!install) {
@@ -1090,7 +1249,9 @@ export async function addTrainingPlanToCalendar(
       const beforeEntries = await trainingPlanCalendarAdapter.listScheduled(previewEntry.happenDay, previewEntry.happenDay);
       const before = new Set(beforeEntries.map(scheduleIdentity));
       writeMayHaveSucceeded = true;
-      if (planEntry.programId) {
+      if (planEntry.corosProgram) {
+        await trainingPlanCalendarAdapter.scheduleCorosProgram(planEntry.corosProgram, previewEntry.happenDay, previewEntry.name);
+      } else if (planEntry.programId) {
         await trainingPlanCalendarAdapter.scheduleLibrary(planEntry.programId, previewEntry.happenDay);
       } else if (planEntry.workout) {
         await trainingPlanCalendarAdapter.createAndSchedule(
@@ -1118,7 +1279,8 @@ export async function addTrainingPlanToCalendar(
         planEntryId: planEntry.id,
         happenDay: previewEntry.happenDay,
         message: cause instanceof Error ? cause.message : String(cause),
-        writeMayHaveSucceeded
+        // A workout that failed before anything was sent isn't on the calendar, so a retry is safe.
+        writeMayHaveSucceeded: writeMayHaveSucceeded && !leftCalendarUnchanged(cause)
       });
     }
     install.updatedAt = new Date().toISOString();

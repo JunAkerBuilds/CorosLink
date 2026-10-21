@@ -3449,6 +3449,12 @@ export interface TrainingPlanEntry {
   workout?: PlanWorkoutEntryInput;
   programId?: string;
   remotePlanProgramId?: string;
+  /**
+   * The full COROS workout (exercises included) this entry came from in a
+   * COROS plan. Its `programId` exists only inside that plan, so a copy of the
+   * plan schedules this instead. Editing the workout drops it.
+   */
+  corosProgram?: Record<string, unknown>;
   plannedDurationSeconds?: number;
   plannedDistanceMeters?: number;
   plannedTrainingLoad?: number;

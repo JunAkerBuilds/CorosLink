@@ -1978,17 +1978,17 @@ export async function scheduleWorkoutOnDate(
   sortNo = 1
 ): Promise<string> {
   if (!/^\d{8}$/.test(happenDay)) {
-    throw new Error("happenDay must be YYYYMMDD.");
+    throw calendarUnchangedError(new Error("happenDay must be YYYYMMDD."));
   }
 
-  const scheduleRaw = await trainingHubGet<Record<string, unknown>>(
+  const scheduleRaw = await beforeCalendarWrite(() => trainingHubGet<Record<string, unknown>>(
     "/training/schedule/query",
     {
       startDate: happenDay,
       endDate: happenDay,
       supportRestExercise: 1
     }
-  );
+  ));
 
   const maxIdInPlan = toOptionalNumber(scheduleRaw.maxIdInPlan) ?? 0;
   const idInPlan = maxIdInPlan + 1;
@@ -2012,6 +2012,25 @@ export async function scheduleWorkoutOnDate(
     pbVersion: toOptionalNumber(program.pbVersion) ?? 2
   });
   return String(idInPlan);
+}
+
+/**
+ * Schedules a copy of a workout taken from a COROS plan. Its IDs belong to that
+ * plan (program/detail can't find them), so it is reset and calculated like a
+ * new workout, then scheduled on its own, as plan installs schedule embedded workouts.
+ */
+export async function scheduleCorosPlanWorkoutCopy(
+  program: Record<string, unknown>,
+  happenDay: string,
+  name?: string
+): Promise<void> {
+  const copy = structuredClone(program);
+  delete copy.planId;
+  delete copy.planIdIndex;
+  delete copy.planProgramId;
+  if (name?.trim()) copy.name = name.trim();
+  const calculated = await beforeCalendarWrite(() => calculateWorkoutProgram(copy));
+  await scheduleWorkoutOnDate(calculated, happenDay);
 }
 
 export async function listScheduledWorkoutEntries(
@@ -2511,11 +2530,11 @@ export async function scheduleLibraryWorkout(
   happenDay: string
 ): Promise<void> {
   const id = String(programId);
-  const program =
-    (await getWorkoutProgramDetail(id)) ??
-    (await findLibraryWorkoutById(id));
+  const program = await beforeCalendarWrite(async () =>
+    (await getWorkoutProgramDetail(id)) ?? (await findLibraryWorkoutById(id))
+  );
   if (!program) {
-    throw new Error("Library workout not found.");
+    throw calendarUnchangedError(new Error("Library workout not found."));
   }
   await scheduleWorkoutOnDate(program, happenDay);
 }
@@ -2530,35 +2549,55 @@ export async function createAndScheduleWorkout(
   if (typeof unitSystemOrSave === "boolean") {
     saveToLibrary = unitSystemOrSave;
   }
-  const entry = toPlanWorkoutEntry(entryInput);
-  const exerciseResolution = await resolveTrainingPlanExercises({
-    name: entry.name,
-    workouts: [entry]
+  // Nothing reaches the calendar before scheduleWorkoutOnDate.
+  const { program, programId } = await beforeCalendarWrite(async () => {
+    const entry = toPlanWorkoutEntry(entryInput);
+    const exerciseResolution = await resolveTrainingPlanExercises({
+      name: entry.name,
+      workouts: [entry]
+    });
+    if (exerciseResolution.issues.length > 0) {
+      throw new Error(exerciseResolution.issues.map((issue) => issue.message).join(" "));
+    }
+    const resolvedEntry = exerciseResolution.draft.workouts[0]!;
+    const context = parseWorkoutEditorContext(
+      await loadWorkoutEditorAccount(),
+      unitSystem
+    );
+    const payload = buildWorkoutPayloadFromEntry(resolvedEntry, context);
+    // Schedule a calculated full payload, not the library query summary. The
+    // summary omits fields needed by simple and structured workouts.
+    if (saveToLibrary) {
+      const created = await createWorkoutProgram(payload);
+      return { program: created.program, programId: created.programId };
+    }
+    return { program: await calculateWorkoutProgram(payload), programId: undefined };
   });
-  if (exerciseResolution.issues.length > 0) {
-    throw new Error(exerciseResolution.issues.map((issue) => issue.message).join(" "));
-  }
-  const resolvedEntry = exerciseResolution.draft.workouts[0]!;
-  const context = parseWorkoutEditorContext(
-    await loadWorkoutEditorAccount(),
-    unitSystem
-  );
-  const payload = buildWorkoutPayloadFromEntry(resolvedEntry, context);
-  // Schedule a calculated full payload, not the library query summary. The
-  // summary omits fields needed by simple and structured workouts.
-  let program: Record<string, unknown>;
-  let programId: string | undefined;
-
-  if (saveToLibrary) {
-    const created = await createWorkoutProgram(payload);
-    programId = created.programId;
-    program = created.program;
-  } else {
-    program = await calculateWorkoutProgram(payload);
-  }
 
   await scheduleWorkoutOnDate(program, happenDay, entryInput.sort_no ?? 1);
   return { programId };
+}
+
+/**
+ * Marks an error raised before anything was sent to the calendar, so a plan
+ * install knows the workout isn't there and can retry it.
+ */
+function calendarUnchangedError(error: unknown): Error {
+  const failure = error instanceof Error ? error : new Error(String(error));
+  return Object.assign(failure, { calendarUnchanged: true });
+}
+
+async function beforeCalendarWrite<T>(step: () => Promise<T>): Promise<T> {
+  try {
+    return await step();
+  } catch (error) {
+    throw calendarUnchangedError(error);
+  }
+}
+
+/** True when a scheduling error was raised before anything reached the calendar. */
+export function leftCalendarUnchanged(error: unknown): boolean {
+  return (error as { calendarUnchanged?: unknown } | null)?.calendarUnchanged === true;
 }
 
 async function findScheduledWorkoutWithProgram(entry: {
