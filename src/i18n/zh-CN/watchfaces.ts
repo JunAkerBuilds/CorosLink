@@ -209,6 +209,8 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Artwork text": "素材文字",
   "Generated artwork": "生成的图像素材",
   "Custom image in use. Remove it to draw the text again.": "正在使用的自定义图像。删除它以再次绘制文本。",
+  "Image in use. Pick a font or remove the image to draw the text instead.": "正在使用图像。选择字体或删除图像即可改为绘制文本。",
+  "Drawn in the chosen font. Pick Keep template font to bring back the original image.": "已使用所选字体绘制。选择“保留模板字体”即可恢复原始图像。",
   "Drawn from the text in the component color and font, or replaced by an image.": "从组件颜色和字体中的文本绘制，或替换为图像。",
   "Replace image": "替换图片",
   "Use an image": "使用图像",

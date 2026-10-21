@@ -1054,6 +1054,8 @@ export interface CorosWatchfaceNativeDataStyle {
   /** Optional text for individual generated sprites. PNG overrides take precedence. */
   assetTexts?: Partial<Record<CorosWatchfaceNativeAssetRole, Record<string, string>>>;
   assets?: Partial<Record<CorosWatchfaceNativeAssetRole, Record<string, string>>>;
+  /** Glyph images (template digits, signs, units) a chosen font draws instead; the template font restores them. */
+  fontReplacedAssets?: Partial<Record<CorosWatchfaceNativeAssetRole, Record<string, string>>>;
   chartStyle?: {
     lineWidth?: number;
     upperColor?: string;

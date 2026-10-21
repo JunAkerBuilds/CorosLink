@@ -6,7 +6,7 @@ import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataSty
 import type { CorosLinkApi } from "../coroslink-api";
 import { NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeDataAsset, nativeDataPreviewValue } from "./nativeData";
 import { NATIVE_CHART_BAR_PAGES, NATIVE_CHART_FIXED_EQUIVALENTS, NATIVE_CHART_PAGES, nativeChartReadoutLabel, nativeChartRepresentation } from "../../electron/watchfaceNativeCatalog";
-import { nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRoleIndices } from "./nativeDataParts";
+import { nativeAssetText, nativeFontRole, nativeHasGlyphArt, nativePart, nativePartHasPosition, nativeParts, nativeRoleIndices, withNativeFont } from "./nativeDataParts";
 import { chartReadoutHidden } from "./chartReadouts";
 import { loadStudioImage, resizeAndTintSprite } from "./watchfaceStudio";
 import { LocalFontPicker } from "./LocalFontPicker";
@@ -268,7 +268,8 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   const indices = role ? nativeRoleIndices(id, style, role) : [];
   const index = indices.includes(selectedIndex) ? selectedIndex : indices[0] ?? 0;
   const replacement = role ? style.assets?.[role]?.[String(index)] : undefined;
-  const customized = Boolean(style.parts?.[partKey]) || (role ? Boolean(style.assets?.[role] && Object.keys(style.assets[role] ?? {}).length) || Boolean(style.assetTexts?.[role] && Object.keys(style.assetTexts[role] ?? {}).length) : Boolean(style.chartStyle));
+  const setAside = role && !replacement ? style.fontReplacedAssets?.[role]?.[String(index)] : undefined;
+  const customized = Boolean(style.parts?.[partKey]) || (role ? [style.assets, style.assetTexts, style.fontReplacedAssets].some(sets => Object.keys(sets?.[role] ?? {}).length > 0) : Boolean(style.chartStyle));
   const locked = disabled || busy;
   const patchPart = (patch: CorosWatchfaceNativePartStyle) => onPatch({parts:{...style.parts,[partKey]:{...style.parts?.[partKey],...patch}}});
   const patchChart = (patch: NonNullable<Style["chartStyle"]>) => onPatch({chartStyle:{...style.chartStyle,...patch}});
@@ -315,11 +316,11 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   }
 
   function restoreComponent() {
-    const parts = {...style.parts}, assets = {...style.assets}, assetTexts = {...style.assetTexts};
+    const parts = {...style.parts}, assets = {...style.assets}, assetTexts = {...style.assetTexts}, fontReplacedAssets = {...style.fontReplacedAssets};
     delete parts[partKey];
-    if (role) { delete assets[role]; delete assetTexts[role]; }
+    if (role) { delete assets[role]; delete assetTexts[role]; delete fontReplacedAssets[role]; }
     if (partKey === "plot") onPatch({parts,chartStyle:undefined,chartWidth:240,chartHeight:120});
-    else onPatch({parts,assets,assetTexts});
+    else onPatch({parts,assets,assetTexts,fontReplacedAssets});
   }
   function removeImage() {
     if (!role) return;
@@ -376,7 +377,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
     {renderSection("appearance", "Appearance", <div className="wf-property-stack">
       {notes}
       {colorControl("Color",style.color,color=>onPatch({color}))}
-      <LocalFontPicker api={api} label={t("Font")} value={style.fontFamily ?? ""} emptyLabel={t("Default")} disabled={locked} onChange={fontFamily=>onPatch({fontFamily})} />
+      <LocalFontPicker api={api} label={t("Font")} value={style.fontFamily ?? ""} emptyLabel={nativeHasGlyphArt(style) ? t("Keep template font") : t("Default")} disabled={locked} onChange={fontFamily=>onPatch(withNativeFont(style,fontFamily))} />
       {definition.kind === "chart" && <ChartPageStrip current={style.chartSource ?? "chart_stress"} readouts={[...chartReadouts, ...stored]} editable={[...chartGroups, ...stored]}
         template={chartReadouts} hidden={hiddenReadouts} taken={takenReadouts} removed={style.removedReadouts ?? []} disabled={locked}
         barsOn={(style.chartStyle?.barWidth ?? 8) > 0} onBars={on => patchChart(on ? { barWidth: 8, barGap: style.chartStyle?.barGap || 4 } : { barWidth: 0 })}
@@ -414,7 +415,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
         </div>
         {partKey === "value" && <WatchfaceNumberAlignControl value={component.align} disabled={locked} onChange={align=>patchPart({align:align ?? "left"})} />}
         {colorControl("Color",component.color,color=>patchPart({color}))}
-        {role && <LocalFontPicker api={api} label={t("Font")} value={style.parts?.[partKey]?.fontFamily ?? ""} emptyLabel={t("Layer font")} disabled={locked} onChange={fontFamily=>patchPart({fontFamily:fontFamily || undefined})} />}
+        {role && <LocalFontPicker api={api} label={t("Font")} value={style.parts?.[partKey]?.fontFamily ?? ""} emptyLabel={t("Layer font")} disabled={locked} onChange={fontFamily=>onPatch(withNativeFont(style,fontFamily,partKey))} />}
 
         {partKey === "plot" && <>
           <p className="watchface-studio-summary">
@@ -437,7 +438,10 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
             <SpritePreview id={id} style={style} role={role} index={index} />
             <div className="wf-native-artwork-copy">
               <label className="field">{t("Text")}<input aria-label={t("Artwork text")} maxLength={32} value={nativeAssetText(id,style,role,index) ?? ""} placeholder={t("Generated artwork")} onChange={event=>onPatch({assetTexts:{...style.assetTexts,[role]:{...style.assetTexts?.[role],[index]:event.target.value}}})} /></label>
-              <span className="watchface-studio-summary">{replacement ? t("Custom image in use. Remove it to draw the text again.") : t("Drawn from the text in the component color and font, or replaced by an image.")}</span>
+              <span className="watchface-studio-summary">{replacement
+                ? nativeFontRole(role) ? t("Image in use. Pick a font or remove the image to draw the text instead.") : t("Custom image in use. Remove it to draw the text again.")
+                : setAside ? t("Drawn in the chosen font. Pick Keep template font to bring back the original image.")
+                : t("Drawn from the text in the component color and font, or replaced by an image.")}</span>
             </div>
           </div>
           <div className="wf-native-artwork-actions">
@@ -456,7 +460,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
       {id !== "date_year" && <label className="field">{t("Preview sample")}<input aria-label={t("Preview sample")} value={nativeDataPreviewValue(id,style)} maxLength={6} onChange={event=>onPatch({previewValue:event.target.value.replace(/[^0-9.:%−-]/g,"")})} /></label>}
       {id === "date_year" && <p className="field-hint">{t("Year follows the date in Preview simulation.")}</p>}
       <p className="watchface-studio-summary">{t("The sample only feeds this preview; the watch supplies live values. Firmware support and state ordering still need an on-watch test.")}</p>
-      <button type="button" className="secondary-button wf-native-restore-all" onClick={()=>onPatch({parts:undefined,assets:undefined,assetTexts:undefined,chartStyle:undefined,color:"#ffffff",fontFamily:undefined,scale:1,chartWidth:240,chartHeight:120})}><RotateCcw size={14} />{" "}{t("Restore all appearance defaults")}</button>
+      <button type="button" className="secondary-button wf-native-restore-all" onClick={()=>onPatch({parts:undefined,assets:undefined,assetTexts:undefined,fontReplacedAssets:undefined,chartStyle:undefined,color:"#ffffff",fontFamily:undefined,scale:1,chartWidth:240,chartHeight:120})}><RotateCcw size={14} />{" "}{t("Restore all appearance defaults")}</button>
     </div>, { disabled: locked })}
   </>;
 }

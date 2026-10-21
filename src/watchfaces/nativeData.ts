@@ -162,7 +162,8 @@ export async function nativeDataAsset(id: string, style: Style, role: Role, inde
     ctx.fillStyle = part.color;
     if (text !== null) {
       const fontSize = Math.round(height * 0.75);
-      setWatchfaceCanvasFont(ctx, { family: part.fontFamily, size: fontSize }, `${fontSize}px ${part.fontFamily}`);
+      // Quoted: an unquoted family such as "Bebas Neue 2" is invalid CSS, and the canvas would keep its default font.
+      setWatchfaceCanvasFont(ctx, { family: part.fontFamily, size: fontSize }, `${fontSize}px "${part.fontFamily.replace(/["\\]/g, "")}"`);
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       fillWatchfaceText(ctx, text, width / 2, height / 2, width);
     } else if (role === "states" && id === "weather_direction") {

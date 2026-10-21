@@ -67,6 +67,7 @@ const WATCHFACE_SCHEMA_DEFINITIONS = {
   nativeDataStyle: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "scale", "color"], properties: {
     enabled: {type:"boolean"}, x:{type:"number"}, y:{type:"number"}, scale:{type:"number",minimum:0.1,maximum:4}, color:{$ref:"#/$defs/nativeColor"}, fontFamily:{type:"string"}, previewValue:{type:"string",maxLength:6}, chartSource:{enum:NATIVE_CHART_SOURCES.map(source=>source.id)}, removedReadouts:{type:"array",uniqueItems:true,items:{enum:[...new Set([...NATIVE_CHART_SOURCES.map(source=>source.id),...NATIVE_CHART_STUDIO_READOUTS])]},description:"Chart only: template readouts taken off their page because they were made fixed; export deletes their keys."}, readouts:{type:"object",propertyNames:{enum:NATIVE_CHART_SOURCES.map(source=>source.id)},additionalProperties:{$ref:"#/$defs/nativeDataStyle"},description:"Chart only: the chart's other readouts by source, each a chart style in face coordinates (its graph parts are ignored). The watch's Back button pages through every readout; chartSource is the one the layer edits."}, chartWidth:{type:"number",minimum:80,maximum:700}, chartHeight:{type:"number",minimum:16,maximum:500}, stateCount:{type:"integer",minimum:1,maximum:64},
     assets:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_ASSET_ROLES.map(role=>[role,{type:"object",propertyNames:{pattern:"^(0|[1-9][0-9]?)$"},additionalProperties:{$ref:"#/$defs/pngImageValue"}}]))},
+    fontReplacedAssets:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_ASSET_ROLES.map(role=>[role,{type:"object",propertyNames:{pattern:"^(0|[1-9][0-9]?)$"},additionalProperties:{$ref:"#/$defs/pngImageValue"}}])),description:"Glyph images (template digits, signs, units) set aside while fontFamily draws them; not drawn or exported. Moving them back to assets restores the template font."},
     assetTexts:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_ASSET_ROLES.map(role=>[role,{type:"object",additionalProperties:{type:"string",maxLength:32}}]))},
     parts:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_PARTS.map(part=>[part,{$ref:"#/$defs/nativeDataPart"}]))},
     chartStyle:{$ref:"#/$defs/nativeChartStyle"}
@@ -484,7 +485,7 @@ function validateAdvancedCollections(design: Record<string, unknown>, diagnostic
   // A chart's stored readouts are chart styles too, one level deep.
   function validateNativeStyle(id: string, style: unknown, path: string, readout = false): void {
       if (!NATIVE_DATA_BY_ID.has(id) || !objectOf(style)) {issue(diagnostics,"native.invalid","Unknown or invalid native data field.",path);return;}
-      allowedKeys(style,["enabled","x","y","scale","color","fontFamily","chartSource","chartWidth","chartHeight","stateCount","previewValue","assets","assetTexts","parts","chartStyle",...(id==="chart"&&!readout?["removedReadouts","readouts"]:[])],diagnostics,path);
+      allowedKeys(style,["enabled","x","y","scale","color","fontFamily","chartSource","chartWidth","chartHeight","stateCount","previewValue","assets","fontReplacedAssets","assetTexts","parts","chartStyle",...(id==="chart"&&!readout?["removedReadouts","readouts"]:[])],diagnostics,path);
       if (style.removedReadouts !== undefined && (!Array.isArray(style.removedReadouts) || style.removedReadouts.some(source => ![...NATIVE_CHART_SOURCES.map(item => item.id), ...NATIVE_CHART_STUDIO_READOUTS as readonly string[]].includes(String(source))))) issue(diagnostics,"native.chart","removedReadouts lists chart sources.",`${path}/removedReadouts`);
       if (style.readouts !== undefined) {
         if (!objectOf(style.readouts)) issue(diagnostics,"native.chart","readouts must map chart sources to chart styles.",`${path}/readouts`);
@@ -500,7 +501,7 @@ function validateAdvancedCollections(design: Record<string, unknown>, diagnostic
       if(style.fontFamily!==undefined)text(style.fontFamily,diagnostics,`${path}/fontFamily`,256);
       if(style.previewValue!==undefined)text(style.previewValue,diagnostics,`${path}/previewValue`,6);
       if(style.chartSource!==undefined&&!NATIVE_CHART_SOURCES.some(source=>source.id===style.chartSource))issue(diagnostics,"native.chart","Unknown chart source.",path);
-      for (const property of ["assets","assetTexts"] as const) {
+      for (const property of ["assets","fontReplacedAssets","assetTexts"] as const) {
         const sets = style[property];
         if (sets === undefined) continue;
         if (!objectOf(sets)) { issue(diagnostics,"native.assets","Expected numbered artwork sets.",`${path}/${property}`); continue; }

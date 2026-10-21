@@ -13703,6 +13703,8 @@ body.wf-value-scrubbing * {
 
 .watchface-shell .wf-native-artwork-stage {
   display: grid;
+  /* A definite track, so the image's max-height: 100% fits tall digits instead of clipping them. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   width: 72px;
   height: 56px;
   overflow: hidden;

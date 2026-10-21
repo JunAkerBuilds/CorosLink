@@ -210,6 +210,8 @@ export const watchfacesPortuguese: Record<string, string> = {
   "Artwork text": "Texto da arte",
   "Generated artwork": "Arte gerada",
   "Custom image in use. Remove it to draw the text again.": "Imagem personalizada em uso. Remova-a para voltar a desenhar o texto.",
+  "Image in use. Pick a font or remove the image to draw the text instead.": "Imagem em uso. Escolha um tipo de letra ou remova a imagem para desenhar o texto.",
+  "Drawn in the chosen font. Pick Keep template font to bring back the original image.": "Desenhado no tipo de letra escolhido. Escolha Manter tipo de letra do modelo para repor a imagem original.",
   "Drawn from the text in the component color and font, or replaced by an image.": "Desenhada a partir do texto na cor e tipo de letra do componente, ou substituída por uma imagem.",
   "Replace image": "Substituir imagem",
   "Use an image": "Usar uma imagem",

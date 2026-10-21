@@ -58,6 +58,40 @@ export function nativePart(id: string, style: Style, part: Part) {
 }
 
 export function nativeRolePart(role: Role): Part { return role === "digits" ? "value" : role; }
+
+/** Glyph artwork a font can draw instead. Icons and state frames stay pictures. */
+const FONT_ROLES = ["digits", "symbols", "decimal", "unit", "separator"] as const satisfies readonly Role[];
+export function nativeFontRole(role: Role): boolean { return (FONT_ROLES as readonly Role[]).includes(role); }
+/** Whether the layer has glyph images (a template's digits, signs or units), drawn or set aside for a font. */
+export function nativeHasGlyphArt(style: Style): boolean {
+  return FONT_ROLES.some(role => Object.keys(style.assets?.[role] ?? {}).length || Object.keys(style.fontReplacedAssets?.[role] ?? {}).length);
+}
+
+/**
+ * Picks a font for the layer, or for one component. Images draw instead of
+ * text, so a template's digit, sign and unit images would hide any font: the
+ * images a font now draws move to `fontReplacedAssets`, and picking the
+ * template font again (an empty family) brings them back.
+ */
+export function withNativeFont(style: Style, fontFamily: string, part?: Part): Pick<Style, "fontFamily" | "parts" | "assets" | "fontReplacedAssets"> {
+  const family = fontFamily || undefined;
+  const parts = part ? { ...style.parts, [part]: { ...style.parts?.[part], fontFamily: family } } : style.parts;
+  const layerFamily = part ? style.fontFamily || undefined : family;
+  const assets = { ...style.assets }, replaced = { ...style.fontReplacedAssets };
+  for (const role of FONT_ROLES) {
+    const owner = nativeRolePart(role);
+    // A layer font skips components that keep a font of their own.
+    if (part ? owner !== part : style.parts?.[owner]?.fontFamily) continue;
+    const [from, to] = parts?.[owner]?.fontFamily || layerFamily ? [assets, replaced] : [replaced, assets];
+    if (!from[role]) continue;
+    // Images in place were imported after the font set the others aside, so they win.
+    to[role] = { ...replaced[role], ...assets[role] };
+    delete from[role];
+  }
+  return { fontFamily: layerFamily, parts, assets: Object.keys(assets).length ? assets : undefined,
+    fontReplacedAssets: Object.keys(replaced).length ? replaced : undefined };
+}
+
 /** Recovered faces keep their original state-table size (official NOMAD ships eight wind directions). */
 export function nativeStateCount(id: string, style: Style): number {
   return style.stateCount ?? NATIVE_DATA_BY_ID.get(id)?.stateCount ?? 1;
