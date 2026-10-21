@@ -54,7 +54,8 @@ mock.method(globalThis, "fetch", async (input, init = {}) => {
   const url = new URL(String(input));
   const token = init.headers?.accesstoken;
   requests.push({ path: url.pathname, token });
-  return respond({ path: url.pathname, token });
+  // Login reads the account with the new token alone; signed-in requests also name the user.
+  return respond({ path: url.pathname, token, atLogin: !init.headers?.yfheader });
 });
 
 const announced = [];
@@ -109,6 +110,7 @@ try {
   assert.equal(relogin.status.authenticated, true);
   assert.equal(relogin.status.sessionExpired, undefined);
   assert.equal(settings.has("trainingHub.sessionExpired"), false);
+  assert.equal(settings.has("trainingHub.accountReadsEmpty"), false, "the new token read the account");
 
   // 2. COROS keeps answering the dead token with empty successes. The check
   // renews it from the saved login and tells the window to reload.
@@ -129,8 +131,12 @@ try {
   // error report hears about it, and the check backs off instead of minting a
   // token every minute: one login, no loop.
   signedInWith("dead-token");
-  respond = ({ path }) =>
-    path === "/account/login" ? success({ accessToken: "fresh-token", userId: "42", regionId: 1 }) : success(null);
+  respond = ({ path, atLogin }) => {
+    if (path === "/account/login") return success({ accessToken: "fresh-token", userId: "42", regionId: 1 });
+    // The re-login's own account read fails here, so it says nothing about the account (see case 8).
+    if (path === "/account/query" && atLogin) return failure("1001", "Service exceptions");
+    return success(null);
+  };
   await checkTrainingHubSession({ force: true });
   status = getTrainingHubStatus();
   assert.equal(requests.filter(({ path }) => path === "/account/login").length, 1);
@@ -287,6 +293,63 @@ try {
     assert.equal(getTrainingHubStatus().authenticated, true);
     assert.equal(announced.length, 0);
   }
+
+  // 8. COROS answered the account query empty even for the token it issued at login: there an empty
+  // answer says nothing about the session, so it stays, with no saved login to renew it. Real auth
+  // codes still end it.
+  signedInWith("old-token");
+  respond = ({ path }) => {
+    if (path === "/account/login") return success({ accessToken: "new-token", userId: "42", regionId: 1 });
+    return path === "/account/query" ? success(null) : freshSession(path);
+  };
+  await loginTrainingHub("runner@example.com", "test-password", false);
+  assert.equal(savedCredentials, null, "Remember me off");
+  assert.equal(settings.get("trainingHub.accountReadsEmpty"), "42");
+  requests.length = 0;
+  announced.length = 0;
+  await checkTrainingHubSession({ force: true });
+  assert.equal(getTrainingHubStatus().authenticated, true);
+  assert.equal(settings.get("trainingHub.accessToken"), "new-token");
+  assert.deepEqual(requests.map(({ path }) => path), ["/account/query"], "no login, nothing minted");
+  assert.equal(announced.length, 0);
+  // An empty read elsewhere prompts a check, which keeps the session too.
+  now += 61_000;
+  respond = ({ path }) => (path === "/account/login" ? assert.fail("no saved login") : success(null));
+  await assert.rejects(getTrainingDashboard(), /succeeded but returned no data/);
+  await checkTrainingHubSession();
+  assert.equal(getTrainingHubStatus().authenticated, true);
+  now += 61_000;
+  respond = ({ path }) => (path === "/account/login" ? assert.fail("no saved login") : loginExpired());
+  await checkTrainingHubSession();
+  status = getTrainingHubStatus();
+  assert.equal(status.authenticated, false);
+  assert.equal(status.sessionExpired, true);
+
+  // Once the account answers, its emptiness counts again.
+  signedInWith("old-token");
+  respond = ({ path }) => {
+    if (path === "/account/login") return success({ accessToken: "new-token", userId: "42", regionId: 1 });
+    return path === "/account/query" ? success(null) : freshSession(path);
+  };
+  await loginTrainingHub("runner@example.com", "test-password", false);
+  respond = () => success({ userId: "42" });
+  await checkTrainingHubSession({ force: true });
+  assert.equal(settings.has("trainingHub.accountReadsEmpty"), false);
+  now += 61_000;
+  respond = ({ path }) => (path === "/account/login" ? assert.fail("no saved login") : success(null));
+  await checkTrainingHubSession();
+  assert.equal(getTrainingHubStatus().sessionExpired, true);
+
+  // Another account, and disconnecting, leave nothing behind.
+  signedInWith("old-token");
+  settings.set("trainingHub.accountReadsEmpty", "7");
+  respond = ({ path }) => (path === "/account/login" ? assert.fail("no saved login") : success(null));
+  savedCredentials = null;
+  await checkTrainingHubSession({ force: true });
+  assert.equal(getTrainingHubStatus().sessionExpired, true, "another user's empty account doesn't count");
+  settings.set("trainingHub.accountReadsEmpty", "42");
+  logoutTrainingHub();
+  assert.equal(settings.has("trainingHub.accountReadsEmpty"), false);
 
   // 7. Checks are throttled, and a read that "succeeds" with no data prompts one.
   signedInWith("live-token");

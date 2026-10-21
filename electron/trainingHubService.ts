@@ -155,6 +155,10 @@ const AUTH_ERROR_CODES = new Set(["0101", "0102", "1006", "1019", "ACCESS_TOKEN_
 // again needs the emailed code, "1" otherwise.
 const SESSION_EXPIRED_SETTING = "trainingHub.sessionExpired";
 const SESSION_CHECK_INTERVAL_MS = 60_000;
+// The user ID of an account whose /account/query COROS answered empty for a
+// token it had just issued at login: there, an empty answer says nothing about
+// the session.
+const ACCOUNT_READS_EMPTY_SETTING = "trainingHub.accountReadsEmpty";
 // After COROS answers a just-renewed token's account query empty too, the check
 // can't tell a dead token from this account's answer: wait 1 h, then 2 h, … 24 h.
 const SESSION_CHECK_BACKOFF_MS = 60 * 60_000;
@@ -200,6 +204,8 @@ interface TrainingHubAuthState {
   userId: string;
   regionId: string;
   baseUrl: string;
+  /** From login: whether the new token read an empty account (unset when the read failed). */
+  accountReadsEmpty?: boolean;
 }
 
 interface TrainingHubApiResponse<T> {
@@ -417,19 +423,25 @@ export function checkTrainingHubSession(
 }
 
 async function runTrainingHubSessionCheck(): Promise<void> {
-  const checkedToken = getStoredAuth()?.accessToken;
-  if (!checkedToken) {
+  const checked = getStoredAuth();
+  const checkedToken = checked?.accessToken;
+  if (!checked || !checkedToken) {
     return;
   }
 
   // An empty account is a refused token here, so it takes the same recovery as
   // 1019 and the other token errors: renew from the saved login, or end it.
+  // Not for an account that read empty at login with a token COROS had just
+  // issued: there only an auth error ends the session.
+  const emptyAtLogin = getSetting(ACCOUNT_READS_EMPTY_SETTING) === checked.userId;
   try {
-    await trainingHubRequest("/account/query", {
+    const account = await trainingHubRequest<unknown>("/account/query", {
       method: "GET",
-      emptyMeansExpired: true
+      ...(emptyAtLogin ? { allowEmptyData: true } : { emptyMeansExpired: true })
     });
     sessionCheckBackoffMs = 0;
+    // The account answers now, so its emptiness means something again.
+    if (emptyAtLogin && account !== undefined && account !== null) forgetEmptyAccountReads();
   } catch (error) {
     // An ended session was announced on its way out of trainingHubRequest. An
     // outage or being offline says nothing about the session.
@@ -594,7 +606,15 @@ function persistTrainingHubSession(session: TrainingHubAuthState): void {
   setSetting(SETTINGS.userId, session.userId);
   setSetting(SETTINGS.regionId, session.regionId);
   setSetting(SETTINGS.baseUrl, session.baseUrl);
+  if (session.accountReadsEmpty) setSetting(ACCOUNT_READS_EMPTY_SETTING, session.userId);
+  else if (session.accountReadsEmpty === false) forgetEmptyAccountReads();
   forgetTrainingHubSessionExpiry();
+}
+
+function forgetEmptyAccountReads(): void {
+  if (getSetting(ACCOUNT_READS_EMPTY_SETTING) !== undefined) {
+    deleteSettings([ACCOUNT_READS_EMPTY_SETTING]);
+  }
 }
 
 // Perform the password step. Returns a completed session, or — when the account
@@ -678,7 +698,7 @@ async function completeSessionFromLogin(
 
   let userId = String(loginData.userId ?? fallbackUserId).trim();
   const accountData = await queryTrainingHubAccount(accessToken, baseUrl);
-  if (accountData?.userId !== undefined) {
+  if (accountData && accountData !== "empty" && accountData.userId !== undefined) {
     userId = String(accountData.userId).trim();
   }
 
@@ -686,7 +706,10 @@ async function completeSessionFromLogin(
     throw new Error("COROS login response did not include a user ID.");
   }
 
-  return { accessToken, userId, regionId, baseUrl };
+  return {
+    accessToken, userId, regionId, baseUrl,
+    ...(accountData ? { accountReadsEmpty: accountData === "empty" } : {})
+  };
 }
 
 // Silent re-authentication path (token refresh from stored credentials). Cannot
@@ -923,10 +946,11 @@ async function verifyTwoFactorCode(
   return payload.data;
 }
 
+/** The account, "empty" when COROS answered with no account, or null when the read failed. */
 async function queryTrainingHubAccount(
   accessToken: string,
   baseUrl: string
-): Promise<TrainingHubAccountData | null> {
+): Promise<TrainingHubAccountData | "empty" | null> {
   // Login carries on without the account details, so only the error report hears why.
   const unavailable = (error: unknown) => {
     recordDiagnosticError(
@@ -952,10 +976,11 @@ async function queryTrainingHubAccount(
     const result = String(payload.result ?? payload.apiCode ?? "");
 
     if (result !== RESULT_SUCCESS || !payload.data) {
-      return unavailable(Object.assign(
+      unavailable(Object.assign(
         new Error(payload.message || "COROS account query returned no account."),
         { code: result || "unknown" }
       ));
+      return result === RESULT_SUCCESS ? "empty" : null;
     }
 
     return payload.data;
@@ -970,6 +995,7 @@ export function logoutTrainingHub(): TrainingHubStatus {
   sessionCheckResumesAt = Number.NEGATIVE_INFINITY;
   pendingTwoFactor = null;
   clearTrainingHubAuth();
+  forgetEmptyAccountReads();
   clearStoredCorosCredentials();
   forgetTrainingHubSessionExpiry();
   return getTrainingHubStatus();
