@@ -86,6 +86,8 @@
     "test:run-efficiency": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-run-efficiency.mjs",
     "test:training-activities-ui": "electron scripts/test-training-activities-ui.cjs",
     "test:weekly-activity": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-weekly-activity.mjs",
+    "test:hall-of-bests": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-hall-of-bests.mjs",
+    "test:activity-globe-cache": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-activity-globe-cache.mjs",
     "test:units": "npm run build:electron && node scripts/test-unit-system.mjs",
     "test:heatmap-summary": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-heatmap-summary.mjs",
     "test:exercise-names": "node --experimental-strip-types scripts/test-exercise-names.mjs",

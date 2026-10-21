@@ -100,7 +100,9 @@ function parseSummary(raw: Record<string, unknown>): StrengthSummary {
     raw.summary && typeof raw.summary === "object"
       ? (raw.summary as Record<string, unknown>)
       : raw;
-  const durationCs = num(s.totalTime) ?? num(s.workoutTime) ?? 0;
+  // Moving time (workoutTime) first, like every other duration CorosLink
+  // headlines; totalTime is elapsed and includes pauses.
+  const durationCs = num(s.workoutTime) ?? num(s.totalTime) ?? 0;
   return {
     sets: num(s.sets) ?? 0,
     totalReps: num(s.totalReps) ?? 0,

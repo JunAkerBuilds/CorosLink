@@ -61,6 +61,18 @@ assert.equal(emptySeries.hasData, false);
 assert.equal(emptySeries.weeklyTotal, "—");
 assert.equal(emptySeries.days.every((day) => day.value === 0), true);
 
+// An empty week still draws an axis; its six divisions must not repeat labels.
+const tickLabels = (series, metric) =>
+  buildWeeklyActivityYAxisTicks(series.yMax).map((tick) =>
+    formatWeeklyActivityAxisTick(tick, metric, series.yAxisUnit)
+  );
+const emptyLoad = buildWeeklyActivitySeries([], "trainingLoad", referenceDate, "metric");
+assert.deepEqual(tickLabels(emptyLoad, "trainingLoad"), ["0", "1", "2", "3", "4", "5", "6"]);
+assert.deepEqual(tickLabels(emptySeries, "distance"), ["0.0", "1.0", "2.0", "3.0", "4.0", "5.0", "6.0"]);
+const emptyDuration = buildWeeklyActivitySeries([], "duration", referenceDate, "metric");
+assert.equal(emptyDuration.yAxisUnit, "m");
+assert.deepEqual(tickLabels(emptyDuration, "duration"), ["0", "10", "20", "30", "40", "50", "60"]);
+
 const activityEnriched = buildWeeklyActivitySeries(
   enrichDayListWithActivityTotals(
     [{ happenDay: "20260625", trainingLoad: 42 }],

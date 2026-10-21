@@ -28,6 +28,7 @@ import {
   validateWorkoutIntensity,
   validateWorkoutDraftShared,
   validateWorkoutTarget,
+  workoutExerciseName,
   workoutSportFromType,
   workoutSportType
 } from "./workoutCapabilities";
@@ -251,6 +252,9 @@ function parseStep(
     validateWorkoutIntensity(sport, parsedIntensity.intensity, kind, numberValue(exercise.exerciseKind));
   const rawName = String(exercise.name ?? "").trim();
   const name = rawName && !/^T\d+$/i.test(rawName) ? rawName : friendlyStepName(kind);
+  // COROS-made steps name the exercise by its catalog code (T1178); show the
+  // catalog name, read from the sid_ overview like the exercise search does.
+  const exerciseName = rawName ? workoutExerciseName(exercise) || rawName : "";
 
   return {
     id: `step-${id ?? index}`,
@@ -261,7 +265,7 @@ function parseStep(
     target: parsedTarget.target,
     intensity: parsedIntensity.intensity,
     ...(originExerciseId(exercise) ? { exerciseId: originExerciseId(exercise) } : {}),
-    ...(rawName ? { exerciseName: rawName } : {}),
+    ...(exerciseName ? { exerciseName } : {}),
     ...(numberValue(exercise.exerciseKind) !== undefined
       ? { exerciseKind: numberValue(exercise.exerciseKind) }
       : {}),

@@ -45,6 +45,15 @@ export const COROS_KNOWN_SPORT_TYPES: Readonly<Record<number, string>> = {
   65535: "All Sports"
 };
 
+/** Sports recorded without GPS: indoor run/bike/rowing, pool swim, gym, climbing walls. */
+export const COROS_INDOOR_SPORT_TYPES: ReadonlySet<number> = new Set([
+  101, 201, 300, 400, 402, 701, 800, 801
+]);
+
+export function isIndoorCorosSport(sportType: number | undefined): boolean {
+  return sportType !== undefined && COROS_INDOOR_SPORT_TYPES.has(sportType);
+}
+
 export function corosSportName(
   sportType: number,
   explicitName?: string | null,

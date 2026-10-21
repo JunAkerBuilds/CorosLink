@@ -257,6 +257,10 @@ export function rememberActivityGeo(
 ): { centroid: GlobePoint | null; route: GlobePoint[] | null } {
   hydrateGeoCache();
   const track = extractTrackPoints(detail);
+  if (track.length < 2 && detail?.trackFetchFailed) {
+    // The track download got no answer; leave it uncached so a later load asks again.
+    return { centroid: null, route: null };
+  }
   const centroid =
     track.length >= 2
       ? {
@@ -511,9 +515,9 @@ export async function loadActivityVisitCentroids(
           });
         }
       } catch {
-        // Skip failed lookups; never block the globe on one activity.
-        VISIT_CACHE.set(activity.activityId, null);
-        ROUTE_CACHE.set(activity.activityId, null);
+        // Skip failed lookups; never block the globe on one activity. A
+        // failure is not an answer, so leave it uncached: caching it as "no
+        // GPS" would persist and hide the place on every later load.
       }
     }
   }

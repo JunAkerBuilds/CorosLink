@@ -1,5 +1,6 @@
 import { t, getLocale } from "../i18n/trainingLocale";
 import type { TrainingHubActivity } from "../../electron/types";
+import { activityMovingSeconds, activitySpeedKmh } from "../../electron/activityTime";
 import { activityCategory, activityTimestamp } from "./activityCollection";
 import { sportColorCategory, type SportColorCategory } from "./sportColors";
 
@@ -63,6 +64,10 @@ export function hallSport(activity: TrainingHubActivity): HallSport | null {
 const positive = (value: number | undefined): value is number =>
   value !== undefined && Number.isFinite(value) && value > 0;
 
+/** Moving seconds, as COROS headlines them; elapsed time adds pauses and stops. */
+const movingSeconds = (activity: TrainingHubActivity): number =>
+  activityMovingSeconds(activity) ?? 0;
+
 // --- Bests from the activity list -------------------------------------------------
 
 export type ActivityRecordKind = "distance" | "duration" | "climb" | "speed";
@@ -110,14 +115,12 @@ function recordValue(activity: TrainingHubActivity, kind: ActivityRecordKind): n
     case "distance":
       return positive(activity.distance) ? activity.distance : undefined;
     case "duration":
-      return positive(activity.duration) ? activity.duration : undefined;
+      return activityMovingSeconds(activity);
     case "climb":
       return positive(activity.elevationGain) ? activity.elevationGain : undefined;
     case "speed":
-      return positive(activity.distance) &&
-        positive(activity.duration) &&
-        activity.distance >= SPEED_MIN_METERS
-        ? activity.distance / 1000 / (activity.duration / 3600)
+      return positive(activity.distance) && activity.distance >= SPEED_MIN_METERS
+        ? activitySpeedKmh(activity)
         : undefined;
   }
 }
@@ -162,7 +165,7 @@ export function sportTally(activities: TrainingHubActivity[], sport: HallSport):
       (tally, activity) => ({
         count: tally.count + 1,
         distance: tally.distance + (positive(activity.distance) ? activity.distance : 0),
-        duration: tally.duration + (positive(activity.duration) ? activity.duration : 0)
+        duration: tally.duration + movingSeconds(activity)
       }),
       { count: 0, distance: 0, duration: 0 }
     );
@@ -196,7 +199,7 @@ export function workTotals(activities: TrainingHubActivity[]): WorkTotals {
       first = first === null ? time : Math.min(first, time);
     }
     distance += positive(activity.distance) ? activity.distance : 0;
-    duration += positive(activity.duration) ? activity.duration : 0;
+    duration += movingSeconds(activity);
     climb += positive(activity.elevationGain) ? activity.elevationGain : 0;
   }
   return { count: activities.length, distance, duration, climb, activeDays: days.size, first };
@@ -227,7 +230,7 @@ export function milestones(activities: TrainingHubActivity[]): Milestones {
     const time = activityTimestamp(activity.startTime);
     if (time) {
       const week = weeks.get(weekStart(time)) ?? { seconds: 0, count: 0 };
-      week.seconds += positive(activity.duration) ? activity.duration : 0;
+      week.seconds += movingSeconds(activity);
       week.count += 1;
       weeks.set(weekStart(time), week);
       const day = new Date(time);
@@ -240,7 +243,7 @@ export function milestones(activities: TrainingHubActivity[]): Milestones {
     ) {
       hardestSession = activity;
     }
-    if (positive(activity.duration) && (activity.duration ?? 0) > (longestSession?.duration ?? 0)) {
+    if (movingSeconds(activity) > (longestSession ? movingSeconds(longestSession) : 0)) {
       longestSession = activity;
     }
   }
@@ -313,7 +316,7 @@ export function workBuckets(
     const time = activityTimestamp(activity.startTime);
     const bucket = buckets.find((candidate) => time >= candidate.start && time < candidate.end);
     if (!bucket) continue;
-    const seconds = positive(activity.duration) ? activity.duration : 0;
+    const seconds = movingSeconds(activity);
     bucket.seconds[sportColorCategory(activity.sportType)] += seconds;
     bucket.total += seconds;
     bucket.count += 1;

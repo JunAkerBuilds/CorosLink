@@ -33,6 +33,7 @@ import {
   type WeekSportFamily
 } from "../calendar/weekSportBreakdown";
 import { activityMovingSeconds } from "../../electron/activityTime";
+import { isIndoorCorosSport } from "../../electron/corosSportTypes";
 import type { CorosLinkApi } from "../coroslink-api";
 import type { PrimaryView } from "../navigation/primaryNav";
 import { PRIMARY_NAV_ITEMS } from "../navigation/primaryNav";
@@ -86,14 +87,16 @@ function routePreviewLoader(api: CorosLinkApi) {
     let request = routePreviews.get(key);
     if (!request) {
       request = api.getTrainingHubActivityDetail(activity.activityId, activity.sportType, activity);
-      request.catch(() => routePreviews.delete(key));
+      // A failed request, or a track download that got no answer, is retried next time.
+      request.then(
+        (detail) => { if (detail.trackFetchFailed) routePreviews.delete(key); },
+        () => routePreviews.delete(key)
+      );
       routePreviews.set(key, request);
     }
     return request;
   };
 }
-
-const INDOOR_SPORT_TYPES = new Set([101, 201, 300, 400, 402, 701, 800, 801]);
 
 // Phosphor duotone throughout, like the launchpad and the Activities table.
 const FAMILY_ICONS: Record<WeekSportFamily, Icon> = {
@@ -894,7 +897,7 @@ function LatestActivityCard({
   useLanguage();
   const { unitSystem } = useUnitSystem();
   const loader = useMemo(() => (api ? routePreviewLoader(api) : null), [api]);
-  const indoor = INDOOR_SPORT_TYPES.has(activity.sportType);
+  const indoor = isIndoorCorosSport(activity.sportType);
   const swim = isSwimSportType(activity.sportType);
   const sportName = resolveSportName(activity, sportTypes) ?? "Activity";
   const distance = activity.distance && activity.distance > 0 ? activity.distance : undefined;

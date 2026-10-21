@@ -2649,6 +2649,11 @@ export interface TrainingHubActivityDetail {
    */
   lapGroups?: TrainingHubActivityLapGroup[];
   track?: TrainingHubActivityTrack;
+  /**
+   * The detail had no GPS track and the GPX fallback got no answer (network,
+   * timeout), so the missing track is not final and must not be cached.
+   */
+  trackFetchFailed?: boolean;
   series?: TrainingHubActivitySeriesPoint[];
   strength?: StrengthDetail;
   raw: Record<string, unknown>;

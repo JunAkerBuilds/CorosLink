@@ -15,6 +15,7 @@ import {
 import {
   corosSportName,
   enrichActivitiesWithSportNames,
+  isIndoorCorosSport,
   mergeSportTypeEntries
 } from "./corosSportTypes";
 import {
@@ -992,13 +993,16 @@ export async function getTrainingHubActivityDetail(
       (point) => point.lat !== undefined && point.lon !== undefined
     ).length ?? 0;
 
-  if (gpsPointCount < 2) {
-    const gpxTrack = await fetchActivityTrackFromGpx(activityId, sportType);
-    if (gpxTrack) {
+  // Indoor sports have no GPS to recover, so skip the extra GPX round trip.
+  if (gpsPointCount < 2 && !isIndoorCorosSport(detail.sportType ?? sportType)) {
+    const gpx = await fetchActivityTrackFromGpx(activityId, sportType);
+    if (gpx.track) {
       detail = {
         ...detail,
-        track: mergeActivityTracks(detail.track, gpxTrack)
+        track: mergeActivityTracks(detail.track, gpx.track)
       };
+    } else if (gpx.failed) {
+      detail = { ...detail, trackFetchFailed: true };
     }
   }
 
@@ -5532,24 +5536,30 @@ function mergeActivityTracks(
   return existing.points.length >= incoming.points.length ? existing : incoming;
 }
 
+/**
+ * The GPX export's track, for outdoor activities whose detail has no GPS
+ * points. `failed` means no answer (network, timeout, HTTP error), so a
+ * missing track must not be remembered as "no GPS".
+ */
 async function fetchActivityTrackFromGpx(
   activityId: string,
   sportType: number
-): Promise<TrainingHubActivityTrack | undefined> {
+): Promise<{ track?: TrainingHubActivityTrack; failed: boolean }> {
   try {
-    // Only a fallback for activities whose detail has no GPS points (often indoor ones).
     const fileUrl = await getTrainingHubActivityFileUrl(activityId, sportType, 1, {
       unreported: true
     });
-    const response = await fetch(fileUrl);
+    const response = await fetch(fileUrl, {
+      signal: AbortSignal.timeout(TRAINING_HUB_REQUEST_TIMEOUT_MS)
+    });
 
     if (!response.ok) {
-      return undefined;
+      return { failed: true };
     }
 
-    return parseGpxTrack(await response.text());
+    return { track: parseGpxTrack(await response.text()), failed: false };
   } catch {
-    return undefined;
+    return { failed: true };
   }
 }
 

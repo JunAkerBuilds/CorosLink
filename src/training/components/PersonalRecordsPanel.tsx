@@ -16,6 +16,7 @@ import {
   isPersonalRecordPopulated,
   isPersonalRecordVisible
 } from "../formatters";
+import { activityMovingSeconds } from "../../../electron/activityTime";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import { formatDistanceValue, formatSpeedValue, type UnitSystem } from "../../units/units";
 import {
@@ -1211,11 +1212,12 @@ function MilestoneList({ milestones }: { milestones: Milestones }) {
       detail: sessionDetail(hardestSession)
     });
   }
-  if (longestSession?.duration) {
+  const longestSeconds = longestSession ? activityMovingSeconds(longestSession) : undefined;
+  if (longestSession && longestSeconds) {
     items.push({
       key: "longest",
       label: t("Longest session"),
-      value: formatDurationSeconds(longestSession.duration),
+      value: formatDurationSeconds(longestSeconds),
       detail: sessionDetail(longestSession)
     });
   }

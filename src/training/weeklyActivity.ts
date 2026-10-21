@@ -207,6 +207,15 @@ function roundAxisMax(max: number): number {
   return Math.ceil(padded / step) * step;
 }
 
+/**
+ * An empty week's axis, split cleanly by the six grid divisions: 0–6 for
+ * distance and load, 0–60 min for duration. A max of 4 would repeat rounded
+ * labels (0, 1, 1, 2, 3, 3, 4).
+ */
+function emptyAxisMax(metric: WeeklyActivityMetric): number {
+  return metric === "duration" ? 1 : 6;
+}
+
 function yAxisUnitForMetric(
   metric: WeeklyActivityMetric,
   maxValue: number,
@@ -276,8 +285,9 @@ export function buildWeeklyActivitySeries(
   });
 
   const useMinutes = metric === "duration" && maxChartValue < 1 && hasData;
-  const yMax =
-    metric === "duration" && useMinutes
+  const yMax = !hasData
+    ? emptyAxisMax(metric)
+    : metric === "duration" && useMinutes
       ? roundAxisMax(maxChartValue * 60) / 60
       : roundAxisMax(maxChartValue);
 

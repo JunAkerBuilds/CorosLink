@@ -50,6 +50,9 @@ assert.equal(detail.summary.totalReps, 66);
 assert.equal(detail.summary.totalWeightKg, 2016);
 assert.equal(detail.summary.calories, 100);
 assert.equal(detail.summary.durationSec, 1000);
+// workoutTime (moving) wins over totalTime (elapsed, includes pauses).
+const paused = parseStrengthDetail({ ...raw, summary: { ...raw.summary, totalTime: 160000, workoutTime: 100000 } });
+assert.equal(paused.summary.durationSec, 1000);
 assert.equal(detail.summary.avgHr, 129);
 assert.equal(detail.summary.aerobicEffect, 2.3);
 

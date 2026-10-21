@@ -396,4 +396,18 @@ assert.notEqual(
   })
 );
 
+// COROS-made strength steps carry the catalog code as their name; the editor
+// shows the catalog name from the sid_ overview, not "T1178".
+const corosStrength = corosProgramToWorkoutDraft({
+  id: "program-strength",
+  name: "COROS strength",
+  sportType: 4,
+  exercises: [
+    { id: "10", originId: "kb-swing", name: "T1178", overview: "sid_strength_two_arm_kettlebell_swings", sportType: 4, exerciseType: 2, targetType: 3, targetValue: 15, sets: 4, restType: 1, restValue: 60, sortNo: 100, groupId: "0", isGroup: false },
+    { id: "11", originId: "custom", name: "T9999", overview: "", sportType: 4, exerciseType: 2, targetType: 3, targetValue: 8, sets: 1, restType: 1, restValue: 30, sortNo: 200, groupId: "0", isGroup: false }
+  ]
+});
+assert.equal(corosStrength.nodes[0].exerciseName, "Two Arm Kettlebell Swings");
+assert.equal(corosStrength.nodes[1].exerciseName, "T9999", "no catalog overview: the code stays");
+
 console.log("COROS workout editor adapter and contract tests passed");

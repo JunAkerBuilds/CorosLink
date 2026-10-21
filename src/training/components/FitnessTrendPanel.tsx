@@ -218,6 +218,9 @@ export function FitnessTrendPanel({
     ? getWeeklyActivityYAxisUnitLabel(primary.metric, primary.series.yAxisUnit)
     : "rel";
   const hasData = seriesByMetric.some(({ series }) => series.hasData);
+  // Once COROS has answered, a week without training is zero bars, not missing data.
+  const answered = Boolean(snapshot?.dailyMetrics || snapshot?.analytics) || activities.length > 0;
+  const showChart = hasData || answered;
   const dayCount = primary.series.days.length;
 
   useEffect(() => {
@@ -254,7 +257,7 @@ export function FitnessTrendPanel({
         ))}
       </div>
 
-      {hasData ? (
+      {showChart ? (
         <div
           className="training-fitness-chart"
           role="img"
