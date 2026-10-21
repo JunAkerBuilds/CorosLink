@@ -53,6 +53,9 @@ assert.equal(detail.summary.durationSec, 1000);
 // workoutTime (moving) wins over totalTime (elapsed, includes pauses).
 const paused = parseStrengthDetail({ ...raw, summary: { ...raw.summary, totalTime: 160000, workoutTime: 100000 } });
 assert.equal(paused.summary.durationSec, 1000);
+// A zero workoutTime has no timer figure: elapsed time stands in.
+const untimed = parseStrengthDetail({ ...raw, summary: { ...raw.summary, totalTime: 160000, workoutTime: 0 } });
+assert.equal(untimed.summary.durationSec, 1600);
 assert.equal(detail.summary.avgHr, 129);
 assert.equal(detail.summary.aerobicEffect, 2.3);
 

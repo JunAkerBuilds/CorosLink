@@ -101,8 +101,10 @@ function parseSummary(raw: Record<string, unknown>): StrengthSummary {
       ? (raw.summary as Record<string, unknown>)
       : raw;
   // Moving time (workoutTime) first, like every other duration CorosLink
-  // headlines; totalTime is elapsed and includes pauses.
-  const durationCs = num(s.workoutTime) ?? num(s.totalTime) ?? 0;
+  // headlines; totalTime is elapsed and includes pauses. A zero workoutTime
+  // means COROS has no timer figure, as in the activity list.
+  const movingCs = num(s.workoutTime);
+  const durationCs = (movingCs && movingCs > 0 ? movingCs : undefined) ?? num(s.totalTime) ?? 0;
   return {
     sets: num(s.sets) ?? 0,
     totalReps: num(s.totalReps) ?? 0,

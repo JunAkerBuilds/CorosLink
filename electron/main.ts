@@ -438,6 +438,7 @@ import {
   getChatAuthStatus,
   getChatSessionEntries,
   getChatSettings,
+  getChatSettingsForWindow,
   listChatModelOptions,
   listChatSessionsForProvider,
   loginChat,
@@ -1947,7 +1948,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("chat:getAuthStatus", () => getChatAuthStatus());
 
-  ipcMain.handle("chat:getSettings", () => getChatSettings());
+  ipcMain.handle("chat:getSettings", () => getChatSettingsForWindow());
 
   ipcMain.handle("chat:getBaseCoachInstructions", () =>
     buildBaseCoachInstructions()

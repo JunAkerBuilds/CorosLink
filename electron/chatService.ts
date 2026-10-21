@@ -256,6 +256,16 @@ export function getChatSettings(): ChatSettings {
   );
 }
 
+/**
+ * The settings the window starts from. They wait for the one-time release of a
+ * detected CLI path, so a window's copy never holds the released path for its
+ * next save to write back.
+ */
+export async function getChatSettingsForWindow(): Promise<ChatSettings> {
+  await releaseDetectedCliPaths();
+  return getChatSettings();
+}
+
 export function saveChatSettings(settings: ChatSettings): ChatSettings {
   return saveChatSettingsToStore(
     chatSettingsStore,

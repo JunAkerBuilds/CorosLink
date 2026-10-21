@@ -224,36 +224,82 @@ export function fillEfficiencyWindow(startTimeSeconds: number): void {
   if (missing.length > 0) void fillEfficiencyHistory(missing, efficiencySource.loadDetail);
 }
 
+interface SweepCaller {
+  /** Its runs not read yet. */
+  pending: Set<string>;
+  total: number;
+  done: number;
+  onProgress?: (done: number, total: number) => void;
+  shouldStop?: () => boolean;
+}
+
+interface Sweep {
+  queue: { activity: TrainingHubActivity; loadDetail: DetailLoader }[];
+  reading?: string;
+  callers: SweepCaller[];
+  finished: Promise<void>;
+}
+
 /** One sweep at a time across the app, so two widgets do not fetch the same runs twice. */
-let sweep: Promise<void> | null = null;
+let sweep: Sweep | null = null;
 const SWEEP_DELAY_MS = 250;
 
 /**
  * Fetch and keep the curves of runs that are missing one, newest first, a few
  * hundred milliseconds apart. A run whose detail fails is skipped this time.
+ *
+ * A sweep already running takes on a later caller's runs and reports its own
+ * progress to it. A run is read while any caller that hasn't stopped still
+ * wants it, so a widget remounted mid-sweep (React's development double mount
+ * included) keeps it going.
  */
 export function fillEfficiencyHistory(
   missing: readonly TrainingHubActivity[],
-  loadDetail: (activity: TrainingHubActivity) => Promise<TrainingHubActivityDetail>,
+  loadDetail: DetailLoader,
   onProgress?: (done: number, total: number) => void,
   shouldStop?: () => boolean
 ): Promise<void> {
-  if (sweep) return sweep;
-  sweep = (async () => {
-    let done = 0;
-    for (const activity of missing) {
-      if (shouldStop?.()) break;
-      try {
-        rememberActivityInsight(await loadDetail(activity), activity);
-      } catch {
-        // Try again on a later sweep.
-      }
-      done += 1;
-      onProgress?.(done, missing.length);
-      await new Promise((resolve) => setTimeout(resolve, SWEEP_DELAY_MS));
-    }
-  })().finally(() => {
-    sweep = null;
+  const running: Sweep = sweep ?? { queue: [], callers: [], finished: Promise.resolve() };
+  const queued = new Set(running.queue.map((item) => item.activity.activityId));
+  if (running.reading) queued.add(running.reading);
+  for (const activity of missing) {
+    if (queued.has(activity.activityId)) continue;
+    queued.add(activity.activityId);
+    running.queue.push({ activity, loadDetail });
+  }
+  running.callers.push({
+    pending: new Set(missing.map((activity) => activity.activityId)),
+    total: missing.length,
+    done: 0,
+    onProgress,
+    shouldStop
   });
-  return sweep;
+  if (!sweep) {
+    sweep = running;
+    running.finished = runSweep(running);
+  }
+  return running.finished;
+}
+
+async function runSweep(running: Sweep): Promise<void> {
+  for (let item = running.queue.shift(); item; item = running.queue.shift()) {
+    const { activity, loadDetail } = item;
+    const wanted = running.callers.some((caller) => !caller.shouldStop?.() && caller.pending.has(activity.activityId));
+    if (!wanted) continue;
+    running.reading = activity.activityId;
+    try {
+      rememberActivityInsight(await loadDetail(activity), activity);
+    } catch {
+      // Try again on a later sweep.
+    }
+    running.reading = undefined;
+    for (const caller of running.callers) {
+      if (!caller.pending.delete(activity.activityId)) continue;
+      caller.done += 1;
+      caller.onProgress?.(caller.done, caller.total);
+    }
+    await new Promise((resolve) => setTimeout(resolve, SWEEP_DELAY_MS));
+  }
+  // Cleared in the same step as the last look at the queue, so a later caller starts a new sweep.
+  sweep = null;
 }

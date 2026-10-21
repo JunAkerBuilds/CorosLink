@@ -173,7 +173,49 @@ try {
   assert.equal(status.reloginNeedsCode, false);
   assert.equal(status.rememberCredentials, false);
 
-  // 5. A live session, an outage and being offline all stay signed in.
+  // 5. Signing out while the check renews the session keeps you signed out,
+  // and nobody hears about an expired session.
+  signedInWith("dead-token");
+  respond = ({ path, token }) => {
+    if (path === "/account/login") {
+      logoutTrainingHub();
+      return success({ accessToken: "fresh-token", userId: "42", regionId: 1 });
+    }
+    return token === "fresh-token" ? freshSession(path) : success(null);
+  };
+  await checkTrainingHubSession({ force: true });
+  status = getTrainingHubStatus();
+  assert.equal(status.authenticated, false);
+  assert.equal(status.sessionExpired, undefined);
+  assert.equal(settings.has("trainingHub.accessToken"), false, "the re-login's session isn't saved");
+  assert.equal(announced.length, 0);
+  assert.ok(!recorded.some(({ source }) => source === "trainingHub:session"));
+
+  // Signing out while a re-login that needs the emailed code runs: not an expired session either.
+  signedInWith("dead-token");
+  respond = ({ path }) => {
+    if (path === "/account/login") {
+      logoutTrainingHub();
+      return twoFactorChallenge();
+    }
+    return success(null);
+  };
+  await checkTrainingHubSession({ force: true });
+  assert.equal(getTrainingHubStatus().sessionExpired, undefined);
+  assert.equal(announced.length, 0);
+
+  // Signing out while a read is refused: no login, and not an expired session.
+  signedInWith("dead-token");
+  respond = () => {
+    logoutTrainingHub();
+    return loginExpired();
+  };
+  await assert.rejects(getTrainingDashboard(), /Log in to COROS Training Hub first/);
+  assert.equal(requests.filter(({ path }) => path === "/account/login").length, 0);
+  assert.equal(getTrainingHubStatus().sessionExpired, undefined);
+  assert.equal(announced.length, 0);
+
+  // 6. A live session, an outage and being offline all stay signed in.
   for (const reply of [
     () => success({ userId: "42" }),
     () => failure("1001", "Service exceptions"),
@@ -188,7 +230,7 @@ try {
     assert.equal(announced.length, 0);
   }
 
-  // 6. Checks are throttled, and a read that "succeeds" with no data prompts one.
+  // 7. Checks are throttled, and a read that "succeeds" with no data prompts one.
   signedInWith("live-token");
   respond = () => success({ userId: "42" });
   await checkTrainingHubSession({ force: true });

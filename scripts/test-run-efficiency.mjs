@@ -129,3 +129,34 @@ assert.equal(efficiencyVerdict(1.0249, 1), "usual");
 assert.equal(efficiencyVerdict(0.97, 1), "worse");
 
 console.log("run efficiency: ok");
+
+// ----- The shared history sweep -----
+const { fillEfficiencyHistory } = await import(
+  `${pathToFileURL(path.join(repoRoot, "src", "training", "activityInsights.ts")).href}?cacheBust=${Date.now()}`
+);
+const sweepRuns = ["run-1", "run-2", "run-3"].map((activityId) => ({ activityId, sportType: 100, startTime: 1_700_000_000 }));
+const read = [];
+const loadDetail = async (activity) => {
+  read.push(activity.activityId);
+  throw new Error("no detail in this test");
+};
+
+// A widget mounted twice in a row (React's development double mount): the
+// first mount stops, the second joins the sweep and it reads every run.
+let firstStopped = false;
+void fillEfficiencyHistory(sweepRuns, loadDetail, undefined, () => firstStopped);
+firstStopped = true;
+const progress = [];
+await fillEfficiencyHistory(sweepRuns, loadDetail, (done, total) => progress.push([done, total]), () => false);
+assert.deepEqual(read, ["run-1", "run-2", "run-3"], "each run is read once");
+assert.deepEqual(progress.at(-1), [3, 3]);
+
+// Once every caller stops, the runs nobody wants any more are left for later.
+read.length = 0;
+let stopped = false;
+const abandoned = fillEfficiencyHistory(sweepRuns, loadDetail, undefined, () => stopped);
+stopped = true;
+await abandoned;
+assert.deepEqual(read, ["run-1"], "only the run already being read");
+
+console.log("efficiency sweep: ok");

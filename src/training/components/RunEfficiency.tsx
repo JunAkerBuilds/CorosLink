@@ -1,5 +1,5 @@
 import { formatNumber, getLocale, t, useLanguage } from "../../i18n/training";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Gauge, Loader2 } from "lucide-react";
 import type { TrainingHubActivity, TrainingHubActivityDetail } from "../../../electron/types";
 import {
@@ -46,19 +46,19 @@ function formatChange(percent: number): string {
   return `${rounded > 0 ? "+" : rounded < 0 ? "−" : "±"}${formatNumber(Math.abs(rounded), { maximumFractionDigits: 1 })}%`;
 }
 
-function useElementWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
-  const ref = useRef<T>(null);
+/** A callback ref, so a chart box that appears after the first render (once runs are read) is measured too. */
+function useElementWidth<T extends HTMLElement>(): [(element: T | null) => void, number] {
+  const [element, setElement] = useState<T | null>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
-    const element = ref.current;
     if (!element) return;
     const observer = new ResizeObserver(([entry]) => {
       if (entry) setWidth(Math.round(entry.contentRect.width));
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
-  return [ref, width];
+  }, [element]);
+  return [setElement, width];
 }
 
 /** The account's heart-rate profile: the snapshot's when it has one, else the one last kept. */

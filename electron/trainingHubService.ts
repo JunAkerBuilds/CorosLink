@@ -567,7 +567,12 @@ function finalizeTrainingHubLogin(
   }
 }
 
+// Every sign-in and sign-out moves this on. A re-login or a recovery that
+// started before one of them leaves the athlete's choice alone.
+let trainingHubSessionGeneration = 0;
+
 function persistTrainingHubSession(session: TrainingHubAuthState): void {
+  trainingHubSessionGeneration += 1;
   setSetting(SETTINGS.accessToken, session.accessToken);
   setSetting(SETTINGS.userId, session.userId);
   setSetting(SETTINGS.regionId, session.regionId);
@@ -943,6 +948,7 @@ async function queryTrainingHubAccount(
 }
 
 export function logoutTrainingHub(): TrainingHubStatus {
+  trainingHubSessionGeneration += 1;
   pendingTwoFactor = null;
   clearTrainingHubAuth();
   clearStoredCorosCredentials();
@@ -6797,6 +6803,12 @@ async function trainingHubFetch<T>(
 
 const SIGNED_OUT_CODE = "COROS_SIGNED_OUT";
 
+function trainingHubSignedOut(): Error {
+  return Object.assign(new Error("Log in to COROS Training Hub first."), {
+    code: SIGNED_OUT_CODE
+  });
+}
+
 /** Local-Only Mode answers the training and account calls from this computer (localSync/localTrainingBackend.ts). */
 interface LocalTrainingHandler {
   handles(path: string): boolean;
@@ -6838,11 +6850,10 @@ async function requestWithSessionRecovery<T>(
   path: string,
   options: TrainingHubRequestOptions
 ): Promise<T> {
+  const generation = trainingHubSessionGeneration;
   const auth = getStoredAuth();
   if (!auth) {
-    throw Object.assign(new Error("Log in to COROS Training Hub first."), {
-      code: SIGNED_OUT_CODE
-    });
+    throw trainingHubSignedOut();
   }
 
   try {
@@ -6854,7 +6865,7 @@ async function requestWithSessionRecovery<T>(
     }
     // A dead token fails in every region, so probing them would only add requests.
     if (retryReason === "token") {
-      return recoverExpiredTrainingHubSession<T>(auth, path, options);
+      return recoverExpiredTrainingHubSession<T>(auth, path, options, generation);
     }
 
     const resolvedBaseUrl = await resolveTrainingHubBaseUrl(
@@ -6878,7 +6889,8 @@ async function requestWithSessionRecovery<T>(
         return recoverExpiredTrainingHubSession<T>(
           { ...auth, baseUrl: resolvedBaseUrl },
           path,
-          options
+          options,
+          generation
         );
       }
 
@@ -6896,9 +6908,14 @@ async function requestWithSessionRecovery<T>(
 async function recoverExpiredTrainingHubSession<T>(
   failed: TrainingHubAuthState,
   path: string,
-  options: TrainingHubRequestOptions
+  options: TrainingHubRequestOptions,
+  generation: number
 ): Promise<T> {
   const current = getStoredAuth();
+  // Signed out while the request ran: nothing expired, and no login is due.
+  if (!current && generation !== trainingHubSessionGeneration) {
+    throw trainingHubSignedOut();
+  }
   if (current && current.accessToken !== failed.accessToken) {
     try {
       return await executeTrainingHubRequest<T>(current, path, options);
@@ -6912,6 +6929,13 @@ async function recoverExpiredTrainingHubSession<T>(
   try {
     refreshed = await reauthenticateFromStoredCredentials(failed.accessToken);
   } catch (reason) {
+    // Signed out, or in, while the re-login ran: the athlete's choice, not an expired session.
+    if (
+      (reason as { code?: unknown } | null)?.code === SIGNED_OUT_CODE ||
+      (!getStoredAuth() && generation !== trainingHubSessionGeneration)
+    ) {
+      throw trainingHubSignedOut();
+    }
     clearExpiredTrainingHubAuth(failed.accessToken);
     throw trainingHubSessionExpired(reason);
   }
@@ -7234,13 +7258,13 @@ async function performReauthentication(): Promise<TrainingHubAuthState> {
     );
   }
 
+  const generation = trainingHubSessionGeneration;
+  let session: TrainingHubAuthState;
   try {
-    const session = await establishTrainingHubSession(
+    session = await establishTrainingHubSession(
       credentials.account,
       credentials.pwdHash
     );
-    persistTrainingHubSession(session);
-    return session;
   } catch (error) {
     console.warn(
       "[trainingHub] Automatic re-login with stored COROS credentials failed; " +
@@ -7249,6 +7273,12 @@ async function performReauthentication(): Promise<TrainingHubAuthState> {
     );
     throw new Error("Automatic re-login with the saved COROS login failed.", { cause: error });
   }
+  // The athlete signed out, or in, while this ran: their choice stands.
+  if (generation !== trainingHubSessionGeneration) {
+    throw trainingHubSignedOut();
+  }
+  persistTrainingHubSession(session);
+  return session;
 }
 
 /** Narrow write boundary for reviewed Strength patches. No payload comes from the renderer. */
