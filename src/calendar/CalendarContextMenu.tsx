@@ -1,5 +1,5 @@
 import { useLanguage, t } from "../i18n/training";
-import { ClipboardPaste, Copy, CopyPlus } from "lucide-react";
+import { ClipboardPaste, Copy, CopyPlus, Link2, Unlink2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "./calendarContextMenu.css";
@@ -7,7 +7,7 @@ import "./calendarContextMenu.css";
 export interface CalendarContextMenuItem {
   id: string;
   label: string;
-  icon: "copy" | "copy-day" | "paste";
+  icon: "copy" | "copy-day" | "paste" | "link" | "unlink";
   shortcut?: string;
   disabled?: boolean;
   hint?: string;
@@ -17,7 +17,9 @@ export interface CalendarContextMenuItem {
 const ICONS = {
   copy: Copy,
   "copy-day": CopyPlus,
-  paste: ClipboardPaste
+  paste: ClipboardPaste,
+  link: Link2,
+  unlink: Unlink2
 } as const;
 
 export const MOD_KEY_LABEL =

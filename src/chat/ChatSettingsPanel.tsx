@@ -4,6 +4,7 @@ import {
   Bot,
   CircleCheck,
   ExternalLink,
+  Gem,
   KeyRound,
   Loader2,
   LogOut,
@@ -13,8 +14,11 @@ import {
 } from "lucide-react";
 import type {
   ChatAuthStatus,
+  ChatProvider,
   ChatSettings,
+  ClaudeCodeConnectionState,
   ClaudeCodeStatus,
+  GeminiCliStatus,
   LocalChatConnectionTest,
   LocalChatDiscovery,
   OpenRouterConnectionTest
@@ -31,7 +35,7 @@ import type { CorosLinkApi } from "../coroslink-api";
 
 const CUSTOM_LOCAL_SERVER_OPTION = "__custom__";
 
-function claudeStatusLabel(status: ClaudeCodeStatus | null): string {
+function cliStatusLabel(status: { state: ClaudeCodeConnectionState } | null): string {
   if (!status) return t("Not checked");
   if (status.state === "not-installed") return t("Not installed");
   if (status.state === "sign-in-required") return t("Installed, sign-in required");
@@ -41,17 +45,19 @@ function claudeStatusLabel(status: ClaudeCodeStatus | null): string {
   return t("Connection failed");
 }
 
-/** Claude Code's own model catalog, labelled with the version each alias runs. */
-function ClaudeModelSelect({
+/** A CLI's own model catalog, labelled with the version each alias runs. */
+function CliModelSelect({
   api,
+  provider,
   value,
   onChange
 }: {
   api: CorosLinkApi | undefined;
+  provider: ChatProvider;
   value: string;
   onChange: (model: string) => void;
 }) {
-  const options = useChatModelOptions(api, "claude-code");
+  const options = useChatModelOptions(api, provider);
   return (
     <select value={value} onChange={(event) => onChange(event.target.value)}>
       {options.map((option) => (
@@ -66,11 +72,25 @@ function ClaudeModelSelect({
   );
 }
 
+/** Gemini CLI's status, its in-flight checks and the actions on it. */
+export interface GeminiSettingsControls {
+  status: GeminiCliStatus | null;
+  checking: boolean;
+  connecting: boolean;
+  testing: boolean;
+  onRefresh: () => void;
+  onConnect: () => void;
+  onTest: () => void;
+  onOpenSetupGuide: (topic: "install" | "sign-in") => void;
+  onUpdate: (patch: Partial<ChatSettings["geminiCli"]>) => void;
+}
+
 export function ChatSettingsPanel({
   api,
   chatSettings,
   authStatus,
   claudeStatus,
+  gemini,
   openRouterApiKey,
   openRouterConnection,
   localApiKey,
@@ -113,6 +133,7 @@ export function ChatSettingsPanel({
   chatSettings: ChatSettings;
   authStatus: ChatAuthStatus | null;
   claudeStatus: ClaudeCodeStatus | null;
+  gemini: GeminiSettingsControls;
   openRouterApiKey: string;
   openRouterConnection: OpenRouterConnectionTest | null;
   localApiKey: string;
@@ -402,8 +423,9 @@ export function ChatSettingsPanel({
 
           <label className="chat-local-field">
             <span>{t("Model")}</span>
-            <ClaudeModelSelect
+            <CliModelSelect
               api={api}
+              provider="claude-code"
               value={chatSettings.claudeCode.model ?? ""}
               onChange={(model) => onUpdateClaudeCode({ model })}
             />
@@ -419,7 +441,7 @@ export function ChatSettingsPanel({
             <Terminal size={15} aria-hidden="true" />
           )}
           <div>
-            <strong>{claudeStatusLabel(claudeStatus)}</strong>
+            <strong>{cliStatusLabel(claudeStatus)}</strong>
             <span>
               {claudeStatus?.message ??
                 t("Check this computer for an installed Claude Code runtime.")}
@@ -516,6 +538,124 @@ export function ChatSettingsPanel({
         </div>
         <p className="chat-settings-copy">
           {t("These selections control built-in COROS and Training Hub data. Full activity files unlock splits, power curves, best efforts, and route comparisons computed locally from cached FIT files; only the derived numbers reach Claude. Connected custom MCP servers are trusted separately and can expose their tools to Claude. Drafts stay local until you click an upload or delete button.")}</p>
+      </section>
+
+      <section
+        className="chat-settings-section chat-claude-section chat-gemini-section"
+        id={chatSettingsSectionDomId("gemini")}
+        data-settings-section="gemini"
+      >
+        <ChatSettingsSectionHeader id="gemini" badge="Beta" />
+        <p className="chat-settings-copy">
+          {t("Uses Gemini CLI installed and signed in on this computer. CorosLink never reads or stores your Google password or Gemini credentials.")}</p>
+
+        <div className="chat-settings-field-grid">
+          <label className="chat-local-field">
+            <span>{t("Gemini executable")}</span>
+            <div className="chat-claude-path-row">
+              <Terminal size={15} aria-hidden="true" />
+              <input
+                value={chatSettings.geminiCli.executablePath ?? ""}
+                onChange={(event) =>
+                  gemini.onUpdate({ executablePath: event.target.value })
+                }
+                placeholder={t("Auto-detect Gemini CLI")}
+                spellCheck={false}
+              />
+            </div>
+          </label>
+
+          <label className="chat-local-field">
+            <span>{t("Model")}</span>
+            <CliModelSelect
+              api={api}
+              provider="gemini-cli"
+              value={chatSettings.geminiCli.model ?? ""}
+              onChange={(model) => gemini.onUpdate({ model })}
+            />
+          </label>
+        </div>
+
+        <div className="chat-claude-status" data-state={gemini.status?.state}>
+          {gemini.checking || gemini.connecting ? (
+            <Loader2 className="chat-spinner" size={15} aria-hidden="true" />
+          ) : gemini.status?.state === "connected" ? (
+            <CircleCheck size={15} aria-hidden="true" />
+          ) : (
+            <Gem size={15} aria-hidden="true" />
+          )}
+          <div>
+            <strong>{cliStatusLabel(gemini.status)}</strong>
+            <span>
+              {gemini.status?.message ??
+                t("Check this computer for an installed Gemini CLI.")}
+            </span>
+          </div>
+        </div>
+
+        <div className="chat-local-actions chat-claude-actions">
+          <button
+            type="button"
+            className="chat-local-action"
+            onClick={gemini.onRefresh}
+            disabled={gemini.checking || gemini.connecting || gemini.testing || busy}
+          >
+            {gemini.checking ? (
+              <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
+            ) : (
+              <RefreshCw size={14} aria-hidden="true" />
+            )}
+            {t("Check")}</button>
+          {gemini.status?.state === "not-installed" ? (
+            <button
+              type="button"
+              className="chat-local-action"
+              onClick={() => gemini.onOpenSetupGuide("install")}
+            >
+              <ExternalLink size={14} aria-hidden="true" />
+              {t("Install Gemini CLI")}</button>
+          ) : null}
+          {/* Google sign-in would replace an API key or Vertex AI setup in Gemini CLI. */}
+          {gemini.status?.installed &&
+          gemini.status.state !== "connected" &&
+          (!gemini.status.authMethod || gemini.status.authMethod === "oauth-personal") ? (
+            <button
+              type="button"
+              className="chat-local-action primary"
+              onClick={gemini.onConnect}
+              disabled={gemini.connecting || gemini.status.state === "connecting" || busy}
+            >
+              {gemini.connecting || gemini.status.state === "connecting" ? (
+                <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
+              ) : (
+                <Gem size={14} aria-hidden="true" />
+              )}
+              {t("Sign in with Google")}</button>
+          ) : null}
+          {gemini.status?.state === "connected" ? (
+            <button
+              type="button"
+              className="chat-local-action primary"
+              onClick={gemini.onTest}
+              disabled={gemini.testing || busy}
+            >
+              {gemini.testing ? (
+                <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
+              ) : (
+                <Bot size={14} aria-hidden="true" />
+              )}
+              {t("Test connection")}</button>
+          ) : null}
+          <button
+            type="button"
+            className="chat-local-action"
+            onClick={() => gemini.onOpenSetupGuide("sign-in")}
+          >
+            <ExternalLink size={14} aria-hidden="true" />
+            {t("Setup guide")}</button>
+        </div>
+        <p className="chat-settings-copy">
+          {t("Gemini gets the same Coach tools as ChatGPT; its own file, shell, and web tools stay off. Coaching prompts and the COROS data it requests go to Google under your Gemini CLI sign-in. Drafts stay local until you click an upload or delete button.")}</p>
       </section>
 
       <section

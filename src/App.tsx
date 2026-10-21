@@ -119,6 +119,7 @@ import {
   readStartupView,
   saveStartupView,
 } from "./navigation/startupView";
+import { useHiddenNavItems } from "./navigation/hiddenNav";
 import { SettingsView, type SettingsSection } from "./settings/SettingsView";
 import type { AccountDestination } from "./settings/AccountsSettings";
 import { DataView } from "./data/DataView";
@@ -385,6 +386,7 @@ export default function App() {
   // The watch's forecast is for the place the Overview's weather last used.
   useEffect(() => { shareWeatherLocationWithWatch(readCachedOverviewWeather()); }, []);
   const [startupView, setStartupView] = useState<View>(readStartupView);
+  const hiddenNavItems = useHiddenNavItems();
   const [sidebarExpanded, setSidebarExpanded] = useState(
     createInitialSidebarExpanded,
   );
@@ -2448,6 +2450,23 @@ export default function App() {
     );
   }
 
+  // A hidden feature shouldn't be where the app opens.
+  useEffect(() => {
+    if (!hiddenNavItems.has(startupView)) {
+      return;
+    }
+    const hiddenView = startupView;
+    setStartupView("overview");
+    saveStartupView("overview");
+    setMessage(
+      localizedText(() => t("{{value0}} is hidden, so CorosLink will open on Overview.", { value0: getPrimaryViewLabel(hiddenView) })),
+    );
+  }, [hiddenNavItems, startupView]);
+
+  function openSidebarSettings() {
+    openSettingsSection("sidebar");
+  }
+
   function handleDevelopmentViewToggle() {
     const nextVisible = !showDevelopmentTools;
     setShowDevelopmentTools(nextVisible);
@@ -2604,6 +2623,7 @@ export default function App() {
           onExpandedChange={setSidebarExpanded}
           overlayOpen={sidebarOverlayOpen}
           onOverlayOpenChange={setSidebarOverlayOpen}
+          onCustomize={openSidebarSettings}
           footer={
             <AppUpdateControls
               snapshot={appUpdateSnapshot}
@@ -2908,6 +2928,7 @@ export default function App() {
                 updateBusy={busy === "update-check"}
                 onCheckForUpdates={() => void handleCheckForUpdates()}
                 onError={setError}
+                showDevelopmentItems={showDevelopmentTools}
               />
             ) : null}
             {activeView === "calendar" ? (
@@ -3155,6 +3176,8 @@ interface WatchOverviewPanelProps {
   libraryCount: number;
   librarySize: string;
   onOpenLibrary: () => void;
+  /** False while Media is hidden from the sidebar; the music counts go with it. */
+  showMusic: boolean;
 }
 
 /** The connected watch in one panel: product, storage and the music on it. */
@@ -3167,6 +3190,7 @@ function WatchOverviewPanel({
   libraryCount,
   librarySize,
   onOpenLibrary,
+  showMusic,
 }: WatchOverviewPanelProps) {
   useLanguage();
   const productName = presentation
@@ -3238,34 +3262,36 @@ function WatchOverviewPanel({
           {storage ? (
             <StorageBar storage={storage} />
           ) : null}
-          <div className="overview-watch-stats">
-            {stats.map((stat) => {
-              const content = (
-                <>
-                  <span className="overview-watch-stat-label">
-                    <span className="overview-watch-stat-icon">{stat.icon}</span>
-                    {t(stat.label)}
-                  </span>
-                  <strong>{stat.value}</strong>
-                  <span className="overview-watch-stat-detail">{t(stat.detail)}</span>
-                </>
-              );
-              return stat.open ? (
-                <button
-                  key={stat.hue}
-                  type="button"
-                  className={`overview-watch-stat is-${stat.hue} is-button`}
-                  onClick={onOpenLibrary}
-                >
-                  {content}
-                </button>
-              ) : (
-                <div key={stat.hue} className={`overview-watch-stat is-${stat.hue}`}>
-                  {content}
-                </div>
-              );
-            })}
-          </div>
+          {showMusic ? (
+            <div className="overview-watch-stats">
+              {stats.map((stat) => {
+                const content = (
+                  <>
+                    <span className="overview-watch-stat-label">
+                      <span className="overview-watch-stat-icon">{stat.icon}</span>
+                      {t(stat.label)}
+                    </span>
+                    <strong>{stat.value}</strong>
+                    <span className="overview-watch-stat-detail">{t(stat.detail)}</span>
+                  </>
+                );
+                return stat.open ? (
+                  <button
+                    key={stat.hue}
+                    type="button"
+                    className={`overview-watch-stat is-${stat.hue} is-button`}
+                    onClick={onOpenLibrary}
+                  >
+                    {content}
+                  </button>
+                ) : (
+                  <div key={stat.hue} className={`overview-watch-stat is-${stat.hue}`}>
+                    {content}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
       </div>
     </section>
@@ -3404,6 +3430,7 @@ function MediaOverviewTab({
 }: MediaOverviewTabProps) {
   useLanguage();
   const greeting = useTimeOfDayGreeting();
+  const musicHidden = useHiddenNavItems().has("media");
   const watchTracks = watchStatus?.tracks ?? [];
   const recentDownloads = useMemo(
     () =>
@@ -3477,6 +3504,7 @@ function MediaOverviewTab({
             libraryCount={downloads.length}
             librarySize={formatBytes(librarySize)}
             onOpenLibrary={onOpenLibrary}
+            showMusic={!musicHidden}
           />
         </div>
       ) : null}
@@ -3507,7 +3535,7 @@ function MediaOverviewTab({
       </div>
 
 
-      {downloads.length > 0 ? (
+      {downloads.length > 0 && !musicHidden ? (
         <section className="panel dashboard-recent dashboard-block">
           <div className="section-heading">
             <div>

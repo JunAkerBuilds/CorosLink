@@ -1,4 +1,6 @@
 import { buildScheduledWorkoutEditRequest } from "./corosWorkoutEditor";
+import { annotateDiagnosticRequest } from "./diagnosticsLog";
+import { recordDiagnosticError } from "./diagnosticsService";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -20,6 +22,7 @@ import {
   countTrainingActivitiesMissingFeelType,
   countTrainingActivitiesSince,
   deleteSettings,
+  deleteTrainingWorkoutMetadata,
   getSetting,
   listStoredStrengthSessions,
   listStoredTrainingActivities,
@@ -34,6 +37,7 @@ import {
 import { activityMovingSeconds } from "./activityTime";
 import { buildRpeDistribution, dailyRpeLoad } from "./rpeLoad";
 import type {
+  ActiveNativeTrainingPlanInstance,
   ActivityPaceBaseline,
   ActivityPaceBaselines,
   RouteActivityType,
@@ -42,6 +46,7 @@ import type {
   TrainingHubActivityDetail,
   TrainingHubActivityFileType,
   TrainingHubActivityLap,
+  TrainingHubActivityLapGroup,
   TrainingHubExportFormat,
   TrainingHubActivityTrack,
   TrainingHubTrackPoint,
@@ -141,6 +146,7 @@ interface LoginResult {
 
 const GLOBAL_BASE_URL = "https://teamapi.coros.com";
 const RESULT_SUCCESS = "0000";
+const TRAINING_HUB_REQUEST_TIMEOUT_MS = 30_000;
 const AUTH_ERROR_CODES = new Set(["0101", "0102", "1006"]);
 
 // Email verification code for the 2FA login challenge: codeType 20, 6 digits.
@@ -284,6 +290,7 @@ interface RawDailyMetric {
   day?: string | number;
   trainingLoad?: number;
   rhr?: number;
+  testRhr?: number;
   avgSleepHrv?: number;
   sleepHrvBase?: number;
   tiredRateNew?: number;
@@ -564,6 +571,7 @@ async function loginViaAnyBase(
       );
       return { loginData, loginBaseUrl };
     } catch (error) {
+      annotateDiagnosticRequest(error, "POST", loginUrl);
       lastError = error;
       // A later region's parameter/transport error must not hide the useful
       // rejection returned by a server that understood the login request.
@@ -762,13 +770,24 @@ async function queryTrainingHubAccount(
   accessToken: string,
   baseUrl: string
 ): Promise<TrainingHubAccountData | null> {
+  // Login carries on without the account details, so only the error report hears why.
+  const unavailable = (error: unknown) => {
+    recordDiagnosticError(
+      "trainingHub:login/accountQuery",
+      annotateDiagnosticRequest(error, "GET", `${baseUrl}/account/query`)
+    );
+    return null;
+  };
   try {
     const response = await fetch(`${baseUrl}/account/query`, {
       headers: buildTrainingHubHeaders(accessToken)
     });
 
     if (!response.ok) {
-      return null;
+      return unavailable(Object.assign(
+        new Error(`COROS account query failed: ${response.status} ${response.statusText}`),
+        { code: `HTTP ${response.status}` }
+      ));
     }
 
     const payload =
@@ -776,12 +795,15 @@ async function queryTrainingHubAccount(
     const result = String(payload.result ?? payload.apiCode ?? "");
 
     if (result !== RESULT_SUCCESS || !payload.data) {
-      return null;
+      return unavailable(Object.assign(
+        new Error(payload.message || "COROS account query returned no account."),
+        { code: result || "unknown" }
+      ));
     }
 
     return payload.data;
-  } catch {
-    return null;
+  } catch (error) {
+    return unavailable(error);
   }
 }
 
@@ -983,7 +1005,8 @@ export async function getTrainingHubActivityDetail(
 export async function getTrainingHubActivityFileUrl(
   activityId: string,
   sportType: number,
-  fileType: TrainingHubActivityFileType = 4
+  fileType: TrainingHubActivityFileType = 4,
+  options: { unreported?: boolean } = {}
 ): Promise<string> {
   const data = await trainingHubRequest<TrainingHubFileUrlData>(
     "/activity/detail/download",
@@ -993,7 +1016,8 @@ export async function getTrainingHubActivityFileUrl(
         labelId: activityId,
         sportType,
         fileType
-      }
+      },
+      unreported: options.unreported
     }
   );
 
@@ -1032,15 +1056,22 @@ export async function fetchTrainingHubActivityFile(
     fileType
   );
 
-  const response = await fetch(fileUrl);
-  if (!response.ok) {
-    throw new Error(
-      `Failed to download the ${format.label} file (HTTP ${response.status}).`
-    );
-  }
+  try {
+    const response = await fetch(fileUrl);
+    if (!response.ok) {
+      throw Object.assign(
+        new Error(`Failed to download the ${format.label} file (HTTP ${response.status}).`),
+        { code: `HTTP ${response.status}` }
+      );
+    }
 
-  const content = Buffer.from(await response.arrayBuffer());
-  return { format, content };
+    const content = Buffer.from(await response.arrayBuffer());
+    return { format, content };
+  } catch (error) {
+    // Backups and the FIT index count a failed file and move on.
+    recordDiagnosticError("trainingHub:activityFile", error);
+    throw error;
+  }
 }
 
 export async function getTrainingAnalytics(): Promise<TrainingHubAnalytics> {
@@ -1844,6 +1875,8 @@ export async function deleteWorkoutProgram(programId: string): Promise<void> {
     throw new Error("A program ID is required to delete a library workout.");
   }
   await trainingHubPostVoid("/training/program/delete", [id]);
+  // Otherwise an offline Library falls back to the cached copy and the workout reappears.
+  deleteTrainingWorkoutMetadata(id);
 }
 
 export async function listWorkoutPrograms(): Promise<Record<string, unknown>[]> {
@@ -1851,9 +1884,30 @@ export async function listWorkoutPrograms(): Promise<Record<string, unknown>[]> 
 }
 
 export async function listLibraryWorkouts(): Promise<TrainingHubLibraryWorkout[]> {
-  const programs = await listLibraryWorkoutPrograms();
+  return (await queryLibraryWorkouts()).workouts;
+}
+
+/**
+ * The library plus whether COROS sent the whole of it: an array whose every
+ * record has an id. Only a complete list may prune the local workout cache.
+ */
+export async function queryLibraryWorkouts(): Promise<{
+  workouts: TrainingHubLibraryWorkout[];
+  complete: boolean;
+}> {
+  const data = await trainingHubPost<unknown>("/training/program/query", {});
+  const programs = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
+  const complete =
+    Array.isArray(data) &&
+    programs.every((program) => program?.id !== undefined && program?.id !== null);
+  return { workouts: libraryWorkoutsFromPrograms(programs), complete };
+}
+
+function libraryWorkoutsFromPrograms(
+  programs: Record<string, unknown>[]
+): TrainingHubLibraryWorkout[] {
   return programs
-    .filter((program) => program.id !== undefined && program.id !== null)
+    .filter((program) => program?.id !== undefined && program?.id !== null)
     .map((program) => ({
       id: String(program.id),
       name: pickString(program, ["name"]) ?? "Workout",
@@ -2555,7 +2609,8 @@ export function parseScheduledWorkoutEntries(
       volume: formatUpcomingWorkoutVolume(program, entity),
       trainingLoad: resolveUpcomingWorkoutLoad(program, entity),
       exercises: parseScheduledExercises(program),
-      rawProgram: program
+      rawProgram: program,
+      corosActivity: resolveCorosActivity(entity)
     });
   });
 
@@ -3045,25 +3100,46 @@ export async function uploadNativeTrainingPlan(
  */
 async function rollBackNativeTrainingPlan(planId: string): Promise<boolean> {
   try {
-    const active = await readNativeTrainingPlanEndpoint<unknown>("/training/plan/query", {
-      method: "POST",
-      body: { statusList: [1] }
-    });
-    // An empty list may come back as null; any other non-array is unexpected.
-    if (active != null && !Array.isArray(active)) {
-      return false;
-    }
-    const instances = ((active ?? []) as Record<string, unknown>[]).filter(
-      (plan) => String(plan.originId ?? "") === planId && plan.id != null
-    );
-    for (const instance of instances) {
-      await deactivateNativeTrainingPlan(String(instance.id));
+    for (const instanceId of await listActiveNativeTrainingPlanInstanceIds(planId)) {
+      await deactivateNativeTrainingPlan(instanceId);
     }
     await deleteNativeTrainingPlan(planId);
     return true;
   } catch {
     return false;
   }
+}
+
+/**
+ * Native plans currently running on the calendar. executeSubPlan never marks
+ * the library plan itself; it creates a separate plan whose originId points
+ * back at it, and quitSubPlan needs that instance ID.
+ */
+export async function listActiveNativeTrainingPlanInstances(): Promise<ActiveNativeTrainingPlanInstance[]> {
+  const active = await readNativeTrainingPlanEndpoint<unknown>("/training/plan/query", {
+    method: "POST",
+    body: { statusList: [1] }
+  });
+  // An empty list may come back as null; any other non-array is unexpected.
+  if (active != null && !Array.isArray(active)) {
+    throw new Error("COROS returned an unexpected list of active plans.");
+  }
+  return ((active ?? []) as Record<string, unknown>[])
+    .filter((plan) => plan.id != null)
+    .map((plan) => ({
+      id: String(plan.id),
+      originId: String(plan.originId ?? ""),
+      startDay: plan.startDay != null ? String(plan.startDay) : undefined
+    }));
+}
+
+/** IDs of the active calendar instances created from one library plan. */
+export async function listActiveNativeTrainingPlanInstanceIds(
+  libraryPlanId: string
+): Promise<string[]> {
+  return (await listActiveNativeTrainingPlanInstances())
+    .filter((instance) => instance.originId === libraryPlanId)
+    .map((instance) => instance.id);
 }
 
 export async function activateNativeTrainingPlan(
@@ -3368,6 +3444,10 @@ function resolveScheduledProgram(
   );
 }
 
+// `entity.sportData` is the activity COROS credited to the workout (its web
+// calendar shows reached/missed from its presence), so it describes what was
+// done, not what was planned. Planned values come from the program; sportData
+// is only a last resort for a missing program.
 function resolveUpcomingWorkoutName(
   program: Record<string, unknown> | undefined,
   entity: Record<string, unknown>
@@ -3375,9 +3455,9 @@ function resolveUpcomingWorkoutName(
   const sportData = pickObject(entity, ["sportData"]);
 
   return (
-    (sportData ? pickString(sportData, ["name"]) : undefined) ??
     (program ? pickString(program, ["name"]) : undefined) ??
     pickString(entity, ["name"]) ??
+    (sportData ? pickString(sportData, ["name"]) : undefined) ??
     "Scheduled workout"
   );
 }
@@ -3389,11 +3469,33 @@ function resolveUpcomingWorkoutLoad(
   const sportData = pickObject(entity, ["sportData"]);
 
   return (
-    (sportData ? toOptionalNumber(sportData.trainingLoad) : undefined) ??
     (program ? toOptionalNumber(program.trainingLoad) : undefined) ??
     (program ? toOptionalNumber(program.essence) : undefined) ??
-    (program ? toOptionalNumber(program.estimatedValue) : undefined)
+    (program ? toOptionalNumber(program.estimatedValue) : undefined) ??
+    (sportData ? toOptionalNumber(sportData.trainingLoad) : undefined)
   );
+}
+
+/** COROS's own plan↔activity link: `entity.sportData` + `entity.completeRate`. */
+function resolveCorosActivity(
+  entity: Record<string, unknown>
+): TrainingHubScheduledWorkoutEntry["corosActivity"] {
+  const sportData = pickObject(entity, ["sportData"]);
+  if (!sportData) {
+    return undefined;
+  }
+  const activityId = pickString(sportData, ["labelIdStr", "labelId", "activityId"]);
+  const startTime = toOptionalNumber(sportData.startTime);
+  if (!activityId && !startTime) {
+    return undefined;
+  }
+  const completeRate = toOptionalNumber(entity.completeRate);
+  return {
+    activityId,
+    startTime,
+    // "-1.00" = no rate.
+    completeRate: completeRate !== undefined && completeRate >= 0 ? completeRate : undefined
+  };
 }
 
 function corosWorkoutDistanceToMeters(value?: number): number {
@@ -3417,8 +3519,8 @@ function formatUpcomingWorkoutVolume(
   }
 
   const distanceMeters =
-    corosWorkoutDistanceToMeters(toOptionalNumber(sportData?.distance)) ||
-    resolveWorkoutDistanceMeters(program);
+    resolveWorkoutDistanceMeters(program) ||
+    corosWorkoutDistanceToMeters(toOptionalNumber(sportData?.distance));
 
   if (distanceMeters > 0) {
     return `${(distanceMeters / 1000).toFixed(2)}km`;
@@ -3621,7 +3723,10 @@ function parseDailyMetric(raw: RawDailyMetric): TrainingHubDailyMetric {
   return {
     happenDay: String(raw.happenDay ?? raw.date ?? raw.day ?? ""),
     trainingLoad: toOptionalNumber(raw.trainingLoad),
-    rhr: toOptionalNumber(raw.rhr),
+    // COROS's Resting Heart Rate (Training Hub chart, MCP queryRestingHeartRate)
+    // is testRhr, present only on measured nights. The daily `rhr` beside it
+    // is a different, lower all-day value COROS never labels as resting HR.
+    rhr: toOptionalNumber(raw.testRhr),
     avgSleepHrv: toOptionalNumber(raw.avgSleepHrv),
     sleepHrvBase: toOptionalNumber(raw.sleepHrvBase),
     tiredRateNew: toOptionalNumber(raw.tiredRateNew),
@@ -5085,6 +5190,86 @@ function extractActivityLaps(raw: Record<string, unknown>): TrainingHubActivityL
   return bestLaps.map((lap, index) => ({ ...lap, index: index + 1 }));
 }
 
+// lapList group types, read from live runs, rides and workouts (2026-10-19).
+// On a structured workout type 2 holds the workout steps and type 10 the
+// 1 km splits; on a plain run with 1 km auto-lap COROS omits type 10.
+const LAP_GROUP_KIND_BY_TYPE = new Map<number, TrainingHubActivityLapGroup["kind"]>([
+  [2, "laps"],
+  [10, "split"],
+  [11, "split"],
+  [12, "split"],
+  [-1, "whole"]
+]);
+const LAP_GROUP_KIND_ORDER: TrainingHubActivityLapGroup["kind"][] = ["laps", "split", "whole"];
+
+function extractActivityLapGroups(raw: Record<string, unknown>): TrainingHubActivityLapGroup[] {
+  const summary = pickObject(raw, ["summaryInfo", "summary", "activitySummary"]) ?? raw;
+  const lapList =
+    pickArray(raw, ["lapList", "laps", "lapInfoList"]) ??
+    pickArray(summary, ["lapList", "laps", "lapInfoList"]) ??
+    [];
+  const candidates: TrainingHubActivityLapGroup[] = [];
+
+  for (const entry of lapList) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+
+    const group = entry as Record<string, unknown>;
+    const type = toOptionalNumber(group.type);
+    const kind = type === undefined ? undefined : LAP_GROUP_KIND_BY_TYPE.get(type);
+    const items = pickArray(group, ["lapItemList", "itemList", "items"]);
+    if (!kind || !items?.length) {
+      continue;
+    }
+
+    const laps = items.map((item, index) => parseActivityLap(item, index));
+    // A one-row lap or split group (a 10 km split of a 10 km run) only
+    // repeats the whole activity.
+    if (!laps.some(isPopulatedActivityLap) || (kind !== "whole" && laps.length < 2)) {
+      continue;
+    }
+
+    const fastestLaps =
+      kind === "whole"
+        ? []
+        : (pickArray(group, ["fastLapIndexList"]) ?? [])
+            .map((value) => toOptionalNumber(value))
+            .filter(
+              (value): value is number =>
+                value !== undefined && Number.isInteger(value) && value >= 0 && value < laps.length
+            );
+
+    candidates.push({
+      kind,
+      splitDistance:
+        kind === "split"
+          ? normalizeCorosDetailDistanceMeters(toOptionalNumber(group.lapDistance)) ?? laps[0]?.distance
+          : undefined,
+      laps,
+      fastestLaps
+    });
+  }
+
+  candidates.sort(
+    (a, b) =>
+      LAP_GROUP_KIND_ORDER.indexOf(a.kind) - LAP_GROUP_KIND_ORDER.indexOf(b.kind) ||
+      (a.splitDistance ?? 0) - (b.splitDistance ?? 0)
+  );
+
+  const seen = new Set<string>();
+  const groups = candidates.filter((group) => {
+    const signature = JSON.stringify(group.laps.map((lap) => [lap.distance, lap.duration]));
+    if (seen.has(signature)) {
+      return false;
+    }
+    seen.add(signature);
+    return true;
+  });
+
+  return groups.length > 1 ? groups : [];
+}
+
 function normalizeGpsCoordinate(value: number): number | undefined {
   if (!Number.isFinite(value) || value === 0) {
     return undefined;
@@ -5322,7 +5507,10 @@ async function fetchActivityTrackFromGpx(
   sportType: number
 ): Promise<TrainingHubActivityTrack | undefined> {
   try {
-    const fileUrl = await getTrainingHubActivityFileUrl(activityId, sportType, 1);
+    // Only a fallback for activities whose detail has no GPS points (often indoor ones).
+    const fileUrl = await getTrainingHubActivityFileUrl(activityId, sportType, 1, {
+      unreported: true
+    });
     const response = await fetch(fileUrl);
 
     if (!response.ok) {
@@ -6128,6 +6316,7 @@ export function parseActivityDetail(raw: Record<string, unknown>): TrainingHubAc
     avgCadence: pickRecordedActivityMetric(raw, summary, "avgCadence"),
     maxCadence: pickRecordedActivityMetric(raw, summary, "maxCadence"),
     laps,
+    lapGroups: extractActivityLapGroups(raw),
     track,
     series: parseActivitySeries(raw),
     strength: parseStrengthDetail(raw),
@@ -6143,12 +6332,15 @@ function parseActivityLap(raw: unknown, index: number): TrainingHubActivityLap {
   const lap = raw as Record<string, unknown>;
   const distanceRaw =
     toOptionalNumber(lap.distance) ?? toOptionalNumber(lap.totalDistance);
-  const durationRaw =
-    toOptionalNumber(lap.totalTime) ??
-    toOptionalNumber(lap.time) ??
-    toOptionalNumber(lap.duration);
+  // Detail laps keep time and timestamps at 0.01 s, like distance. The
+  // ">= 10,000 means centiseconds" guess read every lap under 100 s (a 60 s
+  // rest, a 400 m rep) as that many seconds: 6000 → 1:40:00.
+  const centiseconds = toOptionalNumber(lap.totalTime) ?? toOptionalNumber(lap.time);
 
-  let duration = normalizeActivityDuration(durationRaw);
+  let duration =
+    centiseconds !== undefined && centiseconds > 0
+      ? Math.round(centiseconds / 100)
+      : normalizeActivityDuration(toOptionalNumber(lap.duration));
 
   if (!duration) {
     const startTimestamp = toOptionalNumber(lap.startTimestamp);
@@ -6159,7 +6351,7 @@ function parseActivityLap(raw: unknown, index: number): TrainingHubActivityLap {
       endTimestamp !== undefined &&
       endTimestamp > startTimestamp
     ) {
-      duration = normalizeActivityDuration(endTimestamp - startTimestamp);
+      duration = Math.round((endTimestamp - startTimestamp) / 100);
     }
   }
 
@@ -6413,6 +6605,8 @@ export async function writeNativeTrainingPlanEndpoint<T>(
 interface TrainingHubRequestOptions extends RequestInit {
   params?: Record<string, string | number>;
   allowEmptyData?: boolean;
+  /** An optional extra the caller expects to fail sometimes: keep it out of the error report. */
+  unreported?: boolean;
 }
 
 async function trainingHubFetch<T>(
@@ -6421,6 +6615,8 @@ async function trainingHubFetch<T>(
 ): Promise<T> {
   return trainingHubRequest<T>(path, options);
 }
+
+const SIGNED_OUT_CODE = "COROS_SIGNED_OUT";
 
 /** Local-Only Mode answers the training and account calls from this computer (localSync/localTrainingBackend.ts). */
 interface LocalTrainingHandler {
@@ -6441,9 +6637,32 @@ async function trainingHubRequest<T>(
   if (local?.handles(path)) {
     return local.request(path, { method: options.method, body: options.body, params: options.params }) as T;
   }
+  try {
+    return await requestWithSessionRecovery<T>(path, options);
+  } catch (error) {
+    // Many callers fall back to the cache or skip one activity, so the error
+    // report hears about the failure here. Being signed out is a state, not a failure.
+    if (!options.unreported && (error as { code?: unknown } | null)?.code !== SIGNED_OUT_CODE) {
+      recordDiagnosticError(
+        (error as { code?: unknown } | null)?.code === SESSION_EXPIRED_CODE
+          ? "trainingHub:session"
+          : `trainingHub:${path}`,
+        error
+      );
+    }
+    throw error;
+  }
+}
+
+async function requestWithSessionRecovery<T>(
+  path: string,
+  options: TrainingHubRequestOptions
+): Promise<T> {
   const auth = getStoredAuth();
   if (!auth) {
-    throw new Error("Log in to COROS Training Hub first.");
+    throw Object.assign(new Error("Log in to COROS Training Hub first."), {
+      code: SIGNED_OUT_CODE
+    });
   }
 
   try {
@@ -6488,10 +6707,12 @@ async function recoverExpiredTrainingHubSession<T>(
   path: string,
   options: TrainingHubRequestOptions
 ): Promise<T> {
-  const refreshed = await reauthenticateFromStoredCredentials();
-  if (!refreshed) {
+  let refreshed: TrainingHubAuthState;
+  try {
+    refreshed = await reauthenticateFromStoredCredentials();
+  } catch (reason) {
     clearTrainingHubAuth();
-    throw new Error("COROS session expired. Log in again.");
+    throw trainingHubSessionExpired(reason);
   }
 
   try {
@@ -6499,10 +6720,19 @@ async function recoverExpiredTrainingHubSession<T>(
   } catch (error) {
     if (getTrainingHubRetryReason(error) === "token") {
       clearTrainingHubAuth();
-      throw new Error("COROS session expired. Log in again.");
+      throw trainingHubSessionExpired(error);
     }
     throw error;
   }
+}
+
+const SESSION_EXPIRED_CODE = "COROS_SESSION_EXPIRED";
+
+/** Same message as before; the cause tells the error report why re-login didn't work. */
+function trainingHubSessionExpired(cause: unknown): Error {
+  return Object.assign(new Error("COROS session expired. Log in again.", { cause }), {
+    code: SESSION_EXPIRED_CODE
+  });
 }
 
 async function executeTrainingHubRequest<T>(
@@ -6510,7 +6740,7 @@ async function executeTrainingHubRequest<T>(
   path: string,
   options: TrainingHubRequestOptions = {}
 ): Promise<T> {
-  const { params, allowEmptyData, ...requestOptions } = options;
+  const { params, allowEmptyData, unreported: _unreported, ...requestOptions } = options;
   const url = new URL(`${auth.baseUrl}${path}`);
 
   if (params) {
@@ -6531,7 +6761,9 @@ async function executeTrainingHubRequest<T>(
   const result = await fetchJson<T>(url.toString(), {
     ...requestOptions,
     headers
-  }, { allowEmptyData, contextPath: path });
+  }, { allowEmptyData, contextPath: path }).catch((error: unknown) => {
+    throw annotateDiagnosticRequest(error, requestOptions.method ?? "GET", url.toString());
+  });
   if (
     (path === "/training/schedule/update" ||
       path === "/training/schedule/executeSubPlan" ||
@@ -6635,18 +6867,20 @@ export function parseTrainingHubApiResponse<T>(
 ): T | undefined {
   const result = String(payload.result ?? payload.apiCode ?? "");
 
+  // `code` carries COROS's result code into the error report; messages stay unchanged.
   if (AUTH_ERROR_CODES.has(result)) {
-    throw new InvalidTrainingHubTokenError(
-      payload.message || "COROS session expired."
+    throw Object.assign(
+      new InvalidTrainingHubTokenError(payload.message || "COROS session expired."),
+      { code: result }
     );
   }
 
   if (result !== RESULT_SUCCESS) {
     const message = payload.message || "COROS API request failed.";
     if (isInvalidTokenMessage(message)) {
-      throw new InvalidTrainingHubTokenError(message);
+      throw Object.assign(new InvalidTrainingHubTokenError(message), { code: result });
     }
-    throw new Error(message);
+    throw Object.assign(new Error(message), { code: result || "unknown" });
   }
 
   if (payload.data === undefined || payload.data === null) {
@@ -6665,14 +6899,30 @@ async function fetchJson<T>(
   options: RequestInit,
   fetchOptions?: { allowEmptyData?: boolean; contextPath?: string }
 ): Promise<T> {
-  const response = await fetch(url, options);
-  if (!response.ok) {
-    throw new Error(
-      `COROS API request failed: ${response.status} ${response.statusText}`
-    );
+  let payload: TrainingHubApiResponse<T>;
+  try {
+    // A stalled COROS call would otherwise hold its button ("Deleting") for minutes.
+    const response = await fetch(url, {
+      ...options,
+      signal: options.signal ?? AbortSignal.timeout(TRAINING_HUB_REQUEST_TIMEOUT_MS)
+    });
+    if (!response.ok) {
+      throw Object.assign(
+        new Error(`COROS API request failed: ${response.status} ${response.statusText}`),
+        { code: `HTTP ${response.status}` }
+      );
+    }
+    payload = (await response.json()) as TrainingHubApiResponse<T>;
+  } catch (error) {
+    if ((error as { name?: unknown } | null)?.name === "TimeoutError") {
+      throw new Error(
+        "COROS didn't respond within 30 seconds. Check your connection and try again.",
+        { cause: error }
+      );
+    }
+    throw error;
   }
 
-  const payload = (await response.json()) as TrainingHubApiResponse<T>;
   const data = parseTrainingHubApiResponse<T>(payload, fetchOptions);
   return data as T;
 }
@@ -6725,9 +6975,9 @@ function clearTrainingHubAuth(): void {
 // one is minted, those concurrent logins cannibalise each other and the retried
 // requests end up using an already-stale token. De-duplicating re-auth here means
 // all callers await the same login and reuse the same fresh token.
-let pendingReauth: Promise<TrainingHubAuthState | null> | null = null;
+let pendingReauth: Promise<TrainingHubAuthState> | null = null;
 
-function reauthenticateFromStoredCredentials(): Promise<TrainingHubAuthState | null> {
+function reauthenticateFromStoredCredentials(): Promise<TrainingHubAuthState> {
   if (!pendingReauth) {
     pendingReauth = performReauthentication().finally(() => {
       pendingReauth = null;
@@ -6736,7 +6986,8 @@ function reauthenticateFromStoredCredentials(): Promise<TrainingHubAuthState | n
   return pendingReauth;
 }
 
-async function performReauthentication(): Promise<TrainingHubAuthState | null> {
+/** Rejects with the reason automatic re-login didn't work; the user must log in again. */
+async function performReauthentication(): Promise<TrainingHubAuthState> {
   const credentials = getStoredCorosCredentials();
   if (!credentials) {
     console.warn(
@@ -6744,7 +6995,10 @@ async function performReauthentication(): Promise<TrainingHubAuthState | null> {
         "are available to refresh it (was 'Remember me' enabled and is secure " +
         "storage available?). The user must log in again."
     );
-    return null;
+    throw new Error(
+      "The COROS access token expired and no saved login is available for automatic re-login " +
+        "(Remember me off, or secure storage unavailable)."
+    );
   }
 
   try {
@@ -6760,7 +7014,7 @@ async function performReauthentication(): Promise<TrainingHubAuthState | null> {
         "the user must log in again.",
       error
     );
-    return null;
+    throw new Error("Automatic re-login with the saved COROS login failed.", { cause: error });
   }
 }
 
@@ -6787,8 +7041,12 @@ export async function writeReviewedStrengthProgram(
     throw Object.assign(new Error(error instanceof Error ? error.message : "Workout preflight failed."), { code: "WORKOUT_EDIT_NOT_SENT" });
   }
   // Use the captured account and a single bounded request; never automatically retry a mutation.
-  await executeTrainingHubRequest(auth, source.ref.kind === "library" ? "/training/program/update" : "/training/schedule/update", {
+  const writePath = source.ref.kind === "library" ? "/training/program/update" : "/training/schedule/update";
+  await executeTrainingHubRequest(auth, writePath, {
     method: "POST", body: JSON.stringify(body), allowEmptyData: true, signal: AbortSignal.timeout(30_000)
+  }).catch((error: unknown) => {
+    recordDiagnosticError(`trainingHub:${writePath}`, error);
+    throw error;
   });
 }
 

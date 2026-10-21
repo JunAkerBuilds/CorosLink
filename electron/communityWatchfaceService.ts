@@ -89,6 +89,36 @@ let progressListener:
   | undefined;
 let activeImportSlug: string | undefined;
 
+/** The website account's `clk_` token for a given origin, when this computer is signed in to it. */
+export type CommunityAccountToken = (origin: string) => string | null;
+let accountToken: CommunityAccountToken = () => null;
+
+/** Lets the face lookup and download open the signed-in member's own private faces. */
+export function setCommunityWatchfaceAccountToken(provider: CommunityAccountToken): void {
+  accountToken = provider;
+}
+
+/**
+ * Fetches from the catalog anonymously, as always. Only when that answers 404 and this computer
+ * is signed in to the same site does it ask once more with the account token: the site answers
+ * a member's own private face that way, and 404s anyone else's. The token goes to the catalog's
+ * own origin only, and the caller never follows a redirect with it.
+ */
+export async function fetchCatalogOrOwned(
+  url: URL,
+  init: RequestInit,
+  token: CommunityAccountToken = accountToken,
+  fetchImpl: typeof fetch = fetch
+): Promise<Response> {
+  const response = await fetchImpl(url, init);
+  if (response.status !== 404) return response;
+  const owned = token(url.origin);
+  if (!owned) return response;
+  const headers = new Headers(init.headers);
+  headers.set("authorization", `Bearer ${owned}`);
+  return fetchImpl(url, { ...init, headers });
+}
+
 function catalogBaseUrl(): URL {
   const override = process.env.COROSLINK_WATCHFACE_SITE_URL?.trim();
   const value = override && !app.isPackaged ? override : PRODUCTION_CATALOG_ORIGIN;
@@ -160,16 +190,22 @@ async function readJsonResponse(response: Response): Promise<unknown> {
   return value;
 }
 
-async function requestCatalog(pathname: string): Promise<unknown> {
+async function requestCatalog(pathname: string, options: { owned?: boolean } = {}): Promise<unknown> {
   const url = new URL(pathname, catalogBaseUrl());
-  const response = await fetch(url, {
+  const init: RequestInit = {
     headers: {
       accept: "application/json",
       "user-agent": `CorosLink/${app.getVersion()}`
     },
     redirect: "error",
     signal: AbortSignal.timeout(15_000)
-  });
+  };
+  const response = options.owned ? await fetchCatalogOrOwned(url, init) : await fetch(url, init);
+  if (options.owned && response.status === 404 && !accountToken(url.origin)) {
+    throw new Error(
+      "This watch face isn't in the community catalog. If it's one of your private faces, sign in to watchfaces.coroslink.com in Settings → Account, then open it again."
+    );
+  }
   return readJsonResponse(response);
 }
 
@@ -223,7 +259,7 @@ export async function getCommunityWatchface(
   }
   if (model !== undefined) communityModelSchema.parse(model);
   const parsed = catalogItemSchema.parse(
-    await requestCatalog(`/api/v1/watch-faces/${encodeURIComponent(normalized)}${model ? `?${new URLSearchParams({ model })}` : ""}`)
+    await requestCatalog(`/api/v1/watch-faces/${encodeURIComponent(normalized)}${model ? `?${new URLSearchParams({ model })}` : ""}`, { owned: true })
   );
   const face = validateWatchfaceUrls(parsed.item);
   if (model && new URL(face.downloadUrl).searchParams.get("model") !== model) {
@@ -301,7 +337,7 @@ function signedBlobUrl(location: string): URL {
 }
 
 async function resolveSignedDownload(face: CommunityWatchface): Promise<URL> {
-  const response = await fetch(face.downloadUrl, {
+  const response = await fetchCatalogOrOwned(new URL(face.downloadUrl), {
     headers: {
       accept: "application/zip,application/octet-stream",
       "user-agent": `CorosLink/${app.getVersion()}`

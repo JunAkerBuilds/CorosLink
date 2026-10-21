@@ -5,9 +5,11 @@ import type { RemoteSecretBox, RemoteSettingsStore } from "../identity";
  * Signing this computer in to watchfaces.coroslink.com, the account the relay
  * links it to. The desktop is the website's `coroslink-desktop` app client:
  * PKCE (S256) in the system browser, back through the `coroslink://auth/callback`
- * deep link, then a `clk_` app token kept with safeStorage. That token only
- * buys 10-minute relay tokens (`POST /api/v1/app/relay-token`); it is never
- * sent to the relay or to a phone. See CorosLink-web Watchfaces/docs/relay-tokens.md.
+ * deep link, then a `clk_` app token kept with safeStorage. That token buys
+ * 10-minute relay tokens (`POST /api/v1/app/relay-token`) and opens the
+ * member's own private watch faces on the same website (`tokenFor`); it is
+ * never sent to the relay, to a phone or to any other host. See CorosLink-web
+ * Watchfaces/docs/relay-tokens.md.
  */
 
 export const PRODUCTION_WEBSITE_URL = "https://watchfaces.coroslink.com";
@@ -306,6 +308,22 @@ export class WebsiteAccount {
     this.relay = null;
     this.pending = null;
     this.changed();
+  }
+
+  /**
+   * The app token, for a request to this account's own website only (the community catalog
+   * opening the member's private faces). Null when signed out or for any other origin, so the
+   * keychain is only touched for a signed-in account.
+   */
+  tokenFor(origin: string): string | null {
+    if (!this.signedIn) return null;
+    let requested: string;
+    try {
+      requested = new URL(origin).origin;
+    } catch {
+      return null;
+    }
+    return requested === new URL(this.options.origin).origin ? this.appToken() : null;
   }
 
   private appToken(): string | null {

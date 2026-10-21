@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
 import { loadWatchfaceTestModules } from "./load-watchface-test-modules.mjs";
 
-const [commandsModule, placementModule, displayModesModule, schemaModule, studioModule, composeModule] =
+const [commandsModule, placementModule, displayModesModule, schemaModule, studioModule, composeModule, chartModule, nativePartsModule] =
   await loadWatchfaceTestModules([
     "/src/watchfaces/watchfaceAutomationCommands.ts",
     "/src/watchfaces/watchfaceAutomationPlacement.ts",
     "/src/watchfaces/watchfaceDisplayModes.ts",
     "/src/watchfaces/watchfaceAutomationSchema.ts",
     "/src/watchfaces/watchfaceStudio.ts",
-    "/src/watchfaces/watchfaceCompose.ts"
+    "/src/watchfaces/watchfaceCompose.ts",
+    "/src/watchfaces/chartReadouts.ts",
+    "/src/watchfaces/nativeDataParts.ts"
   ]);
 const {
   WatchfaceAutomationCommandError,
@@ -551,5 +553,66 @@ const slashMoved = studioModule.applyLayoutToDetails(slashDetails, { separators:
 assert.equal(studioModule.watchfaceArcCutRole(slashMoved.resolutions[1]), "dateSlash");
 assert.ok(studioModule.computeLayoutGroupBounds(slashMoved.resolutions[1]).some((box) => box.id === "separators"));
 assert.equal(studioModule.buildLayerVisibilityOverrides(slashMoved, { separators: false })[1].values.arc_cut_icon, "");
+
+// A time font size drawn in the face font: the layer box and the AI's limits
+// measure the font's digits like the editor does, not the PNG template cell.
+const fontDocument = globalThis.document;
+globalThis.document = {
+  createElement: () => {
+    const context = {
+      font: "",
+      measureText(text) {
+        const size = Number(/([\d.]+)px/.exec(this.font)?.[1] ?? 10);
+        return { width: text.length * size * 0.55, actualBoundingBoxLeft: 0, actualBoundingBoxRight: text.length * size * 0.55,
+          actualBoundingBoxAscent: size * 0.7, actualBoundingBoxDescent: 0 };
+      }
+    };
+    return { width: 0, height: 0, getContext: () => context };
+  }
+};
+try {
+  const fontDesign = { ...structuredClone(baseDesign), timeStyles: { hours: { scale: 1, fontSize: 60 } } };
+  const fontGeometry = {
+    configAssetOverrides: fontDesign.configAssetOverrides,
+    timeStyles: fontDesign.timeStyles,
+    letterSpacing: fontDesign.letterSpacing,
+    rasterFont: fontDesign.rasterFont,
+    fontFamily: fontDesign.fontFamily,
+    fontWeight: fontDesign.fontWeight,
+    fontStyle: fontDesign.fontStyle
+  };
+  const fontBase = studioModule.pickPreviewResolution(composeModule.deriveDesignDetails(details416, fontDesign).styledMetricDetails);
+  const editorHours = studioModule.computeLayoutGroupBounds(fontBase, fontGeometry).find(({ id }) => id === "hours");
+  const fontScene = sceneFor(fontDesign);
+  const { x0, y0, x1, y1 } = layer(fontScene, "hours").bounds;
+  assert.deepEqual({ x0, y0, x1, y1 }, { x0: editorHours.x0, y0: editorHours.y0, x1: editorHours.x1, y1: editorHours.y1 },
+    "the hour box matches the editor's face-font bounds");
+  assert.equal(y1 - y0, Math.ceil(60 * 0.7 / 0.96) + 2, "the box is as tall as the measured digits, not the 60px font size");
+  assert.deepEqual(fontScene.nativeOffsetLimits["layout:hours"], studioModule.computeLayoutOffsetLimits(fontBase, fontGeometry).hours,
+    "the AI's movement limits use the same face font");
+} finally {
+  if (fontDocument === undefined) delete globalThis.document;
+  else globalThis.document = fontDocument;
+}
+
+// The chart layer moves the readout it edits, as the editor's nudge, align
+// and group drag do (moveChartReadout); the graph and stored readouts stay.
+const baroChart = { ...nativePartsModule.defaultNativeDataStyle("chart"), chartSource: "chart_baro", x: 40, y: 60 };
+const tideReadout = { ...chartModule.newChartReadout(baroChart, "chart_tide", { width: 416, height: 416 }), x: 200, y: 280 };
+const chartDesign = { ...structuredClone(baseDesign), nativeData: { chart: chartModule.swapChartReadout(baroChart, tideReadout) } };
+const chart = chartDesign.nativeData.chart;
+const shiftedBox = (box, dx, dy) => ({ x0: box.x0 + dx, y0: box.y0 + dy, x1: box.x1 + dx, y1: box.y1 + dy });
+assert.equal(chart.chartSource, "chart_tide");
+assert.ok(chartModule.chartGraphBounds(chart), "the fixture chart draws a graph");
+const chartMoved = activeDesign(apply([{ op: "move_layer", id: "native:chart", dx: 12, dy: -20 }], value(chartDesign))).nativeData.chart;
+assert.deepEqual(chartMoved, chartModule.moveChartReadout(chart, chart.x + 12, chart.y - 20), "move_layer matches the editor's chart move");
+assert.deepEqual(chartModule.chartReadoutBounds(chartMoved), shiftedBox(chartModule.chartReadoutBounds(chart), 12, -20));
+assert.deepEqual(chartModule.chartGraphBounds(chartMoved), chartModule.chartGraphBounds(chart), "the graph stays put");
+assert.deepEqual(chartModule.chartReadoutBounds(chartMoved.readouts.chart_baro), chartModule.chartReadoutBounds(chart.readouts.chart_baro),
+  "the stored readout stays put");
+const chartBox = layer(sceneFor(chartDesign), "native:chart").bounds;
+const chartPlaced = activeDesign(apply([{ op: "place_layers", layerIds: ["native:chart"], anchor: "top-left", x: chartBox.x0 - 10, y: chartBox.y0 + 5 }],
+  value(chartDesign))).nativeData.chart;
+assert.deepEqual(chartPlaced, chartModule.moveChartReadout(chart, chart.x - 10, chart.y + 5), "place_layers moves the edited readout too");
 
 console.log("watchface automation placement tests passed");

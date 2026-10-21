@@ -1,6 +1,9 @@
 export interface DiagnosticsSnapshot {
   report: string;
+  /** Errors in the report's time range. */
   entryCount: number;
+  /** Every error the log keeps, whatever the range. */
+  totalCount: number;
   persistent: boolean;
 }
 

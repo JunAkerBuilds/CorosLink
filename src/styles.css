@@ -6540,34 +6540,6 @@ td span {
   line-height: 1.45;
 }
 
-.local-map-install {
-  display: grid;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.local-map-selection {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.04);
-  padding: 10px 12px;
-}
-
-.local-map-selection strong,
-.local-map-selection span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.local-map-selection span {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
 .map-install-progress {
   display: grid;
   gap: 8px;
@@ -18972,6 +18944,41 @@ tr.data-intervals-row-missing {
   color: #a7b4ff;
 }
 
+.chat-gemini-login-panel > svg {
+  color: #a3cdfb;
+}
+
+:root[data-theme="paper"] .chat-gemini-login-panel > svg {
+  color: #2a6db5;
+}
+
+.chat-login-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: -6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  padding: 3px 6px;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chat-login-link:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.chat-login-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .chat-claude-login-panel .chat-login-title-row h2 {
   margin: 0;
 }
@@ -19969,6 +19976,14 @@ tr.data-intervals-row-missing {
   --chat-select-tone-shadow: rgba(217, 119, 87, 0.22);
 }
 
+.chat-select--gemini,
+.chat-select-menu--gemini {
+  --chat-select-tone: #5ea8f2;
+  --chat-select-tone-strong: #a3cdfb;
+  --chat-select-tone-soft: rgba(94, 168, 242, 0.15);
+  --chat-select-tone-shadow: rgba(94, 168, 242, 0.22);
+}
+
 .chat-select--openrouter,
 .chat-select-menu--openrouter {
   --chat-select-tone: #8b9dff;
@@ -19995,6 +20010,12 @@ tr.data-intervals-row-missing {
   --chat-select-tone: #d97757;
   --chat-select-tone-strong: #f2a17f;
   --chat-select-tone-soft: rgba(217, 119, 87, 0.15);
+}
+
+.chat-provider-menu .app-select-option[data-value="gemini-cli"] {
+  --chat-select-tone: #5ea8f2;
+  --chat-select-tone-strong: #a3cdfb;
+  --chat-select-tone-soft: rgba(94, 168, 242, 0.15);
 }
 
 .chat-provider-menu .app-select-option[data-value="openrouter"] {
@@ -24070,6 +24091,14 @@ tr.data-intervals-row-missing {
   --chat-select-tone-shadow: rgba(189, 91, 60, 0.18);
 }
 
+:root[data-theme="paper"] .chat-select--gemini,
+:root[data-theme="paper"] .chat-select-menu--gemini {
+  --chat-select-tone: #2a6db5;
+  --chat-select-tone-strong: #1d5290;
+  --chat-select-tone-soft: rgba(42, 109, 181, 0.11);
+  --chat-select-tone-shadow: rgba(42, 109, 181, 0.17);
+}
+
 :root[data-theme="paper"] .chat-select--openrouter,
 :root[data-theme="paper"] .chat-select-menu--openrouter {
   --chat-select-tone: #5867b2;
@@ -24100,6 +24129,14 @@ tr.data-intervals-row-missing {
   --chat-select-tone: #bd5b3c;
   --chat-select-tone-strong: #934329;
   --chat-select-tone-soft: rgba(189, 91, 60, 0.12);
+}
+
+:root[data-theme="paper"]
+  .chat-provider-menu
+  .app-select-option[data-value="gemini-cli"] {
+  --chat-select-tone: #2a6db5;
+  --chat-select-tone-strong: #1d5290;
+  --chat-select-tone-soft: rgba(42, 109, 181, 0.11);
 }
 
 :root[data-theme="paper"]

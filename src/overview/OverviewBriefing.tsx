@@ -36,6 +36,7 @@ import { activityMovingSeconds } from "../../electron/activityTime";
 import type { CorosLinkApi } from "../coroslink-api";
 import type { PrimaryView } from "../navigation/primaryNav";
 import { PRIMARY_NAV_ITEMS } from "../navigation/primaryNav";
+import { useHiddenNavItems } from "../navigation/hiddenNav";
 import {
   formatDurationSeconds,
   formatUpcomingWorkoutDate,
@@ -245,6 +246,8 @@ export function OverviewBriefing({
   onSyncWatch
 }: OverviewBriefingProps) {
   useLanguage();
+  const hiddenNavItems = useHiddenNavItems();
+  const trainingHidden = hiddenNavItems.has("training");
   const latest = useMemo(() => latestActivity(activities), [activities]);
   const scores = (snapshot?.racePredictor?.runScoreList ?? []).filter(
     (score) => score.predictSeconds !== undefined && score.predictSeconds > 0
@@ -278,14 +281,14 @@ export function OverviewBriefing({
               api={api}
               activity={latest}
               sportTypes={sportTypes}
-              onOpen={() => onOpenActivity(latest)}
+              onOpen={trainingHidden ? undefined : () => onOpenActivity(latest)}
             />
           ) : null}
           {scores.length > 0 ? (
             <RacePredictionsCard
               scores={scores}
               level={snapshot?.racePredictor?.staminaLevel}
-              onOpen={() => onNavigate("training")}
+              onOpen={trainingHidden ? undefined : () => onNavigate("training")}
             />
           ) : null}
         </div>
@@ -756,6 +759,7 @@ function TodayCard({
   useLanguage();
   const localOnly = useLocalOnlyView();
   const { unitSystem } = useUnitSystem();
+  const hiddenNavItems = useHiddenNavItems();
   const nextLabel = plan.next
     ? `Next up: ${plan.next.name.trim()} · ${formatUpcomingWorkoutDate(plan.next.happenDay)}`
     : undefined;
@@ -768,15 +772,17 @@ function TodayCard({
         title={t("Today’s plan")}
         subtitle={localOnly ? t("From your calendar") : t("From your COROS calendar")}
       >
-        <button
-          type="button"
-          className="overview-round-link"
-          onClick={() => onNavigate("calendar")}
-          aria-label={t("Open Calendar")}
-          title={t("Open Calendar")}
-        >
-          <ChevronRight size={16} aria-hidden="true" />
-        </button>
+        {hiddenNavItems.has("calendar") ? null : (
+          <button
+            type="button"
+            className="overview-round-link"
+            onClick={() => onNavigate("calendar")}
+            aria-label={t("Open Calendar")}
+            title={t("Open Calendar")}
+          >
+            <ChevronRight size={16} aria-hidden="true" />
+          </button>
+        )}
       </CardHead>
 
       {plan.today.length > 0 ? (
@@ -819,9 +825,11 @@ function TodayCard({
               <CalendarPlus size={16} weight="duotone" aria-hidden="true" />
               {t("Pick a workout or plan from the Training Library.")}</p>
           </div>
-          <button type="button" className="overview-link" onClick={() => onNavigate("library")}>
-            {t("Plan")}<ChevronRight size={14} aria-hidden="true" />
-          </button>
+          {hiddenNavItems.has("library") ? null : (
+            <button type="button" className="overview-link" onClick={() => onNavigate("library")}>
+              {t("Plan")}<ChevronRight size={14} aria-hidden="true" />
+            </button>
+          )}
         </article>
       )}
 
@@ -923,7 +931,8 @@ function LatestActivityCard({
   api: CorosLinkApi | undefined;
   activity: TrainingHubActivity;
   sportTypes: TrainingHubSportType[];
-  onOpen: () => void;
+  /** Omitted while Training Hub is hidden from the sidebar. */
+  onOpen?: () => void;
 }) {
   useLanguage();
   const { unitSystem } = useUnitSystem();
@@ -982,9 +991,11 @@ function LatestActivityCard({
             </div>
           ))}
         </dl>
-        <button type="button" className="overview-link" onClick={onOpen}>
-          {t("Open in Training Hub")}<ArrowUpRight size={14} aria-hidden="true" />
-        </button>
+        {onOpen ? (
+          <button type="button" className="overview-link" onClick={onOpen}>
+            {t("Open in Training Hub")}<ArrowUpRight size={14} aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
     </section>
   );
@@ -997,7 +1008,8 @@ function RacePredictionsCard({
 }: {
   scores: NonNullable<TrainingHubSnapshot["racePredictor"]>["runScoreList"];
   level?: number;
-  onOpen: () => void;
+  /** Omitted while Training Hub is hidden from the sidebar. */
+  onOpen?: () => void;
 }) {
   useLanguage();
   const { unitSystem } = useUnitSystem();
@@ -1035,10 +1047,12 @@ function RacePredictionsCard({
           );
         })}
       </ul>
-      <button type="button" className="overview-link" onClick={onOpen}>
-        {t("Training Hub")}
-        <ChevronRight size={14} aria-hidden="true" />
-      </button>
+      {onOpen ? (
+        <button type="button" className="overview-link" onClick={onOpen}>
+          {t("Training Hub")}
+          <ChevronRight size={14} aria-hidden="true" />
+        </button>
+      ) : null}
     </section>
   );
 }
@@ -1114,7 +1128,8 @@ export function OverviewLaunchpad({
   onNavigate: (view: PrimaryView) => void;
 }) {
   useLanguage();
-  const items: LaunchItem[] = [
+  const hiddenNavItems = useHiddenNavItems();
+  const launchItems: LaunchItem[] = [
     { view: "watchfaces", title: t("Watch Faces"), detail: t("Design your own face in Studio") },
     {
       view: "coach",
@@ -1140,9 +1155,17 @@ export function OverviewLaunchpad({
         : t("Load music for your runs")
     }
   ];
+  const items = launchItems.filter((item) => !hiddenNavItems.has(item.view));
+  if (items.length === 0) {
+    return null;
+  }
   return (
     <div className="overview-launchpad-shell">
-      <nav className="overview-launchpad" aria-label={t("Jump to")}>
+      <nav
+        className="overview-launchpad"
+        aria-label={t("Jump to")}
+        style={{ "--launch-columns": items.length } as CSSProperties}
+      >
         {items.map((item) => {
           const Glyph = NAV_ICONS.get(item.view);
           return (

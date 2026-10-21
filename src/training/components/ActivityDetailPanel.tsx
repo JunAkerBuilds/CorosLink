@@ -1,4 +1,4 @@
-import { getLocale, useLanguage, t } from "../../i18n/training";
+import { formatNumber, getLocale, useLanguage, t } from "../../i18n/training";
 import { useMemo, useState, type CSSProperties } from "react";
 import {
   Braces,
@@ -21,7 +21,9 @@ import type {
   TrainingHubActivity,
   TrainingHubActivityDetail,
   TrainingHubActivityFileType,
-  TrainingHubSportType
+  TrainingHubActivityLapGroup,
+  TrainingHubSportType,
+  UnitSystem
 } from "../../../electron/types";
 import {
   activityMovingSeconds,
@@ -48,6 +50,7 @@ import { ActivityRouteMap } from "./ActivityRouteMap";
 import { ActivityTimeInZones } from "./ActivityTimeInZones";
 import { StrengthDetailPanel } from "./StrengthDetailPanel";
 import { ExportMenu } from "./TrainingActivityTable";
+import "../activityLaps.css";
 
 interface ActivityDetailPanelProps {
   detail: TrainingHubActivityDetail | null;
@@ -120,6 +123,40 @@ function hasPopulatedLaps(detail: TrainingHubActivityDetail): boolean {
   );
 }
 
+const METERS_PER_MILE = 1609.344;
+
+function lapGroupKey(group: TrainingHubActivityLapGroup): string {
+  return group.kind === "split" ? `split:${Math.round(group.splitDistance ?? 0)}` : group.kind;
+}
+
+/** COROS splits are whole kilometres (or miles), so name them by length. */
+function lapGroupLabel(group: TrainingHubActivityLapGroup, unitSystem: UnitSystem): string {
+  if (group.kind === "laps") {
+    return t("Laps");
+  }
+  if (group.kind === "whole") {
+    return t("Whole activity");
+  }
+  const meters = group.splitDistance ?? 0;
+  const km = meters / 1000;
+  const miles = meters / METERS_PER_MILE;
+  if (Math.abs(km - Math.round(km)) < 0.005) {
+    return `${formatNumber(Math.round(km))} km`;
+  }
+  if (Math.abs(miles - Math.round(miles)) < 0.005) {
+    return `${formatNumber(Math.round(miles))} mi`;
+  }
+  return formatDistanceMeters(meters, unitSystem);
+}
+
+/**
+ * Open on the watch's own laps, like Training Hub. With none (a ride
+ * recorded without auto-lap) take the finest split.
+ */
+function defaultLapGroup(groups: TrainingHubActivityLapGroup[]): TrainingHubActivityLapGroup | undefined {
+  return groups.find((group) => group.kind === "laps") ?? groups.find((group) => group.kind === "split") ?? groups[0];
+}
+
 function elevationRange(
   detail: TrainingHubActivityDetail
 ): { min: number; max: number } | undefined {
@@ -145,6 +182,9 @@ export function ActivityDetailPanel({
   const { unitSystem } = useUnitSystem();
   const [showRaw, setShowRaw] = useState(false);
   const [mapExpanded, setMapExpanded] = useState(false);
+  // Sticks across activities while this panel lives; an activity without
+  // the picked grouping falls back to its default.
+  const [lapGroupKeyPicked, setLapGroupKeyPicked] = useState<string | null>(null);
   const showcase = variant === "showcase";
   const sportName = useMemo(() => {
     if (detail) {
@@ -221,6 +261,11 @@ export function ActivityDetailPanel({
 
   const startTime = detail.startTime ?? listActivity?.startTime;
   const showLaps = hasPopulatedLaps(detail);
+  const lapGroups = detail.lapGroups ?? [];
+  const lapGroup =
+    lapGroups.find((group) => lapGroupKey(group) === lapGroupKeyPicked) ?? defaultLapGroup(lapGroups);
+  const lapRows = lapGroup?.laps ?? detail.laps;
+  const fastestLaps = new Set(lapGroup?.fastestLaps ?? []);
   const swim = isSwimSportType(detail.sportType ?? listActivity?.sportType);
   const cycling =
     isCyclingSportType(detail.sportType ?? listActivity?.sportType) ||
@@ -366,12 +411,33 @@ export function ActivityDetailPanel({
 
           {showLaps ? (
             <div className="training-laps-section">
-              <h3>
-                {showcase ? <Timer size={17} aria-hidden="true" /> : null}
-                {t("Laps")} {showcase ? (
-                  <span className="activity-detail-visual-note">{detail.laps.length}</span>
+              <div className="training-laps-heading">
+                <h3>
+                  {showcase ? <Timer size={17} aria-hidden="true" /> : null}
+                  {t("Laps")} {showcase ? (
+                    <span className="activity-detail-visual-note">{lapRows.length}</span>
+                  ) : null}
+                </h3>
+                {lapGroup && lapGroups.length > 1 ? (
+                  <div className="library-filter-group training-laps-groups" role="group" aria-label={t("Group laps by")}>
+                    {lapGroups.map((group) => {
+                      const key = lapGroupKey(group);
+                      const active = group === lapGroup;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          className={`library-filter-option${active ? " active" : ""}`}
+                          aria-pressed={active}
+                          onClick={() => setLapGroupKeyPicked(key)}
+                        >
+                          {lapGroupLabel(group, unitSystem)}
+                        </button>
+                      );
+                    })}
+                  </div>
                 ) : null}
-              </h3>
+              </div>
               <div className="table-shell">
                 <table>
                   <thead>
@@ -395,26 +461,31 @@ export function ActivityDetailPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {detail.laps.map((lap) => (
-                      <tr key={lap.index}>
-                        <td>{lap.index}</td>
-                        {showcase ? (
-                          <>
-                            <td>{formatDistanceMeters(lap.distance, unitSystem, swim)}</td>
-                            <td>{formatDurationSeconds(lap.duration)}</td>
-                            {!swim ? <td>{lapPerformance(lap)}</td> : null}
-                          </>
-                        ) : (
-                          <>
-                            <td>{formatDurationSeconds(lap.duration)}</td>
-                            <td>{formatDistanceMeters(lap.distance, unitSystem, swim)}</td>
-                          </>
-                        )}
-                        <td>{formatOptionalNumber(lap.avgHr)}</td>
-                        <td>{formatOptionalNumber(lap.maxHr)}</td>
-                        <td>{formatElevationMeters(lap.elevationGain, unitSystem)}</td>
-                      </tr>
-                    ))}
+                    {lapRows.map((lap, position) => {
+                      const fastest = fastestLaps.has(position) ? (
+                        <span className="training-lap-fastest">{t("Fastest")}</span>
+                      ) : null;
+                      return (
+                        <tr key={lap.index} className={fastest ? "is-fastest" : undefined}>
+                          <td>{lap.index}</td>
+                          {showcase ? (
+                            <>
+                              <td>{formatDistanceMeters(lap.distance, unitSystem, swim)}</td>
+                              <td>{formatDurationSeconds(lap.duration)}{swim ? fastest : null}</td>
+                              {!swim ? <td className="training-lap-performance">{lapPerformance(lap)}{fastest}</td> : null}
+                            </>
+                          ) : (
+                            <>
+                              <td>{formatDurationSeconds(lap.duration)}{fastest}</td>
+                              <td>{formatDistanceMeters(lap.distance, unitSystem, swim)}</td>
+                            </>
+                          )}
+                          <td>{formatOptionalNumber(lap.avgHr)}</td>
+                          <td>{formatOptionalNumber(lap.maxHr)}</td>
+                          <td>{formatElevationMeters(lap.elevationGain, unitSystem)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

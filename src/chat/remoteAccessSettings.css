@@ -218,9 +218,9 @@
   }
 }
 
-/* ---------- Away from home ---------- */
+/* ---------- Reach Coach: one switch, two routes ---------- */
 
-:root .app .chat-settings-backdrop .chat-remote-cloud {
+:root .app .chat-settings-backdrop .chat-remote-reach {
   display: grid;
   gap: 12px;
   padding: 14px 16px;
@@ -229,25 +229,61 @@
   background: var(--settings-well);
 }
 
-:root .app .chat-settings-backdrop .chat-remote-cloud > .chat-settings-copy {
-  margin: 0;
+/* The switch sits flat in the card, like the pairing row. */
+:root .app .chat-settings-backdrop .chat-remote-reach > .chat-settings-toggle-row {
+  padding: 0;
+  border: 0;
+  background: none;
 }
 
-:root .app .chat-settings-backdrop .chat-remote-cloud-head {
+:root .app .chat-settings-backdrop .chat-remote-routes {
+  display: grid;
+  gap: 8px;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-route {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--settings-hairline);
+  border-radius: 12px;
+  background: var(--settings-tile);
+}
+
+:root .app .chat-settings-backdrop .chat-remote-route[data-state="online"] .chat-remote-device-icon {
+  color: var(--success-text);
+}
+
+:root .app .chat-settings-backdrop .chat-remote-route .chat-remote-device-text code {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-route .chat-remote-device-text > .chat-remote-route-wrap {
+  display: block;
+  line-height: 1.5;
+}
+
+:root .app .chat-settings-backdrop .chat-remote-route-end {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
-:root .app .chat-settings-backdrop .chat-remote-cloud-head h4 {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 600;
+/* Consent, progress and notes span the row under the route. */
+:root .app .chat-settings-backdrop .chat-remote-route-more {
+  grid-column: 1 / -1;
 }
 
-:root .app .chat-settings-backdrop .chat-remote-cloud-pill {
+:root .app .chat-settings-backdrop .chat-remote-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -257,39 +293,33 @@
   color: var(--text-secondary);
   font-size: 11.5px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
-:root .app .chat-settings-backdrop .chat-remote-cloud-pill > i {
+:root .app .chat-settings-backdrop .chat-remote-pill > i {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: var(--text-muted);
 }
 
-:root .app .chat-settings-backdrop .chat-remote-cloud-pill[data-state="online"] {
+:root .app .chat-settings-backdrop .chat-remote-pill[data-state="online"] {
   color: var(--success-text);
 }
 
-:root .app .chat-settings-backdrop .chat-remote-cloud-pill[data-state="online"] > i {
+:root .app .chat-settings-backdrop .chat-remote-pill[data-state="online"] > i {
   background: var(--success-dot);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--success-dot) 18%, transparent);
 }
 
-:root .app .chat-settings-backdrop .chat-remote-cloud-pill[data-state="error"] {
+:root .app .chat-settings-backdrop .chat-remote-pill[data-state="error"] {
   border-color: var(--error-border);
   background: var(--error-bg);
   color: var(--error-text);
 }
 
-:root .app .chat-settings-backdrop .chat-remote-cloud-pill[data-state="error"] > i {
+:root .app .chat-settings-backdrop .chat-remote-pill[data-state="error"] > i {
   background: var(--error-text);
-}
-
-/* Rows inside the well sit flat, like the pairing row. */
-:root .app .chat-settings-backdrop .chat-remote-cloud .chat-settings-toggle-row {
-  padding: 0;
-  border: 0;
-  background: none;
 }
 
 :root .app .chat-settings-backdrop .chat-remote-cloud-consent {
@@ -299,7 +329,7 @@
   padding: 12px 14px;
   border: 1px solid var(--settings-tile-border);
   border-radius: 10px;
-  background: var(--settings-tile);
+  background: var(--settings-well);
 }
 
 :root .app .chat-settings-backdrop .chat-remote-cloud-consent strong {
@@ -346,23 +376,13 @@
   font-weight: 600;
 }
 
-:root .app .chat-settings-backdrop .chat-remote-cloud-host {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--settings-hairline);
-  border-radius: 12px;
-  background: var(--settings-tile);
-}
+@media (max-width: 860px) {
+  :root .app .chat-settings-backdrop .chat-remote-route {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
 
-:root .app .chat-settings-backdrop .chat-remote-cloud[data-state="online"] .chat-remote-cloud-host .chat-remote-device-icon {
-  color: var(--success-text);
-}
-
-:root .app .chat-settings-backdrop .chat-remote-cloud-host code {
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 12.5px;
-  font-weight: 500;
+  :root .app .chat-settings-backdrop .chat-remote-route-end {
+    grid-column: 2 / -1;
+    justify-content: flex-start;
+  }
 }

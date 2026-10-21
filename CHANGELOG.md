@@ -22,9 +22,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Connecting the watch now sets its clock and time zone, keeping its 12/24-hour setting, and sends the weather once a location is known.
-- Deleting a plan in the Training Library also removes its upcoming workouts from the calendar.
-- An error that repeats is counted once in the error log instead of filling it, and closing a sign-in window is no longer logged as an error.
+- Closing a sign-in window is no longer logged as an error.
 - CorosLink remembers your watch's Bluetooth identity the first time you connect it from the watch menu. If another device answers with your watch's name, CorosLink sends it nothing and asks before connecting, and automatic sync pauses until you connect your watch from the watch menu.
+
+## [0.1.59] - 2026-10-20
+
+### Added
+
+- **Attach files to Coach.** Click the paperclip, drop files on the conversation, or paste a screenshot to send Coach a PDF, Word document (.docx), text, CSV or Markdown file, or an image, up to six at a time. Coach reads a document's text, tables included, and looks at scanned pages and images, so you can hand it a training plan you made elsewhere and ask it to put the plan on COROS. It drafts the workouts for you to review before anything is saved. Files go to the Coach provider you chose with each message; CorosLink keeps a copy with the conversation, so you can open it from the transcript, and deletes it with the conversation.
+- **Gemini CLI in Coach.** Coach can now run the Gemini CLI installed on your computer, alongside ChatGPT, Claude, OpenRouter and Local. Pick it in Coach settings. It keeps the CLI's own sign-in (an API key, Vertex AI or Google sign-in), and CorosLink never reads or stores your Google password or Gemini credentials. In Coach, Gemini can only use Coach's COROS tools; its own file, shell, web and memory tools are switched off. Google stopped offering Google sign-in to individual accounts in June 2026. If Gemini refuses yours, Coach shows Google's reason, and **Check again** tries once more.
+- **Coach keeps C-LINK's Lock Screen up to date.** While a linked computer runs a Coach answer, C-LINK's Live Activity now shows whether Coach is thinking, looking at your data or writing, and how the answer ended (replied, waiting for you, or failed), even with the iPhone locked. CorosLink sends the relay only the step and a word count, never what Coach writes or which data it reads.
+- **Clear all chats.** The conversations list in Coach has a **Clear all chats** button that deletes every conversation for the current provider, after you confirm.
+- **Link workouts and activities yourself.** Right-click a past workout on the calendar to link it to one of that day's activities, or right-click an activity to link it to one of the day's open workouts. **Unlink activity** removes a link, and **Restore COROS link** brings back one COROS made. Your links stay in CorosLink and don't change anything on COROS. The Training Library's activity picker also offers that day's activities.
+- **More readouts on a chart page.** In Watch Faces, a chart can now show several readouts. **Add data** places another one beside the page's others. Pick a readout in the layer list to edit it while the graph stays put, or drag the readout or the graph on its own. The layer list groups each chart into its pages and their readouts, in the order the watch shows them: barometer and tide with bars, sun with sunrise, moon with moonrise, and each daily page with all three readouts. If a page needs a readout you didn't add, CorosLink adds an invisible one so **Back** still moves through the pages. The preview shows weather only on the pages where the watch does (none on the sun and moon pages). Not every page has been checked on a watch yet.
+- **Weekday and month as words.** In Watch Faces, show the weekday or month as TUE, Tue or Tuesday, translated into the watch languages you pick in **Send**.
+- **Open your private faces from the website.** **Open in CorosLink** on one of your private faces at watchfaces.coroslink.com now works when CorosLink is signed in to the website with the same account. Signed out, it tells you to sign in under **Settings → Account**.
+- **Choose how far back the error report goes.** **Settings → Error logs** can show and copy the last hour, 12 hours, day or 7 days, so you can share a fresh problem without a week of older errors. An error that is still repeating counts as recent.
+
+### Changed
+
+- **One switch for Coach on your iPhone.** In Coach settings → **Remote access**, **Reach Coach from your iPhone** now turns on both home Wi-Fi access and, once you're signed in to your CorosLink website account, access from away. Under the switch, **This Wi-Fi** and **Away from home** show each route's status. Turning it off stops both but keeps this computer linked, so C-LINK finds it at the same address next time. **Sign out** still unlinks the computer, and CorosLink still asks before downloading Cloudflare's `cloudflared`.
+- **The calendar no longer guesses which activity completed a workout.** A planned workout now pairs with an activity only when COROS linked them (you started the workout from the plan on your watch) or you linked them yourself. Before, any activity on the same day could be paired with it. Calendar times show moving time, like COROS's calendar.
+- **One Font size for every number.** In Watch Faces, time, date, fixed and selectable metrics all use the same **Font size** field, and the preview measures the same font the watch draws.
+- **The error report catches COROS sync problems.** Failures in Training Hub, Coach's COROS tools, calendar sync, activity backup and missing COROS health data now show up in the error report even when CorosLink quietly fell back to saved data. The report starts with which COROS servers your accounts use (no email or IDs), and a failure that keeps repeating is one entry with a count.
+- In Watch Faces, analog hands are listed with the other Time layers.
+
+### Fixed
+
+- **Sleep keeps loading after COROS's update.** COROS renamed the tool CorosLink reads sleep from. CorosLink now reads the new one, in one request instead of about twenty. A night your phone hasn't synced yet no longer replaces last night's sleep with an empty one.
+- **Resting heart rate matches COROS.** Training Hub's Resting HR card showed a lower all-day figure, so it disagreed with COROS every day. It now shows the same overnight resting heart rate as COROS's own chart.
+- **Watches connect on Windows again without removing them first.** CorosLink 0.1.57 and 0.1.58 paired the watch with Windows on every connect. Once the watch forgot that pairing, for example after pairing with your phone again, every connect failed until you removed the watch under **Settings → Bluetooth & devices**. CorosLink now connects without pairing unless the watch asks for it. If an old pairing is what's failing, it removes that pairing and tries once more.
+- **Workouts deleted in the COROS app leave the Training Library.** A workout you deleted in the COROS app, or in CorosLink, could come back in **Training Library → Workouts** whenever COROS didn't answer and the Library showed its saved copy. Now it disappears the next time the Library refreshes, along with any tags you gave it in CorosLink.
+- **A stalled COROS request gives up after 30 seconds.** Training Hub and Library actions such as **Delete** no longer spin for minutes when COROS stops responding. They stop with a message to check your connection and try again.
+- **Hidden features stay out of Overview.** After you hide a feature from the sidebar, Overview no longer offers links or tiles that open it, such as **Open in Training Hub**, the Calendar arrow, or the Media counts on the watch panel.
+- In Watch Faces, the selection box around a time part with a font size fits its digits. It was about a third taller. Watchmaker moving a chart readout now moves the readout, as dragging does, instead of shifting the graph.
+- Error reports keep long API paths and file names readable. A path such as `/activity/fit/getImportSportList` showed as `[redacted]`.
+
+### Security
+
+- Updated dependencies with newly published vulnerabilities, including Vite, Hono (used by the MCP SDK behind Coach and Watchmaker) and the certificate bundle in the bundled Python.
+
+## [0.1.58] - 2026-10-19
+
+### Added
+
+- **Hide features you don't use.** Right-click the sidebar to hide a feature or bring one back, or switch features on and off in **Settings → Sidebar**. Overview and Settings always stay. If you hide your startup view, CorosLink opens on Overview instead.
+- **Group the lap table by distance.** In an activity's **Laps** table, switch between the watch's own laps, 1 km, 5 km or 10 km splits, and the whole activity, like Training Hub. Only the groupings COROS sends for that activity appear. The fastest lap or split in each view is marked **Fastest**.
+- **See which plans are on your calendar.** In **Training Library → Plans**, plans with workouts on your COROS calendar show **On calendar** and the week you're in ("Week 3 of 14"). This includes COROS Plans the Coach put on your calendar. Filter by **On calendar** to see only those.
+- **Make watch faces without signing in to COROS.** **Watch Faces → Create** lists the editable templates for every supported watch without a COROS sign-in, and **Start blank** and **Change watch** work signed out too. You still sign in for **Official faces**, **My faces**, sending a face to the COROS app, and getting your watch key the first time you install over Bluetooth.
+- **Distance markers on the route map.** An activity's route shows numbered chips at every kilometre, or every mile in imperial units, at the points where the watch counted them. Long rides space them out (every 5 or 10 km) so the map stays readable.
+
+### Changed
+
+- **Maps add to what's already on the watch.** When the COROS app has already installed part of a region, **Transfer selected** copies only the tiles the watch is missing, and the free-space check counts only those. Before, the watch needed room for the whole package.
+- **Choose Local Map Folder is gone.** Maps install from the COROS packages you download in **Maps → COROS Maps**.
+
+### Fixed
+
+- **The calendar dialog fits small windows.** Adding a plan to the calendar or removing it no longer cuts off the title or the confirm button. Workouts are grouped by week with their sport, the summary shows the date range, and the button says how many workouts it adds or removes.
+- **Delete plans that are on your calendar.** In **Training Library → Plans**, a plan you added to the COROS calendar, such as a Coach plan saved to the calendar, had a greyed-out delete button until you removed its workouts yourself. Delete now removes its upcoming workouts from the calendar first, then the plan. Past days stay.
+- **Delete plans you sent to COROS.** Coach plans saved as a COROS Plan now have a delete button in **Training Library → Plans**. It deletes the plan from your COROS account, not just from CorosLink. If the plan is on your COROS calendar, CorosLink ends it there first, which removes its upcoming workouts; past days stay. Before, only the COROS app could remove them.
+- **Plans deleted in the COROS app leave the Training Library.** A COROS plan you deleted in the COROS app used to stay in **Training Library → Plans**, marked as synced. Now it disappears the next time the Library refreshes, along with any tags or notes you gave it in CorosLink.
+- **Short laps show the right time.** Laps under 100 seconds, such as interval rests and 400 m repeats, showed a hundred times too long (a 60 s rest read 1:40:00). Their pace and the dialog's pacing note were wrong too.
+- On macOS, the **Import GPX** file picker in Route Studio opens attached to the CorosLink window. It could open behind the window, making the app look frozen.
 
 ## [0.1.57] - 2026-10-18
 

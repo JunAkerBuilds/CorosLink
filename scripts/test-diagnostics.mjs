@@ -75,6 +75,100 @@ try {
   }
   assert.equal(redactDiagnosticText("Synced at 10:41:48 on 2026-10-20"), "Synced at 10:41:48 on 2026-10-20");
 
+  // Long API paths, file names, and function names stay readable; long keys and hashes don't.
+  for (const readable of [
+    "trainingHub:/activity/fit/getImportSportList",
+    "GET https://teamapi.coros.com/activity/fit/getImportSportList",
+    "/coros/v2/userInfo/getWatchFaceThemeList",
+    "getHTTPServerConnectionTimeoutError",
+    "chart_heart_rate_icon_pos, chart_heart_rate_icon"
+  ]) assert.equal(redactDiagnosticText(readable), readable);
+  assert.equal(
+    redactDiagnosticText("    at assertTemplateDefinesRequiredKeys (/Users/test-person/app/dist-electron/trainingHubService.js:4855:29)", ["/Users/test-person/app"]),
+    "    at assertTemplateDefinesRequiredKeys ([local path]/dist-electron/trainingHubService.js:4855:29)"
+  );
+  assert.equal(redactDiagnosticText("https://teamapi.coros.com/activity/fit/getImportSportList?size=20"), "https://teamapi.coros.com/activity/fit/getImportSportList");
+  for (const key of [
+    "5f2b9c0e1a7d4e3f8b6a2c9d0e1f3a4b",
+    "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    "sk-proj-AbCdEf123456GhIjKl789012MnOpQr",
+    "QFFIV27AUZgiIMKbzxkpTAqw_mmnSimIPx9",
+    "lzpap7ujfqcb7etuudgd0fphhm16kajny"
+  ]) assert.equal(redactDiagnosticText(`rejected ${key} here`), "rejected [redacted] here", key);
+
+  // A sync failure recorded where it happened, then rethrown to IPC, stays one entry.
+  const grouped = open(path.join(directory, "grouped", "errors.json"));
+  const syncFailure = Object.assign(new Error("Access token is invalid"), { code: "1019" });
+  annotateDiagnosticRequest(syncFailure, "GET", "https://teameuapi.coros.com/activity/query?size=20&pageNumber=1");
+  grouped.record("trainingHub:/activity/query", syncFailure);
+  await assert.rejects(withDiagnosticLogging(grouped, "trainingHub:getActivities", () => { throw syncFailure; })(), (caught) => caught === syncFailure);
+  grouped.record("trainingLibrary:snapshot", new Error("Workouts: Access token is invalid", { cause: syncFailure }));
+  let entries = JSON.parse(grouped.snapshot().report.slice(grouped.snapshot().report.indexOf("[")));
+  assert.equal(entries.length, 1, "rethrown and wrapped copies merge into the first entry");
+  assert.deepEqual(entries[0].via, ["trainingHub:getActivities", "trainingLibrary:snapshot"]);
+  assert.equal(entries[0].error.code, "1019");
+  assert.equal(entries[0].error.request.url, "https://teameuapi.coros.com/activity/query");
+
+  // The same failure repeating (a background sync every few minutes) is counted, not repeated.
+  for (let index = 0; index < 3; index++) {
+    now += 5 * 60 * 1000;
+    grouped.record("calendarSync:google", new Error("Calendar sync failed"));
+  }
+  now += 60 * 60 * 1000;
+  grouped.record("calendarSync:google", new Error("Calendar sync failed"));
+  grouped.record("calendarSync:google", new Error("A different failure"));
+  entries = JSON.parse(grouped.snapshot().report.slice(grouped.snapshot().report.indexOf("[")));
+  const calendar = entries.filter((entry) => entry.source === "calendarSync:google");
+  assert.equal(calendar.length, 3, "a repeat after the 30-minute window and a new message start new entries");
+  assert.equal(calendar[0].count, 3);
+  assert.ok(Date.parse(calendar[0].lastSeen) - Date.parse(calendar[0].timestamp) === 10 * 60 * 1000);
+  assert.deepEqual(Object.keys(calendar[0]), ["timestamp", "lastSeen", "count", "appVersion", "source", "error"]);
+  assert.equal(calendar[1].count, undefined);
+  const reopened = open(path.join(directory, "grouped", "errors.json"));
+  const restored = JSON.parse(reopened.snapshot().report.slice(reopened.snapshot().report.indexOf("[")));
+  assert.equal(restored.find((entry) => entry.count)?.count, 3, "counts survive restart");
+  assert.deepEqual(restored[0].via, ["trainingHub:getActivities", "trainingLibrary:snapshot"], "via survives restart");
+
+  // "fetch failed" for a new reason (only in its cause) is a new entry, not another repeat.
+  const networkFailure = (code) => new TypeError("fetch failed", { cause: Object.assign(new Error(`connect ${code}`), { code }) });
+  grouped.record("calendarSync:apple", networkFailure("ENOTFOUND"));
+  grouped.record("calendarSync:apple", networkFailure("ENOTFOUND"));
+  grouped.record("calendarSync:apple", networkFailure("CERT_HAS_EXPIRED"));
+  entries = JSON.parse(grouped.snapshot().report.slice(grouped.snapshot().report.indexOf("[")));
+  const apple = entries.filter((entry) => entry.source === "calendarSync:apple");
+  assert.deepEqual(apple.map((entry) => [entry.error.cause.code, entry.count]), [["ENOTFOUND", 2], ["CERT_HAS_EXPIRED", undefined]]);
+
+  // Account status lines sit above the entries and are redacted like errors.
+  const withStatus = grouped.snapshot(["COROS accounts", "- Training Hub: signed in · teameuapi.coros.com · person@example.com"]).report;
+  assert.match(withStatus, /COROS accounts\n- Training Hub: signed in · teameuapi\.coros\.com · \[email\]/);
+  assert.ok(withStatus.indexOf("COROS accounts") < withStatus.indexOf("["));
+
+  // A time range keeps failures seen inside it; a long-running repeat counts by its latest occurrence.
+  const ranged = open(path.join(directory, "ranged", "errors.json"));
+  ranged.record("old", new Error("two days ago"));
+  now += 2 * 24 * 60 * 60 * 1000;
+  for (let index = 0; index < 4; index++) {
+    if (index) now += 25 * 60 * 1000;
+    ranged.record("repeating", new Error("still failing"));
+  }
+  now += 10 * 60 * 1000;
+  ranged.record("recent", new Error("just now"));
+  const lastHour = ranged.snapshot([], 1);
+  assert.deepEqual([lastHour.entryCount, lastHour.totalCount], [2, 3]);
+  assert.match(lastHour.report, /Range: last hour \(since \S+Z\), 2 of 3 kept errors/);
+  assert.match(lastHour.report, /still failing/);
+  assert.doesNotMatch(lastHour.report, /two days ago/);
+  assert.match(ranged.snapshot([], 24).report, /Range: last day /);
+  assert.match(ranged.snapshot([], 12).report, /Range: last 12 hours /);
+  for (const everything of [ranged.snapshot(), ranged.snapshot([], 168), ranged.snapshot([], 0), ranged.snapshot([], Number.NaN)]) {
+    assert.deepEqual([everything.entryCount, everything.totalCount], [3, 3]);
+    assert.match(everything.report, /Range: last 7 days \(everything kept\)/);
+  }
+  now += 2 * 60 * 60 * 1000;
+  const quiet = ranged.snapshot([], 1);
+  assert.deepEqual([quiet.entryCount, quiet.totalCount], [0, 3]);
+  assert.match(quiet.report, /No errors in the last hour\.$/);
+
   const circular = new Error("cyclic");
   circular.cause = circular;
   log.record("circular", circular);
@@ -110,31 +204,15 @@ try {
   assert.equal(await withDiagnosticLogging(log, "success", async (value) => value + 1)(41), 42);
 
   // Outcomes the user chose (a closed sign-in window) reach the caller but are not logged.
-  const quiet = open(path.join(directory, "quiet", "errors.json"));
+  const expectedLog = open(path.join(directory, "quiet", "errors.json"));
   const closed = expectedError(new Error("COROS connection window was closed."));
   assert.equal(isExpectedError(closed), true);
   assert.equal(isExpectedError(new Error("other")), false);
-  await assert.rejects(withDiagnosticLogging(quiet, "chatMcp:connect", async () => { throw closed; })(), (caught) => caught === closed);
-  quiet.record("chatMcp:connect", closed);
-  assert.equal(quiet.snapshot().entryCount, 0);
+  await assert.rejects(withDiagnosticLogging(expectedLog, "chatMcp:connect", async () => { throw closed; })(), (caught) => caught === closed);
+  expectedLog.record("chatMcp:connect", closed);
+  assert.equal(expectedLog.snapshot().entryCount, 0);
 
-  // A failure that comes back on every reload is one entry with a count, not a page of copies.
-  for (let index = 0; index < 5; index++) {
-    quiet.record("trainingHub:getDashboard", new Error("Log in to COROS Training Hub first."));
-    quiet.record("trainingHub:getTrainingAnalytics", new Error("Log in to COROS Training Hub first."));
-    now += 1000;
-  }
-  let entries = JSON.parse(fs.readFileSync(path.join(directory, "quiet", "errors.json"), "utf8"));
-  assert.deepEqual(entries.map((entry) => [entry.source, entry.count]), [["trainingHub:getDashboard", 5], ["trainingHub:getTrainingAnalytics", 5]]);
-  assert.ok(Date.parse(entries[0].lastSeen) > Date.parse(entries[0].timestamp));
-  assert.equal(open(path.join(directory, "quiet", "errors.json")).snapshot().entryCount, 2, "counts survive restart");
-  assert.match(quiet.snapshot().report, /"count": 5/);
-  now += 11 * 60 * 1000;
-  quiet.record("trainingHub:getDashboard", new Error("Log in to COROS Training Hub first."));
-  quiet.record("trainingHub:getDashboard", new Error("A different failure"));
-  entries = JSON.parse(fs.readFileSync(path.join(directory, "quiet", "errors.json"), "utf8"));
-  assert.equal(entries.length, 4, "a repeat after the window, or a different message, is a new entry");
-  assert.equal(entries.at(-2).count, undefined);
+  let noteEntries;
   // Watch identity notices: an info or warning entry, not an error; short tags kept, identifiers redacted even if one slips in.
   const notes = open(path.join(directory, "notes", "errors.json"));
   const { identityTag } = await import("../dist-electron/watchIdentity.js");
@@ -143,11 +221,11 @@ try {
   assert.equal(identityTag("5a1e3c2b-0d4f-4e6a-9b7c-1d2e3f405162"), tag, "the same identity, however it's written");
   notes.note("corosBle:identity", `Remembered the watch's Bluetooth identity (system, ${tag}).`);
   notes.note("corosBle:identity", "Identity changed (system, 5A1E3C2B-0D4F-4E6A-9B7C-1D2E3F405162 to usb, AA:BB:CC:DD:EE:0F).", "warning");
-  entries = JSON.parse(fs.readFileSync(path.join(directory, "notes", "errors.json"), "utf8"));
-  assert.deepEqual(entries.map((entry) => [entry.level, entry.error.name]), [["info", "Info"], ["warning", "Warning"]]);
-  assert.ok(entries[0].error.message.includes(tag), "the short tag is kept");
+  noteEntries = JSON.parse(fs.readFileSync(path.join(directory, "notes", "errors.json"), "utf8"));
+  assert.deepEqual(noteEntries.map((entry) => [entry.level, entry.error.name]), [["info", "Info"], ["warning", "Warning"]]);
+  assert.ok(noteEntries[0].error.message.includes(tag), "the short tag is kept");
   for (const secret of ["5A1E3C2B-0D4F-4E6A-9B7C-1D2E3F405162", "AA:BB:CC:DD:EE:0F"]) {
-    assert.ok(!JSON.stringify(entries).includes(secret) && !notes.snapshot().report.includes(secret), `identity notice leaked ${secret}`);
+    assert.ok(!JSON.stringify(noteEntries).includes(secret) && !notes.snapshot().report.includes(secret), `identity notice leaked ${secret}`);
   }
   assert.match(open(path.join(directory, "notes", "errors.json")).snapshot().report, /"level": "warning"/, "levels survive restart");
   // Watch key backups: "exported" / "imported" and the four-digit key ID survive redaction; a wrong
@@ -167,7 +245,7 @@ try {
   assert.match(keyReport, /Watch key imported from a backup \(key 7EDA\)\./);
   assert.equal(keyNotes.snapshot().entryCount, 3, "two notices and the unexpected failure; the wrong passphrase isn't recorded");
   for (const secret of ["typed-passphrase-private", "test-person", "MIIEowIBAAKCAQEA"]) assert.ok(!keyReport.includes(secret), `watch key diagnostics leaked ${secret}`);
-  console.log("Diagnostics passed: nested transport causes, original IPC failures, redaction on disk/export, restart, limits, expiry, clear, corrupt logs, storage failures, redacted watch identity notices, and watch key backup notices.");
+  console.log("Diagnostics passed: nested transport causes, original IPC failures, merged and repeated failures, status lines, redaction on disk/export, restart, limits, expiry, clear, corrupt logs, storage failures, expected outcomes, redacted watch identity notices, and watch key backup notices.");
 } finally {
   fs.rmSync(directory, { recursive: true, force: true });
 }

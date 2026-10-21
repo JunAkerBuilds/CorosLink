@@ -36,9 +36,13 @@ export interface LocalToolCall {
   arguments: string;
 }
 
+type LocalChatContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 interface LocalChatCompletionMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content: string;
+  content: string | LocalChatContentPart[];
   tool_call_id?: string;
   tool_calls?: Array<{
     id: string;
@@ -601,8 +605,20 @@ function buildLocalInputMessages(
     { role: "system", content: instructions },
     ...messages.map((message) => ({
       role: message.role,
-      content: message.content
+      content: messageContent(message)
     }))
+  ];
+}
+
+/** Attached images ride in the athlete's message as OpenAI-style image parts. */
+function messageContent(message: ChatMessage): LocalChatCompletionMessage["content"] {
+  if (message.role !== "user" || !message.images?.length) return message.content;
+  return [
+    { type: "text", text: message.content },
+    ...message.images.flatMap((image): LocalChatContentPart[] => [
+      { type: "text", text: `Image: ${image.label}` },
+      { type: "image_url", image_url: { url: `data:${image.mimeType};base64,${image.base64}` } }
+    ])
   ];
 }
 

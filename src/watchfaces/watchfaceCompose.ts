@@ -483,7 +483,13 @@ export function deriveDesignDetails(
     selectableAssetOverrides
   );
   const componentStyleOverrides = mergeConfigOverrides(
-    buildMetricStyleOverrides(metricDetails, metricStylesOf(design)),
+    buildMetricStyleOverrides(
+      metricDetails,
+      metricStylesOf(design),
+      false,
+      design.fontFamily,
+      toStudioOptions(design)
+    ),
     controlComplicationOverrides,
     controlTemperatureOverrides,
     design.selectableMetricStyle
@@ -738,7 +744,7 @@ export async function composeWatchfaceReplacements(
     ? await buildDateSpriteComposition(
         applyLayoutToDetails(metricDetails, design.layoutOffsets ?? {}),
         dateStyles,
-        toStudioOptions(design),
+        { ...toStudioOptions(design), watchLanguages: design.watchLanguages },
         loadAssets
       )
     : { replacements: [], configOverrides: [] };
@@ -817,7 +823,8 @@ export async function composeWatchfaceReplacements(
         layerOpacities: design.layerOpacities ?? {},
         effectStyles: design.effectStyles ?? [],
         layerEffects: design.layerEffects ?? {},
-        layerStrokes: design.layerStrokes ?? {}
+        layerStrokes: design.layerStrokes ?? {},
+        layoutDetails: styledMetricDetails
       }
     ),
     batteryIconEffectSources.replacements,
@@ -851,7 +858,8 @@ export async function composeWatchfaceReplacements(
     ? buildTimeTrackingOverrides(
         timePositionDetails,
         design.letterSpacing ?? 0,
-        timeStyles
+        timeStyles,
+        toStudioOptions(design)
       )
     : [];
   const trackedDetails = applyConfigOverridesToDetails(
@@ -891,7 +899,15 @@ export async function composeWatchfaceReplacements(
       metricOverrides,
       timeFormatOverrides,
       controlComplicationOverrides,
-      metricStyleActive ? buildMetricStyleOverrides(metricDetails, metricStyles, true) : [],
+      metricStyleActive
+        ? buildMetricStyleOverrides(
+            metricDetails,
+            metricStyles,
+            true,
+            design.fontFamily,
+            toStudioOptions(design)
+          )
+        : [],
       exportedControlTemperatureOverrides,
       selectableMetricStyleActive
         ? buildSelectableMetricStyleOverrides(

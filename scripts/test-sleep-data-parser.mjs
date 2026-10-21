@@ -6,9 +6,15 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const distUrl = (file) =>
   pathToFileURL(path.join(repoRoot, "dist-electron", file)).href;
 
-const { parseSleepDataResponse, pickLatestSleepRecord, sleepResponseQuality } = await import(
-  `${distUrl("sleepDataService.js")}?cacheBust=${Date.now()}`
-);
+const {
+  buildSleepToolArgs,
+  fetchSleepRecords,
+  parseSleepDataResponse,
+  pickLatestSleepRecord,
+  setSleepToolCallerForTests,
+  sleepResponseQuality
+} = await import(`${distUrl("sleepDataService.js")}?cacheBust=${Date.now()}`);
+const { recentTrainingHubDateList } = await import(distUrl("trainingTrendUtils.js"));
 
 const officialPayload = JSON.stringify({
   records: [
@@ -298,6 +304,50 @@ assert.equal(fullTimestampProseLatest?.sleepStart, "22:58");
 assert.equal(fullTimestampProseLatest?.sleepEnd, "05:43");
 assert.equal(fullTimestampProseLatest?.windowMinutes, 405);
 
+// querySleepOverview (2026-10): asleep vs in-bed lines, and an empty day before the real one.
+const sleepOverviewPayload = JSON.stringify([
+  "Sleep Overview",
+  "========================",
+  "Note: each record below is dated by its wake-up day.",
+  "",
+  "2026-10-19",
+  "Sleep Score: 0",
+  "Sleep detail for this day is not available yet.",
+  "",
+  "2026-10-20",
+  "Sleep Score: 62",
+  "Daily Sleep: 5h 56min (incl. naps)",
+  "Main Sleep (asleep): 5h 56min",
+  "Main Sleep Period (incl. awake): 7h 32min",
+  "Sleep metrics scope: daily",
+  "Deep Sleep Ratio: 14%",
+  "Light Sleep Ratio: 57%",
+  "REM Ratio: 8%",
+  "Awake Ratio: 21%",
+  "Awake Time: 1h 36min",
+  "Awake Count (>5 min): 3",
+  "Main Sleep Window: 2026-10-20 00:57 - 2026-10-20 08:29",
+  "Naps Total: 0 min"
+].join("\n"));
+const sleepOverviewLatest = pickLatestSleepRecord(parseSleepDataResponse(sleepOverviewPayload));
+assert.equal(sleepOverviewLatest?.happenDay, "20261020");
+assert.equal(sleepOverviewLatest?.totalMinutes, 356);
+assert.equal(sleepOverviewLatest?.awakeMinutes, 96);
+assert.equal(sleepOverviewLatest?.windowMinutes, 452);
+assert.equal(sleepOverviewLatest?.completeness, "complete");
+// The morning before a phone sync, today's empty day comes after last night's.
+const sleepOverviewUnsyncedToday = parseSleepDataResponse(JSON.stringify([
+  "2026-10-20",
+  "Sleep Score: 62",
+  "Main Sleep (asleep): 5h 56min",
+  "",
+  "2026-10-21",
+  "Sleep Score: 0",
+  "Sleep detail for this day is not available yet."
+].join("\n")));
+assert.deepEqual(sleepOverviewUnsyncedToday.map((record) => record.happenDay), ["20261020"]);
+assert.equal(pickLatestSleepRecord(sleepOverviewUnsyncedToday)?.totalMinutes, 356);
+
 const rangeStringPayload = JSON.stringify({
   happenDay: 20260721,
   sleepScore: 93,
@@ -500,5 +550,108 @@ assert.equal(combinedLatest?.happenDay, "20260707");
 assert.equal(combinedLatest?.score, 71);
 assert.equal(combinedLatest?.totalMinutes, 316);
 assert.equal(combinedLatest?.completeness, "partial");
+
+// Arg selection: querySleepOverview's live schema (2026-10-20) gets one compact range call.
+const overviewTool = {
+  name: "querySleepOverview",
+  inputSchema: {
+    type: "object",
+    properties: {
+      startDate: { type: "string", description: "Optional start date in yyyyMMdd format; dates are wake-up days" },
+      endDate: { type: "string", description: "Optional end date in yyyyMMdd format; dates are wake-up days" },
+      days: { type: "integer", description: "Number of recent days to query when no explicit date range is given, default 7" }
+    },
+    required: [],
+    additionalProperties: false
+  }
+};
+const recentDays = recentTrainingHubDateList(14);
+const [todayDay, startDay] = [recentDays[0], recentDays[recentDays.length - 1]];
+const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+const toIsoDay = (day) => `${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6, 8)}`;
+const overviewPlan = buildSleepToolArgs(overviewTool, 14);
+assert.deepEqual(overviewPlan.range, { startDate: startDay, endDate: todayDay, days: 14 });
+assert.ok(overviewPlan.probes.length <= 3, JSON.stringify(overviewPlan.probes));
+for (const probe of overviewPlan.probes) {
+  assert.ok(Object.keys(probe).every((key) => ["startDate", "endDate", "days"].includes(key)), JSON.stringify(probe));
+  assert.ok(Object.values(probe).every((value) => !isoDatePattern.test(String(value))), JSON.stringify(probe));
+}
+
+const rangeWithoutDaysPlan = buildSleepToolArgs(
+  { name: "sleep_range", inputSchema: { type: "object", properties: { startDate: { type: "string" }, endDate: { type: "string" } } } },
+  7
+);
+assert.deepEqual(rangeWithoutDaysPlan.range, { startDate: recentTrainingHubDateList(7)[6], endDate: todayDay });
+// No documented format, so ISO stays a fallback probe — but only with declared keys.
+assert.ok(rangeWithoutDaysPlan.probes.some((probe) => isoDatePattern.test(String(probe.startDate))));
+assert.ok(rangeWithoutDaysPlan.probes.every((probe) => Object.keys(probe).every((key) => key === "startDate" || key === "endDate")));
+
+const schemalessPlan = buildSleepToolArgs({ name: "querySleepData", inputSchema: { type: "object" } }, 14);
+assert.equal(schemalessPlan.range, undefined);
+assert.ok(schemalessPlan.probes.length >= 15, `schemaless probes: ${schemalessPlan.probes.length}`);
+assert.ok(schemalessPlan.probes.some((probe) => typeof probe.query === "string"));
+assert.ok(schemalessPlan.probes.some((probe) => probe.startDate === toIsoDay(startDay)));
+
+const weeksPlan = buildSleepToolArgs(
+  { name: "get_sleep_data", inputSchema: { type: "object", properties: { weeks: { type: "integer" } } } },
+  14
+);
+assert.equal(weeksPlan.range, undefined);
+assert.deepEqual(weeksPlan.probes, [{ weeks: 2 }, {}]);
+
+// Fetch: stop after the range call finds records; an anomaly warning is a failure, not data.
+const overviewText = [
+  `Sleep for ${toIsoDay(todayDay)}`,
+  "Sleep score: 62",
+  "Main sleep: 5h 56min",
+  "Sleep window: 00:57–08:29",
+  "Awake time: 1h 36min",
+  "Deep: 14%",
+  "Light: 57%",
+  "REM: 8%",
+  "Naps: 0 min"
+].join("\n");
+const anomalyText =
+  "Tool call anomalies detected. High risk of session context pollution. Please start a new session.";
+async function fetchWith(tool, respond) {
+  const calls = [];
+  setSleepToolCallerForTests(async (name, args) => {
+    calls.push(args);
+    return respond(calls.length, args);
+  });
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    return { records: await fetchSleepRecords(tool, 14), calls };
+  } finally {
+    console.warn = originalWarn;
+    setSleepToolCallerForTests();
+  }
+}
+
+const rangeHit = await fetchWith(overviewTool, () => overviewText);
+assert.equal(rangeHit.calls.length, 1);
+assert.deepEqual(rangeHit.calls[0], overviewPlan.range);
+assert.equal(rangeHit.records.length, 1);
+assert.equal(rangeHit.records[0].happenDay, todayDay);
+assert.equal(rangeHit.records[0].score, 62);
+
+const rangeAnomaly = await fetchWith(overviewTool, () => anomalyText);
+assert.equal(rangeAnomaly.calls.length, 1);
+assert.deepEqual(rangeAnomaly.records, []);
+
+const rangeEmpty = await fetchWith(overviewTool, (count) =>
+  count === 1 ? "Sleep Overview\nNo sleep records in this range." : overviewText
+);
+assert.equal(rangeEmpty.calls.length, 2);
+assert.equal(rangeEmpty.records[0]?.score, 62);
+
+const schemalessAnomaly = await fetchWith(
+  { name: "querySleepData", inputSchema: {} },
+  (count) => (count === 3 ? anomalyText : count === 2 ? overviewText : "no data")
+);
+assert.equal(schemalessAnomaly.calls.length, 3);
+assert.equal(schemalessAnomaly.records.length, 1);
+assert.equal(schemalessAnomaly.records[0].score, 62);
 
 console.log("test-sleep-data-parser: ok");

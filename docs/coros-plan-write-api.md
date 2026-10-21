@@ -97,6 +97,14 @@ duplicate, delete, update, activate, and deactivate flows. Findings:
   entries; already-past-but-incomplete days are left in place (pruning, not
   rewriting history).
 
+The Training Library deletes a native plan with `deleteCorosTrainingPlan`
+(`trainingLibraryService.ts`): it lists active instances
+(`{"statusList":[1]}`, `originId` = the library plan ID), quits each by its
+own instance ID, then sends `plan/delete` with the library plan ID. If the
+active-plan query or any quit fails, nothing is deleted, so no calendar
+workouts are left behind by a plan CorosLink no longer lists. The upload
+rollback in `uploadNativeTrainingPlan` uses the same sequence.
+
 CorosLink's own `uploadNativeTrainingPlan` (in `trainingHubService.ts`)
 assembles the create payload from a Coach-generated plan draft: each workout
 is calculated independently, `dayNo` is derived from the workouts' relative

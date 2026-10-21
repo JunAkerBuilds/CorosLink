@@ -31,7 +31,6 @@ import type {
   CorosMapDownloadJob,
   CorosMapInstallResult,
   CorosMapInstallProgress,
-  CorosMapLocalSelection,
   CorosMapManifest,
   CorosMapPackage,
   DownloadAudioResult,
@@ -82,6 +81,7 @@ import type {
   TrainingHubScheduledWorkoutEntry,
   TrainingHubLibraryWorkout,
   TrainingActivityMatch,
+  ManualActivityLink,
   TrainingCollection,
   TrainingLibraryDeleteRequest,
   TrainingLibrarySnapshot,
@@ -121,9 +121,12 @@ import type {
   ChatMessage,
   ChatProvider,
   ChatSessionSummary,
+  CoachFileUpload,
   ChatSettings,
   ClaudeCodeConnectionTest,
   ClaudeCodeStatus,
+  GeminiCliConnectionTest,
+  GeminiCliStatus,
   PersistedChatEntry,
   ChatStreamStart,
   ChatStreamToken,
@@ -148,6 +151,8 @@ import type {
   McpServerConfig,
   McpServerInput,
   McpServerStatus,
+  CorosTrainingPlanDeleteResult,
+  LocalTrainingPlanDeleteResult,
   CorosTrainingPlanDraftInput,
   UploadPlanResult,
   IntervalsStatus,
@@ -570,7 +575,11 @@ export interface CorosLinkApi {
     id: string,
     patch: TrainingPlanMetadataPatch
   ) => Promise<TrainingPlanDocument>;
-  deleteLocalTrainingPlan: (id: string, confirmed: boolean) => Promise<void>;
+  deleteLocalTrainingPlan: (id: string, confirmed: boolean) => Promise<LocalTrainingPlanDeleteResult>;
+  deleteCorosTrainingPlan: (
+    remoteId: string,
+    confirmed: boolean
+  ) => Promise<CorosTrainingPlanDeleteResult>;
   previewTrainingPlanCalendar: (planId: string, startDate: string) => Promise<TrainingPlanCalendarPreview>;
   addTrainingPlanToCalendar: (
     previewId: string,
@@ -598,6 +607,15 @@ export interface CorosLinkApi {
   saveManualActivityMatch: (
     match: TrainingActivityMatch
   ) => Promise<TrainingActivityMatch>;
+  listManualActivityLinks: (
+    startDay: string,
+    endDay: string
+  ) => Promise<ManualActivityLink[]>;
+  saveManualActivityLink: (
+    entry: Pick<TrainingHubScheduledWorkoutEntry, "planId" | "idInPlan" | "happenDay" | "trainingLoad">,
+    activity?: Pick<TrainingHubActivity, "activityId" | "duration" | "distance" | "trainingLoad">
+  ) => Promise<ManualActivityLink>;
+  clearManualActivityLink: (planId: string, idInPlan: string) => Promise<void>;
   listWorkoutExercises: (sport: WorkoutSport) => Promise<WorkoutExerciseOption[]>;
   getWorkoutEditorContext: (unitSystem: UnitSystem) => Promise<WorkoutEditorContext>;
   getWorkoutForEdit: (
@@ -756,10 +774,6 @@ export interface CorosLinkApi {
   deleteCachedCorosMap: (
     packageId: string
   ) => Promise<CachedCorosMapPackage[]>;
-  chooseCorosMapFolder: () => Promise<CorosMapLocalSelection | undefined>;
-  installCorosMapFolder: (
-    sourcePath: string
-  ) => Promise<CorosMapInstallResult>;
   getRouteBuilderConfig: () => Promise<RouteBuilderConfig>;
   saveRouteBuilderConfig: (
     config: RouteBuilderConfig
@@ -788,8 +802,9 @@ export interface CorosLinkApi {
   startRouteShare: (id: string) => Promise<RouteShareSession>;
   stopRouteShare: () => Promise<void>;
   validateRouteApiKey: (apiKey: string) => Promise<RouteApiKeyValidation>;
-  getDiagnostics: () => Promise<DiagnosticsSnapshot>;
-  copyDiagnostics: () => Promise<DiagnosticsSnapshot>;
+  /** `rangeHours` limits the report to failures seen in that many recent hours. */
+  getDiagnostics: (rangeHours?: number) => Promise<DiagnosticsSnapshot>;
+  copyDiagnostics: (rangeHours?: number) => Promise<DiagnosticsSnapshot>;
   clearDiagnostics: () => Promise<DiagnosticsSnapshot>;
   reportRendererError: (error: RendererDiagnosticError) => void;
   getAppInfo: () => Promise<AppInfo>;
@@ -825,6 +840,12 @@ export interface CorosLinkApi {
   connectClaudeCode: () => Promise<ClaudeCodeStatus>;
   testClaudeCodeConnection: () => Promise<ClaudeCodeConnectionTest>;
   openClaudeCodeSetupGuide: () => Promise<void>;
+  getGeminiCliStatus: () => Promise<GeminiCliStatus>;
+  /** Like getGeminiCliStatus, but also retries a remembered sign-in refusal once. */
+  recheckGeminiCli: () => Promise<GeminiCliStatus>;
+  connectGeminiCli: () => Promise<GeminiCliStatus>;
+  testGeminiCliConnection: () => Promise<GeminiCliConnectionTest>;
+  openGeminiCliSetupGuide: (topic: "install" | "sign-in") => Promise<void>;
   loginChat: () => Promise<ChatAuthStatus>;
   logoutChat: () => Promise<ChatAuthStatus>;
   sendChat: (
@@ -874,12 +895,15 @@ export interface CorosLinkApi {
   coachGetSession: (sessionId: string) => Promise<CoachSnapshot>;
   coachCreateSession: (provider: ChatProvider) => Promise<ChatSessionSummary>;
   coachDeleteSession: (sessionId: string) => Promise<void>;
+  coachDeleteAllSessions: (provider: ChatProvider) => Promise<number>;
   coachSubscribe: (
     sessionId: string,
     afterSeq: number
   ) => Promise<{ response: CoachSubscribeResult; replay: CoachEventFrame[] }>;
   coachUnsubscribe: (sessionId: string) => Promise<void>;
-  coachSend: (input: CoachSendInput) => Promise<{ requestId: string }>;
+  coachSend: (input: CoachSendInput & { uploads?: CoachFileUpload[] }) => Promise<{ requestId: string }>;
+  coachAttachmentPreview: (sessionId: string, attachmentId: string) => Promise<string | null>;
+  coachOpenAttachment: (sessionId: string, attachmentId: string) => Promise<void>;
   coachCancel: (sessionId: string) => Promise<{ cancelled: boolean }>;
   coachConfirm: (input: CoachConfirmInput) => Promise<CoachConfirmResult>;
   coachBeginLocalTurn: (sessionId: string, clientMessageId: string, text: string) => Promise<{ requestId: string }>;

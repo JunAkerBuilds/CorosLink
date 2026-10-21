@@ -1,0 +1,24 @@
+/* Distance chips on the activity route map (Leaflet divIcons, see
+   routeDistanceMarkers.ts). Dark with a white ring, like Training Hub's
+   lap markers, so they read on street, satellite and paper tiles alike. */
+.activity-route-distance-marker span {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 1.5px solid #ffffff;
+  border-radius: 7px;
+  background: #0b1015;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 35%);
+  color: #ffffff;
+  font: 700 11px/1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+}

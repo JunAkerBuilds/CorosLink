@@ -1,6 +1,6 @@
 import { CLAIM_TTL_MS, teardownAllocation, type RelayContext } from "./allocations";
 import { purgeExpiredNonces } from "./auth/replay";
-import { allocationKeyOf, listPendingTeardowns, pruneTunnelStatusCache } from "./db";
+import { allocationKeyOf, listPendingTeardowns, pruneLiveActivities, pruneTunnelStatusCache } from "./db";
 import { defaultDeps, loadConfig, type Deps, type Env } from "./env";
 import { errorResponse, RelayError } from "./http";
 import { log } from "./log";
@@ -12,10 +12,13 @@ import {
   handleJwks,
   handleLink,
   handleListEnvironments,
+  handleLiveActivity,
   handleRecovery,
   handleRegisterDevice,
+  handleRegisterLiveActivity,
   handleUnlink,
   handleUnregisterDevice,
+  handleUnregisterLiveActivity,
 } from "./routes";
 
 export type { Env } from "./env";
@@ -37,6 +40,9 @@ const ROUTES: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
   { method: "POST", pattern: /^\/v1\/devices$/u, handler: handleRegisterDevice },
   { method: "DELETE", pattern: /^\/v1\/devices$/u, handler: handleUnregisterDevice },
   { method: "POST", pattern: /^\/v1\/activity$/u, handler: handleActivity },
+  { method: "POST", pattern: /^\/v1\/activity\/live$/u, handler: handleLiveActivity },
+  { method: "POST", pattern: /^\/v1\/live-activities$/u, handler: handleRegisterLiveActivity },
+  { method: "DELETE", pattern: /^\/v1\/live-activities$/u, handler: handleUnregisterLiveActivity },
 ];
 
 export async function handleRequest(
@@ -78,6 +84,7 @@ export async function handleRequest(
 
 export interface MaintenanceResult {
   noncesPurged: number;
+  liveActivitiesPurged: number;
   teardownsAttempted: number;
   teardownsCompleted: number;
   sweep: SweepResult;
@@ -85,7 +92,7 @@ export interface MaintenanceResult {
 
 const TEARDOWN_RETRY_LIMIT = 10;
 
-/** The 5-minute cron: purge replay guards, retry failed unlink teardowns, reap idle tunnels. */
+/** The 5-minute cron: purge replay guards and stale Live Activities, retry failed unlink teardowns, reap idle tunnels. */
 export async function runMaintenance(env: Env, deps: Deps = defaultDeps()): Promise<MaintenanceResult> {
   const ctx: RelayContext = {
     config: loadConfig(env),
@@ -96,6 +103,7 @@ export async function runMaintenance(env: Env, deps: Deps = defaultDeps()): Prom
   const now = deps.now();
   const noncesPurged = await purgeExpiredNonces(env.DB, now);
   await pruneTunnelStatusCache(env.DB, now - 24 * 60 * 60 * 1000);
+  const liveActivitiesPurged = await pruneLiveActivities(env.DB, now);
 
   let teardownsAttempted = 0;
   let teardownsCompleted = 0;
@@ -111,12 +119,13 @@ export async function runMaintenance(env: Env, deps: Deps = defaultDeps()): Prom
   const { candidates, ...counters } = sweep;
   log("info", "maintenance", {
     noncesPurged,
+    liveActivitiesPurged,
     teardownsAttempted,
     teardownsCompleted,
     ...counters,
     ...(sweep.mode === "dry-run" ? { candidates } : {}),
   });
-  return { noncesPurged, teardownsAttempted, teardownsCompleted, sweep };
+  return { noncesPurged, liveActivitiesPurged, teardownsAttempted, teardownsCompleted, sweep };
 }
 
 export default {

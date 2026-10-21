@@ -10,7 +10,7 @@ import type {
   OpenRouterConnectionTest
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
-import { ChatSettingsPanel } from "./ChatSettingsPanel";
+import { ChatSettingsPanel, type GeminiSettingsControls } from "./ChatSettingsPanel";
 import {
   CHAT_SETTINGS_SECTIONS,
   chatSettingsSectionDomId,
@@ -26,6 +26,7 @@ export function ChatSettingsModal({
   chatSettings,
   authStatus,
   claudeStatus,
+  gemini,
   openRouterApiKey,
   openRouterConnection,
   localApiKey,
@@ -70,6 +71,7 @@ export function ChatSettingsModal({
   chatSettings: ChatSettings;
   authStatus: ChatAuthStatus | null;
   claudeStatus: ClaudeCodeStatus | null;
+  gemini: GeminiSettingsControls;
   openRouterApiKey: string;
   openRouterConnection: OpenRouterConnectionTest | null;
   localApiKey: string;
@@ -267,6 +269,7 @@ export function ChatSettingsModal({
             chatSettings={chatSettings}
             authStatus={authStatus}
             claudeStatus={claudeStatus}
+            gemini={gemini}
             openRouterApiKey={openRouterApiKey}
             openRouterConnection={openRouterConnection}
             localApiKey={localApiKey}

@@ -5,10 +5,20 @@ import type { DiagnosticsSnapshot } from "../../electron/diagnosticsTypes";
 import type { CorosLinkApi } from "../coroslink-api";
 import "./diagnosticsSettings.css";
 
+// The whole log is the last 7 days, so that range is everything kept.
+const RANGES = [
+  { hours: 1, label: () => t("1 hour") },
+  { hours: 12, label: () => t("12 hours") },
+  { hours: 24, label: () => t("1 day") },
+  { hours: 168, label: () => t("7 days") }
+];
+const ALL_HOURS = 168;
+
 export function DiagnosticsSettings({ api }: { api: CorosLinkApi }) {
   useLanguage();
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot | null>(null);
   const [busy, setBusy] = useState<"refresh" | "copy" | "clear" | null>("refresh");
+  const [rangeHours, setRangeHours] = useState(ALL_HOURS);
   const [error, setError] = useState<LocalizableText>("");
   const [notice, setNotice] = useState("");
 
@@ -19,7 +29,7 @@ export function DiagnosticsSettings({ api }: { api: CorosLinkApi }) {
       return;
     }
     let active = true;
-    void api.getDiagnostics().then((next) => {
+    void api.getDiagnostics(ALL_HOURS).then((next) => {
       if (active) setSnapshot(next);
     }).catch(() => {
       if (active) setError(localizedText(() => t("Could not load error logs. Try refreshing.")));
@@ -33,13 +43,13 @@ export function DiagnosticsSettings({ api }: { api: CorosLinkApi }) {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  async function perform(action: "refresh" | "copy" | "clear") {
+  async function perform(action: "refresh" | "copy" | "clear", range = rangeHours) {
     setBusy(action);
     setError("");
     setNotice("");
     try {
       const next = action === "clear" ? await api.clearDiagnostics()
-        : action === "copy" ? await api.copyDiagnostics() : await api.getDiagnostics();
+        : action === "copy" ? await api.copyDiagnostics(range) : await api.getDiagnostics(range);
       setSnapshot(next);
       if (action === "copy") {
         setNotice("Copied. Paste the report into your GitHub issue.");
@@ -67,11 +77,32 @@ export function DiagnosticsSettings({ api }: { api: CorosLinkApi }) {
       </div>
       <p className="diagnostics-description">{t("Logs stay on this computer. The report includes recent errors and app details, with common credentials, email addresses, and local paths redacted. Nothing is uploaded automatically.")}</p>
       <div className="diagnostics-toolbar">
-        <span>{snapshot ? t("{{value0}} {{value1}} recorded · Last 7 days · Up to 200 errors", { value0: snapshot.entryCount, value1: t(snapshot.entryCount === 1 ? "error" : "errors") }) : t("Loading error logs…")}</span>
+        <div className="diagnostics-range">
+          <div className="diagnostics-range-options" role="radiogroup" aria-label={t("Report time range")}>
+            {RANGES.map((range) => (
+              <button
+                key={range.hours}
+                type="button"
+                role="radio"
+                aria-checked={rangeHours === range.hours}
+                disabled={busy !== null}
+                onClick={() => {
+                  if (range.hours === rangeHours) return;
+                  setRangeHours(range.hours);
+                  void perform("refresh", range.hours);
+                }}
+              >{range.label()}</button>
+            ))}
+          </div>
+          <span>{!snapshot ? t("Loading error logs…")
+            : rangeHours === ALL_HOURS
+              ? t("{{value0}} {{value1}} recorded · Last 7 days · Up to 200 errors", { value0: snapshot.entryCount, value1: t(snapshot.entryCount === 1 ? "error" : "errors") })
+              : t("Showing {{value0}} of {{value1}} recorded errors", { value0: snapshot.entryCount, value1: snapshot.totalCount })}</span>
+        </div>
         <div>
           <button type="button" className="secondary-button" onClick={() => void perform("refresh")} disabled={busy !== null}>
             <RefreshCw size={14} className={busy === "refresh" ? "spin" : ""} aria-hidden="true" />{t("Refresh")} </button>
-          <button type="button" className="secondary-button" onClick={() => void perform("clear")} disabled={busy !== null || !snapshot?.entryCount}>
+          <button type="button" className="secondary-button" onClick={() => void perform("clear")} disabled={busy !== null || !snapshot?.totalCount}>
             <Trash2 size={14} aria-hidden="true" />{t("Clear logs")} </button>
         </div>
       </div>

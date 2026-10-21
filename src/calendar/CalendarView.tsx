@@ -22,6 +22,8 @@ import type {
   WorkoutEditRef
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
+import { activityMovingSeconds } from "../../electron/activityTime";
+import { scheduledLinkKey } from "../../electron/activityLinks";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import {
   formatDistanceMeters,
@@ -85,6 +87,34 @@ interface CalendarViewProps {
   onOpenCoach: (prompt: string) => void;
 }
 
+/** Moving time, like COROS shows it; null when the activity has none. */
+function formatMovingTime(activity: TrainingHubActivity): string | null {
+  const seconds = activityMovingSeconds(activity);
+  return seconds ? formatDurationSeconds(seconds) : null;
+}
+
+/**
+ * Plan workouts often share a long prefix ("2026 Block 6 … W3D1: 4x20s
+ * Strides"), which truncates every menu item to the same text. Drop the
+ * shared words so each reads apart; the full name stays in the tooltip.
+ */
+function distinctNames(names: string[]): string[] {
+  if (names.length < 2 || new Set(names).size < names.length) return names;
+  let prefix = names[0]!;
+  for (const name of names) {
+    while (!name.startsWith(prefix)) prefix = prefix.slice(0, -1);
+  }
+  const cut = prefix.lastIndexOf(" ") + 1;
+  const rest = names.map((name) => name.slice(cut).replace(/^[\s:·–—-]+/, ""));
+  return cut > 0 && rest.every(Boolean) ? rest : names;
+}
+
+function activityMenuLabel(activity: TrainingHubActivity): string {
+  const name = activity.name || (activity.sportName == null ? undefined : t(String(activity.sportName))) || t("Activity");
+  const time = formatMovingTime(activity);
+  return time ? `${name} · ${time}` : name;
+}
+
 function describeDayForCoach(
   day: CalendarDay,
   unitSystem: UnitSystem
@@ -97,7 +127,7 @@ function describeDayForCoach(
   }
   for (const activity of day.activities) {
     const stats = [
-      activity.duration ? formatDurationSeconds(activity.duration) : null,
+      formatMovingTime(activity),
       activity.distance
         ? formatDistanceMeters(
             activity.distance,
@@ -136,6 +166,7 @@ interface CalendarContextTarget {
   y: number;
   dayKey: string;
   workoutKey?: string;
+  activityId?: string;
 }
 
 function workoutCountLabel(count: number): string {
@@ -305,7 +336,7 @@ export function CalendarView({
   );
 
   const authenticated = Boolean(status?.authenticated);
-  const { weeks, journal, loading, error, reload, applyOptimisticMove, applyJournalSave } = useCalendarData({
+  const { weeks, journal, manualLinks, loading, error, reload, applyOptimisticMove, applyJournalSave, setManualLink } = useCalendarData({
     api,
     authenticated,
     weekKeys,
@@ -736,6 +767,64 @@ export function CalendarView({
         onSelect: () => copyEntries([workout])
       });
     }
+    // Linking is the user's call: CorosLink never pairs a plan and an activity
+    // COROS didn't link, so the menu offers the same-day candidates.
+    const link = (entry: TrainingHubScheduledWorkoutEntry, activity: TrainingHubActivity | null | undefined) => {
+      onError(null);
+      setManualLink(entry, activity).catch((cause: unknown) =>
+        onError(t("Couldn't save the link: {{value1}}", { value1: cause instanceof Error ? cause.message : String(cause) }))
+      );
+    };
+    if (!day.isPast && !day.isToday) {
+      // Nothing to link yet.
+    } else if (workout) {
+      const pair = day.pairs.find((candidate) => scheduledWorkoutKey(candidate.scheduled) === contextMenu.workoutKey);
+      if (pair?.activity) {
+        items.push({
+          id: "unlink-activity",
+          label: "Unlink activity",
+          icon: "unlink",
+          hint: pair.linkSource === "coros"
+            ? "COROS linked these because the workout was started from the plan. Unlinking only changes CorosLink."
+            : undefined,
+          // Hide COROS's link; dropping the user's own brings COROS's back, if any.
+          onSelect: () => link(workout, pair.linkSource === "coros" ? null : undefined)
+        });
+      } else {
+        const workoutLinkKey = scheduledLinkKey(workout);
+        if (workout.corosActivity && manualLinks.some((manual) => scheduledLinkKey(manual) === workoutLinkKey)) {
+          items.push({
+            id: "restore-coros-link",
+            label: "Restore COROS link",
+            icon: "link",
+            onSelect: () => link(workout, undefined)
+          });
+        }
+        for (const activity of day.unplannedActivities) {
+          items.push({
+            id: `link-${activity.activityId}`,
+            label: t("Link “{{value1}}”", { value1: activityMenuLabel(activity) }),
+            icon: "link",
+            onSelect: () => link(workout, activity)
+          });
+        }
+      }
+    } else if (contextMenu.activityId) {
+      const activity = day.unplannedActivities.find((candidate) => candidate.activityId === contextMenu.activityId);
+      if (activity) {
+        const open = day.pairs.filter((pair) => !pair.activity);
+        const names = distinctNames(open.map((pair) => pair.scheduled.name));
+        open.forEach((pair, index) => {
+          items.push({
+            id: `link-${scheduledWorkoutKey(pair.scheduled)}`,
+            label: t("Link to “{{value1}}”", { value1: names[index]! }),
+            icon: "link",
+            hint: pair.scheduled.name,
+            onSelect: () => link(pair.scheduled, activity)
+          });
+        });
+      }
+    }
     if (!workout || day.scheduled.length > 1) {
       items.push({
         id: "copy-day",
@@ -766,7 +855,7 @@ export function CalendarView({
       }
     });
     return items;
-  }, [clipboard, contextMenu, copyEntries, daysByKey, findScheduled, mutating, pasteEntries, getLocale()]);
+  }, [clipboard, contextMenu, copyEntries, daysByKey, findScheduled, manualLinks, mutating, onError, pasteEntries, setManualLink, getLocale()]);
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
@@ -818,7 +907,7 @@ export function CalendarView({
       } else {
         const activity = target.activity;
         const stats = [
-          activity.duration ? formatDurationSeconds(activity.duration) : null,
+          formatMovingTime(activity),
           activity.distance
             ? formatDistanceMeters(
                 activity.distance,
@@ -1058,6 +1147,8 @@ export function CalendarView({
           title={
             (contextMenu.workoutKey &&
               findScheduled(contextMenu.dayKey, contextMenu.workoutKey)?.name) ||
+            (contextMenu.activityId &&
+              daysByKey.get(contextMenu.dayKey)?.activities.find((activity) => activity.activityId === contextMenu.activityId)?.name) ||
             formatHappenDayLabel(contextMenu.dayKey)
           }
           items={contextMenuItems}

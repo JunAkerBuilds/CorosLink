@@ -15,6 +15,7 @@ import {
   type ConnectorSnapshot,
   type ResolvedCloudflared
 } from "./cloudflaredManager";
+import { LiveActivityFeed, type LiveTurnReport } from "./liveActivityFeed";
 import { RelayClient, RelayRequestError } from "./relayClient";
 import {
   ENVIRONMENT_PLATFORMS,
@@ -123,14 +124,21 @@ export interface CloudLinkOptions {
   findCloudflared?: typeof findInstalledCloudflared;
   downloadCloudflared?: typeof downloadPinnedCloudflared;
   supervisor?: Partial<CloudflaredSupervisorOptions>;
+  /** Tests: the Live Activity feed's clock, timers and intervals. */
+  liveActivity?: Partial<Omit<ConstructorParameters<typeof LiveActivityFeed>[0], "send">>;
   onChange?: () => void;
 }
 
 export class CloudLink {
   private readonly supervisor: CloudflaredSupervisor;
   private readonly throttle = new ActivityThrottle();
+  private readonly live: LiveActivityFeed;
   private readonly now: () => number;
   private busy: "linking" | "unlinking" | null = null;
+  /** Switched on and still finding the connector, so the panel says "linking" from the start. */
+  private switchingOn = false;
+  /** Bumped by every setEnabled, so a slow switch-on (a download) yields to a later switch. */
+  private switchGeneration = 0;
   private error: string | undefined;
   /** A non-fatal relay problem (recovery failed, but the stored connector runs). */
   private relayNotice: string | undefined;
@@ -143,8 +151,14 @@ export class CloudLink {
   private trustRefresh: Promise<RelayTrust | null> | null = null;
   private readonly clients = new Map<string, RelayClient>();
 
+  /** The website account this computer signs in with (also used to open the member's private faces). */
+  get account(): WebsiteAccount {
+    return this.options.account;
+  }
+
   constructor(private readonly options: CloudLinkOptions) {
     this.now = options.now ?? Date.now;
+    this.live = new LiveActivityFeed({ send: (report) => this.sendLive(report), now: this.now, ...options.liveActivity });
     this.supervisor = new CloudflaredSupervisor({
       ...options.supervisor,
       onChange: () => this.changed(),
@@ -285,7 +299,7 @@ export class CloudLink {
   }
 
   private state(link: StoredLink | null, connector: ConnectorSnapshot): CloudLinkState {
-    if (this.busy) return "linking";
+    if (this.busy || this.switchingOn) return "linking";
     if (this.error) return "error";
     if (!this.enabled || !link) return "off";
     if (connector.state === "online") return "online";
@@ -406,35 +420,44 @@ export class CloudLink {
   // ----- The switch -----
 
   /**
-   * "Link this computer". On: link (or reconnect) and run the connector; a
+   * Away from home, driven by the remote access switch (remoteAccess.ts) and
+   * the panel's Connect. On: link (or reconnect) and run the connector; a
    * missing connector is downloaded only when `allowDownload` (the person
    * agreed in the panel) or they agreed before. Off: stop the connector and
    * keep the link, so the address stays the same.
    */
   async setEnabled(enabled: boolean, input: { allowDownload?: boolean } = {}): Promise<void> {
+    const generation = ++this.switchGeneration;
     this.error = undefined;
     if (!enabled) {
+      this.switchingOn = false;
       this.setEnabledFlag(false);
       this.relayNotice = undefined;
       await this.stop();
       this.changed();
       return;
     }
+    this.switchingOn = true;
+    this.changed();
     try {
       if (!this.platform) throw new Error("Access away from home isn't available on this system.");
       this.options.secrets.ensureAvailable();
       if (!this.linked && !this.options.account.signedIn) throw new Error("Sign in to watchfaces.coroslink.com first.");
       const connector = await this.ensureConnector(input.allowDownload === true);
       // No connector and no consent yet: the panel asks, then calls again with allowDownload.
-      if (!connector) return;
+      // Switched again while this waited (a download): the later call decides.
+      if (!connector || generation !== this.switchGeneration) return;
       this.setEnabledFlag(true);
       if (this.linked) await this.start();
       else await this.link();
     } catch (error) {
-      this.setEnabledFlag(false);
-      this.error = error instanceof Error ? error.message : String(error);
+      if (generation === this.switchGeneration) {
+        this.setEnabledFlag(false);
+        this.error = error instanceof Error ? error.message : String(error);
+      }
       throw error;
     } finally {
+      if (generation === this.switchGeneration) this.switchingOn = false;
       this.changed();
     }
   }
@@ -488,14 +511,14 @@ export class CloudLink {
     const { identity } = await this.options.environment();
     if (identity.kid !== link.keyThumbprint || identity.environmentId !== link.environmentId) {
       this.forgetLink();
-      throw new Error("This computer's remote access key changed. Turn on Link this computer to link it again.");
+      throw new Error("This computer's remote access key changed. Choose Connect to link it again.");
     }
     const connector = this.connector && !this.connector.stale ? this.connector : await this.ensureConnector(false);
     await this.recover(input.forceRecovery ? "link" : "startup", { force: input.forceRecovery });
     if (!this.linked || !this.enabled) return;
     const token = this.connectorToken();
     if (!connector) throw new Error("Download Cloudflare's connector to go online.");
-    if (!token) throw new Error("This computer's tunnel key is missing. Unlink it, then link it again.");
+    if (!token) throw new Error("This computer's tunnel key is missing. Sign out, then sign in again to link it again.");
     this.supervisor.run({ binary: connector.path, token, version: connector.version });
   }
 
@@ -534,7 +557,7 @@ export class CloudLink {
       if (error.notLinked) {
         await this.supervisor.stop();
         this.forgetLink();
-        this.error = "This computer was unlinked from your account. Turn on Link this computer to link it again.";
+        this.error = "This computer was unlinked from your account. Choose Connect to link it again.";
         return;
       }
       if (error.status === 429) return; // Recovered recently; the stored connector is right.
@@ -641,8 +664,13 @@ export class CloudLink {
 
   // ----- Activity -----
 
-  /** A Coach event from the hub. Turns and staged approvals become text-free pushes. */
+  /**
+   * A Coach event from the hub. Turns and staged approvals become text-free
+   * alerts, and running turns keep C-LINK's Live Activity current.
+   */
   noteCoachEvent(frame: CoachEventFrame): void {
+    // Only turns that start while linked are followed; sending checks the link again.
+    if (frame.event !== "turn.started" || (this.enabled && this.storedLink())) this.live.note(frame);
     const event = activityForCoachEvent(frame);
     if (!event || !this.enabled || !SESSION_ID_PATTERN.test(frame.sessionId)) return;
     const link = this.storedLink();
@@ -653,6 +681,18 @@ export class CloudLink {
       .catch((error) => {
         console.warn("[remote] activity push failed:", error instanceof RelayRequestError ? error.code : "error");
       });
+  }
+
+  /** A turn's phase, for the relay to push to the Live Activities following it. */
+  private async sendLive(report: LiveTurnReport): Promise<void> {
+    const link = this.storedLink();
+    if (!link || !this.enabled) return;
+    try {
+      const { identity } = await this.options.environment();
+      await this.client(identity, link.relayOrigin).liveActivity(report);
+    } catch (error) {
+      console.warn("[remote] live activity push failed:", error instanceof RelayRequestError ? error.code : "error");
+    }
   }
 
   /** For tests and diagnostics. */

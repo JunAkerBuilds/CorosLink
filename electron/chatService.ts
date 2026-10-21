@@ -1,9 +1,10 @@
 import { isWorkoutEditTool } from "./workoutEditService";
-import { BrowserWindow, safeStorage, shell } from "electron";
+import { app, BrowserWindow, safeStorage, shell } from "electron";
 import { expectedError } from "./diagnosticsLog";
 import crypto from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import path from "node:path";
 import { activityMovingSeconds, activitySignificantElapsedSeconds } from "./activityTime";
 import { deleteSettings, getSetting, setSetting } from "./database";
 import { currentActivitySource, usingLocalSources } from "./localSync/activitySource";
@@ -67,7 +68,8 @@ import { isWebUrl } from "./externalLinks";
 import {
   buildResponsesRequest,
   extractReasoningSummaryDelta,
-  extractResponseTextDelta
+  extractResponseTextDelta,
+  toInputMessageItem
 } from "./chatResponsesProtocol";
 import {
   detectLocalChatServersRequest,
@@ -89,6 +91,16 @@ import {
   testClaudeCodeConnection as runClaudeCodeConnectionTest
 } from "./claudeCodeProvider";
 import {
+  GeminiCliProviderError,
+  getGeminiCliStatus as inspectGeminiCliStatus,
+  getGeminiSessionModels,
+  launchGeminiCliLogin,
+  listGeminiCliModels,
+  recheckGeminiCliStatus,
+  streamGeminiCliCompletion,
+  testGeminiCliConnection as runGeminiCliConnectionTest
+} from "./geminiCliProvider";
+import {
   CHAT_SETTINGS_KEYS,
   readChatSettingsFromStore,
   saveChatSettingsToStore,
@@ -99,6 +111,7 @@ import {
   CHATGPT_AUTO_CATALOG,
   CHATGPT_FALLBACK_MODELS,
   CLAUDE_MODEL_OPTIONS,
+  GEMINI_MODEL_OPTIONS,
   chatGptModelOptionsFromCatalog,
   claudeModelOptionsFromCli,
   getChatGptModelCandidates,
@@ -122,6 +135,8 @@ import type {
   ClaudeCodePermissions,
   ClaudeCodeStatus,
   CorosMcpTool,
+  GeminiCliConnectionTest,
+  GeminiCliStatus,
   LocalChatDiscovery,
   LocalChatConfig,
   LocalChatConnectionTest,
@@ -249,6 +264,62 @@ function recordClaudeCodeStatus(status: ClaudeCodeStatus): void {
       ...current.claudeCode,
       executablePath:
         current.claudeCode.executablePath || status.executablePath,
+      lastConnectionStatus: status.state,
+      lastCheckedAt: status.checkedAt
+    }
+  });
+}
+
+/** Where Gemini CLI runs for Coach: its workspace settings keep it to Coach tools. */
+function geminiWorkspaceDir(): string {
+  return path.join(app.getPath("userData"), "gemini-coach", "workspace");
+}
+
+export async function getGeminiCliConnectionStatus(): Promise<GeminiCliStatus> {
+  const settings = getChatSettings();
+  const status = await inspectGeminiCliStatus(settings.geminiCli.executablePath);
+  recordGeminiCliStatus(status);
+  return status;
+}
+
+/** "Check again": also retries a remembered sign-in refusal once. */
+export async function recheckGeminiCliConnectionStatus(): Promise<GeminiCliStatus> {
+  const settings = getChatSettings();
+  const status = await recheckGeminiCliStatus(
+    settings.geminiCli.executablePath,
+    geminiWorkspaceDir()
+  );
+  recordGeminiCliStatus(status);
+  return status;
+}
+
+export async function connectGeminiCli(): Promise<GeminiCliStatus> {
+  const settings = getChatSettings();
+  const status = await launchGeminiCliLogin(
+    settings.geminiCli.executablePath,
+    geminiWorkspaceDir()
+  );
+  recordGeminiCliStatus(status);
+  return status;
+}
+
+export async function testGeminiCliConnection(): Promise<GeminiCliConnectionTest> {
+  const settings = getChatSettings();
+  const result = await runGeminiCliConnectionTest(
+    settings.geminiCli.executablePath,
+    geminiWorkspaceDir()
+  );
+  recordGeminiCliStatus(result.status);
+  return result;
+}
+
+function recordGeminiCliStatus(status: GeminiCliStatus): void {
+  const current = getChatSettings();
+  saveChatSettings({
+    ...current,
+    geminiCli: {
+      ...current.geminiCli,
+      executablePath: current.geminiCli.executablePath || status.executablePath,
       lastConnectionStatus: status.state,
       lastCheckedAt: status.checkedAt
     }
@@ -832,6 +903,85 @@ export async function streamChat(
       return;
     }
 
+    if (settings.provider === "gemini-cli") {
+      const status = await inspectGeminiCliStatus(settings.geminiCli.executablePath);
+      recordGeminiCliStatus(status);
+      if (!status.authenticated || !status.executablePath) {
+        throw new GeminiCliProviderError(
+          status.message,
+          status.installed ? "auth" : "not-installed"
+        );
+      }
+
+      await ensureAllMcpConnected();
+      const chatTools = getAllChatTools();
+      const { text: instructions, hasData } = await buildTrainingContext(
+        undefined,
+        unitSystem,
+        settings.customInstructions
+      );
+      const effectiveInstructions = withLiveToolInstructions(
+        instructions,
+        chatTools
+      );
+
+      send("chat:streamStart", { requestId });
+      send("chat:streamInfo", {
+        requestId,
+        kind: "context",
+        snapshotIncluded: hasData,
+        mcpEnabled: chatTools.length > 0
+      });
+
+      const result = await streamGeminiCliCompletion({
+        executablePath: status.executablePath,
+        workspaceDir: geminiWorkspaceDir(),
+        instructions: effectiveInstructions,
+        messages,
+        tools: chatTools,
+        signal: controller.signal,
+        model: settings.geminiCli.model,
+        onToken: (delta) => {
+          fullText += delta;
+          send("chat:streamToken", { requestId, delta });
+        },
+        onThinking: (delta) => {
+          send("chat:streamInfo", { requestId, kind: "thinking", delta });
+        },
+        onToolCallStart: (toolName) => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "mcp",
+            tool: toolName,
+            status: "call"
+          });
+        },
+        onToolCallError: (toolName, message) => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "mcp",
+            tool: toolName,
+            status: "failed",
+            message
+          });
+        },
+        // The tool bridge offers only chatTools and refuses any other name.
+        onToolCall: async (toolName, args) => {
+          console.log("[chat] Gemini tool call:", toolName);
+          return executeChatTool(toolName, args, send, requestId, unitSystem);
+        }
+      });
+      fullText = result.fullText;
+      recordGeminiCliStatus({
+        ...status,
+        state: "connected",
+        checkedAt: new Date().toISOString(),
+        message: "Gemini CLI is connected and ready for Coach conversations."
+      });
+      send("chat:streamDone", { requestId, fullText });
+      return;
+    }
+
     if (settings.provider === "openrouter") {
       const apiKey = readStoredOpenRouterApiKey();
       if (!apiKey) {
@@ -1158,6 +1308,26 @@ export async function streamChat(
           executablePath: current.executablePath,
           checkedAt: new Date().toISOString(),
           message: error instanceof Error ? error.message : "Claude request failed."
+        });
+      }
+      if (provider === "gemini-cli") {
+        const current = getChatSettings().geminiCli;
+        const failure =
+          error instanceof GeminiCliProviderError ? error.kind : "connection";
+        recordGeminiCliStatus({
+          state:
+            failure === "usage-limit"
+              ? "usage-limit-reached"
+              : failure === "auth"
+                ? "sign-in-required"
+                : failure === "not-installed"
+                  ? "not-installed"
+                  : "connection-failed",
+          installed: failure !== "not-installed",
+          authenticated: failure !== "auth" && failure !== "not-installed",
+          executablePath: current.executablePath,
+          checkedAt: new Date().toISOString(),
+          message: error instanceof Error ? error.message : "Gemini request failed."
         });
       }
       const authError = Boolean(
@@ -1607,6 +1777,25 @@ async function completeOnce(
     return result.fullText || text;
   }
 
+  if (provider === "gemini-cli") {
+    const status = await inspectGeminiCliStatus(settings.geminiCli.executablePath);
+    if (!status.authenticated || !status.executablePath) throw new Error(status.message);
+    // Naming needs no depth: the fast tier answers in a moment.
+    const result = await streamGeminiCliCompletion({
+      executablePath: status.executablePath,
+      workspaceDir: geminiWorkspaceDir(),
+      instructions,
+      messages,
+      tools: [],
+      signal,
+      timeoutMs: TITLE_TIMEOUT_MS,
+      model: "flash",
+      onToken,
+      onToolCall: async () => ""
+    });
+    return result.fullText || text;
+  }
+
   if (provider === "openrouter") {
     const apiKey = readStoredOpenRouterApiKey();
     if (!apiKey) throw new Error("No OpenRouter API key.");
@@ -1831,6 +2020,43 @@ async function listClaudeModelOptions(): Promise<ChatModelOption[]> {
   return options;
 }
 
+let geminiModelCache:
+  | { at: number; executablePath: string; options: Promise<ChatModelOption[]> }
+  | null = null;
+
+async function listGeminiModelOptions(): Promise<ChatModelOption[]> {
+  // Listing starts a session, which signs in; never let that open a browser.
+  const status = await inspectGeminiCliStatus(getChatSettings().geminiCli.executablePath);
+  if (!status.authenticated || !status.executablePath) return GEMINI_MODEL_OPTIONS;
+  const executablePath = status.executablePath;
+  // With Google sign-in, a session whose cached credentials no longer refresh opens
+  // the CLI's browser sign-in. Show what the last Coach session offered instead.
+  if (status.authMethod === "oauth-personal") {
+    const seen = getGeminiSessionModels(executablePath);
+    return seen.length >= 2 ? seen : GEMINI_MODEL_OPTIONS;
+  }
+  if (
+    geminiModelCache?.executablePath === executablePath &&
+    Date.now() - geminiModelCache.at < MODELS_CACHE_MS
+  ) {
+    return geminiModelCache.options;
+  }
+  const options = listGeminiCliModels(executablePath, geminiWorkspaceDir())
+    .then((listed) => {
+      if (listed.length < 2) throw new Error("this Gemini CLI does not list models");
+      return listed;
+    })
+    .catch((error: unknown) => {
+      console.warn(
+        "[chat] Gemini CLI model list unavailable:",
+        error instanceof Error ? error.message : error
+      );
+      return GEMINI_MODEL_OPTIONS;
+    });
+  geminiModelCache = { at: Date.now(), executablePath, options };
+  return options;
+}
+
 /**
  * Model picker rows for a Coach provider, from the provider's own live
  * catalog where it has one. Falls back to the static list on any failure.
@@ -1839,24 +2065,11 @@ export async function listChatModelOptions(
   provider: ChatProvider
 ): Promise<ChatModelOption[]> {
   if (provider === "claude-code") return listClaudeModelOptions();
+  if (provider === "gemini-cli") return listGeminiModelOptions();
   if (provider === "chatgpt") {
     return chatGptModelOptionsFromCatalog(await listChatGptModels());
   }
   return getChatModelOptions(provider);
-}
-
-/** A COROS message turned into a Responses-API input item. */
-function toInputMessageItem(message: ChatMessage): Record<string, unknown> {
-  return {
-    type: "message",
-    role: message.role,
-    content: [
-      {
-        type: message.role === "assistant" ? "output_text" : "input_text",
-        text: message.content
-      }
-    ]
-  };
 }
 
 /** Exposes connected MCP and local workout tools to the model as functions. */

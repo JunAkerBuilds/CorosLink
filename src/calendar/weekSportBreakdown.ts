@@ -8,6 +8,7 @@ import {
   WORKOUT_SPORT_CAPABILITIES,
   workoutSportFromType
 } from "../../electron/workoutCapabilities";
+import { activityMovingSeconds } from "../../electron/activityTime";
 import { parseUpcomingWorkoutDistanceKm } from "../training/formatters";
 import type { SportColorCategory } from "../training/sportColors";
 import { resolveSportName } from "../training/sportTypes";
@@ -203,7 +204,7 @@ export function buildWeekSportBreakdown(days: CalendarDay[]): WeekSportTotals[] 
     for (const activity of day.activities) {
       const group = groupFor(activityGroup(activity));
       group.actualLoad += activity.trainingLoad ?? 0;
-      group.activityTimeSeconds += activity.duration ?? 0;
+      group.activityTimeSeconds += activityMovingSeconds(activity) ?? 0;
       group.distanceMeters += activity.distance ?? 0;
     }
     for (const entry of day.scheduled) {

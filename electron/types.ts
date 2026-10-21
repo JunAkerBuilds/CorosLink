@@ -1039,6 +1039,12 @@ export interface CorosWatchfaceNativeDataStyle {
    * them to an always-shown field). Export deletes their config keys.
    */
   removedReadouts?: string[];
+  /**
+   * Chart only: the face's other readouts, by chart source, each where it sits
+   * on the face. The layer edits one readout at a time (chartSource) and swaps
+   * another in when it is picked; the graph parts stay with the layer.
+   */
+  readouts?: Record<string, CorosWatchfaceNativeDataStyle>;
   /** State-table size when recovered artwork defines fewer frames than the catalog default. */
   stateCount?: number;
   chartWidth?: number;
@@ -1154,7 +1160,7 @@ export interface CorosWatchfaceDesignState {
   previewComplication: string;
   nativeData?: Record<string, CorosWatchfaceNativeDataStyle>;
   metricChanges: Record<string, boolean>;
-  metricStyles: Record<string, { solidAlpha?: boolean; align?: "left" | "center" | "right"; color?: string; scale: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
+  metricStyles: Record<string, { solidAlpha?: boolean; align?: "left" | "center" | "right"; color?: string; scale: number; fontSize?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Optional native calorie goal arc/bar configuration. */
   kcalProgress?: CorosWatchfaceKcalProgressStyle;
   /** Optional native exercise-goal bar configuration. */
@@ -1212,7 +1218,7 @@ export interface CorosWatchfaceDesignState {
   addWeekday?: boolean;
   addDateMonth?: boolean;
   addDateDay?: boolean;
-  timeStyles: Record<string, { solidAlpha?: boolean; color?: string; scale: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
+  timeStyles: Record<string, { solidAlpha?: boolean; color?: string; scale: number; fontSize?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Weekday/month/day sizing; absent in projects saved before resizing. */
   dateStyles?: Record<
     string,
@@ -1220,6 +1226,12 @@ export interface CorosWatchfaceDesignState {
       /** Export solid glyph pixels after all resizing and effects. */
       solidAlpha?: boolean;
       scale: number;
+      /** Desktop fonts: font size in master pixels, drawn inside width/height. */
+      fontSize?: number;
+      /** Desktop-font words: TUE/OCT (default), Tue/Oct or Tuesday/October. */
+      labelStyle?: "upper" | "title" | "full";
+      /** Desktop-font words: translate them for the watch languages picked in Send. */
+      translateLabels?: boolean;
       /** Clockwise rotation applied inside each firmware sprite canvas. */
       rotation?: number;
       /** Exact exported PNG dimensions when set. */
@@ -2456,6 +2468,21 @@ export interface TrainingHubActivityLap {
   maxCadence?: number;
 }
 
+/**
+ * One way of slicing an activity, from the detail payload's lapList. COROS
+ * sends several at once (verified on live runs, rides and workouts):
+ * type 2 = the laps the watch recorded (auto-lap, manual or workout steps),
+ * 10/11/12 = 1/5/10 km splits, -1 = the whole activity as one row.
+ */
+export interface TrainingHubActivityLapGroup {
+  kind: "laps" | "split" | "whole";
+  /** Split length in metres; split groups only. */
+  splitDistance?: number;
+  laps: TrainingHubActivityLap[];
+  /** Zero-based positions COROS marks as the fastest (fastLapIndexList). */
+  fastestLaps: number[];
+}
+
 export interface TrainingHubTrackPoint {
   lat?: number;
   lon?: number;
@@ -2695,6 +2722,11 @@ export interface TrainingHubActivityDetail {
   avgCadence?: number;
   maxCadence?: number;
   laps: TrainingHubActivityLap[];
+  /**
+   * The lap table's alternative groupings, ordered laps → splits → whole.
+   * Empty when COROS sends fewer than two distinct ones.
+   */
+  lapGroups?: TrainingHubActivityLapGroup[];
   track?: TrainingHubActivityTrack;
   series?: TrainingHubActivitySeriesPoint[];
   strength?: StrengthDetail;
@@ -2885,6 +2917,65 @@ export type ChatRole = "user" | "assistant";
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  /** Files the athlete attached to this message, as the transcript records them. */
+  files?: ChatFileAttachment[];
+  /**
+   * Pixels for the model: attached images and page renders of documents with
+   * no text layer. Filled from the attachment store just before a request.
+   */
+  images?: ChatMessageImage[];
+}
+
+export interface ChatMessageImage {
+  /** Names the image for the model, such as "plan.pdf, page 2". */
+  label: string;
+  mimeType: "image/jpeg" | "image/png";
+  base64: string;
+}
+
+/**
+ * A file attached to a Coach message. The transcript keeps only this summary;
+ * the bytes stay in the desktop's attachment store under the conversation.
+ */
+export interface ChatFileAttachment {
+  id: string;
+  name: string;
+  /** Images reach the model as pixels; documents as their text, or page images when they have none. */
+  kind: "image" | "document";
+  /** The original file's type. */
+  mimeType: string;
+  sizeBytes: number;
+  pageCount?: number;
+  /** Characters of document text the model reads. */
+  textChars?: number;
+  /** The text was cut to fit the model's context. */
+  truncated?: boolean;
+  /** Pages sent as images, for a document without a text layer. */
+  pageImages?: number;
+  width?: number;
+  height?: number;
+}
+
+/** A file the Coach window prepared, sent once with the message it belongs to. */
+export interface CoachFileUpload {
+  name: string;
+  mimeType: string;
+  kind: "image" | "document";
+  /** The file as the athlete picked it, kept so it can be opened again. */
+  original: Uint8Array;
+  /** A document's text, already extracted. */
+  text?: string;
+  pageCount?: number;
+  truncated?: boolean;
+  /** What the model sees as pixels: the downscaled image, or page renders. */
+  images?: CoachFileUploadImage[];
+}
+
+export interface CoachFileUploadImage {
+  mimeType: "image/jpeg" | "image/png";
+  data: Uint8Array;
+  width: number;
+  height: number;
 }
 
 /** Optional assistant attribution metadata stored with a message. */
@@ -2911,6 +3002,7 @@ export interface PersistedChatMessageEntry {
   role: ChatRole;
   content: string;
   attachment?: ChatMessageAttachment;
+  files?: ChatFileAttachment[];
   source?: PersistedChatSource;
   /** Display-safe provider reasoning summary, never raw chain-of-thought. */
   reasoningSummary?: string;
@@ -2935,7 +3027,7 @@ export interface CoachInputPrompt {
   answeredAt?: number;
 }
 
-export type ChatProvider = "chatgpt" | "claude-code" | "openrouter" | "local";
+export type ChatProvider = "chatgpt" | "claude-code" | "gemini-cli" | "openrouter" | "local";
 
 export type ClaudeCodeConnectionState =
   | "not-installed"
@@ -2978,6 +3070,35 @@ export interface ClaudeCodeStatus {
 export interface ClaudeCodeConnectionTest {
   ok: boolean;
   status: ClaudeCodeStatus;
+  message: string;
+}
+
+export type GeminiCliConnectionState = ClaudeCodeConnectionState;
+
+export interface GeminiCliConfig {
+  /** Optional user-selected path. CorosLink never reads Gemini credential files. */
+  executablePath?: string;
+  /** Model alias (e.g. "pro", "flash") or full id. Empty = the CLI's own default. */
+  model?: string;
+  lastConnectionStatus?: GeminiCliConnectionState;
+  lastCheckedAt?: string;
+}
+
+export interface GeminiCliStatus {
+  state: GeminiCliConnectionState;
+  installed: boolean;
+  authenticated: boolean;
+  executablePath?: string;
+  version?: string;
+  /** The CLI's selected sign-in, e.g. "oauth-personal" or "gemini-api-key". */
+  authMethod?: string;
+  checkedAt: string;
+  message: string;
+}
+
+export interface GeminiCliConnectionTest {
+  ok: boolean;
+  status: GeminiCliStatus;
   message: string;
 }
 
@@ -3032,6 +3153,7 @@ export interface ChatSettings {
   provider: ChatProvider;
   chatgpt: ChatGptConfig;
   claudeCode: ClaudeCodeConfig;
+  geminiCli: GeminiCliConfig;
   openRouter: OpenRouterConfig;
   local: LocalChatConfig;
   sidebarOpen?: boolean;
@@ -3534,6 +3656,24 @@ export interface TrainingPlanWriteCapabilities {
   verifiedAt?: string;
 }
 
+export interface LocalTrainingPlanDeleteResult {
+  /** Plan-owned workouts removed from the COROS calendar before the delete. */
+  removedCalendarWorkouts: number;
+}
+
+/** A native plan running on the calendar: its own instance ID, linked to the library plan by originId. */
+export interface ActiveNativeTrainingPlanInstance {
+  id: string;
+  originId: string;
+  startDay?: string;
+}
+
+export interface CorosTrainingPlanDeleteResult {
+  remoteId: string;
+  /** Active calendar instances ended (their upcoming workouts removed) before the delete. */
+  endedCalendarPlans: number;
+}
+
 export interface TrainingActivityMatch {
   id: string;
   planId?: string;
@@ -3571,6 +3711,8 @@ export interface TrainingLibrarySnapshot {
   offline: boolean;
   partialFailures: string[];
   nativePlanWrites: TrainingPlanWriteCapabilities;
+  /** Library plan remoteId → its active calendar instance. Missing when COROS couldn't be asked. */
+  nativePlansOnCalendar?: Record<string, { startDay?: string }>;
 }
 
 export interface WorkoutMetadataPatch {
@@ -4138,6 +4280,27 @@ export interface TrainingHubScheduledWorkoutEntry {
   exercises?: TrainingHubScheduledExercise[];
   /** Raw program payload from schedule/query — required to re-add the workout when rescheduling. */
   rawProgram?: Record<string, unknown>;
+  /**
+   * The activity COROS itself credited to this workout (`entity.sportData`).
+   * COROS only links one when the workout was started from the plan; it never
+   * pairs a freestyle activity, and neither does CorosLink.
+   */
+  corosActivity?: {
+    activityId?: string;
+    /** Epoch seconds, for when `labelId` is missing. */
+    startTime?: number;
+    /** `entity.completeRate`, 1 = 100% of plan. */
+    completeRate?: number;
+  };
+}
+
+/** A plan↔activity link the user made in CorosLink (local only — COROS has no API for it). */
+export interface ManualActivityLink {
+  planId: string;
+  idInPlan: string;
+  happenDay: string;
+  /** Undefined = the user said no activity belongs to this workout. */
+  activityId?: string;
 }
 
 export interface TrainingHubLibraryWorkout {

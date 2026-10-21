@@ -20,6 +20,7 @@ import { finalizeWatchfaceDeviceLayout, restoreWatchfaceDateLayout } from "./wat
 import { convertWatchfaceEntries, type WatchfaceConversionEntry, prepareRecoveredWatchfaceExport, normalizeConversionPath, RETAINED_AOD_CONFIG } from "./watchfaceArchiveConversion";
 import { standardizeWatchfacePackage } from "./watchfaceDistribution";
 import { getWatchfaceTarget, type WatchfaceTarget } from "./watchfaceTargets";
+import { WATCHFACE_TEMPLATE_SNAPSHOT } from "./watchfaceCatalogSnapshot";
 import {
   COROS_BLE_LOGIN_KEY_SETTING, COROS_BLE_IMPORTED_KEY_SETTING, COROS_WATCH_KEY_CHECK_SETTING, corosBleLoginKeyId, decodeCorosBleLoginKey,
   maskCorosEmail, sameCorosBleLoginKey, summarizeCorosBleLoginKey, type CorosBleLoginKey
@@ -608,7 +609,13 @@ export async function readCachedCorosWatchfaceThemes(
   } catch {
     return null;
   }
-  if (!session) return null;
+  if (!session) {
+    try {
+      return bundledTemplateCatalog(normalizeThemeListRequest(input));
+    } catch {
+      return null;
+    }
+  }
   const request = normalizeThemeListRequest(input);
   try {
     const parsed = JSON.parse(
@@ -629,6 +636,28 @@ export async function readCachedCorosWatchfaceThemes(
   } catch {
     return null;
   }
+}
+
+/**
+ * The editable templates bundled with the app (npm run watchfaces:snapshot),
+ * listed while signed out: COROS needs a session to list its catalog, but the
+ * template packages themselves download without one.
+ */
+function bundledTemplateCatalog(
+  request: NormalizedThemeListRequest
+): CorosWatchfaceThemeCacheEntry | null {
+  if (request.catalog !== "editable") return null;
+  const firmwareType = request.firmwareType.toUpperCase();
+  const bundled = Object.entries(WATCHFACE_TEMPLATE_SNAPSHOT)
+    .find(([key]) => key.toUpperCase() === firmwareType)?.[1];
+  const themes = (bundled?.themes ?? [])
+    .filter((theme) => (theme.watchFaceVersion ?? 0) <= request.maxWatchFaceVersion)
+    .map((theme) => ({ ...theme }));
+  if (!bundled || !themes.length) return null;
+  for (const theme of themes) {
+    if (theme.packageUrl) knownThemePackageUrls.add(theme.packageUrl);
+  }
+  return { savedAt: bundled.savedAt, themes };
 }
 
 function isCachedWatchfaceTheme(value: unknown): value is CorosWatchfaceTheme {
@@ -673,6 +702,12 @@ async function writeCachedCorosWatchfaceThemes(
 export async function listCorosWatchfaceThemes(
   input: CorosWatchfaceThemeListInput
 ): Promise<CorosWatchfaceTheme[]> {
+  const request = normalizeThemeListRequest(input);
+  if (!readStoredSession()) {
+    // Signed out: the bundled templates, or the usual sign-in error.
+    const bundled = bundledTemplateCatalog(request);
+    if (bundled) return bundled.themes;
+  }
   const session = requireSession();
   const {
     catalog,
@@ -681,7 +716,7 @@ export async function listCorosWatchfaceThemes(
     maxWatchFaceVersion,
     snCode,
     modelVersion
-  } = normalizeThemeListRequest(input);
+  } = request;
 
   const themes = await mobileRequest<unknown>(
     catalog === "editable"
@@ -748,7 +783,7 @@ export async function fetchCorosWatchfaceThemePackage(packageUrl: string): Promi
   if (!knownThemePackageUrls.has(packageUrl)) {
     throw new Error("Load the template catalog first, then choose a listed template.");
   }
-  return (await fetchThemePackage(packageUrl, requireSession())).bytes;
+  return (await fetchThemePackage(packageUrl, readStoredSession())).bytes;
 }
 
 /** Package bytes keyed by URL (minus the rotating access token). */
@@ -809,9 +844,10 @@ async function writeCachedThemePackage(cachePath: string, bytes: Buffer): Promis
   }
 }
 
+/** Packages are public; a signed-in session still sends its token, like the mobile app. */
 async function fetchThemePackage(
   packageUrl: string,
-  session: StoredMobileSession
+  session: StoredMobileSession | null
 ): Promise<{ bytes: Buffer; contentType: string }> {
   const cachePath = themePackageCachePath(packageUrl);
   const cached = await readCachedThemePackage(cachePath);
@@ -819,7 +855,7 @@ async function fetchThemePackage(
   // The mobile client also carries the token as a query parameter; some
   // resource endpoints ignore the header alone.
   const first = await fetchThemeResource(
-    withAccessTokenParam(packageUrl, session),
+    session ? withAccessTokenParam(packageUrl, session) : packageUrl,
     session
   );
   let bytes = first.bytes;
@@ -853,7 +889,7 @@ async function fetchThemePackage(
 export async function downloadCorosWatchfaceTheme(
   input: CorosWatchfaceThemeDownloadInput
 ): Promise<CorosWatchfaceThemeDownload> {
-  const session = requireSession();
+  const session = readStoredSession();
   const packageUrl = typeof input?.packageUrl === "string" ? input.packageUrl : "";
   const firmwareType = normalizeOptionalFirmwareType(input?.firmwareType);
   if (!knownThemePackageUrls.has(packageUrl)) {
@@ -944,14 +980,14 @@ export async function downloadCorosWatchfaceTheme(
 
 async function fetchThemeResource(
   url: string,
-  session: StoredMobileSession
+  session: StoredMobileSession | null
 ): Promise<{ bytes: Buffer; contentType: string }> {
   const parsed = new URL(url);
   if (parsed.protocol !== "https:") {
     throw new Error("Template packages may only be fetched over HTTPS.");
   }
   const response = await fetch(url, {
-    headers: mobileHeaders(session.accessToken, session.userId)
+    headers: mobileHeaders(session?.accessToken, session?.userId)
   });
   if (!response.ok) {
     throw new Error(`The template package request failed (HTTP ${response.status}).`);

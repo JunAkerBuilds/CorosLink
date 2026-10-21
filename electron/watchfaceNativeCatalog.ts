@@ -72,6 +72,8 @@ export const NATIVE_DATA_FIELDS: readonly NativeDataDefinition[] = [
 export const NATIVE_CHART_SOURCES = [
   { id: "chart_stress", label: "Stress", category: "Health" },
   { id: "chart_stamina", label: "Stamina", category: "Health" },
+  // CorosLink-only keys (compiler/studioFields.ts): COROS's own compiler drops them.
+  { id: "chart_heart_rate", label: "Heart rate", category: "Health" },
   { id: "chart_step", label: "Steps", category: "Training" },
   { id: "chart_kcal", label: "Calories", category: "Training" },
   { id: "chart_elevation", label: "Elevation", category: "Training" },
@@ -129,9 +131,9 @@ export function nativeChartRepresentation(source: string | undefined): "bars" | 
 export const NATIVE_CHART_DAILY_PAGES = [["chart_stress", "chart_stamina", "chart_elevation"], ["chart_kcal", "chart_heart_rate", "chart_step"]] as const;
 /**
  * Chart readouts with CorosLink-only config keys (compiler/studioFields.ts).
- * BIN WFChartInfo.heart_rate has no 4.9.9 key: recovery writes
- * chart_heart_rate_* so the built-in compiler keeps it, while COROS's compiler
- * ignores them. They are kept from templates, not offered as chart sources.
+ * BIN WFChartInfo.heart_rate has no 4.9.9 key: Studio writes chart_heart_rate_*,
+ * which the built-in compiler keeps and COROS's compiler ignores. Daily page B
+ * needs it, so faces compiled by the COROS app never show that page.
  */
 export const NATIVE_CHART_STUDIO_READOUTS = ["chart_heart_rate"] as const;
 export function nativeChartDailyPage(source: string | undefined): readonly string[] | undefined {
@@ -139,20 +141,25 @@ export function nativeChartDailyPage(source: string | undefined): readonly strin
 }
 
 /**
- * Every page the watch's Back button cycles through, in COROS's group order.
- * Each page lists its readouts in slot order; the daily pages lay theirs out
- * left / right / lower. A face shows only the pages it carries.
+ * Every page the watch's Back button cycles through, in firmware order. PACE
+ * Pro 3.2008.0 builds a seven-entry page table (function at 0x4544a0, read
+ * 2026-10-20): barometer and tide whenever the bar width is not 0, readout or
+ * not; fishing with its font; sun with a sunrise readout; moon with a
+ * moonrise readout; each daily page only when all three of its readouts have a
+ * font. Back skips missing entries. Studio has no fishing page.
  */
-export const NATIVE_CHART_PAGES: ReadonlyArray<{ id: string; label: string; sources: readonly string[] }> = [
-  { id: "daily-a", label: "Daily data · A", sources: NATIVE_CHART_DAILY_PAGES[0] },
-  { id: "daily-b", label: "Daily data · B", sources: NATIVE_CHART_DAILY_PAGES[1] },
-  { id: "sun", label: "Sun", sources: ["chart_sunrise", "chart_sun_angle"] },
-  { id: "moon", label: "Moon", sources: ["chart_moonrise", "chart_moon", "chart_moon_percent"] },
-  { id: "barometer", label: "Barometer", sources: ["chart_baro"] },
-  { id: "tide", label: "Tide", sources: ["chart_tide"] }
+export const NATIVE_CHART_PAGES: ReadonlyArray<{ id: string; label: string; sources: readonly string[]; required: readonly string[] }> = [
+  { id: "barometer", label: "Barometer", sources: ["chart_baro"], required: [] },
+  { id: "tide", label: "Tide", sources: ["chart_tide"], required: [] },
+  { id: "sun", label: "Sun", sources: ["chart_sunrise", "chart_sun_angle"], required: ["chart_sunrise"] },
+  { id: "moon", label: "Moon", sources: ["chart_moonrise", "chart_moon", "chart_moon_percent"], required: ["chart_moonrise"] },
+  { id: "daily-a", label: "Daily data · A", sources: NATIVE_CHART_DAILY_PAGES[0], required: NATIVE_CHART_DAILY_PAGES[0] },
+  { id: "daily-b", label: "Daily data · B", sources: NATIVE_CHART_DAILY_PAGES[1], required: NATIVE_CHART_DAILY_PAGES[1] }
 ];
+/** Pages the firmware keeps only while the chart draws bars (bar width above 0). */
+export const NATIVE_CHART_BAR_PAGES = ["barometer", "tide"] as const;
 export function nativeChartReadoutLabel(source: string): string {
-  return source === "chart_heart_rate" ? "Heart rate" : NATIVE_CHART_SOURCES.find(item => item.id === source)?.label ?? source;
+  return NATIVE_CHART_SOURCES.find(item => item.id === source)?.label ?? source;
 }
 
 /**

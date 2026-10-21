@@ -1,10 +1,12 @@
 import { getLocale } from "../i18n/trainingLocale";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  ManualActivityLink,
   TrainingHubActivity,
   TrainingHubDailyMetric,
   TrainingHubScheduledWorkoutEntry
 } from "../../electron/types";
+import { scheduledLinkKey } from "../../electron/activityLinks";
 import type { CorosLinkApi } from "../coroslink-api";
 import type { WorkoutJournalEntry, WorkoutJournalRef } from "../../electron/workoutJournalTypes";
 import { findJournalEntry } from "../../electron/workoutJournalModel";
@@ -53,6 +55,9 @@ export function useCalendarData({
 
   const [journal, setJournal] = useState<WorkoutJournalEntry[]>([]);
   const [journalVersion, setJournalVersion] = useState(0);
+  const [manualLinks, setManualLinks] = useState<ManualActivityLink[]>([]);
+  const manualLinksRef = useRef(manualLinks);
+  manualLinksRef.current = manualLinks;
   const cacheRef = useRef(new Map<string, CalendarRangeData>());
   const rangeKeyRef = useRef(rangeKey);
   rangeKeyRef.current = rangeKey;
@@ -126,6 +131,62 @@ export function useCalendarData({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, authenticated, rangeKey, refreshToken, version, journalVersion]);
 
+  // The user's own plan↔activity links are local too.
+  useEffect(() => {
+    if (!api || !authenticated || !rangeStart || !rangeEnd) {
+      setManualLinks([]);
+      return;
+    }
+    let cancelled = false;
+    void api
+      .listManualActivityLinks(rangeStart, rangeEnd)
+      .then((links) => {
+        if (!cancelled) setManualLinks(links);
+      })
+      .catch(() => {
+        if (!cancelled) setManualLinks([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, authenticated, rangeKey, refreshToken, version]);
+
+  /**
+   * Link `activity` to `entry`, or with `activity: null` say none belongs to
+   * it (hides COROS's own link too), or with `undefined` drop the user's link
+   * so COROS's applies again. Applies at once; rolls back if saving fails.
+   */
+  const setManualLink = useCallback(
+    async (entry: TrainingHubScheduledWorkoutEntry, activity: TrainingHubActivity | null | undefined) => {
+      if (!api) return;
+      const key = scheduledLinkKey(entry);
+      const previous = manualLinksRef.current;
+      const rest = previous.filter((link) => scheduledLinkKey(link) !== key);
+      setManualLinks(
+        activity === undefined
+          ? rest
+          : [...rest, { planId: entry.planId, idInPlan: entry.idInPlan, happenDay: entry.happenDay, activityId: activity?.activityId }]
+      );
+      try {
+        if (activity === undefined) {
+          await api.clearManualActivityLink(entry.planId, entry.idInPlan);
+        } else {
+          await api.saveManualActivityLink(
+            { planId: entry.planId, idInPlan: entry.idInPlan, happenDay: entry.happenDay, trainingLoad: entry.trainingLoad },
+            activity
+              ? { activityId: activity.activityId, duration: activity.duration, distance: activity.distance, trainingLoad: activity.trainingLoad }
+              : undefined
+          );
+        }
+      } catch (cause) {
+        setManualLinks(previous);
+        throw cause;
+      }
+    },
+    [api]
+  );
+
   // The Coach can write a brief while the calendar is open.
   useEffect(() => api?.onWorkoutJournalChanged?.(() => setJournalVersion((current) => current + 1)), [api]);
 
@@ -183,6 +244,14 @@ export function useCalendarData({
 
   const weeks = useMemo<CalendarWeek[]>(() => {
     const todayKey = getLocalHappenDayKey();
+    // Pair across the whole range: COROS may credit an activity from another day.
+    const { pairs: allPairs, unplanned: allUnplanned } = pairPlannedWithActual(
+      data?.scheduled ?? [],
+      data?.activities ?? [],
+      manualLinks
+    );
+    const pairByKey = new Map(allPairs.map((pair) => [scheduledLinkKey(pair.scheduled), pair]));
+    const unplannedIds = new Set(allUnplanned.map((activity) => activity.activityId));
     const scheduledByDay = new Map<string, TrainingHubScheduledWorkoutEntry[]>();
     const activitiesByDay = new Map<string, TrainingHubActivity[]>();
     const metricByDay = new Map<string, TrainingHubDailyMetric>();
@@ -219,7 +288,10 @@ export function useCalendarData({
         const activities = (activitiesByDay.get(dateKey) ?? []).sort(
           (left, right) => (left.startTime ?? 0) - (right.startTime ?? 0)
         );
-        const { pairs, unplanned } = pairPlannedWithActual(scheduled, activities);
+        const pairs = scheduled.map(
+          (entry) => pairByKey.get(scheduledLinkKey(entry)) ?? { scheduled: entry }
+        );
+        const unplanned = activities.filter((activity) => unplannedIds.has(activity.activityId));
         return {
           dateKey,
           inMonth: isInMonth(dateKey),
@@ -255,7 +327,7 @@ export function useCalendarData({
         }
       };
     });
-  }, [data, journal, weekKeys, isInMonth, getLocale()]);
+  }, [data, journal, manualLinks, weekKeys, isInMonth, getLocale()]);
 
-  return { weeks, journal, loading, error, reload, applyOptimisticMove, applyJournalSave };
+  return { weeks, journal, manualLinks, loading, error, reload, applyOptimisticMove, applyJournalSave, setManualLink };
 }

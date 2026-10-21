@@ -1,5 +1,6 @@
 import { safeStorage, shell } from "electron";
 import { getSetting, setSetting } from "./database";
+import { recordDiagnosticError } from "./diagnosticsService";
 import { calendarSourceUserId, calendarSourceRevision, listCalendarWorkoutEntries } from "./calendarWorkoutEventStorage";
 import {
   GoogleCalendarClient,
@@ -57,8 +58,9 @@ let timer: ReturnType<typeof setInterval> | undefined;
 export function startGoogleCalendarSync(): void {
   if (timer) return;
   const tick = () => {
-    void googleCalendar.syncIfDue().catch(() => {
-      /* Status carries sync failures for the UI. */
+    void googleCalendar.syncIfDue().catch((error) => {
+      // Status carries sync failures for the UI; the error report keeps the cause.
+      recordDiagnosticError("calendarSync:google", error);
     });
   };
   timer = setInterval(tick, 5 * 60_000);

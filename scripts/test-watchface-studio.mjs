@@ -3728,6 +3728,96 @@ assert.equal(fullMetricStyle?.values.temperature_font_color, "0x33AA55");
 assert.equal(fullMetricStyle?.values.temperature_font, "13x19");
 assert.equal(fullMetricStyle?.values.control_temperature_font, undefined);
 assert.equal(fullMetricStyle?.values.control_temperature_font_color, undefined);
+{
+  // A fixed metric's font size is master-authored pixels. Template PNG digits
+  // take it as their height, so 1.5x the master cell matches scale 1.5 in every
+  // tree; compat temperature keeps its template digits and ignores it.
+  const {
+    fixedMetricDigitCanvas,
+    fixedMetricFontSize,
+    pickPreviewResolution,
+    watchfaceFixedMetricDigitSize
+  } = await import("../src/watchfaces/watchfaceStudio.ts");
+  const masterCell = watchfaceFixedMetricDigitSize(pickPreviewResolution(withMetrics), "heartRate");
+  assert.ok(masterCell);
+  const fontSize = masterCell.height * 1.5;
+  const sized = buildMetricStyleOverrides(withMetrics, {
+    heartRate: { scale: 1, fontSize },
+    temperature: { scale: 1, fontSize: 80 }
+  }, true);
+  const scaled = buildMetricStyleOverrides(withMetrics, {
+    heartRate: { scale: 1.5 },
+    temperature: { scale: 1 }
+  }, true);
+  for (const override of sized) {
+    const reference = scaled.find((entry) => entry.path === override.path);
+    const [ax0, ay0, ax1, ay1] = override.values.heartreate_level_rect.match(/-?\d+/g).map(Number);
+    const [bx0, by0, bx1, by1] = reference.values.heartreate_level_rect.match(/-?\d+/g).map(Number);
+    for (const [a, b] of [[ax0, bx0], [ay0, by0], [ax1, bx1], [ay1, by1]]) {
+      assert.ok(Math.abs(a - b) <= 2, `font size ${fontSize} should match scale 1.5 in ${override.path}`);
+    }
+    assert.equal(override.values.temperature_rect, reference.values.temperature_rect, "compat temperature ignores a font size");
+  }
+  assert.equal(fixedMetricFontSize("temperature", { fontSize: 40 }), undefined);
+  assert.equal(fixedMetricFontSize("steps", { fontSize: 0 }), undefined);
+  assert.equal(fixedMetricFontSize("steps", { fontSize: 40 }), 40);
+  assert.deepEqual(
+    fixedMetricDigitCanvas({ width: 20, height: 40 }, { scale: 1.5 }, undefined, ""),
+    { width: 30, height: 60 },
+    "without a font size the canvas stays the scaled template cell"
+  );
+  assert.deepEqual(
+    fixedMetricDigitCanvas({ width: 20, height: 40 }, { scale: 3 }, 50, "", {}, 0.5),
+    { width: 13, height: 25 },
+    "PNG digits take the font size as height, converted to the target tree"
+  );
+
+  // Time digits share the model: a font size of 1.5x the master hour cell
+  // lands every slot where scale 1.5 does, in every tree.
+  const {
+    buildTimeStyleOverrides: timeOverrides,
+    selectableMetricFontSize,
+    selectableMetricStyleForFontSize,
+    watchfaceTimeDigitSize
+  } = await import("../src/watchfaces/watchfaceStudio.ts");
+  const hourCell = watchfaceTimeDigitSize(pickPreviewResolution(withMetrics), "hours");
+  assert.ok(hourCell);
+  const byFontSize = timeOverrides(withMetrics, { hours: { scale: 1, fontSize: hourCell.height * 1.5 } });
+  const byScale = timeOverrides(withMetrics, { hours: { scale: 1.5 } });
+  assert.equal(byFontSize.length, byScale.length);
+  for (const override of byFontSize) {
+    const reference = byScale.find((entry) => entry.path === override.path);
+    for (const key of Object.keys(reference.values)) {
+      const [ax, ay] = override.values[key].match(/-?\d+/g).map(Number);
+      const [bx, by] = reference.values[key].match(/-?\d+/g).map(Number);
+      assert.ok(Math.abs(ax - bx) <= 2 && Math.abs(ay - by) <= 2, `${key} in ${override.path} should follow the font size`);
+    }
+  }
+
+  // Words drawn in a desktop font: letter styles and watch languages,
+  // Monday-first and January-first like the firmware frames.
+  const { watchfaceDateLabels } = await import("../src/watchfaces/watchfaceStudio.ts");
+  assert.deepEqual(watchfaceDateLabels("week").slice(0, 2), ["MON", "TUE"]);
+  assert.deepEqual(watchfaceDateLabels("week", "title").slice(0, 2), ["Mon", "Tue"]);
+  assert.equal(watchfaceDateLabels("week", "full")[6], "Sunday");
+  assert.equal(watchfaceDateLabels("month", "upper")[9], "OCT");
+  assert.equal(watchfaceDateLabels("month", "full")[9], "October");
+  assert.equal(watchfaceDateLabels("week", "upper", "french")[0], "LUN", "abbreviation dots are dropped");
+  assert.deepEqual(watchfaceDateLabels("week", "upper", "portugal").slice(0, 2), ["SEG", "TER"]);
+  assert.equal(watchfaceDateLabels("month", "title", "germany")[9], "Okt");
+  assert.equal(watchfaceDateLabels("month", "upper", "thai")[8], "ก.ย.", "Thai keeps its abbreviation dots");
+
+  // Selectable values draw at natural width from a target height; the font
+  // size field maps onto it and reads back the same size.
+  const cell = { width: 30, height: 50 };
+  for (const fontSize of [18, 33, 47]) {
+    const mapped = selectableMetricStyleForFontSize(cell, undefined, "Helvetica", fontSize);
+    assert.equal(mapped.nativeSize, true);
+    assert.equal(selectableMetricFontSize(cell, mapped, "Helvetica"), fontSize, `font ${fontSize}px round-trips`);
+    const png = selectableMetricStyleForFontSize(cell, undefined, "", fontSize);
+    assert.equal(selectableMetricFontSize(cell, png, ""), fontSize, `PNG ${fontSize}px round-trips`);
+  }
+}
 // Changing digit counts must leave the chosen edge fixed in preview and firmware.
 for (const align of ["left", "center", "right"]) {
   const fixed = buildMetricStyleOverrides(withMetrics, {
@@ -4436,6 +4526,51 @@ try {
     "weekday export should render into the exact inspector W/H canvas"
   );
 
+  // Translated weekday and month words follow one language choice: the one
+  // Send writes onto the weekday style, not "all" for months.
+  const languageResolution = structuredClone(withMetrics.resolutions[1]);
+  for (const language of ["french", "germany"]) {
+    for (const field of ["week", "month"]) {
+      languageResolution.config[`${language}_date_${field}_font`] =
+        languageResolution.config[`english_date_${field}_font`];
+      languageResolution.config[`${language}_date_${field}_rect`] =
+        languageResolution.config[`english_date_${field}_rect`];
+    }
+  }
+  const translatedFolders = async (weekdayLanguages, watchLanguages) => {
+    const composition = await buildDateSpriteComposition(
+      { archiveId: "translated-words", resolutions: [languageResolution] },
+      {
+        ...(weekdayLanguages ? { weekday: {
+          scale: 1, width: 90, height: 36, fontFamily: "Fixture Sans", translateLabels: true, ...weekdayLanguages
+        } } : {}),
+        dateMonth: {
+          scale: 1, width: 51, height: 26, monthFormat: "labels", fontFamily: "Fixture Sans", translateLabels: true
+        }
+      },
+      { fontFamily: "", digitColor: "#ffffff", tintLabels: false, watchLanguages },
+      async () => []
+    );
+    return [...new Set(composition.replacements
+      .map(({ path }) => /\/(cl_(?:weekday|date_month)_(?:french|germany))\//.exec(path)?.[1])
+      .filter(Boolean))].sort();
+  };
+  assert.deepEqual(
+    await translatedFolders({ overwriteAllLanguages: false, overwriteLanguages: ["french"] }),
+    ["cl_date_month_french", "cl_weekday_french"],
+    "months translate into the weekday's languages only"
+  );
+  assert.deepEqual(
+    await translatedFolders({ overwriteAllLanguages: false }),
+    [],
+    "English only keeps both word sets untranslated"
+  );
+  assert.deepEqual(
+    await translatedFolders(undefined, ["germany"]),
+    ["cl_date_month_germany"],
+    "without a custom weekday, months follow the project's languages"
+  );
+
   const nativeControlIconReplacements =
     await buildWatchfaceConfigAssetReplacements(
       detailsWithControlIcon,
@@ -4459,6 +4594,71 @@ try {
     nativeFullControlIcon?.dataUrl ?? "",
     /W96H48/,
     "native selectable icons should export their imported canvas instead of the template slot"
+  );
+
+  // A template that only declares control_*_icon_pos (2607304 "SIMPLE"):
+  // the value rect exists only after Studio adds the selectable, and the
+  // preview sizes the label slot from it. Export must use the same slot.
+  const bareControlResolution = {
+    ...details.resolutions[1],
+    config: {
+      ...Object.fromEntries(
+        Object.entries(details.resolutions[1].config).filter(
+          ([key]) => !key.startsWith("control_")
+        )
+      ),
+      control_hr_icon_pos: "{357,486}"
+    },
+    aodConfig: {}
+  };
+  const bareControlDetails = {
+    archiveId: "bare-control-slot",
+    resolutions: [bareControlResolution]
+  };
+  const virtualLabelOverrides = {
+    "config:control_hr_icon": {
+      enabled: true,
+      scale: 0.96,
+      replacement: {
+        dataUrl: "data:image/png;base64,W95H95",
+        width: 95,
+        height: 95
+      }
+    }
+  };
+  const virtualLabelPath = ({ path }) =>
+    path.startsWith("watchface_800x800/") && /control_hr_icon/.test(path);
+  const templateSlotLabel = (
+    await buildWatchfaceConfigAssetReplacements(
+      bareControlDetails,
+      virtualLabelOverrides
+    )
+  ).find(virtualLabelPath);
+  assert.match(templateSlotLabel?.dataUrl ?? "", /^data:image\/png;base64,W56H56/);
+  const previewSlotLabel = (
+    await buildWatchfaceConfigAssetReplacements(
+      bareControlDetails,
+      virtualLabelOverrides,
+      {
+        layoutDetails: {
+          ...bareControlDetails,
+          resolutions: [
+            {
+              ...bareControlResolution,
+              config: {
+                ...bareControlResolution.config,
+                control_hr_rect: "{229,535,571,621,hcenter|vcenter}"
+              }
+            }
+          ]
+        }
+      }
+    )
+  ).find(virtualLabelPath);
+  assert.match(
+    previewSlotLabel?.dataUrl ?? "",
+    /^data:image\/png;base64,W86H86/,
+    "a virtual selectable label should export into the slot the preview draws, sized from Studio's value rect"
   );
 
   const nativeStatusIconReplacements =

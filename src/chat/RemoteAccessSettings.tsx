@@ -1,6 +1,6 @@
 import { t, useLanguage, getLocale, formatNumber } from "../i18n/tools";
 import { useEffect, useRef, useState } from "react";
-import { Check, CircleCheck, Copy, Download, Globe, Loader2, LogIn, LogOut, QrCode, Smartphone, Unlink, X } from "lucide-react";
+import { Check, CircleCheck, Copy, Download, Globe, Link2, Loader2, LogIn, LogOut, QrCode, Smartphone, Wifi, X } from "lucide-react";
 import type { CorosLinkApi } from "../coroslink-api";
 import type {
   CloudLinkState,
@@ -51,13 +51,22 @@ function cloudStateLabel(state: CloudLinkState): string {
   }
 }
 
+function RoutePill({ state, label }: { state: string; label: string }) {
+  return (
+    <span className="chat-remote-pill" data-state={state} role="status">
+      {state === "linking" ? <Loader2 className="chat-spinner" size={12} aria-hidden="true" /> : <i aria-hidden="true" />}
+      {label}</span>
+  );
+}
+
 /**
- * Remote access → Away from home: sign in to watchfaces.coroslink.com, link
- * this computer through CorosLink's relay, and run Cloudflare's connector so
- * C-LINK reaches Coach off the local network. Linking stays off until the
- * person turns it on, and cloudflared is downloaded only after they agree.
+ * The away-from-home route under the remote access switch: sign in to
+ * watchfaces.coroslink.com and the switch links this computer through
+ * CorosLink's relay and runs Cloudflare's connector, so C-LINK reaches Coach
+ * off the local network. cloudflared is downloaded only after the person
+ * agrees; Connect retries or picks up a link the switch didn't start.
  */
-function AwayFromHome({
+function AwayRoute({
   api,
   cloud,
   onStatus
@@ -68,28 +77,19 @@ function AwayFromHome({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [consentAsked, setConsentAsked] = useState(false);
-  const [confirm, setConfirm] = useState<"unlink" | "signOut" | null>(null);
+  const [declined, setDeclined] = useState(false);
+  const [confirm, setConfirm] = useState<"signOut" | null>(null);
 
   const run = async (key: string, task: () => Promise<RemoteAccessStatus>) => {
     setBusy(key);
     setError(null);
     try {
-      const next = await task();
-      onStatus(next);
-      return next;
+      onStatus(await task());
     } catch (caught) {
       setError(ipcMessage(caught));
-      return null;
     } finally {
       setBusy(null);
     }
-  };
-
-  const turnOn = async (allowDownload: boolean) => {
-    const next = await run("link", () => api.setCloudLink({ enabled: true, allowDownload }));
-    // No connector yet: ask before downloading it.
-    setConsentAsked(Boolean(next?.cloud && !next.cloud.enabled && next.cloud.connector.needsDownload && !allowDownload));
   };
 
   const account = cloud.account;
@@ -97,188 +97,164 @@ function AwayFromHome({
   const accountName = account.displayName || (account.handle ? `@${account.handle}` : t("your account"));
   const shownError = [error, account.error].find((item) => item && item !== cloud.message) ?? null;
   const downloadMb = connector.downloadBytes ? formatNumber(Math.round(connector.downloadBytes / 1_000_000)) : null;
+  const ready = account.signedIn || cloud.linked;
+  const idle = ready && !cloud.enabled && cloud.state !== "linking" && !connector.downloading;
+  const askDownload = idle && connector.needsDownload && !declined;
+  const showConnect = idle && !askDownload;
+
+  const connect = () => {
+    setDeclined(false);
+    if (!connector.needsDownload) void run("connect", () => api.setCloudLink({ enabled: true }));
+  };
+
+  if (!cloud.available) {
+    return (
+      <div className="chat-remote-route">
+        <span className="chat-remote-device-icon" aria-hidden="true">
+          <Globe size={15} strokeWidth={1.8} />
+        </span>
+        <div className="chat-remote-device-text">
+          <strong>{t("Away from home")}</strong>
+          <span className="chat-remote-route-wrap">
+            {t("Cloudflare doesn't publish a connector for this computer. Install cloudflared and put it on your PATH to use this.")}</span>
+        </div>
+      </div>
+    );
+  }
+
+  const accountButton = account.signedIn ? (
+    <button
+      type="button"
+      className={confirm === "signOut" ? "chat-local-action danger" : "chat-local-action"}
+      disabled={busy !== null}
+      title={cloud.linked ? t("Signing out also unlinks this computer.") : undefined}
+      onBlur={() => setConfirm(null)}
+      onClick={() => {
+        if (cloud.linked && confirm !== "signOut") {
+          setConfirm("signOut");
+          return;
+        }
+        setConfirm(null);
+        void run("signOut", () => api.cloudSignOut());
+      }}
+    >
+      {busy === "signOut" ? <Loader2 className="chat-spinner" size={14} aria-hidden="true" /> : <LogOut size={14} aria-hidden="true" />}
+      {confirm === "signOut" ? t("Sign out and unlink") : t("Sign out")}</button>
+  ) : account.signingIn ? (
+    <button type="button" className="chat-local-action" onClick={() => void run("signIn", () => api.cloudCancelSignIn())}>
+      <X size={14} aria-hidden="true" />
+      {t("Cancel")}</button>
+  ) : (
+    <button
+      type="button"
+      className={cloud.linked ? "chat-local-action" : "chat-local-action primary"}
+      disabled={busy !== null}
+      onClick={() => void run("signIn", () => api.cloudSignIn())}
+    >
+      <LogIn size={14} aria-hidden="true" />
+      {t("Sign in")}</button>
+  );
+
+  const connectorLabel =
+    connector.source === "path" || connector.source === "env"
+      ? t("Using your own cloudflared.")
+      : connector.version
+        ? t("cloudflared {{p0}}", { p0: connector.version })
+        : null;
 
   return (
-    <div className="chat-remote-cloud" data-state={cloud.state}>
-      <div className="chat-remote-cloud-head">
-        <h4>{t("Away from home")}</h4>
-        {cloud.enabled || cloud.state === "error" || cloud.linked ? (
-          <span className="chat-remote-cloud-pill" data-state={cloud.state} role="status">
-            {cloud.state === "linking" ? <Loader2 className="chat-spinner" size={12} aria-hidden="true" /> : <i aria-hidden="true" />}
-            {cloudStateLabel(cloud.state)}</span>
-        ) : null}
+    <div className="chat-remote-route" data-state={ready ? cloud.state : undefined}>
+      <span className="chat-remote-device-icon" aria-hidden="true">
+        <Globe size={15} strokeWidth={1.8} />
+      </span>
+      <div className="chat-remote-device-text">
+        <strong>{t("Away from home")}</strong>
+        {!ready ? (
+          <span className="chat-remote-route-wrap">
+            {account.signingIn
+              ? t("Finish signing in in your browser.")
+              : t("Sign in to watchfaces.coroslink.com and your iPhone reaches Coach from anywhere.")}</span>
+        ) : (
+          <>
+            {cloud.linked && cloud.hostname ? (
+              <code>{cloud.hostname}</code>
+            ) : (
+              <span>{cloud.state === "linking" ? t("Getting a private address at Cloudflare…") : t("No address yet.")}</span>
+            )}
+            <span>
+              {[account.signedIn ? t("Signed in as {{p0}}", { p0: accountName }) : t("Not signed in"), connectorLabel]
+                .filter(Boolean)
+                .join(" · ")}</span>
+          </>
+        )}
       </div>
-      <p className="chat-settings-copy">
-        {t("Reach Coach from C-LINK when your iPhone isn't on this network. Coach traffic is encrypted to Cloudflare and passes through Cloudflare's network; CorosLink's relay only sets up the connection.")}</p>
+      <div className="chat-remote-route-end">
+        {showConnect ? (
+          <button type="button" className="chat-local-action primary" disabled={busy !== null} onClick={connect}>
+            {busy === "connect" ? <Loader2 className="chat-spinner" size={14} aria-hidden="true" /> : <Link2 size={14} aria-hidden="true" />}
+            {t("Connect")}</button>
+        ) : ready && !askDownload ? (
+          <RoutePill state={cloud.state} label={cloudStateLabel(cloud.state)} />
+        ) : null}
+        {accountButton}
+      </div>
 
-      {!cloud.available ? (
-        <p className="chat-settings-copy">
-          {t("Cloudflare doesn't publish a connector for this computer. Install cloudflared and put it on your PATH to use this.")}</p>
-      ) : (
-        <>
-          <div className="chat-remote-pair-row chat-remote-cloud-row">
-            <div className="chat-settings-toggle-text">
-              <strong>{t("watchfaces.coroslink.com account")}</strong>
-              <span>
-                {account.signedIn
-                  ? t("Signed in as {{p0}}.", { p0: accountName })
-                  : account.signingIn
-                    ? t("Finish signing in in your browser.")
-                    : t("Sign in so C-LINK can find this computer from anywhere.")}</span>
-            </div>
-            <div className="chat-remote-pair-actions">
-              {account.signedIn ? (
-                <button
-                  type="button"
-                  className={confirm === "signOut" ? "chat-local-action danger" : "chat-local-action"}
-                  disabled={busy !== null}
-                  title={cloud.linked ? t("Signing out also unlinks this computer.") : undefined}
-                  onBlur={() => setConfirm((current) => (current === "signOut" ? null : current))}
-                  onClick={() => {
-                    if (cloud.linked && confirm !== "signOut") {
-                      setConfirm("signOut");
-                      return;
-                    }
-                    setConfirm(null);
-                    void run("signOut", () => api.cloudSignOut());
-                  }}
-                >
-                  {busy === "signOut" ? <Loader2 className="chat-spinner" size={14} aria-hidden="true" /> : <LogOut size={14} aria-hidden="true" />}
-                  {confirm === "signOut" ? t("Sign out and unlink") : t("Sign out")}</button>
-              ) : account.signingIn ? (
-                <button type="button" className="chat-local-action" onClick={() => void run("signIn", () => api.cloudCancelSignIn())}>
-                  <X size={14} aria-hidden="true" />
-                  {t("Cancel")}</button>
-              ) : (
-                <button
-                  type="button"
-                  className="chat-local-action primary"
-                  disabled={busy !== null}
-                  onClick={() => void run("signIn", () => api.cloudSignIn())}
-                >
-                  <LogIn size={14} aria-hidden="true" />
-                  {t("Sign in")}</button>
-              )}
-            </div>
+      {askDownload ? (
+        <div className="chat-remote-route-more chat-remote-cloud-consent" role="group" aria-label={t("Download Cloudflare's connector?")}>
+          <strong>{t("Download Cloudflare's connector?")}</strong>
+          <span>
+            {t("CorosLink needs cloudflared {{p0}} ({{p1}} MB) from Cloudflare's releases on GitHub to reach Cloudflare. It checks the download against a pinned checksum before running it.", {
+              p0: connector.downloadVersion,
+              p1: downloadMb ?? "?"
+            })}</span>
+          <div className="chat-local-actions">
+            <button
+              type="button"
+              className="chat-local-action primary"
+              disabled={busy !== null}
+              onClick={() => void run("connect", () => api.setCloudLink({ enabled: true, allowDownload: true }))}
+            >
+              <Download size={14} aria-hidden="true" />
+              {t("Download and connect")}</button>
+            <button type="button" className="chat-local-action" disabled={busy !== null} onClick={() => setDeclined(true)}>
+              {t("Not now")}</button>
           </div>
+        </div>
+      ) : null}
 
-          <label className="chat-settings-toggle-row">
-            <span className="chat-settings-toggle-text">
-              <strong>{t("Link this computer")}</strong>
-              <span>
-                {t("Gives this computer a private address at Cloudflare. Your iPhone uses it only when it can't reach this computer directly.")}</span>
-            </span>
-            <input
-              type="checkbox"
-              className="chat-settings-switch"
-              checked={cloud.enabled || consentAsked || connector.downloading}
-              disabled={busy !== null || connector.downloading || (!account.signedIn && !cloud.linked)}
-              onChange={(event) => {
-                if (event.target.checked) {
-                  if (connector.needsDownload) setConsentAsked(true);
-                  else void turnOn(false);
-                } else {
-                  setConsentAsked(false);
-                  void run("link", () => api.setCloudLink({ enabled: false }));
-                }
-              }}
-            />
-          </label>
+      {connector.downloading ? (
+        <div className="chat-remote-route-more chat-remote-cloud-progress" role="status">
+          <span>
+            {t("Downloading cloudflared… {{p0}}%", { p0: String(Math.round((connector.progress ?? 0) * 100)) })}</span>
+          <progress max={1} value={connector.progress ?? undefined} />
+        </div>
+      ) : null}
 
-          {consentAsked && !connector.downloading && !cloud.enabled ? (
-            <div className="chat-remote-cloud-consent" role="group" aria-label={t("Download Cloudflare's connector?")}>
-              <strong>{t("Download Cloudflare's connector?")}</strong>
-              <span>
-                {t("CorosLink needs cloudflared {{p0}} ({{p1}} MB) from Cloudflare's releases on GitHub to reach Cloudflare. It checks the download against a pinned checksum before running it.", {
-                  p0: connector.downloadVersion,
-                  p1: downloadMb ?? "?"
-                })}</span>
-              <div className="chat-local-actions">
-                <button
-                  type="button"
-                  className="chat-local-action primary"
-                  disabled={busy !== null}
-                  onClick={() => void turnOn(true)}
-                >
-                  <Download size={14} aria-hidden="true" />
-                  {t("Download and link")}</button>
-                <button type="button" className="chat-local-action" disabled={busy !== null} onClick={() => setConsentAsked(false)}>
-                  {t("Not now")}</button>
-              </div>
-            </div>
-          ) : null}
+      {cloud.state === "error" && cloud.message ? (
+        <p className="chat-remote-route-more chat-remote-alert" role="alert">
+          {cloud.message}</p>
+      ) : cloud.state === "offline" ? (
+        <p className="chat-remote-route-more chat-remote-cloud-note" role="status">
+          <strong>{t("Not connected to Cloudflare right now. CorosLink keeps trying.")}</strong>
+          {cloud.message ? ` ${cloud.message}` : null}</p>
+      ) : null}
+      {shownError ? (
+        <p className="chat-remote-route-more chat-remote-alert" role="alert">
+          {shownError}</p>
+      ) : null}
 
-          {connector.downloading ? (
-            <div className="chat-remote-cloud-progress" role="status">
-              <span>
-                {t("Downloading cloudflared… {{p0}}%", { p0: String(Math.round((connector.progress ?? 0) * 100)) })}</span>
-              <progress max={1} value={connector.progress ?? undefined} />
-            </div>
-          ) : null}
-
-          {cloud.state === "error" && cloud.message ? (
-            <p className="chat-remote-alert" role="alert">
-              {cloud.message}</p>
-          ) : cloud.state === "offline" ? (
-            <p className="chat-remote-cloud-note" role="status">
-              <strong>{t("Not connected to Cloudflare right now. CorosLink keeps trying.")}</strong>
-              {cloud.message ? ` ${cloud.message}` : null}</p>
-          ) : null}
-          {shownError ? (
-            <p className="chat-remote-alert" role="alert">
-              {shownError}</p>
-          ) : null}
-
-          {cloud.linked && cloud.hostname ? (
-            <div className="chat-remote-cloud-host">
-              <span className="chat-remote-device-icon" aria-hidden="true">
-                <Globe size={15} strokeWidth={1.8} />
-              </span>
-              <div className="chat-remote-device-text">
-                <strong>
-                  <code>{cloud.hostname}</code>
-                </strong>
-                <span>
-                  {connector.source === "path" || connector.source === "env"
-                    ? t("Using your own cloudflared.")
-                    : connector.version
-                      ? t("cloudflared {{p0}}", { p0: connector.version })
-                      : t("C-LINK uses this address away from home.")}</span>
-              </div>
-              <button
-                type="button"
-                className={confirm === "unlink" ? "chat-local-action danger" : "chat-local-action"}
-                disabled={busy !== null}
-                title={t("Unlinking removes this address. C-LINK can still reach this computer on the local network.")}
-                onBlur={() => setConfirm((current) => (current === "unlink" ? null : current))}
-                onClick={() => {
-                  if (confirm !== "unlink") {
-                    setConfirm("unlink");
-                    return;
-                  }
-                  setConfirm(null);
-                  void run("unlink", () => api.cloudUnlink());
-                }}
-              >
-                {busy === "unlink" ? <Loader2 className="chat-spinner" size={14} aria-hidden="true" /> : <Unlink size={14} aria-hidden="true" />}
-                {confirm === "unlink" ? t("Confirm unlink") : t("Unlink")}</button>
-            </div>
-          ) : null}
-
-          {cloud.intelMac ? (
-            <p className="chat-remote-cloud-note">
-              {t("Cloudflare stops building its connector for Intel Macs in 2027. After that, C-LINK reaches this Mac on the local network only.")}</p>
-          ) : null}
-        </>
-      )}
+      {cloud.intelMac ? (
+        <p className="chat-remote-route-more chat-remote-cloud-note">
+          {t("Cloudflare stops building its connector for Intel Macs in 2027. After that, C-LINK reaches this Mac on the local network only.")}</p>
+      ) : null}
     </div>
   );
 }
 
 /**
  * Coach settings → Remote access: lets C-LINK on an iPhone pair with this
- * computer and drive Coach over the local network. Only this window can pair
- * or remove devices.
+ * computer and drive Coach. One switch covers the same Wi-Fi and, once signed
+ * in, away from home. Only this window can pair or remove devices.
  */
 export function RemoteAccessSettings({ api }: { api: CorosLinkApi | undefined }) {
   useLanguage();
@@ -375,6 +351,7 @@ export function RemoteAccessSettings({ api }: { api: CorosLinkApi | undefined })
   };
 
   const networkAccess = status?.networkAccess === true;
+  const lanHosts = status?.lanAddresses.map((host) => `${host}:${status.port ?? ""}`).join(", ") ?? "";
   const remaining = pairing ? Math.max(0, Math.ceil((Date.parse(pairing.expiresAt) - now) / 1000)) : 0;
   const devices = status?.devices ?? [];
   const message = error ?? status?.error ?? null;
@@ -389,28 +366,53 @@ export function RemoteAccessSettings({ api }: { api: CorosLinkApi | undefined })
       <p className="chat-settings-copy">
         {t("Pair C-LINK on your iPhone to follow and continue your Coach conversations while CorosLink is open on this computer. Your iPhone connects to this computer directly.")}</p>
 
-      <label className="chat-settings-toggle-row">
-        <span className="chat-settings-toggle-text">
-          <strong>{t("Network access")}</strong>
-          <span>
-            {networkAccess && status?.lanAddresses.length
-              ? t("Paired iPhones on this network can reach Coach at {{p0}}.", {
-                  p0: status.lanAddresses.map((host) => `${host}:${status.port ?? ""}`).join(", ")
-                })
-              : t("Lets paired iPhones on the same Wi-Fi reach Coach. When off, only this computer can.")}</span>
-        </span>
-        <input
-          type="checkbox"
-          className="chat-settings-switch"
-          checked={networkAccess}
-          disabled={busy === "network" || !status}
-          onChange={(event) => {
-            const enabled = event.target.checked;
-            if (!enabled) setPairing(null);
-            void run("network", () => api.setRemoteNetworkAccess(enabled));
-          }}
-        />
-      </label>
+      <div className="chat-remote-reach" data-on={networkAccess ? "true" : undefined}>
+        <label className="chat-settings-toggle-row">
+          <span className="chat-settings-toggle-text">
+            <strong>{t("Reach Coach from your iPhone")}</strong>
+            <span>
+              {t("Paired iPhones reach Coach on this Wi-Fi, and from anywhere once you sign in. When off, only this computer can.")}</span>
+          </span>
+          <input
+            type="checkbox"
+            className="chat-settings-switch"
+            checked={networkAccess}
+            disabled={busy === "network" || !status}
+            onChange={(event) => {
+              const enabled = event.target.checked;
+              if (!enabled) setPairing(null);
+              void run("network", () => api.setRemoteNetworkAccess(enabled));
+            }}
+          />
+        </label>
+
+        {networkAccess && status ? (
+          <div className="chat-remote-routes">
+            <div className="chat-remote-route" data-state={lanHosts ? "online" : "offline"}>
+              <span className="chat-remote-device-icon" aria-hidden="true">
+                <Wifi size={15} strokeWidth={1.8} />
+              </span>
+              <div className="chat-remote-device-text">
+                <strong>{t("This Wi-Fi")}</strong>
+                {lanHosts ? (
+                  <code>{lanHosts}</code>
+                ) : (
+                  <span className="chat-remote-route-wrap">{t("This computer isn't on a local network right now.")}</span>
+                )}
+              </div>
+              <div className="chat-remote-route-end">
+                <RoutePill state={lanHosts ? "online" : "offline"} label={lanHosts ? t("On") : t("No network")} />
+              </div>
+            </div>
+            {status.cloud ? <AwayRoute api={api} cloud={status.cloud} onStatus={setStatus} /> : null}
+          </div>
+        ) : null}
+
+        {networkAccess && status?.cloud?.available ? (
+          <p className="chat-remote-cloud-note">
+            {t("Away from home, Coach traffic is encrypted to Cloudflare and passes through Cloudflare's network; CorosLink's relay only sets up the connection.")}</p>
+        ) : null}
+      </div>
 
       {message ? (
         <p className="chat-remote-alert" role="alert">
@@ -451,7 +453,7 @@ export function RemoteAccessSettings({ api }: { api: CorosLinkApi | undefined })
               <span>
                 {networkAccess
                   ? t("Shows a one-time code that works for 10 minutes.")
-                  : t("Turn on Network access to pair an iPhone.")}</span>
+                  : t("Turn on Reach Coach from your iPhone to pair one.")}</span>
             </div>
             <div className="chat-remote-pair-actions">
               <label className="chat-local-tools">
@@ -518,8 +520,6 @@ export function RemoteAccessSettings({ api }: { api: CorosLinkApi | undefined })
           </ul>
         )}
       </div>
-
-      {status?.cloud ? <AwayFromHome api={api} cloud={status.cloud} onStatus={setStatus} /> : null}
 
       <label className="chat-settings-toggle-row">
         <span className="chat-settings-toggle-text">

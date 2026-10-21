@@ -1,6 +1,5 @@
 import { t, useLanguage } from "../i18n/watchfaces";
 import type { EditorLayer } from "./watchfaceEditorModel";
-import { nativeLayerChartPages, type NativeData } from "./nativeData";
 import "./watchfaceMetricKinds.css";
 
 /**
@@ -9,6 +8,8 @@ import "./watchfaceMetricKinds.css";
  *  - fixed: one value, always in one spot (step_rect, stress, wind …)
  *  - selectable: the wearer picks what fills the slot in the face settings (rect_control1_pos)
  *  - pages: the native chart; Back on the watch cycles its pages
+ * Weather the watch hides on some chart pages has its own section, and each
+ * field's inspector lists its pages (NativeDataInspector's FieldPagesPanel).
  */
 export type WatchfaceMetricKind = "fixed" | "selectable" | "pages";
 
@@ -19,12 +20,10 @@ const note = (kind: WatchfaceMetricKind) =>
     : kind === "selectable" ? t("The wearer picks which value fills this slot in the watch face settings.")
       : t("The watch shows one chart page at a time. Back on the watch cycles the pages.");
 
-export function watchfaceMetricKind(layer: Pick<EditorLayer, "kind" | "metricId" | "nativeDataId">, nativeData: NativeData = {}): WatchfaceMetricKind | null {
+export function watchfaceMetricKind(layer: Pick<EditorLayer, "kind" | "metricId" | "nativeDataId">): WatchfaceMetricKind | null {
   if (layer.kind === "complication") return "selectable";
   // chart_sun_angle is a chart readout too: it shows only on the sun page.
   if (layer.nativeDataId?.startsWith("chart")) return "pages";
-  // A field sharing its slot with one the watch swaps in on other pages (NOMAD's weather row).
-  if (layer.nativeDataId && nativeLayerChartPages(layer.nativeDataId, nativeData)) return "pages";
   if (layer.nativeDataId === "date_year") return null;
   return layer.metricId || layer.nativeDataId ? "fixed" : null;
 }

@@ -40,12 +40,14 @@ import type {
 import {
   createTrainingPlan,
   activeTrainingPlanCalendarInstall,
+  upcomingTrainingPlanCalendarWorkoutCount,
   planEntryFromWorkout,
   summarizeTrainingPlan,
   trainingPlanCalendarRevision,
   workoutSportFromType
 } from "../../electron/trainingPlanDomain";
 import type { CorosLinkApi } from "../coroslink-api";
+import { activityHappenDay } from "../../electron/activityLinks";
 
 import {
   PlanSourceBadge,
@@ -160,6 +162,35 @@ function planStartLabel(plan: TrainingPlanDocument): string {
   return Number.isNaN(date.valueOf()) ? t("Unscheduled") : `Starts ${shortDate(date)}`;
 }
 
+type NativePlansOnCalendar = Record<string, { startDay?: string }>;
+const NO_NATIVE_PLANS_ON_CALENDAR: NativePlansOnCalendar = {};
+
+/**
+ * The calendar run a plan is part of: a CorosLink calendar install for local
+ * plans, or an active COROS instance (executeSubPlan) for native plans.
+ */
+function planOnCalendar(
+  plan: TrainingPlanDocument,
+  nativeOnCalendar: NativePlansOnCalendar
+): { startDay?: string } | undefined {
+  if (plan.source === "coros") return plan.remoteId ? nativeOnCalendar[plan.remoteId] : undefined;
+  const install = activeTrainingPlanCalendarInstall(plan);
+  return install ? { startDay: install.startDate } : undefined;
+}
+
+/** "Week 3 of 14" once a calendar run has started; undefined before it starts or after it ends. */
+function planCalendarWeekLabel(plan: TrainingPlanDocument, startDay?: string): string | undefined {
+  const digits = startDay?.replaceAll("-", "");
+  if (!digits || !/^\d{8}$/.test(digits)) return undefined;
+  const start = new Date(`${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}T12:00:00`);
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const days = Math.round((today.valueOf() - start.valueOf()) / 86_400_000);
+  const week = Math.floor(days / 7) + 1;
+  if (days < 0 || week > plan.weekCount) return undefined;
+  return t("Week {{value1}} of {{value2}}", { value1: String(week), value2: String(plan.weekCount) });
+}
+
 function sourceLabel(source: TrainingPlanDocument["source"]): string {
   return planSourceLabel(source);
 }
@@ -246,7 +277,7 @@ export function TrainingLibraryView({
     return (
       <section className="training-library-gate">
         <AlertTriangle size={30} strokeWidth={1.5} />
-        <h1>{t("The library didn&rsquo;t load")}</h1>
+        <h1>{t("The library didn’t load")}</h1>
         <p>{fatalError}</p>
         <button type="button" className="primary-button" onClick={() => void load()}>
           {t("Try again")} </button>
@@ -322,32 +353,40 @@ export function TrainingLibraryView({
   // A plan still on the calendar takes its upcoming workouts with it: they're removed first, then the plan.
   const deletePlan = async () => {
     if (!pendingPlanDelete || deletingPlan) return;
+    const plan = pendingPlanDelete;
     setDeletingPlan(true);
     try {
-      if (activeTrainingPlanCalendarInstall(pendingPlanDelete)) {
-        const preview = await api.previewTrainingPlanCalendarRemoval(pendingPlanDelete.id);
-        const removal = await api.removeTrainingPlanFromCalendar(preview.previewId, true);
-        if (removal.failures.length) {
-          onError(t("Some of its calendar workouts couldn't be removed. Try again."));
-          await load();
-          return;
-        }
+      if (plan.source === "coros" && plan.remoteId) {
+        const result = await api.deleteCorosTrainingPlan(plan.remoteId, true);
+        onMessage(result.endedCalendarPlans
+          ? t("Deleted \"{{value1}}\" from COROS and removed its upcoming workouts from your calendar.", { value1: String(plan.name) })
+          : t("Deleted \"{{value1}}\" from COROS.", { value1: String(plan.name) }));
+      } else {
+        const { removedCalendarWorkouts } = await api.deleteLocalTrainingPlan(plan.id, true);
+        onMessage(removedCalendarWorkouts === 1
+          ? (localOnly ? t("Deleted \"{{value1}}\" and removed 1 upcoming workout from your calendar.", { value1: String(plan.name) }) : t("Deleted \"{{value1}}\" and removed 1 upcoming workout from your COROS calendar.", { value1: String(plan.name) }))
+          : removedCalendarWorkouts
+            ? (localOnly ? t("Deleted \"{{value1}}\" and removed {{value2}} upcoming workouts from your calendar.", { value1: String(plan.name), value2: String(removedCalendarWorkouts) }) : t("Deleted \"{{value1}}\" and removed {{value2}} upcoming workouts from your COROS calendar.", { value1: String(plan.name), value2: String(removedCalendarWorkouts) }))
+            : `Deleted "${plan.name}".`);
       }
-      await api.deleteLocalTrainingPlan(pendingPlanDelete.id, true);
-      onMessage(t("Deleted “{{value1}}”.", { value1: pendingPlanDelete.name }));
       setPendingPlanDelete(null);
       await load();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : String(cause));
+      // Calendar workouts may already be gone; show the plan as it is now.
+      setPendingPlanDelete(null);
+      void load();
     } finally {
       setDeletingPlan(false);
     }
   };
-  const upcomingCalendarWorkouts = (plan: TrainingPlanDocument) => {
-    const today = new Date();
-    const key = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
-    return activeTrainingPlanCalendarInstall(plan)?.occurrences.filter(occurrence => !occurrence.removedAt && occurrence.happenDay >= key).length ?? 0;
-  };
+
+  const deleteRemovesCalendar = Boolean(
+    pendingPlanDelete && pendingPlanDelete.source !== "coros" && activeTrainingPlanCalendarInstall(pendingPlanDelete)
+  );
+  const deleteCalendarCount = deleteRemovesCalendar && pendingPlanDelete
+    ? upcomingTrainingPlanCalendarWorkoutCount(pendingPlanDelete)
+    : 0;
 
   const stateLabel = current.offline ? "Offline · cached" : current.stale ? "Partial sync" : "Synced";
 
@@ -376,7 +415,7 @@ export function TrainingLibraryView({
         <details className="tl-notice">
           <summary>
             <AlertTriangle size={14} />
-            {t("Some COROS data didn&rsquo;t refresh. Cached items are still shown.")} </summary>
+            {t("Some COROS data didn’t refresh. Cached items are still shown.")} </summary>
           {current.partialFailures.map((failure) => (
             <p key={failure}>{failure}</p>
           ))}
@@ -429,6 +468,7 @@ export function TrainingLibraryView({
               api={api}
               noun="plan"
               plans={plans}
+              nativeOnCalendar={current.nativePlansOnCalendar}
               collections={current.collections}
               onCreate={() => createPlan("local")}
               onGenerate={() => setGeneratorOpen(true)}
@@ -506,16 +546,32 @@ export function TrainingLibraryView({
             <h2 id="plan-delete-title">
               {t("Delete “")}{pendingPlanDelete.name}&rdquo;?
             </h2>
-            {upcomingCalendarWorkouts(pendingPlanDelete) ? <p>
-              {upcomingCalendarWorkouts(pendingPlanDelete) === 1
-                ? t("Its upcoming workout is removed from your calendar too.")
-                : t("Its {{value1}} upcoming workouts are removed from your calendar too.", { value1: String(upcomingCalendarWorkouts(pendingPlanDelete)) })}
-            </p> : null}
+            {pendingPlanDelete.source === "coros" ? (
+              <>
+                <p>{t("This deletes the plan from your COROS account, not just from CorosLink.")}</p>
+                <p>{t("If the plan is on your COROS calendar, its upcoming workouts are removed too. Past days stay. This can’t be undone.")}</p>
+              </>
+            ) : deleteRemovesCalendar ? (
+              <p>
+                {deleteCalendarCount === 1
+                  ? (localOnly ? t("This deletes the plan from CorosLink and removes its 1 upcoming workout from your calendar. Past days stay.") : t("This deletes the plan from CorosLink and removes its 1 upcoming workout from your COROS calendar. Past days stay."))
+                  : deleteCalendarCount
+                    ? (localOnly ? t("This deletes the plan from CorosLink and removes its {{value1}} upcoming workouts from your calendar. Past days stay.", { value1: String(deleteCalendarCount) }) : t("This deletes the plan from CorosLink and removes its {{value1}} upcoming workouts from your COROS calendar. Past days stay.", { value1: String(deleteCalendarCount) }))
+                    : (localOnly ? t("This deletes the plan from CorosLink and removes its upcoming workouts from your calendar. Past days stay.") : t("This deletes the plan from CorosLink and removes its upcoming workouts from your COROS calendar. Past days stay."))}
+              </p>
+            ) : (
+              <p>
+                {t("This removes the local copy and its")} {pendingPlanDelete.entries.length} {t("item")} {pendingPlanDelete.entries.length === 1 ? "" : "s"}{t(". Plans stored on COROS are not touched.")} </p>
+            )}
             <footer>
               <button type="button" className="ghost-button" disabled={deletingPlan} onClick={() => setPendingPlanDelete(null)}>
                 {t("Cancel")} </button>
-              <button type="button" className="primary-button danger" disabled={deletingPlan} onClick={() => void deletePlan()}>
-                {deletingPlan ? t("Deleting…") : t("Delete plan")} </button>
+              <button type="button" className="primary-button danger" aria-busy={deletingPlan} disabled={deletingPlan} onClick={() => void deletePlan()}>
+                {pendingPlanDelete.source === "coros"
+                  ? deletingPlan ? t("Deleting from COROS…") : t("Delete from COROS")
+                  : deleteRemovesCalendar
+                    ? deletingPlan ? t("Removing workouts…") : t("Remove workouts and delete")
+                    : t("Delete plan")} </button>
             </footer>
           </section>
         </div>
@@ -555,14 +611,14 @@ const PLAN_SCOPE_PREFERENCES = {
     defaultValue: "all",
     validate: (value): value is string =>
       typeof value === "string" &&
-      ["all", "favorite", "coros", "local", "coach", "unsettled", "archived"].includes(value)
+      ["all", "favorite", "calendar", "coros", "local", "coach", "unsettled", "archived"].includes(value)
   }),
   template: defineSelectionPreference<string>({
     key: "trainingLibrary.templates.scope",
     defaultValue: "all",
     validate: (value): value is string =>
       typeof value === "string" &&
-      ["all", "favorite", "coros", "local", "coach", "unsettled", "archived"].includes(value)
+      ["all", "favorite", "calendar", "coros", "local", "coach", "unsettled", "archived"].includes(value)
   })
 } satisfies Record<PlanIndexNoun, unknown>;
 
@@ -638,6 +694,8 @@ interface PlanIndexProps {
   api: CorosLinkApi;
   noun: PlanIndexNoun;
   plans: TrainingPlanDocument[];
+  /** Native plans running on the COROS calendar, keyed by library plan remoteId. */
+  nativeOnCalendar?: NativePlansOnCalendar;
   collections: TrainingCollection[];
   onCreate: () => void;
   onGenerate?: () => void;
@@ -655,6 +713,7 @@ function PlanIndex({
   api,
   noun,
   plans,
+  nativeOnCalendar = NO_NATIVE_PLANS_ON_CALENDAR,
   collections,
   onCreate,
   onGenerate,
@@ -684,8 +743,17 @@ function PlanIndex({
     [plans, getLocale()]
   );
 
+  const calendarRuns = useMemo(
+    () => new Map(plans.flatMap((plan) => {
+      const state = planOnCalendar(plan, nativeOnCalendar);
+      return state ? [[plan.id, state] as const] : [];
+    })),
+    [plans, nativeOnCalendar]
+  );
+
   const scopes = useMemo(() => {
     const options = [{ id: "all", label: "All" }];
+    if (calendarRuns.size > 0) options.push({ id: "calendar", label: "On calendar" });
     if (plans.some((plan) => plan.favorite)) options.push({ id: "favorite", label: "Favorites" });
     for (const source of ["coros", "local", "coach"] as const) {
       if (plans.some((plan) => plan.source === source)) {
@@ -697,7 +765,7 @@ function PlanIndex({
     }
     if (plans.some((plan) => plan.archived)) options.push({ id: "archived", label: "Archived" });
     return options;
-  }, [plans, getLocale()]);
+  }, [plans, calendarRuns, getLocale()]);
 
   const scopeAvailable = scopes.some((option) => option.id === scope);
   useEffect(() => {
@@ -711,6 +779,7 @@ function PlanIndex({
         const haystack = `${plan.name} ${plan.description} ${plan.goal} ${plan.tags.join(" ")} ${plan.sportMix.join(" ")}`;
         if (!haystack.toLowerCase().includes(needle)) return false;
       }
+      if (scope === "calendar") return calendarRuns.has(plan.id) && !plan.archived;
       if (scope === "favorite") return plan.favorite;
       if (scope === "unsettled") return UNSETTLED_SYNC.has(plan.syncState);
       if (scope === "archived") return plan.archived;
@@ -732,7 +801,7 @@ function PlanIndex({
       }
       return left.updatedAt.localeCompare(right.updatedAt) * direction;
     });
-  }, [plans, query, scope, sort, summaries, getLocale()]);
+  }, [plans, query, scope, sort, summaries, calendarRuns, getLocale()]);
 
   const update = async (planId: string, patch: TrainingPlanMetadataPatch) => {
     try {
@@ -809,18 +878,29 @@ function PlanIndex({
         </button>
       ) : null}
       {noun === "plan" && plan.source !== "coros" && onCalendar && retryingInstall ? <button type="button" disabled={offline} aria-label={t("Remove partial installation of {{value1}} from calendar", { value1: String(plan.name) })} onClick={() => onCalendar(plan, "remove")}><CalendarX size={14} /></button> : null}
-      {plan.source !== "coros" ? (
+      {plan.source === "coros" ? (
         <button
           type="button"
           className="danger"
-          disabled={offline && Boolean(activeTrainingPlanCalendarInstall(plan))}
-          title={offline && activeTrainingPlanCalendarInstall(plan) ? t("Reconnect to COROS to change the calendar") : undefined}
+          disabled={offline || !plan.remoteId}
+          title={offline ? t("Reconnect to COROS to delete this plan") : t("Delete from COROS")}
+          aria-label={t("Delete {{value1}} from COROS", { value1: String(plan.name) })}
+          onClick={() => onDelete(plan)}
+        >
+          <Trash2 size={14} />
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="danger"
+          disabled={Boolean(install) && offline}
+          title={install && offline ? t("Reconnect to COROS to delete this plan") : undefined}
           aria-label={t("Delete {{value1}}", { value1: String(plan.name) })}
           onClick={() => onDelete(plan)}
         >
           <Trash2 size={14} />
         </button>
-      ) : null}
+      )}
     </>;
   };
 
@@ -953,10 +1033,12 @@ function PlanIndex({
           {visible.map((plan) => {
             const view = planView(plan, summaries.get(plan.id), noun);
             const isSelected = selected.includes(plan.id);
+            const calendarRun = calendarRuns.get(plan.id);
+            const calendarWeek = calendarRun ? planCalendarWeekLabel(plan, calendarRun.startDay) : undefined;
 
             return (
               <li
-                className={`tl-card${isSelected ? " is-selected" : ""}`}
+                className={`tl-card${isSelected ? " is-selected" : ""}${calendarRun ? " is-on-calendar" : ""}`}
                 key={plan.id}
                 data-accent={view.dominant ?? undefined}
                 style={view.dominant ? sportAccentStyle(view.dominant) : undefined}
@@ -968,6 +1050,7 @@ function PlanIndex({
                       <Heart size={11} fill="currentColor" strokeWidth={0} aria-label={t("Favorite")} />
                     ) : null}
                     <PlanSourceBadge source={plan.source} />
+                    {calendarRun ? <i className="tl-live">{t("On calendar")}</i> : null}
                     {UNSETTLED_SYNC.has(plan.syncState) ? (
                       <i className="tl-flag">{plan.syncState}</i>
                     ) : null}
@@ -999,7 +1082,7 @@ function PlanIndex({
                   </span>
                 </button>
                 <div className="tl-plan-card-footer">
-                  <span><CalendarClock size={12} aria-hidden="true" />{planStartLabel(plan)}</span>
+                  <span className={calendarWeek ? "is-live" : undefined}><CalendarClock size={12} aria-hidden="true" />{calendarWeek ?? planStartLabel(plan)}</span>
                   <div className="tl-card-actions">{planActions(plan)}</div>
                 </div>
               </li>
@@ -1039,10 +1122,11 @@ function PlanIndex({
             {visible.map((plan) => {
               const view = planView(plan, summaries.get(plan.id), noun);
               const isSelected = selected.includes(plan.id);
+              const calendarRun = calendarRuns.get(plan.id);
 
               return (
                 <li
-                  className={`tl-plan-row tl-row${isSelected ? " is-selected" : ""}`}
+                  className={`tl-plan-row tl-row${isSelected ? " is-selected" : ""}${calendarRun ? " is-on-calendar" : ""}`}
                   key={plan.id}
                   data-accent={view.dominant ?? undefined}
                   style={view.dominant ? sportAccentStyle(view.dominant) : undefined}
@@ -1061,6 +1145,7 @@ function PlanIndex({
                         <em key={index}>{detail}</em>
                       ))}
                       <PlanSourceBadge source={plan.source} />
+                      {calendarRun ? <i className="tl-live">{t("On calendar")}</i> : null}
                       {UNSETTLED_SYNC.has(plan.syncState) ? (
                         <i className="tl-flag">{plan.syncState}</i>
                       ) : null}
@@ -1299,17 +1384,27 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
     if (!stateAvailable) setState("all");
   }, [setState, stateAvailable]);
 
-  const activityOptions = useMemo(
-    () => [
+  // A link only counts when the activity is on the workout's day, so offer just those.
+  const activitiesByDay = useMemo(() => {
+    const byDay = new Map<string, TrainingHubActivity[]>();
+    for (const activity of activities) {
+      const day = activityHappenDay(activity);
+      if (day) byDay.set(day, [...(byDay.get(day) ?? []), activity]);
+    }
+    return byDay;
+  }, [activities]);
+  const activityOptionsFor = (match: TrainingActivityMatch) => {
+    const linked = activities.find((activity) => activity.activityId === match.activityId);
+    const sameDay = activitiesByDay.get(match.happenDay) ?? [];
+    return [
       { value: "", label: "Match an activity" },
-      ...activities.map((activity) => ({
+      ...(linked && !sameDay.includes(linked) ? [linked, ...sameDay] : sameDay).map((activity) => ({
         value: activity.activityId,
         label: `${activity.name ?? activity.sportName ?? t("Activity")} · ${activityDate(activity)}`,
         translate: false
       }))
-    ],
-    [activities, getLocale()]
-  );
+    ];
+  };
 
   const createTemplate = async (activity: TrainingHubActivity) => {
     const plan = createTrainingPlan(
@@ -1482,7 +1577,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
                         className="tl-quiet-select is-wide"
                         label={t("Completed activity for {{value1}}", { value1: String(shortDate(date)) })}
                         value={match.activityId ?? ""}
-                        options={activityOptions}
+                        options={activityOptionsFor(match)}
                         onChange={(value) => void linkActivity(match, value || undefined)}
                       />
                       {completedParts.length ? <small>{completedParts.join(" · ")}</small> : null}

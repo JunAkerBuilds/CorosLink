@@ -4,6 +4,7 @@
 import type { StrengthEditPreview } from "./workoutEditTypes";
 import type {
   ActivityVisualPreview,
+  ChatFileAttachment,
   ChatMessage,
   ChatMessageAttachment,
   CoachCorosActionPreview,
@@ -25,6 +26,7 @@ export interface ChatMessageEntry {
   role: ChatMessage["role"];
   content: string;
   attachment?: ChatMessageAttachment;
+  files?: ChatFileAttachment[];
   source?: SourceInfo;
   reasoningSummary?: string;
 }
@@ -190,7 +192,8 @@ export function toWireMessages(entries: ChatEntry[]): ChatMessage[] {
         role: entry.role,
         content: entry.attachment
           ? `${entry.content}\n\n${entry.attachment.content}`
-          : entry.content
+          : entry.content,
+        ...(entry.files?.length ? { files: entry.files } : {})
       }];
     }
     if (entry.kind === "workoutEdit") return [{ role: "assistant", content: `Strength edit proposal ${entry.preview.proposalId}. Last recorded state: ${entry.preview.state}. Call get_workout_edit_status for current results; never assume it was saved.` }];
@@ -260,6 +263,7 @@ function persistVisualEntry(entry: ChatEntry): PersistedChatEntry | null {
       role: entry.role,
       content: entry.content,
       ...(entry.attachment ? { attachment: entry.attachment } : {}),
+      ...(entry.files?.length ? { files: entry.files } : {}),
       ...(entry.source ? { source: entry.source } : {}),
       ...(entry.reasoningSummary
         ? { reasoningSummary: entry.reasoningSummary }
@@ -334,6 +338,7 @@ export function fromPersistedEntries(entries: PersistedChatEntry[]): ChatEntry[]
       role: entry.role,
       content: entry.content,
       ...(entry.attachment ? { attachment: entry.attachment } : {}),
+      ...(entry.files?.length ? { files: entry.files } : {}),
       ...(entry.source ? { source: entry.source } : {}),
       ...(entry.reasoningSummary
         ? { reasoningSummary: entry.reasoningSummary }

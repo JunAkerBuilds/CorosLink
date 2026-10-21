@@ -46,6 +46,7 @@ import { WatchProfileSettings } from "./WatchProfileSettings";
 import { WeatherLocationSettings } from "./WeatherLocationSettings";
 import { WatchSystemSettings } from "./WatchSystemSettings";
 import { LanguageSettings } from "./LanguageSettings";
+import { SidebarSettings } from "./SidebarSettings";
 
 const ABOUT_LINKS = [
   {
@@ -108,7 +109,7 @@ function platformLabel(info: AppInfo): string {
 }
 
 /** Settings sections other screens link straight to. */
-export type SettingsSection = "watch" | "weather" | "privacy";
+export type SettingsSection = "watch" | "weather" | "privacy" | "sidebar";
 
 interface SettingsViewProps {
   api: CorosLinkApi;
@@ -121,6 +122,7 @@ interface SettingsViewProps {
   onError: (message: string) => void;
   initialAccountScreen?: boolean;
   onOpenAccount?: (destination: AccountDestination) => void;
+  showDevelopmentItems?: boolean;
 }
 
 export function SettingsView({
@@ -133,6 +135,7 @@ export function SettingsView({
   initialAccountScreen = false,
   focusSection,
   onSectionFocused,
+  showDevelopmentItems = false,
 }: SettingsViewProps) {
   useLanguage();
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
@@ -446,6 +449,8 @@ export function SettingsView({
           ))}
         </div>
       </div>
+
+      <SettingsAnchor section="sidebar"><SidebarSettings showDevelopmentItems={showDevelopmentItems} /></SettingsAnchor>
 
       <div className="panel settings-sport-panel">
         <div className="section-heading settings-sport-heading">

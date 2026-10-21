@@ -7,6 +7,7 @@ import {
   getCorosMcpTools,
   listCorosMcpTools
 } from "./corosMcpService";
+import { recordDiagnosticError } from "./diagnosticsService";
 import { recentTrainingHubDateList } from "./trainingTrendUtils";
 import type {
   CorosMcpTool,
@@ -673,6 +674,8 @@ async function fetchDailyHealthRecords(
         `[dailyHealthDataService] ${dailyHealthTool.name} failed for args ${JSON.stringify(args)}:`,
         error
       );
+      // A failed call is already in the report; this also catches answers the parser rejects.
+      recordDiagnosticError("corosMcp:dailyHealth", error);
     }
   }
 
@@ -694,12 +697,18 @@ export async function getTrainingDailyHealthData(
 
   try {
     await listCorosMcpTools();
-  } catch {
+  } catch (error) {
     // fall back to cached tool list
+    recordDiagnosticError("corosMcp:dailyHealth/tools", error);
   }
 
   const dailyHealthTool = resolveDailyHealthTool(getCorosMcpTools());
   if (!dailyHealthTool) {
+    // COROS renamed or dropped the tool: the card just shows no data.
+    recordDiagnosticError(
+      "corosMcp:dailyHealth",
+      new Error(`COROS MCP lists no daily health tool (expected ${PREFERRED_DAILY_HEALTH_TOOL}).`)
+    );
     return {
       records: [],
       mcpConnected: true
@@ -716,6 +725,7 @@ export async function getTrainingDailyHealthData(
     };
   } catch (error) {
     console.warn("[dailyHealthDataService] Failed to fetch daily health data:", error);
+    recordDiagnosticError("corosMcp:dailyHealth", error);
     return {
       records: [],
       mcpConnected: true

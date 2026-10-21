@@ -1,0 +1,36 @@
+/* Lap table grouping (laps / km splits / whole activity) and fastest marker.
+   Imported by ActivityDetailPanel, so the calendar aside gets it too. */
+.training-laps-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; min-width: 0; }
+/* The library's narrow-window rule stretches filter groups to full width; this one stays compact. */
+.training-laps-groups.library-filter-group { width: auto; overflow: visible; }
+.training-laps-groups .library-filter-option { flex: 0 0 auto; white-space: nowrap; }
+.training-laps-groups .library-filter-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.training-lap-fastest {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--activity-color, var(--accent)) 16%, transparent);
+  color: var(--activity-color, var(--accent));
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  line-height: 17px;
+  text-transform: uppercase;
+  /* middle sits a hair under the digits' cap-height centre */
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+/* Paper sport hues sit near 4.5:1 on white; the tint would pull them under. */
+:root[data-theme="paper"] .training-lap-fastest {
+  background: color-mix(in srgb, var(--activity-color, var(--accent)) 10%, transparent);
+  color: color-mix(in srgb, var(--activity-color, var(--accent)) 72%, #000);
+}
+.training-laps-section tr.is-fastest td { white-space: nowrap; }
+.training-laps-section tr.is-fastest .training-lap-performance { color: var(--activity-color, var(--accent)); font-weight: 600; }
+
+.activities-detail-sidebar .training-laps-groups { padding: 2px; gap: 2px; }
+.activities-detail-sidebar .training-laps-groups .library-filter-option { min-height: 24px; padding: 0 7px; font-size: 11px; }
+.activities-detail-sidebar .training-lap-fastest { margin-left: 6px; padding: 0 5px; font-size: 9px; line-height: 15px; }

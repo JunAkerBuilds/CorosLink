@@ -1683,6 +1683,12 @@ export async function buildWatchfaceConfigAssetReplacements(
     effectStyles?: WatchfaceStudioOptions["effectStyles"];
     layerEffects?: WatchfaceStudioOptions["layerEffects"];
     layerStrokes?: WatchfaceStudioOptions["layerStrokes"];
+    /**
+     * Composed details carrying the value rects Studio synthesizes for added
+     * selectables. The preview sizes a virtual control icon's slot from those
+     * rects, so the export must too or the label ships at a different size.
+     */
+    layoutDetails?: CorosWatchfaceTemplateDetails;
   } = {}
 ): Promise<CorosWatchfaceAssetReplacement[]> {
   const replacements: CorosWatchfaceAssetReplacement[] = [];
@@ -1799,7 +1805,11 @@ export async function buildWatchfaceConfigAssetReplacements(
           ? { ...override, nativeSize: false }
           : override;
         const virtualCanvas = virtual
-          ? virtualControlIconCanvasSize(resolution)
+          ? virtualControlIconCanvasSize(
+              options.layoutDetails?.resolutions.find(
+                (candidate) => candidate.directory === resolution.directory
+              ) ?? resolution
+            )
           : null;
         const canvasSize = configAssetCanvasSize(
           configKey,
@@ -2680,12 +2690,14 @@ export async function renderWatchfaceTextSprite(
   height: number,
   fontFamily: string,
   color: string,
-  typography: WatchfaceTypography = {}
+  typography: WatchfaceTypography = {},
+  /** Desktop fonts only; PNG fonts always fill the canvas height. */
+  exactFontSize?: number
 ): Promise<string> {
   if (!fontFamily && typography.rasterFont && rasterFontSupportsText(typography.rasterFont, text)) {
     return renderRasterFontSprite(text, width, height, typography.rasterFont, color, typography);
   }
-  return renderDigitSprite(text, width, height, fontFamily, color, typography);
+  return renderDigitSprite(text, width, height, fontFamily, color, typography, exactFontSize);
 }
 
 /**
@@ -3032,6 +3044,97 @@ export async function renderNativeRasterImageSprite(
   return canvas.toDataURL("image/png");
 }
 
+const sharedLabelFontSizes = new Map<string, number>();
+
+/**
+ * The largest font size at which every label of a set fits `width`×`height`
+ * the way {@link renderDigitSprite} fits one label, so a weekday or month set
+ * shares one letter height instead of each label filling the box on its own.
+ */
+function sharedLabelFontSize(
+  labels: readonly string[],
+  width: number,
+  height: number,
+  fontFamily: string,
+  typography: WatchfaceTypography,
+  /** The largest size to try; by default the 92% of height text starts at. */
+  start = Math.floor(height * 0.92)
+): number {
+  const weight = normalizeFontWeight(typography.fontWeight);
+  const fontStyle = typography.fontStyle === "italic" ? "italic" : "normal";
+  const spacing = Math.max(-0.35, Math.min(0.25, typography.letterSpacing ?? 0));
+  const key = `${labels.join(",")}|${fontFamily}|${weight}|${fontStyle}|${spacing}|${width}x${height}|${start}`;
+  const cached = sharedLabelFontSizes.get(key);
+  if (cached !== undefined) return cached;
+  const context = document.createElement("canvas").getContext("2d");
+  let size = Math.floor(start);
+  if (context) {
+    for (; size > 4; size -= 1) {
+      setWatchfaceCanvasFont(
+        context,
+        { family: fontFamily, size, weight, style: fontStyle },
+        `${fontStyle} ${weight} ${size}px ${quoteFontFamily(fontFamily)}`
+      );
+      setCanvasLetterSpacing(context, size * spacing);
+      const fits = labels.every((label) => {
+        const metrics = measureWatchfaceText(context, label);
+        return textInkMetrics(metrics).width <= width * 0.96 &&
+          metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent <= height * 0.96;
+      });
+      if (fits) break;
+    }
+  }
+  if (sharedLabelFontSizes.size >= 64) sharedLabelFontSizes.clear();
+  sharedLabelFontSizes.set(key, size);
+  return size;
+}
+
+/**
+ * Draws one weekday, month or day sprite in a desktop font. The font already
+ * sizes a whole set together (all ten digits, or every label at one shared
+ * size), so this never refits each sprite's own ink to the box: that blew a
+ * narrow "1" up far past a "0". The legacy zoom renders a larger cell and
+ * crops it to the canvas, which keeps strokes crisp.
+ */
+async function renderDateFontSprite(
+  text: string,
+  width: number,
+  height: number,
+  fontFamily: string,
+  color: string,
+  typography: WatchfaceTypography,
+  zoom = 1,
+  align?: WatchfaceHorizontalAlign,
+  /** The set this label belongs to (weekdays, months); digits leave it out. */
+  labels?: readonly string[],
+  /** An explicit font size for this tree; otherwise the set fits the cell. */
+  exactFontSize?: number
+): Promise<string> {
+  const zoomed = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  const cellWidth = Math.max(1, Math.round(width * zoomed));
+  const cellHeight = Math.max(1, Math.round(height * zoomed));
+  const rendered = await renderWatchfaceTextSprite(
+    text,
+    cellWidth,
+    cellHeight,
+    fontFamily,
+    color,
+    typography,
+    exactFontSize !== undefined && exactFontSize > 0
+      ? labels && !/^\d$/.test(text)
+        // The box fits the English words at this size; a longer language
+        // shrinks to fit rather than clip.
+        ? sharedLabelFontSize(labels, cellWidth, cellHeight, fontFamily, typography, exactFontSize * zoomed)
+        : exactFontSize * zoomed
+      : labels && !/^\d$/.test(text)
+        ? sharedLabelFontSize(labels, cellWidth, cellHeight, fontFamily, typography)
+        : undefined
+  );
+  return cellWidth === width && cellHeight === height
+    ? rendered
+    : centerSpriteOnCanvas(rendered, width, height, align);
+}
+
 async function centerSpriteOnCanvas(
   dataUrl: string,
   width: number,
@@ -3115,7 +3218,9 @@ export function renderDigitSprite(
   height: number,
   fontFamily: string,
   color: string,
-  typography: WatchfaceTypography = {}
+  typography: WatchfaceTypography = {},
+  /** Draws at exactly this size instead of the largest size that fits. */
+  exactFontSize?: number
 ): string {
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -3130,10 +3235,19 @@ export function renderDigitSprite(
   const letterSpacing = Math.max(-0.35, Math.min(0.25, typography.letterSpacing ?? 0));
   const numeric = /^\d$/.test(text);
   const familyMetrics = () => [..."0123456789"].map((digit) => measureWatchfaceText(context, digit));
-  let fontSize = Math.floor(height * 0.92);
+  const exact = exactFontSize !== undefined && Number.isFinite(exactFontSize) && exactFontSize > 0;
+  let fontSize = exact ? exactFontSize : Math.floor(height * 0.92);
   context.textBaseline = "alphabetic";
   context.fillStyle = color;
-  for (; fontSize > 4; fontSize -= 1) {
+  if (exact) {
+    setWatchfaceCanvasFont(
+      context,
+      { family: fontFamily, size: fontSize, weight: fontWeight, style: fontStyle },
+      `${fontStyle} ${fontWeight} ${fontSize}px ${quoteFontFamily(fontFamily)}`
+    );
+    setCanvasLetterSpacing(context, numeric ? 0 : fontSize * letterSpacing);
+  }
+  for (; !exact && fontSize > 4; fontSize -= 1) {
     // Use the font's Regular face by default, matching what desktop editors
     // such as Word show when a family is chosen without applying Bold.
     setWatchfaceCanvasFont(
@@ -3794,6 +3908,12 @@ export interface WatchfaceMetricSpriteStyle {
   color?: string;
   /** Scale relative to the source template digit sprites. */
   scale: number;
+  /**
+   * Fixed metrics only: font size in master-resolution pixels. A desktop font
+   * renders at exactly this size in a cell sized to its own digits; PNG digits
+   * use it as their height and keep their proportions. Replaces `scale`.
+   */
+  fontSize?: number;
   /** Clockwise rotation applied inside each firmware sprite canvas. */
   rotation?: number;
   /** Optional per-layer font; falls back to the design font. */
@@ -3848,6 +3968,19 @@ export interface WatchfaceDateSpriteStyle {
   solidAlpha?: boolean;
   /** Legacy artwork zoom used by projects saved before exact dimensions. */
   scale: number;
+  /**
+   * Desktop fonts only: the font size in master pixels. The editor writes the
+   * matching exact width/height (dateSizeForFontSize) beside it, and the text
+   * draws at exactly this size inside that box.
+   */
+  fontSize?: number;
+  /** Desktop-font words only: TUE/OCT (default), Tue/Oct, or Tuesday/October. */
+  labelStyle?: WatchfaceDateLabelStyle;
+  /**
+   * Desktop-font words only: watch languages picked in Send get the names in
+   * their own language instead of copies of the English ones.
+   */
+  translateLabels?: boolean;
   /** Clockwise rotation applied inside each firmware sprite canvas. */
   rotation?: number;
   /** Exact PNG canvas dimensions; omitted to use an imported PNG's native size. */
@@ -3899,8 +4032,18 @@ export function removeWatchfaceDateFontOverride(
     nativeSize: _nativeSize,
     letterSpacing: _letterSpacing,
     monthFormat: _monthFormat,
-    ...remaining
+    labelStyle: _labelStyle,
+    translateLabels: _translateLabels,
+    fontSize,
+    ...sized
   } = style;
+  // A box written for a font size belongs to that font, not the template art.
+  const remaining: typeof sized = { ...sized };
+  if (fontSize !== undefined) {
+    delete remaining.width;
+    delete remaining.height;
+    delete remaining.aspectLocked;
+  }
   const hasIndependentEdits =
     remaining.overwriteAllLanguages !== undefined ||
     remaining.overwriteLanguages !== undefined ||
@@ -3984,8 +4127,26 @@ export function rasterFontNativeSpriteSize(
 export function timeSpriteCanvasSize(
   file: Pick<CorosWatchfaceSpriteFile, "width" | "height">,
   style: WatchfaceMetricSpriteStyle | undefined,
-  typography: WatchfaceTypography = {}
-): { width: number; height: number } {
+  typography: WatchfaceTypography = {},
+  /**
+   * The family the digits draw with and this tree's master scale; a font
+   * size measures that font (see {@link fixedMetricDigitCanvas}).
+   */
+  font: { family?: string; nativeScale?: number } = {}
+): { width: number; height: number; fontSize?: number } {
+  const fontSize = styleFontSize(style);
+  if (fontSize !== undefined) {
+    const family = font.family ?? style?.fontFamily ?? "";
+    const resolved = resolveWatchfaceComponentTypography(typography, style);
+    return fixedMetricDigitCanvas(
+      file,
+      style,
+      fontSize,
+      shouldRenderWatchfaceText("0", family, resolved) ? family : "",
+      resolved,
+      font.nativeScale ?? 1
+    );
+  }
   const scale = normalizeSpriteScale(style?.scale);
   const width = Math.max(1, Math.round(file.width * scale));
   const height = Math.max(1, Math.round(file.height * scale));
@@ -4070,6 +4231,160 @@ export const WATCHFACE_MONTH_LABELS = [
   "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
   "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"
 ];
+
+/** Whether a month draws words: chosen in Studio, or the template's labels. */
+export function dateMonthShowsLabels(
+  resolution: CorosWatchfaceResolutionDetails,
+  style: WatchfaceDateSpriteStyle | undefined
+): boolean {
+  const part = WATCHFACE_DATE_PARTS.find((candidate) => candidate.id === "dateMonth");
+  return dateMonthUsesLabels(part ? findSpriteFolder(resolution, resolution.config[part.fontKey]) : null, style);
+}
+
+export type WatchfaceDateLabelStyle = "upper" | "title" | "full";
+
+/** BCP 47 locales for the watch's per-language date tables. */
+const WATCH_LANGUAGE_LOCALES: Record<string, string> = {
+  english: "en-US",
+  chinese: "zh-CN",
+  chinese_tw: "zh-TW",
+  germany: "de-DE",
+  spanish: "es-ES",
+  french: "fr-FR",
+  japanese: "ja-JP",
+  thai: "th-TH",
+  polish: "pl-PL",
+  portugal: "pt-PT",
+  italian: "it-IT",
+  korean: "ko-KR",
+  russian: "ru-RU"
+};
+
+/**
+ * The weekday (Monday-first, like the firmware's frames) or month
+ * (January-first) names a desktop font draws, in one watch language and
+ * letter style. English short capitals are the template labels.
+ */
+export function watchfaceDateLabels(
+  kind: "week" | "month",
+  labelStyle: WatchfaceDateLabelStyle = "upper",
+  language = "english"
+): string[] {
+  if (language === "english" && labelStyle === "upper") {
+    return [...(kind === "week" ? WEEKDAY_LABELS : WATCHFACE_MONTH_LABELS)];
+  }
+  const locale = WATCH_LANGUAGE_LOCALES[language] ?? "en-US";
+  const width = labelStyle === "full" ? "long" : "short";
+  // pt-PT's short weekdays are whole words ("segunda"); Brazil's are SEG, TER.
+  const formatLocale = language === "portugal" && kind === "week" && width === "short" ? "pt-BR" : locale;
+  const format = new Intl.DateTimeFormat(
+    formatLocale,
+    kind === "week" ? { weekday: width, timeZone: "UTC" } : { month: width, timeZone: "UTC" }
+  );
+  return Array.from({ length: kind === "week" ? 7 : 12 }, (_, index) => {
+    // 1 January 2024 was a Monday.
+    const formatted = format.format(
+      kind === "week" ? Date.UTC(2024, 0, 1 + index) : Date.UTC(2024, index, 15)
+    );
+    // Drop an abbreviation's final dot ("lun."), but Thai keeps its "ก.ย.".
+    const label = language === "thai" ? formatted : formatted.replace(/\.$/, "");
+    return labelStyle === "upper"
+      ? label.toLocaleUpperCase(locale)
+      : label.charAt(0).toLocaleUpperCase(locale) + label.slice(1);
+  });
+}
+
+/** The words a date part draws, or null when it draws digits. */
+function dateLabelSet(
+  partId: WatchfaceDatePartId,
+  monthLabels: boolean,
+  labelStyle?: WatchfaceDateLabelStyle
+): readonly string[] | null {
+  return partId === "weekday"
+    ? watchfaceDateLabels("week", labelStyle)
+    : partId === "dateMonth" && monthLabels
+      ? watchfaceDateLabels("month", labelStyle)
+      : null;
+}
+
+/**
+ * The font size a date part draws at, in master pixels, when a desktop font
+ * draws it; null otherwise. Mirrors buildDateSpriteComposition: an exact box
+ * fits the whole set inside it, natural width draws at 92% of the target
+ * height, and otherwise the set fits the template cell times the old zoom.
+ */
+export function dateFontSize(
+  resolution: CorosWatchfaceResolutionDetails,
+  partId: WatchfaceDatePartId,
+  style: WatchfaceDateSpriteStyle | undefined,
+  fontFamily: string,
+  typography: WatchfaceTypography = {}
+): number | null {
+  if (!fontFamily) return null;
+  const explicit = styleFontSize(style);
+  if (explicit !== undefined) return explicit;
+  const part = WATCHFACE_DATE_PARTS.find((candidate) => candidate.id === partId);
+  const source = part ? findSpriteFolder(resolution, resolution.config[part.fontKey]) : null;
+  const labels = dateLabelSet(partId, partId === "dateMonth" && dateMonthUsesLabels(source, style), style?.labelStyle);
+  const sizes = Array.from({ length: labels?.length ?? 10 }, (_, value) =>
+    dateSpriteCanvasSize(resolution, partId, style, value)
+  ).filter((size): size is NonNullable<typeof size> => Boolean(size));
+  if (sizes.length === 0) return null;
+  const width = Math.max(...sizes.map((size) => size.width));
+  const height = Math.max(...sizes.map((size) => size.height));
+  const exact = sizes.some((size) => size.native);
+  const resolved = resolveWatchfaceComponentTypography(typography, style);
+  const zoom = exact ? 1 : normalizeSpriteScale(style?.scale);
+  if (
+    !exact &&
+    (partId === "weekday" || partId === "dateDay") &&
+    (style?.nativeSize ?? Boolean(style?.fontFamily || style?.rasterFont))
+  ) {
+    return Math.max(5, Math.floor(height * zoom * 0.92));
+  }
+  const box = { width: Math.max(1, Math.round(width * zoom)), height: Math.max(1, Math.round(height * zoom)) };
+  return labels
+    ? sharedLabelFontSize(labels, box.width, box.height, fontFamily, resolved)
+    : fixedMetricCurrentFontSize(box, { scale: 1 }, undefined, fontFamily, resolved);
+}
+
+/**
+ * The exact box (master pixels) that draws a date part's whole set at
+ * `fontSize` in a desktop font, with the same margins as a fixed metric's
+ * digit cell. Writing it as the part's width/height makes the export draw
+ * that size; day and digit-month rects hold two of these boxes.
+ */
+export function dateSizeForFontSize(
+  partId: WatchfaceDatePartId,
+  monthLabels: boolean,
+  fontSize: number,
+  fontFamily: string,
+  typography: WatchfaceTypography = {},
+  labelStyle?: WatchfaceDateLabelStyle
+): { width: number; height: number } {
+  const labels = dateLabelSet(partId, monthLabels, labelStyle);
+  if (!labels) {
+    const cell = fixedMetricDigitCanvas({ width: 1, height: 1 }, undefined, fontSize, fontFamily, typography);
+    return { width: cell.width, height: cell.height };
+  }
+  const context = typeof document === "undefined" ? null : document.createElement("canvas").getContext("2d");
+  if (!context) return { width: Math.round(fontSize * 2), height: Math.round(fontSize) };
+  const weight = normalizeFontWeight(typography.fontWeight);
+  const fontStyle = typography.fontStyle === "italic" ? "italic" : "normal";
+  setWatchfaceCanvasFont(
+    context,
+    { family: fontFamily, size: fontSize, weight, style: fontStyle },
+    `${fontStyle} ${weight} ${fontSize}px ${quoteFontFamily(fontFamily)}`
+  );
+  setCanvasLetterSpacing(context, fontSize * Math.max(-0.35, Math.min(0.25, typography.letterSpacing ?? 0)));
+  const metrics = labels.map((label) => measureWatchfaceText(context, label));
+  const inkWidth = Math.max(...metrics.map((metric) => textInkMetrics(metric).width));
+  const inkHeight = Math.max(...metrics.map((metric) => metric.actualBoundingBoxAscent + metric.actualBoundingBoxDescent));
+  return {
+    width: Math.max(1, Math.ceil(inkWidth / 0.96) + 2),
+    height: Math.max(1, Math.ceil(inkHeight / 0.96) + 2)
+  };
+}
 
 /**
  * COROS label-month folders are JAN-first: 00=JAN through 11=DEC (frame =
@@ -6101,6 +6416,230 @@ export function watchfaceFixedMetricDigitSize(
   return sample ? { width: sample.width, height: sample.height } : null;
 }
 
+/** The template digit cell a time part draws from: the largest of its slots. */
+export function watchfaceTimeDigitSize(
+  resolution: CorosWatchfaceResolutionDetails,
+  partId: WatchfaceTimePartId
+): { width: number; height: number } | null {
+  const fontKeys = partId === "autoTime"
+    ? ["autoalign_time_font"]
+    : WATCHFACE_TIME_PARTS.find((part) => part.id === partId)?.digits.map((digit) => digit.fontKey) ?? [];
+  const files = fontKeys.flatMap((key) =>
+    findSpriteFolder(resolution, resolution.config[key])?.files.slice(0, 10) ?? []
+  );
+  return files.length > 0
+    ? { width: Math.max(...files.map((file) => file.width)), height: Math.max(...files.map((file) => file.height)) }
+    : null;
+}
+
+/**
+ * Selectable values have no font-size setting of their own: at natural width
+ * they draw every digit at one target height (`cell` or an imported PNG's
+ * height, times `scale`), and a desktop font's size there is 92% of it (see
+ * {@link renderNativeWatchfaceTextSprite}). These two translate between that
+ * and a font size, so the inspector can offer the same Font size field as
+ * every other number. `cell` is the master selectable digit cell.
+ */
+export function selectableMetricFontSize(
+  cell: { width: number; height: number },
+  style: WatchfaceMetricSpriteStyle | undefined,
+  fontFamily: string,
+  typography: WatchfaceTypography = {}
+): number {
+  const scale = normalizeSpriteScale(style?.scale);
+  if (!style?.nativeSize) {
+    return fixedMetricCurrentFontSize(cell, style, undefined, fontFamily, typography);
+  }
+  if (fontFamily) return Math.max(5, Math.floor(Math.round(cell.height * scale) * 0.92));
+  return Math.round(selectableImportedHeight(style, cell) * scale);
+}
+
+export function selectableMetricStyleForFontSize(
+  cell: { width: number; height: number },
+  style: WatchfaceMetricSpriteStyle | undefined,
+  fontFamily: string,
+  fontSize: number
+): { nativeSize: true; scale: number } {
+  const targetHeight = fontFamily ? Math.ceil(fontSize / 0.92) : fontSize;
+  const base = fontFamily ? cell.height : selectableImportedHeight(style, cell);
+  return { nativeSize: true, scale: Math.max(0.01, Math.round((targetHeight / Math.max(1, base)) * 10000) / 10000) };
+}
+
+function selectableImportedHeight(
+  style: WatchfaceMetricSpriteStyle | undefined,
+  cell: { height: number }
+): number {
+  const heights = Array.from({ length: 10 }, (_, digit) =>
+    rasterFontNativeSpriteSize(style?.rasterFont, String(digit))?.height ?? 0
+  );
+  return Math.max(...heights) || cell.height;
+}
+
+/** The digit cell every selectable value is drawn in. */
+export function watchfaceSelectableDigitSize(
+  resolution: CorosWatchfaceResolutionDetails
+): { width: number; height: number } | null {
+  const files = controlTemperatureFontFolder(resolution)?.files.slice(0, 10) ?? [];
+  return files.length > 0
+    ? { width: Math.max(...files.map((file) => file.width)), height: Math.max(...files.map((file) => file.height)) }
+    : null;
+}
+
+/**
+ * A fixed metric's font size, when it has a usable one. Compat temperature
+ * keeps the template's own digits, so a font size could only resize its rect.
+ */
+export function fixedMetricFontSize(
+  metricId: WatchfaceMetricId,
+  style: Pick<WatchfaceMetricSpriteStyle, "fontSize"> | undefined
+): number | undefined {
+  if (metricId === "temperature" && TEMPERATURE_FONT_COMPAT) return undefined;
+  return styleFontSize(style);
+}
+
+/** A style's font size in master pixels, when it has a usable one. */
+export function styleFontSize(
+  style: { fontSize?: number } | undefined
+): number | undefined {
+  const size = style?.fontSize;
+  return typeof size === "number" && Number.isFinite(size) && size > 0 ? size : undefined;
+}
+
+/**
+ * How much a time part grows its template cells: by `scale`, or with a font
+ * size by the new digit height over the template's. Slot positions, gaps and
+ * tracking spread by this, as they always did by `scale`.
+ */
+function timeStyleScale(
+  style: WatchfaceMetricSpriteStyle | undefined,
+  file: Pick<CorosWatchfaceSpriteFile, "height">,
+  canvas: { height: number }
+): number {
+  return styleFontSize(style) !== undefined
+    ? canvas.height / Math.max(1, file.height)
+    : normalizeSpriteScale(style?.scale);
+}
+
+let digitMeasureContext: CanvasRenderingContext2D | null = null;
+const fittedDigitFontSizes = new Map<string, number>();
+
+/** Ink box shared by the ten digits of a desktop font at one size. */
+function measureDigitInkBox(
+  fontFamily: string,
+  fontSize: number,
+  typography: WatchfaceTypography
+): { width: number; height: number } | null {
+  if (typeof document === "undefined") return null;
+  digitMeasureContext ??= document.createElement("canvas").getContext("2d");
+  const context = digitMeasureContext;
+  if (!context) return null;
+  const weight = normalizeFontWeight(typography.fontWeight);
+  const fontStyle = typography.fontStyle === "italic" ? "italic" : "normal";
+  setWatchfaceCanvasFont(
+    context,
+    { family: fontFamily, size: fontSize, weight, style: fontStyle },
+    `${fontStyle} ${weight} ${fontSize}px ${quoteFontFamily(fontFamily)}`
+  );
+  const metrics = [..."0123456789"].map((digit) => measureWatchfaceText(context, digit));
+  const width = Math.max(...metrics.map((metric) => textInkMetrics(metric).width));
+  const height =
+    Math.max(...metrics.map((metric) => metric.actualBoundingBoxAscent)) +
+    Math.max(...metrics.map((metric) => metric.actualBoundingBoxDescent));
+  return width > 0 && height > 0 ? { width, height } : null;
+}
+
+/**
+ * The font size a fixed metric draws at, in master pixels: its own, or the
+ * size {@link renderDigitSprite} fits into the scaled template cell. PNG digits
+ * (no `fontFamily`) report their height. Shown before the user picks a size.
+ */
+export function fixedMetricCurrentFontSize(
+  cell: Pick<CorosWatchfaceSpriteFile, "width" | "height">,
+  style: WatchfaceMetricSpriteStyle | undefined,
+  fontSize: number | undefined,
+  fontFamily: string,
+  typography: WatchfaceTypography = {}
+): number {
+  if (fontSize !== undefined) return fontSize;
+  const scale = normalizeSpriteScale(style?.scale);
+  const width = Math.max(1, Math.round(cell.width * scale));
+  const height = Math.max(1, Math.round(cell.height * scale));
+  if (!fontFamily) return height;
+  const key = `${fontFamily}|${normalizeFontWeight(typography.fontWeight)}|${typography.fontStyle ?? "normal"}|${width}x${height}`;
+  const cached = fittedDigitFontSizes.get(key);
+  if (cached !== undefined) return cached;
+  let size = Math.floor(height * 0.92);
+  for (; size > 4; size -= 1) {
+    const ink = measureDigitInkBox(fontFamily, size, typography);
+    if (!ink || (ink.width <= width * 0.96 && ink.height <= height * 0.96)) break;
+  }
+  if (fittedDigitFontSizes.size >= 64) fittedDigitFontSizes.clear();
+  fittedDigitFontSizes.set(key, size);
+  return size;
+}
+
+/**
+ * The digit canvas a fixed metric exports in one resolution tree. Without a
+ * font size it is the template cell times `scale`. With one, a desktop font
+ * draws at exactly that size in a cell measured from its own digits (the
+ * margin {@link renderDigitSprite} keeps, plus a pixel), so a wide face is no longer
+ * squeezed into the template's cell. PNG digits take the size as their height
+ * and keep their proportions. `fontSize` is master-authored; `nativeScale`
+ * (target width / master width) converts it to this tree.
+ */
+export function fixedMetricDigitCanvas(
+  file: Pick<CorosWatchfaceSpriteFile, "width" | "height">,
+  style: WatchfaceMetricSpriteStyle | undefined,
+  fontSize: number | undefined,
+  fontFamily: string,
+  typography: WatchfaceTypography = {},
+  nativeScale = 1
+): { width: number; height: number; fontSize?: number } {
+  if (fontSize === undefined) {
+    const scale = normalizeSpriteScale(style?.scale);
+    return {
+      width: Math.max(1, Math.round(file.width * scale)),
+      height: Math.max(1, Math.round(file.height * scale))
+    };
+  }
+  const size = fontSize * (nativeScale > 0 ? nativeScale : 1);
+  const ink = fontFamily ? measureDigitInkBox(fontFamily, size, typography) : null;
+  if (ink) {
+    // Antialiased overshoot on round digits lands about a pixel outside the
+    // measured box, so keep one spare pixel on every side.
+    return {
+      width: Math.max(1, Math.ceil(ink.width / 0.96) + 2),
+      height: Math.max(1, Math.ceil(ink.height / 0.96) + 2),
+      fontSize: size
+    };
+  }
+  const height = Math.max(1, Math.round(size));
+  const rasterAspects = fontFamily
+    ? []
+    : Array.from({ length: 10 }, (_, digit) =>
+        rasterFontNativeSpriteSize(typography.rasterFont, String(digit))
+      ).flatMap((cell) => (cell?.width && cell.height ? [cell.width / cell.height] : []));
+  const aspect = rasterAspects.length > 0
+    ? Math.max(...rasterAspects)
+    : file.width / Math.max(1, file.height);
+  return { width: Math.max(1, Math.round(height * aspect)), height };
+}
+
+/**
+ * How far a font size stretches a metric's value rect: each axis follows the
+ * new digit canvas against the template's widest/tallest digit, so the rect
+ * keeps its digit count and the template's padding around them.
+ */
+function fixedMetricRectFactors(
+  files: readonly Pick<CorosWatchfaceSpriteFile, "width" | "height">[],
+  canvas: { width: number; height: number }
+): { x: number; y: number } {
+  const digits = files.slice(0, 10);
+  const cellWidth = Math.max(1, ...digits.map((file) => file.width));
+  const cellHeight = Math.max(1, ...digits.map((file) => file.height));
+  return { x: canvas.width / cellWidth, y: canvas.height / cellHeight };
+}
+
 function configHexColor(color: string): string {
   return `0x${color.replace(/^#/, "").toUpperCase()}`;
 }
@@ -6570,21 +7109,51 @@ export function resizeConfigRectValue(
 export function buildMetricStyleOverrides(
   details: CorosWatchfaceTemplateDetails,
   styles: WatchfaceMetricStyles,
-  useStudioFolders = false
+  useStudioFolders = false,
+  /** Face font and typography; a font size measures the metric's own font. */
+  fontFamily = "",
+  typography: WatchfaceTypography = {}
 ): CorosWatchfaceConfigOverride[] {
   const overrides: CorosWatchfaceConfigOverride[] = [];
+  const masterWidth = pickPreviewResolution(details)?.width;
   for (const resolution of details.resolutions) {
     const values: Record<string, string> = {};
+    const nativeScale = masterWidth ? resolution.width / masterWidth : 1;
     for (const metric of WATCHFACE_FIXED_METRICS) {
       const style = styles[metric.id];
       const parts = fixedMetricValueParts(metric);
-      const rects = style
-        ? parts.map((part) =>
-            scaleConfigRectValue(
-              resolution.config[part.rectKey] ?? "",
-              style.scale
+      const fontSize = fixedMetricFontSize(metric.id, style);
+      const sourceFiles = fontSize !== undefined
+        ? metricFontFolder(resolution, metric)?.files ?? []
+        : [];
+      const factors = fontSize !== undefined && sourceFiles.length > 0
+        ? fixedMetricRectFactors(
+            sourceFiles,
+            fixedMetricDigitCanvas(
+              {
+                width: Math.max(...sourceFiles.slice(0, 10).map((file) => file.width)),
+                height: Math.max(...sourceFiles.slice(0, 10).map((file) => file.height))
+              },
+              style,
+              fontSize,
+              style?.fontFamily ?? fontFamily,
+              resolveWatchfaceComponentTypography(typography, style),
+              nativeScale
             )
           )
+        : null;
+      const rects = style
+        ? parts.map((part) => {
+            const value = resolution.config[part.rectKey] ?? "";
+            const rect = factors ? parseConfigRect(value) : null;
+            return rect && factors
+              ? resizeConfigRectToCanvas(
+                  value,
+                  (rect.x1 - rect.x0) * factors.x,
+                  (rect.y1 - rect.y0) * factors.y
+                )
+              : scaleConfigRectValue(value, style.scale);
+          })
         : [];
       if (
         !style ||
@@ -6636,11 +7205,14 @@ export async function buildMetricSpriteReplacements(
     color?: string;
     rotation?: number;
     fontFamily: string;
+    fontSize?: number;
     typography: WatchfaceTypography;
     rasterized: boolean;
     create: boolean;
   }[] = [];
+  const masterWidth = pickPreviewResolution(details)?.width;
   for (const resolution of details.resolutions) {
+    const nativeScale = masterWidth ? resolution.width / masterWidth : 1;
     for (const metric of WATCHFACE_FIXED_METRICS) {
       if (metric.id === "temperature" && TEMPERATURE_FONT_COMPAT) {
         continue;
@@ -6653,29 +7225,39 @@ export async function buildMetricSpriteReplacements(
       if (!style || !rect || !source) {
         continue;
       }
-      const normalizedScale = normalizeSpriteScale(style.scale);
       const metricFontFamily = style.fontFamily ?? fontFamily;
       const metricTypography = resolveWatchfaceComponentTypography(typography, style);
+      const fontSize = fixedMetricFontSize(metric.id, style);
       source.files.slice(0, 10).forEach((file, digit) => {
         const path = `${resolution.directory}/${METRIC_STUDIO_FOLDERS[metric.id]}/${String(digit).padStart(2, "0")}.png`;
         const existsInTemplate = resolution.spriteFolders.some((folder) =>
           folder.files.some((candidate) => candidate.path === path)
         );
+        const rasterized = shouldRenderWatchfaceText(
+          String(digit),
+          metricFontFamily,
+          metricTypography
+        );
+        const canvas = fixedMetricDigitCanvas(
+          file,
+          style,
+          fontSize,
+          rasterized ? metricFontFamily : "",
+          metricTypography,
+          nativeScale
+        );
         jobs.push({
           source: file,
           path,
           digit,
-          width: Math.max(1, Math.round(file.width * normalizedScale)),
-          height: Math.max(1, Math.round(file.height * normalizedScale)),
+          width: canvas.width,
+          height: canvas.height,
           color: style.color,
           rotation: style.rotation,
           fontFamily: metricFontFamily,
+          fontSize: canvas.fontSize,
           typography: metricTypography,
-          rasterized: shouldRenderWatchfaceText(
-            String(digit),
-            metricFontFamily,
-            metricTypography
-          ),
+          rasterized,
           create: !existsInTemplate
         });
       });
@@ -6699,7 +7281,8 @@ export async function buildMetricSpriteReplacements(
             ("digitColor" in typography && typeof typography.digitColor === "string"
               ? typography.digitColor
               : "#ffffff"),
-          job.typography
+          job.typography,
+          job.fontSize
         )
       : await resizeAndTintSprite(
           assetsByPath.get(job.source.path)?.dataUrl ?? "",
@@ -6723,17 +7306,43 @@ export function buildTimeStyleOverrides(
   details: CorosWatchfaceTemplateDetails,
   styles: WatchfaceTimeStyles,
   useStudioFolders = false,
-  typography: WatchfaceTypography = {}
+  /** Face typography; `fontFamily` lets a font size measure the face font. */
+  typography: WatchfaceTypography & { fontFamily?: string } = {}
 ): CorosWatchfaceConfigOverride[] {
   const overrides: CorosWatchfaceConfigOverride[] = [];
+  const masterWidth = pickPreviewResolution(details)?.width;
   for (const resolution of details.resolutions) {
     const values: Record<string, string> = {};
+    const nativeScale = masterWidth ? resolution.width / masterWidth : 1;
     const autoStyle = styles.autoTime;
     if (autoStyle && hasAutoAlignedTime(resolution)) {
-      const rect = scaleConfigRectValue(
-        resolution.config.autoalign_time_rect ?? "",
-        autoStyle.scale
-      );
+      const autoFiles = findSpriteFolder(resolution, resolution.config.autoalign_time_font)?.files ?? [];
+      const autoRect = parseConfigRect(resolution.config.autoalign_time_rect);
+      // A font size resizes the box by the new digit cell, like a fixed metric.
+      const factors = styleFontSize(autoStyle) !== undefined && autoFiles.length > 0 && autoRect
+        ? fixedMetricRectFactors(
+            autoFiles,
+            timeSpriteCanvasSize(
+              {
+                width: Math.max(...autoFiles.slice(0, 10).map((file) => file.width)),
+                height: Math.max(...autoFiles.slice(0, 10).map((file) => file.height))
+              },
+              autoStyle,
+              typography,
+              { family: autoStyle.fontFamily ?? typography.fontFamily ?? "", nativeScale }
+            )
+          )
+        : null;
+      const rect = factors && autoRect
+        ? resizeConfigRectToCanvas(
+            resolution.config.autoalign_time_rect ?? "",
+            (autoRect.x1 - autoRect.x0) * factors.x,
+            (autoRect.y1 - autoRect.y0) * factors.y
+          )
+        : scaleConfigRectValue(
+            resolution.config.autoalign_time_rect ?? "",
+            autoStyle.scale
+          );
       if (rect) values.autoalign_time_rect = rect;
       if (useStudioFolders) {
         values.autoalign_time_font = timeStudioFolder("autoTime", "high");
@@ -6760,7 +7369,10 @@ export function buildTimeStyleOverrides(
               pos,
               source,
               sample,
-              size: timeSpriteCanvasSize(sample, style, typography)
+              size: timeSpriteCanvasSize(sample, style, typography, {
+                family: style.fontFamily ?? typography.fontFamily ?? "",
+                nativeScale
+              })
             }]
           : [];
       });
@@ -6773,7 +7385,7 @@ export function buildTimeStyleOverrides(
       const y1 = Math.max(...planned.map((item) => item.pos.y + item.sample.height));
       const centerX = (x0 + x1) / 2;
       const centerY = (y0 + y1) / 2;
-      const normalizedScale = normalizeSpriteScale(style.scale);
+      const normalizedScale = timeStyleScale(style, planned[0]!.sample, planned[0]!.size);
       const baseGap = planned[1]
         ? planned[1].pos.x - (planned[0]!.pos.x + planned[0]!.sample.width)
         : 0;
@@ -6823,11 +7435,15 @@ export function timeTrackingOffset(part: string | undefined, slot: string | unde
 export function buildTimeTrackingOverrides(
   details: CorosWatchfaceTemplateDetails,
   letterSpacing: number,
-  styles: WatchfaceTimeStyles = {}
+  styles: WatchfaceTimeStyles = {},
+  /** Face typography, so a font size measures the same cell as the preview. */
+  typography: WatchfaceTypography & { fontFamily?: string } = {}
 ): CorosWatchfaceConfigOverride[] {
   const overrides: CorosWatchfaceConfigOverride[] = [];
+  const masterWidth = pickPreviewResolution(details)?.width;
   for (const resolution of details.resolutions) {
     const values: Record<string, string> = {};
+    const nativeScale = masterWidth ? resolution.width / masterWidth : 1;
     for (const part of WATCHFACE_TIME_PARTS) {
       const partSpacing = Math.max(
         -0.35,
@@ -6836,7 +7452,7 @@ export function buildTimeTrackingOverrides(
       if (Math.abs(partSpacing) < 0.001) {
         continue;
       }
-      const scale = normalizeSpriteScale(styles[part.id]?.scale);
+      const partStyle = styles[part.id];
       for (const digit of part.digits) {
         const position = parseConfigPos(resolution.config[digit.posKey]);
         const sample = findSpriteFolder(
@@ -6846,7 +7462,13 @@ export function buildTimeTrackingOverrides(
         if (!position || !sample) {
           continue;
         }
-        const offset = timeTrackingOffset(part.id, digit.slot, sample.height * scale, partSpacing);
+        const height = styleFontSize(partStyle) !== undefined
+          ? timeSpriteCanvasSize(sample, partStyle, typography, {
+              family: partStyle?.fontFamily ?? typography.fontFamily ?? "",
+              nativeScale
+            }).height
+          : sample.height * normalizeSpriteScale(partStyle?.scale);
+        const offset = timeTrackingOffset(part.id, digit.slot, height, partSpacing);
         values[digit.posKey] = `{${position.x + offset},${position.y}}`;
       }
     }
@@ -6877,10 +7499,13 @@ export async function buildTimeSpriteReplacements(
     color?: string;
     rotation?: number;
     fontFamily: string;
+    fontSize?: number;
     typography: WatchfaceTypography;
     rasterized: boolean;
   }[] = [];
+  const masterWidth = pickPreviewResolution(details)?.width;
   for (const resolution of details.resolutions) {
+    const nativeScale = masterWidth ? resolution.width / masterWidth : 1;
     const autoStyle = styles.autoTime;
     const autoSource = autoStyle && hasAutoAlignedTime(resolution)
       ? findSpriteFolder(resolution, resolution.config.autoalign_time_font)
@@ -6892,8 +7517,10 @@ export async function buildTimeSpriteReplacements(
         const canvasSize = timeSpriteCanvasSize(
           file,
           autoStyle,
-          partTypography
+          partTypography,
+          { family: partFontFamily, nativeScale }
         );
+        const contentScale = timeStyleScale(autoStyle, file, canvasSize);
         jobs.push({
           source: file,
           path: `${resolution.directory}/${timeStudioFolder("autoTime", "high")}/${String(value).padStart(2, "0")}.png`,
@@ -6901,17 +7528,12 @@ export async function buildTimeSpriteReplacements(
           tracking: partTypography.letterSpacing,
           width: canvasSize.width,
           height: canvasSize.height,
-          contentWidth: Math.max(
-            1,
-            Math.round(file.width * normalizeSpriteScale(autoStyle.scale))
-          ),
-          contentHeight: Math.max(
-            1,
-            Math.round(file.height * normalizeSpriteScale(autoStyle.scale))
-          ),
+          contentWidth: Math.max(1, Math.round(file.width * contentScale)),
+          contentHeight: Math.max(1, Math.round(file.height * contentScale)),
           color: autoStyle.color,
           rotation: autoStyle.rotation,
           fontFamily: partFontFamily,
+          fontSize: canvasSize.fontSize,
           typography: partTypography,
           rasterized: shouldRenderWatchfaceText(
             String(value),
@@ -6937,25 +7559,22 @@ export async function buildTimeSpriteReplacements(
           const canvasSize = timeSpriteCanvasSize(
             file,
             style,
-            partTypography
+            partTypography,
+            { family: partFontFamily, nativeScale }
           );
+          const contentScale = timeStyleScale(style, file, canvasSize);
           jobs.push({
             source: file,
             path: `${resolution.directory}/${timeStudioFolder(part.id, digit.slot)}/${String(value).padStart(2, "0")}.png`,
             digit: value,
             width: canvasSize.width,
             height: canvasSize.height,
-            contentWidth: Math.max(
-              1,
-              Math.round(file.width * normalizeSpriteScale(style.scale))
-            ),
-            contentHeight: Math.max(
-              1,
-              Math.round(file.height * normalizeSpriteScale(style.scale))
-            ),
+            contentWidth: Math.max(1, Math.round(file.width * contentScale)),
+            contentHeight: Math.max(1, Math.round(file.height * contentScale)),
             color: style.color,
             rotation: style.rotation,
             fontFamily: partFontFamily,
+            fontSize: canvasSize.fontSize,
             typography: partTypography,
             rasterized: shouldRenderWatchfaceText(
               String(value),
@@ -6985,7 +7604,8 @@ export async function buildTimeSpriteReplacements(
             ("digitColor" in typography && typeof typography.digitColor === "string"
               ? typography.digitColor
               : "#ffffff"),
-          job.typography
+          job.typography,
+          job.fontSize
         )
       : await centerSpriteOnCanvas(
           await resizeAndTintSprite(
@@ -7022,7 +7642,10 @@ function alignedDateRectWidth(
 }
 
 function datePartIdForRectKey(rectKey: string): WatchfaceDatePartId | undefined {
-  return WATCHFACE_DATE_PARTS.find((part) => part.rectKey === rectKey)?.id;
+  // Translated tables (french_date_week_rect, …) follow the English part.
+  return WATCHFACE_DATE_PARTS.find((part) =>
+    rectKey.endsWith(part.rectKey.replace(/^english/, ""))
+  )?.id;
 }
 
 /** Isolates date sprite folders and follows exact PNG dimensions when present. */
@@ -7112,6 +7735,21 @@ export function resizeConfigRectToCanvas(
   return `{${x0},${y0},${x0 + normalizedWidth},${y0 + normalizedHeight}${match[5]}}`;
 }
 
+/**
+ * The watch languages whose weekday and month tables get translated words:
+ * one choice for both, the one picked in Send. withWatchLanguages writes it
+ * onto a custom weekday's style, which the weekday copies also follow
+ * (applyWeekdayLanguageOverrides); a face without one keeps the project's.
+ */
+function dateWordLanguages(
+  styles: WatchfaceDateStyles,
+  watchLanguages: "all" | "english" | string[] | undefined
+): "all" | "english" | string[] {
+  const weekday = styles.weekday;
+  if (!weekday) return watchLanguages ?? "all";
+  return weekday.overwriteAllLanguages ? "all" : weekday.overwriteLanguages ?? [];
+}
+
 /** Generates isolated date sprites and any native-size date rectangles. */
 export async function buildDateSpriteComposition(
   details: CorosWatchfaceTemplateDetails,
@@ -7119,7 +7757,10 @@ export async function buildDateSpriteComposition(
   options: Pick<
     WatchfaceStudioOptions,
     "fontFamily" | "digitColor" | "tintLabels" | "fontWeight" | "fontStyle" | "letterSpacing" | "rasterFont"
-  >,
+  > & {
+    /** The project's watch languages, for a face without a custom weekday (see dateWordLanguages). */
+    watchLanguages?: "all" | "english" | string[];
+  },
   loadAssets: WatchfaceAssetLoader
 ): Promise<WatchfaceDateSpriteComposition> {
   const jobs: {
@@ -7131,6 +7772,8 @@ export async function buildDateSpriteComposition(
     kind: "digits" | "week" | "month";
     text: string;
     fontFamily: string;
+    /** This tree's explicit font size, for a desktop font. */
+    fontSize?: number;
     typography: WatchfaceTypography;
     rasterized: boolean;
     color?: string;
@@ -7146,7 +7789,13 @@ export async function buildDateSpriteComposition(
     rectValue: string;
     rectGlyphCount: number;
     create: boolean;
+    /** The word set this label belongs to, when a desktop font draws words. */
+    labels?: string[];
   }[] = [];
+  // Translated word tables, by `${directory}|${language}`, and their config.
+  const translatedWeekdays = new Set<string>();
+  const languageOverrides: CorosWatchfaceConfigOverride[] = [];
+  const styledDateRects = buildDateStyleOverrides(details, styles, true);
   const masterWidth = pickPreviewResolution(details)?.width;
   for (const resolution of details.resolutions) {
     const nativeScale = masterWidth ? resolution.width / masterWidth : 1;
@@ -7163,6 +7812,13 @@ export async function buildDateSpriteComposition(
       const normalizedScale = normalizeSpriteScale(style.scale);
       const monthLabels = part.id === "dateMonth" && dateMonthUsesLabels(source, style);
       const limit = part.kind === "week" ? 7 : monthLabels ? 12 : 10;
+      // A desktop font spells its own words in the chosen letter style; PNG
+      // label sets keep the template's English capitals as glyph keys.
+      const wordKind = partFontFamily && (part.kind === "week" || monthLabels)
+        ? (part.kind === "week" ? "week" : "month")
+        : null;
+      const words = wordKind ? watchfaceDateLabels(wordKind, style.labelStyle) : undefined;
+      const firstJob = jobs.length;
       Array.from({ length: limit }, (_, value) => ({
         value,
         file: source.files[value] ?? source.files[0]
@@ -7186,12 +7842,16 @@ export async function buildDateSpriteComposition(
           width: canvasSize?.width ?? file.width,
           height: canvasSize?.height ?? file.height,
           kind: monthLabels ? "month" : part.kind,
-          text: monthLabels
+          text: words?.[value] ?? (monthLabels
             ? corosMonthLabelForSpriteIndex(value) ?? String(value)
             : part.kind === "week"
               ? WEEKDAY_LABELS[value] ?? String(value)
-              : String(value),
+              : String(value)),
+          labels: words,
           fontFamily: partFontFamily,
+          fontSize: partFontFamily && styleFontSize(style) !== undefined
+            ? styleFontSize(style)! * nativeScale
+            : undefined,
           typography: partTypography,
           rasterized: shouldRenderWatchfaceText(
             monthLabels
@@ -7220,6 +7880,49 @@ export async function buildDateSpriteComposition(
           create: !existsInTemplate
         });
       });
+      if (!wordKind || !style.translateLabels) continue;
+      // Each watch language the template declares gets its own word table.
+      const tableField = part.rectKey.replace(/^english_date_|_rect$/g, "");
+      const chosen = dateWordLanguages(styles, options.watchLanguages);
+      const englishJobs = jobs.slice(firstJob);
+      const styledRect = styledDateRects
+        .filter((override) => override.path === `${resolution.directory}/config.txt`)
+        .reduce<string | undefined>((value, override) => override.values[part.rectKey] ?? value, undefined) ??
+        resolution.config[part.rectKey];
+      for (const key of Object.keys(resolution.config)) {
+        const language = new RegExp(`^([a-z_]+)_date_${tableField}_font$`).exec(key)?.[1];
+        if (!language || language === "english" || language.startsWith("control_") || !WATCH_LANGUAGE_LOCALES[language]) continue;
+        if (chosen !== "all" && (chosen === "english" || !chosen.includes(language))) continue;
+        const rectKey = `${language}_date_${tableField}_rect`;
+        // The exporter rejects keys a template never declared.
+        if (!(rectKey in resolution.config)) continue;
+        const localized = watchfaceDateLabels(wordKind, style.labelStyle, language);
+        const folder = `${part.studioFolder}_${language}`;
+        for (const job of englishJobs) {
+          jobs.push({
+            ...job,
+            path: `${resolution.directory}/${folder}/${String(job.value).padStart(2, "0")}.png`,
+            text: localized[job.value] ?? job.text,
+            labels: localized,
+            groupKey: `${job.configPath}|${rectKey}`,
+            rectKey,
+            create: true
+          });
+        }
+        const colorKey = `${language}_date_${tableField}_font_color`;
+        languageOverrides.push({
+          path: `${resolution.directory}/config.txt`,
+          values: {
+            [`${language}_date_${tableField}_font`]: folder,
+            ...(colorKey in resolution.config ? { [colorKey]: "" } : {}),
+            // Natural-width tables size their own rect below.
+            ...(englishJobs.some((job) => job.nativeSize) || !styledRect
+              ? {}
+              : { [rectKey]: styledRect })
+          }
+        });
+        if (wordKind === "week") translatedWeekdays.add(`${resolution.directory}|${language}`);
+      }
     }
   }
   const assets = await loadAssets([
@@ -7247,9 +7950,7 @@ export async function buildDateSpriteComposition(
       const targetHeight = Math.max(1, Math.round(job.height * job.zoom));
       const unspacedDataUrl = job.rasterized
         ? await renderNativeWatchfaceTextSprite(
-            job.kind === "week"
-              ? WEEKDAY_LABELS[job.value] ?? String(job.value)
-              : String(job.value),
+            job.text,
             targetHeight,
             job.fontFamily,
             job.color ?? options.digitColor,
@@ -7279,6 +7980,34 @@ export async function buildDateSpriteComposition(
         height: image.naturalHeight
       });
       nativeGroups.set(job.groupKey, group);
+      continue;
+    }
+    // A desktop font sizes the whole set itself; see renderDateFontSprite.
+    if (job.rasterized && job.fontFamily) {
+      const fontDataUrl = await renderDateFontSprite(
+        job.text,
+        job.width,
+        job.height,
+        job.fontFamily,
+        job.color ?? options.digitColor,
+        job.typography,
+        job.exactCanvas ? 1 : job.zoom,
+        job.align,
+        job.labels ?? (job.kind === "week" ? WEEKDAY_LABELS : job.kind === "month" ? WATCHFACE_MONTH_LABELS : undefined),
+        job.fontSize
+      );
+      const dataUrl = await rotateSpriteInCanvas(
+        await alignVisibleSpriteInCanvas(fontDataUrl, job.align),
+        job.width,
+        job.height,
+        job.rotation
+      );
+      replacements.push({
+        path: job.path,
+        dataUrl: /^\d$/.test(job.text) ? await spaceWatchfaceGlyph(dataUrl, job.typography.letterSpacing) : dataUrl,
+        create: job.create,
+        ...(job.exactCanvas ? { allowDimensionOverride: true } : {})
+      });
       continue;
     }
     const baseDataUrl = job.rasterized
@@ -7377,14 +8106,21 @@ export async function buildDateSpriteComposition(
       });
     }
   }
-  return applyWeekdayLanguageOverrides(details, styles, { replacements, configOverrides });
+  return applyWeekdayLanguageOverrides(
+    details,
+    styles,
+    { replacements, configOverrides: [...configOverrides, ...languageOverrides] },
+    translatedWeekdays
+  );
 }
 
 /** Copy the composed weekday into firmware-native locale folders only when opted in. */
 export function applyWeekdayLanguageOverrides(
   details: CorosWatchfaceTemplateDetails,
   styles: WatchfaceDateStyles,
-  composition: WatchfaceDateSpriteComposition
+  composition: WatchfaceDateSpriteComposition,
+  /** `${directory}|${language}` tables that already got translated words. */
+  translated: ReadonlySet<string> = new Set()
 ): WatchfaceDateSpriteComposition {
   const allLanguages = styles.weekday?.overwriteAllLanguages === true;
   const selected = new Set(styles.weekday?.overwriteLanguages ?? []);
@@ -7407,6 +8143,7 @@ export function applyWeekdayLanguageOverrides(
       if (!fontKey.endsWith("_date_week_font") || fontKey.startsWith("control_")) continue;
       const language = fontKey.replace(/_date_week_font$/, "");
       if (!allLanguages && !selected.has(language)) continue;
+      if (translated.has(`${resolution.directory}|${language}`)) continue;
       const folder = findSpriteFolder(resolution, font);
       if (!folder || folder.files.length < 7) continue;
       // Avoid modifying an unselected language that shares this font folder.
@@ -7922,6 +8659,10 @@ export interface WatchfaceLayoutGeometryOptions {
   letterSpacing?: number;
   /** Face-wide PNG font used when a time part has no component override. */
   rasterFont?: CorosWatchfaceRasterFont;
+  /** Face font and face, so a time font size measures the drawn digits. */
+  fontFamily?: string;
+  fontWeight?: number;
+  fontStyle?: "normal" | "italic";
 }
 
 export interface WatchfaceLayoutOffsetLimits {
@@ -8087,7 +8828,9 @@ export function computeLayoutGroupBounds(
           ? normalizeSpriteScale(timeStyle.scale)
           : 1;
         const size = effectiveTimeStyle
-          ? timeSpriteCanvasSize(sourceSize, effectiveTimeStyle, geometry)
+          ? timeSpriteCanvasSize(sourceSize, effectiveTimeStyle, geometry, {
+              family: effectiveTimeStyle.fontFamily ?? geometry.fontFamily ?? ""
+            })
           : {
               width: Math.max(1, Math.round(sourceSize.width * timeScale)),
               height: Math.max(1, Math.round(sourceSize.height * timeScale))
@@ -9430,7 +10173,8 @@ export async function drawStudioPreview(
     const canvasSize = timeSpriteCanvasSize(
       file,
       timeStyle,
-      timeTypography
+      timeTypography,
+      { family: timeFontFamily, nativeScale: options.nativeSpriteResolutionScale ?? 1 }
     );
     const width = canvasSize.width;
     const height = canvasSize.height;
@@ -9446,7 +10190,7 @@ export async function drawStudioPreview(
     );
     let image = digitSprites.get(file.path) ?? loaded.get(file.path);
     if (timeStyle || componentColor || rasterizedTime) {
-      const cacheKey = `${file.path}|${timeFontFamily}|${timeColor}|${width}x${height}|${timeTypography.fontWeight ?? 400}|${timeTypography.fontStyle ?? "normal"}|${timeTypography.letterSpacing ?? 0}`;
+      const cacheKey = `${file.path}|${timeFontFamily}|${timeColor}|${width}x${height}|${timeTypography.fontWeight ?? 400}|${timeTypography.fontStyle ?? "normal"}|${timeTypography.letterSpacing ?? 0}|${canvasSize.fontSize ?? ""}`;
       image = styledTimeGlyphs.get(cacheKey);
       if (!image) {
         if (rasterizedTime) {
@@ -9457,11 +10201,12 @@ export async function drawStudioPreview(
               height,
               timeFontFamily,
               timeColor,
-              timeTypography
+              timeTypography,
+              canvasSize.fontSize
             )
           );
         } else if (loadedAssets.get(file.path)?.dataUrl) {
-          const contentScale = normalizeSpriteScale(timeStyle?.scale);
+          const contentScale = timeStyleScale(timeStyle, file, canvasSize);
           image = await loadStudioImage(
             await centerSpriteOnCanvas(
               await resizeAndTintSprite(
@@ -9517,12 +10262,14 @@ export async function drawStudioPreview(
       const hourSize = timeSpriteCanvasSize(
         hourLowFile,
         hourStyle,
-        resolveWatchfaceComponentTypography(options, hourStyle)
+        resolveWatchfaceComponentTypography(options, hourStyle),
+        { family: hourStyle?.fontFamily ?? options.fontFamily, nativeScale: options.nativeSpriteResolutionScale ?? 1 }
       );
       const minuteSize = timeSpriteCanvasSize(
         minuteHighFile,
         minuteStyle,
-        resolveWatchfaceComponentTypography(options, minuteStyle)
+        resolveWatchfaceComponentTypography(options, minuteStyle),
+        { family: minuteStyle?.fontFamily ?? options.fontFamily, nativeScale: options.nativeSpriteResolutionScale ?? 1 }
       );
       const hourWidth = hourSize.width;
       const hourHeight = hourSize.height;
@@ -9599,6 +10346,9 @@ export async function drawStudioPreview(
     const weekStyle = options.dateStyles?.weekday;
     const weekFontFamily = weekStyle?.fontFamily ?? options.fontFamily;
     const weekTypography = resolveWatchfaceComponentTypography(options, weekStyle);
+    // A desktop font spells the weekday in the chosen letter style.
+    const weekWords = weekFontFamily ? watchfaceDateLabels("week", weekStyle?.labelStyle) : WEEKDAY_LABELS;
+    const weekLabel = weekWords[weekdayIndex] ?? "DAY";
     let image = loaded.get(weekFile.path);
     const weekScale = normalizeSpriteScale(weekStyle?.scale);
     const weekCanvas = dateSpriteCanvasSize(
@@ -9628,7 +10378,7 @@ export async function drawStudioPreview(
     ) {
       image = await loadStudioImage(
         await renderNativeWatchfaceTextSprite(
-          WEEKDAY_LABELS[weekdayIndex] ?? "DAY",
+          weekLabel,
           weekHeight * weekScale,
           weekFontFamily,
           weekColor ?? options.digitColor,
@@ -9654,6 +10404,23 @@ export async function drawStudioPreview(
       );
       renderedWeekWidth = image.naturalWidth;
       renderedWeekHeight = image.naturalHeight;
+    } else if (weekFontFamily) {
+      image = await loadStudioImage(
+        await renderDateFontSprite(
+          weekLabel,
+          weekWidth,
+          weekHeight,
+          weekFontFamily,
+          weekColor ?? options.digitColor,
+          weekTypography,
+          weekCanvas?.native ? 1 : weekScale,
+          weekStyle?.align,
+          weekWords,
+          styleFontSize(weekStyle) !== undefined
+            ? styleFontSize(weekStyle)! * (options.nativeSpriteResolutionScale ?? 1)
+            : undefined
+        )
+      );
     } else if (shouldRenderWatchfaceText(WEEKDAY_LABELS[weekdayIndex] ?? "DAY", weekFontFamily, weekTypography)) {
       const rendered = await renderWatchfaceTextSprite(
         WEEKDAY_LABELS[weekdayIndex] ?? "DAY",
@@ -9746,7 +10513,25 @@ export async function drawStudioPreview(
     const width = canvasSize?.width ?? monthFile.width;
     const height = canvasSize?.height ?? monthFile.height;
     let image = loaded.get(monthFile.path);
-    if (shouldRenderWatchfaceText(label, monthFontFamily, monthTypography)) {
+    if (monthStyle && monthFontFamily) {
+      const monthWords = watchfaceDateLabels("month", monthStyle.labelStyle);
+      image = await loadStudioImage(
+        await renderDateFontSprite(
+          monthWords[monthIndex] ?? label,
+          width,
+          height,
+          monthFontFamily,
+          monthColor ?? options.digitColor,
+          monthTypography,
+          canvasSize?.native ? 1 : monthStyle.scale,
+          monthStyle.align,
+          monthWords,
+          styleFontSize(monthStyle) !== undefined
+            ? styleFontSize(monthStyle)! * (options.nativeSpriteResolutionScale ?? 1)
+            : undefined
+        )
+      );
+    } else if (shouldRenderWatchfaceText(label, monthFontFamily, monthTypography)) {
       const rendered = await renderWatchfaceTextSprite(
         label,
         width,
@@ -10143,17 +10928,37 @@ export async function drawStudioPreview(
         )
       );
       const timeCanvas = timeStyle
-        ? timeSpriteCanvasSize(file, timeStyle, glyphTypography)
+        ? timeSpriteCanvasSize(file, timeStyle, glyphTypography, {
+            family: glyphFontFamily,
+            nativeScale: options.nativeSpriteResolutionScale ?? 1
+          })
+        : null;
+      const metricFontSize = plan.metricId && !timeStyle
+        ? fixedMetricFontSize(plan.metricId, metricStyle)
+        : undefined;
+      const metricCanvas = metricFontSize !== undefined
+        ? fixedMetricDigitCanvas(
+            file,
+            metricStyle,
+            metricFontSize,
+            shouldRenderWatchfaceText(digit, glyphFontFamily, glyphTypography)
+              ? glyphFontFamily
+              : "",
+            glyphTypography,
+            options.nativeSpriteResolutionScale ?? 1
+          )
         : null;
       let styledFile = {
         ...file,
         width:
           dateCanvas?.width ??
           timeCanvas?.width ??
+          metricCanvas?.width ??
           Math.max(1, Math.round(file.width * glyphScale)),
         height:
           dateCanvas?.height ??
           timeCanvas?.height ??
+          metricCanvas?.height ??
           Math.max(1, Math.round(file.height * glyphScale))
       };
       const glyphColor =
@@ -10163,7 +10968,7 @@ export async function drawStudioPreview(
         complicationStyle?.color ??
         componentColor ??
         options.digitColor;
-      const cacheKey = `${file.path}|${glyphFontFamily}|${glyphColor}|${styledFile.width}x${styledFile.height}|${glyphTypography.fontWeight ?? 400}|${glyphTypography.fontStyle ?? "normal"}|${glyphTypography.letterSpacing ?? 0}|${dateCanvas?.native ?? false}|${nativeGlyph ? "native" : "bounded"}`;
+      const cacheKey = `${file.path}|${glyphFontFamily}|${glyphColor}|${styledFile.width}x${styledFile.height}|${glyphTypography.fontWeight ?? 400}|${glyphTypography.fontStyle ?? "normal"}|${glyphTypography.letterSpacing ?? 0}|${dateCanvas?.native ?? false}|${nativeGlyph ? "native" : "bounded"}|${metricCanvas?.fontSize ?? timeCanvas?.fontSize ?? dateStyle?.fontSize ?? ""}`;
       let image = styledMetricGlyphs.get(cacheKey);
       if (!image) {
         if (
@@ -10191,6 +10996,24 @@ export async function drawStudioPreview(
               Boolean(dateStyle?.color || complicationStyle?.color)
             )
           );
+        } else if (dateStyle && glyphFontFamily) {
+          // Matches the export: the font sizes all ten digits together.
+          image = await loadStudioImage(
+            await renderDateFontSprite(
+              digit,
+              styledFile.width,
+              styledFile.height,
+              glyphFontFamily,
+              glyphColor,
+              glyphTypography,
+              dateCanvas?.native ? 1 : dateStyle.scale,
+              undefined,
+              undefined,
+              styleFontSize(dateStyle) !== undefined
+                ? styleFontSize(dateStyle)! * (options.nativeSpriteResolutionScale ?? 1)
+                : undefined
+            )
+          );
         } else if (shouldRenderWatchfaceText(digit, glyphFontFamily, glyphTypography)) {
           const rendered = await renderWatchfaceTextSprite(
             digit,
@@ -10198,7 +11021,8 @@ export async function drawStudioPreview(
             styledFile.height,
             glyphFontFamily,
             glyphColor,
-            glyphTypography
+            glyphTypography,
+            metricCanvas?.fontSize ?? timeCanvas?.fontSize
           );
           image = await loadStudioImage(
             dateStyle && !dateCanvas?.native

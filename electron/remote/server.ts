@@ -290,10 +290,11 @@ function stringParam(params: Record<string, unknown>, key: string, maxLength = 2
   return value;
 }
 
-const PROVIDERS: ChatProvider[] = ["chatgpt", "claude-code", "openrouter", "local"];
+const PROVIDERS: ChatProvider[] = ["chatgpt", "claude-code", "gemini-cli", "openrouter", "local"];
 const PROVIDER_LABELS: Record<ChatProvider, string> = {
   chatgpt: "ChatGPT",
   "claude-code": "Claude",
+  "gemini-cli": "Gemini",
   openrouter: "OpenRouter",
   local: "Local model"
 };
@@ -307,6 +308,7 @@ export interface RemoteModelCatalog {
 function currentModel(settings: ChatSettings, provider: ChatProvider): string {
   switch (provider) {
     case "claude-code": return settings.claudeCode.model ?? "";
+    case "gemini-cli": return settings.geminiCli.model ?? "";
     case "openrouter": return settings.openRouter.model ?? "";
     case "local": return settings.local.model ?? "";
     default: return settings.chatgpt.model ?? "";
@@ -318,6 +320,7 @@ export function applyModelChoice(settings: ChatSettings, provider: ChatProvider,
   const next: ChatSettings = { ...settings, provider };
   const chosen = model || undefined;
   if (provider === "claude-code") next.claudeCode = { ...settings.claudeCode, model: chosen };
+  else if (provider === "gemini-cli") next.geminiCli = { ...settings.geminiCli, model: chosen };
   else if (provider === "chatgpt") next.chatgpt = { ...settings.chatgpt, model: chosen };
   else if (provider === "openrouter") next.openRouter = { ...settings.openRouter, model: chosen ?? "openrouter/auto" };
   return next;

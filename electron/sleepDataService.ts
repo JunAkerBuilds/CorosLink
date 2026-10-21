@@ -14,7 +14,8 @@ import type {
   TrainingHubSleepSummary
 } from "./types";
 
-const PREFERRED_SLEEP_TOOL = "querySleepData";
+// COROS renamed querySleepData in 2026-10; the /sleep/ match in resolveSleepTool still finds the old name.
+const PREFERRED_SLEEP_TOOL = "querySleepOverview";
 const FALLBACK_SLEEP_TOOL = "get_sleep_data";
 
 function toOptionalNumber(value: unknown): number | undefined {
@@ -1245,7 +1246,8 @@ function parseProseSleepSection(section: string): TrainingHubSleepRecord | undef
   const isoDateMatch = section.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
   const compactDateMatch = section.match(/\b(20\d{6})\b/);
   const scoreMatch = section.match(/Sleep score:\s*(\d+(?:\.\d+)?)/i);
-  const mainSleepMatch = section.match(/Main sleep:\s*([^\n]+)/i);
+  // querySleepOverview labels it "Main Sleep (asleep):", beside "Main Sleep Period (incl. awake):".
+  const mainSleepMatch = section.match(/Main sleep(?:\s*\(asleep\))?:\s*([^\n]+)/i);
   const awakeMatch = section.match(/Awake time:\s*([^\n]+)/i);
   const awakePercentMatch = section.match(/Awake (?:ratio|percent(?:age)?):\s*(\d+(?:\.\d+)?)\s*%/i);
   const awakeCountMatch = section.match(/(?:Awake count|Wake-ups?|Wakeups?)\s*(?:\(?\s*>?\s*5\s*min(?:utes?)?\s*\)?)?:\s*(\d+)/i);
@@ -1263,6 +1265,11 @@ function parseProseSleepSection(section: string): TrainingHubSleepRecord | undef
   const [napStart, napEnd] = parseSleepClockRange(napText);
 
   if (!scoreMatch && !mainSleepMatch) {
+    return undefined;
+  }
+  // querySleepOverview lists a night the phone hasn't synced as "Sleep Score: 0" with no
+  // sleep lines; skip it like the old "No data" days so last night's record stays latest.
+  if (!mainSleepMatch && Number(scoreMatch?.[1]) === 0) {
     return undefined;
   }
 
@@ -1533,7 +1540,7 @@ export function parseSleepDataResponse(text: string): TrainingHubSleepRecord[] {
   return mergeCollectedSleepRecords([...jsonRecords, ...proseRecords]);
 }
 
-function resolveSleepTool(tools: CorosMcpTool[]): CorosMcpTool | undefined {
+export function resolveSleepTool(tools: CorosMcpTool[]): CorosMcpTool | undefined {
   const preferred = tools.find((tool) => tool.name === PREFERRED_SLEEP_TOOL);
   if (preferred) {
     return preferred;
@@ -1551,13 +1558,47 @@ function resolveSleepTool(tools: CorosMcpTool[]): CorosMcpTool | undefined {
   );
 }
 
-function schemaPropertyNames(schema: Record<string, unknown>): string[] {
+function schemaProperties(schema: Record<string, unknown>): Record<string, unknown> {
   const properties = schema.properties;
   if (!properties || typeof properties !== "object") {
-    return [];
+    return {};
   }
 
-  return Object.keys(properties as Record<string, unknown>);
+  return properties as Record<string, unknown>;
+}
+
+function schemaPropertyNames(schema: Record<string, unknown>): string[] {
+  return Object.keys(schemaProperties(schema));
+}
+
+function documentsCompactDate(schema: Record<string, unknown>, key: string): boolean {
+  const property = schemaProperties(schema)[key];
+  const description =
+    property && typeof property === "object"
+      ? (property as Record<string, unknown>).description
+      : undefined;
+  return typeof description === "string" && /yyyymmdd/i.test(description);
+}
+
+// Only send what the schema allows: declared keys, and no ISO dates where it documents yyyyMMdd.
+function fitsSleepToolSchema(
+  candidate: Record<string, unknown>,
+  schema: Record<string, unknown>,
+  propertyNames: string[]
+): boolean {
+  if (propertyNames.length === 0) {
+    return true;
+  }
+
+  return Object.entries(candidate).every(
+    ([key, value]) =>
+      propertyNames.includes(key) &&
+      !(
+        typeof value === "string" &&
+        /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+        documentsCompactDate(schema, key)
+      )
+  );
 }
 
 function addExactSleepDateArgs(
@@ -1654,17 +1695,53 @@ function addGenericSleepQueryArgs(
   );
 }
 
-function buildSleepToolArgs(
-  tool: CorosMcpTool,
-  days: number
-): Record<string, unknown>[] {
+export interface SleepToolArgsPlan {
+  // Sent alone first when the schema declares startDate/endDate (querySleepOverview).
+  range?: Record<string, unknown>;
+  // Legacy probing; after a declared range, only sent until a call finds records.
+  probes: Record<string, unknown>[];
+}
+
+export function buildSleepToolArgs(tool: CorosMcpTool, days: number): SleepToolArgsPlan {
   const dateList = recentTrainingHubDateList(days);
   const startDay = dateList[dateList.length - 1];
   const endDay = dateList[0];
+  const propertyNames = schemaPropertyNames(tool.inputSchema);
+  let range: Record<string, unknown> | undefined;
+
+  if (propertyNames.includes("startDate") && propertyNames.includes("endDate")) {
+    // COROS dates these yyyyMMdd by wake-up day; ISO dates draw an anomaly warning, not data.
+    range = { startDate: startDay, endDate: endDay };
+    if (propertyNames.includes("days")) {
+      range.days = days;
+    }
+  }
+
+  const seen = new Set<string>(range ? [JSON.stringify(range)] : []);
+  const probes = buildSleepProbeArgs(tool, propertyNames, startDay, endDay, days).filter(
+    (candidate) => {
+      const key = JSON.stringify(candidate);
+      if (seen.has(key) || !fitsSleepToolSchema(candidate, tool.inputSchema, propertyNames)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    }
+  );
+
+  return { range, probes };
+}
+
+function buildSleepProbeArgs(
+  tool: CorosMcpTool,
+  propertyNames: string[],
+  startDay: string,
+  endDay: string,
+  days: number
+): Record<string, unknown>[] {
   const startIso = happenDayToIso(startDay);
   const endIso = happenDayToIso(endDay);
   const timezone = getLocalTimeZone();
-  const propertyNames = schemaPropertyNames(tool.inputSchema);
   const candidates: Record<string, unknown>[] = [];
 
   addExactSleepDateArgs(candidates, propertyNames, endDay);
@@ -1717,15 +1794,7 @@ function buildSleepToolArgs(
     candidates.push({ weeks: Math.max(1, Math.ceil(days / 7)) });
   }
 
-  const seen = new Set<string>();
-  return candidates.filter((candidate) => {
-    const key = JSON.stringify(candidate);
-    if (seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
+  return candidates;
 }
 
 async function ensureMcpForSleep(
@@ -1767,19 +1836,41 @@ export function sleepResponseQuality(records: TrainingHubSleepRecord[]): number 
   );
 }
 
-async function fetchSleepRecords(
+type SleepToolCaller = (name: string, args: Record<string, unknown>) => Promise<string>;
+
+let callSleepTool: SleepToolCaller = callCorosMcpTool;
+
+export function setSleepToolCallerForTests(caller?: SleepToolCaller): void {
+  callSleepTool = caller ?? callCorosMcpTool;
+}
+
+// COROS returns this text instead of data when it flags the call pattern.
+class SleepToolAnomalyError extends Error {}
+
+async function requestSleepRecords(
+  sleepTool: CorosMcpTool,
+  args: Record<string, unknown>
+): Promise<TrainingHubSleepRecord[]> {
+  const response = await callSleepTool(sleepTool.name, args);
+  if (/Tool call anomalies detected/i.test(response)) {
+    throw new SleepToolAnomalyError(response.trim().slice(0, 200));
+  }
+  return parseSleepDataResponse(response);
+}
+
+export async function fetchSleepRecords(
   sleepTool: CorosMcpTool,
   days: number
 ): Promise<TrainingHubSleepRecord[]> {
-  const argCandidates = buildSleepToolArgs(sleepTool, days);
+  const { range, probes } = buildSleepToolArgs(sleepTool, days);
+  const argCandidates = range ? [range, ...probes] : probes;
   let bestRecords: TrainingHubSleepRecord[] = [];
   let bestScore = -1;
   const collectedRecords: TrainingHubSleepRecord[] = [];
 
   for (const args of argCandidates) {
     try {
-      const response = await callCorosMcpTool(sleepTool.name, args);
-      const records = parseSleepDataResponse(response);
+      const records = await requestSleepRecords(sleepTool, args);
       const score = sleepResponseQuality(records);
       collectedRecords.push(...records);
 
@@ -1787,11 +1878,19 @@ async function fetchSleepRecords(
         bestScore = score;
         bestRecords = records;
       }
+      // Legacy probing merges every answer; a declared range stops at the first one with records.
+      if (range && records.length > 0) {
+        break;
+      }
     } catch (error) {
       console.warn(
         `[sleepDataService] ${sleepTool.name} failed for args ${JSON.stringify(args)}:`,
         error
       );
+      // More calls after a flag only add to it; keep what this refresh already has.
+      if (error instanceof SleepToolAnomalyError) {
+        break;
+      }
     }
   }
 

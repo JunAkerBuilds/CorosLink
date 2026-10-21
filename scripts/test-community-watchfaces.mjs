@@ -6,7 +6,7 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const serviceUrl = pathToFileURL(
   path.join(repoRoot, "dist-electron", "communityWatchfaceService.js")
 ).href;
-const { parseCommunityCatalogPage, parseCommunityWatchfaceDeepLink, trustedDownloadLocation } = await import(
+const { fetchCatalogOrOwned, parseCommunityCatalogPage, parseCommunityWatchfaceDeepLink, trustedDownloadLocation } = await import(
   `${serviceUrl}?cacheBust=${Date.now()}`
 );
 
@@ -104,3 +104,33 @@ for (const location of [
 }
 
 console.log("Community watchface service tests passed");
+
+// A private face answers only its owner: the catalog is asked anonymously first, and with the
+// account token only after a 404, and only for the catalog's own origin.
+{
+  const requests = [];
+  const fakeFetch = (statuses) => async (url, init) => {
+    requests.push({ url: String(url), authorization: new Headers(init.headers).get("authorization") });
+    return new Response("{}", { status: statuses.shift() });
+  };
+  const faceUrl = new URL("https://watchfaces.coroslink.com/api/v1/watch-faces/night-trail");
+  const init = { headers: { accept: "application/json" }, redirect: "error" };
+  const token = "clk_" + "A".repeat(43);
+  const tokenFor = (origin) => (origin === "https://watchfaces.coroslink.com" ? token : null);
+
+  assert.equal((await fetchCatalogOrOwned(faceUrl, init, tokenFor, fakeFetch([200]))).status, 200);
+  assert.deepEqual(requests.splice(0), [{ url: faceUrl.href, authorization: null }], "public faces never carry the token");
+
+  assert.equal((await fetchCatalogOrOwned(faceUrl, init, tokenFor, fakeFetch([404, 200]))).status, 200);
+  assert.deepEqual(requests.splice(0).map((request) => request.authorization), [null, `Bearer ${token}`]);
+
+  assert.equal((await fetchCatalogOrOwned(faceUrl, init, () => null, fakeFetch([404]))).status, 404);
+  assert.equal(requests.splice(0).length, 1, "signed out, a 404 stays a 404");
+
+  const elsewhere = new URL("https://attacker.test/api/v1/watch-faces/night-trail");
+  assert.equal((await fetchCatalogOrOwned(elsewhere, init, tokenFor, fakeFetch([404]))).status, 404);
+  assert.deepEqual(requests.splice(0).map((request) => request.authorization), [null], "the token stays on the catalog's origin");
+
+  assert.equal((await fetchCatalogOrOwned(faceUrl, init, tokenFor, fakeFetch([500]))).status, 500);
+  assert.equal(requests.splice(0).length, 1, "only a 404 is retried");
+}

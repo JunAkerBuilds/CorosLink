@@ -40,7 +40,6 @@ const french: Record<string, string> = {
   "Export here": "Exporter ici", "Choose a backup folder": "Choisir un dossier de sauvegarde",
   "Choose an audiobook (select several files to join them)": "Choisir un livre audio (sélectionnez plusieurs fichiers pour les réunir)",
   "Audiobook": "Livre audio",
-  "Choose extracted COROS map folder": "Choisir le dossier de cartes COROS extraites",
   "Export GPX": "Exporter le GPX", "Import GPX route": "Importer un itinéraire GPX",
   "Switch to Connected Mode and restart CorosLink?": "Passer en mode connecté et redémarrer CorosLink ?",
   "CorosLink will be able to send data to COROS again: workouts, plans, schedules, gear, watch faces and activity imports. Your local activities stay on this computer.": "CorosLink pourra de nouveau envoyer des données à COROS : entraînements, plans, programmes, équipement, cadrans et imports d’activités. Vos activités locales restent sur cet ordinateur.",

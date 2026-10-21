@@ -6,6 +6,7 @@ import type {
   TrainingHubScheduledWorkoutEntry,
   UnitSystem
 } from "../../electron/types";
+import { activityMovingSeconds } from "../../electron/activityTime";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import {
   formatDistanceMeters,
@@ -95,8 +96,10 @@ function activityStatsLine(
   unitSystem: UnitSystem
 ): string {
   const parts: string[] = [];
-  if (activity.duration) {
-    parts.push(formatDurationSeconds(activity.duration));
+  // Moving time, like COROS's calendar — elapsed time counts the pauses too.
+  const seconds = activityMovingSeconds(activity);
+  if (seconds) {
+    parts.push(formatDurationSeconds(seconds));
   }
   if (activity.distance) {
     parts.push(
@@ -178,6 +181,7 @@ function PairChip({
           .filter(Boolean)
           .join(" ")}
         data-calendar-workout={scheduledWorkoutKey(scheduled)}
+        data-calendar-activity={activity.activityId}
         draggable={canCopy}
         onDragStart={(event) => {
           if (!canCopy) {
@@ -194,7 +198,9 @@ function PairChip({
         title={
           selectable
             ? `${selected ? t("Deselect") : t("Select")} ${scheduled.name}`
-            : t("{{value1}} — planned vs actual. Drag to a day to schedule it again.", { value1: String(scheduled.name) })
+            : pair.linkSource === "manual"
+              ? t("{{value1}} — planned vs actual, linked by you. Right-click to unlink. Drag to a day to schedule it again.", { value1: String(scheduled.name) })
+              : t("{{value1}} — planned vs actual, linked by COROS. Drag to a day to schedule it again.", { value1: String(scheduled.name) })
         }
       >
         {selectable ? (
@@ -446,6 +452,7 @@ export function DayCell({
           <button
             key={`activity-${activity.activityId}`}
             type="button"
+            data-calendar-activity={activity.activityId}
             className={[
               "calendar-chip",
               "calendar-chip-activity",

@@ -188,4 +188,28 @@ assert.deepEqual(niceTicks(0, 100, 4), [0, 25, 50, 75, 100]);
 assert.deepEqual(niceTicks(250, 420, 3, [30, 60, 120]), [300, 360, 420]);
 assert.deepEqual(elevationChange(Float64Array.from([10, 11, 10, 13, 13, 9]), 0, 5), { gain: 3, loss: 4 });
 
+// Route distance markers follow the watch's distance, skip paused points
+// (COROS distance 0 → undefined) and stay clear of the finish.
+const markersUrl = pathToFileURL(path.join(repoRoot, "src", "training", "routeDistanceMarkers.ts"));
+const { routeDistanceMarkers } = await import(`${markersUrl.href}?cacheBust=${Date.now()}`);
+const along = (meters) => ({ lat: 45, lon: -75 + meters / 100000, distance: meters });
+const pausedRun = [along(0), along(600), { lat: 45, lon: -74.9 }, along(1400), along(2500), along(3200)];
+assert.deepEqual(
+  routeDistanceMarkers(pausedRun, "metric").map((marker) => [marker.label, +marker.latLng[1].toFixed(5)]),
+  [["1", -74.99], ["2", -74.98], ["3", -74.97]]
+);
+assert.deepEqual(routeDistanceMarkers([along(0), along(3010)], "metric").map((m) => m.label), ["1", "2"], "3 km sits on the finish");
+assert.deepEqual(routeDistanceMarkers([along(0), along(5000)], "imperial").map((m) => m.label), ["1", "2", "3"]);
+assert.deepEqual(routeDistanceMarkers([along(1500), along(3500)], "metric").map((m) => m.label), ["2", "3"], "late GPS lock");
+const century = routeDistanceMarkers([along(0), along(100_500)], "metric").map((m) => m.label);
+assert.equal(century[0], "5", "long rides step up so the map stays legible");
+assert.equal(century.length, 20);
+// No watch distance: measure the GPS path (0.01° of longitude at 45° N ≈ 787 m).
+const unmeasured = routeDistanceMarkers(
+  Array.from({ length: 6 }, (_, i) => ({ lat: 45, lon: -75 + i * 0.01 })),
+  "metric"
+);
+assert.deepEqual(unmeasured.map((m) => m.label), ["1", "2", "3"]);
+assert.deepEqual(routeDistanceMarkers([along(0)], "metric"), []);
+
 console.log("activity streams: ok");

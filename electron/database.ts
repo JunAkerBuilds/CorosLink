@@ -287,7 +287,7 @@ export function initializeDatabase(userDataPath: string): Database.Database {
 
     CREATE TABLE IF NOT EXISTS chat_sessions (
       id TEXT PRIMARY KEY,
-      provider TEXT NOT NULL CHECK(provider IN ('chatgpt', 'claude-code', 'openrouter', 'local')),
+      provider TEXT NOT NULL CHECK(provider IN ('chatgpt', 'claude-code', 'gemini-cli', 'openrouter', 'local')),
       title TEXT NOT NULL,
       messages_json TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -520,6 +520,7 @@ function deriveSessionTitle(messagesJson: string): string {
 const CHAT_SESSION_PROVIDERS = [
   "chatgpt",
   "claude-code",
+  "gemini-cli",
   "openrouter",
   "local"
 ];
@@ -541,6 +542,11 @@ function migrateChatSessionProviderConstraint(
     return;
   }
 
+  // The hub's event cursor; the events table keeps numbering past it.
+  const hasLastSeq = (
+    database.prepare("PRAGMA table_info(chat_sessions)").all() as Array<{ name: string }>
+  ).some((column) => column.name === "last_seq");
+
   // SQLite cannot alter CHECK constraints in place, so rebuild the table.
   database.transaction(() => {
     database.exec(`
@@ -548,25 +554,27 @@ function migrateChatSessionProviderConstraint(
 
       CREATE TABLE chat_sessions (
         id TEXT PRIMARY KEY,
-        provider TEXT NOT NULL CHECK(provider IN ('chatgpt', 'claude-code', 'openrouter', 'local')),
+        provider TEXT NOT NULL CHECK(provider IN ('chatgpt', 'claude-code', 'gemini-cli', 'openrouter', 'local')),
         title TEXT NOT NULL,
         messages_json TEXT NOT NULL,
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        last_seq INTEGER NOT NULL DEFAULT 0
       );
 
-      INSERT INTO chat_sessions (id, provider, title, messages_json, created_at, updated_at)
+      INSERT INTO chat_sessions (id, provider, title, messages_json, created_at, updated_at, last_seq)
         SELECT
           id,
           CASE
-            WHEN provider IN ('chatgpt', 'claude-code', 'openrouter', 'local') THEN provider
+            WHEN provider IN ('chatgpt', 'claude-code', 'gemini-cli', 'openrouter', 'local') THEN provider
             WHEN provider = 'claude' THEN 'claude-code'
             ELSE 'chatgpt'
           END,
           title,
           messages_json,
           created_at,
-          updated_at
+          updated_at,
+          ${hasLastSeq ? "last_seq" : "0"}
         FROM chat_sessions_legacy;
 
       DROP TABLE chat_sessions_legacy;
@@ -2629,6 +2637,13 @@ export function listCachedTrainingLibraryWorkouts(): TrainingHubLibraryWorkout[]
       )
     )
     .filter((item): item is TrainingHubLibraryWorkout => Boolean(item?.id));
+}
+
+/** Drops a library workout's cached copy and its local tags, favorite, and collection. */
+export function deleteTrainingWorkoutMetadata(programId: string): void {
+  requireDatabase()
+    .prepare("DELETE FROM training_workout_metadata WHERE program_id = ?")
+    .run(programId);
 }
 
 export function saveTrainingWorkoutMetadata(

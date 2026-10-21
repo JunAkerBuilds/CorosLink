@@ -28,6 +28,7 @@ const protocol = requireDist("./remote/cloud/relayProtocol.js");
 const contract = requireDist("./remote/contract.js");
 const { RelayClient, RelayRequestError, relayBaseUrl } = requireDist("./remote/cloud/relayClient.js");
 const { CloudLink, ActivityThrottle, activityForCoachEvent } = requireDist("./remote/cloud/cloudLink.js");
+const { LiveActivityFeed, entryWaitsForMember } = requireDist("./remote/cloud/liveActivityFeed.js");
 const { RemoteServer } = requireDist("./remote/server.js");
 const { RemoteAuth } = requireDist("./remote/auth.js");
 const { loadOrCreateRemoteIdentity } = requireDist("./remote/identity.js");
@@ -58,6 +59,13 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), "coroslink-relay-client-test-
     assert.equal(protocol.ENVIRONMENT_SIGNATURE_TYP, constant("ENVIRONMENT_SIGNATURE_TYP"));
     assert.deepEqual([...protocol.ENVIRONMENT_OPERATIONS], list("ENVIRONMENT_OPERATIONS"));
     assert.deepEqual([...protocol.ACTIVITY_EVENTS], list("ACTIVITY_EVENTS"));
+    assert.deepEqual([...protocol.LIVE_RUNNING_PHASES], list("LIVE_RUNNING_PHASES"));
+    assert.deepEqual([...protocol.LIVE_FINAL_PHASES], list("LIVE_FINAL_PHASES"));
+    assert.deepEqual([...protocol.LIVE_EVENTS], list("LIVE_EVENTS"));
+    assert.equal(protocol.REQUEST_ID_PATTERN.source, regex("REQUEST_ID_PATTERN"));
+    assert.match(text, new RegExp(`LIVE_UPDATE_MIN_INTERVAL_SECONDS = ${protocol.LIVE_UPDATE_MIN_INTERVAL_SECONDS};`));
+    assert.match(text, /MAX_LIVE_WORDS = 1_000_000;/);
+    assert.ok(text.includes("`POST /v1/activity/live`"), "live route");
     assert.equal(protocol.SESSION_ID_PATTERN.source, regex("SESSION_ID_PATTERN"));
     assert.equal(protocol.ENVIRONMENT_ID_PATTERN.source, regex("ENVIRONMENT_ID_PATTERN"));
     assert.match(text, new RegExp(`RECOVERY_MIN_INTERVAL_SECONDS = ${protocol.RECOVERY_MIN_INTERVAL_SECONDS};`));
@@ -215,6 +223,12 @@ async function createStubRelay() {
           call.body = body;
           return json(res, { sent: 1, failed: 0, removed: 0 });
         }
+        if (req.url === "/v1/activity/live") {
+          const { body, claims } = await verify(req, raw, "environment.live", linkedKey);
+          call.claims = claims;
+          call.body = body;
+          return json(res, { sent: 1, failed: 0, removed: 0, skipped: 0 });
+        }
         fail(res, 404, "not_found", "Not found.");
       } catch (error) {
         if (Array.isArray(error)) return fail(res, ...error);
@@ -304,6 +318,26 @@ const server = new RemoteServer({
 await server.start();
 const port = server.port;
 let changes = 0;
+/** The Live Activity feed's timers run on `clock`: `advanceLive` moves it and fires what's due. */
+const liveTimers = [];
+const liveScheduler = {
+  setTimer: (run, ms) => {
+    const timer = { run, at: clock + ms };
+    liveTimers.push(timer);
+    return timer;
+  },
+  clearTimer: (timer) => {
+    const index = liveTimers.indexOf(timer);
+    if (index >= 0) liveTimers.splice(index, 1);
+  }
+};
+const advanceLive = (ms) => {
+  clock += ms;
+  for (const timer of liveTimers.filter((candidate) => candidate.at <= clock)) {
+    liveScheduler.clearTimer(timer);
+    timer.run();
+  }
+};
 cloud = new CloudLink({
   settings,
   secrets,
@@ -320,6 +354,7 @@ cloud = new CloudLink({
     throw new Error("No downloads in this test.");
   },
   supervisor: { env: { ...process.env, FAKE_CLOUDFLARED_LOG: logFile }, restartDelayMs: () => 50 },
+  liveActivity: liveScheduler,
   onChange: () => {
     changes += 1;
   }
@@ -531,6 +566,142 @@ try {
     assert.equal(throttle.allow("b", "replied", 13_000), true);
     assert.equal(throttle.allow("c", "replied", 14_000), false, "hourly cap");
     assert.equal(throttle.allow("c", "replied", 3_700_000), true);
+  }
+
+  // ----- Live Activity: the phase and a word count, never text or tool names -----
+  {
+    const session = hub.createSession("claude-code");
+    // This conversation's reports only: the earlier turns' may still be landing.
+    const live = () => relay.calls("/v1/activity/live").filter((call) => JSON.parse(call.raw).sessionId === session.id);
+    const reports = () => live().map((call) => JSON.parse(call.raw));
+    const before = 0;
+    hub.send({ sessionId: session.id, clientMessageId: "live-1", text: "My secret question about my sleep" });
+    const turn = stream.turns.at(-1);
+    turn.send("chat:streamStart");
+    turn.send("chat:streamInfo", { kind: "thinking", delta: "Secret reasoning" });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(live().length, before, "the phone starts thinking; that needs no report");
+
+    // A tool call goes at once: nothing was reported for this turn yet.
+    turn.send("chat:streamInfo", { kind: "mcp", tool: "get_secret_sleep_scores", status: "call" });
+    await waitFor(() => live().length === before + 1, { message: "tool report" });
+    const base = { environmentId: identity.environmentId, sessionId: session.id, requestId: turn.requestId };
+    assert.deepEqual(reports().at(-1), { ...base, event: "update", phase: "usingTool", words: 0 });
+    assert.equal(live().at(-1).claims.op, "environment.live");
+
+    // Writing within 10 s of the last report waits for it, and carries the newest count.
+    turn.send("chat:streamToken", { delta: "Your secret sleep" });
+    turn.send("chat:streamToken", { delta: " was short" });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(live().length, before + 1);
+    advanceLive(10_000);
+    await waitFor(() => live().length === before + 2, { message: "writing report" });
+    assert.deepEqual(reports().at(-1), { ...base, event: "update", phase: "writing", words: 5 });
+
+    // A word count alone waits 30 s; the end goes at once and says the question waits for the member.
+    turn.send("chat:streamToken", { delta: " last night.\n\nWhich night\tshould I compare?" });
+    advanceLive(10_000);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(live().length, before + 2, "word counts wait 30 s");
+    turn.send("chat:streamInfo", {
+      kind: "coachPrompt",
+      prompt: {
+        promptId: "p1",
+        question: "Secret question?",
+        allowCustom: true,
+        choices: [
+          { id: "c1", label: "Tuesday", response: "Compare with Tuesday." },
+          { id: "c2", label: "Last week", response: "Compare with last week." }
+        ]
+      }
+    });
+    turn.send("chat:streamDone", { fullText: "Your secret sleep was short last night.\n\nWhich night should I compare?" });
+    await waitFor(() => live().length === before + 3, { message: "end report" });
+    assert.deepEqual(reports().at(-1), { ...base, event: "end", phase: "needsYou", words: 12 });
+    advanceLive(60_000);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(live().length, before + 3, "nothing after the end");
+    for (const call of live()) assert.ok(!/secret|sleep_scores/i.test(call.raw), "no text or tool names leave the computer");
+
+    // A failed turn ends failed.
+    hub.send({ sessionId: session.id, clientMessageId: "live-2", text: "Again" });
+    const failing = stream.turns.at(-1);
+    failing.send("chat:streamError", { message: "The provider is down." });
+    await waitFor(() => live().length === before + 4, { message: "failed end" });
+    assert.deepEqual(reports().at(-1), { ...base, requestId: failing.requestId, event: "end", phase: "failed", words: 0 });
+  }
+
+  // ----- The feed on its own: approvals, coalescing, other turns -----
+  {
+    let at = 1_000_000;
+    const timers = [];
+    const sent = [];
+    const feed = new LiveActivityFeed({
+      send: async (report) => sent.push(report),
+      now: () => at,
+      setTimer: (run, ms) => {
+        const timer = { run, at: at + ms };
+        timers.push(timer);
+        return timer;
+      },
+      clearTimer: (timer) => {
+        const index = timers.indexOf(timer);
+        if (index >= 0) timers.splice(index, 1);
+      }
+    });
+    const advance = (ms) => {
+      at += ms;
+      for (const timer of timers.filter((candidate) => candidate.at <= at)) {
+        timers.splice(timers.indexOf(timer), 1);
+        timer.run();
+      }
+    };
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
+    let seq = 0;
+    const frame = (event, data, sessionId = "s1") => feed.note({ event, sessionId, seq: ++seq, data });
+
+    frame("turn.started", { requestId: "r1" });
+    frame("turn.delta", { requestId: "r1", delta: "One" });
+    frame("turn.tool", { requestId: "r1", tool: "a", status: "call" });
+    frame("turn.tool", { requestId: "r1", status: "failed" });
+    frame("turn.delta", { requestId: "r1", delta: " two" });
+    frame("turn.delta", { requestId: "old", delta: " ignored words here" });
+    await settle();
+    assert.deepEqual(sent.map((report) => `${report.phase}:${report.words}`), ["writing:1"], "a tool call inside 10 s coalesces away");
+    // Back to writing, only the word count changed: it waits 30 s from the last report.
+    advance(10_000);
+    await settle();
+    assert.equal(sent.length, 1);
+    advance(20_000);
+    await settle();
+    assert.deepEqual(sent.at(-1), { sessionId: "s1", requestId: "r1", event: "update", phase: "writing", words: 2 });
+
+    // An approval card staged during the turn, then approved before it ended: replied.
+    frame("entry.appended", { index: 4, entry: { kind: "corosAction", preview: { state: "pending" } } });
+    frame("entry.updated", { index: 4, entry: { kind: "corosAction", preview: { state: "saved" } } });
+    // An older card updated meanwhile doesn't count.
+    frame("entry.updated", { index: 1, entry: { kind: "workoutDelete", preview: {} } });
+    frame("turn.completed", { requestId: "r1" });
+    await settle();
+    assert.deepEqual(sent.at(-1), { sessionId: "s1", requestId: "r1", event: "end", phase: "replied", words: 2 });
+    assert.equal(feed.followed, 0);
+    assert.equal(timers.length, 0);
+
+    // A card still waiting at the end: needsYou. Two conversations are followed apart.
+    frame("turn.started", { requestId: "r2" });
+    frame("turn.started", { requestId: "q1" }, "s2");
+    frame("entry.appended", { index: 7, entry: { kind: "workoutEdit", preview: { state: "awaiting_confirmation" } } });
+    frame("turn.completed", { requestId: "r2" });
+    frame("turn.failed", { requestId: "q1", message: "x", authError: false }, "s2");
+    await settle();
+    assert.deepEqual(sent.slice(-2).map((report) => `${report.sessionId}:${report.phase}`), ["s1:needsYou", "s2:failed"]);
+
+    assert.equal(entryWaitsForMember({ kind: "coachPrompt", prompt: { promptId: "p", question: "q", choices: [], allowCustom: true } }), true);
+    assert.equal(entryWaitsForMember({ kind: "coachPrompt", prompt: { promptId: "p", question: "q", choices: [], allowCustom: true, answer: "Yes" } }), false);
+    assert.equal(entryWaitsForMember({ kind: "workoutDelete", preview: {} }), true, "older cards without a state are pending");
+    assert.equal(entryWaitsForMember({ kind: "planDraft", draft: { uploadedAt: 5 } }), false);
+    assert.equal(entryWaitsForMember({ kind: "planDraft", draft: {} }), true);
+    assert.equal(entryWaitsForMember({ kind: "message", role: "assistant", content: "x" }), false);
   }
 
   // ----- A stale clock is corrected from the relay's time -----

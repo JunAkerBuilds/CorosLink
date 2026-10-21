@@ -478,7 +478,7 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
             <div><dt>{t("Rest days")}</dt><dd>{summary.restDays}</dd></div>
             <div><dt>{t("Peak week")}</dt><dd>{summary.trainingLoad > 0 && summary.peakWeek ? t("Week {{value1}}", { value1: String(summary.peakWeek) }) : "–"}</dd></div>
           </dl>
-          {plan.source === "coros" ? <div className="plan-editor-limitation"><AlertTriangle size={16} /><p>{t("This edit will be saved as a local plan. Native plan writes remain disabled until verified.")}</p></div> : null}
+          {plan.source === "coros" ? <div className="plan-editor-limitation"><AlertTriangle size={16} /><p>{t("This edit will be saved as a local plan. CorosLink can't edit plans on COROS yet.")}</p></div> : null}
           {validation.length ? <div className="plan-editor-validation" aria-live="polite">{validation.map((issue, index) => <p className={issue.severity} key={`${issue.path}:${index}`}><AlertTriangle size={13} />{t(issue.message)}</p>)}</div> : <p className="plan-editor-valid">{t("Ready to save.")}</p>}
         </aside>
       </div>

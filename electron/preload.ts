@@ -31,7 +31,6 @@ import type {
   CorosMapDownloadJob,
   CorosMapInstallResult,
   CorosMapInstallProgress,
-  CorosMapLocalSelection,
   CorosMapManifest,
   CorosMapPackage,
   DownloadAudioResult,
@@ -82,6 +81,7 @@ import type {
   TrainingHubScheduledWorkoutEntry,
   TrainingHubLibraryWorkout,
   TrainingActivityMatch,
+  ManualActivityLink,
   TrainingCollection,
   TrainingLibraryDeleteRequest,
   TrainingLibrarySnapshot,
@@ -121,9 +121,12 @@ import type {
   ChatMessage,
   ChatProvider,
   ChatSessionSummary,
+  CoachFileUpload,
   ChatSettings,
   ClaudeCodeConnectionTest,
   ClaudeCodeStatus,
+  GeminiCliConnectionTest,
+  GeminiCliStatus,
   PersistedChatEntry,
   ChatStreamStart,
   ChatStreamToken,
@@ -148,6 +151,8 @@ import type {
   McpServerConfig,
   McpServerInput,
   McpServerStatus,
+  CorosTrainingPlanDeleteResult,
+  LocalTrainingPlanDeleteResult,
   CorosTrainingPlanDraftInput,
   UploadPlanResult,
   IntervalsStatus,
@@ -806,8 +811,13 @@ const api = {
     patch: TrainingPlanMetadataPatch
   ): Promise<TrainingPlanDocument> =>
     ipcRenderer.invoke("trainingLibrary:updatePlanMetadata", id, patch),
-  deleteLocalTrainingPlan: (id: string, confirmed: boolean): Promise<void> =>
+  deleteLocalTrainingPlan: (id: string, confirmed: boolean): Promise<LocalTrainingPlanDeleteResult> =>
     ipcRenderer.invoke("trainingLibrary:deletePlan", id, confirmed),
+  deleteCorosTrainingPlan: (
+    remoteId: string,
+    confirmed: boolean
+  ): Promise<CorosTrainingPlanDeleteResult> =>
+    ipcRenderer.invoke("trainingLibrary:deleteCorosPlan", remoteId, confirmed),
   previewTrainingPlanCalendar: (planId: string, startDate: string): Promise<TrainingPlanCalendarPreview> =>
     ipcRenderer.invoke("trainingLibrary:previewPlanCalendar", planId, startDate),
   addTrainingPlanToCalendar: (
@@ -845,6 +855,18 @@ const api = {
     match: TrainingActivityMatch
   ): Promise<TrainingActivityMatch> =>
     ipcRenderer.invoke("trainingLibrary:saveManualMatch", match),
+  listManualActivityLinks: (
+    startDay: string,
+    endDay: string
+  ): Promise<ManualActivityLink[]> =>
+    ipcRenderer.invoke("trainingLibrary:listManualLinks", startDay, endDay),
+  saveManualActivityLink: (
+    entry: Pick<TrainingHubScheduledWorkoutEntry, "planId" | "idInPlan" | "happenDay" | "trainingLoad">,
+    activity?: Pick<TrainingHubActivity, "activityId" | "duration" | "distance" | "trainingLoad">
+  ): Promise<ManualActivityLink> =>
+    ipcRenderer.invoke("trainingLibrary:saveManualLink", entry, activity),
+  clearManualActivityLink: (planId: string, idInPlan: string): Promise<void> =>
+    ipcRenderer.invoke("trainingLibrary:clearManualLink", planId, idInPlan),
   listWorkoutExercises: (sport: WorkoutSport): Promise<WorkoutExerciseOption[]> =>
     ipcRenderer.invoke("trainingHub:listWorkoutExercises", sport),
   getWorkoutEditorContext: (unitSystem: UnitSystem): Promise<WorkoutEditorContext> =>
@@ -1127,12 +1149,6 @@ const api = {
     packageId: string
   ): Promise<CachedCorosMapPackage[]> =>
     ipcRenderer.invoke("maps:deleteCachedCorosMap", packageId),
-  chooseCorosMapFolder: (): Promise<CorosMapLocalSelection | undefined> =>
-    ipcRenderer.invoke("maps:chooseCorosMapFolder"),
-  installCorosMapFolder: (
-    sourcePath: string
-  ): Promise<CorosMapInstallResult> =>
-    ipcRenderer.invoke("maps:installCorosMapFolder", sourcePath),
   getRouteBuilderConfig: (): Promise<RouteBuilderConfig> =>
     ipcRenderer.invoke("maps:getRouteBuilderConfig"),
   saveRouteBuilderConfig: (
@@ -1179,8 +1195,8 @@ const api = {
     ipcRenderer.invoke("maps:stopRouteShare"),
   validateRouteApiKey: (apiKey: string): Promise<RouteApiKeyValidation> =>
     ipcRenderer.invoke("maps:validateRouteApiKey", apiKey),
-  getDiagnostics: (): Promise<DiagnosticsSnapshot> => ipcRenderer.invoke("diagnostics:get"),
-  copyDiagnostics: (): Promise<DiagnosticsSnapshot> => ipcRenderer.invoke("diagnostics:copy"),
+  getDiagnostics: (rangeHours?: number): Promise<DiagnosticsSnapshot> => ipcRenderer.invoke("diagnostics:get", rangeHours),
+  copyDiagnostics: (rangeHours?: number): Promise<DiagnosticsSnapshot> => ipcRenderer.invoke("diagnostics:copy", rangeHours),
   clearDiagnostics: (): Promise<DiagnosticsSnapshot> => ipcRenderer.invoke("diagnostics:clear"),
   reportRendererError: (error: RendererDiagnosticError): void => ipcRenderer.send("diagnostics:rendererError", error),
   getAppInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:getInfo"),
@@ -1247,6 +1263,16 @@ const api = {
     ipcRenderer.invoke("chat:testClaudeCodeConnection"),
   openClaudeCodeSetupGuide: (): Promise<void> =>
     ipcRenderer.invoke("chat:openClaudeCodeSetupGuide"),
+  getGeminiCliStatus: (): Promise<GeminiCliStatus> =>
+    ipcRenderer.invoke("chat:getGeminiCliStatus"),
+  recheckGeminiCli: (): Promise<GeminiCliStatus> =>
+    ipcRenderer.invoke("chat:recheckGeminiCli"),
+  connectGeminiCli: (): Promise<GeminiCliStatus> =>
+    ipcRenderer.invoke("chat:connectGeminiCli"),
+  testGeminiCliConnection: (): Promise<GeminiCliConnectionTest> =>
+    ipcRenderer.invoke("chat:testGeminiCliConnection"),
+  openGeminiCliSetupGuide: (topic: "install" | "sign-in"): Promise<void> =>
+    ipcRenderer.invoke("chat:openGeminiCliSetupGuide", topic),
   loginChat: (): Promise<ChatAuthStatus> => ipcRenderer.invoke("chat:login"),
   logoutChat: (): Promise<ChatAuthStatus> => ipcRenderer.invoke("chat:logout"),
   // Fire-and-forget: assistant text arrives via the onChat* subscriptions.
@@ -1365,6 +1391,8 @@ const api = {
     ipcRenderer.invoke("coach:createSession", provider),
   coachDeleteSession: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke("coach:deleteSession", sessionId),
+  coachDeleteAllSessions: (provider: ChatProvider): Promise<number> =>
+    ipcRenderer.invoke("coach:deleteAllSessions", provider),
   coachSubscribe: (
     sessionId: string,
     afterSeq: number
@@ -1372,8 +1400,12 @@ const api = {
     ipcRenderer.invoke("coach:subscribe", sessionId, afterSeq),
   coachUnsubscribe: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke("coach:unsubscribe", sessionId),
-  coachSend: (input: CoachSendInput): Promise<{ requestId: string }> =>
+  coachSend: (input: CoachSendInput & { uploads?: CoachFileUpload[] }): Promise<{ requestId: string }> =>
     ipcRenderer.invoke("coach:send", input),
+  coachAttachmentPreview: (sessionId: string, attachmentId: string): Promise<string | null> =>
+    ipcRenderer.invoke("coach:attachmentPreview", sessionId, attachmentId),
+  coachOpenAttachment: (sessionId: string, attachmentId: string): Promise<void> =>
+    ipcRenderer.invoke("coach:openAttachment", sessionId, attachmentId),
   coachCancel: (sessionId: string): Promise<{ cancelled: boolean }> =>
     ipcRenderer.invoke("coach:cancel", sessionId),
   coachConfirm: (input: CoachConfirmInput): Promise<CoachConfirmResult> =>

@@ -13,3 +13,10 @@
 .diagnostics-notice { color: var(--text-secondary); }
 .diagnostics-notice:empty { display: none; }
 @media (max-width: 700px) { .diagnostics-heading { flex-wrap: wrap; } .diagnostics-heading > div { flex-basis: calc(100% - 40px); } }
+.diagnostics-toolbar > .diagnostics-range { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-width: 0; }
+.diagnostics-range-options { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--glass-border); border-radius: 999px; background: var(--glass-bg); }
+.diagnostics-range-options button { padding: 5px 11px; border: 0; border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background 0.15s ease, color 0.15s ease; }
+.diagnostics-range-options button:hover:not(:disabled) { color: var(--text-primary); }
+.diagnostics-range-options button:disabled { cursor: default; }
+.diagnostics-range-options button[aria-checked="true"] { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-glow); }
+.diagnostics-range-options button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

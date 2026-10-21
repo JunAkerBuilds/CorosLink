@@ -2,6 +2,7 @@ import { createExecutionContext, env as bindings, waitOnExecutionContext } from 
 import {
   calculateJwkThumbprint,
   CompactSign,
+  decodeProtectedHeader,
   exportJWK,
   exportPKCS8,
   generateKeyPair,
@@ -272,8 +273,16 @@ export class FakeCloudflare {
 export class FakeApns {
   sent: Array<{ host: string; token: string; headers: Record<string, string>; body: Record<string, unknown> }> = [];
   responses = new Map<string, { status: number; reason?: string }[]>();
+  /** The keys APNs knows, by key id; a token signed under any other kid is refused. */
+  private readonly keys = new Map<string, JWK>();
 
-  constructor(private readonly publicJwk: JWK) {}
+  constructor(publicJwk: JWK, kid = "APNSKEY123") {
+    this.keys.set(kid, publicJwk);
+  }
+
+  addKey(kid: string, publicJwk: JWK): void {
+    this.keys.set(kid, publicJwk);
+  }
 
   respond(token: string, ...responses: { status: number; reason?: string }[]): void {
     this.responses.set(token, responses);
@@ -288,7 +297,9 @@ export class FakeApns {
     // Check the provider token is a valid ES256 JWT from our key.
     const bearer = headers.authorization?.replace(/^bearer /u, "") ?? "";
     try {
-      await jwtVerify(bearer, await importJWK(this.publicJwk, "ES256"));
+      const key = this.keys.get(decodeProtectedHeader(bearer).kid ?? "");
+      if (!key) throw new Error("unknown kid");
+      await jwtVerify(bearer, await importJWK(key, "ES256"));
     } catch {
       return new Response(JSON.stringify({ reason: "InvalidProviderToken" }), { status: 403 });
     }
@@ -608,6 +619,8 @@ export async function resetDatabase(db: D1Database): Promise<void> {
     db.prepare("DELETE FROM allocations"),
     db.prepare("DELETE FROM environment_links"),
     db.prepare("DELETE FROM push_devices"),
+    db.prepare("DELETE FROM live_activities"),
+    db.prepare("DELETE FROM live_turn_ends"),
     db.prepare("DELETE FROM nonces"),
     db.prepare("DELETE FROM tunnel_status_cache"),
     db.prepare("DELETE FROM apns_provider_tokens"),

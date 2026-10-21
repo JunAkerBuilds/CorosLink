@@ -4,11 +4,14 @@ import type { DiagnosticsSnapshot } from "./diagnosticsTypes";
 
 const MAX_ENTRIES = 200;
 const MAX_BYTES = 512 * 1024;
-const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+const MAX_AGE_MS = 7 * 24 * HOUR_MS;
+// A failure that keeps repeating (a background sync every few minutes) stays one entry.
+const REPEAT_WINDOW_MS = 30 * 60 * 1000;
+const MAX_VIA = 6;
+// A hot path failing on every call must not rewrite the log file each time.
+const REPEAT_PERSIST_INTERVAL_MS = 30 * 1000;
 const REDACTED = "[redacted]";
-/** The same failure again within this window is counted on the earlier entry instead of added. */
-const REPEAT_WINDOW_MS = 10 * 60 * 1000;
-const REPEAT_LOOKBACK = 10;
 const requests = new WeakMap<object, { method: string; url: string }>();
 const EXPECTED = Symbol.for("coroslink.diagnostics.expected");
 
@@ -29,12 +32,14 @@ interface DiagnosticError {
 interface DiagnosticEntry {
   /** When this failure was first recorded. */
   timestamp: string;
+  /** Latest repeat of the same failure, when it happened more than once. */
+  lastSeen?: string;
+  count?: number;
   appVersion: string;
   source: string;
-  /** The latest occurrence; `count` says how many there were. */
+  /** Callers the same error passed through after it was recorded, such as the IPC channel. */
+  via?: string[];
   error: DiagnosticError;
-  count?: number;
-  lastSeen?: string;
   /** Set on a notice that is not an error (e.g. the watch's Bluetooth identity changed). */
   level?: DiagnosticLevel;
 }
@@ -71,6 +76,22 @@ export function isExpectedError(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && (error as Record<symbol, unknown>)[EXPECTED] === true);
 }
 
+/**
+ * A long run that is an API path, file, or function name (`/activity/fit/getImportSportList`,
+ * `/dist-electron/trainingHubService`): whole words. Keys and hashes break into one- and
+ * two-letter fragments between digits, or are one unbroken lowercase string.
+ */
+function readsAsWords(run: string): boolean {
+  if (/[+=]/.test(run) || !/[/_-]|[a-z][A-Z]/.test(run)) return false;
+  const words = run.match(/[A-Z]?[a-z]+|[A-Z]+(?![a-z])/g) ?? [];
+  const letters = words.reduce((sum, word) => sum + word.length, 0);
+  // Base64 key material (a DER key starts "MIIE…") is mostly capitals; names and paths are mostly lowercase.
+  if ((run.match(/[A-Z]/g)?.length ?? 0) * 2 > letters) return false;
+  const fragments = words.filter((word) => word.length <= 2).length;
+  return words.length > 0 && fragments * 4 <= words.length && letters >= words.length * 3 &&
+    (run.match(/\d+/g)?.length ?? 0) <= 3 && words.every((word) => word.length <= 24);
+}
+
 /** Redact before persistence as well as before export. No IPC arguments are logged. */
 export function redactDiagnosticText(value: string, privatePaths: string[] = []): string {
   let text = value;
@@ -96,7 +117,7 @@ export function redactDiagnosticText(value: string, privatePaths: string[] = [])
     .replace(/(?:\b[A-Z]:[\\/]|\/(?:Users|home|Volumes|tmp|private|var)\/)[^\r\n"')]+/gi, "[local path]")
     .replace(/[A-Z0-9._%+-]+(?:@|%40)[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?/g, REDACTED)
-    .replace(/[A-Za-z0-9_+/=-]{32,}/g, REDACTED)
+    .replace(/[A-Za-z0-9_+/=-]{32,}/g, (run) => readsAsWords(run) ? run : REDACTED)
     .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, REDACTED)
     // Bluetooth hardware addresses identify the watch (and its owner) as well as a serial does.
     .replace(/\b[0-9a-f]{2}(?::[0-9a-f]{2}){5}\b/gi, REDACTED)
@@ -107,6 +128,8 @@ export function redactDiagnosticText(value: string, privatePaths: string[] = [])
 export class DiagnosticsLog {
   private entries: DiagnosticEntry[] = [];
   private persistent = true;
+  private readonly recorded = new WeakMap<object, DiagnosticEntry>();
+  private lastRepeatPersist = Number.NEGATIVE_INFINITY;
 
   constructor(
     private readonly filePath: string,
@@ -120,16 +143,19 @@ export class DiagnosticsLog {
       if (Array.isArray(saved)) {
         this.entries = saved.slice(-MAX_ENTRIES).flatMap((entry) => {
           if (!entry || typeof entry.timestamp !== "string" || !Number.isFinite(Date.parse(entry.timestamp))) return [];
-          const count = Number.isSafeInteger(entry.count) && entry.count > 1 ? entry.count as number : undefined;
-          const lastSeen = count && typeof entry.lastSeen === "string" && Number.isFinite(Date.parse(entry.lastSeen)) ? entry.lastSeen : undefined;
+          const lastSeen = typeof entry.lastSeen === "string" && Number.isFinite(Date.parse(entry.lastSeen)) ? entry.lastSeen : undefined;
+          const via = Array.isArray(entry.via)
+            ? entry.via.slice(-MAX_VIA).flatMap((value: unknown) => typeof value === "string" ? [this.clean(value, 120)] : [])
+            : [];
           return [{
             timestamp: entry.timestamp,
+            ...(lastSeen ? { lastSeen } : {}),
+            ...(Number.isSafeInteger(entry.count) && entry.count > 1 ? { count: entry.count } : {}),
             appVersion: this.clean(entry.appVersion, 80),
             source: this.clean(entry.source, 120),
+            ...(via.length ? { via } : {}),
             error: this.describeError(entry.error),
-            ...(entry.level === "info" || entry.level === "warning" ? { level: entry.level as DiagnosticLevel } : {}),
-            ...(count ? { count } : {}),
-            ...(lastSeen ? { lastSeen } : {})
+            ...(entry.level === "info" || entry.level === "warning" ? { level: entry.level as DiagnosticLevel } : {})
           }];
         });
       }
@@ -184,10 +210,21 @@ export class DiagnosticsLog {
     while (Buffer.byteLength(JSON.stringify(this.entries)) > MAX_BYTES) this.entries.shift();
   }
 
+  /** The entry an error, or one of its causes, was already recorded as. */
+  private recordedEntry(error: unknown): DiagnosticEntry | undefined {
+    let value = error;
+    for (let depth = 0; depth <= 3 && value && typeof value === "object"; depth++) {
+      const entry = this.recorded.get(value);
+      if (entry && this.entries.includes(entry)) return entry;
+      value = (value as { cause?: unknown }).cause;
+    }
+    return undefined;
+  }
+
   private persist(): void {
     try {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true, mode: 0o700 });
-      fs.writeFileSync(`${this.filePath}.tmp`, JSON.stringify(this.entries), { mode: 0o600 });
+      fs.writeFileSync(`${this.filePath}.tmp`, JSON.stringify(this.entries.map(orderedEntry)), { mode: 0o600 });
       fs.renameSync(`${this.filePath}.tmp`, this.filePath);
       this.persistent = true;
     } catch {
@@ -204,32 +241,37 @@ export class DiagnosticsLog {
   record(source: string, error: unknown, level?: DiagnosticLevel): void {
     if (isExpectedError(error)) return;
     try {
-      const now = this.now();
-      const entry: DiagnosticEntry = {
-        timestamp: new Date(now).toISOString(),
-        appVersion: this.environment.appVersion,
-        source: this.clean(source, 120),
-        error: this.describeError(error),
-        ...(level ? { level } : {})
-      };
-      // A failure that keeps coming back (each reload of a screen) is one entry with a count,
-      // so it can't push everything else out of the log.
-      const repeat = this.entries.slice(-REPEAT_LOOKBACK).reverse().find((previous) =>
-        previous.source === entry.source && previous.appVersion === entry.appVersion &&
-        previous.error.name === entry.error.name && previous.error.message === entry.error.message &&
-        previous.error.code === entry.error.code &&
-        now - Date.parse(previous.lastSeen ?? previous.timestamp) <= REPEAT_WINDOW_MS);
+      const cleanSource = this.clean(source, 120);
+      // The same failure rethrown up to an IPC handler: note the path, not a second entry.
+      const known = this.recordedEntry(error);
+      if (known) {
+        if (known.source !== cleanSource && !known.via?.includes(cleanSource)) {
+          known.via = [...(known.via ?? []), cleanSource].slice(-MAX_VIA);
+          this.persist();
+        }
+        return;
+      }
+      const timestamp = new Date(this.now()).toISOString();
+      const described = this.describeError(error);
+      const signature = repeatSignature(cleanSource, described);
+      const repeat = [...this.entries].reverse().find((entry) => repeatSignature(entry.source, entry.error) === signature &&
+        entry.level === level && this.now() - Date.parse(entry.lastSeen ?? entry.timestamp) <= REPEAT_WINDOW_MS);
+      let entry: DiagnosticEntry;
       if (repeat) {
         repeat.count = (repeat.count ?? 1) + 1;
-        repeat.lastSeen = entry.timestamp;
-        repeat.error = entry.error;
-        // Keep the log in time order: the entry moves to where it last happened.
+        repeat.lastSeen = timestamp;
+        // Still failing: keep it with the newest entries so retention follows the latest repeat.
         this.entries.splice(this.entries.indexOf(repeat), 1);
-        this.entries.push(repeat);
+        entry = repeat;
       } else {
-        this.entries.push(entry);
+        entry = { timestamp, appVersion: this.environment.appVersion, source: cleanSource, error: described, ...(level ? { level } : {}) };
       }
+      this.entries.push(entry);
+      if (error && typeof error === "object") this.recorded.set(error, entry);
       this.prune();
+      // Snapshots always show the live count; on disk a repeat may lag by the interval.
+      if (repeat && this.now() - this.lastRepeatPersist < REPEAT_PERSIST_INTERVAL_MS) return;
+      if (repeat) this.lastRepeatPersist = this.now();
       this.persist();
     } catch { /* Error objects from dependencies may contain throwing getters. */ }
   }
@@ -244,23 +286,68 @@ export class DiagnosticsLog {
     return this.snapshot();
   }
 
-  snapshot(): DiagnosticsSnapshot {
+  /**
+   * `status` lines describe current state (e.g. account connections) and are redacted like errors.
+   * `rangeHours` keeps only failures seen in that many recent hours; a repeat counts by its latest occurrence.
+   */
+  snapshot(status: string[] = [], rangeHours?: number): DiagnosticsSnapshot {
     const count = this.entries.length;
     this.prune();
     if (this.entries.length !== count) this.persist();
+    const statusLines = status.flatMap((line) => typeof line === "string" ? [this.clean(line, 300)] : []);
+    const rangeMs = typeof rangeHours === "number" && rangeHours > 0 ? rangeHours * HOUR_MS : MAX_AGE_MS;
+    const since = rangeMs < MAX_AGE_MS ? this.now() - rangeMs : undefined;
+    const entries = since === undefined ? this.entries
+      : this.entries.filter((entry) => Date.parse(entry.lastSeen ?? entry.timestamp) >= since);
+    const range = since === undefined ? "Range: last 7 days (everything kept)"
+      : `Range: last ${describeHours(rangeMs / HOUR_MS)} (since ${new Date(since).toISOString()}), ${entries.length} of ${this.entries.length} kept errors`;
     const report = [
       "CorosLink error report",
       `Generated: ${new Date(this.now()).toISOString()}`,
       `App: ${this.environment.appVersion}`,
       `System: ${this.environment.platform} ${this.environment.osVersion} (${this.environment.arch})`,
       `Electron: ${this.environment.electronVersion} | Chromium: ${this.environment.chromeVersion} | Node: ${this.environment.nodeVersion}`,
-      "Retention: latest 200 errors, up to 7 days (512 KB maximum); a repeat within 10 minutes adds to the earlier entry's count",
+      "Retention: latest 200 errors, up to 7 days (512 KB maximum)",
+      "Repeats of the same failure within 30 minutes are grouped (count, lastSeen).",
       "Request bodies, headers, and input arguments are not collected.",
+      range,
+      ...(statusLines.length ? ["", ...statusLines] : []),
       "",
-      this.entries.length ? JSON.stringify(this.entries, null, 2) : "No errors recorded."
+      entries.length ? JSON.stringify(entries.map(orderedEntry), null, 2)
+        : since !== undefined && this.entries.length ? `No errors in the last ${describeHours(rangeMs / HOUR_MS)}.` : "No errors recorded."
     ].join("\n");
-    return { report, entryCount: this.entries.length, persistent: this.persistent };
+    return { report, entryCount: entries.length, totalCount: this.entries.length, persistent: this.persistent };
   }
+}
+
+function describeHours(hours: number): string {
+  if (hours % 24 === 0) return hours === 24 ? "day" : `${hours / 24} days`;
+  return hours === 1 ? "hour" : `${hours} hours`;
+}
+
+/**
+ * Same place, same failure: what decides that a new error is a repeat of an entry. The cause
+ * counts too: every network failure is "fetch failed", with the real reason only in its cause.
+ */
+function repeatSignature(source: string, error: DiagnosticError): string {
+  return JSON.stringify([
+    source, error.name, error.message, error.code, error.request?.method, error.request?.url,
+    error.cause?.name, error.cause?.message, error.cause?.code
+  ]);
+}
+
+/** Field order for the report: when, how often, where, then the error itself. */
+function orderedEntry(entry: DiagnosticEntry): DiagnosticEntry {
+  return {
+    timestamp: entry.timestamp,
+    ...(entry.lastSeen ? { lastSeen: entry.lastSeen } : {}),
+    ...(entry.count ? { count: entry.count } : {}),
+    appVersion: entry.appVersion,
+    source: entry.source,
+    ...(entry.via?.length ? { via: entry.via } : {}),
+    error: entry.error,
+    ...(entry.level ? { level: entry.level } : {})
+  };
 }
 
 /** Capture the original error (including cause) before Electron serializes it. */

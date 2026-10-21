@@ -123,15 +123,40 @@ export function parseNativeCorosPlan(
   };
 }
 
-export async function listNativeCorosPlans(): Promise<NativeCorosPlanDetail[]> {
+export interface NativeCorosPlanLibrary {
+  plans: NativeCorosPlanDetail[];
+  /**
+   * True when COROS answered with an array and every record in it parsed with
+   * an ID. plan/query `{}` takes no paging fields and returns the whole
+   * library as one bare array (no page or total), so only then does a plan
+   * missing from `plans` mean it no longer exists on COROS.
+   */
+  complete: boolean;
+}
+
+export function parseNativeCorosPlanLibrary(
+  data: unknown,
+  syncedAt = new Date().toISOString()
+): NativeCorosPlanLibrary {
+  const plans = objectArray(data)
+    .map((raw) => parseNativeCorosPlan(raw, syncedAt))
+    .filter((plan) => plan.remoteId);
+  return {
+    plans,
+    complete: Array.isArray(data) && plans.length === data.length
+  };
+}
+
+export async function queryNativeCorosPlanLibrary(): Promise<NativeCorosPlanLibrary> {
   const data = await readNativeTrainingPlanEndpoint<unknown>(
     "/training/plan/query",
     { method: "POST", body: {} }
   );
-  const syncedAt = new Date().toISOString();
-  return objectArray(data)
-    .map((raw) => parseNativeCorosPlan(raw, syncedAt))
-    .filter((plan) => plan.remoteId);
+  return parseNativeCorosPlanLibrary(data);
+}
+
+export async function listNativeCorosPlans(): Promise<NativeCorosPlanDetail[]> {
+  return (await queryNativeCorosPlanLibrary()).plans;
 }
 
 export async function readNativeCorosPlan(

@@ -1441,9 +1441,10 @@
   container: overview-launch / inline-size;
 }
 
+/* --launch-columns is the visible tile count; hidden features drop their tile. */
 .overview-launchpad {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--launch-columns, 4), minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -1930,6 +1931,10 @@
 @container overview-launch (max-width: 1040px) {
   .overview-launchpad {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overview-launchpad > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
 }
 

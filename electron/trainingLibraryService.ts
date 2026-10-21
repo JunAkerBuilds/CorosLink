@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import {
   deleteTrainingCollection,
   deleteTrainingPlanDocument,
+  deleteTrainingWorkoutMetadata,
   getTrainingPlanDocument,
   listCachedTrainingLibraryWorkouts,
   listTrainingActivityMatches,
@@ -14,15 +15,21 @@ import {
   saveTrainingWorkoutMetadata
 } from "./database";
 import {
-  listNativeCorosPlans,
+  queryNativeCorosPlanLibrary,
   readNativeCorosPlan
 } from "./corosTrainingPlanAdapter";
+import { resolveActivityLinks, scheduledLinkKey } from "./activityLinks";
+import { recordDiagnosticError } from "./diagnosticsService";
 import {
   createAndScheduleWorkout,
+  deactivateNativeTrainingPlan,
+  deleteNativeTrainingPlan,
   deleteWorkoutProgram,
-  listLibraryWorkouts,
+  listActiveNativeTrainingPlanInstanceIds,
+  listActiveNativeTrainingPlanInstances,
   listScheduledWorkoutEntries,
   listTrainingHubActivities,
+  queryLibraryWorkouts,
   removeScheduledWorkout,
   scheduleLibraryWorkout
 } from "./trainingHubService";
@@ -34,6 +41,9 @@ import {
   workoutSportFromType
 } from "./trainingPlanDomain";
 import type {
+  CorosTrainingPlanDeleteResult,
+  LocalTrainingPlanDeleteResult,
+  ManualActivityLink,
   NativeCorosPlanDetail,
   NativeCorosPlanSummary,
   TrainingActivityMatch,
@@ -58,20 +68,21 @@ import type {
   WorkoutSport
 } from "./types";
 
-const UNVERIFIED_WRITE_REASON =
-  "Editing, duplicating, deleting, or removing native COROS plans from the Calendar isn't available in CorosLink yet. Use the COROS app.";
+const UNSUPPORTED_NATIVE_WRITE_REASON =
+  "Editing native COROS plans, or duplicating them on COROS, isn't available in CorosLink yet. Use the COROS app.";
 
 export function getNativePlanWriteCapabilities(): TrainingPlanWriteCapabilities {
   return {
-    // Create/activate are live from chat (uploadNativeTrainingPlan); the
-    // Library has no native edit/delete/deactivate flow wired yet.
+    // Create/activate are live from chat (uploadNativeTrainingPlan). The
+    // Library deletes plans, ending an active calendar instance first
+    // (deleteCorosTrainingPlan); native edit/copy aren't wired yet.
     create: true,
     update: false,
     duplicate: false,
-    delete: false,
+    delete: true,
     activate: true,
-    removeActive: false,
-    reason: UNVERIFIED_WRITE_REASON
+    removeActive: true,
+    reason: UNSUPPORTED_NATIVE_WRITE_REASON
   };
 }
 
@@ -304,19 +315,124 @@ function mergeWorkout(
   };
 }
 
+let queryNativePlanLibrary = queryNativeCorosPlanLibrary;
+let queryLibraryWorkoutList = queryLibraryWorkouts;
+
+/** Test seam for the snapshot's plan/query read. Never used by the renderer. */
+export function setNativePlanLibraryQueryForTests(
+  query?: typeof queryNativeCorosPlanLibrary
+): void {
+  queryNativePlanLibrary = query ?? queryNativeCorosPlanLibrary;
+}
+
+/** Test seam for the snapshot's program/query read. Never used by the renderer. */
+export function setLibraryWorkoutQueryForTests(query?: typeof queryLibraryWorkouts): void {
+  queryLibraryWorkoutList = query ?? queryLibraryWorkouts;
+}
+
+let recordRefreshFailure: (source: string, error: unknown) => void = recordDiagnosticError;
+let reportedRefreshFailures = new Set<string>();
+
+/** Test seam for the error-report recorder. Never used by the renderer. */
+export function setRefreshFailureRecorderForTests(
+  record?: (source: string, error: unknown) => void
+): void {
+  recordRefreshFailure = record ?? recordDiagnosticError;
+  reportedRefreshFailures = new Set();
+}
+
+/**
+ * Puts Library refresh failures in the error report. The snapshot catches them
+ * for its banner, so no IPC handler ever sees them. A failure that repeats on
+ * every refresh is recorded once, until it clears or changes.
+ */
+function reportRefreshFailures(failures: string[], causes: Map<string, unknown>): void {
+  for (const failure of failures) {
+    if (reportedRefreshFailures.has(failure)) continue;
+    recordRefreshFailure("trainingLibrary:snapshot", new Error(failure, { cause: causes.get(failure) }));
+  }
+  reportedRefreshFailures = new Set(failures);
+}
+
+/**
+ * Drops cached workouts that a complete program/query no longer returns, such
+ * as workouts deleted in the COROS app. Without this, a later failed query
+ * falls back to the cache and shows them again, and deleting them can't make
+ * them go away. Only rows cached before the query are candidates.
+ */
+function pruneDeletedWorkouts(
+  cachedProgramIds: string[],
+  fetched: TrainingHubLibraryWorkout[],
+  partialFailures: string[]
+): void {
+  const live = new Set(fetched.map((workout) => workout.id));
+  for (const programId of cachedProgramIds) {
+    if (live.has(programId)) continue;
+    try {
+      deleteTrainingWorkoutMetadata(programId);
+    } catch (error) {
+      partialFailures.push(`Workout ${programId}: ${errorReason(error)}`);
+    }
+  }
+}
+
+/**
+ * Drops cached native plans that a complete plan/query no longer returns, such
+ * as plans deleted in the COROS app. Only documents cached before the query
+ * are candidates, so a plan saved while it was in flight isn't mistaken for a
+ * deleted one. Local tags, notes, favorite, and collection go with the
+ * document; if the plan reappears, the next refresh rebuilds it from COROS
+ * with default metadata.
+ */
+function pruneDeletedNativePlans(
+  cached: TrainingPlanDocument[],
+  fetched: NativeCorosPlanSummary[],
+  partialFailures: string[]
+): void {
+  const live = new Set(fetched.map((plan) => plan.remoteId));
+  for (const plan of cached) {
+    if (plan.source !== "coros" || !plan.remoteId || live.has(plan.remoteId)) continue;
+    try {
+      deleteTrainingPlanDocument(plan.id);
+    } catch (error) {
+      partialFailures.push(
+        `Training plan "${plan.name}" (${plan.remoteId}): ${errorReason(error)}`
+      );
+    }
+  }
+}
+
 export async function getTrainingLibrarySnapshot(): Promise<TrainingLibrarySnapshot> {
   const cachedAt = new Date().toISOString();
   const partialFailures: string[] = [];
+  // The original errors go to the error report as causes, so their stacks survive.
+  const failureCauses = new Map<string, unknown>();
+  const addRejected = (section: string, reason: unknown) => {
+    const failure = `${section}: ${String((reason as { message?: unknown } | undefined)?.message ?? reason)}`;
+    partialFailures.push(failure);
+    failureCauses.set(failure, reason);
+  };
   const localPlans = listTrainingPlanDocuments();
-  const [workoutsResult, nativeResult, scheduleResult] = await Promise.allSettled([
-    listLibraryWorkouts(),
-    listNativeCorosPlans(),
-    listScheduledWorkoutEntries(relativeDateKey(-180), relativeDateKey(365))
+  const cachedProgramIds = listTrainingWorkoutMetadata().map((metadata) => metadata.programId);
+  const [workoutsResult, nativeResult, scheduleResult, activeNativeResult] = await Promise.allSettled([
+    queryLibraryWorkoutList(),
+    queryNativePlanLibrary(),
+    listScheduledWorkoutEntries(relativeDateKey(-180), relativeDateKey(365)),
+    listActiveNativeTrainingPlanInstances()
   ]);
 
   let baseWorkouts: TrainingHubLibraryWorkout[];
   if (workoutsResult.status === "fulfilled") {
-    baseWorkouts = workoutsResult.value;
+    const { workouts: fetchedWorkouts, complete } = workoutsResult.value;
+    baseWorkouts = fetchedWorkouts;
+    if (complete) {
+      pruneDeletedWorkouts(cachedProgramIds, fetchedWorkouts, partialFailures);
+    } else {
+      partialFailures.push(
+        "Workouts: COROS sent a workout list CorosLink couldn't fully read, so workouts " +
+          "deleted on COROS may still be listed."
+      );
+    }
     const previous = metadataByProgram();
     for (const workout of baseWorkouts) {
       const metadata = previous.get(workout.id);
@@ -336,7 +452,7 @@ export async function getTrainingLibrarySnapshot(): Promise<TrainingLibrarySnaps
       );
     }
   } else {
-    partialFailures.push(`Workouts: ${String(workoutsResult.reason?.message ?? workoutsResult.reason)}`);
+    addRejected("Workouts", workoutsResult.reason);
     baseWorkouts = listCachedTrainingLibraryWorkouts();
   }
 
@@ -355,8 +471,9 @@ export async function getTrainingLibrarySnapshot(): Promise<TrainingLibrarySnaps
       lastSyncedAt: plan.lastSyncedAt
     }));
   if (nativeResult.status === "fulfilled") {
-    nativePlans = nativeResult.value;
-    for (const native of nativeResult.value) {
+    const { plans: fetched, complete } = nativeResult.value;
+    nativePlans = fetched;
+    for (const native of fetched) {
       try {
         saveTrainingPlanDocument(nativePlanToDocument(native), native.rawPayload);
       } catch (error) {
@@ -367,14 +484,23 @@ export async function getTrainingLibrarySnapshot(): Promise<TrainingLibrarySnaps
         );
       }
     }
+    if (complete) {
+      pruneDeletedNativePlans(localPlans, fetched, partialFailures);
+    } else {
+      partialFailures.push(
+        "Training plans: COROS sent a plan list CorosLink couldn't fully read, so plans " +
+          "deleted on COROS may still be listed."
+      );
+    }
   } else {
-    partialFailures.push(`Training plans: ${String(nativeResult.reason?.message ?? nativeResult.reason)}`);
+    addRejected("Training plans", nativeResult.reason);
   }
 
   const schedule = scheduleResult.status === "fulfilled" ? scheduleResult.value : [];
   if (scheduleResult.status === "rejected") {
-    partialFailures.push(`Schedule: ${String(scheduleResult.reason?.message ?? scheduleResult.reason)}`);
+    addRejected("Schedule", scheduleResult.reason);
   }
+  reportRefreshFailures(partialFailures, failureCauses);
   const plans = listTrainingPlanDocuments();
   const metadata = metadataByProgram();
   return {
@@ -392,7 +518,15 @@ export async function getTrainingLibrarySnapshot(): Promise<TrainingLibrarySnaps
       nativeResult.status === "rejected" &&
       scheduleResult.status === "rejected",
     partialFailures,
-    nativePlanWrites: getNativePlanWriteCapabilities()
+    nativePlanWrites: getNativePlanWriteCapabilities(),
+    // Only a badge depends on this, so a failed query just leaves it out.
+    nativePlansOnCalendar: activeNativeResult.status === "fulfilled"
+      ? Object.fromEntries(
+          activeNativeResult.value
+            .filter((instance) => instance.originId)
+            .map((instance) => [instance.originId, { startDay: instance.startDay }])
+        )
+      : undefined
   };
 }
 
@@ -458,12 +592,124 @@ export function deleteLocalTrainingPlan(id: string, confirmed: boolean): void {
   const plan = getTrainingPlanDocument(id);
   if (!plan) return;
   if (plan.source === "coros") {
-    throw new Error(UNVERIFIED_WRITE_REASON);
+    throw new Error("This plan is stored on COROS. Delete it from your COROS account instead.");
   }
   if (activeTrainingPlanCalendarInstall(plan)) {
     throw new Error("Remove this plan's future calendar workouts before deleting the plan.");
   }
   deleteTrainingPlanDocument(id);
+}
+
+/**
+ * Library delete for local plans. A plan that still owns upcoming calendar
+ * workouts has them removed first, through the same owned-occurrence removal
+ * as the calendar button (past days stay), and is kept if any can't be
+ * confirmed removed.
+ */
+export async function deleteLocalTrainingPlanAndCalendar(
+  id: string,
+  confirmed: boolean
+): Promise<LocalTrainingPlanDeleteResult> {
+  if (!confirmed) throw new Error("Deleting a training plan requires confirmation.");
+  const plan = getTrainingPlanDocument(id);
+  let removedCalendarWorkouts = 0;
+  if (plan && plan.source !== "coros" && activeTrainingPlanCalendarInstall(plan)) {
+    const preview = await previewTrainingPlanCalendarRemoval(plan.id);
+    const result = await removeTrainingPlanFromCalendar(preview.previewId, true);
+    removedCalendarWorkouts = result.removedCount;
+    if (activeTrainingPlanCalendarInstall(result.plan)) {
+      throw new Error(
+        `Removed ${result.removedCount} upcoming workout${result.removedCount === 1 ? "" : "s"} ` +
+          `from your COROS calendar, but ${result.failures.length} couldn't be confirmed removed, ` +
+          "so the plan wasn't deleted. Retry from the plan's calendar button, then delete it."
+      );
+    }
+  }
+  deleteLocalTrainingPlan(id, true);
+  return { removedCalendarWorkouts };
+}
+
+interface NativeTrainingPlanWriter {
+  listActiveInstanceIds: typeof listActiveNativeTrainingPlanInstanceIds;
+  deactivate: typeof deactivateNativeTrainingPlan;
+  delete: typeof deleteNativeTrainingPlan;
+}
+
+const defaultNativeTrainingPlanWriter: NativeTrainingPlanWriter = {
+  listActiveInstanceIds: listActiveNativeTrainingPlanInstanceIds,
+  deactivate: deactivateNativeTrainingPlan,
+  delete: deleteNativeTrainingPlan
+};
+
+let nativeTrainingPlanWriter = defaultNativeTrainingPlanWriter;
+
+/** Test seam for native plan delete simulations. Never used by the renderer. */
+export function setNativeTrainingPlanWriterForTests(
+  overrides?: Partial<NativeTrainingPlanWriter>
+): void {
+  nativeTrainingPlanWriter = overrides
+    ? { ...defaultNativeTrainingPlanWriter, ...overrides }
+    : defaultNativeTrainingPlanWriter;
+}
+
+function errorReason(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Deletes a native plan from the athlete's COROS account. If the plan is on
+ * the calendar, its active instance is ended first (quitSubPlan removes only
+ * upcoming workouts; past days stay), so no workouts outlive a plan that
+ * CorosLink no longer lists. Any failure before plan/delete leaves the plan in
+ * place.
+ */
+export async function deleteCorosTrainingPlan(
+  remoteId: string,
+  confirmed: boolean
+): Promise<CorosTrainingPlanDeleteResult> {
+  if (!confirmed) throw new Error("Deleting a training plan requires confirmation.");
+  const id = remoteId.trim();
+  const local = listTrainingPlanDocuments().filter(
+    (plan) => plan.source === "coros" && plan.remoteId === id
+  );
+  if (!id || local.length === 0) {
+    throw new Error("This COROS plan isn't in the Training Library. Refresh and try again.");
+  }
+
+  let instanceIds: string[];
+  try {
+    instanceIds = await nativeTrainingPlanWriter.listActiveInstanceIds(id);
+  } catch (error) {
+    throw new Error(
+      `${errorReason(error)} CorosLink couldn't check whether this plan is on your COROS ` +
+        "calendar, so nothing was deleted.",
+      { cause: error }
+    );
+  }
+  for (const instanceId of instanceIds) {
+    try {
+      await nativeTrainingPlanWriter.deactivate(instanceId);
+    } catch (error) {
+      throw new Error(
+        `${errorReason(error)} CorosLink couldn't remove this plan's upcoming workouts from ` +
+          "your COROS calendar, so the plan wasn't deleted.",
+        { cause: error }
+      );
+    }
+  }
+  try {
+    await nativeTrainingPlanWriter.delete(id);
+  } catch (error) {
+    if (instanceIds.length === 0) throw error;
+    throw new Error(
+      `${errorReason(error)} The plan's upcoming workouts were removed from your COROS ` +
+        "calendar, but the plan itself wasn't deleted. Try again.",
+      { cause: error }
+    );
+  }
+
+  for (const plan of local) deleteTrainingPlanDocument(plan.id);
+  return { remoteId: id, endedCalendarPlans: instanceIds.length };
 }
 
 interface StoredPlanCalendarPreview {
@@ -987,27 +1233,20 @@ export async function deleteTrainingLibraryWorkouts(
   return ids;
 }
 
-export function activityDay(activity: TrainingHubActivity): string | undefined {
-  if (!activity.startTime) return undefined;
-  const raw = activity.startTime > 10_000_000_000 ? activity.startTime : activity.startTime * 1000;
-  return dateKey(new Date(raw));
+function toManualActivityLink(match: TrainingActivityMatch): ManualActivityLink {
+  return {
+    planId: match.schedulePlanId,
+    idInPlan: match.scheduleIdInPlan,
+    happenDay: match.happenDay,
+    activityId: match.activityId
+  };
 }
 
-export function scheduledActivityScore(
-  scheduled: TrainingHubScheduledWorkoutEntry,
-  activity: TrainingHubActivity
-): number {
-  let score = 0.35;
-  if (scheduled.sportType && scheduled.sportType === activity.sportType) score += 0.35;
-  const plannedLoad = scheduled.trainingLoad;
-  if (plannedLoad && activity.trainingLoad !== undefined) {
-    score += 0.2 * Math.max(0, 1 - Math.abs(activity.trainingLoad - plannedLoad) / plannedLoad);
-  }
-  const normalizedName = scheduled.name.trim().toLowerCase();
-  if (normalizedName && activity.name?.trim().toLowerCase() === normalizedName) score += 0.1;
-  return Math.min(1, score);
-}
-
+/**
+ * Plan adherence from links only — COROS's (the workout was started from the
+ * plan) or the user's. A same-day activity nobody linked doesn't count, the
+ * same rule the calendar and COROS's own calendar use.
+ */
 export function buildTrainingActivityMatches(
   scheduled: TrainingHubScheduledWorkoutEntry[],
   activities: TrainingHubActivity[],
@@ -1020,31 +1259,38 @@ export function buildTrainingActivityMatches(
       match
     ])
   );
-  const usedActivities = new Set<string>();
+  const links = resolveActivityLinks(
+    scheduled,
+    activities,
+    previous.filter((match) => match.manual).map(toManualActivityLink)
+  );
+  const fetched = new Set(activities.map((activity) => activity.activityId));
   const results: TrainingActivityMatch[] = [];
   for (const entry of scheduled) {
-    const key = `${entry.planId}:${entry.idInPlan}`;
+    const key = scheduledLinkKey(entry);
     const manual = existing.get(key);
-    let activity = manual?.manual
-      ? activities.find((candidate) => candidate.activityId === manual.activityId)
-      : undefined;
-    let confidence = manual?.manual ? manual.confidence : undefined;
-    if (!manual?.manual) {
-      const candidates = activities
-        .filter((candidate) => activityDay(candidate) === entry.happenDay)
-        .filter((candidate) => !usedActivities.has(candidate.activityId))
-        .map((candidate) => ({ candidate, score: scheduledActivityScore(entry, candidate) }))
-        .sort((left, right) => right.score - left.score);
-      if (candidates[0]?.score >= 0.5) {
-        activity = candidates[0].candidate;
-        confidence = candidates[0].score;
-      }
+    const link = links.get(key);
+    if (
+      manual?.manual &&
+      manual.activityId &&
+      link?.source !== "manual" &&
+      (!fetched.has(manual.activityId) || manual.status === "skipped")
+    ) {
+      // The user's activity is outside this fetch (range or page cap), or they
+      // skipped the session: keep their row as it is.
+      results.push(manual);
+      continue;
     }
-    if (activity) usedActivities.add(activity.activityId);
-    const ratio = entry.trainingLoad && activity?.trainingLoad !== undefined
+    // A user link that no longer resolves (other day, or another workout has the
+    // activity) stops counting; don't save whatever resolved instead as theirs.
+    const keepsManual = manual?.manual === true && (link?.source === "manual" || !manual.activityId);
+    const activity = link?.activity;
+    const confidence = link ? (link.source === "manual" ? manual?.confidence ?? 1 : 1) : undefined;
+    const corosRate = link?.source === "coros" ? entry.corosActivity?.completeRate : undefined;
+    const ratio = corosRate ?? (entry.trainingLoad && activity?.trainingLoad !== undefined
       ? activity.trainingLoad / entry.trainingLoad
-      : undefined;
-    const status: TrainingActivityMatch["status"] = manual?.status === "skipped"
+      : undefined);
+    const status: TrainingActivityMatch["status"] = keepsManual && manual?.status === "skipped"
       ? "skipped"
       : activity
         ? ratio !== undefined && ratio < 0.75 ? "partial" : "completed"
@@ -1059,7 +1305,7 @@ export function buildTrainingActivityMatches(
       happenDay: entry.happenDay,
       status,
       confidence,
-      manual: manual?.manual ?? false,
+      manual: keepsManual,
       completedDurationSeconds: activity?.duration,
       completedDistanceMeters: activity?.distance,
       plannedTrainingLoad: entry.trainingLoad,
@@ -1093,4 +1339,68 @@ export function saveManualActivityMatch(match: TrainingActivityMatch): TrainingA
   const next = { ...match, manual: true, updatedAt: new Date().toISOString() };
   saveTrainingActivityMatch(next);
   return next;
+}
+
+/** The user's own plan↔activity links in a range (manual rows only). */
+export function listManualActivityLinks(startDay: string, endDay: string): ManualActivityLink[] {
+  return listTrainingActivityMatches()
+    .filter((match) => match.manual && match.happenDay >= startDay && match.happenDay <= endDay)
+    .map(toManualActivityLink);
+}
+
+/**
+ * Link an activity to a scheduled workout, or with no `activity` say that none
+ * belongs to it (this also hides COROS's own link). Local only: COROS has no
+ * API for linking.
+ */
+export function saveManualActivityLink(
+  entry: Pick<TrainingHubScheduledWorkoutEntry, "planId" | "idInPlan" | "happenDay" | "trainingLoad">,
+  activity?: Pick<TrainingHubActivity, "activityId" | "duration" | "distance" | "trainingLoad">
+): ManualActivityLink {
+  const existing = listTrainingActivityMatches().find(
+    (match) => match.schedulePlanId === entry.planId && match.scheduleIdInPlan === entry.idInPlan
+  );
+  const ratio = activity && entry.trainingLoad && activity.trainingLoad !== undefined
+    ? activity.trainingLoad / entry.trainingLoad
+    : undefined;
+  const match: TrainingActivityMatch = {
+    id: existing?.id ?? crypto.randomUUID(),
+    planId: existing?.planId,
+    planEntryId: existing?.planEntryId,
+    schedulePlanId: entry.planId,
+    scheduleIdInPlan: entry.idInPlan,
+    activityId: activity?.activityId,
+    happenDay: entry.happenDay,
+    status: activity
+      ? ratio !== undefined && ratio < 0.75 ? "partial" : "completed"
+      : entry.happenDay < dateKey(new Date()) ? "missed" : "upcoming",
+    confidence: activity ? 1 : undefined,
+    manual: true,
+    completedDurationSeconds: activity?.duration,
+    completedDistanceMeters: activity?.distance,
+    plannedTrainingLoad: entry.trainingLoad ?? existing?.plannedTrainingLoad,
+    completedTrainingLoad: activity?.trainingLoad,
+    updatedAt: new Date().toISOString()
+  };
+  saveTrainingActivityMatch(match);
+  return toManualActivityLink(match);
+}
+
+/** Drop the user's link so the workout goes back to COROS's own (or none). */
+export function clearManualActivityLink(planId: string, idInPlan: string): void {
+  const existing = listTrainingActivityMatches().find(
+    (match) => match.schedulePlanId === planId && match.scheduleIdInPlan === idInPlan
+  );
+  if (!existing?.manual) return;
+  saveTrainingActivityMatch({
+    ...existing,
+    activityId: undefined,
+    confidence: undefined,
+    manual: false,
+    status: existing.happenDay < dateKey(new Date()) ? "missed" : "upcoming",
+    completedDurationSeconds: undefined,
+    completedDistanceMeters: undefined,
+    completedTrainingLoad: undefined,
+    updatedAt: new Date().toISOString()
+  });
 }

@@ -261,6 +261,16 @@ export function activeTrainingPlanCalendarInstall(
   );
 }
 
+/** Recorded calendar workouts, dated today or later, that removing the active install would delete. */
+export function upcomingTrainingPlanCalendarWorkoutCount(
+  plan: TrainingPlanDocument,
+  today = formatPlanDate(new Date(), false)
+): number {
+  return activeTrainingPlanCalendarInstall(plan, today)?.occurrences.filter(
+    (occurrence) => !occurrence.removedAt && occurrence.happenDay >= today
+  ).length ?? 0;
+}
+
 export function createTrainingPlan(
   name = "Untitled plan",
   source: TrainingPlanDocument["source"] = "local"

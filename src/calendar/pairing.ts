@@ -1,119 +1,45 @@
 import type {
+  ManualActivityLink,
   TrainingHubActivity,
   TrainingHubDailyMetric,
   TrainingHubScheduledWorkoutEntry
 } from "../../electron/types";
+import {
+  linkCompletionPct,
+  resolveActivityLinks,
+  scheduledLinkKey
+} from "../../electron/activityLinks";
+import { activityMovingSeconds } from "../../electron/activityTime";
 import { parseUpcomingWorkoutDistanceKm } from "../training/formatters";
 import type { CalendarDay, PlannedActualPair, WeeklyStats } from "./calendarTypes";
 import { buildWeekSportBreakdown, scheduledPlannedSeconds } from "./weekSportBreakdown";
 
-type SportBucket = "run" | "bike" | "swim" | "walk" | "strength" | "other";
-
-function bucketFromName(name?: string): SportBucket | undefined {
-  const normalized = (name ?? "").toLowerCase();
-  if (!normalized) {
-    return undefined;
-  }
-  if (/(run|jog|track|marathon|5k|10k|tempo|interval)/.test(normalized)) {
-    return "run";
-  }
-  if (/(ride|bike|cycl|spin)/.test(normalized)) {
-    return "bike";
-  }
-  if (/swim/.test(normalized)) {
-    return "swim";
-  }
-  if (/(walk|hike)/.test(normalized)) {
-    return "walk";
-  }
-  if (/(strength|gym|weight|core)/.test(normalized)) {
-    return "strength";
-  }
-  return "other";
-}
-
-function sportsCompatible(
-  scheduled: TrainingHubScheduledWorkoutEntry,
-  activity: TrainingHubActivity
-): boolean {
-  const plannedBucket = bucketFromName(scheduled.name);
-  const actualBucket = bucketFromName(activity.sportName ?? activity.name);
-  if (!plannedBucket || !actualBucket) {
-    return true;
-  }
-  if (plannedBucket === "other" || actualBucket === "other") {
-    return true;
-  }
-  // Walks often record what was planned as an easy run/recovery; keep those pairable.
-  if (
-    (plannedBucket === "run" && actualBucket === "walk") ||
-    (plannedBucket === "walk" && actualBucket === "run")
-  ) {
-    return true;
-  }
-  return plannedBucket === actualBucket;
-}
-
-function completionPct(
-  scheduled: TrainingHubScheduledWorkoutEntry,
-  activity: TrainingHubActivity
-): number | undefined {
-  const plannedLoad = scheduled.trainingLoad;
-  if (plannedLoad && plannedLoad > 0 && activity.trainingLoad !== undefined) {
-    return Math.round((activity.trainingLoad / plannedLoad) * 100);
-  }
-  const plannedKm = parseUpcomingWorkoutDistanceKm(scheduled.volume);
-  if (plannedKm && plannedKm > 0 && activity.distance !== undefined) {
-    return Math.round((activity.distance / 1000 / plannedKm) * 100);
-  }
-  return undefined;
-}
-
-function matchScore(
-  scheduled: TrainingHubScheduledWorkoutEntry,
-  activity: TrainingHubActivity
-): number {
-  const plannedLoad = scheduled.trainingLoad;
-  if (plannedLoad && plannedLoad > 0 && activity.trainingLoad !== undefined) {
-    return Math.abs(activity.trainingLoad - plannedLoad) / plannedLoad;
-  }
-  const plannedKm = parseUpcomingWorkoutDistanceKm(scheduled.volume);
-  if (plannedKm && plannedKm > 0 && activity.distance !== undefined) {
-    return Math.abs(activity.distance / 1000 - plannedKm) / plannedKm;
-  }
-  return 1;
-}
-
 /**
- * Greedy per-day matching of scheduled workouts to completed activities.
- * Each activity is consumed by at most one scheduled workout.
+ * Pair scheduled workouts with the activities COROS or the user linked to
+ * them — never by guessing (see electron/activityLinks.ts). Run it over the
+ * whole visible range: COROS may credit an activity from another day.
  */
 export function pairPlannedWithActual(
   scheduled: TrainingHubScheduledWorkoutEntry[],
-  activities: TrainingHubActivity[]
+  activities: TrainingHubActivity[],
+  manualLinks: ManualActivityLink[] = []
 ): { pairs: PlannedActualPair[]; unplanned: TrainingHubActivity[] } {
-  const remaining = [...activities];
-  const pairs: PlannedActualPair[] = [];
+  const links = resolveActivityLinks(scheduled, activities, manualLinks);
+  const linked = new Set([...links.values()].map((link) => link.activity.activityId));
 
-  for (const entry of scheduled) {
-    const candidates = remaining
-      .filter((activity) => sportsCompatible(entry, activity))
-      .sort((left, right) => matchScore(entry, left) - matchScore(entry, right));
-    const best = candidates[0];
+  const pairs = scheduled.map((entry): PlannedActualPair => {
+    const link = links.get(scheduledLinkKey(entry));
+    return link
+      ? {
+          scheduled: entry,
+          activity: link.activity,
+          linkSource: link.source,
+          completionPct: linkCompletionPct(entry, link, parseUpcomingWorkoutDistanceKm(entry.volume) ?? undefined)
+        }
+      : { scheduled: entry };
+  });
 
-    if (best) {
-      remaining.splice(remaining.indexOf(best), 1);
-      pairs.push({
-        scheduled: entry,
-        activity: best,
-        completionPct: completionPct(entry, best)
-      });
-    } else {
-      pairs.push({ scheduled: entry });
-    }
-  }
-
-  return { pairs, unplanned: remaining };
+  return { pairs, unplanned: activities.filter((activity) => !linked.has(activity.activityId)) };
 }
 
 function lastDefined<T>(
@@ -145,7 +71,7 @@ export function computeWeeklyStats(days: CalendarDay[]): WeeklyStats {
   for (const day of days) {
     for (const activity of day.activities) {
       actualLoad += activity.trainingLoad ?? 0;
-      activityTimeSeconds += activity.duration ?? 0;
+      activityTimeSeconds += activityMovingSeconds(activity) ?? 0;
       distanceMeters += activity.distance ?? 0;
       elevationGain += activity.elevationGain ?? 0;
     }

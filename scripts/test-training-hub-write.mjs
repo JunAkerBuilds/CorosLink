@@ -107,5 +107,31 @@ assert.equal(scheduled.length, 1);
 assert.equal(scheduled[0]?.name, "Easy 7km");
 assert.equal(scheduled[0]?.planId, "plan-1");
 assert.equal(scheduled[0]?.idInPlan, "42");
+assert.equal(scheduled[0]?.corosActivity, undefined, "no sportData = COROS linked nothing");
+
+// entity.sportData is the activity COROS credited to the workout: it links the
+// pair but must not replace the planned name, load or distance.
+const linked = parseScheduledWorkoutEntries({
+  entities: [
+    {
+      happenDay: 20261020,
+      planId: "plan-2",
+      idInPlan: "7",
+      planProgramId: "7",
+      completeRate: "0.85",
+      sportData: { labelId: "480757304470307016", startTime: 1790957363, name: "Port of Spain Walk", trainingLoad: 3, distance: 217000 }
+    },
+    { happenDay: 20261020, planId: "plan-2", idInPlan: "8", planProgramId: "8", completeRate: "-1.00" }
+  ],
+  programs: [
+    { id: "prog-7", idInPlan: "7", name: "Foundation Run", trainingLoad: 67, distance: 800000 },
+    { id: "prog-8", idInPlan: "8", name: "Strides", trainingLoad: 10 }
+  ]
+});
+assert.equal(linked[0]?.name, "Foundation Run");
+assert.equal(linked[0]?.trainingLoad, 67);
+assert.equal(linked[0]?.volume, "8.00km");
+assert.deepEqual(linked[0]?.corosActivity, { activityId: "480757304470307016", startTime: 1790957363, completeRate: 0.85 });
+assert.equal(linked[1]?.corosActivity, undefined);
 
 console.log("training hub write response tests passed");

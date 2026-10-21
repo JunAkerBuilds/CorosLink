@@ -14,7 +14,8 @@ export function ChatSidebar({
   onOpen,
   onNewChat,
   onSelectSession,
-  onDeleteSession
+  onDeleteSession,
+  onDeleteAllSessions
 }: {
   open: boolean;
   overlay: boolean;
@@ -26,6 +27,7 @@ export function ChatSidebar({
   onNewChat: () => void;
   onSelectSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
+  onDeleteAllSessions: () => void;
 }) {
   useLanguage();
   useEffect(() => {
@@ -91,6 +93,7 @@ export function ChatSidebar({
               onNewChat={onNewChat}
               onSelectSession={onSelectSession}
               onDeleteSession={onDeleteSession}
+              onDeleteAllSessions={onDeleteAllSessions}
             />
           </div>
         </aside>

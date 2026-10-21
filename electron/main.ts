@@ -17,7 +17,8 @@ import { registerWorkoutAutomation } from "./workoutAutomation";
 import { followRescheduledWorkout, listWorkoutJournal, onWorkoutJournalChanged, saveWorkoutJournal } from "./workoutJournalService";
 import type { WorkoutJournalSaveInput } from "./workoutJournalTypes";
 import { app, BrowserWindow, dialog, nativeTheme, session, shell, ShareMenu } from "electron";
-import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow, recordDiagnosticNotice } from "./diagnosticsService";
+import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow, recordDiagnosticNotice, registerDiagnosticStatus } from "./diagnosticsService";
+import { corosAccountDiagnostics } from "./corosAccountDiagnostics";
 import { googleCalendar, startGoogleCalendarSync, stopGoogleCalendarSync } from "./googleCalendarService";
 import type { GoogleCalendarConfigInput } from "./googleCalendarTypes";
 import { appleCalendar, startAppleCalendarSync, stopAppleCalendarSync } from "./appleCalendarService";
@@ -56,6 +57,14 @@ import {
   type CoachSendInput
 } from "./coachHub";
 import { workoutEdits } from "./workoutEditRuntime";
+import {
+  CoachAttachmentError,
+  MAX_COACH_UPLOADS_PER_MESSAGE,
+  createCoachAttachmentStore,
+  expandCoachAttachments,
+  type CoachAttachmentStore
+} from "./coachAttachments";
+import type { ChatFileAttachment, CoachFileUpload } from "./types";
 import { RemoteAccess } from "./remote/remoteAccess";
 import { isAuthCallbackUrl } from "./remote/cloud/websiteAccount";
 import { completeOnboarding, isOnboardingPending } from "./onboardingState";
@@ -168,7 +177,8 @@ import type {
 } from "./types";
 import {
   addTrainingPlanToCalendar,
-  deleteLocalTrainingPlan,
+  deleteCorosTrainingPlan,
+  deleteLocalTrainingPlanAndCalendar,
   deleteTrainingLibraryWorkouts,
   getNativeTrainingPlan,
   getTrainingLibrarySnapshot,
@@ -179,6 +189,9 @@ import {
   removeTrainingCollection,
   saveLocalTrainingPlan,
   saveManualActivityMatch,
+  listManualActivityLinks,
+  saveManualActivityLink,
+  clearManualActivityLink,
   updateWorkoutMetadata,
   updateTrainingPlanMetadata,
   upsertTrainingCollection
@@ -230,6 +243,7 @@ import {
   cleanupCommunityWatchfaceImports,
   getCommunityWatchface,
   importCommunityWatchface,
+  setCommunityWatchfaceAccountToken,
   listCommunityWatchfaces,
   parseCommunityWatchfaceDeepLink,
   setCommunityWatchfaceProgressListener
@@ -249,7 +263,6 @@ import { buildManualTcx } from "./tcxBuilder";
 import {
   cancelCorosMapDownload,
   cancelCorosMapInstall,
-  chooseCorosMapFolder,
   clearCorosMapDownloadJob,
   deleteAllGeneratedRoutes,
   deleteCachedCorosMap,
@@ -266,7 +279,6 @@ import {
   importRouteFromGpx,
   installCachedCorosMap,
   installCachedCorosMaps,
-  installCorosMapFolder,
   listCachedCorosMaps,
   listCorosMapDownloadJobs,
   listGeneratedRoutes,
@@ -416,7 +428,10 @@ import {
   deleteChatSessionById,
   detectLocalChatServers,
   connectClaudeCode,
+  connectGeminiCli,
   getClaudeCodeConnectionStatus,
+  getGeminiCliConnectionStatus,
+  recheckGeminiCliConnectionStatus,
   getChatAuthStatus,
   getChatSessionEntries,
   getChatSettings,
@@ -429,6 +444,7 @@ import {
   generateCoachSessionTitle,
   streamChat,
   testClaudeCodeConnection,
+  testGeminiCliConnection,
   testLocalChatConnection,
   testOpenRouterConnection,
   uploadTrainingPlanDraft,
@@ -514,16 +530,31 @@ function requireRemoteAccess(): RemoteAccess {
   return remoteAccess;
 }
 
+// Files attached to Coach messages, one folder per conversation.
+let coachAttachmentStore: CoachAttachmentStore | undefined;
+
+function coachAttachments(): CoachAttachmentStore {
+  coachAttachmentStore ??= createCoachAttachmentStore(
+    path.join(app.getPath("userData"), "coach-attachments")
+  );
+  return coachAttachmentStore;
+}
+
 function createCoachHub(): CoachSessionHub {
   return new CoachSessionHub({
     // getChatSessionEntries also reconciles COROS review cards with their saves.
     sessions: createChatHistorySessionStore(undefined, { load: getChatSessionEntries }),
     events: createSqliteCoachEventStore(),
     stream: {
-      start: (sink, requestId, messages, unitSystem, provider) =>
-        streamChat(sink, requestId, messages, unitSystem, { provider }),
+      start: async (sink, requestId, messages, unitSystem, provider, sessionId) => {
+        const withFiles = await expandCoachAttachments(messages, (file) =>
+          coachAttachments().load(sessionId, file.id)
+        );
+        return streamChat(sink, requestId, withFiles, unitSystem, { provider });
+      },
       cancel: cancelChat
     },
+    attachments: { removeSession: (sessionId) => coachAttachments().removeSession(sessionId) },
     actions: {
       confirmCorosAction: confirmCoachCorosAction,
       confirmWorkoutDelete,
@@ -997,6 +1028,7 @@ if (!hasSingleInstanceLock) {
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return;
   initializeDiagnostics(() => mainWindow);
+  registerDiagnosticStatus(corosAccountDiagnostics);
   if (process.defaultApp && process.argv[1]) {
     app.setAsDefaultProtocolClient("coroslink", process.execPath, [
       path.resolve(process.argv[1])
@@ -1063,6 +1095,9 @@ app.whenReady().then(() => {
     },
     chatModels: listChatModelOptions
   });
+  // Opening one's own private face from the website: the catalog may ask with the account token.
+  const account = remoteAccess.cloud.account;
+  setCommunityWatchfaceAccountToken((origin) => account.tokenFor(origin));
   registerIpcHandlers();
   remoteAccess.initialize();
   watchfaceAutomation = registerWatchfaceAutomation(() => mainWindow);
@@ -1939,6 +1974,28 @@ function registerIpcHandlers(): void {
     shell.openExternal("https://code.claude.com/docs/en/quickstart")
   );
 
+  ipcMain.handle("chat:getGeminiCliStatus", () =>
+    getGeminiCliConnectionStatus()
+  );
+
+  ipcMain.handle("chat:recheckGeminiCli", () =>
+    recheckGeminiCliConnectionStatus()
+  );
+
+  ipcMain.handle("chat:connectGeminiCli", () => connectGeminiCli());
+
+  ipcMain.handle("chat:testGeminiCliConnection", () =>
+    testGeminiCliConnection()
+  );
+
+  ipcMain.handle("chat:openGeminiCliSetupGuide", (_event, topic: unknown) =>
+    shell.openExternal(
+      topic === "install"
+        ? "https://geminicli.com/docs/get-started/installation/"
+        : "https://geminicli.com/docs/get-started/authentication/"
+    )
+  );
+
   ipcMain.handle("chat:login", () => loginChat(mainWindow));
 
   ipcMain.handle("chat:logout", () => logoutChat());
@@ -2009,6 +2066,9 @@ function registerIpcHandlers(): void {
   ipcMain.handle("coach:deleteSession", (_event, sessionId: string) => {
     requireCoachHub().deleteSession(sessionId);
   });
+  ipcMain.handle("coach:deleteAllSessions", (_event, provider: ChatProvider) =>
+    requireCoachHub().deleteAllSessions(provider)
+  );
   ipcMain.handle("coach:subscribe", (event, sessionId: string, afterSeq: number) => {
     const contents = event.sender;
     dropCoachSubscription(contents.id);
@@ -2031,12 +2091,54 @@ function registerIpcHandlers(): void {
       dropCoachSubscription(event.sender.id);
     }
   });
-  ipcMain.handle("coach:send", (_event, input: CoachSendInput) =>
-    requireCoachHub().send({
-      ...input,
-      unitSystem: input.unitSystem ? normalizeUnitSystem(input.unitSystem) : undefined
-    })
+  ipcMain.handle(
+    "coach:send",
+    async (event, input: CoachSendInput & { uploads?: CoachFileUpload[] }) => {
+      // Files come only as uploads from the main window, stored before the hub
+      // sees them; a `files` list the window made up is dropped.
+      const { uploads, files: _ignored, ...message } = input;
+      const files: ChatFileAttachment[] = [];
+      if (Array.isArray(uploads) && uploads.length > 0) {
+        mainWindowSender(event, "Coach attachments");
+        if (uploads.length > MAX_COACH_UPLOADS_PER_MESSAGE) {
+          throw new Error(`Attach up to ${MAX_COACH_UPLOADS_PER_MESSAGE} files at a time.`);
+        }
+        try {
+          for (const upload of uploads) {
+            files.push(await coachAttachments().save(message.sessionId, upload));
+          }
+        } catch (error) {
+          await coachAttachments().remove(message.sessionId, files.map((file) => file.id));
+          if (error instanceof CoachAttachmentError) throw new Error(error.message);
+          throw error;
+        }
+      }
+      try {
+        return requireCoachHub().send({
+          ...message,
+          ...(files.length ? { files } : {}),
+          unitSystem: message.unitSystem ? normalizeUnitSystem(message.unitSystem) : undefined
+        });
+      } catch (error) {
+        if (files.length) {
+          await coachAttachments().remove(message.sessionId, files.map((file) => file.id));
+        }
+        throw error;
+      }
+    }
   );
+  ipcMain.handle("coach:attachmentPreview", (_event, sessionId: string, attachmentId: string) =>
+    coachAttachments().preview(String(sessionId), String(attachmentId)).catch(() => null)
+  );
+  ipcMain.handle("coach:openAttachment", async (event, sessionId: string, attachmentId: string) => {
+    mainWindowSender(event, "Coach attachments");
+    const file = await coachAttachments()
+      .originalPath(String(sessionId), String(attachmentId))
+      .catch(() => null);
+    if (!file) throw new Error("This file is no longer available.");
+    const failure = await shell.openPath(file);
+    if (failure) throw new Error(failure);
+  });
   ipcMain.handle("coach:cancel", (_event, sessionId: string) =>
     requireCoachHub().cancel(sessionId)
   );
@@ -2332,7 +2434,12 @@ function registerIpcHandlers(): void {
   );
   ipcMain.handle(
     "trainingLibrary:deletePlan",
-    (_event, id: string, confirmed: boolean) => deleteLocalTrainingPlan(id, confirmed)
+    (_event, id: string, confirmed: boolean) => deleteLocalTrainingPlanAndCalendar(id, confirmed)
+  );
+  ipcMain.handle(
+    "trainingLibrary:deleteCorosPlan",
+    (_event, remoteId: string, confirmed: boolean) =>
+      deleteCorosTrainingPlan(remoteId, confirmed)
   );
   ipcMain.handle(
     "trainingLibrary:previewPlanCalendar",
@@ -2372,6 +2479,17 @@ function registerIpcHandlers(): void {
   );
   ipcMain.handle("trainingLibrary:saveManualMatch", (_event, match) =>
     saveManualActivityMatch(match)
+  );
+  ipcMain.handle(
+    "trainingLibrary:listManualLinks",
+    (_event, startDay: string, endDay: string) => listManualActivityLinks(startDay, endDay)
+  );
+  ipcMain.handle("trainingLibrary:saveManualLink", (_event, entry, activity) =>
+    saveManualActivityLink(entry, activity)
+  );
+  ipcMain.handle(
+    "trainingLibrary:clearManualLink",
+    (_event, planId: string, idInPlan: string) => clearManualActivityLink(planId, idInPlan)
   );
 
   ipcMain.handle(
@@ -2856,16 +2974,6 @@ function registerIpcHandlers(): void {
     deleteCachedCorosMap(packageId)
   );
 
-  ipcMain.handle("maps:chooseCorosMapFolder", () => chooseCorosMapFolder());
-
-  ipcMain.handle("maps:installCorosMapFolder", async (_event, sourcePath: string) => {
-    try {
-      return await installCorosMapFolder(sourcePath);
-    } catch (error) {
-      throw toCorosMapInstallIpcError(error);
-    }
-  });
-
   ipcMain.handle("maps:getRouteBuilderConfig", () => getRouteBuilderConfig());
 
   ipcMain.handle(
@@ -2906,8 +3014,11 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "maps:importRouteGpx",
-    (_event, activityType?: RouteActivityType) =>
-      importRouteFromGpx(activityType)
+    (event, activityType?: RouteActivityType) =>
+      importRouteFromGpx(
+        activityType,
+        BrowserWindow.fromWebContents(event.sender)
+      )
   );
 
   ipcMain.handle("maps:saveDrawnRoute", (_event, payload: DrawnRoutePayload) =>

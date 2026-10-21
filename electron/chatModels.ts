@@ -27,6 +27,15 @@ export const CLAUDE_MODEL_OPTIONS: ChatModelOption[] = [
   { value: "haiku", label: "Claude Haiku 5.5" }
 ];
 
+// Gemini CLI's aliases track the newest model of each tier for the account.
+// Newer CLIs list their models when a session starts; this is the fallback.
+export const GEMINI_MODEL_OPTIONS: ChatModelOption[] = [
+  { value: "", label: "Default" },
+  { value: "pro", label: "Gemini Pro" },
+  { value: "flash", label: "Gemini Flash" },
+  { value: "flash-lite", label: "Gemini Flash-Lite" }
+];
+
 export const OPENROUTER_MODEL_OPTIONS: ChatModelOption[] = [
   { value: "openrouter/auto", label: "Auto Router" },
   { value: "openrouter/free", label: "Free Router" }
@@ -66,6 +75,7 @@ export function getChatGptModelCandidates(
 
 export function getChatModelOptions(provider: string): ChatModelOption[] {
   if (provider === "claude-code") return CLAUDE_MODEL_OPTIONS;
+  if (provider === "gemini-cli") return GEMINI_MODEL_OPTIONS;
   if (provider === "openrouter") return OPENROUTER_MODEL_OPTIONS;
   return CHATGPT_MODEL_OPTIONS;
 }

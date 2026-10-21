@@ -109,7 +109,8 @@ async function renderNativeData(details) {
     const values=chart.configOverrides[0].values;
     const key=source.id==='chart_moon'?'chart_moon_icon':source.id==='chart_sunrise'||source.id==='chart_moonrise'?source.id+'_hour_rect':source.id+'_rect';
     check(values[key]&&values[key]!==studio.COROS_CONFIG_DELETE_VALUE,source.id+' emits its native fields');
-    check(values.chart_stress_rect===undefined||values.chart_stress_rect===studio.COROS_CONFIG_DELETE_VALUE||source.id==='chart_stress','Switching charts never writes a stale source');
+    // Stamina or elevation alone completes its daily page with an invisible stress readout.
+    check([undefined,studio.COROS_CONFIG_DELETE_VALUE,'cl_nd_chart_blank_digits'].includes(values.chart_stress_font)||source.id==='chart_stress','Switching charts never writes a stale source');
   }
   // Recovered official faces carry every chart group's readouts; only the
   // selected source, the shared graph and this editor's own leftovers are replaced.
@@ -118,7 +119,35 @@ async function renderNativeData(details) {
   const groupedValues=grouped.configOverrides[0].values;
   check(groupedValues.chart_tide_rect===undefined&&groupedValues.chart_item3_bg===undefined,'Other chart groups of an official face survive export');
   check(groupedValues.chart_stress_rect===studio.COROS_CONFIG_DELETE_VALUE&&groupedValues.chart_stress_font===studio.COROS_CONFIG_DELETE_VALUE,'Editor-generated leftovers of another source are cleared');
-  check(groupedValues.chart_step_rect&&groupedValues.chart_rect&&groupedValues.chart_bg===studio.COROS_CONFIG_DELETE_VALUE,'Selected source and shared graph keys are rewritten');
+  check(groupedValues.chart_step_rect&&groupedValues.chart_rect&&groupedValues.chart_bg==='cl_nd_blank_icon\\00.png'&&groupedValues.chart_pos,'Selected source and shared graph keys are rewritten; a hidden backdrop is an invisible one');
+  // A chart with several readouts exports each into its own folders; the graph is written once.
+  const chartDetails={...details,resolutions:[details.resolutions.find(r=>r.width===800)]};
+  const storedReadout=(source,x=60)=>({...nativeData.chart,chartSource:source,x});
+  const multi=await native.composeNativeData(chartDetails,{chart:{...nativeData.chart,chartSource:'chart_stress',readouts:{chart_stamina:storedReadout('chart_stamina',400),chart_baro:storedReadout('chart_baro'),chart_sunrise:storedReadout('chart_sunrise')},removedReadouts:['chart_baro']}});
+  const multiValues=multi.configOverrides[0].values;
+  check(multiValues.chart_stress_font==='cl_nd_chart_d'&&multiValues.chart_stamina_font==='cl_nd_cr_stamina_d'&&multiValues.chart_stamina_icon==='cl_nd_cr_stamina_i\\00.png','Every stored readout gets its own digits and icon');
+  check(multiValues.chart_sunrise_hour_rect&&multiValues.chart_sunrise_font==='cl_nd_cr_sunrise_d'&&multiValues.chart_sunset_icon==='cl_nd_cr_sunrise_i\\01.png','A stored rise/set readout exports both times and icons');
+  check(multiValues.chart_baro_rect===studio.COROS_CONFIG_DELETE_VALUE&&multiValues.chart_baro_font===studio.COROS_CONFIG_DELETE_VALUE,'A made-fixed stored readout leaves its page');
+  check(multiValues.chart_point_icon==='cl_nd_chart_m\\00.png'&&multiValues.chart_colon_icon==='cl_nd_chart_s\\03.png','The edited readout supplies the shared chart symbols');
+  check(multi.assetReplacements.filter(a=>a.path.startsWith('watchface_800x800/cl_nd_cr_stamina_d/')).length===10,'A stored readout exports ten digits');
+  check(studio.parseConfigRect(multiValues.chart_stamina_rect).x0===440,'A stored readout keeps its own position');
+  check(multiValues.chart_rect&&multiValues.chart_rect!==studio.COROS_CONFIG_DELETE_VALUE,'The graph comes from the layer');
+  check(multiValues.chart_bg==='cl_nd_blank_icon\\00.png'&&multiValues.chart_pos===`{${studio.parseConfigRect(multiValues.chart_rect).x0},${studio.parseConfigRect(multiValues.chart_rect).y0}}`,'Without a visible backdrop the chart still declares an invisible one at the plot, as every official chart face does');
+  // The watch keeps a daily page only with all three readouts: stress and stamina get an invisible elevation, page B stays off.
+  check(multiValues.chart_elevation_font==='cl_nd_chart_blank_digits'&&multiValues.chart_elevation_rect&&multiValues.chart_elevation_icon==='cl_nd_blank_icon\\00.png','A started daily page is completed with an invisible readout');
+  check(!multiValues.chart_kcal_font&&!multiValues.chart_heart_rate_font,'A daily page without readouts stays off');
+  const hiddenStamina=(await native.composeNativeData(chartDetails,{chart:{...nativeData.chart,chartSource:'chart_stress',readouts:{chart_stamina:{...storedReadout('chart_stamina',400),parts:{value:{enabled:false},icon:{enabled:false}}}}}})).configOverrides[0].values;
+  check(hiddenStamina.chart_stamina_font==='cl_nd_chart_blank_digits'&&hiddenStamina.chart_elevation_font==='cl_nd_chart_blank_digits','A readout hidden on its page is exported invisibly, so the page stays');
+  const sunAngleOnly=(await native.composeNativeData(chartDetails,{chart:{...nativeData.chart,chartSource:'chart_sun_angle'}})).configOverrides[0].values;
+  check(sunAngleOnly.chart_sunrise_font==='cl_nd_chart_blank_digits'&&sunAngleOnly.chart_sunrise_hour_rect&&sunAngleOnly.chart_sunset_icon,'Sun angle alone gets the invisible sunrise readout its page needs');
+  const builtTwice={...chartDetails.resolutions[0],config:{...chartDetails.resolutions[0].config,chart_stamina_rect:'{1,1,2,2,left|vcenter}',chart_stamina_font:'cl_nd_cr_stamina_d',chart_stamina_icon:'cl_nd_cr_stamina_i\\00.png',chart_stamina_icon_pos:'{1,1}',chart_kcal_rect:'{1,1,2,2,left|vcenter}',chart_kcal_font:'cl_nd_chart_d'}};
+  const again=(await native.composeNativeData({...details,resolutions:[builtTwice]},{chart:{...nativeData.chart,chartSource:'chart_stress'}})).configOverrides[0].values;
+  check(again.chart_stamina_font===undefined&&again.chart_stamina_rect===undefined,'A reopened face keeps a readout exported into its own folders');
+  check(again.chart_kcal_font===studio.COROS_CONFIG_DELETE_VALUE,'A readout in the edited readout\'s folders is cleared');
+  const pageCanvas=async readouts=>{const c=document.createElement('canvas');c.width=800;c.height=800;await native.drawNativeDataPreview(c,800,{chart:{...nativeData.chart,x:100,y:100,chartSource:'chart_stress',...(readouts?{readouts}:{})}});return c.toDataURL();};
+  const alone=await pageCanvas();
+  check(alone!==await pageCanvas({chart_stamina:{...storedReadout('chart_stamina',400),y:100}}),'Stored readouts on the shown page are previewed');
+  check(alone===await pageCanvas({chart_baro:{...storedReadout('chart_baro',400),y:100}}),'Readouts on other pages wait for theirs');
   // Preview follows the chart layer's group for slot-sharing alternatives.
   const slot=(id,x,y,extra={})=>({...native.defaultNativeDataStyle(id),x,y,...extra});
   const grouping={weather_temp:slot('weather_temp',300,60),chart_sun_angle:slot('chart_sun_angle',300,60),weather_wind:slot('weather_wind',300,140),weather_temp_min:slot('weather_temp_min',300,140),chart:slot('chart',80,300,{chartSource:'chart_sunrise'})};
@@ -126,7 +155,12 @@ async function renderNativeData(details) {
   check(native.nativeLayerHiddenByChartGroup('weather_temp_min',grouping)&&!native.nativeLayerHiddenByChartGroup('weather_wind',grouping),'Sun group shows wind instead of min/max in a shared row');
   const generalGrouping={...grouping,chart:{...grouping.chart,chartSource:'chart_stress'}};
   check(!native.nativeLayerHiddenByChartGroup('weather_temp',generalGrouping)&&native.nativeLayerHiddenByChartGroup('chart_sun_angle',generalGrouping)&&native.nativeLayerHiddenByChartGroup('weather_wind',generalGrouping)&&!native.nativeLayerHiddenByChartGroup('weather_temp_min',generalGrouping),'General group shows temperature and min/max');
-  check(!native.nativeLayerHiddenByChartGroup('weather_temp',{...grouping,weather_temp:slot('weather_temp',10,10)}),'Non-overlapping layers are never suppressed');
+  // Firmware 3.2008.0 gates weather by page, not by position: the sun and moon pages skip the weather block.
+  const apart={...grouping,weather_temp:slot('weather_temp',10,10),weather_temp_min:slot('weather_temp_min',10,600),weather_rainfall:slot('weather_rainfall',600,600)};
+  check(['weather_temp','weather_temp_min','weather_rainfall'].every(id=>native.nativeLayerHiddenByChartGroup(id,apart))&&!native.nativeLayerHiddenByChartGroup('weather_wind',apart),'The sun page hides the weather block wherever it sits and keeps wind');
+  const baroPage={...apart,chart:{...apart.chart,chartSource:'chart_baro'}};
+  check(!native.nativeLayerHiddenByChartGroup('weather_temp',baroPage)&&native.nativeLayerHiddenByChartGroup('weather_temp_min',baroPage)&&!native.nativeLayerHiddenByChartGroup('weather_wind',baroPage),'Bar pages show current weather and wind, not min/max');
+  check(JSON.stringify(native.nativeLayerChartPages('weather_temp_min',apart))===JSON.stringify({pages:['daily-a','daily-b']})&&native.nativeLayerChartPages('weather_temp',{weather_temp:apart.weather_temp})===null,'Min/max shows only on the daily pages; without a chart nothing is page-dependent');
   check(!native.nativeLayerHiddenByChartGroup('weather_temp',{...grouping,chart:{...grouping.chart,enabled:false}}),'Without a chart layer nothing is suppressed');
   // Recovered NOMAD keeps the solar angle beside a sunrise chart. The chart owns
   // every chart_* key, so its blanket deletion must not erase the earlier field.
@@ -209,7 +243,8 @@ async function renderNativeData(details) {
   check(validateWatchfaceAutomationDocument({design:invalid,projectName:'Invalid'}, {details}).some(d=>d.severity==='error'),'Invalid graph thickness is rejected');
   const customPreview=document.createElement('canvas');customPreview.width=800;customPreview.height=800;
   customPreview.getContext('2d').fillRect(0,0,800,800);
-  await native.drawNativeDataPreview(customPreview,800,{...customData,chart:{...customData.chart,parts:{...customData.chart.parts,mask:{enabled:false}}}});
+  // Daily data draws no graph, so the bar colors show on the barometer page.
+  await native.drawNativeDataPreview(customPreview,800,{...customData,chart:{...customData.chart,chartSource:'chart_baro',parts:{...customData.chart.parts,mask:{enabled:false}}}});
   const customPixels=customPreview.getContext('2d').getImageData(0,0,800,800).data;
   check(customPixels.some((v,i)=>i%4===0&&v===255&&customPixels[i+1]===255&&customPixels[i+2]===0),'Preview renders the configured selected-bar color');
   // Simulation changes rendered samples without changing assets or design.
@@ -227,7 +262,7 @@ async function renderNativeData(details) {
   const pixels=c=>c.getContext('2d').getImageData(0,0,800,800).data;
   const has=(data,[r,g,b])=>data.some((v,i)=>i%4===0&&v===r&&data[i+1]===g&&data[i+2]===b);
   const barsPreview=await previewWith(styled), barPixels=pixels(barsPreview);
-  check(has(barPixels,[0,0,255])&&!has(barPixels,[0,255,0]),'A daily-data chart previews bars, not the line');
+  check(!has(barPixels,[0,0,255])&&!has(barPixels,[0,255,0]),'A daily-data chart previews its readouts without bars or a line');
   check(barsPreview.toDataURL()===(await previewWith({...styled,previewType:'curve'})).toDataURL(),'A saved previewType no longer changes the graph');
   check(has(pixels(await previewWith(styled,undefined,'chart_baro')),[0,0,255]),'Barometer previews bars');
   const linePreview=await previewWith(styled,undefined,'chart_sunrise'), linePixels=pixels(linePreview);
@@ -236,7 +271,9 @@ async function renderNativeData(details) {
   const historyLine=await previewWith(styled,undefined,'chart_moon_percent');
   check(historyLine.toDataURL()!==(await previewWith(styled,{chartHistory:[1,0,1,0]},'chart_moon_percent')).toDataURL(),'chartHistory reshapes the sample line');
   check(defaultSample!==await renderSample({values:{week_tl:'9999'}}),'Training simulation renders new glyphs');
-  check(defaultSample!==await renderSample({values:{weather_direction:'8'}}),'Wind simulation selects different state artwork');
+  // Wind is hidden on the daily-data page this sample chart shows, so draw it alone.
+  const renderWind=async scenario=>{const c=sampleCanvas();await native.drawNativeDataPreview(c,800,{weather_direction:simulatedData.weather_direction},scenario);return c.toDataURL();};
+  check(await renderWind()!==await renderWind({values:{weather_direction:'8'}}),'Wind simulation selects different state artwork');
   check(defaultSample!==await renderSample({values:{chart_stress:'99'},chartHistory:[0,1,0,1]}),'Chart simulation changes history and value');
   check(JSON.stringify(simulatedData)===beforeData,'Preview leaves native design and assets untouched');
   const weather=await import('/src/watchfaces/weatherAssets.ts');

@@ -220,7 +220,7 @@ async function recoverSolar(config: Record<string, string>, source: (key: string
  * the project's config text, and the layer starts on the group the official
  * thumbnail shows (sunrise/sunset first), keeping the original graph artwork.
  */
-const CHART_SOURCE_ORDER = ["chart_sunrise", "chart_moonrise", "chart_baro", "chart_tide", "chart_stress", "chart_stamina", "chart_step", "chart_kcal", "chart_elevation", "chart_moon_percent", "chart_sun_angle", "chart_moon"];
+const CHART_SOURCE_ORDER = ["chart_sunrise", "chart_moonrise", "chart_baro", "chart_tide", "chart_stress", "chart_stamina", "chart_step", "chart_kcal", "chart_elevation", "chart_heart_rate", "chart_moon_percent", "chart_sun_angle", "chart_moon"];
 const storedWidth = (value: string | undefined, fallback: number) => {
   const n = Number(value?.trim());
   return value?.trim() && Number.isFinite(n) && n >= 0 ? n : fallback;
@@ -236,7 +236,7 @@ const isChartReadout = (id: string, studio: boolean) => NATIVE_CHART_SOURCES.som
 function templateChartSources(config: Record<string, string>, source: (key: string) => CorosWatchfaceSpriteFile[], studio = false): string[] {
   const plot = parseConfigRect(config.chart_rect);
   if (!plot || plot.x1 <= plot.x0 || plot.y1 <= plot.y0) return [];
-  return [...CHART_SOURCE_ORDER, ...(studio ? NATIVE_CHART_STUDIO_READOUTS : [])].filter(id => isChartReadout(id, studio) &&
+  return [...new Set([...CHART_SOURCE_ORDER, ...(studio ? NATIVE_CHART_STUDIO_READOUTS : [])])].filter(id => isChartReadout(id, studio) &&
     // A moon-phase group is a frame table; SATISFY's single blank sun/moon
     // icon is a placeholder, not a readout the watch cycles to.
     (id === "chart_moon" ? source("chart_moon_icon").length > 1 : Boolean(parseConfigRect(config[chartRectKey(id)]) && source(`${id}_font`).length)));
@@ -336,7 +336,8 @@ async function recoverChart(config: Record<string, string>, source: (key: string
   const font = moon || invisible ? null : readoutFile;
   const artwork = { background: ["chart_bg", "chart_pos"], mask: ["chart_bar_mask", "chart_bar_mask_pos"], noDataMask: ["chart_bar_nodata_mask", "chart_bar_nodata_mask_pos"] } as const;
   const placed = (Object.entries(artwork) as [keyof typeof artwork, readonly [string, string]][])
-    .flatMap(([role, [key, posKey]]) => { const file = source(key)[0], position = parseConfigPos(config[posKey]); return file && position ? [{ role, key, file, position }] : []; });
+    // Studio's invisible backdrop (1x1, written when the graph background is off) reopens as off.
+    .flatMap(([role, [key, posKey]]) => { const file = source(key)[0], position = parseConfigPos(config[posKey]); return file && position && !(role === "background" && blank(file)) ? [{ role, key, file, position }] : []; });
   // Native parts use nonnegative offsets: anchor the layer at the upper-left of everything it draws.
   const xs = [plot.x0, valueRect?.x0, iconPosition?.x, ...placed.map(p => p.position.x)].filter((n): n is number => n !== undefined && n !== null);
   const ys = [plot.y0, valueRect?.y0, iconPosition?.y, ...placed.map(p => p.position.y)].filter((n): n is number => n !== undefined && n !== null);

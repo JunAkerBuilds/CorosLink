@@ -18,6 +18,7 @@ import type {
   ActivityVisualHrSection,
   ActivityVisualLapPoint,
   ActivityVisualPreview,
+  ChatFileAttachment,
   ChatMessageAttachment,
   ChatProvider,
   ChatSessionSummary,
@@ -98,6 +99,7 @@ function normalizeProvider(value: unknown): ChatProvider {
   if (
     value === "local" ||
     value === "claude-code" ||
+    value === "gemini-cli" ||
     value === "openrouter"
   ) {
     return value;
@@ -755,6 +757,7 @@ function parseMessageEntry(value: unknown): PersistedChatMessageEntry | null {
 
   const source = parseSource(value.source);
   const attachment = role === "user" ? parseMessageAttachment(value.attachment) : null;
+  const files = role === "user" ? parseFileAttachments(value.files) : [];
   const reasoningSummary =
     typeof value.reasoningSummary === "string" && value.reasoningSummary.trim()
       ? value.reasoningSummary
@@ -764,9 +767,48 @@ function parseMessageEntry(value: unknown): PersistedChatMessageEntry | null {
     role,
     content: value.content,
     ...(attachment ? { attachment } : {}),
+    ...(files.length ? { files } : {}),
     ...(source ? { source } : {}),
     ...(reasoningSummary ? { reasoningSummary } : {})
   };
+}
+
+function optionalCount(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.round(value)
+    : undefined;
+}
+
+function parseFileAttachments(value: unknown): ChatFileAttachment[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): ChatFileAttachment[] => {
+    if (
+      !isRecord(item) ||
+      typeof item.id !== "string" ||
+      !item.id ||
+      typeof item.name !== "string" ||
+      (item.kind !== "image" && item.kind !== "document") ||
+      typeof item.mimeType !== "string"
+    ) {
+      return [];
+    }
+    const counts = {
+      pageCount: optionalCount(item.pageCount),
+      textChars: optionalCount(item.textChars),
+      pageImages: optionalCount(item.pageImages),
+      width: optionalCount(item.width),
+      height: optionalCount(item.height)
+    };
+    return [{
+      id: item.id,
+      name: item.name,
+      kind: item.kind,
+      mimeType: item.mimeType,
+      sizeBytes: optionalCount(item.sizeBytes) ?? 0,
+      ...Object.fromEntries(Object.entries(counts).filter(([, count]) => count !== undefined)),
+      ...(item.truncated === true ? { truncated: true } : {})
+    }];
+  });
 }
 
 function parseMessageAttachment(value: unknown): ChatMessageAttachment | null {
@@ -1097,6 +1139,10 @@ export function deriveSessionTitleFromEntries(
     if (entry.kind === "message" && entry.role === "user" && entry.content.trim()) {
       return truncateTitle(entry.content);
     }
+    // A message that is only files is named after the first one.
+    if (entry.kind === "message" && entry.role === "user" && entry.files?.length) {
+      return truncateTitle(entry.files[0].name);
+    }
   }
   return DEFAULT_SESSION_TITLE;
 }
@@ -1126,6 +1172,9 @@ function derivePreviewFromEntries(entries: PersistedChatEntry[]): string {
       const preview = plainTextPreview(entry.content);
       if (!preview) continue;
       return preview.length > 80 ? `${preview.slice(0, 80)}…` : preview;
+    }
+    if (entry.kind === "message" && entry.files?.length) {
+      return entry.files.map((file) => file.name).join(", ");
     }
     if (entry.kind === "planDraft") {
       return entry.draft.summary || entry.draft.name;

@@ -2,7 +2,6 @@ import { t, useLanguage } from "../i18n/tools";
 import {
   AlertCircle,
   Download,
-  FolderOpen,
   Globe,
   HardDrive,
   Loader2,
@@ -24,7 +23,6 @@ import type {
   CachedCorosMapPackage,
   CorosMapDownloadJob,
   CorosMapInstallProgress,
-  CorosMapLocalSelection,
   CorosMapManifest,
   CorosMapPackage,
   WatchStatus
@@ -180,8 +178,6 @@ function CorosMapsTab({
     landscape: showLandscape,
     topo: showTopo
   } = filters;
-  const [localSelection, setLocalSelection] =
-    useState<CorosMapLocalSelection | null>(null);
   const [downloadJobs, setDownloadJobs] = useState<CorosMapDownloadJob[]>([]);
   const [installProgress, setInstallProgress] =
     useState<CorosMapInstallProgress | null>(null);
@@ -416,42 +412,6 @@ function CorosMapsTab({
     }
   }
 
-  async function handleChooseFolder() {
-    setBusy("choose-folder");
-    onError(null);
-    onMessage(null);
-    try {
-      const selection = await api.chooseCorosMapFolder();
-      if (selection) {
-        setLocalSelection(selection);
-        onMessage(t("Local COROS map folder selected."));
-      }
-    } catch (caught) {
-      onError(toErrorMessage(caught));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function handleInstallFolder() {
-    if (!localSelection) {
-      return;
-    }
-
-    setBusy("install-folder");
-    onError(null);
-    onMessage(null);
-    try {
-      const result = await api.installCorosMapFolder(localSelection.sourcePath);
-      onWatchStatusChange(result.watch);
-      onMessage(t("Installed {{p0}} of map files.", { p0: formatBytes(result.sizeBytes) }));
-    } catch (caught) {
-      reportInstallOutcome(caught, onMessage, onError);
-    } finally {
-      setBusy(null);
-    }
-  }
-
   const regionOptions = useMemo(() => {
     const regions = new Map<string, string>();
     for (const pkg of manifest?.packages ?? []) {
@@ -575,47 +535,6 @@ function CorosMapsTab({
           <AlertCircle size={18} aria-hidden="true" />
           <p>
             {t("COROS packages are large. Install only the regions you need and merge into the watch map folder.")}</p>
-        </div>
-
-        <div className="local-map-install">
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={handleChooseFolder}
-            disabled={busy === "choose-folder"}
-          >
-            {busy === "choose-folder" ? (
-              <Loader2 className="spin" size={17} aria-hidden="true" />
-            ) : (
-              <FolderOpen size={17} aria-hidden="true" />
-            )}
-            {t("Choose Local Map Folder")}</button>
-
-          {localSelection ? (
-            <div className="local-map-selection">
-              <strong>{shortPath(localSelection.mapPath)}</strong>
-              <span>
-                {formatBytes(localSelection.sizeBytes)} ·{" "}
-                {localSelection.fileCount}  {t("files")}</span>
-            </div>
-          ) : null}
-
-          <button
-            type="button"
-            className="primary-button"
-            onClick={handleInstallFolder}
-            disabled={
-              !watchStatus?.connected ||
-              !localSelection ||
-              busy === "install-folder"
-            }
-          >
-            {busy === "install-folder" ? (
-              <Loader2 className="spin" size={17} aria-hidden="true" />
-            ) : (
-              <Upload size={17} aria-hidden="true" />
-            )}
-            {t("Install to Watch")}</button>
         </div>
 
         {installProgress ? (
@@ -1343,11 +1262,6 @@ function titleFromRegionId(value: string): string {
     )
     .join(" ")
     .replace(/([A-Za-z]+)(\d+)$/, "$1 - $2");
-}
-
-function shortPath(value: string): string {
-  const parts = value.split(/[/\\]/).filter(Boolean);
-  return parts.slice(-3).join("/");
 }
 
 function formatProgress(job?: CorosMapDownloadJob): string {

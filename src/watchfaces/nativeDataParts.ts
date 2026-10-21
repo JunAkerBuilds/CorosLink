@@ -66,7 +66,7 @@ export function nativePartHasPosition(part: Part): boolean { return !["unit", "s
 
 const ICON_LABELS: Record<string, string> = {
   weather_temp: "°", weather_temp_min: "↓", weather_temp_max: "↑", weather_wind: "≈", weather_rainfall: "☂", weather_humidity: "%", weather_uv: "UV", weather_aqi: "AQ",
-  stamina: "S", stress: "~", sleep_score: "Z", week_tl: "TL", baro: "P", step: "S", kcal: "K", elevation: "↑", sun_angle: "☀", moon_percent: "☾", tide: "≈"
+  stamina: "S", stress: "~", heart_rate: "♥", sleep_score: "Z", week_tl: "TL", baro: "P", step: "S", kcal: "K", elevation: "↑", sun_angle: "☀", moon_percent: "☾", tide: "≈"
 };
 export function nativeAssetText(id: string, style: Style, role: Role, index: number): string | null {
   const custom = style.assetTexts?.[role]?.[String(index)];

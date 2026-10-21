@@ -57,7 +57,6 @@ export const nativePortuguese: Readonly<Record<string, string>> = {
   "Choose a backup folder": "Escolher uma pasta para cópias de segurança",
   "Choose an audiobook (select several files to join them)": "Escolher um audiolivro (seleccione vários ficheiros para os juntar)",
   "Audiobook": "Audiolivro",
-  "Choose extracted COROS map folder": "Escolher a pasta de mapas COROS extraída",
   "Export GPX": "Exportar GPX",
   "Import GPX route": "Importar percurso GPX",
   "Export activity-page backup": "Exportar cópia de segurança das páginas de actividade",

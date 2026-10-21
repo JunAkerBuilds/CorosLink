@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import Database from "better-sqlite3";
@@ -15,6 +16,8 @@ const databaseModule = await import(distUrl("database.js"));
 const library = await import(distUrl("trainingLibraryService.js"));
 const planWorkoutEditor = await import(distUrl("planWorkoutEditor.js"));
 const chatWorkoutTools = await import(distUrl("chatWorkoutTools.js"));
+const recordedRefreshFailures = [];
+library.setRefreshFailureRecorderForTests((source, error) => recordedRefreshFailures.push({ source, error }));
 
 const makeWorkout = (name, load, seconds = 1_800) => ({
   key: name.toLowerCase().replaceAll(" ", "-"),
@@ -325,17 +328,33 @@ assert.equal(duplicateNative.entities.length, 5, "the lossless adapter retains e
 
 const day = new Date(2099, 11, 1, 12, 0, 0).valueOf();
 const scheduled = [
-  { planId: "schedule", idInPlan: "one", planProgramId: "pp", happenDay: "20991201", name: "Easy", sportType: 1, trainingLoad: 40 },
+  { planId: "schedule", idInPlan: "one", planProgramId: "pp", happenDay: "20991201", name: "Easy", sportType: 1, trainingLoad: 40, corosActivity: { activityId: "activity-1", completeRate: 0.95 } },
   { planId: "schedule", idInPlan: "two", planProgramId: "pp2", happenDay: "20991202", name: "Restored", sportType: 1, trainingLoad: 30 }
 ];
 const activities = [
   { activityId: "activity-1", name: "Easy", sportType: 1, startTime: day, duration: 1_800, distance: 5_000, trainingLoad: 38 }
 ];
 const matches = library.buildTrainingActivityMatches(scheduled, activities, [], "20991202");
-assert.equal(matches[0].status, "completed");
+assert.equal(matches[0].status, "completed", "COROS's own link completes the workout");
 assert.equal(matches[0].activityId, "activity-1");
-assert.equal(matches[0].confidence >= 0.9, true);
+assert.equal(matches[0].confidence, 1);
 assert.equal(matches[1].status, "upcoming");
+const unlinked = library.buildTrainingActivityMatches(
+  [{ ...scheduled[0], corosActivity: undefined }],
+  activities,
+  [],
+  "20991202"
+);
+assert.equal(unlinked[0].status, "missed", "a same-day activity nobody linked doesn't count");
+assert.equal(unlinked[0].activityId, undefined);
+const linkedByUser = library.buildTrainingActivityMatches(
+  [{ ...scheduled[0], corosActivity: undefined }],
+  activities,
+  [{ ...unlinked[0], activityId: "activity-1", manual: true }],
+  "20991202"
+);
+assert.equal(linkedByUser[0].activityId, "activity-1", "the user's link counts");
+assert.equal(linkedByUser[0].status, "completed");
 const manual = library.buildTrainingActivityMatches(
   scheduled,
   activities,
@@ -343,6 +362,23 @@ const manual = library.buildTrainingActivityMatches(
   "21000101"
 );
 assert.equal(manual[1].status, "skipped");
+const otherDay = { ...activities[0], activityId: "activity-2", startTime: day + 86_400_000 };
+const staleUserLink = library.buildTrainingActivityMatches(
+  [scheduled[0]],
+  [...activities, otherDay],
+  [{ ...matches[0], activityId: "activity-2", manual: true }],
+  "20991202"
+);
+assert.equal(staleUserLink[0].activityId, "activity-1", "a user link to another day yields to COROS's");
+assert.equal(staleUserLink[0].manual, false, "COROS's link isn't saved as the user's");
+const unfetchedUserLink = library.buildTrainingActivityMatches(
+  [{ ...scheduled[0], corosActivity: undefined }],
+  activities,
+  [{ ...matches[0], activityId: "activity-elsewhere", manual: true }],
+  "20991202"
+);
+assert.equal(unfetchedUserLink[0].activityId, "activity-elsewhere", "a link to an activity outside the fetch is kept");
+assert.equal(unfetchedUserLink[0].manual, true);
 
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "coroslink-training-library-"));
 const legacyPath = path.join(tempRoot, "coros-desktop.sqlite");
@@ -578,6 +614,44 @@ const partialRemovalPreview = await library.previewTrainingPlanCalendarRemoval(p
 const partialRemoval = await library.removeTrainingPlanFromCalendar(partialRemovalPreview.previewId, true);
 assert.equal(partialRemoval.removedCount, 1, "known occurrences remain removable after a partial install");
 assert.equal(partialRemoval.failures.some((failure) => failure.writeMayHaveSucceeded), true, "unverified writes remain recorded instead of being retried by name");
+
+mockCalendar = [];
+let failCalendarRemove = false;
+library.setTrainingPlanCalendarAdapterForTests({
+  listScheduled: async (startDay, endDay) => mockCalendar.filter((entry) => entry.happenDay >= startDay && entry.happenDay <= endDay),
+  createAndSchedule: async (entry, happenDay) => {
+    appendMockOccurrence(entry.name, happenDay);
+    return {};
+  },
+  removeScheduled: async (entry) => {
+    if (failCalendarRemove) throw new Error("mock remove failure");
+    mockCalendar = mockCalendar.filter((candidate) => !(candidate.planId === entry.planId && candidate.idInPlan === entry.idInPlan));
+  }
+});
+const deleteInstalled = structuredClone(generated);
+deleteInstalled.id = "plan:delete-installed";
+deleteInstalled.startDate = "2099-08-03";
+deleteInstalled.weekCount = 1;
+deleteInstalled.entries = deleteInstalled.entries.slice(0, 2).map((entry, index) => ({ ...entry, weekIndex: 0, dayIndex: index * 2, programId: undefined }));
+deleteInstalled.calendarInstalls = [];
+databaseModule.saveTrainingPlanDocument(deleteInstalled);
+const deleteInstallPreview = await library.previewTrainingPlanCalendar(deleteInstalled.id, "2099-08-03");
+await library.addTrainingPlanToCalendar(deleteInstallPreview.previewId, true, "metric");
+assert.equal(domain.upcomingTrainingPlanCalendarWorkoutCount(databaseModule.getTrainingPlanDocument(deleteInstalled.id), "20990101"), 2);
+await assert.rejects(library.deleteLocalTrainingPlanAndCalendar(deleteInstalled.id, false), /confirmation/i);
+failCalendarRemove = true;
+await assert.rejects(library.deleteLocalTrainingPlanAndCalendar(deleteInstalled.id, true), /wasn't deleted/i);
+assert.ok(databaseModule.getTrainingPlanDocument(deleteInstalled.id), "a failed calendar removal keeps the plan");
+assert.equal(mockCalendar.length, 2);
+failCalendarRemove = false;
+const installedDelete = await library.deleteLocalTrainingPlanAndCalendar(deleteInstalled.id, true);
+assert.equal(installedDelete.removedCalendarWorkouts, 2, "upcoming plan-owned workouts are removed before the delete");
+assert.equal(mockCalendar.length, 0);
+assert.equal(databaseModule.getTrainingPlanDocument(deleteInstalled.id), undefined);
+const plainDelete = domain.createTrainingPlan("Plain delete", "local");
+databaseModule.saveTrainingPlanDocument(plainDelete);
+assert.deepEqual(await library.deleteLocalTrainingPlanAndCalendar(plainDelete.id, true), { removedCalendarWorkouts: 0 });
+assert.equal(databaseModule.getTrainingPlanDocument(plainDelete.id), undefined);
 library.setTrainingPlanCalendarAdapterForTests();
 
 assert.throws(() => library.deleteLocalTrainingPlan(first.id, false), /confirmation/i);
@@ -588,7 +662,308 @@ await assert.rejects(
 );
 assert.equal(library.getNativePlanWriteCapabilities().create, true);
 assert.equal(library.getNativePlanWriteCapabilities().activate, true);
-assert.equal(library.getNativePlanWriteCapabilities().delete, false);
+assert.equal(library.getNativePlanWriteCapabilities().delete, true);
+assert.equal(library.getNativePlanWriteCapabilities().removeActive, true);
+assert.equal(library.getNativePlanWriteCapabilities().update, false);
+
+const saveNativeForDelete = (remoteId) => {
+  const document = library.nativePlanToDocument(
+    adapter.parseNativeCorosPlan({ ...rawNative, id: remoteId }, "2026-07-29T00:00:00.000Z")
+  );
+  databaseModule.saveTrainingPlanDocument(document);
+  return document;
+};
+const nativeWrites = [];
+let activeInstances = {};
+let failQuit = false;
+let failDelete = false;
+library.setNativeTrainingPlanWriterForTests({
+  listActiveInstanceIds: async (planId) => {
+    nativeWrites.push(`list:${planId}`);
+    if (activeInstances[planId] instanceof Error) throw activeInstances[planId];
+    return activeInstances[planId] ?? [];
+  },
+  deactivate: async (instanceId) => {
+    nativeWrites.push(`quit:${instanceId}`);
+    if (failQuit) throw new Error("mock quit failure");
+  },
+  delete: async (planId) => {
+    nativeWrites.push(`delete:${planId}`);
+    if (failDelete) throw new Error("mock delete failure");
+  }
+});
+
+const activeNative = saveNativeForDelete("remote-active");
+assert.throws(
+  () => library.deleteLocalTrainingPlan(activeNative.id, true),
+  /stored on COROS/i,
+  "the local delete path never touches native plans"
+);
+await assert.rejects(library.deleteCorosTrainingPlan("remote-active", false), /confirmation/i);
+await assert.rejects(library.deleteCorosTrainingPlan("remote-unknown", true), /isn't in the Training Library/i);
+assert.deepEqual(nativeWrites, [], "unconfirmed or unknown deletes make no COROS calls");
+
+activeInstances = { "remote-active": new Error("mock query failure") };
+await assert.rejects(library.deleteCorosTrainingPlan("remote-active", true), /nothing was deleted/i);
+assert.deepEqual(nativeWrites, ["list:remote-active"], "an unverifiable calendar state blocks the delete");
+
+nativeWrites.length = 0;
+activeInstances = { "remote-active": ["instance-1", "instance-2"] };
+failQuit = true;
+await assert.rejects(library.deleteCorosTrainingPlan("remote-active", true), /wasn't deleted/i);
+assert.deepEqual(nativeWrites, ["list:remote-active", "quit:instance-1"], "a failed quit stops before plan/delete");
+failQuit = false;
+
+nativeWrites.length = 0;
+failDelete = true;
+await assert.rejects(library.deleteCorosTrainingPlan("remote-active", true), /upcoming workouts were removed/i);
+assert.ok(databaseModule.getTrainingPlanDocument(activeNative.id), "a failed plan/delete keeps the plan listed");
+failDelete = false;
+
+nativeWrites.length = 0;
+const activeResult = await library.deleteCorosTrainingPlan("remote-active", true);
+assert.deepEqual(
+  nativeWrites,
+  ["list:remote-active", "quit:instance-1", "quit:instance-2", "delete:remote-active"],
+  "active calendar instances are quit by instance ID before the library plan is deleted"
+);
+assert.deepEqual(activeResult, { remoteId: "remote-active", endedCalendarPlans: 2 });
+assert.equal(databaseModule.getTrainingPlanDocument(activeNative.id), undefined, "the cached native plan is removed");
+
+const idleNative = saveNativeForDelete("remote-idle");
+nativeWrites.length = 0;
+activeInstances = {};
+const idleResult = await library.deleteCorosTrainingPlan("remote-idle", true);
+assert.deepEqual(nativeWrites, ["list:remote-idle", "delete:remote-idle"]);
+assert.equal(idleResult.endedCalendarPlans, 0);
+assert.equal(databaseModule.getTrainingPlanDocument(idleNative.id), undefined);
+library.setNativeTrainingPlanWriterForTests();
+
+const parsedLibrary = adapter.parseNativeCorosPlanLibrary([rawNative]);
+assert.equal(parsedLibrary.complete, true);
+assert.equal(parsedLibrary.plans[0].remoteId, "remote-1");
+assert.equal(
+  adapter.parseNativeCorosPlanLibrary([rawNative, { name: "No id" }]).complete,
+  false,
+  "a record without an id makes the list incomplete"
+);
+assert.equal(
+  adapter.parseNativeCorosPlanLibrary({ dataList: [rawNative] }).complete,
+  false,
+  "a non-array response is never treated as the whole library"
+);
+assert.equal(adapter.parseNativeCorosPlanLibrary([]).complete, true, "an empty array is a real (empty) library");
+
+const realFetch = globalThis.fetch;
+globalThis.fetch = async () => {
+  throw new Error("Network is disabled in test-training-library.");
+};
+const nativeLibraryFor = (...remoteIds) =>
+  adapter.parseNativeCorosPlanLibrary(
+    remoteIds.map((remoteId) => ({ ...rawNative, id: remoteId })),
+    "2026-07-29T00:00:00.000Z"
+  );
+const keptNative = saveNativeForDelete("remote-kept");
+const goneNative = saveNativeForDelete("remote-gone");
+library.updateTrainingPlanMetadata(goneNative.id, { favorite: true, tags: ["race"], archived: true });
+databaseModule.saveTrainingPlanDocument({ ...databaseModule.getTrainingPlanDocument(goneNative.id), notes: "Local note" });
+
+library.setNativePlanLibraryQueryForTests(async () => ({ plans: [], complete: false }));
+let pruneSnapshot = await library.getTrainingLibrarySnapshot();
+assert.ok(databaseModule.getTrainingPlanDocument(goneNative.id), "an incomplete plan list prunes nothing");
+assert.ok(
+  pruneSnapshot.partialFailures.some((failure) => /couldn't fully read/i.test(failure)),
+  "an incomplete plan list is reported"
+);
+
+library.setNativePlanLibraryQueryForTests(async () => {
+  throw new Error("mock plan/query failure");
+});
+pruneSnapshot = await library.getTrainingLibrarySnapshot();
+assert.ok(databaseModule.getTrainingPlanDocument(goneNative.id), "a failed plan/query prunes nothing");
+assert.equal(pruneSnapshot.nativePlans.some((plan) => plan.remoteId === "remote-gone"), true, "cached plans stay listed offline");
+
+let savedDuringQuery;
+library.setNativePlanLibraryQueryForTests(async () => {
+  savedDuringQuery = saveNativeForDelete("remote-in-flight");
+  return nativeLibraryFor("remote-kept");
+});
+pruneSnapshot = await library.getTrainingLibrarySnapshot();
+assert.equal(databaseModule.getTrainingPlanDocument(goneNative.id), undefined, "a plan deleted on COROS is pruned");
+assert.equal(pruneSnapshot.plans.some((plan) => plan.id === goneNative.id), false, "the pruned plan leaves the Library");
+assert.ok(databaseModule.getTrainingPlanDocument(keptNative.id), "plans still on COROS stay");
+assert.ok(databaseModule.getTrainingPlanDocument(savedDuringQuery.id), "a plan cached while plan/query ran isn't pruned");
+assert.ok(databaseModule.getTrainingPlanDocument(first.id), "local plans are never pruned");
+assert.ok(databaseModule.getTrainingPlanDocument(persistedGroupedPlan.id), "coach plans are never pruned");
+assert.deepEqual(pruneSnapshot.nativePlans.map((plan) => plan.remoteId), ["remote-kept"]);
+assert.match(pruneSnapshot.partialFailures.join("\n"), /log in/i, "workouts and schedule fail locally without a session");
+
+library.setNativePlanLibraryQueryForTests(async () => nativeLibraryFor("remote-kept", "remote-gone"));
+pruneSnapshot = await library.getTrainingLibrarySnapshot();
+const restored = databaseModule.getTrainingPlanDocument(goneNative.id);
+assert.ok(restored, "a plan that was only missing for a while comes back");
+assert.equal(restored.source, "coros");
+assert.equal(restored.syncState, "synced");
+assert.deepEqual(restored.tags, []);
+assert.equal(restored.favorite, false);
+assert.equal(restored.archived, false);
+assert.equal(restored.notes, "");
+assert.equal(restored.collectionId, undefined);
+assert.equal(restored.entries.length, goneNative.entries.length, "the plan is rebuilt from COROS");
+
+library.setNativePlanLibraryQueryForTests(async () => nativeLibraryFor());
+await library.getTrainingLibrarySnapshot();
+assert.equal(
+  databaseModule.listTrainingPlanDocuments().some((plan) => plan.source === "coros"),
+  false,
+  "an empty library prunes every cached native plan"
+);
+library.setNativePlanLibraryQueryForTests();
+
+const libraryWorkout = (id) => ({ id, name: `Workout ${id}`, sportType: 4, createTimestamp: 1 });
+const cacheWorkout = (id) =>
+  databaseModule.saveTrainingWorkoutMetadata(
+    { programId: id, favorite: true, tags: ["strength"], source: "coros", syncState: "synced" },
+    libraryWorkout(id)
+  );
+const cachedWorkoutIds = () =>
+  databaseModule.listTrainingWorkoutMetadata().map((metadata) => metadata.programId).sort();
+cacheWorkout("w-kept");
+cacheWorkout("w-gone");
+
+library.setLibraryWorkoutQueryForTests(async () => {
+  throw new Error("mock program/query failure");
+});
+let workoutSnapshot = await library.getTrainingLibrarySnapshot();
+assert.deepEqual(workoutSnapshot.workouts.map((workout) => workout.id).sort(), ["w-gone", "w-kept"], "a failed program/query lists the cache");
+assert.deepEqual(cachedWorkoutIds(), ["w-gone", "w-kept"], "a failed program/query prunes nothing");
+const workoutFailureRecords = () =>
+  recordedRefreshFailures.filter(({ error }) => error.message === "Workouts: mock program/query failure");
+assert.equal(workoutFailureRecords().length, 1, "a refresh failure goes to the error report");
+assert.equal(workoutFailureRecords()[0].source, "trainingLibrary:snapshot");
+assert.equal(workoutFailureRecords()[0].error.cause.message, "mock program/query failure", "the original error is kept as the cause");
+await library.getTrainingLibrarySnapshot();
+assert.equal(workoutFailureRecords().length, 1, "a failure that repeats on every refresh is recorded once");
+
+library.setLibraryWorkoutQueryForTests(async () => ({ workouts: [libraryWorkout("w-kept")], complete: false }));
+workoutSnapshot = await library.getTrainingLibrarySnapshot();
+assert.deepEqual(cachedWorkoutIds(), ["w-gone", "w-kept"], "an incomplete workout list prunes nothing");
+assert.ok(
+  workoutSnapshot.partialFailures.some((failure) => /workout list CorosLink couldn't fully read/i.test(failure)),
+  "an incomplete workout list is reported"
+);
+
+library.setLibraryWorkoutQueryForTests(async () => {
+  cacheWorkout("w-in-flight");
+  return { workouts: [libraryWorkout("w-kept")], complete: true };
+});
+workoutSnapshot = await library.getTrainingLibrarySnapshot();
+assert.deepEqual(workoutSnapshot.workouts.map((workout) => workout.id), ["w-kept"]);
+assert.deepEqual(cachedWorkoutIds(), ["w-in-flight", "w-kept"], "a workout deleted on COROS leaves the cache");
+assert.equal(
+  databaseModule.listTrainingWorkoutMetadata().find((metadata) => metadata.programId === "w-kept").favorite,
+  true,
+  "workouts still on COROS keep their local metadata"
+);
+
+library.setLibraryWorkoutQueryForTests(async () => {
+  throw new Error("mock program/query failure");
+});
+workoutSnapshot = await library.getTrainingLibrarySnapshot();
+assert.equal(
+  workoutSnapshot.workouts.some((workout) => workout.id === "w-gone"),
+  false,
+  "a pruned workout doesn't come back when program/query later fails"
+);
+assert.equal(workoutFailureRecords().length, 2, "a failure that clears and comes back is recorded again");
+
+const hub = await import(distUrl("trainingHubService.js"));
+// Training Hub records the failures its callers swallow; read them through a real log.
+const requireDist = createRequire(import.meta.url);
+const { DiagnosticsLog } = requireDist(path.join(repoRoot, "dist-electron", "diagnosticsLog.js"));
+const diagnosticsService = requireDist(path.join(repoRoot, "dist-electron", "diagnosticsService.js"));
+const diagnosticsDir = fs.mkdtempSync(path.join(os.tmpdir(), "coroslink-library-diagnostics-"));
+const hubDiagnostics = new DiagnosticsLog(path.join(diagnosticsDir, "errors.json"), {
+  appVersion: "test", platform: "test", arch: "test", osVersion: "test", electronVersion: "test", nodeVersion: "test", chromeVersion: "test"
+});
+diagnosticsService.setDiagnosticRecorderForTests((source, error) => hubDiagnostics.record(source, error));
+const hubDiagnosticEntries = () => {
+  const { report } = hubDiagnostics.snapshot();
+  return report.includes("No errors recorded.") ? [] : JSON.parse(report.slice(report.indexOf("[")));
+};
+databaseModule.setSetting("trainingHub.accessToken", "test-token");
+databaseModule.setSetting("trainingHub.userId", "test-user");
+databaseModule.setSetting("trainingHub.regionId", "1");
+databaseModule.setSetting("trainingHub.baseUrl", "https://teamapi.example.test");
+let hubResponse;
+const hubRequests = [];
+globalThis.fetch = async (url, init) => {
+  hubRequests.push({ url: String(url), init });
+  return hubResponse();
+};
+const corosReply = (body) => () => new Response(JSON.stringify(body), { status: 200 });
+
+hubResponse = corosReply({ result: "0000", data: [{ id: 7, name: "Lift" }] });
+assert.deepEqual((await hub.queryLibraryWorkouts()).complete, true);
+assert.ok(hubRequests.at(-1).init.signal instanceof AbortSignal, "Training Hub requests carry a timeout signal");
+hubResponse = corosReply({ result: "0000", data: [] });
+assert.deepEqual(await hub.queryLibraryWorkouts(), { workouts: [], complete: true }, "an empty array is a real (empty) library");
+hubResponse = corosReply({ result: "0000", data: [{ id: 7 }, { name: "No id" }] });
+assert.equal((await hub.queryLibraryWorkouts()).complete, false, "a record without an id makes the list incomplete");
+hubResponse = corosReply({ result: "0000", data: { dataList: [{ id: 7 }] } });
+assert.equal((await hub.queryLibraryWorkouts()).complete, false, "a non-array response is never treated as the whole library");
+
+hubResponse = corosReply({ result: "1001", message: "Mock delete rejected" });
+await assert.rejects(
+  library.deleteTrainingLibraryWorkouts({ programIds: ["w-kept"], confirmed: true }),
+  /Mock delete rejected/
+);
+assert.ok(cachedWorkoutIds().includes("w-kept"), "a rejected delete keeps the cached workout");
+const rejectedDelete = hubDiagnosticEntries().find((entry) => entry.error.message === "Mock delete rejected");
+assert.equal(rejectedDelete?.source, "trainingHub:/training/program/delete", "a rejected Training Hub call is in the error report");
+assert.equal(rejectedDelete.error.code, "1001", "with COROS's result code");
+assert.deepEqual(rejectedDelete.error.request, { method: "POST", url: "https://teamapi.example.test/training/program/delete" });
+
+hubResponse = () => {
+  throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+};
+await assert.rejects(
+  library.deleteTrainingLibraryWorkouts({ programIds: ["w-kept"], confirmed: true }),
+  /didn't respond within 30 seconds/
+);
+assert.ok(cachedWorkoutIds().includes("w-kept"), "a timed-out delete keeps the cached workout");
+const timedOut = hubDiagnosticEntries().find((entry) => /didn't respond within 30 seconds/.test(entry.error.message));
+assert.equal(timedOut?.error.cause?.name, "TimeoutError", "the timeout keeps its original cause");
+
+hubResponse = corosReply({ result: "0000" });
+assert.deepEqual(
+  await library.deleteTrainingLibraryWorkouts({ programIds: ["w-kept"], confirmed: true }),
+  ["w-kept"]
+);
+assert.match(hubRequests.at(-1).url, /\/training\/program\/delete$/);
+assert.equal(hubRequests.at(-1).init.body, JSON.stringify(["w-kept"]));
+assert.deepEqual(cachedWorkoutIds(), ["w-in-flight"], "a deleted workout leaves the cache");
+workoutSnapshot = await library.getTrainingLibrarySnapshot();
+assert.equal(
+  workoutSnapshot.workouts.some((workout) => workout.id === "w-kept"),
+  false,
+  "a deleted workout stays gone while program/query fails"
+);
+
+databaseModule.deleteSettings([
+  "trainingHub.accessToken",
+  "trainingHub.userId",
+  "trainingHub.regionId",
+  "trainingHub.baseUrl"
+]);
+const recordedBeforeSignOut = hubDiagnosticEntries().length;
+await assert.rejects(hub.queryLibraryWorkouts(), /Log in to COROS Training Hub first/);
+assert.equal(hubDiagnosticEntries().length, recordedBeforeSignOut, "being signed out is a state, not an error-report entry");
+diagnosticsService.setDiagnosticRecorderForTests();
+fs.rmSync(diagnosticsDir, { recursive: true, force: true });
+library.setLibraryWorkoutQueryForTests();
+library.setRefreshFailureRecorderForTests();
+globalThis.fetch = realFetch;
 
 db.close();
 fs.rmSync(tempRoot, { recursive: true, force: true });

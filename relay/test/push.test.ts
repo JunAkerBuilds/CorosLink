@@ -2,7 +2,7 @@ import { decodeJwt, decodeProtectedHeader } from "jose";
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetApnsCaches } from "../src/apns";
 import type { ActivityResponse } from "../src/protocol";
-import { createEnvironment, errorCode, Harness, RELAY_ORIGIN, type EnvironmentIdentity } from "./helpers";
+import { createEnvironment, errorCode, es256KeyPair, Harness, RELAY_ORIGIN, type EnvironmentIdentity } from "./helpers";
 
 const PHONE_TOKEN = "a".repeat(64);
 const IPAD_TOKEN = "b".repeat(64);
@@ -104,8 +104,22 @@ describe("push", () => {
     await register(PHONE_TOKEN, "production");
     harness.apns.respond(PHONE_TOKEN, { status: 503, reason: "ServiceUnavailable" });
     expect((await (await activity()).json()) as ActivityResponse).toEqual({ sent: 0, failed: 1, removed: 0 });
+    harness.clock.advance(21 * 60 * 1000);
     harness.apns.respond(PHONE_TOKEN, { status: 403, reason: "ExpiredProviderToken" });
     expect((await (await activity()).json()) as ActivityResponse).toEqual({ sent: 1, failed: 0, removed: 0 });
+    const tokens = harness.apns.sent.map((sent) => sent.headers.authorization);
+    expect(tokens.at(-1)).not.toBe(tokens.at(-2));
+  });
+
+  it("doesn't replace a young provider token APNs refuses, so it never trips Apple's update limit", async () => {
+    await register(PHONE_TOKEN, "production");
+    harness.apns.respond(PHONE_TOKEN, { status: 403, reason: "InvalidProviderToken" }, { status: 403, reason: "InvalidProviderToken" });
+    expect((await (await activity()).json()) as ActivityResponse).toEqual({ sent: 0, failed: 1, removed: 0 });
+    harness.clock.advance(5 * 60 * 1000);
+    expect((await (await activity("approval")).json()) as ActivityResponse).toEqual({ sent: 0, failed: 1, removed: 0 });
+    const tokens = harness.apns.sent.map((sent) => sent.headers.authorization);
+    expect(tokens).toHaveLength(2);
+    expect(new Set(tokens).size).toBe(1);
   });
 
   it("moves a token to the account that registered it last", async () => {
@@ -136,6 +150,31 @@ describe("push", () => {
       event: "message: here is your plan",
     });
     expect(badEvent.status).toBe(400);
+  });
+
+  it("signs each APNs environment's pushes with that environment's key", async () => {
+    const sandboxKey = await es256KeyPair();
+    harness = await Harness.create({ APNS_SANDBOX_KEY_ID: "SANDBOXKEY", APNS_SANDBOX_PRIVATE_KEY: sandboxKey.pem });
+    harness.apns.addKey("SANDBOXKEY", sandboxKey.publicJwk);
+    desktop = await createEnvironment();
+    await harness.link(desktop);
+    await register(PHONE_TOKEN, "production");
+    await register(IPAD_TOKEN, "sandbox");
+    expect((await (await activity()).json()) as ActivityResponse).toEqual({ sent: 2, failed: 0, removed: 0 });
+    const kids = Object.fromEntries(
+      harness.apns.sent.map((sent) => [sent.host, decodeProtectedHeader(sent.headers.authorization!.replace("bearer ", "")).kid]),
+    );
+    expect(kids).toEqual({ "api.push.apple.com": "APNSKEY123", "api.sandbox.push.apple.com": "SANDBOXKEY" });
+
+    // A sandbox key alone still reaches sandbox devices; production ones fail without a key.
+    harness = await Harness.create({ APNS_KEY_ID: "", APNS_PRIVATE_KEY: "", APNS_SANDBOX_KEY_ID: "SANDBOXKEY", APNS_SANDBOX_PRIVATE_KEY: sandboxKey.pem });
+    harness.apns.addKey("SANDBOXKEY", sandboxKey.publicJwk);
+    desktop = await createEnvironment();
+    await harness.link(desktop);
+    await register(PHONE_TOKEN, "production");
+    await register(IPAD_TOKEN, "sandbox");
+    expect((await (await activity()).json()) as ActivityResponse).toEqual({ sent: 1, failed: 1, removed: 0 });
+    expect(harness.apns.sent.map((sent) => sent.host)).toEqual(["api.sandbox.push.apple.com"]);
   });
 
   it("answers not_configured without APNs credentials", async () => {

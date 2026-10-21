@@ -1,4 +1,5 @@
 import { PRIMARY_NAV_ITEMS, type PrimaryView } from "./primaryNav";
+import { getHiddenNavItems } from "./hiddenNav";
 import { t } from "../i18n/locale";
 
 const DEFAULT_STARTUP_VIEW: PrimaryView = "overview";
@@ -24,7 +25,9 @@ export function readStartupView(): PrimaryView {
 
   try {
     const storedView = window.localStorage.getItem(STARTUP_VIEW_STORAGE_KEY);
-    return isPrimaryView(storedView) ? storedView : DEFAULT_STARTUP_VIEW;
+    return isPrimaryView(storedView) && !getHiddenNavItems().has(storedView)
+      ? storedView
+      : DEFAULT_STARTUP_VIEW;
   } catch {
     return DEFAULT_STARTUP_VIEW;
   }

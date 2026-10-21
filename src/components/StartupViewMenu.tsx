@@ -6,6 +6,7 @@ import {
   visiblePrimaryNavItems,
 } from "../navigation/primaryNav";
 import { getPrimaryViewLabel } from "../navigation/startupView";
+import { useHiddenNavItems } from "../navigation/hiddenNav";
 
 interface StartupViewMenuProps {
   value: PrimaryView;
@@ -21,6 +22,7 @@ export function StartupViewMenu({
   showLabel = false,
 }: StartupViewMenuProps) {
   useLanguage();
+  const hiddenNavItems = useHiddenNavItems();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const activeLabel = getPrimaryViewLabel(value);
@@ -77,7 +79,7 @@ export function StartupViewMenu({
         <div className="startup-view-popover" role="menu">
           <p className="update-settings-heading">{t("Startup view")}</p>
           <div className="startup-view-options">
-            {visiblePrimaryNavItems(showDevelopmentItems).filter(
+            {visiblePrimaryNavItems(showDevelopmentItems, hiddenNavItems).filter(
               (item) => !item.excludeFromStartup,
             ).map(({ id, label, icon: Icon, beta }) => {
               const active = id === value;

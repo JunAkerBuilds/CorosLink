@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { recordDiagnosticError } from "./diagnosticsService";
 import {
   activityMatchesBackupFilters,
   hasActiveBackupFilters,
@@ -251,7 +252,8 @@ export async function startActivityBackup(
         );
         await fs.promises.writeFile(filePath, content);
         emitProgress({ completed: (currentProgress?.completed ?? 0) + 1 });
-      } catch {
+      } catch (error) {
+        recordDiagnosticError("activityBackup:file", error);
         emitProgress({ failed: (currentProgress?.failed ?? 0) + 1 });
       }
 
@@ -263,6 +265,7 @@ export async function startActivityBackup(
       currentName: undefined
     });
   } catch (caught) {
+    recordDiagnosticError("activityBackup", caught);
     emitProgress({
       state: "error",
       currentName: undefined,
