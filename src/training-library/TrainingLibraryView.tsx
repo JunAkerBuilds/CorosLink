@@ -15,6 +15,7 @@ import {
   Heart,
   LayoutGrid,
   List,
+  ListChecks,
   Plus,
   RefreshCw,
   Scale,
@@ -216,7 +217,7 @@ export function TrainingLibraryView({
   const [editingPlan, setEditingPlan] = useState<TrainingPlanDocument | null>(null);
   const [compareOpen, setCompareOpen] = useState(false);
   const [compareIds, setCompareIds] = useState<string[]>([]);
-  const [pendingPlanDelete, setPendingPlanDelete] = useState<TrainingPlanDocument | null>(null);
+  const [pendingPlanDelete, setPendingPlanDelete] = useState<TrainingPlanDocument[]>([]);
   const [deletingPlan, setDeletingPlan] = useState(false);
   const [generatorOpen, setGeneratorOpen] = useState(false);
   const [calendarTarget, setCalendarTarget] = useState<{ plan: TrainingPlanDocument; operation?: "install" | "remove" } | null>(null);
@@ -365,42 +366,63 @@ export function TrainingLibraryView({
   };
 
   // A plan still on the calendar takes its upcoming workouts with it: they're removed first, then the plan.
-  const deletePlan = async () => {
-    if (!pendingPlanDelete || deletingPlan) return;
-    const plan = pendingPlanDelete;
-    setDeletingPlan(true);
-    try {
-      if (plan.source === "coros" && plan.remoteId) {
-        const result = await api.deleteCorosTrainingPlan(plan.remoteId, true);
-        onMessage(result.endedCalendarPlans
-          ? t("Deleted \"{{value1}}\" from COROS and removed its upcoming workouts from your calendar.", { value1: String(plan.name) })
-          : t("Deleted \"{{value1}}\" from COROS.", { value1: String(plan.name) }));
-      } else {
-        const { removedCalendarWorkouts } = await api.deleteLocalTrainingPlan(plan.id, true);
-        onMessage(removedCalendarWorkouts === 1
-          ? (localOnly ? t("Deleted \"{{value1}}\" and removed 1 upcoming workout from your calendar.", { value1: String(plan.name) }) : t("Deleted \"{{value1}}\" and removed 1 upcoming workout from your COROS calendar.", { value1: String(plan.name) }))
-          : removedCalendarWorkouts
-            ? (localOnly ? t("Deleted \"{{value1}}\" and removed {{value2}} upcoming workouts from your calendar.", { value1: String(plan.name), value2: String(removedCalendarWorkouts) }) : t("Deleted \"{{value1}}\" and removed {{value2}} upcoming workouts from your COROS calendar.", { value1: String(plan.name), value2: String(removedCalendarWorkouts) }))
-            : `Deleted "${plan.name}".`);
-      }
-      setPendingPlanDelete(null);
-      await load();
-    } catch (cause) {
-      onError(cause instanceof Error ? cause.message : String(cause));
-      // Calendar workouts may already be gone; show the plan as it is now.
-      setPendingPlanDelete(null);
-      void load();
-    } finally {
-      setDeletingPlan(false);
+  const deletePlan = async (plan: TrainingPlanDocument): Promise<string> => {
+    if (plan.source === "coros" && plan.remoteId) {
+      const result = await api.deleteCorosTrainingPlan(plan.remoteId, true);
+      return result.endedCalendarPlans
+        ? t("Deleted \"{{value1}}\" from COROS and removed its upcoming workouts from your calendar.", { value1: String(plan.name) })
+        : t("Deleted \"{{value1}}\" from COROS.", { value1: String(plan.name) });
     }
+    const { removedCalendarWorkouts } = await api.deleteLocalTrainingPlan(plan.id, true);
+    return removedCalendarWorkouts === 1
+      ? (localOnly ? t("Deleted \"{{value1}}\" and removed 1 upcoming workout from your calendar.", { value1: String(plan.name) }) : t("Deleted \"{{value1}}\" and removed 1 upcoming workout from your COROS calendar.", { value1: String(plan.name) }))
+      : removedCalendarWorkouts
+        ? (localOnly ? t("Deleted \"{{value1}}\" and removed {{value2}} upcoming workouts from your calendar.", { value1: String(plan.name), value2: String(removedCalendarWorkouts) }) : t("Deleted \"{{value1}}\" and removed {{value2}} upcoming workouts from your COROS calendar.", { value1: String(plan.name), value2: String(removedCalendarWorkouts) }))
+        : `Deleted "${plan.name}".`;
   };
 
-  const deleteRemovesCalendar = Boolean(
-    pendingPlanDelete && pendingPlanDelete.source !== "coros" && activeTrainingPlanCalendarInstall(pendingPlanDelete)
+  // One at a time, so a plan that fails leaves the others deleted and says which it was.
+  const deletePlans = async () => {
+    if (!pendingPlanDelete.length || deletingPlan) return;
+    const targets = pendingPlanDelete;
+    setDeletingPlan(true);
+    const failures: string[] = [];
+    let lastMessage = "";
+    for (const plan of targets) {
+      try {
+        lastMessage = await deletePlan(plan);
+      } catch (cause) {
+        failures.push(targets.length === 1
+          ? (cause instanceof Error ? cause.message : String(cause))
+          : `${plan.name}: ${cause instanceof Error ? cause.message : String(cause)}`);
+      }
+    }
+    const deleted = targets.length - failures.length;
+    const templates = targets.every((plan) => plan.source === "template");
+    if (deleted && targets.length === 1) onMessage(lastMessage);
+    else if (deleted) {
+      onMessage(failures.length
+        ? (templates ? t("Deleted {{value1}} of {{value2}} templates.", { value1: String(deleted), value2: String(targets.length) }) : t("Deleted {{value1}} of {{value2}} plans.", { value1: String(deleted), value2: String(targets.length) }))
+        : (templates ? t("Deleted {{value1}} templates.", { value1: String(deleted) }) : t("Deleted {{value1}} plans.", { value1: String(deleted) })));
+    }
+    if (failures.length) onError(targets.length === 1 ? failures[0] : `${t("Couldn’t delete:")} ${failures.join("; ")}`);
+    // Calendar workouts may already be gone even where a delete failed; show the plans as they are now.
+    setPendingPlanDelete([]);
+    setDeletingPlan(false);
+    await load();
+  };
+
+  const deleteSingle = pendingPlanDelete.length === 1 ? pendingPlanDelete[0] : null;
+  const deleteOnCalendar = pendingPlanDelete.filter(
+    (plan) => plan.source !== "coros" && activeTrainingPlanCalendarInstall(plan)
   );
-  const deleteCalendarCount = deleteRemovesCalendar && pendingPlanDelete
-    ? upcomingTrainingPlanCalendarWorkoutCount(pendingPlanDelete)
-    : 0;
+  const deleteRemovesCalendar = deleteOnCalendar.length > 0;
+  const deleteCalendarCount = deleteOnCalendar.reduce(
+    (sum, plan) => sum + upcomingTrainingPlanCalendarWorkoutCount(plan),
+    0
+  );
+  const deleteCorosCount = pendingPlanDelete.filter((plan) => plan.source === "coros").length;
+  const deleteTemplates = pendingPlanDelete.length > 0 && pendingPlanDelete.every((plan) => plan.source === "template");
 
   const stateLabel = current.offline ? "Offline · cached" : current.stale ? "Partial sync" : "Synced";
 
@@ -549,7 +571,7 @@ export function TrainingLibraryView({
         void load();
       }} /> : null}
 
-      {pendingPlanDelete ? (
+      {pendingPlanDelete.length > 1 ? (
         <div className="tl-dialog-backdrop">
           <section
             className="tl-dialog"
@@ -558,9 +580,56 @@ export function TrainingLibraryView({
             aria-labelledby="plan-delete-title"
           >
             <h2 id="plan-delete-title">
-              {t("Delete “")}{pendingPlanDelete.name}&rdquo;?
+              {deleteTemplates
+                ? t("Delete {{value1}} templates?", { value1: String(pendingPlanDelete.length) })
+                : t("Delete {{value1}} plans?", { value1: String(pendingPlanDelete.length) })}
             </h2>
-            {pendingPlanDelete.source === "coros" ? (
+            <ul>
+              {pendingPlanDelete.map((plan) => <li key={plan.id}><strong>{plan.name}</strong></li>)}
+            </ul>
+            {deleteCorosCount ? (
+              <p>
+                {deleteCorosCount === 1
+                  ? t("1 of them is a COROS plan: it’s deleted from your COROS account, not just from CorosLink, and its upcoming workouts leave your COROS calendar. This can’t be undone.")
+                  : t("{{value1}} of them are COROS plans: they’re deleted from your COROS account, not just from CorosLink, and their upcoming workouts leave your COROS calendar. This can’t be undone.", { value1: String(deleteCorosCount) })}
+              </p>
+            ) : null}
+            {deleteRemovesCalendar ? (
+              <p>
+                {deleteCalendarCount === 1
+                  ? (localOnly ? t("Their 1 upcoming workout on your calendar is removed first. Past days stay.") : t("Their 1 upcoming workout on your COROS calendar is removed first. Past days stay."))
+                  : (localOnly ? t("Their {{value1}} upcoming workouts on your calendar are removed first. Past days stay.", { value1: String(deleteCalendarCount) }) : t("Their {{value1}} upcoming workouts on your COROS calendar are removed first. Past days stay.", { value1: String(deleteCalendarCount) }))}
+              </p>
+            ) : null}
+            {!deleteCorosCount && !deleteRemovesCalendar ? (
+              <p>{t("This removes them from CorosLink. Plans stored on COROS are not touched.")}</p>
+            ) : null}
+            <footer>
+              <button type="button" className="ghost-button" disabled={deletingPlan} onClick={() => setPendingPlanDelete([])}>
+                {t("Cancel")} </button>
+              <button type="button" className="primary-button danger" aria-busy={deletingPlan} disabled={deletingPlan} onClick={() => void deletePlans()}>
+                {deletingPlan
+                  ? t("Deleting")
+                  : deleteTemplates
+                    ? t("Delete {{value1}} templates", { value1: String(pendingPlanDelete.length) })
+                    : t("Delete {{value1}} plans", { value1: String(pendingPlanDelete.length) })} </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
+
+      {deleteSingle ? (
+        <div className="tl-dialog-backdrop">
+          <section
+            className="tl-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="plan-delete-title"
+          >
+            <h2 id="plan-delete-title">
+              {t("Delete “")}{deleteSingle.name}&rdquo;?
+            </h2>
+            {deleteSingle.source === "coros" ? (
               <>
                 <p>{t("This deletes the plan from your COROS account, not just from CorosLink.")}</p>
                 <p>{t("If the plan is on your COROS calendar, its upcoming workouts are removed too. Past days stay. This can’t be undone.")}</p>
@@ -575,13 +644,13 @@ export function TrainingLibraryView({
               </p>
             ) : (
               <p>
-                {t("This removes the local copy and its")} {pendingPlanDelete.entries.length} {t("item")} {pendingPlanDelete.entries.length === 1 ? "" : "s"}{t(". Plans stored on COROS are not touched.")} </p>
+                {t("This removes the local copy and its")} {deleteSingle.entries.length} {t("item")}{deleteSingle.entries.length === 1 ? "" : "s"}{t(". Plans stored on COROS are not touched.")} </p>
             )}
             <footer>
-              <button type="button" className="ghost-button" disabled={deletingPlan} onClick={() => setPendingPlanDelete(null)}>
+              <button type="button" className="ghost-button" disabled={deletingPlan} onClick={() => setPendingPlanDelete([])}>
                 {t("Cancel")} </button>
-              <button type="button" className="primary-button danger" aria-busy={deletingPlan} disabled={deletingPlan} onClick={() => void deletePlan()}>
-                {pendingPlanDelete.source === "coros"
+              <button type="button" className="primary-button danger" aria-busy={deletingPlan} disabled={deletingPlan} onClick={() => void deletePlans()}>
+                {deleteSingle.source === "coros"
                   ? deletingPlan ? t("Deleting from COROS…") : t("Delete from COROS")
                   : deleteRemovesCalendar
                     ? deletingPlan ? t("Removing workouts…") : t("Remove workouts and delete")
@@ -717,7 +786,7 @@ interface PlanIndexProps {
   offline?: boolean;
   onOpen: (plan: TrainingPlanDocument) => void;
   onDuplicate: (plan: TrainingPlanDocument) => void;
-  onDelete: (plan: TrainingPlanDocument) => void;
+  onDelete: (plans: TrainingPlanDocument[]) => void;
   onRefresh: () => Promise<void>;
   onError: (message: string | null) => void;
   onCompare?: (ids: string[]) => void;
@@ -751,6 +820,14 @@ function PlanIndex({
     PLAN_LAYOUT_PREFERENCES[noun]
   );
   const [selected, setSelected] = useState<string[]>([]);
+
+  // A deleted plan leaves the selection.
+  useEffect(() => {
+    setSelected((current) => {
+      const kept = current.filter((id) => plans.some((plan) => plan.id === id));
+      return kept.length === current.length ? current : kept;
+    });
+  }, [plans]);
 
   const summaries = useMemo(
     () => new Map(plans.map((plan) => [plan.id, summarizeTrainingPlan(plan)])),
@@ -857,13 +934,20 @@ function PlanIndex({
         setSelected((current) =>
           current.includes(plan.id)
             ? current.filter((id) => id !== plan.id)
-            : current.length < 3
-              ? [...current, plan.id]
-              : current
+            : [...current, plan.id]
         )
       }
     />
   );
+
+  const selectedPlans = plans.filter((plan) => selected.includes(plan.id));
+  // As the row buttons: a COROS plan, or one with workouts on the calendar, needs COROS to delete.
+  const deleteNeedsCoros = selectedPlans.some((plan) =>
+    plan.source === "coros" || Boolean(activeTrainingPlanCalendarInstall(plan))
+  );
+  const deleteSelectedBlocked =
+    (offline && deleteNeedsCoros) || selectedPlans.some((plan) => plan.source === "coros" && !plan.remoteId);
+  const unselectedVisible = visible.filter((plan) => !selected.includes(plan.id)).length;
 
   const planActions = (plan: TrainingPlanDocument) => {
     const install = activeTrainingPlanCalendarInstall(plan);
@@ -899,7 +983,7 @@ function PlanIndex({
           disabled={offline || !plan.remoteId}
           title={offline ? t("Reconnect to COROS to delete this plan") : t("Delete from COROS")}
           aria-label={t("Delete {{value1}} from COROS", { value1: String(plan.name) })}
-          onClick={() => onDelete(plan)}
+          onClick={() => onDelete([plan])}
         >
           <Trash2 size={14} />
         </button>
@@ -910,7 +994,7 @@ function PlanIndex({
           disabled={Boolean(install) && offline}
           title={install && offline ? t("Reconnect to COROS to delete this plan") : undefined}
           aria-label={t("Delete {{value1}}", { value1: String(plan.name) })}
-          onClick={() => onDelete(plan)}
+          onClick={() => onDelete([plan])}
         >
           <Trash2 size={14} />
         </button>
@@ -1025,6 +1109,18 @@ function PlanIndex({
               }}
             />
           ) : null}
+          {unselectedVisible ? (
+            <button type="button" onClick={() => setSelected([...new Set([...selected, ...visible.map((plan) => plan.id)])])}>
+              <ListChecks size={13} /> {t("Select all {{value1}}", { value1: String(selected.length + unselectedVisible) })} </button>
+          ) : null}
+          <button
+            type="button"
+            className="danger"
+            disabled={deleteSelectedBlocked}
+            title={deleteSelectedBlocked ? t("Reconnect to COROS to delete these plans") : undefined}
+            onClick={() => onDelete(selectedPlans)}
+          >
+            <Trash2 size={13} /> {t("Delete")} </button>
           <button type="button" aria-label={t("Clear selection")} onClick={() => setSelected([])}>
             <X size={13} />
           </button>
@@ -1191,7 +1287,7 @@ interface TemplateSectionProps {
   onCreate: () => void;
   onOpen: (plan: TrainingPlanDocument) => void;
   onDuplicate: (plan: TrainingPlanDocument) => void;
-  onDelete: (plan: TrainingPlanDocument) => void;
+  onDelete: (plans: TrainingPlanDocument[]) => void;
   onRefresh: () => Promise<void>;
   onMessage: (message: string) => void;
   onError: (message: string | null) => void;

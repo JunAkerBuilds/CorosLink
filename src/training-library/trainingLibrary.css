@@ -784,6 +784,7 @@
 
 .tl-bulk {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 9px 16px;
@@ -803,6 +804,11 @@
     opacity: 1;
     transform: none;
   }
+}
+
+/* A narrow window wraps whole controls to a second row, never a label inside one. */
+.tl-bulk :is(strong, button, .tl-selection-hint) {
+  white-space: nowrap;
 }
 
 .tl-bulk strong {

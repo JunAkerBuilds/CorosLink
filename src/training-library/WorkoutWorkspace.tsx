@@ -11,6 +11,7 @@ import {
   LayoutGrid,
   Link2,
   List,
+  ListChecks,
   LoaderCircle,
   Pencil,
   Plus,
@@ -752,6 +753,11 @@ export function WorkoutWorkspace({
             ) : null}
             <button type="button" onClick={() => downloadSelection(exportTargets)}>
               <Download size={13} /> {t("Export")} </button>
+            {filtered.some((workout) => !selected.includes(workout.id)) ? (
+              // Every workout the filters match, including ones not shown yet.
+              <button type="button" onClick={() => setSelected([...new Set([...selected, ...filtered.map((workout) => workout.id)])])}>
+                <ListChecks size={13} /> {t("Select all {{value1}}", { value1: String(new Set([...selected, ...filtered.map((workout) => workout.id)]).size) })} </button>
+            ) : null}
             <button type="button" className="danger" onClick={() => setPendingDelete(selected)}>
               <Trash2 size={13} /> {t("Delete")} </button>
             <button type="button" aria-label={t("Clear selection")} onClick={() => setSelected([])}>
