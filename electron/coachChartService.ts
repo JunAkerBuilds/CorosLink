@@ -74,12 +74,12 @@ export async function loadTrendWindow(
     try {
       if (await ensureCorosMcpConnected()) {
         if (includeSleep) {
-          const sleep = await getTrainingSleepData(null, days);
+          const sleep = await getTrainingSleepData(days);
           sleepAvailable = sleep.mcpConnected && sleep.records.length > 0;
           points = mergeSleepIntoTrendPoints(points, sleep);
         }
         if (includeDailyHealth) {
-          const health = await getTrainingDailyHealthData(null, days);
+          const health = await getTrainingDailyHealthData(days);
           dailyHealthAvailable = health.mcpConnected;
           points = mergeDailyHealthIntoTrendPoints(points, health);
         }

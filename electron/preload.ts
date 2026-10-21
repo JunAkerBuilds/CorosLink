@@ -974,6 +974,11 @@ const api = {
     return () =>
       ipcRenderer.removeListener("trainingHub:backupProgress", listener);
   },
+  onScheduledWorkoutsChanged: (callback: () => void): (() => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("trainingHub:scheduleChanged", listener);
+    return () => ipcRenderer.removeListener("trainingHub:scheduleChanged", listener);
+  },
   getTrainingAnalytics: (): Promise<TrainingHubAnalytics> =>
     ipcRenderer.invoke("trainingHub:getTrainingAnalytics"),
   getRacePredictor: (): Promise<TrainingHubRacePredictor> =>
@@ -1340,6 +1345,16 @@ const api = {
     ipcRenderer.invoke("mcp:disconnect", id),
   getMcpStatuses: (): Promise<McpServerStatus[]> =>
     ipcRenderer.invoke("mcp:statuses"),
+  onMcpConnectionChanged: (
+    callback: (change: { id: string; connected: boolean }) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      change: { id: string; connected: boolean }
+    ) => callback(change);
+    ipcRenderer.on("mcp:connectionChanged", listener);
+    return () => ipcRenderer.removeListener("mcp:connectionChanged", listener);
+  },
   setMcpBearer: (id: string, token: string): Promise<void> =>
     ipcRenderer.invoke("mcp:setBearer", id, token),
   uploadTrainingPlanDraft: (

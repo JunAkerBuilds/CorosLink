@@ -694,6 +694,8 @@ export interface CorosLinkApi {
   /** Saves as the athlete; resolves null when the entry ended up empty and was removed. */
   saveWorkoutJournal: (input: WorkoutJournalSaveInput) => Promise<WorkoutJournalEntry | null>;
   onWorkoutJournalChanged: (callback: () => void) => () => void;
+  /** Any schedule write (calendar, Training Library, Coach, automation) landed on COROS. */
+  onScheduledWorkoutsChanged?: (callback: () => void) => () => void;
   getRaceOverview: () => Promise<RaceOverview>;
   listRaceActivityIds: () => Promise<string[]>;
   markActivityAsRace: (activity: TrainingHubActivity) => Promise<RaceOverview>;
@@ -863,6 +865,10 @@ export interface CorosLinkApi {
   getCorosMcpAccount: () => Promise<CorosMcpAccount>;
   disconnectMcpServer: (id: string) => Promise<void>;
   getMcpStatuses: () => Promise<McpServerStatus[]>;
+  /** An MCP server connected or lost its connection. */
+  onMcpConnectionChanged?: (
+    callback: (change: { id: string; connected: boolean }) => void
+  ) => () => void;
   setMcpBearer: (id: string, token: string) => Promise<void>;
   uploadTrainingPlanDraft: (
     draftId: string,

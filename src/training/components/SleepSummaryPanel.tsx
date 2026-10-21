@@ -1,4 +1,5 @@
 import { t, useLanguage } from "../../i18n/training";
+import { useState } from "react";
 import {
   Loader2,
   Moon,
@@ -7,11 +8,17 @@ import {
 } from "lucide-react";
 import { formatSleepClockRange, formatSleepNightLabel } from "../formatters";
 import type { TrainingHubSleepRecord, TrainingHubSleepSummary } from "../../../electron/types";
+import "../sleepPanel.css";
 
 interface SleepSummaryPanelProps {
   sleep?: TrainingHubSleepSummary | null;
   connecting?: boolean;
   refreshing?: boolean;
+  /**
+   * Opens COROS sign-in. Background loads never do, so this is the way in when
+   * data access isn't connected; the sleep reloads once it connects.
+   */
+  onConnect?: () => Promise<unknown>;
 }
 
 function formatSleepDuration(minutes?: number): string {
@@ -257,9 +264,24 @@ function SleepStageBar({ record }: { record: TrainingHubSleepRecord }) {
 export function SleepSummaryPanel({
   sleep,
   connecting = false,
-  refreshing = false
+  refreshing = false,
+  onConnect
 }: SleepSummaryPanelProps) {
   useLanguage();
+  const [connectingMcp, setConnectingMcp] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const connect = async () => {
+    if (!onConnect || connectingMcp) return;
+    setConnectingMcp(true);
+    setConnectError(null);
+    try {
+      await onConnect();
+    } catch (caught) {
+      setConnectError(caught instanceof Error ? caught.message : t("Could not connect to COROS."));
+    } finally {
+      setConnectingMcp(false);
+    }
+  };
   const latest = sleep?.latest;
   const tone = sleepScoreTone(latest?.score);
   const label = sleepScoreLabel(latest?.score);
@@ -328,12 +350,28 @@ export function SleepSummaryPanel({
         </>
       ) : null}
 
-      {!isLoading && !latest ? (
-        <p className="sleep-panel-message">
-          {sleep?.mcpConnected
-            ? t("No sleep data for this period.")
-            : t("Connect COROS data access to view sleep metrics.")}
-        </p>
+      {!isLoading && !latest && sleep?.mcpConnected ? (
+        <p className="sleep-panel-message">{t("No sleep data for this period.")}</p>
+      ) : null}
+      {!isLoading && !latest && !sleep?.mcpConnected ? (
+        <div className="sleep-panel-connect">
+          <p className="sleep-panel-message">
+            {t("Connect COROS data access to view sleep metrics.")}
+          </p>
+          {onConnect ? (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => void connect()}
+              disabled={connectingMcp}
+            >
+              {connectingMcp ? t("Connecting…") : t("Connect COROS data access")}
+            </button>
+          ) : null}
+          {connectError ? (
+            <p className="sleep-panel-connect-error" role="alert">{connectError}</p>
+          ) : null}
+        </div>
       ) : null}
     </section>
   );

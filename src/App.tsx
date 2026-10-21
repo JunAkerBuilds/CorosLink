@@ -510,9 +510,10 @@ export default function App() {
     useState("");
   const [youtubeMusicHeadersRaw, setYoutubeMusicHeadersRaw] = useState("");
   const completedJobIdsRef = useRef<Set<string>>(new Set());
-  const mcpAutoConnectAttemptedRef = useRef(false);
   const trainingCoreLoadSequenceRef = useRef(0);
   const trainingWellnessLoadSequenceRef = useRef(0);
+  const wellnessLoadingRef = useRef(false);
+  const mcpConnectedDuringLoadRef = useRef(false);
   const [trainingHubStatus, setTrainingHubStatus] =
     useState<TrainingHubStatus | null>(null);
   const [trainingHubEmail, setTrainingHubEmail] = useState("");
@@ -852,39 +853,20 @@ export default function App() {
     }
   }, [api]);
 
-  const ensureTrainingHubMcp = useCallback(async () => {
-    if (!api || mcpAutoConnectAttemptedRef.current) {
-      return;
-    }
-
-    const mcpStatus = await api.getCorosMcpStatus();
-    if (mcpStatus.connected && mcpStatus.authorized) {
-      return;
-    }
-
-    mcpAutoConnectAttemptedRef.current = true;
-
-    try {
-      await api.connectCorosMcp();
-    } catch {
-      // Sleep panel degrades gracefully when MCP is unavailable.
-    }
-  }, [api]);
-
-  const loadTrainingHubWellnessData = useCallback(async () => {
+  // Sleep and daily health come from COROS MCP. Main reconnects it with the saved
+  // authorization only; COROS sign-in opens from a Connect button, and a
+  // connection made there reloads this through onMcpConnectionChanged.
+  const loadTrainingHubWellnessData = useCallback(async (): Promise<void> => {
     if (!api) {
       return;
     }
 
     const loadSequence = ++trainingWellnessLoadSequenceRef.current;
+    wellnessLoadingRef.current = true;
     setSleepConnecting(true);
+    let sawConnection = false;
 
     try {
-      await ensureTrainingHubMcp();
-      if (trainingWellnessLoadSequenceRef.current !== loadSequence) {
-        return;
-      }
-
       const [sleepResult, dailyHealthResult] = await Promise.allSettled([
         api.getTrainingSleepData(14),
         api.getTrainingDailyHealthData(1),
@@ -894,6 +876,8 @@ export default function App() {
         return;
       }
 
+      sawConnection =
+        sleepResult.status === "fulfilled" && sleepResult.value.mcpConnected;
       setTrainingHubSleepData(
         sleepResult.status === "fulfilled" ? sleepResult.value : null,
       );
@@ -905,9 +889,55 @@ export default function App() {
     } finally {
       if (trainingWellnessLoadSequenceRef.current === loadSequence) {
         setSleepConnecting(false);
+        wellnessLoadingRef.current = false;
+        // COROS connected while this load ran but after it looked: load again.
+        const missedConnection = mcpConnectedDuringLoadRef.current && !sawConnection;
+        mcpConnectedDuringLoadRef.current = false;
+        if (missedConnection) {
+          void loadTrainingHubWellnessData();
+        }
       }
     }
-  }, [api, ensureTrainingHubMcp]);
+  }, [api]);
+
+  useEffect(() => {
+    if (!api?.onMcpConnectionChanged) {
+      return;
+    }
+    return api.onMcpConnectionChanged(({ id, connected }) => {
+      if (id !== "coros" || !connected) {
+        return;
+      }
+      // A load's own reconnect lands here too; that load already reads the data.
+      if (wellnessLoadingRef.current) {
+        mcpConnectedDuringLoadRef.current = true;
+        return;
+      }
+      void loadTrainingHubWellnessData();
+    });
+  }, [api, loadTrainingHubWellnessData]);
+
+  // Overview's Up next reads the schedule again after any change to it: the
+  // calendar, the Training Library, Coach and automation all write through main.
+  useEffect(() => {
+    if (!api?.onScheduledWorkoutsChanged) {
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = api.onScheduledWorkoutsChanged(() => {
+      // A plan or a batch of calendar edits writes several times; read once they settle.
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        void fetchUpcomingWorkouts(api, 14)
+          .then(setTrainingHubUpcomingWorkouts)
+          .catch(() => undefined);
+      }, 400);
+    });
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [api]);
 
   const refreshTrainingHub = useCallback(async () => {
     if (!api) {

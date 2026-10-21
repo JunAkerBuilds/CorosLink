@@ -1,9 +1,6 @@
-import type { BrowserWindow } from "electron";
 import {
   callCorosMcpTool,
-  connectCorosMcp,
   ensureCorosMcpConnected,
-  getCorosMcpStatus,
   getCorosMcpTools,
   listCorosMcpTools
 } from "./corosMcpService";
@@ -1797,23 +1794,6 @@ function buildSleepProbeArgs(
   return candidates;
 }
 
-async function ensureMcpForSleep(
-  mainWindow?: BrowserWindow | null
-): Promise<boolean> {
-  if (await ensureCorosMcpConnected()) {
-    return true;
-  }
-
-  const status = getCorosMcpStatus();
-  if (!status.authorized) {
-    await connectCorosMcp(mainWindow, true);
-    return getCorosMcpStatus().connected;
-  }
-
-  await connectCorosMcp(mainWindow, true);
-  return getCorosMcpStatus().connected;
-}
-
 export function sleepResponseQuality(records: TrainingHubSleepRecord[]): number {
   const latest = pickLatestSleepRecord(records);
   if (!latest) {
@@ -1898,11 +1878,12 @@ export async function fetchSleepRecords(
   return mergedRecords.length > 0 ? mergedRecords : bestRecords;
 }
 
-export async function getTrainingSleepData(
-  mainWindow?: BrowserWindow | null,
-  days = 14
-): Promise<TrainingHubSleepSummary> {
-  const connected = await ensureMcpForSleep(mainWindow);
+/**
+ * Sleep from COROS MCP. A background load: it reconnects with the saved
+ * authorization only, and COROS sign-in opens only from a Connect button.
+ */
+export async function getTrainingSleepData(days = 14): Promise<TrainingHubSleepSummary> {
+  const connected = await ensureCorosMcpConnected();
   if (!connected) {
     return {
       records: [],

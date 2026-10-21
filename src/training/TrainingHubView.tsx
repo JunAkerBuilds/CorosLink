@@ -509,7 +509,7 @@ function TrainingHubContent({
                     healthRecords={snapshot?.dailyHealth?.records} layout="stack"
                     metrics={[widget.id.slice(6) as "load" | "heart" | "steps" | "calories"]} className="hub-daily-stat" />;
                 case "fitness": return <FitnessTrendPanel snapshot={snapshot} activities={activities} />;
-                case "sleep": return <SleepSummaryPanel sleep={snapshot?.sleep} connecting={sleepConnecting} refreshing={busy === "training-refresh"} />;
+                case "sleep": return <SleepSummaryPanel sleep={snapshot?.sleep} connecting={sleepConnecting} refreshing={busy === "training-refresh"} onConnect={sampleMode ? undefined : () => api.connectCorosMcp()} />;
                 case "vo2": return <Vo2MaxWidget snapshot={snapshot} />;
                 case "efficiency": return <RunningEfficiencyWidget size={widgetPreset(widget).chartSize} snapshot={snapshot} activities={activities} loadDetail={loadActivityPreview} sampleMode={sampleMode} />;
                 case "heatmap": return <TrainingHeatmapPanel snapshot={snapshot} activities={activities} rpeBackfill={rpeBackfill} />;

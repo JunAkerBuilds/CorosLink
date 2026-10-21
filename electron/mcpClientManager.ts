@@ -570,7 +570,10 @@ function clearStoredAuth(id: string): void {
   const stale = rt.client;
   rt.client = null;
   rt.tools = [];
-  if (stale) void stale.close().catch(() => undefined);
+  if (stale) {
+    void stale.close().catch(() => undefined);
+    notifyConnectionChanged(id, false);
+  }
   const keys = keysFor(id);
   deleteSettings([keys.tokens, keys.clientInfo, keys.authorizationId]);
 }
@@ -675,6 +678,7 @@ async function activateClient(
       }
     });
     attachClientCloseHandler(server.id, client);
+    notifyConnectionChanged(server.id, true);
   } catch (error) {
     await client.close().catch(() => undefined);
     throw error;
@@ -778,6 +782,8 @@ export interface McpConnectOptions {
   loginHint?: string;
   /** Endpoint to switch to while the server holds no authorization yet. */
   preferredUrl?: string;
+  /** The athlete pressed Connect: a server they had disabled is turned back on. */
+  enable?: boolean;
 }
 
 /** Connect a server (running its OAuth flow if needed). Single-flight per server. */
@@ -790,7 +796,8 @@ export async function connectMcpServer(
   let server = getMcpServer(id);
   if (!server) throw new Error(`Unknown MCP server "${id}".`);
   if (!server.enabled) {
-    if (!interactive) {
+    // A disabled server stays off until the athlete turns it on, whatever asks to connect.
+    if (!options.enable) {
       throw new Error(`${server.name} MCP server is disabled.`);
     }
     server = updateMcpServer(id, { enabled: true });
@@ -862,11 +869,17 @@ export async function disconnectMcpServer(
   if (options.clearAuthorization !== false) {
     rt.credentialsInvalidatedAtGeneration = rt.generation;
   }
-  if (rt.client) {
+  const client = rt.client;
+  if (client) {
     try {
-      await rt.client.close();
+      await client.close();
     } catch {
       // best-effort
+    }
+    // Closing usually reports this already, through the close handler.
+    if (rt.client === client) {
+      rt.client = null;
+      notifyConnectionChanged(id, false);
     }
   }
   rt.client = null;
@@ -1094,7 +1107,32 @@ function attachClientCloseHandler(id: string, client: Client): void {
     rt.client = null;
     rt.tools = [];
     rt.toolsRefresh = undefined;
+    notifyConnectionChanged(id, false);
   };
+}
+
+// ----- connection changes -----
+
+type McpConnectionListener = (id: string, connected: boolean) => void;
+const connectionListeners = new Set<McpConnectionListener>();
+
+/**
+ * Hears every server connecting or losing its connection, so the window can
+ * load what a server provides once it is reachable (COROS sleep data, say).
+ */
+export function onMcpConnectionChanged(listener: McpConnectionListener): () => void {
+  connectionListeners.add(listener);
+  return () => connectionListeners.delete(listener);
+}
+
+function notifyConnectionChanged(id: string, connected: boolean): void {
+  for (const listener of connectionListeners) {
+    try {
+      listener(id, connected);
+    } catch (error) {
+      console.warn("[mcp] connection listener failed:", error);
+    }
+  }
 }
 
 function canonicalHttpUrl(value: string): string {

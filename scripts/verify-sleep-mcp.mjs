@@ -63,7 +63,7 @@ app.whenReady().then(async () => {
     return response;
   });
 
-  const summary = await getTrainingSleepData(null, days);
+  const summary = await getTrainingSleepData(days);
   console.log(`\n${callCount} call(s); ${summary.records.length} record(s):`,
     summary.records.map((record) => record.happenDay).join(", "));
   console.log("latest:", JSON.stringify(summary.latest ?? null, null, 2));

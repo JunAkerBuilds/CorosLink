@@ -39,6 +39,9 @@ export function setCorosMcpAccountSource(source: () => CorosMcpAccount): void {
  * account CorosLink already knows: its email is filled in on COROS's sign-in
  * page, and the built-in server moves to the account's regional endpoint
  * before it is first authorized.
+ *
+ * Interactive means the athlete pressed Connect: only then may a sign-in
+ * window open, and a server they had disabled is turned back on.
  */
 export async function connectMcpServerWithCorosAccount(
   id: string,
@@ -47,13 +50,14 @@ export async function connectMcpServerWithCorosAccount(
 ): Promise<McpServerStatus> {
   const server = getMcpServer(id);
   if (!interactive || !server || !isCorosMcpUrl(server.url)) {
-    return connectMcpServer(id, interactive, parentWindow);
+    return connectMcpServer(id, interactive, parentWindow, { enable: interactive });
   }
   const account = readCorosAccount();
   return connectMcpServer(id, interactive, parentWindow, {
     loginHint: account.email,
     preferredUrl:
-      server.builtin && account.region ? corosMcpUrl(account.region) : undefined
+      server.builtin && account.region ? corosMcpUrl(account.region) : undefined,
+    enable: true
   });
 }
 
@@ -75,6 +79,7 @@ export function getCorosMcpStatus(): CorosMcpStatus {
   };
 }
 
+/** The athlete's Connect (interactive), or a silent reconnect with the saved authorization. */
 export async function connectCorosMcp(
   mainWindow?: BrowserWindow | null,
   interactive = true
@@ -83,6 +88,10 @@ export async function connectCorosMcp(
   return getCorosMcpStatus();
 }
 
+/**
+ * Reconnects with the saved authorization only: never opens COROS sign-in or
+ * turns a disabled server on. Background loads use this.
+ */
 export async function ensureCorosMcpConnected(): Promise<boolean> {
   return ensureMcpServerConnected(COROS);
 }

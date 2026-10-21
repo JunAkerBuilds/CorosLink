@@ -127,6 +127,7 @@ import {
   cancelTrainingHubTwoFactor,
   logoutTrainingHub,
   reconnectTrainingHub,
+  setScheduledWorkoutsChangedListener,
   uploadActivityFitToCoros,
   uploadTrainingPlan
 } from "./trainingHubService";
@@ -472,7 +473,8 @@ import {
 import {
   disconnectMcpServer,
   ensureAllMcpConnected,
-  getMcpStatuses
+  getMcpStatuses,
+  onMcpConnectionChanged
 } from "./mcpClientManager";
 import {
   addMcpServer,
@@ -1106,6 +1108,18 @@ app.whenReady().then(() => {
   setActivityBackupProgressListener((progress) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("trainingHub:backupProgress", progress);
+    }
+  });
+  // Up next on Overview re-reads the schedule whenever any view changes it.
+  setScheduledWorkoutsChangedListener(() => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("trainingHub:scheduleChanged");
+    }
+  });
+  // Sleep and daily health load once COROS MCP connects, however it connected.
+  onMcpConnectionChanged((id, connected) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("mcp:connectionChanged", { id, connected });
     }
   });
   setFitIndexProgressListener((progress) => {
@@ -2679,7 +2693,7 @@ function registerIpcHandlers(): void {
   );
 
   ipcMain.handle("trainingHub:getSleepData", (_event, days?: number) =>
-    getTrainingSleepData(mainWindow, days ?? 7)
+    getTrainingSleepData(days ?? 7)
   );
 
   ipcMain.handle("trainingHub:getHealthInsight", (_event, kind: HealthInsightKind, days?: number) =>
@@ -2687,7 +2701,7 @@ function registerIpcHandlers(): void {
   );
 
   ipcMain.handle("trainingHub:getDailyHealthData", (_event, days?: number) =>
-    getTrainingDailyHealthData(mainWindow, days ?? 1)
+    getTrainingDailyHealthData(days ?? 1)
   );
 
   ipcMain.handle("intervals:getStatus", () => getIntervalsStatus());

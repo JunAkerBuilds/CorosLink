@@ -110,6 +110,7 @@
     "verify:coros-plan-write-api": "npm run build:electron && node scripts/verify-coros-plan-write-api.mjs",
     "verify:coach-coros-mcp": "npm run build:electron && electron scripts/verify-coach-coros-mcp.cjs",
     "test:training-hub-write": "npm run build:electron && node scripts/test-training-hub-write.mjs",
+    "test:training-hub-session": "npm run build:electron && node scripts/test-training-hub-session.mjs",
     "test:diagnostics": "npm run build:electron && node scripts/test-diagnostics.mjs",
     "test:diagnostics-ui": "npm run build:electron && electron scripts/test-diagnostics-ui.cjs",
     "test:coros-login": "npm run build:electron && node scripts/test-coros-login.mjs",

@@ -104,7 +104,8 @@ if (!phase) {
       assert.equal(store.getMcpServer("coros").enabled, false);
       assert.equal(database.getSetting("corosMcp.tokens"), "saved-default-authorization");
       assert.equal(store.getMcpServer("coros-eu").url, regionalUrl);
-      await manager.connectMcpServer("coros");
+      // The athlete's Connect turns the disabled server back on.
+      await manager.connectMcpServer("coros", true, null, { enable: true });
       await manager.ensureAllMcpConnected();
       assert.equal(manager.getAllMcpTools().length, 2);
 

@@ -174,6 +174,8 @@ const REGION_PROBE_URLS = [
   "https://teamcnapi.coros.com",
   "https://teamsgapi.coros.com"
 ];
+// A region that doesn't answer is skipped rather than holding the request.
+const REGION_PROBE_TIMEOUT_MS = 10_000;
 
 const SETTINGS = {
   accessToken: "trainingHub.accessToken",
@@ -1849,6 +1851,26 @@ export function getScheduledWorkoutRevision(): string | undefined {
   return userId ? getSetting(scheduledWorkoutRevisionKey(userId)) : undefined;
 }
 
+let scheduledWorkoutsChangedListener: (() => void) | null = null;
+
+/**
+ * Hears every schedule write that bumps the revision, from the calendar, the
+ * Training Library, Coach or automation alike, so views showing upcoming
+ * workouts can read them again.
+ */
+export function setScheduledWorkoutsChangedListener(listener: (() => void) | null): void {
+  scheduledWorkoutsChangedListener = listener;
+}
+
+function scheduledWorkoutsChanged(userId: string): void {
+  setSetting(scheduledWorkoutRevisionKey(userId), crypto.randomUUID());
+  try {
+    scheduledWorkoutsChangedListener?.();
+  } catch (error) {
+    console.warn("[trainingHub] schedule listener failed:", error);
+  }
+}
+
 export async function removeScheduledWorkout(entry: {
   planId: string;
   idInPlan: string;
@@ -3120,7 +3142,7 @@ export async function listActiveNativeTrainingPlanInstances(): Promise<ActiveNat
     method: "POST",
     body: { statusList: [1] }
   });
-  // An empty list may come back as null; any other non-array is unexpected.
+  // An empty list arrives as [] (COROS sends null); any other non-array is unexpected.
   if (active != null && !Array.isArray(active)) {
     throw new Error("COROS returned an unexpected list of active plans.");
   }
@@ -6577,8 +6599,9 @@ export async function readNativeTrainingPlanEndpoint<T>(
     | { method: "GET"; params: Record<string, string | number> }
 ): Promise<T> {
   if (path === "/training/plan/query" && options.method === "POST") {
-    const result = await trainingHubPost<T>(path, options.body);
-    return result as T;
+    // COROS answers an account with no plans with data: null; that is an empty list.
+    const result = await trainingHubPost<T>(path, options.body, { allowEmptyData: true });
+    return (result ?? []) as T;
   }
   if (path === "/training/plan/detail" && options.method === "GET") {
     return trainingHubGet<T>(path, options.params);
@@ -6665,16 +6688,16 @@ async function requestWithSessionRecovery<T>(
     if (!retryReason) {
       throw error;
     }
+    // A dead token fails in every region, so probing them would only add requests.
+    if (retryReason === "token") {
+      return recoverExpiredTrainingHubSession<T>(auth, path, options);
+    }
 
     const resolvedBaseUrl = await resolveTrainingHubBaseUrl(
       auth.accessToken,
       auth.baseUrl
     );
     if (resolvedBaseUrl === auth.baseUrl) {
-      if (retryReason === "token") {
-        return recoverExpiredTrainingHubSession<T>(path, options);
-      }
-
       throw error;
     }
 
@@ -6687,8 +6710,12 @@ async function requestWithSessionRecovery<T>(
         options
       );
     } catch (retryError) {
-      if (retryReason === "token") {
-        return recoverExpiredTrainingHubSession<T>(path, options);
+      if (getTrainingHubRetryReason(retryError) === "token") {
+        return recoverExpiredTrainingHubSession<T>(
+          { ...auth, baseUrl: resolvedBaseUrl },
+          path,
+          options
+        );
       }
 
       throw retryError;
@@ -6696,15 +6723,32 @@ async function requestWithSessionRecovery<T>(
   }
 }
 
+/**
+ * Recovers a request whose token COROS refused. Requests that started together
+ * all fail with the same token: the first signs in again, and the others find
+ * the new token already stored and retry with it instead of signing in again,
+ * which would end the session the first one just made.
+ */
 async function recoverExpiredTrainingHubSession<T>(
+  failed: TrainingHubAuthState,
   path: string,
   options: TrainingHubRequestOptions
 ): Promise<T> {
+  const current = getStoredAuth();
+  if (current && current.accessToken !== failed.accessToken) {
+    try {
+      return await executeTrainingHubRequest<T>(current, path, options);
+    } catch (error) {
+      if (getTrainingHubRetryReason(error) !== "token") throw error;
+      failed = current;
+    }
+  }
+
   let refreshed: TrainingHubAuthState;
   try {
-    refreshed = await reauthenticateFromStoredCredentials();
+    refreshed = await reauthenticateFromStoredCredentials(failed.accessToken);
   } catch (reason) {
-    clearTrainingHubAuth();
+    clearExpiredTrainingHubAuth(failed.accessToken);
     throw trainingHubSessionExpired(reason);
   }
 
@@ -6712,7 +6756,7 @@ async function recoverExpiredTrainingHubSession<T>(
     return await executeTrainingHubRequest<T>(refreshed, path, options);
   } catch (error) {
     if (getTrainingHubRetryReason(error) === "token") {
-      clearTrainingHubAuth();
+      clearExpiredTrainingHubAuth(refreshed.accessToken);
       throw trainingHubSessionExpired(error);
     }
     throw error;
@@ -6763,7 +6807,7 @@ async function executeTrainingHubRequest<T>(
       path === "/training/schedule/quitSubPlan") &&
     requestOptions.method === "POST"
   ) {
-    setSetting(scheduledWorkoutRevisionKey(auth.userId), crypto.randomUUID());
+    scheduledWorkoutsChanged(auth.userId);
   }
   return result;
 }
@@ -6801,7 +6845,8 @@ async function probeTrainingHubBaseUrl(
   for (const url of candidates) {
     try {
       const response = await fetch(url, {
-        headers: buildTrainingHubHeaders(accessToken)
+        headers: buildTrainingHubHeaders(accessToken),
+        signal: AbortSignal.timeout(REGION_PROBE_TIMEOUT_MS)
       });
 
       if (!response.ok) {
@@ -6962,6 +7007,13 @@ function clearTrainingHubAuth(): void {
   ]);
 }
 
+/** Signs out only a session that still holds the refused token, never a newer one. */
+function clearExpiredTrainingHubAuth(deadToken: string): void {
+  if (getSetting(SETTINGS.accessToken) === deadToken) {
+    clearTrainingHubAuth();
+  }
+}
+
 // A single in-flight re-authentication shared by all concurrent callers.
 // When a token expires, every parallel request would otherwise trigger its own
 // full COROS login; because COROS invalidates the previous token each time a new
@@ -6970,12 +7022,23 @@ function clearTrainingHubAuth(): void {
 // all callers await the same login and reuse the same fresh token.
 let pendingReauth: Promise<TrainingHubAuthState> | null = null;
 
-function reauthenticateFromStoredCredentials(): Promise<TrainingHubAuthState> {
-  if (!pendingReauth) {
-    pendingReauth = performReauthentication().finally(() => {
-      pendingReauth = null;
-    });
+/**
+ * A session to replace `failedToken`. A request that failed before another
+ * re-login finished takes that login's token instead of starting one more.
+ */
+function reauthenticateFromStoredCredentials(
+  failedToken: string
+): Promise<TrainingHubAuthState> {
+  if (pendingReauth) {
+    return pendingReauth;
   }
+  const current = getStoredAuth();
+  if (current && current.accessToken !== failedToken) {
+    return Promise.resolve(current);
+  }
+  pendingReauth = performReauthentication().finally(() => {
+    pendingReauth = null;
+  });
   return pendingReauth;
 }
 

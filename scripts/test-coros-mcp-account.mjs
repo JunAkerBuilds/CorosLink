@@ -132,8 +132,33 @@ await manager.disconnectMcpServer("coros", { clearAuthorization: false });
 coros.setCorosMcpAccountSource(() => { throw new Error("Secure storage locked"); });
 assert.deepEqual(await connect("coros"), { url: US, loginHint: undefined });
 
+// The window hears connections come and go.
+const changes = [];
+const stopListening = manager.onMcpConnectionChanged((id, connected) => changes.push(`${id}:${connected}`));
+await connect("coros");
+assert.deepEqual(changes, ["coros:true", "coros:false"]);
+stopListening();
+
+// A server the athlete disabled stays off for background loads and anything
+// else that asks, until their own Connect turns it back on.
+servers.get("coros").enabled = false;
+settings.set("corosMcp.tokens", Buffer.from(JSON.stringify({
+  access_token: "a", refresh_token: "r", token_type: "Bearer"
+})).toString("base64"));
+settings.set("corosMcp.resourceUrl", US);
+connections.length = 0;
+assert.equal(await coros.ensureCorosMcpConnected(), false);
+await assert.rejects(manager.connectMcpServer("coros", true, null), /disabled/);
+assert.equal(connections.length, 0);
+assert.equal(servers.get("coros").enabled, false);
+await coros.connectCorosMcp(null);
+assert.equal(servers.get("coros").enabled, true, "Connect turns it back on");
+assert.equal(connections.length, 1);
+await manager.disconnectMcpServer("coros", { clearAuthorization: false });
+settings.delete("corosMcp.tokens");
+
 // A removed COROS server stays removed.
 servers.delete("coros");
 await assert.rejects(coros.connectCorosMcp(null), /Unknown MCP server/);
 
-console.log("coros-mcp-account tests passed (region, email hint, authorized, added, silent, in-flight)");
+console.log("coros-mcp-account tests passed (region, email hint, authorized, added, silent, in-flight, connection events, disabled stays off)");
