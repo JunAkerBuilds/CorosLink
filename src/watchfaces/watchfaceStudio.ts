@@ -6099,7 +6099,13 @@ export async function buildControlTemperatureSpriteReplacements(
   style: WatchfaceMetricSpriteStyle,
   fontFamily: string,
   loadAssets: WatchfaceAssetLoader,
-  typography: WatchfaceTypography = {}
+  typography: WatchfaceTypography = {},
+  /**
+   * The temperature's own Tint color, the only color that recolors a PNG font
+   * that keeps its own colors. An unstyled temperature still draws in the
+   * digit color (`style.color`), but leaves such a font as it is, as in the preview.
+   */
+  tintColor?: string
 ): Promise<CorosWatchfaceAssetReplacement[]> {
   const jobs: Array<{
     source: CorosWatchfaceSpriteFile;
@@ -6128,7 +6134,7 @@ export async function buildControlTemperatureSpriteReplacements(
     });
   }
   const selectedFont = style.fontFamily ?? fontFamily;
-  const spriteTypography = resolveWatchfaceComponentTypography(typography, style);
+  const spriteTypography = resolveWatchfaceComponentTypography(typography, { ...style, color: tintColor });
   const rasterized = shouldRenderWatchfaceText("0123456789", selectedFont, spriteTypography);
   const assets = rasterized
     ? []

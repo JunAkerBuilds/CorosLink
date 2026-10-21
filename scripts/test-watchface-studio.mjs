@@ -14,6 +14,7 @@ import {
   sanitizeWatchfaceAodAlpha,
   buildAmPmOverrides,
   buildControlTemperatureOverrides,
+  buildControlTemperatureSpriteReplacements,
   buildControlIconPositionOverrides,
   buildControlBatteryVisibilityOverrides,
   buildControlComplicationConfigurationOverrides,
@@ -3928,6 +3929,74 @@ assert.equal(
   fullControlTemperature?.values.control_temperature_negative_sign_icon,
   undefined
 );
+// An unstyled control temperature draws in the digit color, but only its own Tint color
+// recolors a PNG font that keeps its colors (compose passes metricStyles.temperature?.color).
+{
+  const compositeOperations = [];
+  const nativeDocument = globalThis.document;
+  const nativeImage = globalThis.Image;
+  globalThis.document = {
+    createElement: () => {
+      const canvas = { width: 0, height: 0 };
+      const context = new Proxy({ canvas }, {
+        get(target, key) {
+          if (key in target) return target[key];
+          if (key === "getImageData") {
+            return (_x, _y, width, height) => ({ width, height, data: new Uint8ClampedArray(Math.max(0, width * height) * 4).fill(255) });
+          }
+          if (key === "measureText") return (text) => ({ width: text.length * 8, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2 });
+          return () => {};
+        },
+        set(target, key, value) {
+          if (key === "globalCompositeOperation") compositeOperations.push(value);
+          target[key] = value;
+          return true;
+        }
+      });
+      canvas.getContext = () => context;
+      canvas.toDataURL = () => `data:image/png;base64,W${canvas.width}H${canvas.height}`;
+      return canvas;
+    }
+  };
+  globalThis.Image = class FakeGlyphImage {
+    naturalWidth = 1;
+    naturalHeight = 1;
+    onload = null;
+    onerror = null;
+    set src(value) {
+      const size = /W(\d+)H(\d+)/.exec(value);
+      this.naturalWidth = Number(size?.[1] ?? 1);
+      this.naturalHeight = Number(size?.[2] ?? 1);
+      queueMicrotask(() => this.onload?.());
+    }
+    decode() {
+      return Promise.resolve();
+    }
+  };
+  try {
+    const keptColors = {
+      label: "Official",
+      dataUrl: "data:image/png;base64,W120H18",
+      glyphs: "0123456789",
+      columns: 10,
+      tint: false,
+      sprites: Object.fromEntries([..."0123456789"].map((digit) => [digit, "data:image/png;base64,W12H18"]))
+    };
+    const unstyled = await buildControlTemperatureSpriteReplacements(
+      withMetrics, { color: "#ffffff", scale: 1 }, "", async () => [], { rasterFont: keptColors }, undefined
+    );
+    assert.ok(unstyled.length > 0);
+    assert.equal(compositeOperations.includes("source-in"), false, "the digit color alone keeps the PNG font's own colors");
+    compositeOperations.length = 0;
+    await buildControlTemperatureSpriteReplacements(
+      withMetrics, { color: "#ff6a00", scale: 1 }, "", async () => [], { rasterFont: keptColors }, "#ff6a00"
+    );
+    assert.ok(compositeOperations.includes("source-in"), "the temperature's own Tint color recolors it");
+  } finally {
+    globalThis.document = nativeDocument;
+    globalThis.Image = nativeImage;
+  }
+}
 const timeStyleOverrides = buildTimeStyleOverrides(
   withMetrics,
   {

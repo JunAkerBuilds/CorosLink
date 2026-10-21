@@ -780,7 +780,9 @@ export async function composeWatchfaceReplacements(
           controlTemperatureStyle,
           design.fontFamily,
           loadAssets,
-          toStudioOptions(design)
+          toStudioOptions(design),
+          // Only a color set on the temperature itself tints its PNG font.
+          metricStyles.temperature?.color
         )
       : [],
     selectableMetricComposition.replacements,
