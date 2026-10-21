@@ -53,7 +53,8 @@ vm.runInNewContext(fs.readFileSync(servicePath,'utf8'),{exports,Buffer,setTimeou
 const service=new exports.CorosNativeBleService();
 service.state={connected:true,systemBind:'authenticated',modelNumber:'COROS W332',softwareRevision:'3.2008.0',deviceName:'COROS PACE Pro TEST',channels:[]};
 service.backendInUse='system';let reads=[],disconnects=0,release;
-service.disconnect=async()=>{disconnects++;};
+// A failed transfer resets the link with closeLink() (disconnect() first waits for watch work to finish).
+service.closeLink=async()=>{disconnects++;};
 service.send=async(operation,{page})=>{
  assert.equal(operation,'musicInventoryPage');reads.push(page);
  if(page===0)await new Promise(resolve=>{release=resolve;});
@@ -111,7 +112,7 @@ function deleteFixture(){
   deviceName:'COROS PACE Pro TEST',deviceId:'watch-one',authenticatedAt:123,channels:[]};s.backendInUse='system';
  const f={s,tracks:[{...targetTrack},{name:'Other.mp3',watchPath:'/emmc2:/Music/Other.mp3',sizeBytes:100,watchId:43}],writes:[],disconnects:0,
   ack:[1,1,0,1],remove:true};
- s.disconnect=async()=>{f.disconnects++;s.state.connected=false;s.musicInventory=undefined;};
+ s.closeLink=async()=>{f.disconnects++;s.state.connected=false;s.musicInventory=undefined;};
  s.send=async(operation,input)=>{
   f.writes.push({operation,input});
   if(operation==='musicInventoryPage')return {payload:musicFile(Buffer.concat(f.tracks.map(t=>row(t.watchPath,t.sizeBytes,t.watchId)))).toString('base64')};
