@@ -539,6 +539,30 @@ async function addMinMaxCompanions(
   }
 }
 
+/** Keys composeNativeData writes for a field beyond its catalog keys. */
+function nativeCompanionKeys(id: string): string[] {
+  if (id === "weather_temp") return ["weather_negasign_icon", "weather_dgree_icon"];
+  if (id.startsWith("weather_temp_")) return ["weather_temp_max_min_negasign_icon", "weather_temp_max_min_dgree_icon", "weather_temp_separator_icon_pos", "weather_temp_separator_icon"];
+  return [];
+}
+
+/**
+ * Drops deletions of keys an enabled native field writes itself. A hidden
+ * template image can share its key with one: Start blank hid SIMPLE's own
+ * degree and minus images, Current weather was turned back on and writes its
+ * own there, and the editor's final pass over hidden images then deleted them,
+ * so every export showed the reading without "°" or a minus (2026-10-20).
+ */
+export function keepNativeOwnedKeys(overrides: CorosWatchfaceConfigOverride[], data: NativeData = {}): CorosWatchfaceConfigOverride[] {
+  const owned = new Set(Object.entries(data).flatMap(([id, style]) => {
+    const field = NATIVE_DATA_BY_ID.get(id);
+    return field && style.enabled ? [...nativeFieldKeys(field), ...nativeCompanionKeys(id)] : [];
+  }));
+  return overrides
+    .map(({ path, values }) => ({ path, values: Object.fromEntries(Object.entries(values).filter(([key]) => !owned.has(key))) }))
+    .filter(({ values }) => Object.keys(values).length > 0);
+}
+
 /**
  * Fields the watch draws only on some chart pages, wherever they sit. PACE Pro
  * firmware 3.2008.0 (chart routine around 0x454776): on the sun and moon pages

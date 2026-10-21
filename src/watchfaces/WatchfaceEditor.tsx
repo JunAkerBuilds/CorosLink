@@ -16,7 +16,7 @@ import { nativePart, nativeParts } from "./nativeDataParts";
 import { addChartPage, chartDragSplit, chartGraphBounds, chartReadoutBounds, chartReadoutHidden, chartReadoutPage, chartSourceOf, chartStoredReadout, dropChartReadout, hiddenChartReadout, moveChartGraph, moveChartReadout, newChartReadout, removeChartPage, setChartReadoutShown, storedChartReadouts, swapChartReadout } from "./chartReadouts";
 import { describeNativeDataComponents } from "./nativeDataAutomation";
 import { watchfaceAutomationAssetContracts } from "./watchfaceAutomationAssetContracts";
-import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES, defaultNativeDataStyle, drawNativeDataPreview, minMaxTemperatureRun, nativeDataSize, nativeLayerChartPages, nativeLayerStyle } from "./nativeData";
+import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES, defaultNativeDataStyle, drawNativeDataPreview, keepNativeOwnedKeys, minMaxTemperatureRun, nativeDataSize, nativeLayerChartPages, nativeLayerStyle } from "./nativeData";
 import { glyphBaselineMovements, visibleGlyphBounds } from "./watchfaceGlyphLayout";
 import { WatchfaceExportPreview } from "./WatchfaceExportPreview";
 import {
@@ -7666,11 +7666,15 @@ export function WatchfaceEditor({
       // saved PACE 4 projects may contain the same analog overlay in current
       // and AOD configs, and no later composition step may be allowed to drop
       // those deletion sentinels before the archive service receives them.
+      // Keys a native field writes (Current weather's "°" and minus) stay its own.
       const configOverrides = mergeConfigOverrides(
         composedConfigOverrides,
-        buildDisabledWatchfaceConfigAssetOverrides(
-          currentDetails,
-          currentDesign.configAssetOverrides ?? {}
+        keepNativeOwnedKeys(
+          buildDisabledWatchfaceConfigAssetOverrides(
+            currentDetails,
+            currentDesign.configAssetOverrides ?? {}
+          ),
+          currentDesign.nativeData
         ),
         buildDisabledControlComplicationOverrides(
           currentDetails,
