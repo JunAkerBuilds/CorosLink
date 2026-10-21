@@ -29,6 +29,20 @@ const cards: { kind: HealthInsightKind; title: string; subtitle: string; icon: L
 /** Points further apart than this are drawn as separate segments (e.g. one night per segment). */
 const GAP_MS = 3 * 60 * 60 * 1000;
 
+/**
+ * Y domain that keeps a near-flat series honest: a one-unit change (two nights at 32 and 33 ms) would
+ * otherwise fill the chart with fractional ticks. Spreads of a quarter of the level or more stay "auto".
+ */
+function valueDomain(values: number[]): [number | "auto", number | "auto"] {
+  if (!values.length) return ["auto", "auto"];
+  const low = Math.min(...values);
+  const high = Math.max(...values);
+  const minSpan = Math.max(4, Math.abs((low + high) / 2) * 0.25);
+  if (high - low >= minSpan) return ["auto", "auto"];
+  const center = (low + high) / 2;
+  return [Math.max(0, Math.floor(center - minSpan / 2)), Math.ceil(center + minSpan / 2)];
+}
+
 function metricText(metric: HealthInsightMetric): string {
   return typeof metric.value === "number" ? formatNumber(metric.value, 1) : metric.value;
 }
@@ -38,7 +52,7 @@ function HealthChart({ series, range, baseline, color, connect = false }: { seri
   const { colors } = useChartColors();
   const stroke = color ?? colors.accentBright;
   const gradientId = useId();
-  const { points, span, dayOnly } = useMemo(() => {
+  const { points, span, dayOnly, domain } = useMemo(() => {
     const dayOnly = series.points.every(point => DAY_ONLY.test(point.time));
     const points: { epoch: number; value: number | null }[] = [];
     for (const point of series.points) {
@@ -48,7 +62,7 @@ function HealthChart({ series, range, baseline, color, connect = false }: { seri
       points.push({ epoch, value: point.value });
     }
     const span = points.length ? points[points.length - 1].epoch - points[0].epoch : 0;
-    return { points, span, dayOnly };
+    return { points, span, dayOnly, domain: valueDomain(series.points.map(point => point.value)) };
   }, [series, connect, getLocale()]);
   const tickMode = dayOnly || span > 36 * 60 * 60 * 1000 ? "day" : "clock";
   const latest = series.points.at(-1);
@@ -63,7 +77,7 @@ function HealthChart({ series, range, baseline, color, connect = false }: { seri
         </defs>
         <CartesianGrid stroke={colors.grid} vertical={false} />
         <XAxis dataKey="epoch" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={value => formatTime(value, tickMode)} tick={{ fill: colors.text, fontSize: 11 }} minTickGap={40} axisLine={false} tickLine={false} />
-        <YAxis tick={{ fill: colors.text, fontSize: 11 }} axisLine={false} tickLine={false} domain={["auto", "auto"]} width={36} />
+        <YAxis tick={{ fill: colors.text, fontSize: 11 }} axisLine={false} tickLine={false} domain={domain} allowDecimals={series.points.some(point => Math.abs(point.value) < 10)} width={36} />
         {range && <ReferenceArea y1={range[0]} y2={range[1]} fill={color ?? colors.accentSoft} fillOpacity={color ? 0.12 : 0.45} stroke="none" ifOverflow="extendDomain" />}
         {baseline !== undefined && <ReferenceLine y={baseline} stroke={colors.text} strokeDasharray="4 4" strokeOpacity={0.6} ifOverflow="extendDomain" />}
         <Tooltip cursor={{ stroke: colors.cursor }} labelFormatter={value => formatTime(typeof value === "number" ? value : String(value), dayOnly ? "day" : "full")} formatter={value => [`${value} ${series.unit ?? ""}`.trim(), series.label]} contentStyle={{ background: colors.tooltipBg, border: `1px solid ${colors.tooltipBorder}`, borderRadius: 10, color: colors.text, fontSize: 12 }} />
@@ -111,8 +125,8 @@ function SeriesSummary({ result, series, part, referenceKeys = [] }: { result: H
   </>;
 }
 
-function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sampleMode, onConnect, connecting, size }: typeof cards[number] & {
-  size?: ChartCardSize; api: CorosLinkApi; refreshToken: number; sampleMode: boolean; onConnect: () => void; connecting: boolean;
+function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sampleMode, local, onConnect, connecting, size }: typeof cards[number] & {
+  size?: ChartCardSize; api: CorosLinkApi; refreshToken: number; sampleMode: boolean; local: boolean; onConnect: () => void; connecting: boolean;
 }) {
   useLanguage();
   const compact = (kind === "stress" || kind === "sleepHrv") && (size === "mini" || size === "short");
@@ -151,13 +165,16 @@ function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sam
   const fallback = fetched?.status === "empty" && latest ? latest : undefined;
   const result = fallback ?? fetched;
   const hrv = kind === "sleepHrv" && result?.status === "ready" && result.metrics.some(metric => metric.key === "average" && typeof metric.value === "number");
-  // Prefer the first series that can actually draw a line; a one-night average is a dot, not a chart.
-  const chartable = result?.series.filter(item => !hrv || item.points.length > 1) ?? [];
-  const series = chartable.find(item => item.key === selectedSeries) ?? result?.series.find(item => item.points.length > 1) ?? (hrv ? undefined : result?.series[0]);
+  // A health check is five readings taken together, so it gets its own tile layout instead of the hero + tab strip.
+  const vitals = kind === "healthCheck" && result?.status === "ready" && result.metrics.some(metric => typeof metric.value === "number");
+  // Prefer the first series that can actually draw a line; a one-night average or a single check is a dot, not a chart.
+  const lineOnly = hrv || vitals;
+  const chartable = result?.series.filter(item => !lineOnly || item.points.length > 1) ?? [];
+  const series = chartable.find(item => item.key === selectedSeries) ?? result?.series.find(item => item.points.length > 1) ?? (lineOnly ? undefined : result?.series[0]);
   const hrvEmpty = kind === "sleepHrv" && result?.status === "empty";
   const message = hrvEmpty ? undefined
     : result?.status === "empty" ? (result.message ?? "No measurements for this period. Sync your watch with the COROS app to update your data.")
-    : result?.status === "unavailable" ? "This data is not available from your COROS connection yet."
+    : result?.status === "unavailable" ? (result.message ?? "This data is not available from your COROS connection yet.")
     : result?.status === "disconnected" ? "Connect COROS data access to see your health information."
     : result?.status === "error" ? "Could not load this data. Use Refresh at the top of Training Hub to try again." : undefined;
   const rangeMetric = result?.metrics.find(metric => metric.key === "normalRange");
@@ -168,8 +185,6 @@ function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sam
   const report = result?.report;
   const hrvNotes = hrv ? sleepHrvNotes(report) : undefined;
   const longReport = Boolean(report && report.length > 320);
-  // A health check is five readings taken together, so it gets its own tile layout instead of the hero + tab strip.
-  const vitals = kind === "healthCheck" && result?.status === "ready" && result.metrics.some(metric => typeof metric.value === "number");
   const vitalColors = getHealthVitalColors(theme);
   const vitalColor = series && vitals ? vitalColors[series.key as HealthVitalKey] : undefined;
   // Non-vital cards draw in their identity hue (matches --insight-tone in healthInsights.css).
@@ -177,10 +192,14 @@ function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sam
   const vitalLabel = series && vitals ? HEALTH_VITAL_LABELS[series.key as HealthVitalKey] ?? series.label : undefined;
   const restingMetric = vitals ? result.metrics.find(metric => metric.key === "restingHeartRate") : undefined;
   const resting = series?.key === "heartRate" && typeof restingMetric?.value === "number" ? restingMetric.value : undefined;
+  // A single health check has nothing to trend: no tile is selected and one sentence explains why.
+  const vitalTrend = vitals ? series : undefined;
 
-  // The health check card is already busy with five tiles, so its footer keeps only the update time.
   const updated = result?.fetchedAt ? t("Updated {{value1}}", { value1: formatTime(result.fetchedAt, "clock") }) : "";
-  const sourceLine = [sampleMode ? t("Sample data") : vitals ? "" : t("Reported by COROS"), updated].filter(Boolean).join(" · ");
+  // Numbers from the COROS account say so; Local-Only Mode shows only the update time. The health
+  // check card is busy with five tiles, so its footer keeps only the update time too.
+  const source = sampleMode ? t("Sample data") : local ? "" : t("Reported by COROS");
+  const sourceLine = [vitals && !sampleMode ? "" : source, updated].filter(Boolean).join(" · ");
 
   const chartNotes = <>
     {(range || baseline !== undefined) && <p className="health-insight-legend">
@@ -210,13 +229,20 @@ function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sam
         {result?.status === "error" && (result.message == null ? result.message : t(String(result.message))) && <details className="health-insight-error"><summary>{t("Error details")}</summary><p>{(result.message == null ? result.message : t(String(result.message)))}</p></details>}
       </div>}
       {!loading && hrvEmpty && <div className="health-insight-state health-hrv-empty" role="status">
-        <MoonStar size={18} aria-hidden="true" /><SleepHrvEmpty week={days === 7 || weekEmpty} />
+        <MoonStar size={18} aria-hidden="true" /><SleepHrvEmpty week={days === 7 || weekEmpty} local={local} />
       </div>}
       {!loading && hrv && result && <>
-        {fallback && <SleepHrvNotSynced compact={compact} />}
+        {fallback && <SleepHrvNotSynced compact={compact} local={local} />}
         <SleepHrvSummary result={result} part={compact ? "primary" : undefined} />
         {chartable.length > 1 && (compact ? <select aria-label={t("Chart")} value={series?.key ?? ""} onChange={event => setSelectedSeries(event.target.value)}>{chartable.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select> : <Segmented label={t("Chart")} value={series?.key ?? ""} options={chartable.map(item => ({ value: item.key, label: item.label }))} onChange={setSelectedSeries} />)}
         {series && <HealthChart series={series} range={range} baseline={baseline} color={toneColor} />}
+        {/* The watch keeps one average per night (no overnight samples), so a single night has no line to draw. */}
+        {!series && local && !compact && <div className="health-insight-state health-hrv-single" role="note">
+          <MoonStar size={18} aria-hidden="true" />
+          <p>{days === 1 && !weekEmpty
+            ? t("Choose Last 7 days to see your HRV trend.")
+            : t("Your HRV trend appears after a few nights.")}</p>
+        </div>}
         {compact ? <details className="chart-card-details"><summary>{t("Details & source")}</summary>
           <SleepHrvSummary result={result} part="details" />
           {hrvNotes && <div className="health-insight-note"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: () => null, a: ({ children }) => <span>{children}</span> }}>{hrvNotes}</ReactMarkdown></div>}
@@ -224,13 +250,15 @@ function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sam
         </details> : hrvNotes && <details className="health-insight-report health-hrv-explanation"><summary>{t("COROS notes")}</summary><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: () => null, a: ({ children }) => <span>{children}</span> }}>{hrvNotes}</ReactMarkdown></details>}
       </>}
       {!loading && result?.status === "ready" && vitals && <>
-        <HealthCheckVitals result={result} days={days} selected={series?.key} onSelect={setSelectedSeries} />
-        {series && series.points.length > 1 && <div className="health-check-trend">
+        <HealthCheckVitals result={result} days={days} selected={vitalTrend?.key} onSelect={setSelectedSeries} />
+        {vitalTrend && <div className="health-check-trend">
           <p className="health-check-trend-title">{t(vitalLabel ?? "HRV")} · {days === 1 ? t("today") : t("last {{value1}} days", { value1: String(days) })}</p>
-          <HealthChart series={series} color={vitalColor} baseline={resting} connect />
-          {resting !== undefined && <p className="health-insight-legend"><span><i className="is-baseline" />{t("Resting heart rate")} {resting} {series.unit}</span></p>}
+          <HealthChart series={vitalTrend} color={vitalColor} baseline={resting} connect />
+          {resting !== undefined && <p className="health-insight-legend"><span><i className="is-baseline" />{t("Resting heart rate")} {resting} {vitalTrend.unit}</span></p>}
         </div>}
-        {series && series.points.length === 1 && <p className="health-vital-hint">{t("Only one")} {vitalLabel === "HRV" ? t("HRV") : vitalLabel?.toLowerCase()} {t("reading")} {days === 1 ? t("today") : t("in the last {{value1}} days", { value1: String(days) })}{t(". Run another health check on your watch to see how it moves.")}</p>}
+        {!vitalTrend && <p className="health-vital-hint">{days === 1
+          ? t("One health check today. Run another on your watch to see how your readings move.")
+          : t("One health check in the last {{value1}} days. Run another on your watch to see how your readings move.", { value1: String(days) })}</p>}
         {report && <details className="health-insight-report"><summary>{t("COROS report")}</summary><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: () => null, a: ({ children }) => <span>{children}</span> }}>{report}</ReactMarkdown></details>}
       </>}
       {!loading && result?.status === "ready" && !vitals && !hrv && <>
@@ -242,7 +270,7 @@ function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sam
         {compact ? <details className="chart-card-details"><summary>{t("Details & source")}</summary>
           {series && <SeriesSummary result={result} series={series} referenceKeys={referenceKeys} part="details" />}
           {chartNotes}
-          <p className="health-insight-source">{sampleMode ? t("Sample data") : t("Reported by COROS")}{result.fetchedAt ? t(" · Updated {{value1}}", { value1: String(formatTime(result.fetchedAt, "clock")) }) : ""}</p>
+          <p className="health-insight-source">{source ? <>{source}{result.fetchedAt ? t(" · Updated {{value1}}", { value1: String(formatTime(result.fetchedAt, "clock")) }) : ""}</> : updated}</p>
         </details> : chartNotes}
       </>}
       {!(compact && result?.status === "ready") && !loading && result && result.status !== "disconnected" && <p className="health-insight-source">{sourceLine}</p>}
@@ -250,7 +278,7 @@ function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sam
   </article>;
 }
 
-export function HealthInsightsPanel({ api, refreshToken = 0, sampleMode = false, kind, size }: { size?: ChartCardSize; api: CorosLinkApi; refreshToken?: number; sampleMode?: boolean; kind?: HealthInsightKind }) {
+export function HealthInsightsPanel({ api, refreshToken = 0, sampleMode = false, local = false, kind, size }: { size?: ChartCardSize; api: CorosLinkApi; refreshToken?: number; sampleMode?: boolean; local?: boolean; kind?: HealthInsightKind }) {
   useLanguage();
   const [connectionRefresh, setConnectionRefresh] = useState(0);
   const [connecting, setConnecting] = useState(false);
@@ -268,6 +296,6 @@ export function HealthInsightsPanel({ api, refreshToken = 0, sampleMode = false,
   return <section className={`health-insights ${kind ? "is-single" : ""}`} aria-label={kind ? t(cards.find(card => card.kind === kind)?.title ?? "") : t("Health and recovery")}>
     {!kind && <div className="health-insights-heading"><div><p className="eyebrow">{t("Health & recovery")}</p><h2>{t("A closer look at your health")}</h2></div></div>}
     {connectionError && <p role="alert" className="health-insight-message">{connectionError}</p>}
-    <div className="health-insights-grid">{cards.filter(card => !kind || card.kind === kind).map(card => <InsightCard size={size} key={card.kind} {...card} api={api} refreshToken={refreshToken + connectionRefresh} sampleMode={sampleMode} onConnect={() => void connect()} connecting={connecting} />)}</div>
+    <div className="health-insights-grid">{cards.filter(card => !kind || card.kind === kind).map(card => <InsightCard size={size} key={card.kind} {...card} api={api} refreshToken={refreshToken + connectionRefresh} sampleMode={sampleMode} local={local} onConnect={() => void connect()} connecting={connecting} />)}</div>
   </section>;
 }

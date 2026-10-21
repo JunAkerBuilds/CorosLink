@@ -12,6 +12,8 @@ interface SleepSummaryPanelProps {
   sleep?: TrainingHubSleepSummary | null;
   connecting?: boolean;
   refreshing?: boolean;
+  /** Local-Only Mode: sleep comes from the watch, and the sleep score (computed by COROS) never arrives. */
+  local?: boolean;
 }
 
 function formatSleepDuration(minutes?: number): string {
@@ -257,13 +259,16 @@ function SleepStageBar({ record }: { record: TrainingHubSleepRecord }) {
 export function SleepSummaryPanel({
   sleep,
   connecting = false,
-  refreshing = false
+  refreshing = false,
+  local = false
 }: SleepSummaryPanelProps) {
   useLanguage();
   const latest = sleep?.latest;
   const tone = sleepScoreTone(latest?.score);
   const label = sleepScoreLabel(latest?.score);
   const isLoading = connecting || refreshing;
+  // Local-Only Mode has no sleep score: the duration leads, and the score-tinted badge has nothing to show.
+  const durationOnly = local && latest?.score === undefined;
 
   return (
     <section className={`panel sleep-panel tone-${tone}`}>
@@ -276,26 +281,28 @@ export function SleepSummaryPanel({
             {t("Sleep")} </p>
           <h2>{latest ? formatSleepNightLabel(latest) : t("Last night")}</h2>
         </div>
-        <span className="sleep-panel-icon" aria-hidden="true">
-          {isLoading ? <Loader2 className="spin" size={16} /> : <MoonStar size={16} />}
-        </span>
+        {isLoading || !durationOnly ? (
+          <span className="sleep-panel-icon" aria-hidden="true">
+            {isLoading ? <Loader2 className="spin" size={16} /> : <MoonStar size={16} />}
+          </span>
+        ) : null}
       </div>
 
-      {connecting ? (
+      {connecting && !local ? (
         <p className="sleep-panel-message">{t("Connecting COROS data access…")}</p>
       ) : null}
 
-      {!connecting && isLoading ? (
+      {(!connecting || local) && isLoading ? (
         <p className="sleep-panel-message">{t("Syncing sleep data…")}</p>
       ) : null}
 
       {!isLoading && latest ? (
         <>
-          <div className="sleep-panel-hero">
-            <div className="sleep-panel-score">
+          <div className={`sleep-panel-hero${durationOnly ? " is-duration-only" : ""}`}>
+            {durationOnly ? null : <div className="sleep-panel-score">
               <strong>{latest.score !== undefined ? Math.round(latest.score) : "–"}</strong>
               <span>{t(label)}</span>
-            </div>
+            </div>}
             <div className="sleep-panel-duration">
               <span>{t("Main sleep")}</span>
               <strong>{formatSleepDuration(latest.totalMinutes)}</strong>
@@ -330,8 +337,8 @@ export function SleepSummaryPanel({
 
       {!isLoading && !latest ? (
         <p className="sleep-panel-message">
-          {sleep?.mcpConnected
-            ? t("No sleep data for this period.")
+          {sleep?.mcpConnected || local
+            ? local ? t("No data yet.") : t("No sleep data for this period.")
             : t("Connect COROS data access to view sleep metrics.")}
         </p>
       ) : null}

@@ -10,10 +10,8 @@ import {
   listIndexedSummaries
 } from "./fitIndexService";
 import type { FitActivitySummary } from "./fitSummary";
-import {
-  getTrainingHubStatus,
-  listTrainingHubActivities
-} from "./trainingHubService";
+import { currentActivitySource } from "./localSync/activitySource";
+import { trainingDataAvailable } from "./localSync/trainingDataAccess";
 import type { CorosMcpTool, TrainingHubActivity, UnitSystem } from "./types";
 import {
   formatDistanceValue,
@@ -158,7 +156,7 @@ async function listActivitiesInWindow(days: number): Promise<ActivityRef[]> {
   const refs: ActivityRef[] = [];
   const seen = new Set<string>();
   for (let page = 1; page <= LIST_MAX_PAGES; page += 1) {
-    const activities = await listTrainingHubActivities(page, LIST_PAGE_SIZE);
+    const activities = await currentActivitySource().listActivities(page, LIST_PAGE_SIZE);
     let reachedCutoff = false;
     for (const activity of activities) {
       if (!activity.activityId || seen.has(activity.activityId)) continue;
@@ -195,7 +193,7 @@ async function resolveActivityRef(
   if (stored) return toRef(stored);
   if (sportType !== undefined) return { activityId, sportType };
   for (let page = 1; page <= 5; page += 1) {
-    const activities = await listTrainingHubActivities(page, LIST_PAGE_SIZE);
+    const activities = await currentActivitySource().listActivities(page, LIST_PAGE_SIZE);
     const match = activities.find((activity) => activity.activityId === activityId);
     if (match) return toRef(match);
     if (activities.length < LIST_PAGE_SIZE) break;
@@ -220,7 +218,7 @@ function indexNote(deferred: number, failed: number, windowDays: number): string
 }
 
 export function getChatFitTools(): CorosMcpTool[] {
-  if (!getTrainingHubStatus().authenticated) return [];
+  if (!trainingDataAvailable()) return [];
   return [
     {
       name: "get_power_curve",

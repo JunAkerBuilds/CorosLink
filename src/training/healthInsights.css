@@ -89,6 +89,8 @@
 .health-insight-state { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 26px 16px; border-radius: 10px; border: 1px dashed var(--glass-border); color: var(--text-muted); text-align: center; }
 .health-insight-state p { margin: 0; font-size: 13px; line-height: 1.55; max-width: 34ch; }
 .health-insight-state .secondary-button { margin-top: 4px; }
+/* Local sleep HRV for one night: the note takes the chart's place instead of leaving the card empty. */
+.health-hrv-single { flex: 1; justify-content: center; }
 .health-insight-message { color: var(--text-muted); font-size: 13px; line-height: 1.6; padding: 10px 0; }
 .health-insight-source { margin: auto 0 0; color: var(--text-muted); font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
 .health-insight-note { color: var(--text-muted); font-size: 12px; line-height: 1.55; }
@@ -141,7 +143,8 @@
     linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
   box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08), 0 0 0 1px color-mix(in srgb, var(--vital) 28%, transparent), 0 0 22px color-mix(in srgb, var(--vital) 18%, transparent);
 }
-.health-vital:disabled { cursor: default; }
+/* A tile with no trend to show (a single check) is a reading, not an unavailable control. */
+.health-vital:disabled { cursor: default; opacity: 1; }
 .health-vital:focus-visible { outline: 2px solid var(--vital); outline-offset: 2px; }
 .health-vital-head { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--text-secondary); font-size: 9.5px; font-weight: 750; letter-spacing: 0.06em; line-height: 1.25; text-transform: uppercase; overflow-wrap: anywhere; }
 .health-vital-icon {

@@ -10,7 +10,7 @@ import {
   happenDayFromTimestamp,
   inferUpcomingWorkoutCategory
 } from "../training/formatters";
-import { recoveryTone } from "../training/parsers";
+import { recoveryHoursLeft, recoveryTone } from "../training/parsers";
 import { scheduledSportFamily, WEEK_SPORT_FAMILY_META } from "../calendar/weekSportBreakdown";
 import { sportColorCategory, type SportColorCategory } from "../training/sportColors";
 import type { TrainingHubSnapshot } from "../training/types";
@@ -23,12 +23,33 @@ export interface Readiness {
   title: string;
   message: string;
   fullRecoveryHours?: number;
+  /** Local-Only Mode without a recovery %: whole hours the watch says are left (0 once recovered). */
+  hoursLeft?: number;
+  /** Nothing to show yet: a watch sync would bring it. */
+  needsSync?: boolean;
+}
+
+export interface ReadinessOptions {
+  /** Local-Only Mode: recovery comes from the watch, and syncing happens in CorosLink. */
+  localOnly?: boolean;
+  /** The clock, in ms. */
+  now?: number;
+  /** Local-Only Mode: when the watch was last synced, in ms (the recovery time is as of then). */
+  syncedAt?: number;
+}
+
+/** A sync older than this no longer describes today: the advice says when it's from. */
+const STALE_SYNC_MS = 12 * 3_600_000;
+
+function syncTimeText(ms: number): string {
+  return new Date(ms).toLocaleString(getLocale(), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 /** Recovery verdict, phrased around today's plan when there is one. */
 export function buildReadiness(
   snapshot: TrainingHubSnapshot | null,
-  today: TrainingHubUpcomingWorkout[]
+  today: TrainingHubUpcomingWorkout[],
+  { localOnly = false, now = Date.now(), syncedAt }: ReadinessOptions = {}
 ): Readiness {
   const raw = snapshot?.summary.recoveryPct;
   const percent = raw !== undefined && Number.isFinite(raw) && raw > 0
@@ -71,13 +92,52 @@ export function buildReadiness(
             : t("Recovery is low. Consider swapping {{p0}} for something easy.", { p0: String(plan) })
           : t("Recovery is low. Prioritise rest and sleep today.")
       };
-    default:
-      return {
-        tone, percent, fullRecoveryHours,
-        title: t("Waiting for a sync"),
-        message: t("Sync your watch with the COROS app to see today's recovery.")
-      };
   }
+
+  if (!localOnly) {
+    return {
+      tone, percent, fullRecoveryHours,
+      title: t("Waiting for a sync"),
+      message: t("Sync your watch with the COROS app to see today's recovery.")
+    };
+  }
+
+  // Local-Only Mode has no recovery %; the watch's recovery time from its latest activity stands in.
+  const recoveredAt = snapshot?.summary.recoveredAt;
+  if (recoveredAt === undefined) {
+    return {
+      tone, needsSync: true,
+      title: t("Waiting for a sync"),
+      message: t("Sync your watch to see today's recovery.")
+    };
+  }
+  const hoursLeft = recoveryHoursLeft(recoveredAt, now);
+  // Days-old data isn't today's advice: say when it's from, and offer a sync.
+  if (syncedAt !== undefined && now - syncedAt > STALE_SYNC_MS) {
+    return {
+      tone: hoursLeft > 0 ? "mid" : "neutral", hoursLeft, needsSync: true,
+      title: hoursLeft > 0 ? t("Recovering · {{p0}} h left", { p0: hoursLeft }) : t("Recovered"),
+      message: t("As of your last sync, {{p0}}. Sync your watch to see today's recovery.", { p0: syncTimeText(syncedAt) })
+    };
+  }
+  if (hoursLeft > 0) {
+    return {
+      tone: "mid", hoursLeft,
+      title: t("Recovering · {{p0}} h left", { p0: hoursLeft }),
+      message: plan
+        ? easyPlan
+          ? t("You're still recovering, so {{p0}} fits today.", { p0: String(plan) })
+          : t("You're still recovering. Keep {{p0}} at a controlled effort.", { p0: String(plan) })
+        : t("You're still recovering. Easy to moderate effort today.")
+    };
+  }
+  return {
+    tone: "high", hoursLeft,
+    title: t("Recovered"),
+    message: plan
+      ? t("Your watch counts you as fully recovered. A good day for {{p0}}.", { p0: String(plan) })
+      : t("Your watch counts you as fully recovered. You're cleared for a hard session.")
+  };
 }
 
 export interface TodayPlan {

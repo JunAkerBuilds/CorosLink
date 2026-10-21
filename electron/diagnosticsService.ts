@@ -1,7 +1,7 @@
 import { app, clipboard, ipcMain, type BrowserWindow } from "electron";
 import os from "node:os";
 import path from "node:path";
-import { DiagnosticsLog, withDiagnosticLogging } from "./diagnosticsLog";
+import { DiagnosticsLog, withDiagnosticLogging, type DiagnosticLevel } from "./diagnosticsLog";
 import type { RendererDiagnosticError } from "./diagnosticsTypes";
 
 let log: DiagnosticsLog | undefined;
@@ -45,6 +45,11 @@ function currentStatus(): string[] {
       return [`Status unavailable: ${error instanceof Error ? error.message : String(error)}`];
     }
   });
+}
+
+/** An info or warning entry (not an error), redacted like every entry. */
+export function recordDiagnosticNotice(source: string, message: string, level: DiagnosticLevel = "info"): void {
+  try { getLog().note(source, message, level); } catch { /* Diagnostics are best effort. */ }
 }
 
 export function handleDiagnosticIpc(

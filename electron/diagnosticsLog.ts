@@ -13,6 +13,7 @@ const MAX_VIA = 6;
 const REPEAT_PERSIST_INTERVAL_MS = 30 * 1000;
 const REDACTED = "[redacted]";
 const requests = new WeakMap<object, { method: string; url: string }>();
+const EXPECTED = Symbol.for("coroslink.diagnostics.expected");
 
 interface DiagnosticError {
   name: string;
@@ -29,6 +30,7 @@ interface DiagnosticError {
 }
 
 interface DiagnosticEntry {
+  /** When this failure was first recorded. */
   timestamp: string;
   /** Latest repeat of the same failure, when it happened more than once. */
   lastSeen?: string;
@@ -38,7 +40,11 @@ interface DiagnosticEntry {
   /** Callers the same error passed through after it was recorded, such as the IPC channel. */
   via?: string[];
   error: DiagnosticError;
+  /** Set on a notice that is not an error (e.g. the watch's Bluetooth identity changed). */
+  level?: DiagnosticLevel;
 }
+
+export type DiagnosticLevel = "info" | "warning";
 
 export interface DiagnosticsEnvironment {
   appVersion: string;
@@ -57,6 +63,20 @@ export function annotateDiagnosticRequest(error: unknown, method: string, url: s
 }
 
 /**
+ * Marks an outcome the user chose or the app expects (a sign-in window closed,
+ * a request cut short by quitting) so it still reaches the caller but is not
+ * recorded as an error.
+ */
+export function expectedError<T extends Error>(error: T): T {
+  Object.defineProperty(error, EXPECTED, { value: true });
+  return error;
+}
+
+export function isExpectedError(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && (error as Record<symbol, unknown>)[EXPECTED] === true);
+}
+
+/**
  * A long run that is an API path, file, or function name (`/activity/fit/getImportSportList`,
  * `/dist-electron/trainingHubService`): whole words. Keys and hashes break into one- and
  * two-letter fragments between digits, or are one unbroken lowercase string.
@@ -65,6 +85,8 @@ function readsAsWords(run: string): boolean {
   if (/[+=]/.test(run) || !/[/_-]|[a-z][A-Z]/.test(run)) return false;
   const words = run.match(/[A-Z]?[a-z]+|[A-Z]+(?![a-z])/g) ?? [];
   const letters = words.reduce((sum, word) => sum + word.length, 0);
+  // Base64 key material (a DER key starts "MIIE…") is mostly capitals; names and paths are mostly lowercase.
+  if ((run.match(/[A-Z]/g)?.length ?? 0) * 2 > letters) return false;
   const fragments = words.filter((word) => word.length <= 2).length;
   return words.length > 0 && fragments * 4 <= words.length && letters >= words.length * 3 &&
     (run.match(/\d+/g)?.length ?? 0) <= 3 && words.every((word) => word.length <= 24);
@@ -79,11 +101,11 @@ export function redactDiagnosticText(value: string, privatePaths: string[] = [])
     text = text.split(encodeURI(privatePath)).join("[local path]");
   }
   text = text
-    .replace(/\b(password|passwd|pwd(?:Hash)?|p1|p2|secret|client[_-]?secret|app[_-]?password|(?:access|refresh|id|auth)[_-]?token|token|api[_-]?key|appKey|loginTicket|account|email|user[_-]?id)\b\\["']\s*[:=][^\r\n]*/gi, `$1=${REDACTED}`)
+    .replace(/\b(password|passwd|pwd(?:Hash)?|p1|p2|secret|client[_-]?secret|app[_-]?password|(?:access|refresh|id|auth)[_-]?token|token|api[_-]?key|appKey|watch[_-]?key|passphrase|loginTicket|account|email|user[_-]?id|serial(?:[_-]?(?:no|number))?|latitude|longitude|lat|lon|lng)\b\\["']\s*[:=][^\r\n]*/gi, `$1=${REDACTED}`)
     // Full header values can contain several cookies or authentication fields.
     .replace(/\b(?:authorization|proxy-authorization|cookie|set-cookie)\s*["']?\s*[:=][^\r\n]*/gi, `credentials: ${REDACTED}`)
     .replace(/\b(?:Bearer|Basic)\s+[^\s,;"']+/gi, `credentials ${REDACTED}`)
-    .replace(/\b(password|passwd|pwd(?:Hash)?|p1|p2|secret|client[_-]?secret|app[_-]?password|(?:access|refresh|id|auth)[_-]?token|token|api[_-]?key|appKey|loginTicket|account|email|user[_-]?id)\b["']?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n,;\]}]+)/gi, `$1=${REDACTED}`)
+    .replace(/\b(password|passwd|pwd(?:Hash)?|p1|p2|secret|client[_-]?secret|app[_-]?password|(?:access|refresh|id|auth)[_-]?token|token|api[_-]?key|appKey|watch[_-]?key|passphrase|loginTicket|account|email|user[_-]?id|serial(?:[_-]?(?:no|number))?|latitude|longitude|lat|lon|lng)\b["']?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n,;\]}]+)/gi, `$1=${REDACTED}`)
     // Remove credentials, query parameters, and fragments from every URL.
     .replace(/https?:\/\/[^\s<>"')]+/gi, (value) => {
       try {
@@ -97,6 +119,8 @@ export function redactDiagnosticText(value: string, privatePaths: string[] = [])
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?/g, REDACTED)
     .replace(/[A-Za-z0-9_+/=-]{32,}/g, (run) => readsAsWords(run) ? run : REDACTED)
     .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, REDACTED)
+    // Bluetooth hardware addresses identify the watch (and its owner) as well as a serial does.
+    .replace(/\b[0-9a-f]{2}(?::[0-9a-f]{2}){5}\b/gi, REDACTED)
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
   return text;
 }
@@ -130,7 +154,8 @@ export class DiagnosticsLog {
             appVersion: this.clean(entry.appVersion, 80),
             source: this.clean(entry.source, 120),
             ...(via.length ? { via } : {}),
-            error: this.describeError(entry.error)
+            error: this.describeError(entry.error),
+            ...(entry.level === "info" || entry.level === "warning" ? { level: entry.level as DiagnosticLevel } : {})
           }];
         });
       }
@@ -208,7 +233,13 @@ export class DiagnosticsLog {
     }
   }
 
-  record(source: string, error: unknown): void {
+  /** A notice that isn't an error, redacted like one: `name` is "Info" or "Warning". */
+  note(source: string, message: string, level: DiagnosticLevel = "info"): void {
+    this.record(source, { name: level === "warning" ? "Warning" : "Info", message }, level);
+  }
+
+  record(source: string, error: unknown, level?: DiagnosticLevel): void {
+    if (isExpectedError(error)) return;
     try {
       const cleanSource = this.clean(source, 120);
       // The same failure rethrown up to an IPC handler: note the path, not a second entry.
@@ -224,7 +255,7 @@ export class DiagnosticsLog {
       const described = this.describeError(error);
       const signature = repeatSignature(cleanSource, described);
       const repeat = [...this.entries].reverse().find((entry) => repeatSignature(entry.source, entry.error) === signature &&
-        this.now() - Date.parse(entry.lastSeen ?? entry.timestamp) <= REPEAT_WINDOW_MS);
+        entry.level === level && this.now() - Date.parse(entry.lastSeen ?? entry.timestamp) <= REPEAT_WINDOW_MS);
       let entry: DiagnosticEntry;
       if (repeat) {
         repeat.count = (repeat.count ?? 1) + 1;
@@ -233,7 +264,7 @@ export class DiagnosticsLog {
         this.entries.splice(this.entries.indexOf(repeat), 1);
         entry = repeat;
       } else {
-        entry = { timestamp, appVersion: this.environment.appVersion, source: cleanSource, error: described };
+        entry = { timestamp, appVersion: this.environment.appVersion, source: cleanSource, error: described, ...(level ? { level } : {}) };
       }
       this.entries.push(entry);
       if (error && typeof error === "object") this.recorded.set(error, entry);
@@ -314,7 +345,8 @@ function orderedEntry(entry: DiagnosticEntry): DiagnosticEntry {
     appVersion: entry.appVersion,
     source: entry.source,
     ...(entry.via?.length ? { via: entry.via } : {}),
-    error: entry.error
+    error: entry.error,
+    ...(entry.level ? { level: entry.level } : {})
   };
 }
 
@@ -327,7 +359,7 @@ export function withDiagnosticLogging<T extends unknown[], R>(
   return async (...args) => {
     try { return await listener(...args); }
     catch (error) {
-      try { log.record(source, error); } catch { /* Preserve the original failure. */ }
+      try { if (!isExpectedError(error)) log.record(source, error); } catch { /* Preserve the original failure. */ }
       throw error;
     }
   };

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Local-Only Mode (experimental).** Turn it on in **Settings → Privacy & local data** and nothing is uploaded to COROS. **Sync watch now** in the watch menu reads activities, sleep, heart rate, HRV, stress and Health Checks from a PACE 4, PACE 4 Pro, PACE Pro, PACE 3 or APEX 4 over Bluetooth, and the Training Hub shows them from this computer. Tested on PACE 4 with macOS; other models are in beta. Workouts, plans and the calendar stay on this computer too; your COROS workouts, calendar and activities stay in your COROS account. You can also import FIT files and save a backup, optionally encrypted. Syncing never deletes your recorded data from the watch or marks it as synced. You still sign in to COROS once, so CorosLink can save the watch key. Without COROS, Strava and TrainingPeaks stop receiving your activities, and the watch gets no firmware updates.
+- In Local-Only Mode, a sync also puts your training calendar on the watch and updates its GPS satellite data when COROS has newer data. Workouts with zone or % targets aren't put on the watch calendar. If the watch has a training plan from the COROS app, CorosLink asks before replacing it, and **Settings → Privacy & local data** turns that permission off again.
+- **Automatic sync** in the watch menu syncs every 1, 3, 6 or 12 hours while CorosLink is open in Local-Only Mode. It is off until you turn it on.
+- **Watch settings and training profile.** Change units, time format, display, do not disturb and other watch settings, plus your heart-rate and pace thresholds and heart-rate zones, in **Settings**. Settings with a lock can only be changed on the watch. The gear in the watch menu opens them.
+- **Weather on your watch.** The forecast, including air quality (US AQI), comes from Open-Meteo for the place you choose in **Settings → Weather location**, or the Overview's location.
+- **Send to watch** in the Training Library puts a workout on the watch over Bluetooth.
+- In Local-Only Mode, the Training Hub shows the figures your watch stores with each activity: **VO₂ max**, the time until you're **recovered**, and **Base Fitness, Load Impact and fatigue**. The Overview's readiness card counts down the same recovery time.
+- In Local-Only Mode, the **Resting HR** card shows CorosLink's own figure: the lowest 30-minute average of your heart rate while you sleep, on the morning you wake up. It can differ from the figure on your watch or in the COROS app.
+- **Back up the watch key.** In the watch menu, **Connection details → Watch key → Back up watch key** saves the key to a file protected by a passphrase. **Restore watch key…** puts it back on this or another computer without signing in to COROS again. Keep the file and the passphrase safe: anyone with both can sign in to your watch, and the passphrase can't be recovered.
+
+### Changed
+
+- Connecting the watch now sets its clock and time zone, keeping its 12/24-hour setting, and sends the weather once a location is known.
+- Closing a sign-in window is no longer logged as an error.
+- CorosLink remembers your watch's Bluetooth identity the first time you connect it from the watch menu. If another device answers with your watch's name, CorosLink sends it nothing and asks before connecting, and automatic sync pauses until you connect your watch from the watch menu.
+
 ## [0.1.59] - 2026-10-20
 
 ### Added

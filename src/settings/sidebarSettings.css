@@ -3,18 +3,6 @@
   scroll-margin-top: 24px;
 }
 
-.settings-sidebar-panel.is-spotlit {
-  animation: settings-sidebar-spotlight 1.6s ease-out;
-}
-
-@keyframes settings-sidebar-spotlight {
-  0%,
-  35% {
-    border-color: color-mix(in srgb, var(--accent) 60%, var(--glass-border));
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
-  }
-}
-
 .settings-sidebar-heading {
   display: flex;
   align-items: flex-start;
@@ -179,10 +167,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .settings-sidebar-panel.is-spotlit {
-    animation: none;
-  }
-
   .settings-sidebar-row,
   .settings-sidebar-icon,
   .settings-sidebar-label,

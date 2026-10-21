@@ -194,7 +194,9 @@ async function main() {
     await until(`document.querySelector('${faces} .watch-source')?.textContent.includes('test-face.bin')`);
     assert.equal(await js(`${install}.disabled`), true, 'disconnected watch cannot sync');
     await click("Connect watch");
-    await until("document.querySelector('.watch-menu-connect-button')");
+    // Local-Only Mode: one main button, Sync (it connects first); Connect only sits in the footer.
+    await until("document.querySelector('.watch-menu-connect-only') && document.querySelector('.watch-menu-sync-button')");
+    assert.equal(await js("!!document.querySelector('.watch-menu-connect-button')"), false, "no second big button");
     await page("Send a message");
     await until("document.querySelector('#coros-notification-help')?.textContent.includes('Connect and authenticate')");
     await type("Should stay local"); await submit();
@@ -203,8 +205,8 @@ async function main() {
     // One button connects: an unknown watch is found and, alone nearby, connected.
     await js("notificationFixture.remembered=false; notificationFixture.nearby=[{deviceId:'only',deviceName:'COROS PACE Pro 1A2B'}]; void 0");
     await js("document.querySelector('.watch-menu-back').click(); void 0");
-    await until("document.querySelector('.watch-menu-connect-button')");
-    await js("document.querySelector('.watch-menu-connect-button').click(); void 0");
+    await until("document.querySelector('.watch-menu-connect-only')");
+    await js("document.querySelector('.watch-menu-connect-only').click(); void 0");
     await until(`${trigger}.textContent.includes('Connected')`);
     assert.equal(await js("notificationFixture.scans"), 1);
     assert.deepEqual(await js("notificationFixture.connectCalls.map(c=>c.device?.deviceId ?? null)"), [null, "only"], "tries the remembered watch, then the one nearby");
@@ -212,18 +214,49 @@ async function main() {
 
     // Several watches: choose one, then connect to it.
     await clickMenu("Disconnect");
-    await until("document.querySelector('.watch-menu-connect-button')");
+    await until("document.querySelector('.watch-menu-connect-only')");
     await js("notificationFixture.connectCalls=[]; notificationFixture.nearby=[{deviceId:'a',deviceName:'COROS PACE Pro 2F1A'},{deviceId:'b',deviceName:'COROS PACE 4 81C2'}]; void 0");
-    await js("document.querySelector('.watch-menu-connect-button').click(); void 0");
+    await js("document.querySelector('.watch-menu-connect-only').click(); void 0");
     await until("document.querySelectorAll('.watch-menu-devices label').length === 2");
-    assert.equal(await js("document.querySelector('.watch-menu-connect-button').disabled"), true, "choose a watch before connecting");
+    assert.equal(await js("document.querySelector('.watch-menu-connect-only').disabled"), true, "choose a watch before connecting");
+    assert.equal(await js("document.querySelector('.watch-menu-sync-button').disabled"), true, "or syncing");
     await js("[...document.querySelectorAll('.watch-menu-devices input')][1].click(); void 0");
-    await until("document.querySelector('.watch-menu-connect-button').textContent.includes('COROS PACE 4')");
-    await js("document.querySelector('.watch-menu-connect-button').click(); void 0");
+    await until("document.querySelector('.watch-menu-connect-only').textContent.includes('COROS PACE 4')");
+    await js("document.querySelector('.watch-menu-connect-only').click(); void 0");
     await until(`${trigger}.textContent.includes('Connected')`);
     assert.deepEqual(await js("notificationFixture.connectCalls.map(c=>c.device?.deviceId ?? null)"), [null, "b"]);
     assert.equal(await js("notificationFixture.connectCalls.every(c=>c.backend==='system')"), true, "connecting always uses the computer's Bluetooth");
     assert.equal(await js("document.querySelector('.watch-menu-panel').textContent.includes('Mac Bluetooth')"), false);
+
+    // Sync from the watch menu: offered while connected, and the watch stays connected afterwards.
+    await openMenu();
+    await until("document.querySelector('.watch-menu-sync-button')");
+    assert.equal(await js("!!document.querySelector('.watch-menu-connect-only')"), false);
+    const connectsBeforeSync = await js("notificationFixture.connectCalls.length");
+    await js("document.querySelector('.watch-menu-sync-button').click(); void 0");
+    await until("document.querySelector('.watch-menu-panel .watch-sync-result')?.textContent.includes('1 new activity')");
+    const summary = await js("document.querySelector('.watch-menu-panel .watch-sync-result').textContent");
+    assert.equal(summary, "Synced · 1 new activity", "one line when everything worked");
+    assert.equal(await js("notificationFixture.syncCalls"), 1);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    assert.equal(await js("!!document.querySelector('.watch-menu-connect-only')"), false, "still connected after the sync");
+    assert.ok((await js(`${trigger}.textContent`)).includes('Connected'));
+    // A second sync right away uses the same connection.
+    await js("document.querySelector('.watch-menu-sync-button').click(); void 0");
+    await until("notificationFixture.syncCalls === 2");
+    assert.equal(await js("notificationFixture.connectCalls.length"), connectsBeforeSync, "no reconnect between syncs");
+    // A watch that went away: Sync is the one main button and connects it first.
+    await js("Object.assign(notificationFixture.state, { phase: 'idle', connected: false, systemBind: 'not_authenticated' }); void 0");
+    await until("document.querySelector('.watch-menu-connect-only') && document.querySelector('.watch-menu-sync-button')");
+    assert.equal(await js("document.querySelector('.watch-menu-sync-button').classList.contains('primary-button')"), true, "Sync leads");
+    // (With several watches nearby and none remembered, Sync first lists them, like Connect; here the watch is remembered.)
+    await js("notificationFixture.remembered = true; void 0");
+    const connectsBefore = await js("notificationFixture.connectCalls.length");
+    await js("document.querySelector('.watch-menu-sync-button').click(); void 0");
+    await until("notificationFixture.syncCalls === 3");
+    assert.equal(await js("notificationFixture.connectCalls.length"), connectsBefore + 1, "a disconnected watch is connected before syncing");
+    await until(`${trigger}.textContent.includes('Connected')`);
+    assert.equal(await js("!!document.querySelector('.watch-menu-connect-only')"), false, "and stays connected after the sync");
 
     // Rejected sign-in: the watch shows connected, the menu asks for COROS sign-in.
     await js("Object.assign(notificationFixture.state,{systemBind:'failed',authenticationError:'The watch rejected COROS authentication.'}); void 0");
@@ -242,13 +275,103 @@ async function main() {
     // Connection details: the saved watch key survives sign-out and has its own Remove button.
     await page("Connection details");
     const keySection = "document.querySelector('.watch-link-key')";
-    await until(`${keySection}?.textContent.includes('Signing out of COROS keeps it')`);
-    await js(`[...${keySection}.querySelectorAll('button')].find(b=>b.textContent.includes('Remove watch key')).click(); void 0`);
+    // The last connection found a different key on the watch: that leads, not "It doesn't expire".
+    await until(`${keySection}?.querySelector('[role=alert]')`);
+    assert.equal(await js(`${keySection}.textContent.includes('It doesn’t expire')`), false, "no reassurance above the problem");
+    assert.equal(await js(`${keySection}.querySelector('h3').nextElementSibling.getAttribute('role')`), "alert", "the problem comes first");
+    // Four rows: the masked account, saved time (unknown for a 0.1.57 key), last use and the key ID the watch reports.
+    assert.deepEqual(await js(`[...${keySection}.querySelectorAll('dt')].map(x=>x.textContent)`), ["Account", "Saved", "Last used", "Key ID"]);
+    const keyRows = await js(`[...${keySection}.querySelectorAll('dd')].map(x=>x.textContent)`);
+    assert.equal(keyRows[0], "ru•••@example.com");
+    assert.equal(keyRows[1], "Unknown");
+    assert.match(keyRows[2], /^COROS PACE 4 · .*2026/);
+    assert.equal(keyRows[3], "3F1A");
+    assert.equal(await js(`${keySection}.textContent.includes('It stops working if you pair or reset your watch in the COROS app.')`), false, "no general hint beside the problem");
+    // Say what happened, with a way to sign in again.
+    const keyProblem = `${keySection}.querySelector('[role=alert]')`;
+    assert.match(await js(`${keyProblem}.textContent`), /has a different key .*Sign in to COROS again/);
+    assert.equal(await js(`[...${keyProblem}.querySelectorAll('button')].some(b=>b.textContent==='Sign in')`), true);
+    const keyButtons = () => js(`[...${keySection}.querySelectorAll('.watch-link-key-actions button')].map(b=>b.textContent.trim())`);
+    const keyButton = text => `[...${keySection}.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(text)})`;
+    const fill = (selector, value) => js(`(()=>{const input=${keySection}.querySelector(${JSON.stringify(selector)});
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});
+      input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    const labelled = text => js(`(()=>{const label=[...${keySection}.querySelectorAll('label')].find(l=>l.textContent===${JSON.stringify(text)});
+      const input=label&&document.getElementById(label.htmlFor);return input?input.type+':'+(label.offsetWidth>1):null;})()`);
+    assert.deepEqual(await keyButtons(), ["Back up watch key", "Restore watch key…", "Remove watch key"]);
+
+    // Back up: the passphrase twice, each with a visible label; too short or different can't be sent.
+    await js(`${keyButton("Back up watch key")}.click(); void 0`);
+    await until(`${keySection}.querySelector('form')`);
+    assert.equal(await labelled("Passphrase"), "password:true", "the passphrase field has a visible label");
+    assert.equal(await labelled("Repeat passphrase"), "password:true");
+    assert.match(await js(`${keySection}.querySelector('form').textContent`), /anyone with both can sign in to your watch\. The passphrase can’t be recovered\./);
+    const save = `${keySection}.querySelector('form button[type=submit]')`;
+    assert.equal(await js(`${save}.disabled`), true);
+    await fill("input[autocomplete=new-password]", "short");
+    await until(`${keySection}.querySelector('input[aria-invalid=true]')`);
+    assert.equal(await js(`${save}.disabled`), true, "under 8 characters");
+    assert.match(await js(`${keySection}.querySelector('form').textContent`), /At least 8 characters/);
+    await fill("form input:nth-of-type(1)", "correct horse battery");
+    await fill("form input:nth-of-type(2)", "correct horse batter");
+    await until(`${keySection}.textContent.includes('The passphrases don’t match.')`);
+    assert.equal(await js(`${save}.disabled`), true, "the passphrases differ");
+    await fill("form input:nth-of-type(2)", "correct horse battery");
+    await until(`!${save}.disabled`);
+    await js(`${keySection}.querySelector('form').requestSubmit(); void 0`);
+    await until(`${keySection}.textContent.includes('Watch key backup saved.')`);
+    assert.deepEqual(await js("notificationFixture.backupCalls"), ["correct horse battery"], "the passphrase is sent once");
+    assert.equal(await js(`!!${keySection}.querySelector('form')`), false, "the form closes");
+    assert.equal(await js(`[...document.querySelectorAll('input[type=password]')].some(i=>i.value)`), false, "no passphrase is left in the page");
+
+    // Cancel a backup: nothing is sent.
+    await js(`${keyButton("Back up watch key")}.click(); void 0`);
+    await until(`${keySection}.querySelector('form')`);
+    await fill("form input:nth-of-type(1)", "abandoned passphrase");
+    await js(`${keyButton("Cancel")}.click(); void 0`);
+    await until(`!${keySection}.querySelector('form')`);
+    assert.equal(await js("notificationFixture.backupCalls.length"), 1);
+
+    await js(`${keyButton("Remove watch key")}.click(); void 0`);
     await until(`${keySection}.textContent.includes('Not saved')`);
+    assert.equal(await js(`${keySection}.querySelectorAll('dt').length`), 0, "no rows once the key is removed");
     assert.equal(await js("notificationFixture.forgetCalls"), 1);
-    assert.equal(await js(`!!${keySection}.querySelector('button')`), false, "nothing left to remove");
+    assert.deepEqual(await keyButtons(), ["Restore watch key…"], "nothing left to remove or back up; a backup can still be restored");
+
+    // Restore: main's file dialog first, then the passphrase. A wrong one says so plainly and can be retried.
+    await js(`${keyButton("Restore watch key…")}.click(); void 0`);
+    await until(`${keySection}.querySelector('form')`);
+    assert.equal(await js("notificationFixture.chooseCalls"), 1);
+    assert.equal(await labelled("Backup passphrase"), "password:true");
+    await fill("form input", "wrong passphrase");
+    await js(`${keySection}.querySelector('form').requestSubmit(); void 0`);
+    await until(`${keySection}.querySelector('[role=alert]')?.textContent === 'Wrong passphrase or damaged file.'`);
+    assert.equal(await js(`${keySection}.querySelector('form input').value`), "", "the passphrase is cleared after each try");
+    assert.equal(await js(`!!${keySection}.querySelector('form')`), true, "and the form stays for another try");
+    await fill("form input", "correct horse battery");
+    await js(`${keySection}.querySelector('form').requestSubmit(); void 0`);
+    await until(`${keySection}.textContent.includes('Watch key restored.')`);
+    await until(`${keySection}.querySelectorAll('dt').length === 4`);
+    assert.equal(await js(`${keySection}.querySelectorAll('dt').length`), 4, "the restored key's details are shown");
+    assert.deepEqual(await js("notificationFixture.restoreCalls"), ["wrong passphrase", "correct horse battery"]);
+    // The same key again: just say so.
+    await js(`${keyButton("Restore watch key…")}.click(); void 0`);
+    await until(`${keySection}.querySelector('form')`);
+    await fill("form input", "correct horse battery");
+    await js(`${keySection}.querySelector('form').requestSubmit(); void 0`);
+    await until(`${keySection}.textContent.includes('This watch key is already saved.')`);
+    // Choosing no file opens no form; cancelling one tells main to drop the chosen file.
+    await js("notificationFixture.backupChosen = false; void 0");
+    await js(`${keyButton("Restore watch key…")}.click(); void 0`);
+    await until("notificationFixture.chooseCalls === 3");
+    assert.equal(await js(`!!${keySection}.querySelector('form')`), false);
+    await js("notificationFixture.backupChosen = true; void 0");
+    await js(`${keyButton("Restore watch key…")}.click(); void 0`);
+    await until(`${keySection}.querySelector('form')`);
+    await js(`${keyButton("Cancel")}.click(); void 0`);
+    await until("notificationFixture.cancelRestoreCalls === 1");
     assert.deepEqual(errors, []);
-    console.log("Watch menu (connect, choose a watch, messages, details, watch key removal, sign-in), On watch installs, cancellation, error recovery, connection gating and narrow layout passed.");
+    console.log("Watch menu (connect, choose a watch, sync, messages, details, watch key backup, restore and removal, sign-in), On watch installs, cancellation, error recovery, connection gating and narrow layout passed.");
   } finally { win.destroy(); await vite.close(); }
 }
 main().then(() => app.exit(0), error => { console.error(error); app.exit(1); });

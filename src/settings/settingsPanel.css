@@ -1,0 +1,26 @@
+/* The Settings panels for the watch (training profile, weather location, watch settings) and for
+   privacy stack in one column, unlike the two-column Units panel whose classes they share. Their
+   layouts follow the panel's width, not the window's. */
+.settings-panel { container: settings-panel / inline-size; }
+.settings-panel.settings-units-panel { grid-template-columns: minmax(0, 1fr); align-items: stretch; gap: 14px; }
+.settings-panel p { margin: 0; line-height: 1.6; font-size: 13px; }
+.settings-panel .settings-units-heading p:not(.eyebrow) { max-width: 68ch; }
+.settings-hint { color: var(--text-secondary); }
+.settings-panel .settings-hint { display: flex; align-items: center; gap: 6px; }
+.settings-panel .settings-hint > svg { flex: none; }
+.settings-error { color: var(--error-text); }
+
+/* Labelled fields in a responsive grid. */
+.settings-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.settings-field { display: grid; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+.settings-field input, .settings-field select { min-height: 36px; padding: 7px 10px; border: 1px solid var(--glass-border); border-radius: var(--radius-sm); background: var(--bg-base); color: var(--text-primary); font: inherit; font-size: 13px; }
+.settings-field :is(input, select):hover:not(:disabled):not(:focus) { border-color: color-mix(in srgb, var(--text-secondary) 45%, transparent); }
+.settings-field input:focus-visible, .settings-field select:focus-visible { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 1px; }
+.settings-field input[aria-invalid="true"] { border-color: var(--error-text); }
+
+@container settings-panel (max-width: 820px) {
+  .settings-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container settings-panel (max-width: 460px) {
+  .settings-fields { grid-template-columns: minmax(0, 1fr); }
+}

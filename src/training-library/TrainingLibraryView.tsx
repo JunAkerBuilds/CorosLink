@@ -1,5 +1,6 @@
 import { formatWorkoutSport } from "../calendar/workoutLabels";
 import { getLocale, t, useLanguage } from "../i18n/training";
+import { useLocalOnlyView } from "../privacy/localOnlyView";
 import {
   AlertTriangle,
   BookOpen,
@@ -205,6 +206,7 @@ export function TrainingLibraryView({
   onError
 }: TrainingLibraryViewProps) {
   useLanguage();
+  const localOnly = useLocalOnlyView();
   const [section, setSection] = useSelectionPreference(
     LIBRARY_SECTION_PREFERENCE
   );
@@ -348,6 +350,7 @@ export function TrainingLibraryView({
     await savePlan(duplicate);
   };
 
+  // A plan still on the calendar takes its upcoming workouts with it: they're removed first, then the plan.
   const deletePlan = async () => {
     if (!pendingPlanDelete || deletingPlan) return;
     const plan = pendingPlanDelete;
@@ -361,9 +364,9 @@ export function TrainingLibraryView({
       } else {
         const { removedCalendarWorkouts } = await api.deleteLocalTrainingPlan(plan.id, true);
         onMessage(removedCalendarWorkouts === 1
-          ? t("Deleted \"{{value1}}\" and removed 1 upcoming workout from your COROS calendar.", { value1: String(plan.name) })
+          ? (localOnly ? t("Deleted \"{{value1}}\" and removed 1 upcoming workout from your calendar.", { value1: String(plan.name) }) : t("Deleted \"{{value1}}\" and removed 1 upcoming workout from your COROS calendar.", { value1: String(plan.name) }))
           : removedCalendarWorkouts
-            ? t("Deleted \"{{value1}}\" and removed {{value2}} upcoming workouts from your COROS calendar.", { value1: String(plan.name), value2: String(removedCalendarWorkouts) })
+            ? (localOnly ? t("Deleted \"{{value1}}\" and removed {{value2}} upcoming workouts from your calendar.", { value1: String(plan.name), value2: String(removedCalendarWorkouts) }) : t("Deleted \"{{value1}}\" and removed {{value2}} upcoming workouts from your COROS calendar.", { value1: String(plan.name), value2: String(removedCalendarWorkouts) }))
             : `Deleted "${plan.name}".`);
       }
       setPendingPlanDelete(null);
@@ -525,7 +528,9 @@ export function TrainingLibraryView({
         setCalendarTarget(null);
         if (editingPlan?.id === result.plan.id) setEditingPlan(result.plan);
         if (result.failures.length) onMessage(t("Updated {{value1}} calendar workout{{value2}}; {{value3}} need retry.", { value1: String(result.scheduledCount + result.removedCount), value2: String(result.scheduledCount + result.removedCount === 1 ? "" : "s"), value3: String(result.failures.length) }));
-        else if (result.scheduledCount) onMessage(t("Added {{value1}} workouts from \"{{value2}}\" to the COROS calendar.", { value1: String(result.scheduledCount), value2: String(result.plan.name) }));
+        else if (result.scheduledCount) onMessage(localOnly
+          ? t("Added {{value1}} workouts from \"{{value2}}\" to the calendar.", { value1: String(result.scheduledCount), value2: String(result.plan.name) })
+          : t("Added {{value1}} workouts from \"{{value2}}\" to the COROS calendar.", { value1: String(result.scheduledCount), value2: String(result.plan.name) }));
         else onMessage(t("Removed {{value1}} future workouts owned by \"{{value2}}\".", { value1: String(result.removedCount), value2: String(result.plan.name) }));
         void load();
       }} /> : null}
@@ -549,10 +554,10 @@ export function TrainingLibraryView({
             ) : deleteRemovesCalendar ? (
               <p>
                 {deleteCalendarCount === 1
-                  ? t("This deletes the plan from CorosLink and removes its 1 upcoming workout from your COROS calendar. Past days stay.")
+                  ? (localOnly ? t("This deletes the plan from CorosLink and removes its 1 upcoming workout from your calendar. Past days stay.") : t("This deletes the plan from CorosLink and removes its 1 upcoming workout from your COROS calendar. Past days stay."))
                   : deleteCalendarCount
-                    ? t("This deletes the plan from CorosLink and removes its {{value1}} upcoming workouts from your COROS calendar. Past days stay.", { value1: String(deleteCalendarCount) })
-                    : t("This deletes the plan from CorosLink and removes its upcoming workouts from your COROS calendar. Past days stay.")}
+                    ? (localOnly ? t("This deletes the plan from CorosLink and removes its {{value1}} upcoming workouts from your calendar. Past days stay.", { value1: String(deleteCalendarCount) }) : t("This deletes the plan from CorosLink and removes its {{value1}} upcoming workouts from your COROS calendar. Past days stay.", { value1: String(deleteCalendarCount) }))
+                    : (localOnly ? t("This deletes the plan from CorosLink and removes its upcoming workouts from your calendar. Past days stay.") : t("This deletes the plan from CorosLink and removes its upcoming workouts from your COROS calendar. Past days stay."))}
               </p>
             ) : (
               <p>
@@ -722,6 +727,7 @@ function PlanIndex({
   onCompare
 }: PlanIndexProps) {
   useLanguage();
+  const localOnly = useLocalOnlyView();
   const [query, setQuery] = useState("");
   const [scope, setScope] = useSelectionPreference(
     PLAN_SCOPE_PREFERENCES[noun]
@@ -1018,7 +1024,7 @@ function PlanIndex({
             {query || scope !== "all"
               ? t("Clear the search or choose another filter.")
               : noun === "plan"
-                ? t("Build a plan here, or refresh to pull plans from COROS.")
+                ? localOnly ? t("Build a plan here, or ask the Coach to draft one.") : t("Build a plan here, or refresh to pull plans from COROS.")
                 : t("Save a plan as a template, or turn a completed activity into one.")}
           </p>
         </div>

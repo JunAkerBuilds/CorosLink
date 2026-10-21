@@ -4,12 +4,11 @@ import {
   SIGNIFICANT_PAUSE_SECONDS
 } from "./activityTime";
 import {
-  getTrainingHubStatus,
-  getTrainingHubActivityDetail,
-  listTrainingHubActivities,
   downsampleActivitySeries,
   formatActivitySeriesForChat
 } from "./trainingHubService";
+import { currentActivitySource } from "./localSync/activitySource";
+import { trainingDataAvailable } from "./localSync/trainingDataAccess";
 import type {
   ActivityHrTrendPreview,
   ActivityVisualLapPoint,
@@ -41,8 +40,7 @@ export function isChatActivityTool(name: string): name is ChatActivityToolName {
 }
 
 export function getChatActivityTools(): CorosMcpTool[] {
-  const hubStatus = getTrainingHubStatus();
-  if (!hubStatus.authenticated) {
+  if (!trainingDataAvailable()) {
     return [];
   }
 
@@ -122,7 +120,7 @@ async function handleListRecentActivities(
   const page = Math.max(Number(args.page) || 1, 1);
 
   try {
-    const activities = await listTrainingHubActivities(page, limit);
+    const activities = await currentActivitySource().listActivities(page, limit);
     if (activities.length === 0) {
       return "No recent activities found in COROS Training Hub.";
     }
@@ -163,11 +161,11 @@ async function handleGetActivityDetail(
   const includeSeries = args.include_series === true || args.includeSeries === true;
 
   try {
-    const listActivities = await listTrainingHubActivities(1, 50);
+    const listActivities = await currentActivitySource().listActivities(1, 50);
     const listActivity = listActivities.find(
       (activity) => activity.activityId === activityId
     );
-    const detail = await getTrainingHubActivityDetail(
+    const detail = await currentActivitySource().getActivityDetail(
       activityId,
       sportType,
       listActivity

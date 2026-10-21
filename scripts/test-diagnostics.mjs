@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DiagnosticsLog, annotateDiagnosticRequest, redactDiagnosticText, withDiagnosticLogging } from "../dist-electron/diagnosticsLog.js";
+import { DiagnosticsLog, annotateDiagnosticRequest, expectedError, isExpectedError, redactDiagnosticText, withDiagnosticLogging } from "../dist-electron/diagnosticsLog.js";
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "coroslink-diagnostics-"));
 const file = path.join(directory, "diagnostics", "errors.json");
@@ -61,6 +61,20 @@ try {
   assert.match(report, /\[redacted\]/);
   assert.equal(fs.statSync(file).mode & 0o777, 0o600);
   assert.equal(redactDiagnosticText("ENOTFOUND apieu.coros.com"), "ENOTFOUND apieu.coros.com");
+  // Local-Only Mode: backup passphrases, the watch key, where the weather is for, and the watch's identifiers.
+  for (const [input, secret] of [
+    ["Restore failed: passphrase=correct horse battery", "correct horse"],
+    ["{\"watchKey\":\"0011223344556677\"}", "0011223344556677"],
+    ["Weather for latitude: 48.85661, longitude: 2.35222", "48.85661"],
+    ["Weather for latitude: 48.85661, longitude: 2.35222", "2.35222"],
+    ["{\"lat\":-33.8688,\"lon\":151.2093}", "151.2093"],
+    ["watch serial_number=P4A1234567", "P4A1234567"],
+    ["Peripheral AA:BB:CC:DD:EE:0F disconnected", "AA:BB:CC:DD:EE:0F"]
+  ]) {
+    assert.ok(!redactDiagnosticText(input).includes(secret), `redaction kept ${secret}`);
+  }
+  assert.equal(redactDiagnosticText("Synced at 10:41:48 on 2026-10-20"), "Synced at 10:41:48 on 2026-10-20");
+
   // Long API paths, file names, and function names stay readable; long keys and hashes don't.
   for (const readable of [
     "trainingHub:/activity/fit/getImportSportList",
@@ -188,7 +202,50 @@ try {
   assert.throws(() => memoryOnly.clear(), /ENOTDIR/);
   assert.equal(memoryOnly.snapshot().entryCount, 1, "failed clear retains in-memory logs");
   assert.equal(await withDiagnosticLogging(log, "success", async (value) => value + 1)(41), 42);
-  console.log("Diagnostics passed: nested transport causes, original IPC failures, merged and repeated failures, status lines, redaction on disk/export, restart, limits, expiry, clear, corrupt logs, and storage failures.");
+
+  // Outcomes the user chose (a closed sign-in window) reach the caller but are not logged.
+  const expectedLog = open(path.join(directory, "quiet", "errors.json"));
+  const closed = expectedError(new Error("COROS connection window was closed."));
+  assert.equal(isExpectedError(closed), true);
+  assert.equal(isExpectedError(new Error("other")), false);
+  await assert.rejects(withDiagnosticLogging(expectedLog, "chatMcp:connect", async () => { throw closed; })(), (caught) => caught === closed);
+  expectedLog.record("chatMcp:connect", closed);
+  assert.equal(expectedLog.snapshot().entryCount, 0);
+
+  let noteEntries;
+  // Watch identity notices: an info or warning entry, not an error; short tags kept, identifiers redacted even if one slips in.
+  const notes = open(path.join(directory, "notes", "errors.json"));
+  const { identityTag } = await import("../dist-electron/watchIdentity.js");
+  const tag = identityTag("5A1E3C2B-0D4F-4E6A-9B7C-1D2E3F405162");
+  assert.match(tag, /^id#[0-9a-f]{8}$/);
+  assert.equal(identityTag("5a1e3c2b-0d4f-4e6a-9b7c-1d2e3f405162"), tag, "the same identity, however it's written");
+  notes.note("corosBle:identity", `Remembered the watch's Bluetooth identity (system, ${tag}).`);
+  notes.note("corosBle:identity", "Identity changed (system, 5A1E3C2B-0D4F-4E6A-9B7C-1D2E3F405162 to usb, AA:BB:CC:DD:EE:0F).", "warning");
+  noteEntries = JSON.parse(fs.readFileSync(path.join(directory, "notes", "errors.json"), "utf8"));
+  assert.deepEqual(noteEntries.map((entry) => [entry.level, entry.error.name]), [["info", "Info"], ["warning", "Warning"]]);
+  assert.ok(noteEntries[0].error.message.includes(tag), "the short tag is kept");
+  for (const secret of ["5A1E3C2B-0D4F-4E6A-9B7C-1D2E3F405162", "AA:BB:CC:DD:EE:0F"]) {
+    assert.ok(!JSON.stringify(noteEntries).includes(secret) && !notes.snapshot().report.includes(secret), `identity notice leaked ${secret}`);
+  }
+  assert.match(open(path.join(directory, "notes", "errors.json")).snapshot().report, /"level": "warning"/, "levels survive restart");
+  // Watch key backups: "exported" / "imported" and the four-digit key ID survive redaction; a wrong
+  // passphrase is the user's to retry and isn't logged; a passphrase, path or key that slipped into
+  // a message would be redacted.
+  const keyNotes = open(path.join(directory, "watch-key", "errors.json"));
+  keyNotes.note("watchKey:backup", "Watch key backup exported (key 7EDA).");
+  keyNotes.note("watchKey:backup", "Watch key imported from a backup (key 7EDA).");
+  const wrongPassphrase = withDiagnosticLogging(keyNotes, "watchfaces:restoreWatchKey", () => { throw expectedError(new Error("Wrong passphrase or damaged file.")); });
+  await assert.rejects(wrongPassphrase({ passphrase: "typed-passphrase-private" }), /Wrong passphrase/);
+  const leaky = withDiagnosticLogging(keyNotes, "watchfaces:backupWatchKey", () => {
+    throw new Error(`passphrase: typed-passphrase-private while writing /Users/test-person/Desktop/coros-watch-key-7eda.coroswatchkey ${"MIIEowIBAAKCAQEA".repeat(4)}`);
+  });
+  await assert.rejects(leaky({ passphrase: "typed-passphrase-private" }));
+  const keyReport = keyNotes.snapshot().report;
+  assert.match(keyReport, /Watch key backup exported \(key 7EDA\)\./);
+  assert.match(keyReport, /Watch key imported from a backup \(key 7EDA\)\./);
+  assert.equal(keyNotes.snapshot().entryCount, 3, "two notices and the unexpected failure; the wrong passphrase isn't recorded");
+  for (const secret of ["typed-passphrase-private", "test-person", "MIIEowIBAAKCAQEA"]) assert.ok(!keyReport.includes(secret), `watch key diagnostics leaked ${secret}`);
+  console.log("Diagnostics passed: nested transport causes, original IPC failures, merged and repeated failures, status lines, redaction on disk/export, restart, limits, expiry, clear, corrupt logs, storage failures, expected outcomes, redacted watch identity notices, and watch key backup notices.");
 } finally {
   fs.rmSync(directory, { recursive: true, force: true });
 }

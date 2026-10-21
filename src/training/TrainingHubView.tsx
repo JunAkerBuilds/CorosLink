@@ -1,5 +1,5 @@
 import { getLocale, useLanguage, t } from "../i18n/training";
-import { widgetPreset } from "./dashboardLayout";
+import { widgetCatalog, widgetPreset, type WidgetId } from "./dashboardLayout";
 import { type CSSProperties, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ArrowRightFromLine,
@@ -15,10 +15,13 @@ import {
   Monitor,
   ShieldCheck,
   Trophy,
-  RefreshCw
+  RefreshCw,
+  CloudOff,
+  Watch
 } from "lucide-react";
 import { CoachChartsPanel } from "./components/CoachChartsPanel";
 import { FitnessScoresPanel } from "./components/FitnessScoresPanel";
+import { FitnessBalanceCard } from "./components/FitnessBalanceCard";
 import { FitnessTrendPanel } from "./components/FitnessTrendPanel";
 import { PersonalRecordsPanel } from "./components/PersonalRecordsPanel";
 import {
@@ -47,6 +50,7 @@ import { CustomizableDashboard } from "./components/CustomizableDashboard";
 import type { TrainingHubViewProps } from "./types";
 import type { TrainingHubActivity } from "../../electron/types";
 import { createTrainingHubSampleData, type TrainingHubSampleData } from "./sampleData";
+import { useWatchSync } from "../watch/watchSyncState";
 import loginPageBackground from "../../public/assets/training-hub/Login-page-bg.png";
 
 export function TrainingHubView(props: TrainingHubViewProps) {
@@ -127,6 +131,8 @@ function TrainingHubContent({
   navigationRequest,
   onNavigationRequestHandled,
   onOpenCoach,
+  onSyncWatch,
+  localDataVersion = 0,
   sampleMode = false,
   sampleDetails,
   onToggleSample
@@ -140,13 +146,18 @@ function TrainingHubContent({
     return api.getTrainingHubActivityDetail(activity.activityId, activity.sportType, activity);
   }, [api, sampleDetails]);
   const connected = sampleMode || Boolean(status?.authenticated);
+  // Local-Only Mode: data comes from the watch via this computer. A COROS session (userId) may still exist for reading.
+  const local = !sampleMode && status?.dataSource === "local";
+  const corosSignedIn = Boolean(status?.userId);
   // Sample records are regenerated relative to today, so never celebrate them.
   const prCelebration = usePersonalRecordCelebration(
     snapshot?.dashboard ?? null,
     connected && !sampleMode
   );
   // Counts completed hub refreshes so pinned live charts re-resolve alongside them.
-  const [hubRefreshCount, setHubRefreshCount] = useState(0);
+  const [refreshCount, setHubRefreshCount] = useState(0);
+  // A watch sync also counts: cards that fetch for themselves reload after one.
+  const hubRefreshCount = refreshCount + localDataVersion;
   const wasRefreshingRef = useRef(false);
   useEffect(() => {
     if (busy === "training-refresh") {
@@ -207,11 +218,28 @@ function TrainingHubContent({
     [snapshot, getLocale()]
   );
 
+  /** Whether a COROS-only widget has COROS account data to show (Local-Only Mode with a COROS sign-in). */
+  const hasCorosData = (id: WidgetId): boolean => {
+    switch (id) {
+      // The watch stores its own VO₂ max and recovery time with each activity; the cards say when there is none yet.
+      case "vo2": case "recovery": return true;
+      case "scores": return Boolean(snapshot?.dashboard);
+      case "race": return Boolean(snapshot?.racePredictor);
+      case "effort": return Boolean(snapshot?.analytics?.rpeDistribution);
+      case "trend-rpe": return (snapshot?.trendPoints ?? []).some(point => point.rpeLoad !== undefined);
+      case "zones-heart": return Boolean(snapshot?.analytics) || (snapshot?.dashboard?.lthrZones?.length ?? 0) > 0;
+      case "upcoming": return corosSignedIn;
+      // Resting HR and cycle say it in their own cards.
+      default: return true;
+    }
+  };
+
   return (
     <div className="stack training-dashboard">
       {connected || onToggleSample ? (
         <TrainingHubHeader
           connected={connected}
+          localOnly={local}
           status={status}
           busy={busy}
           sampleMode={sampleMode}
@@ -481,6 +509,10 @@ function TrainingHubContent({
 
       {connected ? (
         <>
+          {/* Local-Only Mode before the first sync: one place that says so, with the button that fixes it. */}
+          {local && onSyncWatch && activities.length === 0 && !snapshot?.sleep?.records?.length && !snapshot?.dailyHealth?.records?.length ? (
+            <WatchDataBanner onSync={onSyncWatch} />
+          ) : null}
           <div
             id={`${tabIdPrefix}-panel-overview`}
             className="stack training-hub-tab-panel"
@@ -489,27 +521,30 @@ function TrainingHubContent({
             tabIndex={0}
             hidden={activeTab !== "overview"}
           >
-            <CustomizableDashboard toolbarTarget={dashboardToolbarTarget} sampleMode={sampleMode} renderWidget={widget => {
+            <CustomizableDashboard key={local ? "local" : "standard"} toolbarTarget={dashboardToolbarTarget} sampleMode={sampleMode} localOnly={local} renderWidget={widget => {
+              // Added from the widget library in Local-Only Mode: a COROS-only card shows a short empty state.
+              if (local && !hasCorosData(widget.id)) return <CorosOnlyWidget id={widget.id} />;
               switch (widget.id) {
-                case "recovery": return <RecoveryRing summary={summary} />;
+                case "recovery": return <RecoveryRing summary={summary} local={local} />;
+                case "load-balance": return <FitnessBalanceCard summary={summary} />;
                 case "daily-load": case "daily-heart": case "daily-steps": case "daily-calories":
                   return <TrainingSummaryTiles summary={summary} trendPoints={snapshot?.trendPoints}
                     healthRecords={snapshot?.dailyHealth?.records} layout="stack"
-                    metrics={[widget.id.slice(6) as "load" | "heart" | "steps" | "calories"]} className="hub-daily-stat" />;
-                case "fitness": return <FitnessTrendPanel snapshot={snapshot} activities={activities} />;
-                case "sleep": return <SleepSummaryPanel sleep={snapshot?.sleep} connecting={sleepConnecting} refreshing={busy === "training-refresh"} />;
-                case "vo2": return <Vo2MaxWidget snapshot={snapshot} />;
-                case "heatmap": return <TrainingHeatmapPanel snapshot={snapshot} activities={activities} rpeBackfill={rpeBackfill} />;
-                case "stress": case "sleepHrv": case "healthCheck": case "cycle": return <HealthInsightsPanel size={widgetPreset(widget).chartSize} kind={widget.id} api={api} refreshToken={hubRefreshCount} sampleMode={sampleMode} />;
+                    metrics={[widget.id.slice(6) as "load" | "heart" | "steps" | "calories"]} className="hub-daily-stat" local={local} />;
+                case "fitness": return <FitnessTrendPanel snapshot={snapshot} activities={activities} local={local} />;
+                case "sleep": return <SleepSummaryPanel sleep={snapshot?.sleep} connecting={sleepConnecting} refreshing={busy === "training-refresh"} local={status?.dataSource === "local"} />;
+                case "vo2": return <Vo2MaxWidget snapshot={snapshot} local={local} />;
+                case "heatmap": return <TrainingHeatmapPanel snapshot={snapshot} activities={activities} rpeBackfill={rpeBackfill} local={local} />;
+                case "stress": case "sleepHrv": case "healthCheck": case "cycle": return <HealthInsightsPanel size={widgetPreset(widget).chartSize} kind={widget.id} api={api} refreshToken={hubRefreshCount} sampleMode={sampleMode} local={status?.dataSource === "local"} />;
                 case "trend-load": case "trend-rpe": case "trend-hrv": case "trend-sleep": {
                   const cutoff = new Date();
                   cutoff.setDate(cutoff.getDate() - widget.days + 1);
                   const date = `${cutoff.getFullYear()}${String(cutoff.getMonth() + 1).padStart(2, "0")}${String(cutoff.getDate()).padStart(2, "0")}`;
                   const points = (snapshot?.trendPoints ?? []).filter(point => !widget.days || point.date >= date);
-                  return <TrainingTrendCharts size={widgetPreset(widget).chartSize} metric={widget.id.slice(6) as "load" | "rpe" | "hrv" | "sleep"} rangeLabel={widget.days ? `Last ${widget.days} days` : "Available history"} points={points} sleepRecords={snapshot?.sleep?.records} />;
+                  return <TrainingTrendCharts size={widgetPreset(widget).chartSize} metric={widget.id.slice(6) as "load" | "rpe" | "hrv" | "sleep"} rangeLabel={widget.days ? `Last ${widget.days} days` : "Available history"} points={points} sleepRecords={snapshot?.sleep?.records} local={local} />;
                 }
                 case "coach": return sampleMode ? <section className="panel"><h2>{t("Coach charts")}</h2><p>{t("Charts pinned from your coach conversations appear here when using your training data.")}</p></section> : <CoachChartsPanel size={widgetPreset(widget).chartSize} api={api} refreshToken={hubRefreshCount} showEmpty onOpenCoach={onOpenCoach} />;
-                case "zones-heart": case "zones-distance": return <TrainingZoneDistributionCharts size={widgetPreset(widget).chartSize} variant={widget.id === "zones-heart" ? "heart" : "distance"} lthrZones={snapshot?.dashboard?.lthrZones ?? []} activities={activities} analytics={snapshot?.analytics ?? null} />;
+                case "zones-heart": case "zones-distance": return <TrainingZoneDistributionCharts size={widgetPreset(widget).chartSize} variant={widget.id === "zones-heart" ? "heart" : "distance"} lthrZones={snapshot?.dashboard?.lthrZones ?? []} activities={activities} analytics={snapshot?.analytics ?? null} local={local} />;
                 case "scores": return <FitnessScoresPanel size={widgetPreset(widget).chartSize} dashboard={snapshot?.dashboard ?? null} racePredictor={snapshot?.racePredictor ?? null} />;
                 case "race": return <RacePredictorCards size={widgetPreset(widget).chartSize} racePredictor={snapshot?.racePredictor ?? null} />;
                 case "effort": return <PerceivedEffortPanel size={widgetPreset(widget).chartSize} distribution={snapshot?.analytics?.rpeDistribution} />;
@@ -585,6 +620,39 @@ function TrainingHubContent({
         />
       ) : null}
     </div>
+  );
+}
+
+/** A COROS-only widget in Local-Only Mode without COROS account data: one short row instead of an empty chart. */
+function CorosOnlyWidget({ id }: { id: WidgetId }) {
+  useLanguage();
+  const title = widgetCatalog.find(widget => widget.id === id)?.title ?? "";
+  return (
+    <section className="panel hub-coros-only">
+      <p className="eyebrow">{t(title)}</p>
+      <p className="hub-coros-only-note"><CloudOff size={14} aria-hidden="true" />{t("Not available in Local-Only Mode.")}</p>
+    </section>
+  );
+}
+
+/** Before the first watch sync in Local-Only Mode: what's missing and the one button that fills it. */
+function WatchDataBanner({ onSync }: { onSync: () => void }) {
+  useLanguage();
+  const sync = useWatchSync();
+  const syncing = sync.manual || sync.reading;
+  return (
+    <section className="panel hub-watch-banner" aria-label={t("No watch data yet")}>
+      <span className="hub-watch-banner-icon" aria-hidden="true"><Watch size={18} /></span>
+      <div className="hub-watch-banner-text">
+        <strong>{t("No watch data yet")}</strong>
+        {/* Older history stays in the COROS account; this is the way to bring it here. */}
+        <small>{t("For your COROS history, download it in Data → Cloud activity backup, then use Import a folder in Settings → Privacy & local data.")}</small>
+      </div>
+      <button type="button" className="primary-button" disabled={syncing} onClick={onSync}>
+        {syncing ? <Loader2 size={15} className="spin" aria-hidden="true" /> : <RefreshCw size={15} aria-hidden="true" />}
+        {syncing ? sync.percent === null ? t("Syncing…") : t("Syncing… {{p0}}%", { p0: sync.percent }) : t("Sync watch now")}
+      </button>
+    </section>
   );
 }
 

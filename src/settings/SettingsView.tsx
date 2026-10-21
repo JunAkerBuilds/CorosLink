@@ -24,7 +24,7 @@ import {
   CalendarDays,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import type { AppInfo, AppUpdateSnapshot } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { formatBytes } from "../media/libraryUtils";
@@ -41,6 +41,10 @@ import appLogo from "../../build/icon-animated.svg";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import { AccountsSettings, type AccountDestination } from "./AccountsSettings";
 import { DiagnosticsSettings } from "./DiagnosticsSettings";
+import { PrivacySettings } from "./PrivacySettings";
+import { WatchProfileSettings } from "./WatchProfileSettings";
+import { WeatherLocationSettings } from "./WeatherLocationSettings";
+import { WatchSystemSettings } from "./WatchSystemSettings";
 import { LanguageSettings } from "./LanguageSettings";
 import { SidebarSettings } from "./SidebarSettings";
 
@@ -104,8 +108,14 @@ function platformLabel(info: AppInfo): string {
   return `${name} (${info.arch})`;
 }
 
+/** Settings sections other screens link straight to. */
+export type SettingsSection = "watch" | "weather" | "privacy" | "sidebar";
+
 interface SettingsViewProps {
   api: CorosLinkApi;
+  /** Scrolls to this section; `key` changes on every request, so asking twice works. */
+  focusSection?: { section: SettingsSection; key: number };
+  onSectionFocused?: () => void;
   updateSnapshot: AppUpdateSnapshot;
   updateBusy: boolean;
   onCheckForUpdates: () => void;
@@ -113,9 +123,6 @@ interface SettingsViewProps {
   initialAccountScreen?: boolean;
   onOpenAccount?: (destination: AccountDestination) => void;
   showDevelopmentItems?: boolean;
-  /** Scroll to a section once, then report it so a later visit starts at the top. */
-  focusSection?: "sidebar" | null;
-  onFocusSectionHandled?: () => void;
 }
 
 export function SettingsView({
@@ -126,9 +133,9 @@ export function SettingsView({
   onError,
   onOpenAccount,
   initialAccountScreen = false,
+  focusSection,
+  onSectionFocused,
   showDevelopmentItems = false,
-  focusSection = null,
-  onFocusSectionHandled,
 }: SettingsViewProps) {
   useLanguage();
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
@@ -139,29 +146,35 @@ export function SettingsView({
   const [settingsPage, setSettingsPage] = useState<"accounts" | "main" | "storage">(
     initialAccountScreen && onOpenAccount ? "accounts" : "main",
   );
+
+  // A link from elsewhere (watch menu, weather card, Local-Only button) opens the main page at its section.
+  const [pendingSection, setPendingSection] = useState<SettingsSection | null>(null);
+  useEffect(() => {
+    if (!focusSection) return;
+    setSettingsPage("main");
+    setPendingSection(focusSection.section);
+    onSectionFocused?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusSection?.key]);
+  useEffect(() => {
+    if (!pendingSection || settingsPage !== "main") return;
+    setPendingSection(null);
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    requestAnimationFrame(() => {
+      const element = document.getElementById(`settings-section-${pendingSection}`);
+      if (!element) return;
+      element.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
+      element.focus({ preventScroll: true });
+      element.classList.add("is-targeted");
+      window.setTimeout(() => element.classList.remove("is-targeted"), 1600);
+      // Panels above load a moment later and can push the section down; settle on it once they have.
+      window.setTimeout(() => {
+        if (Math.abs(element.getBoundingClientRect().top - scrollParentTop(element)) > 40) element.scrollIntoView({ block: "start" });
+      }, 700);
+    });
+  }, [pendingSection, settingsPage]);
   const [sportColors, setSportColors] = useState(() => readStoredSportColors());
   const { unitSystem, setUnitSystem } = useUnitSystem();
-  const sidebarPanelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (focusSection !== "sidebar") {
-      return;
-    }
-    if (settingsPage !== "main") {
-      setSettingsPage("main");
-      return;
-    }
-
-    const panel = sidebarPanelRef.current;
-    if (panel) {
-      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      panel.scrollIntoView({ block: "start", behavior: reducedMotion ? "auto" : "smooth" });
-      panel.classList.remove("is-spotlit");
-      void panel.offsetWidth;
-      panel.classList.add("is-spotlit");
-    }
-    onFocusSectionHandled?.();
-  }, [focusSection, onFocusSectionHandled, settingsPage]);
 
   function updateSportColor(cat: SportColorCategory, value: string) {
     const next = { ...sportColors, [cat]: value };
@@ -437,7 +450,7 @@ export function SettingsView({
         </div>
       </div>
 
-      <SidebarSettings ref={sidebarPanelRef} showDevelopmentItems={showDevelopmentItems} />
+      <SettingsAnchor section="sidebar"><SidebarSettings showDevelopmentItems={showDevelopmentItems} /></SettingsAnchor>
 
       <div className="panel settings-sport-panel">
         <div className="section-heading settings-sport-heading">
@@ -502,6 +515,14 @@ export function SettingsView({
         </div>
       </div>
 
+      <WatchProfileSettings api={api} />
+
+      <SettingsAnchor section="weather"><WeatherLocationSettings api={api} /></SettingsAnchor>
+
+      <SettingsAnchor section="watch"><WatchSystemSettings api={api} /></SettingsAnchor>
+
+      <SettingsAnchor section="privacy"><PrivacySettings api={api} /></SettingsAnchor>
+
       <div className="panel settings-storage-panel">
         <p className="eyebrow">{t("Storage")}</p>
         <button
@@ -532,4 +553,16 @@ export function SettingsView({
       <DiagnosticsSettings api={api} />
     </section>
   );
+}
+
+function SettingsAnchor({ section, children }: { section: SettingsSection; children: ReactNode }) {
+  return <div id={`settings-section-${section}`} className="settings-section-anchor" tabIndex={-1}>{children}</div>;
+}
+
+/** The top edge of the area that scrolls `element`: its nearest scrolling ancestor, or the window. */
+function scrollParentTop(element: HTMLElement): number {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    if (/(auto|scroll)/.test(getComputedStyle(node).overflowY) && node.scrollHeight > node.clientHeight) return node.getBoundingClientRect().top;
+  }
+  return 0;
 }

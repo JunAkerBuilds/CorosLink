@@ -111,6 +111,7 @@ import {
   type CoachEventFrame
 } from "../../electron/coachHub/coachContract";
 import { formatWorkoutSport } from "../../electron/workoutCapabilities";
+import { shouldFollowTranscript, TRANSCRIPT_BOTTOM_SLACK_PX } from "./transcriptFollow";
 import { trainingPlanFromCoachDraftPreview } from "../../electron/trainingPlanDomain";
 import { sportTheme } from "../training-library/sportTheme";
 import { ActivityVisualCard } from "./ActivityVisualCard";
@@ -2779,10 +2780,22 @@ export function ChatView({
     };
   }, [showTools, settingsOpen]);
 
-  // Keep the transcript scrolled to the newest content.
+  // Follow new content while the reader is at the bottom; a card updating in place (e.g. a confirmed
+  // delete) doesn't pull them away from where they are. Sending a message or opening another
+  // conversation always goes to the bottom.
+  // Entries arrive as fresh objects on every update, so changes are judged by session and length.
+  const pinnedToBottomRef = useRef(true);
+  const followedRef = useRef<{ session: string | null; length: number }>({ session: null, length: 0 });
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [timeline, streamingText, thinkingText, exportingLatestActivity]);
+    const last = timeline.at(-1);
+    const next = { session: activeSessionId, length: timeline.length, lastIsUserMessage: last?.kind === "message" && last.role === "user" };
+    const follow = shouldFollowTranscript(followedRef.current, next, pinnedToBottomRef.current);
+    followedRef.current = { session: activeSessionId, length: timeline.length };
+    if (follow) {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+      pinnedToBottomRef.current = true;
+    }
+  }, [timeline, streamingText, thinkingText, exportingLatestActivity, activeSessionId]);
 
   const handleSignIn = async () => {
     if (!api) return;
@@ -4334,7 +4347,10 @@ export function ChatView({
               ) : null}
             </div>
           </div>
-          <div className="chat-transcript" ref={scrollRef}>
+          <div className="chat-transcript" ref={scrollRef} onScroll={(event) => {
+            const transcript = event.currentTarget;
+            pinnedToBottomRef.current = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < TRANSCRIPT_BOTTOM_SLACK_PX;
+          }}>
         <div className="chat-thread">
           {timeline.length === 0 && !streaming ? (
             <div className="chat-empty">

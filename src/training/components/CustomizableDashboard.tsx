@@ -2,7 +2,7 @@ import { useLanguage, t } from "../../i18n/training";
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Plus, RotateCcw, Settings2, Undo2, X } from 'lucide-react';
-import { dashboardStorageKey, defaultLayout, defaultWidget, moveWidget, parseLayout, widgetCatalog, widgetPreset, widgetPresets, type DashboardWidget, type WidgetId } from '../dashboardLayout';
+import { dashboardStorageKey, defaultLayout, defaultWidget, localDashboardStorageKey, localDefaultLayout, moveWidget, parseLayout, parseLocalLayout, widgetCatalog, widgetPreset, widgetPresets, type DashboardWidget, type WidgetId } from '../dashboardLayout';
 import '../dashboardLayout.css';
 import { usePackedDashboard } from '../usePackedDashboard';
 import { WidgetResizeHandle } from './WidgetResizeHandle';
@@ -10,13 +10,24 @@ import { WidgetDropPreview } from './WidgetDropPreview';
 import type { WidgetSizePreset } from '../widgetSizing';
 import { useDashboardDrag } from '../useDashboardDrag';
 
-export function CustomizableDashboard({ renderWidget, sampleMode = false, toolbarTarget }: {
-  renderWidget: (widget: DashboardWidget) => ReactNode; sampleMode?: boolean; toolbarTarget?: HTMLDivElement | null;
+export function CustomizableDashboard({ renderWidget, sampleMode = false, localOnly = false, toolbarTarget }: {
+  renderWidget: (widget: DashboardWidget) => ReactNode; sampleMode?: boolean;
+  /** Local-Only Mode: its own saved layout and default (see parseLocalLayout). */
+  localOnly?: boolean;
+  toolbarTarget?: HTMLDivElement | null;
 }) {
   useLanguage();
   const gridRef = usePackedDashboard();
-  const storageKey = dashboardStorageKey + (sampleMode ? '.sample' : '');
-  const [layout, setLayout] = useState(() => { try { return parseLayout(localStorage.getItem(storageKey)); } catch { return defaultLayout(); } });
+  const local = localOnly && !sampleMode;
+  const storageKey = sampleMode ? `${dashboardStorageKey}.sample` : local ? localDashboardStorageKey : dashboardStorageKey;
+  const initialLayout = local ? localDefaultLayout : defaultLayout;
+  const [layout, setLayout] = useState(() => {
+    try {
+      return local
+        ? parseLocalLayout(localStorage.getItem(localDashboardStorageKey), localStorage.getItem(dashboardStorageKey))
+        : parseLayout(localStorage.getItem(storageKey));
+    } catch { return initialLayout(); }
+  });
   const [editing, setEditing] = useState(false);
   const [library, setLibrary] = useState(false);
   const [query, setQuery] = useState('');
@@ -52,7 +63,7 @@ export function CustomizableDashboard({ renderWidget, sampleMode = false, toolba
   const controls = (
       <div className="hub-dashboard-buttons" inert={Boolean(resizing)}>
         {editing && <><button type="button" disabled={!history.length} onClick={() => { setLayout(history[history.length - 1]); setHistory(history.slice(0, -1)); setAnnouncement('Change undone'); }}><Undo2 size={15} />{t("Undo")}</button>
-          <button type="button" onClick={() => update(defaultLayout(), 'Default dashboard restored. Use Undo to recover your layout.')}><RotateCcw size={15} />{t("Reset layout")}</button>
+          <button type="button" onClick={() => update(initialLayout(), 'Default dashboard restored. Use Undo to recover your layout.')}><RotateCcw size={15} />{t("Reset layout")}</button>
           <button type="button" onClick={() => setLibrary(true)}><Plus size={15} />{t("Add widget")}</button></>}
         <button type="button" className="hub-dashboard-edit" aria-pressed={editing} onClick={() => { setEditing(!editing); drag.cancel(); }}>{editing ? <Check size={15} /> : <Settings2 size={15} />}{editing ? t("Done") : t("Edit dashboard")}</button>
       </div>

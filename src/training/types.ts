@@ -38,6 +38,10 @@ export interface TrainingSummaryMetrics {
   rhrDelta?: number;
   steps?: number;
   calories?: number;
+  /** Local-Only Mode, from the watch's latest activity that has it: when it counts you as fully recovered (Unix seconds). */
+  recoveredAt?: number;
+  /** Local-Only Mode, from the watch: the latest Base Fitness, Load Impact and fatigue (%), and their day. */
+  fitnessBalance?: { happenDay: string; baseFitness: number; loadImpact?: number; fatigue?: number };
 }
 
 export interface TrainingHubSnapshot {
@@ -130,6 +134,10 @@ export interface TrainingHubViewProps {
   onNavigationRequestHandled?: () => void;
   /** Opens Coach with the composer prefilled (e.g. to rebuild a pinned chart). */
   onOpenCoach?: (prefill: CoachPrefill) => void;
+  /** Local-Only Mode: starts "Sync watch now" (offered on the dashboard before the first sync). */
+  onSyncWatch?: () => void;
+  /** Bumped after each watch sync, so cards that fetch their own data fetch again. */
+  localDataVersion?: number;
 }
 
 export type { TrainingHubDailyMetric };

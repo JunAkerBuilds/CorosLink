@@ -101,7 +101,15 @@ export function readCachedOverviewWeather(): OverviewWeatherSnapshot | null {
   }
 }
 
+/** The watch gets its forecast for the same place (sent on each connection; see electron/watchWeatherService.ts). */
+export function shareWeatherLocationWithWatch(snapshot: Pick<OverviewWeatherSnapshot, "lat" | "lon" | "place"> | null): void {
+  if (!snapshot || !Number.isFinite(snapshot.lat) || !Number.isFinite(snapshot.lon)) return;
+  void window.corosLink?.setWatchWeatherLocation?.({ latitude: snapshot.lat, longitude: snapshot.lon, place: snapshot.place })
+    .catch(() => undefined);
+}
+
 function storeOverviewWeather(snapshot: OverviewWeatherSnapshot): void {
+  shareWeatherLocationWithWatch(snapshot);
   try {
     window.localStorage.setItem(
       OVERVIEW_WEATHER_STORAGE_KEY,
@@ -315,12 +323,17 @@ export async function loadOverviewWeather(
   signal: AbortSignal,
   options: { force?: boolean } = {}
 ): Promise<OverviewWeatherSnapshot> {
+  // A place chosen in Settings wins over the system or IP location (which a VPN moves).
+  const chosen = await window.corosLink?.getWeatherLocation?.().catch(() => null);
+  const chosenPosition: ResolvedPosition | undefined = chosen?.source === "chosen"
+    ? { lat: chosen.latitude, lon: chosen.longitude, place: chosen.place } : undefined;
   const cached = readCachedOverviewWeather();
-  if (!options.force && isOverviewWeatherFresh(cached)) {
+  const cachedHere = !chosenPosition || (cached && Math.abs(cached.lat - chosenPosition.lat) < 0.01 && Math.abs(cached.lon - chosenPosition.lon) < 0.01);
+  if (!options.force && cachedHere && isOverviewWeatherFresh(cached)) {
     return cached;
   }
 
-  const position = await requestPosition(signal);
+  const position = chosenPosition ?? await requestPosition(signal);
   const { lat, lon } = position;
   const [forecast, place] = await Promise.all([
     fetchForecast(lat, lon, signal),
@@ -330,7 +343,7 @@ export async function loadOverviewWeather(
     fetchedAt: Date.now(),
     lat,
     lon,
-    place: place ?? cached?.place,
+    place: place ?? (cachedHere ? cached?.place : undefined),
     ...forecast
   };
   storeOverviewWeather(snapshot);

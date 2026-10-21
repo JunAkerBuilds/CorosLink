@@ -1,10 +1,10 @@
-import { t, useLanguage, getLocale } from "../i18n/tools";
+import { t, useLanguage, getLocale, formatDate } from "../i18n/tools";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
-  BatteryMedium, Bluetooth, ChevronDown, ChevronLeft, ChevronRight, Info, KeyRound, LayoutGrid, Loader2,
-  MessageSquare, RefreshCw, Search, Send, Smartphone, Unplug, Usb, Watch, type LucideIcon
+  AlertCircle, BatteryMedium, Bluetooth, ChevronDown, ChevronLeft, ChevronRight, Download, Info, KeyRound, LayoutGrid, Loader2,
+  MessageSquare, RefreshCw, RotateCw, Search, Send, Settings, Smartphone, Unplug, Upload, Usb, Watch, type LucideIcon
 } from "lucide-react";
-import type { WatchStatus } from "../../electron/types";
+import type { CorosWatchKeySummary, CorosWatchfaceStatus, WatchStatus } from "../../electron/types";
 import type { CorosNativeBleDeviceChoice, CorosNativeBleSnapshot } from "../../electron/corosNativeBleTypes";
 import type { CorosLinkApi } from "../coroslink-api";
 import { formatBytes } from "../media/libraryUtils";
@@ -13,9 +13,12 @@ import {
   apiErrorMessage, connectedWatch, onSystemBluetooth, watchConnectionState, watchDisplayName, watchFirmware, watchLinkSupported, watchMessagingReady,
   type WatchLinkTone
 } from "../watchfaces/watchLink";
-import { isValidatedWatch } from "../../electron/watchfaceTargets";
 import "../watchfaces/watchLink.css";
 import "./watchConnection.css";
+import { EXPERIMENTAL_SYNC_MODELS } from "../../electron/localSync/watchSyncModels";
+import { WatchAutoSyncControl } from "./WatchAutoSyncControl";
+import { WatchSyncResult } from "./WatchSyncResult";
+import { runWatchSync, useWatchSync } from "./watchSyncState";
 
 type WatchMenuPage = "home" | "message" | "iphone" | "details";
 
@@ -30,6 +33,13 @@ interface WatchConnectionMenuProps {
   onOpenChange: (open: boolean) => void;
   onOpenWatchFaces: () => void;
   onSignIn: () => void;
+  /** Opens a section of Settings ("watch", "weather"). */
+  onOpenSettings?: (section: "watch" | "weather") => void;
+  /** Local-Only Mode: the Training Hub shows what a watch sync reads, so the menu offers one. */
+  localOnly?: boolean;
+  /** Set when another view asks for "Sync watch now": the menu opens and starts it. */
+  syncRequest?: number | null;
+  onSyncRequestHandled?: () => void;
 }
 
 /** The toolbar's watch button: every way CorosLink reaches the watch, from any view. */
@@ -50,11 +60,19 @@ export function WatchConnectionMenu(props: WatchConnectionMenuProps) {
       onOpenChange(false);
       triggerRef.current?.focus();
     };
+    // Tabbing past the panel closes it, as a click outside does; leaving the window doesn't.
+    const handleFocusOut = (event: FocusEvent) => {
+      const next = event.relatedTarget as Node | null;
+      if (next && !containerRef.current?.contains(next)) onOpenChange(false);
+    };
+    const container = containerRef.current;
     document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
+    container?.addEventListener("focusout", handleFocusOut);
     return () => {
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
+      container?.removeEventListener("focusout", handleFocusOut);
     };
   }, [open, onOpenChange]);
 
@@ -105,41 +123,51 @@ function triggerState(snapshot: CorosNativeBleSnapshot | null, usbWatch: WatchSt
 }
 
 function WatchMenuPanel({
-  id, api, snapshot, onSnapshotChange, usbWatch, onOpenChange, onOpenWatchFaces, onSignIn
+  id, api, snapshot, onSnapshotChange, usbWatch, onOpenChange, onOpenWatchFaces, onSignIn, onOpenSettings, localOnly, syncRequest, onSyncRequestHandled
 }: WatchConnectionMenuProps & { id: string }) {
   useLanguage();
   const [page, setPage] = useState<WatchMenuPage>("home");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // The sync and its result belong to the window, so closing the menu mid-sync loses nothing.
+  const watchSync = useWatchSync(api);
+  const syncing = watchSync.manual || watchSync.reading;
+  const syncPercent = watchSync.percent;
   const [choosing, setChoosing] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<CorosNativeBleDeviceChoice | undefined>();
   const [watchKeySaved, setWatchKeySaved] = useState<boolean | null>(null);
+  const [watchKey, setWatchKey] = useState<CorosWatchKeySummary | undefined>();
   const panelRef = useRef<HTMLDivElement>(null);
+  const applyKeyStatus = (status: CorosWatchfaceStatus) => {
+    setWatchKeySaved(Boolean(status.watchAuthenticationAvailable));
+    setWatchKey(status.watchKey);
+  };
   const shownPage = useRef<WatchMenuPage | null>(null);
 
   useEffect(() => {
     if (typeof api?.getCorosWatchfaceStatus !== "function") return;
     let disposed = false;
     void api.getCorosWatchfaceStatus()
-      .then(status => { if (!disposed) setWatchKeySaved(Boolean(status.watchAuthenticationAvailable)); })
+      .then(status => { if (!disposed) applyKeyStatus(status); })
       .catch(() => {});
     return () => { disposed = true; };
-  }, [api]);
+    // A watch sign-in updates when the key was last used.
+  }, [api, snapshot?.systemBind, snapshot?.authenticatedAt]);
 
-  // Opening focuses the panel; each page change focuses its first control.
+  // Opening focuses the panel; a sub-page focuses Back, and Back returns to the row that opened it.
   useEffect(() => {
     const previous = shownPage.current;
     shownPage.current = page;
     if (previous === page) return;
     if (previous === null) panelRef.current?.focus();
-    else panelRef.current?.querySelector<HTMLElement>(page === "home" ? ".watch-menu-row" : ".watch-menu-back")?.focus();
+    else panelRef.current?.querySelector<HTMLElement>(page === "home" ? `.watch-menu-row[data-page="${previous}"]` : ".watch-menu-back")?.focus();
   }, [page]);
 
   const supported = Boolean(api && typeof api.connectCorosNativeBle === "function" && watchLinkSupported(snapshot));
   const connected = Boolean(snapshot?.connected);
   const state = watchConnectionState(snapshot);
   const linking = snapshot?.phase === "connecting" || snapshot?.phase === "scanning";
-  const disabled = busy || linking;
+  const disabled = busy || linking || watchSync.manual;
   const waitedSeconds = useWaitTimer(!connected && disabled);
   const devices = snapshot?.discoveredDevices ?? [];
   const needsSignIn = connected
@@ -171,11 +199,13 @@ function WatchMenuPanel({
       return api!.connectCorosNativeBle({ backend: "system", device: nearby[0] });
     }
     setChoosing(true);
-    setSelectedDevice(current => nearby.find(item => item.deviceId === current?.deviceId) ?? (nearby.length === 1 ? nearby[0] : undefined));
+    // Several watches with one name: the remembered one is chosen, never another automatically.
+    setSelectedDevice(current => nearby.find(item => item.deviceId === current?.deviceId) ?? nearby.find(item => item.remembered)
+      ?? (nearby.length === 1 ? nearby[0] : undefined));
     return found;
   }
 
-  const connect = () => run(async () => {
+  async function connectWatch(): Promise<CorosNativeBleSnapshot> {
     // Always the computer's own Bluetooth; this replaces a saved USB-adapter choice.
     if (choosing && selectedDevice) return api!.connectCorosNativeBle({ backend: "system", device: selectedDevice });
     try {
@@ -185,13 +215,61 @@ function WatchMenuPanel({
       if (!/find and select/i.test(apiErrorMessage(error, ""))) throw error;
     }
     return findWatches(true);
+  }
+
+  const connect = () => run(connectWatch);
+
+  /** Connects first when needed, then reads activities and health history; the watch stays connected. */
+  const sync = () => run(async () => {
+    await runWatchSync(api!, connected ? undefined : async () => {
+      const linked = await connectWatch();
+      onSnapshotChange(linked);
+      // Several watches nearby, or the watch needs a sign-in: stop here; the panel shows what to do.
+      return linked.connected && linked.systemBind === "authenticated";
+    });
+    return api!.getCorosNativeBleStatus();
   });
+
+  // Progress shows on the button that started it: during a sync, Connect stays put
+  // and the Sync button reports finding, connecting, then syncing.
+  const phaseLabel = snapshot?.phase === "scanning" ? t("Finding watch…") : snapshot?.phase === "connecting" ? t("Connecting…") : null;
+  const connecting = !syncing && (busy || linking);
+  const syncLabel = !syncing ? t("Sync watch now")
+    : connected ? syncPercent === null ? t("Syncing…") : t("Syncing… {{p0}}%", { p0: syncPercent })
+    : phaseLabel ?? t("Connecting…");
+  // A watch that is not signed in cannot sync, nor can one without a saved watch key; the callout above asks for the sign-in.
+  const syncBlocked = connected ? snapshot?.systemBind !== "authenticated" : watchKeySaved === false || (choosing && !selectedDevice);
+  // Connected before (the key signed in to a watch, or the last connection left its name): no first-time pairing hint.
+  const pairedBefore = watchKeySaved !== false && Boolean(watchKey?.lastUsed || snapshot?.deviceName || snapshot?.identityMismatch);
+  // Only in Local-Only Mode, and not for a connected watch whose sync files haven't been checked.
+  const offerSync = Boolean(localOnly) && !(connected && snapshot?.watchModel && !EXPERIMENTAL_SYNC_MODELS.has(snapshot.watchModel));
+
+  // Another view asked for a sync (the Training Hub before the first one): start it once the menu is open.
+  const syncNow = useRef(sync);
+  syncNow.current = sync;
+  const canSync = supported && offerSync && !syncing && !disabled && !syncBlocked;
+  useEffect(() => {
+    if (!syncRequest) return;
+    onSyncRequestHandled?.();
+    if (canSync) void syncNow.current();
+  }, [syncRequest]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // In Local-Only Mode, Sync is the menu's one main button: it connects first when needed.
+  const syncButton = (
+    <button className={`primary-button watch-link-button watch-menu-sync-button${syncing ? " is-busy" : ""}`} type="button"
+      disabled={disabled || syncing || syncBlocked} aria-describedby={syncBlocked && needsSignIn ? `${id}-sign-in` : undefined}
+      onClick={() => void sync()}>
+      {syncing ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <RefreshCw size={15} aria-hidden="true" />}
+      {syncLabel}
+      {syncing && syncPercent !== null ? <span className="watch-menu-sync-meter" style={{ width: `${syncPercent}%` }} aria-hidden="true" /> : null}
+    </button>
+  );
 
   const openWatchFaces = () => { onOpenChange(false); onOpenWatchFaces(); };
   const signIn = () => { onOpenChange(false); onSignIn(); };
+  const openSettings = (section: "watch" | "weather") => { onOpenChange(false); onOpenSettings?.(section); };
 
-  const connectLabel = snapshot?.phase === "scanning" ? t("Finding watch…")
-    : snapshot?.phase === "connecting" || busy ? t("Connecting…")
+  const connectLabel = connecting ? phaseLabel ?? t("Connecting…")
     : choosing && selectedDevice ? t("Connect to {{p0}}", { p0: watchDisplayName(selectedDevice.deviceName) }) : t("Connect watch");
 
   const home = (
@@ -206,10 +284,14 @@ function WatchMenuPanel({
               <BatteryMedium size={14} aria-hidden="true" />{snapshot.batteryPercent}%</span> : null}
           </p>
         </div>
+        {onOpenSettings ? <button className="watch-link-icon-button" type="button"
+          aria-label={t("Watch settings")} title={t("Watch settings")} onClick={() => openSettings("watch")}>
+          <Settings size={15} aria-hidden="true" />
+        </button> : null}
         {connected ? <button className="watch-link-icon-button" type="button" disabled={disabled}
           aria-label={t("Refresh battery and status")} title={t("Refresh battery and status")}
           onClick={() => void run(() => api!.refreshCorosNativeBle())}>
-          <RefreshCw size={15} className={busy ? "spin" : undefined} aria-hidden="true" />
+          <RotateCw size={14} className={busy && !syncing ? "spin" : undefined} aria-hidden="true" />
         </button> : null}
       </header>
 
@@ -220,13 +302,28 @@ function WatchMenuPanel({
         <KeyRound size={16} aria-hidden="true" />
         <div>
           <strong>{connected && snapshot?.systemBind === "failed" ? t("The watch didn’t accept this account") : t("Sign in to COROS")}</strong>
-          <p>{connected && snapshot?.systemBind === "failed" && snapshot.authenticationError ? snapshot.authenticationError
+          <p id={`${id}-sign-in`}>{connected && snapshot?.systemBind === "failed" && snapshot.authenticationError ? snapshot.authenticationError
             : t("Your watch only trusts CorosLink after you sign in with the COROS account it’s paired to.")}</p>
         </div>
         <button className="secondary-button watch-link-button" type="button" onClick={signIn}>{t("Sign in")}</button>
       </div> : null}
 
-      {supported && !connected ? <div className="watch-menu-connect">
+      {/* Another device answered with the watch's name: nothing was sent to it until the user says so. */}
+      {supported && !connected && snapshot?.identityMismatch ? <div className="watch-menu-callout is-identity" role="alert">
+        <AlertCircle size={16} aria-hidden="true" />
+        <div>
+          <strong>{t("This doesn’t look like the watch you connected before.")}</strong>
+          <div className="watch-menu-callout-actions">
+            <button className="secondary-button watch-link-button" type="button" disabled={disabled}
+              onClick={() => void run(() => api!.connectCorosNativeBle({ backend: "system", confirmIdentity: true }))}>{t("Connect anyway")}</button>
+            <button className="watch-menu-text-button" type="button" disabled={disabled}
+              onClick={() => void run(() => api!.disconnectCorosNativeBle())}>{t("Cancel")}</button>
+          </div>
+        </div>
+      </div> : null}
+
+      {/* While another device's answer waits for the user, the callout above is the only choice. */}
+      {supported && !connected && !snapshot?.identityMismatch ? <div className="watch-menu-connect">
         {choosing && devices.length ? <fieldset className="watch-menu-devices" disabled={disabled}>
           <legend>{t("Watches nearby")}</legend>
           {devices.map(device => <label key={device.deviceId} className={selectedDevice?.deviceId === device.deviceId ? "is-selected" : undefined}>
@@ -236,25 +333,35 @@ function WatchMenuPanel({
             <span>{watchDisplayName(device.deviceName)}<small>{device.deviceName}</small></span>
           </label>)}
         </fieldset> : null}
-        <button className="primary-button watch-link-button watch-menu-connect-button" type="button"
+        {offerSync ? syncButton : <button className={`primary-button watch-link-button watch-menu-connect-button${connecting ? " is-busy" : ""}`} type="button"
           disabled={disabled || (choosing && !selectedDevice)} onClick={() => void connect()}>
-          {busy || linking ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <Bluetooth size={15} aria-hidden="true" />}
+          {connecting ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <Bluetooth size={15} aria-hidden="true" />}
           {connectLabel}
-        </button>
+        </button>}
         {waitedSeconds >= 8 ? <p className="watch-menu-hint" role="status">
-          {t("Still looking for your watch ·")} {Math.floor(waitedSeconds / 60)}:{String(waitedSeconds % 60).padStart(2, "0")}{t(". Wake it and open System → Pair Phone. CorosLink stops trying after about a minute.")}</p> : <p className="watch-menu-hint">
-          {t("First time? On the watch, open System → Pair Phone, then connect and accept the pairing prompt.")}</p>}
+          {t("Still looking for your watch ·")} {Math.floor(waitedSeconds / 60)}:{String(waitedSeconds % 60).padStart(2, "0")}{t(". Wake it and open System → Pair Phone. CorosLink stops trying after about a minute.")}</p>
+          : !pairedBefore ? <p className="watch-menu-hint">
+          {t("First time? On the watch, open System → Pair Phone, then connect and accept the pairing prompt.")}</p> : null}
       </div> : null}
 
-      {message || (snapshot?.phase === "failed" && snapshot.error) ? <p className="watch-link-note is-error" role="alert">{message ?? snapshot?.error}</p> : null}
+      {supported && connected && offerSync ? <div className="watch-menu-connect">
+        {syncButton}
+      </div> : null}
 
+      {/* Results sit under the button that asked for them; a background sync reports here too. */}
+      {offerSync && watchSync.last && !watchSync.manual ? <WatchSyncResult api={api} last={watchSync.last} disabled={disabled || syncing}
+        onSync={() => void sync()} /> : null}
+      {message || (snapshot?.phase === "failed" && snapshot.error) ? <p className="watch-link-note watch-menu-result is-error" role="alert">
+        <AlertCircle size={15} aria-hidden="true" /><span>{message ?? snapshot?.error}</span></p> : null}
+
+      {supported && offerSync && api ? <WatchAutoSyncControl api={api} disabled={disabled || syncing} /> : null}
 
       {supported ? <ul className="watch-menu-list" aria-label={t("Watch features")}>
         <MenuRow icon={LayoutGrid} title={t("Watch faces")} detail={t("Install and replace faces on the watch")} onClick={openWatchFaces} />
-        <MenuRow icon={MessageSquare} title={t("Send a message")} detail={watchMessagingReady(snapshot) ? t("Appears as a notification on the watch") : t("Needs a connected, supported COROS watch")}
+        <MenuRow page="message" icon={MessageSquare} title={t("Send a message")} detail={watchMessagingReady(snapshot) ? t("Appears as a notification on the watch") : t("Needs a connected, supported COROS watch")}
           onClick={() => setPage("message")} />
-        <MenuRow icon={Smartphone} title={t("iPhone app")} detail={t("Pair C-LINK with a QR code")} onClick={() => setPage("iphone")} />
-        <MenuRow icon={Info} title={t("Connection details")} detail={t("Firmware, signal, watch key and diagnostics")} onClick={() => setPage("details")} />
+        <MenuRow page="iphone" icon={Smartphone} title={t("iPhone app")} detail={t("Pair C-LINK with a QR code")} onClick={() => setPage("iphone")} />
+        <MenuRow page="details" icon={Info} title={t("Connection details")} detail={t("Firmware, signal and watch key")} onClick={() => setPage("details")} />
       </ul> : null}
 
       {usbWatch?.connected || usbWatch?.error ? <div className="watch-menu-usb">
@@ -270,10 +377,17 @@ function WatchMenuPanel({
       {supported ? <footer className="watch-menu-footer">
         {connected ? <button className="secondary-button watch-link-button" type="button" disabled={disabled}
           onClick={() => void run(() => api!.disconnectCorosNativeBle())}>
-          <Unplug size={15} aria-hidden="true" />  {t("Disconnect")}</button> : <button className="watch-menu-text-button" type="button" disabled={disabled}
-          onClick={() => void run(() => findWatches(false))}>
-          <Search size={14} aria-hidden="true" /> {choosing ? t("Search again") : t("Choose a watch")}
-        </button>}
+          <Unplug size={15} aria-hidden="true" />  {t("Disconnect")}</button> : <>
+          {/* Sync connects first; this connects without syncing (for watch faces or a message). */}
+          {offerSync && !snapshot?.identityMismatch ? <button className="watch-menu-text-button watch-menu-connect-only" type="button"
+            disabled={disabled || (choosing && !selectedDevice)} onClick={() => void connect()}>
+            {connecting ? <Loader2 className="spin" size={14} aria-hidden="true" /> : <Bluetooth size={14} aria-hidden="true" />} {connecting || (choosing && selectedDevice) ? connectLabel : t("Connect only")}
+          </button> : null}
+          <button className="watch-menu-text-button" type="button" disabled={disabled}
+            onClick={() => void run(() => findWatches(false))}>
+            <Search size={14} aria-hidden="true" /> {choosing ? t("Search again") : t("Choose a watch")}
+          </button>
+        </>}
       </footer> : null}
     </>
   );
@@ -289,7 +403,9 @@ function WatchMenuPanel({
         </header>
         {page === "message" ? <WatchMessageComposer api={api} snapshot={snapshot} busy={disabled} onBusy={setBusy} />
           : page === "iphone" ? api ? <CorosPhonePairingPanel api={api} /> : null
-          : <WatchConnectionDetails snapshot={snapshot} api={api} watchKeySaved={watchKeySaved} onWatchKeySavedChange={setWatchKeySaved} />}
+          : <WatchConnectionDetails snapshot={snapshot} api={api} watchKeySaved={watchKeySaved} watchKey={watchKey}
+            onWatchKeyStatus={applyKeyStatus} onSignIn={signIn}
+            onChoosePlace={onOpenSettings ? () => openSettings("weather") : undefined} />}
       </div>}
     </div>
   );
@@ -310,11 +426,23 @@ function useWaitTimer(waiting: boolean): number {
   return startedAt === null ? 0 : Math.max(0, Math.floor((now - startedAt) / 1000));
 }
 
-function MenuRow({ icon: Icon, title, detail, onClick }: { icon: LucideIcon; title: string; detail: ReactNode; onClick: () => void }) {
+/** Developer diagnostics show only when CorosLink runs with COROSLINK_SYNC_CAPTURE=1 (the flag behind the capture tools). */
+function useDeveloperTools(api: CorosLinkApi | undefined): boolean {
+  const [enabled, setEnabled] = useState(false);
+  useEffect(() => {
+    if (typeof api?.getLocalDataOverview !== "function") return;
+    let live = true;
+    void api.getLocalDataOverview().then(overview => { if (live) setEnabled(Boolean(overview.captureEnabled)); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [api]);
+  return enabled;
+}
+
+function MenuRow({ icon: Icon, title, detail, onClick, page }: { icon: LucideIcon; title: string; detail: ReactNode; onClick: () => void; page?: WatchMenuPage }) {
   useLanguage();
   return (
     <li>
-      <button className="watch-menu-row" type="button" onClick={onClick}>
+      <button className="watch-menu-row" type="button" data-page={page} onClick={onClick}>
         <span className="watch-menu-row-icon" aria-hidden="true"><Icon size={16} /></span>
         <span className="watch-menu-row-text"><strong>{title}</strong><small>{detail}</small></span>
         <ChevronRight size={15} aria-hidden="true" />
@@ -378,80 +506,206 @@ function WatchMessageComposer({ api, snapshot, busy, onBusy }: {
 }
 
 /**
- * The watch account key CorosLink saved at COROS sign-in. Signing out keeps it; this
- * removes it (main asks to confirm), and a sign-in with another account replaces it.
+ * The watch account key CorosLink saved at COROS sign-in. Signing out keeps it; Remove
+ * deletes it (main asks to confirm), and a sign-in with another account replaces it.
+ * It doesn't expire; it stops working once the watch is given another key.
+ * Back up saves it encrypted with a passphrase; Restore reads such a file back (main
+ * asks before replacing a different key). The passphrase is sent once and then cleared;
+ * the key itself never reaches this page.
  */
-function WatchKeySection({ api, saved, onSavedChange }: {
-  api: CorosLinkApi | undefined; saved: boolean | null; onSavedChange: (saved: boolean) => void;
+function WatchKeySection({ api, saved, info, onStatus, onSignIn }: {
+  api: CorosLinkApi | undefined; saved: boolean | null; info: CorosWatchKeySummary | undefined;
+  onStatus: (status: CorosWatchfaceStatus) => void; onSignIn: () => void;
 }) {
   useLanguage();
-  const [removing, setRemoving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const id = useId();
+  const [working, setWorking] = useState<"remove" | "backup" | "choose" | "restore" | null>(null);
+  const [form, setForm] = useState<"backup" | "restore" | null>(null);
+  const [passphrase, setPassphrase] = useState("");
+  const [repeat, setRepeat] = useState("");
+  const [note, setNote] = useState<{ error: boolean; text: string } | null>(null);
   const canRemove = typeof api?.forgetCorosWatchKey === "function";
+  const canBackUp = typeof api?.backupCorosWatchKey === "function";
+  const canRestore = typeof api?.chooseCorosWatchKeyBackup === "function" && typeof api?.restoreCorosWatchKey === "function";
+  const when = (at: number) => formatDate(at, { dateStyle: "medium", timeStyle: "short" });
+  const tooShort = passphrase.length > 0 && passphrase.length < 8;
+  const mismatch = form === "backup" && repeat.length > 0 && repeat !== passphrase;
+  const clearPassphrases = () => { setPassphrase(""); setRepeat(""); };
+  const closeForm = () => {
+    if (form === "restore") void api?.cancelCorosWatchKeyRestore?.().catch(() => {});
+    clearPassphrases(); setForm(null);
+  };
 
-  async function remove() {
-    if (removing || !api?.forgetCorosWatchKey) return;
-    setRemoving(true);
-    setError(null);
+  async function attempt(kind: NonNullable<typeof working>, task: () => Promise<void>, fallback: string) {
+    if (working) return;
+    setWorking(kind);
+    setNote(null);
     try {
-      onSavedChange(Boolean((await api.forgetCorosWatchKey()).watchAuthenticationAvailable));
+      await task();
     } catch (caught) {
-      setError(apiErrorMessage(caught, t("Could not remove the watch key.")));
+      setNote({ error: true, text: apiErrorMessage(caught, fallback) });
     } finally {
-      setRemoving(false);
+      setWorking(null);
     }
   }
+
+  const remove = () => attempt("remove", async () => { onStatus(await api!.forgetCorosWatchKey!()); }, t("Could not remove the watch key."));
+
+  const backUp = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (passphrase.length < 8 || repeat !== passphrase) return;
+    const secret = passphrase;
+    clearPassphrases();
+    void attempt("backup", async () => {
+      const result = await api!.backupCorosWatchKey!(secret);
+      if (!result.saved) return;
+      setForm(null);
+      setNote({ error: false, text: t("Watch key backup saved.") });
+    }, t("Could not back up the watch key."));
+  };
+
+  const choose = () => attempt("choose", async () => {
+    clearPassphrases(); setForm(null);
+    const choice = await api!.chooseCorosWatchKeyBackup!();
+    if (choice.chosen) setForm("restore");
+  }, t("Could not open the watch key backup."));
+
+  const restore = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!passphrase) return;
+    const secret = passphrase;
+    clearPassphrases();
+    void attempt("restore", async () => {
+      const result = await api!.restoreCorosWatchKey!(secret);
+      onStatus(result.status);
+      setForm(null);
+      if (result.outcome === "restored") setNote({ error: false, text: t("Watch key restored.") });
+      else if (result.outcome === "alreadySaved") setNote({ error: false, text: t("This watch key is already saved.") });
+    }, t("Could not restore the watch key."));
+  };
+
+  const rows: Array<[string, string]> = info ? [
+    [t("Account"), info.accountEmail ?? t("COROS account {{p0}}", { p0: info.accountId })],
+    [t("Saved", undefined, "watchKey"), info.savedAt ? when(info.savedAt) : t("Unknown")],
+    [t("Last used"), info.lastUsed ? `${watchDisplayName(info.lastUsed.watch)} · ${when(info.lastUsed.at)}` : "—"],
+    [t("Key ID"), info.keyId]
+  ] : [];
+  const problem = info?.problem;
+  const icon = (kind: NonNullable<typeof working>, Icon: LucideIcon) => working === kind
+    ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <Icon size={15} aria-hidden="true" />;
 
   return (
     <section className="watch-link-key" aria-label={t("Watch key")}>
       <h3>{t("Watch key")}</h3>
-      <p role="status">{saved === null ? t("Checking for a saved watch key…")
-        : saved ? t("Saved on this computer from your COROS sign-in. Signing out of COROS keeps it; signing in with another account replaces it.")
-        : t("Not saved. Sign in to COROS to authenticate with your watch.")}</p>
-      {saved && canRemove ? <button className="secondary-button watch-link-button" type="button" disabled={removing} onClick={() => void remove()}>
-        {removing ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <KeyRound size={15} aria-hidden="true" />}
-        {t("Remove watch key")}</button> : null}
-      {error ? <p className="watch-link-note is-error" role="alert">{error}</p> : null}
+      {/* A key that no longer works leads with the problem, in place of the reassuring status line. */}
+      {saved && problem ? <div className="watch-menu-callout" role="alert">
+        <AlertCircle size={16} aria-hidden="true" />
+        <div>
+          <p>{problem.result === "mismatch"
+            ? t("{{p0}} has a different key ({{p1}}). Sign in to COROS again to get the current one.", { p0: watchDisplayName(problem.watch), p1: when(problem.at) })
+            : t("{{p0}} didn’t accept this key ({{p1}}). Connect the watch to the COROS app once, then sign in to COROS again.", { p0: watchDisplayName(problem.watch), p1: when(problem.at) })}</p>
+        </div>
+        <button className="secondary-button watch-link-button" type="button" onClick={onSignIn}>{t("Sign in")}</button>
+      </div> : <p role="status">{saved === null ? t("Checking for a saved watch key…")
+        : saved ? t("Saved on this computer. It doesn’t expire.")
+        : t("Not saved. Sign in to COROS to authenticate with your watch.")}</p>}
+      {saved && rows.length ? <dl>{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl> : null}
+      {saved && !problem ? <p className="watch-menu-hint">{t("It stops working if you pair or reset your watch in the COROS app. Sign in here again to get the new key.")}</p> : null}
+      {form === "backup" ? <form className="watch-link-key-form" aria-label={t("Back up watch key")} onSubmit={backUp}>
+        <p>{t("Keep this file and passphrase safe: anyone with both can sign in to your watch. The passphrase can’t be recovered.")}</p>
+        <label htmlFor={`${id}-passphrase`}>{t("Passphrase")}</label>
+        <input id={`${id}-passphrase`} type="password" autoComplete="new-password" maxLength={1024} value={passphrase}
+          aria-invalid={tooShort || undefined} aria-describedby={`${id}-rule`} disabled={working !== null}
+          onChange={event => { setPassphrase(event.target.value); setNote(null); }} />
+        <label htmlFor={`${id}-repeat`}>{t("Repeat passphrase")}</label>
+        <input id={`${id}-repeat`} type="password" autoComplete="new-password" maxLength={1024} value={repeat}
+          aria-invalid={mismatch || undefined} aria-describedby={`${id}-rule`} disabled={working !== null}
+          onChange={event => { setRepeat(event.target.value); setNote(null); }} />
+        <p id={`${id}-rule`} className={mismatch ? "watch-link-note is-error" : undefined}>
+          {mismatch ? t("The passphrases don’t match.") : t("At least 8 characters")}</p>
+        <div className="watch-link-key-actions">
+          <button className="primary-button watch-link-button" type="submit" disabled={working !== null || passphrase.length < 8 || repeat !== passphrase}>
+            {icon("backup", Download)}{t("Save backup…")}</button>
+          <button className="secondary-button watch-link-button" type="button" disabled={working !== null} onClick={closeForm}>{t("Cancel")}</button>
+        </div>
+      </form> : null}
+      {form === "restore" ? <form className="watch-link-key-form" aria-label={t("Restore watch key")} onSubmit={restore}>
+        <label htmlFor={`${id}-restore`}>{t("Backup passphrase")}</label>
+        <input id={`${id}-restore`} type="password" autoComplete="off" maxLength={1024} value={passphrase} disabled={working !== null}
+          onChange={event => { setPassphrase(event.target.value); setNote(null); }} />
+        <div className="watch-link-key-actions">
+          <button className="primary-button watch-link-button" type="submit" disabled={working !== null || !passphrase}>
+            {icon("restore", Upload)}{t("Restore")}</button>
+          <button className="secondary-button watch-link-button" type="button" disabled={working !== null} onClick={closeForm}>{t("Cancel")}</button>
+        </div>
+      </form> : null}
+      {saved !== null && form === null ? <div className="watch-link-key-actions">
+        {saved && canBackUp ? <button className="secondary-button watch-link-button" type="button" disabled={working !== null}
+          onClick={() => { setNote(null); clearPassphrases(); setForm("backup"); }}>
+          <Download size={15} aria-hidden="true" />{t("Back up watch key")}</button> : null}
+        {canRestore ? <button className="secondary-button watch-link-button" type="button" disabled={working !== null} onClick={() => void choose()}>
+          {icon("choose", Upload)}{t("Restore watch key…")}</button> : null}
+        {saved && canRemove ? <button className="secondary-button watch-link-button" type="button" disabled={working !== null} onClick={() => void remove()}>
+          {icon("remove", KeyRound)}{t("Remove watch key")}</button> : null}
+      </div> : null}
+      {note ? <p className={`watch-link-note${note.error ? " is-error" : " is-success"}`} role={note.error ? "alert" : "status"}>{note.text}</p> : null}
     </section>
   );
 }
 
-function WatchConnectionDetails({ snapshot, api, watchKeySaved, onWatchKeySavedChange }: {
+function WatchConnectionDetails({ snapshot, api, watchKeySaved, watchKey: watchKeyInfo, onWatchKeyStatus, onSignIn, onChoosePlace }: {
   snapshot: CorosNativeBleSnapshot | null;
   api: CorosLinkApi | undefined;
   watchKeySaved: boolean | null;
-  onWatchKeySavedChange: (saved: boolean) => void;
+  watchKey: CorosWatchKeySummary | undefined;
+  onWatchKeyStatus: (status: CorosWatchfaceStatus) => void;
+  onSignIn: () => void;
+  onChoosePlace?: () => void;
 }) {
   useLanguage();
-  const watchKey = <WatchKeySection api={api} saved={watchKeySaved} onSavedChange={onWatchKeySavedChange} />;
+  const developerTools = useDeveloperTools(api);
+  const watchKey = <WatchKeySection api={api} saved={watchKeySaved} info={watchKeyInfo} onStatus={onWatchKeyStatus} onSignIn={onSignIn} />;
   if (!snapshot) return <div className="watch-link-details"><p className="watch-menu-hint">{t("Reading the watch connection…")}</p>{watchKey}</div>;
   const details = [
     [t("Battery"), snapshot.batteryPercent === undefined ? "—" : `${snapshot.batteryPercent}%`],
     [t("Model"), snapshot.modelNumber || "—"],
-    [t("Recognized as"), connectedWatch(snapshot) ? `${connectedWatch(snapshot)!.label}${snapshot.watchModelSource === "name" ? t(" (from its name)") : ""}${(snapshot.watchValidated ?? isValidatedWatch(snapshot)) ? "" : t(" · beta")}`
+    [t("Recognized as"), connectedWatch(snapshot) ? connectedWatch(snapshot)!.label
       : snapshot.connected ? t("Not supported yet") : "—"],
     [t("Software"), watchFirmware(snapshot) || "—"],
     [t("Signal"), snapshot.connected && snapshot.rssiDbm !== undefined ? t("{{p0}} dBm", { p0: snapshot.rssiDbm }) : "—"],
-    [snapshot.pairingManagedByOS ? t("Maximum write") : "MTU", snapshot.pairingManagedByOS
-      ? snapshot.maximumWriteBytes === undefined ? "—" : t("{{p0}} bytes", { p0: snapshot.maximumWriteBytes })
-      : snapshot.mtu === undefined ? "—" : t("{{p0}} bytes", { p0: snapshot.mtu })],
     [t("Connection"), snapshot.connected ? "Bluetooth" : t("Disconnected")],
     [t("COROS session"), snapshot.connected && snapshot.systemBind === "authenticated" ? t("Authenticated")
-      : snapshot.systemBind === "failed" ? t("Authentication failed") : t("Not authenticated")]
-  ];
+      : snapshot.systemBind === "failed" ? t("Authentication failed") : t("Not authenticated")],
+    [t("Clock"), snapshot.connected && snapshot.clockSetAt
+      ? t("Set from this computer at {{p0}}", { p0: new Date(snapshot.clockSetAt).toLocaleTimeString(getLocale(), { hour: "numeric", minute: "2-digit" }) })
+      : "—"],
+    [t("Weather"), snapshot.connected && snapshot.weatherSentAt
+      ? t("Forecast sent at {{p0}}", { p0: new Date(snapshot.weatherSentAt).toLocaleTimeString(getLocale(), { hour: "numeric", minute: "2-digit" }) })
+      : snapshot.connected && snapshot.weatherFailedAt ? t("The watch didn't take the forecast this time. CorosLink sends it again next time the watch connects.")
+      : snapshot.connected ? onChoosePlace
+        ? <button type="button" className="watch-link-inline-button" onClick={onChoosePlace}>{t("Choose a place")}</button>
+        : t("Choose a place in Settings → Weather location, or open the Overview once")
+      : "—"],
+    [t("Satellite data"), developerTools
+      ? <>{satelliteData(snapshot.gpsAssistance, snapshot.connected)}<SatelliteDeveloperTools api={api} assist={snapshot.gpsAssistance} connected={snapshot.connected} /></>
+      : satelliteData(snapshot.gpsAssistance, snapshot.connected)]
+  ] satisfies Array<[string, ReactNode]>;
+  // With the watch away, rows that would only read "—" are left out.
+  const rows = snapshot.connected ? details : details.filter(([, value]) => value !== "—");
   return (
     <div className="watch-link-details">
-      <dl>{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd title={value}>{value}</dd></div>)}</dl>
+      <dl>{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
       {watchKey}
-      {onSystemBluetooth(snapshot) ? <section className="watch-link-events" aria-label={t("Watch controls")}>
+      {/* Developer diagnostics: only with COROSLINK_SYNC_CAPTURE=1, like the capture tools in Privacy settings. */}
+      {developerTools && onSystemBluetooth(snapshot) ? <section className="watch-link-events" aria-label={t("Watch controls")}>
         <h3>{t("Watch controls")}</h3>
-        <p>{t("Press the watch’s phone music controls to see the commands it sends. Action mapping is still being investigated.")}</p>
+        <p>{t("Press the watch’s phone music controls to see the commands it sends.")}</p>
         {snapshot.watchEvents?.length ? <ul>{snapshot.watchEvents.slice().reverse().map(event => <li key={event.id}>
           <time>{new Date(event.receivedAt).toLocaleTimeString(getLocale())}</time>
           {event.kind === "call-rejected" ? t("Call rejected") : t("Media command {{p0}}, value {{p1}}", { p0: event.action, p1: event.value })}
         </li>)}</ul> : <p>{t("No watch commands received in this connection.")}</p>}
       </section> : null}
-      {snapshot.channels.length ? <details className="watch-link-channels">
+      {developerTools && snapshot.channels.length ? <details className="watch-link-channels">
         <summary>{t("Live BLE channels")}</summary>
         <p>{snapshot.pairingManagedByOS ? t("{{p0}} COROS control writes · pairing managed by your operating system", { p0: (snapshot.controlWrites ?? 0).toLocaleString(getLocale()) })
           : t("Computer → adapter {{p0}} packets · adapter → computer {{p1}} packets", { p0: (snapshot.hostToAdapterPackets ?? 0).toLocaleString(getLocale()), p1: (snapshot.adapterToHostPackets ?? 0).toLocaleString(getLocale()) })}</p>
@@ -460,9 +714,45 @@ function WatchConnectionDetails({ snapshot, api, watchKeySaved, onWatchKeySavedC
           <span>{channel.subscribed ? t("Listening") : t("Disconnected")} · {channel.notifications.toLocaleString(getLocale())}  {t("notifications ·")} {channel.receivedBytes.toLocaleString(getLocale())}  {t("bytes")}</span>
         </li>)}</ul>
       </details> : null}
-      <p className="watch-menu-hint">{snapshot.connected && snapshot.systemBind === "authenticated"
-        ? t("The watch accepted a fresh COROS authentication challenge from CorosLink.")
-        : t("Sign in to the COROS account paired with this watch, then connect. CorosLink gets your watch account key from that sign-in.")}</p>
+      {/* Only when the watch needs a sign-in; a saved key with the watch away needs nothing more than connecting. */}
+      {(snapshot.connected && snapshot.systemBind !== "authenticated") || (!snapshot.connected && watchKeySaved === false)
+        ? <p className="watch-menu-hint">{t("Sign in to the COROS account paired with this watch, then connect.")}</p>
+        : null}
     </div>
   );
+}
+
+/**
+ * Developer only (COROSLINK_SYNC_CAPTURE=1): the raw bytes the satellite format is read from (bind
+ * reply bytes 11–14, then settings type 13 once a sync has read it), and a test send that doesn't
+ * wait for the usual rule. The send itself is refused in the main process without the flag.
+ */
+function SatelliteDeveloperTools({ api, assist, connected }: { api: CorosLinkApi | undefined; assist: CorosNativeBleSnapshot["gpsAssistance"]; connected: boolean }) {
+  useLanguage();
+  const [outcome, setOutcome] = useState<{ sending?: boolean; sent?: boolean; error?: string }>({});
+  const send = api?.sendSatelliteDataNow;
+  return (
+    <small className="watch-menu-detail-sub">
+      <code>{assist ? `${assist.raw || "—"}${assist.settingsRaw ? ` · ${assist.settingsRaw}` : ""}` : "—"}</code>{" "}
+      {send ? <button type="button" className="watch-link-inline-button" disabled={!connected || outcome.sending} onClick={() => {
+        setOutcome({ sending: true });
+        void send().then(
+          result => setOutcome(result.ok ? { sent: true } : { error: result.error ?? "—" }),
+          error => setOutcome({ error: error instanceof Error ? error.message : String(error) }));
+      }}>{outcome.sending ? t("Sending…") : t("Send satellite data now")}</button> : null}{" "}
+      {outcome.sent ? t("Sent") : outcome.error ?? null}
+    </small>
+  );
+}
+
+/** When the watch's GPS assistance data runs out, as read on the last connection. */
+function satelliteData(assist: CorosNativeBleSnapshot["gpsAssistance"], connected: boolean): ReactNode {
+  // A reply in an unknown format, or a date far from today, wasn't read as expected: shown as no data (the bytes stay in the snapshot).
+  const plausible = !assist?.validUntil || Math.abs(assist.validUntil - Date.now()) < 400 * 86_400_000;
+  if (!assist || assist.format === "unknown" || !plausible) return "—";
+  const until = assist.validUntil && new Date(assist.validUntil).toLocaleString(getLocale(), { dateStyle: "medium", timeStyle: "short" });
+  const value = !assist.validUntil ? t("None on the watch")
+    : assist.validUntil > Date.now() ? t("Valid until {{p0}}", { p0: until }) : t("Expired {{p0}}", { p0: until });
+  // With the watch away it may have been updated since (by the COROS app, say), so say when this was read.
+  return connected ? value : <>{value}<small className="watch-menu-detail-sub">{t("as read at the last connection")}</small></>;
 }

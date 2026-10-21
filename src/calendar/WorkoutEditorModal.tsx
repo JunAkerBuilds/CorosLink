@@ -1,5 +1,6 @@
 import { formatIntensityType, formatWorkoutSport } from "./workoutLabels";
 import { getLocale, t, useLanguage } from "../i18n/training";
+import { useLocalOnlyView } from "../privacy/localOnlyView";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   AlertTriangle,
@@ -259,6 +260,7 @@ export function WorkoutEditorModal({
   onError
 }: WorkoutEditorModalProps) {
   useLanguage();
+  const localOnly = useLocalOnlyView();
   const { unitSystem } = useUnitSystem();
   const reducedMotion = useReducedMotion();
   const [document, setDocument] = useState<WorkoutEditorDocument | null>(null);
@@ -743,7 +745,7 @@ export function WorkoutEditorModal({
 
           {confirmClose ? (
             <div className="workout-editor-confirm" role="alertdialog" aria-label={t("Discard workout changes")}>
-              <div><strong>{t("Discard unsaved changes?")}</strong><span>{planMode ? t("Your edits have not been applied to the plan.") : t("Your edits have not been sent to COROS.")}</span></div>
+              <div><strong>{t("Discard unsaved changes?")}</strong><span>{planMode ? t("Your edits have not been applied to the plan.") : localOnly ? t("Your edits have not been saved.") : t("Your edits have not been sent to COROS.")}</span></div>
               <button type="button" className="ghost-button" onClick={() => setConfirmClose(false)}>{t("Keep editing")}</button>
               <button type="button" className="danger-button" onClick={onClose}>{t("Discard")}</button>
             </div>

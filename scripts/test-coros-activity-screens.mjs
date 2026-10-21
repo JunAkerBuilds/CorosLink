@@ -219,13 +219,13 @@ try {
   const reading = native.readActivityScreens(0);
   await rejects(native.readActivityScreens(0), /current Bluetooth operation/);
   await rejects(native.listMusic(), /current Bluetooth operation/);
-  await rejects(native.connect(), /operation/);
-  await rejects(native.scan(), /operation/);
-  await rejects(native.syncRoute({}), /activity-page sync/);
+  await rejects(native.connect(), /activity screens/);
+  await rejects(native.scan(), /activity screens/);
+  await rejects(native.syncRoute({}), /activity screens/);
   await rejects(native.syncWatchface("preview"), /Bluetooth transfer/);
   await rejects(native.listWatchfaceSlots(), /Bluetooth transfer/);
   await rejects(native.sendNotification({ message: "Fixture message" }), /Bluetooth operation/);
-  check(() => assert.throws(() => native.downloadWifiMap("preview"), /activity-page sync/));
+  check(() => assert.throws(() => native.downloadWifiMap("preview"), /activity screens/));
   check(() => assert.throws(() => native.sendMusicOverWifi(async () => null), /current Bluetooth operation/));
   const readingStatus = await native.status();
   check(() => assert.equal(readingStatus.phase, "connected"));

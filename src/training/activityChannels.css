@@ -124,3 +124,39 @@
 
 :root[data-theme="paper"] .activity-channels-readout { background: #f7f9f6; }
 :root[data-theme="paper"] .activity-channels-navigator-shade { fill: #ffffffb3; }
+
+/* --- The watch's own analysis (Local-Only Mode) ----------------------------
+   Training effect, running dynamics and heart-rate recovery share one row
+   under time in zones; a panel left alone on a wrapped row takes its width.
+   Values read like the channel readout: a coloured rule, a figure, a unit. */
+.activity-detail-insights { display: flex; flex-wrap: wrap; gap: 14px; }
+.activity-detail-insights:empty { display: none; }
+.activity-detail-insights > .activity-detail-visual-panel:is(.activity-effect, .activity-hr-recovery) { flex: 1 1 300px; min-width: 0; min-height: 0; grid-template-rows: none; align-content: start; }
+.activities-detail-dialog .activity-detail-insights > .activity-detail-visual-panel { gap: 14px; }
+.activities-detail-sidebar .activity-detail-insights { gap: 12px; }
+.activities-detail-sidebar .activity-detail-insights > .activity-detail-visual-panel { gap: 8px; }
+.activity-effect, .activity-hr-recovery { --channels-rule: color-mix(in srgb, var(--text-muted) 24%, transparent); --channels-bed: color-mix(in srgb, var(--text-muted) 6%, transparent); }
+.activity-effect .activity-detail-visual-heading, .activity-hr-recovery .activity-detail-visual-heading { flex-wrap: wrap; row-gap: 6px; }
+/* The calendar aside has no dialog heading rules; keep icon and title apart there too. */
+:where(.activity-effect, .activity-hr-recovery, .activity-zones) .activity-detail-visual-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px 12px; }
+:where(.activity-effect, .activity-hr-recovery, .activity-zones) .activity-detail-visual-heading h3 { display: flex; align-items: center; gap: 7px; }
+
+.activity-effect-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 12px 16px; margin: 0; }
+.activity-effect-items > div { --item-color: color-mix(in srgb, var(--text-muted) 40%, transparent); display: grid; align-content: start; gap: 3px; min-width: 0; padding-left: 10px; border-left: 2px solid var(--item-color); }
+.activity-effect-items dt { font-size: 11px; font-weight: 600; line-height: 1.3; letter-spacing: .05em; text-transform: uppercase; color: var(--text-secondary); }
+.activity-effect-items dd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 5px; margin: 0; min-width: 0; }
+.activity-effect-items strong { font-size: 19px; line-height: 1.15; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.activity-effect-items small { font-size: 12px; color: var(--text-secondary); }
+.activity-effect-items dd > span { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.activity-effect-items .has-tone dd > span { font-weight: 600; color: var(--item-color); }
+.activities-detail-sidebar .activity-effect-items { gap: 10px 12px; }
+.activities-detail-sidebar .activity-effect-items strong { font-size: 15px; }
+
+.activity-hr-recovery-chart { display: grid; gap: 4px; }
+.activity-hr-recovery-curve { display: block; width: 100%; height: 56px; border-radius: 6px; background: var(--channels-bed); }
+.activity-hr-recovery-mark { stroke: var(--channels-rule); stroke-dasharray: 2 3; }
+.activity-hr-recovery-area { stroke: none; fill-opacity: .17; }
+.activity-hr-recovery-line { fill: none; stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; }
+.activity-hr-recovery-axis { display: flex; justify-content: space-between; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.activity-hr-recovery-caption { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-secondary); }
+.activities-detail-sidebar .activity-hr-recovery-caption, .activities-detail-sidebar .activity-hr-recovery-axis { font-size: 10px; }

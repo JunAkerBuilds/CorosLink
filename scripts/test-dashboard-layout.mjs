@@ -48,3 +48,30 @@ assert.equal(ensureDashboardWidget('coach', storage), true);
 assert.deepEqual(parseLayout(store.get('coroslink.training-dashboard.v1')).map(w => w.id), ['sleep', 'coach'], 'custom layouts keep their widgets');
 function defaultWidgetFor(id) { return { id, size: 6, preset: '6-standard', title: '', days: 0, metrics: ['load', 'heart', 'steps', 'calories'] }; }
 console.log('Dashboard widget auto-add checks passed');
+
+// Local-Only Mode keeps its own layout without the COROS-only widgets, and never rewrites the saved one.
+const { localDefaultLayout, parseLocalLayout, isCorosOnlyWidget, localDashboardStorageKey, dashboardStorageKey } = await import('../src/training/dashboardLayout.ts');
+assert.equal(localDashboardStorageKey, `${dashboardStorageKey}.local`);
+const localDefaults = localDefaultLayout();
+assert.ok(localDefaults.length > 0 && !localDefaults.some(w => isCorosOnlyWidget(w.id)), 'the Local-Only default has only cards the watch can fill');
+assert.deepEqual(localDefaults.slice(0, 2).map(w => w.id), ['sleep', 'healthCheck'], 'watch readings lead');
+assert.deepEqual(parseLocalLayout(null, null), localDefaults, 'no saved layout: the Local-Only default');
+assert.deepEqual(parseLocalLayout(null, JSON.stringify({ version: 3, widgets: defaultLayout() })), localDefaults, 'an unchanged default starts from the Local-Only default');
+assert.deepEqual(parseLocalLayout(null, JSON.stringify({ version: 3, widgets: [...defaultLayout(), { ...defaultWidgetFor('coach'), size: 12, preset: '12-standard', startRow: true }] })).map(w => w.id),
+  [...localDefaults.map(w => w.id), 'coach'], 'a pinned chart panel is kept');
+assert.deepEqual(parseLocalLayout(null, JSON.stringify({ version: 3, widgets: ['stress', 'scores', 'sleep', 'race'].map(defaultWidgetFor) })).map(w => w.id),
+  ['stress', 'sleep'], 'a custom layout keeps its order without the COROS-only widgets');
+assert.deepEqual(parseLocalLayout(null, JSON.stringify({ version: 3, widgets: ['scores', 'race'].map(defaultWidgetFor) })), localDefaults, 'nothing left: the Local-Only default');
+for (const id of ['vo2', 'recovery', 'load-balance']) {
+  assert.ok(!isCorosOnlyWidget(id) && localDefaults.some(w => w.id === id), `${id} comes from the watch's activities`);
+}
+assert.ok(!isCorosOnlyWidget('daily-heart') && localDefaults.some(w => w.id === 'daily-heart'), "resting HR comes from the watch's sleep heart rate");
+assert.deepEqual(parseLocalLayout(JSON.stringify({ version: 3, widgets: ['recovery'].map(defaultWidgetFor) }), null).map(w => w.id), ['recovery'], 'a saved Local-Only layout is used as is, including widgets added back');
+assert.deepEqual(parseLocalLayout('broken', null), localDefaults);
+const localStore = new Map([[dashboardStorageKey, JSON.stringify({ version: 3, widgets: [defaultWidgetFor('sleep')] })], [localDashboardStorageKey, JSON.stringify({ version: 3, widgets: [defaultWidgetFor('stress')] })]]);
+const localStorageStub = { getItem: key => localStore.get(key) ?? null, setItem: (key, value) => localStore.set(key, value) };
+assert.equal(ensureDashboardWidget('coach', localStorageStub), true);
+assert.deepEqual(parseLayout(localStore.get(dashboardStorageKey)).map(w => w.id), ['sleep', 'coach']);
+assert.deepEqual(parseLayout(localStore.get(localDashboardStorageKey)).map(w => w.id), ['stress', 'coach'], 'a saved Local-Only layout gets the pinned charts too');
+assert.equal(ensureDashboardWidget('coach', localStorageStub), false);
+console.log('Local-Only dashboard layout checks passed');

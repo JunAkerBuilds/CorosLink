@@ -101,6 +101,39 @@ export interface WatchStatus {
 /** COROS account region, selecting the regional mobile API host. */
 export type CorosWatchfaceRegion = "eu" | "us" | "cn";
 
+/**
+ * The saved COROS watch key, as the renderer may show it. The key doesn't expire;
+ * it stops working when the watch is given another key.
+ */
+export interface CorosWatchKeySummary {
+  /** Four hex digits: the checksum a watch reports for the key it stores. */
+  keyId: string;
+  /** The masked account ID, "•••• 1234". */
+  accountId: string;
+  /** The masked email, when the key was saved by this version or later. */
+  accountEmail?: string;
+  /** When CorosLink saved the key; missing for keys saved by 0.1.57. */
+  savedAt?: number;
+  /** When COROS issued the key. */
+  issuedAt?: number;
+  /** The last watch that accepted this key. */
+  lastUsed?: { at: number; watch: string };
+  /** A watch that held a different key, or rejected this one, since it was last accepted. */
+  problem?: { at: number; watch: string; result: "mismatch" | "rejected" };
+}
+
+/** A watch key backup export: whether a file was saved (no path, no key material). */
+export interface CorosWatchKeyBackupResult { saved: boolean }
+
+/** Whether a watch key backup file was chosen in the native dialog; its contents stay in the main process. */
+export interface CorosWatchKeyBackupChoice { chosen: boolean }
+
+/** A watch key restore: what happened, and the status (with the key's summary only). */
+export interface CorosWatchKeyRestoreResult {
+  outcome: "restored" | "alreadySaved" | "cancelled";
+  status: CorosWatchfaceStatus;
+}
+
 /** COROS mobile-app session for catalogs, sharing, and watch authentication. */
 export interface CorosWatchfaceStatus {
   authenticated: boolean;
@@ -111,6 +144,8 @@ export interface CorosWatchfaceStatus {
   savedEmail?: string;
   /** Saved Bluetooth key availability, independent of cloud sign-in; key material remains private. */
   watchAuthenticationAvailable?: boolean;
+  /** About the saved watch key, when one is saved and readable. Never key material. */
+  watchKey?: CorosWatchKeySummary;
   watchAuthenticationError?: string;
   /** Region of the active mobile session, when signed in. */
   region?: CorosWatchfaceRegion;
@@ -2113,7 +2148,10 @@ export interface SpotifySyncResult {
 }
 
 export interface TrainingHubStatus {
+  /** True when training data can be shown: a COROS session, or local data in Local-Only Mode. */
   authenticated: boolean;
+  /** "local" in Local-Only Mode (set by the renderer); absent means the COROS cloud. */
+  dataSource?: "cloud" | "local";
   userId?: string;
   regionId?: string;
   baseUrl?: string;
@@ -2345,6 +2383,12 @@ export interface TrainingHubDailyMetric {
   vo2max?: number;
   distance?: number;
   duration?: number;
+  /** Local-Only Mode, from the watch: when it counts you as fully recovered (Unix seconds), as of the day's last activity. */
+  recoveredAt?: number;
+  /** Local-Only Mode, from the watch: Base Fitness and Load Impact (training-load points), fatigue (%). */
+  baseFitness?: number;
+  loadImpact?: number;
+  fatigue?: number;
 }
 
 export interface TrainingHubDailyMetrics {
@@ -2615,6 +2659,44 @@ export interface StravaConfigInput {
   clientSecret?: string;
 }
 
+/** Heart rate after the workout ended, measured by the watch (Local-Only Mode, from its daily history). */
+export interface TrainingHubHeartRateRecovery {
+  /** bpm one second after the workout ended. */
+  startBpm: number;
+  /** bpm 60 and 120 seconds after the workout ended. */
+  oneMinuteBpm: number;
+  twoMinuteBpm: number;
+  /** How far heart rate fell in those times (startBpm − later value). */
+  dropOneMinute: number;
+  dropTwoMinutes: number;
+  /** bpm once a second; sample i is i + 1 seconds after the workout ended; 0 means no reading. */
+  samples: number[];
+}
+
+/** The watch's own training analysis of a workout (Local-Only Mode, from the activity file). */
+export interface TrainingHubTrainingEffect {
+  /** 0–5.9, as the COROS app shows it. */
+  aerobic?: number;
+  anaerobic?: number;
+  /** 1 Easy, 2 Base, 3 Tempo, 4 Threshold, 5 VO2 Max, 6 Anaerobic. */
+  focus?: number;
+  aerobicLoad?: number;
+  anaerobicLoad?: number;
+  /** Training load of the 7 days up to this workout, and the watch's recommended range for it. */
+  sevenDayLoad?: number;
+  recommendedLoadMin?: number;
+  recommendedLoadMax?: number;
+}
+
+/** Running-dynamics averages measured by the watch. */
+export interface TrainingHubRunningDynamics {
+  groundTimeMs?: number;
+  verticalOscillationMm?: number;
+  /** Percent. */
+  verticalRatio?: number;
+  stepLengthMm?: number;
+}
+
 export interface TrainingHubActivityDetail {
   activityId?: string;
   name?: string;
@@ -2648,6 +2730,12 @@ export interface TrainingHubActivityDetail {
   track?: TrainingHubActivityTrack;
   series?: TrainingHubActivitySeriesPoint[];
   strength?: StrengthDetail;
+  heartRateRecovery?: TrainingHubHeartRateRecovery;
+  trainingEffect?: TrainingHubTrainingEffect;
+  runningDynamics?: TrainingHubRunningDynamics;
+  minHr?: number;
+  /** °C. */
+  avgTemperature?: number;
   raw: Record<string, unknown>;
 }
 
