@@ -1107,6 +1107,25 @@ export default function App() {
     });
   }, [api, refreshYouTubeMusic]);
 
+  // Main reports when COROS stops honouring the stored session. Signed out, the
+  // hub returns to its sign-in view and drops what the dead session loaded;
+  // renewed from the saved login, it reloads what came back empty.
+  useEffect(() => {
+    if (!api?.onTrainingHubSessionChange) {
+      return;
+    }
+    return api.onTrainingHubSessionChange((status) => {
+      applyTrainingHubStatus(status);
+      if (status.authenticated) {
+        void refreshTrainingHub().catch((caught) =>
+          setError(localizedText(() => toErrorMessage(caught))),
+        );
+      } else {
+        clearTrainingHubData();
+      }
+    });
+  }, [api, applyTrainingHubStatus, clearTrainingHubData, refreshTrainingHub]);
+
   useEffect(() => {
     if (!api?.onCombinedDownloadProgress) {
       return;

@@ -523,6 +523,10 @@ export interface CorosLinkApi {
     callback: (update: SpotifySyncUpdate) => void
   ) => () => void;
   getTrainingHubStatus: () => Promise<TrainingHubStatus>;
+  /** COROS ended the session (status signed out), or CorosLink renewed a dead one on its own. */
+  onTrainingHubSessionChange?: (
+    callback: (status: TrainingHubStatus) => void
+  ) => () => void;
   loginTrainingHub: (
     email: string,
     password: string,

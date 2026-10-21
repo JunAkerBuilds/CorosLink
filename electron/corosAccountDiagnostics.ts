@@ -12,9 +12,12 @@ export function corosAccountDiagnostics(): string[] {
   lines.push(describe("Training Hub", () => {
     const hub = getTrainingHubStatus();
     const autoLogin = hub.rememberCredentials ? "automatic re-login available" : "no saved login for automatic re-login";
+    const expired = hub.sessionExpired
+      ? ` · session expired${hub.reloginNeedsCode ? " (signing in needs the emailed code)" : ""}`
+      : "";
     return hub.authenticated
       ? `signed in · ${host(hub.baseUrl)} · region ${hub.regionId ?? "unknown"} · ${autoLogin}`
-      : `signed out · ${autoLogin}`;
+      : `signed out${expired} · ${autoLogin}`;
   }));
   lines.push(describe("Watch Faces (COROS app account)", () => {
     const watchfaces = getCorosWatchfaceStatus();

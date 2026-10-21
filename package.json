@@ -116,6 +116,7 @@
     "test:diagnostics": "npm run build:electron && node scripts/test-diagnostics.mjs",
     "test:diagnostics-ui": "npm run build:electron && electron scripts/test-diagnostics-ui.cjs",
     "test:coros-login": "npm run build:electron && node scripts/test-coros-login.mjs",
+    "test:training-hub-session-expiry": "npm run build:electron && node scripts/test-training-hub-session-expiry.mjs",
     "test:coros-ble-login": "npm run build:electron && node scripts/test-coros-ble-login.mjs && node scripts/test-coros-system-ble.mjs",
     "test:activity-backup": "npm run build:electron && node scripts/test-activity-backup.mjs",
     "test:aws-sigv4": "npm run build:electron && node scripts/test-aws-sigv4.mjs",

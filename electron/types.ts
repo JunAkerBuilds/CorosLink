@@ -2119,6 +2119,10 @@ export interface TrainingHubStatus {
   baseUrl?: string;
   rememberCredentials?: boolean;
   email?: string;
+  /** Signed out because COROS stopped accepting the session and CorosLink couldn't renew it. */
+  sessionExpired?: boolean;
+  /** Signing in again needs the code COROS emails (two-step verification). */
+  reloginNeedsCode?: boolean;
 }
 
 // Result of a login/reconnect attempt. When the COROS account has two-factor

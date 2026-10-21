@@ -736,6 +736,19 @@ const api = {
   },
   getTrainingHubStatus: (): Promise<TrainingHubStatus> =>
     ipcRenderer.invoke("trainingHub:getStatus"),
+  onTrainingHubSessionChange: (
+    callback: (status: TrainingHubStatus) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      status: TrainingHubStatus
+    ) => {
+      callback(status);
+    };
+    ipcRenderer.on("trainingHub:sessionChange", listener);
+    return () =>
+      ipcRenderer.removeListener("trainingHub:sessionChange", listener);
+  },
   loginTrainingHub: (
     email: string,
     password: string,

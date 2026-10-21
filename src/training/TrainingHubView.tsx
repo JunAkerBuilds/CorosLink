@@ -4,6 +4,7 @@ import { type CSSProperties, useCallback, useEffect, useId, useMemo, useRef, use
 import {
   ArrowRightFromLine,
   ChartNoAxesColumnIncreasing,
+  CircleAlert,
   Eye,
   EyeOff,
   ExternalLink,
@@ -376,6 +377,20 @@ function TrainingHubContent({
               <strong>{t("Welcome back")}</strong>
               <p>{t("Sign in to access your COROS Training Hub data")}</p>
             </div>
+
+            {status?.sessionExpired ? (
+              <div className="training-login-expired" role="status">
+                <CircleAlert size={18} aria-hidden="true" />
+                <div>
+                  <strong>{t("Your COROS session expired.")}</strong>
+                  <small>
+                    {status.reloginNeedsCode
+                      ? t("Sign in again and enter the code COROS emails you.")
+                      : t("Sign in again to see live training data.")}
+                  </small>
+                </div>
+              </div>
+            ) : null}
 
             {canReconnect ? (
               <div className="training-login-reconnect">

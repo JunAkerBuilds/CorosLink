@@ -148,7 +148,13 @@ interface LoginResult {
 const GLOBAL_BASE_URL = "https://teamapi.coros.com";
 const RESULT_SUCCESS = "0000";
 const TRAINING_HUB_REQUEST_TIMEOUT_MS = 30_000;
-const AUTH_ERROR_CODES = new Set(["0101", "0102", "1006"]);
+// training.coros.com signs out on 1019 ("Login expired, please log in again")
+// and on ACCESS_TOKEN_IS_INVALID.
+const AUTH_ERROR_CODES = new Set(["0101", "0102", "1006", "1019", "ACCESS_TOKEN_IS_INVALID"]);
+// Set while signed out because COROS ended the session: "code" when signing in
+// again needs the emailed code, "1" otherwise.
+const SESSION_EXPIRED_SETTING = "trainingHub.sessionExpired";
+const SESSION_CHECK_INTERVAL_MS = 60_000;
 
 // Email verification code for the 2FA login challenge: codeType 20, 6 digits.
 const TWO_FACTOR_CODE_TYPE = 20;
@@ -335,6 +341,7 @@ interface TrainingHubFileUrlData {
 export function getTrainingHubStatus(): TrainingHubStatus {
   const auth = getStoredAuth();
   const credentials = getStoredCorosCredentials();
+  const expired = auth ? undefined : getSetting(SESSION_EXPIRED_SETTING);
 
   return {
     authenticated: Boolean(auth),
@@ -342,8 +349,131 @@ export function getTrainingHubStatus(): TrainingHubStatus {
     regionId: auth?.regionId,
     baseUrl: auth?.baseUrl,
     rememberCredentials: Boolean(credentials),
-    email: credentials?.account
+    email: credentials?.account,
+    ...(expired ? { sessionExpired: true, reloginNeedsCode: expired === "code" } : {})
   };
+}
+
+type TrainingHubSessionListener = (status: TrainingHubStatus) => void;
+
+const sessionListeners = new Set<TrainingHubSessionListener>();
+let sessionCheck: Promise<void> | null = null;
+let lastSessionCheckAt = Number.NEGATIVE_INFINITY;
+
+/** Hears when COROS ends the session, and when CorosLink renews a dead one on its own. */
+export function onTrainingHubSessionChange(
+  listener: TrainingHubSessionListener
+): () => void {
+  sessionListeners.add(listener);
+  return () => {
+    sessionListeners.delete(listener);
+  };
+}
+
+function announceTrainingHubSession(): void {
+  const status = getTrainingHubStatus();
+  for (const listener of sessionListeners) {
+    try {
+      listener(status);
+    } catch {
+      // A closed window must not fail the request that noticed.
+    }
+  }
+}
+
+/**
+ * Asks COROS whether the stored token still opens the account, at most once a
+ * minute. A token COROS stopped honouring doesn't always come back as an auth
+ * error: reads can succeed with no data, which leaves Training Hub "connected"
+ * but empty. Such a session is renewed from the saved login, or ended.
+ */
+export function checkTrainingHubSession(
+  options: { force?: boolean } = {}
+): Promise<void> {
+  if (sessionCheck) {
+    return sessionCheck;
+  }
+  const now = Date.now();
+  if (
+    !getStoredAuth() ||
+    (!options.force && now - lastSessionCheckAt < SESSION_CHECK_INTERVAL_MS)
+  ) {
+    return Promise.resolve();
+  }
+  lastSessionCheckAt = now;
+  sessionCheck = runTrainingHubSessionCheck()
+    .catch((error: unknown) => recordDiagnosticError("trainingHub:sessionCheck", error))
+    .finally(() => {
+      sessionCheck = null;
+    });
+  return sessionCheck;
+}
+
+async function runTrainingHubSessionCheck(): Promise<void> {
+  const checkedToken = getStoredAuth()?.accessToken;
+  if (!checkedToken) {
+    return;
+  }
+
+  // An empty account is a refused token here, so it takes the same recovery as
+  // 1019 and the other token errors: renew from the saved login, or end it.
+  try {
+    await trainingHubRequest("/account/query", {
+      method: "GET",
+      emptyMeansExpired: true
+    });
+  } catch {
+    // An ended session was announced on its way out of trainingHubRequest. An
+    // outage or being offline says nothing about the session.
+    return;
+  }
+
+  // Renewed: reads made with the dead token came back empty, so reload them.
+  const current = getStoredAuth()?.accessToken;
+  if (current && current !== checkedToken) {
+    announceTrainingHubSession();
+  }
+}
+
+/**
+ * Every failed Training Hub request passes through here. A session that ended
+ * is remembered (so the window can say why it is signed out) and announced
+ * once; a read that "succeeded" with no data prompts a session check.
+ */
+function observeTrainingHubFailure(error: unknown): void {
+  if ((error as { code?: unknown } | null)?.code !== SESSION_EXPIRED_CODE) {
+    if (error instanceof Error && / succeeded but returned no data\.$/.test(error.message)) {
+      void checkTrainingHubSession();
+    }
+    return;
+  }
+  // Another request renewed the session or the user signed in again meanwhile.
+  if (getStoredAuth()) {
+    return;
+  }
+  const marker = needsEmailedCode(error) ? "code" : "1";
+  if (getSetting(SESSION_EXPIRED_SETTING) === marker) {
+    return;
+  }
+  setSetting(SESSION_EXPIRED_SETTING, marker);
+  announceTrainingHubSession();
+}
+
+function needsEmailedCode(error: unknown): boolean {
+  let value = error;
+  for (let depth = 0; depth <= 4 && value && typeof value === "object"; depth++) {
+    if ((value as { message?: unknown }).message === "COROS_TWO_FACTOR_REQUIRED") {
+      return true;
+    }
+    value = (value as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+function forgetTrainingHubSessionExpiry(): void {
+  if (getSetting(SESSION_EXPIRED_SETTING) !== undefined) {
+    deleteSettings([SESSION_EXPIRED_SETTING]);
+  }
 }
 
 export async function loginTrainingHub(
@@ -442,6 +572,7 @@ function persistTrainingHubSession(session: TrainingHubAuthState): void {
   setSetting(SETTINGS.userId, session.userId);
   setSetting(SETTINGS.regionId, session.regionId);
   setSetting(SETTINGS.baseUrl, session.baseUrl);
+  forgetTrainingHubSessionExpiry();
 }
 
 // Perform the password step. Returns a completed session, or — when the account
@@ -815,6 +946,7 @@ export function logoutTrainingHub(): TrainingHubStatus {
   pendingTwoFactor = null;
   clearTrainingHubAuth();
   clearStoredCorosCredentials();
+  forgetTrainingHubSessionExpiry();
   return getTrainingHubStatus();
 }
 
@@ -6648,6 +6780,11 @@ interface TrainingHubRequestOptions extends RequestInit {
   allowEmptyData?: boolean;
   /** An optional extra the caller expects to fail sometimes: keep it out of the error report. */
   unreported?: boolean;
+  /**
+   * Session check: COROS answers a dead token's account query with an empty
+   * success, so no data counts as a refused token.
+   */
+  emptyMeansExpired?: boolean;
 }
 
 async function trainingHubFetch<T>(
@@ -6676,6 +6813,7 @@ async function trainingHubRequest<T>(
         error
       );
     }
+    observeTrainingHubFailure(error);
     throw error;
   }
 }
@@ -6787,7 +6925,13 @@ async function executeTrainingHubRequest<T>(
   path: string,
   options: TrainingHubRequestOptions = {}
 ): Promise<T> {
-  const { params, allowEmptyData, unreported: _unreported, ...requestOptions } = options;
+  const {
+    params,
+    allowEmptyData,
+    unreported: _unreported,
+    emptyMeansExpired,
+    ...requestOptions
+  } = options;
   const url = new URL(`${auth.baseUrl}${path}`);
 
   if (params) {
@@ -6808,9 +6952,16 @@ async function executeTrainingHubRequest<T>(
   const result = await fetchJson<T>(url.toString(), {
     ...requestOptions,
     headers
-  }, { allowEmptyData, contextPath: path }).catch((error: unknown) => {
+  }, { allowEmptyData: allowEmptyData || emptyMeansExpired, contextPath: path }).catch((error: unknown) => {
     throw annotateDiagnosticRequest(error, requestOptions.method ?? "GET", url.toString());
   });
+  if (emptyMeansExpired && (result === undefined || result === null)) {
+    throw annotateDiagnosticRequest(
+      new InvalidTrainingHubTokenError(`COROS ${path} returned nothing for the saved session.`),
+      requestOptions.method ?? "GET",
+      url.toString()
+    );
+  }
   if (
     (path === "/training/schedule/update" ||
       path === "/training/schedule/executeSubPlan" ||

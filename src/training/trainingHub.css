@@ -373,3 +373,41 @@
   min-height: 26px;
   padding: 0 8px;
 }
+
+/* Sign-in view after COROS ended the saved session. */
+.training-login-expired {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.training-login-expired > svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.training-login-expired > div {
+  display: grid;
+  gap: 2px;
+}
+
+.training-login-expired strong {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.training-login-expired small {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* --warning-text is ~4:1 on its own tint over paper; small text needs 4.5:1. */
+:root[data-theme="paper"] .training-login-expired {
+  color: #7c560e;
+}

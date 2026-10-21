@@ -105,6 +105,8 @@ import {
   fetchTrainingHubActivityFile,
   getTrainingHubActivityDetail,
   getTrainingHubStatus,
+  checkTrainingHubSession,
+  onTrainingHubSessionChange,
   getUpcomingWorkouts,
   listTrainingHubActivities,
   listScheduledWorkoutEntries,
@@ -1120,6 +1122,12 @@ app.whenReady().then(() => {
   onMcpConnectionChanged((id, connected) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("mcp:connectionChanged", { id, connected });
+    }
+  });
+  // COROS ended the session (signed out), or a dead one was renewed from the saved login.
+  onTrainingHubSessionChange((status) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("trainingHub:sessionChange", status);
     }
   });
   setFitIndexProgressListener((progress) => {
@@ -2285,7 +2293,11 @@ function registerIpcHandlers(): void {
       })
   );
 
-  ipcMain.handle("trainingHub:getStatus", () => getTrainingHubStatus());
+  ipcMain.handle("trainingHub:getStatus", () => {
+    // A stored token isn't proof COROS still honours it; the answer arrives as trainingHub:sessionChange.
+    void checkTrainingHubSession();
+    return getTrainingHubStatus();
+  });
 
   ipcMain.handle(
     "trainingHub:login",
