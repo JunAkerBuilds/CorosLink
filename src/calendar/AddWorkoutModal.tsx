@@ -1,5 +1,6 @@
 import { formatIntensityType, formatWorkoutSport } from "./workoutLabels";
 import { t, getLocale, useLanguage } from "../i18n/training";
+import { useLocalOnlyView } from "../privacy/localOnlyView";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   Activity,
@@ -1784,13 +1785,15 @@ export function AddWorkoutModal({
   libraryOnly = false
 }: AddWorkoutModalProps) {
   useLanguage();
+  const localOnly = useLocalOnlyView();
   const { unitSystem } = useUnitSystem();
   const reducedMotion = useReducedMotion();
   const todayKey = getLocalHappenDayKey();
   // Logging makes no sense for a day that hasn't happened yet, and COROS
   // rejects scheduling in the past — so each side of "today" gets the
   // tab set (and default tab) that can actually succeed.
-  const canLogActivity = !libraryOnly && dateKey <= todayKey;
+  // Logging a manual activity creates it on COROS, which Local-Only Mode never does.
+  const canLogActivity = !libraryOnly && !localOnly && dateKey <= todayKey;
   const canSchedule = dateKey >= todayKey;
   const [tab, setTab] = useState<AddTab>(libraryOnly ? "builder" : canSchedule ? "quick" : "activity");
   const [submitting, setSubmitting] = useState(false);

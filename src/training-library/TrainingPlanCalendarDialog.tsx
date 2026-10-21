@@ -1,4 +1,5 @@
 import { getLocale, useLanguage, t } from "../i18n/training";
+import { useLocalOnlyView } from "../privacy/localOnlyView";
 import {
   AlertTriangle,
   CalendarPlus,
@@ -116,6 +117,7 @@ function initialInstallDate(plan: TrainingPlanDocument): string {
 
 export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperation, onClose, onComplete }: TrainingPlanCalendarDialogProps) {
   useLanguage();
+  const localOnly = useLocalOnlyView();
   const { unitSystem } = useUnitSystem();
   const install = activeTrainingPlanCalendarInstall(plan);
   const operation = requestedOperation ?? (install && !(install.state === "partial" && install.lastOperation === "install") ? "remove" : "install");
@@ -202,7 +204,7 @@ export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperat
       <header>
         <div className="plan-calendar-heading">
           <span className="plan-calendar-title-icon" aria-hidden="true">{operation === "install" ? <CalendarPlus size={17} /> : <CalendarX size={17} />}</span>
-          <div><p className="tl-eyebrow">{t("COROS calendar")}</p><h2 id="plan-calendar-title">{operation === "install" ? t("Add plan to calendar") : t("Remove plan from calendar")}</h2><p>{plan.name}</p></div>
+          <div><p className="tl-eyebrow">{localOnly ? t("Calendar") : t("COROS calendar")}</p><h2 id="plan-calendar-title">{operation === "install" ? t("Add plan to calendar") : t("Remove plan from calendar")}</h2><p>{plan.name}</p></div>
         </div>
         <button type="button" className="icon-button" aria-label={t("Close calendar preview")} disabled={mutating} onClick={onClose}><X size={17} /></button>
       </header>
@@ -212,7 +214,7 @@ export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperat
 
         {!offline && operation === "install" && !preview ? <div className="plan-calendar-start"><label><span>{t("Plan start date")}</span><input autoFocus type="date" value={startDate} min={today} aria-invalid={Boolean(startDateProblem)} aria-describedby={startDateProblem ? "plan-calendar-date-error" : undefined} disabled={loading} onChange={(event) => { setStartDate(event.target.value); setError(null); }} />{startDateProblem ? <small id="plan-calendar-date-error" className="plan-calendar-date-error" role="alert">{startDateProblem}</small> : null}</label><p>{t("Day 1 starts on the selected date. The preview checks exact dates and shows same-day workouts; existing workouts are kept.")}</p><button type="button" className="primary-button" disabled={loading || Boolean(startDateProblem)} onClick={() => void loadPreview()}>{loading ? <LoaderCircle className="is-spinning" size={15} /> : <CalendarPlus size={15} />}{loading ? t("Checking calendar...") : t("Preview dates")}</button></div> : null}
 
-        {!offline && loading ? <div className="plan-calendar-loading"><LoaderCircle className="is-spinning" size={22} /><strong>{t("Checking the COROS calendar")}</strong><p>{t("Comparing plan dates with current scheduled workouts.")}</p></div> : null}
+        {!offline && loading ? <div className="plan-calendar-loading"><LoaderCircle className="is-spinning" size={22} /><strong>{localOnly ? t("Checking the calendar") : t("Checking the COROS calendar")}</strong><p>{t("Comparing plan dates with current scheduled workouts.")}</p></div> : null}
 
         {error ? <div className="plan-calendar-error" role="alert"><AlertTriangle size={17} /><div><strong>{error.title}</strong><p>{t(error.message)}</p></div><button type="button" className="ghost-button" disabled={loading || mutating} onClick={() => void loadPreview()}><RefreshCw size={14} /> {t("Try again")}</button></div> : null}
 

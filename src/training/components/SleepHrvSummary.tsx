@@ -101,26 +101,26 @@ export function SleepHrvSummary({ result, part }: { result: HealthInsightResult;
       <ReferenceGauge value={average.value} range={range} baseline={baseline} />
       <p className="health-insight-legend">
         {range && <span><i className="is-range" />{t("Normal range")} {range[0]}–{range[1]} ms</span>}
-        {baseline !== undefined && <span><i className="is-baseline" />{t("Baseline")}{baseline} ms</span>}
+        {baseline !== undefined && <span><i className="is-baseline" />{t("Baseline")} {baseline} ms</span>}
       </p>
     </div>}
   </>;
 }
 
 /** Shown when today's window is empty and the card fell back to the latest synced night. */
-export function SleepHrvNotSynced({ compact }: { compact?: boolean }) {
+export function SleepHrvNotSynced({ compact, local }: { compact?: boolean; local?: boolean }) {
   useLanguage();
-  const hint = "Showing your latest night until your watch syncs with the COROS app.";
+  const hint = local ? t("Showing your latest night until you sync your watch in CorosLink.") : t("Showing your latest night until your watch syncs with the COROS app.");
   return <p className="health-hrv-notice" role="note" title={compact ? hint : undefined}>
     <CloudOff size={14} aria-hidden="true" />
     <span><strong>{t("Last night isn’t synced yet.")}</strong>{!compact && <> {hint}</>}</span>
   </p>;
 }
 
-export function SleepHrvEmpty({ week }: { week: boolean }) {
+export function SleepHrvEmpty({ week, local }: { week: boolean; local?: boolean }) {
   useLanguage();
   return <>
-    <strong>{week ? t("No sleep HRV this week") : t("No HRV for last night yet")}</strong>
-    <p>{t("Wear your watch to sleep, then sync it in the COROS app. Each night appears on the morning you wake up.")}</p>
+    <strong>{local ? t("No data yet.") : week ? t("No sleep HRV this week") : t("No HRV for last night yet")}</strong>
+    {local ? null : <p>{t("Wear your watch to sleep, then sync it in the COROS app. Each night appears on the morning you wake up.")}</p>}
   </>;
 }

@@ -11,7 +11,8 @@ from unittest.mock import patch
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.serialization import Encoding, PrivateFormat, NoEncryption
-from coros_ble_auth import AccountAuth, AuthError, MessageDecoder, bind_status, crc32_mpeg2, frame_message
+from coros_ble_auth import (AccountAuth, AuthError, KEY_MISMATCH, KEY_REJECTED, KEY_UPDATE, KeyMismatchError, MessageDecoder, OTHER_ACCOUNT,
+                            bind_status, crc16_ccitt_false, crc32_mpeg2, frame_message, refusal_message, reports_key_id, watch_key_id)
 
 ROOT = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("native_ble", ROOT / "coros-native-ble.py")
@@ -61,6 +62,70 @@ class AuthenticationTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(AuthError):
                 account.authenticated_payload(account.initial_payload(), {**challenge, **changes})
 
+    def test_watch_key_checksum_is_compared_before_signing(self):
+        # CRC-16/CCITT-FALSE over [u16 n length][u16 e length][n][e], as the watch reports it.
+        self.assertEqual(crc16_ccitt_false(b"123456789"), 0x29B1)
+        numbers = self.key.public_key().public_numbers()
+        blob = struct.pack("<HH", 256, 3) + numbers.n.to_bytes(256, "big") + b"\x01\x00\x01"
+        account = AccountAuth(self.credential, self.credential["deviceName"])
+        self.assertEqual(account.key_id, crc16_ccitt_false(blob))
+        self.assertEqual(watch_key_id(numbers), account.key_id)
+        challenge = {"status": 5, "keyExists": True, "authType": 0, "needRandom": True, "nonce": b"1234"}
+        for key_id in [account.key_id, 0]:
+            self.assertEqual(len(account.authenticated_payload(account.initial_payload(), {**challenge, "keyId": key_id})), 293)
+        with self.assertRaises(KeyMismatchError) as caught:
+            account.authenticated_payload(account.initial_payload(), {**challenge, "keyId": account.key_id ^ 1})
+        self.assertEqual(str(caught.exception), KEY_MISMATCH)
+        with self.assertRaises(AuthError) as caught:
+            account.authenticated_payload(account.initial_payload(), {**challenge, "status": 2})
+        self.assertEqual(str(caught.exception), OTHER_ACCOUNT)
+        reply = bytearray(17); reply[0] = 0x35; reply[7:9] = b"\x1a\x3f"; reply[10] = 4
+        self.assertEqual(bind_status(bytes(reply))["keyId"], 0x3F1A)
+        self.assertEqual(refusal_message(bind_status(bytes(reply))), KEY_REJECTED)
+
+    def test_pace_4_reporting_no_key_is_not_signed(self):
+        # The PACE 4 always reports its key's checksum, so 0000 there means it holds no key; other watches keep signing on 0000.
+        self.assertTrue(reports_key_id("COROS W336", "COROS PACE 4 81D0"))
+        self.assertTrue(reports_key_id("W336-3.2008.0", ""))
+        self.assertTrue(reports_key_id("", "COROS PACE 4 81D0"))
+        self.assertTrue(reports_key_id(None, "COROS PACE 4"))
+        for model, name in [("COROS W332", "COROS PACE Pro TEST"), ("COROS W337", "COROS PACE 4 81D0"), ("", "COROS PACE 4 Pro 81D0"),
+                            ("", "COROS APEX 4 81D0"), (None, None), ("COROS W541", "COROS PACE 4 81D0")]:
+            self.assertFalse(reports_key_id(model, name), (model, name))
+        challenge = {"status": 5, "keyExists": True, "authType": 0, "needRandom": True, "nonce": b"1234", "keyId": 0}
+        pace_4 = AccountAuth(self.credential, self.credential["deviceName"], key_id_reported=True)
+        with self.assertRaises(AuthError) as caught:
+            pace_4.authenticated_payload(pace_4.initial_payload(), challenge)
+        self.assertEqual(str(caught.exception), KEY_UPDATE)
+        self.assertNotIsInstance(caught.exception, KeyMismatchError)
+        self.assertEqual(len(pace_4.authenticated_payload(pace_4.initial_payload(), {**challenge, "keyId": pace_4.key_id})), 293)
+        other = AccountAuth(self.credential, self.credential["deviceName"])
+        self.assertEqual(len(other.authenticated_payload(other.initial_payload(), challenge)), 293)
+
+    async def test_live_pace_4_session_with_no_key_sends_nothing_signed(self):
+        for model, signed in [("COROS W336", False), ("COROS W332", True)]:
+            session = native.NativeSession()
+            session.connection = type("Connection", (), {"is_encrypted": True})()
+            session.state.update(connected=True, encrypted=True, mtu=247, modelNumber=model)
+            calls = []
+
+            async def exchange(payload, maximum):
+                calls.append(payload)
+                reply = bytearray(17)
+                if len(calls) == 1:
+                    reply[0] = 0x35;reply[9] = 5;reply[11:15] = b"new!"
+                else:
+                    reply[0] = 0x31
+                return bytes(reply)
+
+            session.control_exchange = exchange
+            await session.authenticate(self.credential, self.credential["deviceName"])
+            self.assertEqual(len(calls), 2 if signed else 1, model)
+            self.assertEqual(session.state["systemBind"], "authenticated" if signed else "failed")
+            if not signed:
+                self.assertEqual(session.state["authenticationError"], KEY_UPDATE)
+                self.assertIsNone(session.state.get("keyCheck"), "no key is not a different key")
+
     def test_incomplete_out_of_order_and_bad_checksum(self):
         frames = frame_message(0xA5, bytes(range(40)))
         decoder = MessageDecoder(0xA5)
@@ -95,12 +160,42 @@ class AuthenticationTests(unittest.IsolatedAsyncioTestCase):
             session.control_exchange = exchange
             await session.authenticate(self.credential, self.credential["deviceName"])
             self.assertEqual(session.state["systemBind"], "authenticated" if accepted else "failed")
+            self.assertEqual(session.state.get("keyCheck"), "ok" if accepted else None)
             self.assertTrue(session.state["connected"], "an auth rejection retains the working BLE connection")
             self.assertEqual(len(calls), 2)
             self.assertNotIn(self.credential["privateKeyDer"], str(session.state))
             session.disconnected(None)
             self.assertEqual(session.state["systemBind"], "not_authenticated")
             self.assertNotIn("authenticatedAt", session.state)
+
+    async def test_live_session_key_mismatch_and_rejection(self):
+        account = AccountAuth(self.credential, self.credential["deviceName"])
+        for case in ["mismatch", "rejected"]:
+            session = native.NativeSession()
+            session.connection = type("Connection", (), {"is_encrypted": True})()
+            session.state.update(connected=True, encrypted=True, mtu=247)
+            calls = []
+
+            async def exchange(payload, maximum):
+                calls.append(payload)
+                reply = bytearray(17)
+                if len(calls) == 1:
+                    reply[0] = 0x35;reply[9] = 5;reply[11:15] = b"new!"
+                    reply[7:9] = struct.pack("<H", account.key_id ^ 0x55 if case == "mismatch" else account.key_id)
+                else:
+                    reply[0] = 0x35;reply[10] = 4
+                return bytes(reply)
+
+            session.control_exchange = exchange
+            await session.authenticate(self.credential, self.credential["deviceName"])
+            self.assertEqual(session.state["systemBind"], "failed")
+            self.assertEqual(session.state["keyCheck"], case)
+            if case == "mismatch":
+                self.assertEqual(len(calls), 1, "a different key on the watch is never signed for")
+                self.assertEqual(session.state["authenticationError"], KEY_MISMATCH)
+            else:
+                self.assertEqual(session.state["authenticationError"], KEY_REJECTED)
+            self.assertNotIn(self.credential["privateKeyDer"], str(session.state))
 
     async def test_cleanup_failure_and_safe_pairing_error(self):
         class BrokenTransport:

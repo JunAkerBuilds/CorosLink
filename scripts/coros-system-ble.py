@@ -23,8 +23,9 @@ import traceback
 from bleak import BleakClient, BleakScanner
 from bleak.exc import BleakBluetoothNotAvailableError, BleakError, BleakGATTProtocolError, BleakGATTProtocolErrorCode
 from coros_ble_protocol import Decoder, ProtocolError, frames
-from coros_ble_route import MUSIC_DELETE_FILE, ROUTE_FILE, WATCHFACE_FILE, send_file_block
+from coros_ble_route import DATA_FILES, MUSIC_DELETE_FILE, ROUTE_FILE, WATCHFACE_FILE, send_file_block
 from coros_ble_music import MusicDeleteReceiver, MusicPageReceiver, decode_watch_interaction
+from coros_ble_activity import SyncBlockReceiver
 
 CHANNELS = {
     'control': '6e400001-b5a3-f393-e0a9-77656c6f6f70',
@@ -40,7 +41,25 @@ def standard_uuid(short):
     return '0000' + short + '-0000-1000-8000-00805f9b34fb'
 
 
+# How long a connect with a remembered identity waits for that device once a
+# same-named device with another address has been seen.
+PINNED_GRACE_SECONDS = 10
+
+
+class IdentityMismatch(ProtocolError):
+    """A device advertising the remembered name, but with another address. It is
+    never connected to; its address goes back outside `detail` (see main)."""
+    def __init__(self, address):
+        super().__init__('This doesn\u2019t look like the watch you connected before.')
+        self.address = address
+
+
 FILE_OPERATIONS = {'routeBlock': ROUTE_FILE, 'watchfaceBlock': WATCHFACE_FILE, 'musicDelete': MUSIC_DELETE_FILE}
+# Developer capture of local-sync frames (never authentication). Bounded to stay
+# well under Electron's 256 KB response-line limit.
+CAPTURE_OPERATIONS = ('syncFileBlock', 'exchange')
+CAPTURE_HEX_LIMIT = 120_000
+
 # GATT errors a watch returns until the link is paired: insufficient
 # authentication, authorization, encryption key size and encryption.
 PAIRING_REQUIRED_CODES = {0x05, 0x08, 0x0c, 0x0f}
@@ -135,6 +154,9 @@ class SystemSession:
         # Music inventory reads listen on control and bulk: (is_control, bytes).
         self.music_queue = None
         self.interaction_sequence = 0
+        self.capture = None
+        self.capture_chars = 0
+        self.capture_started = 0.0
         self.write = None
         self.state = {'phase': 'idle', 'backend': 'system', 'connected': False,
                       'encrypted': False, 'pairingManagedByOS': True,
@@ -152,17 +174,26 @@ class SystemSession:
         if self.music_queue is not None and not self.music_queue.full():
             self.music_queue.put_nowait(None)
 
-    async def discover(self, name=None):
+    async def discover(self, name=None, pinned=None):
         results = {}
-        found = asyncio.get_running_loop().create_future()
+        loop = asyncio.get_running_loop()
+        found = loop.create_future()
+        other = {}
 
         def report(device, advertisement):
             label = advertisement.local_name or device.name or ''
             if not label.startswith('COROS'):
                 return
             results[device.address] = (device, label, advertisement.rssi)
-            if name == label and not found.done():
-                found.set_result(results[device.address])
+            if name != label or found.done():
+                return
+            # With a remembered identity, only that device; a same-named one is reported, never used.
+            if pinned is not None and device.address.upper() != pinned:
+                if 'address' not in other:
+                    other['address'] = device.address
+                    loop.call_later(PINNED_GRACE_SECONDS, lambda: found.done() or found.set_exception(IdentityMismatch(other['address'])))
+                return
+            found.set_result(results[device.address])
 
         async with BleakScanner(report):
             if name is None:
@@ -183,15 +214,17 @@ class SystemSession:
         self.state['phase'] = 'idle'
         return self.state
 
-    async def connect(self, name):
+    async def connect(self, name, pinned=None):
         if self.client:
             await self.close()
         if not isinstance(name, str) or not name.startswith('COROS'):
             raise ProtocolError('Find and select your COROS watch before connecting.')
+        if pinned is not None and (not isinstance(pinned, str) or not pinned or len(pinned) > 128):
+            raise ProtocolError('The remembered watch identity is invalid.')
         self.stale_bond_cleared = False
         self.state.update(phase='connecting', systemBind='unavailable')
         self.step = 'scan'
-        device, label, rssi = await self.discover(name)
+        device, label, rssi = await self.discover(name, pinned.upper() if pinned else None)
         try:
             return await self.open(device, label, rssi)
         except Exception as error:
@@ -287,7 +320,25 @@ class SystemSession:
             await asyncio.wait_for(self.client.start_notify(notify, lambda sender, data, ch=channel: self.notification(ch, data)), 30)
             channel['subscribed'] = True
 
+    def start_capture(self, enabled):
+        self.capture = [] if enabled else None
+        self.capture_chars = 0
+        self.capture_started = time.monotonic()
+
+    def record(self, direction, channel, data):
+        if self.capture is None or self.capture_chars >= CAPTURE_HEX_LIMIT:
+            return
+        value = bytes(data).hex()
+        self.capture_chars += len(value)
+        self.capture.append({'d': direction, 'c': channel, 't': int((time.monotonic() - self.capture_started) * 1000), 'x': value})
+
+    async def write_bulk(self, characteristic, value):
+        self.record('tx', 'bulk', value)
+        await self.client.write_gatt_char(characteristic, value, response=False)
+
     def notification(self, channel, data):
+        if channel['name'] in ('control', 'bulk'):
+            self.record('rx', channel['name'], data)
         channel['notifications'] += 1
         channel['receivedBytes'] += len(data)
         channel['lastNotificationAt'] = int(time.time() * 1000)
@@ -310,6 +361,7 @@ class SystemSession:
         decoder = Decoder(opcode)
         try:
             for frame in frames(opcode, payload, min(maximum, self.write.max_write_without_response_size, 255)):
+                self.record('tx', 'control', frame)
                 await self.client.write_gatt_char(self.write, frame, response=False)
                 self.state['controlWrites'] = self.state.get('controlWrites', 0) + 1
             async def receive():
@@ -341,6 +393,7 @@ class SystemSession:
         return bulk
 
     async def write_control(self, value):
+        self.record('tx', 'control', value)
         await self.client.write_gatt_char(self.write, value, response=False)
         self.state['controlWrites'] = self.state.get('controlWrites', 0) + 1
 
@@ -434,6 +487,35 @@ class SystemSession:
         finally:
             self.music_queue = None
 
+    async def sync_file_block(self, file_index, offset, selector):
+        """One verified, unacknowledged block of a read-only SyncData file (local activity sync)."""
+        receiver = SyncBlockReceiver(file_index, offset, selector)
+        bulk = self.connected_channels()
+        self.music_queue = asyncio.Queue(maxsize=512)
+        try:
+            for frame in receiver.request_frames():
+                await self.write_control(frame)
+
+            async def receive():
+                while True:
+                    item = await self.music_queue.get()
+                    if item is None:
+                        raise ProtocolError('The watch disconnected while sending its records.')
+                    result = receiver.accept(item[1], item[0])
+                    if result.payload is not None:
+                        return result.payload
+                    for frame in result.frames:
+                        if result.bulk:
+                            await self.write_bulk(bulk, frame)
+                        else:
+                            await self.write_control(frame)
+            try:
+                return await asyncio.wait_for(receive(), 30)
+            except asyncio.TimeoutError:
+                raise ProtocolError('The watch did not send the requested records.') from None
+        finally:
+            self.music_queue = None
+
     async def refresh(self):
         if self.client and self.client.is_connected:
             data = await self.client.read_gatt_char(standard_uuid('2a19'))
@@ -501,10 +583,11 @@ async def main():
                 request_id = request.get('id')
                 operation = request['operation']
                 extra = {}
+                session.start_capture(request.get('capture') is True and operation in CAPTURE_OPERATIONS)
                 if operation == 'scan':
                     result = await session.scan()
                 elif operation == 'connect':
-                    result = await session.connect(request.get('deviceName'))
+                    result = await session.connect(request.get('deviceName'), request.get('pinnedId'))
                     if session.stale_bond_cleared:
                         # Electron adds helper events to the Bluetooth trail of later error reports.
                         emit({'event': 'stale bond cleared'})
@@ -517,10 +600,13 @@ async def main():
                     response = await session.exchange(data, request['maximumWriteBytes'], request.get('opcode', 0xa5))
                     result = session.state
                     extra['payload'] = base64.b64encode(response).decode()
-                elif operation in FILE_OPERATIONS:
+                elif operation in FILE_OPERATIONS or operation == 'dataFileBlock':
+                    file_index = FILE_OPERATIONS.get(operation, request.get('fileId'))
+                    if operation == 'dataFileBlock' and file_index not in DATA_FILES:
+                        raise ProtocolError('Only workout, weather, training-calendar and satellite-data files can be sent this way.')
                     reply = await session.file_block(base64.b64decode(request['header'], validate=True),
                                                      base64.b64decode(request['block'], validate=True),
-                                                     FILE_OPERATIONS[operation])
+                                                     file_index)
                     result = session.state
                     if reply is not None:
                         extra['payload'] = base64.b64encode(reply).decode()
@@ -531,13 +617,20 @@ async def main():
                     payload = await session.music_inventory_page(request.get('page'))
                     result = session.state
                     extra['payload'] = base64.b64encode(payload).decode()
+                elif operation == 'syncFileBlock':
+                    payload = await session.sync_file_block(request.get('fileIndex'), request.get('offset'), request.get('selector', 0))
+                    result = session.state
+                    extra['payload'] = base64.b64encode(payload).decode()
                 elif operation == 'disconnect':
                     await session.close()
                     result = session.state
                 else:
                     raise ProtocolError('Unsupported Bluetooth operation.')
                 result['updatedAt'] = int(time.time() * 1000)
+                if session.capture is not None:
+                    extra['capture'] = session.capture
                 emit({'id': request_id, 'result': result, **extra})
+                session.start_capture(False)
             except Exception as error:
                 reason = failure_reason(error)
                 message = str(error) if isinstance(error, ProtocolError) else (
@@ -547,7 +640,13 @@ async def main():
                     extra['reason'] = reason
                 if operation == 'connect' and session.stale_bond_cleared:
                     extra['staleBondCleared'] = True
-                emit({'id': request_id, 'error': message, 'detail': failure_detail(error, operation, started, **extra)})
+                failure = {'id': request_id, 'error': message, 'detail': failure_detail(error, operation, started, **extra)}
+                if isinstance(error, IdentityMismatch):
+                    failure['mismatch'] = {'deviceId': error.address}
+                if session.capture is not None:
+                    failure['capture'] = session.capture
+                emit(failure)
+                session.start_capture(False)
                 if operation == 'connect':
                     await session.close()
     finally:

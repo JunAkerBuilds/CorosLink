@@ -157,14 +157,20 @@
   white-space: nowrap;
 }
 
-.overview-weather-refresh {
+/* Refresh and settings, stacked in the card's top-right corner; shown on hover or focus. */
+.overview-weather-actions {
   position: absolute;
-  top: 8px;
+  top: 6px;
   right: 8px;
   display: grid;
+  gap: 2px;
+}
+
+.overview-weather-refresh {
+  display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 0;
   border-radius: 8px;
@@ -179,21 +185,31 @@
 }
 
 .overview-weather:hover .overview-weather-refresh,
-.overview-weather-refresh:focus-visible,
+.overview-weather:focus-within .overview-weather-refresh,
 .overview-weather--empty .overview-weather-refresh {
   opacity: 1;
 }
+
+/* The gear is the way into Settings → Weather location, so it stays in sight; only refresh waits for hover. */
+.overview-weather-refresh.overview-weather-settings { opacity: 0.6; }
+.overview-weather:hover .overview-weather-settings,
+.overview-weather:focus-within .overview-weather-settings { opacity: 1; }
 
 .overview-weather-refresh:hover:not(:disabled) {
   background: var(--control-bg, rgba(255, 255, 255, 0.06));
   color: var(--text-primary);
 }
 
+.overview-weather-refresh:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .overview-weather-refresh:disabled {
   cursor: default;
 }
 
-.overview-weather--loading .overview-weather-refresh svg {
+.overview-weather--loading .overview-weather-refresh:not(.overview-weather-settings) svg {
   animation: overview-weather-spin 1s linear infinite;
 }
 

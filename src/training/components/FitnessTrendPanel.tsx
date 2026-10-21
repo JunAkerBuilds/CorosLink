@@ -36,6 +36,8 @@ const FITNESS_METRICS_PREFERENCE =
 interface FitnessTrendPanelProps {
   snapshot: TrainingHubSnapshot | null;
   activities?: TrainingHubActivity[];
+  /** Local-Only Mode: before the first sync the card says only that there's no data yet. */
+  local?: boolean;
 }
 
 // Short chip labels keep grouped legends compact; the dropdown uses full labels.
@@ -43,6 +45,13 @@ const METRIC_SHORT_LABELS: Record<WeeklyActivityMetric, string> = {
   distance: "Distance",
   duration: "Duration",
   trainingLoad: "Load"
+};
+
+// Offered from the empty chart when another metric does have data this week.
+const SHOW_METRIC_LABELS: Record<WeeklyActivityMetric, string> = {
+  distance: "Show distance",
+  duration: "Show duration",
+  trainingLoad: "Show load"
 };
 
 interface MetricMultiSelectProps {
@@ -179,7 +188,8 @@ function MetricMultiSelect({ selected, onChange }: MetricMultiSelectProps) {
 
 export function FitnessTrendPanel({
   snapshot,
-  activities = []
+  activities = [],
+  local = false
 }: FitnessTrendPanelProps) {
   useLanguage();
   const { unitSystem } = useUnitSystem();
@@ -218,9 +228,24 @@ export function FitnessTrendPanel({
     ? getWeeklyActivityYAxisUnitLabel(primary.metric, primary.series.yAxisUnit)
     : "rel";
   const hasData = seriesByMetric.some(({ series }) => series.hasData);
+  // A week with only an indoor session has time and load but no distance: point to what can be charted.
+  const metricWithData = useMemo(
+    () =>
+      hasData
+        ? undefined
+        : WEEKLY_ACTIVITY_METRICS.find(
+            (metric) =>
+              !selectedMetrics.includes(metric) &&
+              buildWeeklyActivitySeries(dayList, metric, new Date(), unitSystem).hasData
+          ),
+    [hasData, dayList, selectedMetrics, unitSystem]
+  );
   // Once COROS has answered, a week without training is zero bars, not missing data.
-  const answered = Boolean(snapshot?.dailyMetrics || snapshot?.analytics) || activities.length > 0;
-  const showChart = hasData || answered;
+  // Local-Only Mode before the first sync says only that there is no data yet.
+  const answered =
+    (Boolean(snapshot?.dailyMetrics || snapshot?.analytics) || activities.length > 0) &&
+    !(local && !activities.length);
+  const showChart = hasData || (answered && !metricWithData);
   const dayCount = primary.series.days.length;
 
   useEffect(() => {
@@ -230,7 +255,7 @@ export function FitnessTrendPanel({
   }, [selectedMetrics, hasData]);
 
   return (
-    <section className="panel training-fitness-panel">
+    <section className={`panel training-fitness-panel${hasData ? "" : " is-empty"}`}>
       <div className="training-fitness-header">
         <p className="eyebrow">{t("Weekly Activity")}</p>
         <div className="training-metric-select-wrap">
@@ -241,7 +266,8 @@ export function FitnessTrendPanel({
         </div>
       </div>
 
-      <div className="training-fitness-legend" aria-hidden="true">
+      {/* Without bars the legend only repeats the metric picker. */}
+      {hasData ? <div className="training-fitness-legend" aria-hidden="true">
         {seriesByMetric.map(({ metric, series }) => (
           <span key={metric} className="training-fitness-legend-item">
             <span
@@ -255,7 +281,7 @@ export function FitnessTrendPanel({
             ) : null}
           </span>
         ))}
-      </div>
+      </div> : null}
 
       {showChart ? (
         <div
@@ -376,8 +402,24 @@ export function FitnessTrendPanel({
             </div>
           </div>
         </div>
+      ) : metricWithData ? (
+        <div className="training-empty-state training-fitness-empty">
+          <p>
+            {selectedMetrics.length === 1
+              ? t("Nothing recorded for this metric this week.")
+              : t("Nothing recorded for these metrics this week.")}
+          </p>
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => setSelectedMetrics([metricWithData])}
+          >
+            {t(SHOW_METRIC_LABELS[metricWithData])}
+          </button>
+        </div>
       ) : (
-        <p className="training-empty-state">{t("No weekly activity data yet.")}</p>
+        // The chart covers the current calendar week (from Monday), not "all data".
+        <p className="training-empty-state">{local && !activities.length ? t("No data yet.") : t("No activity this week yet.")}</p>
       )}
     </section>
   );

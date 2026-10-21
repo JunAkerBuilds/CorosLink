@@ -1,6 +1,6 @@
 import { t, useLanguage, getLocale, formatNumber } from "../i18n/tools";
 import { lazy, Suspense, useEffect, useId, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { ArrowUpRight, ChevronRight, LogIn } from "lucide-react";
+import { ArrowUpRight, Check, ChevronRight, Loader2, LogIn, RefreshCw } from "lucide-react";
 import {
   Barbell,
   Bicycle,
@@ -69,6 +69,8 @@ import {
   type Vitals,
   type WeekSummary
 } from "./overviewBriefingModel";
+import { useLocalOnlyView } from "../privacy/localOnlyView";
+import { useWatchSync } from "../watch/watchSyncState";
 import "./overviewBriefing.css";
 
 // Leaflet stays out of the startup bundle until the latest route is on screen.
@@ -188,12 +190,35 @@ export function useOverviewBriefing(
   activities: TrainingHubActivity[],
   workouts: TrainingHubUpcomingWorkout[]
 ): OverviewBriefingData {
+  const localOnly = useLocalOnlyView();
+  // The watch's recovery time counts down, so Local-Only Mode re-reads the clock every minute.
+  const countdown = localOnly && snapshot?.summary.recoveredAt !== undefined;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!countdown) return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, [countdown]);
+  // The recovery time is as of the last watch sync; read when that was, and again after each sync.
+  const lastSync = useWatchSync().last;
+  const [syncedAt, setSyncedAt] = useState<number | undefined>();
+  useEffect(() => {
+    const api = window.corosLink;
+    if (!countdown || typeof api?.getLocalDataOverview !== "function") { setSyncedAt(undefined); return; }
+    let live = true;
+    void api.getLocalDataOverview().then(overview => {
+      const finished = overview.lastActivitySync?.finishedAt;
+      if (live) setSyncedAt(finished ? Date.parse(finished) : undefined);
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [countdown, lastSync]);
   return useMemo(() => {
     const plan = buildTodayPlan(workouts);
-    const readiness = buildReadiness(snapshot, plan.today);
+    const readiness = buildReadiness(snapshot, plan.today, { localOnly, now, syncedAt });
     const week = buildWeekSummary(activities, workouts);
     return { readiness, plan, week, brief: buildBriefLine(readiness, plan, week) };
-  }, [snapshot, activities, workouts, getLocale()]);
+  }, [snapshot, activities, workouts, localOnly, now, syncedAt, getLocale()]);
 }
 
 interface OverviewBriefingProps {
@@ -207,6 +232,8 @@ interface OverviewBriefingProps {
   sportTypes: TrainingHubSportType[];
   onNavigate: (view: PrimaryView) => void;
   onOpenActivity: (activity: TrainingHubActivity) => void;
+  /** Local-Only Mode: opens the watch menu and starts a sync. */
+  onSyncWatch?: () => void;
 }
 
 export function OverviewBriefing({
@@ -218,7 +245,8 @@ export function OverviewBriefing({
   activities,
   sportTypes,
   onNavigate,
-  onOpenActivity
+  onOpenActivity,
+  onSyncWatch
 }: OverviewBriefingProps) {
   useLanguage();
   const hiddenNavItems = useHiddenNavItems();
@@ -246,7 +274,7 @@ export function OverviewBriefing({
   return (
     <div className="overview-briefing">
       <div className="overview-row">
-        <ReadinessCard readiness={briefing.readiness} snapshot={snapshot} onNavigate={onNavigate} />
+        <ReadinessCard readiness={briefing.readiness} snapshot={snapshot} onNavigate={onNavigate} onSyncWatch={onSyncWatch} />
         <TodayCard plan={briefing.plan} week={briefing.week} onNavigate={onNavigate} />
       </div>
       {latest || scores.length > 0 ? (
@@ -286,18 +314,21 @@ const RING_RADIUS = 62;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 
 /** Recovery dial styled like a watch bezel: lit ticks and an arc up to today's percent. */
-function ReadinessRing({ percent, tone, ghost = false }: { percent?: number; tone: Readiness["tone"]; ghost?: boolean }) {
+function ReadinessRing({ percent, hoursLeft, tone, ghost = false }: { percent?: number; hoursLeft?: number; tone: Readiness["tone"]; ghost?: boolean }) {
   useLanguage();
   const revealed = useMountedReveal();
   const ready = ghost || revealed;
-  const ratio = (percent ?? 0) / 100;
+  // The watch's recovery time has no percent: the ring fills only once it has run out.
+  const ratio = hoursLeft !== undefined ? (hoursLeft === 0 ? 1 : 0) : (percent ?? 0) / 100;
   const lit = ready ? Math.round(ratio * RING_TICKS) : 0;
   return (
     <div
       className={`overview-ring tone-${tone}${ready ? " is-ready" : ""}${ghost ? " is-ghost" : ""}`}
       role={ghost ? undefined : "img"}
       aria-hidden={ghost || undefined}
-      aria-label={ghost ? undefined : percent !== undefined ? t("{{p0}}% recovered", { p0: String(percent) }) : t("Recovery not synced yet")}
+      aria-label={ghost ? undefined : hoursLeft !== undefined
+        ? hoursLeft > 0 ? t("Recovered in {{value1}} h", { value1: String(hoursLeft) }) : t("Recovered")
+        : percent !== undefined ? t("{{p0}}% recovered", { p0: String(percent) }) : t("Recovery not synced yet")}
     >
       <svg viewBox="0 0 168 168" aria-hidden="true">
         <circle className="overview-ring-core" cx="84" cy="84" r="54" />
@@ -328,8 +359,9 @@ function ReadinessRing({ percent, tone, ghost = false }: { percent?: number; ton
       </svg>
       <div className="overview-ring-label">
         <strong>
-          {percent !== undefined ? percent : "–"}
-          {percent !== undefined ? <small>%</small> : null}
+          {hoursLeft !== undefined
+            ? hoursLeft > 0 ? <>{hoursLeft}<small>h</small></> : <Check size={34} strokeWidth={2.5} aria-hidden="true" />
+            : percent !== undefined ? <>{percent}<small>%</small></> : "–"}
         </strong>
         <span>{t("Recovery", undefined, "overviewRing")}</span>
       </div>
@@ -658,13 +690,17 @@ function PendingVitals({ items, wide }: { items: VitalSpec[]; wide: boolean }) {
 function ReadinessCard({
   readiness,
   snapshot,
-  onNavigate
+  onNavigate,
+  onSyncWatch
 }: {
   readiness: Readiness;
   snapshot: TrainingHubSnapshot | null;
   onNavigate: (view: PrimaryView) => void;
+  onSyncWatch?: () => void;
 }) {
   useLanguage();
+  const sync = useWatchSync();
+  const syncing = sync.manual || sync.reading;
   const vitals = useMemo(() => buildVitals(snapshot), [snapshot, getLocale()]);
   const specs = vitalSpecs(vitals, onNavigate);
   const measured = specs.filter((spec) => spec.value !== undefined);
@@ -692,10 +728,16 @@ function ReadinessCard({
         ) : null}
       </CardHead>
       <div className="overview-readiness-body">
-        <ReadinessRing percent={readiness.percent} tone={readiness.tone} />
+        <ReadinessRing percent={readiness.percent} hoursLeft={readiness.hoursLeft} tone={readiness.tone} />
         <div className="overview-readiness-copy">
           <h2>{readiness.title}</h2>
           <p>{readiness.message}</p>
+          {readiness.needsSync && onSyncWatch ? (
+            <button type="button" className="secondary-button overview-readiness-sync" disabled={syncing} onClick={onSyncWatch}>
+              {syncing ? <Loader2 size={15} className="spin" aria-hidden="true" /> : <RefreshCw size={15} aria-hidden="true" />}
+              {syncing ? sync.percent === null ? t("Syncing…") : t("Syncing… {{p0}}%", { p0: sync.percent }) : t("Sync watch now")}
+            </button>
+          ) : null}
         </div>
         <dl className="overview-vitals" style={{ gridTemplateRows }}>
           {measured.map((spec) => (
@@ -718,6 +760,7 @@ function TodayCard({
   onNavigate: (view: PrimaryView) => void;
 }) {
   useLanguage();
+  const localOnly = useLocalOnlyView();
   const { unitSystem } = useUnitSystem();
   const hiddenNavItems = useHiddenNavItems();
   const nextLabel = plan.next
@@ -730,7 +773,7 @@ function TodayCard({
         icon={<CalendarDots size={20} weight="duotone" />}
         hue="var(--ov-calendar)"
         title={t("Today’s plan")}
-        subtitle={t("From your COROS calendar")}
+        subtitle={localOnly ? t("From your calendar") : t("From your COROS calendar")}
       >
         {hiddenNavItems.has("calendar") ? null : (
           <button

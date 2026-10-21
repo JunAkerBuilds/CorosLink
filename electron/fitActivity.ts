@@ -27,6 +27,42 @@ export interface FitRecord {
   power?: number;
   /** °C. */
   temp?: number;
+  /** Running dynamics: step length (mm), ground contact (ms), vertical oscillation (mm), vertical ratio (%). */
+  stepLength?: number;
+  groundTime?: number;
+  verticalOscillation?: number;
+  verticalRatio?: number;
+  /** Grade-adjusted speed, m/s (COROS developer field "Effort Pace"). */
+  effortSpeed?: number;
+}
+
+/** Running-dynamics averages: mm, ms, mm, %. */
+export interface FitDynamics {
+  stepLengthMm?: number;
+  groundTimeMs?: number;
+  verticalOscillationMm?: number;
+  verticalRatio?: number;
+}
+
+/** The watch's training analysis (developer fields CorosLink writes, plus the standard training effect). */
+export interface FitTraining {
+  trainingLoad?: number;
+  aerobicLoad?: number;
+  anaerobicLoad?: number;
+  aerobicEffect?: number;
+  anaerobicEffect?: number;
+  focus?: number;
+  sevenDayLoad?: number;
+  recommendedLoadMin?: number;
+  recommendedLoadMax?: number;
+  /** The watch's VO₂ max, ml/kg/min. */
+  vo2max?: number;
+  /** Seconds from the end of the activity until fully recovered, as the watch worked it out. */
+  recovery?: number;
+  /** The watch's Base Fitness and Load Impact (training-load points) and fatigue (%). */
+  baseFitness?: number;
+  loadImpact?: number;
+  fatigue?: number;
 }
 
 export interface FitLap {
@@ -45,6 +81,9 @@ export interface FitLap {
   ascentM?: number;
   descentM?: number;
   calories?: number;
+  minHr?: number;
+  avgTemperature?: number;
+  dynamics?: FitDynamics;
 }
 
 export interface FitSession {
@@ -68,6 +107,11 @@ export interface FitSession {
   descentM?: number;
   calories?: number;
   trainingStressScore?: number;
+  minHr?: number;
+  avgTemperature?: number;
+  totalStrides?: number;
+  dynamics?: FitDynamics;
+  training?: FitTraining;
 }
 
 export interface FitActivity {
@@ -92,6 +136,54 @@ function scaled(
   offset = 0
 ): number | undefined {
   return value === undefined ? undefined : value / scale - offset;
+}
+
+/** Cadence plus FIT's fractional part (1/128). */
+function withFraction(whole: number | undefined, fraction: number | undefined): number | undefined {
+  return whole === undefined ? undefined : whole + (fraction ?? 0) / 128;
+}
+
+function developerNumber(message: FitMessage, name: string): number | undefined {
+  const value = message.developerFields?.get(name);
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+/** Dynamics averages from session fields (89/91/132/134) or lap fields (77/79/118/120). */
+function dynamicsOf(message: FitMessage, fields: { vo: number; gct: number; vr: number; step: number }): FitDynamics | undefined {
+  const dynamics: FitDynamics = {
+    verticalOscillationMm: scaled(num(message, fields.vo), 10),
+    groundTimeMs: scaled(num(message, fields.gct), 10),
+    verticalRatio: scaled(num(message, fields.vr), 100),
+    stepLengthMm: scaled(num(message, fields.step), 10)
+  };
+  return Object.values(dynamics).some((value) => value !== undefined) ? dynamics : undefined;
+}
+
+function trainingOf(message: FitMessage): FitTraining | undefined {
+  const training: FitTraining = {
+    trainingLoad: developerNumber(message, "Training Load"),
+    aerobicLoad: developerNumber(message, "Aerobic Training Load"),
+    anaerobicLoad: developerNumber(message, "Anaerobic Training Load"),
+    aerobicEffect: scaled(num(message, 24), 10),
+    anaerobicEffect: scaled(num(message, 137), 10),
+    focus: developerNumber(message, "Training Focus"),
+    sevenDayLoad: developerNumber(message, "7-Day Training Load"),
+    recommendedLoadMin: developerNumber(message, "Recommended Load Min"),
+    recommendedLoadMax: developerNumber(message, "Recommended Load Max")
+  };
+  const vo2max = developerNumber(message, "VO2 Max");
+  if (vo2max !== undefined && vo2max > 0) training.vo2max = vo2max;
+  const recovery = developerNumber(message, "Recovery Time");
+  if (recovery !== undefined) training.recovery = recovery;
+  const baseFitness = developerNumber(message, "Base Fitness");
+  if (baseFitness !== undefined && baseFitness > 0) {
+    training.baseFitness = baseFitness;
+    const loadImpact = developerNumber(message, "Load Impact");
+    const fatigue = developerNumber(message, "Fatigue");
+    if (loadImpact !== undefined) training.loadImpact = loadImpact;
+    if (fatigue !== undefined) training.fatigue = fatigue;
+  }
+  return Object.values(training).some((value) => value !== undefined) ? training : undefined;
 }
 
 function unixTs(message: FitMessage, field: number): number | undefined {
@@ -126,14 +218,19 @@ function parseSession(message: FitMessage): FitSession | null {
     maxSpeed: pickSpeed(message, 125, 15),
     avgHr: num(message, 16),
     maxHr: num(message, 17),
-    avgCadence: num(message, 18),
-    maxCadence: num(message, 19),
+    avgCadence: withFraction(num(message, 18), num(message, 92)),
+    maxCadence: withFraction(num(message, 19), num(message, 93)),
     avgPower: num(message, 20),
     maxPower: num(message, 21),
     ascentM: num(message, 22),
     descentM: num(message, 23),
     normalizedPower: num(message, 34),
-    trainingStressScore: scaled(num(message, 35), 10)
+    trainingStressScore: scaled(num(message, 35), 10),
+    minHr: num(message, 64),
+    avgTemperature: num(message, 57),
+    totalStrides: num(message, 10),
+    dynamics: dynamicsOf(message, { vo: 89, gct: 91, vr: 132, step: 134 }),
+    training: trainingOf(message)
   };
 }
 
@@ -151,11 +248,14 @@ function parseLap(message: FitMessage, index: number): FitLap | null {
     maxSpeed: pickSpeed(message, 111, 14),
     avgHr: num(message, 15),
     maxHr: num(message, 16),
-    avgCadence: num(message, 17),
+    avgCadence: withFraction(num(message, 17), num(message, 80)),
     avgPower: num(message, 19),
     maxPower: num(message, 20),
     ascentM: num(message, 21),
-    descentM: num(message, 22)
+    descentM: num(message, 22),
+    minHr: num(message, 63),
+    avgTemperature: num(message, 50),
+    dynamics: dynamicsOf(message, { vo: 77, gct: 79, vr: 118, step: 120 })
   };
 }
 
@@ -259,11 +359,15 @@ export function parseFitActivity(input: Uint8Array | ArrayBuffer): FitActivity {
     }
   }
 
-  const stamps = rawRecords
-    .map((message) => unixTs(message, 253))
-    .filter((value): value is number => value !== undefined);
-  const firstTs = stamps.length ? Math.min(...stamps) : undefined;
-  const lastTs = stamps.length ? Math.max(...stamps) : undefined;
+  // A loop, not Math.min(...stamps): a day and a half of per-second records overflows the argument list.
+  let firstTs: number | undefined;
+  let lastTs: number | undefined;
+  for (const message of rawRecords) {
+    const ts = unixTs(message, 253);
+    if (ts === undefined) continue;
+    if (firstTs === undefined || ts < firstTs) firstTs = ts;
+    if (lastTs === undefined || ts > lastTs) lastTs = ts;
+  }
   const activeWindows = buildActiveWindows(events, firstTs, lastTs);
 
   const records: FitRecord[] = [];
@@ -289,7 +393,12 @@ export function parseFitActivity(input: Uint8Array | ArrayBuffer): FitActivity {
       hr: num(message, 3),
       cadence: num(message, 4),
       power: num(message, 7),
-      temp: num(message, 13)
+      temp: num(message, 13),
+      verticalOscillation: scaled(num(message, 39), 10),
+      groundTime: scaled(num(message, 41), 10),
+      verticalRatio: scaled(num(message, 83), 100),
+      stepLength: scaled(num(message, 85), 10),
+      effortSpeed: developerNumber(message, "Effort Pace")
     });
   }
 

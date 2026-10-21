@@ -38,7 +38,7 @@
 
 ## Features
 
-The desktop interface supports English and French. Choose **Settings → App language → Français** to switch immediately. Dates and numbers follow the selected language. See the [localization guide](src/i18n/README.md) to contribute another language.
+The desktop interface supports English, French, Portuguese and Simplified Chinese. Choose a language in **Settings → App language** to switch immediately. Dates and numbers follow the selected language. See the [localization guide](src/i18n/README.md) to contribute another language.
 
 ### Training Hub & Coach
 
@@ -56,6 +56,10 @@ Sign in with your COROS account to see recovery, training load, HRV, sleep, EvoL
     <img src="docs/screenshots/coach-dark.webp" alt="Coach drafting a week of workouts" width="900" />
   </picture>
 </p>
+
+### Local-Only Mode (experimental)
+
+Keep your data off COROS. CorosLink syncs activities, sleep, heart rate, HRV and stress from a PACE 4, PACE 4 Pro, PACE Pro, PACE 3 or APEX 4 over Bluetooth to this computer and uploads nothing to COROS. Turn it on in **Settings → Privacy & local data**. Tested on PACE 4 with macOS; other models are in beta. You sign in to COROS once so CorosLink can save the watch key it needs to connect.
 
 ### Training Library & Calendar
 
@@ -154,7 +158,7 @@ CorosLink is local-first and runs no backend of its own.
 - Music, maps, activity caches, and settings live on your machine (SQLite + files on disk).
 - Tokens and passwords are stored locally; sensitive ones are encrypted with the OS keychain.
 - Data only leaves your machine for the service you're using: COROS (training data), Spotify/Google/Apple (your library or calendar), OpenRouteService (routes), or the AI provider you pick for Coach.
-- Watch-only recordings can't be read — a workout must sync to your COROS account first.
+- Watch recordings come from your COROS account, or straight from the watch in Local-Only Mode.
 
 > Only download media you have the rights or permission to download.
 

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { enrichActivitiesWithSportNames } from "./corosSportTypes";
 import { musicFileNamesMatch } from "./musicFileNames";
+import { createLocalDataTables } from "./localSync/localDataSchema";
 import Database from "better-sqlite3";
 import type {
   CachedCorosMapPackage,
@@ -146,6 +147,13 @@ export function initializeDatabase(userDataPath: string): Database.Database {
   migrateLegacyDatabase(userDataPath, dbPath);
   db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
+  // Health data (heart rate, sleep) lives here: readable by this user only, whatever the umask.
+  // SQLite creates the -wal and -shm files with the database's own mode.
+  if (process.platform !== "win32") {
+    for (const file of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
+      try { fs.chmodSync(file, 0o600); } catch { /* not created yet: it takes the database's mode */ }
+    }
+  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS downloads (
       id TEXT PRIMARY KEY,
@@ -435,6 +443,7 @@ export function initializeDatabase(userDataPath: string): Database.Database {
   // After the provider rebuild above, which recreates chat_sessions.
   ensureColumn(db, "chat_sessions", "last_seq", "INTEGER NOT NULL DEFAULT 0");
   createRemoteAccessTables(db);
+  createLocalDataTables(db);
 
   // Seed the default only once, including when upgrading an existing registry.
   // Remember initialization separately so removing COROS survives a restart.

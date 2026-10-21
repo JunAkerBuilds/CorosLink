@@ -2,6 +2,8 @@ import type { CalendarEventTiming, CalendarWorkoutEventRef, CalendarWorkoutEvent
 import type { ChatGptModelInfo, ChatModelOption } from "./chatModels";
 import type { HealthInsightKind, HealthInsightResult } from "./healthInsightsTypes";
 import { contextBridge, ipcRenderer } from "electron";
+import type { DataModeStatus, LocalOnlyActivationOptions, NetworkAccessReport } from "./privacy/dataModeTypes";
+import type { LocalBackupResult, LocalDataOverview, LocalImportResult, LocalRestoreResult, WatchSyncProbe, WatchSyncProgress } from "./localSync/localDataTypes";
 import type { CorosNativeBleSnapshot } from "./corosNativeBleTypes";
 import type { DiagnosticsSnapshot, RendererDiagnosticError } from "./diagnosticsTypes";
 import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "./watchfaceAutomationTypes";
@@ -269,6 +271,8 @@ const api = {
   // Host OS, so the renderer can reserve space for the macOS traffic lights.
   platform: process.platform,
   nativeSidebarGlass: process.platform === "darwin" && process.argv.includes("--coros-native-sidebar-glass"),
+  /** CorosLink started in Local-Only Mode (known before the first data-mode status arrives). */
+  localOnlyAtLaunch: process.argv.includes("--coroslink-local-only"),
   getWatchStatus: (): Promise<WatchStatus> =>
     ipcRenderer.invoke("watch:getStatus"),
   getCorosWatchfaceStatus: (): Promise<CorosWatchfaceStatus> =>
@@ -290,6 +294,15 @@ const api = {
     ipcRenderer.invoke("watchfaces:logout"),
   forgetCorosWatchKey: (): Promise<CorosWatchfaceStatus> =>
     ipcRenderer.invoke("watchfaces:forgetWatchKey"),
+  // The passphrase goes to the main process once per operation; the key never comes back.
+  backupCorosWatchKey: (passphrase: string): Promise<import("./types").CorosWatchKeyBackupResult> =>
+    ipcRenderer.invoke("watchfaces:backupWatchKey", { passphrase }),
+  chooseCorosWatchKeyBackup: (): Promise<import("./types").CorosWatchKeyBackupChoice> =>
+    ipcRenderer.invoke("watchfaces:chooseWatchKeyBackup"),
+  restoreCorosWatchKey: (passphrase: string): Promise<import("./types").CorosWatchKeyRestoreResult> =>
+    ipcRenderer.invoke("watchfaces:restoreWatchKey", { passphrase }),
+  cancelCorosWatchKeyRestore: (): Promise<void> =>
+    ipcRenderer.invoke("watchfaces:cancelWatchKeyRestore"),
   listCorosPairedDevices: (): Promise<CorosPairedDevice[]> =>
     ipcRenderer.invoke("watchfaces:listPairedDevices"),
   selectCorosBluetoothDevice: (deviceId: string): Promise<void> =>
@@ -342,6 +355,16 @@ const api = {
   downloadCorosWifiMap: (previewId: string): Promise<{ taskId: string; status: import("./corosWifiMapTypes").CorosWifiMapStatus }> => ipcRenderer.invoke("corosBle:mapDownload", previewId),
   getCorosRouteSyncStatus: (): Promise<import("./corosBleRouteTypes").CorosRouteSyncStatus> => ipcRenderer.invoke("corosBle:routeStatus"),
   syncCorosRoute: (routeId: string): Promise<import("./corosBleRouteTypes").CorosRouteSyncStatus> => ipcRenderer.invoke("corosBle:routeSync", routeId),
+  getWatchProfile: (): Promise<import("./watchProfileService").WatchProfileSummary | null> => ipcRenderer.invoke("watch:getProfile"),
+  updateWatchProfile: (edits: { maxHr?: number; restingHr?: number; thresholdHr?: number; hrZoneType?: number; thresholdPaceSecondsPerKm?: number }): Promise<import("./watchProfileService").WatchProfileSummary> => ipcRenderer.invoke("watch:updateProfile", edits),
+  setWatchWeatherLocation: (location: { latitude: number; longitude: number; place?: string }): Promise<void> => ipcRenderer.invoke("watch:setWeatherLocation", location),
+  getWatchSettings: (): Promise<import("./watchSettingsService").WatchSettingsSummary | null> => ipcRenderer.invoke("watch:getSettings"),
+  updateWatchSettings: (edits: Record<string, number>): Promise<import("./watchSettingsService").WatchSettingsSummary> => ipcRenderer.invoke("watch:updateSettings", edits),
+  getWeatherLocation: (): Promise<import("./watchWeatherService").WeatherLocation | null> => ipcRenderer.invoke("watch:getWeatherLocation"),
+  chooseWeatherLocation: (location: { latitude: number; longitude: number; place?: string } | null): Promise<import("./watchWeatherService").WeatherLocation | null> =>
+    ipcRenderer.invoke("watch:chooseWeatherLocation", location),
+  searchWeatherPlaces: (query: string, language: string): Promise<import("./watchWeatherService").WeatherPlace[]> => ipcRenderer.invoke("watch:searchWeatherPlaces", query, language),
+  sendWorkoutToWatch: (programId: string): Promise<{ slot: number; bytes: number }> => ipcRenderer.invoke("corosBle:sendWorkout", programId),
   cancelCorosRouteSync: (): Promise<void> => ipcRenderer.invoke("corosBle:routeCancel"),
   cancelCorosBluetoothDeviceSelection: (): Promise<void> =>
     ipcRenderer.invoke("watchfaces:cancelBluetoothDevice"),
@@ -1496,7 +1519,48 @@ const api = {
       callback(fullscreen);
     ipcRenderer.on("window:fullscreenChanged", listener);
     return () => ipcRenderer.removeListener("window:fullscreenChanged", listener);
-  }
+  },
+  getDataModeStatus: (): Promise<DataModeStatus> => ipcRenderer.invoke("dataMode:getStatus"),
+  activateLocalOnlyMode: (options: LocalOnlyActivationOptions): Promise<DataModeStatus> =>
+    ipcRenderer.invoke("dataMode:activateLocalOnly", options),
+  returnToConnectedMode: (): Promise<DataModeStatus> => ipcRenderer.invoke("dataMode:returnToConnected"),
+  getNetworkAccessReport: (): Promise<NetworkAccessReport> => ipcRenderer.invoke("dataMode:getNetworkReport"),
+  clearNetworkAccessReport: (): Promise<NetworkAccessReport> => ipcRenderer.invoke("dataMode:clearNetworkReport"),
+  onDataModeChange: (callback: (status: DataModeStatus) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: DataModeStatus) => callback(status);
+    ipcRenderer.on("dataMode:changed", listener);
+    return () => ipcRenderer.removeListener("dataMode:changed", listener);
+  },
+  getLocalDataOverview: (): Promise<LocalDataOverview> => ipcRenderer.invoke("localData:getOverview"),
+  importLocalFitFiles: (folder?: boolean): Promise<LocalImportResult> => ipcRenderer.invoke("localData:importFitFiles", folder === true),
+  syncWatchLocally: (): Promise<WatchSyncProgress> => ipcRenderer.invoke("localData:syncWatch"),
+  getWatchSyncProgress: (): Promise<WatchSyncProgress> => ipcRenderer.invoke("localData:getSyncProgress"),
+  cancelWatchSync: (): Promise<WatchSyncProgress> => ipcRenderer.invoke("localData:cancelSync"),
+  allowWatchPlanReplacement: (): Promise<void> => ipcRenderer.invoke("localData:allowWatchPlanReplacement"),
+  getWatchPlanReplacement: (): Promise<boolean> => ipcRenderer.invoke("localData:getWatchPlanReplacement"),
+  setWatchPlanReplacement: (allowed: boolean): Promise<boolean> => ipcRenderer.invoke("localData:setWatchPlanReplacement", allowed),
+  readWatchDayTotals: (): Promise<unknown> => ipcRenderer.invoke("localData:readDayTotals"),
+  /** Developer test (COROSLINK_SYNC_CAPTURE=1): send satellite data to the watch now. */
+  sendSatelliteDataNow: (): Promise<NonNullable<WatchSyncProgress["satellite"]>> => ipcRenderer.invoke("localData:sendSatelliteDataNow"),
+  probeWatchSync: (options?: { allBlocks?: boolean; selector?: number; fileIndex?: number }): Promise<WatchSyncProbe> => ipcRenderer.invoke("localData:probeWatchSync", options),
+  getWatchAutoSync: (): Promise<import("./watchAutoSyncService").WatchAutoSyncState> => ipcRenderer.invoke("watch:getAutoSync"),
+  setWatchAutoSync: (input: { enabled?: boolean; intervalHours?: number }): Promise<import("./watchAutoSyncService").WatchAutoSyncState> =>
+    ipcRenderer.invoke("watch:setAutoSync", input),
+  onWatchAutoSyncChange: (callback: (state: import("./watchAutoSyncService").WatchAutoSyncState) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: import("./watchAutoSyncService").WatchAutoSyncState) => callback(state);
+    ipcRenderer.on("watch:autoSyncChanged", listener);
+    return () => ipcRenderer.removeListener("watch:autoSyncChanged", listener);
+  },
+  onWatchSyncProgress: (callback: (progress: WatchSyncProgress) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: WatchSyncProgress) => callback(progress);
+    ipcRenderer.on("localData:syncProgress", listener);
+    return () => ipcRenderer.removeListener("localData:syncProgress", listener);
+  },
+  exportLocalBackup: (passphrase?: string): Promise<LocalBackupResult> =>
+    ipcRenderer.invoke("localData:exportBackup", { passphrase }),
+  chooseLocalBackup: (): Promise<{ chosen: boolean; encrypted?: boolean }> => ipcRenderer.invoke("localData:chooseBackup"),
+  restoreLocalBackup: (passphrase?: string): Promise<LocalRestoreResult> =>
+    ipcRenderer.invoke("localData:restoreBackup", { passphrase })
 };
 
 contextBridge.exposeInMainWorld("corosLink", api);

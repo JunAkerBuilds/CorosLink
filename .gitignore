@@ -17,7 +17,8 @@ bin/*/
 /.agents/skills
 /.claude
 /video
-/docs
+/docs/*
+!/docs/local-only-mode.md
 *.tsbuildinfo
 
 # Local firmware and Bluetooth reverse engineering

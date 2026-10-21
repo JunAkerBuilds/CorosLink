@@ -16,6 +16,8 @@ interface TrainingSummaryTilesProps {
   layout?: "row" | "stack";
   metrics?: TrainingSummaryMetric[];
   className?: string;
+  /** Local-Only Mode: resting HR needs a night's sleep with the watch, so an empty card says so. */
+  local?: boolean;
 }
 
 type TrainingSummaryMetric = "load" | "heart" | "steps" | "calories";
@@ -96,6 +98,8 @@ interface StatCardProps {
   readings?: StatReading[];
   variant?: "bar" | "widget";
   tone?: "load" | "heart" | "steps" | "calories";
+  /** Shown in place of "Recent history will appear after syncing." when the card has no readings. */
+  emptyHint?: string;
 }
 
 function StatCard({
@@ -106,7 +110,8 @@ function StatCard({
   context,
   readings = [],
   variant = "bar",
-  tone = "load"
+  tone = "load",
+  emptyHint
 }: StatCardProps) {
   useLanguage();
   if (variant === "widget") {
@@ -148,7 +153,7 @@ function StatCard({
                 ))}
               </dl>
             </>
-          ) : <p>{t("Recent history will appear after syncing.")}</p>}
+          ) : <p>{emptyHint ?? t("Recent history will appear after syncing.")}</p>}
         </div>
       </details>
     );
@@ -180,9 +185,14 @@ export function TrainingSummaryTiles({
   healthRecords = [],
   layout = "row",
   metrics = ["load", "heart"],
-  className
+  className,
+  local = false
 }: TrainingSummaryTilesProps) {
   useLanguage();
+  const rhrReadings = recentReadings(trendPoints.map((point) => ({ date: point.date, value: point.rhr !== undefined && point.rhr > 0 ? point.rhr : undefined })));
+  // Without a reading for today, Local-Only Mode asks for a night's sleep: once under the history, or above it when there is some.
+  const rhrHint = local && summary.latestRhr === undefined ? t("Wear your watch to bed to measure it") : undefined;
+  const rhrHistory = rhrReadings.some((reading) => reading.value !== undefined);
   const variant = layout === "stack" ? "widget" : "bar";
   const iconSize = variant === "widget" ? 17 : 16;
   const tilesClassName = [
@@ -222,10 +232,13 @@ export function TrainingSummaryTiles({
             variant === "widget" ? "bpm" : summary.rhrDelta !== undefined
               ? t("{{value1}} vs 7-day avg", { value1: String(formatSignedDelta(summary.rhrDelta, " bpm")) }) : t("beats per minute")
           }
-          context={summary.rhrDelta !== undefined ? t("{{value1}} vs 7-day avg", { value1: String(formatSignedDelta(summary.rhrDelta, " bpm")) }) : undefined}
-          readings={recentReadings(trendPoints.map((point) => ({ date: point.date, value: point.rhr !== undefined && point.rhr > 0 ? point.rhr : undefined })))}
+          context={rhrHint && rhrHistory
+            ? rhrHint
+            : summary.rhrDelta !== undefined ? t("{{value1}} vs 7-day avg", { value1: String(formatSignedDelta(summary.rhrDelta, " bpm")) }) : undefined}
+          readings={rhrReadings}
           variant={variant}
           tone="heart"
+          emptyHint={rhrHint}
         />
       ) : null}
 
@@ -244,7 +257,7 @@ export function TrainingSummaryTiles({
       {metrics.includes("calories") ? (
         <StatCard
           icon={<Zap size={iconSize} />}
-          label={t("Calories")}
+          label={local ? t("Active calories") : t("Calories")}
           value={formatWholeNumber(summary.calories)}
           detail={variant === "widget" ? "kcal" : t("total calories")}
           readings={recentReadings(healthRecords.map((record) => ({ date: record.happenDay, value: record.calories })))}

@@ -1939,7 +1939,7 @@ export const watchfacesPortuguese: Record<string, string> = {
   "Add {{label}} to this page": "Adicionar {{label}} a esta página",
   "The chart needs at least one page. Delete the chart layer to remove it.": "O gráfico precisa de pelo menos uma página. Elimine a camada do gráfico para o remover.",
   "The watch hides {{label}} on the other chart pages wherever it sits. No face setting changes that.": "O relógio oculta {{label}} nas outras páginas do gráfico, esteja onde estiver. Nenhuma definição do mostrador altera isso.",
-  "To keep it on screen with sunrise and sunset times, use the Sunrise / sunset field instead of the chart's Sun page.": "Para a manter no ecrã com as horas do nascer e pôr-do-sol, use o campo Nascer / pôr-do-sol em vez da página Sol do gráfico.",
+  "To keep it on screen with sunrise and sunset times, use the Sunrise / sunset field instead of the chart's Sun page.": "Para a manter no ecrã com as horas do nascer e do pôr-do-sol, use o campo Nascer / pôr-do-sol em vez da página Sol do gráfico.",
   "The watch shows these as two pages of numbers with no graph: stress, stamina and elevation, then calories, heart rate and steps. Bar style applies to the barometer and tide pages.": "O relógio mostra-os em duas páginas de números sem gráfico: stress, energia e altitude, depois calorias, frequência cardíaca e passos. O estilo de barras aplica-se às páginas do barómetro e da maré.",
   "The watch skips this page while the bar width is 0.": "O relógio salta esta página enquanto a largura das barras for 0.",
   "Turn bars on": "Activar barras",

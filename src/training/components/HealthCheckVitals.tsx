@@ -66,7 +66,7 @@ function Sparkline({ points, reference }: { points: HealthInsightPoint[]; refere
 function StressBands({ level, score }: { level?: string; score?: number }) {
   useLanguage();
   const lit = level ? STRESS_BANDS.findIndex(band => band.toLowerCase() === level.toLowerCase()) : -1;
-  return <span className="health-stress-bands" role="img" aria-label={level ? t("Stress band: {{value1}}", { value1: String(level) }) : t("Stress bands")}>
+  return <span className="health-stress-bands" role="img" aria-label={level ? t("Stress band: {{value1}}", { value1: t(level) }) : t("Stress bands")}>
     {STRESS_BANDS.map((band, index) => <i key={band} className={index === lit ? "is-lit" : undefined} />)}
     {score !== undefined && score > 0 && <b className="health-stress-marker" style={{ left: `${Math.min(100, score)}%` }} />}
   </span>;
@@ -130,22 +130,24 @@ export function HealthCheckVitals({ result, days, selected, onSelect }: {
         if (vital.key === "heartRate") style["--beat"] = `${60 / Math.max(vital.value, 1)}s`;
         if (vital.key === "respiratoryRate") style["--breath"] = `${60 / Math.max(vital.value, 1)}s`;
         // Only the stress band earns a visible caption; resting HR and ranges stay in the accessible label and the trend chart.
-        const foot = vital.key === "stress" ? level : undefined;
-        const detail = vital.key === "stress" ? level
-          : vital.key === "heartRate" && resting !== undefined ? `Resting ${formatNumber(resting)} ${vital.unit ?? ""}`.trim()
+        const foot = vital.key === "stress" && level ? t(level) : undefined;
+        const detail = vital.key === "stress" ? foot
+          : vital.key === "heartRate" && resting !== undefined ? t("Resting heart rate {{value1}}", { value1: `${formatNumber(resting)} ${vital.unit ?? ""}`.trim() })
           : points.length > 1 ? `${formatNumber(Math.min(...values), digits)}–${formatNumber(Math.max(...values), digits)} ${vital.unit ?? ""}`.trim()
           : undefined;
-        const description = `${vital.label} ${formatNumber(vital.value, 1)} ${vital.unit ?? ""}${detail ? `, ${detail}` : ""}`.trim();
+        const description = `${t(vital.label)} ${formatNumber(vital.value, 1)} ${vital.unit ?? ""}${detail ? `, ${detail}` : ""}`.trim();
         const unit = vital.unit === "breaths/min" ? "/min" : vital.unit;
+        // A tile toggles its trend below the tiles, so it is only a control when there is a line to draw.
+        const trend = points.length > 1;
         return <button key={vital.key} type="button" className={`health-vital is-${vital.key}`} style={style as CSSProperties}
-          aria-pressed={vital.series ? vital.key === selected : undefined} aria-label={description} disabled={!vital.series} onClick={() => onSelect(vital.key)}>
+          aria-pressed={trend ? vital.key === selected : undefined} aria-label={description} disabled={!trend} onClick={() => onSelect(vital.key)}>
           <span className="health-vital-head"><span className="health-vital-icon" aria-hidden="true"><Icon size={14} /></span>{t(vital.label)}</span>
           <span className="health-vital-value">{formatNumber(vital.value, 1)}{unit && <small>{unit}</small>}</span>
           <span className="health-vital-instrument">
             {vital.key === "stress" ? <StressBands level={level} score={vital.value} />
-              : points.length > 0 ? <Sparkline points={points} reference={vital.key === "heartRate" ? resting : undefined} /> : null}
+              : trend ? <Sparkline points={points} reference={vital.key === "heartRate" ? resting : undefined} /> : null}
           </span>
-          {foot && <span className={`health-vital-foot${vital.key === "stress" ? " is-level" : ""}`}>{t(foot)}</span>}
+          {foot && <span className={`health-vital-foot${vital.key === "stress" ? " is-level" : ""}`}>{foot}</span>}
         </button>;
       })}
     </div>

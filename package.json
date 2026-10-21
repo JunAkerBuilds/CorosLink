@@ -34,6 +34,7 @@
     "test:download-progress": "npm run build:electron && node scripts/test-download-progress.mjs",
     "test:route-location": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-route-location.mjs",
     "test:overview-weather": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-overview-weather.mjs",
+    "test:overview-briefing": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-overview-briefing.mjs",
     "test:route-overlap": "node --experimental-strip-types scripts/test-route-overlap.mjs",
     "test:route-engine": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-route-engine.mjs",
     "test:sketch": "npm run build:electron && node scripts/test-sketch-geometry.mjs",
@@ -42,6 +43,10 @@
     "test:selection-preferences": "node --experimental-strip-types scripts/test-selection-preferences.mjs",
     "test:calendar-event-timing": "npm run build:electron && node --test scripts/test-calendar-event-timing.mjs scripts/test-calendar-workout-events.mjs scripts/test-apple-calendar.mjs scripts/test-google-calendar.mjs && electron scripts/test-calendar-event-settings.cjs && electron scripts/test-calendar-workout-event-ui.cjs",
     "test:calendar-sync-status": "node --experimental-strip-types scripts/test-calendar-sync-status.mjs",
+    "test:watch-settings-ui": "electron scripts/test-watch-settings-ui.cjs",
+    "test:watch-menu-ui": "electron scripts/test-watch-menu-ui.cjs",
+    "test:privacy-settings-ui": "electron scripts/test-privacy-settings-ui.cjs",
+    "test:watch-commands": "npm run build:electron && cross-env TZ=Asia/Ho_Chi_Minh node scripts/test-coros-watch-commands.mjs && cross-env TZ=Asia/Kolkata node scripts/test-coros-watch-commands.mjs && cross-env TZ=America/St_Johns node scripts/test-coros-watch-commands.mjs && cross-env TZ=America/New_York node scripts/test-coros-watch-commands.mjs",
     "test:sleep-duration": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-sleep-duration.mjs",
     "test:calendar-drag": "node --experimental-strip-types scripts/test-calendar-drag.mjs",
     "test:calendar-pairing": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-calendar-pairing.mjs",
@@ -66,6 +71,7 @@
     "test:website-sign-in": "npm run build:electron && node scripts/test-website-sign-in.mjs",
     "test:coach-coros": "npm run build:electron && node scripts/test-coach-coros.mjs",
     "test:coach-coros-ui": "npm run build:electron && electron scripts/test-coach-coros-ui.cjs",
+    "test:chat-transcript-follow": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-chat-transcript-follow.mjs",
     "test:coach-creations": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-coach-creations.mjs",
     "test:claude-code": "npm run build:electron && node scripts/test-claude-code-provider.mjs",
     "test:gemini-cli": "npm run build:electron && node scripts/test-gemini-cli-provider.mjs",
@@ -136,6 +142,12 @@
     "test:coros-system-ble": "npm run build:electron && node scripts/test-coros-system-ble.mjs",
     "test:coros-notification-ui": "electron scripts/test-coros-notification-ui.cjs",
     "test:coros-wifi-maps": "npm run build:electron && node scripts/test-coros-wifi-maps.mjs",
+    "smoke:local-only": "npm run build && electron scripts/smoke-local-only-startup.cjs",
+    "test:security": "npm run build:electron && node scripts/test-security-decoders.mjs && electron scripts/test-security-electron.cjs",
+    "test:local-only": "npm run build:electron && node scripts/test-local-only-privacy.mjs && node scripts/test-coros-sport-record.mjs && node scripts/test-coros-daily-record.mjs && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-local-only-data.mjs && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-local-training.mjs && electron scripts/test-local-only-electron.cjs && npm run -s test:overview-briefing && electron scripts/test-watch-figures-ui.cjs && electron scripts/test-watch-menu-ui.cjs && electron scripts/test-watch-settings-ui.cjs && electron scripts/test-privacy-settings-ui.cjs",
+    "test:coros-ble-activity": "npm run build:electron && node scripts/test-coros-corebluetooth-sync.mjs && cd scripts && python3 test-coros-ble-activity.py",
+    "test:coros-ble-python": "cd scripts && python3 test-coros-ble-route.py && python3 test-coros-system-ble-transfers.py && python3 test-coros-system-ble.py",
+    "test:coros-ble-auth-needs-bumble": "cd scripts && python3 test-coros-ble-auth.py",
     "test:coros-ble-music": "npm run build:electron && node scripts/test-coros-ble-music.mjs && electron scripts/test-coros-music-ui.cjs",
     "test:coros-wifi-music": "npm run build:electron && node scripts/test-coros-wifi-music.mjs && electron scripts/test-coros-wifi-music-ui.cjs",
     "test:coros-ble-routes": "npm run build:electron && node scripts/test-coros-ble-routes.mjs && node scripts/test-coros-system-ble.mjs",
@@ -240,6 +252,10 @@
       {
         "from": "scripts/coros_ble_music.py",
         "to": "ble/coros_ble_music.py"
+      },
+      {
+        "from": "scripts/coros_ble_activity.py",
+        "to": "ble/coros_ble_activity.py"
       },
       {
         "from": "skills",

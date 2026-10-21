@@ -1,4 +1,5 @@
 import { BrowserWindow } from "electron";
+import { expectedError } from "./diagnosticsLog";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
@@ -788,7 +789,7 @@ function waitForAuthorizationCode(
 
       authWindow.on("closed", () => {
         authWindow = undefined;
-        rejectOnce(new Error("Spotify login window was closed."));
+        rejectOnce(expectedError(new Error("Spotify login window was closed.")));
       });
       authWindow.loadURL(authUrl);
     });

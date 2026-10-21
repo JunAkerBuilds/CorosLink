@@ -37,6 +37,8 @@ interface TrainingZoneDistributionChartsProps {
   lthrZones: TrainingHubThresholdZone[];
   activities: TrainingHubActivity[];
   analytics: TrainingHubAnalytics | null;
+  /** Local-Only Mode: before the first sync the card says only that there's no data yet. */
+  local?: boolean;
 }
 
 interface PerceivedEffortPanelProps {
@@ -997,7 +999,8 @@ export function TrainingZoneDistributionCharts({
   activities,
   analytics,
   variant,
-  size
+  size,
+  local = false
 }: TrainingZoneDistributionChartsProps) {
   useLanguage();
   const { unitSystem } = useUnitSystem();
@@ -1038,7 +1041,7 @@ export function TrainingZoneDistributionCharts({
         {(!variant || variant === "distance") && <ZoneDistributionPanel size={size}
           title={t("Distance Zones")}
           subtitle="Distribution"
-          emptyMessage="No distance zone distribution data loaded."
+          emptyMessage={local && !activities.length ? "No data yet." : "No distance zone distribution data loaded."}
           variant="distance"
           heroKicker="Most runs"
           metricColumnLabel={

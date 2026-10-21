@@ -1,3 +1,4 @@
+import { usingLocalSources } from "./localSync/activitySource";
 import { getWorkoutEditTools, isWorkoutEditTool } from "./workoutEditService";
 import { workoutEdits } from "./workoutEditRuntime";
 import type { StrengthEditPreview } from "./workoutEditTypes";
@@ -193,12 +194,15 @@ export function isChatWorkoutTool(name: string): name is ChatWorkoutToolName {
 }
 
 export function getChatWorkoutTools(): CorosMcpTool[] {
-  const hubStatus = getTrainingHubStatus();
-  if (!hubStatus.authenticated) {
+  // An unreadable credential store means "not signed in", not "no tools".
+  const hubStatus = (() => { try { return getTrainingHubStatus(); } catch { return { authenticated: false }; } })();
+  // Local-Only Mode keeps workouts and plans in CorosLink's own library and calendar (localSync/localTrainingBackend.ts).
+  const local = usingLocalSources();
+  if (!hubStatus.authenticated && !local) {
     return [];
   }
 
-  return [
+  const tools: CorosMcpTool[] = [
     ...getWorkoutEditTools(),
     {
       name: "search_coros_exercises",
@@ -349,6 +353,8 @@ export function getChatWorkoutTools(): CorosMcpTool[] {
       }
     }
   ];
+  // The exercise catalog is COROS's; without a session it can't be searched.
+  return local && !hubStatus.authenticated ? tools.filter(tool => tool.name !== "search_coros_exercises") : tools;
 }
 
 export function getStoredPlanDraft(draftId: string): StoredPlanDraft | undefined {

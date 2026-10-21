@@ -209,14 +209,55 @@
   gap: 8px;
 }
 
-.watch-menu-panel .watch-menu-connect-button {
+/* Sync sits under Connect (or alone once connected) at the same size. */
+.watch-menu-panel :is(.watch-menu-connect-button, .watch-menu-sync-button) {
   width: 100%;
   height: 40px;
   min-height: 40px;
   min-width: 0;
 }
 
-.watch-menu-panel .watch-menu-connect-button:disabled:not(.is-busy) { opacity: 0.6; }
+.watch-menu-panel :is(.watch-menu-connect-button, .watch-menu-sync-button):disabled:not(.is-busy) { opacity: 0.6; }
+
+/* How much of the activity file a sync has read, along the button's lower edge. */
+.watch-menu-panel .watch-menu-sync-button { position: relative; overflow: hidden; font-variant-numeric: tabular-nums; }
+
+.watch-menu-sync-meter {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--accent);
+  transition: width 240ms ease;
+}
+
+/* Sync and connection results: an icon as well as a colour says how it went. Also used by
+   Settings → Privacy & local data, so the rules aren't tied to the menu panel. */
+.watch-sync-result {
+  display: grid;
+  gap: 6px;
+}
+
+.watch-menu-result {
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.watch-menu-result > svg { margin-top: 2px; }
+.watch-menu-result.is-success { color: var(--text-secondary); }
+.watch-menu-result.is-success > svg { color: var(--watch-link-ok, var(--success-text)); }
+.watch-menu-result.is-warning { color: var(--text-primary); }
+.watch-menu-result.is-warning > svg { color: var(--warning-text); }
+.watch-menu-result.is-error { color: var(--error-text); }
+:root[data-theme="paper"] .watch-menu-result.is-warning > svg { color: #8a5a00; }
+.watch-sync-actions { display: inline-flex; flex-wrap: wrap; gap: 12px; margin-left: 8px; }
+.watch-sync-actions .watch-link-inline-button:disabled { opacity: 0.55; cursor: default; }
 
 .watch-menu-devices {
   display: grid;
@@ -287,11 +328,13 @@
 
 /* Sign-in callout ---------------------------------------------------------- */
 
+/* The panel is narrow, so the button sits under the text rather than squeezing it into a thin
+   column (long French and Portuguese text especially). */
 .watch-menu-callout {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 8px 10px;
   padding: 11px 12px;
   border: 1px solid var(--warning-border);
   border-radius: 12px;
@@ -318,6 +361,18 @@
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.watch-menu-callout.is-identity { grid-template-columns: auto minmax(0, 1fr); }
+
+.watch-menu-callout > .watch-link-button { grid-column: 2; justify-self: start; }
+
+.watch-menu-callout-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .watch-menu-panel .watch-menu-callout .watch-link-button {
@@ -381,12 +436,11 @@
   font-weight: 600;
 }
 
+/* Details wrap: longer translations and "Needs a connected, supported COROS watch" stay readable. */
 .watch-menu-row-text small {
-  overflow: hidden;
   color: var(--text-secondary);
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.4;
 }
 
 .watch-menu-row > svg:last-child {
@@ -445,6 +499,7 @@
 
 .watch-menu-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
@@ -546,7 +601,9 @@
 
 .watch-menu-panel .watch-link-details dl > div + div { border-top: 1px solid var(--watch-link-rule); }
 .watch-menu-panel .watch-link-details dt { flex: none; font-size: 12.5px; }
-.watch-menu-panel .watch-link-details dd { margin: 0; text-align: right; }
+/* Long values (clock, weather, satellite data) wrap instead of being cut off. */
+.watch-menu-panel .watch-link-details dd { min-width: 0; margin: 0; overflow: visible; text-align: right; text-overflow: clip; white-space: normal; overflow-wrap: break-word; }
+.watch-menu-detail-sub { display: block; margin-top: 2px; color: var(--text-secondary); font-size: 11.5px; }
 /* The page title names the composer; keep the label for assistive tech. */
 .watch-menu-panel .watch-link-composer label {
   position: absolute;
@@ -575,6 +632,81 @@
 
 @media (prefers-reduced-motion: reduce) {
   .watch-menu-trigger.is-busy .watch-menu-lamp { animation: none; }
+  .watch-menu-sync-meter { transition: none; }
   .watch-menu-row > svg:last-child,
   .watch-menu-trigger-status > svg { transition: none; }
+}
+
+/* Automatic sync ------------------------------------------------------------ */
+
+/* Label on the left, the interval (while on) and the switch on the right, as in Watch settings. */
+.watch-menu-autosync {
+  display: grid;
+  gap: 4px;
+}
+
+.watch-menu-autosync-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-height: 30px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.watch-menu-autosync-row > span { flex: 1 1 auto; min-width: 0; }
+.watch-menu-autosync-row .watch-setting-switch { margin: 0; }
+
+.watch-menu-autosync-row select {
+  min-height: 28px;
+  padding: 2px 6px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.watch-menu-autosync-row select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.watch-menu-autosync-row select:disabled { cursor: not-allowed; opacity: 0.55; }
+
+/* Paused: a chip by the label, and the switch and interval dimmed (both still work) until the watch is connected. */
+.watch-menu-autosync-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  margin-left: 8px;
+  padding: 0 7px;
+  border: 1px solid var(--warning-border);
+  border-radius: 999px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: 1px;
+}
+
+:root[data-theme="paper"] .watch-menu-autosync-chip { color: #7a4f00; }
+.watch-menu-autosync.is-paused .watch-menu-autosync-row :is(select, .watch-setting-switch) { opacity: 0.5; }
+.watch-menu-autosync.is-paused .watch-menu-autosync-row :is(select, .watch-setting-switch):hover:not(:disabled) { opacity: 0.8; }
+
+/* A link-styled action inside a details value, e.g. "Choose a place". */
+.watch-link-inline-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.watch-link-inline-button:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

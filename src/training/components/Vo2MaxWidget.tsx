@@ -15,6 +15,8 @@ const VO2_SPORT_FIELD: Record<Vo2Sport, "vo2max" | "cycleVo2max"> = {
 
 interface Vo2MaxWidgetProps {
   snapshot: TrainingHubSnapshot | null;
+  /** Local-Only Mode: the figure is the one the watch stored with its activities. */
+  local?: boolean;
 }
 
 interface Vo2Reading {
@@ -114,7 +116,7 @@ function latestVo2Readings(days: TrainingHubDailyMetric[], sport: Vo2Sport): Vo2
     );
 }
 
-export function Vo2MaxWidget({ snapshot }: Vo2MaxWidgetProps) {
+export function Vo2MaxWidget({ snapshot, local = false }: Vo2MaxWidgetProps) {
   useLanguage();
   const [isReady, setIsReady] = useState(false);
   const [pickedSport, setPickedSport] = useState<Vo2Sport>("run");
@@ -155,6 +157,7 @@ export function Vo2MaxWidget({ snapshot }: Vo2MaxWidgetProps) {
         <div>
           <p className="eyebrow">VO2 Max</p>
           <h2>{sport === "ride" ? t("Cycling engine") : t("Running engine")}</h2>
+          {local ? <p className="card-source-note">{t("From your watch")}</p> : null}
         </div>
         {showSwitch ? (
           <div className="library-filter-group vo2-sport-switch" role="group" aria-label={t("VO2 max sport")}>
@@ -198,19 +201,22 @@ export function Vo2MaxWidget({ snapshot }: Vo2MaxWidgetProps) {
               />
             );
           })}
-          <line
-            className="vo2-gauge-needle"
-            x1={VO2_CENTER_X}
-            y1={VO2_CENTER_Y}
-            x2={needle.x}
-            y2={needle.y}
-          />
-          <circle
-            className="vo2-gauge-pin"
-            cx={VO2_CENTER_X}
-            cy={VO2_CENTER_Y}
-            r="5"
-          />
+          {/* No figure yet: no needle, which would read as the scale's minimum. */}
+          {displayValue !== undefined ? <>
+            <line
+              className="vo2-gauge-needle"
+              x1={VO2_CENTER_X}
+              y1={VO2_CENTER_Y}
+              x2={needle.x}
+              y2={needle.y}
+            />
+            <circle
+              className="vo2-gauge-pin"
+              cx={VO2_CENTER_X}
+              cy={VO2_CENTER_Y}
+              r="5"
+            />
+          </> : null}
         </svg>
 
         <div className={`vo2-gauge-value${displayValue !== undefined ? " has-value" : ""}`}>

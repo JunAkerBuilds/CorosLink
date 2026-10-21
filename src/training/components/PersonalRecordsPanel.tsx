@@ -17,6 +17,7 @@ import {
   isPersonalRecordVisible
 } from "../formatters";
 import { activityMovingSeconds } from "../../../electron/activityTime";
+import { useLocalOnlyView } from "../../privacy/localOnlyView";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import { formatDistanceValue, formatSpeedValue, type UnitSystem } from "../../units/units";
 import {
@@ -379,6 +380,7 @@ export function PersonalRecordsPanel({
   onCelebrate
 }: PersonalRecordsPanelProps) {
   useLanguage();
+  const localOnly = useLocalOnlyView();
   const { unitSystem } = useUnitSystem();
   // The lights come up a frame after the board mounts. A transition rather
   // than an animation, so a backgrounded window (which pauses animations)
@@ -718,9 +720,9 @@ export function PersonalRecordsPanel({
           <Trophy size={22} strokeWidth={1.7} aria-hidden="true" />
           <p>{t("No personal records yet.")}</p>
           <span>
-            {t(
-              "Your running bests from COROS, your longest rides, walks and swims, and the hours behind them appear here after a sync."
-            )}
+            {localOnly
+              ? t("Your longest runs, rides, walks and swims, and the hours behind them appear here after a watch sync.")
+              : t("Your running bests from COROS, your longest rides, walks and swims, and the hours behind them appear here after a sync.")}
           </span>
         </div>
       )}

@@ -1,3 +1,4 @@
+import { usingLocalSources } from "./localSync/activitySource";
 import type { ClaudeCodePermissions, CorosMcpTool } from "./types";
 
 export const COROS_WORKOUT_WRITES = new Set([
@@ -60,8 +61,11 @@ export function corosInputSchema(schema: Record<string, unknown>): Record<string
 }
 /** Keep the server's live schema; all providers receive the same review contract. */
 export function coachMcpTools(tools: CorosMcpTool[]): CorosMcpTool[] {
+  // Local-Only Mode never saves to COROS; the Coach uses CorosLink's own draft tools instead.
+  const local = usingLocalSources();
   return tools.flatMap(tool => {
     if (!isCorosWorkoutWrite(tool.name)) return [tool];
+    if (local) return [];
     try {
       const schema = corosInputSchema(tool.inputSchema);
       return [{

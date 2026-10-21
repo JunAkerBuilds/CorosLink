@@ -14,7 +14,9 @@ underlying `ENOTFOUND`, timeout, or certificate error.
 
 Logs stay in the app's data folder at `diagnostics/errors.json`. Nothing is
 uploaded automatically. The latest 200 errors are retained for up to seven days,
-within a 512 KB limit. Logs survive app restarts. Errors from older versions
+within a 512 KB limit. The same error again within 10 minutes is counted on the
+earlier entry instead of added, and outcomes the user chose (closing a sign-in
+window, stopping the Bluetooth helper) aren't recorded. Logs survive app restarts. Errors from older versions
 retain the app version that recorded them. If disk storage fails, the Settings
 panel explains that the current report needs to be copied before closing.
 

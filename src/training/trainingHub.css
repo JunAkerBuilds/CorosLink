@@ -411,3 +411,36 @@
 :root[data-theme="paper"] .training-login-expired {
   color: #7c560e;
 }
+
+/* Local-Only Mode before the first sync: one row with the button that brings the data in. */
+.hub-watch-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 14px 16px;
+}
+
+.hub-watch-banner-text { display: grid; flex: 1 1 16em; gap: 3px; min-width: 0; }
+.hub-watch-banner-text > strong { font-size: 15px; }
+.hub-watch-banner-text > small { color: var(--text-secondary); font-size: 12.5px; line-height: 1.45; }
+.hub-watch-banner .primary-button { flex: none; }
+
+.hub-watch-banner-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--glass-border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+/* A COROS-only card in Local-Only Mode: one short row, whatever the card's preset height. */
+.hub-widget-content > .hub-coros-only { min-height: 0; }
+.hub-coros-only { display: grid; gap: 6px; align-content: center; }
+.hub-coros-only > .eyebrow { margin: 0; }
+.hub-coros-only-note { display: flex; align-items: flex-start; gap: 8px; margin: 0; color: var(--text-secondary); font-size: 13px; }
+.hub-coros-only-note > svg { flex: none; margin-top: 3px; }

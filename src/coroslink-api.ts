@@ -1,5 +1,7 @@
 import type { CalendarEventTiming, CalendarWorkoutEventRef, CalendarWorkoutEventSaveResult } from "../electron/calendarSyncTypes";
 import type { CorosNativeBleSnapshot } from "../electron/corosNativeBleTypes";
+import type { DataModeStatus, LocalOnlyActivationOptions, NetworkAccessReport } from "../electron/privacy/dataModeTypes";
+import type { LocalBackupResult, LocalDataOverview, LocalImportResult, LocalRestoreResult, WatchSyncProbe, WatchSyncProgress } from "../electron/localSync/localDataTypes";
 import type { ChatGptModelInfo, ChatModelOption } from "../electron/chatModels";
 import type { StrengthEditPreview } from "../electron/workoutEditTypes";
 import type { HealthInsightKind, HealthInsightResult } from "../electron/healthInsightsTypes";
@@ -269,6 +271,14 @@ export interface CorosLinkApi {
   logoutCorosWatchfaces: () => Promise<CorosWatchfaceStatus>;
   /** Asks to confirm, then removes the saved watch key; resolves with the status either way. */
   forgetCorosWatchKey?: () => Promise<CorosWatchfaceStatus>;
+  /** Asks where to save, then writes the saved watch key encrypted with `passphrase`. */
+  backupCorosWatchKey?: (passphrase: string) => Promise<import("../electron/types").CorosWatchKeyBackupResult>;
+  /** Opens a native dialog to choose a watch key backup; the file stays in the main process. */
+  chooseCorosWatchKeyBackup?: () => Promise<import("../electron/types").CorosWatchKeyBackupChoice>;
+  /** Decrypts the chosen backup with `passphrase`; main confirms before replacing a different key. */
+  restoreCorosWatchKey?: (passphrase: string) => Promise<import("../electron/types").CorosWatchKeyRestoreResult>;
+  /** Forgets the chosen backup without restoring it. */
+  cancelCorosWatchKeyRestore?: () => Promise<void>;
   listCorosPairedDevices: () => Promise<CorosPairedDevice[]>;
   selectCorosBluetoothDevice: (deviceId: string) => Promise<void>;
   getCorosNativeBleStatus: () => Promise<CorosNativeBleSnapshot>;
@@ -316,6 +326,15 @@ export interface CorosLinkApi {
   downloadCorosWifiMap: (previewId: string) => Promise<{ taskId: string; status: import("../electron/corosWifiMapTypes").CorosWifiMapStatus }>;
   getCorosRouteSyncStatus: () => Promise<import("../electron/corosBleRouteTypes").CorosRouteSyncStatus>;
   syncCorosRoute: (routeId: string) => Promise<import("../electron/corosBleRouteTypes").CorosRouteSyncStatus>;
+  getWatchProfile: () => Promise<import("../electron/watchProfileService").WatchProfileSummary | null>;
+  updateWatchProfile: (edits: { maxHr?: number; restingHr?: number; thresholdHr?: number; hrZoneType?: number; thresholdPaceSecondsPerKm?: number }) => Promise<import("../electron/watchProfileService").WatchProfileSummary>;
+  setWatchWeatherLocation: (location: { latitude: number; longitude: number; place?: string }) => Promise<void>;
+  getWatchSettings: () => Promise<import("../electron/watchSettingsService").WatchSettingsSummary | null>;
+  updateWatchSettings: (edits: Record<string, number>) => Promise<import("../electron/watchSettingsService").WatchSettingsSummary>;
+  getWeatherLocation: () => Promise<import("../electron/watchWeatherService").WeatherLocation | null>;
+  chooseWeatherLocation: (location: { latitude: number; longitude: number; place?: string } | null) => Promise<import("../electron/watchWeatherService").WeatherLocation | null>;
+  searchWeatherPlaces: (query: string, language: string) => Promise<import("../electron/watchWeatherService").WeatherPlace[]>;
+  sendWorkoutToWatch: (programId: string) => Promise<{ slot: number; bytes: number }>;
   cancelCorosRouteSync: () => Promise<void>;
   cancelCorosBluetoothDeviceSelection: () => Promise<void>;
   onCorosBluetoothDevices: (
@@ -929,6 +948,42 @@ export interface CorosLinkApi {
   setWindowBackground: (color: string) => Promise<void>;
   isWindowFullscreen: () => Promise<boolean>;
   onWindowFullscreenChange: (callback: (fullscreen: boolean) => void) => () => void;
+  // Local-Only Mode (Settings → Privacy).
+  /** CorosLink started in Local-Only Mode (known before the first data-mode status arrives). */
+  localOnlyAtLaunch?: boolean;
+  getDataModeStatus: () => Promise<DataModeStatus>;
+  activateLocalOnlyMode: (options: LocalOnlyActivationOptions) => Promise<DataModeStatus>;
+  /** Asks for native confirmation, then saves Connected Mode and restarts CorosLink. */
+  returnToConnectedMode: () => Promise<DataModeStatus>;
+  getNetworkAccessReport: () => Promise<NetworkAccessReport>;
+  clearNetworkAccessReport: () => Promise<NetworkAccessReport>;
+  onDataModeChange: (callback: (status: DataModeStatus) => void) => () => void;
+  getLocalDataOverview: () => Promise<LocalDataOverview>;
+  importLocalFitFiles: (folder?: boolean) => Promise<LocalImportResult>;
+  syncWatchLocally: () => Promise<WatchSyncProgress>;
+  getWatchSyncProgress: () => Promise<WatchSyncProgress>;
+  cancelWatchSync: () => Promise<WatchSyncProgress>;
+  /**
+   * The user agrees, once, that a sync may replace a training plan on the watch that CorosLink
+   * didn't put there (a sync result's `calendar.foreignPlan`). Remembered; the next sync replaces it.
+   */
+  allowWatchPlanReplacement: () => Promise<void>;
+  /** Whether that agreement is on (the watch section of Privacy & local data shows it as a switch). */
+  getWatchPlanReplacement: () => Promise<boolean>;
+  /** Turns the agreement on or off; off, the next sync asks again. Resolves with the setting now. */
+  setWatchPlanReplacement: (allowed: boolean) => Promise<boolean>;
+  readWatchDayTotals: () => Promise<unknown>;
+  /** Developer test (COROSLINK_SYNC_CAPTURE=1): send satellite data to the watch now. */
+  sendSatelliteDataNow?: () => Promise<NonNullable<WatchSyncProgress["satellite"]>>;
+  /** Reads the first activity block without acknowledging it, then disconnects (developer capture mode). */
+  probeWatchSync: (options?: { allBlocks?: boolean; selector?: number; fileIndex?: number }) => Promise<WatchSyncProbe>;
+  getWatchAutoSync: () => Promise<import("../electron/watchAutoSyncService").WatchAutoSyncState>;
+  setWatchAutoSync: (input: { enabled?: boolean; intervalHours?: number }) => Promise<import("../electron/watchAutoSyncService").WatchAutoSyncState>;
+  onWatchAutoSyncChange: (callback: (state: import("../electron/watchAutoSyncService").WatchAutoSyncState) => void) => () => void;
+  onWatchSyncProgress: (callback: (progress: WatchSyncProgress) => void) => () => void;
+  exportLocalBackup: (passphrase?: string) => Promise<LocalBackupResult>;
+  chooseLocalBackup: () => Promise<{ chosen: boolean; encrypted?: boolean }>;
+  restoreLocalBackup: (passphrase?: string) => Promise<LocalRestoreResult>;
 }
 
 declare global {

@@ -10,7 +10,7 @@ Changes save locally on this device, including an empty dashboard. Sample mode u
 
 Version 3 adds size presets and migrates older widths to the closest supported shape. The earlier version 2 migration automatically expands previously saved recovery, health, trends and zone groups into individual widgets, preserving removed groups and selected daily metrics. Existing health groups retain their cycle card until the user removes it.
 
-The versioned layout is stored under `coroslink.training-dashboard.v1` in localStorage, with `.sample` appended for preview data. Unknown widgets, duplicate entries and unsupported widths are sanitized when loading. Malformed storage falls back to the default layout. Storage write failures are shown in the toolbar.
+The versioned layout is stored under `coroslink.training-dashboard.v1` in localStorage, with `.sample` appended for preview data and `.local` for Local-Only Mode (see [Local-Only Mode](local-only-mode.md)). Unknown widgets, duplicate entries and unsupported widths are sanitized when loading. Malformed storage falls back to the default layout. Storage write failures are shown in the toolbar.
 
 Validation:
 

@@ -674,6 +674,25 @@
 }
 
 .watch-link-key .watch-link-button { justify-self: start; }
+.watch-link-key-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Watch key backup and restore: visible labels, one field per line. */
+.watch-link-key-form { display: grid; gap: 6px; }
+.watch-link-key-form label { margin-top: 4px; color: var(--text-primary); font-size: 12.5px; font-weight: 600; }
+.watch-link-key-form input {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--watch-link-rule);
+  border-radius: 8px;
+  background: var(--watch-link-control);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+.watch-link-key-form input:focus-visible { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 1px; }
+.watch-link-key-form input[aria-invalid="true"] { border-color: var(--error-border); }
+.watch-link-key-form .watch-link-key-actions { margin-top: 4px; }
 
 .watch-link-key p:not(.watch-link-note),
 .watch-link-events p,

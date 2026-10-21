@@ -22,7 +22,10 @@ export function onSystemBluetooth(snapshot: CorosNativeBleSnapshot | null): bool
 
 /** Messages need an authenticated, supported COROS watch on the computer's Bluetooth. */
 export function watchMessagingReady(snapshot: CorosNativeBleSnapshot | null): boolean {
+  // While connecting, the link is already up and signed in but CorosLink is still
+  // setting the clock and sending weather; the watch takes nothing else until then.
   return Boolean(snapshot?.connected && snapshot.systemBind === "authenticated" &&
+    snapshot.phase !== "connecting" && snapshot.phase !== "scanning" &&
     onSystemBluetooth(snapshot) && connectedWatch(snapshot));
 }
 

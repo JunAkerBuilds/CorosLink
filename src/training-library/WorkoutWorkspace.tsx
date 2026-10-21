@@ -1,5 +1,6 @@
 import { formatWorkoutSport } from "../calendar/workoutLabels";
 import { getLocale, t, useLanguage } from "../i18n/training";
+import { useLocalOnlyView } from "../privacy/localOnlyView";
 import {
   CalendarPlus,
   Copy,
@@ -18,7 +19,8 @@ import {
   Tag,
   Trash2,
   Unlink,
-  X
+  X,
+  Watch
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -302,6 +304,7 @@ export function WorkoutWorkspace({
   onError
 }: WorkoutWorkspaceProps) {
   useLanguage();
+  const localOnly = useLocalOnlyView();
   const { unitSystem } = useUnitSystem();
   const [query, setQuery] = useState("");
   const [scope, setScope] = useSelectionPreference(
@@ -557,6 +560,20 @@ export function WorkoutWorkspace({
     }
   };
 
+  /** Puts the workout in the watch's workout list over Bluetooth (no COROS account needed). */
+  const sendToWatch = async () => {
+    if (!active) return;
+    setBusy("watch");
+    try {
+      await api.sendWorkoutToWatch(active.id);
+      onMessage(t("Sent \"{{value1}}\" to your watch. Find it under Workouts on the watch.", { value1: String(active.name) }));
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const duplicate = async () => {
     if (!active) return;
     const name = window.prompt("Name for the duplicate", `${active.name} Copy`);
@@ -593,7 +610,9 @@ export function WorkoutWorkspace({
     setBusy("delete");
     try {
       await api.deleteTrainingLibraryWorkouts({ programIds: pendingDelete, confirmed: true });
-      onMessage(t("Deleted {{value1}} workout{{value2}} from COROS.", { value1: String(pendingDelete.length), value2: String(pendingDelete.length === 1 ? "" : "s") }));
+      onMessage(localOnly
+        ? t("Deleted {{value1}} workout{{value2}} from this computer.", { value1: String(pendingDelete.length), value2: String(pendingDelete.length === 1 ? "" : "s") })
+        : t("Deleted {{value1}} workout{{value2}} from COROS.", { value1: String(pendingDelete.length), value2: String(pendingDelete.length === 1 ? "" : "s") }));
       setSelected([]);
       setPendingDelete([]);
       setActiveId(null);
@@ -1121,7 +1140,7 @@ export function WorkoutWorkspace({
                   </span>
                   <span>
                     <strong>{t("Schedule workout")}</strong>
-                    <small>{t("Add it to your COROS calendar")}</small>
+                    <small>{localOnly ? t("Add it to your calendar") : t("Add it to your COROS calendar")}</small>
                   </span>
                 </div>
                 <div className="tl-reader-schedule-controls">
@@ -1153,6 +1172,13 @@ export function WorkoutWorkspace({
                     onClick={() => setEditId(active.id)}
                   >
                     <Pencil size={14} /> {t("Edit")} </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={busy === "watch"}
+                    onClick={() => void sendToWatch()}
+                  >
+                    <Watch size={14} /> {busy === "watch" ? t("Sending to watch…") : t("Send to watch")} </button>
                   <div className="tl-reader-duplicate">
                     <button
                       type="button"
@@ -1198,7 +1224,7 @@ export function WorkoutWorkspace({
             aria-labelledby="workout-delete-title"
           >
             <h2 id="workout-delete-title">
-              {t("Delete")} {pendingDelete.length} {t("workout")}{pendingDelete.length === 1 ? "" : "s"} {t("from COROS?")} </h2>
+              {t("Delete")} {pendingDelete.length} {t("workout")}{pendingDelete.length === 1 ? "" : "s"} {localOnly ? t("from this computer?") : t("from COROS?")} </h2>
             <p>
               {t("This cannot be undone. Calendar copies stay in place, and plan references will remain but point at nothing.")} </p>
             <ul>

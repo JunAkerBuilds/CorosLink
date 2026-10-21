@@ -102,7 +102,14 @@ async function main() {
     await until(report, (value) => value?.includes("No errors recorded"), "clear logs");
     assert.equal((await js('window.corosLink.getDiagnostics()')).entryCount, 0);
     await assert.rejects(fs.access(path.join(app.getPath("userData"), "diagnostics", "errors.json")), /ENOENT/);
-    console.log(`Diagnostics UI passed: Settings placement, real watchface IPC transport failure, renderer capture, reload, native clipboard, copy fallback, and persistent clear. Screenshot: ${imagePath}`);
+    // Opened from the Local-Only button (or the watch menu / weather card): Settings scrolls to that section and focuses it.
+    for (const section of ["privacy", "weather", "watch"]) {
+      await window.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/scripts/fixtures/diagnostics.html?focus=${section}`);
+      await until(() => js(`document.activeElement?.id`), (id) => id === `settings-section-${section}`, `${section} section focused`);
+      // At the top of the view, or, near the end of Settings, fully in view with the page scrolled as far as it goes.
+      await until(() => js(`(() => { const el = document.getElementById("settings-section-${section}"); const r = el.getBoundingClientRect(); let scroller = el.parentElement; while (scroller && !(scroller.scrollHeight > scroller.clientHeight && /(auto|scroll)/.test(getComputedStyle(scroller).overflowY))) scroller = scroller.parentElement; const end = !scroller || Math.ceil(scroller.scrollTop + scroller.clientHeight) >= scroller.scrollHeight - 1; return (r.top >= 0 && r.top <= 60) || (end && r.top >= 0 && r.bottom <= innerHeight); })()`), Boolean, `${section} section scrolled into view`);
+    }
+    console.log(`Diagnostics UI passed: Settings placement, section links, real watchface IPC transport failure, renderer capture, reload, native clipboard, copy fallback, and persistent clear. Screenshot: ${imagePath}`);
   } finally {
     clearTimeout(watchdog);
     globalThis.fetch = originalFetch;

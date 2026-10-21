@@ -215,6 +215,8 @@ function buildSummary(
     0
   );
   const latestRhr = latest?.rhr ?? dashboard?.rhr;
+  const recoveryDay = [...dayList].reverse().find((day) => day.recoveredAt !== undefined);
+  const balanceDay = [...dayList].reverse().find((day) => day.baseFitness !== undefined);
 
   return {
     staminaLevel: racePredictor?.staminaLevel ?? latest?.staminaLevel,
@@ -227,7 +229,11 @@ function buildSummary(
         ? latestRhr - priorRhrAverage
         : undefined,
     steps: latestHealth?.steps,
-    calories: latestHealth?.calories
+    calories: latestHealth?.calories,
+    ...(recoveryDay ? { recoveredAt: recoveryDay.recoveredAt } : {}),
+    ...(balanceDay?.baseFitness !== undefined ? {
+      fitnessBalance: { happenDay: balanceDay.happenDay, baseFitness: balanceDay.baseFitness, loadImpact: balanceDay.loadImpact, fatigue: balanceDay.fatigue }
+    } : {})
   };
 }
 
@@ -251,6 +257,13 @@ export function buildTrainingHubSnapshot(
     sleep: sleep ?? null,
     dailyHealth: dailyHealth ?? null
   };
+}
+
+/** Whole hours left until the watch counts you as fully recovered; 0 once recovered, never negative. */
+export function recoveryHoursLeft(recoveredAt: number, nowMs: number): number {
+  const seconds = recoveredAt - nowMs / 1000;
+  // The watch rounds to the hour; anything still left shows as at least 1 h.
+  return seconds > 0 ? Math.max(1, Math.round(seconds / 3600)) : 0;
 }
 
 export function recoveryTone(

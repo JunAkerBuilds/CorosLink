@@ -4,12 +4,16 @@ export interface CorosNativeBleDeviceChoice {
   deviceId: string;
   deviceName: string;
   rssiDbm?: number;
+  /** The watch CorosLink remembers (its Bluetooth identity matches), when several share a name. */
+  remembered?: boolean;
 }
 
 export interface CorosNativeBleConnectOptions {
   pair?: boolean;
   backend?: CorosBleBackend;
   device?: CorosNativeBleDeviceChoice;
+  /** "Connect anyway": trust the device that didn't match the remembered watch (asked for in the watch menu). */
+  confirmIdentity?: boolean;
 }
 
 export interface CorosNativeBleChannel {
@@ -42,6 +46,16 @@ export interface CorosNativeBleSnapshot {
   systemBind: "unavailable" | "not_authenticated" | "authenticating" | "authenticated" | "failed";
   authenticatedAt?: number;
   authenticationError?: string;
+  /** A device with the remembered watch's name but another Bluetooth identity answered; nothing was sent to it. */
+  identityMismatch?: boolean;
+  /** When CorosLink last set the watch's clock and time zone (on every authenticated connection). */
+  clockSetAt?: number;
+  /** When CorosLink last sent the weather forecast to the watch. */
+  weatherSentAt?: number;
+  /** When the watch didn't take the forecast on this connection (it's sent again on the next one). */
+  weatherFailedAt?: number;
+  /** Satellite data on the watch, as of the last connection (kept after disconnecting). */
+  gpsAssistance?: import("./corosWatchGpsAssist").WatchGpsAssistance;
   channels: CorosNativeBleChannel[];
   deviceName?: string;
   watchAddress?: string;
@@ -74,4 +88,13 @@ export interface CorosPhonePairingCode {
   /** Last digits of the COROS account ID. */
   account: string;
   deviceName?: string;
+}
+
+/** One local-sync transport operation as captured for protocol debugging (developer mode only). */
+export interface CorosSyncCaptureEntry {
+  operation: string;
+  ok: boolean;
+  error?: string;
+  /** d: tx/rx, c: control/bulk channel, t: ms since the operation began, x: frame hex. */
+  frames: Array<{ d: "tx" | "rx"; c: "control" | "bulk"; t: number; x: string }>;
 }

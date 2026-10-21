@@ -1,12 +1,23 @@
+// Must stay the first import: reads the persisted data mode and installs the
+// network guards before any other module can open a connection.
+import { networkPolicy } from "./privacy/bootstrap";
+import { getWatchSettings, storeWatchSwitches, updateWatchSettings } from "./watchSettingsService";
+import { chooseWeatherLocation, getWeatherLocation, searchWeatherPlaces, setWatchWeatherLocation, watchWeatherFile } from "./watchWeatherService";
+import { getWatchProfile, storeWatchProfile, updateWatchProfile } from "./watchProfileService";
+import { confineMainWindow, requireMainWindowSender } from "./mainWindowGuard";
+import { LocalOnlyFeatureError } from "./privacy/remoteFeatures";
+import { registerLocalOnlyMode } from "./privacy/localOnlyMain";
+import { currentActivitySource, currentHealthSource, usingLocalSources } from "./localSync/activitySource";
+import type { LocalDataService } from "./localSync/localDataService";
 import { getCalendarWorkoutEvent, updateCalendarWorkoutEvent, syncEditedCalendarWorkout } from "./calendarWorkoutEventService";
-import { initializeNativeLanguage, localizeDialogOptions, setNativeLanguage } from "./localization";
+import { initializeNativeLanguage, localizeDialogOptions, nativeText, setNativeLanguage } from "./localization";
 import { listCalendarWorkoutEntries } from "./calendarWorkoutEventStorage";
 import type { CalendarEventTiming, CalendarWorkoutEventRef } from "./calendarSyncTypes";
 import { registerWorkoutAutomation } from "./workoutAutomation";
 import { followRescheduledWorkout, listWorkoutJournal, onWorkoutJournalChanged, saveWorkoutJournal } from "./workoutJournalService";
 import type { WorkoutJournalSaveInput } from "./workoutJournalTypes";
 import { app, BrowserWindow, dialog, nativeTheme, session, shell, ShareMenu } from "electron";
-import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow, registerDiagnosticStatus } from "./diagnosticsService";
+import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow, recordDiagnosticNotice, registerDiagnosticStatus } from "./diagnosticsService";
 import { corosAccountDiagnostics } from "./corosAccountDiagnostics";
 import { googleCalendar, startGoogleCalendarSync, stopGoogleCalendarSync } from "./googleCalendarService";
 import type { GoogleCalendarConfigInput } from "./googleCalendarTypes";
@@ -19,10 +30,12 @@ import path from "node:path";
 import { listLocalFontFamilies } from "./fontService";
 import { corosNativeBle } from "./corosNativeBleService";
 import { registerCorosActivityScreenIpc } from "./corosActivityScreenIpc";
+import { registerCorosWatchKeyBackupIpc } from "./corosWatchKeyBackupIpc";
 import { resolveWifiMusicLibraryFiles } from "./corosWifiMusicLibrary";
 import { getCorosWatchfaceCompiler } from "./corosWatchfaceCompiler";
 import { getWatchfaceTarget } from "./watchfaceTargets";
 import { isWebUrl } from "./externalLinks";
+import { pathToFileURL } from "node:url";
 import { registerWatchfaceAutomation } from "./watchfaceAutomation";
 import { onWatchfaceRendererNavigation } from "./watchfaceRendererLifecycle";
 import {
@@ -95,15 +108,12 @@ import { getAppInfo, openAppStorageLocation } from "./appInfoService";
 import {
   backfillFeelTypes,
   getActivityPaceBaselines,
-  getDailyMetrics,
   getRacePredictor,
   getRpeBackfillStatus,
   getRpeLoadByDay,
   getSportTypeMap,
   getTrainingAnalytics,
   getTrainingDashboard,
-  fetchTrainingHubActivityFile,
-  getTrainingHubActivityDetail,
   getTrainingHubStatus,
   checkTrainingHubSession,
   onTrainingHubSessionChange,
@@ -123,6 +133,7 @@ import {
   getWorkoutForEdit,
   previewWorkoutEdit,
   saveWorkoutEdit,
+  getWorkoutProgramDetail,
   loginTrainingHub,
   verifyTrainingHubTwoFactor,
   resendTrainingHubTwoFactorCode,
@@ -200,6 +211,9 @@ import {
   exportCorosWatchfaceProject,
   exportCorosWatchfaceArchive,
   forgetCorosWatchKey,
+  createCorosWatchKeyBackup,
+  openCorosWatchKeyBackup,
+  saveRestoredCorosWatchKey,
   getCorosBatteryReport,
   getCorosWatchfaceStatus,
   importCorosWatchfaceShareLink,
@@ -486,10 +500,7 @@ import {
   setMcpBearer,
   updateMcpServer
 } from "./mcpServersStore";
-import { getTrainingHealthInsight } from "./healthInsightsService";
 import type { HealthInsightKind } from "./healthInsightsTypes";
-import { getTrainingDailyHealthData } from "./dailyHealthDataService";
-import { getTrainingSleepData } from "./sleepDataService";
 import type {
   ChatMessage,
   ChatProvider,
@@ -515,6 +526,8 @@ function requireCoachHub(): CoachSessionHub {
 
 // The environment server phones (C-LINK) drive the Coach hub through.
 let remoteAccess: RemoteAccess | undefined;
+// Activities and health data held on this computer (watch sync, FIT imports, backups).
+let localData: LocalDataService | undefined;
 
 function requireRemoteAccess(): RemoteAccess {
   if (!remoteAccess) throw new Error("Remote access is still starting. Try again in a moment.");
@@ -728,7 +741,7 @@ async function exportTrainingHubActivityFileToDisk(
   fileType: TrainingHubActivityFileType,
   suggestedName?: string
 ): Promise<TrainingHubExportResult> {
-  const { format, content } = await fetchTrainingHubActivityFile(
+  const { format, content } = await currentActivitySource().readActivityFile(
     activity.activityId,
     activity.sportType,
     fileType
@@ -867,7 +880,10 @@ function createWindow(): void {
       : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
-      additionalArguments: process.platform === "darwin" ? ["--coros-native-sidebar-glass"] : [],
+      additionalArguments: [
+        ...(process.platform === "darwin" ? ["--coros-native-sidebar-glass"] : []),
+        ...(networkPolicy.enforcing ? ["--coroslink-local-only"] : [])
+      ],
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: true,
@@ -907,6 +923,9 @@ function createWindow(): void {
     notifyWindowFullscreen(false);
   });
 
+  // The window stays on this page: a dropped file or link would otherwise get the whole preload API.
+  const appPage = process.env.VITE_DEV_SERVER_URL || pathToFileURL(path.join(__dirname, "../dist/index.html")).href;
+  confineMainWindow(mainWindow.webContents, appPage, url => { void shell.openExternal(url); });
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools({ mode: "detach" });
@@ -1060,6 +1079,8 @@ app.whenReady().then(() => {
     }
   });
   initializeDatabase(app.getPath("userData"));
+  // Local-Only Mode is known before anything below can upload to COROS.
+  localData = registerLocalOnlyMode({ getWindow: () => mainWindow });
   initializeNativeLanguage();
   hydratePlanDraftStoreFromDatabase();
   prunePlanDraftStore();
@@ -1166,6 +1187,8 @@ app.on("window-all-closed", () => {
 
 let wifiMusicQuitPending = false;
 let wifiMusicQuitReady = false;
+let watchWorkQuitPending = false;
+let watchWorkQuitReady = false;
 app.on("before-quit", event => {
   if (!wifiMusicQuitReady && corosNativeBle.isWifiMusicActive()) {
     event.preventDefault();
@@ -1177,7 +1200,20 @@ app.on("before-quit", event => {
     }
     return;
   }
+  // A sync, transfer or settings write to the watch finishes first (bounded): cut short, it can leave
+  // the watch without its training plan until the next sync. A sync's reads stop at the next block.
+  if (!watchWorkQuitReady && corosNativeBle.hasWatchWork()) {
+    event.preventDefault();
+    if (!watchWorkQuitPending) {
+      watchWorkQuitPending = true;
+      localData?.cancelSync();
+      void corosNativeBle.finishBeforeQuit().catch(() => undefined)
+        .finally(() => { watchWorkQuitReady = true; app.quit(); });
+    }
+    return;
+  }
   coachHub?.shutdown();
+  localData?.cancelSync();
   void remoteAccess?.stop();
   void corosNativeBle.stop();
   void watchfaceAutomation?.stop();
@@ -1195,7 +1231,11 @@ function registerIpcHandlers(): void {
     setNativeLanguage(language);
   });
   ipcMain.handle("corosBle:status", () => corosNativeBle.status());
-  ipcMain.handle("corosBle:connect", (_event, input?: import("./corosNativeBleTypes").CorosNativeBleConnectOptions) => corosNativeBle.connect(input?.pair === true, input));
+  // Connecting sets the watch's clock and sends weather; counted as the user's (see userConnect).
+  ipcMain.handle("corosBle:connect", (event, input?: import("./corosNativeBleTypes").CorosNativeBleConnectOptions) => {
+    mainWindowSender(event, "the watch connection");
+    return corosNativeBle.userConnect(input?.pair === true, input);
+  });
   ipcMain.handle("corosBle:scan", () => corosNativeBle.scan());
   ipcMain.handle("corosBle:refresh", () => corosNativeBle.refresh());
   // Bluetooth music (library reads, deletes, Wi-Fi send) isn't supported in release builds yet.
@@ -1204,14 +1244,9 @@ function registerIpcHandlers(): void {
   };
   ipcMain.handle("corosBle:musicInventory", () => { requireBleMusic(); return corosNativeBle.listMusic(); });
   ipcMain.handle("corosBle:wifiMusicStatus", () => { requireBleMusic(); return corosNativeBle.wifiMusicStatus(); });
-  /** The main window, when it (not a subframe or another window) sent the request. */
-  const mainWindowSender = (event: Electron.IpcMainInvokeEvent, action: string) => {
-    const owner = BrowserWindow.fromWebContents(event.sender);
-    if (!owner || owner !== mainWindow || owner.isDestroyed() || event.senderFrame !== event.sender.mainFrame) {
-      throw new Error(`Use ${action} from CorosLink's main window.`);
-    }
-    return owner;
-  };
+  /** The main window, when it (not a subframe or another window) sent the request. Every watch write checks it. */
+  const mainWindowSender = (event: Electron.IpcMainInvokeEvent, action: string) =>
+    requireMainWindowSender(event, mainWindow, `Use ${action} from CorosLink's main window.`);
   const audioOwner = (event: Electron.IpcMainInvokeEvent) => {
     requireBleMusic();
     return mainWindowSender(event, "audio sync");
@@ -1306,7 +1341,20 @@ function registerIpcHandlers(): void {
     }));
     return result.response === 1 ? forgetCorosWatchKey() : getCorosWatchfaceStatus();
   });
-  ipcMain.handle("corosBle:sendNotification", (_event, input: import("./corosBleNotificationProtocol").CorosNotificationInput) => corosNativeBle.sendNotification(input));
+  // A passphrase-protected copy of the watch key: the key stays here, the renderer sends only the passphrase.
+  registerCorosWatchKeyBackupIpc({
+    ipc: ipcMain, owner: event => mainWindowSender(event, "watch key backup"),
+    service: { status: getCorosWatchfaceStatus, createBackup: createCorosWatchKeyBackup, openBackup: openCorosWatchKeyBackup, saveRestored: saveRestoredCorosWatchKey },
+    saveDialog: (owner, options) => dialog.showSaveDialog(owner, localizeDialogOptions(options)),
+    openDialog: (owner, options) => dialog.showOpenDialog(owner, localizeDialogOptions(options)),
+    confirm: async (owner, options) => (await dialog.showMessageBox(owner, localizeDialogOptions(options))).response,
+    text: nativeText,
+    notice: message => recordDiagnosticNotice("watchKey:backup", message)
+  });
+  ipcMain.handle("corosBle:sendNotification", (event, input: import("./corosBleNotificationProtocol").CorosNotificationInput) => {
+    mainWindowSender(event, "watch messages");
+    return corosNativeBle.sendNotification(input);
+  });
   ipcMain.handle("corosBle:chooseWatchface", async () => {
     const options: OpenDialogOptions = { title: "Choose a compiled COROS watch face", properties: ["openFile"],
       filters: [{ name: "Compiled watch face", extensions: ["bin"] }] };
@@ -1316,7 +1364,10 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle("corosBle:watchfaceStatus", () => corosNativeBle.watchfaceSyncStatus());
   ipcMain.handle("corosBle:watchfaceSlots", () => corosNativeBle.listWatchfaceSlots());
-  ipcMain.handle("corosBle:watchfaceSync", (_event, previewId: string, target?: import("./corosBleWatchfaceTypes").CorosDirectWatchfaceTarget) => corosNativeBle.syncWatchface(previewId, target));
+  ipcMain.handle("corosBle:watchfaceSync", (event, previewId: string, target?: import("./corosBleWatchfaceTypes").CorosDirectWatchfaceTarget) => {
+    mainWindowSender(event, "watch face sync");
+    return corosNativeBle.syncWatchface(previewId, target);
+  });
   ipcMain.handle("corosBle:watchfaceCancel", () => corosNativeBle.cancelWatchfaceSync());
   ipcMain.handle("corosBle:compilerStatus", () => getCorosWatchfaceCompiler().status());
   ipcMain.handle("corosBle:compileWatchface", async () => {
@@ -1358,10 +1409,53 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle("corosBle:mapStatus", () => corosNativeBle.wifiMapStatus());
   ipcMain.handle("corosBle:mapPreview", (_event, tiles: unknown) => corosNativeBle.previewWifiMap(tiles));
-  ipcMain.handle("corosBle:mapDownload", (_event, previewId: string) => corosNativeBle.downloadWifiMap(previewId));
+  ipcMain.handle("corosBle:mapDownload", (event, previewId: string) => {
+    mainWindowSender(event, "map downloads");
+    return corosNativeBle.downloadWifiMap(previewId);
+  });
   ipcMain.handle("corosBle:routeStatus", () => corosNativeBle.routeSyncStatus());
   ipcMain.handle("corosBle:routeCancel", () => corosNativeBle.cancelRouteSync());
-  ipcMain.handle("corosBle:routeSync", async (_event, routeId: unknown) => {
+  corosNativeBle.setConnectedPush(() => watchWeatherFile());
+  corosNativeBle.setProfileSink((profile, model) => storeWatchProfile(profile, new Date(), model));
+  corosNativeBle.setSwitchesSink((switches, ext, model) => storeWatchSwitches(switches, ext, new Date(), model));
+  ipcMain.handle("watch:getProfile", () => getWatchProfile() ?? null);
+  ipcMain.handle("watch:updateProfile", (event, edits: unknown) => {
+    mainWindowSender(event, "watch settings");
+    return updateWatchProfile(edits, {
+      read: () => corosNativeBle.readWatchProfile(),
+      write: profile => corosNativeBle.writeWatchProfile(profile)
+    });
+  });
+  ipcMain.handle("watch:setWeatherLocation", (event, location: unknown) => {
+    mainWindowSender(event, "the weather location");
+    return setWatchWeatherLocation(location);
+  });
+  ipcMain.handle("watch:getWeatherLocation", () => getWeatherLocation() ?? null);
+  ipcMain.handle("watch:getSettings", () => getWatchSettings() ?? null);
+  ipcMain.handle("watch:updateSettings", (event, edits: unknown) => {
+    mainWindowSender(event, "watch settings");
+    return updateWatchSettings(edits, {
+      read: () => corosNativeBle.readWatchSwitches(),
+      write: (word, ext) => corosNativeBle.writeWatchSwitches(word, ext)
+    });
+  });
+  ipcMain.handle("watch:chooseWeatherLocation", (event, location: unknown) => {
+    mainWindowSender(event, "the weather location");
+    return chooseWeatherLocation(location) ?? null;
+  });
+  ipcMain.handle("watch:searchWeatherPlaces", (event, query: unknown, language: unknown) => {
+    mainWindowSender(event, "the weather location");
+    return searchWeatherPlaces(query, typeof language === "string" ? language : "en");
+  });
+  ipcMain.handle("corosBle:sendWorkout", async (event, programId: unknown) => {
+    mainWindowSender(event, "Send to watch");
+    if (typeof programId !== "string" || !/^\d{1,20}$/.test(programId)) throw new Error("Invalid workout.");
+    const program = await getWorkoutProgramDetail(programId);
+    if (!program) throw new Error("The workout was not found.");
+    return corosNativeBle.sendWorkoutToWatch(program);
+  });
+  ipcMain.handle("corosBle:routeSync", async (event, routeId: unknown) => {
+    mainWindowSender(event, "route sync");
     if (typeof routeId !== "string" || routeId.length > 128) throw new Error("Invalid saved route.");
     const route = await getGeneratedRouteDetails(routeId);
     if (!route) throw new Error("The saved route was not found.");
@@ -2074,6 +2168,10 @@ function registerIpcHandlers(): void {
   // reach the hub with their grant's permissions instead (CoachActor).
   ipcMain.handle("coach:confirm", (event, input: CoachConfirmInput) => {
     mainWindowSender(event, "Coach approvals");
+    // Plans and deletes are served locally in Local-Only Mode; COROS actions and strength edits would write to COROS.
+    if (networkPolicy.enforcing && input?.decision === "confirm" && (input.kind === "corosAction" || input.kind === "strengthEdit")) {
+      throw new LocalOnlyFeatureError("Saving Coach changes to COROS");
+    }
     return requireCoachHub().confirm({
       ...input,
       options: input.options
@@ -2330,7 +2428,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "trainingHub:listActivities",
     (_event, page: number, size: number, startDay?: string, endDay?: string) =>
-      listTrainingHubActivities(page, size, startDay, endDay)
+      currentActivitySource().listActivities(page, size, startDay, endDay)
   );
 
   ipcMain.handle(
@@ -2540,7 +2638,7 @@ function registerIpcHandlers(): void {
       activityId: string,
       sportType: number,
       listActivity?: TrainingHubActivity
-    ) => getTrainingHubActivityDetail(activityId, sportType, listActivity)
+    ) => currentActivitySource().getActivityDetail(activityId, sportType, listActivity)
   );
 
   ipcMain.handle(
@@ -2567,10 +2665,10 @@ function registerIpcHandlers(): void {
       fileType: TrainingHubActivityFileType = 4
     ): Promise<TrainingHubExportResult> => {
       const latest = pickLatestTrainingHubActivity(
-        await listTrainingHubActivities(1, 50)
+        await currentActivitySource().listActivities(1, 50)
       );
       if (!latest) {
-        throw new Error("No COROS activities were found to export.");
+        throw new Error(usingLocalSources() ? "No activities are stored on this computer yet." : "No COROS activities were found to export.");
       }
       return exportTrainingHubActivityFileToDisk(latest, fileType, latest.name);
     }
@@ -2640,7 +2738,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle("trainingHub:getDashboard", () => getTrainingDashboard());
 
   ipcMain.handle("trainingHub:getDailyMetrics", (_event, dateList: string[]) =>
-    getDailyMetrics(dateList)
+    currentHealthSource().getDailyMetrics(dateList)
   );
 
   ipcMain.handle(
@@ -2696,8 +2794,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("trainingHub:getSportTypeMap", () => getSportTypeMap());
 
-  ipcMain.handle("trainingHub:getActivityPaceBaselines", () =>
-    getActivityPaceBaselines()
+  ipcMain.handle("trainingHub:getActivityPaceBaselines", async () =>
+    usingLocalSources()
+      ? getActivityPaceBaselines({ activities: await currentActivitySource().listActivities(1, 1000) })
+      : getActivityPaceBaselines()
   );
 
   ipcMain.handle("trainingHub:getUpcomingWorkouts", (_event, days?: number) =>
@@ -2705,15 +2805,15 @@ function registerIpcHandlers(): void {
   );
 
   ipcMain.handle("trainingHub:getSleepData", (_event, days?: number) =>
-    getTrainingSleepData(days ?? 7)
+    currentHealthSource().getSleep(days ?? 7)
   );
 
   ipcMain.handle("trainingHub:getHealthInsight", (_event, kind: HealthInsightKind, days?: number) =>
-    getTrainingHealthInsight(kind, days ?? 7)
+    currentHealthSource().getInsight(kind, days ?? 7)
   );
 
   ipcMain.handle("trainingHub:getDailyHealthData", (_event, days?: number) =>
-    getTrainingDailyHealthData(days ?? 1)
+    currentHealthSource().getDailyHealth(days ?? 1)
   );
 
   ipcMain.handle("intervals:getStatus", () => getIntervalsStatus());

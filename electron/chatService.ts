@@ -1,15 +1,16 @@
 import { isWorkoutEditTool } from "./workoutEditService";
 import { app, BrowserWindow, safeStorage, shell } from "electron";
+import { expectedError } from "./diagnosticsLog";
 import crypto from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { activityMovingSeconds, activitySignificantElapsedSeconds } from "./activityTime";
 import { deleteSettings, getSetting, setSetting } from "./database";
+import { currentActivitySource, usingLocalSources } from "./localSync/activitySource";
 import {
   formatScheduledExercisesForChat,
   getTrainingHubStatus,
-  listTrainingHubActivities,
   getTrainingDashboard,
   getUpcomingWorkouts
 } from "./trainingHubService";
@@ -707,7 +708,8 @@ function waitForAuthorizationCode(
       });
       authWindow.on("closed", () => {
         authWindow = undefined;
-        rejectOnce(new Error("ChatGPT sign-in window was closed."));
+        // Closing the sign-in window is the user's choice, not a failure to report.
+        rejectOnce(expectedError(new Error("ChatGPT sign-in window was closed.")));
       });
       // Some OpenAI flows hop to an external verification page; keep it in-window.
       authWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -2411,7 +2413,7 @@ async function buildTrainingContext(
   } catch {
     status = { authenticated: false };
   }
-  if (!status.authenticated) {
+  if (!status.authenticated && !usingLocalSources()) {
     return {
       rules,
       hasData: false,
@@ -2427,7 +2429,7 @@ async function buildTrainingContext(
   const includeUpcoming = permissions?.upcomingWorkouts !== false;
   const [activities, dashboard, upcoming] = await Promise.allSettled([
     includeActivities
-      ? listTrainingHubActivities(1, 25)
+      ? currentActivitySource().listActivities(1, 25)
       : Promise.resolve([] as TrainingHubActivity[]),
     includeMetrics
       ? getTrainingDashboard()
@@ -2437,7 +2439,20 @@ async function buildTrainingContext(
       : Promise.resolve([] as TrainingHubUpcomingWorkout[])
   ]);
 
-  const sections: string[] = [unitInstruction, "", timeInstruction, ""];
+  const sections: string[] = [unitInstruction, ""];
+  if (usingLocalSources()) {
+    sections.push(
+      "## Local-Only Mode",
+      "CorosLink is in Local-Only Mode: nothing is sent to COROS. Workouts and plans you draft and the athlete saves go into " +
+        "CorosLink's own workout library and training calendar on this computer, not the COROS app or COROS calendar. " +
+        "They reach the watch over Bluetooth: Send to watch in the Training Library puts one workout in the watch's workout list, " +
+        "and Sync watch now (watch menu) puts the next five weeks of the calendar on the watch. Never tell the athlete to use the COROS app. " +
+        "Use exact paces, heart rates or power for steps rather than zones or percentages, which the watch can't take from CorosLink yet. " +
+        "COROS's exercise catalog isn't available, so strength workouts can't be drafted.",
+      ""
+    );
+  }
+  sections.push(timeInstruction, "");
   let hasData = false;
 
   if (activities.status === "fulfilled" && activities.value.length > 0) {

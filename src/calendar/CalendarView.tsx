@@ -1,4 +1,5 @@
 import { getLocale, useLanguage, t } from "../i18n/training";
+import { useLocalOnlyView } from "../privacy/localOnlyView";
 import {
   BookOpen,
   CalendarDays,
@@ -222,6 +223,7 @@ export function CalendarView({
   onOpenCoach
 }: CalendarViewProps) {
   useLanguage();
+  const localOnly = useLocalOnlyView();
   const { unitSystem } = useUnitSystem();
   const [mode, setMode] = useSelectionPreference(CALENDAR_MODE_PREFERENCE);
   const [anchor, setAnchor] = useState(() => new Date());
@@ -1226,7 +1228,7 @@ export function CalendarView({
           onClose={() => setEditRef(null)}
           onSaved={(result) => {
             const scope = editRef.kind === "scheduled" ? "scheduled occurrence" : "library workout";
-            onMessage(result.verified ? t("Updated {{value1}} in COROS.", { value1: String(scope) }) : result.warning ?? t("Updated {{value1}}, but verification is still pending.", { value1: String(scope) }));
+            onMessage(localOnly ? t("Updated {{value1}}.", { value1: String(scope) }) : result.verified ? t("Updated {{value1}} in COROS.", { value1: String(scope) }) : result.warning ?? t("Updated {{value1}}, but verification is still pending.", { value1: String(scope) }));
             setEditRef(null);
             reload();
             if (editRef.kind === "scheduled") void syncCalendarEdit(editRef);

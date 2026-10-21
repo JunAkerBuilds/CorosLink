@@ -15,6 +15,8 @@ import {
   Zap,
   type LucideIcon
 } from "lucide-react";
+import { ActivityHeartRateRecovery } from "./ActivityHeartRateRecovery";
+import { ActivityRunningDynamics, ActivityTrainingEffect } from "./ActivityTrainingEffect";
 import type {
   TrainingHubActivity,
   TrainingHubActivityDetail,
@@ -423,6 +425,13 @@ export function ActivityDetailPanel({
               // On a trail the ground sets the pace; effort pace is the fair scale.
               initialKind={streamSportType === 102 ? "gap" : undefined}
             />
+          ) : null}
+          {detail.trainingEffect || detail.runningDynamics || detail.heartRateRecovery ? (
+            <div className="activity-detail-insights">
+              {detail.trainingEffect ? <ActivityTrainingEffect effect={detail.trainingEffect} /> : null}
+              {detail.runningDynamics ? <ActivityRunningDynamics dynamics={detail.runningDynamics} /> : null}
+              {detail.heartRateRecovery ? <ActivityHeartRateRecovery recovery={detail.heartRateRecovery} /> : null}
+            </div>
           ) : null}
           {/* Running efficiency is still being tried out: development builds only. */}
           {import.meta.env.DEV ? <RunEfficiencyPanel detail={detail} listActivity={listActivity} /> : null}
