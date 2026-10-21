@@ -413,7 +413,9 @@ import {
   deleteChatSessionById,
   detectLocalChatServers,
   connectClaudeCode,
+  connectGeminiCli,
   getClaudeCodeConnectionStatus,
+  getGeminiCliConnectionStatus,
   getChatAuthStatus,
   getChatSessionEntries,
   getChatSettings,
@@ -426,6 +428,7 @@ import {
   generateCoachSessionTitle,
   streamChat,
   testClaudeCodeConnection,
+  testGeminiCliConnection,
   testLocalChatConnection,
   testOpenRouterConnection,
   uploadTrainingPlanDraft,
@@ -1870,6 +1873,24 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("chat:openClaudeCodeSetupGuide", () =>
     shell.openExternal("https://code.claude.com/docs/en/quickstart")
+  );
+
+  ipcMain.handle("chat:getGeminiCliStatus", () =>
+    getGeminiCliConnectionStatus()
+  );
+
+  ipcMain.handle("chat:connectGeminiCli", () => connectGeminiCli());
+
+  ipcMain.handle("chat:testGeminiCliConnection", () =>
+    testGeminiCliConnection()
+  );
+
+  ipcMain.handle("chat:openGeminiCliSetupGuide", (_event, topic: unknown) =>
+    shell.openExternal(
+      topic === "install"
+        ? "https://geminicli.com/docs/get-started/installation/"
+        : "https://geminicli.com/docs/get-started/authentication/"
+    )
   );
 
   ipcMain.handle("chat:login", () => loginChat(mainWindow));

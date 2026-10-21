@@ -1,6 +1,6 @@
 import { t, useLanguage } from "../i18n/tools";
 import { useEffect, useState } from "react";
-import { Network, Sparkles, Terminal } from "lucide-react";
+import { Gem, Network, Sparkles, Terminal } from "lucide-react";
 import type { ChatProvider } from "../../electron/types";
 import {
   getChatModelOptions,
@@ -13,8 +13,8 @@ import { SelectDropdown, type SelectOption } from "../components/SelectDropdown"
 const liveModelOptions = new Map<ChatProvider, ChatModelOption[]>();
 
 /**
- * The provider's live model catalog (Claude Code's or the ChatGPT account's),
- * starting from the last known or static list while it loads.
+ * The provider's live model catalog (Claude Code's, Gemini CLI's or the
+ * ChatGPT account's), starting from the last known or static list while it loads.
  */
 export function useChatModelOptions(
   api: CorosLinkApi | undefined,
@@ -25,7 +25,12 @@ export function useChatModelOptions(
   const [options, setOptions] = useState(initial);
   useEffect(() => {
     setOptions(initial());
-    if (!api || (provider !== "claude-code" && provider !== "chatgpt")) return;
+    if (
+      !api ||
+      (provider !== "claude-code" && provider !== "gemini-cli" && provider !== "chatgpt")
+    ) {
+      return;
+    }
     let active = true;
     api
       .listChatModels(provider)
@@ -55,6 +60,10 @@ function renderChatGptIcon() {
 
 function renderClaudeIcon() {
   return <Terminal size={14} strokeWidth={2.1} aria-hidden="true" />;
+}
+
+function renderGeminiIcon() {
+  return <Gem size={14} strokeWidth={2.1} aria-hidden="true" />;
 }
 
 function renderOpenRouterIcon() {
@@ -93,21 +102,27 @@ export function ModelSwitch({
   const providerLabel =
     provider === "claude-code"
       ? "Claude"
-      : provider === "openrouter"
-        ? "OpenRouter"
-        : "ChatGPT";
+      : provider === "gemini-cli"
+        ? "Gemini"
+        : provider === "openrouter"
+          ? "OpenRouter"
+          : "ChatGPT";
   const tone =
     provider === "claude-code"
       ? "claude"
-      : provider === "openrouter"
-        ? "openrouter"
-        : "gpt";
+      : provider === "gemini-cli"
+        ? "gemini"
+        : provider === "openrouter"
+          ? "openrouter"
+          : "gpt";
   const renderIcon =
     provider === "claude-code"
       ? renderClaudeIcon
-      : provider === "openrouter"
-        ? renderOpenRouterIcon
-        : renderChatGptIcon;
+      : provider === "gemini-cli"
+        ? renderGeminiIcon
+        : provider === "openrouter"
+          ? renderOpenRouterIcon
+          : renderChatGptIcon;
   const selectedLabel =
     options.find((option) => option.value === model)?.label ?? model;
 

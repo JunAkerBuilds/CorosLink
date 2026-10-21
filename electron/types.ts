@@ -2939,7 +2939,7 @@ export interface CoachInputPrompt {
   answeredAt?: number;
 }
 
-export type ChatProvider = "chatgpt" | "claude-code" | "openrouter" | "local";
+export type ChatProvider = "chatgpt" | "claude-code" | "gemini-cli" | "openrouter" | "local";
 
 export type ClaudeCodeConnectionState =
   | "not-installed"
@@ -2982,6 +2982,35 @@ export interface ClaudeCodeStatus {
 export interface ClaudeCodeConnectionTest {
   ok: boolean;
   status: ClaudeCodeStatus;
+  message: string;
+}
+
+export type GeminiCliConnectionState = ClaudeCodeConnectionState;
+
+export interface GeminiCliConfig {
+  /** Optional user-selected path. CorosLink never reads Gemini credential files. */
+  executablePath?: string;
+  /** Model alias (e.g. "pro", "flash") or full id. Empty = the CLI's own default. */
+  model?: string;
+  lastConnectionStatus?: GeminiCliConnectionState;
+  lastCheckedAt?: string;
+}
+
+export interface GeminiCliStatus {
+  state: GeminiCliConnectionState;
+  installed: boolean;
+  authenticated: boolean;
+  executablePath?: string;
+  version?: string;
+  /** The CLI's selected sign-in, e.g. "oauth-personal" or "gemini-api-key". */
+  authMethod?: string;
+  checkedAt: string;
+  message: string;
+}
+
+export interface GeminiCliConnectionTest {
+  ok: boolean;
+  status: GeminiCliStatus;
   message: string;
 }
 
@@ -3036,6 +3065,7 @@ export interface ChatSettings {
   provider: ChatProvider;
   chatgpt: ChatGptConfig;
   claudeCode: ClaudeCodeConfig;
+  geminiCli: GeminiCliConfig;
   openRouter: OpenRouterConfig;
   local: LocalChatConfig;
   sidebarOpen?: boolean;

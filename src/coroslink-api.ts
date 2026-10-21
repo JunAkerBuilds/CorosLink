@@ -123,6 +123,8 @@ import type {
   ChatSettings,
   ClaudeCodeConnectionTest,
   ClaudeCodeStatus,
+  GeminiCliConnectionTest,
+  GeminiCliStatus,
   PersistedChatEntry,
   ChatStreamStart,
   ChatStreamToken,
@@ -818,6 +820,10 @@ export interface CorosLinkApi {
   connectClaudeCode: () => Promise<ClaudeCodeStatus>;
   testClaudeCodeConnection: () => Promise<ClaudeCodeConnectionTest>;
   openClaudeCodeSetupGuide: () => Promise<void>;
+  getGeminiCliStatus: () => Promise<GeminiCliStatus>;
+  connectGeminiCli: () => Promise<GeminiCliStatus>;
+  testGeminiCliConnection: () => Promise<GeminiCliConnectionTest>;
+  openGeminiCliSetupGuide: (topic: "install" | "sign-in") => Promise<void>;
   loginChat: () => Promise<ChatAuthStatus>;
   logoutChat: () => Promise<ChatAuthStatus>;
   sendChat: (

@@ -99,6 +99,7 @@ function normalizeProvider(value: unknown): ChatProvider {
   if (
     value === "local" ||
     value === "claude-code" ||
+    value === "gemini-cli" ||
     value === "openrouter"
   ) {
     return value;

@@ -30,6 +30,7 @@ import {
   Database,
   ExternalLink,
   FileText,
+  Gem,
   HeartPulse,
   Image as ImageIcon,
   Info,
@@ -83,6 +84,7 @@ import type {
   ChatSessionSummary,
   ChatSettings,
   ClaudeCodeStatus,
+  GeminiCliStatus,
   CoachChartPreview,
   CoachFileUpload,
   CoachInputChoice,
@@ -144,6 +146,7 @@ const DEFAULT_CHAT_SETTINGS: ChatSettings = {
       fullActivityFiles: false
     }
   },
+  geminiCli: {},
   openRouter: {
     model: "openrouter/auto",
     hasApiKey: false
@@ -2268,6 +2271,10 @@ export function ChatView({
   const [checkingClaude, setCheckingClaude] = useState(false);
   const [connectingClaude, setConnectingClaude] = useState(false);
   const [testingClaude, setTestingClaude] = useState(false);
+  const [geminiStatus, setGeminiStatus] = useState<GeminiCliStatus | null>(null);
+  const [checkingGemini, setCheckingGemini] = useState(false);
+  const [connectingGemini, setConnectingGemini] = useState(false);
+  const [testingGemini, setTestingGemini] = useState(false);
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -2424,6 +2431,7 @@ export function ChatView({
   onPlanUploadedRef.current = onPlanUploaded;
   const autoDetectLocalRef = useRef(false);
   const claudePollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const geminiPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const mcpRef = useRef<HTMLDivElement>(null);
   const chatHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -2565,6 +2573,12 @@ export function ChatView({
             .then(setClaudeStatus)
             .catch(() => undefined);
         }
+        if (providerRef.current === "gemini-cli") {
+          void api
+            ?.getGeminiCliStatus()
+            .then(setGeminiStatus)
+            .catch(() => undefined);
+        }
       } else if (frame.event === "entry.updated") {
         // Saves land on any device; refresh the Training views when one does.
         const before = state.entries[frame.data.index];
@@ -2657,6 +2671,10 @@ export function ChatView({
         if (claudeResult.status === "fulfilled") {
           setClaudeStatus(claudeResult.value);
         }
+        // Gemini's check launches the CLI, so it waits until Gemini is in use.
+        if (settings.provider === "gemini-cli") {
+          await api.getGeminiCliStatus().then(setGeminiStatus).catch(() => undefined);
+        }
         await ensureActiveSession(settings.provider);
       })
       .finally(() => {
@@ -2667,6 +2685,10 @@ export function ChatView({
       if (claudePollTimerRef.current) {
         clearTimeout(claudePollTimerRef.current);
         claudePollTimerRef.current = null;
+      }
+      if (geminiPollTimerRef.current) {
+        clearTimeout(geminiPollTimerRef.current);
+        geminiPollTimerRef.current = null;
       }
       if (chatHighlightTimeoutRef.current) {
         clearTimeout(chatHighlightTimeoutRef.current);
@@ -2698,6 +2720,13 @@ export function ChatView({
   useEffect(() => {
     onActivityChange?.(streaming || exportingLatestActivity);
   }, [streaming, exportingLatestActivity, onActivityChange]);
+
+  // The Gemini section in settings shows the CLI's state on first open.
+  useEffect(() => {
+    if (!api || !settingsOpen || geminiStatus) return;
+    void api.getGeminiCliStatus().then(setGeminiStatus).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, settingsOpen]);
 
   const refreshMcpStatuses = useCallback(async () => {
     if (!api) return;
@@ -2885,6 +2914,105 @@ export function ChatView({
     }
   };
 
+  const refreshGeminiCliStatus = async () => {
+    if (!api || checkingGemini) return null;
+    setCheckingGemini(true);
+    onError(null);
+    try {
+      const status = await api.getGeminiCliStatus();
+      setGeminiStatus(status);
+      return status;
+    } catch (caught) {
+      onError(
+        caught instanceof Error
+          ? caught.message
+          : t("Gemini CLI detection failed.")
+      );
+      return null;
+    } finally {
+      setCheckingGemini(false);
+    }
+  };
+
+  // Google sign-in runs in the browser; poll until the CLI has credentials.
+  const pollGeminiCliStatus = (attempt = 0) => {
+    if (!api || attempt >= 160) return;
+    if (geminiPollTimerRef.current) {
+      clearTimeout(geminiPollTimerRef.current);
+    }
+    geminiPollTimerRef.current = setTimeout(() => {
+      void api
+        .getGeminiCliStatus()
+        .then((status) => {
+          setGeminiStatus(status);
+          if (status.state === "connecting") {
+            pollGeminiCliStatus(attempt + 1);
+          }
+        })
+        .catch(() => pollGeminiCliStatus(attempt + 1));
+    }, 2000);
+  };
+
+  const handleConnectGeminiCli = async () => {
+    if (!api || connectingGemini) return;
+    setConnectingGemini(true);
+    onError(null);
+    try {
+      const status = await api.connectGeminiCli();
+      setGeminiStatus(status);
+      if (status.state === "connecting") {
+        pollGeminiCliStatus();
+      }
+    } catch (caught) {
+      onError(
+        caught instanceof Error ? caught.message : t("Google sign-in failed.")
+      );
+    } finally {
+      setConnectingGemini(false);
+    }
+  };
+
+  const handleTestGeminiCli = async () => {
+    if (!api || testingGemini) return;
+    setTestingGemini(true);
+    onError(null);
+    try {
+      const result = await api.testGeminiCliConnection();
+      setGeminiStatus(result.status);
+      if (!result.ok) onError(result.message);
+    } catch (caught) {
+      onError(
+        caught instanceof Error
+          ? caught.message
+          : t("Gemini CLI connection test failed.")
+      );
+    } finally {
+      setTestingGemini(false);
+    }
+  };
+
+  const handleUpdateGeminiCli = async (
+    patch: Partial<ChatSettings["geminiCli"]>
+  ) => {
+    const nextSettings = {
+      ...chatSettings,
+      geminiCli: { ...chatSettings.geminiCli, ...patch }
+    };
+    setChatSettings(nextSettings);
+    if (patch.executablePath !== undefined) setGeminiStatus(null);
+    if (!api) return;
+    try {
+      const saved = await api.saveChatSettings(nextSettings);
+      setChatSettings(saved);
+    } catch (caught) {
+      onError(
+        caught instanceof Error
+          ? caught.message
+          : t("Could not save Gemini settings.")
+      );
+    }
+  };
+
   const handleNewChat = async () => {
     if (!api || streaming || exportingLatestActivity) return;
     onError(null);
@@ -2953,6 +3081,10 @@ export function ChatView({
         const status = await api.getClaudeCodeStatus();
         setClaudeStatus(status);
       }
+      if (provider === "gemini-cli") {
+        const status = await api.getGeminiCliStatus();
+        setGeminiStatus(status);
+      }
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : t("Provider change failed."));
     }
@@ -2970,6 +3102,14 @@ export function ChatView({
               model: normalizedModel
             }
           }
+        : chatSettings.provider === "gemini-cli"
+          ? {
+              ...chatSettings,
+              geminiCli: {
+                ...chatSettings.geminiCli,
+                model: normalizedModel
+              }
+            }
         : chatSettings.provider === "openrouter"
           ? {
               ...chatSettings,
@@ -3577,6 +3717,7 @@ export function ChatView({
 
   const isLocalProvider = chatSettings.provider === "local";
   const isClaudeProvider = chatSettings.provider === "claude-code";
+  const isGeminiProvider = chatSettings.provider === "gemini-cli";
   const isOpenRouterProvider = chatSettings.provider === "openrouter";
   const isChatGptProvider = chatSettings.provider === "chatgpt";
   const localModelConfigured = chatSettings.local.model.trim().length > 0;
@@ -3600,6 +3741,8 @@ export function ChatView({
   const showLoginGate = isChatGptProvider && !authStatus?.signedIn;
   const showClaudeGate =
     isClaudeProvider && claudeStatus?.state !== "connected";
+  const showGeminiGate =
+    isGeminiProvider && geminiStatus?.state !== "connected";
   const showOpenRouterGate =
     isOpenRouterProvider && !chatSettings.openRouter.hasApiKey;
   const showPlanPanel = useMediaQuery("(min-width: 1400px)");
@@ -3668,6 +3811,8 @@ export function ChatView({
   const selectedModel =
     chatSettings.provider === "claude-code"
       ? chatSettings.claudeCode.model ?? ""
+      : chatSettings.provider === "gemini-cli"
+        ? chatSettings.geminiCli.model ?? ""
       : chatSettings.provider === "openrouter"
         ? chatSettings.openRouter.model
         : chatSettings.chatgpt.model ?? "";
@@ -3706,6 +3851,19 @@ export function ChatView({
     chatSettings,
     authStatus,
     claudeStatus,
+    gemini: {
+      status: geminiStatus,
+      checking: checkingGemini,
+      connecting: connectingGemini,
+      testing: testingGemini,
+      onRefresh: () => void refreshGeminiCliStatus(),
+      onConnect: () => void handleConnectGeminiCli(),
+      onTest: () => void handleTestGeminiCli(),
+      onOpenSetupGuide: (topic: "install" | "sign-in") =>
+        void api?.openGeminiCliSetupGuide(topic),
+      onUpdate: (patch: Partial<ChatSettings["geminiCli"]>) =>
+        void handleUpdateGeminiCli(patch)
+    },
     openRouterApiKey,
     openRouterConnection,
     localApiKey,
@@ -3832,6 +3990,104 @@ export function ChatView({
               <p className="chat-login-note">
                 {claudeStatus?.message ?? t("Checking for Claude Code…")}
               </p>
+            </div>
+            <div className="chat-composer-toolbar chat-composer-toolbar-login">
+              {providerControls}
+            </div>
+          </div>
+        </div>
+        <ChatSettingsModal {...settingsModalProps} />
+      </div>
+    );
+  }
+
+  if (showGeminiGate) {
+    const notInstalled = geminiStatus?.state === "not-installed";
+    const signingInWithGoogle =
+      connectingGemini || geminiStatus?.state === "connecting";
+    return (
+      <div className="chat-view chat-view-login">
+        <div className="chat-layout">
+          <ChatSidebar {...sidebarProps} />
+          <div className="chat-main chat-main-login">
+            <div className="chat-header">
+              <div className="chat-header-title">
+                <span>{t("Training Coach")}</span>
+              </div>
+              <div className="chat-header-end">
+                <button
+                  type="button"
+                  className="chat-settings-button"
+                  onClick={() => setSettingsOpen(true)}
+                >
+                  <Settings2 size={16} aria-hidden="true" />
+                  {t("Settings")}</button>
+              </div>
+            </div>
+            <div className="panel chat-login-panel chat-claude-login-panel chat-gemini-login-panel">
+              <Gem size={32} aria-hidden="true" />
+              <div className="chat-login-title-row">
+                <h2>Gemini CLI</h2>
+                <span className="chat-beta-badge">{t("Beta")}</span>
+              </div>
+              <p>
+                {t("Use the Gemini CLI installed on this computer with the sign-in it already has. CorosLink does not read or store your Google or Gemini credentials.")}</p>
+              <div className="chat-login-actions">
+                {notInstalled ? (
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => void api?.openGeminiCliSetupGuide("install")}
+                  >
+                    <ExternalLink size={16} aria-hidden="true" />
+                    {t("Install Gemini CLI")}</button>
+                ) : (
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => void handleConnectGeminiCli()}
+                    disabled={signingInWithGoogle || !geminiStatus || !api}
+                  >
+                    {signingInWithGoogle ? (
+                      <Loader2
+                        className="chat-spinner"
+                        size={16}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <Gem size={16} aria-hidden="true" />
+                    )}
+                    {t("Sign in with Google")}</button>
+                )}
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => void refreshGeminiCliStatus()}
+                  disabled={checkingGemini || !api}
+                >
+                  {checkingGemini ? (
+                    <Loader2
+                      className="chat-spinner"
+                      size={16}
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <RefreshCw size={16} aria-hidden="true" />
+                  )}
+                  {t("Check again")}</button>
+              </div>
+              <p className="chat-login-note">
+                {geminiStatus?.message ?? t("Checking for Gemini CLI…")}
+              </p>
+              {notInstalled ? null : (
+                <button
+                  type="button"
+                  className="chat-login-link"
+                  onClick={() => void api?.openGeminiCliSetupGuide("sign-in")}
+                >
+                  <ExternalLink size={13} aria-hidden="true" />
+                  {t("Setup guide")}</button>
+              )}
             </div>
             <div className="chat-composer-toolbar chat-composer-toolbar-login">
               {providerControls}

@@ -2,6 +2,7 @@ import { t, useLanguage } from "../i18n/tools";
 import {
   ChartSpline,
   Cpu,
+  Gem,
   MessageSquareText,
   Plug,
   Smartphone,
@@ -18,6 +19,7 @@ export type ChatSettingsSectionId =
   | "chatgpt"
   | "openrouter"
   | "claude"
+  | "gemini"
   | "local"
   | "mcp";
 
@@ -68,6 +70,13 @@ export const CHAT_SETTINGS_SECTIONS: ReadonlyArray<{
     label: "Claude",
     description: "Use Claude Code signed in on this computer",
     icon: Sparkles,
+    group: "Providers"
+  },
+  {
+    id: "gemini",
+    label: "Gemini",
+    description: "Use Gemini CLI signed in on this computer",
+    icon: Gem,
     group: "Providers"
   },
   {

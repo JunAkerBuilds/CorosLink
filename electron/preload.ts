@@ -123,6 +123,8 @@ import type {
   ChatSettings,
   ClaudeCodeConnectionTest,
   ClaudeCodeStatus,
+  GeminiCliConnectionTest,
+  GeminiCliStatus,
   PersistedChatEntry,
   ChatStreamStart,
   ChatStreamToken,
@@ -1238,6 +1240,14 @@ const api = {
     ipcRenderer.invoke("chat:testClaudeCodeConnection"),
   openClaudeCodeSetupGuide: (): Promise<void> =>
     ipcRenderer.invoke("chat:openClaudeCodeSetupGuide"),
+  getGeminiCliStatus: (): Promise<GeminiCliStatus> =>
+    ipcRenderer.invoke("chat:getGeminiCliStatus"),
+  connectGeminiCli: (): Promise<GeminiCliStatus> =>
+    ipcRenderer.invoke("chat:connectGeminiCli"),
+  testGeminiCliConnection: (): Promise<GeminiCliConnectionTest> =>
+    ipcRenderer.invoke("chat:testGeminiCliConnection"),
+  openGeminiCliSetupGuide: (topic: "install" | "sign-in"): Promise<void> =>
+    ipcRenderer.invoke("chat:openGeminiCliSetupGuide", topic),
   loginChat: (): Promise<ChatAuthStatus> => ipcRenderer.invoke("chat:login"),
   logoutChat: (): Promise<ChatAuthStatus> => ipcRenderer.invoke("chat:logout"),
   // Fire-and-forget: assistant text arrives via the onChat* subscriptions.

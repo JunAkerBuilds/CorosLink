@@ -20,6 +20,10 @@ export const CHAT_SETTINGS_KEYS = {
   claudeUpcomingWorkouts: "chat.claudeCode.permissions.upcomingWorkouts",
   claudeSleepData: "chat.claudeCode.permissions.sleepData",
   claudeFullActivityFiles: "chat.claudeCode.permissions.fullActivityFiles",
+  geminiExecutablePath: "chat.geminiCli.executablePath",
+  geminiModel: "chat.geminiCli.model",
+  geminiLastConnectionStatus: "chat.geminiCli.lastConnectionStatus",
+  geminiLastCheckedAt: "chat.geminiCli.lastCheckedAt",
   localBaseUrl: "chat.local.baseUrl",
   localModel: "chat.local.model",
   localApiKey: "chat.local.apiKey",
@@ -61,7 +65,7 @@ export function readChatSettingsFromStore(
       executablePath:
         store.get(CHAT_SETTINGS_KEYS.claudeExecutablePath) || undefined,
       model: store.get(CHAT_SETTINGS_KEYS.claudeModel) || undefined,
-      lastConnectionStatus: normalizeClaudeConnectionStatus(
+      lastConnectionStatus: normalizeCliConnectionStatus(
         store.get(CHAT_SETTINGS_KEYS.claudeLastConnectionStatus)
       ),
       lastCheckedAt:
@@ -78,6 +82,16 @@ export function readChatSettingsFromStore(
         fullActivityFiles:
           store.get(CHAT_SETTINGS_KEYS.claudeFullActivityFiles) === "true"
       }
+    },
+    geminiCli: {
+      executablePath:
+        store.get(CHAT_SETTINGS_KEYS.geminiExecutablePath) || undefined,
+      model: store.get(CHAT_SETTINGS_KEYS.geminiModel) || undefined,
+      lastConnectionStatus: normalizeCliConnectionStatus(
+        store.get(CHAT_SETTINGS_KEYS.geminiLastConnectionStatus)
+      ),
+      lastCheckedAt:
+        store.get(CHAT_SETTINGS_KEYS.geminiLastCheckedAt) || undefined
     },
     local: {
       baseUrl:
@@ -159,6 +173,30 @@ export function saveChatSettingsToStore(
     CHAT_SETTINGS_KEYS.claudeFullActivityFiles,
     claudePermissions?.fullActivityFiles === true ? "true" : "false"
   );
+  const geminiExecutablePath = settings.geminiCli?.executablePath?.trim();
+  if (geminiExecutablePath) {
+    store.set(CHAT_SETTINGS_KEYS.geminiExecutablePath, geminiExecutablePath);
+  } else {
+    store.delete([CHAT_SETTINGS_KEYS.geminiExecutablePath]);
+  }
+  const geminiModel = settings.geminiCli?.model?.trim();
+  if (geminiModel) {
+    store.set(CHAT_SETTINGS_KEYS.geminiModel, geminiModel);
+  } else {
+    store.delete([CHAT_SETTINGS_KEYS.geminiModel]);
+  }
+  if (settings.geminiCli?.lastConnectionStatus) {
+    store.set(
+      CHAT_SETTINGS_KEYS.geminiLastConnectionStatus,
+      settings.geminiCli.lastConnectionStatus
+    );
+  }
+  if (settings.geminiCli?.lastCheckedAt) {
+    store.set(
+      CHAT_SETTINGS_KEYS.geminiLastCheckedAt,
+      settings.geminiCli.lastCheckedAt
+    );
+  }
   store.set(
     CHAT_SETTINGS_KEYS.localBaseUrl,
     normalizeLocalChatBaseUrl(settings.local.baseUrl)
@@ -221,6 +259,7 @@ function normalizeProvider(value: unknown): ChatProvider {
   if (
     value === "local" ||
     value === "claude-code" ||
+    value === "gemini-cli" ||
     value === "openrouter"
   ) {
     return value;
@@ -228,7 +267,7 @@ function normalizeProvider(value: unknown): ChatProvider {
   return "chatgpt";
 }
 
-function normalizeClaudeConnectionStatus(
+function normalizeCliConnectionStatus(
   value: unknown
 ): ChatSettings["claudeCode"]["lastConnectionStatus"] {
   return value === "not-installed" ||
