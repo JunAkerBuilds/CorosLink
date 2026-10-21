@@ -12986,6 +12986,16 @@ body.wf-value-scrubbing * {
   white-space: nowrap;
 }
 
+/* A weight the font has no face for: canvas-drawn ink in the text color. */
+.watchface-shell .wf-sprite-strip-sample-ink {
+  display: block;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
 /* Control-slot assets live beside the Selectable metric instead of in the
    Template assets list: the chosen data type's icon, then the shared
    colon and negative sign as compact rows. */

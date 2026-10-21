@@ -1,7 +1,13 @@
 import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { Loader2 } from "lucide-react";
 import { type CSSProperties, useEffect, useState } from "react";
-import { isWatchfaceFontInstalled } from "./watchfaceFontSnapshots";
+import {
+  fillWatchfaceText,
+  isSyntheticWatchfaceWeight,
+  isWatchfaceFontInstalled,
+  measureWatchfaceText,
+  setWatchfaceCanvasFont
+} from "./watchfaceFontSnapshots";
 import type {
   CorosWatchfaceRasterFont,
   CorosWatchfaceTemplateAsset
@@ -262,6 +268,61 @@ interface WatchfaceFontPreviewProps {
  * template's sprite folder, or a sample of the local font that export will
  * rasterize.
  */
+/** Matches `.wf-sprite-strip--sample`: 26 px type, 1.15 line height, 0.04 em tracking. */
+const SAMPLE_FONT_SIZE = 26;
+
+/**
+ * The sample as Studio draws the weight on the watch. CSS text cannot show a
+ * weight the family has no face for, so the canvas draws it and the page
+ * paints that ink in the theme's text color.
+ */
+function SyntheticWeightSample({ fontFamily, fontWeight, fontStyle, text }: {
+  fontFamily: string;
+  fontWeight: number;
+  fontStyle: "normal" | "italic";
+  text: string;
+}) {
+  const [ink, setInk] = useState<{ url: string; width: number; height: number } | null>(null);
+  useEffect(() => {
+    const density = Math.max(1, Math.ceil(window.devicePixelRatio || 1));
+    const size = SAMPLE_FONT_SIZE * density;
+    const height = Math.round(SAMPLE_FONT_SIZE * 1.15);
+    const face = { family: fontFamily, size, weight: fontWeight, style: fontStyle };
+    const font = `${fontStyle} ${fontWeight} ${size}px "${fontFamily.replace(/["\\]/g, "")}"`;
+    const prepare = (context: CanvasRenderingContext2D) => {
+      setWatchfaceCanvasFont(context, face, font);
+      if ("letterSpacing" in context) context.letterSpacing = `${size * 0.04}px`;
+      context.textBaseline = "alphabetic";
+    };
+    const canvas = document.createElement("canvas");
+    let context = canvas.getContext("2d");
+    if (!context) return;
+    prepare(context);
+    const metrics = measureWatchfaceText(context, text);
+    const left = Math.max(0, metrics.actualBoundingBoxLeft);
+    canvas.width = Math.max(1, Math.ceil(left + Math.max(metrics.width, metrics.actualBoundingBoxRight)) + 2);
+    canvas.height = height * density;
+    // Resizing resets the context, font included.
+    context = canvas.getContext("2d")!;
+    prepare(context);
+    context.fillStyle = "#ffffff";
+    const ascent = metrics.fontBoundingBoxAscent || size * 0.8;
+    const descent = metrics.fontBoundingBoxDescent || size * 0.2;
+    fillWatchfaceText(context, text, left + 1, (canvas.height - ascent - descent) / 2 + ascent);
+    setInk({ url: canvas.toDataURL("image/png"), width: canvas.width / density, height });
+  }, [fontFamily, fontWeight, fontStyle, text]);
+  if (!ink) return <>{text}</>;
+  const mask = `url("${ink.url}")`;
+  return (
+    <span
+      className="wf-sprite-strip-sample-ink"
+      role="img"
+      aria-label={text}
+      style={{ width: ink.width, height: ink.height, maskImage: mask, WebkitMaskImage: mask }}
+    />
+  );
+}
+
 export function WatchfaceFontPreview({
   fontFamily,
   typography,
@@ -290,17 +351,16 @@ export function WatchfaceFontPreview({
     const summary = isWatchfaceFontInstalled(fontFamily)
       ? t("{{fontFamily}} · rasterized to PNG digits on export", { fontFamily })
       : t("{{fontFamily}} is missing · sample shown in a substitute font", { fontFamily: fontFamily });
+    const fontWeight = typography?.fontWeight ?? 400;
+    const fontStyle = typography?.fontStyle === "italic" ? "italic" : "normal";
+    const synthetic = isWatchfaceFontInstalled(fontFamily) &&
+      isSyntheticWatchfaceWeight({ family: fontFamily, weight: fontWeight, style: fontStyle });
     return (
       <div className="wf-sprite-preview wf-sprite-preview--font" aria-label={t("Font sample")}>
-        <div
-          className="wf-sprite-strip wf-sprite-strip--sample"
-          style={{
-            fontFamily,
-            fontWeight: typography?.fontWeight ?? 400,
-            fontStyle: typography?.fontStyle ?? "normal"
-          }}
-        >
-          {sampleText}
+        <div className="wf-sprite-strip wf-sprite-strip--sample" style={{ fontFamily, fontWeight, fontStyle }}>
+          {synthetic
+            ? <SyntheticWeightSample fontFamily={fontFamily} fontWeight={fontWeight} fontStyle={fontStyle} text={sampleText} />
+            : sampleText}
         </div>
         <span className="wf-sprite-strip-summary" title={t(summary)}>
           {t(summary)}
