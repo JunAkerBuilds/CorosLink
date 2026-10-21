@@ -343,11 +343,13 @@ export async function getGeminiCliStatus(
 
   const auth = await getGeminiAuthState();
   const methodLabel = auth.method ? AUTH_METHOD_LABELS[auth.method] ?? auth.method : undefined;
+  // A sign-in that rewrites the credentials changes the key, which lifts the refusal.
   const refused =
-    auth.signedIn && !pendingLogin && lastAuthFailure?.key === (await authFailureKey(executablePath))
+    auth.signedIn && lastAuthFailure?.key === (await authFailureKey(executablePath))
       ? lastAuthFailure.message
       : undefined;
-  if (!auth.signedIn || refused) {
+  // Cached credentials don't make a sign-in in progress, or one that just failed, connected.
+  if (!auth.signedIn || refused || pendingLogin) {
     return {
       state: pendingLogin ? "connecting" : "sign-in-required",
       installed: true,
@@ -358,10 +360,9 @@ export async function getGeminiCliStatus(
       checkedAt,
       message: pendingLogin
         ? "Finish signing in with Google in your browser."
-        : refused ??
-          (lastLoginError
-            ? `Google sign-in did not finish: ${lastLoginError}`
-            : SIGN_IN_REQUIRED_MESSAGE)
+        : lastLoginError
+          ? `Google sign-in did not finish: ${lastLoginError}`
+          : refused ?? SIGN_IN_REQUIRED_MESSAGE
     };
   }
 
@@ -394,7 +395,6 @@ export async function launchGeminiCliLogin(
 
   const executablePath = status.executablePath;
   lastLoginError = undefined;
-  lastAuthFailure = undefined;
   pendingLogin = (async () => {
     await prepareWorkspace(workspaceDir);
     const agent = AcpAgent.start(executablePath, await acpArgs(executablePath), {
@@ -1083,10 +1083,11 @@ async function startToolBridge(
 
   let transport: StreamableHTTPServerTransport | undefined;
   const httpServer = http.createServer((request, response) => {
-    const supplied = request.headers.authorization?.match(/^Bearer (\S+)$/)?.[1] ?? "";
+    // Compare bytes: a non-ASCII header can match the token's length in characters but not in bytes.
+    const supplied = Buffer.from(request.headers.authorization?.match(/^Bearer (\S+)$/)?.[1] ?? "");
+    const expected = Buffer.from(token);
     const authorized =
-      supplied.length === token.length &&
-      crypto.timingSafeEqual(Buffer.from(supplied), Buffer.from(token));
+      supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected);
     if (request.url !== MCP_ENDPOINT || !authorized || request.headers.origin || !transport) {
       response.writeHead(request.url !== MCP_ENDPOINT ? 404 : 401).end();
       return;

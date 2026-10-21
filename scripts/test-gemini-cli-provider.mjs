@@ -25,6 +25,7 @@ const {
   getGeminiAuthState,
   getGeminiCliStatus,
   getGeminiExecutableCandidates,
+  launchGeminiCliLogin,
   listGeminiCliModels,
   normalizeGeminiCliError,
   parseGeminiSelectedAuthType,
@@ -160,7 +161,7 @@ try {
   assert.equal(tokens.join(""), result.fullText);
   assert.equal(
     result.fullText,
-    'You ran {"distance":42.7}. [args:ok model:flash system:ok settings:ok image:ok tools:get_weekly_mileage permission:cancelled]'
+    'You ran {"distance":42.7}. [args:ok model:flash probe:401 system:ok settings:ok image:ok tools:get_weekly_mileage permission:cancelled]'
   );
   // The instructions file lives only as long as the request.
   assert.deepEqual(await readdir(path.join(scratch, "app", "gemini-coach", "gemini-coach-prompts")), []);
@@ -211,6 +212,17 @@ try {
   const refused = await getGeminiCliStatus(fakeGemini);
   assert.equal(refused.state, "sign-in-required");
   assert.match(refused.message, /not available for this account/);
+  // Signing in again: cached credentials don't make it connected while it runs or after it fails.
+  assert.equal((await launchGeminiCliLogin(fakeGemini, workspaceDir)).state, "connecting");
+  assert.equal((await getGeminiCliStatus(fakeGemini)).state, "connecting");
+  let afterLogin;
+  for (let attempt = 0; attempt < 50; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    afterLogin = await getGeminiCliStatus(fakeGemini);
+    if (afterLogin.state !== "connecting") break;
+  }
+  assert.equal(afterLogin.state, "sign-in-required");
+  assert.match(afterLogin.message, /Google sign-in did not finish: Google sign-in is not available/);
   // New credentials clear the refusal.
   await new Promise((resolve) => setTimeout(resolve, 20));
   await writeFile(path.join(geminiDir, "oauth_creds.json"), '{"fresh":true}');
@@ -258,6 +270,9 @@ if (modelIndex >= 0) checks.push("model:" + args[modelIndex + 1]);
 async function handle(message) {
   if (message.id !== undefined && waiting.has(message.id)) { waiting.get(message.id)(message.result); return; }
   if (message.method === "initialize") return send({ id: message.id, result: { protocolVersion: 1, agentCapabilities: {} } });
+  if (message.method === "authenticate") {
+    return setTimeout(() => send({ id: message.id, error: { code: -32000, message: "Google sign-in is not available for this account." } }), 1500);
+  }
   if (message.method === "session/new") {
     if (process.env.FAKE_GEMINI_REFUSE) {
       process.stderr.write("Error authenticating: IneligibleTierError: Google sign-in is not available for this account.\\n");
@@ -269,6 +284,9 @@ async function handle(message) {
       const { StreamableHTTPClientTransport } = requireFromRepo("@modelcontextprotocol/sdk/client/streamableHttp.js");
       mcp = new Client({ name: "fake-gemini", version: "1" });
       const headers = Object.fromEntries(server.headers.map((header) => [header.name, header.value]));
+      // Same length in characters as the real token, longer in bytes: refused, never a crash.
+      const probe = await fetch(server.url, { method: "POST", headers: { authorization: "Bearer " + "\u00e9".repeat(headers.Authorization.length - 7) } });
+      checks.push("probe:" + probe.status);
       await mcp.connect(new StreamableHTTPClientTransport(new URL(server.url), { requestInit: { headers } }));
     }
     return send({ id: message.id, result: { sessionId: "s1", models: { currentModelId: "gemini-fake-pro", availableModels: [
