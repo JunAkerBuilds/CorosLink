@@ -100,6 +100,7 @@ const RENDER_CHART_TOOL: CorosMcpTool = {
               enum: [...COACH_CHART_SERIES_METRICS],
               description:
                 "Metric to bind. Daily (one point per day): trainingLoad, rpeLoad (session-RPE load), avgSleepHrv (overnight HRV ms), sleepHrvBase (HRV baseline), rhr (resting HR), sleepScore, sleepMinutes, trainingLoadRatio, staminaLevel, vo2max, steps, calories. " +
+                "Overnight metrics (avgSleepHrv, rhr, sleepScore, sleepMinutes) sit on the morning the night ended, before that day's training. " +
                 "Intraday (one point per hour, from the COROS watch): stress (0–100), heartRate, spo2, respiratoryRate. A chart binds daily or intraday metrics, not both."
             },
             values: {
@@ -184,6 +185,8 @@ export function getChatAnalyticsTools(): CorosMcpTool[] {
         "Fetch daily training load, resting HR, HRV vs baseline, and sleep score " +
         "for the last N days (default 7, up to 90) for recovery and fitness analysis, " +
         "plus the latest running and cycling VO2max. " +
+        "Resting HR, HRV and sleep on a date come from the night that ended that morning, " +
+        "so they precede that day's training; a session's effect shows on the next date. " +
         "Windows longer than 14 days also include weekly averages.",
       inputSchema: {
         type: "object",
@@ -299,11 +302,15 @@ export function formatFitnessTrendLines(
   points: TrainingTrendPoint[],
   days: number
 ): string[] {
-  const lines = [`Fitness trends (last ${days} days):`, ""];
+  // COROS files a night under the morning it ended, so a date's HRV, resting HR
+  // and sleep were measured before that day's training, not after it.
+  const lines = [
+    `Fitness trends (last ${days} days):`,
+    "Each date: that day's training load, then the night that ended that morning (before the training). A day's load shows in the next date's night.",
+    ""
+  ];
   for (const point of points) {
-    const parts = [
-      point.label,
-      point.trainingLoad != null ? `load ${Math.round(point.trainingLoad)}` : undefined,
+    const night = [
       point.rhr != null ? `RHR ${Math.round(point.rhr)} bpm` : undefined,
       point.avgSleepHrv != null ? `HRV ${Math.round(point.avgSleepHrv)}` : undefined,
       point.sleepHrvBase != null ? `baseline ${Math.round(point.sleepHrvBase)}` : undefined,
@@ -313,6 +320,11 @@ export function formatFitnessTrendLines(
             Math.round(point.sleepMinutes % 60)
           ).padStart(2, "0")}`
         : undefined
+    ].filter(Boolean);
+    const parts = [
+      point.label,
+      point.trainingLoad != null ? `load ${Math.round(point.trainingLoad)}` : undefined,
+      night.length > 0 ? `night before: ${night.join(" · ")}` : undefined
     ].filter(Boolean);
     lines.push(`- ${parts.join(" · ")}`);
   }

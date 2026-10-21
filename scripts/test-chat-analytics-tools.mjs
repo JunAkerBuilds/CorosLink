@@ -65,7 +65,15 @@ const lines = formatFitnessTrendLines(
   7
 );
 assert.equal(lines[0], "Fitness trends (last 7 days):");
-assert.match(lines[4], /sleep 88 · slept 7h35/);
+assert.match(lines[1], /night that ended that morning \(before the training\)/);
+// A date's overnight readings precede its training, so they are labelled as the night before.
+assert.equal(lines[3], "- 07/01 · load 120 · night before: RHR 48 bpm · HRV 62 · baseline 58");
+assert.equal(lines[5], "- 07/03 · load 0 · night before: sleep 88 · slept 7h35");
+assert.equal(
+  formatFitnessTrendLines([{ date: "20260704", label: "07/04", trainingLoad: 35 }], 7)[3],
+  "- 07/04 · load 35",
+  "no night block without overnight readings"
+);
 assert.ok(!lines.some((line) => line === "Weekly summary:"), "no weekly block for short windows");
 
 const longPoints = Array.from({ length: 21 }, (_, index) => ({

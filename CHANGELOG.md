@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Coach reads HRV on the right side of a workout.** COROS files each night under the morning it ended, so a date's HRV, resting heart rate and sleep were measured before that day's training. Coach's fitness trends now label them as the night before, so Coach no longer reads a low HRV as the result of the session that came after it.
 - Two Portuguese watch face labels used post-1990 spelling.
 - **Stop works while Coach is still getting ready.** Pressing Stop while Coach was checking its connection, reaching COROS or reading your attached files used to be lost, and Claude or Gemini then answered the whole turn anyway. The turn now ends at once and nothing is sent.
 - **Changing a Claude setting no longer hides the conversation.** Picking a model or changing what Claude may see used to swap the conversation for the sign-in screen until you reopened Coach. Only a new Claude executable path checks the connection again, once you stop typing it.
