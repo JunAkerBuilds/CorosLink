@@ -1172,8 +1172,8 @@ const api = {
     ipcRenderer.invoke("maps:stopRouteShare"),
   validateRouteApiKey: (apiKey: string): Promise<RouteApiKeyValidation> =>
     ipcRenderer.invoke("maps:validateRouteApiKey", apiKey),
-  getDiagnostics: (): Promise<DiagnosticsSnapshot> => ipcRenderer.invoke("diagnostics:get"),
-  copyDiagnostics: (): Promise<DiagnosticsSnapshot> => ipcRenderer.invoke("diagnostics:copy"),
+  getDiagnostics: (rangeHours?: number): Promise<DiagnosticsSnapshot> => ipcRenderer.invoke("diagnostics:get", rangeHours),
+  copyDiagnostics: (rangeHours?: number): Promise<DiagnosticsSnapshot> => ipcRenderer.invoke("diagnostics:copy", rangeHours),
   clearDiagnostics: (): Promise<DiagnosticsSnapshot> => ipcRenderer.invoke("diagnostics:clear"),
   reportRendererError: (error: RendererDiagnosticError): void => ipcRenderer.send("diagnostics:rendererError", error),
   getAppInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:getInfo"),

@@ -4,7 +4,8 @@ import type { DiagnosticsSnapshot } from "./diagnosticsTypes";
 
 const MAX_ENTRIES = 200;
 const MAX_BYTES = 512 * 1024;
-const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+const MAX_AGE_MS = 7 * 24 * HOUR_MS;
 // A failure that keeps repeating (a background sync every few minutes) stays one entry.
 const REPEAT_WINDOW_MS = 30 * 60 * 1000;
 const MAX_VIA = 6;
@@ -254,12 +255,21 @@ export class DiagnosticsLog {
     return this.snapshot();
   }
 
-  /** `status` lines describe current state (e.g. account connections) and are redacted like errors. */
-  snapshot(status: string[] = []): DiagnosticsSnapshot {
+  /**
+   * `status` lines describe current state (e.g. account connections) and are redacted like errors.
+   * `rangeHours` keeps only failures seen in that many recent hours; a repeat counts by its latest occurrence.
+   */
+  snapshot(status: string[] = [], rangeHours?: number): DiagnosticsSnapshot {
     const count = this.entries.length;
     this.prune();
     if (this.entries.length !== count) this.persist();
     const statusLines = status.flatMap((line) => typeof line === "string" ? [this.clean(line, 300)] : []);
+    const rangeMs = typeof rangeHours === "number" && rangeHours > 0 ? rangeHours * HOUR_MS : MAX_AGE_MS;
+    const since = rangeMs < MAX_AGE_MS ? this.now() - rangeMs : undefined;
+    const entries = since === undefined ? this.entries
+      : this.entries.filter((entry) => Date.parse(entry.lastSeen ?? entry.timestamp) >= since);
+    const range = since === undefined ? "Range: last 7 days (everything kept)"
+      : `Range: last ${describeHours(rangeMs / HOUR_MS)} (since ${new Date(since).toISOString()}), ${entries.length} of ${this.entries.length} kept errors`;
     const report = [
       "CorosLink error report",
       `Generated: ${new Date(this.now()).toISOString()}`,
@@ -269,12 +279,19 @@ export class DiagnosticsLog {
       "Retention: latest 200 errors, up to 7 days (512 KB maximum)",
       "Repeats of the same failure within 30 minutes are grouped (count, lastSeen).",
       "Request bodies, headers, and input arguments are not collected.",
+      range,
       ...(statusLines.length ? ["", ...statusLines] : []),
       "",
-      this.entries.length ? JSON.stringify(this.entries.map(orderedEntry), null, 2) : "No errors recorded."
+      entries.length ? JSON.stringify(entries.map(orderedEntry), null, 2)
+        : since !== undefined && this.entries.length ? `No errors in the last ${describeHours(rangeMs / HOUR_MS)}.` : "No errors recorded."
     ].join("\n");
-    return { report, entryCount: this.entries.length, persistent: this.persistent };
+    return { report, entryCount: entries.length, totalCount: this.entries.length, persistent: this.persistent };
   }
+}
+
+function describeHours(hours: number): string {
+  if (hours % 24 === 0) return hours === 24 ? "day" : `${hours / 24} days`;
+  return hours === 1 ? "hour" : `${hours} hours`;
 }
 
 /**

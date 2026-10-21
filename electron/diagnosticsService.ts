@@ -66,18 +66,19 @@ export function initializeDiagnostics(getWindow: () => BrowserWindow | undefined
     }
   };
   // Keep diagnostic operations outside the logging wrapper to avoid recursion.
-  ipcMain.handle("diagnostics:get", (event) => {
+  const range = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+  ipcMain.handle("diagnostics:get", (event, rangeHours?: unknown) => {
     assertSender(event);
-    return getLog().snapshot(currentStatus());
+    return getLog().snapshot(currentStatus(), range(rangeHours));
   });
   ipcMain.handle("diagnostics:clear", (event) => {
     assertSender(event);
     getLog().clear();
     return getLog().snapshot(currentStatus());
   });
-  ipcMain.handle("diagnostics:copy", (event) => {
+  ipcMain.handle("diagnostics:copy", (event, rangeHours?: unknown) => {
     assertSender(event);
-    const snapshot = getLog().snapshot(currentStatus());
+    const snapshot = getLog().snapshot(currentStatus(), range(rangeHours));
     clipboard.writeText(snapshot.report);
     return snapshot;
   });

@@ -783,8 +783,9 @@ export interface CorosLinkApi {
   startRouteShare: (id: string) => Promise<RouteShareSession>;
   stopRouteShare: () => Promise<void>;
   validateRouteApiKey: (apiKey: string) => Promise<RouteApiKeyValidation>;
-  getDiagnostics: () => Promise<DiagnosticsSnapshot>;
-  copyDiagnostics: () => Promise<DiagnosticsSnapshot>;
+  /** `rangeHours` limits the report to failures seen in that many recent hours. */
+  getDiagnostics: (rangeHours?: number) => Promise<DiagnosticsSnapshot>;
+  copyDiagnostics: (rangeHours?: number) => Promise<DiagnosticsSnapshot>;
   clearDiagnostics: () => Promise<DiagnosticsSnapshot>;
   reportRendererError: (error: RendererDiagnosticError) => void;
   getAppInfo: () => Promise<AppInfo>;

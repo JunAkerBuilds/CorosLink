@@ -129,6 +129,32 @@ try {
   assert.match(withStatus, /COROS accounts\n- Training Hub: signed in · teameuapi\.coros\.com · \[email\]/);
   assert.ok(withStatus.indexOf("COROS accounts") < withStatus.indexOf("["));
 
+  // A time range keeps failures seen inside it; a long-running repeat counts by its latest occurrence.
+  const ranged = open(path.join(directory, "ranged", "errors.json"));
+  ranged.record("old", new Error("two days ago"));
+  now += 2 * 24 * 60 * 60 * 1000;
+  for (let index = 0; index < 4; index++) {
+    if (index) now += 25 * 60 * 1000;
+    ranged.record("repeating", new Error("still failing"));
+  }
+  now += 10 * 60 * 1000;
+  ranged.record("recent", new Error("just now"));
+  const lastHour = ranged.snapshot([], 1);
+  assert.deepEqual([lastHour.entryCount, lastHour.totalCount], [2, 3]);
+  assert.match(lastHour.report, /Range: last hour \(since \S+Z\), 2 of 3 kept errors/);
+  assert.match(lastHour.report, /still failing/);
+  assert.doesNotMatch(lastHour.report, /two days ago/);
+  assert.match(ranged.snapshot([], 24).report, /Range: last day /);
+  assert.match(ranged.snapshot([], 12).report, /Range: last 12 hours /);
+  for (const everything of [ranged.snapshot(), ranged.snapshot([], 168), ranged.snapshot([], 0), ranged.snapshot([], Number.NaN)]) {
+    assert.deepEqual([everything.entryCount, everything.totalCount], [3, 3]);
+    assert.match(everything.report, /Range: last 7 days \(everything kept\)/);
+  }
+  now += 2 * 60 * 60 * 1000;
+  const quiet = ranged.snapshot([], 1);
+  assert.deepEqual([quiet.entryCount, quiet.totalCount], [0, 3]);
+  assert.match(quiet.report, /No errors in the last hour\.$/);
+
   const circular = new Error("cyclic");
   circular.cause = circular;
   log.record("circular", circular);
