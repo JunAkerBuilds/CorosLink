@@ -2224,6 +2224,9 @@ export const TRAINING_HUB_EXPORT_FORMATS: readonly TrainingHubExportFormat[] = [
   }
 ];
 
+/** Activities kept on this computer (Local-Only Mode) export as their FIT file, or GPX made from it (localSync/activitySource.ts). */
+export const LOCAL_ACTIVITY_EXPORT_FILE_TYPES: readonly TrainingHubActivityFileType[] = [4, 1];
+
 export interface TrainingHubExportResult {
   /** False when the user cancelled the save dialog. */
   saved: boolean;

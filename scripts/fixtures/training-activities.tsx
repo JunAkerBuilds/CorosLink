@@ -4,6 +4,7 @@ import { TrainingActivities } from "../../src/training/components/TrainingActivi
 import { TrainingHubHeader } from "../../src/training/components/TrainingHubHeader";
 import { ThemeProvider, useTheme } from "../../src/theme/ThemeProvider";
 import { UnitSystemProvider, useUnitSystem } from "../../src/units/UnitSystemProvider";
+import { setLocalOnlyView } from "../../src/privacy/localOnlyView";
 import type { TrainingHubActivity, TrainingHubActivityDetail } from "../../electron/types";
 import "../../src/styles.css";
 import "../../src/training/trainingHub.css";
@@ -38,7 +39,7 @@ function Fixture() {
   const [selected, setSelected] = useState<TrainingHubActivity | null>(null);
   const { setTheme } = useTheme();
   const { setUnitSystem } = useUnitSystem();
-  Object.assign(window, { setTestTheme: setTheme, setTestUnits: setUnitSystem });
+  Object.assign(window, { setTestTheme: setTheme, setTestUnits: setUnitSystem, setTestLocalOnly: setLocalOnlyView });
   return <main className="stack training-dashboard" style={{ padding: "28px 32px", height: "100vh", overflow: "auto" }}>
     <TrainingHubHeader connected status={null} busy={null} sampleMode={false} activeTab="activities" tabIdPrefix="fixture" activityCount={activities.length}
       onTabChange={() => {}} onRefresh={() => {}} onLogout={() => {}} />
