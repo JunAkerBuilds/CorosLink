@@ -300,7 +300,7 @@ assert.equal(answerTurn.requestId, answer.requestId);
 assert.equal(answerTurn.unitSystem, "imperial", "remote-style sends reuse the desktop's last units");
 assert.deepEqual(answerTurn.messages.slice(-2), [
   { role: "assistant", content: "I need the athlete's answer before continuing:\nHow hard should Sunday be?\n- Easy\n- Tempo" },
-  { role: "user", content: "Keep Sunday easy." }
+  { role: "user", content: "Keep Sunday easy.", answersPrompt: true }
 ]);
 const answered = main.hub.getSession(session.id).entries[8];
 assert.equal(answered.prompt.answer, "Keep Sunday easy.");

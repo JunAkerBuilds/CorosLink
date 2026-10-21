@@ -276,6 +276,27 @@ async function main() {
       await shoot(`dark-narrow-${lang}`);
       await size(1100);
     }
+    // Units changes under an open profile: the pace follows it and other unsaved edits stay. Saving writes the
+    // pace shown (seconds per km), never the old digits read in the new unit.
+    await open();
+    const pace = `document.querySelector('.settings-fields input[type=text]')`;
+    assert.equal(await js(`${pace}.value`), '4:45');
+    await js(`window.setUnits('imperial'); void 0`);
+    await until(`${pace}.value === '7:39'`);
+    assert.equal(await js(`${profileBar}`), null, 'switching units is not an edit');
+    await setInput('.settings-fields input', '201');
+    await js(`window.setUnits('metric'); void 0`);
+    await until(`${pace}.value === '4:45'`);
+    assert.equal(await js(`document.querySelector('.settings-fields input').value`), '201', 'other unsaved edits stay');
+    await setInput('.settings-fields input[type=text]', '5:00');
+    await js(`window.setUnits('imperial'); void 0`);
+    await until(`${pace}.value === '8:03'`);
+    await js(`${profileSave}.click(); void 0`);
+    await until(`window.profileSaved.length === 1`);
+    assert.deepEqual(await js(`window.profileSaved[0]`), { maxHr: 201, restingHr: 55, thresholdHr: 160, hrZoneType: 3, thresholdPaceSecondsPerKm: 300 });
+    await js(`window.setUnits('metric'); void 0`);
+    await until(`${pace}.value === '5:00' && ${profileBar}?.classList.contains('is-dirty') === false`);
+
     // The Overview weather card: refresh and settings stacked in its corner; settings opens Weather location.
     await open('card=weather');
     await until(`document.querySelector('.overview-weather-temp') !== null`);
@@ -286,7 +307,7 @@ async function main() {
     await js(`document.querySelector('.overview-weather-settings').click(); void 0`);
     assert.deepEqual(await js(`window.openedSettings`), ['weather']);
     assert.deepEqual(errors, [], 'no console errors');
-    console.log('Watch settings: locked for unchecked models, weather card settings link, full-width layout, 12-hour reading, keyboard segments, profile checks and preview, edit and save, sticky save bar, paper zone contrast, empty, search, disconnected, error, French and Chinese at medium and narrow widths passed.');
+    console.log('Watch settings: locked for unchecked models, weather card settings link, full-width layout, 12-hour reading, keyboard segments, profile checks and preview, pace across a Units change, edit and save, sticky save bar, paper zone contrast, empty, search, disconnected, error, French and Chinese at medium and narrow widths passed.');
   } finally { clearTimeout(watchdog); win?.destroy(); await vite?.close(); }
 }
 main().then(() => app.exit(0), error => { console.error(error); app.exit(1); });

@@ -57,6 +57,17 @@ export function WatchProfileSettings({ api }: { api: CorosLinkApi }) {
   const fromProfile = useCallback((value: WatchProfileSummary) => ({ maxHr: String(value.maxHr), restingHr: String(value.restingHr), thresholdHr: String(value.thresholdHr),
     hrZoneType: value.hrZoneType || 3, pace: formatPace(value.thresholdPaceSecondsPerKm, imperial) }), [imperial]);
 
+  // The pace is typed in the unit shown. When Units changes, the draft is converted while rendering, so the
+  // form never reads as edited (and stops following the watch) and "4:45" is never saved in the other unit.
+  const [paceImperial, setPaceImperial] = useState(imperial);
+  if (paceImperial !== imperial) {
+    setPaceImperial(imperial);
+    setDraft(current => {
+      const seconds = parsePace(current.pace, paceImperial);
+      return seconds === undefined ? current : { ...current, pace: formatPace(seconds, imperial) };
+    });
+  }
+
   // Read again when the watch connects: the profile is read from it just after connecting.
   const load = useCallback(() => {
     void api.getWatchProfile().catch(() => null).then(value => {

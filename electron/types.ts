@@ -2224,6 +2224,9 @@ export const TRAINING_HUB_EXPORT_FORMATS: readonly TrainingHubExportFormat[] = [
   }
 ];
 
+/** Activities kept on this computer (Local-Only Mode) export as their FIT file, or GPX made from it (localSync/activitySource.ts). */
+export const LOCAL_ACTIVITY_EXPORT_FILE_TYPES: readonly TrainingHubActivityFileType[] = [4, 1];
+
 export interface TrainingHubExportResult {
   /** False when the user cancelled the save dialog. */
   saved: boolean;
@@ -2933,6 +2936,8 @@ export interface ChatMessage {
   content: string;
   /** Files the athlete attached to this message, as the transcript records them. */
   files?: ChatFileAttachment[];
+  /** The athlete's answer to one of Coach's questions, part of the request that led to it. */
+  answersPrompt?: boolean;
   /**
    * Pixels for the model: attached images and page renders of documents with
    * no text layer. Filled from the attachment store just before a request.

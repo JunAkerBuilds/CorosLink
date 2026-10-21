@@ -113,6 +113,39 @@ assert.match(chatHistoryNote(fitted.omitted), /40 earliest messages of this conv
 const huge = { role: "user", content: "x".repeat(400_000) };
 assert.deepEqual(fitChatHistory([...shortChat, huge], 1_000).messages, [huge], "the latest message goes even over budget");
 assert.equal(estimateChatMessageTokens({ role: "user", content: "abcd", images: [{ label: "a", mimeType: "image/png", base64: "x".repeat(90_000) }] }), 1_001);
+// A shortened window starts with the athlete's message, as strict chat templates (Gemma, Mistral) need.
+const alternating = Array.from({ length: 9 }, (_, index) => turn(index));
+assert.deepEqual(fitChatHistory(alternating, 450), { messages: alternating.slice(6), omitted: 6 });
+// The athlete's newest message with files still sent goes with everything after it, its documents shortened
+// to fit instead of dropping the request they came with. Two 120,000-character PDFs, for every provider:
+const tokensOf = (window) => window.messages.reduce((sum, message) => sum + estimateChatMessageTokens(message), 0);
+const pdfBlock = (name) => `<attached_file name="${name}" pages="40">\n${"Tue | 8 km easy\n".repeat(7_500)}\n</attached_file>`;
+const pdfFile = { id: "p1", name: "Base.pdf", kind: "document", mimeType: "application/pdf", sizeBytes: 1 };
+const twoPlans = { role: "user", content: `Load both plans\n\n${pdfBlock("Base.pdf")}\n\n${pdfBlock("Build.pdf")}`, files: [pdfFile, { ...pdfFile, id: "p2" }] };
+const question = { role: "assistant", content: "Which one first?" };
+const choice = { role: "user", content: "The base plan" };
+for (const [provider, budget] of Object.entries(CHAT_HISTORY_TOKEN_BUDGETS)) {
+  const window = fitChatHistory([turn(0), turn(1), twoPlans, question, choice], budget);
+  assert.equal(window.omitted, 2, `${provider}: only the older messages are left out`);
+  assert.deepEqual(window.messages.slice(1), [question, choice]);
+  assert.match(window.messages[0].content, /^Load both plans\n\n<attached_file name="Base.pdf"/);
+  assert.equal((window.messages[0].content.match(/<\/attached_file>/g) ?? []).length, 2, `${provider}: both documents stay`);
+  assert.equal((window.messages[0].content.match(/The text was cut here to fit this conversation/g) ?? []).length, 2);
+  assert.ok(tokensOf(window) <= budget, `${provider}: within the budget`);
+}
+assert.ok(!twoPlans.content.includes("cut here"), "the messages passed in are left as they are");
+// One PDF and a long reply on OpenRouter: the document is cut only as much as needed.
+const onePlan = { role: "user", content: `Build this\n\n${pdfBlock("Plan.pdf")}`, files: [pdfFile] };
+const longReply = { role: "assistant", content: "r".repeat(8_000) };
+const openRouterWindow = fitChatHistory([turn(0), turn(1), onePlan, longReply, choice], CHAT_HISTORY_TOKEN_BUDGETS.openrouter);
+assert.equal(openRouterWindow.omitted, 2);
+assert.ok(openRouterWindow.messages[0].content.length > 115_000, "most of the document stays");
+assert.match(openRouterWindow.messages[0].content, /8 km easy\n\n\[The text was cut here to fit this conversation; the rest of the file is not included\.\]\n<\/attached_file>$/);
+assert.ok(tokensOf(openRouterWindow) <= CHAT_HISTORY_TOKEN_BUDGETS.openrouter);
+// A short message with files is kept as it is, and files on a message outside the document window get no favour.
+assert.deepEqual(fitChatHistory([turn(0), { ...turn(2), files: [pdfFile] }, turn(1), turn(2)], 250).messages.length, 3);
+const outside = [{ ...onePlan }, ...Array.from({ length: 6 }, (_, index) => turn(index + 1)), turn(0)];
+assert.deepEqual(fitChatHistory(outside, 1_000), { messages: outside.slice(2), omitted: 2 }, "dropped, and the reply after it too");
 assert.ok(CHAT_HISTORY_TOKEN_BUDGETS.local < CHAT_HISTORY_TOKEN_BUDGETS.chatgpt);
 
 const { MAX_CUSTOM_COACH_INSTRUCTIONS } = await import(

@@ -144,6 +144,45 @@ class SystemTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(caught.exception.address,'AA:AA:AA:AA:AA:01');self.assertEqual(made,['AA:AA:AA:AA:AA:02'],'nothing connected')
             with self.assertRaises(ProtocolError):await worker.SystemSession().connect('COROS PACE 4 TEST',7)
         finally:worker.BleakScanner,worker.BleakClient,worker.PINNED_GRACE_SECONDS=original
+    async def test_rotated_address_with_the_remembered_serial(self):
+        # The watch isn't bonded and can come back under another address: with the remembered serial
+        # number, the other device is read first and used only if Device Information gives that number.
+        made=[]
+        class Watch(FakeClient):
+            serial=b'W332ABC123\x00';refuse_serial=False
+            def __init__(self,device,**kwargs):
+                made.append(device.address);super().__init__(device,**kwargs)
+                chars={}
+                def characteristic(uuid):
+                    return chars.setdefault(uuid,SimpleNamespace(uuid=uuid,properties=['read','write-without-response','notify'],max_write_without_response_size=244))
+                self.services=SimpleNamespace(get_characteristic=characteristic)
+            async def read_gatt_char(self,char):
+                if char.uuid==worker.standard_uuid('2a25'):
+                    if Watch.refuse_serial:raise BleakGATTProtocolError(0x05)
+                    return Watch.serial
+                return b'\x43'
+        class Scanner(FakeScanner):
+            async def __aenter__(self):
+                self.callback(SimpleNamespace(address='AA:AA:AA:AA:AA:07',name='COROS PACE 4 TEST'),SimpleNamespace(local_name='COROS PACE 4 TEST',rssi=-50))
+                return self
+        original=(worker.BleakScanner,worker.BleakClient,worker.PINNED_GRACE_SECONDS)
+        worker.BleakScanner,worker.BleakClient,worker.PINNED_GRACE_SECONDS=Scanner,Watch,0.05
+        try:
+            session=worker.SystemSession()
+            state=await session.connect('COROS PACE 4 TEST','AA:AA:AA:AA:AA:02',' w332abc123 ')
+            self.assertEqual((state['deviceId'],state['serialNumber'],state['connected']),('AA:AA:AA:AA:AA:07','W332ABC123',True))
+            await session.close()
+            for serial,refuse in [(b'W332OTHER9',False),(b'W332ABC123',True)]:
+                Watch.serial,Watch.refuse_serial=serial,refuse
+                session=worker.SystemSession();made.clear()
+                with self.assertRaises(worker.IdentityMismatch) as caught:
+                    await session.connect('COROS PACE 4 TEST','AA:AA:AA:AA:AA:02','W332ABC123')
+                self.assertEqual(caught.exception.address,'AA:AA:AA:AA:AA:07');self.assertEqual(made,['AA:AA:AA:AA:AA:07'])
+                self.assertEqual((session.client.subscriptions,session.client.pair_calls),(0,0),'no notifications or pairing for another watch')
+                await session.close()
+            reply=(await run_main({'id':1,'operation':'connect','deviceName':'COROS PACE 4 TEST','pinnedId':'AA:AA:AA:AA:AA:02','pinnedSerial':'W332ABC123'}))[-1]
+            self.assertEqual(reply['mismatch'],{'deviceId':'AA:AA:AA:AA:AA:07'});self.assertNotIn('AA:AA',json.dumps(reply['detail']))
+        finally:worker.BleakScanner,worker.BleakClient,worker.PINNED_GRACE_SECONDS=original
     async def test_windows_pairs_only_when_the_watch_refuses(self):
         FakeClient.refuse_unpaired=True
         session=windows_session();state=await session.connect('COROS PACE Pro TEST')

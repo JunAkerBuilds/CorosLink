@@ -1,6 +1,7 @@
 // How much of a Coach conversation each request carries. Long conversations
 // keep their newest messages within a per-provider budget, and the model is
 // told that earlier ones were left out instead of silently losing them.
+import { coachDocumentWindowStart, shortenAttachedDocuments } from "./coachAttachments";
 import type { ChatMessage, ChatProvider } from "./types";
 
 /** About four characters per token, as the attachment limits assume. */
@@ -33,22 +34,46 @@ export function estimateChatMessageTokens(message: ChatMessage): number {
   );
 }
 
-/** The newest messages that fit the budget; the latest message always goes. */
+/**
+ * The newest messages that fit the budget. The latest message always goes,
+ * and so does the athlete's newest message with files whose documents are
+ * still sent (with everything after it): its document text is shortened to fit
+ * instead. A window that leaves messages out starts with the athlete's, as
+ * strict chat templates (Gemma, Mistral) require.
+ */
 export function fitChatHistory(
   messages: ChatMessage[],
   budgetTokens: number
 ): ChatHistoryWindow {
+  const window = [...messages];
+  const withFiles = newestMessageWithFiles(messages);
+  const keepFrom = withFiles >= 0 ? withFiles : messages.length - 1;
   let start = messages.length;
   let used = 0;
   while (start > 0) {
-    const cost = estimateChatMessageTokens(messages[start - 1]);
-    if (start < messages.length && used + cost > budgetTokens) break;
+    const index = start - 1;
+    let cost = estimateChatMessageTokens(window[index]);
+    if (index === withFiles && used + cost > budgetTokens) {
+      const over = (used + cost - budgetTokens) * CHARS_PER_TOKEN;
+      window[index] = { ...window[index], content: shortenAttachedDocuments(window[index].content, over) };
+      cost = estimateChatMessageTokens(window[index]);
+    }
+    if (index < keepFrom && used + cost > budgetTokens) break;
     used += cost;
-    start -= 1;
+    start = index;
   }
-  return start === 0
+  while (start > 0 && start < keepFrom && window[start].role === "assistant") start += 1;
+  return start === 0 && withFiles < 0
     ? { messages, omitted: 0 }
-    : { messages: messages.slice(start), omitted: start };
+    : { messages: window.slice(start), omitted: start };
+}
+
+function newestMessageWithFiles(messages: ChatMessage[]): number {
+  const documentsFrom = coachDocumentWindowStart(messages);
+  for (let index = messages.length - 1; index >= documentsFrom; index -= 1) {
+    if (messages[index].files?.length) return index;
+  }
+  return -1;
 }
 
 /** Tells the model the transcript starts partway through; empty when nothing was left out. */

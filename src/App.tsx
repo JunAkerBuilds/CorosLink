@@ -1211,14 +1211,15 @@ export default function App() {
 
   // Main reports when COROS stops honouring the stored session. Signed out, the
   // hub returns to its sign-in view and drops what the dead session loaded;
-  // renewed from the saved login, it reloads what came back empty.
+  // renewed from the saved login, it reloads what came back empty. In Local-Only
+  // Mode the data is this computer's: it reloads without what COROS worked out.
   useEffect(() => {
     if (!api?.onTrainingHubSessionChange) {
       return;
     }
     return api.onTrainingHubSessionChange((status) => {
       applyTrainingHubStatus(status);
-      if (status.authenticated) {
+      if (status.authenticated || localOnlyRef.current) {
         void refreshTrainingHub().catch((caught) =>
           setError(localizedText(() => toErrorMessage(caught))),
         );
@@ -1974,7 +1975,14 @@ export default function App() {
 
     try {
       setTrainingHubStatus(await api.logoutTrainingHub());
-      clearTrainingHubData();
+      // Local-Only Mode keeps this computer's data and drops what COROS worked out.
+      if (localOnlyRef.current) {
+        void refreshTrainingHub().catch((caught) =>
+          setError(localizedText(() => toErrorMessage(caught))),
+        );
+      } else {
+        clearTrainingHubData();
+      }
       setMessage(localizedText(() => t("COROS Training Hub disconnected.")));
     } catch (caught) {
       setError(localizedText(() => toErrorMessage(caught)));
@@ -2031,7 +2039,8 @@ export default function App() {
       setError(localizedText(() => toErrorMessage(caught)));
       const status = await api.getTrainingHubStatus();
       setTrainingHubStatus(status);
-      if (!status.authenticated) {
+      // In Local-Only Mode the activities come from this computer, whatever COROS says.
+      if (!status.authenticated && !localOnlyRef.current) {
         clearTrainingHubData();
       }
     } finally {

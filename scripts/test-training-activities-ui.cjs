@@ -124,6 +124,18 @@ async function main() {
     await until(() => count('[role="menuitem"]'), n => n > 0, 'sidebar export');
     await click('[role="menuitem"]');
     assert.equal(await js('window.activitiesTest.exports.length'), 3);
+    // In Local-Only Mode the activities are this computer's, which export only as FIT and GPX.
+    const exportLabels = () => js(`Array.from(document.querySelectorAll('[role="menuitem"] .training-export-option-label')).map(label => label.textContent).join()`);
+    await js('window.setTestLocalOnly(true); void 0');
+    await click('.activities-detail-sidebar .training-export-button');
+    await until(exportLabels, labels => labels === 'FIT,GPX', 'local export formats');
+    await click('[role="menuitem"]:last-of-type');
+    assert.equal(await js('window.activitiesTest.exports.at(-1)'), 'swim:1');
+    await js('window.setTestLocalOnly(false); void 0');
+    await click('.activities-detail-sidebar .training-export-button');
+    await until(exportLabels, labels => labels === 'FIT,GPX,TCX,KML,CSV', 'every format with COROS');
+    await js(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); void 0`);
+    await until(() => count('[role="menuitem"]'), n => n === 0, 'export menu closed');
     await click('.activities-detail-sidebar .activity-route-expand');
     await until(() => count('.activity-route-modal-backdrop'), n => n === 1, 'sidebar expanded map');
     await click('[aria-label="Close expanded map"]');

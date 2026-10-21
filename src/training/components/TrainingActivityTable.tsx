@@ -7,6 +7,7 @@ import { activityCategory } from "../activityCollection";
 import { activityMovingSeconds } from "../../../electron/activityTime";
 import type { KeyboardEvent } from "react";
 import {
+  LOCAL_ACTIVITY_EXPORT_FILE_TYPES,
   TRAINING_HUB_EXPORT_FORMATS,
   type TrainingHubActivity,
   type TrainingHubActivityFileType,
@@ -19,6 +20,7 @@ import {
 } from "../formatters";
 import { isSwimSportType, resolveSportName } from "../sportTypes";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
+import { useLocalOnlyView } from "../../privacy/localOnlyView";
 import { ActivityLabelChips } from "./TrainingLabelChip";
 
 interface TrainingActivityTableProps {
@@ -73,6 +75,10 @@ export function ExportMenu({
   onExportFile
 }: ExportMenuProps) {
   useLanguage();
+  // Activities on this computer export only as FIT and GPX.
+  const formats = useLocalOnlyView()
+    ? TRAINING_HUB_EXPORT_FORMATS.filter((format) => LOCAL_ACTIVITY_EXPORT_FILE_TYPES.includes(format.fileType))
+    : TRAINING_HUB_EXPORT_FORMATS;
   const [menuPosition, setMenuPosition] = useState<{
     top?: number;
     bottom?: number;
@@ -203,7 +209,7 @@ export function ExportMenu({
               style={{ top: menuPosition.top, bottom: menuPosition.bottom, left: menuPosition.left, right: menuPosition.right }}
             >
               <p className="training-export-dropdown-title">{t("Export as")}</p>
-              {TRAINING_HUB_EXPORT_FORMATS.map((format) => (
+              {formats.map((format) => (
                 <button
                   key={format.fileType}
                   type="button"

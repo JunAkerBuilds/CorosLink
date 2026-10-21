@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import { UnitSystemProvider } from '../../src/units/UnitSystemProvider';
+import { UnitSystemProvider, useUnitSystem } from '../../src/units/UnitSystemProvider';
 import { WatchProfileSettings } from '../../src/settings/WatchProfileSettings';
 import { WeatherLocationSettings } from '../../src/settings/WeatherLocationSettings';
 import { WatchSystemSettings } from '../../src/settings/WatchSystemSettings';
@@ -73,8 +73,14 @@ if (query.get('card') === 'weather') {
   localStorage.setItem(OVERVIEW_WEATHER_STORAGE_KEY, JSON.stringify({ fetchedAt: Date.now(), lat: 21.03, lon: 105.85, place: 'Hanoi', temperatureC: 27, apparentTemperatureC: 30, highC: 31, lowC: 24, humidityPercent: 78, windKmh: 9, weatherCode: 2, isDay: true }));
 }
 (window as unknown as { openedSettings: string[] }).openedSettings = [];
+// window.setUnits('imperial' | 'metric') changes the app's Units, as Settings does.
+function UnitsHandle() {
+  (window as unknown as { setUnits: (system: string) => void }).setUnits = useUnitSystem().setUnitSystem as (system: string) => void;
+  return null;
+}
 createRoot(document.getElementById('root')!).render(
   <UnitSystemProvider>
+    <UnitsHandle />
     <div className="app">
       <div className="app-body">
         <main className="content">

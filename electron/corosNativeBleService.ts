@@ -7,8 +7,8 @@ import type { CorosBleBackend, CorosNativeBleConnectOptions, CorosNativeBleSnaps
 import { BIND_MESSAGES, BIND_REASON, BIND_STATUS, bindRefusalMessage, CorosBindReplyError, CorosBleAccountAuth, describeBindReply, formatCorosWatchKeyId, watchReportsKeyId, type CorosAccountCredential } from "./corosBleAuth";
 import { recordDiagnosticError, recordDiagnosticNotice } from "./diagnosticsService";
 import {
-  IDENTITY_CONFIRM_MS, identityTag, normalizeIdentity, parsePinnedWatches, sameIdentity, WATCH_IDENTITY_SETTING, WatchIdentityError,
-  watchIdentityProblem, type PinnedWatch, type WatchIdentityProblem
+  IDENTITY_CONFIRM_MS, identityTag, normalizeIdentity, normalizeSerial, parsePinnedWatches, sameIdentity, sameSerial, WATCH_IDENTITY_SETTING,
+  WatchIdentityError, watchIdentityProblem, type PinnedWatch, type WatchIdentityProblem
 } from "./watchIdentity";
 import { expectedError } from "./diagnosticsLog";
 import { CorosBleOperationError, CorosBleTrace } from "./corosBleTrace";
@@ -573,20 +573,24 @@ export class CorosNativeBleService {
         this.state = { ...emptyState(), backend, phase: "connecting", available: true };
         this.startWorker(backend);
         try {
-          // With an identity to expect, the helper connects to that device only.
-          await this.request("connect", { deviceName: target.deviceName, deviceId: target.deviceId, ...(expected.deviceId ? { pinnedId: expected.deviceId } : {}) });
+          // With an identity to expect, the helper connects to that device only, or, when it doesn't show up,
+          // reads the serial number of a same-named one and keeps it only if that is the remembered watch's.
+          await this.request("connect", { deviceName: target.deviceName, deviceId: target.deviceId,
+            ...(expected.deviceId ? { pinnedId: expected.deviceId, ...(expected.serialNumber ? { pinnedSerial: expected.serialNumber } : {}) } : {}) });
         } catch (error) {
           const other = (error as { identityMismatch?: string }).identityMismatch;
           if (other) return await this.refuseIdentity("system", mode, other, target.deviceName);
           throw error;
         }
-        // Checked again here, whatever the helper did, before the sign-in challenge is answered.
-        if (expected.deviceId && !sameIdentity(this.state.deviceId, expected.deviceId)) {
+        // Checked again here, whatever the helper did, before the sign-in challenge is answered. A new
+        // identity is the remembered watch's only with its serial number (it rotated its address).
+        const rotated = Boolean(expected.deviceId) && !sameIdentity(this.state.deviceId, expected.deviceId);
+        if (rotated && !sameSerial(this.state.serialNumber, expected.serialNumber)) {
           return await this.refuseIdentity("system", mode, this.state.deviceId ?? "", target.deviceName);
         }
         setSetting(DEVICE_SETTING, JSON.stringify({ deviceName: this.state.deviceName, deviceId: this.state.deviceId }));
         await this.authenticateSystem();
-        if (this.state.systemBind === "authenticated") this.rememberIdentity("system", mode, this.state.deviceId, expected.confirmed);
+        if (this.state.systemBind === "authenticated") this.rememberIdentity("system", mode, this.state.deviceId, expected.confirmed, rotated);
         // The watch's own 12/24-hour setting is read before the clock is set, so setting it keeps that format.
         const switches = await this.readProfileOnConnect();
         await this.setWatchClock(switches);
@@ -1312,10 +1316,11 @@ export class CorosNativeBleService {
 
   /**
    * Which identity this connection must have. A "Connect anyway" for the device just refused trusts that one;
-   * otherwise the remembered one, if any. A device the user chose that isn't it is refused before connecting.
+   * otherwise the remembered one, if any, and its serial number. A device the user chose that isn't it is
+   * refused before connecting.
    */
   private identityToExpect(backend: CorosBleBackend, mode: ConnectMode, confirm: boolean, chosen?: string):
-    { deviceId?: string; refused?: string; confirmed?: boolean } {
+    { deviceId?: string; serialNumber?: string; refused?: string; confirmed?: boolean } {
     const pending = this.pendingIdentity?.backend === backend && Date.now() - this.pendingIdentity.at < IDENTITY_CONFIRM_MS ? this.pendingIdentity : undefined;
     // A background attempt leaves the question in the watch menu as it is.
     if (mode !== "background") this.pendingIdentity = undefined;
@@ -1324,7 +1329,7 @@ export class CorosNativeBleService {
     if (mode === "user" && confirm && pending) return { deviceId: pending.deviceId, confirmed: true };
     if (!pinned) return {};
     if (normalizeIdentity(chosen) && !sameIdentity(chosen, pinned.deviceId)) return { refused: normalizeIdentity(chosen) };
-    return { deviceId: pinned.deviceId };
+    return { deviceId: pinned.deviceId, serialNumber: normalizeSerial(pinned.serialNumber) };
   }
 
   /**
@@ -1345,24 +1350,37 @@ export class CorosNativeBleService {
 
   /**
    * After the watch accepted a connection the user made: remember its identity the first time (an existing
-   * remembered watch included), or the new one the user confirmed. Background sync can then resume.
+   * remembered watch included), or the new one the user confirmed. Background sync can then resume. The
+   * remembered watch under a new identity (`rotated`: its serial number matched) is followed on any connection.
    */
-  private rememberIdentity(backend: CorosBleBackend, mode: ConnectMode, deviceId: string | undefined, confirmed?: boolean): void {
+  private rememberIdentity(backend: CorosBleBackend, mode: ConnectMode, deviceId: string | undefined, confirmed?: boolean, rotated?: boolean): void {
     const identity = normalizeIdentity(deviceId);
-    if (mode !== "user" || !identity) return;
+    if (!identity) return;
     const pinned = this.pinnedWatch(backend);
-    if (!pinned || (confirmed && !sameIdentity(pinned.deviceId, identity))) {
-      const watch: PinnedWatch = {
+    if (rotated && pinned) {
+      this.savePinnedWatch(backend, { ...pinned, deviceId: identity });
+      recordDiagnosticNotice("corosBle:identity", `The remembered watch came back with a new Bluetooth identity and the same serial number (${backend}, ${identityTag(pinned.deviceId)} to ${identityTag(identity)}).`, "info");
+    } else if (mode !== "user") return;
+    else if (!pinned || (confirmed && !sameIdentity(pinned.deviceId, identity))) {
+      this.savePinnedWatch(backend, {
         deviceId: identity, deviceName: this.state.deviceName, serialNumber: this.state.serialNumber || undefined,
         modelNumber: this.state.modelNumber || undefined, model: this.watchTarget()?.model, pinnedAt: Date.now()
-      };
-      setSetting(WATCH_IDENTITY_SETTING, JSON.stringify({ ...parsePinnedWatches(getSetting(WATCH_IDENTITY_SETTING)), [backend]: watch }));
+      });
       if (pinned) recordDiagnosticNotice("corosBle:identity", `The remembered watch's Bluetooth identity changed after the user confirmed it (${backend}, ${identityTag(pinned.deviceId)} to ${identityTag(identity)}).`, "warning");
       else recordDiagnosticNotice("corosBle:identity", `Remembered the watch's Bluetooth identity (${backend}, ${identityTag(identity)}).`, "info");
     } else if (!sameIdentity(pinned.deviceId, identity)) return;
+    else if (!normalizeSerial(pinned.serialNumber) && normalizeSerial(this.state.serialNumber)) {
+      // A serial number that couldn't be read when the watch was remembered.
+      this.savePinnedWatch(backend, { ...pinned, serialNumber: this.state.serialNumber });
+    }
+    if (mode !== "user") return;
     for (const listener of this.identityListeners) {
       try { listener(); } catch { /* a listener never affects the connection */ }
     }
+  }
+
+  private savePinnedWatch(backend: CorosBleBackend, watch: PinnedWatch): void {
+    setSetting(WATCH_IDENTITY_SETTING, JSON.stringify({ ...parsePinnedWatches(getSetting(WATCH_IDENTITY_SETTING)), [backend]: watch }));
   }
 
   /** Called after each connection the user made to the remembered watch (background sync resumes). */

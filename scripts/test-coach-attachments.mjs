@@ -170,6 +170,12 @@ try {
     loadPlan
   );
   assert.match(recent[0].content, /8 km easy/, "within the window the text is sent again");
+  // Answers to Coach's own questions belong to the request they answer and don't use up the window.
+  const answers = await expandCoachAttachments(
+    [{ role: "user", content: "Load this", files: [plan] }, ...followUps.map((message) => message.role === "user" ? { ...message, answersPrompt: true } : message)],
+    loadPlan
+  );
+  assert.match(answers[0].content, /8 km easy/);
 
   // ----- What each provider receives -----
   const withImage = { role: "user", content: "Look at this", images: [{ label: "Track.png", mimeType: "image/png", base64: "AAAA" }] };
