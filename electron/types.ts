@@ -2933,6 +2933,8 @@ export interface ChatMessage {
   content: string;
   /** Files the athlete attached to this message, as the transcript records them. */
   files?: ChatFileAttachment[];
+  /** The athlete's answer to one of Coach's questions, part of the request that led to it. */
+  answersPrompt?: boolean;
   /**
    * Pixels for the model: attached images and page renders of documents with
    * no text layer. Filled from the attachment store just before a request.

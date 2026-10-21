@@ -279,11 +279,10 @@ export async function expandCoachAttachments(
 ): Promise<ChatMessage[]> {
   if (!messages.some((message) => message.files?.length)) return messages;
   let imageBudget = MAX_COACH_MODEL_IMAGES;
-  let athleteTurns = 0;
+  const documentsFrom = coachDocumentWindowStart(messages);
   const expanded: ChatMessage[] = [];
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
-    if (message.role === "user") athleteTurns += 1;
     if (!message.files?.length) {
       expanded.unshift(message);
       continue;
@@ -291,7 +290,7 @@ export async function expandCoachAttachments(
     const blocks: string[] = [];
     const images: ChatMessageImage[] = [];
     for (const file of message.files) {
-      if (file.kind === "document" && athleteTurns > COACH_DOCUMENT_TURNS) {
+      if (file.kind === "document" && index < documentsFrom) {
         blocks.push(earlierDocumentBlock(file));
         continue;
       }
@@ -318,6 +317,51 @@ export async function expandCoachAttachments(
     expanded.unshift({ ...message, content, ...(images.length ? { images } : {}) });
   }
   return expanded;
+}
+
+/**
+ * Where the messages whose documents are sent in full begin: the athlete's
+ * latest COACH_DOCUMENT_TURNS messages. Answers to Coach's own questions don't
+ * count; they belong to the request that led to the question.
+ */
+export function coachDocumentWindowStart(messages: ChatMessage[]): number {
+  let athleteTurns = 0;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === "user" && !message.answersPrompt && ++athleteTurns > COACH_DOCUMENT_TURNS) return index + 1;
+  }
+  return 0;
+}
+
+const ATTACHED_FILE_BLOCK = /(<attached_file\b[^>]*>\n)([\s\S]*?)(\n<\/attached_file>)/g;
+const SHORTENED_NOTE = "[The text was cut here to fit this conversation; the rest of the file is not included.]";
+
+/**
+ * Message text with about `removeChars` fewer characters of attached document
+ * text. The longest documents are cut first, down to a common length, and say
+ * so; the athlete's own words and shorter documents stay whole.
+ */
+export function shortenAttachedDocuments(content: string, removeChars: number): string {
+  const lengths = Array.from(content.matchAll(ATTACHED_FILE_BLOCK), (match) => match[2]!.length);
+  const total = lengths.reduce((sum, length) => sum + length, 0);
+  if (removeChars <= 0 || total === 0) return content;
+  // A cut text ends with a blank line and the note.
+  let remaining = Math.max(0, total - removeChars - (SHORTENED_NOTE.length + 2) * lengths.length);
+  let cap = 0;
+  const sorted = [...lengths].sort((a, b) => a - b);
+  for (let index = 0; index < sorted.length; index += 1) {
+    const share = remaining / (sorted.length - index);
+    if (sorted[index]! >= share) {
+      cap = Math.floor(share);
+      break;
+    }
+    remaining -= sorted[index]!;
+  }
+  return content.replace(ATTACHED_FILE_BLOCK, (block, open: string, body: string, close: string) => {
+    if (body.length <= cap) return block;
+    const kept = body.slice(0, cap).trimEnd();
+    return `${open}${kept ? `${kept}\n\n` : ""}${SHORTENED_NOTE}${close}`;
+  });
 }
 
 function fileAttributes(file: ChatFileAttachment): string {

@@ -219,7 +219,7 @@ export function toWireMessages(entries: ChatEntry[]): ChatMessage[] {
       return entry.prompt.answer
         ? [
             promptMessage,
-            { role: "user", content: entry.prompt.answer }
+            { role: "user", content: entry.prompt.answer, answersPrompt: true }
           ]
         : [promptMessage];
     }
