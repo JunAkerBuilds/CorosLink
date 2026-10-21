@@ -68,6 +68,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A copy of a COROS plan goes on the calendar.** Add to calendar failed for every workout of a plan copied from COROS, with "Library workout not found." A copy now schedules the plan's own workouts, and the preview names any workout it can't add before anything is written. A plan left half-added by such a failure no longer stays stuck: refreshing the Training Library clears it, so it can be added again.
 - **Current weather keeps its ° and minus sign.** On a face started blank in Watch Face Studio, exports showed Current weather without "°" or a minus sign, while the preview showed both.
 
+### Security
+
+- Updated Electron to 42.11.3, which fixes HID and USB permission checks that could be attributed to the wrong website.
+
 ## [0.1.59] - 2026-10-20
 
 ### Added
