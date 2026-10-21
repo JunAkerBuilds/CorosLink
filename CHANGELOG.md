@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Saving a strength workout made in the COROS app keeps its exercises' names.** The workout editor saved every exercise you hadn't swapped as "Training" with a generic description, replacing the name and description COROS had stored, so CorosLink showed "Training" when you opened the workout again. HYROX stations had the same problem.
+
 ## [0.1.66] - 2026-10-25
 
 ### Added

@@ -53,6 +53,10 @@ const EXERCISE_TYPE_TO_KIND: Record<number, RunWorkoutEditorStepKind> = {
   5: "sendOff"
 };
 
+/** COROS catalog exercises are named by code (T1178) and described by a sid_ key. */
+const CATALOG_CODE_NAME = /^T\d+$/i;
+const CATALOG_OVERVIEW = /^sid_[a-z0-9_]+$/i;
+
 const KIND_TO_EXERCISE_TYPE: Record<RunWorkoutEditorStepKind, number> = {
   warmup: 1,
   training: 2,
@@ -119,7 +123,36 @@ function friendlyStepName(kind: RunWorkoutEditorStepKind): string {
 function editableStepOverview(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const overview = value.trim();
-  return overview && !/^sid_[a-z0-9_]+$/i.test(overview) ? overview : undefined;
+  return overview && !CATALOG_OVERVIEW.test(overview) ? overview : undefined;
+}
+
+/**
+ * The code name and sid_ overview COROS wrote for a strength-catalog exercise,
+ * while the step still holds that exercise. The editor shows neither (a code
+ * name reads as the step kind, a sid_ overview as empty), so rewriting them
+ * from the draft would replace the exercise's name and description with
+ * "Training" and the generic sid_strength_training.
+ */
+function sourceCatalogIdentity(
+  source: Record<string, unknown>,
+  step: RunWorkoutEditorStep,
+  sport: WorkoutSport
+): { name?: string; overview?: string } {
+  const catalogExercise = sport === "strength" ||
+    (sport === "hyrox" && step.kind === "training" && Boolean(step.exerciseKind));
+  const sameExercise = Boolean(step.exerciseId) &&
+    step.exerciseId === originExerciseId(source) &&
+    EXERCISE_TYPE_TO_KIND[numberValue(source.exerciseType) ?? 2] === step.kind;
+  if (!catalogExercise || !sameExercise) return {};
+  const name = String(source.name ?? "").trim();
+  const overview = typeof source.overview === "string" ? source.overview.trim() : "";
+  return {
+    // Any other name was picked or typed in the editor.
+    ...(CATALOG_CODE_NAME.test(name) && step.name.trim() === friendlyStepName(step.kind)
+      ? { name }
+      : {}),
+    ...(CATALOG_OVERVIEW.test(overview) ? { overview } : {})
+  };
 }
 
 function parseTarget(
@@ -242,7 +275,7 @@ function parseStep(
     validateWorkoutTarget(sport, kind, parsedTarget.target, numberValue(exercise.exerciseKind)) ??
     validateWorkoutIntensity(sport, parsedIntensity.intensity, kind, numberValue(exercise.exerciseKind));
   const rawName = String(exercise.name ?? "").trim();
-  const name = rawName && !/^T\d+$/i.test(rawName) ? rawName : friendlyStepName(kind);
+  const name = rawName && !CATALOG_CODE_NAME.test(rawName) ? rawName : friendlyStepName(kind);
   // COROS-made steps name the exercise by its catalog code (T1178); show the
   // catalog name, read from the sid_ overview like the exercise search does.
   const exerciseName = rawName ? workoutExerciseName(exercise) || rawName : "";
@@ -556,7 +589,8 @@ export function workoutDraftToCorosProgram(
       return exercise;
     }
 
-    exercise.name = step.name.trim() || friendlyStepName(step.kind);
+    const catalogIdentity = source ? sourceCatalogIdentity(source, step, draft.sport) : {};
+    exercise.name = catalogIdentity.name ?? (step.name.trim() || friendlyStepName(step.kind));
     exercise.exerciseType = KIND_TO_EXERCISE_TYPE[step.kind];
     exercise.subType = step.kind === "sendOff"
       ? 1
@@ -583,7 +617,9 @@ export function workoutDraftToCorosProgram(
     exercise.restValue = strengthExercise
       ? step.restValue ?? 60
       : numberValue(exercise.restValue) ?? 0;
-    exercise.overview = step.overview?.trim() || defaultOverview(draft.sport, step.kind, step.target);
+    exercise.overview = step.overview?.trim() ||
+      catalogIdentity.overview ||
+      defaultOverview(draft.sport, step.kind, step.target);
     applyTarget(exercise, step, context, draft.sport);
     applyIntensity(exercise, step.intensity, context);
     return exercise;

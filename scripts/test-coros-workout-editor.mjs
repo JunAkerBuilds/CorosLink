@@ -398,7 +398,7 @@ assert.notEqual(
 
 // COROS-made strength steps carry the catalog code as their name; the editor
 // shows the catalog name from the sid_ overview, not "T1178".
-const corosStrength = corosProgramToWorkoutDraft({
+const corosStrengthProgram = {
   id: "program-strength",
   name: "COROS strength",
   sportType: 4,
@@ -406,8 +406,53 @@ const corosStrength = corosProgramToWorkoutDraft({
     { id: "10", originId: "kb-swing", name: "T1178", overview: "sid_strength_two_arm_kettlebell_swings", sportType: 4, exerciseType: 2, targetType: 3, targetValue: 15, sets: 4, restType: 1, restValue: 60, sortNo: 100, groupId: "0", isGroup: false },
     { id: "11", originId: "custom", name: "T9999", overview: "", sportType: 4, exerciseType: 2, targetType: 3, targetValue: 8, sets: 1, restType: 1, restValue: 30, sortNo: 200, groupId: "0", isGroup: false }
   ]
-});
+};
+const corosStrength = corosProgramToWorkoutDraft(corosStrengthProgram);
 assert.equal(corosStrength.nodes[0].exerciseName, "Two Arm Kettlebell Swings");
 assert.equal(corosStrength.nodes[1].exerciseName, "T9999", "no catalog overview: the code stays");
+
+// Saving keeps the code name and sid_ overview COROS resolves for the same
+// exercise, even with a new prescription; the editor shows neither, and
+// rewriting them made the step "Training" (sid_strength_training) for good.
+const strengthEdit = structuredClone(corosStrength);
+strengthEdit.nodes[0].sets = 5;
+strengthEdit.nodes[0].target = { type: "reps", count: 12 };
+const savedStrength = workoutDraftToCorosProgram(corosStrengthProgram, strengthEdit, metricContext);
+const savedSwing = savedStrength.exercises.find((item) => item.id === "10");
+assert.equal(savedSwing.name, "T1178");
+assert.equal(savedSwing.overview, "sid_strength_two_arm_kettlebell_swings");
+assert.equal(savedSwing.originId, "kb-swing");
+assert.equal(savedSwing.sets, 5);
+assert.equal(savedSwing.targetValue, 12);
+assert.equal(savedStrength.exercises.find((item) => item.id === "11").name, "T9999");
+assert.equal(corosProgramToWorkoutDraft(savedStrength).nodes[0].exerciseName, "Two Arm Kettlebell Swings");
+assert.equal(workoutDraftsMatch(strengthEdit, savedStrength), true);
+
+// A different exercise, or notes typed in the editor, are written as edited.
+const swapped = structuredClone(corosStrength);
+Object.assign(swapped.nodes[0], { name: "Goblet Squat", exerciseName: "Goblet Squat", exerciseId: "goblet-squat" });
+swapped.nodes[1].overview = "Slow lowering";
+const savedSwap = workoutDraftToCorosProgram(corosStrengthProgram, swapped, metricContext);
+const swappedStep = savedSwap.exercises.find((item) => item.id === "10");
+assert.equal(swappedStep.name, "Goblet Squat");
+assert.equal(swappedStep.overview, "sid_strength_training");
+assert.equal(swappedStep.originId, "goblet-squat");
+assert.equal(savedSwap.exercises.find((item) => item.id === "11").name, "T9999");
+assert.equal(savedSwap.exercises.find((item) => item.id === "11").overview, "Slow lowering");
+
+// HYROX stations hold strength-catalog exercises too.
+const hyroxStationProgram = {
+  id: "program-hyrox",
+  name: "COROS HYROX",
+  sportType: 9,
+  exercises: [
+    { id: "20", originId: "wall-ball", name: "T2001", overview: "sid_strength_wall_ball", sportType: 9, exerciseType: 2, subType: 2, exerciseKind: 8, hyroxTrainingMode: "strength", intensityType: 1, intensityValue: 9, intensityValueExtend: 9, intensityDisplayUnit: 6, targetType: 3, targetValue: 100, sets: 1, restType: 3, restValue: 0, sortNo: 100, groupId: "0", isGroup: false }
+  ]
+};
+const hyroxStation = corosProgramToWorkoutDraft(hyroxStationProgram);
+assert.equal(hyroxStation.nodes[0].editable, true);
+const savedStation = workoutDraftToCorosProgram(hyroxStationProgram, hyroxStation, metricContext).exercises[0];
+assert.equal(savedStation.name, "T2001");
+assert.equal(savedStation.overview, "sid_strength_wall_ball");
 
 console.log("COROS workout editor adapter and contract tests passed");
