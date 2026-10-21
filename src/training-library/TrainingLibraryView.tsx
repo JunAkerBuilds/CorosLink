@@ -295,15 +295,22 @@ export function TrainingLibraryView({
     adherence: current.matches.length
   };
 
-  const savePlan = async (plan: TrainingPlanDocument) => {
+  const savePlan = async (plan: TrainingPlanDocument): Promise<TrainingPlanDocument | undefined> => {
     try {
       const saved = await api.saveLocalTrainingPlan(plan);
-      setEditingPlan(null);
       onMessage(t("Saved \"{{value1}}\" as a local {{value2}}.", { value1: String(saved.name), value2: String(saved.source === "template" ? "template" : "plan") }));
       await load();
+      return saved;
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : String(cause));
+      return undefined;
     }
+  };
+
+  // Saving keeps the editor open on the saved copy, so Add to calendar is one click away.
+  const savePlanAndKeepEditing = async (plan: TrainingPlanDocument) => {
+    const saved = await savePlan(plan);
+    if (saved) setEditingPlan(saved);
   };
 
   const createPlan = (source: "local" | "template") =>
@@ -447,7 +454,7 @@ export function TrainingLibraryView({
           calendarEnabled={current.plans.some((plan) => plan.id === editingPlan.id) && editingPlan.source !== "coros"}
           offline={current.offline}
           onCalendar={(plan, operation) => setCalendarTarget({ plan, operation })}
-          onSave={savePlan}
+          onSave={savePlanAndKeepEditing}
           onClose={() => setEditingPlan(null)}
         />
       ) : (
