@@ -1,4 +1,5 @@
 import { callCorosMcpTool, ensureCorosMcpConnected, getCorosMcpTools, listCorosMcpTools } from "./corosMcpService";
+import { recordDiagnosticError } from "./diagnosticsService";
 import { buildHealthInsightArgs, parseHealthInsightResponse } from "./healthInsightsParser";
 import type { HealthInsightKind, HealthInsightResult } from "./healthInsightsTypes";
 
@@ -18,7 +19,11 @@ export async function getTrainingHealthInsight(kind: HealthInsightKind, days = 7
     if (!await ensureCorosMcpConnected()) return { ...base, status: "disconnected" };
     let tool = getCorosMcpTools().find(item => item.name === TOOLS[kind]);
     if (!tool) tool = (await listCorosMcpTools()).find(item => item.name === TOOLS[kind]);
-    if (!tool) return { ...base, status: "unavailable" };
+    if (!tool) {
+      // A renamed or dropped COROS tool otherwise only shows as an unavailable card.
+      recordDiagnosticError(`corosMcp:healthInsight/${kind}`, new Error(`COROS MCP lists no ${TOOLS[kind]} tool.`));
+      return { ...base, status: "unavailable" };
+    }
     const args = buildHealthInsightArgs(tool, days);
     const response = await callCorosMcpTool(tool.name, args);
     const data = parseHealthInsightResponse(kind, response);
@@ -35,6 +40,7 @@ export async function getTrainingHealthInsight(kind: HealthInsightKind, days = 7
       fetchedAt: new Date().toISOString()
     };
   } catch (error) {
+    recordDiagnosticError(`corosMcp:healthInsight/${kind}`, error);
     return { ...base, status: "error", message: error instanceof Error ? error.message : "Could not load COROS health data." };
   }
 }

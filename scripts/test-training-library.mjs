@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import Database from "better-sqlite3";
@@ -874,6 +875,19 @@ assert.equal(
 assert.equal(workoutFailureRecords().length, 2, "a failure that clears and comes back is recorded again");
 
 const hub = await import(distUrl("trainingHubService.js"));
+// Training Hub records the failures its callers swallow; read them through a real log.
+const requireDist = createRequire(import.meta.url);
+const { DiagnosticsLog } = requireDist(path.join(repoRoot, "dist-electron", "diagnosticsLog.js"));
+const diagnosticsService = requireDist(path.join(repoRoot, "dist-electron", "diagnosticsService.js"));
+const diagnosticsDir = fs.mkdtempSync(path.join(os.tmpdir(), "coroslink-library-diagnostics-"));
+const hubDiagnostics = new DiagnosticsLog(path.join(diagnosticsDir, "errors.json"), {
+  appVersion: "test", platform: "test", arch: "test", osVersion: "test", electronVersion: "test", nodeVersion: "test", chromeVersion: "test"
+});
+diagnosticsService.setDiagnosticRecorderForTests((source, error) => hubDiagnostics.record(source, error));
+const hubDiagnosticEntries = () => {
+  const { report } = hubDiagnostics.snapshot();
+  return report.includes("No errors recorded.") ? [] : JSON.parse(report.slice(report.indexOf("[")));
+};
 databaseModule.setSetting("trainingHub.accessToken", "test-token");
 databaseModule.setSetting("trainingHub.userId", "test-user");
 databaseModule.setSetting("trainingHub.regionId", "1");
@@ -902,6 +916,10 @@ await assert.rejects(
   /Mock delete rejected/
 );
 assert.ok(cachedWorkoutIds().includes("w-kept"), "a rejected delete keeps the cached workout");
+const rejectedDelete = hubDiagnosticEntries().find((entry) => entry.error.message === "Mock delete rejected");
+assert.equal(rejectedDelete?.source, "trainingHub:/training/program/delete", "a rejected Training Hub call is in the error report");
+assert.equal(rejectedDelete.error.code, "1001", "with COROS's result code");
+assert.deepEqual(rejectedDelete.error.request, { method: "POST", url: "https://teamapi.example.test/training/program/delete" });
 
 hubResponse = () => {
   throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
@@ -911,6 +929,8 @@ await assert.rejects(
   /didn't respond within 30 seconds/
 );
 assert.ok(cachedWorkoutIds().includes("w-kept"), "a timed-out delete keeps the cached workout");
+const timedOut = hubDiagnosticEntries().find((entry) => /didn't respond within 30 seconds/.test(entry.error.message));
+assert.equal(timedOut?.error.cause?.name, "TimeoutError", "the timeout keeps its original cause");
 
 hubResponse = corosReply({ result: "0000" });
 assert.deepEqual(
@@ -933,6 +953,11 @@ databaseModule.deleteSettings([
   "trainingHub.regionId",
   "trainingHub.baseUrl"
 ]);
+const recordedBeforeSignOut = hubDiagnosticEntries().length;
+await assert.rejects(hub.queryLibraryWorkouts(), /Log in to COROS Training Hub first/);
+assert.equal(hubDiagnosticEntries().length, recordedBeforeSignOut, "being signed out is a state, not an error-report entry");
+diagnosticsService.setDiagnosticRecorderForTests();
+fs.rmSync(diagnosticsDir, { recursive: true, force: true });
 library.setLibraryWorkoutQueryForTests();
 library.setRefreshFailureRecorderForTests();
 globalThis.fetch = realFetch;

@@ -1,6 +1,7 @@
 import { app } from "electron";
 import fs from "node:fs";
 import path from "node:path";
+import { recordDiagnosticError } from "./diagnosticsService";
 import {
   countFitIndexRows,
   getFitIndexRow,
@@ -202,6 +203,7 @@ export async function ensureFitSummaries(
       }
     } catch (error) {
       console.warn(`[fitIndex] failed to index ${activity.activityId}:`, error);
+      recordDiagnosticError("fitIndex:activity", error);
       result.failed += 1;
     }
     await delay(DOWNLOAD_DELAY_MS);
@@ -328,6 +330,7 @@ export async function startFitIndexSync(
         emitProgress({ completed: (currentProgress?.completed ?? 0) + 1 });
       } catch (error) {
         console.warn(`[fitIndex] sync failed for ${activity.activityId}:`, error);
+        recordDiagnosticError("fitIndex:activity", error);
         emitProgress({ failed: (currentProgress?.failed ?? 0) + 1 });
       }
       await delay(DOWNLOAD_DELAY_MS);
@@ -339,6 +342,7 @@ export async function startFitIndexSync(
       currentName: undefined
     });
   } catch (caught) {
+    recordDiagnosticError("fitIndex:sync", caught);
     emitProgress({
       state: "error",
       currentName: undefined,

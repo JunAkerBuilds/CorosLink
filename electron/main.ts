@@ -6,7 +6,8 @@ import { registerWorkoutAutomation } from "./workoutAutomation";
 import { followRescheduledWorkout, listWorkoutJournal, onWorkoutJournalChanged, saveWorkoutJournal } from "./workoutJournalService";
 import type { WorkoutJournalSaveInput } from "./workoutJournalTypes";
 import { app, BrowserWindow, dialog, nativeTheme, session, shell, ShareMenu } from "electron";
-import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow } from "./diagnosticsService";
+import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow, registerDiagnosticStatus } from "./diagnosticsService";
+import { corosAccountDiagnostics } from "./corosAccountDiagnostics";
 import { googleCalendar, startGoogleCalendarSync, stopGoogleCalendarSync } from "./googleCalendarService";
 import type { GoogleCalendarConfigInput } from "./googleCalendarTypes";
 import { appleCalendar, startAppleCalendarSync, stopAppleCalendarSync } from "./appleCalendarService";
@@ -1003,6 +1004,7 @@ if (!hasSingleInstanceLock) {
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return;
   initializeDiagnostics(() => mainWindow);
+  registerDiagnosticStatus(corosAccountDiagnostics);
   if (process.defaultApp && process.argv[1]) {
     app.setAsDefaultProtocolClient("coroslink", process.execPath, [
       path.resolve(process.argv[1])

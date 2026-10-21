@@ -5,6 +5,11 @@ import type { DiagnosticsSnapshot } from "./diagnosticsTypes";
 const MAX_ENTRIES = 200;
 const MAX_BYTES = 512 * 1024;
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+// A failure that keeps repeating (a background sync every few minutes) stays one entry.
+const REPEAT_WINDOW_MS = 30 * 60 * 1000;
+const MAX_VIA = 6;
+// A hot path failing on every call must not rewrite the log file each time.
+const REPEAT_PERSIST_INTERVAL_MS = 30 * 1000;
 const REDACTED = "[redacted]";
 const requests = new WeakMap<object, { method: string; url: string }>();
 
@@ -24,8 +29,13 @@ interface DiagnosticError {
 
 interface DiagnosticEntry {
   timestamp: string;
+  /** Latest repeat of the same failure, when it happened more than once. */
+  lastSeen?: string;
+  count?: number;
   appVersion: string;
   source: string;
+  /** Callers the same error passed through after it was recorded, such as the IPC channel. */
+  via?: string[];
   error: DiagnosticError;
 }
 
@@ -79,6 +89,8 @@ export function redactDiagnosticText(value: string, privatePaths: string[] = [])
 export class DiagnosticsLog {
   private entries: DiagnosticEntry[] = [];
   private persistent = true;
+  private readonly recorded = new WeakMap<object, DiagnosticEntry>();
+  private lastRepeatPersist = Number.NEGATIVE_INFINITY;
 
   constructor(
     private readonly filePath: string,
@@ -92,10 +104,17 @@ export class DiagnosticsLog {
       if (Array.isArray(saved)) {
         this.entries = saved.slice(-MAX_ENTRIES).flatMap((entry) => {
           if (!entry || typeof entry.timestamp !== "string" || !Number.isFinite(Date.parse(entry.timestamp))) return [];
+          const lastSeen = typeof entry.lastSeen === "string" && Number.isFinite(Date.parse(entry.lastSeen)) ? entry.lastSeen : undefined;
+          const via = Array.isArray(entry.via)
+            ? entry.via.slice(-MAX_VIA).flatMap((value: unknown) => typeof value === "string" ? [this.clean(value, 120)] : [])
+            : [];
           return [{
             timestamp: entry.timestamp,
+            ...(lastSeen ? { lastSeen } : {}),
+            ...(Number.isSafeInteger(entry.count) && entry.count > 1 ? { count: entry.count } : {}),
             appVersion: this.clean(entry.appVersion, 80),
             source: this.clean(entry.source, 120),
+            ...(via.length ? { via } : {}),
             error: this.describeError(entry.error)
           }];
         });
@@ -147,14 +166,25 @@ export class DiagnosticsLog {
 
   private prune(): void {
     const cutoff = this.now() - MAX_AGE_MS;
-    this.entries = this.entries.filter((entry) => Date.parse(entry.timestamp) >= cutoff).slice(-MAX_ENTRIES);
+    this.entries = this.entries.filter((entry) => Date.parse(entry.lastSeen ?? entry.timestamp) >= cutoff).slice(-MAX_ENTRIES);
     while (Buffer.byteLength(JSON.stringify(this.entries)) > MAX_BYTES) this.entries.shift();
+  }
+
+  /** The entry an error, or one of its causes, was already recorded as. */
+  private recordedEntry(error: unknown): DiagnosticEntry | undefined {
+    let value = error;
+    for (let depth = 0; depth <= 3 && value && typeof value === "object"; depth++) {
+      const entry = this.recorded.get(value);
+      if (entry && this.entries.includes(entry)) return entry;
+      value = (value as { cause?: unknown }).cause;
+    }
+    return undefined;
   }
 
   private persist(): void {
     try {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true, mode: 0o700 });
-      fs.writeFileSync(`${this.filePath}.tmp`, JSON.stringify(this.entries), { mode: 0o600 });
+      fs.writeFileSync(`${this.filePath}.tmp`, JSON.stringify(this.entries.map(orderedEntry)), { mode: 0o600 });
       fs.renameSync(`${this.filePath}.tmp`, this.filePath);
       this.persistent = true;
     } catch {
@@ -165,13 +195,37 @@ export class DiagnosticsLog {
 
   record(source: string, error: unknown): void {
     try {
-      this.entries.push({
-        timestamp: new Date(this.now()).toISOString(),
-        appVersion: this.environment.appVersion,
-        source: this.clean(source, 120),
-        error: this.describeError(error)
-      });
+      const cleanSource = this.clean(source, 120);
+      // The same failure rethrown up to an IPC handler: note the path, not a second entry.
+      const known = this.recordedEntry(error);
+      if (known) {
+        if (known.source !== cleanSource && !known.via?.includes(cleanSource)) {
+          known.via = [...(known.via ?? []), cleanSource].slice(-MAX_VIA);
+          this.persist();
+        }
+        return;
+      }
+      const timestamp = new Date(this.now()).toISOString();
+      const described = this.describeError(error);
+      const signature = repeatSignature(cleanSource, described);
+      const repeat = [...this.entries].reverse().find((entry) => repeatSignature(entry.source, entry.error) === signature &&
+        this.now() - Date.parse(entry.lastSeen ?? entry.timestamp) <= REPEAT_WINDOW_MS);
+      let entry: DiagnosticEntry;
+      if (repeat) {
+        repeat.count = (repeat.count ?? 1) + 1;
+        repeat.lastSeen = timestamp;
+        // Still failing: keep it with the newest entries so retention follows the latest repeat.
+        this.entries.splice(this.entries.indexOf(repeat), 1);
+        entry = repeat;
+      } else {
+        entry = { timestamp, appVersion: this.environment.appVersion, source: cleanSource, error: described };
+      }
+      this.entries.push(entry);
+      if (error && typeof error === "object") this.recorded.set(error, entry);
       this.prune();
+      // Snapshots always show the live count; on disk a repeat may lag by the interval.
+      if (repeat && this.now() - this.lastRepeatPersist < REPEAT_PERSIST_INTERVAL_MS) return;
+      if (repeat) this.lastRepeatPersist = this.now();
       this.persist();
     } catch { /* Error objects from dependencies may contain throwing getters. */ }
   }
@@ -186,10 +240,12 @@ export class DiagnosticsLog {
     return this.snapshot();
   }
 
-  snapshot(): DiagnosticsSnapshot {
+  /** `status` lines describe current state (e.g. account connections) and are redacted like errors. */
+  snapshot(status: string[] = []): DiagnosticsSnapshot {
     const count = this.entries.length;
     this.prune();
     if (this.entries.length !== count) this.persist();
+    const statusLines = status.flatMap((line) => typeof line === "string" ? [this.clean(line, 300)] : []);
     const report = [
       "CorosLink error report",
       `Generated: ${new Date(this.now()).toISOString()}`,
@@ -197,12 +253,32 @@ export class DiagnosticsLog {
       `System: ${this.environment.platform} ${this.environment.osVersion} (${this.environment.arch})`,
       `Electron: ${this.environment.electronVersion} | Chromium: ${this.environment.chromeVersion} | Node: ${this.environment.nodeVersion}`,
       "Retention: latest 200 errors, up to 7 days (512 KB maximum)",
+      "Repeats of the same failure within 30 minutes are grouped (count, lastSeen).",
       "Request bodies, headers, and input arguments are not collected.",
+      ...(statusLines.length ? ["", ...statusLines] : []),
       "",
-      this.entries.length ? JSON.stringify(this.entries, null, 2) : "No errors recorded."
+      this.entries.length ? JSON.stringify(this.entries.map(orderedEntry), null, 2) : "No errors recorded."
     ].join("\n");
     return { report, entryCount: this.entries.length, persistent: this.persistent };
   }
+}
+
+/** Same place, same failure: what decides that a new error is a repeat of an entry. */
+function repeatSignature(source: string, error: DiagnosticError): string {
+  return JSON.stringify([source, error.name, error.message, error.code, error.request?.method, error.request?.url]);
+}
+
+/** Field order for the report: when, how often, where, then the error itself. */
+function orderedEntry(entry: DiagnosticEntry): DiagnosticEntry {
+  return {
+    timestamp: entry.timestamp,
+    ...(entry.lastSeen ? { lastSeen: entry.lastSeen } : {}),
+    ...(entry.count ? { count: entry.count } : {}),
+    appVersion: entry.appVersion,
+    source: entry.source,
+    ...(entry.via?.length ? { via: entry.via } : {}),
+    error: entry.error
+  };
 }
 
 /** Capture the original error (including cause) before Electron serializes it. */

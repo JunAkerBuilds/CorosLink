@@ -16,6 +16,7 @@ import type {
   OAuthTokens
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { deleteSettings, getSetting, setSetting } from "./database";
+import { recordDiagnosticError } from "./diagnosticsService";
 import { corosSignInEmailScript, isCorosSignInPage } from "./corosMcpRegions";
 import {
   getMcpBearer,
@@ -93,7 +94,9 @@ function readTokens(id: string): OAuthTokens | undefined {
   try {
     const json = safeStorage.decryptString(Buffer.from(encoded, "base64"));
     return JSON.parse(json) as OAuthTokens;
-  } catch {
+  } catch (error) {
+    // The server then just looks unauthorized; say why in the error report.
+    recordDiagnosticError(`mcp:${id}/storedTokens`, error);
     return undefined;
   }
 }
@@ -149,7 +152,8 @@ function readClientInformation(id: string): OAuthClientInformationFull | undefin
       writeClientInformation(id, parsed);
     }
     return parsed;
-  } catch {
+  } catch (error) {
+    recordDiagnosticError(`mcp:${id}/storedClientRegistration`, error);
     return undefined;
   }
 }
@@ -666,7 +670,9 @@ async function activateClient(
     rt.toolsRefresh = undefined;
     rt.toolsCheckedAt = Date.now();
     client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
-      if (rt.client === client) await refreshTools(server).catch(() => undefined);
+      if (rt.client === client) {
+        await refreshTools(server).catch((error) => recordDiagnosticError(`mcp:${server.id}/tools`, error));
+      }
     });
     attachClientCloseHandler(server.id, client);
   } catch (error) {
@@ -829,6 +835,8 @@ export async function connectMcpServer(
           rt.lastError = error instanceof Error ? error.message : String(error);
           if (!interactive) {
             rt.silentRetryAfter = Date.now() + SILENT_RETRY_COOLDOWN_MS;
+            // Background reconnects have no IPC caller to report them.
+            recordDiagnosticError(`mcp:${server.id}/reconnect`, error);
           }
         }
         throw error;
@@ -876,7 +884,7 @@ async function ensureMcpConnected(server: McpServerConfig): Promise<void> {
   const rt = runtime(server.id);
   if (!server.enabled) return;
   if (rt.client) {
-    await refreshTools(server, false).catch(() => undefined);
+    await refreshTools(server, false).catch((error) => recordDiagnosticError(`mcp:${server.id}/tools`, error));
     return;
   }
   if (Date.now() < rt.silentRetryAfter) return;
@@ -960,12 +968,21 @@ export async function callMcpTool(
     );
   }
 
+  // Health cards and the Coach turn most tool failures into an empty state or chat
+  // text, so every failed call is recorded here.
+  const source = `mcp:${split.serverId}/${split.toolName}`;
+  const failed = (message: string, cause?: unknown): Error => {
+    const error = new Error(message, cause === undefined ? undefined : { cause });
+    recordDiagnosticError(source, error);
+    return error;
+  };
+
   let result;
   try {
     result = await rt.client.callTool({ name: split.toolName, arguments: args });
   } catch (caught) {
     const detail = caught instanceof Error ? caught.message : String(caught);
-    throw new Error(formatToolFailure(serverName, split.serverId, split.toolName, detail));
+    throw failed(formatToolFailure(serverName, split.serverId, split.toolName, detail), caught);
   }
 
   const content = Array.isArray(result.content) ? result.content : [];
@@ -984,12 +1001,16 @@ export async function callMcpTool(
   const combined = [text.trim(), structured.trim()].filter(Boolean).join("\n");
 
   if (result.isError) {
-    throw new Error(
+    throw failed(
       formatToolFailure(serverName, split.serverId, split.toolName, combined || text || "unknown error")
     );
   }
   if (/service exceptions?/i.test(combined || text)) {
-    throw new Error(formatToolFailure(serverName, split.serverId, split.toolName, combined || text));
+    throw failed(formatToolFailure(serverName, split.serverId, split.toolName, combined || text));
+  }
+  // COROS answers some bad calls with this notice instead of an error; callers decide what it means.
+  if (/tool call anomalies detected/i.test(combined || text)) {
+    recordDiagnosticError(source, new Error(`${serverName} MCP ${split.toolName} returned an anomaly notice instead of data.`));
   }
   return combined || text;
 }

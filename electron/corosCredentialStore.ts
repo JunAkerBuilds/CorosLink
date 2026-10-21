@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { safeStorage } from "electron";
 import { deleteSettings, getSetting, setSetting } from "./database";
+import { recordDiagnosticError } from "./diagnosticsService";
 
 const SETTINGS = {
   credentials: "coros.credentials",
@@ -44,6 +45,8 @@ export function storeCorosCredentials(
       "[corosCredentials] Failed to encrypt and save COROS credentials.",
       error
     );
+    // Without a saved login, an expired COROS session can't re-login on its own.
+    recordDiagnosticError("corosAccount:saveLogin", error);
     return false;
   }
 }
@@ -84,7 +87,8 @@ function readCredentialsSetting(key: string): StoredCorosCredentials | null {
   try {
     const decrypted = safeStorage.decryptString(Buffer.from(encoded, "base64"));
     return normalizeCredentials(JSON.parse(decrypted));
-  } catch {
+  } catch (error) {
+    recordDiagnosticError("corosAccount:readSavedLogin", error);
     return null;
   }
 }

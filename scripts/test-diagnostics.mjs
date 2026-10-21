@@ -62,6 +62,44 @@ try {
   assert.equal(fs.statSync(file).mode & 0o777, 0o600);
   assert.equal(redactDiagnosticText("ENOTFOUND apieu.coros.com"), "ENOTFOUND apieu.coros.com");
 
+  // A sync failure recorded where it happened, then rethrown to IPC, stays one entry.
+  const grouped = open(path.join(directory, "grouped", "errors.json"));
+  const syncFailure = Object.assign(new Error("Access token is invalid"), { code: "1019" });
+  annotateDiagnosticRequest(syncFailure, "GET", "https://teameuapi.coros.com/activity/query?size=20&pageNumber=1");
+  grouped.record("trainingHub:/activity/query", syncFailure);
+  await assert.rejects(withDiagnosticLogging(grouped, "trainingHub:getActivities", () => { throw syncFailure; })(), (caught) => caught === syncFailure);
+  grouped.record("trainingLibrary:snapshot", new Error("Workouts: Access token is invalid", { cause: syncFailure }));
+  let entries = JSON.parse(grouped.snapshot().report.slice(grouped.snapshot().report.indexOf("[")));
+  assert.equal(entries.length, 1, "rethrown and wrapped copies merge into the first entry");
+  assert.deepEqual(entries[0].via, ["trainingHub:getActivities", "trainingLibrary:snapshot"]);
+  assert.equal(entries[0].error.code, "1019");
+  assert.equal(entries[0].error.request.url, "https://teameuapi.coros.com/activity/query");
+
+  // The same failure repeating (a background sync every few minutes) is counted, not repeated.
+  for (let index = 0; index < 3; index++) {
+    now += 5 * 60 * 1000;
+    grouped.record("calendarSync:google", new Error("Calendar sync failed"));
+  }
+  now += 60 * 60 * 1000;
+  grouped.record("calendarSync:google", new Error("Calendar sync failed"));
+  grouped.record("calendarSync:google", new Error("A different failure"));
+  entries = JSON.parse(grouped.snapshot().report.slice(grouped.snapshot().report.indexOf("[")));
+  const calendar = entries.filter((entry) => entry.source === "calendarSync:google");
+  assert.equal(calendar.length, 3, "a repeat after the 30-minute window and a new message start new entries");
+  assert.equal(calendar[0].count, 3);
+  assert.ok(Date.parse(calendar[0].lastSeen) - Date.parse(calendar[0].timestamp) === 10 * 60 * 1000);
+  assert.deepEqual(Object.keys(calendar[0]), ["timestamp", "lastSeen", "count", "appVersion", "source", "error"]);
+  assert.equal(calendar[1].count, undefined);
+  const reopened = open(path.join(directory, "grouped", "errors.json"));
+  const restored = JSON.parse(reopened.snapshot().report.slice(reopened.snapshot().report.indexOf("[")));
+  assert.equal(restored.find((entry) => entry.count)?.count, 3, "counts survive restart");
+  assert.deepEqual(restored[0].via, ["trainingHub:getActivities", "trainingLibrary:snapshot"], "via survives restart");
+
+  // Account status lines sit above the entries and are redacted like errors.
+  const withStatus = grouped.snapshot(["COROS accounts", "- Training Hub: signed in · teameuapi.coros.com · person@example.com"]).report;
+  assert.match(withStatus, /COROS accounts\n- Training Hub: signed in · teameuapi\.coros\.com · \[email\]/);
+  assert.ok(withStatus.indexOf("COROS accounts") < withStatus.indexOf("["));
+
   const circular = new Error("cyclic");
   circular.cause = circular;
   log.record("circular", circular);
@@ -95,7 +133,7 @@ try {
   assert.throws(() => memoryOnly.clear(), /ENOTDIR/);
   assert.equal(memoryOnly.snapshot().entryCount, 1, "failed clear retains in-memory logs");
   assert.equal(await withDiagnosticLogging(log, "success", async (value) => value + 1)(41), 42);
-  console.log("Diagnostics passed: nested transport causes, original IPC failures, redaction on disk/export, restart, limits, expiry, clear, corrupt logs, and storage failures.");
+  console.log("Diagnostics passed: nested transport causes, original IPC failures, merged and repeated failures, status lines, redaction on disk/export, restart, limits, expiry, clear, corrupt logs, and storage failures.");
 } finally {
   fs.rmSync(directory, { recursive: true, force: true });
 }

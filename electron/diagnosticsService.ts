@@ -5,6 +5,7 @@ import { DiagnosticsLog, withDiagnosticLogging } from "./diagnosticsLog";
 import type { RendererDiagnosticError } from "./diagnosticsTypes";
 
 let log: DiagnosticsLog | undefined;
+let statusProviders: Array<() => string[]> = [];
 
 function getLog(): DiagnosticsLog {
   return log ??= new DiagnosticsLog(
@@ -22,8 +23,28 @@ function getLog(): DiagnosticsLog {
   );
 }
 
+let recordForTests: ((source: string, error: unknown) => void) | undefined;
+
+/** Test seam for services that record failures they don't rethrow. Never used by the app. */
+export function setDiagnosticRecorderForTests(record?: (source: string, error: unknown) => void): void {
+  recordForTests = record;
+}
+
 export function recordDiagnosticError(source: string, error: unknown): void {
-  try { getLog().record(source, error); } catch { /* Diagnostics are best effort. */ }
+  try { (recordForTests ?? getLog().record.bind(getLog()))(source, error); } catch { /* Diagnostics are best effort. */ }
+}
+
+/** Adds current-state lines (such as account connections) to the top of every report. */
+export function registerDiagnosticStatus(provider: () => string[]): void {
+  statusProviders = [...statusProviders, provider];
+}
+
+function currentStatus(): string[] {
+  return statusProviders.flatMap((provider) => {
+    try { return provider(); } catch (error) {
+      return [`Status unavailable: ${error instanceof Error ? error.message : String(error)}`];
+    }
+  });
 }
 
 export function handleDiagnosticIpc(
@@ -47,15 +68,16 @@ export function initializeDiagnostics(getWindow: () => BrowserWindow | undefined
   // Keep diagnostic operations outside the logging wrapper to avoid recursion.
   ipcMain.handle("diagnostics:get", (event) => {
     assertSender(event);
-    return getLog().snapshot();
+    return getLog().snapshot(currentStatus());
   });
   ipcMain.handle("diagnostics:clear", (event) => {
     assertSender(event);
-    return getLog().clear();
+    getLog().clear();
+    return getLog().snapshot(currentStatus());
   });
   ipcMain.handle("diagnostics:copy", (event) => {
     assertSender(event);
-    const snapshot = getLog().snapshot();
+    const snapshot = getLog().snapshot(currentStatus());
     clipboard.writeText(snapshot.report);
     return snapshot;
   });

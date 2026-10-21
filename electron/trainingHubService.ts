@@ -1,4 +1,6 @@
 import { buildScheduledWorkoutEditRequest } from "./corosWorkoutEditor";
+import { annotateDiagnosticRequest } from "./diagnosticsLog";
+import { recordDiagnosticError } from "./diagnosticsService";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -569,6 +571,7 @@ async function loginViaAnyBase(
       );
       return { loginData, loginBaseUrl };
     } catch (error) {
+      annotateDiagnosticRequest(error, "POST", loginUrl);
       lastError = error;
       // A later region's parameter/transport error must not hide the useful
       // rejection returned by a server that understood the login request.
@@ -767,13 +770,24 @@ async function queryTrainingHubAccount(
   accessToken: string,
   baseUrl: string
 ): Promise<TrainingHubAccountData | null> {
+  // Login carries on without the account details, so only the error report hears why.
+  const unavailable = (error: unknown) => {
+    recordDiagnosticError(
+      "trainingHub:login/accountQuery",
+      annotateDiagnosticRequest(error, "GET", `${baseUrl}/account/query`)
+    );
+    return null;
+  };
   try {
     const response = await fetch(`${baseUrl}/account/query`, {
       headers: buildTrainingHubHeaders(accessToken)
     });
 
     if (!response.ok) {
-      return null;
+      return unavailable(Object.assign(
+        new Error(`COROS account query failed: ${response.status} ${response.statusText}`),
+        { code: `HTTP ${response.status}` }
+      ));
     }
 
     const payload =
@@ -781,12 +795,15 @@ async function queryTrainingHubAccount(
     const result = String(payload.result ?? payload.apiCode ?? "");
 
     if (result !== RESULT_SUCCESS || !payload.data) {
-      return null;
+      return unavailable(Object.assign(
+        new Error(payload.message || "COROS account query returned no account."),
+        { code: result || "unknown" }
+      ));
     }
 
     return payload.data;
-  } catch {
-    return null;
+  } catch (error) {
+    return unavailable(error);
   }
 }
 
@@ -988,7 +1005,8 @@ export async function getTrainingHubActivityDetail(
 export async function getTrainingHubActivityFileUrl(
   activityId: string,
   sportType: number,
-  fileType: TrainingHubActivityFileType = 4
+  fileType: TrainingHubActivityFileType = 4,
+  options: { unreported?: boolean } = {}
 ): Promise<string> {
   const data = await trainingHubRequest<TrainingHubFileUrlData>(
     "/activity/detail/download",
@@ -998,7 +1016,8 @@ export async function getTrainingHubActivityFileUrl(
         labelId: activityId,
         sportType,
         fileType
-      }
+      },
+      unreported: options.unreported
     }
   );
 
@@ -1037,15 +1056,22 @@ export async function fetchTrainingHubActivityFile(
     fileType
   );
 
-  const response = await fetch(fileUrl);
-  if (!response.ok) {
-    throw new Error(
-      `Failed to download the ${format.label} file (HTTP ${response.status}).`
-    );
-  }
+  try {
+    const response = await fetch(fileUrl);
+    if (!response.ok) {
+      throw Object.assign(
+        new Error(`Failed to download the ${format.label} file (HTTP ${response.status}).`),
+        { code: `HTTP ${response.status}` }
+      );
+    }
 
-  const content = Buffer.from(await response.arrayBuffer());
-  return { format, content };
+    const content = Buffer.from(await response.arrayBuffer());
+    return { format, content };
+  } catch (error) {
+    // Backups and the FIT index count a failed file and move on.
+    recordDiagnosticError("trainingHub:activityFile", error);
+    throw error;
+  }
 }
 
 export async function getTrainingAnalytics(): Promise<TrainingHubAnalytics> {
@@ -5480,7 +5506,10 @@ async function fetchActivityTrackFromGpx(
   sportType: number
 ): Promise<TrainingHubActivityTrack | undefined> {
   try {
-    const fileUrl = await getTrainingHubActivityFileUrl(activityId, sportType, 1);
+    // Only a fallback for activities whose detail has no GPS points (often indoor ones).
+    const fileUrl = await getTrainingHubActivityFileUrl(activityId, sportType, 1, {
+      unreported: true
+    });
     const response = await fetch(fileUrl);
 
     if (!response.ok) {
@@ -6575,6 +6604,8 @@ export async function writeNativeTrainingPlanEndpoint<T>(
 interface TrainingHubRequestOptions extends RequestInit {
   params?: Record<string, string | number>;
   allowEmptyData?: boolean;
+  /** An optional extra the caller expects to fail sometimes: keep it out of the error report. */
+  unreported?: boolean;
 }
 
 async function trainingHubFetch<T>(
@@ -6584,13 +6615,38 @@ async function trainingHubFetch<T>(
   return trainingHubRequest<T>(path, options);
 }
 
+const SIGNED_OUT_CODE = "COROS_SIGNED_OUT";
+
 async function trainingHubRequest<T>(
   path: string,
   options: TrainingHubRequestOptions = {}
 ): Promise<T> {
+  try {
+    return await requestWithSessionRecovery<T>(path, options);
+  } catch (error) {
+    // Many callers fall back to the cache or skip one activity, so the error
+    // report hears about the failure here. Being signed out is a state, not a failure.
+    if (!options.unreported && (error as { code?: unknown } | null)?.code !== SIGNED_OUT_CODE) {
+      recordDiagnosticError(
+        (error as { code?: unknown } | null)?.code === SESSION_EXPIRED_CODE
+          ? "trainingHub:session"
+          : `trainingHub:${path}`,
+        error
+      );
+    }
+    throw error;
+  }
+}
+
+async function requestWithSessionRecovery<T>(
+  path: string,
+  options: TrainingHubRequestOptions
+): Promise<T> {
   const auth = getStoredAuth();
   if (!auth) {
-    throw new Error("Log in to COROS Training Hub first.");
+    throw Object.assign(new Error("Log in to COROS Training Hub first."), {
+      code: SIGNED_OUT_CODE
+    });
   }
 
   try {
@@ -6635,10 +6691,12 @@ async function recoverExpiredTrainingHubSession<T>(
   path: string,
   options: TrainingHubRequestOptions
 ): Promise<T> {
-  const refreshed = await reauthenticateFromStoredCredentials();
-  if (!refreshed) {
+  let refreshed: TrainingHubAuthState;
+  try {
+    refreshed = await reauthenticateFromStoredCredentials();
+  } catch (reason) {
     clearTrainingHubAuth();
-    throw new Error("COROS session expired. Log in again.");
+    throw trainingHubSessionExpired(reason);
   }
 
   try {
@@ -6646,10 +6704,19 @@ async function recoverExpiredTrainingHubSession<T>(
   } catch (error) {
     if (getTrainingHubRetryReason(error) === "token") {
       clearTrainingHubAuth();
-      throw new Error("COROS session expired. Log in again.");
+      throw trainingHubSessionExpired(error);
     }
     throw error;
   }
+}
+
+const SESSION_EXPIRED_CODE = "COROS_SESSION_EXPIRED";
+
+/** Same message as before; the cause tells the error report why re-login didn't work. */
+function trainingHubSessionExpired(cause: unknown): Error {
+  return Object.assign(new Error("COROS session expired. Log in again.", { cause }), {
+    code: SESSION_EXPIRED_CODE
+  });
 }
 
 async function executeTrainingHubRequest<T>(
@@ -6657,7 +6724,7 @@ async function executeTrainingHubRequest<T>(
   path: string,
   options: TrainingHubRequestOptions = {}
 ): Promise<T> {
-  const { params, allowEmptyData, ...requestOptions } = options;
+  const { params, allowEmptyData, unreported: _unreported, ...requestOptions } = options;
   const url = new URL(`${auth.baseUrl}${path}`);
 
   if (params) {
@@ -6678,7 +6745,9 @@ async function executeTrainingHubRequest<T>(
   const result = await fetchJson<T>(url.toString(), {
     ...requestOptions,
     headers
-  }, { allowEmptyData, contextPath: path });
+  }, { allowEmptyData, contextPath: path }).catch((error: unknown) => {
+    throw annotateDiagnosticRequest(error, requestOptions.method ?? "GET", url.toString());
+  });
   if (
     (path === "/training/schedule/update" ||
       path === "/training/schedule/executeSubPlan" ||
@@ -6782,18 +6851,20 @@ export function parseTrainingHubApiResponse<T>(
 ): T | undefined {
   const result = String(payload.result ?? payload.apiCode ?? "");
 
+  // `code` carries COROS's result code into the error report; messages stay unchanged.
   if (AUTH_ERROR_CODES.has(result)) {
-    throw new InvalidTrainingHubTokenError(
-      payload.message || "COROS session expired."
+    throw Object.assign(
+      new InvalidTrainingHubTokenError(payload.message || "COROS session expired."),
+      { code: result }
     );
   }
 
   if (result !== RESULT_SUCCESS) {
     const message = payload.message || "COROS API request failed.";
     if (isInvalidTokenMessage(message)) {
-      throw new InvalidTrainingHubTokenError(message);
+      throw Object.assign(new InvalidTrainingHubTokenError(message), { code: result });
     }
-    throw new Error(message);
+    throw Object.assign(new Error(message), { code: result || "unknown" });
   }
 
   if (payload.data === undefined || payload.data === null) {
@@ -6820,15 +6891,17 @@ async function fetchJson<T>(
       signal: options.signal ?? AbortSignal.timeout(TRAINING_HUB_REQUEST_TIMEOUT_MS)
     });
     if (!response.ok) {
-      throw new Error(
-        `COROS API request failed: ${response.status} ${response.statusText}`
+      throw Object.assign(
+        new Error(`COROS API request failed: ${response.status} ${response.statusText}`),
+        { code: `HTTP ${response.status}` }
       );
     }
     payload = (await response.json()) as TrainingHubApiResponse<T>;
   } catch (error) {
     if ((error as { name?: unknown } | null)?.name === "TimeoutError") {
       throw new Error(
-        "COROS didn't respond within 30 seconds. Check your connection and try again."
+        "COROS didn't respond within 30 seconds. Check your connection and try again.",
+        { cause: error }
       );
     }
     throw error;
@@ -6886,9 +6959,9 @@ function clearTrainingHubAuth(): void {
 // one is minted, those concurrent logins cannibalise each other and the retried
 // requests end up using an already-stale token. De-duplicating re-auth here means
 // all callers await the same login and reuse the same fresh token.
-let pendingReauth: Promise<TrainingHubAuthState | null> | null = null;
+let pendingReauth: Promise<TrainingHubAuthState> | null = null;
 
-function reauthenticateFromStoredCredentials(): Promise<TrainingHubAuthState | null> {
+function reauthenticateFromStoredCredentials(): Promise<TrainingHubAuthState> {
   if (!pendingReauth) {
     pendingReauth = performReauthentication().finally(() => {
       pendingReauth = null;
@@ -6897,7 +6970,8 @@ function reauthenticateFromStoredCredentials(): Promise<TrainingHubAuthState | n
   return pendingReauth;
 }
 
-async function performReauthentication(): Promise<TrainingHubAuthState | null> {
+/** Rejects with the reason automatic re-login didn't work; the user must log in again. */
+async function performReauthentication(): Promise<TrainingHubAuthState> {
   const credentials = getStoredCorosCredentials();
   if (!credentials) {
     console.warn(
@@ -6905,7 +6979,10 @@ async function performReauthentication(): Promise<TrainingHubAuthState | null> {
         "are available to refresh it (was 'Remember me' enabled and is secure " +
         "storage available?). The user must log in again."
     );
-    return null;
+    throw new Error(
+      "The COROS access token expired and no saved login is available for automatic re-login " +
+        "(Remember me off, or secure storage unavailable)."
+    );
   }
 
   try {
@@ -6921,7 +6998,7 @@ async function performReauthentication(): Promise<TrainingHubAuthState | null> {
         "the user must log in again.",
       error
     );
-    return null;
+    throw new Error("Automatic re-login with the saved COROS login failed.", { cause: error });
   }
 }
 
@@ -6948,8 +7025,12 @@ export async function writeReviewedStrengthProgram(
     throw Object.assign(new Error(error instanceof Error ? error.message : "Workout preflight failed."), { code: "WORKOUT_EDIT_NOT_SENT" });
   }
   // Use the captured account and a single bounded request; never automatically retry a mutation.
-  await executeTrainingHubRequest(auth, source.ref.kind === "library" ? "/training/program/update" : "/training/schedule/update", {
+  const writePath = source.ref.kind === "library" ? "/training/program/update" : "/training/schedule/update";
+  await executeTrainingHubRequest(auth, writePath, {
     method: "POST", body: JSON.stringify(body), allowEmptyData: true, signal: AbortSignal.timeout(30_000)
+  }).catch((error: unknown) => {
+    recordDiagnosticError(`trainingHub:${writePath}`, error);
+    throw error;
   });
 }
 

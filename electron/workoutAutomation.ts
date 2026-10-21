@@ -1,6 +1,8 @@
-import { app, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from "electron";
+import { app, type BrowserWindow, type IpcMainInvokeEvent } from "electron";
 import path from "node:path";
 import { getSetting, setSetting } from "./database";
+// Same as main.ts: a failed COROS workout edit thrown to the window lands in the error report.
+import { diagnosticIpcMain as ipcMain } from "./diagnosticsService";
 import { WatchfaceAutomationServer } from "./watchfaceAutomationServer";
 import { getWorkoutEditTools, workoutEditSchemas, type WorkoutEditToolName } from "./workoutEditService";
 import { workoutEdits } from "./workoutEditRuntime";

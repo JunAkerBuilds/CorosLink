@@ -1,5 +1,6 @@
 import { safeStorage } from "electron";
 import { getSetting, setSetting } from "./database";
+import { recordDiagnosticError } from "./diagnosticsService";
 import { calendarSourceUserId, calendarSourceRevision, listCalendarWorkoutEntries } from "./calendarWorkoutEventStorage";
 import {
   AppleCalendarClient,
@@ -51,8 +52,9 @@ let timer: ReturnType<typeof setInterval> | undefined;
 export function startAppleCalendarSync(): void {
   if (timer) return;
   const tick = () => {
-    void appleCalendar.syncIfDue().catch(() => {
-      /* Connection status carries failures. */
+    void appleCalendar.syncIfDue().catch((error) => {
+      // Connection status carries failures; the error report keeps the cause.
+      recordDiagnosticError("calendarSync:apple", error);
     });
   };
   timer = setInterval(tick, 5 * 60_000);
