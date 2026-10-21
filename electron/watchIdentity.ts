@@ -10,6 +10,11 @@ import type { CorosBleBackend } from "./corosNativeBleTypes";
  * - Windows and Linux Bluetooth: the device address the OS reports (bonded);
  * - USB adapter: the watch address in the saved bond, whose key encrypts the link.
  * Kept per backend: the identifiers aren't comparable across them.
+ *
+ * The computer's own Bluetooth connects without a bond, so the watch can rotate
+ * its address and come back under a new identifier. The serial number it reports
+ * (Device Information, read before sign-in) is remembered too: a new identifier
+ * with that serial number is the remembered watch, and its identifier is updated.
  */
 
 export const WATCH_IDENTITY_SETTING = "coros.ble.watchIdentity";
@@ -58,6 +63,18 @@ export function normalizeIdentity(deviceId: unknown): string | undefined {
 export function sameIdentity(a: unknown, b: unknown): boolean {
   const left = normalizeIdentity(a);
   return Boolean(left) && left === normalizeIdentity(b);
+}
+
+/** A serial number to compare. A placeholder (very short, or one repeated character) never counts. */
+export function normalizeSerial(serial: unknown): string | undefined {
+  if (typeof serial !== "string") return undefined;
+  const value = serial.trim().toUpperCase();
+  return value.length >= 4 && value.length <= 128 && !/^(.)\1*$/.test(value) ? value : undefined;
+}
+
+export function sameSerial(a: unknown, b: unknown): boolean {
+  const left = normalizeSerial(a);
+  return Boolean(left) && left === normalizeSerial(b);
 }
 
 /** A short, non-reversible tag for logs: never the identifier itself. */

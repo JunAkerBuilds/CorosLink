@@ -51,12 +51,16 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     var musicDeleteReceiver: CorosMusicDeleteReceiver?
     var operationStarted = Date()
     var deadlineSite: (line: Int, function: String)?
-    // A connect with a remembered identity ("pinnedId") goes to that peripheral only. A same-named
-    // peripheral with another identity is never connected to; it is reported if the remembered one
-    // doesn't show up (its identifier travels outside `detail`, which reaches diagnostics).
+    // A connect with a remembered identity ("pinnedId") goes to that peripheral only. If the remembered
+    // one doesn't show up, a same-named peripheral with another identity is reported (its identifier
+    // travels outside `detail`, which reaches diagnostics). With the remembered watch's serial number
+    // ("pinnedSerial"), that peripheral is connected to first, and kept only if Device Information
+    // gives that serial number: the watch isn't bonded to the Mac and can rotate its address.
     var otherIdentity: String?
+    var otherPeripheral: CBPeripheral?
     var pinnedSeen = false
     var pinnedIdentity: UUID? { (current?["pinnedId"] as? String).flatMap { UUID(uuidString: $0) } }
+    var pinnedSerial: String? { (current?["pinnedSerial"] as? String).flatMap { $0.isEmpty ? nil : $0.uppercased() } }
 
     var operation: String { current?["operation"] as? String ?? "" }
     var connecting: Bool { operation == "connect" }
@@ -75,7 +79,7 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         captureChars = 0
         switch operation {
         case "scan", "connect":
-            otherIdentity = nil; pinnedSeen = false
+            otherIdentity = nil; otherPeripheral = nil; pinnedSeen = false
             if operation == "connect", peripheral?.state == .connected {
                 finish(); return
             }
@@ -375,11 +379,22 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             guard p.identifier == pinned else {
                 if otherIdentity == nil {
                     otherIdentity = p.identifier.uuidString
+                    otherPeripheral = p
                     let request = current?["id"] as? Int
-                    // Give the remembered watch a moment to advertise before reporting the other device.
+                    // Give the remembered watch a moment to advertise before trying or reporting the other device.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
                         guard let self = self, self.connecting, self.current?["id"] as? Int == request, !self.pinnedSeen,
                               self.peripheral?.state != .connected, let other = self.otherIdentity else { return }
+                        if self.pinnedSerial != nil, let candidate = self.otherPeripheral {
+                            // Its serial number is compared once Device Information is read (nextRead).
+                            if let pending = self.peripheral {
+                                self.peripheral = nil
+                                self.central?.cancelPeripheralConnection(pending)
+                            }
+                            self.state.removeValue(forKey: "serialNumber")
+                            self.connectPeripheral(candidate, name: name)
+                            return
+                        }
                         self.fail("This doesn’t look like the watch you connected before.", extra: ["mismatch": ["deviceId": other]])
                     }
                 }
@@ -473,6 +488,17 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     func nextRead() {
         guard let p = peripheral else { return }
         if reads.isEmpty {
+            // Another identity stands in for the remembered one only with its serial number; before
+            // notifications are turned on, and long before the sign-in challenge is answered.
+            if let pinned = pinnedIdentity, p.identifier != pinned {
+                let serial = (state["serialNumber"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+                guard let expected = pinnedSerial, serial == expected else {
+                    peripheral = nil
+                    central?.cancelPeripheralConnection(p)
+                    fail("This doesn’t look like the watch you connected before.", extra: ["mismatch": ["deviceId": p.identifier.uuidString]])
+                    return
+                }
+            }
             subscriptions = channels.compactMap { _, uuid in characteristics[uuid.replacingOccurrences(of: "0001", with: "0003").lowercased()] }
             state["channels"] = channels.compactMap { name, uuid -> [String: Any]? in
                 let notify = uuid.replacingOccurrences(of: "0001", with: "0003")

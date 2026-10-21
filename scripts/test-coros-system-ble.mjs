@@ -86,8 +86,9 @@ assert.equal(describeBindReply(finalReply(5,4)),'status 5 (0x35), flags 0x00: no
 for(const platform of ['darwin','win32','linux']) {
   const settings=new Map([['coros.ble.accountAuth',Buffer.from('encrypted:'+JSON.stringify(credential)).toString('base64')]]);
   const workers=[],writes=[],credentialReads=[],diagnostics=[],notices=[];const exports={};let noKeyReply=false,watchKeyCrc=0,rejectSignature=false,weatherHeaderTimeout=false,connectModel='COROS W332';
-  // Devices advertising the watch's name, by Bluetooth identity; `ignorePin` is a helper that connects by name regardless.
-  let nearby=['os-id'],ignorePin=false;
+  // Devices advertising the watch's name, by Bluetooth identity, and their serial numbers; `ignorePin` is a helper
+  // that connects by name regardless.
+  let nearby=['os-id'],ignorePin=false;const serials={};
   vm.runInNewContext(fs.readFileSync(filename,'utf8'),{exports,Buffer,Error,setTimeout,clearTimeout,
     process:{platform,arch:'x64',env:{BUMBLE_SNOOPER:'unsafe',BUMBLE_LOGLEVEL:'DEBUG'},resourcesPath:'/resources'},
     require(id){
@@ -126,9 +127,11 @@ for(const platform of ['darwin','win32','linux']) {
           if(request.operation==='scan')state={...state,discoveredDevices:nearby.map(deviceId=>({deviceId,deviceName:credential.deviceName}))};
           if(request.operation==='connect'){
             // As main.swift does: with a remembered identity only that device, else the chosen or first one with the name.
+            // Without the remembered device, a same-named one with the remembered serial number stands in (nextRead).
             const pinned=ignorePin?undefined:request.pinnedId;
-            const match=pinned?nearby.find(id=>id.toUpperCase()===pinned.toUpperCase()):nearby.find(id=>id===request.deviceId)??nearby[0];
-            if(match)state={...state,phase:'connected',connected:true,deviceName:request.deviceName,deviceId:match,modelNumber:connectModel,softwareRevision:'V 3.2008.0'};
+            let match=pinned?nearby.find(id=>id.toUpperCase()===pinned.toUpperCase()):nearby.find(id=>id===request.deviceId)??nearby[0];
+            if(!match&&pinned&&request.pinnedSerial&&serials[nearby[0]]?.trim().toUpperCase()===request.pinnedSerial)match=nearby[0];
+            if(match)state={...state,phase:'connected',connected:true,deviceName:request.deviceName,deviceId:match,serialNumber:serials[match],modelNumber:connectModel,softwareRevision:'V 3.2008.0'};
             else {responseError='This doesn’t look like the watch you connected before.';responseDetail={site:'main.swift:380 centralManager(_:didDiscover:advertisementData:rssi:)',operation:'connect'};mismatch={deviceId:nearby[0]};}
           }
           if(request.operation==='exchange') {
@@ -754,6 +757,8 @@ for(const platform of ['darwin','win32','linux']) {
   // and checked before the sign-in challenge is answered or anything else is sent.
   {
     const WATCH='5A1E3C2B-0D4F-4E6A-9B7C-1D2E3F405162',OTHER='9F8E7D6C-5B4A-4392-8170-6F5E4D3C2B1A';
+    const ROTATED='3C4D5E6F-7081-4293-A4B5-C6D7E8F90A1B',UNREAD='0A1B2C3D-4E5F-4061-8273-94A5B6C7D8E9';
+    Object.assign(serials,{[WATCH]:'W332A0001',[ROTATED]:'w332a0001 ',[OTHER]:'W332A0002'});
     settings.set('coros.ble.accountAuth',Buffer.from('encrypted:'+JSON.stringify(credential)).toString('base64'));
     settings.delete('coros.ble.watchIdentity');
     const watch=new exports.CorosNativeBleService();
@@ -761,7 +766,8 @@ for(const platform of ['darwin','win32','linux']) {
     const pin=()=>JSON.parse(settings.get('coros.ble.watchIdentity')??'{}').system;
     const since=at=>writes.slice(at);
     const signed=at=>since(at).some(x=>x.operation==='exchange');
-    const leaks=list=>list.some(entry=>[WATCH,OTHER,WATCH.toLowerCase(),OTHER.toLowerCase()].some(id=>entry.message.includes(id)));
+    const leaks=list=>list.some(entry=>[WATCH,OTHER,ROTATED,WATCH.toLowerCase(),OTHER.toLowerCase(),ROTATED.toLowerCase(),'W332A000']
+      .some(id=>entry.message.toUpperCase().includes(id.toUpperCase())));
     // Nothing remembered: background sync neither connects nor authenticates.
     nearby=[WATCH];
     assert.equal(watch.watchIdentityForBackgroundSync(),'unpinned');
@@ -788,6 +794,36 @@ for(const platform of ['darwin','win32','linux']) {
     assert.equal((await watch.connectForBackgroundSync()).systemBind,'authenticated');
     assert.equal(since(at).find(x=>x.operation==='connect').pinnedId,WATCH);
     assert.equal(confirmed,1,'a background connection is not the user\'s');
+    await watch.disconnect();
+    // The watch isn't bonded and can rotate its address: a new identity with the remembered serial number is the
+    // remembered watch, followed quietly on any connection, and background sync isn't paused.
+    assert.equal(pin().serialNumber,'W332A0001');
+    nearby=[ROTATED];at=writes.length;logged=notices.length;
+    const moved=await watch.connectForBackgroundSync();
+    assert.deepEqual([moved.systemBind,moved.deviceId,moved.identityMismatch],['authenticated',ROTATED,undefined]);
+    const movedConnect=since(at).find(x=>x.operation==='connect');
+    assert.deepEqual([movedConnect.pinnedId,movedConnect.pinnedSerial],[WATCH,'W332A0001']);
+    assert.deepEqual([pin().deviceId,pin().serialNumber,pin().deviceName],[ROTATED,'W332A0001',credential.deviceName]);
+    assert.equal(watch.watchIdentityForBackgroundSync(),'ok');
+    assert.deepEqual(notices.slice(logged).map(entry=>[entry.source,entry.level]),[['corosBle:identity','info']]);
+    assert.equal(confirmed,1);
+    await watch.disconnect();
+    // And back, from the watch menu: no question asked.
+    nearby=[WATCH];
+    const back=await watch.userConnect(false,{backend:'system'});
+    assert.deepEqual([back.systemBind,back.identityMismatch,pin().deviceId],['authenticated',undefined,WATCH]);
+    assert.equal(confirmed,2);
+    await watch.disconnect();
+    // A new identity whose serial number can't be read is asked about; nothing is signed.
+    nearby=[UNREAD];at=writes.length;
+    assert.equal((await watch.userConnect(false,{backend:'system'})).identityMismatch,true);
+    assert.deepEqual([pin().deviceId,signed(at)],[WATCH,false]);
+    await watch.disconnect();
+    // A helper that connected to another serial number anyway: CorosLink checks it again before the challenge.
+    nearby=[OTHER];ignorePin=true;at=writes.length;
+    assert.equal((await watch.userConnect(false,{backend:'system'})).identityMismatch,true);
+    assert.deepEqual([pin().deviceId,signed(at)],[WATCH,false]);
+    ignorePin=false;
     await watch.disconnect();
     // Only another device with the name nearby: a manual connect asks first; nothing is signed or sent.
     nearby=[OTHER];at=writes.length;logged=notices.length;
@@ -818,7 +854,7 @@ for(const platform of ['darwin','win32','linux']) {
     assert.deepEqual([anyway.connected,anyway.systemBind,anyway.deviceId,anyway.identityMismatch],[true,'authenticated',OTHER,undefined]);
     assert.equal(since(at).find(x=>x.operation==='connect').pinnedId,OTHER,'to the device the user confirmed only');
     assert.equal(pin().deviceId,OTHER);
-    assert.equal(confirmed,2);
+    assert.equal(confirmed,3);
     assert.deepEqual(notices.slice(logged).map(entry=>[entry.level,/changed .*id#[0-9a-f]{8} to id#[0-9a-f]{8}/.test(entry.message)]),[['warning',true]]);
     await watch.disconnect();
     // A "Connect anyway" with nothing refused just now is an ordinary connection.
@@ -840,6 +876,7 @@ for(const platform of ['darwin','win32','linux']) {
     assert.equal(leaks(notices),false,'identity notices carry short tags, never the identifiers');
     assert.equal(leaks(diagnostics),false);
     settings.delete('coros.ble.accountAuth');nearby=['os-id'];
+    for(const id of Object.keys(serials))delete serials[id];
   }
   console.log(platform+': discovery, native transport selection, fresh authentication, key isolation, OS status, reconnect and the remembered watch identity passed.');
 }

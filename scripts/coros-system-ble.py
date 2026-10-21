@@ -48,7 +48,9 @@ PINNED_GRACE_SECONDS = 10
 
 class IdentityMismatch(ProtocolError):
     """A device advertising the remembered name, but with another address. It is
-    never connected to; its address goes back outside `detail` (see main)."""
+    connected to only to read its serial number, when the remembered watch's is
+    known (the watch isn't bonded and can rotate its address), and used only if
+    the two match; its address goes back outside `detail` (see main)."""
     def __init__(self, address):
         super().__init__('This doesn\u2019t look like the watch you connected before.')
         self.address = address
@@ -149,6 +151,8 @@ class SystemSession:
         self.step = None
         # Whether the last connect removed a Windows pairing the watch had dropped.
         self.stale_bond_cleared = False
+        # The remembered watch's serial number, while a device with another address stands in for it.
+        self.expected_serial = None
         self.client = None
         self.queue = None
         # Music inventory reads listen on control and bulk: (is_control, bytes).
@@ -174,7 +178,7 @@ class SystemSession:
         if self.music_queue is not None and not self.music_queue.full():
             self.music_queue.put_nowait(None)
 
-    async def discover(self, name=None, pinned=None):
+    async def discover(self, name=None, pinned=None, serial=None):
         results = {}
         loop = asyncio.get_running_loop()
         found = loop.create_future()
@@ -187,11 +191,14 @@ class SystemSession:
             results[device.address] = (device, label, advertisement.rssi)
             if name != label or found.done():
                 return
-            # With a remembered identity, only that device; a same-named one is reported, never used.
+            # With a remembered identity, only that device. A same-named one is reported, or,
+            # with the remembered serial number, tried in its place (see prepare).
             if pinned is not None and device.address.upper() != pinned:
                 if 'address' not in other:
                     other['address'] = device.address
-                    loop.call_later(PINNED_GRACE_SECONDS, lambda: found.done() or found.set_exception(IdentityMismatch(other['address'])))
+                    loop.call_later(PINNED_GRACE_SECONDS, lambda: found.done() or (
+                        found.set_result(results[other['address']]) if serial else
+                        found.set_exception(IdentityMismatch(other['address']))))
                 return
             found.set_result(results[device.address])
 
@@ -214,17 +221,22 @@ class SystemSession:
         self.state['phase'] = 'idle'
         return self.state
 
-    async def connect(self, name, pinned=None):
+    async def connect(self, name, pinned=None, serial=None):
         if self.client:
             await self.close()
         if not isinstance(name, str) or not name.startswith('COROS'):
             raise ProtocolError('Find and select your COROS watch before connecting.')
-        if pinned is not None and (not isinstance(pinned, str) or not pinned or len(pinned) > 128):
+        if any(value is not None and (not isinstance(value, str) or not value or len(value) > 128) for value in (pinned, serial)):
             raise ProtocolError('The remembered watch identity is invalid.')
         self.stale_bond_cleared = False
         self.state.update(phase='connecting', systemBind='unavailable')
         self.step = 'scan'
-        device, label, rssi = await self.discover(name, pinned.upper() if pinned else None)
+        pinned = pinned.upper() if pinned else None
+        serial = serial.strip().upper() if serial and pinned else None
+        device, label, rssi = await self.discover(name, pinned, serial)
+        self.expected_serial = serial if pinned is not None and device.address.upper() != pinned else None
+        if self.expected_serial:
+            self.state.pop('serialNumber', None)
         try:
             return await self.open(device, label, rssi)
         except Exception as error:
@@ -306,6 +318,10 @@ class SystemSession:
                     self.state[label] = data.decode('utf-8', errors='replace').rstrip('\0').strip()
             except Exception:
                 continue
+        # Another address stands in for the remembered watch only with its serial number:
+        # checked before notifications or pairing, long before the sign-in challenge.
+        if self.expected_serial and self.state.get('serialNumber', '').strip().upper() != self.expected_serial:
+            raise IdentityMismatch(self.state['deviceId'])
         for label, uuid in CHANNELS.items():
             notify = self.client.services.get_characteristic(uuid.replace('0001', '0003', 1))
             write = self.client.services.get_characteristic(uuid.replace('0001', '0002', 1))
@@ -587,7 +603,7 @@ async def main():
                 if operation == 'scan':
                     result = await session.scan()
                 elif operation == 'connect':
-                    result = await session.connect(request.get('deviceName'), request.get('pinnedId'))
+                    result = await session.connect(request.get('deviceName'), request.get('pinnedId'), request.get('pinnedSerial'))
                     if session.stale_bond_cleared:
                         # Electron adds helper events to the Bluetooth trail of later error reports.
                         emit({'event': 'stale bond cleared'})
