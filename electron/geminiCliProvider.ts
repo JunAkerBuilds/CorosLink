@@ -309,6 +309,33 @@ async function rememberAuthFailure(executablePath: string, message: string): Pro
   lastAuthFailure = { key: await authFailureKey(executablePath), message };
 }
 
+/** The remembered refusal, while nothing it depended on has changed. */
+async function currentRefusal(executablePath: string): Promise<string | undefined> {
+  if (!lastAuthFailure) return undefined;
+  return lastAuthFailure.key === (await authFailureKey(executablePath))
+    ? lastAuthFailure.message
+    : undefined;
+}
+
+type GeminiSessionModels = {
+  currentModelId?: string;
+  availableModels?: Array<{ modelId?: unknown; name?: unknown }>;
+};
+
+// What the last session that started offered. With Google sign-in the model
+// picker reads these instead of starting a session of its own.
+let sessionModels: { executablePath: string; options: ChatModelOption[] } | undefined;
+
+function rememberSessionModels(executablePath: string, models?: GeminiSessionModels): void {
+  const options = geminiModelOptionsFromSession(models);
+  if (options.length > 0) sessionModels = { executablePath, options };
+}
+
+/** The models this CLI's most recent session offered, without starting one. */
+export function getGeminiSessionModels(executablePath: string): ChatModelOption[] {
+  return sessionModels?.executablePath === executablePath ? sessionModels.options : [];
+}
+
 export async function getGeminiCliStatus(
   customPath?: string
 ): Promise<GeminiCliStatus> {
@@ -344,10 +371,7 @@ export async function getGeminiCliStatus(
   const auth = await getGeminiAuthState();
   const methodLabel = auth.method ? AUTH_METHOD_LABELS[auth.method] ?? auth.method : undefined;
   // A sign-in that rewrites the credentials changes the key, which lifts the refusal.
-  const refused =
-    auth.signedIn && lastAuthFailure?.key === (await authFailureKey(executablePath))
-      ? lastAuthFailure.message
-      : undefined;
+  const refused = auth.signedIn ? await currentRefusal(executablePath) : undefined;
   // Cached credentials don't make a sign-in in progress, or one that just failed, connected.
   if (!auth.signedIn || refused || pendingLogin) {
     return {
@@ -381,6 +405,34 @@ export async function getGeminiCliStatus(
 }
 
 /**
+ * "Check again". A remembered refusal holds until the CLI, its credentials or its
+ * settings change, which a passing failure (a proxy 403, a dropped connection)
+ * never does. So it is tried once more with a session that sends no prompt:
+ * success lifts it, and a refusal is remembered again with Gemini's reason.
+ */
+export async function recheckGeminiCliStatus(
+  customPath: string | undefined,
+  workspaceDir: string
+): Promise<GeminiCliStatus> {
+  const status = await getGeminiCliStatus(customPath);
+  if (
+    status.state !== "sign-in-required" ||
+    !status.executablePath ||
+    // Without cached credentials a session would start Google's browser sign-in.
+    !(await getGeminiAuthState()).signedIn ||
+    !(await currentRefusal(status.executablePath))
+  ) {
+    return status;
+  }
+  try {
+    await startCheckSession(status.executablePath, workspaceDir, { rememberRefusal: true });
+  } catch {
+    // The status below reports a refusal remembered again, or the one that still holds.
+  }
+  return getGeminiCliStatus(customPath);
+}
+
+/**
  * Starts Gemini's own Google sign-in: the CLI opens the browser and caches the
  * credentials itself. Returns at once; the status turns connected when done.
  */
@@ -391,6 +443,15 @@ export async function launchGeminiCliLogin(
   const status = await getGeminiCliStatus(customPath);
   if (!status.installed || !status.executablePath || status.authenticated || pendingLogin) {
     return status;
+  }
+  // Google sign-in makes it the CLI's selected method and drops other cached
+  // credentials; an API key or Vertex AI setup is the athlete's to change.
+  if (status.authMethod && status.authMethod !== "oauth-personal") {
+    const label = AUTH_METHOD_LABELS[status.authMethod] ?? status.authMethod;
+    return {
+      ...status,
+      message: `${status.message} Gemini CLI is set up for your ${label}, so CorosLink won't switch it to Google sign-in.`
+    };
   }
 
   const executablePath = status.executablePath;
@@ -493,23 +554,39 @@ export async function listGeminiCliModels(
   executablePath: string,
   workspaceDir: string
 ): Promise<ChatModelOption[]> {
+  return startCheckSession(executablePath, workspaceDir, { rememberRefusal: false });
+}
+
+/** A session that never sends a prompt: it proves the sign-in and reports the models. */
+async function startCheckSession(
+  executablePath: string,
+  workspaceDir: string,
+  options: { rememberRefusal: boolean }
+): Promise<ChatModelOption[]> {
   await prepareWorkspace(workspaceDir);
   const agent = AcpAgent.start(executablePath, await acpArgs(executablePath), {
     cwd: workspaceDir,
     env: createGeminiEnvironment(executablePath)
   });
-  const timer = setTimeout(() => agent.close(), MODEL_LIST_TIMEOUT_MS);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    agent.close();
+  }, MODEL_LIST_TIMEOUT_MS);
   try {
     await agent.initialize();
-    const session = (await agent.request("session/new", {
-      cwd: workspaceDir,
-      mcpServers: []
-    })) as {
-      models?: {
-        currentModelId?: string;
-        availableModels?: Array<{ modelId?: unknown; name?: unknown }>;
-      };
-    };
+    let session: { models?: GeminiSessionModels };
+    try {
+      session = (await agent.request("session/new", {
+        cwd: workspaceDir,
+        mcpServers: []
+      })) as { models?: GeminiSessionModels };
+    } catch (caught) {
+      if (!options.rememberRefusal || timedOut) throw caught;
+      throw await sessionStartError(caught, agent, executablePath);
+    }
+    lastAuthFailure = undefined;
+    rememberSessionModels(executablePath, session.models);
     return geminiModelOptionsFromSession(session.models);
   } finally {
     clearTimeout(timer);
@@ -518,10 +595,7 @@ export async function listGeminiCliModels(
 }
 
 /** "Default · <current model>" first, then each model the session offers. */
-export function geminiModelOptionsFromSession(models?: {
-  currentModelId?: string;
-  availableModels?: Array<{ modelId?: unknown; name?: unknown }>;
-}): ChatModelOption[] {
+export function geminiModelOptionsFromSession(models?: GeminiSessionModels): ChatModelOption[] {
   const rows = (models?.availableModels ?? [])
     .filter(
       (model): model is { modelId: string; name?: unknown } =>
@@ -614,7 +688,7 @@ export async function streamGeminiCliCompletion(
     };
 
     await agent.initialize();
-    let session: { sessionId?: string };
+    let session: { sessionId?: string; models?: GeminiSessionModels };
     try {
       session = (await agent.request("session/new", {
         cwd: options.workspaceDir,
@@ -628,7 +702,7 @@ export async function streamGeminiCliCompletion(
               }
             ]
           : []
-      })) as { sessionId?: string };
+      })) as { sessionId?: string; models?: GeminiSessionModels };
     } catch (caught) {
       if (timedOut || externallyCancelled || options.signal.aborted) throw caught;
       throw await sessionStartError(caught, agent, options.executablePath);
@@ -637,6 +711,7 @@ export async function streamGeminiCliCompletion(
     sessionId = session.sessionId;
     sessionStarted = true;
     lastAuthFailure = undefined;
+    rememberSessionModels(options.executablePath, session.models);
     armIdleTimeout();
 
     const result = (await agent.request("session/prompt", {

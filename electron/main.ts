@@ -417,6 +417,7 @@ import {
   connectGeminiCli,
   getClaudeCodeConnectionStatus,
   getGeminiCliConnectionStatus,
+  recheckGeminiCliConnectionStatus,
   getChatAuthStatus,
   getChatSessionEntries,
   getChatSettings,
@@ -1881,6 +1882,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("chat:getGeminiCliStatus", () =>
     getGeminiCliConnectionStatus()
+  );
+
+  ipcMain.handle("chat:recheckGeminiCli", () =>
+    recheckGeminiCliConnectionStatus()
   );
 
   ipcMain.handle("chat:connectGeminiCli", () => connectGeminiCli());

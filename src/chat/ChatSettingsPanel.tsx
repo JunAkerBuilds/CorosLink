@@ -615,7 +615,10 @@ export function ChatSettingsPanel({
               <ExternalLink size={14} aria-hidden="true" />
               {t("Install Gemini CLI")}</button>
           ) : null}
-          {gemini.status?.installed && gemini.status.state !== "connected" ? (
+          {/* Google sign-in would replace an API key or Vertex AI setup in Gemini CLI. */}
+          {gemini.status?.installed &&
+          gemini.status.state !== "connected" &&
+          (!gemini.status.authMethod || gemini.status.authMethod === "oauth-personal") ? (
             <button
               type="button"
               className="chat-local-action primary"

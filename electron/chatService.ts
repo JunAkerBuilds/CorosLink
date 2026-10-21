@@ -92,8 +92,10 @@ import {
 import {
   GeminiCliProviderError,
   getGeminiCliStatus as inspectGeminiCliStatus,
+  getGeminiSessionModels,
   launchGeminiCliLogin,
   listGeminiCliModels,
+  recheckGeminiCliStatus,
   streamGeminiCliCompletion,
   testGeminiCliConnection as runGeminiCliConnectionTest
 } from "./geminiCliProvider";
@@ -275,6 +277,17 @@ function geminiWorkspaceDir(): string {
 export async function getGeminiCliConnectionStatus(): Promise<GeminiCliStatus> {
   const settings = getChatSettings();
   const status = await inspectGeminiCliStatus(settings.geminiCli.executablePath);
+  recordGeminiCliStatus(status);
+  return status;
+}
+
+/** "Check again": also retries a remembered sign-in refusal once. */
+export async function recheckGeminiCliConnectionStatus(): Promise<GeminiCliStatus> {
+  const settings = getChatSettings();
+  const status = await recheckGeminiCliStatus(
+    settings.geminiCli.executablePath,
+    geminiWorkspaceDir()
+  );
   recordGeminiCliStatus(status);
   return status;
 }
@@ -2014,6 +2027,12 @@ async function listGeminiModelOptions(): Promise<ChatModelOption[]> {
   const status = await inspectGeminiCliStatus(getChatSettings().geminiCli.executablePath);
   if (!status.authenticated || !status.executablePath) return GEMINI_MODEL_OPTIONS;
   const executablePath = status.executablePath;
+  // With Google sign-in, a session whose cached credentials no longer refresh opens
+  // the CLI's browser sign-in. Show what the last Coach session offered instead.
+  if (status.authMethod === "oauth-personal") {
+    const seen = getGeminiSessionModels(executablePath);
+    return seen.length >= 2 ? seen : GEMINI_MODEL_OPTIONS;
+  }
   if (
     geminiModelCache?.executablePath === executablePath &&
     Date.now() - geminiModelCache.at < MODELS_CACHE_MS

@@ -2919,7 +2919,8 @@ export function ChatView({
     setCheckingGemini(true);
     onError(null);
     try {
-      const status = await api.getGeminiCliStatus();
+      // Also retries a remembered sign-in refusal, so a passing failure doesn't hold the gate.
+      const status = await api.recheckGeminiCli();
       setGeminiStatus(status);
       return status;
     } catch (caught) {
@@ -4005,6 +4006,9 @@ export function ChatView({
     const notInstalled = geminiStatus?.state === "not-installed";
     const signingInWithGoogle =
       connectingGemini || geminiStatus?.state === "connecting";
+    // Google sign-in would replace an API key or Vertex AI setup in Gemini CLI.
+    const offersGoogleSignIn =
+      !geminiStatus?.authMethod || geminiStatus.authMethod === "oauth-personal";
     return (
       <div className="chat-view chat-view-login">
         <div className="chat-layout">
@@ -4041,7 +4045,7 @@ export function ChatView({
                   >
                     <ExternalLink size={16} aria-hidden="true" />
                     {t("Install Gemini CLI")}</button>
-                ) : (
+                ) : offersGoogleSignIn ? (
                   <button
                     type="button"
                     className="primary-button"
@@ -4058,10 +4062,10 @@ export function ChatView({
                       <Gem size={16} aria-hidden="true" />
                     )}
                     {t("Sign in with Google")}</button>
-                )}
+                ) : null}
                 <button
                   type="button"
-                  className="secondary-button"
+                  className={!notInstalled && !offersGoogleSignIn ? "primary-button" : "secondary-button"}
                   onClick={() => void refreshGeminiCliStatus()}
                   disabled={checkingGemini || !api}
                 >

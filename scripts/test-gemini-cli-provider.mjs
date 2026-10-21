@@ -25,10 +25,12 @@ const {
   getGeminiAuthState,
   getGeminiCliStatus,
   getGeminiExecutableCandidates,
+  getGeminiSessionModels,
   launchGeminiCliLogin,
   listGeminiCliModels,
   normalizeGeminiCliError,
   parseGeminiSelectedAuthType,
+  recheckGeminiCliStatus,
   streamGeminiCliCompletion
 } = await import(`${providerUrl}?cacheBust=${Date.now()}`);
 
@@ -168,6 +170,14 @@ try {
   const workspaceSettings = JSON.parse(await readFile(path.join(workspaceDir, ".gemini", "settings.json"), "utf8"));
   assert.deepEqual(workspaceSettings.tools.core, []);
 
+  // The model picker reads what that session offered instead of starting one (Google sign-in).
+  assert.deepEqual(getGeminiSessionModels(fakeGemini), [
+    { value: "", label: "Default", detail: "Gemini Fake Pro" },
+    { value: "gemini-fake-pro", label: "Gemini Fake Pro" },
+    { value: "gemini-fake-flash", label: "Gemini Fake Flash" }
+  ]);
+  assert.deepEqual(getGeminiSessionModels(path.join(bin, "other-gemini")), []);
+
   const models = await listGeminiCliModels(fakeGemini, workspaceDir);
   assert.deepEqual(models, [
     { value: "", label: "Default", detail: "Gemini Fake Pro" },
@@ -208,10 +218,14 @@ try {
       error.kind === "auth" &&
       error.message === "Gemini CLI could not sign in: Google sign-in is not available for this account."
   );
-  delete process.env.FAKE_GEMINI_REFUSE;
   const refused = await getGeminiCliStatus(fakeGemini);
   assert.equal(refused.state, "sign-in-required");
   assert.match(refused.message, /not available for this account/);
+  // Check again retries once with a prompt-less session; a refusal that holds keeps its reason.
+  const stillRefused = await recheckGeminiCliStatus(fakeGemini, workspaceDir);
+  assert.equal(stillRefused.state, "sign-in-required");
+  assert.match(stillRefused.message, /not available for this account/);
+  delete process.env.FAKE_GEMINI_REFUSE;
   // Signing in again: cached credentials don't make it connected while it runs or after it fails.
   assert.equal((await launchGeminiCliLogin(fakeGemini, workspaceDir)).state, "connecting");
   assert.equal((await getGeminiCliStatus(fakeGemini)).state, "connecting");
@@ -227,6 +241,46 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 20));
   await writeFile(path.join(geminiDir, "oauth_creds.json"), '{"fresh":true}');
   assert.equal((await getGeminiCliStatus(fakeGemini)).state, "connected");
+
+  const refuseOnce = async () => {
+    process.env.FAKE_GEMINI_REFUSE = "1";
+    try {
+      await assert.rejects(
+        streamGeminiCliCompletion({
+          executablePath: fakeGemini,
+          workspaceDir,
+          instructions: "x",
+          messages: [{ role: "user", content: "hi" }],
+          tools: [],
+          signal: new AbortController().signal,
+          onToken: () => undefined,
+          onToolCall: async () => ""
+        }),
+        (error) => error.kind === "auth"
+      );
+    } finally {
+      delete process.env.FAKE_GEMINI_REFUSE;
+    }
+  };
+
+  // A passing refusal changes nothing on disk; Check again lifts it once a session starts.
+  await refuseOnce();
+  assert.equal((await getGeminiCliStatus(fakeGemini)).state, "sign-in-required");
+  assert.equal((await recheckGeminiCliStatus(fakeGemini, workspaceDir)).state, "connected");
+
+  // An API key setup is never switched to Google sign-in (that rewrites the CLI's settings).
+  const apiKeySettings = '{ "security": { "auth": { "selectedType": "gemini-api-key" } } }';
+  await writeFile(path.join(geminiDir, "settings.json"), apiKeySettings);
+  await refuseOnce();
+  const apiKeyLogin = await launchGeminiCliLogin(fakeGemini, workspaceDir);
+  assert.equal(apiKeyLogin.state, "sign-in-required");
+  assert.match(apiKeyLogin.message, /set up for your Gemini API key, so CorosLink won't switch it to Google sign-in/);
+  assert.equal((await getGeminiCliStatus(fakeGemini)).state, "sign-in-required", "no sign-in started");
+  assert.equal(await readFile(path.join(geminiDir, "settings.json"), "utf8"), apiKeySettings);
+  await writeFile(
+    path.join(geminiDir, "settings.json"),
+    '{ "security": { "auth": { "selectedType": "oauth-personal" } } }'
+  );
 
   // Cancelling ends the CLI process and reports a cancellation.
   const controller = new AbortController();
@@ -244,7 +298,7 @@ try {
   await assert.rejects(pending, (error) => error.kind === "cancelled");
   delete process.env.FAKE_GEMINI_HANG;
 
-  console.log("gemini cli provider tests passed (helpers, sign-in state, ACP stream, tool bridge, models, refusals, cancel)");
+  console.log("gemini cli provider tests passed (helpers, sign-in state, ACP stream, tool bridge, models, refusals, recheck, API-key sign-in guard, cancel)");
 } finally {
   await rm(scratch, { recursive: true, force: true });
 }

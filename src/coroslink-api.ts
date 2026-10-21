@@ -821,6 +821,8 @@ export interface CorosLinkApi {
   testClaudeCodeConnection: () => Promise<ClaudeCodeConnectionTest>;
   openClaudeCodeSetupGuide: () => Promise<void>;
   getGeminiCliStatus: () => Promise<GeminiCliStatus>;
+  /** Like getGeminiCliStatus, but also retries a remembered sign-in refusal once. */
+  recheckGeminiCli: () => Promise<GeminiCliStatus>;
   connectGeminiCli: () => Promise<GeminiCliStatus>;
   testGeminiCliConnection: () => Promise<GeminiCliConnectionTest>;
   openGeminiCliSetupGuide: (topic: "install" | "sign-in") => Promise<void>;

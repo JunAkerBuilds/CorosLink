@@ -1242,6 +1242,8 @@ const api = {
     ipcRenderer.invoke("chat:openClaudeCodeSetupGuide"),
   getGeminiCliStatus: (): Promise<GeminiCliStatus> =>
     ipcRenderer.invoke("chat:getGeminiCliStatus"),
+  recheckGeminiCli: (): Promise<GeminiCliStatus> =>
+    ipcRenderer.invoke("chat:recheckGeminiCli"),
   connectGeminiCli: (): Promise<GeminiCliStatus> =>
     ipcRenderer.invoke("chat:connectGeminiCli"),
   testGeminiCliConnection: (): Promise<GeminiCliConnectionTest> =>
