@@ -523,22 +523,21 @@ for(const platform of ['darwin','win32','linux']) {
     assert.deepEqual([...new Set(writes.slice(beforeSatellite).filter(x=>x.operation==='dataFileBlock').map(x=>x.fileId))],[id==='apex-4'?13:68],`${id}: its own format`);
     service.setConnectedPush(async()=>undefined);
   }
-  // A watch whose firmware CorosLink hasn't checked (here a NOMAD) keeps its settings, profile and workouts:
-  // nothing is written, the clock gets this computer's 12/24-hour format, and no weather is sent.
+  // A watch whose firmware CorosLink hasn't checked (here a NOMAD) is left as it is: its settings and profile
+  // aren't read or written, its clock isn't set, and no workouts or weather are sent.
   {
     connectModel='COROS W942';await service.disconnect();
     const forecast=Buffer.alloc(3000,1);let asked=0;
     service.setConnectedPush(async()=>{asked+=1;return forecast;});
-    const computer=new Intl.DateTimeFormat(undefined,{hour:'numeric'}).resolvedOptions().hour12===true?1:0;
     const before=writes.length;
-    const next=service.connect(false,{backend:'system'});
-    // The watch's bit 13 says the opposite of this computer: a NOMAD's switch layout isn't known, so it isn't used.
-    workers.at(-1).switchWord=(computer?0x0e2d2085&~(1<<13):0x0e2d2085|1<<13)>>>0;
-    const linked=await next;
+    const linked=await service.connect(false,{backend:'system'});
     assert.equal(linked.watchModel,'nomad');
+    assert.equal(linked.systemBind,'authenticated');
     assert.equal(writes.slice(before).some(x=>x.operation==='dataFileBlock'),false,'no weather file');
     assert.equal(asked,0,'no forecast fetched');assert.equal(linked.weatherSentAt,undefined);
-    assert.equal(Buffer.from(writes.filter(x=>x.opcode===0x8c).at(-1).payload,'base64')[6],computer,'the clock is set with this computer\'s format');
+    assert.equal(writes.slice(before).some(x=>x.opcode===0xa7),false,'its settings and profile aren\'t read');
+    assert.equal(writes.slice(before).some(x=>x.opcode===0x8c),false,'its clock isn\'t set');
+    assert.equal(linked.clockSetAt,undefined);
     const after=writes.length;
     await assert.rejects(service.writeWatchSwitches(Buffer.alloc(4)),/Not available on this watch/);
     await assert.rejects(service.writeWatchProfile(Buffer.from([0x48,0xc2,0x01])),/Not available on this watch/);

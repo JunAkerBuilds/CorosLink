@@ -57,7 +57,7 @@ export const WATCH_FEATURE_MODELS: Readonly<Record<WatchFeature, ReadonlySet<Wat
   settings: EXPERIMENTAL_SYNC_MODELS,
   /** The training profile (setting 10). */
   profile: EXPERIMENTAL_SYNC_MODELS,
-  /** The watch's own 12/24-hour switch, kept when the clock is set; other watches get this computer's format, as from the phone app. */
+  /** The clock and time zone set on connect, keeping the watch's own 12/24-hour switch. Other watches keep their clock. */
   clockFormat: EXPERIMENTAL_SYNC_MODELS,
   /** Weather on connect (SendFile 80). */
   weather: EXPERIMENTAL_SYNC_MODELS,

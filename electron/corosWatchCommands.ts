@@ -33,11 +33,6 @@ export function encodeSyncTime(now: Date, hour12: boolean): Buffer {
   return payload;
 }
 
-/** Whether this computer shows a 12-hour clock (the phone app sends the phone's setting). */
-export function systemUsesHour12(): boolean {
-  return new Intl.DateTimeFormat(undefined, { hour: "numeric" }).resolvedOptions().hour12 === true;
-}
-
 /** A one-byte acknowledgement of 1; anything else is a refusal. */
 export function requireWatchAcknowledgement(reply: Buffer, what: string): void {
   if (reply.length < 1 || reply[0] !== 1) throw new Error(`The watch did not accept the ${what}.`);

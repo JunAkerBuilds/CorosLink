@@ -35,7 +35,7 @@ import { decodeSettings, encodeSettings, encodeSettingsRequest, SETTING_SWITCH, 
 import { applyFwInfoGpsAssistance, decodeBindGpsAssistance, SETTING_FW_INFO, type WatchGpsAssistance } from "./corosWatchGpsAssist";
 import { encodeCepTransfer, unixMsOfWatchHour, type CepFile } from "./corosWatchCep";
 import { decodeSwitches, decodeSwitchWord, SETTING_SWITCH_EXT } from "./corosWatchSettings";
-import { encodeSyncTime, nearLocalMidnight, requireWatchAcknowledgement, SYNC_TIME_OPCODE, systemUsesHour12 } from "./corosWatchCommands";
+import { encodeSyncTime, nearLocalMidnight, requireWatchAcknowledgement, SYNC_TIME_OPCODE } from "./corosWatchCommands";
 import { NOT_AVAILABLE_ON_WATCH, watchSupports, watchTakesSatelliteFormat, type WatchFeature } from "./localSync/watchSyncModels";
 import type { WatchModelId } from "./watchModels";
 import {
@@ -709,23 +709,22 @@ export class CorosNativeBleService {
    * does on every connection. The message also carries the 12/24-hour format:
    * the watch's own setting, as read on this connection, so setting the clock
    * never changes it. When it can't be read, the clock isn't set on this
-   * connection. Best effort: a refusal is recorded and never fails the connection.
+   * connection. Only on models whose firmware was checked: elsewhere bit 13 may
+   * mean something else, and the computer's format may not be the watch's.
+   * Best effort: a refusal is recorded and never fails the connection.
    */
   private async setWatchClock(switches?: Buffer): Promise<void> {
     if (!this.state.connected || this.state.systemBind !== "authenticated" || this.backendInUse !== "system") return;
+    if (!watchSupports("clockFormat", this.watchTarget()?.model)) {
+      this.trace.add("clock not set", { reason: "model not checked" });
+      return;
+    }
     try {
-      let hour12: boolean;
-      // Bit 13 means 12-hour only where the firmware was checked; other watches get this computer's format, as from the phone app.
-      if (watchSupports("clockFormat", this.watchTarget()?.model)) {
-        const own = hour12From(switches) ?? hour12From(await this.readSwitches().then(read => read.word, () => undefined));
-        if (own === undefined) {
-          this.trace.add("clock not set", { reason: "12/24-hour format unknown" });
-          recordDiagnosticNotice("corosBle:setClock", "The watch's 12/24-hour format couldn't be read, so its clock wasn't set on this connection.", "warning");
-          return;
-        }
-        hour12 = own;
-      } else {
-        hour12 = systemUsesHour12();
+      const hour12 = hour12From(switches) ?? hour12From(await this.readSwitches().then(read => read.word, () => undefined));
+      if (hour12 === undefined) {
+        this.trace.add("clock not set", { reason: "12/24-hour format unknown" });
+        recordDiagnosticNotice("corosBle:setClock", "The watch's 12/24-hour format couldn't be read, so its clock wasn't set on this connection.", "warning");
+        return;
       }
       while (nearLocalMidnight(new Date())) await new Promise(resolve => setTimeout(resolve, 2_000));
       const reply = await this.send("exchange", { opcode: SYNC_TIME_OPCODE, payload: encodeSyncTime(new Date(), hour12).toString("base64"), maximumWriteBytes: 20 });
@@ -1435,13 +1434,16 @@ export class CorosNativeBleService {
   /**
    * Reads the training profile and system switches (read-only), as the phone app reads
    * settings on connect. Returns the switches, which carry the watch's 12/24-hour format.
+   * Only for models whose firmware was checked: others may not answer, and each
+   * unanswered read would hold the connection until the helper gives up.
    */
   private async readProfileOnConnect(): Promise<Buffer | undefined> {
     if (!this.state.connected || this.state.systemBind !== "authenticated" || this.backendInUse !== "system") return undefined;
+    const model = this.watchTarget()?.model;
+    if (!(["profile", "settings", "clockFormat"] as const).some(feature => watchSupports(feature, model))) return undefined;
     const failed = (source: string, error: unknown) => { recordDiagnosticError(source, error instanceof Error ? error : new Error(String(error))); };
     let reply: Map<number, Buffer>;
     try { reply = await this.readProfileReply(); } catch (error) { failed("corosBle:readProfile", error); return undefined; }
-    const model = this.watchTarget()?.model;
     // Each part on its own: a profile that doesn't decode keeps the switches, and with them the watch's 12/24-hour format.
     try {
       const profile = reply.get(SETTING_USER_INFO);
