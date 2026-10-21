@@ -380,7 +380,7 @@ export interface RemoteAccessStatus {
 // ----- Away from home (electron/remote/cloud/) -----
 
 /**
- * off: "Link this computer" is off. linking: talking to the relay or starting
+ * off: away from home is off. linking: talking to the relay or starting
  * the connector. online: cloudflared has a connection to Cloudflare. offline:
  * linked, but cloudflared isn't connected right now. error: see `message`.
  */
@@ -397,7 +397,7 @@ export interface CloudLinkStatus {
     signingIn: boolean;
     error?: string;
   };
-  /** The "Link this computer" switch. Off until the person turns it on. */
+  /** Away from home is on: follows the remote access switch once signed in. Off until then. */
   enabled: boolean;
   linked: boolean;
   state: CloudLinkState;

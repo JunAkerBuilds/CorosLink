@@ -30,9 +30,10 @@ import { RemoteServer, remoteLanAddresses, type RelayTrust } from "./server";
 /**
  * Remote access as the app runs it: one environment server for the Coach hub,
  * started at launch once this computer has an identity (or on first use), the
- * Network access and keep-awake settings, and pairing codes for the Remote
- * access panel. The desktop window drives it over IPC (main.ts), which is the
- * only place `access:write` exists.
+ * one remote access switch (the same Wi-Fi, plus away from home once signed
+ * in), keep-awake, and pairing codes for the Remote access panel. The desktop
+ * window drives it over IPC (main.ts), which is the only place `access:write`
+ * exists.
  */
 
 const NETWORK_ACCESS_KEY = "remote.networkAccess";
@@ -114,6 +115,8 @@ export class RemoteAccess {
     this.prune();
     // Turns and staged approvals become text-free pushes while linked.
     this.options.hub.onEvent((frame) => this.cloud.noteCoachEvent(frame));
+    // Before one switch, the tunnel could run with the same Wi-Fi off; it now means both.
+    if (this.cloud.enabled && !this.networkAccess) this.options.settings.set(NETWORK_ACCESS_KEY, "1");
     // Reconnects the tunnel when linked and switched on (which starts the server).
     this.cloud.initialize();
     if (!hasRemoteIdentity(this.options.settings)) return;
@@ -237,13 +240,30 @@ export class RemoteAccess {
     };
   }
 
+  /**
+   * The remote access switch: the same Wi-Fi and, once signed in, away from
+   * home. Off stops both (the away-from-home link stays, so its address does).
+   */
   async setNetworkAccess(enabled: boolean): Promise<RemoteAccessStatus> {
     this.options.settings.set(NETWORK_ACCESS_KEY, enabled ? "1" : "0");
     if (!enabled) this.auth.cancelPairing();
     const server = await this.ensureStarted();
     await server.setNetworkAccess(enabled);
+    if (enabled) this.connectAway();
+    else await this.cloud.setEnabled(false);
     this.changed();
     return this.status();
+  }
+
+  /**
+   * Away from home joins the same Wi-Fi when there's an account or a link to
+   * use. It runs on its own (the status says "linking"); a missing cloudflared
+   * waits for the panel's download consent.
+   */
+  private connectAway(): void {
+    const cloud = this.cloud.status();
+    if (!cloud.available || cloud.enabled || !(cloud.account.signedIn || cloud.linked)) return;
+    void this.cloud.setEnabled(true).catch(() => undefined);
   }
 
   setKeepAwake(enabled: boolean): RemoteAccessStatus {
@@ -252,9 +272,9 @@ export class RemoteAccess {
     return this.status();
   }
 
-  /** A QR code for C-LINK. Needs Network access on and a local network to be on. */
+  /** A QR code for C-LINK. Needs remote access on and a local network to be on. */
   async createPairing(input: { viewOnly?: boolean } = {}): Promise<RemotePairingCode> {
-    if (!this.networkAccess) throw new Error("Turn on Network access first, so your iPhone can reach this computer.");
+    if (!this.networkAccess) throw new Error("Turn on remote access first, so your iPhone can reach this computer.");
     const server = await this.ensureStarted();
     const hosts = remoteLanAddresses();
     if (!hosts.length) {
@@ -325,9 +345,10 @@ export class RemoteAccess {
     return this.status();
   }
 
-  /** The `coroslink://auth/callback` deep link from the browser. */
-  handleAuthCallback(url: string): Promise<void> {
-    return this.cloud.handleAuthCallback(url);
+  /** The `coroslink://auth/callback` deep link from the browser. Signed in with remote access on: away from home joins in. */
+  async handleAuthCallback(url: string): Promise<void> {
+    await this.cloud.handleAuthCallback(url);
+    if (this.networkAccess) this.connectAway();
   }
 
   // ----- Keep awake -----
