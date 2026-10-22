@@ -67,6 +67,59 @@ export function Ridge({ values, peakWeek, unit, variant, label }: RidgeProps) {
   );
 }
 
+interface WeekProfileProps {
+  /** One value per week, in week order. */
+  values: number[];
+  /** Load bars take the sport's hue; session counts stay neutral, as on the ridge. */
+  variant: "load" | "count";
+  /** 1-based peak week from the plan summary, drawn at full strength. */
+  peakWeek?: number;
+  /** 1-based week the calendar run is in: weeks before it read as done, the rest step back. */
+  currentWeek?: number;
+  /** Names the quantity, e.g. "load" or "sessions". Used for the tooltip. */
+  unit: string;
+  /** Full sentence for assistive technology. */
+  label: string;
+}
+
+/**
+ * The ridge at tile size, inside a well: one bar per week, and once a plan is
+ * on the calendar, the week being trained lit.
+ */
+export function WeekProfile({ values, variant, peakWeek, currentWeek, unit, label }: WeekProfileProps) {
+  useLanguage();
+  if (values.length === 0) {
+    return <span className="tl-profile is-blank" aria-label={t("No weeks")}>&mdash;</span>;
+  }
+
+  const peak = Math.max(...values);
+
+  return (
+    <span className={`tl-profile is-${variant}`} role="img" aria-label={t(label)}>
+      {values.map((value, index) => {
+        const week = index + 1;
+        const state = [
+          value > 0 ? "" : " is-empty",
+          peakWeek === week && value > 0 ? " is-peak" : "",
+          currentWeek !== undefined && week < currentWeek ? " is-done" : "",
+          currentWeek === week ? " is-now" : ""
+        ].join("");
+        return (
+          <span
+            key={index}
+            className={`tl-profile-week${state}`}
+            title={t("Week {{value1}}: {{value2}} {{value3}}", { value1: String(week), value2: String(Math.round(value)), value3: String(unit) })}
+            style={{
+              "--tl-bar-height": value > 0 ? `${Math.max(peak > 0 ? value / peak : 0, MINIMUM_SHARE) * 100}%` : "2px",
+              "--tl-bar-index": index < STAGGER_LIMIT ? index : STAGGER_LIMIT
+            } as React.CSSProperties}
+          />
+        );
+      })}
+    </span>
+  );
+}
+
 export interface BulletWeek {
   weekLabel: string;
   planned: number;

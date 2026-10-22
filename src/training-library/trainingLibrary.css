@@ -1,20 +1,17 @@
 /*
  * Training Library
  *
- * A library is a record, so this surface keeps a ledger's discipline — hairline
- * columns, aligned figures — but dresses it in the app's own materials: glass
- * panels over ambient accent washes, one segmented control for the sections,
- * and the accent gradient reserved for moments of emphasis.
+ * A library is a record, so this surface keeps a ledger's discipline — aligned
+ * figures, quiet labels — in the Overview's raised material: graphite cards lit
+ * from above and edged by light and shadow instead of a hairline, raised tiles
+ * and keys inside them, recessed wells for fields, tracks and segmented
+ * controls, and duotone glyph tiles for sports. The accent stays the app's
+ * signature green; red and yellow stay reserved for danger and caution.
  *
- * The library is its own room in either theme: layered charcoal, never pure
- * black, when the app is dark; a deeper paper than the shell, panels lifted
- * off it in near-white, when the app is paper. The gate shares that ground.
- * The accent stays the app's signature green; red and yellow stay reserved
- * for danger and caution.
- *
- * Only one thing is ever drawn — the ridge of weekly training load (Ridge.tsx),
- * small on an index row and at reading size on the adherence lede. It keeps to
- * the accent hue alone; height carries the number.
+ * One picture recurs — a plan's weeks (Ridge.tsx): bars of training load, or
+ * stacks of sessions when COROS lists a plan without load. It is drawn small on
+ * a list row, in a well on a tile, at reading size on the plan being trained,
+ * and against completed load on the adherence lede.
  *
  * Motion follows the shell's cadence: the view enters in three beats, rows
  * settle, then ridges draw themselves. Everything sits under
@@ -32,10 +29,10 @@
    */
   --tl-rule: color-mix(in srgb, var(--text-muted) 32%, transparent);
   --tl-rule-soft: color-mix(in srgb, var(--text-muted) 17%, transparent);
-  --tl-panel-bg: color-mix(in srgb, var(--surface) 58%, transparent);
   --tl-row-hover: color-mix(in srgb, var(--accent) 6%, transparent);
   --tl-figure: 15px;
   --tl-column: 58px;
+  --tl-radius: 24px;
   /* The one motion signature every control in the view shares. */
   --tl-ease-out: cubic-bezier(0.2, 0.8, 0.25, 1);
 
@@ -48,11 +45,8 @@
   min-height: 0;
   padding: 30px 34px 24px;
   color: var(--text-primary);
-  background:
-    radial-gradient(1100px 460px at 16% -8%, var(--bg-ambient-green), transparent 62%),
-    radial-gradient(880px 420px at 90% -12%, var(--bg-ambient-teal), transparent 58%),
-    var(--tl-ground, var(--bg-base));
-  background-attachment: local;
+  /* The view sits in the shell's own content panel, so it adds no ground of its own. */
+  background: transparent;
   overflow: hidden;
 }
 
@@ -65,43 +59,46 @@
 /*
  * The library's own materials, stated once per theme.
  *
- * Both blocks work by pinning tokens on the view itself rather than inventing
- * new names, so everything downstream — this file, plus shared pieces like
- * .app-select and .primary-button — follows for free, and the modals the
- * editor and the workspace render inline inherit it all without a rule of
- * their own. Only what the library departs from is listed; the accent, the
- * status hues, and the ambient washes come from the app theme untouched.
+ * Surfaces, glass and text come from the app theme. What is pinned here is the
+ * raised material the Overview introduced (overviewBriefing.css, --ov-*), so a
+ * plan card and a readiness card read as the same object: graphite lit from
+ * above, a light rim on top and a shade along the bottom instead of a border,
+ * raised tiles and keys one step up inside it, and wells cut into it for fields,
+ * tracks and segmented controls. The library's cards keep a faint full rim the
+ * Overview lacks, because a borderless card on the shell's canvas lost its
+ * edges for users with dimmer displays.
  *
- * The two blocks are the same room lit from the same side. Dark stacks value
- * upward — ground, panel, tile — and paper stacks it the same way with the
- * range turned over: a deeper paper for the ground, near-white panels lifted
- * off it, white tiles. Depth is a sheen and a lit top edge on dark, where the
- * ground can still take light; on paper it is carried by the shadows instead,
- * which is why every raised recipe is a token rather than a literal.
- *
- * The gate shares both blocks so the connect screen sits on the same ground.
+ * The gate and the inline dialogs share both blocks.
  */
 :root:not([data-theme="paper"]) :is(.training-library-view, .training-library-gate) {
   color-scheme: dark;
 
+  --tl-raised: linear-gradient(160deg, #1f242b 0%, #1a1d23 60%, #171a1f 100%);
+  --tl-raised-solid: #1b1f24;
+  --tl-raised-rim: inset 0 1px 0 rgba(255, 255, 255, 0.075), inset 0 -1px 0 rgba(0, 0, 0, 0.28), inset 0 0 0 1px rgba(226, 234, 242, 0.055);
+  --tl-raised-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 24px -12px rgba(0, 0, 0, 0.55), 0 30px 60px -30px rgba(0, 0, 0, 0.6);
+  --tl-raised-shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.3), 0 18px 36px -14px rgba(0, 0, 0, 0.6), 0 44px 80px -34px rgba(0, 0, 0, 0.7);
+  --tl-raised-tile: linear-gradient(180deg, #252a32 0%, #1e2228 100%);
+  --tl-raised-tile-hover: linear-gradient(180deg, #2a3038 0%, #22272e 100%);
+  --tl-raised-tile-rim: inset 0 1px 0 rgba(255, 255, 255, 0.07), inset 0 -1px 0 rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --tl-glyph-face: linear-gradient(160deg, #2a2f37, #16191e);
+  --tl-glyph-rim: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+  --tl-well-face: #111317;
+  --tl-well-rim: inset 0 1px 3px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(226, 234, 242, 0.06);
+  --tl-pill: linear-gradient(180deg, #2b3038 0%, #23272e 100%);
+  --tl-pill-hover: linear-gradient(180deg, #333944 0%, #2a2f37 100%);
+  --tl-pill-rim: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.35);
+  --tl-divider: rgba(226, 234, 242, 0.085);
+
   --tl-ground: #16171b;
-  --tl-panel-bg: #1d1f25;
-  --tl-card: #23262e;
-  --tl-reader-bg: #1a1c21;
+  --tl-panel-bg: var(--surface);
+  --tl-card: var(--surface);
+  --tl-reader-bg: rgba(0, 0, 0, 0.16);
   /* Catalog plates sit a step below the panel; hovering lifts them back to it. */
   --tl-tile: #131418;
   --tl-tile-hover: #191b20;
 
-  --surface: #23262e;
-  --glass-bg: rgba(255, 255, 255, 0.04);
-  --glass-bg-hover: rgba(255, 255, 255, 0.07);
-  --glass-bg-elevated: rgba(255, 255, 255, 0.09);
-  --glass-border: rgba(255, 255, 255, 0.1);
   --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-
-  --text-primary: #edeef0;
-  --text-secondary: #a9adb2;
-  --text-muted: #7b8085;
 
   /* Light from above: a sheen down a raised surface, a lit hairline on its
      top edge, and a well for anything recessed into it. */
@@ -123,7 +120,7 @@
   --tl-shadow-lift: 0 4px 14px rgba(0, 0, 0, 0.14);
 
   /* Provenance: where a plan came from, never what it contains. */
-  --tl-source-coach: #c084fc;
+  --tl-source-coach: var(--text-secondary);
   --tl-source-template: #eab308;
 
   /* The calendar's phase hues (--step-* on .sched-detail), brought over so the
@@ -141,28 +138,35 @@
 :root[data-theme="paper"] :is(.training-library-view, .training-library-gate) {
   color-scheme: light;
 
+  /* One step darker than the theme's muted grey, so small text stays >= 4.5:1
+     in the wells (#e9ece6) as well as on the white cards. */
+  --text-muted: #5c6a61;
+
+  --tl-raised: linear-gradient(160deg, #ffffff 0%, #fbfcfa 62%, #f7f8f5 100%);
+  --tl-raised-solid: #fcfdfb;
+  --tl-raised-rim: inset 0 1px 0 #ffffff, inset 0 0 0 1px rgba(38, 52, 41, 0.08);
+  --tl-raised-shadow: 0 1px 2px rgba(30, 45, 35, 0.06), 0 10px 24px -14px rgba(30, 45, 35, 0.16), 0 30px 60px -34px rgba(30, 45, 35, 0.14);
+  --tl-raised-shadow-lift: 0 2px 4px rgba(30, 45, 35, 0.07), 0 18px 36px -16px rgba(30, 45, 35, 0.2), 0 44px 80px -38px rgba(30, 45, 35, 0.18);
+  --tl-raised-tile: linear-gradient(180deg, #f9faf8 0%, #f2f4f0 100%);
+  --tl-raised-tile-hover: linear-gradient(180deg, #ffffff 0%, #f5f7f3 100%);
+  --tl-raised-tile-rim: inset 0 1px 0 #ffffff, inset 0 0 0 1px rgba(38, 52, 41, 0.08);
+  --tl-glyph-face: linear-gradient(160deg, #ffffff, #eef1ec);
+  --tl-glyph-rim: inset 0 1px 0 #ffffff, inset 0 0 0 1px rgba(38, 52, 41, 0.08), 0 1px 2px rgba(30, 45, 35, 0.08);
+  --tl-well-face: #e9ece6;
+  --tl-well-rim: inset 0 1px 2px rgba(30, 45, 35, 0.14), inset 0 0 0 1px rgba(38, 52, 41, 0.05);
+  --tl-pill: linear-gradient(180deg, #ffffff 0%, #f3f5f1 100%);
+  --tl-pill-hover: linear-gradient(180deg, #ffffff 0%, #eaeee8 100%);
+  --tl-pill-rim: inset 0 0 0 1px rgba(38, 52, 41, 0.1), 0 1px 2px rgba(30, 45, 35, 0.08);
+  --tl-divider: rgba(38, 52, 41, 0.1);
+
   --tl-ground: #efebe1;
-  --tl-panel-bg: #fdfcf8;
-  --tl-card: #ffffff;
-  --tl-reader-bg: #f4f1e9;
+  --tl-panel-bg: var(--surface);
+  --tl-card: var(--surface);
+  --tl-reader-bg: rgba(38, 52, 41, 0.035);
   --tl-tile: #f5f2ea;
   --tl-tile-hover: #fbf9f4;
 
-  /*
-   * Controls take an ink wash rather than the app's white glass: the library's
-   * panels are already near-white, and a white-on-white fill leaves hover
-   * states with nothing to say.
-   */
-  --surface: #ffffff;
-  --glass-bg: rgba(38, 34, 28, 0.045);
-  --glass-bg-hover: rgba(38, 34, 28, 0.08);
-  --glass-bg-elevated: rgba(38, 34, 28, 0.1);
-  --glass-border: rgba(38, 34, 28, 0.14);
   --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.75);
-
-  --text-primary: #26251f;
-  --text-secondary: #55524a;
-  --text-muted: #857f74;
 
   /*
    * The sheen survives only where paper is not already white — the reader
@@ -187,7 +191,7 @@
   --tl-shadow-week: 0 1px 2px rgba(60, 50, 35, 0.05), 0 8px 22px rgba(60, 50, 35, 0.07);
   --tl-shadow-lift: 0 4px 14px rgba(60, 50, 35, 0.1);
 
-  --tl-source-coach: #7c3aed;
+  --tl-source-coach: var(--text-secondary);
   --tl-source-template: #a16207;
 
   /*
@@ -213,95 +217,99 @@
 
 /*
  * `.ghost-button` has no global base — each view sets its own — and the global
- * `.primary-button` is a 44px marketing button. Both are quieted here to sit on
- * a hairline row without shouting.
+ * `.primary-button` is a 44px marketing button. Here both are pills: a ghost
+ * button is a raised key in the card's own material, and the primary action
+ * is the one filled with the accent.
  */
 .training-library-view :is(.primary-button, .ghost-button) {
   display: inline-flex;
-  min-height: 32px;
+  min-height: 34px;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 0 13px;
-  border-radius: var(--radius-sm);
-  font-size: 12.5px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .training-library-view .primary-button {
-  border: 0;
   color: #fff;
   background: var(--accent-gradient);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    0 6px 18px color-mix(in srgb, var(--accent) 30%, transparent);
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.14);
+    0 1px 2px rgba(30, 45, 35, 0.16),
+    0 6px 16px -6px color-mix(in srgb, var(--accent) 60%, transparent);
   transition:
-    transform 170ms var(--tl-ease-out),
     box-shadow 170ms var(--tl-ease-out),
     filter 170ms ease;
 }
 
 .training-library-view .primary-button:hover:not(:disabled) {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.26),
-    0 10px 26px color-mix(in srgb, var(--accent) 38%, transparent);
-  filter: brightness(1.07);
-  transform: translateY(-1px);
+  filter: brightness(1.06);
 }
 
 .training-library-view .primary-button:active:not(:disabled) {
-  transform: translateY(0);
-  filter: brightness(0.97);
+  filter: brightness(0.96);
 }
 
-/* On the dark ground the bright mint gradient and its glow outshine the page;
-   a deeper, flat fill keeps the action obvious without glaring. */
+/* On graphite the bright mint gradient outshines the page; a deeper fill with
+   the same lit top edge as the raised keys keeps the action obvious without glare. */
 :root:not([data-theme="paper"]) .training-library-view .primary-button {
-  background: color-mix(in srgb, var(--accent) 58%, #0c0e11);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 66%, #0c0e11), color-mix(in srgb, var(--accent) 54%, #0c0e11));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 2px 8px rgba(0, 0, 0, 0.24);
-  text-shadow: none;
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2),
+    0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 :root:not([data-theme="paper"]) .training-library-view .primary-button:hover:not(:disabled) {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 4px 12px rgba(0, 0, 0, 0.28);
-  filter: brightness(1.1);
+  filter: brightness(1.12);
 }
 
 .training-library-view .ghost-button {
-  border: 1px solid var(--glass-border);
-  color: var(--text-secondary);
-  background: var(--glass-bg);
-  backdrop-filter: blur(8px);
+  color: var(--text-primary);
+  background: var(--tl-pill);
+  box-shadow: var(--tl-pill-rim);
   transition:
-    color 160ms ease,
-    background 160ms ease,
-    border-color 160ms ease,
-    transform 170ms var(--tl-ease-out),
-    box-shadow 170ms var(--tl-ease-out);
+    color 150ms ease,
+    background 150ms ease;
+}
+
+.training-library-view .ghost-button svg {
+  color: var(--text-secondary);
 }
 
 .training-library-view .ghost-button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--glass-border));
-  color: var(--text-primary);
-  background: var(--glass-bg-hover);
-  box-shadow: var(--tl-shadow-lift);
-  transform: translateY(-1px);
+  background: var(--tl-pill-hover);
 }
 
-.training-library-view .ghost-button.danger:hover:not(:disabled) {
+.training-library-view .ghost-button.danger:hover:not(:disabled),
+.training-library-view .ghost-button.danger:hover:not(:disabled) svg {
   color: var(--error-text);
-  border-color: var(--error-border);
 }
 
 .training-library-view :is(.primary-button, .ghost-button):disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* A sport's duotone figure on a small raised key, tinted from above in its hue. */
+.tl-glyph {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--tl-sport, var(--accent));
+  background:
+    radial-gradient(120% 90% at 30% 0%, color-mix(in srgb, var(--tl-sport, var(--accent)) 24%, transparent), transparent 70%),
+    var(--tl-glyph-face);
+  box-shadow: var(--tl-glyph-rim);
 }
 
 .training-library-view .icon-button {
@@ -335,116 +343,109 @@
 
 /* ---------------------------------------------------------------- Masthead */
 
+/* The Overview's head, quieter: the name in ink, one line on what the open
+   section holds, and the round raised key for the one action that is global. */
 .tl-masthead {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  padding-bottom: 22px;
+  padding-bottom: 20px;
+}
+
+.tl-masthead-title {
+  min-width: 0;
 }
 
 .tl-masthead h1 {
   margin: 0;
+  color: var(--text-primary);
   font-family: var(--font-display);
-  font-size: 32px;
+  font-size: 30px;
   font-weight: 600;
-  letter-spacing: -0.028em;
-  line-height: 1.1;
-  /* The signature gradient: ink settling into the accent, left to right. */
-  background: linear-gradient(
-    100deg,
-    var(--text-primary) 38%,
-    color-mix(in srgb, var(--accent-strong) 72%, var(--text-primary)) 88%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.025em;
+  line-height: 1.12;
 }
 
-/* The census replaces a tagline: what is actually in the library. */
-.tl-census {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 18px;
-  margin: 10px 0 0;
-  color: var(--text-muted);
-  font-size: 12.5px;
-}
-
-.tl-census span {
-  display: inline-flex;
-  align-items: baseline;
-}
-
-.tl-census b {
-  margin-right: 5px;
-  color: var(--accent-strong);
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+.tl-masthead-title p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  line-height: 1.4;
 }
 
 .tl-masthead-actions {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 10px;
 }
 
+.tl-round-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  background: var(--tl-pill);
+  box-shadow: var(--tl-pill-rim);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.tl-round-button:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--tl-pill-hover);
+}
+
+.tl-round-button:disabled {
+  cursor: default;
+}
+
+/* Sync trouble rides as a chip in a well, tinted only by its text. */
 .tl-state {
   display: inline-flex;
+  min-height: 28px;
   align-items: center;
   gap: 7px;
-  padding: 5px 11px;
-  border: 1px solid var(--glass-border);
+  padding: 0 12px 0 10px;
   border-radius: var(--radius-pill);
-  color: var(--text-muted);
-  background: var(--glass-bg);
-  font-size: 10.5px;
+  color: var(--warning-text);
+  background: var(--tl-well-face);
+  box-shadow: var(--tl-well-rim);
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .tl-state::before {
   width: 6px;
   height: 6px;
+  flex: none;
   border-radius: 50%;
-  background: var(--success-dot);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success-dot) 18%, transparent);
+  background: currentColor;
   content: "";
 }
 
-.tl-state.is-stale::before {
-  background: var(--warning-text);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning-text) 18%, transparent);
+.tl-state svg {
+  order: -1;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .tl-state::before {
-    animation: tl-dot-pulse 2.4s ease-in-out infinite;
-  }
-}
-
-@keyframes tl-dot-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--success-dot) 22%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--success-dot) 6%, transparent);
-  }
+.tl-state:has(svg)::before {
+  content: none;
 }
 
 .tl-notice {
   margin-bottom: 18px;
   padding: 11px 14px;
   border: 1px solid var(--warning-border);
-  border-radius: var(--radius-md);
+  border-radius: 14px;
   color: var(--warning-text);
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--warning-text) 10%, transparent), var(--warning-bg));
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--warning-text) 8%, transparent);
+  background: var(--warning-bg);
   font-size: 12.5px;
 }
 
@@ -464,19 +465,19 @@
 /* -------------------------------------------------------------- Section nav */
 
 /*
- * The same segmented control the shell uses for primary navigation: one glass
- * pill holding the sections, the active one raised into an accent-lit tile.
+ * A segmented control cut into the page: the sections sit in a recessed well
+ * and the open one is a raised key, as in the Overview's period picker.
  */
 .tl-sections {
   display: inline-flex;
   max-width: 100%;
-  gap: 4px;
-  margin-bottom: 20px;
+  align-self: flex-start;
+  gap: 2px;
+  margin-bottom: 22px;
   padding: 4px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  background: var(--glass-bg);
-  box-shadow: var(--shadow-inset);
+  border-radius: 14px;
+  background: var(--tl-well-face);
+  box-shadow: var(--tl-well-rim);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -493,43 +494,36 @@
 }
 
 .tl-sections button {
-  position: relative;
   display: inline-flex;
+  min-height: 34px;
   flex: none;
   align-items: center;
   gap: 8px;
-  min-height: 34px;
-  padding: 0 14px;
-  border: 1px solid transparent;
-  border-radius: calc(var(--radius-lg) - 5px);
-  color: var(--text-muted);
+  padding: 0 14px 0 12px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--text-secondary);
   background: none;
-  font-family: var(--font-display);
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: -0.005em;
   white-space: nowrap;
   cursor: pointer;
   transition:
-    color 180ms ease,
-    background 180ms ease,
-    border-color 180ms ease,
-    box-shadow 180ms ease;
+    color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .tl-sections button svg {
   width: 15px;
   height: 15px;
-  transition: color 180ms ease, transform 220ms var(--tl-ease-out);
+  flex: none;
+  color: var(--text-muted);
+  transition: color 160ms ease;
 }
 
 .tl-sections button:hover:not(:disabled) {
-  color: var(--text-secondary);
-  background: var(--glass-bg-hover);
-}
-
-.tl-sections button:hover:not(:disabled) svg {
-  transform: scale(1.08);
+  color: var(--text-primary);
 }
 
 .tl-sections button:disabled {
@@ -540,48 +534,36 @@
   opacity: 0.5;
 }
 
-/* The count rides as a small pill so the tab label stays the reading line. */
+/* The count is a quiet figure after the label, not a badge competing with it. */
 .tl-sections button span {
-  min-width: 20px;
-  padding: 1.5px 6px;
-  border-radius: var(--radius-pill);
   color: var(--text-muted);
-  background: color-mix(in srgb, var(--text-muted) 14%, transparent);
-  font-size: 10px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
-  text-align: center;
-  transition: color 180ms ease, background 180ms ease;
 }
 
 .tl-sections button[aria-current="page"] {
-  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
-  color: var(--accent-strong);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent) 16%, transparent), color-mix(in srgb, var(--accent) 9%, transparent));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--accent) 24%, transparent),
-    0 4px 14px color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text-primary);
+  background: var(--tl-pill);
+  box-shadow: var(--tl-pill-rim);
+}
+
+.tl-sections button[aria-current="page"] svg {
+  color: var(--accent);
 }
 
 .tl-sections button[aria-current="page"] span {
-  color: #fff;
-  background: var(--accent-gradient);
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 34%, transparent);
+  color: var(--text-secondary);
 }
 
 /* ------------------------------------------------------------------- Panels */
 
+/* Raised material: graphite lit from above, edged by light and shadow. */
 .tl-panel {
   min-width: 0;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  background:
-    radial-gradient(ellipse 90% 62% at 14% 0%, var(--bg-ambient-green), transparent 58%),
-    linear-gradient(180deg, var(--tl-sheen), var(--tl-sheen-fade) 42%),
-    var(--tl-panel-bg);
-  box-shadow: var(--shadow-card), var(--glass-inset);
-  backdrop-filter: blur(var(--glass-blur));
+  border-radius: var(--tl-radius);
+  background: var(--tl-raised);
+  box-shadow: var(--tl-raised-rim), var(--tl-raised-shadow);
   overflow: hidden;
 }
 
@@ -623,13 +605,13 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
-  padding: 18px 20px 15px;
+  padding: 20px 22px 16px;
 }
 
 .tl-panel > header h2 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.015em;
 }
@@ -637,17 +619,16 @@
 .tl-panel > header p {
   margin: 5px 0 0;
   max-width: 52ch;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 12.5px;
 }
 
+/* Labels are sentence case throughout, as on the Overview: small, set in weight, never tracked capitals. */
 .tl-eyebrow {
   margin: 0;
-  color: color-mix(in srgb, var(--accent-strong) 78%, var(--text-muted));
-  font-size: 10px;
+  color: var(--accent-strong);
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
 }
 
 /* ------------------------------------------------------------------ Filters */
@@ -656,9 +637,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px 14px;
-  padding: 13px 16px;
-  border-bottom: 1px solid var(--tl-rule);
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--tl-divider);
 }
 
 /* Sort, layout and the create action group at the right of the filter line. */
@@ -669,20 +650,20 @@
   margin-left: auto;
 }
 
+/* Fields are recessed into the page; the accent rings them while they are in use. */
 .tl-search {
   display: inline-flex;
   min-width: 0;
+  min-height: 36px;
   flex: 0 1 300px;
   align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--glass-border);
+  gap: 9px;
+  padding: 0 14px;
   border-radius: var(--radius-pill);
   color: var(--text-muted);
-  background: var(--glass-bg);
+  background: var(--tl-well-face);
+  box-shadow: var(--tl-well-rim);
   transition:
-    border-color 170ms ease,
     box-shadow 170ms ease,
     color 170ms ease,
     flex-basis 240ms var(--tl-ease-out);
@@ -706,55 +687,74 @@
   outline: 0;
 }
 
-/* The field wakes up: accent ring, soft outer glow, and a little more room. */
 .tl-search:focus-within {
   flex-basis: 340px;
-  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
   color: var(--accent);
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent),
-    0 6px 18px color-mix(in srgb, var(--accent) 10%, transparent);
+    var(--tl-well-rim),
+    0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
+/* Filter chips share one well; the chosen one is raised out of it. */
 .tl-chips {
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 13px;
+  background: var(--tl-well-face);
+  box-shadow: var(--tl-well-rim);
 }
 
 .tl-chips button {
-  padding: 5px 12px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-pill);
-  color: var(--text-muted);
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--text-secondary);
   background: none;
-  font-size: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
   transition:
-    color 160ms ease,
-    background 160ms ease,
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    transform 170ms var(--tl-ease-out);
+    color 150ms ease,
+    background 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .tl-chips button:hover {
-  color: var(--text-secondary);
-  border-color: color-mix(in srgb, var(--text-muted) 34%, transparent);
-  background: var(--glass-bg);
-  transform: translateY(-1px);
+  color: var(--text-primary);
 }
 
 .tl-chips button[aria-pressed="true"] {
-  color: var(--accent-strong);
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent) 15%, transparent), color-mix(in srgb, var(--accent) 8%, transparent));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--accent) 20%, transparent),
-    0 3px 10px color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text-primary);
+  background: var(--tl-pill);
+  box-shadow: var(--tl-pill-rim);
+}
+
+/* Dropdowns on a filter line are raised pills, the same key as a ghost button. */
+.training-library-view .tl-filters .tl-quiet-select:not(.is-wide) .app-select-trigger {
+  min-height: 36px;
+  gap: 8px;
+  padding: 0 11px 0 15px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--text-primary);
+  background: var(--tl-pill);
+  box-shadow: var(--tl-pill-rim);
+  font-size: 13px;
   font-weight: 600;
+}
+
+.training-library-view .tl-filters .tl-quiet-select:not(.is-wide) .app-select-trigger:hover,
+.training-library-view .tl-filters .tl-quiet-select:not(.is-wide) .app-select-trigger[aria-expanded="true"] {
+  background: var(--tl-pill-hover);
+}
+
+.training-library-view .tl-filters .tl-quiet-select .app-select-icon {
+  color: var(--text-muted);
 }
 
 /* The "show more" control spans the whole tile grid rather than one cell. */
@@ -772,7 +772,7 @@
   gap: 8px;
   margin: 0;
   padding: 10px 18px;
-  border-bottom: 1px solid var(--tl-rule);
+  border-bottom: 1px solid var(--tl-divider);
   color: var(--warning-text);
   background: color-mix(in srgb, var(--warning-bg) 60%, transparent);
   font-size: 12px;
@@ -782,16 +782,16 @@
   flex: none;
 }
 
+/* Selection actions: the count in the accent, every action a small raised key. */
 .tl-bulk {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 9px 16px;
-  border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--accent) 12%, transparent), color-mix(in srgb, var(--accent) 5%, transparent));
-  font-size: 12px;
+  gap: 6px;
+  padding: 8px 12px 8px 18px;
+  border-bottom: 1px solid var(--tl-divider);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  font-size: 12.5px;
   animation: tl-bulk-in 240ms var(--tl-ease-out) both;
 }
 
@@ -814,36 +814,58 @@
 .tl-bulk strong {
   margin-right: 6px;
   color: var(--accent-strong);
-  font-family: var(--font-display);
   font-weight: 600;
 }
 
-.tl-bulk button {
+.tl-bulk button,
+.training-library-view .tl-bulk .tl-quiet-select .app-select-trigger {
   display: inline-flex;
+  min-height: 30px;
   align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border: 1px solid var(--glass-border);
+  gap: 6px;
+  padding: 0 12px;
+  border: 0;
   border-radius: var(--radius-pill);
-  color: var(--text-secondary);
-  background: var(--glass-bg);
-  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--tl-pill);
+  box-shadow: var(--tl-pill-rim);
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
 }
 
-.tl-bulk button:hover:not(:disabled) {
-  color: var(--text-primary);
-  background: var(--glass-bg-hover);
+.tl-bulk button svg {
+  color: var(--text-secondary);
+}
+
+.tl-bulk button:hover:not(:disabled),
+.training-library-view .tl-bulk .tl-quiet-select .app-select-trigger:hover {
+  background: var(--tl-pill-hover);
 }
 
 .tl-bulk button:disabled {
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-.tl-bulk button.danger:hover {
+.tl-bulk button.danger:hover:not(:disabled),
+.tl-bulk button.danger:hover:not(:disabled) svg {
   color: var(--error-text);
-  border-color: var(--error-border);
+}
+
+/* Clearing the selection is the quiet way out, so it is a bare round key. */
+.tl-bulk button:last-child:has(> svg:only-child) {
+  width: 30px;
+  justify-content: center;
+  margin-left: auto;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.tl-bulk button:last-child:has(> svg:only-child):hover {
+  background: var(--tl-pill);
+  box-shadow: var(--tl-pill-rim);
 }
 
 /* -------------------------------------------------------------- Ledger index */
@@ -863,15 +885,12 @@
   position: sticky;
   z-index: 2;
   top: 0;
-  padding: 9px 16px;
-  border-bottom: 1px solid var(--tl-rule);
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--tl-divider);
   color: var(--text-muted);
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  backdrop-filter: blur(12px);
-  font-size: 9.5px;
+  background: var(--tl-raised-solid);
+  font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
 }
 
 .tl-index-head .tl-column-label,
@@ -934,13 +953,13 @@
 
 .tl-plan-row {
   grid-template-columns:
-    16px minmax(0, 1fr)
+    18px minmax(0, 1fr)
     var(--tl-column) var(--tl-column) var(--tl-column) 62px
     132px 92px;
 }
 
 .tl-workout-row {
-  grid-template-columns: 16px minmax(0, 1fr) 88px 50px 44px;
+  grid-template-columns: 18px minmax(0, 1fr) 88px 50px 44px;
 }
 
 /* The row's own body is the primary target; it stays a plain block of text. */
@@ -959,6 +978,43 @@
 
 .tl-row-open.is-static {
   cursor: default;
+}
+
+/* A plan row leads with its sport's glyph tile, as the Overview's list rows do. */
+.tl-row-open.has-glyph {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.tl-row-open.has-glyph .tl-glyph {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+
+.tl-row-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tl-row-name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The weeks at row size: the same drawing as the tile, a line tall. */
+.tl-row .tl-profile {
+  height: 26px;
+  gap: 2px;
+}
+
+.tl-row .tl-profile-week {
+  flex-basis: 8px;
+  border-radius: 1.5px;
 }
 
 .tl-row-name {
@@ -989,7 +1045,7 @@
   gap: 7px;
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -1010,16 +1066,14 @@
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: 5px;
-  padding: 1px 7px 1px 6px;
+  gap: 6px;
+  padding: 1px 8px 1px 7px;
   border-radius: var(--radius-pill);
   color: var(--accent-strong);
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
-  font-size: 9.5px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-size: 11px;
   font-style: normal;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .tl-live::before {
@@ -1032,19 +1086,22 @@
   content: "";
 }
 
-.tl-card.is-on-calendar { border-color: color-mix(in srgb, var(--accent) 34%, var(--glass-border)); }
-.tl-card.is-on-calendar::before { opacity: 0.7; }
-.tl-plan-card-footer > span.is-live { color: var(--accent-strong); font-weight: 600; }
 
+/* Sentence case like every other label; a raw sync state ("pending") gets its capital here. */
 .tl-flag {
+  display: inline-block;
   flex: none;
-  padding: 1px 6px;
+  padding: 2px 8px;
   border-radius: var(--radius-pill);
   color: var(--warning-text);
-  background: var(--warning-bg);
-  font-size: 9.5px;
+  background: color-mix(in srgb, var(--warning-text) 12%, transparent);
+  font-size: 11px;
   font-style: normal;
-  letter-spacing: 0.06em;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.tl-flag::first-letter {
   text-transform: uppercase;
 }
 
@@ -1077,11 +1134,9 @@
   border-radius: var(--radius-pill);
   color: color-mix(in srgb, var(--tl-sport, var(--accent-strong)) 82%, var(--text-primary));
   background: color-mix(in srgb, var(--tl-sport, var(--accent)) 10%, transparent);
-  font-size: 9.5px;
+  font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.1em;
-  line-height: 1.5;
-  text-transform: uppercase;
+  line-height: 1.45;
   white-space: nowrap;
 }
 
@@ -1179,33 +1234,44 @@
   font-weight: 500;
 }
 
+/* A raised key that fills with the accent and takes a check when chosen. */
 .tl-mark {
-  width: 15px;
-  height: 15px;
+  position: relative;
+  width: 18px;
+  height: 18px;
+  flex: none;
   padding: 0;
-  border: 1.5px solid color-mix(in srgb, var(--text-muted) 52%, transparent);
-  border-radius: 5px;
-  background: none;
+  border: 0;
+  border-radius: 6px;
+  background: var(--tl-pill);
+  box-shadow: var(--tl-pill-rim), inset 0 0 0 1px color-mix(in srgb, var(--text-muted) 34%, transparent);
   cursor: pointer;
   transition:
-    border-color 160ms ease,
     background 160ms ease,
     box-shadow 160ms ease,
     transform 160ms var(--tl-ease-out);
 }
 
 .tl-mark:hover {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: var(--tl-pill-rim), inset 0 0 0 1.5px var(--accent);
 }
 
 .tl-mark[aria-checked="true"] {
-  border-color: var(--accent);
-  background: var(--accent-gradient);
-  box-shadow:
-    inset 0 0 0 2px color-mix(in srgb, var(--surface) 80%, transparent),
-    0 2px 8px color-mix(in srgb, var(--accent) 32%, transparent);
+  background: var(--accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 2px rgba(0, 0, 0, 0.25);
   animation: tl-mark-pop 220ms var(--tl-ease-out);
+}
+
+.tl-mark[aria-checked="true"]::after {
+  position: absolute;
+  top: 3px;
+  left: 6.5px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  content: "";
+  transform: rotate(45deg);
 }
 
 @keyframes tl-mark-pop {
@@ -1382,10 +1448,8 @@
   gap: 7px;
   padding-right: 24px;
   color: var(--text-muted);
-  font-size: 9.5px;
+  font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
 }
 
 .tl-card-top em {
@@ -1535,25 +1599,26 @@
  * width when the reader takes its 392px and when it collapses away.
  */
 .tl-catalog .tl-grid {
+  /* A tile clips its corners, which makes it a scroll container: in a scroller
+     with no free space its row would stay at min-height and cut the footer. */
+  grid-auto-rows: max-content;
   grid-template-columns: repeat(auto-fill, minmax(246px, 1fr));
   gap: 14px;
   padding: 18px;
 }
 
 /*
- * The tile is a plate sunk below the panel rather than raised over it: one
- * step back from the panel's value in either theme, one hairline, and no
- * accent stripe, wash, or glow. All the colour a tile carries is the sport's,
- * and only where the sport is the information — the badge, the load bar, the
- * glyph behind them.
+ * Inside the raised panel a workout is a raised tile, one step up, as the
+ * Overview's vitals sit inside their card. All the colour a tile carries is
+ * the sport's, and only where the sport is the information — the badge, the
+ * load bar, the glyph behind them. Reading and selection read as a ring.
  */
 .tl-catalog .tl-card {
   min-height: 190px;
-  border-color: var(--tl-rule-soft);
-  background: var(--tl-tile);
-  box-shadow:
-    inset 0 1px 0 var(--tl-well),
-    var(--tl-shadow-plate);
+  border: 0;
+  border-radius: 18px;
+  background: var(--tl-raised-tile);
+  box-shadow: var(--tl-raised-tile-rim);
 }
 
 /* ::before is the accent wash, ::after the sport stripe. Neither survives. */
@@ -1565,32 +1630,24 @@
 
 .tl-catalog .tl-card:hover,
 .tl-catalog .tl-card[data-accent]:hover {
-  border-color: color-mix(in srgb, var(--text-muted) 48%, transparent);
-  background: var(--tl-tile-hover);
-  box-shadow:
-    inset 0 1px 0 var(--tl-well),
-    var(--tl-shadow-plate-hover);
+  background: var(--tl-raised-tile-hover);
+  box-shadow: var(--tl-raised-tile-rim), var(--tl-shadow-plate-hover);
   transform: translateY(-2px);
 }
 
-/* Reading and selection read as light on the edge, never as hue. */
 .tl-catalog .tl-card.is-active,
 .tl-catalog .tl-card[data-accent].is-active {
-  border-color: color-mix(in srgb, var(--text-primary) 40%, transparent);
-  background: var(--tl-tile-hover);
+  background: var(--tl-raised-tile-hover);
   box-shadow:
-    inset 0 1px 0 var(--tl-well),
-    0 0 0 1px color-mix(in srgb, var(--text-primary) 14%, transparent),
-    var(--tl-shadow-plate-held);
+    var(--tl-raised-tile-rim),
+    inset 0 0 0 1.5px color-mix(in srgb, var(--text-primary) 42%, transparent);
 }
 
 .tl-catalog .tl-card.is-selected,
 .tl-catalog .tl-card[data-accent].is-selected {
-  border-color: color-mix(in srgb, var(--text-primary) 58%, transparent);
   box-shadow:
-    inset 0 1px 0 var(--tl-well),
-    0 0 0 1px color-mix(in srgb, var(--text-primary) 24%, transparent),
-    var(--tl-shadow-plate-held);
+    var(--tl-raised-tile-rim),
+    inset 0 0 0 1.5px var(--accent);
 }
 
 .tl-catalog .tl-card-open {
@@ -1686,10 +1743,8 @@
 
 .tl-wk-meter-head small {
   color: var(--text-muted);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: 11.5px;
+  font-weight: 500;
 }
 
 .tl-wk-meter-head b {
@@ -1716,11 +1771,9 @@
 
 .tl-wk-load em {
   color: var(--text-muted);
-  font-size: 9.5px;
+  font-size: 11.5px;
   font-style: normal;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-weight: 500;
 }
 
 /*
@@ -1887,41 +1940,42 @@
 
 /* -------------------------------------------------------- Layout switch */
 
+/* Grid or list: two keys in a well, the chosen one raised. */
 .tl-layout-switch {
   display: inline-flex;
   flex: none;
   gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-sm);
-  background: var(--glass-bg);
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--tl-well-face);
+  box-shadow: var(--tl-well-rim);
 }
 
 .tl-layout-switch button {
   display: inline-flex;
-  width: 27px;
-  height: 25px;
+  width: 34px;
+  height: 30px;
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
   background: none;
   cursor: pointer;
   transition:
-    color 160ms ease,
-    background 160ms ease,
-    box-shadow 160ms ease;
+    color 150ms ease,
+    background 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .tl-layout-switch button:hover {
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .tl-layout-switch button[aria-pressed="true"] {
-  color: var(--accent-strong);
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text-primary);
+  background: var(--tl-pill);
+  box-shadow: var(--tl-pill-rim);
 }
 
 /* ------------------------------------------------- The ridge (the signature) */
@@ -1992,7 +2046,7 @@
 /*
  * Sport accent. A tile or row with [data-accent] carries --tl-sport-accent
  * inline (see sportTheme): the tile borrows the sport's hue for its top
- * stripe, hover glow, and load ridge; the row gets a quiet leading edge.
+ * stripe, hover glow, and load ridge; a selected row takes a wash of it.
  * Grey session-count ridges stay grey so they are never mistaken for load.
  */
 .tl-card[data-accent]::after {
@@ -2037,10 +2091,6 @@
 
 .tl-card[data-accent] .tl-card-top > svg {
   color: var(--tl-sport-accent);
-}
-
-.tl-row[data-accent] {
-  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--tl-sport-accent) 72%, transparent);
 }
 
 .tl-row[data-accent].is-selected {
@@ -2127,7 +2177,7 @@
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  border-right: 1px solid var(--tl-rule);
+  border-right: 1px solid var(--tl-divider);
 }
 
 .tl-catalog > :is(.tl-grid, .tl-index) {
@@ -2329,12 +2379,10 @@
 .tl-reader-metrics dt {
   overflow: hidden;
   color: var(--text-muted);
-  /* Like the figure, the label scales with the panel so DISTANCE never clips. */
-  font-size: clamp(8.2px, 2.3cqi, 9px);
-  font-weight: 600;
-  letter-spacing: clamp(0.8px, 0.26cqi, 1.1px);
+  /* Like the figure, the label scales with the panel so Distance never clips. */
+  font-size: clamp(10px, 2.9cqi, 11.5px);
+  font-weight: 500;
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -2526,10 +2574,8 @@
   justify-content: space-between;
   margin: 0;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
 }
 
 .tl-steps-label span {
@@ -2928,13 +2974,25 @@
 
 .tl-collection-create input {
   min-width: 0;
-  min-height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-sm);
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
   color: var(--text-primary);
-  background: var(--glass-bg);
-  font-size: 12.5px;
+  background: var(--tl-well-face);
+  box-shadow: var(--tl-well-rim);
+  font-size: 13px;
+}
+
+.tl-collection-create input::placeholder {
+  color: var(--text-muted);
+}
+
+.training-library-view .tl-collection-create input:focus-visible {
+  outline: 0;
+  box-shadow:
+    var(--tl-well-rim),
+    0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .tl-collections ul {
@@ -3083,9 +3141,11 @@
 
 .tl-tally dt {
   color: var(--text-muted);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.15em;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.tl-tally dt::first-letter {
   text-transform: uppercase;
 }
 
@@ -4694,21 +4754,22 @@
   }
 
   /* One orchestrated moment: rows settle in, then the ridges draw themselves. */
-  :is(.tl-index ul, .tl-grid) > li {
+  :is(.tl-index ul, .tl-grid, .tl-plan-grid) > li {
     animation: tl-settle 300ms cubic-bezier(0.2, 0.8, 0.25, 1) backwards;
   }
 
-  :is(.tl-index ul, .tl-grid) > li:nth-child(1) { animation-delay: 170ms; }
-  :is(.tl-index ul, .tl-grid) > li:nth-child(2) { animation-delay: 196ms; }
-  :is(.tl-index ul, .tl-grid) > li:nth-child(3) { animation-delay: 222ms; }
-  :is(.tl-index ul, .tl-grid) > li:nth-child(4) { animation-delay: 248ms; }
-  :is(.tl-index ul, .tl-grid) > li:nth-child(5) { animation-delay: 274ms; }
-  :is(.tl-index ul, .tl-grid) > li:nth-child(6) { animation-delay: 300ms; }
-  :is(.tl-index ul, .tl-grid) > li:nth-child(7) { animation-delay: 326ms; }
-  :is(.tl-index ul, .tl-grid) > li:nth-child(8) { animation-delay: 352ms; }
-  :is(.tl-index ul, .tl-grid) > li:nth-child(n + 9) { animation-delay: 378ms; }
+  :is(.tl-index ul, .tl-grid, .tl-plan-grid) > li:nth-child(1) { animation-delay: 170ms; }
+  :is(.tl-index ul, .tl-grid, .tl-plan-grid) > li:nth-child(2) { animation-delay: 196ms; }
+  :is(.tl-index ul, .tl-grid, .tl-plan-grid) > li:nth-child(3) { animation-delay: 222ms; }
+  :is(.tl-index ul, .tl-grid, .tl-plan-grid) > li:nth-child(4) { animation-delay: 248ms; }
+  :is(.tl-index ul, .tl-grid, .tl-plan-grid) > li:nth-child(5) { animation-delay: 274ms; }
+  :is(.tl-index ul, .tl-grid, .tl-plan-grid) > li:nth-child(6) { animation-delay: 300ms; }
+  :is(.tl-index ul, .tl-grid, .tl-plan-grid) > li:nth-child(7) { animation-delay: 326ms; }
+  :is(.tl-index ul, .tl-grid, .tl-plan-grid) > li:nth-child(8) { animation-delay: 352ms; }
+  :is(.tl-index ul, .tl-grid, .tl-plan-grid) > li:nth-child(n + 9) { animation-delay: 378ms; }
 
   .tl-ridge-bar,
+  .tl-profile-week,
   .tl-bullet b,
   .tl-bullet i {
     animation: tl-grow 460ms cubic-bezier(0.2, 0.85, 0.3, 1) backwards;
@@ -4880,10 +4941,15 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  /* The refresh key stays beside the title; only the sync chip wraps under it. */
   .tl-masthead {
     align-items: flex-start;
-    flex-direction: column;
+    flex-wrap: wrap;
     gap: 14px;
+  }
+
+  .tl-masthead-title {
+    flex: 1 1 260px;
   }
 
   .tl-sections {
@@ -5866,87 +5932,47 @@
   .plan-generator-stages li.is-active .plan-generator-stage-dot::after { animation: none; }
 }
 
-/* Plan browsing: readable summaries and a labeled weekly silhouette. */
-.tl-intro {
-  margin: 8px 0 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
+/* ---------------------------------------------- Plans: board, tiles, hero */
 
+/*
+ * The plan library has no panel of its own: the filter line sits on the page,
+ * and every plan is its own raised card below it, as the Overview's cards are.
+ */
 .tl-plan-library {
-  border: 0;
   border-radius: 0;
-  background: transparent;
+  background: none;
   box-shadow: none;
-  backdrop-filter: none;
+  overflow: visible;
 }
 
-.tl-plan-library > .tl-plan-heading {
-  align-items: center;
-  padding: 8px 0 20px;
+.tl-plan-library > .tl-filters {
+  padding: 0;
+  border-bottom: 0;
 }
 
-.tl-plan-heading h2 {
-  font-size: 21px;
-  letter-spacing: -0.035em;
+.tl-plan-library .tl-filters-tail {
+  flex-wrap: wrap;
 }
 
-.tl-plan-heading p {
-  color: var(--text-secondary);
-  line-height: 1.5;
+.tl-plan-library .tl-search {
+  flex: 1 1 220px;
+  max-width: 340px;
 }
 
 .tl-plan-create {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-left: 8px;
+  margin-left: 4px;
 }
 
 .tl-plan-create :is(.primary-button, .ghost-button) {
-  min-height: 38px;
-  border-radius: 11px;
-}
-
-.tl-plan-library > .tl-filters {
-  margin: 0;
-  padding: 0 0 4px;
-  gap: 12px;
-  border-bottom: 0;
-}
-
-.tl-plan-library .tl-filters-tail {
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-@media (max-width: 1000px) {
-  .tl-plan-library .tl-filters-tail {
-    flex: 1 1 100%;
-    margin-left: 0;
-  }
-  .tl-plan-library .tl-plan-create { margin-left: auto; }
-}
-
-@media (max-width: 480px) {
-  .tl-plan-library .tl-plan-create {
-    flex: 1 1 100%;
-    margin-left: 0;
-    padding-left: 0;
-    border-left: 0;
-  }
-}
-
-.tl-plan-library .tl-search {
-  flex: 1 1 220px;
-  max-width: 320px;
   min-height: 36px;
-  border-radius: 10px;
 }
 
 .tl-selection-hint {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .tl-plan-results {
@@ -5957,183 +5983,549 @@
   gap: 12px;
   padding: 16px 0 0;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
-.tl-plan-results strong { color: var(--text-primary); font-weight: 600; }
-
-.tl-plan-library > .tl-grid {
-  grid-auto-rows: max-content;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
-  gap: 18px;
-  padding: 18px 2px 24px;
+.tl-plan-results strong {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
-.tl-plan-library .tl-card {
-  isolation: isolate;
-  border-radius: 17px;
-  border-color: color-mix(in srgb, var(--text-secondary) 20%, transparent);
+/* Off the panel, the selection bar floats as its own raised strip. */
+.tl-plan-library > .tl-bulk {
+  margin-top: 16px;
+  border-bottom: 0;
+  border-radius: 16px;
   background:
-    linear-gradient(145deg, var(--tl-sheen-lit), var(--tl-sheen-fade) 48%),
-    color-mix(in srgb, var(--tl-card) 62%, transparent);
-  -webkit-backdrop-filter: blur(24px) saturate(130%);
-  backdrop-filter: blur(24px) saturate(130%);
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%),
+    var(--tl-raised);
+  box-shadow: var(--tl-raised-rim), var(--tl-raised-shadow);
+}
+
+/*
+ * The board scrolls; its side padding is pulled back out of the view's gutter so
+ * a card's shadow and hover lift are never clipped at the scroller's edge.
+ */
+.tl-plan-library > :is(.tl-plan-board, .tl-index, .tl-empty) {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.tl-plan-board {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin: 0 -24px;
+  padding: 20px 24px 32px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--glass-border) transparent;
+  /* Cards slide out under the filter line instead of being cut at it. */
+  mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 22px), transparent);
+}
+
+.tl-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ---- Tile */
+
+.tl-plan-tile {
+  --tl-hue: var(--tl-sport-accent, var(--accent));
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  border-radius: 22px;
+  /* The sport's hue glows in from the top-right corner, as on the Overview's cards. */
+  background:
+    radial-gradient(70% 80% at 100% 0%, color-mix(in srgb, var(--tl-hue) 9%, transparent), transparent 70%),
+    var(--tl-raised);
+  box-shadow: var(--tl-raised-rim), var(--tl-raised-shadow);
+  transition:
+    box-shadow 220ms var(--tl-ease-out),
+    transform 220ms var(--tl-ease-out);
+}
+
+.tl-plan-tile:hover {
+  box-shadow: var(--tl-raised-rim), var(--tl-raised-shadow-lift);
+  transform: translateY(-2px);
+}
+
+.tl-plan-tile.is-selected {
   box-shadow:
-    inset 0 1px 0 var(--tl-edge-light),
-    inset 0 -1px 0 var(--tl-well),
-    var(--tl-shadow-card);
+    var(--tl-raised-rim),
+    inset 0 0 0 1.5px var(--accent),
+    var(--tl-raised-shadow);
 }
 
-/* Diffuse the color layer only: labels and controls stay crisp above it. */
-.tl-plan-library .tl-card::before,
-.tl-plan-library .tl-card[data-accent]::before {
-  inset: -24px;
-  z-index: -1;
-  background:
-    radial-gradient(ellipse at 5% 5%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 65%),
-    radial-gradient(ellipse at 100% 90%, color-mix(in srgb, var(--accent-2) 6%, transparent), transparent 60%);
-  filter: blur(22px);
-  opacity: 0.8;
+.tl-plan-tile-open {
+  display: flex;
+  min-width: 0;
+  flex: 1 0 auto;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 20px 16px;
+  border: 0;
+  border-radius: 22px 22px 0 0;
+  color: inherit;
+  background: none;
+  text-align: left;
+  cursor: pointer;
 }
 
-.tl-plan-library .tl-card:hover::before,
-.tl-plan-library .tl-card.is-selected::before {
+.training-library-view .tl-plan-tile-open:focus-visible {
+  outline-offset: -2px;
+}
+
+.tl-plan-tile-head {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 12px;
+  /* Room for the selection mark in the corner. */
+  padding-right: 26px;
+}
+
+.tl-plan-tile-title {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.tl-plan-tile-name {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* Provenance, then the sports: where the plan came from, then what it trains. */
+.tl-plan-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.tl-plan-meta > svg {
+  flex: none;
+  color: var(--accent);
+}
+
+.tl-plan-meta :is(em, .tl-source) {
+  flex: none;
+  font-style: normal;
+}
+
+.tl-plan-meta em {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tl-plan-meta > :is(em, .tl-source) + em::before {
+  margin-right: 6px;
+  color: var(--text-muted);
+  content: "·";
+}
+
+.tl-plan-meta .tl-source[data-source="local"] {
+  color: var(--text-muted);
+}
+
+.tl-plan-tile-note {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* The weeks sit in a recessed well; the auto margin lands it on the tile floor
+   so wells line up across a row however far a name wraps. */
+.tl-plan-well {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: auto;
+  padding: 12px 14px 14px;
+  border-radius: 14px;
+  background: var(--tl-well-face);
+  box-shadow: var(--tl-well-rim);
+}
+
+.tl-plan-caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.tl-plan-caption > span:not(:first-child) {
+  color: var(--text-secondary);
+}
+
+/* Three figures read as one instrument: label above, value below, hairlines between. */
+.tl-plan-figs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tl-plan-figs > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 0 14px;
+  border-left: 1px solid var(--tl-divider);
+}
+
+.tl-plan-figs > span:first-child {
+  padding-left: 2px;
+  border-left: 0;
+}
+
+.tl-plan-figs small {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.tl-plan-figs b {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-plan-figs b.is-nil {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.tl-plan-tile-foot {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 50px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 20px;
+  border-top: 1px solid var(--tl-divider);
+}
+
+/* Short by construction ("Week 3 of 10", "Starts Oct 24"), so it never clips: clipping would cut the live dot's ring. */
+.tl-plan-status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.tl-plan-status svg {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.tl-plan-status.is-live {
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+/* A plan on the calendar answers with the live dot the Overview uses for "now". */
+.tl-plan-status.is-live > i {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.tl-plan-tile-foot .tl-flag {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-plan-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  margin-left: auto;
+  transition: opacity 140ms ease;
+}
+
+/*
+ * A tile keeps its actions out of the way until it is reached. They take no
+ * room at rest, so the status and any warning read in full; reaching the tile
+ * swaps the warnings for the actions in the same place.
+ */
+.tl-plan-tile .tl-plan-actions {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.tl-plan-tile-foot .tl-flag {
+  transition: opacity 140ms ease;
+}
+
+.tl-plan-tile:is(:hover, :focus-within, .is-selected) .tl-plan-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tl-plan-tile:is(:hover, :focus-within, .is-selected) .tl-plan-tile-foot .tl-flag {
+  opacity: 0;
+}
+
+.tl-plan-actions button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--text-muted);
+  background: none;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.tl-plan-actions button:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--tl-pill);
+  box-shadow: var(--tl-pill-rim);
+}
+
+.tl-plan-actions button.danger:hover:not(:disabled) {
+  color: var(--error-text);
+}
+
+.tl-plan-actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* The selection mark waits in the corner until a tile is reached or a selection starts. */
+.tl-plan-tile > .tl-mark {
+  position: absolute;
+  top: 22px;
+  right: 18px;
+  z-index: 1;
+}
+
+.tl-plan-tile > .tl-mark {
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.tl-plan-tile:hover > .tl-mark,
+.tl-plan-grid.is-selecting .tl-mark,
+.tl-plan-tile > .tl-mark:focus-visible,
+.tl-plan-tile > .tl-mark[aria-checked="true"] {
   opacity: 1;
 }
 
-/* Sport identity lives in the surface instead of a hard top stripe. */
-.tl-plan-library .tl-card[data-accent]::after {
-  content: none;
-}
-
-.tl-plan-library .tl-card.is-selected,
-.tl-plan-library .tl-card[data-accent].is-selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
-}
-
-@supports not (backdrop-filter: blur(1px)) {
-  .tl-plan-library .tl-card { background-color: var(--tl-card); }
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .tl-plan-library .tl-card {
-    background: var(--tl-card);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
+/* Without a pointer there is no reaching a tile: the actions stay, after the status. */
+@media (hover: none) {
+  .tl-plan-tile-foot {
+    flex-wrap: wrap;
+    padding-block: 8px;
   }
-  .tl-plan-library .tl-card::before { display: none; }
+
+  .tl-plan-tile .tl-plan-actions {
+    position: static;
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+
+  .tl-plan-tile .tl-plan-tile-foot .tl-flag,
+  .tl-plan-tile > .tl-mark {
+    opacity: 1;
+  }
 }
 
-.tl-plan-library .tl-card-open { flex: 1 0 auto; padding: 20px 20px 16px; gap: 12px; }
-.tl-plan-library .tl-card-name { font-size: 17px; line-height: 1.4; min-height: 2.8em; }
-.tl-plan-library .tl-card-note { color: var(--text-secondary); font-size: 12px; }
-.tl-plan-library .tl-card > .tl-mark { top: 18px; right: 17px; }
+/* ---- Week profile (Ridge.tsx WeekProfile) */
 
-.tl-plan-sports {
+/*
+ * The ridge at tile size: one bar per week from the left, so a longer plan
+ * draws a longer ridge. Load takes the sport's hue with the peak week at full
+ * strength; a plan COROS lists without load draws its sessions per week in
+ * the neutral session colour. Once a plan is on the calendar the week being
+ * trained is lit and the weeks ahead step back.
+ */
+.tl-profile {
   display: flex;
-  flex-wrap: wrap;
+  height: 44px;
+  min-width: 0;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.tl-profile.is-blank {
   align-items: center;
-  min-height: 22px;
-  gap: 8px 12px;
-  color: var(--text-secondary);
-  font-size: 11px;
+  color: var(--text-muted);
 }
 
-.tl-plan-sports .tl-sport-badge { font-size: 11px; }
-.tl-plan-sports .tl-sport-badge svg { width: 13px; height: 13px; }
-
-.tl-plan-profile {
-  display: flex;
-  flex-direction: column;
-  gap: 13px;
-  margin-top: auto;
-  padding: 12px 13px;
-  border-radius: 10px;
-  background: var(--tl-well);
+.tl-profile-week {
+  min-width: 2px;
+  height: var(--tl-bar-height);
+  flex: 0 1 12px;
+  border-radius: 3px 3px 1px 1px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tl-hue, var(--accent)) 86%, transparent),
+    color-mix(in srgb, var(--tl-hue, var(--accent)) 52%, transparent)
+  );
+  transform-origin: bottom;
 }
 
-.tl-plan-profile-label {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--text-secondary);
-  font-size: 10px;
+.tl-profile-week.is-peak {
+  background: var(--tl-hue, var(--accent));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 10px color-mix(in srgb, var(--tl-hue, var(--accent)) 46%, transparent);
 }
 
-.tl-plan-profile-label > span { white-space: nowrap; }
-.tl-plan-profile .tl-ridge { height: 44px; margin: 0; gap: 3px; }
-.tl-plan-profile .tl-ridge-bar { flex-basis: 12px; border-radius: 3px 3px 1px 1px; }
-.tl-plan-profile .tl-ridge.is-count .tl-ridge-bar:not(.is-empty) {
+.tl-profile.is-count .tl-profile-week {
   background: color-mix(in srgb, var(--accent) 48%, var(--text-secondary));
+  box-shadow: none;
 }
 
-.tl-plan-library .tl-card-figs { gap: 28px; border: 0; padding-top: 1px; }
-.tl-plan-library .tl-card-figs b { font-size: 20px; font-weight: 500; }
-.tl-plan-library .tl-card-figs small { font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--text-secondary); }
-
-.tl-plan-card-footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 5px;
-  padding: 9px 12px 9px 20px;
-  border-top: 1px solid var(--tl-rule-soft);
+/* On paper the dark-theme mix lands as a heavy slab; sessions sit back in a pale teal instead. */
+:root[data-theme="paper"] .tl-profile.is-count .tl-profile-week {
+  background: color-mix(in srgb, var(--accent) 42%, #d3dcd6);
 }
 
-.tl-plan-card-footer > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-secondary);
-  font-size: 10px;
+.tl-profile .tl-profile-week.is-empty {
+  height: 2px;
+  background: color-mix(in srgb, var(--text-muted) 32%, transparent);
+  box-shadow: none;
 }
 
-.tl-plan-card-footer .tl-card-actions { position: static; opacity: 1; }
-.tl-plan-card-footer .tl-card-actions button { background: transparent; width: 28px; height: 28px; }
-.tl-plan-card-footer .tl-card-actions button:hover { background: var(--glass-bg-hover); }
+.tl-profile:has(.is-now) .tl-profile-week:not(.is-done, .is-now) {
+  opacity: 0.45;
+}
+
+.tl-profile .tl-profile-week.is-now {
+  background: var(--accent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 0 10px color-mix(in srgb, var(--accent) 50%, transparent);
+  opacity: 1;
+}
+
+/* ---- List layout and empty board */
+
+.tl-plan-library > .tl-index {
+  margin-top: 20px;
+  border-radius: 22px;
+  background: var(--tl-raised);
+  box-shadow: var(--tl-raised-rim), var(--tl-raised-shadow);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.tl-plan-library > .tl-index .tl-index-head {
+  background: var(--tl-raised-solid);
+}
+
+.tl-plan-library > .tl-empty {
+  margin-top: 20px;
+  border-radius: 22px;
+  background: var(--tl-raised);
+  box-shadow: var(--tl-raised-rim), var(--tl-raised-shadow);
+}
+
+@media (max-width: 1000px) {
+  .tl-plan-library .tl-filters-tail {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+
+  .tl-plan-library .tl-plan-create {
+    margin-left: auto;
+  }
+}
+
+/* The view's gutter drops to 16px here, so the board borrows no more than that. */
+@media (max-width: 900px) {
+  .tl-plan-board {
+    margin: 0 -16px;
+    padding: 16px 16px 24px;
+  }
+}
 
 @media (max-width: 760px) {
-  .tl-plan-library > .tl-plan-heading { flex-direction: column; align-items: flex-start; padding: 8px 0 18px; gap: 14px; }
-  .tl-plan-library > .tl-filters { margin: 0; }
-  .tl-plan-library .tl-search { flex: 1 1 100%; }
-  .tl-plan-library .tl-filters-tail { margin-left: 0; }
-  .tl-plan-library > .tl-grid { padding: 16px 2px; }
-  .tl-plan-results { padding: 14px 0 0; flex-wrap: wrap; }
+  .tl-masthead {
+    align-items: flex-start;
+  }
+
+  .tl-plan-library .tl-search {
+    max-width: none;
+    flex: 1 1 100%;
+  }
+
+  .tl-plan-library .tl-filters-tail {
+    margin-left: 0;
+  }
+
+  .tl-plan-results {
+    flex-wrap: wrap;
+    padding: 14px 0 0;
+  }
 }
 
-/* Inherit the desktop's materials instead of creating another room inside it. */
-:root[data-theme] .training-library-view,
-:root:not([data-theme]) .training-library-view {
-  --surface: inherit;
-  --glass-bg: inherit;
-  --glass-bg-hover: inherit;
-  --glass-bg-elevated: inherit;
-  --glass-border: inherit;
-  --text-primary: inherit;
-  --text-secondary: inherit;
-  --text-muted: inherit;
-  --tl-card: var(--surface);
-  --tl-panel-bg: var(--surface);
-  --tl-source-coach: var(--text-secondary);
-  background: transparent;
+@media (max-width: 480px) {
+  .tl-plan-library .tl-plan-create {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
 }
 
 .app .app-body > .content:has(> .training-library-view) {
   padding: 0;
-}
-
-.training-library-view > .tl-sections {
-  border: 0;
-  border-bottom: 1px solid var(--tl-rule-soft);
-  border-radius: 0;
-  padding: 0 0 16px;
-  background: transparent;
-  box-shadow: none;
-}
-
-.tl-plan-library .tl-card[data-accent]:hover {
-  border-color: color-mix(in srgb, var(--accent) 32%, var(--glass-border));
-  box-shadow: var(--tl-shadow-card-hover), inset 0 1px 0 var(--tl-edge-light);
 }

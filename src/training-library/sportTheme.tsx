@@ -19,6 +19,19 @@ import {
   Waves,
   type LucideIcon
 } from "lucide-react";
+import {
+  Barbell,
+  Bicycle,
+  Fire,
+  Hand as HandGlyph,
+  HandGrabbing,
+  Mountains,
+  PersonSimpleRun,
+  PersonSimpleSki,
+  PersonSimpleSwim,
+  Pulse,
+  type Icon as PhosphorIcon
+} from "@phosphor-icons/react";
 import type { CSSProperties } from "react";
 import type { TrainingPlanDocument, WorkoutSport } from "../../electron/types";
 
@@ -27,22 +40,24 @@ export interface SportTheme {
   /** CSS colour — a customizable --sport-* token where one exists. */
   color: string;
   icon: LucideIcon;
+  /** Duotone figure for glyph tiles, the same set the Overview's tiles use. */
+  glyph: PhosphorIcon;
 }
 
 export const WORKOUT_SPORT_THEME: Record<WorkoutSport, SportTheme> = {
-  run: { color: "var(--sport-run)", icon: Footprints },
-  trailRun: { color: "var(--sport-trail)", icon: Mountain },
-  bike: { color: "var(--sport-bike)", icon: Bike },
-  swim: { color: "#38b6e8", icon: Waves },
-  strength: { color: "var(--sport-strength)", icon: Dumbbell },
-  xcSki: { color: "#8ab4f8", icon: Snowflake },
-  indoorClimb: { color: "#f59e0b", icon: HandGrab },
-  bouldering: { color: "#a78bfa", icon: Hand },
-  hyrox: { color: "#ec4899", icon: Flame }
+  run: { color: "var(--sport-run)", icon: Footprints, glyph: PersonSimpleRun },
+  trailRun: { color: "var(--sport-trail)", icon: Mountain, glyph: Mountains },
+  bike: { color: "var(--sport-bike)", icon: Bike, glyph: Bicycle },
+  swim: { color: "#38b6e8", icon: Waves, glyph: PersonSimpleSwim },
+  strength: { color: "var(--sport-strength)", icon: Dumbbell, glyph: Barbell },
+  xcSki: { color: "#8ab4f8", icon: Snowflake, glyph: PersonSimpleSki },
+  indoorClimb: { color: "#f59e0b", icon: HandGrab, glyph: HandGrabbing },
+  bouldering: { color: "#a78bfa", icon: Hand, glyph: HandGlyph },
+  hyrox: { color: "#ec4899", icon: Flame, glyph: Fire }
 };
 
 /** Unknown or missing sports still get a quiet identity, never a crash. */
-const FALLBACK_SPORT_THEME: SportTheme = { color: "var(--sport-other)", icon: Activity };
+const FALLBACK_SPORT_THEME: SportTheme = { color: "var(--sport-other)", icon: Activity, glyph: Pulse };
 
 export function sportTheme(sport: WorkoutSport | undefined): SportTheme {
   return (sport ? WORKOUT_SPORT_THEME[sport] : undefined) ?? FALLBACK_SPORT_THEME;
@@ -97,6 +112,16 @@ export function SportBadge({ sport, label, compact }: SportBadgeProps) {
     <span className={`tl-sport-badge${compact ? " is-compact" : ""}`} style={sportChipStyle(sport)}>
       <Icon size={11} strokeWidth={2.2} aria-hidden="true" />
       <span>{(label == null ? label : t(String(label))) ?? (sport ? formatWorkoutSport(sport) : t("Workout"))}</span>
+    </span>
+  );
+}
+
+/** The sport's duotone figure on a small raised key, tinted from above in the sport's hue. */
+export function SportGlyph({ sport, size = 20 }: { sport: WorkoutSport | undefined; size?: number }) {
+  const Glyph = sportTheme(sport).glyph;
+  return (
+    <span className="tl-glyph" style={sportChipStyle(sport)} aria-hidden="true">
+      <Glyph size={size} weight="duotone" />
     </span>
   );
 }

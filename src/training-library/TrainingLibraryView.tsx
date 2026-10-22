@@ -1,5 +1,5 @@
 import { formatWorkoutSport } from "../calendar/workoutLabels";
-import { getLocale, t, useLanguage } from "../i18n/training";
+import { formatNumber, getLocale, t, useLanguage } from "../i18n/training";
 import { useLocalOnlyView } from "../privacy/localOnlyView";
 import {
   AlertTriangle,
@@ -52,14 +52,13 @@ import { activityHappenDay } from "../../electron/activityLinks";
 
 import {
   PlanSourceBadge,
-  SportMixDots,
-  SportBadge,
+  SportGlyph,
   dominantSport,
   planSourceLabel,
   sportAccentStyle
 } from "./sportTheme";
 import { SelectDropdown } from "../components/SelectDropdown";
-import { BulletRidge, Ridge, type BulletWeek } from "./Ridge";
+import { BulletRidge, WeekProfile, type BulletWeek } from "./Ridge";
 import { PlanCompare } from "./PlanCompare";
 import { PlanEditor } from "./PlanEditor";
 import { WorkoutWorkspace } from "./WorkoutWorkspace";
@@ -93,6 +92,14 @@ const SECTIONS: Array<{ id: LibrarySection; label: string; icon: typeof Zap }> =
   { id: "templates", label: "Templates", icon: Bookmark },
   { id: "adherence", label: "Adherence", icon: Target }
 ];
+
+/** One quiet line under the title: what the open section holds. */
+const SECTION_LEDES: Record<LibrarySection, string> = {
+  workouts: "Single sessions to schedule, build plans from, or send to your watch.",
+  plans: "Blocks of weeks you can put on your calendar and train through.",
+  templates: "Starting points to build new plans from.",
+  adherence: "What was planned, against what got done."
+};
 
 const LIBRARY_SECTION_PREFERENCE =
   defineSelectionPreference<LibrarySection>({
@@ -179,17 +186,29 @@ function planOnCalendar(
   return install ? { startDay: install.startDate } : undefined;
 }
 
-/** "Week 3 of 14" once a calendar run has started; undefined before it starts or after it ends. */
-function planCalendarWeekLabel(plan: TrainingPlanDocument, startDay?: string): string | undefined {
+function calendarStartDate(startDay?: string): Date | undefined {
   const digits = startDay?.replaceAll("-", "");
   if (!digits || !/^\d{8}$/.test(digits)) return undefined;
-  const start = new Date(`${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}T12:00:00`);
+  return new Date(`${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}T12:00:00`);
+}
+
+/** The 1-based week a calendar run is in; undefined before it starts or after it ends. */
+function planCalendarWeek(plan: TrainingPlanDocument, startDay?: string): number | undefined {
+  const start = calendarStartDate(startDay);
+  if (!start) return undefined;
   const today = new Date();
   today.setHours(12, 0, 0, 0);
   const days = Math.round((today.valueOf() - start.valueOf()) / 86_400_000);
   const week = Math.floor(days / 7) + 1;
-  if (days < 0 || week > plan.weekCount) return undefined;
-  return t("Week {{value1}} of {{value2}}", { value1: String(week), value2: String(plan.weekCount) });
+  return days < 0 || week > plan.weekCount ? undefined : week;
+}
+
+/** "Week 3 of 14" once a calendar run has started; undefined before it starts or after it ends. */
+function planCalendarWeekLabel(plan: TrainingPlanDocument, startDay?: string): string | undefined {
+  const week = planCalendarWeek(plan, startDay);
+  return week === undefined
+    ? undefined
+    : t("Week {{value1}} of {{value2}}", { value1: String(week), value2: String(plan.weekCount) });
 }
 
 function sourceLabel(source: TrainingPlanDocument["source"]): string {
@@ -429,8 +448,9 @@ export function TrainingLibraryView({
   return (
     <section className="training-library-view">
       <header className="tl-masthead">
-        <div>
+        <div className="tl-masthead-title">
           <h1>{t("Training Library")}</h1>
+          <p>{t(SECTION_LEDES[section])}</p>
         </div>
         <div className="tl-masthead-actions">
           {current.stale || current.offline ? <span className="tl-state is-stale">
@@ -439,11 +459,14 @@ export function TrainingLibraryView({
           </span> : null}
           <button
             type="button"
-            className="ghost-button"
+            className="tl-round-button"
             disabled={loading}
+            aria-label={t("Refresh")}
+            title={t("Refresh")}
             onClick={() => void load()}
           >
-            <RefreshCw size={14} className={loading ? "is-spinning" : ""} /> {t("Refresh")} </button>
+            <RefreshCw size={15} className={loading ? "is-spinning" : ""} />
+          </button>
         </div>
       </header>
 
@@ -742,30 +765,43 @@ const PLAN_LAYOUT_PREFERENCES = {
 } satisfies Record<PlanIndexNoun, unknown>;
 
 /**
- * Everything a tile and a row both need, derived once so the two layouts can
+ * Everything a tile, the hero and a row need, derived once so the layouts can
  * never drift apart on what a plan says.
  */
 function planView(
   plan: TrainingPlanDocument,
-  summary: ReturnType<typeof summarizeTrainingPlan> | undefined,
-  noun: "plan" | "template"
+  summary: ReturnType<typeof summarizeTrainingPlan> | undefined
 ) {
   const weekly = summary?.weekly ?? [];
   const hasLoad = weekly.some((week) => week.trainingLoad > 0);
   const sports = plan.sportMix.map((sport) => formatWorkoutSport(sport)).join(", ");
-  const context =
-    plan.goal || plan.description || sports || `${sourceLabel(plan.source)} ${noun}`;
+
+  // A peak is only worth naming when one week stands above the rest.
+  const loads = weekly.map((week) => week.trainingLoad);
+  const peakWeek = hasLoad && loads.filter((load) => load === Math.max(...loads)).length === 1
+    ? summary?.peakWeek
+    : undefined;
+  // How often the plan trains, when there is no load peak to describe its shape.
+  const busyWeeks = weekly.map((week) => week.workouts).filter((count) => count > 0);
+  const fewest = Math.min(...busyWeeks);
+  const most = Math.max(...busyWeeks);
+  const rhythm = !busyWeeks.length
+    ? ""
+    : fewest === most
+      ? t("{{value1}} a week", { value1: String(most) })
+      : t("{{value1}}–{{value2}} a week", { value1: String(fewest), value2: String(most) });
 
   return {
-    context,
+    /** What the plan is for, in the author's words; the tile shows nothing rather than repeat its sports. */
+    note: plan.goal || plan.description,
+    sports,
     sessions: summary?.workouts ?? 0,
     load: summary?.trainingLoad ? Math.round(summary.trainingLoad) : 0,
-    details: [context, planStartLabel(plan)],
+    profileNote: peakWeek ? t("Peak in week {{value1}}", { value1: String(peakWeek) }) : rhythm,
     dominant: dominantSport(summary?.sportDistribution, plan.sportMix),
-    sportCounts: summary?.sportDistribution,
     ridge: {
       values: weekly.map((week) => (hasLoad ? week.trainingLoad : week.workouts)),
-      peakWeek: hasLoad ? summary?.peakWeek : undefined,
+      peakWeek,
       unit: hasLoad ? "load" : "sessions",
       variant: hasLoad ? ("load" as const) : ("count" as const),
       label: `${hasLoad ? "Training load" : "Sessions"} across ${weekly.length} ${weekly.length === 1 ? "week" : "weeks"}`
@@ -1002,6 +1038,86 @@ function PlanIndex({
     </>;
   };
 
+  /** Warnings a plan carries until they are settled: sync trouble, or a calendar run that no longer matches it. */
+  const planFlags = (plan: TrainingPlanDocument) => {
+    const install = activeTrainingPlanCalendarInstall(plan);
+    return <>
+      {UNSETTLED_SYNC.has(plan.syncState) ? <i className="tl-flag">{plan.syncState}</i> : null}
+      {install && install.planRevision !== trainingPlanCalendarRevision(plan) ? <i className="tl-flag">{t("Calendar differs")}</i> : null}
+    </>;
+  };
+
+  /** Where a plan stands on the calendar: the week it is in, when it starts, or not scheduled. */
+  const planStatus = (plan: TrainingPlanDocument) => {
+    const calendarRun = calendarRuns.get(plan.id);
+    if (!calendarRun) return planStartLabel(plan);
+    const label = planCalendarWeekLabel(plan, calendarRun.startDay);
+    if (label) return label;
+    const start = calendarStartDate(calendarRun.startDay);
+    return start && start.valueOf() > Date.now()
+      ? t("Starts {{value1}}", { value1: shortDate(start) })
+      : t("On calendar");
+  };
+
+  const renderTile = (plan: TrainingPlanDocument) => {
+    const view = planView(plan, summaries.get(plan.id));
+    const isSelected = selected.includes(plan.id);
+    const calendarRun = calendarRuns.get(plan.id);
+
+    return (
+      <li
+        className={`tl-plan-tile${isSelected ? " is-selected" : ""}${calendarRun ? " is-on-calendar" : ""}`}
+        key={plan.id}
+        style={sportAccentStyle(view.dominant)}
+      >
+        {selectMark(plan, isSelected)}
+        <button type="button" className="tl-plan-tile-open" onClick={() => onOpen(plan)}>
+          <span className="tl-plan-tile-head">
+            <SportGlyph sport={view.dominant} />
+            <span className="tl-plan-tile-title">
+              <span className="tl-plan-tile-name" title={plan.name}>{plan.name}</span>
+              <span className="tl-plan-meta">
+                {plan.favorite ? <Heart size={11} fill="currentColor" strokeWidth={0} aria-label={t("Favorite")} /> : null}
+                <PlanSourceBadge source={plan.source} />
+                {view.sports ? <em title={view.sports}>{view.sports}</em> : null}
+              </span>
+            </span>
+          </span>
+          {view.note ? <span className="tl-plan-tile-note" title={view.note}>{view.note}</span> : null}
+          <span className="tl-plan-well">
+            <span className="tl-plan-caption">
+              <span>{view.ridge.variant === "load" ? t("Weekly load") : t("Sessions per week")}</span>
+              {view.profileNote ? <span>{view.profileNote}</span> : null}
+            </span>
+            <WeekProfile {...view.ridge} currentWeek={calendarRun ? planCalendarWeek(plan, calendarRun.startDay) : undefined} />
+          </span>
+          <span className="tl-plan-figs">
+            <span>
+              <small>{t("Weeks")}</small>
+              <b>{plan.weekCount}</b>
+            </span>
+            <span>
+              <small>{t("Sessions")}</small>
+              <b className={view.sessions ? "" : "is-nil"}>{view.sessions || "—"}</b>
+            </span>
+            <span>
+              <small>{t("Load")}</small>
+              <b className={view.load ? "" : "is-nil"}>{view.load ? formatNumber(view.load) : "—"}</b>
+            </span>
+          </span>
+        </button>
+        <div className="tl-plan-tile-foot">
+          <span className={`tl-plan-status${calendarRun ? " is-live" : ""}`}>
+            {calendarRun ? <i aria-hidden="true" /> : <CalendarClock size={13} aria-hidden="true" />}
+            {planStatus(plan)}
+          </span>
+          {planFlags(plan)}
+          <div className="tl-plan-actions">{planActions(plan)}</div>
+        </div>
+      </li>
+    );
+  };
+
   return (
     <div className="tl-panel tl-plan-library">
       <div className="tl-filters">
@@ -1139,66 +1255,11 @@ function PlanIndex({
           </p>
         </div>
       ) : layout === "grid" ? (
-        <ul className="tl-grid" role="list">
-          {visible.map((plan) => {
-            const view = planView(plan, summaries.get(plan.id), noun);
-            const isSelected = selected.includes(plan.id);
-            const calendarRun = calendarRuns.get(plan.id);
-            const calendarWeek = calendarRun ? planCalendarWeekLabel(plan, calendarRun.startDay) : undefined;
-
-            return (
-              <li
-                className={`tl-card${isSelected ? " is-selected" : ""}${calendarRun ? " is-on-calendar" : ""}`}
-                key={plan.id}
-                data-accent={view.dominant ?? undefined}
-                style={view.dominant ? sportAccentStyle(view.dominant) : undefined}
-              >
-                {selectMark(plan, isSelected)}
-                <button type="button" className="tl-card-open" onClick={() => onOpen(plan)}>
-                  <span className="tl-card-top">
-                    {plan.favorite ? (
-                      <Heart size={11} fill="currentColor" strokeWidth={0} aria-label={t("Favorite")} />
-                    ) : null}
-                    <PlanSourceBadge source={plan.source} />
-                    {calendarRun ? <i className="tl-live">{t("On calendar")}</i> : null}
-                    {UNSETTLED_SYNC.has(plan.syncState) ? (
-                      <i className="tl-flag">{plan.syncState}</i>
-                    ) : null}
-                    {activeTrainingPlanCalendarInstall(plan) && activeTrainingPlanCalendarInstall(plan)?.planRevision !== trainingPlanCalendarRevision(plan) ? <i className="tl-flag">{t("Calendar differs")}</i> : null}
-                  </span>
-                  <span className="tl-card-name" title={plan.name}>{plan.name}</span>
-                  <span className="tl-card-note" title={view.context}>{view.context}</span>
-                  <span className="tl-plan-sports">
-                    {plan.sportMix.slice(0, 3).map((sport) => <SportBadge key={sport} sport={sport} compact />)}
-                    {plan.sportMix.length > 3 ? <span title={plan.sportMix.slice(3).map(formatWorkoutSport).join(", ")}>+{plan.sportMix.length - 3} {t("more")}</span> : null}
-                  </span>
-                  <span className="tl-plan-profile">
-                    <span className="tl-plan-profile-label">{view.ridge.variant === "load" ? t("Weekly training load") : t("Sessions per week")}<span>{plan.weekCount} {plan.weekCount === 1 ? t("week") : t("weeks")}</span></span>
-                    <Ridge {...view.ridge} />
-                  </span>
-                  <span className="tl-card-figs">
-                    <span>
-                      <b>{plan.weekCount}</b>
-                      <small>{plan.weekCount === 1 ? t("week") : t("weeks")}</small>
-                    </span>
-                    <span>
-                      <b className={view.sessions ? "" : "is-nil"}>{view.sessions || "—"}</b>
-                      <small>{view.sessions === 1 ? t("session") : t("sessions")}</small>
-                    </span>
-                    {view.load > 0 ? <span>
-                      <b>{view.load}</b>
-                      <small>{t("training load")}</small>
-                    </span> : null}
-                  </span>
-                </button>
-                <div className="tl-plan-card-footer">
-                  <span className={calendarWeek ? "is-live" : undefined}><CalendarClock size={12} aria-hidden="true" />{calendarWeek ?? planStartLabel(plan)}</span>
-                  <div className="tl-card-actions">{planActions(plan)}</div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="tl-plan-board">
+          <ul className={`tl-plan-grid${selected.length ? " is-selecting" : ""}`} role="list">
+            {visible.map(renderTile)}
+          </ul>
+        </div>
       ) : (
         <div className="tl-index">
           <div className="tl-index-head tl-plan-row">
@@ -1209,7 +1270,7 @@ function PlanIndex({
               aria-pressed={sort.column === "name"}
               onClick={() => toggleSort("name")}
             >
-              {noun}
+              {noun === "plan" ? t("Plan") : t("Template")}
               {sortIndicator("name")}
             </button>
             {PLAN_COLUMNS.map((column) => (
@@ -1230,7 +1291,7 @@ function PlanIndex({
 
           <ul role="list">
             {visible.map((plan) => {
-              const view = planView(plan, summaries.get(plan.id), noun);
+              const view = planView(plan, summaries.get(plan.id));
               const isSelected = selected.includes(plan.id);
               const calendarRun = calendarRuns.get(plan.id);
 
@@ -1242,33 +1303,30 @@ function PlanIndex({
                   style={view.dominant ? sportAccentStyle(view.dominant) : undefined}
                 >
                   {selectMark(plan, isSelected)}
-                  <button type="button" className="tl-row-open" onClick={() => onOpen(plan)}>
-                    <span className="tl-row-name">
-                      {plan.favorite ? (
-                        <Heart size={12} fill="currentColor" strokeWidth={0} aria-label={t("Favorite")} />
-                      ) : null}
-                      {plan.name}
-                    </span>
-                    <span className="tl-row-sub">
-                      <SportMixDots sports={plan.sportMix} counts={view.sportCounts} />
-                      {view.details.map((detail, index) => (
-                        <em key={index}>{detail}</em>
-                      ))}
-                      <PlanSourceBadge source={plan.source} />
-                      {calendarRun ? <i className="tl-live">{t("On calendar")}</i> : null}
-                      {UNSETTLED_SYNC.has(plan.syncState) ? (
-                        <i className="tl-flag">{plan.syncState}</i>
-                      ) : null}
-                      {activeTrainingPlanCalendarInstall(plan) && activeTrainingPlanCalendarInstall(plan)?.planRevision !== trainingPlanCalendarRevision(plan) ? <i className="tl-flag">{t("Calendar differs")}</i> : null}
+                  <button type="button" className="tl-row-open has-glyph" onClick={() => onOpen(plan)}>
+                    <SportGlyph sport={view.dominant} size={17} />
+                    <span className="tl-row-text">
+                      <span className="tl-row-name">
+                        {plan.favorite ? (
+                          <Heart size={12} fill="currentColor" strokeWidth={0} aria-label={t("Favorite")} />
+                        ) : null}
+                        <span>{plan.name}</span>
+                      </span>
+                      <span className="tl-row-sub">
+                        <PlanSourceBadge source={plan.source} />
+                        {view.sports ? <em>{view.sports}</em> : null}
+                        {calendarRun ? <i className="tl-live">{planStatus(plan)}</i> : <em>{planStatus(plan)}</em>}
+                        {planFlags(plan)}
+                      </span>
                     </span>
                   </button>
                   <span className="tl-fig">{plan.weekCount}</span>
                   <span className={`tl-fig${view.sessions ? "" : " is-nil"}`}>
                     {view.sessions || "—"}
                   </span>
-                  <span className={`tl-fig${view.load ? "" : " is-nil"}`}>{view.load || "—"}</span>
+                  <span className={`tl-fig${view.load ? "" : " is-nil"}`}>{view.load ? formatNumber(view.load) : "—"}</span>
                   <span className="tl-fig is-quiet">{elapsedLabel(plan.updatedAt)}</span>
-                  <Ridge {...view.ridge} />
+                  <WeekProfile {...view.ridge} currentWeek={calendarRun ? planCalendarWeek(plan, calendarRun.startDay) : undefined} />
                   <div className="tl-row-actions">{planActions(plan)}</div>
                 </li>
               );

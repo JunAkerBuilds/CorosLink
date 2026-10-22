@@ -913,7 +913,7 @@ export function WorkoutWorkspace({
                 aria-pressed={sort.column === "name"}
                 onClick={() => toggleSort("name")}
               >
-                {t("workout")}{sortIndicator("name")}
+                {t("Workout")}{sortIndicator("name")}
               </button>
               {WORKOUT_COLUMNS.map((column) => (
                 <button
