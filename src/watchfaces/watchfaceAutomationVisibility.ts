@@ -167,6 +167,7 @@ function applyLayerVisibility(
     return {
       ...design,
       ampmIndicator: {
+        ...design.ampmIndicator,
         enabled: visible,
         x: design.ampmIndicator?.x ?? capability.defaultPos.x,
         y: design.ampmIndicator?.y ?? capability.defaultPos.y,

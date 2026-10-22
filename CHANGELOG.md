@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Font size and weight for every font in Watch Face Studio.** UV, barometer, humidity, wind, temperature and the face's other live data fields now have **Weight**, **Style** and **Font size** beside their Font, like time and metrics. Font size replaces their Scale box. Each component, such as the label or the number, can set its own weight and size. The time and date separators and the AM/PM indicator get Weight and Style too.
+
+### Fixed
+
+- **A label no longer looks like a second font.** Text too wide for its spot, such as "UV" beside the UV index, was squeezed narrower, so it read as a condensed font next to its number. It now shrinks evenly instead.
+
 ## [0.1.61] - 2026-10-22
 
 ### Added

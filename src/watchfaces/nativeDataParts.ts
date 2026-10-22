@@ -1,4 +1,4 @@
-import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part } from "../../electron/types";
+import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceNativePartStyle as PartStyle } from "../../electron/types";
 import { NATIVE_DATA_BY_ID, nativeHasIcon } from "../../electron/watchfaceNativeCatalog";
 
 export function defaultNativeDataStyle(id: string): Style {
@@ -50,6 +50,9 @@ export function nativePart(id: string, style: Style, part: Part) {
   return {
     enabled: custom?.enabled ?? (!["background", "mask", "noDataMask"].includes(part) && !(chartMoon && part === "plot") && !(["stamina", "weather_uv"].includes(id) && part === "states")),
     color: custom?.color ?? style.color, fontFamily: custom?.fontFamily || style.fontFamily || "Arial",
+    fontWeight: custom?.fontWeight ?? style.fontWeight ?? 400,
+    fontStyle: custom?.fontStyle ?? style.fontStyle ?? "normal",
+    letterSpacing: custom?.letterSpacing ?? style.letterSpacing ?? 0,
     x: custom?.x ?? defaults.x, y: custom?.y ?? defaults.y,
     width: custom?.width ?? defaults.width, height: custom?.height ?? defaults.height,
     digitWidth: custom?.digitWidth ?? (custom?.width ?? defaults.width) / 4,
@@ -58,6 +61,42 @@ export function nativePart(id: string, style: Style, part: Part) {
 }
 
 export function nativeRolePart(role: Role): Part { return role === "digits" ? "value" : role; }
+export function nativePartRole(part: Part): Role | null { return part === "value" ? "digits" : part === "plot" ? null : part; }
+
+/** Generated text fills this share of its sprite's height (before it shrinks to fit the width). */
+const NATIVE_TEXT_EM = 0.75;
+export function nativeTextFontSize(spriteHeight: number): number { return Math.round(spriteHeight * NATIVE_TEXT_EM); }
+
+/** Whether a role's sprites are drawn as text in a font, rather than images. */
+export function nativeRoleDrawsText(style: Style, role: Role): boolean {
+  return !Object.keys(style.assets?.[role] ?? {}).length;
+}
+
+/**
+ * A component's Font size in master pixels, after the layer's scale: the em
+ * its text draws at, or the height of its images (as PNG digits elsewhere).
+ */
+export function nativeComponentFontSize(id: string, style: Style, part: Part): number {
+  const role = nativePartRole(part), height = nativePart(id, style, part).height;
+  return (role && nativeRoleDrawsText(style, role) ? nativeTextFontSize(height) : height) * style.scale;
+}
+
+/** Fields whose Font size is their number's; icon-only fields keep a plain scale. */
+export function nativeHasFontSize(id: string, style: Style): boolean { return nativeParts(id, style).includes("value"); }
+
+/** The layer scale that draws the number at `fontSize` master pixels, within the scale's 0.1–4 range. */
+export function nativeScaleForFontSize(id: string, style: Style, fontSize: number): number {
+  const base = nativeComponentFontSize(id, { ...style, scale: 1 }, "value");
+  return Math.round(Math.max(0.1, Math.min(4, fontSize / Math.max(1, base))) * 1000) / 1000;
+}
+
+/** Resizes a component's sprite box so its text draws at `fontSize` master pixels, keeping the box's shape. */
+export function nativePartForFontSize(id: string, style: Style, part: Part, fontSize: number): Pick<PartStyle, "width" | "height" | "digitWidth"> {
+  const current = nativePart(id, style, part);
+  const factor = fontSize / Math.max(1, nativeComponentFontSize(id, style, part));
+  const fit = (value: number) => Math.round(Math.max(4, Math.min(800, value * factor)));
+  return { width: fit(current.width), height: fit(current.height), ...(part === "value" ? { digitWidth: Math.max(1, Math.round(current.digitWidth * factor)) } : {}) };
+}
 
 /** Glyph artwork a font can draw instead. Icons and state frames stay pictures. */
 const FONT_ROLES = ["digits", "symbols", "decimal", "unit", "separator"] as const satisfies readonly Role[];

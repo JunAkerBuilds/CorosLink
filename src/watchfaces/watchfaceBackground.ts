@@ -396,10 +396,13 @@ export async function renderDesignBackground(
       ? `"${separatorFont.replace(/["\\]/g, "")}"`
       : "system-ui, sans-serif";
     const fontSize = Math.round(separator.size * separatorScale);
+    // Separators are bold unless their layer picks another weight.
+    const fontWeight = separator.fontWeight ?? 700;
+    const fontStyle = separator.fontStyle ?? "normal";
     setWatchfaceCanvasFont(
       context,
-      { family: separatorFont, size: fontSize, weight: 700 },
-      `700 ${fontSize}px ${family}`
+      { family: separatorFont, size: fontSize, weight: fontWeight, style: fontStyle },
+      `${fontStyle} ${fontWeight} ${fontSize}px ${family}`
     );
     context.fillStyle = separator.color;
     const effects = resolveWatchfaceLayerEffects(

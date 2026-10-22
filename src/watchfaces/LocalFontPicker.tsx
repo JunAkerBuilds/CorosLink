@@ -35,6 +35,13 @@ interface LocalFontPickerProps {
   disabled?: boolean;
   /** The glyphs this choice draws with, shown directly under the picker. */
   preview?: ReactNode;
+  /**
+   * The font drawn while none is picked here, such as the layer's. Weight and
+   * style stay editable then, instead of following template artwork.
+   */
+  inheritedFamily?: string;
+  /** False hides Sprite spacing, for single-glyph sprites. */
+  showSpacing?: boolean;
 }
 
 interface FontPickerPopoverPosition {
@@ -67,7 +74,9 @@ export function LocalFontPicker({
   onTypographyChange,
   onLetterSpacingChange,
   disabled = false,
-  preview
+  preview,
+  inheritedFamily,
+  showSpacing = true
 }: LocalFontPickerProps) {
   useLanguage();
   const [open, setOpen] = useState(false);
@@ -103,14 +112,15 @@ export function LocalFontPicker({
       (!rasterFontRequiredText ||
         rasterFontSupportsText(rasterFont, rasterFontRequiredText))
   );
+  const drawnFamily = value || inheritedFamily;
   const fontShapeControlsDisabled =
-    disabled || (!value && !rasterFontIsActive) || rasterFontIsActive;
+    disabled || (!drawnFamily && !rasterFontIsActive) || rasterFontIsActive;
   const fontIsMissing = !rasterFontIsActive && !isWatchfaceFontInstalled(value);
   // The project's saved glyphs still draw it: a warning, not an error.
   const fontIsEmbedded = fontIsMissing && hasWatchfaceFontSnapshot(value);
   const spriteSpacingDisabled =
     disabled ||
-    (!onLetterSpacingChange && !value && !rasterFontIsActive);
+    (!onLetterSpacingChange && !drawnFamily && !rasterFontIsActive);
   // Keep picker labels and samples at natural tracking. Component-specific
   // spacing belongs to the exported watch glyphs, not the font-selection UI.
   const pickerPreviewStyle: CSSProperties = {
@@ -489,7 +499,7 @@ export function LocalFontPicker({
             </select>
           </label>
           </>}
-          <label className="watchface-typography-tracking">{t("Sprite spacing")}{" "}<span>{Math.round(letterSpacing * 100)}%</span>
+          {showSpacing ? <label className="watchface-typography-tracking">{t("Sprite spacing")}{" "}<span>{Math.round(letterSpacing * 100)}%</span>
             <input
               type="range"
               min="-0.35"
@@ -499,10 +509,10 @@ export function LocalFontPicker({
               disabled={spriteSpacingDisabled}
               onChange={(event) => updateTypography({ letterSpacing: Number(event.target.value) })}
             />
-          </label>
+          </label> : null}
         </div>
       ) : null}
-      {typography && !value && !rasterFontIsActive ? (
+      {typography && !drawnFamily && !rasterFontIsActive ? (
         <p className="watchface-typography-hint">
           <Info size={13} aria-hidden="true" />{t("Font shape inherited from template")}</p>
       ) : null}

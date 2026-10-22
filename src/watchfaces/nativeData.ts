@@ -2,10 +2,10 @@ import type { CorosWatchfaceAssetReplacement, CorosWatchfaceConfigOverride, Coro
 import type { ChartPageCompanions } from "./recoveredWatchfaceDesign";
 import { NATIVE_CHART_DAILY_PAGES, NATIVE_CHART_PAGES, NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartDailyPage, nativeChartGroup, nativeChartRepresentation, nativeChartSourceKeys, nativeFieldKeys, nativeConfigPrefix, nativeHasIcon, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
 import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, offsetConfigValue, parseConfigPos, parseConfigRect, pickPreviewResolution, resizeAndTintSprite } from "./watchfaceStudio";
-import { isNativeTime, nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRolePart, nativeRoleIndices, nativeStateCount } from "./nativeDataParts";
+import { isNativeTime, nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRolePart, nativeRoleIndices, nativeStateCount, nativeTextFontSize } from "./nativeDataParts";
 import { chartGraphBounds, chartPageFillers, chartReadoutBounds, chartReadoutFolder, chartReadoutPage, chartSourceOf, storedChartReadouts } from "./chartReadouts";
 import { parseSimulationDateTime, type WatchfacePreviewScenario } from "./watchfaceSimulation";
-import { fillWatchfaceText, setWatchfaceCanvasFont } from "./watchfaceFontSnapshots";
+import { fillWatchfaceText, measureWatchfaceText, setWatchfaceCanvasFont } from "./watchfaceFontSnapshots";
 export { NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS, NATIVE_DATA_BY_ID } from "../../electron/watchfaceNativeCatalog";
 export type NativeData = Record<string, Style>;
 export { defaultNativeDataStyle } from "./nativeDataParts";
@@ -161,11 +161,21 @@ export async function nativeDataAsset(id: string, style: Style, role: Role, inde
   return canvasImage(width, height, ctx => {
     ctx.fillStyle = part.color;
     if (text !== null) {
-      const fontSize = Math.round(height * 0.75);
-      // Quoted: an unquoted family such as "Bebas Neue 2" is invalid CSS, and the canvas would keep its default font.
-      setWatchfaceCanvasFont(ctx, { family: part.fontFamily, size: fontSize }, `${fontSize}px "${part.fontFamily.replace(/["\\]/g, "")}"`);
+      const setSize = (size: number) => {
+        // Quoted: an unquoted family such as "Bebas Neue 2" is invalid CSS, and the canvas would keep its default font.
+        setWatchfaceCanvasFont(ctx, { family: part.fontFamily, size, weight: part.fontWeight, style: part.fontStyle },
+          `${part.fontStyle} ${part.fontWeight} ${size}px "${part.fontFamily.replace(/["\\]/g, "")}"`);
+        if ("letterSpacing" in ctx) ctx.letterSpacing = `${size * part.letterSpacing}px`;
+      };
+      // Text wider than its sprite shrinks evenly. fillText's maxWidth would
+      // squeeze it instead, so "UV" read as a narrower font than its number.
+      let fontSize = nativeTextFontSize(height);
+      setSize(fontSize);
+      const textWidth = measureWatchfaceText(ctx, text).width;
+      if (textWidth > width) { fontSize = Math.max(1, Math.floor(fontSize * width / textWidth)); setSize(fontSize); }
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      fillWatchfaceText(ctx, text, width / 2, height / 2, width);
+      // Letter spacing also follows the last character; centre the visible text.
+      fillWatchfaceText(ctx, text, (width + fontSize * part.letterSpacing) / 2, height / 2, width);
     } else if (role === "states" && id === "weather_direction") {
       ctx.translate(width / 2, height / 2); ctx.rotate(index * Math.PI / 8);
       const r = Math.min(width, height) * 0.35;

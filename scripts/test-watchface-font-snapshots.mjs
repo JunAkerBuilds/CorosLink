@@ -48,6 +48,15 @@ assert.ok(summary.includes("Date: Didot 500 normal"));
 // Separator glyphs are always drawn bold.
 assert.ok(summary.includes("Separators: Futura 700 normal"));
 assert.ok(summary.includes("Time (always-on): Menlo 500 normal"));
+// Weights other layers pick are captured as drawn: native fields and their components, separators.
+const weighted = collectWatchfaceFontUses({
+  ...baseDesign,
+  staticSeparators: { ...baseDesign.staticSeparators, colon: { ...baseDesign.staticSeparators.colon, fontWeight: 300 } },
+  nativeData: { weather_uv: { enabled: true, x: 0, y: 0, scale: 1, color: "#fff", fontFamily: "Avenir Next", fontWeight: 600, parts: { icon: { fontStyle: "italic" } } } }
+}).map((use) => `${use.usedBy}: ${use.family} ${use.weight} ${use.style}`);
+assert.ok(weighted.includes("Separators: Futura 300 normal"));
+assert.ok(weighted.includes("Native data: Avenir Next 600 normal"));
+assert.ok(weighted.includes("Native data: Avenir Next 600 italic"), "A component's own style uses the layer family");
 // An explicit "" selects a PNG font; disabled separators and generic families draw nothing local.
 assert.ok(!uses.some((use) => use.family === "" || use.family === "Unused Face" || use.family === "sans-serif"));
 

@@ -236,9 +236,9 @@ function collectModeFontUses(
       "Selectable data"
     );
   }
-  // Separator glyphs are always drawn bold (watchfaceBackground.ts).
+  // Separator glyphs are bold unless they pick a weight (watchfaceBackground.ts).
   for (const separator of Object.values(mode.staticSeparators ?? {})) {
-    if (separator?.enabled) add(separator.fontFamily ?? family, 700, "normal", "Separators");
+    if (separator?.enabled) add(separator.fontFamily ?? family, separator.fontWeight ?? 700, separator.fontStyle, "Separators");
   }
   const exerciseSeparator = mode.exerciseSeparator;
   if (exerciseSeparator && exerciseSeparator.enabled !== false && !exerciseSeparator.artwork) {
@@ -249,14 +249,16 @@ function collectModeFontUses(
       "Separators"
     );
   }
-  add(mode.ampmIndicator?.fontFamily, 400, "normal", "AM/PM");
+  add(mode.ampmIndicator?.fontFamily, mode.ampmIndicator?.fontWeight, mode.ampmIndicator?.fontStyle, "AM/PM");
   for (const element of mode.backgroundElements ?? []) {
     if (element.kind === "text") add(element.fontFamily, element.weight, "normal", "Text layers");
   }
   for (const native of Object.values(mode.nativeData ?? {})) {
-    add(native?.fontFamily, 400, "normal", "Native data");
+    add(native?.fontFamily, native?.fontWeight, native?.fontStyle, "Native data");
+    // A component draws the layer's family unless it picks its own, with its own weight or style if set.
     for (const part of Object.values(native?.parts ?? {})) {
-      add(part?.fontFamily, 400, "normal", "Native data");
+      if (!part?.fontFamily && part?.fontWeight === undefined && part?.fontStyle === undefined) continue;
+      add(part.fontFamily || native?.fontFamily, part.fontWeight ?? native?.fontWeight, part.fontStyle ?? native?.fontStyle, "Native data");
     }
   }
 }

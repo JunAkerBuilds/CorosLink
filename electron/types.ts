@@ -1020,6 +1020,10 @@ export interface CorosWatchfaceNativePartStyle {
   height?: number;
   color?: string;
   fontFamily?: string;
+  /** Override the layer's weight, style and spacing for this component's text. */
+  fontWeight?: number;
+  fontStyle?: "normal" | "italic";
+  letterSpacing?: number;
   /** Preserve a recovered glyph's width independently of its value rectangle. */
   digitWidth?: number;
   align?: "left" | "center" | "right";
@@ -1032,6 +1036,10 @@ export interface CorosWatchfaceNativeDataStyle {
   scale: number;
   color: string;
   fontFamily?: string;
+  fontWeight?: number;
+  fontStyle?: "normal" | "italic";
+  /** Space between the characters inside one sprite, in em; digits are spaced by digitWidth. */
+  letterSpacing?: number;
   /** Chart data-field prefix; not a verified selector for the watch's plotted history. */
   chartSource?: string;
   /**
@@ -1268,6 +1276,9 @@ export interface CorosWatchfaceDesignState {
       size: number;
       color: string;
       fontFamily?: string;
+      /** Absent draws the glyph bold (700). */
+      fontWeight?: number;
+      fontStyle?: "normal" | "italic";
     }
   >;
   /** AM/PM indicator styling; absent in projects saved before the feature. */
@@ -1279,6 +1290,9 @@ export interface CorosWatchfaceDesignState {
     /** Optional tint; absent preserves the template sprite color. */
     color?: string;
     fontFamily?: string;
+    fontWeight?: number;
+    fontStyle?: "normal" | "italic";
+    letterSpacing?: number;
     rasterFont?: CorosWatchfaceRasterFont;
   };
   /** Dynamic 41-state weather icon; absent in older projects. */

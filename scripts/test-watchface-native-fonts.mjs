@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { nativeHasGlyphArt, nativePart, withNativeFont } from "../src/watchfaces/nativeDataParts.ts";
+import { nativeComponentFontSize, nativeHasFontSize, nativeHasGlyphArt, nativePart, nativePartForFontSize, nativeScaleForFontSize, withNativeFont } from "../src/watchfaces/nativeDataParts.ts";
 
 // A recovered weather field: the template's digit, sign and unit images, plus an icon.
 const digits = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [String(i), `digit-${i}`]));
@@ -53,5 +53,26 @@ assert.deepEqual(template.assets, recovered.assets);
 const added = { enabled: true, x: 444, y: 448, scale: 1, color: "#ffffff" };
 assert.ok(!nativeHasGlyphArt(added));
 assert.deepEqual(withNativeFont(added, "Futura"), { fontFamily: "Futura", parts: undefined, assets: undefined, fontReplacedAssets: undefined });
+
+// Components take the layer's weight, style and spacing unless they set their own.
+const shaped = { ...added, fontFamily: "Futura", fontWeight: 300, fontStyle: "italic", letterSpacing: 0.1, parts: { icon: { fontWeight: 800 } } };
+assert.deepEqual(
+  ["fontWeight", "fontStyle", "letterSpacing"].map(key => nativePart("weather_uv", shaped, "value")[key]),
+  [300, "italic", 0.1]
+);
+assert.equal(nativePart("weather_uv", shaped, "icon").fontWeight, 800);
+assert.equal(nativePart("weather_uv", added, "value").fontWeight, 400, "Regular when nothing is set");
+
+// Font size: drawn text is 75% of its sprite's height, PNG digits their height, both times the layer scale.
+assert.equal(nativeComponentFontSize("weather_uv", added, "value"), 36, "48 px sprite, scale 1");
+assert.equal(nativeComponentFontSize("weather_temp", recovered, "value"), 95, "Template digits read as their height");
+assert.equal(nativeComponentFontSize("weather_uv", { ...added, scale: 1.5 }, "value"), 54);
+assert.ok(nativeHasFontSize("weather_uv", added) && !nativeHasFontSize("weather_direction", added), "Icon-only fields keep Scale");
+// The layer's Font size is its scale; it stays within the scale's range.
+assert.equal(nativeScaleForFontSize("weather_uv", added, 54), 1.5);
+assert.equal(nativeScaleForFontSize("weather_uv", added, 1000), 4);
+// A component's Font size resizes its box and keeps its shape.
+assert.deepEqual(nativePartForFontSize("weather_uv", added, "icon", 54), { width: 54, height: 72 });
+assert.deepEqual(nativePartForFontSize("weather_uv", added, "value", 18), { width: 48, height: 24, digitWidth: 12 });
 
 console.log("native font tests passed");

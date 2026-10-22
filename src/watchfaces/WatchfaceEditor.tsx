@@ -12,7 +12,7 @@ import { WatchfaceNumberAlignControl } from "./WatchfaceNumberAlignControl";
 import { NativeDataInspector } from "./NativeDataInspector";
 import { MetricKindNote, watchfaceMetricKind } from "./watchfaceMetricKinds";
 import { NATIVE_CHART_FIXED_EQUIVALENTS, NATIVE_CHART_PAGES, nativeChartReadoutLabel } from "../../electron/watchfaceNativeCatalog";
-import { nativePart, nativeParts } from "./nativeDataParts";
+import { nativeHasFontSize, nativePart, nativeParts } from "./nativeDataParts";
 import { addChartPage, chartDragSplit, chartGraphBounds, chartReadoutBounds, chartReadoutHidden, chartReadoutPage, chartSourceOf, chartStoredReadout, dropChartReadout, hiddenChartReadout, moveChartGraph, moveChartReadout, newChartReadout, removeChartPage, setChartReadoutShown, storedChartReadouts, swapChartReadout } from "./chartReadouts";
 import { describeNativeDataComponents } from "./nativeDataAutomation";
 import { watchfaceAutomationAssetContracts } from "./watchfaceAutomationAssetContracts";
@@ -12417,6 +12417,7 @@ export function WatchfaceEditor({
             api={api}
             disabled={isPositionLocked(layer.id) || spriteImportPending}
             renderSection={renderPropertySection}
+            renderFontSizeField={renderFontSizeField}
             onPatch={patch => updateNativeData(layer.nativeDataId!, patch)}
             chartGroups={layer.nativeDataId === "chart" ? chartGroups : undefined}
             chartReadouts={layer.nativeDataId === "chart" ? chartReadouts : undefined}
@@ -14175,19 +14176,22 @@ export function WatchfaceEditor({
           <button type="button" onClick={() => setPosition(style.x, style.y - fromWatchCoordinate(1))} aria-label={t("Nudge up")}><ArrowUp size={13} aria-hidden="true" /></button>
           <button type="button" onClick={() => setPosition(style.x, style.y + fromWatchCoordinate(1))} aria-label={t("Nudge down")}><ArrowDown size={13} aria-hidden="true" /></button>
         </div>
-        <span>{t("Scale")}</span>
-        <span className="wf-input-with-unit wf-position-scale">
-          <EditableNumberInput
-            aria-label={t("Layer scale")}
-            min="0.1"
-            max="4"
-            step="0.05"
-            value={style.scale}
-            fallback={1}
-            onValueChange={(scale) => updateNativeData(id, { scale: Math.max(0.1, Math.min(4, scale)) })}
-          />
-          <span>×</span>
-        </span>
+        {/* A field with a number sizes by Font size under Appearance instead. */}
+        {nativeHasFontSize(id, style) ? null : <>
+          <span>{t("Scale")}</span>
+          <span className="wf-input-with-unit wf-position-scale">
+            <EditableNumberInput
+              aria-label={t("Layer scale")}
+              min="0.1"
+              max="4"
+              step="0.05"
+              value={style.scale}
+              fallback={1}
+              onValueChange={(scale) => updateNativeData(id, { scale: Math.max(0.1, Math.min(4, scale)) })}
+            />
+            <span>×</span>
+          </span>
+        </>}
       </>,
       <p className="watchface-studio-summary">
         {target === id
@@ -14317,6 +14321,10 @@ export function WatchfaceEditor({
               value={separator.fontFamily ?? design.fontFamily}
               emptyLabel={t("System font")}
               onChange={(fontFamily) => updateStaticSeparator(separatorId, { fontFamily })}
+              inheritedFamily="system-ui"
+              typography={{ fontWeight: separator.fontWeight ?? 700, fontStyle: separator.fontStyle ?? "normal" }}
+              onTypographyChange={({ fontWeight, fontStyle }) => updateStaticSeparator(separatorId, { fontWeight, fontStyle })}
+              showSpacing={false}
             />
             <label className="field watchface-zoom-control">{t("Size")}{" "}<span>{separator.size}{t("px")}</span>
               <input
@@ -14467,6 +14475,9 @@ export function WatchfaceEditor({
               value={indicator.fontFamily ?? ""}
               emptyLabel={t("Keep template lettering")}
               onChange={(fontFamily) => updateAmPmIndicator({ fontFamily })}
+              typography={{ fontWeight: indicator.fontWeight ?? 400, fontStyle: indicator.fontStyle ?? "normal", letterSpacing: indicator.letterSpacing ?? 0 }}
+              onTypographyChange={({ fontWeight, fontStyle }) => updateAmPmIndicator({ ...(fontWeight !== undefined ? { fontWeight } : {}), ...(fontStyle ? { fontStyle } : {}) })}
+              onLetterSpacingChange={(letterSpacing) => updateAmPmIndicator({ letterSpacing })}
             />
             <label className="field watchface-zoom-control">{t("Size")}{" "}<span>{indicator.scale.toFixed(2)}×</span>
               <input

@@ -6,9 +6,9 @@ import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataSty
 import type { CorosLinkApi } from "../coroslink-api";
 import { NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeDataAsset, nativeDataPreviewValue } from "./nativeData";
 import { NATIVE_CHART_BAR_PAGES, NATIVE_CHART_FIXED_EQUIVALENTS, NATIVE_CHART_PAGES, nativeChartReadoutLabel, nativeChartRepresentation } from "../../electron/watchfaceNativeCatalog";
-import { nativeAssetText, nativeFontRole, nativeHasGlyphArt, nativePart, nativePartHasPosition, nativeParts, nativeRoleIndices, withNativeFont } from "./nativeDataParts";
+import { nativeAssetText, nativeComponentFontSize, nativeFontRole, nativeHasFontSize, nativeHasGlyphArt, nativePart, nativePartForFontSize, nativePartHasPosition, nativeParts, nativeRoleDrawsText, nativeRoleIndices, nativeScaleForFontSize, withNativeFont } from "./nativeDataParts";
 import { chartReadoutHidden } from "./chartReadouts";
-import { loadStudioImage, resizeAndTintSprite } from "./watchfaceStudio";
+import { loadStudioImage, resizeAndTintSprite, type WatchfaceTypography } from "./watchfaceStudio";
 import { LocalFontPicker } from "./LocalFontPicker";
 import { WatchfaceNumberAlignControl } from "./WatchfaceNumberAlignControl";
 import type { WatchfaceInspectorSectionId } from "./watchfaceInspectorSections";
@@ -228,9 +228,11 @@ type RenderSection = (
  * selected part, and Advanced for preview-only settings. The editor renders
  * the Transform section itself so it matches every other layer.
  */
-export function NativeDataInspector({ id, style, coordinateScale, api, disabled, renderSection, onPatch, onError, onImportStart, onImportFinish, isImportCurrent, chartGroups = [], chartReadouts = chartGroups, onChartGroup, onAddReadout, onRemoveReadout, takenReadouts, onShowReadout, onAddPage, onRemovePage, onMakeFixed, pageFields, onSelectField, fieldPages }: {
+export function NativeDataInspector({ id, style, coordinateScale, api, disabled, renderSection, renderFontSizeField, onPatch, onError, onImportStart, onImportFinish, isImportCurrent, chartGroups = [], chartReadouts = chartGroups, onChartGroup, onAddReadout, onRemoveReadout, takenReadouts, onShowReadout, onAddPage, onRemovePage, onMakeFixed, pageFields, onSelectField, fieldPages }: {
   id: string; style: Style; api: CorosLinkApi; disabled: boolean; coordinateScale: number;
   renderSection: RenderSection;
+  /** The editor's shared Font size field, in watch pixels. */
+  renderFontSizeField: (value: number, onChange: (fontSize: number) => void) => ReactNode;
   /** Template chart readouts the layer can switch to; the watch's Back button cycles between them. */
   chartGroups?: string[]; onChartGroup?: (source: string) => void;
   /** Every chart readout the template carries, including ones only "Make fixed" can edit (heart rate). */
@@ -273,6 +275,11 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   const locked = disabled || busy;
   const patchPart = (patch: CorosWatchfaceNativePartStyle) => onPatch({parts:{...style.parts,[partKey]:{...style.parts?.[partKey],...patch}}});
   const patchChart = (patch: NonNullable<Style["chartStyle"]>) => onPatch({chartStyle:{...style.chartStyle,...patch}});
+  // The picker sends only the weight or style that changed; spacing comes separately.
+  const shapePatch = ({ rasterFont: _rasterFont, letterSpacing: _spacing, ...shape }: WatchfaceTypography) => shape;
+  /** Font sizes show in watch pixels, like Width and Height; the style stores master pixels. */
+  const fontSizeField = (fontSize: number, change: (fontSize: number) => void) =>
+    <div className="watchface-position-inputs">{renderFontSizeField(Math.round(fontSize * coordinateScale), value => change(value / coordinateScale))}</div>;
 
   async function importArtwork(folder: boolean) {
     if (!role) return;
@@ -377,7 +384,11 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
     {renderSection("appearance", "Appearance", <div className="wf-property-stack">
       {notes}
       {colorControl("Color",style.color,color=>onPatch({color}))}
-      <LocalFontPicker api={api} label={t("Font")} value={style.fontFamily ?? ""} emptyLabel={nativeHasGlyphArt(style) ? t("Keep template font") : t("Default")} disabled={locked} onChange={fontFamily=>onPatch(withNativeFont(style,fontFamily))} />
+      <LocalFontPicker api={api} label={t("Font")} value={style.fontFamily ?? ""} emptyLabel={nativeHasGlyphArt(style) ? t("Keep template font") : t("Default")} disabled={locked} onChange={fontFamily=>onPatch(withNativeFont(style,fontFamily))}
+        inheritedFamily={nativeHasGlyphArt(style) ? undefined : nativePart(id, style, "value").fontFamily}
+        typography={{ fontWeight: style.fontWeight ?? 400, fontStyle: style.fontStyle ?? "normal", letterSpacing: style.letterSpacing ?? 0 }}
+        onTypographyChange={typography=>onPatch(shapePatch(typography))} onLetterSpacingChange={letterSpacing=>onPatch({letterSpacing})} />
+      {nativeHasFontSize(id, style) && fontSizeField(nativeComponentFontSize(id, style, "value"), fontSize=>onPatch({scale:nativeScaleForFontSize(id, style, fontSize)}))}
       {definition.kind === "chart" && <ChartPageStrip current={style.chartSource ?? "chart_stress"} readouts={[...chartReadouts, ...stored]} editable={[...chartGroups, ...stored]}
         template={chartReadouts} hidden={hiddenReadouts} taken={takenReadouts} removed={style.removedReadouts ?? []} disabled={locked}
         barsOn={(style.chartStyle?.barWidth ?? 8) > 0} onBars={on => patchChart(on ? { barWidth: 8, barGap: style.chartStyle?.barGap || 4 } : { barWidth: 0 })}
@@ -415,7 +426,14 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
         </div>
         {partKey === "value" && <WatchfaceNumberAlignControl value={component.align} disabled={locked} onChange={align=>patchPart({align:align ?? "left"})} />}
         {colorControl("Color",component.color,color=>patchPart({color}))}
-        {role && <LocalFontPicker api={api} label={t("Font")} value={style.parts?.[partKey]?.fontFamily ?? ""} emptyLabel={t("Layer font")} disabled={locked} onChange={fontFamily=>onPatch(withNativeFont(style,fontFamily,partKey))} />}
+        {role && <>
+          <LocalFontPicker api={api} label={t("Font")} value={style.parts?.[partKey]?.fontFamily ?? ""} emptyLabel={t("Layer font")} disabled={locked} onChange={fontFamily=>onPatch(withNativeFont(style,fontFamily,partKey))}
+            inheritedFamily={nativeRoleDrawsText(style, role) ? component.fontFamily : undefined}
+            typography={{ fontWeight: component.fontWeight, fontStyle: component.fontStyle, letterSpacing: component.letterSpacing }}
+            onTypographyChange={typography=>patchPart(shapePatch(typography))} onLetterSpacingChange={letterSpacing=>patchPart({letterSpacing})}
+            showSpacing={role === "icon" || role === "unit" || role === "states"} />
+          {fontSizeField(nativeComponentFontSize(id, style, partKey), fontSize=>patchPart(nativePartForFontSize(id, style, partKey, fontSize)))}
+        </>}
 
         {partKey === "plot" && <>
           <p className="watchface-studio-summary">
@@ -460,7 +478,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
       {id !== "date_year" && <label className="field">{t("Preview sample")}<input aria-label={t("Preview sample")} value={nativeDataPreviewValue(id,style)} maxLength={6} onChange={event=>onPatch({previewValue:event.target.value.replace(/[^0-9.:%−-]/g,"")})} /></label>}
       {id === "date_year" && <p className="field-hint">{t("Year follows the date in Preview simulation.")}</p>}
       <p className="watchface-studio-summary">{t("The sample only feeds this preview; the watch supplies live values. Firmware support and state ordering still need an on-watch test.")}</p>
-      <button type="button" className="secondary-button wf-native-restore-all" onClick={()=>onPatch({parts:undefined,assets:undefined,assetTexts:undefined,fontReplacedAssets:undefined,chartStyle:undefined,color:"#ffffff",fontFamily:undefined,scale:1,chartWidth:240,chartHeight:120})}><RotateCcw size={14} />{" "}{t("Restore all appearance defaults")}</button>
+      <button type="button" className="secondary-button wf-native-restore-all" onClick={()=>onPatch({parts:undefined,assets:undefined,assetTexts:undefined,fontReplacedAssets:undefined,chartStyle:undefined,color:"#ffffff",fontFamily:undefined,fontWeight:undefined,fontStyle:undefined,letterSpacing:undefined,scale:1,chartWidth:240,chartHeight:120})}><RotateCcw size={14} />{" "}{t("Restore all appearance defaults")}</button>
     </div>, { disabled: locked })}
   </>;
 }

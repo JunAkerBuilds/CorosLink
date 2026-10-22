@@ -2318,7 +2318,15 @@ export interface WatchfaceAmPmStyle {
   color?: string;
   /** Optional desktop font rasterized into the live AM and PM sprites. */
   fontFamily?: string;
+  fontWeight?: number;
+  fontStyle?: "normal" | "italic";
+  letterSpacing?: number;
   rasterFont?: CorosWatchfaceRasterFont;
+}
+
+/** The weight, style and spacing an AM/PM font draws with. */
+function amPmTypography(style: WatchfaceAmPmStyle): WatchfaceTypography {
+  return { fontWeight: style.fontWeight, fontStyle: style.fontStyle, letterSpacing: style.letterSpacing };
 }
 
 /**
@@ -2506,7 +2514,8 @@ export async function buildAmPmSpriteReplacements(
             width,
             height,
             style.fontFamily,
-            style.color ?? "#ffffff"
+            style.color ?? "#ffffff",
+            amPmTypography(style)
           )
         : style.rasterFont && rasterFontSupportsText(style.rasterFont, job.label)
           ? await renderRasterFontSprite(job.label, width, height, tintedForComponent(style.rasterFont, style.color), style.color ?? "#ffffff")
@@ -11326,7 +11335,8 @@ export async function drawStudioPreview(
             width,
             height,
             ampmStyle.fontFamily,
-            ampmStyle.color ?? options.digitColor
+            ampmStyle.color ?? options.digitColor,
+            amPmTypography(ampmStyle)
           )
         : ampmStyle.rasterFont && rasterFontSupportsText(ampmStyle.rasterFont, now.getHours() < 12 ? "AM" : "PM")
           ? await renderRasterFontSprite(now.getHours() < 12 ? "AM" : "PM", width, height, tintedForComponent(ampmStyle.rasterFont, ampmStyle.color), ampmStyle.color ?? options.digitColor)
