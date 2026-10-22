@@ -923,6 +923,7 @@ export interface CorosWatchfaceBackgroundText extends CorosWatchfaceBackgroundEl
   fontSize: number;
   color: string;
   weight: number;
+  fontStyle?: "normal" | "italic";
   align: "left" | "center" | "right";
 }
 
@@ -1004,6 +1005,9 @@ export interface CorosWatchfaceExerciseSeparatorStyle {
   size: number;
   scale: number;
   color: string;
+  /** The generated glyph's weight and style; absent draws it bold (700). */
+  fontWeight?: number;
+  fontStyle?: "normal" | "italic";
   /** Optional independent PNG; absent renders a generated colon glyph. */
   artwork?: CorosWatchfaceArtwork | null;
 }

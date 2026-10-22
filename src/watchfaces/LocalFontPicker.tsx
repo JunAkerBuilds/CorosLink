@@ -472,33 +472,14 @@ export function LocalFontPicker({
 
       {typography && onTypographyChange ? (
         <div className="watchface-typography-controls">
-          {rasterFontIsActive ? null : <>
-          <label>{t("Weight")}<select
-              value={fontWeight}
+          {rasterFontIsActive ? null : (
+            <FontShapeControls
+              fontWeight={fontWeight}
+              fontStyle={fontStyle}
               disabled={fontShapeControlsDisabled}
-              onChange={(event) => updateTypography({ fontWeight: Number(event.target.value) })}
-            >
-              {[100, 200, 300, 400, 500, 600, 700, 800, 900].map((weight) => (
-                <option key={weight} value={weight}>
-                  {weight}{weight === 400 ? t(" · Regular") : weight === 700 ? t(" · Bold") : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>{t("Style")}<select
-              value={fontStyle}
-              disabled={fontShapeControlsDisabled}
-              onChange={(event) =>
-                updateTypography({
-                  fontStyle: event.target.value as "normal" | "italic"
-                })
-              }
-            >
-              <option value="normal">{t("Normal")}</option>
-              <option value="italic">{t("Italic")}</option>
-            </select>
-          </label>
-          </>}
+              onChange={updateTypography}
+            />
+          )}
           {showSpacing ? <label className="watchface-typography-tracking">{t("Sprite spacing")}{" "}<span>{Math.round(letterSpacing * 100)}%</span>
             <input
               type="range"
@@ -552,5 +533,44 @@ export function LocalFontPicker({
       ) : null}
 
     </div>
+  );
+}
+
+/** The Weight and Style menus, also used where a glyph inherits another layer's font. */
+export function FontShapeControls({ fontWeight, fontStyle, disabled = false, onChange }: {
+  fontWeight: number;
+  fontStyle: "normal" | "italic";
+  disabled?: boolean;
+  onChange: (patch: { fontWeight?: number; fontStyle?: "normal" | "italic" }) => void;
+}) {
+  useLanguage();
+  return (
+    <>
+      <label>{t("Weight")}<select
+          value={fontWeight}
+          disabled={disabled}
+          onChange={(event) => onChange({ fontWeight: Number(event.target.value) })}
+        >
+          {[100, 200, 300, 400, 500, 600, 700, 800, 900].map((weight) => (
+            <option key={weight} value={weight}>
+              {weight}{weight === 400 ? t(" · Regular") : weight === 700 ? t(" · Bold") : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>{t("Style")}<select
+          value={fontStyle}
+          disabled={disabled}
+          onChange={(event) =>
+            onChange({
+              fontStyle: event.target.value as "normal" | "italic"
+            })
+          }
+        >
+          <option value="normal">{t("Normal")}</option>
+          <option value="italic">{t("Italic")}</option>
+        </select>
+      </label>
+    </>
   );
 }

@@ -97,10 +97,12 @@ async function drawExerciseSeparator(
       : "system-ui, sans-serif";
     layerContext.textAlign = "center";
     layerContext.textBaseline = "middle";
+    const fontWeight = separator.fontWeight ?? 700;
+    const fontStyle = separator.fontStyle ?? "normal";
     setWatchfaceCanvasFont(
       layerContext,
-      { family: separatorFont, size: Math.round(height), weight: 700 },
-      `700 ${Math.round(height)}px ${family}`
+      { family: separatorFont, size: Math.round(height), weight: fontWeight, style: fontStyle },
+      `${fontStyle} ${fontWeight} ${Math.round(height)}px ${family}`
     );
     layerContext.fillStyle = separator.color;
     fillWatchfaceText(layerContext, ":", centerX, centerY);

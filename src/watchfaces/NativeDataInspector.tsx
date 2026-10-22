@@ -6,7 +6,7 @@ import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataSty
 import type { CorosLinkApi } from "../coroslink-api";
 import { NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeDataAsset, nativeDataPreviewValue } from "./nativeData";
 import { NATIVE_CHART_BAR_PAGES, NATIVE_CHART_FIXED_EQUIVALENTS, NATIVE_CHART_PAGES, nativeChartReadoutLabel, nativeChartRepresentation } from "../../electron/watchfaceNativeCatalog";
-import { nativeAssetText, nativeComponentFontSize, nativeFontRole, nativeHasFontSize, nativeHasGlyphArt, nativePart, nativePartForFontSize, nativePartHasPosition, nativeParts, nativeRoleDrawsText, nativeRoleIndices, nativeScaleForFontSize, withNativeFont } from "./nativeDataParts";
+import { nativeAssetText, nativeComponentFontSize, nativeFontRole, nativeFontSizePart, nativeHasGlyphArt, nativePart, nativePartForFontSize, nativePartHasPosition, nativeParts, nativeRoleDrawsText, nativeRoleIndices, nativeScaleForFontSize, withNativeFont } from "./nativeDataParts";
 import { chartReadoutHidden } from "./chartReadouts";
 import { loadStudioImage, resizeAndTintSprite, type WatchfaceTypography } from "./watchfaceStudio";
 import { LocalFontPicker } from "./LocalFontPicker";
@@ -231,7 +231,7 @@ type RenderSection = (
 export function NativeDataInspector({ id, style, coordinateScale, api, disabled, renderSection, renderFontSizeField, onPatch, onError, onImportStart, onImportFinish, isImportCurrent, chartGroups = [], chartReadouts = chartGroups, onChartGroup, onAddReadout, onRemoveReadout, takenReadouts, onShowReadout, onAddPage, onRemovePage, onMakeFixed, pageFields, onSelectField, fieldPages }: {
   id: string; style: Style; api: CorosLinkApi; disabled: boolean; coordinateScale: number;
   renderSection: RenderSection;
-  /** The editor's shared Font size field, in watch pixels. */
+  /** The editor's shared Font size field, in master pixels. */
   renderFontSizeField: (value: number, onChange: (fontSize: number) => void) => ReactNode;
   /** Template chart readouts the layer can switch to; the watch's Back button cycles between them. */
   chartGroups?: string[]; onChartGroup?: (source: string) => void;
@@ -277,9 +277,9 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   const patchChart = (patch: NonNullable<Style["chartStyle"]>) => onPatch({chartStyle:{...style.chartStyle,...patch}});
   // The picker sends only the weight or style that changed; spacing comes separately.
   const shapePatch = ({ rasterFont: _rasterFont, letterSpacing: _spacing, ...shape }: WatchfaceTypography) => shape;
-  /** Font sizes show in watch pixels, like Width and Height; the style stores master pixels. */
+  /** Master pixels, like every other layer's Font size, so equal sizes read the same across layers. */
   const fontSizeField = (fontSize: number, change: (fontSize: number) => void) =>
-    <div className="watchface-position-inputs">{renderFontSizeField(Math.round(fontSize * coordinateScale), value => change(value / coordinateScale))}</div>;
+    <div className="watchface-position-inputs">{renderFontSizeField(Math.round(fontSize), change)}</div>;
 
   async function importArtwork(folder: boolean) {
     if (!role) return;
@@ -388,7 +388,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
         inheritedFamily={nativeHasGlyphArt(style) ? undefined : nativePart(id, style, "value").fontFamily}
         typography={{ fontWeight: style.fontWeight ?? 400, fontStyle: style.fontStyle ?? "normal", letterSpacing: style.letterSpacing ?? 0 }}
         onTypographyChange={typography=>onPatch(shapePatch(typography))} onLetterSpacingChange={letterSpacing=>onPatch({letterSpacing})} />
-      {nativeHasFontSize(id, style) && fontSizeField(nativeComponentFontSize(id, style, "value"), fontSize=>onPatch({scale:nativeScaleForFontSize(id, style, fontSize)}))}
+      {fontSizeField(nativeComponentFontSize(id, style, nativeFontSizePart(id, style)), fontSize=>onPatch({scale:nativeScaleForFontSize(id, style, fontSize)}))}
       {definition.kind === "chart" && <ChartPageStrip current={style.chartSource ?? "chart_stress"} readouts={[...chartReadouts, ...stored]} editable={[...chartGroups, ...stored]}
         template={chartReadouts} hidden={hiddenReadouts} taken={takenReadouts} removed={style.removedReadouts ?? []} disabled={locked}
         barsOn={(style.chartStyle?.barWidth ?? 8) > 0} onBars={on => patchChart(on ? { barWidth: 8, barGap: style.chartStyle?.barGap || 4 } : { barWidth: 0 })}

@@ -689,6 +689,7 @@ export const watchfacesFrench: Record<string, string> = {
   "Added by Studio using the minute digits. This template has no seconds of its own.": "Ajouté par l’atelier avec les chiffres des minutes. Ce modèle ne possède pas de secondes.",
   "Remove seconds": "Supprimer les secondes",
   "The watch's thermometer supplies this value and can be affected by body heat. Add Current weather under Weather for weather data.": "Cette valeur provient du thermomètre de la montre et peut être influencée par la chaleur corporelle. Ajoutez Météo actuelle sous Météo pour les données météo.",
+  "On the watch this reading always uses the template’s own digits, tinted with its color, so a font, weight or font size can’t change it.": "Sur la montre, cette mesure utilise toujours les chiffres du modèle, teintés de sa couleur : une police, une graisse ou une taille de police ne peuvent pas la changer.",
   "Exercise separator": "Séparateur d’exercice",
   "Show separator": "Afficher le séparateur",
   "Size": "Taille",

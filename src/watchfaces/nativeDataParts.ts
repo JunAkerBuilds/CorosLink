@@ -81,12 +81,15 @@ export function nativeComponentFontSize(id: string, style: Style, part: Part): n
   return (role && nativeRoleDrawsText(style, role) ? nativeTextFontSize(height) : height) * style.scale;
 }
 
-/** Fields whose Font size is their number's; icon-only fields keep a plain scale. */
-export function nativeHasFontSize(id: string, style: Style): boolean { return nativeParts(id, style).includes("value"); }
+/** The component a layer's Font size names: its number, or the state artwork of a field without one. */
+export function nativeFontSizePart(id: string, style: Style): Part {
+  const parts = nativeParts(id, style);
+  return parts.includes("value") ? "value" : parts[0];
+}
 
-/** The layer scale that draws the number at `fontSize` master pixels, within the scale's 0.1–4 range. */
+/** The layer scale that draws that component at `fontSize` master pixels, within the scale's 0.1–4 range. */
 export function nativeScaleForFontSize(id: string, style: Style, fontSize: number): number {
-  const base = nativeComponentFontSize(id, { ...style, scale: 1 }, "value");
+  const base = nativeComponentFontSize(id, { ...style, scale: 1 }, nativeFontSizePart(id, style));
   return Math.round(Math.max(0.1, Math.min(4, fontSize / Math.max(1, base))) * 1000) / 1000;
 }
 

@@ -218,10 +218,11 @@ function drawBackgroundElement(
       context.fillStyle = element.color;
       context.textAlign = element.align;
       context.textBaseline = "middle";
+      const fontStyle = element.fontStyle ?? "normal";
       setWatchfaceCanvasFont(
         context,
-        { family: element.fontFamily, size: element.fontSize, weight: element.weight },
-        `${element.weight} ${element.fontSize}px ${quoteFamily(element.fontFamily)}`
+        { family: element.fontFamily, size: element.fontSize, weight: element.weight, style: fontStyle },
+        `${fontStyle} ${element.weight} ${element.fontSize}px ${quoteFamily(element.fontFamily)}`
       );
       fillWatchfaceText(context, element.text, 0, 0);
   }

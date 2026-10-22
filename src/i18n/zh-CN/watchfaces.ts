@@ -690,6 +690,7 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Added by Studio using the minute digits. This template has no seconds of its own.": "Studio 使用分钟数字添加。该模板没有自己的秒数。",
   "Remove seconds": "删除秒数",
   "The watch's thermometer supplies this value and can be affected by body heat. Add Current weather under Weather for weather data.": "手表的温度计提供该值，并且可能会受到体温的影响。在天气下添加当前天气以获取天气数据。",
+  "On the watch this reading always uses the template’s own digits, tinted with its color, so a font, weight or font size can’t change it.": "在手表上，此读数始终使用模板自带的数字，并以其颜色着色，因此字体、粗细或字号无法改变它。",
   "Exercise separator": "运动分隔符",
   "Show separator": "显示分隔符",
   "Size": "大小",

@@ -244,14 +244,14 @@ function collectModeFontUses(
   if (exerciseSeparator && exerciseSeparator.enabled !== false && !exerciseSeparator.artwork) {
     add(
       (mode.metricStyles ?? base.metricStyles)?.exercise?.fontFamily || family,
-      700,
-      "normal",
+      exerciseSeparator.fontWeight ?? 700,
+      exerciseSeparator.fontStyle,
       "Separators"
     );
   }
   add(mode.ampmIndicator?.fontFamily, mode.ampmIndicator?.fontWeight, mode.ampmIndicator?.fontStyle, "AM/PM");
   for (const element of mode.backgroundElements ?? []) {
-    if (element.kind === "text") add(element.fontFamily, element.weight, "normal", "Text layers");
+    if (element.kind === "text") add(element.fontFamily, element.weight, element.fontStyle, "Text layers");
   }
   for (const native of Object.values(mode.nativeData ?? {})) {
     add(native?.fontFamily, native?.fontWeight, native?.fontStyle, "Native data");

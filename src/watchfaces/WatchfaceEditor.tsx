@@ -12,7 +12,7 @@ import { WatchfaceNumberAlignControl } from "./WatchfaceNumberAlignControl";
 import { NativeDataInspector } from "./NativeDataInspector";
 import { MetricKindNote, watchfaceMetricKind } from "./watchfaceMetricKinds";
 import { NATIVE_CHART_FIXED_EQUIVALENTS, NATIVE_CHART_PAGES, nativeChartReadoutLabel } from "../../electron/watchfaceNativeCatalog";
-import { nativeHasFontSize, nativePart, nativeParts } from "./nativeDataParts";
+import { nativePart, nativeParts } from "./nativeDataParts";
 import { addChartPage, chartDragSplit, chartGraphBounds, chartReadoutBounds, chartReadoutHidden, chartReadoutPage, chartSourceOf, chartStoredReadout, dropChartReadout, hiddenChartReadout, moveChartGraph, moveChartReadout, newChartReadout, removeChartPage, setChartReadoutShown, storedChartReadouts, swapChartReadout } from "./chartReadouts";
 import { describeNativeDataComponents } from "./nativeDataAutomation";
 import { watchfaceAutomationAssetContracts } from "./watchfaceAutomationAssetContracts";
@@ -508,6 +508,7 @@ import {
   retargetWatchfaceCompositionToAod,
   retargetWatchfaceCompositionToCurrent,
   supportsWatchfaceSpriteRotation,
+  TEMPERATURE_FONT_COMPAT,
   virtualControlIconCanvasSize,
   isControlComplicationEnabled,
   isTemplateTimeColonEnabled,
@@ -561,7 +562,7 @@ import {
 } from "./weatherAssets";
 import { CustomPngFontPanel } from "./CustomPngFontPanel";
 import { OfficialAssetBrowser, officialAssetToSpriteFolder, type OfficialAssetBrowserMode } from "./OfficialAssetBrowser";
-import { LocalFontPicker } from "./LocalFontPicker";
+import { FontShapeControls, LocalFontPicker } from "./LocalFontPicker";
 import {
   TemplateSpriteStrip,
   WatchfaceFontPreview,
@@ -12630,6 +12631,8 @@ export function WatchfaceEditor({
     if (layer.kind === "metric" && layer.metricId) {
       const style = design.metricStyles?.[layer.metricId];
       // Compat temperature keeps the template's digits, so it has no font size.
+      // Compatibility mode exports the fixed temperature with the template's own digit folder.
+      const templateDigitsOnly = layer.metricId === "temperature" && TEMPERATURE_FONT_COMPAT;
       const metricFontSizeField = (() => {
         const cell = previewResolution ? watchfaceFixedMetricDigitSize(previewResolution, layer.metricId) : null;
         if (!cell || fixedMetricFontSize(layer.metricId, { fontSize: 1 }) === undefined) return null;
@@ -12692,9 +12695,18 @@ export function WatchfaceEditor({
                     <div className="watchface-position-inputs">
                       <label>{t("Center X")}<EditableNumberInput step="1" value={exerciseSeparator.x} fallback={previewWidth / 2} disabled={isPositionLocked(layer.id)} onValueChange={(x) => updateExerciseSeparator({ x })} /></label>
                       <label>{t("Center Y")}<EditableNumberInput step="1" value={exerciseSeparator.y} fallback={previewHeight * 0.8} disabled={isPositionLocked(layer.id)} onValueChange={(y) => updateExerciseSeparator({ y })} /></label>
-                      <label>{t("Size")}<EditableNumberInput min="1" step="1" value={exerciseSeparator.size} fallback={1} onValueChange={(size) => updateExerciseSeparator({ size: Math.max(1, size) })} /></label>
-                      <label>{t("Scale")}<EditableNumberInput min="0.01" step="0.01" value={exerciseSeparator.scale} fallback={1} onValueChange={(scale) => updateExerciseSeparator({ scale: Math.max(0.01, scale) })} /></label>
+                      {/* Drawn at size × scale; one Font size sets both, as on every other layer. */}
+                      {renderFontSizeField(Math.round(exerciseSeparator.size * exerciseSeparator.scale), (fontSize) => updateExerciseSeparator({ size: fontSize, scale: 1 }))}
                     </div>
+                    {exerciseSeparator.artwork ? null : (
+                      <div className="watchface-typography-controls">
+                        <FontShapeControls
+                          fontWeight={exerciseSeparator.fontWeight ?? 700}
+                          fontStyle={exerciseSeparator.fontStyle ?? "normal"}
+                          onChange={(shape) => updateExerciseSeparator(shape)}
+                        />
+                      </div>
+                    )}
                     {exerciseSeparator.artwork ? (
                       <div className="wf-config-asset-preview">
                         <img
@@ -12735,14 +12747,20 @@ export function WatchfaceEditor({
             "Typography",
             <div className="wf-property-stack">
               <WatchfaceNumberAlignControl value={style?.align} allowTemplateDefault onChange={(align) => setMetricStyle(layer.metricId!, { align })} />
-              <LocalFontPicker api={api} label={t("Font")} value={style?.fontFamily ?? design.fontFamily} emptyLabel={t("Keep template font")} preview={renderFontPreview(layer.metricId!, style)} onChange={(fontFamily) => setMetricStyle(layer.metricId!, { fontFamily })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle(layer.metricId!, typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle(layer.metricId!, { letterSpacing })} />
+              {templateDigitsOnly ? (
+                <p className="watchface-studio-summary">{t("On the watch this reading always uses the template’s own digits, tinted with its color, so a font, weight or font size can’t change it.")}</p>
+              ) : (
+                <LocalFontPicker api={api} label={t("Font")} value={style?.fontFamily ?? design.fontFamily} emptyLabel={t("Keep template font")} preview={renderFontPreview(layer.metricId!, style)} onChange={(fontFamily) => setMetricStyle(layer.metricId!, { fontFamily })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle(layer.metricId!, typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle(layer.metricId!, { letterSpacing })} />
+              )}
               <div className="watchface-position-inputs">
                 {metricFontSizeField
                   ? renderFontSizeField(metricFontSizeField.value, (fontSize) => setMetricStyle(layer.metricId!, { fontSize }))
                   : <label>{t("Scale")}<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle(layer.metricId!, { scale: Math.max(0.01, scale) })} /></label>}
                 {supportsWatchfaceSpriteRotation(layer.metricId) ? <label>{t("Rotation")}<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle(layer.metricId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label> : null}
               </div>
-              <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel={layer.label} onActivate={() => setMetricStyle(layer.metricId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont })} />
+              {templateDigitsOnly ? null : (
+                <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel={layer.label} onActivate={() => setMetricStyle(layer.metricId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont })} />
+              )}
             </div>,
             { disabled: isPositionLocked(layer.id) }
           )}
@@ -14176,22 +14194,6 @@ export function WatchfaceEditor({
           <button type="button" onClick={() => setPosition(style.x, style.y - fromWatchCoordinate(1))} aria-label={t("Nudge up")}><ArrowUp size={13} aria-hidden="true" /></button>
           <button type="button" onClick={() => setPosition(style.x, style.y + fromWatchCoordinate(1))} aria-label={t("Nudge down")}><ArrowDown size={13} aria-hidden="true" /></button>
         </div>
-        {/* A field with a number sizes by Font size under Appearance instead. */}
-        {nativeHasFontSize(id, style) ? null : <>
-          <span>{t("Scale")}</span>
-          <span className="wf-input-with-unit wf-position-scale">
-            <EditableNumberInput
-              aria-label={t("Layer scale")}
-              min="0.1"
-              max="4"
-              step="0.05"
-              value={style.scale}
-              fallback={1}
-              onValueChange={(scale) => updateNativeData(id, { scale: Math.max(0.1, Math.min(4, scale)) })}
-            />
-            <span>×</span>
-          </span>
-        </>}
       </>,
       <p className="watchface-studio-summary">
         {target === id
@@ -14326,20 +14328,13 @@ export function WatchfaceEditor({
               onTypographyChange={({ fontWeight, fontStyle }) => updateStaticSeparator(separatorId, { fontWeight, fontStyle })}
               showSpacing={false}
             />
-            <label className="field watchface-zoom-control">{t("Size")}{" "}<span>{separator.size}{t("px")}</span>
-              <input
-                type="range"
-                min="12"
-                max="200"
-                step="1"
-                value={separator.size}
-                onChange={(event) => {
-                  const size = Number(event.target.value);
-                  updateStaticSeparator(separatorId, { size });
-                  setPosition(separator.x, separator.y, size);
-                }}
-              />
-            </label>
+            <div className="watchface-position-inputs">
+              {renderFontSizeField(separator.size, (fontSize) => {
+                const size = Math.max(12, Math.min(200, fontSize));
+                updateStaticSeparator(separatorId, { size });
+                setPosition(separator.x, separator.y, size);
+              })}
+            </div>
           </div>,
           { disabled: isPositionLocked(separatorId === "colon" ? "staticColon" : "staticDateSlash") }
         )}
@@ -14479,20 +14474,14 @@ export function WatchfaceEditor({
               onTypographyChange={({ fontWeight, fontStyle }) => updateAmPmIndicator({ ...(fontWeight !== undefined ? { fontWeight } : {}), ...(fontStyle ? { fontStyle } : {}) })}
               onLetterSpacingChange={(letterSpacing) => updateAmPmIndicator({ letterSpacing })}
             />
-            <label className="field watchface-zoom-control">{t("Size")}{" "}<span>{indicator.scale.toFixed(2)}×</span>
-              <input
-                type="range"
-                min="0.5"
-                max="2"
-                step="0.02"
-                value={indicator.scale}
-                onChange={(event) => {
-                  const scale = Number(event.target.value);
-                  updateAmPmIndicator({ scale });
-                  setPosition(indicator.x, indicator.y, scale);
-                }}
-              />
-            </label>
+            {/* The lettering's height in master pixels, like PNG digits elsewhere; it sets the indicator's scale. */}
+            <div className="watchface-position-inputs">
+              {renderFontSizeField(Math.round(capability.icon.height * indicator.scale), (fontSize) => {
+                const scale = Math.round(Math.max(0.5, Math.min(2, fontSize / capability.icon.height)) * 1000) / 1000;
+                updateAmPmIndicator({ scale });
+                setPosition(indicator.x, indicator.y, scale);
+              })}
+            </div>
           </div>,
           { disabled: isPositionLocked("ampm") }
         )}
@@ -14863,10 +14852,19 @@ export function WatchfaceEditor({
               "Text",
               <div className="wf-property-stack">
                 <label className="field">{t("Text")}<input value={element.text} maxLength={40} onChange={(event) => set({ text: event.target.value })} /></label>
-                <LocalFontPicker api={api} label={t("Font")} value={element.fontFamily} emptyLabel={t("System font")} onChange={(fontFamily) => set({ fontFamily })} />
+                <LocalFontPicker
+                  api={api}
+                  label={t("Font")}
+                  value={element.fontFamily}
+                  emptyLabel={t("System font")}
+                  onChange={(fontFamily) => set({ fontFamily })}
+                  inheritedFamily="system-ui"
+                  typography={{ fontWeight: element.weight, fontStyle: element.fontStyle ?? "normal" }}
+                  onTypographyChange={({ fontWeight, fontStyle }) => set({ weight: fontWeight ?? element.weight, fontStyle: fontStyle ?? "normal" })}
+                  showSpacing={false}
+                />
                 <div className="watchface-position-inputs">
-                  <label>{t("Size")}<EditableNumberInput min="12" max="200" step="1" value={element.fontSize} fallback={12} onValueChange={(fontSize) => set({ fontSize: Math.max(12, fontSize) })} /></label>
-                  <label>{t("Weight")}<EditableNumberInput min="100" max="900" step="100" value={element.weight} fallback={400} onValueChange={(weight) => set({ weight: Math.max(100, Math.min(900, Math.round(weight / 100) * 100)) })} /></label>
+                  {renderFontSizeField(element.fontSize, (fontSize) => set({ fontSize: Math.max(12, Math.min(200, fontSize)) }))}
                 </div>
                 <label className="field">{t("Text align")}<select value={element.align} onChange={(event) => set({ align: event.target.value as CorosWatchfaceBackgroundText["align"] })}><option value="left">{t("Left")}</option><option value="center">{t("Center")}</option><option value="right">{t("Right")}</option></select></label>
               </div>,

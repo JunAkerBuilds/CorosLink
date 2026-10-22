@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { nativeComponentFontSize, nativeHasFontSize, nativeHasGlyphArt, nativePart, nativePartForFontSize, nativeScaleForFontSize, withNativeFont } from "../src/watchfaces/nativeDataParts.ts";
+import { nativeComponentFontSize, nativeFontSizePart, nativeHasGlyphArt, nativePart, nativePartForFontSize, nativeScaleForFontSize, withNativeFont } from "../src/watchfaces/nativeDataParts.ts";
 
 // A recovered weather field: the template's digit, sign and unit images, plus an icon.
 const digits = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [String(i), `digit-${i}`]));
@@ -67,7 +67,10 @@ assert.equal(nativePart("weather_uv", added, "value").fontWeight, 400, "Regular 
 assert.equal(nativeComponentFontSize("weather_uv", added, "value"), 36, "48 px sprite, scale 1");
 assert.equal(nativeComponentFontSize("weather_temp", recovered, "value"), 95, "Template digits read as their height");
 assert.equal(nativeComponentFontSize("weather_uv", { ...added, scale: 1.5 }, "value"), 54);
-assert.ok(nativeHasFontSize("weather_uv", added) && !nativeHasFontSize("weather_direction", added), "Icon-only fields keep Scale");
+// Every layer has a Font size: its number's, or for a field without one, its state artwork's.
+assert.equal(nativeFontSizePart("weather_uv", added), "value");
+assert.equal(nativeFontSizePart("weather_direction", added), "states");
+assert.equal(nativeScaleForFontSize("weather_direction", added, 72), 2);
 // The layer's Font size is its scale; it stays within the scale's range.
 assert.equal(nativeScaleForFontSize("weather_uv", added, 54), 1.5);
 assert.equal(nativeScaleForFontSize("weather_uv", added, 1000), 4);
