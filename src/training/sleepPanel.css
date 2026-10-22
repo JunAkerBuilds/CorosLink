@@ -12,3 +12,75 @@
   font-size: 12px;
   line-height: 1.5;
 }
+
+/* The whole card opens the past week; the pill is its visible, keyboard-reachable way in. */
+.sleep-panel.is-openable {
+  cursor: pointer;
+  transition: border-color 160ms ease;
+}
+
+.sleep-panel.is-openable:hover {
+  border-color: color-mix(in srgb, var(--sleep-tone) 34%, rgba(255, 255, 255, 0.09));
+}
+
+.sleep-panel-week {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 34px;
+  flex-shrink: 0;
+  padding: 0 10px 0 13px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sleep-tone) 18%, rgba(255, 255, 255, 0.04));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: color-mix(in srgb, var(--sleep-tone) 70%, white);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background 160ms ease;
+}
+
+.sleep-panel-week svg {
+  transition: transform 160ms ease;
+}
+
+.sleep-panel.is-openable:hover .sleep-panel-week {
+  background: color-mix(in srgb, var(--sleep-tone) 28%, rgba(255, 255, 255, 0.06));
+}
+
+.sleep-panel.is-openable:hover .sleep-panel-week svg {
+  transform: translateX(2px);
+}
+
+@container sleep-summary (max-width: 300px) {
+  .sleep-panel-week {
+    justify-content: center;
+    width: 34px;
+    padding: 0;
+  }
+
+  .sleep-panel-week span {
+    display: none;
+  }
+}
+
+:root[data-theme="paper"] .sleep-panel.is-openable:hover {
+  border-color: color-mix(in srgb, var(--sleep-tone) 40%, rgba(38, 34, 28, 0.1));
+}
+
+:root[data-theme="paper"] .sleep-panel-week {
+  background: color-mix(in srgb, var(--sleep-tone) 16%, rgba(255, 255, 255, 0.7));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sleep-tone) 26%, transparent);
+  color: color-mix(in srgb, var(--sleep-tone) 38%, #1d2420);
+}
+
+:root[data-theme="paper"] .sleep-panel.is-openable:hover .sleep-panel-week {
+  background: color-mix(in srgb, var(--sleep-tone) 26%, rgba(255, 255, 255, 0.7));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sleep-panel-week svg {
+    transition: none;
+  }
+}

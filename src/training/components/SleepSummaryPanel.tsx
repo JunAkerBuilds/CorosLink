@@ -1,12 +1,14 @@
 import { t, useLanguage } from "../../i18n/training";
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 import {
+  ChevronRight,
   Loader2,
   Moon,
   MoonStar,
   Sunrise
 } from "lucide-react";
 import { formatSleepClockRange, formatSleepNightLabel } from "../formatters";
+import { formatSleepDuration, sleepScoreLabel, sleepScoreTone } from "../sleepWeek";
 import type { TrainingHubSleepRecord, TrainingHubSleepSummary } from "../../../electron/types";
 import "../sleepPanel.css";
 
@@ -21,62 +23,8 @@ interface SleepSummaryPanelProps {
   onConnect?: () => Promise<unknown>;
   /** Local-Only Mode: sleep comes from the watch, and the sleep score (computed by COROS) never arrives. */
   local?: boolean;
-}
-
-function formatSleepDuration(minutes?: number): string {
-  if (minutes === undefined || !Number.isFinite(minutes)) {
-    return "–";
-  }
-
-  if (minutes <= 0) {
-    return "0m";
-  }
-
-  const hours = Math.floor(minutes / 60);
-  const remainder = Math.round(minutes % 60);
-
-  if (hours <= 0) {
-    return `${remainder}m`;
-  }
-
-  return `${hours}h ${String(remainder).padStart(2, "0")}m`;
-}
-
-function sleepScoreTone(score?: number): "low" | "mid" | "good" | "high" | "neutral" {
-  if (score === undefined || !Number.isFinite(score)) {
-    return "neutral";
-  }
-
-  if (score < 60) {
-    return "low";
-  }
-
-  if (score < 75) {
-    return "mid";
-  }
-
-  if (score < 90) {
-    return "good";
-  }
-
-  return "high";
-}
-
-function sleepScoreLabel(score?: number): string {
-  const tone = sleepScoreTone(score);
-
-  switch (tone) {
-    case "low":
-      return t("Poor");
-    case "mid":
-      return t("Fair");
-    case "good":
-      return t("Good");
-    case "high":
-      return t("Excellent");
-    default:
-      return t("Waiting");
-  }
+  /** Opens the past-week sleep page; the hub morphs this card into it. */
+  onOpenWeek?: () => void;
 }
 
 function stageTotal(record: TrainingHubSleepRecord): number {
@@ -268,7 +216,8 @@ export function SleepSummaryPanel({
   connecting = false,
   refreshing = false,
   onConnect,
-  local = false
+  local = false,
+  onOpenWeek
 }: SleepSummaryPanelProps) {
   useLanguage();
   const [connectingMcp, setConnectingMcp] = useState(false);
@@ -291,9 +240,15 @@ export function SleepSummaryPanel({
   const isLoading = connecting || refreshing;
   // Local-Only Mode has no sleep score: the duration leads, and the score-tinted badge has nothing to show.
   const durationOnly = local && latest?.score === undefined;
+  // The whole card opens the week; the header button is its keyboard and screen-reader way in.
+  const canOpenWeek = Boolean(onOpenWeek) && !isLoading && Boolean(latest);
+  const openWeekFromCard = (event: MouseEvent<HTMLElement>) => {
+    if ((event.target as Element).closest("button, a, input, select, textarea")) return;
+    onOpenWeek?.();
+  };
 
   return (
-    <section className={`panel sleep-panel tone-${tone}`}>
+    <section className={`panel sleep-panel tone-${tone}${canOpenWeek ? " is-openable" : ""}`} onClick={canOpenWeek ? openWeekFromCard : undefined}>
       <div className="sleep-panel-header">
         <div>
           <p className="sleep-panel-label">
@@ -303,7 +258,12 @@ export function SleepSummaryPanel({
             {t("Sleep")} </p>
           <h2>{latest ? formatSleepNightLabel(latest) : t("Last night")}</h2>
         </div>
-        {isLoading || !durationOnly ? (
+        {canOpenWeek ? (
+          <button type="button" className="sleep-panel-week" onClick={onOpenWeek}>
+            <span>{t("Past week")}</span>
+            <ChevronRight size={15} strokeWidth={2.4} aria-hidden="true" />
+          </button>
+        ) : isLoading || !durationOnly ? (
           <span className="sleep-panel-icon" aria-hidden="true">
             {isLoading ? <Loader2 className="spin" size={16} /> : <MoonStar size={16} />}
           </span>

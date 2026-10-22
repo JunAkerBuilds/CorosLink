@@ -48,6 +48,7 @@
     "test:privacy-settings-ui": "electron scripts/test-privacy-settings-ui.cjs",
     "test:watch-commands": "npm run build:electron && cross-env TZ=Asia/Ho_Chi_Minh node scripts/test-coros-watch-commands.mjs && cross-env TZ=Asia/Kolkata node scripts/test-coros-watch-commands.mjs && cross-env TZ=America/St_Johns node scripts/test-coros-watch-commands.mjs && cross-env TZ=America/New_York node scripts/test-coros-watch-commands.mjs",
     "test:sleep-duration": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-sleep-duration.mjs",
+    "test:sleep-week": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-sleep-week.mjs",
     "test:calendar-drag": "node --experimental-strip-types scripts/test-calendar-drag.mjs",
     "test:calendar-pairing": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-calendar-pairing.mjs",
     "test:calendar-copy": "npm run build:electron && node --experimental-strip-types scripts/test-calendar-copy.mjs",

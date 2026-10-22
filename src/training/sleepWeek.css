@@ -1,0 +1,1331 @@
+/* Past 7 nights: the sleep card's page. A night-sky hero over the same dark
+   glass as the activity dialog, with the sleep card's stage colours. Training
+   Hub morphs the card into it (rules at the end of this file). */
+.sleep-week-page {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  max-width: 1240px;
+  margin-inline: auto;
+  color: var(--text-primary);
+}
+
+.sleep-week-page-head {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+}
+
+.sleep-week-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px 0 11px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.sleep-week-back:hover {
+  border-color: color-mix(in srgb, var(--text-muted) 40%, transparent);
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.sleep-week-back svg {
+  transition: transform 160ms ease;
+}
+
+.sleep-week-back:hover svg {
+  transform: translateX(-2px);
+}
+
+/* The hub stays mounted behind the page (inert in the markup): no height, no paint. */
+.training-dashboard.is-behind-page {
+  height: 0;
+  min-height: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+
+.sleep-week-surface {
+  --sw-deep: #4a63ff;
+  --sw-light: #6f89ff;
+  --sw-rem: #9b7bff;
+  --sw-awake: rgba(255, 255, 255, 0.36);
+  --sw-night: #7c86ff;
+  --sw-ink-night: #bcc4ff;
+  --sw-dawn: #f3b98b;
+  --sw-card: linear-gradient(160deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02));
+  --sw-card-border: rgba(255, 255, 255, 0.075);
+  --sw-card-rim: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --sw-well: rgba(0, 0, 0, 0.2);
+  --sw-well-rim: inset 0 1px 2px rgba(0, 0, 0, 0.28), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  --sw-hairline: color-mix(in srgb, var(--text-muted) 16%, transparent);
+  --sw-chip: rgba(255, 255, 255, 0.07);
+  --sw-chip-solid: #22263a;
+  --sw-tone-low: #ff7a86;
+  --sw-tone-mid: #ffbf5e;
+  --sw-tone-good: #4fe39a;
+  --sw-tone-high: #7cbcff;
+  --sw-tone-neutral: var(--text-muted);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: clip;
+  isolation: isolate;
+  container: sleep-week / inline-size;
+  border: 1px solid color-mix(in srgb, var(--sw-night) 20%, var(--glass-border));
+  border-radius: 24px;
+  background:
+    radial-gradient(560px 420px at calc(100% + 120px) calc(100% + 140px), rgba(124, 134, 255, 0.1), transparent 70%),
+    linear-gradient(172deg, #161a28, #121520 38%, #101217);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.32), inset 0 1px 0 #ffffff1c, inset 0 0 0 1px #ffffff08;
+}
+
+/* ── Hero ─────────────────────────────────────────────────────────── */
+.sleep-week-hero {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  gap: 18px;
+  padding: 22px 26px 24px;
+}
+
+.sleep-week-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 -56px;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, rgba(10, 14, 36, 0.2), rgba(10, 14, 36, 0.52) 70%),
+    url("../assets/training/sleep-night.png") center 42% / cover no-repeat;
+  filter: saturate(0.85);
+  -webkit-mask-image: linear-gradient(180deg, #000 52%, transparent);
+  mask-image: linear-gradient(180deg, #000 52%, transparent);
+  pointer-events: none;
+}
+
+.sleep-week-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sleep-week-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.sleep-week-moon {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(112, 76, 222, 0.45);
+  color: #c4adff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.sleep-week-headline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 24px;
+}
+
+.sleep-week-headline.is-duration-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sleep-week-headline h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: clamp(1.45rem, 3.2cqi, 1.85rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+/* Every item leads with a dot; the 20px the row is pulled left is clipped, so no line starts with one. */
+.sleep-week-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 0;
+  margin: 8px 0 0 -20px;
+  clip-path: inset(-4px -4px -4px 20px);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.sleep-week-meta > span::before {
+  content: "·";
+  display: inline-block;
+  width: 20px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.sleep-week-best {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sleep-week-best svg {
+  color: #c4adff;
+}
+
+.sleep-week-figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+  margin-top: 22px;
+}
+
+.sleep-week-figure strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 6cqi, 3.25rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 0.95;
+}
+
+.sleep-week-figure > span:not(.sleep-week-delta) {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.sleep-week-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--sw-chip);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.3;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.sleep-week-delta.is-duration.is-up svg {
+  color: var(--sw-ink-night);
+}
+
+.sleep-week-delta.is-score.is-up {
+  background: color-mix(in srgb, var(--sw-tone-good) 13%, transparent);
+  color: var(--sw-tone-good);
+}
+
+.sleep-week-delta.is-score.is-down {
+  background: color-mix(in srgb, var(--sw-tone-mid) 13%, transparent);
+  color: var(--sw-tone-mid);
+}
+
+/* Score ring */
+.sleep-week-ring {
+  --ring-color: var(--sw-tone-neutral);
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  min-width: 128px;
+}
+
+.sleep-week-ring.tone-low { --ring-color: var(--sw-tone-low); }
+.sleep-week-ring.tone-mid { --ring-color: var(--sw-tone-mid); }
+.sleep-week-ring.tone-good { --ring-color: var(--sw-tone-good); }
+.sleep-week-ring.tone-high { --ring-color: var(--sw-tone-high); }
+
+.sleep-week-ring > svg {
+  grid-area: 1 / 1;
+  width: 112px;
+  height: 112px;
+}
+
+.sleep-week-ring-track {
+  fill: rgba(8, 10, 24, 0.32);
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 8;
+}
+
+.sleep-week-ring-arc {
+  fill: none;
+  stroke: var(--ring-color);
+  stroke-linecap: round;
+  stroke-width: 8;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--ring-color) 40%, transparent));
+}
+
+.sleep-week-ring-copy {
+  grid-area: 1 / 1;
+  align-self: center;
+  display: grid;
+  justify-items: center;
+}
+
+.sleep-week-ring-copy strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.sleep-week-ring-copy span {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.sleep-week-ring-label {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--ring-color);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+/* ── Body ─────────────────────────────────────────────────────────── */
+.sleep-week-body {
+  display: grid;
+  gap: 16px;
+  padding: 4px 26px 24px;
+}
+
+.sleep-week-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--sw-card-border);
+  border-radius: 18px;
+  background: var(--sw-card);
+  box-shadow: var(--sw-card-rim);
+}
+
+.sleep-week-card-head h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.sleep-week-card-head p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Stat tiles */
+.sleep-week-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sleep-week-stat {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "icon label"
+    "value value"
+    "foot foot";
+  align-items: center;
+  gap: 10px 8px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--sw-card-border);
+  border-radius: 16px;
+  background: var(--sw-card);
+  box-shadow: var(--sw-card-rim);
+}
+
+.sleep-week-stat-icon {
+  grid-area: icon;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--sw-night) 16%, transparent);
+  color: var(--sw-ink-night);
+}
+
+.sleep-week-stat-label {
+  grid-area: label;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sleep-week-stat-value {
+  grid-area: value;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sleep-week-stat-foot {
+  grid-area: foot;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+
+.sleep-week-verdict {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sleep-week-verdict.is-steady {
+  background: color-mix(in srgb, var(--sw-tone-good) 13%, transparent);
+  color: var(--sw-tone-good);
+}
+
+.sleep-week-verdict.is-varied {
+  background: color-mix(in srgb, var(--sw-tone-mid) 13%, transparent);
+  color: var(--sw-tone-mid);
+}
+
+.sleep-week-verdict.is-irregular {
+  background: color-mix(in srgb, var(--sw-tone-low) 13%, transparent);
+  color: var(--sw-tone-low);
+}
+
+.sleep-week-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(280px, 1fr);
+  align-items: stretch;
+  gap: 16px;
+}
+
+/* ── Nightly rhythm ───────────────────────────────────────────────── */
+.sleep-week-plot {
+  --plot-pad: 8px;
+  --plot-day: 50px;
+  --plot-value: 98px;
+  --plot-gap: 12px;
+  --plot-left: calc(var(--plot-pad) + var(--plot-day) + var(--plot-gap));
+  --plot-right: calc(var(--plot-pad) + var(--plot-value) + var(--plot-gap));
+  margin-top: 16px;
+}
+
+.sleep-week-axis {
+  height: 18px;
+  padding: 0 var(--plot-right) 0 var(--plot-left);
+}
+
+.sleep-week-axis-track {
+  position: relative;
+  height: 100%;
+}
+
+.sleep-week-axis-track > span {
+  position: absolute;
+  top: 0;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.sleep-week-axis.is-foot {
+  height: 20px;
+  margin-top: 8px;
+}
+
+.sleep-week-axis.is-foot span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.sleep-week-axis.is-foot .is-bedtime svg {
+  color: var(--sw-ink-night);
+}
+
+.sleep-week-axis.is-foot .is-wake svg {
+  color: var(--sw-dawn);
+}
+
+.sleep-week-rows {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.sleep-week-grid {
+  position: absolute;
+  top: 0;
+  right: var(--plot-right);
+  bottom: 0;
+  left: var(--plot-left);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.sleep-week-grid i {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 1px;
+  background: var(--sw-hairline);
+}
+
+.sleep-week-grid i.is-midnight {
+  background: color-mix(in srgb, var(--text-muted) 32%, transparent);
+}
+
+.sleep-week-grid b {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  width: 0;
+  border-left: 1px dashed color-mix(in srgb, var(--sw-night) 75%, transparent);
+}
+
+.sleep-week-grid b.is-wake {
+  border-left-color: color-mix(in srgb, var(--sw-dawn) 70%, transparent);
+}
+
+.sleep-week-row {
+  --row-tone: var(--sw-tone-neutral);
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: var(--plot-day) minmax(0, 1fr) var(--plot-value);
+  align-items: center;
+  gap: var(--plot-gap);
+  height: 40px;
+  padding: 0 var(--plot-pad);
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  text-align: left;
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+.sleep-week-row.tone-low { --row-tone: var(--sw-tone-low); }
+.sleep-week-row.tone-mid { --row-tone: var(--sw-tone-mid); }
+.sleep-week-row.tone-good { --row-tone: var(--sw-tone-good); }
+.sleep-week-row.tone-high { --row-tone: var(--sw-tone-high); }
+
+.sleep-week-row:hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.sleep-week-row.is-selected {
+  background: color-mix(in srgb, var(--sw-night) 11%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sw-night) 28%, transparent);
+}
+
+.sleep-week-row:focus-visible {
+  outline: 2px solid var(--sw-night);
+  outline-offset: 1px;
+}
+
+.sleep-week-day {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.sleep-week-day strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sleep-week-day small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.sleep-week-row.is-today .sleep-week-day strong {
+  color: var(--sw-ink-night);
+}
+
+.sleep-week-track {
+  position: relative;
+  height: 100%;
+  min-width: 0;
+}
+
+.sleep-week-bar {
+  position: absolute;
+  top: 50%;
+  height: 14px;
+  min-width: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #3d55ea, #6c6dff 42%, #9c7cf7 78%, #e2a0cf);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 2px 8px rgba(40, 50, 160, 0.32);
+  transform: translateY(-50%);
+  transition: height 180ms ease, box-shadow 180ms ease;
+}
+
+.sleep-week-row.is-selected .sleep-week-bar {
+  height: 18px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 4px 16px rgba(108, 109, 255, 0.42);
+}
+
+.sleep-week-row.is-partial .sleep-week-bar {
+  background:
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0 3px, transparent 3px 7px),
+    linear-gradient(90deg, #3d55ea, #6c6dff 42%, #9c7cf7 78%, #e2a0cf);
+  opacity: 0.72;
+}
+
+/* A night without a bar: a line across the track and a solid chip, so grid lines never cross the words. */
+.sleep-week-gap,
+.sleep-week-untimed {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.sleep-week-gap::before,
+.sleep-week-untimed::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--text-muted) 40%, transparent);
+}
+
+.sleep-week-untimed::before {
+  height: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sw-night) 30%, transparent);
+  transform: translateY(-50%);
+}
+
+.sleep-week-gap span,
+.sleep-week-untimed span {
+  position: relative;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--sw-chip-solid);
+  box-shadow: inset 0 0 0 1px var(--sw-card-border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sleep-week-value {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.sleep-week-hours {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sleep-week-row.is-missing .sleep-week-hours {
+  color: var(--text-muted);
+}
+
+.sleep-week-score {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--row-tone) 15%, transparent);
+  color: var(--row-tone);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.sleep-week-score:empty {
+  background: none;
+}
+
+/* ── Selected night ───────────────────────────────────────────────── */
+.sleep-week-night {
+  --night-tone: var(--sw-ink-night);
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.sleep-week-night.tone-low { --night-tone: var(--sw-tone-low); }
+.sleep-week-night.tone-mid { --night-tone: var(--sw-tone-mid); }
+.sleep-week-night.tone-good { --night-tone: var(--sw-tone-good); }
+.sleep-week-night.tone-high { --night-tone: var(--sw-tone-high); }
+
+.sleep-week-night::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(260px 200px at 100% 0%, color-mix(in srgb, var(--night-tone) 13%, transparent), transparent 70%);
+  pointer-events: none;
+}
+
+.sleep-week-night-date {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sleep-week-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sw-night) 18%, transparent);
+  color: var(--sw-ink-night);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sleep-week-pill.is-partial {
+  background: color-mix(in srgb, var(--sw-tone-mid) 15%, transparent);
+  color: var(--sw-tone-mid);
+}
+
+.sleep-week-night-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.sleep-week-night-score strong {
+  display: block;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.sleep-week-night-score span {
+  display: block;
+  margin-top: 6px;
+  color: var(--night-tone);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sleep-week-night-duration {
+  margin-left: auto;
+  text-align: right;
+}
+
+.sleep-week-night-duration span {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sleep-week-night-duration strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-primary);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.sleep-week-night-hero:not(:has(.sleep-week-night-score)) .sleep-week-night-duration {
+  margin-left: 0;
+  text-align: left;
+}
+
+.sleep-week-night-hero:not(:has(.sleep-week-night-score)) .sleep-week-night-duration strong {
+  font-family: var(--font-display);
+  font-size: 34px;
+  letter-spacing: -0.04em;
+}
+
+.sleep-week-night-window {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.sleep-week-night-window > span:not(.sleep-week-night-arrow) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sleep-week-night-window svg {
+  color: var(--sw-ink-night);
+}
+
+.sleep-week-night-window > span:last-child svg {
+  color: var(--sw-dawn);
+}
+
+.sleep-week-night-arrow {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+/* Rows share one set of columns (subgrid), so the meters line up whatever the longest stage name. */
+.sleep-week-stage-list {
+  display: grid;
+  grid-template-columns: max-content minmax(48px, 1fr) max-content max-content;
+  gap: 10px 12px;
+  margin: 0;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--sw-hairline);
+  list-style: none;
+}
+
+.sleep-week-stage-list li {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+  font-size: 12px;
+}
+
+.sleep-week-stage-list li.is-deep,
+.sleep-week-mix-tile.is-deep { --stage: var(--sw-deep); }
+.sleep-week-stage-list li.is-light,
+.sleep-week-mix-tile.is-light { --stage: var(--sw-light); }
+.sleep-week-stage-list li.is-rem,
+.sleep-week-mix-tile.is-rem { --stage: var(--sw-rem); }
+.sleep-week-stage-list li.is-awake,
+.sleep-week-mix-tile.is-awake { --stage: var(--sw-awake); }
+
+.sleep-week-stage-name,
+.sleep-week-mix-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sleep-week-stage-name i,
+.sleep-week-mix-label i {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--stage);
+}
+
+.sleep-week-stage-meter {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.sleep-week-stage-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--stage);
+}
+
+.sleep-week-stage-time {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.sleep-week-stage-share {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.sleep-week-night-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 16px;
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--sw-hairline);
+}
+
+.sleep-week-night-metrics div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sleep-week-night-metrics dt {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.065em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sleep-week-night-metrics dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.sleep-week-partial {
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--sw-tone-mid) 34%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--sw-tone-mid) 10%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.sleep-week-muted {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.sleep-week-night-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 28px 12px;
+  border-radius: 14px;
+  background: var(--sw-well);
+  box-shadow: var(--sw-well-rim);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.sleep-week-night-empty svg {
+  color: var(--sw-ink-night);
+  opacity: 0.8;
+}
+
+.sleep-week-night-empty p {
+  max-width: 30ch;
+  margin: 0;
+}
+
+/* ── Stage averages ───────────────────────────────────────────────── */
+.sleep-week-mix-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.sleep-week-mix-tile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "label label"
+    "value bars"
+    "share bars";
+  align-items: end;
+  gap: 4px 12px;
+  min-width: 0;
+  padding: 13px 14px;
+  border-radius: 14px;
+  background: var(--sw-well);
+  box-shadow: var(--sw-well-rim);
+}
+
+.sleep-week-mix-label {
+  grid-area: label;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.sleep-week-mix-tile strong {
+  grid-area: value;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+.sleep-week-mix-share {
+  grid-area: share;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.sleep-week-mix-bars {
+  grid-area: bars;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 36px;
+}
+
+.sleep-week-mix-bars span {
+  width: 6px;
+  height: calc(4px + var(--bar, 0) * 32px);
+  border-radius: 3px;
+  background: var(--stage);
+  opacity: 0.42;
+  transition: opacity 160ms ease;
+}
+
+.sleep-week-mix-bars span.is-selected {
+  opacity: 1;
+}
+
+.sleep-week-mix-bars span[data-empty] {
+  height: 3px;
+  background: var(--text-muted);
+  opacity: 0.4;
+}
+
+.sleep-week-footnote {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+/* ── Narrow windows ───────────────────────────────────────────────── */
+@container sleep-week (max-width: 880px) {
+  .sleep-week-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sleep-week-stats,
+  .sleep-week-mix-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container sleep-week (max-width: 560px) {
+  .sleep-week-hero {
+    padding: 18px 18px 20px;
+  }
+
+  .sleep-week-body {
+    padding: 4px 18px 18px;
+  }
+
+  .sleep-week-headline {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
+
+  .sleep-week-ring {
+    grid-template-columns: auto auto;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .sleep-week-ring-label {
+    justify-items: start;
+  }
+
+  .sleep-week-plot {
+    --plot-day: 44px;
+    --plot-value: 88px;
+    --plot-gap: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sleep-week-back svg,
+  .sleep-week-bar,
+  .sleep-week-row,
+  .sleep-week-mix-bars span {
+    transition: none;
+  }
+}
+
+/* ── Paper ────────────────────────────────────────────────────────── */
+:root[data-theme="paper"] .sleep-week-surface {
+  --sw-awake: rgba(85, 80, 72, 0.46);
+  --sw-night: #5b63d6;
+  --sw-ink-night: #4842b0;
+  --sw-dawn: #b5622a;
+  --sw-card: #ffffff;
+  --sw-card-border: color-mix(in srgb, var(--text-muted) 20%, transparent);
+  --sw-card-rim: 0 1px 2px rgba(40, 44, 70, 0.05);
+  --sw-well: #f1f3f8;
+  --sw-well-rim: inset 0 1px 2px rgba(40, 44, 70, 0.07), inset 0 0 0 1px rgba(40, 44, 70, 0.04);
+  --sw-hairline: color-mix(in srgb, var(--text-muted) 18%, transparent);
+  --sw-chip: rgba(38, 42, 60, 0.07);
+  --sw-chip-solid: #eceef5;
+  --sw-tone-low: #bf3344;
+  --sw-tone-mid: #9a5a00;
+  --sw-tone-good: #12784a;
+  --sw-tone-high: #2361bd;
+  border-color: color-mix(in srgb, var(--text-muted) 24%, transparent);
+  background:
+    radial-gradient(560px 420px at calc(100% + 120px) calc(100% + 140px), rgba(91, 99, 214, 0.08), transparent 70%),
+    linear-gradient(172deg, #f6f7fb, #eff1f6);
+  box-shadow: 0 18px 48px rgba(26, 30, 56, 0.12), inset 0 1px 0 #ffffff;
+}
+
+:root[data-theme="paper"] .sleep-week-hero::before {
+  background:
+    linear-gradient(180deg, rgba(246, 247, 252, 0.74), rgba(239, 242, 250, 0.82) 70%),
+    url("../assets/training/sleep-night.png") center 42% / cover no-repeat;
+  filter: saturate(0.7);
+}
+
+:root[data-theme="paper"] .sleep-week-moon {
+  background: rgba(112, 76, 222, 0.14);
+  color: #6944bd;
+}
+
+:root[data-theme="paper"] .sleep-week-best svg {
+  color: #6944bd;
+}
+
+:root[data-theme="paper"] .sleep-week-back {
+  border-color: color-mix(in srgb, var(--text-muted) 26%, transparent);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+:root[data-theme="paper"] .sleep-week-back:hover {
+  border-color: color-mix(in srgb, var(--text-muted) 42%, transparent);
+  background: #ffffff;
+}
+
+:root[data-theme="paper"] .sleep-week-delta {
+  box-shadow: inset 0 0 0 1px rgba(38, 42, 60, 0.06);
+}
+
+:root[data-theme="paper"] .sleep-week-ring-track {
+  fill: rgba(255, 255, 255, 0.55);
+  stroke: rgba(38, 42, 60, 0.1);
+}
+
+:root[data-theme="paper"] .sleep-week-ring-arc {
+  filter: none;
+}
+
+:root[data-theme="paper"] .sleep-week-row:hover {
+  background: rgba(38, 42, 60, 0.04);
+}
+
+:root[data-theme="paper"] .sleep-week-row.is-selected {
+  background: color-mix(in srgb, var(--sw-night) 8%, transparent);
+}
+
+:root[data-theme="paper"] .sleep-week-bar {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.36), 0 2px 6px rgba(60, 70, 180, 0.2);
+}
+
+:root[data-theme="paper"] .sleep-week-row.is-selected .sleep-week-bar {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 4px 14px rgba(80, 84, 220, 0.3);
+}
+
+:root[data-theme="paper"] .sleep-week-stage-meter {
+  background: rgba(38, 42, 60, 0.08);
+}
+
+/* ── Card ⇄ page morph ────────────────────────────────────────────────
+   TrainingHubView commits the switch inside a View Transition with
+   html.is-sleep-morph-open or -close set. Names exist only on the side that
+   is showing, so the old card pairs with the new page (and back): the
+   surface grows out of the card's box, the moon-and-"Sleep" label and the
+   "Training Hub" title glide to their new places, and the rest of the hub
+   crossfades. */
+:root:is(.is-sleep-morph-open, .is-sleep-morph-close) .training-dashboard:not(.is-behind-page) .sleep-panel,
+:root:is(.is-sleep-morph-open, .is-sleep-morph-close) .sleep-week-surface {
+  view-transition-name: sleep-surface;
+}
+
+/* Boxes hug their text while captured, so both snapshots share an aspect ratio. */
+:root:is(.is-sleep-morph-open, .is-sleep-morph-close) .training-dashboard:not(.is-behind-page) .sleep-panel-label,
+:root:is(.is-sleep-morph-open, .is-sleep-morph-close) .sleep-week-eyebrow {
+  width: fit-content;
+  view-transition-name: sleep-eyebrow;
+}
+
+:root:is(.is-sleep-morph-open, .is-sleep-morph-close) .training-dashboard:not(.is-behind-page) .training-hub-heading h1,
+:root:is(.is-sleep-morph-open, .is-sleep-morph-close) .sleep-week-back-label {
+  width: fit-content;
+  view-transition-name: sleep-hub-title;
+}
+
+:root:is(.is-sleep-morph-open, .is-sleep-morph-close)::view-transition-group(*) {
+  animation-duration: 520ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* The box grows (or shrinks) between card and page on a solid night surface;
+   each side's content keeps its natural size, pinned top-left, and the two
+   fade through rather than over each other, so text never doubles up. */
+:root:is(.is-sleep-morph-open, .is-sleep-morph-close)::view-transition-group(sleep-surface) {
+  overflow: clip;
+  border-radius: 24px;
+  background: #141826;
+}
+
+:root:is(.is-sleep-morph-open, .is-sleep-morph-close)::view-transition-old(sleep-surface),
+:root:is(.is-sleep-morph-open, .is-sleep-morph-close)::view-transition-new(sleep-surface) {
+  height: 100%;
+  object-fit: none;
+  object-position: left top;
+}
+
+:root:is(.is-sleep-morph-open, .is-sleep-morph-close)::view-transition-old(sleep-surface) {
+  animation: sleep-morph-out 150ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+:root:is(.is-sleep-morph-open, .is-sleep-morph-close)::view-transition-new(sleep-surface) {
+  animation: sleep-morph-in 280ms cubic-bezier(0, 0, 0.2, 1) 120ms both;
+}
+
+:root:is(.is-sleep-morph-open, .is-sleep-morph-close)::view-transition-group(sleep-eyebrow),
+:root:is(.is-sleep-morph-open, .is-sleep-morph-close)::view-transition-group(sleep-hub-title) {
+  z-index: 3;
+}
+
+/* styles.css gives the root a theme-reveal; here it is a true crossfade, blended
+   plus-lighter so unchanged pixels (sidebar, window chrome) stay still. */
+:root:is(.is-sleep-morph-open, .is-sleep-morph-close)::view-transition-image-pair(root) {
+  isolation: isolate;
+}
+
+:root:is(.is-sleep-morph-open, .is-sleep-morph-close)::view-transition-old(root) {
+  z-index: 1;
+  mix-blend-mode: plus-lighter;
+  animation: sleep-morph-out 260ms linear both;
+}
+
+:root:is(.is-sleep-morph-open, .is-sleep-morph-close)::view-transition-new(root) {
+  z-index: 2;
+  mix-blend-mode: plus-lighter;
+  animation: sleep-morph-in 260ms linear both;
+}
+
+:root[data-theme="paper"]:is(.is-sleep-morph-open, .is-sleep-morph-close)::view-transition-group(sleep-surface) {
+  background: #f1f3f8;
+}
+
+@keyframes sleep-morph-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes sleep-morph-in {
+  from {
+    opacity: 0;
+  }
+}

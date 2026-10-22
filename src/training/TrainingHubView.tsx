@@ -33,6 +33,7 @@ import { RacePredictorCards } from "./components/RacePredictorCards";
 import { RecoveryRing } from "./components/RecoveryRing";
 import { HealthInsightsPanel } from "./components/HealthInsightsPanel";
 import { SleepSummaryPanel } from "./components/SleepSummaryPanel";
+import { SleepWeekPage } from "./components/SleepWeekPage";
 import { TrainingHeatmapPanel } from "./components/TrainingHeatmapPanel";
 import { TrainingSummaryTiles } from "./components/TrainingSummaryTiles";
 import { TrainingActivities } from "./components/TrainingActivities";
@@ -55,6 +56,11 @@ import type { TrainingHubActivity } from "../../electron/types";
 import { createTrainingHubSampleData, type TrainingHubSampleData } from "./sampleData";
 import { useWatchSync } from "../watch/watchSyncState";
 import loginPageBackground from "../../public/assets/training-hub/Login-page-bg.png";
+import { runViewMorph } from "../viewMorph";
+
+/** Set on <html> while the sleep card and its page morph; sleepWeek.css names the moving parts under them. */
+const SLEEP_MORPH_OPEN = "is-sleep-morph-open";
+const SLEEP_MORPH_CLOSE = "is-sleep-morph-close";
 
 export function TrainingHubView(props: TrainingHubViewProps) {
   useLanguage();
@@ -196,11 +202,33 @@ function TrainingHubContent({
     setActiveTab(tab);
     setVisitedTabs(current => current.includes(tab) ? current : [...current, tab]);
   };
+  // The sleep card opens a page of its own. The dashboard stays mounted (hidden
+  // and inert) behind it, so coming back needs no reload, re-pack or re-entrance.
+  const [sleepPageOpen, setSleepPageOpen] = useState(false);
+  const hubRef = useRef<HTMLDivElement>(null);
+  const hubScrollTop = useRef(0);
+  const openSleepPage = () => {
+    const scroller = hubRef.current?.closest<HTMLElement>(".content");
+    hubScrollTop.current = scroller?.scrollTop ?? 0;
+    runViewMorph(SLEEP_MORPH_OPEN, () => setSleepPageOpen(true), {
+      after: () => { if (scroller) scroller.scrollTop = 0; }
+    });
+  };
+  const closeSleepPage = () => {
+    const scroller = hubRef.current?.closest<HTMLElement>(".content");
+    runViewMorph(SLEEP_MORPH_CLOSE, () => setSleepPageOpen(false), {
+      after: () => {
+        if (scroller) scroller.scrollTop = hubScrollTop.current;
+        hubRef.current?.querySelector<HTMLElement>(".sleep-panel-week")?.focus({ preventScroll: true });
+      }
+    });
+  };
   const [activityOpenRequest, setActivityOpenRequest] =
     useState<{ activity: TrainingHubActivity; requestId: number } | null>(null);
   useEffect(() => {
     if (!navigationRequest) return;
     const { tab, activity, requestId } = navigationRequest;
+    setSleepPageOpen(false);
     setActiveTab(tab);
     setVisitedTabs(current => current.includes(tab) ? current : [...current, tab]);
     if (activity) setActivityOpenRequest({ activity, requestId });
@@ -247,8 +275,11 @@ function TrainingHubContent({
     }
   };
 
+  const showSleepPage = sleepPageOpen && connected;
+
   return (
-    <div className="stack training-dashboard">
+    <>
+    <div ref={hubRef} className={`stack training-dashboard${showSleepPage ? " is-behind-page" : ""}`} inert={showSleepPage}>
       {connected || onToggleSample ? (
         <TrainingHubHeader
           connected={connected}
@@ -559,7 +590,7 @@ function TrainingHubContent({
                     healthRecords={snapshot?.dailyHealth?.records} layout="stack"
                     metrics={[widget.id.slice(6) as "load" | "heart" | "steps" | "calories"]} className="hub-daily-stat" local={local} />;
                 case "fitness": return <FitnessTrendPanel snapshot={snapshot} activities={activities} local={local} />;
-                case "sleep": return <SleepSummaryPanel sleep={snapshot?.sleep} connecting={sleepConnecting} refreshing={busy === "training-refresh"} local={status?.dataSource === "local"} onConnect={sampleMode || status?.dataSource === "local" ? undefined : () => api.connectCorosMcp()} />;
+                case "sleep": return <SleepSummaryPanel sleep={snapshot?.sleep} connecting={sleepConnecting} refreshing={busy === "training-refresh"} local={status?.dataSource === "local"} onConnect={sampleMode || status?.dataSource === "local" ? undefined : () => api.connectCorosMcp()} onOpenWeek={openSleepPage} />;
                 case "vo2": return <Vo2MaxWidget snapshot={snapshot} local={local} />;
                 case "efficiency": return <RunningEfficiencyWidget size={widgetPreset(widget).chartSize} snapshot={snapshot} activities={activities} loadDetail={loadActivityPreview} sampleMode={sampleMode} />;
                 case "heatmap": return <TrainingHeatmapPanel snapshot={snapshot} activities={activities} rpeBackfill={rpeBackfill} local={local} />;
@@ -648,6 +679,10 @@ function TrainingHubContent({
         />
       ) : null}
     </div>
+    {showSleepPage ? (
+      <SleepWeekPage records={snapshot?.sleep?.records ?? []} trendPoints={snapshot?.trendPoints} local={status?.dataSource === "local"} onBack={closeSleepPage} />
+    ) : null}
+    </>
   );
 }
 
