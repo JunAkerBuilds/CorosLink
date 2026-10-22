@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { type CSSProperties, useEffect, useState } from "react";
 import {
   fillWatchfaceText,
+  hasWatchfaceFontSnapshot,
   isSyntheticWatchfaceWeight,
   isWatchfaceFontInstalled,
   measureWatchfaceText,
@@ -272,11 +273,12 @@ interface WatchfaceFontPreviewProps {
 const SAMPLE_FONT_SIZE = 26;
 
 /**
- * The sample as Studio draws the weight on the watch. CSS text cannot show a
- * weight the family has no face for, so the canvas draws it and the page
- * paints that ink in the theme's text color.
+ * The sample as Studio draws it on the watch. CSS text cannot show a weight
+ * the family has no face for, nor a family that only exists as glyphs embedded
+ * in the project, so the canvas draws it and the page paints that ink in the
+ * theme's text color.
  */
-function SyntheticWeightSample({ fontFamily, fontWeight, fontStyle, text }: {
+function CanvasFontSample({ fontFamily, fontWeight, fontStyle, text }: {
   fontFamily: string;
   fontWeight: number;
   fontStyle: "normal" | "italic";
@@ -348,18 +350,22 @@ export function WatchfaceFontPreview({
     );
   }
   if (fontFamily) {
-    const summary = isWatchfaceFontInstalled(fontFamily)
+    const installed = isWatchfaceFontInstalled(fontFamily);
+    const embedded = !installed && hasWatchfaceFontSnapshot(fontFamily);
+    const summary = installed
       ? t("{{fontFamily}} · rasterized to PNG digits on export", { fontFamily })
-      : t("{{fontFamily}} is missing · sample shown in a substitute font", { fontFamily: fontFamily });
+      : embedded
+        ? t("{{fontFamily}} isn’t installed · sample drawn from the embedded glyphs", { fontFamily })
+        : t("{{fontFamily}} is missing · sample shown in a substitute font", { fontFamily: fontFamily });
     const fontWeight = typography?.fontWeight ?? 400;
     const fontStyle = typography?.fontStyle === "italic" ? "italic" : "normal";
-    const synthetic = isWatchfaceFontInstalled(fontFamily) &&
+    const synthetic = installed &&
       isSyntheticWatchfaceWeight({ family: fontFamily, weight: fontWeight, style: fontStyle });
     return (
       <div className="wf-sprite-preview wf-sprite-preview--font" aria-label={t("Font sample")}>
         <div className="wf-sprite-strip wf-sprite-strip--sample" style={{ fontFamily, fontWeight, fontStyle }}>
-          {synthetic
-            ? <SyntheticWeightSample fontFamily={fontFamily} fontWeight={fontWeight} fontStyle={fontStyle} text={sampleText} />
+          {synthetic || embedded
+            ? <CanvasFontSample fontFamily={fontFamily} fontWeight={fontWeight} fontStyle={fontStyle} text={sampleText} />
             : sampleText}
         </div>
         <span className="wf-sprite-strip-summary" title={t(summary)}>

@@ -287,7 +287,8 @@ import {
   Watch,
   Maximize2,
   Minimize2,
-  TriangleAlert
+  TriangleAlert,
+  ArrowUpRight
 } from "lucide-react";
 import {
   resizeWatchfaceDimensions,
@@ -660,12 +661,20 @@ import {
 } from "./watchfaceInteractiveRenderer";
 import { WatchfacePointerController } from "./watchfacePointerController";
 import {
+  WATCHFACE_FONT_DOWNLOAD_URL,
   attachWatchfaceFontSnapshots,
   findMissingWatchfaceFonts,
   forgetWatchfaceFontAvailability,
-  rememberWatchfaceFontSnapshots
+  rememberWatchfaceFontSnapshots,
+  type WatchfaceMissingFont
 } from "./watchfaceFontSnapshots";
 import { drawWeatherPreviewLayer, maskCanvasToCircle, normalizeEditorDesign } from "./watchfaceExportPipeline";
+
+/** A missing font's "Used by" entry, such as "Time (always-on)", in the app language. */
+function missingFontPlaceLabel(place: WatchfaceMissingFont["usedBy"][number]): string {
+  const label = t(place.usedBy);
+  return place.alwaysOn ? t("{{place}} (always-on)", { place: label }) : label;
+}
 
 /** Display names for the `<language>_date_week_font` prefixes COROS archives use. */
 function LinkedDimensionInputs({
@@ -1200,6 +1209,16 @@ export function WatchfaceEditor({
     () => (details ? findMissingWatchfaceFonts(rootDesign) : []),
     [details, rootDesign]
   );
+  // Red while any family lacks embedded glyphs; yellow when the project's
+  // saved glyphs cover every family, so only editing needs the font installed.
+  const fontNoticeEmbedded = missingFonts.every((font) => font.hasSnapshot);
+  const fontNoticeTitle = fontNoticeEmbedded
+    ? missingFonts.length === 1
+      ? t("FONT NOT INSTALLED")
+      : t("FONTS NOT INSTALLED ({{value1}})", { value1: missingFonts.length })
+    : missingFonts.length === 1
+      ? t("MISSING FONT")
+      : t("MISSING FONTS ({{value1}})", { value1: missingFonts.length });
   const [projectId, setProjectId] = useState<string | undefined>(initialProjectId);
   const [creating, setCreating] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -10302,32 +10321,45 @@ export function WatchfaceEditor({
             </div>
           ) : null}
           {missingFonts.length > 0 && !fontNoticeDismissed ? (
-            <div className="wf-font-notice" role="status">
+            <div className={`wf-font-notice${fontNoticeEmbedded ? " is-embedded" : ""}`} role="status">
               <TriangleAlert className="wf-font-notice-icon" size={16} aria-hidden="true" />
               <div className="wf-font-notice-body">
-                <p className="wf-font-notice-title">
-                  {missingFonts.length === 1
-                    ? t("MISSING FONT")
-                    : t("MISSING FONTS ({{value1}})", { value1: missingFonts.length })}
-                </p>
+                <p className="wf-font-notice-title">{fontNoticeTitle}</p>
                 <ul>
                   {missingFonts.map((font) => (
                     <li key={font.family}>
-                      <strong>{t("\"")}{font.family}{t("\" font isn’t installed.")}</strong>
+                      <strong>
+                        {font.hasSnapshot
+                          ? t("“{{family}}” is embedded but not installed.", { family: font.family })
+                          : t("“{{family}}” isn’t installed or embedded.", { family: font.family })}
+                      </strong>
                       <span>
                         {font.hasSnapshot
-                          ? t("Drawn from the glyphs saved with this project.")
+                          ? t("The preview and export draw its saved glyphs.")
                           : t("The preview and export use a substitute font.")}
                       </span>
-                      <span className="wf-font-notice-uses">{t("Used by:")}{" "}{font.usedBy.join(", ")}</span>
+                      <span className="wf-font-notice-uses">
+                        {t("Used by: {{places}}", {
+                          places: new Intl.ListFormat(getLocale(), { style: "narrow" }).format(font.usedBy.map(missingFontPlaceLabel))
+                        })}
+                      </span>
                     </li>
                   ))}
                 </ul>
                 <p className="wf-font-notice-hint">
-                  {missingFonts.some((font) => !font.hasSnapshot)
-                    ? t("Install the font or choose another one before exporting.")
-                    : t("Install the font to change its weight or draw characters the project didn’t save.")}
+                  {fontNoticeEmbedded
+                    ? t("The face should look right as it is. To change its text with this font, such as its weight or new characters, install the font on this computer.")
+                    : t("Install the font or choose another one before exporting.")}
                 </p>
+                <a
+                  className="wf-font-notice-link"
+                  href={WATCHFACE_FONT_DOWNLOAD_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {t("Find fonts on dafont.com")}
+                  <ArrowUpRight size={12} aria-hidden="true" />
+                </a>
               </div>
               <button
                 type="button"
@@ -10354,11 +10386,11 @@ export function WatchfaceEditor({
               <span>
                 <button
                   type="button"
-                  className="wf-font-notice-reopen"
+                  className={`wf-font-notice-reopen${fontNoticeEmbedded ? " is-embedded" : ""}`}
                   onClick={() => setFontNoticeDismissed(false)}
                 >
                   <TriangleAlert size={12} aria-hidden="true" />
-                  {missingFonts.length === 1 ? t("MISSING FONT") : t("MISSING FONTS ({{value1}})", { value1: missingFonts.length })}
+                  {fontNoticeTitle}
                 </button>
               </span>
             ) : null}

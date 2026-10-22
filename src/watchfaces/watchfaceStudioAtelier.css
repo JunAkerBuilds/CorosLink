@@ -729,9 +729,42 @@
   color: var(--atl-titanium);
 }
 
-:root .watchface-shell.watchface-shell--studio .wf-font-notice-hint {
+/* Outranks the body's `:is(p, ul)` margin reset. */
+:root .watchface-shell.watchface-shell--studio .wf-font-notice-body .wf-font-notice-hint {
   margin-top: 8px;
   color: var(--atl-titanium);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-font-notice-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 6px;
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--atl-line-strong);
+  text-underline-offset: 3px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-font-notice-link:hover {
+  text-decoration-color: currentColor;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-font-notice-link:focus-visible {
+  outline: 2px solid var(--atl-lume-ring);
+  outline-offset: 2px;
+}
+
+/* Every family's glyphs are embedded in the project, so the face still
+   previews and exports as designed: amber warning instead of red error. */
+:root .watchface-shell.watchface-shell--studio .wf-font-notice.is-embedded {
+  border-color: var(--warning-border);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-font-notice.is-embedded :is(.wf-font-notice-icon, .wf-font-notice-title) {
+  color: var(--warning-text);
 }
 
 :root .watchface-shell.watchface-shell--studio .wf-font-notice-close {
@@ -778,6 +811,38 @@
 :root .watchface-shell.watchface-shell--studio .wf-font-notice-reopen:focus-visible {
   outline: 2px solid var(--atl-lume-ring);
   outline-offset: 1px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-font-notice-reopen.is-embedded {
+  color: var(--warning-text);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-font-notice-reopen.is-embedded:hover {
+  background: var(--warning-bg);
+}
+
+/* Font picker: a family drawn from embedded glyphs warns in amber. */
+:root .watchface-shell.watchface-shell--studio .watchface-font-picker-trigger.is-missing.is-embedded {
+  border-color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
+:root .watchface-shell.watchface-shell--studio .watchface-font-missing-badge.is-embedded {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+:root .watchface-shell.watchface-shell--studio .watchface-font-missing-hint.is-embedded {
+  color: var(--warning-text);
+}
+
+:root .watchface-shell.watchface-shell--studio .watchface-font-missing-hint a {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: inherit;
+  font-weight: 600;
+  text-underline-offset: 2px;
 }
 
 /* The canvas border is the bezel. The case gets a polished edge and sits on

@@ -3,6 +3,7 @@ import {
   attachWatchfaceFontSnapshots,
   collectWatchfaceFontUses,
   findMissingWatchfaceFonts,
+  hasWatchfaceFontSnapshot,
   isSyntheticWatchfaceWeight,
   measureWatchfaceText,
   normalizeWatchfaceFontFamily,
@@ -36,7 +37,7 @@ const baseDesign = {
 };
 
 const uses = collectWatchfaceFontUses(baseDesign);
-const summary = uses.map((use) => `${use.usedBy}: ${use.family} ${use.weight} ${use.style}`);
+const summary = uses.map((use) => `${use.usedBy}${use.alwaysOn ? " (always-on)" : ""}: ${use.family} ${use.weight} ${use.style}`);
 // Component styles inherit the face-wide family and weight, as the renderers do.
 assert.ok(summary.includes("Face-wide font: Futura 500 normal"));
 assert.ok(summary.includes("Metrics: Futura 500 normal"));
@@ -68,6 +69,8 @@ assert.equal(saved.fontFamily, "Futura");
 // Without a DOM every family counts as drawable, and measuring falls through
 // to the context untouched.
 assert.deepEqual(findMissingWatchfaceFonts(baseDesign), []);
+// Nor can a snapshot decode, so no family counts as embedded.
+assert.equal(hasWatchfaceFontSnapshot("Futura"), false);
 const context = {
   font: "10px sans-serif",
   textAlign: "left",

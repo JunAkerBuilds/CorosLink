@@ -12974,11 +12974,13 @@ body.wf-value-scrubbing * {
   font-size: 11.5px;
 }
 
-/* A local font has no sprites yet: sample the digits export will rasterize. */
+/* A local font has no sprites yet: sample the digits export will rasterize.
+   White like the exported sprites: the strip is the dark watch face in both
+   themes, where paper's dark text color would vanish. */
 .watchface-shell .wf-sprite-strip--sample {
   display: block;
   overflow: hidden;
-  color: var(--text-primary);
+  color: #fff;
   font-size: 26px;
   line-height: 1.15;
   letter-spacing: 0.04em;

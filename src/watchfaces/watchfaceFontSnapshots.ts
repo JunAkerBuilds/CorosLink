@@ -69,14 +69,16 @@ export interface WatchfaceFontFace {
 }
 
 export interface WatchfaceFontUse extends WatchfaceFontFace {
-  /** Where the design uses this face, such as "Time" or "Date (always-on)". */
+  /** Where the design uses this face, such as "Time". English; the UI translates it. */
   usedBy: string;
+  /** True when the use is in the always-on design. */
+  alwaysOn: boolean;
 }
 
 export interface WatchfaceMissingFont {
   family: string;
-  usedBy: string[];
-  /** True when a saved snapshot stands in for the family. */
+  usedBy: Array<Pick<WatchfaceFontUse, "usedBy" | "alwaysOn">>;
+  /** True when a saved snapshot (the glyphs embedded in the project) stands in for the family. */
   hasSnapshot: boolean;
 }
 
@@ -183,16 +185,16 @@ export function collectWatchfaceFontUses(
   design: CorosWatchfaceDesignState
 ): WatchfaceFontUse[] {
   const uses: WatchfaceFontUse[] = [];
-  collectModeFontUses(design, design, "", uses);
+  collectModeFontUses(design, design, false, uses);
   const aod = design.modeDesigns?.aod;
-  if (aod) collectModeFontUses(aod, design, " (always-on)", uses);
+  if (aod) collectModeFontUses(aod, design, true, uses);
   return uses;
 }
 
 function collectModeFontUses(
   mode: CorosWatchfaceModeDesignState,
   base: CorosWatchfaceDesignState,
-  suffix: string,
+  alwaysOn: boolean,
   uses: WatchfaceFontUse[]
 ): void {
   const add = (
@@ -207,7 +209,8 @@ function collectModeFontUses(
       family: name,
       weight: normalizeWeight(weight),
       style: style === "italic" ? "italic" : "normal",
-      usedBy: `${usedBy}${suffix}`
+      usedBy,
+      alwaysOn
     });
   };
   const family = mode.fontFamily ?? base.fontFamily;
@@ -318,10 +321,21 @@ export function findMissingWatchfaceFonts(
       usedBy: [],
       hasSnapshot: findLoadedFace(use).length > 0
     };
-    if (!entry.usedBy.includes(use.usedBy)) entry.usedBy.push(use.usedBy);
+    if (!entry.usedBy.some((place) => place.usedBy === use.usedBy && place.alwaysOn === use.alwaysOn)) {
+      entry.usedBy.push({ usedBy: use.usedBy, alwaysOn: use.alwaysOn });
+    }
     missing.set(key, entry);
   }
   return [...missing.values()];
+}
+
+/** Where the missing-font notices send people looking for a font to install. */
+export const WATCHFACE_FONT_DOWNLOAD_URL = "https://www.dafont.com/";
+
+/** Whether the open project embeds saved glyphs for `family`. */
+export function hasWatchfaceFontSnapshot(family: string): boolean {
+  const name = normalizeWatchfaceFontFamily(family);
+  return Boolean(name && loadedSnapshots.get(name.toLocaleLowerCase())?.length);
 }
 
 function isValidSnapshot(value: unknown): value is CorosWatchfaceFontSnapshot {
