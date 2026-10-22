@@ -4676,16 +4676,18 @@ const METRIC_STUDIO_FOLDERS: Record<WatchfaceMetricId, string> = {
 };
 
 /**
- * Temporary experiment (July 2026): on-watch, every element backed by the
- * template's own files renders, while weather and temperature — the features
- * that depend on folders we create (`weather`, `cl_ftemp`) — do not. To test
- * whether the COROS pipeline drops newly created folders, this flag makes the
- * fixed temperature block reuse the template's existing digit folder with a
- * firmware color tint instead of generated `cl_ftemp` sprites. Trade-off
- * while enabled: the temperature size slider only scales the rect, not the
- * digits, and custom fonts don't apply to this block.
+ * Experiment from July 2026, off since 2026-10-22. On a watch, weather and
+ * the fixed temperature went missing while elements backed by the template's
+ * own files rendered, so this flag tested whether COROS drops folders a face
+ * adds: fixed temperature reused the template's digit folder with a firmware
+ * tint instead of generated `cl_ftemp` sprites. Studio-made folders have
+ * since rendered for every other metric (`cl_hr`, `cl_steps`, native
+ * fields), so temperature draws its own sprites again and takes a font,
+ * weight and Font size like them. Setting it true goes back to the template
+ * digits: its size control then only scales the rect, and the editor hides
+ * its font controls.
  */
-export const TEMPERATURE_FONT_COMPAT = true;
+export const TEMPERATURE_FONT_COMPAT = false;
 
 function timeStudioFolder(
   part: WatchfaceTimePartId,

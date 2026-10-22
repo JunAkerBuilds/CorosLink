@@ -3773,17 +3773,17 @@ assert.equal(
   fullMetricStyle?.values.temperature_rect,
   "{34,590,347,696,hcenter|vcenter}"
 );
-// With TEMPERATURE_FONT_COMPAT enabled, the fixed temperature block reuses
-// the template's digit folder and takes a firmware tint instead of
-// pre-colored `cl_ftemp` sprites.
-assert.equal(fullMetricStyle?.values.temperature_font_color, "0x33AA55");
-assert.equal(fullMetricStyle?.values.temperature_font, "13x19");
+// The fixed temperature draws its own pre-colored `cl_ftemp` sprites like
+// the other metrics, so the firmware tint is cleared (TEMPERATURE_FONT_COMPAT
+// off; on, it reused the template's "13x19" folder with a 0x33AA55 tint).
+assert.equal(fullMetricStyle?.values.temperature_font_color, "");
+assert.equal(fullMetricStyle?.values.temperature_font, "cl_ftemp");
 assert.equal(fullMetricStyle?.values.control_temperature_font, undefined);
 assert.equal(fullMetricStyle?.values.control_temperature_font_color, undefined);
 {
   // A fixed metric's font size is master-authored pixels. Template PNG digits
   // take it as their height, so 1.5x the master cell matches scale 1.5 in every
-  // tree; compat temperature keeps its template digits and ignores it.
+  // tree, temperature included.
   const {
     fixedMetricDigitCanvas,
     fixedMetricFontSize,
@@ -3793,13 +3793,15 @@ assert.equal(fullMetricStyle?.values.control_temperature_font_color, undefined);
   const masterCell = watchfaceFixedMetricDigitSize(pickPreviewResolution(withMetrics), "heartRate");
   assert.ok(masterCell);
   const fontSize = masterCell.height * 1.5;
+  const temperatureCell = watchfaceFixedMetricDigitSize(pickPreviewResolution(withMetrics), "temperature");
+  assert.ok(temperatureCell);
   const sized = buildMetricStyleOverrides(withMetrics, {
     heartRate: { scale: 1, fontSize },
-    temperature: { scale: 1, fontSize: 80 }
+    temperature: { scale: 1, fontSize: temperatureCell.height * 1.5 }
   }, true);
   const scaled = buildMetricStyleOverrides(withMetrics, {
     heartRate: { scale: 1.5 },
-    temperature: { scale: 1 }
+    temperature: { scale: 1.5 }
   }, true);
   for (const override of sized) {
     const reference = scaled.find((entry) => entry.path === override.path);
@@ -3808,9 +3810,13 @@ assert.equal(fullMetricStyle?.values.control_temperature_font_color, undefined);
     for (const [a, b] of [[ax0, bx0], [ay0, by0], [ax1, bx1], [ay1, by1]]) {
       assert.ok(Math.abs(a - b) <= 2, `font size ${fontSize} should match scale 1.5 in ${override.path}`);
     }
-    assert.equal(override.values.temperature_rect, reference.values.temperature_rect, "compat temperature ignores a font size");
+    const [tx0, ty0, tx1, ty1] = override.values.temperature_rect.match(/-?\d+/g).map(Number);
+    const [ux0, uy0, ux1, uy1] = reference.values.temperature_rect.match(/-?\d+/g).map(Number);
+    for (const [a, b] of [[tx0, ux0], [ty0, uy0], [tx1, ux1], [ty1, uy1]]) {
+      assert.ok(Math.abs(a - b) <= 2, `temperature font size should match scale 1.5 in ${override.path}`);
+    }
   }
-  assert.equal(fixedMetricFontSize("temperature", { fontSize: 40 }), undefined);
+  assert.equal(fixedMetricFontSize("temperature", { fontSize: 40 }), 40);
   assert.equal(fixedMetricFontSize("steps", { fontSize: 0 }), undefined);
   assert.equal(fixedMetricFontSize("steps", { fontSize: 40 }), 40);
   assert.deepEqual(
@@ -5077,11 +5083,12 @@ assert.equal(
   45,
   "supported fixed metrics should rotate in preview and export"
 );
-assert.equal(supportsWatchfaceSpriteRotation("temperature"), false);
+// Temperature draws its own sprites (TEMPERATURE_FONT_COMPAT off), so it rotates like the rest.
+assert.equal(supportsWatchfaceSpriteRotation("temperature"), true);
 assert.equal(
   resolveWatchfaceSpriteRotation(rotationOptions, "temperature"),
-  0,
-  "compatibility-mode temperature must not preview an unsupported rotation"
+  90,
+  "fixed temperature rotates in preview and export"
 );
 const rotationDocument = globalThis.document;
 const rotationImage = globalThis.Image;

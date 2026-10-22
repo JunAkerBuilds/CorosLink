@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Font size and weight for every font in Watch Face Studio.** UV, barometer, humidity, wind, temperature and the face's other live data fields now have **Weight**, **Style** and **Font size** beside their Font, like time and metrics. Font size replaces their Scale box. Each component, such as the label or the number, can set its own weight and size. The time and date separators, the exercise separator and the AM/PM indicator get Weight, Style and Font size too, and text layers get the same Weight and Style menus, italic included. All Font sizes use the same pixels, so equal numbers draw the same size.
-- The sensor Temperature reading says why it has no font controls: on the watch it always uses the template's own digits.
+- **Sensor temperature takes a font too.** It used to keep the template's own digits on the watch whatever you picked. It now draws its own, so Font, Weight, Style, Font size and Rotation work as they do on the other metrics.
 
 ### Fixed
 
