@@ -49,6 +49,8 @@ export function useCalendarData({
   const rangeKey = `${rangeStart}-${rangeEnd}`;
 
   const [data, setData] = useState<CalendarRangeData | null>(null);
+  // The range `data` belongs to: it lags rangeKey until the new range arrives.
+  const [loadedRangeKey, setLoadedRangeKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
@@ -72,6 +74,7 @@ export function useCalendarData({
     const cached = cacheRef.current.get(rangeKey);
     if (cached) {
       setData(cached);
+      setLoadedRangeKey(rangeKey);
     }
     setLoading(!cached);
     setError(null);
@@ -94,6 +97,7 @@ export function useCalendarData({
         };
         cacheRef.current.set(rangeKey, next);
         setData(next);
+        setLoadedRangeKey(rangeKey);
         setLoading(false);
       })
       .catch((cause: unknown) => {
@@ -329,5 +333,8 @@ export function useCalendarData({
     });
   }, [data, journal, manualLinks, weekKeys, isInMonth, getLocale()]);
 
-  return { weeks, journal, manualLinks, loading, error, reload, applyOptimisticMove, applyJournalSave, setManualLink };
+  /** True once the weeks hold the visible range's own data (cached or fetched). */
+  const ready = loadedRangeKey === rangeKey;
+
+  return { weeks, journal, manualLinks, loading, ready, error, reload, applyOptimisticMove, applyJournalSave, setManualLink };
 }

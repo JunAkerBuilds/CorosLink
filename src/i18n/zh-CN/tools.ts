@@ -1770,4 +1770,5 @@ export const toolsChinese: Readonly<Record<string, string>> = {
   "Choose a watch key backup first.": "请先选择手表密钥备份。",
   "OS secure storage is required to save your COROS watch account key.": "需要系统安全存储才能保存您的 COROS 手表账户密钥。",
   "CorosLink couldn't save the watch key backup there. Choose another folder.": "CorosLink 无法将手表密钥备份保存到该位置。请选择其他文件夹。",
+  "Next up: {{value1}} · {{value2}}": "接下来：{{value1}} · {{value2}}",
 };

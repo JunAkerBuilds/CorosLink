@@ -3,11 +3,11 @@ import type {
   TrainingHubActivity,
   TrainingHubScheduledWorkoutEntry
 } from "../../electron/types";
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, type MouseEvent } from "react";
 import {
   scheduledWorkoutKey,
   type CalendarDay,
-  type CalendarMode,
+  type CalendarGridMode,
   type CalendarWeek
 } from "./calendarTypes";
 import type { CalendarDragPayload } from "./calendarDrag";
@@ -15,14 +15,46 @@ import { DayCell } from "./DayCell";
 import { WEEKDAY_LABELS } from "./dateUtils";
 import { WeekStatsCell } from "./WeekStatsCell";
 
+/** What a right-click in the grid or the list points at. */
+export interface CalendarContextTarget {
+  x: number;
+  y: number;
+  dayKey: string;
+  workoutKey?: string;
+  activityId?: string;
+}
+
+/**
+ * Reads the day, workout and activity under a right-click from their data
+ * attributes, focusing the item so ⌘C / ⌘V act on it; null outside a day.
+ */
+export function readCalendarContextTarget(event: MouseEvent): CalendarContextTarget | null {
+  const target = event.target as Element;
+  const dayEl = target.closest<HTMLElement>("[data-calendar-day]");
+  if (!dayEl?.dataset.calendarDay) return null;
+  event.preventDefault();
+  const workoutEl = target.closest<HTMLElement>("[data-calendar-workout]");
+  const activityEl = target.closest<HTMLElement>("[data-calendar-activity]");
+  (workoutEl ?? activityEl ?? dayEl).focus({ preventScroll: true });
+  return {
+    x: event.clientX,
+    y: event.clientY,
+    dayKey: dayEl.dataset.calendarDay,
+    workoutKey: workoutEl?.dataset.calendarWorkout,
+    activityId: activityEl?.dataset.calendarActivity
+  };
+}
+
 interface CalendarGridProps {
   weeks: CalendarWeek[];
-  mode: CalendarMode;
+  mode: CalendarGridMode;
   loading: boolean;
   busy: boolean;
   selectionMode: boolean;
   selectedWorkoutKeys: ReadonlySet<string>;
   copiedWorkoutKeys: ReadonlySet<string>;
+  /** The workout another view asked to open, ringed for a moment. */
+  highlightedWorkoutKey: string | null;
   onSelectScheduled: (day: CalendarDay, entry: TrainingHubScheduledWorkoutEntry) => void;
   onSelectActivity: (day: CalendarDay, activity: TrainingHubActivity) => void;
   onToggleScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
@@ -36,13 +68,7 @@ interface CalendarGridProps {
     copy: boolean
   ) => void;
   onAskCoachWeek: (week: CalendarWeek) => void;
-  onContextMenu: (target: {
-    x: number;
-    y: number;
-    dayKey: string;
-    workoutKey?: string;
-    activityId?: string;
-  }) => void;
+  onContextMenu: (target: CalendarContextTarget) => void;
 }
 
 export function CalendarGrid({
@@ -53,6 +79,7 @@ export function CalendarGrid({
   selectionMode,
   selectedWorkoutKeys,
   copiedWorkoutKeys,
+  highlightedWorkoutKey,
   onSelectScheduled,
   onSelectActivity,
   onToggleScheduled,
@@ -117,20 +144,8 @@ export function CalendarGrid({
         ref={bodyRef}
         className="calendar-grid-body"
         onContextMenu={(event) => {
-          const target = event.target as Element;
-          const dayEl = target.closest<HTMLElement>("[data-calendar-day]");
-          if (!dayEl?.dataset.calendarDay) return;
-          event.preventDefault();
-          const workoutEl = target.closest<HTMLElement>("[data-calendar-workout]");
-          const activityEl = target.closest<HTMLElement>("[data-calendar-activity]");
-          (workoutEl ?? activityEl ?? dayEl).focus({ preventScroll: true });
-          onContextMenu({
-            x: event.clientX,
-            y: event.clientY,
-            dayKey: dayEl.dataset.calendarDay,
-            workoutKey: workoutEl?.dataset.calendarWorkout,
-            activityId: activityEl?.dataset.calendarActivity
-          });
+          const target = readCalendarContextTarget(event);
+          if (target) onContextMenu(target);
         }}
       >
         {weeks.map((week) => {
@@ -154,6 +169,7 @@ export function CalendarGrid({
                   isScheduledCopied={(entry) =>
                     copiedWorkoutKeys.has(scheduledWorkoutKey(entry))
                   }
+                  highlightedWorkoutKey={highlightedWorkoutKey}
                   onSelectScheduled={(entry) => onSelectScheduled(day, entry)}
                   onSelectActivity={(activity) => onSelectActivity(day, activity)}
                   onToggleScheduled={onToggleScheduled}

@@ -1,0 +1,182 @@
+/* --- calendar filters: header toggle + the bar under the header --- */
+
+/* Filters and List made the header row too long for a narrow window: let it wrap. */
+.calendar-view .calendar-header-actions {
+  flex-wrap: wrap;
+}
+
+.calendar-filter-button.is-open {
+  background: var(--glass-bg-hover);
+}
+
+.calendar-filter-button.is-active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-border));
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.calendar-filter-badge {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  margin-right: -6px;
+  padding: 0 5px;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--surface);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.calendar-filter-bar {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 8px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-inset);
+}
+
+.calendar-filter-kinds {
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: 3px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+}
+
+.calendar-filter-kinds button {
+  padding: 5px 14px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.calendar-filter-kinds button:hover:not(.is-active) {
+  color: var(--text-primary);
+}
+
+.calendar-filter-kinds button.is-active {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.calendar-filter-sports {
+  display: flex;
+  /* Wide enough to drop under the segmented control rather than squeeze beside it. */
+  flex: 1 1 360px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.calendar-filter-sport {
+  --filter-sport: var(--sport-other);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 5px 0 10px;
+  border: 1px solid color-mix(in srgb, var(--filter-sport) 30%, var(--glass-border));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--filter-sport) 9%, var(--glass-bg-elevated));
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.calendar-filter-sport svg {
+  flex-shrink: 0;
+  color: var(--filter-sport);
+}
+
+.calendar-filter-sport:hover {
+  background: color-mix(in srgb, var(--filter-sport) 15%, var(--glass-bg-elevated));
+}
+
+.calendar-filter-count {
+  min-width: 20px;
+  padding: 2px 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  text-align: center;
+}
+
+/* Hidden: an outline left behind, struck through, still readable. */
+.calendar-filter-sport.is-hidden {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--text-muted) 45%, transparent);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.calendar-filter-sport.is-hidden svg {
+  color: var(--text-secondary);
+}
+
+.calendar-filter-sport.is-hidden .calendar-filter-sport-label {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.calendar-filter-sport.is-hidden:hover {
+  border-color: color-mix(in srgb, var(--text-muted) 70%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  color: var(--text-primary);
+}
+
+.calendar-filter-empty {
+  flex: 1 1 200px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.calendar-filter-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.calendar-filter-kinds button:focus-visible,
+.calendar-filter-sport:focus-visible,
+.calendar-filter-reset:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+:root[data-theme="paper"] .calendar-filter-sport svg {
+  color: color-mix(in srgb, var(--filter-sport) 62%, var(--text-primary));
+}
+
+:root[data-theme="paper"] .calendar-filter-sport.is-hidden svg {
+  color: var(--text-secondary);
+}

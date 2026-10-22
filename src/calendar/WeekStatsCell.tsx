@@ -58,7 +58,7 @@ function StatRow({
   );
 }
 
-const SPORT_ICONS: Record<WeekSportFamily, LucideIcon> = {
+export const WEEK_SPORT_ICONS: Record<WeekSportFamily, LucideIcon> = {
   run: Footprints,
   trail: Mountain,
   hike: MountainSnow,
@@ -97,7 +97,7 @@ function SportBreakdownRow({
   unitSystem: UnitSystem;
 }) {
   useLanguage();
-  const Icon = SPORT_ICONS[sport.family];
+  const Icon = WEEK_SPORT_ICONS[sport.family];
   const time =
     sport.plannedTimeSeconds > 0
       ? `${formatDurationSeconds(sport.activityTimeSeconds)} / ${formatDurationSeconds(sport.plannedTimeSeconds)}`

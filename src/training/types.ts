@@ -134,6 +134,8 @@ export interface TrainingHubViewProps {
   onNavigationRequestHandled?: () => void;
   /** Opens Coach with the composer prefilled (e.g. to rebuild a pinned chart). */
   onOpenCoach?: (prefill: CoachPrefill) => void;
+  /** Opens a scheduled workout on its day in the Training Calendar. */
+  onOpenCalendarWorkout?: (workout: TrainingHubUpcomingWorkout) => void;
   /** Local-Only Mode: starts "Sync watch now" (offered on the dashboard before the first sync). */
   onSyncWatch?: () => void;
   /** Bumped after each watch sync, so cards that fetch their own data fetch again. */

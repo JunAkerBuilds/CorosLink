@@ -3609,6 +3609,8 @@ export function parseUpcomingWorkouts(
     );
 
     workouts.push({
+      planId: String(entity.planId ?? "") || undefined,
+      idInPlan: idInPlan || undefined,
       happenDay,
       name: resolveUpcomingWorkoutName(program, entity),
       volume: formatUpcomingWorkoutVolume(program, entity),

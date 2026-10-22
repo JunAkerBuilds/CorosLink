@@ -30,3 +30,60 @@
 .hub-dashboard-widget[data-widget="upcoming"] .training-upcoming-panel[data-chart-size="short"] {
   min-height: max(var(--chart-card-height), var(--widget-aligned-height, 0px));
 }
+
+/* Each workout opens on its day in the Training Calendar. The title is the
+   button; its ::after stretches the hit area over the whole row or card. */
+.training-upcoming-row.is-interactive,
+.training-upcoming-today.is-interactive {
+  position: relative;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+/* Only a reset: in a row the button is also .training-upcoming-title, which sets its type. */
+.training-upcoming-open {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.training-upcoming-today-title .training-upcoming-open {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+.training-upcoming-open::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-md);
+}
+.training-upcoming-open:focus-visible { outline: none; }
+.training-upcoming-row.is-interactive:has(.training-upcoming-open:focus-visible),
+.training-upcoming-today.is-interactive:has(.training-upcoming-open:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.training-upcoming-row.is-interactive:hover {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.045);
+}
+.training-upcoming-today.is-interactive:hover { border-color: rgba(110, 231, 168, 0.66); }
+.training-upcoming-chevron { transition: color 0.15s ease, transform 0.15s ease; }
+.training-upcoming-today-chevron { align-self: center; margin-left: auto; }
+.is-interactive:hover > .training-upcoming-chevron {
+  color: var(--text-secondary);
+  transform: translateX(2px);
+}
+:root[data-theme="paper"] .training-upcoming-row.is-interactive:hover {
+  border-color: rgba(92, 110, 98, 0.14);
+  background: rgba(38, 52, 44, 0.035);
+}
+:root[data-theme="paper"] .training-upcoming-today.is-interactive:hover { border-color: rgba(20, 125, 93, 0.42); }
+@media (prefers-reduced-motion: reduce) {
+  .is-interactive:hover > .training-upcoming-chevron { transform: none; }
+}

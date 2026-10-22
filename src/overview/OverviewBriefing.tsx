@@ -232,6 +232,8 @@ interface OverviewBriefingProps {
   sportTypes: TrainingHubSportType[];
   onNavigate: (view: PrimaryView) => void;
   onOpenActivity: (activity: TrainingHubActivity) => void;
+  /** Opens a planned workout on its day in the Training Calendar. */
+  onOpenWorkout?: (workout: TrainingHubUpcomingWorkout) => void;
   /** Local-Only Mode: opens the watch menu and starts a sync. */
   onSyncWatch?: () => void;
 }
@@ -246,6 +248,7 @@ export function OverviewBriefing({
   sportTypes,
   onNavigate,
   onOpenActivity,
+  onOpenWorkout,
   onSyncWatch
 }: OverviewBriefingProps) {
   useLanguage();
@@ -275,7 +278,7 @@ export function OverviewBriefing({
     <div className="overview-briefing">
       <div className="overview-row">
         <ReadinessCard readiness={briefing.readiness} snapshot={snapshot} onNavigate={onNavigate} onSyncWatch={onSyncWatch} />
-        <TodayCard plan={briefing.plan} week={briefing.week} onNavigate={onNavigate} />
+        <TodayCard plan={briefing.plan} week={briefing.week} onNavigate={onNavigate} onOpenWorkout={onOpenWorkout} />
       </div>
       {latest || scores.length > 0 ? (
         <div className={`overview-row${latest && scores.length > 0 ? "" : " is-single"}`}>
@@ -753,18 +756,22 @@ function ReadinessCard({
 function TodayCard({
   plan,
   week,
-  onNavigate
+  onNavigate,
+  onOpenWorkout
 }: {
   plan: TodayPlan;
   week: WeekSummary;
   onNavigate: (view: PrimaryView) => void;
+  onOpenWorkout?: (workout: TrainingHubUpcomingWorkout) => void;
 }) {
   useLanguage();
   const localOnly = useLocalOnlyView();
   const { unitSystem } = useUnitSystem();
   const hiddenNavItems = useHiddenNavItems();
+  const open = hiddenNavItems.has("calendar") ? undefined : onOpenWorkout;
+  const upnextId = useId();
   const nextLabel = plan.next
-    ? `Next up: ${plan.next.name.trim()} · ${formatUpcomingWorkoutDate(plan.next.happenDay)}`
+    ? t("Next up: {{value1}} · {{value2}}", { value1: plan.next.name.trim(), value2: formatUpcomingWorkoutDate(plan.next.happenDay) })
     : undefined;
 
   return (
@@ -789,44 +796,59 @@ function TodayCard({
       </CardHead>
 
       {plan.today.length > 0 ? (
-        <div className="overview-sessions">
+        <div className="overview-sessions" data-count={plan.today.length > 1 ? "many" : "one"}>
           {plan.today.map((workout, index) => {
             const family = planFamily(workout);
             const stats = workoutStats(workout, unitSystem);
             return (
               <article
                 key={`${workout.happenDay}-${workout.sortNo ?? index}-${workout.name}`}
-                className="overview-session"
+                className={`overview-session${open ? " is-interactive" : ""}`}
                 style={sportStyle(family)}
               >
+                <span className="overview-glyph overview-session-glyph" aria-hidden="true">
+                  <SportIcon family={family} size={20} />
+                </span>
                 <div>
-                  <h2>{workout.name.trim()}</h2>
-                  <p>
-                    <SportIcon family={family} size={16} />
-                    {[workoutKind(workout, family), stats].filter(Boolean).join(" · ")}
-                  </p>
+                  <h2>
+                    {open ? (
+                      <button
+                        type="button"
+                        className="overview-open-workout"
+                        title={t("Open in Training Calendar")}
+                        onClick={() => open(workout)}
+                      >
+                        {workout.name.trim()}
+                      </button>
+                    ) : (
+                      workout.name.trim()
+                    )}
+                  </h2>
+                  <p>{[workoutKind(workout, family), stats].filter(Boolean).join(" · ")}</p>
                 </div>
+                {open ? <ChevronRight className="overview-session-chevron" size={16} aria-hidden="true" /> : null}
               </article>
             );
           })}
         </div>
       ) : plan.next ? (
         <article className="overview-session is-rest">
+          <span className="overview-glyph overview-session-glyph" aria-hidden="true">
+            <MoonStars size={20} weight="duotone" />
+          </span>
           <div>
             <h2>{t("Rest day")}</h2>
-            <p>
-              <MoonStars size={16} weight="duotone" aria-hidden="true" />
-              {nextLabel}
-            </p>
+            <p>{nextLabel}</p>
           </div>
         </article>
       ) : (
         <article className="overview-session is-empty">
+          <span className="overview-glyph overview-session-glyph" aria-hidden="true">
+            <CalendarPlus size={20} weight="duotone" />
+          </span>
           <div>
             <h2>{t("Nothing scheduled")}</h2>
-            <p>
-              <CalendarPlus size={16} weight="duotone" aria-hidden="true" />
-              {t("Pick a workout or plan from the Training Library.")}</p>
+            <p>{t("Pick a workout or plan from the Training Library.")}</p>
           </div>
           {hiddenNavItems.has("library") ? null : (
             <button type="button" className="overview-link" onClick={() => onNavigate("library")}>
@@ -841,10 +863,26 @@ function TodayCard({
           <p className="overview-upnext-label">{t("Coming up")}</p>
           <ul>
             {plan.later.slice(plan.today.length > 0 ? 0 : 1, plan.today.length > 1 ? 1 : 2).map((workout, index) => (
-              <li key={`${workout.happenDay}-${workout.sortNo ?? index}-${workout.name}`} style={sportStyle(planFamily(workout))}>
-                <span className="overview-upnext-day">{formatUpcomingWorkoutDate(workout.happenDay)}</span>
+              <li
+                key={`${workout.happenDay}-${workout.sortNo ?? index}-${workout.name}`}
+                className={open ? "is-interactive" : undefined}
+                style={sportStyle(planFamily(workout))}
+              >
+                <span id={`${upnextId}-${index}`} className="overview-upnext-day">{formatUpcomingWorkoutDate(workout.happenDay)}</span>
                 <SportIcon family={planFamily(workout)} size={16} />
-                <span className="overview-upnext-name">{workout.name.trim()}</span>
+                {open ? (
+                  <button
+                    type="button"
+                    className="overview-upnext-name overview-open-workout"
+                    aria-describedby={`${upnextId}-${index}`}
+                    title={t("Open in Training Calendar")}
+                    onClick={() => open(workout)}
+                  >
+                    {workout.name.trim()}
+                  </button>
+                ) : (
+                  <span className="overview-upnext-name">{workout.name.trim()}</span>
+                )}
                 <span className="overview-upnext-stats">{workoutStats(workout, unitSystem)}</span>
               </li>
             ))}

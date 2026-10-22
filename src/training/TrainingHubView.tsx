@@ -140,6 +140,7 @@ function TrainingHubContent({
   navigationRequest,
   onNavigationRequestHandled,
   onOpenCoach,
+  onOpenCalendarWorkout,
   onSyncWatch,
   localDataVersion = 0,
   sampleMode = false,
@@ -607,7 +608,7 @@ function TrainingHubContent({
                 case "scores": return <FitnessScoresPanel size={widgetPreset(widget).chartSize} dashboard={snapshot?.dashboard ?? null} racePredictor={snapshot?.racePredictor ?? null} />;
                 case "race": return <RacePredictorCards size={widgetPreset(widget).chartSize} racePredictor={snapshot?.racePredictor ?? null} />;
                 case "effort": return <PerceivedEffortPanel size={widgetPreset(widget).chartSize} distribution={snapshot?.analytics?.rpeDistribution} />;
-                case "upcoming": return <UpcomingWorkoutsPanel size={widgetPreset(widget).chartSize} workouts={upcomingWorkouts} />;
+                case "upcoming": return <UpcomingWorkoutsPanel size={widgetPreset(widget).chartSize} workouts={upcomingWorkouts} onOpenWorkout={sampleMode ? undefined : onOpenCalendarWorkout} />;
               }
             }} />
           </div>

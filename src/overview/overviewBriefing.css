@@ -821,28 +821,51 @@
 
 .overview-sessions {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
+/* Each of today's sessions (and the rest-day / nothing-planned note) is a
+   raised tile: the sport's glyph, the name, its details, and — when it opens
+   in the calendar — a chevron inside the tile, which is the button. */
 .overview-session {
   --overview-sport: var(--accent);
+  position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   gap: 14px;
   min-width: 0;
+  padding: 12px 14px 12px 12px;
+  border-radius: 16px;
+  background: var(--ov-tile);
+  box-shadow: var(--ov-tile-rim);
+}
+
+.overview-session-glyph {
+  --glyph: var(--overview-sport);
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
 }
 
 .overview-session > div {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
   flex: 1;
 }
 
 .overview-session h2 {
   overflow: hidden;
+  font-size: 19px;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* Two or more sessions share the space as equals. */
+.overview-sessions[data-count="many"] .overview-session h2 {
+  font-size: 16px;
+  letter-spacing: -0.01em;
 }
 
 .overview-session p,
@@ -854,22 +877,20 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The sport rides in front of the session's details, in the sport's colour. */
 .overview-session p {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
-
-.overview-session p svg {
-  flex-shrink: 0;
-  color: var(--overview-sport);
-}
-
 
 .overview-session.is-rest,
 .overview-session.is-empty {
   --overview-sport: var(--text-muted);
+}
+
+.overview-session.is-rest h2,
+.overview-session.is-empty h2 {
+  font-size: 17px;
 }
 
 .overview-session.is-empty .overview-link {
@@ -879,19 +900,21 @@
 
 .overview-upnext {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .overview-upnext-label {
-  margin: 0;
+  margin: 4px 0 0;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 600;
 }
 
+/* Rows share one set of columns, so names line up whatever the day label is. */
 .overview-upnext ul {
   display: grid;
-  gap: 2px;
+  grid-template-columns: max-content 16px minmax(0, 1fr) auto;
+  column-gap: 12px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -900,10 +923,10 @@
 .overview-upnext li {
   --overview-sport: var(--accent);
   display: grid;
-  grid-template-columns: 44px 16px minmax(0, 1fr) auto;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
-  gap: 10px;
-  min-height: 34px;
+  min-height: 36px;
   font-size: 13px;
 }
 
@@ -916,6 +939,7 @@
 }
 
 .overview-upnext-day {
+  min-width: 30px;
   color: var(--text-muted);
   font-weight: 600;
 }
@@ -929,6 +953,7 @@
 }
 
 .overview-upnext-stats {
+  justify-self: end;
   color: var(--text-muted);
   font-weight: 500;
   white-space: nowrap;
@@ -1960,3 +1985,100 @@
 :root[data-theme="paper"] .overview-watch-image.dashboard-hero-image {
   filter: drop-shadow(0 18px 30px rgba(30, 45, 35, 0.2));
 }
+
+/* Planned sessions open on their day in the Training Calendar. The name is
+   the button; its ::after stretches the hit area over the tile (or, for a
+   Coming up row, an outset wash) so the layout doesn't move. */
+.overview-session.is-interactive {
+  --open-inset: 0;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.overview-session.is-interactive:hover {
+  background:
+    linear-gradient(color-mix(in srgb, var(--text-primary) 4%, transparent), color-mix(in srgb, var(--text-primary) 4%, transparent)),
+    var(--ov-tile);
+}
+
+.overview-session.is-interactive:has(.overview-open-workout:focus-visible) {
+  box-shadow: var(--ov-tile-rim), 0 0 0 2px var(--accent);
+}
+
+.overview-upnext li.is-interactive {
+  --open-inset: -2px -8px;
+  position: relative;
+  isolation: isolate;
+}
+
+.overview-upnext li.is-interactive::before {
+  content: "";
+  position: absolute;
+  inset: var(--open-inset);
+  z-index: -1;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease;
+  pointer-events: none;
+}
+
+.overview-upnext li.is-interactive:hover::before {
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+.overview-upnext li.is-interactive:has(.overview-open-workout:focus-visible)::before {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.overview-open-workout {
+  display: block;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.overview-open-workout::after {
+  content: "";
+  position: absolute;
+  inset: var(--open-inset);
+  border-radius: inherit;
+}
+
+.overview-session .overview-open-workout::after {
+  border-radius: 16px;
+}
+
+.overview-open-workout:focus-visible {
+  outline: none;
+}
+
+.overview-session-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.overview-session.is-interactive:hover .overview-session-chevron {
+  color: var(--text-primary);
+  transform: translateX(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overview-session.is-interactive,
+  .overview-session-chevron {
+    transition: none;
+  }
+
+  .overview-session.is-interactive:hover .overview-session-chevron {
+    transform: none;
+  }
+}
+

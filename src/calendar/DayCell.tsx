@@ -27,6 +27,7 @@ import {
 import {
   scheduledWorkoutKey,
   type CalendarDay,
+  type CalendarGridMode,
   type PlannedActualPair
 } from "./calendarTypes";
 import { dayNumber } from "./dateUtils";
@@ -36,12 +37,13 @@ import "./workoutJournal.css";
 
 interface DayCellProps {
   day: CalendarDay;
-  mode: "month" | "week";
+  mode: CalendarGridMode;
   onSelectScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
   onSelectActivity: (activity: TrainingHubActivity) => void;
   onToggleScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
   isScheduledSelected: (entry: TrainingHubScheduledWorkoutEntry) => boolean;
   isScheduledCopied: (entry: TrainingHubScheduledWorkoutEntry) => boolean;
+  highlightedWorkoutKey: string | null;
   onAdd: (dateKey: string) => void;
   onCopyDay: (day: CalendarDay) => void;
   onPasteDay: (dateKey: string) => void;
@@ -78,7 +80,7 @@ function startScheduledDrag(
   event.dataTransfer.effectAllowed = copyOnly ? "copy" : "copyMove";
 }
 
-function completionTone(pct?: number): string {
+export function completionTone(pct?: number): string {
   if (pct === undefined) {
     return "";
   }
@@ -91,7 +93,7 @@ function completionTone(pct?: number): string {
   return "is-missed";
 }
 
-function activityStatsLine(
+export function activityStatsLine(
   activity: TrainingHubActivity,
   unitSystem: UnitSystem
 ): string {
@@ -116,7 +118,7 @@ function activityStatsLine(
 const FEEL_WORDS = ["Awful", "Rough", "Okay", "Good", "Great"];
 
 /** A quiet mark on the chip: a target for a brief, a feel dot for a debrief. */
-function JournalMark({ entry }: { entry: WorkoutJournalEntry | undefined }) {
+export function JournalMark({ entry }: { entry: WorkoutJournalEntry | undefined }) {
   useLanguage();
   if (!entry) return null;
   const { brief, debrief } = entry;
@@ -141,6 +143,7 @@ function PairChip({
   selectionMode,
   selected,
   copied,
+  highlighted,
   onSelectScheduled,
   onSelectActivity,
   onToggleScheduled
@@ -151,6 +154,7 @@ function PairChip({
   selectionMode: boolean;
   selected: boolean;
   copied: boolean;
+  highlighted: boolean;
   onSelectScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
   onSelectActivity: (activity: TrainingHubActivity) => void;
   onToggleScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
@@ -176,6 +180,7 @@ function PairChip({
           selectable && "is-selection-enabled",
           selected && "is-selected",
           copied && "is-copied",
+          highlighted && "is-nav-target",
           selectionMode && !selectable && "is-selection-unavailable"
         ]
           .filter(Boolean)
@@ -243,6 +248,7 @@ function PairChip({
         selectable && "is-selection-enabled",
         selected && "is-selected",
         copied && "is-copied",
+        highlighted && "is-nav-target",
         selectionMode && !selectable && "is-selection-unavailable"
       ]
         .filter(Boolean)
@@ -319,6 +325,7 @@ export function DayCell({
   onToggleScheduled,
   isScheduledSelected,
   isScheduledCopied,
+  highlightedWorkoutKey,
   onAdd,
   onCopyDay,
   onPasteDay,
@@ -443,6 +450,7 @@ export function DayCell({
             selectionMode={selectionMode}
             selected={isScheduledSelected(pair.scheduled)}
             copied={isScheduledCopied(pair.scheduled)}
+            highlighted={highlightedWorkoutKey === scheduledWorkoutKey(pair.scheduled)}
             onSelectScheduled={onSelectScheduled}
             onSelectActivity={onSelectActivity}
             onToggleScheduled={onToggleScheduled}

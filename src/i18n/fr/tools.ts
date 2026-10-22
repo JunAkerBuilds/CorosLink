@@ -1745,4 +1745,5 @@ export const toolsFrench: Record<string, string> = {
   "Choose a watch key backup first.": "Choisissez d’abord une sauvegarde de clé de montre.",
   "OS secure storage is required to save your COROS watch account key.": "Le stockage sécurisé du système est nécessaire pour enregistrer la clé de compte de votre montre COROS.",
   "CorosLink couldn't save the watch key backup there. Choose another folder.": "CorosLink n’a pas pu enregistrer la sauvegarde de la clé de la montre à cet emplacement. Choisissez un autre dossier.",
+  "Next up: {{value1}} · {{value2}}": "À venir : {{value1}} · {{value2}}",
 };

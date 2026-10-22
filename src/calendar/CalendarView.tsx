@@ -8,10 +8,11 @@ import {
   ChevronRight,
   ListChecks,
   RefreshCw,
+  SlidersHorizontal,
   Trash2,
   X
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CalendarConnectionStatus } from "../../electron/calendarSyncTypes";
 import type {
   TrainingHubActivity,
@@ -35,15 +36,28 @@ import {
 } from "../training/formatters";
 import { isSwimSportType } from "../training/sportTypes";
 import { AddWorkoutModal } from "./AddWorkoutModal";
-import { CalendarGrid } from "./CalendarGrid";
+import { CalendarAgenda, scrollAgendaToToday } from "./CalendarAgenda";
+import { CalendarFilterBar } from "./CalendarFilterBar";
+import {
+  countCalendarEntries,
+  countCalendarSports,
+  DEFAULT_CALENDAR_FILTER,
+  filterCalendarDay,
+  isCalendarFilter,
+  isCalendarFilterActive,
+  type CalendarFilter
+} from "./calendarFilters";
+import { CalendarGrid, type CalendarContextTarget } from "./CalendarGrid";
 import {
   createCalendarClipboardEntry,
   scheduledWorkoutKey,
   type CalendarClipboardEntry,
   type CalendarDay,
   type CalendarMode,
+  type CalendarNavigationRequest,
   type CalendarSelection,
-  type CalendarWeek
+  type CalendarWeek,
+  type PlannedActualPair
 } from "./calendarTypes";
 import type { CalendarDragPayload } from "./calendarDrag";
 import { DayDetailPanel } from "./DayDetailPanel";
@@ -54,6 +68,7 @@ import {
 } from "./CalendarContextMenu";
 import {
   addDaysToKey,
+  dateFromKey,
   isKeyInMonth,
   monthGridWeeks,
   monthLabel,
@@ -66,6 +81,7 @@ import { WorkoutEditorModal } from "./WorkoutEditorModal";
 import { WorkoutLibraryModal } from "./WorkoutLibraryModal";
 import {
   defineSelectionPreference,
+  selectionIsBoolean,
   selectionIsOneOf,
   useSelectionPreference
 } from "../preferences/selectionPreferences";
@@ -73,7 +89,19 @@ import {
 const CALENDAR_MODE_PREFERENCE = defineSelectionPreference<CalendarMode>({
   key: "calendar.mode",
   defaultValue: "month",
-  validate: selectionIsOneOf(["month", "week"])
+  validate: selectionIsOneOf(["month", "week", "agenda"])
+});
+
+const CALENDAR_FILTER_PREFERENCE = defineSelectionPreference<CalendarFilter>({
+  key: "calendar.filter",
+  defaultValue: DEFAULT_CALENDAR_FILTER,
+  validate: isCalendarFilter
+});
+
+const CALENDAR_FILTER_BAR_PREFERENCE = defineSelectionPreference<boolean>({
+  key: "calendar.filterBarOpen",
+  defaultValue: false,
+  validate: selectionIsBoolean
 });
 
 interface CalendarViewProps {
@@ -85,6 +113,9 @@ interface CalendarViewProps {
   onError: (message: string | null) => void;
   onOpenTraining: () => void;
   onOpenCoach: (prompt: string) => void;
+  /** A day (and workout) another view asked to open; consumed once. */
+  navigationRequest?: CalendarNavigationRequest | null;
+  onNavigationRequestHandled?: () => void;
 }
 
 /** Moving time, like COROS shows it; null when the activity has none. */
@@ -161,12 +192,30 @@ function scheduledWorkoutRemovalRef(entry: TrainingHubScheduledWorkoutEntry) {
   };
 }
 
-interface CalendarContextTarget {
-  x: number;
-  y: number;
-  dayKey: string;
-  workoutKey?: string;
-  activityId?: string;
+/** The occurrence a navigation request names: its schedule ids, else name and slot. */
+function findNavigationPair(
+  day: CalendarDay,
+  workout: CalendarNavigationRequest["workout"]
+): PlannedActualPair | undefined {
+  if (!workout) return undefined;
+  const exact = workout.idInPlan
+    ? day.pairs.find(
+        (pair) =>
+          pair.scheduled.idInPlan === workout.idInPlan &&
+          (!workout.planId || pair.scheduled.planId === workout.planId)
+      )
+    : undefined;
+  if (exact) return exact;
+  const named = day.pairs.filter((pair) => pair.scheduled.name.trim() === workout.name.trim());
+  return named.find((pair) => workout.sortNo === undefined || pair.scheduled.sortNo === workout.sortNo) ?? named[0];
+}
+
+/** Center an element in the calendar's own scroller, leaving the page where it is. */
+function scrollIntoCalendar(element: HTMLElement) {
+  const scroller = element.closest<HTMLElement>(".calendar-grid-body, .calendar-agenda-scroll");
+  if (!scroller) return;
+  const offset = element.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+  scroller.scrollTop += offset - (scroller.clientHeight - element.offsetHeight) / 2;
 }
 
 function workoutCountLabel(count: number): string {
@@ -220,13 +269,25 @@ export function CalendarView({
   onMessage,
   onError,
   onOpenTraining,
-  onOpenCoach
+  onOpenCoach,
+  navigationRequest,
+  onNavigationRequestHandled
 }: CalendarViewProps) {
   useLanguage();
   const localOnly = useLocalOnlyView();
   const { unitSystem } = useUnitSystem();
   const [mode, setMode] = useSelectionPreference(CALENDAR_MODE_PREFERENCE);
-  const [anchor, setAnchor] = useState(() => new Date());
+  const [filter, setFilter] = useSelectionPreference(CALENDAR_FILTER_PREFERENCE);
+  const [filterBarOpen, setFilterBarOpen] = useSelectionPreference(CALENDAR_FILTER_BAR_PREFERENCE);
+  const filterBarId = useId();
+  // Opened from another view: start on that day so the first fetch is the right range.
+  const [anchor, setAnchor] = useState(() =>
+    navigationRequest ? dateFromKey(navigationRequest.happenDay) : new Date()
+  );
+  const [pendingNavigation, setPendingNavigation] = useState<CalendarNavigationRequest | null>(null);
+  const [highlightedWorkoutKey, setHighlightedWorkoutKey] = useState<string | null>(null);
+  const handledNavigationId = useRef<number | null>(null);
+  const navigationSelection = useRef<CalendarSelection | null>(null);
   const [selection, setSelection] = useState<CalendarSelection | null>(null);
   const [addTarget, setAddTarget] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
@@ -321,11 +382,12 @@ export function CalendarView({
   const anchorYear = anchor.getFullYear();
   const anchorMonth = anchor.getMonth();
 
+  // The list shows the same month as the month grid.
   const weekKeys = useMemo(
     () =>
-      mode === "month"
-        ? monthGridWeeks(anchorYear, anchorMonth)
-        : [weekRow(anchor)],
+      mode === "week"
+        ? [weekRow(anchor)]
+        : monthGridWeeks(anchorYear, anchorMonth),
     [mode, anchor, anchorYear, anchorMonth, getLocale()]
   );
 
@@ -336,7 +398,7 @@ export function CalendarView({
   );
 
   const authenticated = Boolean(status?.authenticated);
-  const { weeks, journal, manualLinks, loading, error, reload, applyOptimisticMove, applyJournalSave, setManualLink } = useCalendarData({
+  const { weeks, journal, manualLinks, loading, ready, error, reload, applyOptimisticMove, applyJournalSave, setManualLink } = useCalendarData({
     api,
     authenticated,
     weekKeys,
@@ -345,21 +407,44 @@ export function CalendarView({
   });
 
   useEffect(() => api.onWorkoutEditsChanged(() => { if (authenticated) void reload(); }), [api, authenticated, reload]);
+  // Until the visible range's own data is in. `loading` alone can flip true and back within one render.
+  const settling = !error && (loading || !ready);
 
+  // Filters hide entries from the grid and the list; week totals still count everything.
+  const visibleWeeks = useMemo(
+    () =>
+      isCalendarFilterActive(filter)
+        ? weeks.map((week) => ({ ...week, days: week.days.map((day) => filterCalendarDay(day, filter)) }))
+        : weeks,
+    [weeks, filter]
+  );
+  // The days on screen: the list leaves out the neighbouring months' days.
+  const shownDays = useMemo(() => {
+    const days = weeks.flatMap((week) => week.days);
+    return mode === "agenda" ? days.filter((day) => day.inMonth) : days;
+  }, [weeks, mode]);
+  const visibleShownDays = useMemo(() => {
+    const days = visibleWeeks.flatMap((week) => week.days);
+    return mode === "agenda" ? days.filter((day) => day.inMonth) : days;
+  }, [visibleWeeks, mode]);
+  const sportCounts = useMemo(() => countCalendarSports(shownDays, filter.kind), [shownDays, filter.kind]);
+  const hiddenCount = countCalendarEntries(shownDays) - countCalendarEntries(visibleShownDays);
+  const filterActive = isCalendarFilterActive(filter);
+  const activeFilterCount = (filter.kind === "all" ? 0 : 1) + filter.hiddenSports.length;
+
+  // Only what's on screen can be selected, so a bulk remove never takes a hidden workout.
   const selectableWorkouts = useMemo(() => {
     const entries = new Map<string, TrainingHubScheduledWorkoutEntry>();
-    for (const week of weeks) {
-      for (const day of week.days) {
-        if (day.isPast) {
-          continue;
-        }
-        for (const entry of day.scheduled) {
-          entries.set(scheduledWorkoutKey(entry), entry);
-        }
+    for (const day of visibleShownDays) {
+      if (day.isPast) {
+        continue;
+      }
+      for (const { scheduled } of day.pairs) {
+        entries.set(scheduledWorkoutKey(scheduled), scheduled);
       }
     }
     return [...entries.values()];
-  }, [weeks, getLocale()]);
+  }, [visibleShownDays, getLocale()]);
 
   const allSelectableSelected =
     selectableWorkouts.length > 0 &&
@@ -368,9 +453,9 @@ export function CalendarView({
     );
 
   const headline =
-    mode === "month"
-      ? monthLabel(anchorYear, anchorMonth)
-      : weekRangeLabel(weekKeys[0] ?? []);
+    mode === "week"
+      ? weekRangeLabel(weekKeys[0] ?? [])
+      : monthLabel(anchorYear, anchorMonth);
 
   const exitSelectionMode = useCallback(() => {
     setSelectionMode(false);
@@ -419,7 +504,7 @@ export function CalendarView({
     exitSelectionMode();
     setAnchor((current) => {
       const next = new Date(current);
-      if (mode === "month") {
+      if (mode !== "week") {
         next.setDate(1);
         next.setMonth(next.getMonth() + direction);
       } else {
@@ -633,6 +718,67 @@ export function CalendarView({
     () => new Set((clipboard ?? []).map(scheduledWorkoutKey)),
     [clipboard, getLocale()]
   );
+
+  // Another view asked for a day: move there, then open the workout once its range has loaded.
+  useEffect(() => {
+    if (!navigationRequest) return;
+    if (handledNavigationId.current !== navigationRequest.requestId) {
+      handledNavigationId.current = navigationRequest.requestId;
+      exitSelectionMode();
+      setContextMenu(null);
+      setSelection(null);
+      setAnchor(dateFromKey(navigationRequest.happenDay));
+      setPendingNavigation(navigationRequest);
+    }
+    onNavigationRequestHandled?.();
+  }, [navigationRequest, onNavigationRequestHandled, exitSelectionMode]);
+
+  useEffect(() => {
+    if (!pendingNavigation) return;
+    if (error) {
+      setPendingNavigation(null);
+      return;
+    }
+    const day = ready ? daysByKey.get(pendingNavigation.happenDay) : undefined;
+    if (!day) return;
+    setPendingNavigation(null);
+    const pair = findNavigationPair(day, pendingNavigation.workout);
+    const selector = pair
+      ? `[data-calendar-workout="${CSS.escape(scheduledWorkoutKey(pair.scheduled))}"]`
+      : `[data-calendar-day="${pendingNavigation.happenDay}"]`;
+    if (pair) {
+      navigationSelection.current = pair.activity
+        ? { kind: "activity", day, activity: pair.activity }
+        : { kind: "scheduled", day, entry: pair.scheduled };
+      setHighlightedWorkoutKey(scheduledWorkoutKey(pair.scheduled));
+      setSelection(navigationSelection.current);
+    }
+    // After the grid's own scroll-to-today has run.
+    let frame = window.requestAnimationFrame(() => {
+      frame = window.requestAnimationFrame(() => {
+        const element = document.querySelector<HTMLElement>(selector);
+        if (!element) return;
+        scrollIntoCalendar(element);
+        if (!pair) element.focus({ preventScroll: true });
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [pendingNavigation, ready, error, daysByKey]);
+
+  // Once its details close, hand focus to the opened workout and let the ring fade.
+  useEffect(() => {
+    if (!highlightedWorkoutKey) return;
+    if (selection) {
+      // Opening anything else ends the hand-off.
+      if (selection !== navigationSelection.current) setHighlightedWorkoutKey(null);
+      return;
+    }
+    document
+      .querySelector<HTMLElement>(`[data-calendar-workout="${CSS.escape(highlightedWorkoutKey)}"]`)
+      ?.focus({ preventScroll: true });
+    const timer = window.setTimeout(() => setHighlightedWorkoutKey(null), 2400);
+    return () => window.clearTimeout(timer);
+  }, [highlightedWorkoutKey, selection]);
 
   const modalOpen = addTarget !== null || editRef !== null || libraryOpen;
   const keyboardState = useRef({
@@ -954,6 +1100,7 @@ export function CalendarView({
             onClick={() => {
               exitSelectionMode();
               setAnchor(new Date());
+              if (mode === "agenda") window.requestAnimationFrame(() => scrollAgendaToToday());
             }}
           >
             {t("Today")} </button>
@@ -962,7 +1109,7 @@ export function CalendarView({
               type="button"
               className="calendar-nav-button calendar-nav-arrow"
               onClick={() => navigate(-1)}
-              aria-label={mode === "month" ? t("Previous month") : t("Previous week")}
+              aria-label={mode === "week" ? t("Previous week") : t("Previous month")}
             >
               <ChevronLeft size={16} aria-hidden="true" />
             </button>
@@ -970,7 +1117,7 @@ export function CalendarView({
               type="button"
               className="calendar-nav-button calendar-nav-arrow"
               onClick={() => navigate(1)}
-              aria-label={mode === "month" ? t("Next month") : t("Next week")}
+              aria-label={mode === "week" ? t("Next week") : t("Next month")}
             >
               <ChevronRight size={16} aria-hidden="true" />
             </button>
@@ -1033,6 +1180,29 @@ export function CalendarView({
           >
             <RefreshCw size={14} aria-hidden="true" />
           </button>
+          <button
+            type="button"
+            className={[
+              "calendar-nav-button",
+              "calendar-filter-button",
+              filterBarOpen && "is-open",
+              filterActive && "is-active"
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            onClick={() => setFilterBarOpen((open) => !open)}
+            aria-expanded={filterBarOpen}
+            aria-controls={filterBarOpen ? filterBarId : undefined}
+          >
+            <SlidersHorizontal size={14} aria-hidden="true" />
+            {t("Filters")}
+            {activeFilterCount > 0 ? (
+              <span className="calendar-filter-badge">
+                <span className="sr-only">{t("Active filters:")} </span>
+                {activeFilterCount}
+              </span>
+            ) : null}
+          </button>
           <div className="calendar-mode-toggle" role="tablist">
             <button
               type="button"
@@ -1056,11 +1226,36 @@ export function CalendarView({
               }}
             >
               {t("Week")} </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "agenda"}
+              className={mode === "agenda" ? "is-active" : ""}
+              onClick={() => {
+                exitSelectionMode();
+                setMode("agenda");
+              }}
+            >
+              {t("List")} </button>
           </div>
         </div>
       </header>
 
       {error ? <p className="calendar-error">{error}</p> : null}
+
+      {filterBarOpen ? (
+        <CalendarFilterBar
+          id={filterBarId}
+          filter={filter}
+          sports={sportCounts}
+          hiddenCount={hiddenCount}
+          onChange={(next) => {
+            setConfirmBulkDelete(false);
+            setSelectedWorkoutKeys(new Set());
+            setFilter(next);
+          }}
+        />
+      ) : null}
 
       {selectionMode ? (
         <div
@@ -1114,31 +1309,52 @@ export function CalendarView({
         </div>
       ) : null}
 
-      <CalendarGrid
-        weeks={weeks}
-        mode={mode}
-        loading={loading}
-        busy={mutating}
-        selectionMode={selectionMode}
-        selectedWorkoutKeys={selectedWorkoutKeys}
-        onSelectScheduled={(day, entry) => setSelection({ kind: "scheduled", day, entry })}
-        onSelectActivity={(day, activity: TrainingHubActivity) =>
-          setSelection({ kind: "activity", day, activity })
-        }
-        onToggleScheduled={toggleScheduledSelection}
-        onAdd={setAddTarget}
-        onCopyDay={(day) => copyEntries(day.scheduled, formatHappenDayLabel(day.dateKey))}
-        onPasteDay={(dateKey) => {
-          if (clipboard) void pasteEntries(clipboard, dateKey);
-        }}
-        clipboardCount={clipboard?.length ?? 0}
-        onDropEntry={handleDropEntry}
-        onAskCoachWeek={handleAskCoachWeek}
-        copiedWorkoutKeys={copiedWorkoutKeys}
-        onContextMenu={(target) => {
-          if (!selectionMode) setContextMenu(target);
-        }}
-      />
+      {mode === "agenda" ? (
+        <CalendarAgenda
+          weeks={visibleWeeks}
+          loading={settling}
+          busy={mutating}
+          selectionMode={selectionMode}
+          selectedWorkoutKeys={selectedWorkoutKeys}
+          highlightedWorkoutKey={highlightedWorkoutKey}
+          hiddenCount={hiddenCount}
+          onShowEverything={() => setFilter(DEFAULT_CALENDAR_FILTER)}
+          onSelectScheduled={(day, entry) => setSelection({ kind: "scheduled", day, entry })}
+          onSelectActivity={(day, activity) => setSelection({ kind: "activity", day, activity })}
+          onToggleScheduled={toggleScheduledSelection}
+          onAdd={setAddTarget}
+          onContextMenu={(target) => {
+            if (!selectionMode) setContextMenu(target);
+          }}
+        />
+      ) : (
+        <CalendarGrid
+          weeks={visibleWeeks}
+          mode={mode}
+          loading={settling}
+          busy={mutating}
+          selectionMode={selectionMode}
+          selectedWorkoutKeys={selectedWorkoutKeys}
+          highlightedWorkoutKey={highlightedWorkoutKey}
+          onSelectScheduled={(day, entry) => setSelection({ kind: "scheduled", day, entry })}
+          onSelectActivity={(day, activity: TrainingHubActivity) =>
+            setSelection({ kind: "activity", day, activity })
+          }
+          onToggleScheduled={toggleScheduledSelection}
+          onAdd={setAddTarget}
+          onCopyDay={(day) => copyEntries(day.scheduled, formatHappenDayLabel(day.dateKey))}
+          onPasteDay={(dateKey) => {
+            if (clipboard) void pasteEntries(clipboard, dateKey);
+          }}
+          clipboardCount={clipboard?.length ?? 0}
+          onDropEntry={handleDropEntry}
+          onAskCoachWeek={handleAskCoachWeek}
+          copiedWorkoutKeys={copiedWorkoutKeys}
+          onContextMenu={(target) => {
+            if (!selectionMode) setContextMenu(target);
+          }}
+        />
+      )}
 
       {contextMenu && contextMenuItems.length > 0 ? (
         <CalendarContextMenu

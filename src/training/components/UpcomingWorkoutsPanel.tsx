@@ -5,6 +5,7 @@ import "../upcomingSizing.css";
 import { CalendarDays, ChevronRight, Moon } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import type { TrainingHubUpcomingWorkout } from "../../../electron/types";
+import { useHiddenNavItems } from "../../navigation/hiddenNav";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import {
   filterUpcomingWorkoutsFromToday,
@@ -19,13 +20,18 @@ import {
 interface UpcomingWorkoutsPanelProps {
   size?: ChartCardSize;
   workouts: TrainingHubUpcomingWorkout[];
+  /** Opens the workout on its day in the Training Calendar. */
+  onOpenWorkout?: (workout: TrainingHubUpcomingWorkout) => void;
 }
 
-export function UpcomingWorkoutsPanel({ workouts, size }: UpcomingWorkoutsPanelProps) {
+export function UpcomingWorkoutsPanel({ workouts, size, onOpenWorkout }: UpcomingWorkoutsPanelProps) {
   useLanguage();
   const { unitSystem } = useUnitSystem();
   const [expanded, setExpanded] = useState(false);
   const listId = useId();
+  const hintId = `${listId}-hint`;
+  // A hidden Calendar has nowhere to open the workout.
+  const open = useHiddenNavItems().has("calendar") ? undefined : onOpenWorkout;
   const limit = size ? { mini: 1, short: 3, standard: Infinity, tall: Infinity }[size] : Infinity;
   const scheduledWorkouts = useMemo(
     () => filterUpcomingWorkoutsFromToday(workouts),
@@ -65,12 +71,19 @@ export function UpcomingWorkoutsPanel({ workouts, size }: UpcomingWorkoutsPanelP
         </div>
       ) : (
         <div id={listId} className="training-upcoming-body">
+          {open ? (
+            <span id={hintId} className="sr-only">
+              {t("Opens in the Training Calendar")}
+            </span>
+          ) : null}
           {todayWorkouts.length > 0 ? (
             <div className="training-upcoming-today-stack">
               {todayWorkouts.map((workout, index) => (
                 <TodayWorkoutCard
                   key={`today-${workout.happenDay}-${workout.sortNo ?? index}-${workout.name}`}
                   workout={workout}
+                  hintId={hintId}
+                  onOpen={open}
                 />
               ))}
             </div>
@@ -86,23 +99,37 @@ export function UpcomingWorkoutsPanel({ workouts, size }: UpcomingWorkoutsPanelP
                   workout.trainingLoad,
                   unitSystem
                 );
+                const dateId = `${listId}-date-${index}`;
 
                 return (
                   <li
-                    className="training-upcoming-row"
+                    className={`training-upcoming-row${open ? " is-interactive" : ""}`}
                     key={`${workout.happenDay}-${workout.sortNo ?? index}-${workout.name}`}
                   >
                     <div className="training-upcoming-rail" aria-hidden="true">
                       <span className="training-upcoming-dot" />
                     </div>
-                    <span className="training-upcoming-date">
+                    <span id={dateId} className="training-upcoming-date">
                       {formatUpcomingWorkoutDate(workout.happenDay)}
                     </span>
                     <div className="training-upcoming-main">
                       <div className="training-upcoming-title-row">
-                        <strong className="training-upcoming-title">
-                          {workout.name}
-                        </strong>
+                        {open ? (
+                          // The button's hit area stretches over the whole row.
+                          <button
+                            type="button"
+                            className="training-upcoming-title training-upcoming-open"
+                            aria-describedby={`${dateId} ${hintId}`}
+                            title={t("Open in Training Calendar")}
+                            onClick={() => open(workout)}
+                          >
+                            {workout.name}
+                          </button>
+                        ) : (
+                          <strong className="training-upcoming-title">
+                            {workout.name}
+                          </strong>
+                        )}
                         <span className="training-upcoming-tag">
                           {t(inferUpcomingWorkoutCategory(workout.name))}
                         </span>
@@ -111,9 +138,11 @@ export function UpcomingWorkoutsPanel({ workouts, size }: UpcomingWorkoutsPanelP
                         <p className="training-upcoming-row-stats">{rowStats}</p>
                       ) : null}
                     </div>
-                    <span className="training-upcoming-chevron" aria-hidden="true">
-                      <ChevronRight size={18} strokeWidth={2.2} />
-                    </span>
+                    {open ? (
+                      <span className="training-upcoming-chevron" aria-hidden="true">
+                        <ChevronRight size={18} strokeWidth={2.2} />
+                      </span>
+                    ) : null}
                   </li>
                 );
               })}
@@ -126,7 +155,15 @@ export function UpcomingWorkoutsPanel({ workouts, size }: UpcomingWorkoutsPanelP
   );
 }
 
-function TodayWorkoutCard({ workout }: { workout: TrainingHubUpcomingWorkout }) {
+function TodayWorkoutCard({
+  workout,
+  hintId,
+  onOpen
+}: {
+  workout: TrainingHubUpcomingWorkout;
+  hintId: string;
+  onOpen?: (workout: TrainingHubUpcomingWorkout) => void;
+}) {
   useLanguage();
   const { unitSystem } = useUnitSystem();
   const category = inferUpcomingWorkoutCategory(workout.name);
@@ -138,7 +175,7 @@ function TodayWorkoutCard({ workout }: { workout: TrainingHubUpcomingWorkout }) 
   );
 
   return (
-    <article className="training-upcoming-today">
+    <article className={`training-upcoming-today${onOpen ? " is-interactive" : ""}`}>
       <div className="training-upcoming-today-icon" aria-hidden="true">
         <CalendarDays size={22} strokeWidth={2.2} />
       </div>
@@ -147,9 +184,28 @@ function TodayWorkoutCard({ workout }: { workout: TrainingHubUpcomingWorkout }) 
           <span className="training-upcoming-today-pill">{t("Today")}</span>
           <span className="training-upcoming-today-tag">{t(category)}</span>
         </div>
-        <h3 className="training-upcoming-today-title">{workout.name}</h3>
+        <h3 className="training-upcoming-today-title">
+          {onOpen ? (
+            <button
+              type="button"
+              className="training-upcoming-open"
+              aria-describedby={hintId}
+              title={t("Open in Training Calendar")}
+              onClick={() => onOpen(workout)}
+            >
+              {workout.name}
+            </button>
+          ) : (
+            workout.name
+          )}
+        </h3>
         <p className="training-upcoming-today-meta">{detailLine}</p>
       </div>
+      {onOpen ? (
+        <span className="training-upcoming-chevron training-upcoming-today-chevron" aria-hidden="true">
+          <ChevronRight size={18} strokeWidth={2.2} />
+        </span>
+      ) : null}
     </article>
   );
 }

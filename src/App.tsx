@@ -97,6 +97,7 @@ import type {
   TrainingHubNavigationRequest,
   TrainingHubSnapshot,
 } from "./training/types";
+import type { CalendarNavigationRequest } from "./calendar/calendarTypes";
 import type { CorosLinkApi } from "./coroslink-api";
 import type { CoachPrefill } from "./chat/chatTypes";
 import { AppUpdateControls } from "./components/AppUpdateControls";
@@ -581,6 +582,9 @@ export default function App() {
   const [trainingHubNavigation, setTrainingHubNavigation] =
     useState<TrainingHubNavigationRequest | null>(null);
   const trainingHubNavigationSequence = useRef(0);
+  const [calendarNavigation, setCalendarNavigation] =
+    useState<CalendarNavigationRequest | null>(null);
+  const calendarNavigationSequence = useRef(0);
   const [url, setUrl] = useState("");
   const [autoTransfer, setAutoTransfer] = useState(true);
   const autoTransferRef = useRef(autoTransfer);
@@ -1114,6 +1118,22 @@ export default function App() {
     });
     setActiveView("training");
   }, []);
+
+  const openCalendarWorkout = useCallback((workout: TrainingHubUpcomingWorkout) => {
+    calendarNavigationSequence.current += 1;
+    setCalendarNavigation({
+      happenDay: workout.happenDay,
+      workout: {
+        planId: workout.planId,
+        idInPlan: workout.idInPlan,
+        name: workout.name,
+        sortNo: workout.sortNo,
+      },
+      requestId: calendarNavigationSequence.current,
+    });
+    setActiveView("calendar");
+  }, []);
+  const clearCalendarNavigation = useCallback(() => setCalendarNavigation(null), []);
 
   useEffect(() => {
     if (!api || trainingHubActivities.length === 0) {
@@ -2741,6 +2761,7 @@ export default function App() {
                 onOpenWeatherSettings={() => openSettingsSection("weather")}
                 onSyncWatch={localOnly && trainingHubLoaded ? requestWatchSync : undefined}
                 onOpenTrainingActivity={openTrainingHubActivity}
+                onOpenCalendarWorkout={openCalendarWorkout}
                 onSelectTrainingActivity={handleTrainingHubActivityDetail}
               />
             ) : null}
@@ -2919,6 +2940,7 @@ export default function App() {
                   onExportFile={handleTrainingHubExport}
                   navigationRequest={trainingHubNavigation}
                   onNavigationRequestHandled={() => setTrainingHubNavigation(null)}
+                  onOpenCalendarWorkout={openCalendarWorkout}
                   onOpenCoach={(prefill) => {
                     setCoachPrefill(prefill);
                     setActiveView("coach");
@@ -3001,6 +3023,8 @@ export default function App() {
                     setCoachPrefill({ text: prompt });
                     setActiveView("coach");
                   }}
+                  navigationRequest={calendarNavigation}
+                  onNavigationRequestHandled={clearCalendarNavigation}
                 />
               </Suspense>
             ) : null}
@@ -3457,6 +3481,7 @@ interface MediaOverviewTabProps {
   /** Local-Only Mode: opens the watch menu and starts a sync. */
   onSyncWatch?: () => void;
   onOpenTrainingActivity: (activity: TrainingHubActivity) => void;
+  onOpenCalendarWorkout: (workout: TrainingHubUpcomingWorkout) => void;
   onSelectTrainingActivity: (activity: TrainingHubActivity) => void;
 }
 
@@ -3482,6 +3507,7 @@ function MediaOverviewTab({
   onOpenWeatherSettings,
   onSyncWatch,
   onOpenTrainingActivity,
+  onOpenCalendarWorkout,
   onSelectTrainingActivity,
 }: MediaOverviewTabProps) {
   useLanguage();
@@ -3576,6 +3602,7 @@ function MediaOverviewTab({
           sportTypes={trainingSportTypes}
           onNavigate={onNavigate}
           onOpenActivity={onOpenTrainingActivity}
+          onOpenWorkout={onOpenCalendarWorkout}
           onSyncWatch={onSyncWatch}
         />
       </div>

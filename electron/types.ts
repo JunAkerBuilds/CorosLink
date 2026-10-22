@@ -2771,6 +2771,9 @@ export interface TrainingHubSportType {
 }
 
 export interface TrainingHubUpcomingWorkout {
+  /** Schedule identity, so other views can open this occurrence in the calendar. */
+  planId?: string;
+  idInPlan?: string;
   happenDay: string;
   name: string;
   volume?: string;

@@ -60,7 +60,18 @@ export interface CalendarWeek {
   stats: WeeklyStats;
 }
 
-export type CalendarMode = "month" | "week";
+export type CalendarMode = "month" | "week" | "agenda";
+
+/** The grid layouts; the agenda lists the same month instead. */
+export type CalendarGridMode = Exclude<CalendarMode, "agenda">;
+
+/** Another view asking the calendar to show a day, optionally with one planned workout open. */
+export interface CalendarNavigationRequest {
+  happenDay: string;
+  workout?: Pick<TrainingHubScheduledWorkoutEntry, "name" | "sortNo"> &
+    Partial<Pick<TrainingHubScheduledWorkoutEntry, "planId" | "idInPlan">>;
+  requestId: number;
+}
 
 export type CalendarSelection =
   | { kind: "scheduled"; day: CalendarDay; entry: TrainingHubScheduledWorkoutEntry }
