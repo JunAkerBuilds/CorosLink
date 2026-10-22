@@ -9,6 +9,7 @@ import type {
   ChatMessageAttachment,
   ChatProvider,
   ChatSessionSummary,
+  ChatTurnStage,
   TrainingPlanDestination,
   UnitSystem
 } from "../types";
@@ -34,6 +35,8 @@ export interface CoachActiveTurn {
   thinking: string;
   /** The tool Coach is calling, while it is calling one. */
   tool?: string;
+  /** The last step reported before the model writes; absent from older hubs. */
+  stage?: ChatTurnStage;
 }
 
 /** A whole session as of `cursor`, the number of its last event. */
@@ -51,6 +54,8 @@ export interface CoachEventDataMap {
   "turn.started": { requestId: string };
   "turn.delta": { requestId: string; delta: string };
   "turn.thinking": { requestId: string; delta: string };
+  /** Live only: the step a turn is on before the model writes. */
+  "turn.status": { requestId: string; stage: ChatTurnStage };
   /** `call` while a tool runs, `failed` when it fails. */
   "turn.tool": { requestId: string; tool?: string; status: "call" | "failed"; message?: string };
   "turn.completed": { requestId: string };
@@ -200,11 +205,23 @@ export function applyCoachEvent(
       return { ...next, activeTurn: { requestId: known.data.requestId, text: "", thinking: "" } };
     case "turn.delta": {
       const turn = state.activeTurn ?? { requestId: known.data.requestId, text: "", thinking: "" };
-      return { ...next, activeTurn: { requestId: turn.requestId, text: turn.text + known.data.delta, thinking: turn.thinking } };
+      return {
+        ...next,
+        activeTurn: {
+          requestId: turn.requestId,
+          text: turn.text + known.data.delta,
+          thinking: turn.thinking,
+          ...(turn.stage ? { stage: turn.stage } : {})
+        }
+      };
     }
     case "turn.thinking": {
       const turn = state.activeTurn ?? { requestId: known.data.requestId, text: "", thinking: "" };
       return { ...next, activeTurn: { ...turn, thinking: turn.thinking + known.data.delta } };
+    }
+    case "turn.status": {
+      const turn = state.activeTurn ?? { requestId: known.data.requestId, text: "", thinking: "" };
+      return { ...next, activeTurn: { ...turn, stage: known.data.stage } };
     }
     case "turn.tool": {
       const turn = state.activeTurn ?? { requestId: known.data.requestId, text: "", thinking: "" };

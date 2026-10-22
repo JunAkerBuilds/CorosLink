@@ -1,4 +1,4 @@
-import { t, getLocale } from "../i18n/toolsLocale";
+import { getLocale } from "../i18n/toolsLocale";
 import type { ChatSessionSummary } from "../../electron/types";
 
 export type ChatSessionGroupLabel =
@@ -96,11 +96,9 @@ export function formatSessionRelativeTime(updatedAt: string): string {
   const updatedStart = startOfLocalDay(updated).getTime();
   const dayDiff = Math.floor((todayStart - updatedStart) / 86_400_000);
 
-  if (dayDiff <= 0) {
+  // The group label already says Today or Yesterday; the row adds the hour.
+  if (dayDiff <= 1) {
     return sessionFormatter("time").format(updated);
-  }
-  if (dayDiff === 1) {
-    return t("Yesterday");
   }
   if (dayDiff < 7) {
     return sessionFormatter("weekday").format(updated);

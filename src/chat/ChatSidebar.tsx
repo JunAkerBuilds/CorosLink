@@ -10,6 +10,7 @@ export function ChatSidebar({
   sessions,
   activeSessionId,
   busy,
+  activeStatus,
   onClose,
   onOpen,
   onNewChat,
@@ -22,6 +23,8 @@ export function ChatSidebar({
   sessions: ChatSessionSummary[];
   activeSessionId: string | null;
   busy?: boolean;
+  /** What Coach is doing in the open conversation, while it works. */
+  activeStatus?: string | null;
   onClose: () => void;
   onOpen: () => void;
   onNewChat: () => void;
@@ -89,6 +92,7 @@ export function ChatSidebar({
               sessions={sessions}
               activeSessionId={activeSessionId}
               busy={busy}
+              activeStatus={activeStatus}
               onCollapse={onClose}
               onNewChat={onNewChat}
               onSelectSession={onSelectSession}

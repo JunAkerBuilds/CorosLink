@@ -1,6 +1,6 @@
 import { t, useLanguage } from "../i18n/tools";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Loader2, PanelLeftClose, Plus, Search, Trash2 } from "lucide-react";
+import { MessagesSquare, PanelLeftClose, Search, SquarePen, Trash2, X } from "lucide-react";
 import type { ChatSessionSummary } from "../../electron/types";
 import { ChatSessionRow } from "./ChatSessionRow";
 import { groupChatSessions } from "./chatSessionGroups";
@@ -9,6 +9,7 @@ export function ChatHistoryPanel({
   sessions,
   activeSessionId,
   busy,
+  activeStatus,
   onCollapse,
   onNewChat,
   onSelectSession,
@@ -18,6 +19,7 @@ export function ChatHistoryPanel({
   sessions: ChatSessionSummary[];
   activeSessionId: string | null;
   busy?: boolean;
+  activeStatus?: string | null;
   onCollapse: () => void;
   onNewChat: () => void;
   onSelectSession: (sessionId: string) => void;
@@ -26,9 +28,11 @@ export function ChatHistoryPanel({
 }) {
   const { language } = useLanguage();
   const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const trimmedQuery = query.trim();
 
   const filteredSessions = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
+    const normalized = trimmedQuery.toLowerCase();
     if (!normalized) {
       return sessions;
     }
@@ -37,7 +41,7 @@ export function ChatHistoryPanel({
         session.title.toLowerCase().includes(normalized) ||
         session.preview.toLowerCase().includes(normalized)
     );
-  }, [query, sessions, language]);
+  }, [trimmedQuery, sessions, language]);
 
   const groups = useMemo(
     () => groupChatSessions(filteredSessions),
@@ -55,6 +59,11 @@ export function ChatHistoryPanel({
     (sessionId: string) => handlersRef.current.onDeleteSession(sessionId),
     []
   );
+
+  const clearSearch = () => {
+    setQuery("");
+    searchRef.current?.focus();
+  };
 
   // Only worth offering once something has been said; a lone blank chat stays.
   const canClear = sessions.some((session) => session.messageCount > 0);
@@ -75,63 +84,98 @@ export function ChatHistoryPanel({
       <div className="chat-history-toolbar">
         <div className="chat-history-header">
           <p className="eyebrow">{t("Conversations")}</p>
-          <button
-            type="button"
-            className="chat-history-collapse-button"
-            onClick={onCollapse}
-            aria-expanded="true"
-            aria-controls="chat-conversation-sidebar"
-            aria-label={t("Collapse conversations")}
-            title={t("Collapse conversations")}
-          >
-            <PanelLeftClose size={16} aria-hidden="true" />
-          </button>
+          <div className="chat-history-actions">
+            <button
+              type="button"
+              className="chat-history-icon-button chat-history-new"
+              onClick={onNewChat}
+              disabled={busy}
+              aria-label={t("New chat")}
+              title={t("New chat")}
+            >
+              <SquarePen size={16} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="chat-history-icon-button chat-history-collapse-button"
+              onClick={onCollapse}
+              aria-expanded="true"
+              aria-controls="chat-conversation-sidebar"
+              aria-label={t("Collapse conversations")}
+              title={t("Collapse conversations")}
+            >
+              <PanelLeftClose size={16} aria-hidden="true" />
+            </button>
+          </div>
         </div>
-        <button
-          type="button"
-          className="chat-new-chat chat-new-chat-sidebar"
-          onClick={onNewChat}
-          disabled={busy}
-        >
-          <Plus size={14} aria-hidden="true" />
-          {t("New chat")}</button>
         <label className="chat-history-search">
           <Search size={14} aria-hidden="true" />
           <input
-            type="search"
+            ref={searchRef}
+            type="text"
             aria-label={t("Search conversations")}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && query) {
+                event.stopPropagation();
+                setQuery("");
+              }
+            }}
             placeholder={t("Search chats")}
             spellCheck={false}
           />
+          {query ? (
+            <button
+              type="button"
+              className="chat-history-search-clear"
+              onClick={clearSearch}
+              aria-label={t("Clear search")}
+              title={t("Clear search")}
+            >
+              <X size={13} aria-hidden="true" />
+            </button>
+          ) : null}
         </label>
       </div>
 
       <div className="chat-session-list">
         {groups.length === 0 ? (
           <p className="chat-history-empty">
-            {query.trim() ? t("No chats match your search.") : t("No conversations yet.")}
+            {trimmedQuery ? t("No chats match your search.") : t("No conversations yet.")}
           </p>
         ) : (
           groups.map((group) => (
             <section key={group.label} className="chat-session-group">
               <h3 className="chat-session-group-label">{t(group.label)}</h3>
               <div className="chat-session-group-list">
-                {group.sessions.map((session) => (
-                  <ChatSessionRow
-                    key={session.id}
-                    session={session}
-                    active={session.id === activeSessionId}
-                    disabled={busy}
-                    onSelect={selectSession}
-                    onDelete={deleteSession}
-                  />
-                ))}
+                {group.sessions.map((session) => {
+                  const active = session.id === activeSessionId;
+                  return (
+                    <ChatSessionRow
+                      key={session.id}
+                      session={session}
+                      active={active}
+                      disabled={busy}
+                      status={active ? activeStatus ?? null : null}
+                      query={trimmedQuery}
+                      onSelect={selectSession}
+                      onDelete={deleteSession}
+                    />
+                  );
+                })}
               </div>
             </section>
           ))
         )}
+        {!trimmedQuery && !canClear ? (
+          <div className="chat-history-hint">
+            <span className="chat-history-hint-icon" aria-hidden="true">
+              <MessagesSquare size={16} />
+            </span>
+            <p>{t("Ask Coach anything. Each chat is saved here so you can pick it up later.")}</p>
+          </div>
+        ) : null}
       </div>
 
       {canClear ? (
@@ -144,12 +188,6 @@ export function ChatHistoryPanel({
           >
             <Trash2 size={13} aria-hidden="true" />
             {t("Clear all chats")}</button>
-        </div>
-      ) : null}
-
-      {busy ? (
-        <div className="chat-sidebar-busy" aria-hidden="true">
-          <Loader2 className="chat-spinner" size={16} />
         </div>
       ) : null}
     </div>

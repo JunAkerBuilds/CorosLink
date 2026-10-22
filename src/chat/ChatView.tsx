@@ -120,6 +120,7 @@ import { FitnessTrendCard } from "./FitnessTrendCard";
 import { HrZoneCard } from "./HrZoneCard";
 import { ChatSettingsModal } from "./ChatSettingsModal";
 import { ChatSidebar } from "./ChatSidebar";
+import { CoachTurnStatus, coachTurnStatusLabel } from "./CoachTurnStatus";
 import { ModelSwitch } from "./ModelSwitch";
 import { ProviderSwitch } from "./ProviderSwitch";
 import {
@@ -3781,6 +3782,16 @@ export function ChatView({
     }
     return false;
   })();
+  const turnStatusLabel = activeTurn
+    ? coachTurnStatusLabel({
+        provider: coachState?.session.provider ?? chatSettings.provider,
+        stage: activeTurn.stage,
+        thinking: Boolean(thinkingText),
+        writing: Boolean(streamingText),
+        tool: activeTool,
+        resuming: resumingCoachPrompt
+      })
+    : "";
   const waitingForCoachAnswer = [...timeline]
     .reverse()
     .some(
@@ -3885,6 +3896,11 @@ export function ChatView({
     sessions,
     activeSessionId,
     busy: isBusy,
+    activeStatus: streaming
+      ? turnStatusLabel
+      : exportingLatestActivity
+        ? t("Preparing latest activity FIT export…")
+        : null,
     onClose: () => void handleUpdateChatSettings({ sidebarOpen: false }),
     onOpen: () => void handleUpdateChatSettings({ sidebarOpen: true }),
     onNewChat: () => void handleNewChat(),
@@ -4680,7 +4696,7 @@ export function ChatView({
             );
           })}
 
-          {streaming ? (
+          {streaming && activeTurn ? (
             <div className="chat-row chat-row-assistant">
               <div className="chat-bubble chat-bubble-streaming">
                 {streamingText ? (
@@ -4689,18 +4705,22 @@ export function ChatView({
                       <ThinkingDisclosure content={thinkingText} live />
                     ) : null}
                     <AssistantMarkdown content={streamingText} streaming />
+                    {/* A tool called mid-answer pauses the text; say so under it. */}
+                    {activeTool ? (
+                      <CoachTurnStatus
+                        requestId={activeTurn.requestId}
+                        label={turnStatusLabel}
+                        waiting={false}
+                      />
+                    ) : null}
                   </>
                 ) : (
                   <div className="chat-stream-pending">
-                    {activeTool || !thinkingText ? (
-                      <span className="chat-stream-status">
-                        {activeTool
-                          ? t("Using {{p0}}…", { p0: activeTool.replace(/_/g, " ") })
-                          : resumingCoachPrompt
-                            ? t("Resuming plan…")
-                            : t("Working on it…")}
-                      </span>
-                    ) : null}
+                    <CoachTurnStatus
+                      requestId={activeTurn.requestId}
+                      label={turnStatusLabel}
+                      waiting
+                    />
                     {thinkingText ? (
                       <ThinkingDisclosure content={thinkingText} live />
                     ) : null}

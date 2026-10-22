@@ -49,6 +49,9 @@
   --coach-pop-shadow: 0 18px 44px rgba(0, 0, 0, 0.42);
   --coach-send-bg: #f0f1f3;
   --coach-send-fg: #141516;
+  --coach-selected-bg: rgba(240, 241, 243, 0.085);
+  --coach-selected-shadow: inset 0 0 0 1px rgba(240, 241, 243, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --coach-match-bg: rgba(240, 241, 243, 0.2);
   --coach-frost: none;
   --coach-light: transparent;
   --coach-ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -94,6 +97,9 @@
   --coach-pop-shadow: 0 18px 44px rgba(43, 52, 67, 0.16);
   --coach-send-bg: #292e36;
   --coach-send-fg: #ffffff;
+  --coach-selected-bg: #ffffff;
+  --coach-selected-shadow: inset 0 0 0 1px rgba(41, 46, 54, 0.07), 0 1px 3px rgba(43, 52, 67, 0.07);
+  --coach-match-bg: rgba(41, 46, 54, 0.16);
   --coach-light: rgba(170, 182, 204, 0.2);
   --coach-rail-surface: linear-gradient(165deg, rgba(255, 255, 255, 0.36), transparent 72%), rgba(239, 242, 247, 0.36);
 }
@@ -249,8 +255,8 @@
 }
 
 :root .app .chat-history-toolbar {
-  gap: 6px;
-  padding: 12px 10px 6px;
+  gap: 8px;
+  padding: 12px 10px 8px;
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -260,69 +266,66 @@
 
 :root .app .chat-history-header {
   min-height: 32px;
-  padding: 0 0 0 10px;
+  padding: 0 0 0 8px;
 }
 
 :root .app .chat-history-header .eyebrow {
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--text-primary);
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: -0.01em;
   text-transform: none;
 }
 
-:root .app .chat-history-collapse-button {
+.chat-history-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+:root .app .chat-history-icon-button {
+  display: grid;
+  place-items: center;
   width: 30px;
   height: 30px;
+  padding: 0;
   border: 0;
   border-radius: 9px;
-  color: var(--text-muted);
-}
-
-:root .app .chat-history-collapse-button:hover {
-  border-color: transparent;
-  background: var(--coach-ink-4);
-  color: var(--text-primary);
-}
-
-:root .app .chat-new-chat-sidebar {
-  justify-content: flex-start;
-  gap: 10px;
-  min-height: 36px;
-  margin-top: 2px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 10px;
-  background: var(--coach-ink-4);
-  color: var(--text-primary);
-  font-size: 12.5px;
-  font-weight: 550;
-  box-shadow: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
   transition: background 160ms var(--coach-ease-soft), color 160ms var(--coach-ease-soft);
 }
 
-:root .app .chat-new-chat-sidebar svg {
-  color: var(--text-secondary);
-  transition: transform 260ms var(--coach-ease), color 160ms var(--coach-ease-soft);
+/* New chat is the rail's one action, so it sits on a quiet fill. */
+:root .app .chat-history-new {
+  background: var(--coach-ink-4);
+  color: var(--text-primary);
 }
 
-:root .app .chat-new-chat-sidebar:hover:not(:disabled) {
+:root .app .chat-history-icon-button:hover:not(:disabled) {
   background: var(--coach-ink-8);
   color: var(--text-primary);
-  transform: none;
 }
 
-:root .app .chat-new-chat-sidebar:hover:not(:disabled) svg {
-  color: var(--text-primary);
-  transform: rotate(90deg);
+:root .app .chat-history-icon-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+:root .app .chat-history-icon-button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 :root .app .chat-history-search {
   min-height: 34px;
-  padding-inline: 10px;
-  border: 1px solid transparent;
+  gap: 8px;
+  padding: 0 6px 0 10px;
+  border: 1px solid var(--coach-ink-4);
   border-radius: 10px;
   background: var(--coach-ink-2);
+  color: var(--text-muted);
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -336,7 +339,7 @@
 }
 
 :root .app .chat-history-search input {
-  padding: 6px 0;
+  padding: 7px 0;
   font-size: 12.5px;
 }
 
@@ -345,35 +348,61 @@
   opacity: 1;
 }
 
+.chat-history-search-clear {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: var(--coach-ink-4);
+  color: var(--text-secondary);
+  cursor: pointer;
+  animation: coach-fade-in 160ms var(--coach-ease-soft) both;
+  transition: background 160ms var(--coach-ease-soft), color 160ms var(--coach-ease-soft);
+}
+
+.chat-history-search-clear:hover,
+.chat-history-search-clear:focus-visible {
+  background: var(--coach-ink-8);
+  color: var(--text-primary);
+}
+
 :root .app .chat-session-list {
-  padding: 2px 10px 20px;
+  padding: 4px 10px 20px;
 }
 
 :root .app .chat-session-group + .chat-session-group {
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 :root .app .chat-session-group-label {
-  margin: 10px 10px 4px;
+  margin: 8px 12px 4px;
+  color: var(--text-muted);
   font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   text-transform: none;
   opacity: 1;
 }
 
 :root .app .chat-session-group-list {
-  gap: 1px;
+  gap: 2px;
 }
 
+/* Title and time share the first line; the preview, or live status, the second. */
 :root .app .chat-session-row {
   position: relative;
   isolation: isolate;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 3px 10px;
   min-height: 0;
-  padding: 9px 10px;
+  padding: 9px 10px 9px 12px;
   border: 0;
   border-radius: 10px;
-  gap: 2px 8px;
   transition: background 180ms var(--coach-ease-soft), color 180ms var(--coach-ease-soft);
 }
 
@@ -382,6 +411,11 @@
   border-color: transparent;
   box-shadow: none;
   transform: none;
+}
+
+:root .app .chat-session-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 /* The highlight is its own element so a session switch slides just the pill. */
@@ -398,48 +432,137 @@
   inset: 0;
   z-index: -1;
   border-radius: 10px;
-  background: var(--sidebar-indicator-bg);
-  box-shadow: var(--sidebar-indicator-shadow);
+  background: var(--coach-selected-bg);
+  box-shadow: var(--coach-selected-shadow);
   pointer-events: none;
 }
 
+/* While Coach answers the list holds still; other rows step down a grey (never alpha). */
+:root .app .chat-session-row.is-disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+:root .app .chat-session-row.is-disabled:hover {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+:root .app .chat-session-row.is-disabled:not(.is-active) .chat-session-row-title {
+  color: var(--text-secondary);
+}
+
 :root .app .chat-session-row-title {
-  font-size: 12.5px;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
   font-weight: 550;
-  line-height: 1.35;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-:root .app .chat-session-row-preview {
-  font-size: 11.5px;
-  line-height: 1.4;
-}
-
-:root .app .chat-session-row-meta {
-  gap: 4px;
-  padding-top: 1px;
+:root .app .chat-session-row.is-active .chat-session-row-title {
+  font-weight: 600;
 }
 
 :root .app .chat-session-row-time {
-  font-size: 10.5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  transition: opacity 140ms var(--coach-ease-soft);
+}
+
+:root .app :is(.chat-session-row-preview, .chat-session-row-status) {
+  grid-column: 1 / -1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root .app .chat-session-row-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.chat-session-row-status > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: coach-fade-in 220ms var(--coach-ease-soft) both;
+}
+
+.chat-session-row-match {
+  border-radius: 3px;
+  background: var(--coach-match-bg);
+  color: inherit;
 }
 
 :root .app .chat-session-row-delete {
   position: absolute;
+  top: 6px;
   right: 6px;
-  bottom: 5px;
   width: 24px;
   height: 24px;
+  border: 0;
   border-radius: 7px;
-  background: var(--coach-sidebar);
+  background: transparent;
+  box-shadow: none;
 }
 
-:root .app .chat-session-row.is-active .chat-session-row-delete {
-  background: transparent;
+/* Delete takes the time's place on hover, so the two never overlap. */
+:root .app .chat-session-row:is(:hover, :focus-within):has(.chat-session-row-delete) .chat-session-row-time {
+  opacity: 0;
+}
+
+:root .app .chat-session-row-delete:hover,
+:root .app .chat-session-row-delete:focus-visible {
+  background: var(--error-bg);
+  box-shadow: none;
+  color: color-mix(in srgb, var(--error-text) 80%, var(--text-primary));
 }
 
 :root .app .chat-history-empty {
   margin: 14px 12px 0;
   font-size: 12px;
+}
+
+/* A rail with nothing said yet explains itself instead of standing empty. */
+.chat-history-hint {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin: 16px 2px 0;
+  padding: 18px 16px 16px;
+  border: 1px dashed var(--coach-ink-12);
+  border-radius: 12px;
+  text-align: center;
+  animation: coach-fade-in 320ms var(--coach-ease-soft) both;
+}
+
+.chat-history-hint-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--coach-ink-4);
+  color: var(--text-secondary);
+}
+
+.chat-history-hint p {
+  margin: 0;
+  text-wrap: balance;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .chat-history-footer {
@@ -484,11 +607,6 @@
 .chat-history-clear:disabled {
   opacity: 0.55;
   cursor: default;
-}
-
-/* Keep the busy spinner clear of the footer's (long, in French) label. */
-.chat-history-footer ~ .chat-sidebar-busy {
-  bottom: 58px;
 }
 
 /* ---------- Reading column ---------- */
@@ -592,9 +710,117 @@
   box-shadow: none;
 }
 
-:root .app .chat-view .chat-stream-status {
+/* ---------- Live turn status: what Coach is doing until the answer starts ---------- */
+
+:root .app .chat-view .chat-stream-pending {
+  gap: 10px;
+  min-width: 0;
+}
+
+.chat-turn-status-wrap {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+
+.chat-markdown + .chat-turn-status-wrap {
+  margin-top: 4px;
+}
+
+.chat-turn-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 0 13px 0 12px;
+  border: 1px solid var(--coach-ink-8);
+  border-radius: 999px;
+  background: var(--coach-ink-2);
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
+  line-height: 1.2;
+  animation: coach-fade-up 280ms var(--coach-ease) both;
+}
+
+/* Both ends of the sweep are body-text greys, so the label stays readable mid-shimmer. */
+.chat-turn-status-label {
+  overflow: hidden;
+  background: linear-gradient(90deg, var(--text-secondary) 35%, var(--text-primary) 50%, var(--text-secondary) 65%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: coach-fade-in 240ms var(--coach-ease-soft) both, coach-status-sweep 2.4s linear infinite;
+}
+
+.chat-turn-status-clock {
+  flex: none;
+  padding-left: 10px;
+  border-left: 1px solid var(--coach-ink-12);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-turn-status-hint {
+  max-width: 52ch;
+  margin: 0 0 0 4px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  animation: coach-fade-in 400ms var(--coach-ease-soft) both;
+}
+
+.coach-activity-dots {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  height: 8px;
+}
+
+.coach-activity-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: coach-activity-dot 1.2s ease-in-out infinite;
+}
+
+.coach-activity-dots i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.coach-activity-dots i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes coach-activity-dot {
+  0%,
+  70%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0) scale(0.85);
+  }
+
+  35% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1);
+  }
+}
+
+@keyframes coach-status-sweep {
+  from {
+    background-position: 160% 0;
+  }
+
+  to {
+    background-position: -60% 0;
+  }
 }
 
 :root .app .chat-view .chat-markdown-streaming > :last-child::after {
@@ -1525,8 +1751,8 @@
 
 :root .app .chat-view .chat-plan-list-item.is-selected {
   border-color: transparent;
-  background: var(--sidebar-indicator-bg);
-  box-shadow: var(--sidebar-indicator-shadow);
+  background: var(--coach-selected-bg);
+  box-shadow: var(--coach-selected-shadow);
 }
 
 :root .app .chat-view .chat-plan-list-item:focus-visible {

@@ -3332,6 +3332,14 @@ export interface ChatStreamError {
 }
 
 /**
+ * What a turn is doing before the model writes, so a slow first reply (a
+ * provider CLI starting, tools connecting) never looks stalled: checking the
+ * provider's sign-in, connecting tools, reading training data, then waiting
+ * on the model.
+ */
+export type ChatTurnStage = "provider" | "tools" | "context" | "model";
+
+/**
  * Diagnostic signal about where the answer's data is coming from: the static
  * training snapshot injected into `instructions`, and/or live COROS MCP tool
  * calls the model makes mid-stream.
@@ -3361,6 +3369,11 @@ export type ChatStreamInfo =
       kind: "thinking";
       /** Incremental display-safe reasoning/thinking summary from the provider. */
       delta: string;
+    }
+  | {
+      requestId: string;
+      kind: "stage";
+      stage: ChatTurnStage;
     }
   | {
       requestId: string;

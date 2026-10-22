@@ -333,6 +333,40 @@ assert.deepEqual(shape(failedFrame.data), shape(vector("turn.failed").data));
 assert.deepEqual(main.hub.getSession(session.id).entries[8], { kind: "coachPrompt", prompt });
 assert.deepEqual(b.frames, a.frames);
 
+// ----- Start-up steps reach clients live and stay in the snapshot -----
+{
+  const staging = createHarness();
+  const staged = staging.hub.createSession("claude-code");
+  const watch = record(staging.hub, staged.id, 0);
+  const { requestId: stagedId } = staging.hub.send({ sessionId: staged.id, clientMessageId: "s-1", text: "Ready for intervals?" });
+  const stagedTurn = staging.stream.turns[0];
+  stagedTurn.info({ kind: "stage", stage: "provider" });
+  stagedTurn.info({ kind: "stage", stage: "tools" });
+  stagedTurn.info({ kind: "stage", stage: "tools" }); // a repeat is not news
+  stagedTurn.send("chat:streamStart");
+  stagedTurn.info({ kind: "stage", stage: "model" });
+  assert.deepEqual(
+    watch.frames.filter((frame) => frame.event === "turn.status").map((frame) => frame.data),
+    [
+      { requestId: stagedId, stage: "provider" },
+      { requestId: stagedId, stage: "tools" },
+      { requestId: stagedId, stage: "model" }
+    ]
+  );
+  assert.ok(!SAVED_COACH_EVENTS.has("turn.status"), "start-up steps are live only");
+  stagedTurn.send("chat:streamToken", { delta: "Yes." });
+  const live = staging.hub.getSession(staged.id);
+  assert.deepEqual(live.activeTurn, { requestId: stagedId, text: "Yes.", thinking: "", stage: "model" });
+  let mirrored = coachStateFromSnapshot({ ...live, cursor: 0, entries: [], activeTurn: null });
+  for (const frame of watch.frames) mirrored = applyCoachEvent(mirrored, frame);
+  assert.deepEqual(mirrored.activeTurn, live.activeTurn, "the reducer rebuilds the snapshot's turn");
+  stagedTurn.send("chat:streamDone", { fullText: "Yes." });
+  stagedTurn.resolve();
+  await tick();
+  assert.equal(staging.hub.getSession(staged.id).activeTurn, null);
+  watch.subscription.unsubscribe();
+}
+
 // ----- Confirmations land once and reach every client -----
 const before = a.frames.length;
 const coros = await main.hub.confirm({ sessionId: session.id, kind: "corosAction", id: "r1", decision: "confirm" });

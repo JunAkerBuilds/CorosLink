@@ -14,6 +14,7 @@ import type {
   ChatSessionSummary,
   ChatSettings,
   ChatStreamInfo,
+  ChatTurnStage,
   CoachCorosActionPreview,
   CoachInputPrompt,
   DeleteWorkoutResult,
@@ -140,6 +141,8 @@ interface TurnState {
   text: string;
   thinking: string;
   tool?: string;
+  /** The last step reported before the model writes. */
+  stage?: ChatTurnStage;
   source: SourceInfo | null;
   /** Coach prompts arrive mid-turn but are shown after the answer, so they read in order. */
   pendingPrompts: CoachInputPrompt[];
@@ -708,6 +711,11 @@ export class CoachSessionHub {
         turn.thinking += info.delta;
         this.emit(state, "turn.thinking", { requestId: turn.requestId, delta: info.delta });
         return;
+      case "stage":
+        if (turn.stage === info.stage) return;
+        turn.stage = info.stage;
+        this.emit(state, "turn.status", { requestId: turn.requestId, stage: info.stage });
+        return;
       case "mcp": {
         const failed = info.status !== "call" && (/fail|error/i.test(info.status) || Boolean(info.message));
         turn.tool = info.status === "call" ? info.tool : undefined;
@@ -1068,7 +1076,13 @@ export class CoachSessionHub {
   private snapshot(state: SessionState): CoachSnapshot {
     const turn = state.turn;
     const activeTurn: CoachActiveTurn | null = turn
-      ? { requestId: turn.requestId, text: turn.text, thinking: turn.thinking, ...(turn.tool ? { tool: turn.tool } : {}) }
+      ? {
+          requestId: turn.requestId,
+          text: turn.text,
+          thinking: turn.thinking,
+          ...(turn.tool ? { tool: turn.tool } : {}),
+          ...(turn.stage ? { stage: turn.stage } : {})
+        }
       : null;
     return {
       session: coachSessionInfo(state.summary),

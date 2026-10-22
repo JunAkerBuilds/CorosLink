@@ -139,6 +139,7 @@ import type {
   ChatAuthStatus,
   ChatSettings,
   ChatProvider,
+  ChatTurnStage,
   ClaudeCodeConnectionTest,
   ClaudeCodePermissions,
   ClaudeCodeStatus,
@@ -914,6 +915,10 @@ export async function streamChat(
       console.warn("[chat] stream listener failed:", error);
     }
   };
+  // Every step before the model answers is reported, so a cold start (a CLI
+  // launching, tools connecting) reads as progress rather than a stall.
+  const stage = (stage: ChatTurnStage) =>
+    send("chat:streamInfo", { requestId, kind: "stage", stage });
 
   const controller = new AbortController();
   activeStreams.set(requestId, controller);
@@ -928,6 +933,7 @@ export async function streamChat(
   try {
     const settings: ChatSettings = { ...getChatSettings(), provider };
     if (settings.provider === "claude-code") {
+      stage("provider");
       const status = await unlessCancelled(
         claudeCodeStatusForTurn(),
         signal
@@ -939,8 +945,10 @@ export async function streamChat(
         );
       }
 
+      stage("tools");
       await unlessCancelled(ensureAllMcpConnected(), signal);
       const chatTools = getClaudeCodeTools(settings.claudeCode.permissions);
+      stage("context");
       const prompt = await unlessCancelled(
         buildTrainingContext(
           settings.claudeCode.permissions,
@@ -959,6 +967,7 @@ export async function streamChat(
         snapshotIncluded: hasData,
         mcpEnabled: chatTools.length > 0
       });
+      stage("model");
 
       const result = await streamClaudeCodeCompletion({
         executablePath: status.executablePath,
@@ -1018,6 +1027,7 @@ export async function streamChat(
     }
 
     if (settings.provider === "gemini-cli") {
+      stage("provider");
       const status = await unlessCancelled(
         geminiCliStatusForTurn(),
         signal
@@ -1029,8 +1039,10 @@ export async function streamChat(
         );
       }
 
+      stage("tools");
       await unlessCancelled(ensureAllMcpConnected(), signal);
       const chatTools = getAllChatTools();
+      stage("context");
       const prompt = await unlessCancelled(
         buildTrainingContext(undefined, unitSystem, settings.customInstructions),
         signal
@@ -1045,6 +1057,7 @@ export async function streamChat(
         snapshotIncluded: hasData,
         mcpEnabled: chatTools.length > 0
       });
+      stage("model");
 
       const result = await streamGeminiCliCompletion({
         executablePath: status.executablePath,
@@ -1100,12 +1113,14 @@ export async function streamChat(
       if (!apiKey) {
         throw new Error("Add an OpenRouter API key in Coach settings first.");
       }
+      stage("context");
       const prompt = await unlessCancelled(
         buildTrainingContext(undefined, unitSystem, settings.customInstructions),
         signal
       );
       const { hasData } = prompt;
 
+      stage("tools");
       await unlessCancelled(ensureAllMcpConnected(), signal);
       const chatTools = getAllChatTools();
       const effectiveInstructions = composeCoachInstructions(prompt, chatTools, historyNote);
@@ -1118,6 +1133,7 @@ export async function streamChat(
         snapshotIncluded: hasData,
         mcpEnabled: chatTools.length > 0
       });
+      stage("model");
 
       const result = await streamOpenRouterChatCompletion({
         config: {
@@ -1164,6 +1180,7 @@ export async function streamChat(
     }
 
     if (settings.provider === "local") {
+      stage("context");
       const prompt = await unlessCancelled(
         buildTrainingContext(undefined, unitSystem, settings.customInstructions),
         signal
@@ -1172,6 +1189,7 @@ export async function streamChat(
       const runtimeConfig = getLocalRuntimeConfig(settings.local);
 
       if (runtimeConfig.toolsEnabled) {
+        stage("tools");
         await unlessCancelled(ensureAllMcpConnected(), signal);
       }
       const chatTools = runtimeConfig.toolsEnabled
@@ -1187,6 +1205,7 @@ export async function streamChat(
         snapshotIncluded: hasData,
         mcpEnabled: chatTools.length > 0
       });
+      stage("model");
 
       const result = await streamLocalChatCompletion({
         config: runtimeConfig,
@@ -1237,7 +1256,9 @@ export async function streamChat(
       return;
     }
 
+    stage("provider");
     const token = await unlessCancelled(getValidToken(), signal);
+    stage("context");
     const prompt = await unlessCancelled(
       buildTrainingContext(undefined, unitSystem, settings.customInstructions),
       signal
@@ -1246,6 +1267,7 @@ export async function streamChat(
 
     // Reconnect a previously-authorized COROS MCP session, then expose its tools
     // to the model as function tools so it can pull data on demand.
+    stage("tools");
     await unlessCancelled(ensureAllMcpConnected(), signal);
     const tools = buildChatFunctionTools();
 
@@ -1260,6 +1282,7 @@ export async function streamChat(
       snapshotIncluded: hasData,
       mcpEnabled: tools.length > 0
     });
+    stage("model");
 
     // Responses-API input items, extended each round with the model's tool calls
     // and our tool results.
