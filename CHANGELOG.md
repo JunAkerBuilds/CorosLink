@@ -7,9 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.61] - 2026-10-22
+
+### Added
+
+- **Calendar list and filters.** The Training Calendar has a **List** mode beside Month and Week: one row per workout or activity, grouped by day, with the full titles the grid cuts off. A filter bar shows only planned workouts or only completed activities and hides whole sports, in any mode. CorosLink remembers the mode and the filters.
+- **Open a workout on its day.** Upcoming workouts in the Training Hub, and today's sessions and Coming up on the Overview, now open that workout in the Training Calendar: it moves to the day and highlights the workout.
+- **Past 7 nights.** Click the Training Hub's sleep card, or its **Past week** pill, for a page on your last week of sleep: average night and sleep score against the week before, bedtime and wake-up and how steady they were, time awake, and overnight resting HR and HRV. A chart draws each night from bedtime to wake-up on one clock, and selecting a night shows its score, stages, wake-ups, naps and heart readings. Back or Esc returns you to the same place in the hub.
+
 ### Changed
 
+- **Coach shows what it's doing.** From the moment you send a message, Coach shows what it's working on, such as checking the provider, connecting tools or reading your training data, with a clock. After 20 seconds with nothing written yet, it says it's still working. The conversations list shows the same status and gains a new chat button, search, and a delete button that appears on hover.
+- **A new look for the Training Library.** The library takes the Overview's raised cards. A plan's tile leads with its sport's icon and shows its weeks as bars, and a plan on the calendar reads "Week 3 of 10" with that week lit. A plan's status and a "Calendar differs" warning now read in full.
+- **Today on the Overview.** Today's sessions are tiles with their sport's icon, and the whole tile opens the workout. Rest days and days with nothing scheduled use the same tile, and Coming up rows line up in columns.
+- **Embedded fonts in Watch Face Studio.** A face whose font isn't installed on this computer but whose glyphs are saved with the project now reads **Not installed** in yellow instead of red **Missing font**: the face still looks right, and you only need the font to change its text. A font with no saved glyphs stays red. Both link to dafont.com, and the font picker's sample is drawn from the saved glyphs.
 - **Away from home** says when the network you're on blocks Cloudflare's tunnel. School, office and hotel networks often block the port Cloudflare's connector needs (7844), so your iPhone can't reach this computer through them. The Remote access panel now says so instead of only "Not connected", and CorosLink reconnects by itself on another network or a phone hotspot. A connector that can't get out at all now reads Offline instead of staying on Linking.
+
+### Fixed
+
+- In the Training Library, a workout tile with tags no longer cuts off its footer, and a list row's second line no longer cuts off at "Un..." or "CO...".
+- Watch Face Studio's font notice reads correctly in French, Portuguese and Chinese, including where each font is used. Font samples are readable in the light theme.
+- The Overview's "Next up" line on a rest day is translated.
 
 ## [0.1.60] - 2026-10-21
 
