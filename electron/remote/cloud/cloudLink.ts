@@ -10,9 +10,11 @@ import {
   downloadCloudflared as downloadPinnedCloudflared,
   findCloudflared as findInstalledCloudflared,
   isIntelMac,
+  probeEdgePorts,
   pruneManagedCloudflared,
   type CloudflaredSupervisorOptions,
   type ConnectorSnapshot,
+  type EdgePortProbe,
   type ResolvedCloudflared
 } from "./cloudflaredManager";
 import { LiveActivityFeed, type LiveTurnReport } from "./liveActivityFeed";
@@ -49,6 +51,8 @@ const CONSENT_KEY = "remote.cloud.cloudflaredConsent";
 const RECOVERY_INTERVAL_MS = RECOVERY_MIN_INTERVAL_SECONDS * 1000;
 /** An unknown relay `kid` refetches the relay's keys at most this often. */
 const RELAY_KEYS_REFRESH_MS = 60 * 60_000;
+/** While the connector can't reach Cloudflare, the network is checked at most this often. */
+const EDGE_PROBE_INTERVAL_MS = 60_000;
 
 interface StoredLink {
   version: 1;
@@ -124,6 +128,8 @@ export interface CloudLinkOptions {
   findCloudflared?: typeof findInstalledCloudflared;
   downloadCloudflared?: typeof downloadPinnedCloudflared;
   supervisor?: Partial<CloudflaredSupervisorOptions>;
+  /** Tests: stands in for the TCP checks of the edge's port and the relay. */
+  probeEdge?: (relay: { host: string; port: number }) => Promise<EdgePortProbe>;
   /** Tests: the Live Activity feed's clock, timers and intervals. */
   liveActivity?: Partial<Omit<ConstructorParameters<typeof LiveActivityFeed>[0], "send">>;
   onChange?: () => void;
@@ -150,6 +156,10 @@ export class CloudLink {
   private retryTimer: NodeJS.Timeout | null = null;
   private trustRefresh: Promise<RelayTrust | null> | null = null;
   private readonly clients = new Map<string, RelayClient>();
+  /** The relay answers but Cloudflare's edge doesn't: this network blocks port 7844. */
+  private edgeBlocked = false;
+  private edgeProbe: Promise<void> | null = null;
+  private lastEdgeProbeAt = 0;
 
   /** The website account this computer signs in with (also used to open the member's private faces). */
   get account(): WebsiteAccount {
@@ -161,7 +171,15 @@ export class CloudLink {
     this.live = new LiveActivityFeed({ send: (report) => this.sendLive(report), now: this.now, ...options.liveActivity });
     this.supervisor = new CloudflaredSupervisor({
       ...options.supervisor,
-      onChange: () => this.changed(),
+      onChange: (snapshot) => {
+        // Connected, or stopped: a blocked port found earlier no longer applies.
+        if (snapshot.state === "online" || snapshot.state === "stopped") {
+          this.edgeBlocked = false;
+          this.lastEdgeProbeAt = 0;
+        }
+        this.changed();
+      },
+      onEdgeUnreachable: () => this.checkEdgePorts(),
       onNeedsRecovery: (reason) => void this.recover(reason).catch(() => undefined),
       onSwapped: (spec) => {
         if (spec.version === CLOUDFLARED_VERSION && this.connector?.source === "managed") {
@@ -292,7 +310,8 @@ export class CloudLink {
         progress: this.download?.progress ?? null,
         downloadVersion: CLOUDFLARED_VERSION,
         downloadBytes: target ? CLOUDFLARED_ASSETS[target].size : null,
-        connections: connector.connections
+        connections: connector.connections,
+        portBlocked: this.edgeBlocked && connector.state !== "online"
       },
       intelMac: isIntelMac(this.options.platform, this.options.arch)
     };
@@ -303,7 +322,8 @@ export class CloudLink {
     if (this.error) return "error";
     if (!this.enabled || !link) return "off";
     if (connector.state === "online") return "online";
-    if (connector.state === "starting" || this.download) return "linking";
+    // A connector that never got out of a blocked network is offline, not still starting.
+    if ((connector.state === "starting" && !this.edgeBlocked) || this.download) return "linking";
     return "offline";
   }
 
@@ -566,6 +586,37 @@ export class CloudLink {
       }
       this.relayNotice = error.message;
     }
+  }
+
+  /**
+   * The connector can't reach Cloudflare's edge: check, at most once a
+   * minute while that lasts, whether this network blocks the tunnel's port
+   * (the relay answers, the edge on 7844 doesn't), so the panel can say so.
+   */
+  private checkEdgePorts(): void {
+    const link = this.storedLink();
+    if (!link || this.edgeProbe || this.now() - this.lastEdgeProbeAt < EDGE_PROBE_INTERVAL_MS) return;
+    if (this.supervisor.snapshot().state === "online") return;
+    this.lastEdgeProbeAt = this.now();
+    const relay = new URL(link.relayOrigin);
+    const target = {
+      host: relay.hostname.replace(/^\[|\]$/g, ""),
+      port: Number(relay.port) || (relay.protocol === "http:" ? 80 : 443)
+    };
+    const probe = this.options.probeEdge ?? ((input: typeof target) => probeEdgePorts({ relay: input }));
+    this.edgeProbe = probe(target)
+      .then((result) => {
+        const blocked =
+          result.relay && !result.tunnelPort && this.supervisor.running && this.supervisor.snapshot().state !== "online";
+        if (blocked !== this.edgeBlocked) {
+          this.edgeBlocked = blocked;
+          this.changed();
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        this.edgeProbe = null;
+      });
   }
 
   private scheduleRetry(delayMs: number): void {

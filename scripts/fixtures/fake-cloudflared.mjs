@@ -4,8 +4,10 @@
 //
 // FAKE_CLOUDFLARED_LOG   file that gets one JSON line per event
 // FAKE_CLOUDFLARED_NAME  which wrapper this is (old, new, …)
-// FAKE_CLOUDFLARED_MODE  register (default) | exit | reject | silent
+// FAKE_CLOUDFLARED_MODE  register (default) | exit | reject | unreachable | silent
 // FAKE_CLOUDFLARED_DELAY_MS  wait before registering (default 20)
+// FAKE_CLOUDFLARED_FAILURES  unreachable: dials that time out (default 6)
+// FAKE_CLOUDFLARED_THEN  unreachable: `register` to get out after them
 import crypto from "node:crypto";
 import fs from "node:fs";
 
@@ -29,6 +31,14 @@ process.on("SIGTERM", () => {
   process.exit(0);
 });
 
+const register = () => {
+  log("registered");
+  // cloudflared colours its output on a terminal; the manager strips it.
+  process.stderr.write(
+    "\u001b[32m2026-10-16T12:00:01Z INF Registered tunnel connection connIndex=0 connection=abc event=0 ip=198.41.200.13 location=yyz01 protocol=quic\u001b[0m\n"
+  );
+};
+
 const mode = process.env.FAKE_CLOUDFLARED_MODE ?? "register";
 const delay = Number(process.env.FAKE_CLOUDFLARED_DELAY_MS ?? 20);
 process.stderr.write("2026-10-16T12:00:00Z INF Starting tunnel tunnelID=00000000-0000-0000-0000-000000000000\n");
@@ -48,14 +58,23 @@ if (mode === "exit") {
     );
     if (count >= 6) clearInterval(timer);
   }, delay);
-} else if (mode === "register") {
-  setTimeout(() => {
-    log("registered");
-    // cloudflared colours its output on a terminal; the manager strips it.
-    process.stderr.write(
-      "\u001b[32m2026-10-16T12:00:01Z INF Registered tunnel connection connIndex=0 connection=abc event=0 ip=198.41.200.13 location=yyz01 protocol=quic\u001b[0m\n"
-    );
+} else if (mode === "unreachable") {
+  // A network that blocks port 7844: cloudflared's QUIC dials time out.
+  const failures = Number(process.env.FAKE_CLOUDFLARED_FAILURES ?? 6);
+  let count = 0;
+  const timer = setInterval(() => {
+    count += 1;
+    if (count <= failures) {
+      process.stderr.write(
+        `2026-10-22T12:00:0${count % 10}Z ERR Failed to dial a quic connection error="failed to dial to edge with quic: timeout: no recent network activity" connIndex=0 event=0 ip=198.41.200.63\n`
+      );
+      return;
+    }
+    clearInterval(timer);
+    if (process.env.FAKE_CLOUDFLARED_THEN === "register") register();
   }, delay);
+} else if (mode === "register") {
+  setTimeout(register, delay);
 }
 
 // Stay up until stopped.

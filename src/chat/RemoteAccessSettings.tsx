@@ -233,6 +233,10 @@ function AwayRoute({
       {cloud.state === "error" && cloud.message ? (
         <p className="chat-remote-route-more chat-remote-alert" role="alert">
           {cloud.message}</p>
+      ) : cloud.state === "offline" && connector.portBlocked ? (
+        <p className="chat-remote-route-more chat-remote-cloud-note" role="status">
+          <strong>{t("This network blocks Cloudflare's tunnel.")}</strong>
+          {` ${t("Cloudflare's connector needs outbound port 7844, which school, office and hotel networks often block. On another network or a phone hotspot, CorosLink reconnects by itself.")}`}</p>
       ) : cloud.state === "offline" ? (
         <p className="chat-remote-route-more chat-remote-cloud-note" role="status">
           <strong>{t("Not connected to Cloudflare right now. CorosLink keeps trying.")}</strong>

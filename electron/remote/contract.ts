@@ -416,6 +416,8 @@ export interface CloudLinkStatus {
     downloadVersion: string;
     downloadBytes: number | null;
     connections: number;
+    /** Not connected because this network blocks Cloudflare's tunnel port (7844) while HTTPS gets out. */
+    portBlocked: boolean;
   };
   /** Cloudflare stops building cloudflared for Intel Macs in 2027. */
   intelMac: boolean;

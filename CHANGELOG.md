@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Away from home** says when the network you're on blocks Cloudflare's tunnel. School, office and hotel networks often block the port Cloudflare's connector needs (7844), so your iPhone can't reach this computer through them. The Remote access panel now says so instead of only "Not connected", and CorosLink reconnects by itself on another network or a phone hotspot. A connector that can't get out at all now reads Offline instead of staying on Linking.
+
 ## [0.1.60] - 2026-10-21
 
 ### Added

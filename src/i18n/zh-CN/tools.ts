@@ -1656,6 +1656,8 @@ export const toolsChinese: Readonly<Record<string, string>> = {
   "cloudflared {{p0}}": "cloudflared {{p0}}",
   "Cloudflare stops building its connector for Intel Macs in 2027. After that, C-LINK reaches this Mac on the local network only.": "Cloudflare 将在 2027 年停止为 Intel Mac 构建连接器。此后，C-LINK 只能在本地网络中连接这台 Mac。",
   "Not connected to Cloudflare right now. CorosLink keeps trying.": "目前未连接到 Cloudflare。CorosLink 会继续尝试。",
+  "This network blocks Cloudflare's tunnel.": "此网络阻止了 Cloudflare 隧道。",
+  "Cloudflare's connector needs outbound port 7844, which school, office and hotel networks often block. On another network or a phone hotspot, CorosLink reconnects by itself.": "Cloudflare 的连接器需要出站端口 7844，而学校、公司和酒店的网络常会封锁这个端口。换到其他网络或手机热点后，CorosLink 会自动重新连接。",
   "Reach Coach from your iPhone": "从 iPhone 访问教练",
   "Paired iPhones reach Coach on this Wi-Fi, and from anywhere once you sign in. When off, only this computer can.": "已配对的 iPhone 可在此 Wi-Fi 下访问教练，登录后在任何地方都能访问。关闭时只有这台电脑可以访问。",
   "This Wi-Fi": "此 Wi-Fi",

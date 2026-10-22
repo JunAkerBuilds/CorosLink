@@ -22,7 +22,8 @@ const {
   extractTarMember,
   findCloudflared,
   isIntelMac,
-  managedCloudflaredPath
+  managedCloudflaredPath,
+  probeEdgePorts
 } = requireDist("./remote/cloud/cloudflaredManager.js");
 
 const fixture = path.join(repoRoot, "scripts", "fixtures", "fake-cloudflared.mjs");
@@ -280,6 +281,64 @@ try {
     assert.deepEqual(recoveries.slice(0, 2), ["rejected", "rejected"]);
     assert.notEqual(supervisor.snapshot().state, "online");
     await supervisor.stop();
+  }
+
+  // Dials that time out (a network blocking port 7844) are reported, each one, and leave it starting.
+  {
+    fs.rmSync(logFile, { force: true });
+    const binary = fakeBinary("blocked", {
+      FAKE_CLOUDFLARED_MODE: "unreachable",
+      FAKE_CLOUDFLARED_FAILURES: "3",
+      FAKE_CLOUDFLARED_DELAY_MS: "10",
+      FAKE_CLOUDFLARED_THEN: "register"
+    });
+    let unreachable = 0;
+    const { supervisor, recoveries } = supervise({ onEdgeUnreachable: () => (unreachable += 1) });
+    supervisor.run({ binary, token, version: "1" });
+    await waitFor(() => unreachable === 3, "three unreachable dials");
+    assert.equal(supervisor.snapshot().state, "starting");
+    assert.equal(supervisor.snapshot().message, undefined, "a timed-out dial isn't a rejection");
+    await waitFor(() => supervisor.snapshot().state === "online", "online once out");
+    assert.equal(unreachable, 3);
+    assert.deepEqual(recoveries, [], "no recovery: the tunnel is fine");
+    await supervisor.stop();
+
+    // A rejection is not an unreachable edge.
+    const rejected = fakeBinary("rejected-reach", { FAKE_CLOUDFLARED_MODE: "reject", FAKE_CLOUDFLARED_DELAY_MS: "10" });
+    const second = supervise({ onEdgeUnreachable: () => (unreachable += 1) });
+    second.supervisor.run({ binary: rejected, token, version: "1" });
+    await waitFor(() => second.recoveries.length >= 1, "a rejection recovery");
+    assert.equal(unreachable, 3);
+    await second.supervisor.stop();
+  }
+
+  // The port check: the relay answers and the edge port doesn't = blocked.
+  {
+    const listening = http.createServer();
+    await new Promise((resolve) => listening.listen(0, "127.0.0.1", resolve));
+    const open = listening.address().port;
+    const closedServer = http.createServer();
+    await new Promise((resolve) => closedServer.listen(0, "127.0.0.1", resolve));
+    const closed = closedServer.address().port;
+    await new Promise((resolve) => closedServer.close(resolve));
+    try {
+      const relay = { host: "127.0.0.1", port: open };
+      assert.deepEqual(
+        await probeEdgePorts({ relay, edgeHosts: ["127.0.0.1"], edgePort: closed, timeoutMs: 1_000 }),
+        { tunnelPort: false, relay: true }
+      );
+      assert.deepEqual(
+        await probeEdgePorts({ relay, edgeHosts: ["127.0.0.1", "127.0.0.1"], edgePort: open, timeoutMs: 1_000 }),
+        { tunnelPort: true, relay: true }
+      );
+      assert.deepEqual(
+        await probeEdgePorts({ relay: { host: "127.0.0.1", port: closed }, edgeHosts: ["127.0.0.1"], edgePort: closed, timeoutMs: 1_000 }),
+        { tunnelPort: false, relay: false }
+      );
+    } finally {
+      listening.closeAllConnections?.();
+      await new Promise((resolve) => listening.close(resolve));
+    }
   }
 
   // Version swap: the new connector starts, and the old one stops only after the new one registers.

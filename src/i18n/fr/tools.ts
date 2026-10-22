@@ -1631,6 +1631,8 @@ export const toolsFrench: Record<string, string> = {
   "cloudflared {{p0}}": "cloudflared {{p0}}",
   "Cloudflare stops building its connector for Intel Macs in 2027. After that, C-LINK reaches this Mac on the local network only.": "Cloudflare cesse de publier son connecteur pour les Mac Intel en 2027. Ensuite, C-LINK ne joindra ce Mac que sur le réseau local.",
   "Not connected to Cloudflare right now. CorosLink keeps trying.": "Pas connecté à Cloudflare pour l’instant. CorosLink continue d’essayer.",
+  "This network blocks Cloudflare's tunnel.": "Ce réseau bloque le tunnel de Cloudflare.",
+  "Cloudflare's connector needs outbound port 7844, which school, office and hotel networks often block. On another network or a phone hotspot, CorosLink reconnects by itself.": "Le connecteur de Cloudflare a besoin du port sortant 7844, que les réseaux d’écoles, d’entreprises et d’hôtels bloquent souvent. Sur un autre réseau ou en partage de connexion, CorosLink se reconnecte tout seul.",
   "Reach Coach from your iPhone": "Accéder au coach depuis votre iPhone",
   "Paired iPhones reach Coach on this Wi-Fi, and from anywhere once you sign in. When off, only this computer can.": "Les iPhone associés joignent le coach sur ce Wi-Fi et, une fois votre compte connecté, de partout. Désactivé, seul cet ordinateur y a accès.",
   "This Wi-Fi": "Ce Wi-Fi",

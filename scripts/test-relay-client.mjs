@@ -338,6 +338,11 @@ const advanceLive = (ms) => {
     timer.run();
   }
 };
+/** The connector's environment, read at each start, so a section can switch the fake's mode. */
+const connectorEnv = { ...process.env, FAKE_CLOUDFLARED_LOG: logFile };
+/** What the edge-port check finds, and the relay host and port each check tried. */
+let edgeProbe = { tunnelPort: true, relay: true };
+const probes = [];
 cloud = new CloudLink({
   settings,
   secrets,
@@ -353,7 +358,11 @@ cloud = new CloudLink({
   downloadCloudflared: async () => {
     throw new Error("No downloads in this test.");
   },
-  supervisor: { env: { ...process.env, FAKE_CLOUDFLARED_LOG: logFile }, restartDelayMs: () => 50 },
+  supervisor: { env: connectorEnv, restartDelayMs: () => 50 },
+  probeEdge: async (target) => {
+    probes.push(target);
+    return edgeProbe;
+  },
   liveActivity: liveScheduler,
   onChange: () => {
     changes += 1;
@@ -751,6 +760,39 @@ try {
     await cloud.setEnabled(true);
     await waitFor(() => cloud.status().state === "online", { message: "back online" });
     assert.equal(relay.calls("/v1/environments/link").length, 1, "switching back on doesn't link again");
+  }
+
+  // ----- A network that blocks port 7844: the panel is told, until it connects -----
+  {
+    Object.assign(connectorEnv, {
+      FAKE_CLOUDFLARED_MODE: "unreachable",
+      FAKE_CLOUDFLARED_FAILURES: "4",
+      FAKE_CLOUDFLARED_DELAY_MS: "60",
+      FAKE_CLOUDFLARED_THEN: "register"
+    });
+    const relayUrl = new URL(relay.state.origin);
+    edgeProbe = { tunnelPort: false, relay: true };
+    await cloud.setEnabled(false);
+    await cloud.setEnabled(true);
+    await waitFor(() => cloud.status().connector.portBlocked, { message: "port blocked" });
+    assert.equal(cloud.status().state, "offline", "never connected, but not left linking");
+    assert.deepEqual(probes, [{ host: relayUrl.hostname, port: Number(relayUrl.port) }]);
+    await waitFor(() => cloud.status().state === "online", { message: "online once out" });
+    assert.equal(cloud.status().connector.portBlocked, false);
+    assert.equal(probes.length, 1, "checked at most once a minute");
+
+    // Nothing gets out at all: not a blocked port, so no such note.
+    edgeProbe = { tunnelPort: false, relay: false };
+    await cloud.setEnabled(false);
+    await cloud.setEnabled(true);
+    await waitFor(() => probes.length === 2, { message: "checked again after connecting" });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(cloud.status().connector.portBlocked, false);
+    assert.equal(cloud.status().state, "linking");
+    await waitFor(() => cloud.status().state === "online", { message: "online again" });
+    for (const key of ["FAKE_CLOUDFLARED_MODE", "FAKE_CLOUDFLARED_FAILURES", "FAKE_CLOUDFLARED_DELAY_MS", "FAKE_CLOUDFLARED_THEN"]) {
+      delete connectorEnv[key];
+    }
   }
 
   // ----- Unlink -----

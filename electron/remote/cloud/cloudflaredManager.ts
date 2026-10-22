@@ -1,6 +1,7 @@
 import { execFile, spawn as spawnProcess, type ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import zlib from "node:zlib";
@@ -331,6 +332,58 @@ export async function downloadCloudflared(input: DownloadCloudflaredInput): Prom
   return destination;
 }
 
+// ----- Whether this network lets it out -----
+
+/**
+ * cloudflared reaches Cloudflare's edge on port 7844 only (QUIC on UDP, and
+ * its HTTP/2 fallback on TCP); there is no 443 route. School, office and
+ * hotel networks often block 7844 and leave HTTPS open.
+ */
+export const TUNNEL_EDGE_PORT = 7844;
+const TUNNEL_EDGE_HOSTS = ["region1.v2.argotunnel.com", "region2.v2.argotunnel.com"];
+
+export interface EdgePortProbe {
+  /** A TCP connection to the edge on 7844 went through. */
+  tunnelPort: boolean;
+  /** A TCP connection to the relay went through: this computer is online. */
+  relay: boolean;
+}
+
+export interface ProbeEdgePortsInput {
+  relay: { host: string; port: number };
+  edgeHosts?: string[];
+  edgePort?: number;
+  timeoutMs?: number;
+}
+
+function canConnect(host: string, port: number, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host, port });
+    const done = (connected: boolean) => {
+      socket.destroy();
+      resolve(connected);
+    };
+    socket.setTimeout(timeoutMs, () => done(false));
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
+}
+
+/**
+ * Opens (and at once closes) TCP connections to the edge on 7844 and to the
+ * relay, both hosts CorosLink talks to anyway. The relay answering while the
+ * edge doesn't means the network blocks the tunnel's port.
+ */
+export async function probeEdgePorts(input: ProbeEdgePortsInput): Promise<EdgePortProbe> {
+  const timeoutMs = input.timeoutMs ?? 5_000;
+  const edgePort = input.edgePort ?? TUNNEL_EDGE_PORT;
+  const [edge, relay] = await Promise.all([
+    Promise.all((input.edgeHosts ?? TUNNEL_EDGE_HOSTS).map((host) => canConnect(host, edgePort, timeoutMs))),
+    canConnect(input.relay.host, input.relay.port, timeoutMs)
+  ]);
+  return { tunnelPort: edge.some(Boolean), relay };
+}
+
 // ----- Running it -----
 
 export interface CloudflaredSpec {
@@ -364,6 +417,8 @@ export interface CloudflaredSupervisorOptions {
   onNeedsRecovery?: (reason: "exit" | "rejected") => void;
   /** A newer connector registered and the old one was stopped. */
   onSwapped?: (spec: CloudflaredSpec) => void;
+  /** The running connector couldn't reach Cloudflare's edge (once per failed dial). */
+  onEdgeUnreachable?: () => void;
   restartDelayMs?: (attempt: number) => number;
   rejectionLimit?: number;
   rejectionWindowMs?: number;
@@ -373,6 +428,8 @@ export interface CloudflaredSupervisorOptions {
 const REGISTERED = /Registered tunnel connection/i;
 const UNREGISTERED = /Unregistered tunnel connection|Connection terminated|Lost connection with the edge/i;
 const REJECTED = /Unauthorized|Invalid tunnel secret|Tunnel not found|token is not valid|tunnel credentials/i;
+/** A dial to the edge that got nowhere: QUIC timed out, or the HTTP/2 fallback couldn't connect. */
+const EDGE_UNREACHABLE = /failed to dial to edge|Unable to establish connection with Cloudflare edge/i;
 
 function redact(text: string, token: string): string {
   const clean = stripVTControlCharacters(text);
@@ -590,6 +647,10 @@ export class CloudflaredSupervisor {
     if (UNREGISTERED.test(line)) {
       item.connections = Math.max(0, item.connections - 1);
       return this.changed();
+    }
+    if (EDGE_UNREACHABLE.test(line) && item === this.current) {
+      this.options.onEdgeUnreachable?.();
+      return;
     }
     if (REJECTED.test(line) && item === this.current) {
       const now = this.now();
