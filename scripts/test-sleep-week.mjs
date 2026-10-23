@@ -65,8 +65,25 @@ const mixed = buildSleepWeek([
 assert.equal(mixed.nights[5].partial, true);
 assert.equal(mixed.nights[4].partial, false);
 assert.equal(mixed.nights[4].napMinutes, 35);
+assert.equal(mixed.nights[4].napWindow, undefined);
 assert.equal(mixed.duration.value, 450);
 assert.equal(mixed.tracked, 7);
+
+// One nap keeps its times; a nap-only day shows the nap without counting as a tracked night.
+const napped = buildSleepWeek([
+  night(22),
+  { happenDay: key(22), kind: "nap", totalMinutes: 78, sleepStart: "07:34", sleepEnd: "09:00" },
+  { happenDay: key(20), kind: "nap", totalMinutes: 56, sleepStart: "15:04", sleepEnd: "16:06" }
+], now);
+assert.equal(napped.nights[6].napMinutes, 78);
+assert.equal(formatNoonClock(napped.nights[6].napWindow.start), "7:34 AM");
+assert.equal(formatNoonClock(napped.nights[6].napWindow.end), "9:00 AM");
+assert.equal(napped.nights[4].record, undefined);
+assert.equal(napped.nights[4].napMinutes, 56);
+assert.equal(formatNoonClock(napped.nights[4].napWindow.start), "3:04 PM");
+assert.equal(napped.tracked, 1);
+// A main record's own nap clocks fill in when no nap record came with it.
+assert.equal(formatNoonClock(buildSleepWeek([night(22, { napMinutes: 30, napStart: "13:00", napEnd: "13:30" })], now).nights[6].napWindow.end), "1:30 PM");
 
 // Missing nights keep their row; a short week still averages but does not compare.
 const sparse = buildSleepWeek([...twoWeeks.slice(0, 7), night(20), night(22, { totalMinutes: 390 })], now);

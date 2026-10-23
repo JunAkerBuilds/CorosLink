@@ -56,7 +56,7 @@ function formatNapSummary(record: TrainingHubSleepRecord): string {
     return t("No data");
   }
 
-  return formatSleepDuration(record.napMinutes);
+  return record.napMinutes > 0 ? formatSleepDuration(record.napMinutes) : t("None", undefined, "naps");
 }
 
 function formatSleepWindow(
@@ -78,16 +78,18 @@ function formatSleepMetricDuration(minutes?: number): string {
 
 function SleepMetric({
   label,
-  value
+  value,
+  title
 }: {
   label: string;
   value: string | number;
+  title?: string;
 }) {
   useLanguage();
   return (
     <div className="sleep-metric">
       <dt>{t(label)}</dt>
-      <dd title={String(value)}>{value}</dd>
+      <dd title={title ?? String(value)}>{value}</dd>
     </div>
   );
 }
@@ -312,6 +314,7 @@ export function SleepSummaryPanel({
             <SleepMetric
               label={t("Naps")}
               value={formatNapSummary(latest)}
+              title={latest.napMinutes ? formatSleepClockRange(latest.napStart, latest.napEnd) : undefined}
             />
           </dl>
         </>

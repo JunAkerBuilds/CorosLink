@@ -348,6 +348,73 @@ const sleepOverviewUnsyncedToday = parseSleepDataResponse(JSON.stringify([
 assert.deepEqual(sleepOverviewUnsyncedToday.map((record) => record.happenDay), ["20261020"]);
 assert.equal(pickLatestSleepRecord(sleepOverviewUnsyncedToday)?.totalMinutes, 356);
 
+// querySleepOverview naps (live 2026-10-23): a nap-only day scores -1, and a day with
+// both lists the nap's asleep time, in-bed period and window after the main sleep.
+const sleepOverviewNaps = parseSleepDataResponse(JSON.stringify([
+  "2026-10-15",
+  "Sleep Score: -1",
+  "Daily Sleep: 56min (incl. naps)",
+  "Sleep metrics scope: daily",
+  "Naps Total (asleep): 56 min",
+  "Naps Period (incl. awake): 1h 2min",
+  "Nap Window: 2026-10-15 15:04 - 2026-10-15 16:06",
+  "",
+  "2026-10-22",
+  "Sleep Score: 64",
+  "Daily Sleep: 5h 5min (incl. naps)",
+  "Main Sleep (asleep): 5h 5min",
+  "Main Sleep Window: 2026-10-22 00:13 - 2026-10-22 05:30",
+  "Naps Total: 0 min",
+  "",
+  "2026-10-23",
+  "Sleep Score: 68",
+  "Daily Sleep: 5h 30min (incl. naps)",
+  "Main Sleep (asleep): 4h 12min",
+  "Main Sleep Period (incl. awake): 4h 18min",
+  "Sleep metrics scope: daily",
+  "Deep Sleep Ratio: 32%",
+  "Light Sleep Ratio: 53%",
+  "REM Ratio: 13%",
+  "Awake Ratio: 2%",
+  "Awake Time: 6 min",
+  "Awake Count (>5 min): 0",
+  "Main Sleep Window: 2026-10-23 00:40 - 2026-10-23 04:58",
+  "Naps Total (asleep): 1h 18min",
+  "Naps Period (incl. awake): 1h 26min",
+  "Nap Window: 2026-10-23 07:34 - 2026-10-23 09:00"
+].join("\n")));
+assert.deepEqual(
+  sleepOverviewNaps.map((record) => `${record.happenDay}:${record.kind}`),
+  ["20261015:nap", "20261022:main", "20261023:main", "20261023:nap"]
+);
+const napOnlyDay = sleepOverviewNaps[0];
+assert.equal(napOnlyDay.score, undefined);
+assert.equal(napOnlyDay.totalMinutes, 56);
+assert.equal(napOnlyDay.windowMinutes, 62);
+assert.equal(napOnlyDay.awakeMinutes, 6);
+assert.equal(napOnlyDay.sleepStart, "15:04");
+assert.equal(napOnlyDay.sleepEnd, "16:06");
+assert.equal(sleepOverviewNaps[1].napMinutes, 0);
+const napMorning = pickLatestSleepRecord(sleepOverviewNaps);
+assert.equal(napMorning?.happenDay, "20261023");
+assert.equal(napMorning?.totalMinutes, 252);
+assert.equal(napMorning?.score, 68);
+assert.equal(napMorning?.sleepStart, "00:40");
+assert.equal(napMorning?.completeness, "complete");
+assert.equal(napMorning?.napMinutes, 78);
+assert.equal(napMorning?.napStart, "07:34");
+assert.equal(napMorning?.napEnd, "09:00");
+// Two naps: the total stands, but no single window does.
+const twoNaps = parseSleepDataResponse(JSON.stringify([
+  "2026-10-24",
+  "Sleep Score: -1",
+  "Naps Total (asleep): 1h 30min",
+  "Nap Window: 2026-10-24 12:10 - 2026-10-24 12:40",
+  "Nap Window: 2026-10-24 16:00 - 2026-10-24 17:05"
+].join("\n")));
+assert.deepEqual(twoNaps.map((record) => [record.kind, record.totalMinutes, record.sleepStart]), [["nap", 90, undefined]]);
+assert.equal(pickLatestSleepRecord(twoNaps), undefined);
+
 const rangeStringPayload = JSON.stringify({
   happenDay: 20260721,
   sleepScore: 93,

@@ -133,14 +133,22 @@ function mainSleepByDay(records: TrainingHubSleepRecord[]): Map<string, Training
   return byDay;
 }
 
-function napMinutesByDay(records: TrainingHubSleepRecord[]): Map<string, number> {
-  const byDay = new Map<string, number>();
+function napsByDay(records: TrainingHubSleepRecord[]): Map<string, TrainingHubSleepRecord[]> {
+  const byDay = new Map<string, TrainingHubSleepRecord[]>();
   for (const record of records) {
     if (record.kind === "nap" && valid(record.totalMinutes)) {
-      byDay.set(record.happenDay, (byDay.get(record.happenDay) ?? 0) + record.totalMinutes);
+      byDay.set(record.happenDay, [...(byDay.get(record.happenDay) ?? []), record]);
     }
   }
   return byDay;
+}
+
+/** One nap's clock times; a day with several naps has no single window. */
+function napWindow(naps: TrainingHubSleepRecord[], main?: TrainingHubSleepRecord): SleepWeekNight["napWindow"] {
+  if (naps.length > 1) return undefined;
+  const start = minutesAfterNoon(naps[0] ? naps[0].sleepStart ?? naps[0].napStart : main?.napStart);
+  const end = minutesAfterNoon(naps[0] ? naps[0].sleepEnd ?? naps[0].napEnd : main?.napEnd);
+  return start === undefined || end === undefined ? undefined : { start, end: end <= start ? end + 1440 : end };
 }
 
 /** A day of Training Hub metrics: COROS measures resting HR and HRV while you sleep. */
@@ -160,6 +168,8 @@ export interface SleepWeekNight {
   record?: TrainingHubSleepRecord;
   partial: boolean;
   napMinutes?: number;
+  /** The day's nap, when it had one with times, in the same minutes as `window`. */
+  napWindow?: { start: number; end: number };
   /** Minutes after the noon before; end may pass the next noon. */
   window?: { start: number; end: number };
   stages: Record<SleepStage, number | undefined>;
@@ -252,7 +262,7 @@ export function buildSleepWeek(records: TrainingHubSleepRecord[] = [], now = new
   const mains = mainSleepByDay(records);
   const heart = new Map(trend.map((day) => [day.date, day]));
   const positive = (value: number | undefined) => valid(value) && value > 0 ? value : undefined;
-  const naps = napMinutesByDay(records);
+  const naps = napsByDay(records);
   const today = dayKey(now);
   const recentDays = Array.from({ length: SLEEP_WEEK_NIGHTS }, (_value, index) => shiftDay(today, -index));
   const newest = [...mains.keys()].filter((key) => key <= today).sort().at(-1);
@@ -263,6 +273,7 @@ export function buildSleepWeek(records: TrainingHubSleepRecord[] = [], now = new
     const date = shiftDay(endKey, index - SLEEP_WEEK_NIGHTS + 1);
     const day = parseDayKey(date)!;
     const record = mains.get(date);
+    const dayNaps = naps.get(date) ?? [];
     return {
       date,
       weekday: day.toLocaleDateString(locale, { weekday: "short" }),
@@ -272,7 +283,10 @@ export function buildSleepWeek(records: TrainingHubSleepRecord[] = [], now = new
       isToday: date === today,
       record,
       partial: record?.completeness === "partial",
-      napMinutes: naps.get(date) ?? (record?.napMinutes && record.napMinutes > 0 ? record.napMinutes : undefined),
+      napMinutes: dayNaps.length
+        ? dayNaps.reduce((sum, nap) => sum + (nap.totalMinutes ?? 0), 0)
+        : record?.napMinutes && record.napMinutes > 0 ? record.napMinutes : undefined,
+      napWindow: napWindow(dayNaps, record),
       window: record ? sleepWindow(record) : undefined,
       stages: Object.fromEntries(SLEEP_STAGES.map((stage) => [stage, record ? sleepStageMinutes(record, stage) : undefined])) as Record<SleepStage, number | undefined>,
       restingHr: positive(heart.get(date)?.rhr),

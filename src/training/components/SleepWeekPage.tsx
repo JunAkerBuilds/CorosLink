@@ -136,12 +136,35 @@ function HeartTile({ week }: { week: SleepWeekSummary }) {
 
 function nightLabel(night: SleepWeekNight): string {
   const record = night.record;
-  if (!record) return t("{{value1}}: no sleep recorded", { value1: night.weekdayLong });
+  const nap = night.napMinutes ? t("nap {{value1}}", { value1: formatSleepDuration(night.napMinutes) }) : undefined;
+  if (!record) {
+    return nap
+      ? t("{{value1}}: no main sleep, {{value2}}", { value1: night.weekdayLong, value2: nap })
+      : t("{{value1}}: no sleep recorded", { value1: night.weekdayLong });
+  }
   const parts = [formatSleepDuration(record.totalMinutes)];
   if (record.score !== undefined) parts.push(t("score {{value1}}", { value1: String(Math.round(record.score)) }));
   if (night.window) parts.push(t("{{value1}} to {{value2}}", { value1: formatNoonClock(night.window.start), value2: formatNoonClock(night.window.end) }));
+  if (nap) parts.push(nap);
   if (night.partial) parts.push(t("Partial"));
   return `${night.weekdayLong}: ${parts.join(", ")}`;
+}
+
+function NapMetric({ night }: { night: SleepWeekNight }) {
+  useLanguage();
+  return (
+    <div>
+      <dt>{t("Naps")}</dt>
+      <dd>
+        {night.napMinutes ? formatSleepDuration(night.napMinutes) : t("None", undefined, "naps")}
+        {night.napMinutes && night.napWindow ? (
+          <small className="sleep-week-nap-window">
+            {formatNoonClock(night.napWindow.start)} – {formatNoonClock(night.napWindow.end)}
+          </small>
+        ) : null}
+      </dd>
+    </div>
+  );
 }
 
 function RhythmChart({ week, selected, scored, onSelect }: {
@@ -208,7 +231,13 @@ function RhythmChart({ week, selected, scored, onSelect }: {
                 ) : record ? (
                   <span className="sleep-week-untimed"><span>{t("Time not recorded")}</span></span>
                 ) : (
-                  <span className="sleep-week-gap"><span>{night.isToday ? t("Not synced yet") : t("No data")}</span></span>
+                  <span className="sleep-week-gap">
+                    <span>
+                      {night.napMinutes
+                        ? t("Nap {{value1}}", { value1: formatSleepDuration(night.napMinutes) })
+                        : night.isToday ? t("Not synced yet") : t("No data")}
+                    </span>
+                  </span>
                 )}
               </span>
               <span className="sleep-week-value">
@@ -279,10 +308,21 @@ function NightDetail({ night, week }: { night: SleepWeekNight; week: SleepWeekSu
       </header>
 
       {!record ? (
-        <div className="sleep-week-night-empty">
-          <MoonStar size={22} aria-hidden="true" />
-          <p>{night.isToday ? t("Last night hasn't synced yet. Wear your watch to bed and sync in the morning.") : t("No sleep was recorded this night.")}</p>
-        </div>
+        <>
+          <div className="sleep-week-night-empty">
+            <MoonStar size={22} aria-hidden="true" />
+            <p>
+              {night.napMinutes
+                ? t("No main sleep was recorded this night.")
+                : night.isToday ? t("Last night hasn't synced yet. Wear your watch to bed and sync in the morning.") : t("No sleep was recorded this night.")}
+            </p>
+          </div>
+          {night.napMinutes ? (
+            <dl className="sleep-week-night-metrics">
+              <NapMetric night={night} />
+            </dl>
+          ) : null}
+        </>
       ) : (
         <>
           {stageTotal > 0 ? (
@@ -310,7 +350,7 @@ function NightDetail({ night, week }: { night: SleepWeekNight; week: SleepWeekSu
           <dl className="sleep-week-night-metrics">
             <div><dt>{t("Awake")}</dt><dd>{record.awakeMinutes !== undefined ? formatSleepDuration(record.awakeMinutes) : t("No data")}</dd></div>
             <div><dt>{t("Wake-ups > 5m")}</dt><dd>{record.awakeCountOverFiveMinutes ?? t("No data")}</dd></div>
-            <div><dt>{t("Naps")}</dt><dd>{night.napMinutes ? formatSleepDuration(night.napMinutes) : t("None", undefined, "naps")}</dd></div>
+            <NapMetric night={night} />
             {week.restingHr !== undefined ? (
               <div><dt>{t("Resting HR")}</dt><dd>{night.restingHr !== undefined ? `${Math.round(night.restingHr)} bpm` : t("No data")}</dd></div>
             ) : null}

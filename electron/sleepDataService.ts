@@ -1226,23 +1226,21 @@ function parseProseSleepRecords(text: string): TrainingHubSleepRecord[] {
   const records: TrainingHubSleepRecord[] = [];
 
   for (const section of candidates) {
-    const record = parseProseSleepSection(section);
-    if (record) {
-      records.push(record);
-    }
+    records.push(...parseProseSleepSection(section));
   }
 
   return records;
 }
 
-function parseProseSleepSection(section: string): TrainingHubSleepRecord | undefined {
+/** A day's main sleep and, when the day had one, a nap record beside it. */
+function parseProseSleepSection(section: string): TrainingHubSleepRecord[] {
   const dateMatch = section.match(
     /(?:Sleep for\s+)?(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),?\s+([A-Za-z]{3})\s+(\d{1,2})/i
   );
   const monthDateMatch = section.match(/\b([A-Za-z]{3})\s+(\d{1,2}),?\s+(20\d{2})\b/i);
   const isoDateMatch = section.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
   const compactDateMatch = section.match(/\b(20\d{6})\b/);
-  const scoreMatch = section.match(/Sleep score:\s*(\d+(?:\.\d+)?)/i);
+  const scoreMatch = section.match(/Sleep score:\s*(-?\d+(?:\.\d+)?)/i);
   // querySleepOverview labels it "Main Sleep (asleep):", beside "Main Sleep Period (incl. awake):".
   const mainSleepMatch = section.match(/Main sleep(?:\s*\(asleep\))?:\s*([^\n]+)/i);
   const awakeMatch = section.match(/Awake time:\s*([^\n]+)/i);
@@ -1254,20 +1252,32 @@ function parseProseSleepSection(section: string): TrainingHubSleepRecord | undef
   const windowLineMatch = section.match(
     /(?:Main\s+)?Sleep\s+(?:window|period|range)\s*:\s*([^\n]+)/i
   );
-  const napLineMatch = section.match(/\bNaps?(?:\s+Total)?:\s*([^\n]+)/i);
+  // querySleepOverview: "Naps Total (asleep): 1h 18min", "Naps Period (incl. awake): 1h 26min"
+  // and "Nap Window: 2026-10-23 07:34 - 2026-10-23 09:00"; a day without naps says "Naps Total: 0 min".
+  const napLineMatch = section.match(/\bNaps?(?:\s+Total)?(?:\s*\(asleep\))?:\s*([^\n]+)/i);
   const napText = napLineMatch?.[1]?.trim();
   const napDurationMatch = napText?.match(
     /\b(?:none|no|zero)\b|(?:(?:\d+(?:\.\d+)?\s*h(?:ours?)?)(?:\s*\d+(?:\.\d+)?\s*m(?:in(?:utes?)?)?)?|\d+(?:\.\d+)?\s*m(?:in(?:utes?)?)?)/i
   );
-  const [napStart, napEnd] = parseSleepClockRange(napText);
+  const napPeriodMatch = section.match(/\bNaps?\s+Period(?:\s*\([^)]*\))?:\s*([^\n]+)/i);
+  const napWindowClocks = [...section.matchAll(/\bNap\s+Windows?:\s*([^\n]+)/gi)]
+    .flatMap((match) => extractSleepClocks(match[1]));
+  // Clocks only for a single nap; the total covers several but their windows don't add up to one.
+  const [napStart, napEnd] = napWindowClocks.length === 0
+    ? parseSleepClockRange(napText)
+    : napWindowClocks.length === 2 ? napWindowClocks : [];
+  const napDurationText = napDurationMatch?.[0]?.trim();
+  const napMinutes = napDurationText ? parseNapDurationText(napDurationText) : undefined;
+  const hasNap = (napMinutes !== undefined && napMinutes > 0) || Boolean(napStart && napEnd);
 
-  if (!scoreMatch && !mainSleepMatch) {
-    return undefined;
-  }
-  // querySleepOverview lists a night the phone hasn't synced as "Sleep Score: 0" with no
-  // sleep lines; skip it like the old "No data" days so last night's record stays latest.
-  if (!mainSleepMatch && Number(scoreMatch?.[1]) === 0) {
-    return undefined;
+  // querySleepOverview scores a nap-only day -1 and a night the phone hasn't synced 0 (with
+  // no sleep lines); neither is a main sleep, so last night's record stays latest.
+  const reportedScore = scoreMatch ? Number(scoreMatch[1]) : undefined;
+  const score = reportedScore !== undefined && reportedScore >= 0 ? reportedScore : undefined;
+  const hasMain = Boolean(mainSleepMatch) || (score !== undefined && score > 0);
+
+  if (!hasMain && !hasNap) {
+    return [];
   }
 
   let happenDay: string | undefined;
@@ -1342,15 +1352,40 @@ function parseProseSleepSection(section: string): TrainingHubSleepRecord | undef
       : awakeMinutes !== undefined && percentDenominator !== undefined
         ? Math.round((awakeMinutes / percentDenominator) * 1000) / 10
         : undefined;
-  const napDurationText = napDurationMatch?.[0]?.trim();
+  const records: TrainingHubSleepRecord[] = [];
 
-  return finalizeSleepRecord(
+  if (hasNap) {
+    const napWindowMinutes = napPeriodMatch
+      ? parseDurationMinutes(napPeriodMatch[1].trim())
+      : undefined;
+    records.push(finalizeSleepRecord({}, {
+      happenDay,
+      kind: "nap",
+      totalMinutes: napMinutes,
+      awakeMinutes:
+        napMinutes !== undefined && napWindowMinutes !== undefined
+          ? Math.max(0, napWindowMinutes - napMinutes)
+          : undefined,
+      windowMinutes: napWindowMinutes,
+      napMinutes,
+      napStart,
+      napEnd,
+      sleepStart: napStart,
+      sleepEnd: napEnd
+    }));
+  }
+
+  if (!hasMain) {
+    return records;
+  }
+
+  records.unshift(finalizeSleepRecord(
     {},
     {
       happenDay,
       kind: "main",
       totalMinutes,
-      score: scoreMatch ? Number(scoreMatch[1]) : undefined,
+      score,
       deepMinutes:
         deepPercent !== undefined && percentDenominator !== undefined
           ? Math.round((deepPercent / 100) * percentDenominator)
@@ -1372,11 +1407,13 @@ function parseProseSleepSection(section: string): TrainingHubSleepRecord | undef
       windowMinutes,
       sleepStart,
       sleepEnd,
-      napMinutes: napDurationText ? parseNapDurationText(napDurationText) : undefined,
+      napMinutes,
       napStart,
       napEnd
     }
-  );
+  ));
+
+  return records;
 }
 
 const SLEEP_BUNDLE_CHILD_KEYS = new Set([
