@@ -5,7 +5,10 @@ import type { WatchfaceAutomationAssetRef } from "./watchfaceAutomationTypes";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 64 * 1024 * 1024;
-const MAX_IMAGES = 128;
+// A live document carries every sprite of the open face: a weather indicator
+// alone is 82 day/night icons, and each digit font or native field adds ~10.
+// The byte budget bounds memory; the count only stops pathological payloads.
+const MAX_IMAGES = 2048;
 const MAX_DEPTH = 64;
 const MAX_RASTER_FILES = 256;
 const MAX_RASTER_BYTES = 12 * 1024 * 1024;
@@ -257,10 +260,12 @@ export class WatchfaceAutomationAssetStore {
       return `data:${asset.metadata.mimeType};base64,${asset.bytes.toString("base64")}`;
     }
     if (!hydrate && typeof value === "string") {
-      budget.stringBytes += Buffer.byteLength(value, "utf8");
-      if (budget.stringBytes > MAX_PAYLOAD_STRING_BYTES) throw new Error("The automation payload contains too much text.");
+      // A raster-font sheet shared by several layers leaves as one reference,
+      // so it counts against the text budget once, like the image budget.
       const existing = budget.images.get(value);
       if (existing) return existing;
+      budget.stringBytes += Buffer.byteLength(value, "utf8");
+      if (budget.stringBytes > MAX_PAYLOAD_STRING_BYTES) throw new Error("The automation payload contains too much text.");
       const image = parseDataImage(value);
       if (!image) return value;
       budget.count += 1;

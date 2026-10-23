@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -129,9 +130,20 @@ try {
   assert.equal(inspectedJson.design.designSprites.length, 146, "Repeated source images use a shared outgoing asset reference");
   assert.deepEqual(inspectedJson.design.designSprites[145].dataUrl, documentAsset);
   const assets = createWatchfaceAutomationAssetStore(temporaryRoot);
-  await assert.rejects(assets.hydrateAssetRefs(Array(129).fill(documentAsset)), /too many or too much image/, "Input expansion keeps its image budget");
-  const distinct = Array.from({ length: 129 }, (_, i) => `data:image/png;base64,${encodeCorosRgbaPng(1, 1, Buffer.from([i, 0, 0, 255])).toString("base64")}`);
-  await assert.rejects(assets.externalizeDataImages(distinct), /too many or too much image/, "Distinct outgoing images keep their image budget");
+  await assert.rejects(assets.hydrateAssetRefs(Array(2049).fill(documentAsset)), /too many or too much image/, "Input expansion keeps its image budget");
+  const sprite = (i) => `data:image/png;base64,${encodeCorosRgbaPng(1, 1, Buffer.from([i & 255, i >> 8, 0, 255])).toString("base64")}`;
+  await assert.rejects(assets.externalizeDataImages(Array.from({ length: 2049 }, (_, i) => sprite(i))), /too many or too much image/, "Distinct outgoing images keep their image budget");
+  // A face with a weather indicator (41 day + 41 night icons) and a dozen
+  // digit fonts, whose raster sheet is shared by many metric layers.
+  const sheet = `data:image/png;base64,${encodeCorosRgbaPng(700, 700, crypto.randomBytes(700 * 700 * 4)).toString("base64")}`;
+  const denseFace = {
+    weatherIndicator: { day: Array.from({ length: 41 }, (_, i) => sprite(i)), night: Array.from({ length: 41 }, (_, i) => sprite(41 + i)) },
+    fonts: Array.from({ length: 12 }, (_, font) => Array.from({ length: 10 }, (_, digit) => sprite(100 + font * 10 + digit))),
+    metricStyles: Array.from({ length: 30 }, () => ({ rasterFont: { dataUrl: sheet } }))
+  };
+  const denseOut = await assets.externalizeDataImages(denseFace);
+  assert.equal(JSON.stringify(denseOut).includes("data:image"), false, "A dense face leaves as asset references");
+  assert.deepEqual(denseOut.metricStyles[29].rasterFont.dataUrl, denseOut.metricStyles[0].rasterFont.dataUrl, "A shared sheet is stored once");
   assert.match(documentAsset.assetId, /^[a-f0-9]{64}$/);
   assert.equal(JSON.stringify(inspectedJson).includes("data:image"), false);
 
