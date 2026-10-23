@@ -59,6 +59,7 @@ import { explorerExerciseName } from "./exerciseExplorerData";
 import {
   buildStrengthAnalytics,
   formatSets,
+  pendingNotice,
   startOfWeekMs,
   type ExerciseStat,
   type HeatMetric,
@@ -234,19 +235,6 @@ function sourceIsAvailable(
     return Object.values(connected).filter(Boolean).length >= 2;
   }
   return connected[source];
-}
-
-function pendingNotice(pending: { coros: number; strava: number }): string | null {
-  const total = pending.coros + pending.strava;
-  if (total <= 0) return null;
-  const sessions = `${total} more session${total === 1 ? "" : "s"}`;
-  if (pending.coros > 0 && pending.strava > 0) {
-    return `Reading ${sessions} from COROS and Strava. The map fills in as they arrive.`;
-  }
-  if (pending.coros > 0) {
-    return `Reading ${sessions} from COROS. The map fills in as they arrive.`;
-  }
-  return `Reading notes for ${sessions} from Strava.`;
 }
 
 /**

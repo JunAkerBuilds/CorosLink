@@ -1573,15 +1573,15 @@ export function BodyMapV2({
               <ul aria-label={t("Muscle group layer priority, highest first")}>
                 {layerPreferences.order.map((muscle, index) => {
                   const hidden = layerPreferences.hidden.has(muscle);
-                  const label = MUSCLE_BY_ID[muscle].label;
+                  const label = t(MUSCLE_BY_ID[muscle].label, undefined, "muscle");
                   return (
                     <li key={muscle} className={hidden ? "is-hidden" : ""}>
                       <button
                         type="button"
                         className="anatomy-layer-visibility"
-                        aria-label={`${hidden ? t("Show") : t("Hide")} ${t(label)}`}
+                        aria-label={`${hidden ? t("Show") : t("Hide")} ${label}`}
                         aria-pressed={!hidden}
-                        title={`${hidden ? t("Show") : t("Hide")} ${t(label)}`}
+                        title={`${hidden ? t("Show") : t("Hide")} ${label}`}
                         onClick={() => toggleLayer(muscle)}
                       >
                         {hidden ? (
@@ -1590,7 +1590,7 @@ export function BodyMapV2({
                           <Eye size={14} aria-hidden="true" />
                         )}
                       </button>
-                      <span>{t(label)}</span>
+                      <span>{label}</span>
                       <div className="anatomy-layer-move">
                         <button
                           type="button"
