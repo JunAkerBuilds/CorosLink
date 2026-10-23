@@ -261,6 +261,11 @@ export class ActivityRepository {
     return row ? this.getActivity(row.activity_id) : undefined;
   }
 
+  /** Renames a stored activity; false when there is no such activity. */
+  renameActivity(activityId: string, name: string): boolean {
+    return this.db.prepare("UPDATE local_activity_files SET name = ? WHERE activity_id = ?").run(name, activityId).changes > 0;
+  }
+
   /** Points an activity at a re-decoded file (same activity, another decoder version's output). */
   replaceActivityFile(activityId: string, file: { filePath: string; sha256: string; sizeBytes: number }): void {
     this.db.prepare("UPDATE local_activity_files SET file_path = ?, sha256 = ?, size_bytes = ? WHERE activity_id = ?")

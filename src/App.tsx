@@ -1109,6 +1109,32 @@ export default function App() {
     [api],
   );
 
+  const handleTrainingHubRenameActivity = useCallback(
+    (activity: TrainingHubActivity, name: string) => {
+      if (!api) {
+        return Promise.reject(new Error("CorosLink isn't ready yet."));
+      }
+      return api.renameTrainingHubActivity(activity.activityId, name, activity.startTime);
+    },
+    [api],
+  );
+
+  // A rename from any view (Activities, Calendar) lands in every copy of the activity.
+  useEffect(() => {
+    if (!api) {
+      return;
+    }
+    return api.onTrainingHubActivityRenamed(({ activityId, name }) => {
+      const rename = <T extends { activityId?: string; name?: string }>(item: T): T =>
+        item.activityId === activityId ? { ...item, name } : item;
+      setTrainingHubActivities((current) =>
+        current.some((activity) => activity.activityId === activityId) ? current.map(rename) : current,
+      );
+      setSelectedTrainingHubActivity((current) => (current ? rename(current) : current));
+      setTrainingHubActivityDetail((current) => (current ? rename(current) : current));
+    });
+  }, [api]);
+
   const openTrainingHubActivity = useCallback((activity: TrainingHubActivity) => {
     trainingHubNavigationSequence.current += 1;
     setTrainingHubNavigation({
@@ -2938,6 +2964,7 @@ export default function App() {
                   onRefresh={handleTrainingHubRefresh}
                   onLoadDetail={handleTrainingHubActivityDetail}
                   onExportFile={handleTrainingHubExport}
+                  onRenameActivity={handleTrainingHubRenameActivity}
                   navigationRequest={trainingHubNavigation}
                   onNavigationRequestHandled={() => setTrainingHubNavigation(null)}
                   onOpenCalendarWorkout={openCalendarWorkout}

@@ -3,11 +3,13 @@ import { AnimatePresence, motion } from "motion/react";
 import { MessageCircle, Pencil, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type {
+  TrainingHubActivity,
   TrainingHubActivityDetail,
   TrainingHubSportType
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { ActivityDetailPanel } from "../training/components/ActivityDetailPanel";
+import { ActivityTitleEditor } from "../training/components/ActivityTitleEditor";
 import { formatHappenDayLabel } from "../training/formatters";
 import type { CalendarSelection } from "./calendarTypes";
 import { ScheduledWorkoutDetail } from "./ScheduledWorkoutDetail";
@@ -33,6 +35,8 @@ interface DayDetailPanelProps {
   journal?: WorkoutJournalEntry[];
   onJournalSaved?: (entry: WorkoutJournalEntry | null, ref: WorkoutJournalRef) => void;
   onAskCoachBrief?: (selection: CalendarSelection) => void;
+  /** Renames a completed activity; resolves to the saved name. */
+  onRenameActivity?: (activity: TrainingHubActivity, name: string) => Promise<string>;
 }
 export function DayDetailPanel({
   api,
@@ -48,7 +52,8 @@ export function DayDetailPanel({
   onError,
   journal,
   onJournalSaved,
-  onAskCoachBrief
+  onAskCoachBrief,
+  onRenameActivity
 }: DayDetailPanelProps) {
   useLanguage();
   const [detail, setDetail] = useState<TrainingHubActivityDetail | null>(null);
@@ -109,7 +114,7 @@ export function DayDetailPanel({
             transition={{ type: "spring", stiffness: 320, damping: 32 }}
           >
             <header className="calendar-detail-header">
-              <div>
+              <div className="calendar-detail-heading">
                 <p className="eyebrow">
                   {formatHappenDayLabel(
                     selection.kind === "scheduled"
@@ -117,13 +122,27 @@ export function DayDetailPanel({
                       : selection.day.dateKey
                   )}
                 </p>
-                <h3>
-                  {selection.kind === "scheduled"
-                    ? selection.entry.name
-                    : selection.activity.name ??
-                      (selection.activity.sportName == null ? selection.activity.sportName : t(String(selection.activity.sportName))) ??
-                      t("Activity")}
-                </h3>
+                {selection.kind === "scheduled" ? (
+                  <h3>{selection.entry.name}</h3>
+                ) : (
+                  <ActivityTitleEditor
+                    key={selection.activity.activityId}
+                    as="h3"
+                    name={selection.activity.name}
+                    title={
+                      selection.activity.name ||
+                      (selection.activity.sportName ? t(String(selection.activity.sportName)) : undefined) ||
+                      t("Activity")
+                    }
+                    onRename={onRenameActivity ? async (name) => {
+                      const renamed = selection.activity;
+                      const saved = await onRenameActivity(renamed, name);
+                      setDetail((current) =>
+                        current?.activityId === renamed.activityId ? { ...current, name: saved } : current
+                      );
+                    } : undefined}
+                  />
+                )}
               </div>
               <div className="calendar-detail-actions">
                 <button

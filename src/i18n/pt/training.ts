@@ -2430,4 +2430,10 @@ export const trainingPortuguese: Record<string, string> = {
   "Peak in week {{value1}}": "Pico na semana {{value1}}",
   "All plans": "Todos os planos",
   "All templates": "Todos os modelos",
+  "Rename activity": "Mudar o nome da actividade",
+  "Activity name": "Nome da actividade",
+  "Save name": "Guardar nome",
+  "An activity needs a name.": "Uma actividade precisa de um nome.",
+  "That name is too long for COROS.": "Esse nome é demasiado longo para a COROS.",
+  "COROS didn't keep the new name. Try again.": "A COROS não guardou o novo nome. Tente novamente.",
 };

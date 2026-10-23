@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Rename past activities.** Click the pencil beside an activity's title, or double-click the title, in the activity details or in the Calendar's day panel. Press Enter to save the new name to COROS, the same change Training Hub makes, or Esc to keep the old one. Names can be up to 150 bytes, Training Hub's limit. CorosLink reads the activity back from COROS to confirm the name was saved, and the Activities list, Overview and Calendar update at once. In Local-Only Mode the name changes only on this computer.
+
 ### Fixed
 
 - **Watchmaker and external AI tools work on detailed watch faces again.** On a face with a weather indicator and several digit fonts, every Watchmaker request failed with "The automation payload contains too many or too much image data", so the assistant couldn't read the face, let alone change it. The editor tools gave up past 128 images, and a weather indicator alone has 82. They now take up to 2048. A font sheet shared by many layers also counts once toward the size limit instead of once per layer.

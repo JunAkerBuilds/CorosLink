@@ -959,6 +959,15 @@ const api = {
       sportType,
       listActivity
     ),
+  renameTrainingHubActivity: (activityId: string, name: string, startTime?: number): Promise<string> =>
+    ipcRenderer.invoke("trainingHub:renameActivity", activityId, name, startTime),
+  onTrainingHubActivityRenamed: (
+    callback: (renamed: { activityId: string; name: string }) => void
+  ): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, renamed: { activityId: string; name: string }) => callback(renamed);
+    ipcRenderer.on("trainingHub:activityRenamed", listener);
+    return () => ipcRenderer.removeListener("trainingHub:activityRenamed", listener);
+  },
   exportTrainingHubActivityFile: (
     activityId: string,
     sportType: number,

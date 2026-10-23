@@ -17,6 +17,7 @@ import { useUnitSystem } from "../../units/UnitSystemProvider";
 import { formatSpeedValue, metersToSwimDistance, swimDistanceUnit } from "../../units/units";
 import { ActivityCardRoute, createActivityPreviewLoader, type ActivityPreviewLoader } from "./ActivityCardRoute";
 import { ActivityDetailPanel } from "./ActivityDetailPanel";
+import { ActivityTitleEditor } from "./ActivityTitleEditor";
 import { ExportMenu, TrainingActivityTable } from "./TrainingActivityTable";
 import { ActivityLabelChips } from "./TrainingLabelChip";
 import "../trainingActivities.css";
@@ -72,7 +73,7 @@ function ActivitySummary({ activities }: { activities: TrainingHubActivity[] }) 
   </div>;
 }
 
-type Props = Pick<TrainingHubViewProps, "activities" | "sportTypes" | "selectedActivity" | "activityDetail" | "busy" | "onLoadDetail" | "onExportFile"> & {
+type Props = Pick<TrainingHubViewProps, "activities" | "sportTypes" | "selectedActivity" | "activityDetail" | "busy" | "onLoadDetail" | "onExportFile" | "onRenameActivity"> & {
   loadPreview: ActivityPreviewLoader; sampleMode?: boolean;
   /** Reverse-geocodes a track's first point for the detail dialog's location chip. */
   resolveLocation?: (lat: number, lon: number) => Promise<RouteGeocodeResult>;
@@ -167,7 +168,7 @@ function ActivityCalendar({ activities, onOpen }: { activities: TrainingHubActiv
 }
 
 export function TrainingActivities({ activities, sportTypes, selectedActivity, activityDetail, busy,
-  onLoadDetail, onExportFile, loadPreview, resolveLocation, raceTags, openRequest, sampleMode = false }: Props) {
+  onLoadDetail, onExportFile, onRenameActivity, loadPreview, resolveLocation, raceTags, openRequest, sampleMode = false }: Props) {
   useLanguage();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<ActivityCategory>("all");
@@ -180,6 +181,11 @@ export function TrainingActivities({ activities, sportTypes, selectedActivity, a
   const filtered = useMemo(() => selectActivities(activities, category, query, sort, names), [activities, category, query, sort, names, getLocale()]);
   useEffect(() => { setLimit(24); }, [category, query, sort]);
   function openActivity(activity: TrainingHubActivity) { setOpened(activity); onLoadDetail(activity); }
+  // The open dialog holds its own copy of the activity, so it takes the new name too.
+  const renameActivity = onRenameActivity && !sampleMode ? async (activity: TrainingHubActivity, name: string) => {
+    const saved = await onRenameActivity(activity, name);
+    setOpened(current => current?.activityId === activity.activityId ? { ...current, name: saved } : current);
+  } : undefined;
   const handledOpenRequest = useRef<number | null>(null);
   useEffect(() => {
     if (!openRequest || handledOpenRequest.current === openRequest.requestId) return;
@@ -220,10 +226,10 @@ export function TrainingActivities({ activities, sportTypes, selectedActivity, a
       </div>
       </div>
       {view === "list" && opened ? <ActivityDetailDialog inline opened={opened} sportTypes={sportTypes} activityDetail={activityDetail} busy={busy} sampleMode={sampleMode}
-        resolveLocation={resolveLocation} raceTags={raceTags} onLoadDetail={onLoadDetail} onExportFile={onExportFile} onClose={() => setOpened(null)} /> : null}
+        resolveLocation={resolveLocation} raceTags={raceTags} onLoadDetail={onLoadDetail} onExportFile={onExportFile} onRename={renameActivity} onClose={() => setOpened(null)} /> : null}
     </div>
     <ActivityDetailDialog opened={view === "list" ? null : opened} sportTypes={sportTypes} activityDetail={activityDetail} busy={busy} sampleMode={sampleMode} raceTags={raceTags}
-      resolveLocation={resolveLocation} onLoadDetail={onLoadDetail} onExportFile={onExportFile} onClose={() => setOpened(null)} />
+      resolveLocation={resolveLocation} onLoadDetail={onLoadDetail} onExportFile={onExportFile} onRename={renameActivity} onClose={() => setOpened(null)} />
   </div>;
 }
 
@@ -248,8 +254,9 @@ const pacingCopy: Record<LapPacing, string> = {
   "positive-split": "You went out fast and eased off in the back half."
 };
 
-function ActivityDetailDialog({ inline = false, opened, sportTypes, activityDetail, busy, sampleMode, resolveLocation, raceTags, onLoadDetail, onExportFile, onClose }: {
+function ActivityDetailDialog({ inline = false, opened, sportTypes, activityDetail, busy, sampleMode, resolveLocation, raceTags, onLoadDetail, onExportFile, onRename, onClose }: {
   inline?: boolean; opened: TrainingHubActivity | null; onClose: () => void;
+  onRename?: (activity: TrainingHubActivity, name: string) => Promise<void>;
 } & Pick<Props, "sportTypes" | "activityDetail" | "busy" | "sampleMode" | "resolveLocation" | "raceTags" | "onLoadDetail" | "onExportFile">) {
   useLanguage();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -258,7 +265,8 @@ function ActivityDetailDialog({ inline = false, opened, sportTypes, activityDeta
   const resolveLocationRef = useRef(resolveLocation);
   resolveLocationRef.current = resolveLocation;
   useEffect(() => {
-    if (opened) dialog.current?.showModal();
+    // A rename hands over a new copy of the open activity; the dialog is already up.
+    if (opened) { if (!dialog.current?.open) dialog.current?.showModal(); }
     else dialog.current?.close();
   }, [opened]);
   const detail = opened && activityDetail?.activityId === opened.activityId ? activityDetail : null;
@@ -298,7 +306,9 @@ function ActivityDetailDialog({ inline = false, opened, sportTypes, activityDeta
         <div className="activity-dialog-hero">
           <span className="activity-dialog-sport"><Icon size={34} aria-hidden="true" /></span>
           <div className="activity-dialog-title">
-            <h2 id={headingId}>{opened.name || (sportName == null ? sportName : t(String(sportName))) || t("Activity")}</h2>
+            <ActivityTitleEditor key={opened.activityId} id={headingId} name={opened.name}
+              title={opened.name || (sportName == null ? sportName : t(String(sportName))) || t("Activity")}
+              onRename={onRename ? name => onRename(opened, name) : undefined} />
             <p className="activity-dialog-meta"><Icon size={15} aria-hidden="true" />
               <time dateTime={timestamp ? new Date(timestamp).toISOString() : undefined}>{formatTrainingLongTimestamp(opened.startTime)}</time>
               {location ? <><i aria-hidden="true" /><MapPin size={14} aria-hidden="true" /><span>{location}</span></> : null}</p>

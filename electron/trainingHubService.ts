@@ -30,11 +30,13 @@ import {
   listStrengthActivitiesMissingDetail,
   listTrainingActivitiesMissingFeelType,
   listTrainingActivityRpeInputs,
+  renameStoredTrainingActivity,
   setSetting,
   setTrainingActivityFeelType,
   upsertStrengthSessionDetail,
   upsertTrainingActivities
 } from "./database";
+import { ACTIVITY_NAME_MAX_BYTES, activityNameBytes } from "./activityName";
 import { activityMovingSeconds } from "./activityTime";
 import { buildRpeDistribution, dailyRpeLoad } from "./rpeLoad";
 import type {
@@ -1190,6 +1192,77 @@ export async function getTrainingHubActivityDetail(
   }
 
   return detail;
+}
+
+function activityQueryDay(epochMs: number): string {
+  const date = new Date(epochMs);
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+}
+
+/** The name COROS now lists for an activity, read from the days around its start. */
+async function readBackActivityName(
+  activityId: string,
+  startTime: number
+): Promise<string | undefined> {
+  const startMs = startTime < 10_000_000_000 ? startTime * 1000 : startTime;
+  const day = 86_400_000;
+  try {
+    const listed = await queryTrainingHubActivityPage(
+      1,
+      50,
+      activityQueryDay(startMs - day),
+      activityQueryDay(startMs + day)
+    );
+    return listed.find((activity) => activity.activityId === activityId)?.name;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Renames a recorded activity the way Training Hub's activity list does:
+ * POST /activity/update with its labelId and the new name. COROS answers that
+ * write with an empty success, which a dead token gets too, so the activity is
+ * read back. When it can't be found the session is checked; a renewed session
+ * sends the rename once more and an ended one reports signed out.
+ */
+export async function renameTrainingHubActivity(
+  activityId: string,
+  name: string,
+  startTime?: number,
+  retried = false
+): Promise<string> {
+  const next = name.trim();
+  if (!next) {
+    throw new Error("An activity needs a name.");
+  }
+  if (activityNameBytes(next) > ACTIVITY_NAME_MAX_BYTES) {
+    throw new Error("That name is too long for COROS.");
+  }
+  const token = getStoredAuth()?.accessToken;
+  await trainingHubPostVoid("/activity/update", { labelId: activityId, name: next });
+
+  const listed = startTime ? await readBackActivityName(activityId, startTime) : undefined;
+  if (listed !== undefined && listed !== next) {
+    throw new Error("COROS didn't keep the new name. Try again.");
+  }
+  if (listed === undefined && startTime) {
+    await checkTrainingHubSession({ force: true });
+    const current = getStoredAuth()?.accessToken;
+    if (!current) {
+      throw trainingHubSignedOut();
+    }
+    if (current !== token && !retried) {
+      return renameTrainingHubActivity(activityId, next, startTime, true);
+    }
+  }
+
+  try {
+    renameStoredTrainingActivity(activityId, next);
+  } catch {
+    // The local copy catches up on the next activity refresh.
+  }
+  return next;
 }
 
 export async function getTrainingHubActivityFileUrl(

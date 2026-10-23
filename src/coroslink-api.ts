@@ -676,6 +676,11 @@ export interface CorosLinkApi {
     sportType: number,
     listActivity?: TrainingHubActivity
   ) => Promise<TrainingHubActivityDetail>;
+  /** Renames a recorded activity (COROS, or this computer in Local-Only Mode); resolves to the saved name. */
+  renameTrainingHubActivity: (activityId: string, name: string, startTime?: number) => Promise<string>;
+  onTrainingHubActivityRenamed: (
+    callback: (renamed: { activityId: string; name: string }) => void
+  ) => () => void;
   exportTrainingHubActivityFile: (
     activityId: string,
     sportType: number,

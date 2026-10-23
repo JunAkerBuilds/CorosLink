@@ -89,6 +89,7 @@ function TrainingHubPreview(props: TrainingHubViewProps) {
     rpeBackfill: null,
     onLoadDetail: setSelectedSample,
     onExportFile: () => {},
+    onRenameActivity: undefined,
     onRefresh: () => {},
     onLogout: () => {}
   } : props;
@@ -137,6 +138,7 @@ function TrainingHubContent({
   onRefresh,
   onLoadDetail,
   onExportFile,
+  onRenameActivity,
   navigationRequest,
   onNavigationRequestHandled,
   onOpenCoach,
@@ -633,6 +635,7 @@ function TrainingHubContent({
                 resolveLocation={api.reverseGeocodeRouteLocation}
                 onLoadDetail={onLoadDetail}
                 onExportFile={onExportFile}
+                onRenameActivity={onRenameActivity}
                 raceTags={raceJournal}
                 openRequest={activityOpenRequest}
               />

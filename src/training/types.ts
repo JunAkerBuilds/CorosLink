@@ -130,6 +130,8 @@ export interface TrainingHubViewProps {
     activity: TrainingHubActivity,
     fileType: TrainingHubActivityFileType
   ) => void;
+  /** Renames a recorded activity; resolves to the saved name. Absent where names can't change. */
+  onRenameActivity?: (activity: TrainingHubActivity, name: string) => Promise<string>;
   navigationRequest?: TrainingHubNavigationRequest | null;
   onNavigationRequestHandled?: () => void;
   /** Opens Coach with the composer prefilled (e.g. to rebuild a pinned chart). */

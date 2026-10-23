@@ -407,6 +407,8 @@ export function CalendarView({
   });
 
   useEffect(() => api.onWorkoutEditsChanged(() => { if (authenticated) void reload(); }), [api, authenticated, reload]);
+  // A renamed activity shows its new name on its day, wherever it was renamed.
+  useEffect(() => api.onTrainingHubActivityRenamed(() => { if (authenticated) void reload(); }), [api, authenticated, reload]);
   // Until the visible range's own data is in. `loading` alone can flip true and back within one render.
   const settling = !error && (loading || !ready);
 
@@ -1388,6 +1390,15 @@ export function CalendarView({
         journal={journal}
         onJournalSaved={applyJournalSave}
         onAskCoachBrief={handleAskCoachBrief}
+        onRenameActivity={async (activity, name) => {
+          const saved = await api.renameTrainingHubActivity(activity.activityId, name, activity.startTime);
+          setSelection((current) =>
+            current?.kind === "activity" && current.activity.activityId === activity.activityId
+              ? { ...current, activity: { ...current.activity, name: saved } }
+              : current
+          );
+          return saved;
+        }}
         onEdit={(target) => {
           setSelection(null);
           setEditRef({

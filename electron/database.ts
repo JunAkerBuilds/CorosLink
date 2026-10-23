@@ -1589,6 +1589,17 @@ export function setTrainingActivityFeelType(
     .run(feelType, activityId);
 }
 
+/** Keep the stored copies in step after a rename, so offline views and Coach see the new name. */
+export function renameStoredTrainingActivity(activityId: string, name: string): void {
+  const database = requireDatabase();
+  database
+    .prepare(`UPDATE training_activities SET name = ? WHERE activity_id = ?`)
+    .run(name, activityId);
+  database
+    .prepare(`UPDATE fit_index SET name = ? WHERE activity_id = ?`)
+    .run(name, activityId);
+}
+
 /**
  * Activities on/after `sinceEpochSeconds` whose feel_type has never been
  * fetched (NULL), NEWEST first — recent sessions are the most likely to be

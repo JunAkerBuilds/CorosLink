@@ -2644,6 +2644,18 @@ function registerIpcHandlers(): void {
     ) => currentActivitySource().getActivityDetail(activityId, sportType, listActivity)
   );
 
+  // Every open view (Activities, Calendar, Overview) hears the new name.
+  ipcMain.handle(
+    "trainingHub:renameActivity",
+    async (_event, activityId: string, name: string, startTime?: number): Promise<string> => {
+      const saved = await currentActivitySource().renameActivity(activityId, name, startTime);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("trainingHub:activityRenamed", { activityId, name: saved });
+      }
+      return saved;
+    }
+  );
+
   ipcMain.handle(
     "trainingHub:exportActivityFile",
     async (

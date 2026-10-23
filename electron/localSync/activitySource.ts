@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { normalizeActivityName } from "../activityName";
 import { parseFitActivity } from "../fitActivity";
 import type { HealthInsightKind, HealthInsightResult } from "../healthInsightsTypes";
 import { LOCAL_ONLY_ERROR_PREFIX } from "../privacy/dataModeTypes";
@@ -31,6 +32,8 @@ export interface ActivitySource {
   listActivities(page?: number, size?: number, startDay?: string, endDay?: string): Promise<TrainingHubActivity[]>;
   getActivityDetail(activityId: string, sportType: number, listActivity?: TrainingHubActivity): Promise<TrainingHubActivityDetail>;
   readActivityFile(activityId: string, sportType: number, fileType: TrainingHubActivityFileType): Promise<{ format: TrainingHubExportFormat; content: Buffer }>;
+  /** Renames an activity and resolves to the name now stored. */
+  renameActivity(activityId: string, name: string, startTime?: number): Promise<string>;
 }
 
 export interface HealthDataSource {
@@ -91,6 +94,14 @@ export class LocalActivitySource implements ActivitySource {
       return { format: exportFormat(1), content: Buffer.from(buildGpx(parseFitActivity(new Uint8Array(content)), record.name ?? record.sportName ?? "Activity"), "utf8") };
     }
     throw new LocalDataUnavailableError("Activities on this computer can be exported as FIT or GPX.");
+  }
+
+  async renameActivity(activityId: string, name: string): Promise<string> {
+    const next = normalizeActivityName(name);
+    if (!next) throw new Error("An activity needs a name.");
+    this.record(activityId);
+    this.repository.renameActivity(activityId, next);
+    return next;
   }
 }
 

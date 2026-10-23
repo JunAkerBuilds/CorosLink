@@ -232,6 +232,15 @@ try {
     await assert.rejects(localSource.getActivityDetail("123456789", 100), /Local-Only Mode: This activity isn't stored/);
   });
 
+  await test("a stored activity renames on this computer", async () => {
+    const [run] = await localSource.listActivities(1, 50);
+    assert.equal(await localSource.renameActivity(run.activityId, "  Waterfront tempo  "), "Waterfront tempo");
+    assert.equal((await localSource.listActivities(1, 50))[0].name, "Waterfront tempo");
+    await assert.rejects(localSource.renameActivity(run.activityId, "   "), /An activity needs a name/);
+    await assert.rejects(localSource.renameActivity("123456789", "Ghost run"), /Local-Only Mode: This activity isn't stored/);
+    await localSource.renameActivity(run.activityId, "Lunch run");
+  });
+
   // ----- watch sync -----
 
   function fakeWatch(initial, options = {}) {

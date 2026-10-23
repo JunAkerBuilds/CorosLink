@@ -1,0 +1,41 @@
+/* Activity titles that rename in place (ActivityTitleEditor): the activity
+   dialog, its list inspector, and the calendar's day panel. The heading keeps
+   its host's type; the field inherits it so editing doesn't change the size. */
+.activity-title { --title-tint: var(--activity-color, var(--accent)); display: flex; align-items: center; gap: 6px; min-width: 0; }
+.activity-dialog-title .activity-title { overflow: visible; }
+.activity-title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: inherit; }
+
+.activity-title-edit,
+.activity-title-action { display: inline-grid; place-items: center; flex-shrink: 0; padding: 0; border-radius: 8px; color: var(--text-secondary); font: inherit; cursor: pointer; transition: color 160ms ease, background 160ms ease, border-color 160ms ease; }
+.activity-title-edit { width: 28px; height: 28px; border: 1px solid transparent; background: transparent; }
+.activity-title-edit:hover { color: var(--text-primary); border-color: var(--glass-border); background: var(--glass-bg-hover); }
+.activity-title-edit:focus-visible,
+.activity-title-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Editing: the field's padding plus border sits left of the text, so the text keeps its place. */
+.activity-title.is-editing { gap: 6px; }
+.activity-title-input { flex: 1; min-width: 0; width: 100%; margin: -2px 0 -2px -8px; padding: 1px 7px; border: 1px solid color-mix(in srgb, var(--title-tint) 62%, var(--glass-border)); border-radius: 9px; background: var(--glass-bg); box-shadow: 0 0 0 2px color-mix(in srgb, var(--title-tint) 16%, transparent); color: var(--text-primary); font: inherit; letter-spacing: inherit; line-height: inherit; }
+/* The border and soft ring are the focus mark; the global 2px outline would double it. */
+.activity-title-input:focus-visible { outline: none; }
+.activity-title-input[readonly] { color: var(--text-secondary); }
+.activity-title-input[aria-invalid="true"] { border-color: color-mix(in srgb, var(--error-text) 70%, var(--glass-border)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--error-text) 16%, transparent); }
+.activity-title-action { width: 30px; height: 30px; border: 1px solid var(--glass-border); background: var(--glass-bg); }
+.activity-title-action:hover:not(:disabled) { color: var(--text-primary); background: var(--glass-bg-hover); }
+.activity-title-action.is-save { color: var(--title-tint); border-color: color-mix(in srgb, var(--title-tint) 45%, var(--glass-border)); background: color-mix(in srgb, var(--title-tint) 14%, transparent); }
+.activity-title-action.is-save:hover:not(:disabled) { color: var(--text-primary); background: color-mix(in srgb, var(--title-tint) 26%, transparent); }
+.activity-title-error { margin: 0; color: var(--error-text); font-size: 12px; font-weight: 500; line-height: 1.4; }
+
+/* The list inspector and calendar panel wrap long names instead of cutting them. */
+.activities-detail-sidebar .activity-title-text { overflow-wrap: anywhere; }
+.activities-detail-sidebar .activity-title-edit,
+.calendar-detail-heading .activity-title-edit { width: 24px; height: 24px; border-radius: 6px; }
+.activities-detail-sidebar .activity-title-action,
+.calendar-detail-heading .activity-title-action { width: 26px; height: 26px; border-radius: 7px; }
+/* 10px from the sport tile in the inspector: a 5px offset and the ring still clear it. */
+.activities-detail-sidebar .activity-title-input,
+.calendar-detail-heading .activity-title-input { margin: -2px 0 -2px -5px; padding: 1px 4px; border-radius: 7px; }
+.calendar-detail-heading { flex: 1; min-width: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-title-edit, .activity-title-action { transition: none; }
+}

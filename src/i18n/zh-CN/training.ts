@@ -2455,4 +2455,10 @@ export const trainingChinese: Readonly<Record<string, string>> = {
   "Peak in week {{value1}}": "第 {{value1}} 周达到峰值",
   "All plans": "全部计划",
   "All templates": "全部模板",
+  "Rename activity": "重命名活动",
+  "Activity name": "活动名称",
+  "Save name": "保存名称",
+  "An activity needs a name.": "活动名称不能为空。",
+  "That name is too long for COROS.": "名称过长，COROS 无法保存。",
+  "COROS didn't keep the new name. Try again.": "COROS 未保存新名称，请重试。",
 };
