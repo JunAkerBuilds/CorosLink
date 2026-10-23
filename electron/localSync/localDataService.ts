@@ -10,7 +10,7 @@ import { importFitFiles } from "./fitImportService";
 import { HealthRepository } from "./healthRepository";
 import { LocalArchive } from "./localArchive";
 import { exportLocalBackup, restoreLocalBackup, backupNeedsPassphrase, removeUnfinishedRestores } from "./localBackupService";
-import type { LocalDataOverview, LocalImportResult, LocalBackupResult, LocalRestoreResult, WatchSyncProbe, WatchSyncProgress } from "./localDataTypes";
+import type { LocalDataOverview, LocalImportResult, LocalBackupResult, LocalRestoreResult, LocalSyncRun, WatchSyncProbe, WatchSyncProgress } from "./localDataTypes";
 import { assertReadableSyncFile, DAILY_DATA_FILE, SPORT_RECORD_FILE } from "./activityProtocol";
 import { sha256Hex } from "./localArchive";
 import type { SyncCaptureLog } from "./syncCapture";
@@ -393,6 +393,14 @@ export class LocalDataService {
 
   isSyncRunning(): boolean {
     return this.watchActivities.isRunning();
+  }
+
+  /** The last finished watch syncs, without the storage scan overview() does. */
+  lastSyncs(): { activities?: LocalSyncRun; health?: LocalSyncRun } {
+    return {
+      activities: this.activities.lastSuccessfulRun("activities"),
+      health: this.activities.lastSuccessfulRun("health-totals")
+    };
   }
 
   async overview(): Promise<LocalDataOverview> {

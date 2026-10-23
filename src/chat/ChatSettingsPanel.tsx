@@ -24,6 +24,7 @@ import type {
   OpenRouterConnectionTest
 } from "../../electron/types";
 import { CoachInstructionsSettings } from "./CoachInstructionsSettings";
+import { AthleteMemorySettings } from "./AthleteMemorySettings";
 import { RemoteAccessSettings } from "./RemoteAccessSettings";
 import { McpServersPanel } from "./McpServersPanel";
 import { AntigravitySettingsSection, type AntigravityControls } from "./antigravity";
@@ -231,6 +232,8 @@ export function ChatSettingsPanel({
         disabled={savingSettings || busy}
         onSave={(customInstructions) => onUpdateChatSettings({ customInstructions })}
       />
+
+      <AthleteMemorySettings api={api} />
 
       <RemoteAccessSettings api={api} />
 

@@ -1,6 +1,6 @@
 import { requireDatabase } from "./database";
 import { isRaceDistanceKey } from "./raceModel";
-import type { RaceBuildUp, RaceDistanceKey, RaceSource } from "./raceTypes";
+import type { RaceBuildUp, RaceDistanceKey, RacePriority, RaceSource, RaceTarget } from "./raceTypes";
 
 // Race tags live in their own tables, created on first use. Strava-derived
 // data is kept apart in `strava_race_activities` so a disconnect can drop it
@@ -85,6 +85,20 @@ function database() {
         ON race_entries(coros_activity_id);
       CREATE INDEX IF NOT EXISTS idx_race_entries_strava
         ON race_entries(strava_activity_id);
+
+      CREATE TABLE IF NOT EXISTS race_targets (
+        target_id TEXT PRIMARY KEY,
+        event_name TEXT NOT NULL,
+        race_day TEXT NOT NULL,
+        distance_key TEXT NOT NULL,
+        distance_m REAL NOT NULL,
+        goal_time_sec REAL,
+        priority TEXT,
+        location TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
 
       CREATE TABLE IF NOT EXISTS strava_race_activities (
         activity_id TEXT PRIMARY KEY,
@@ -265,4 +279,87 @@ export function clearStravaRaceActivities(keepAthleteId?: string): number {
     ? db.prepare("DELETE FROM strava_race_activities WHERE athlete_id <> ?").run(keepAthleteId)
     : db.prepare("DELETE FROM strava_race_activities").run();
   return result.changes;
+}
+
+interface TargetRow {
+  target_id: string;
+  event_name: string;
+  race_day: string;
+  distance_key: string;
+  distance_m: number;
+  goal_time_sec: number | null;
+  priority: string | null;
+  location: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+function toRaceTarget(row: TargetRow): RaceTarget {
+  const priority = row.priority === "A" || row.priority === "B" || row.priority === "C" ? row.priority as RacePriority : undefined;
+  return {
+    targetId: row.target_id,
+    name: row.event_name,
+    raceDay: row.race_day,
+    distanceKey: isRaceDistanceKey(row.distance_key) ? row.distance_key : "other",
+    distance: row.distance_m,
+    goalTime: optional(row.goal_time_sec),
+    priority,
+    location: optional(row.location),
+    notes: optional(row.notes),
+    createdAt: row.created_at
+  };
+}
+
+/** Races the athlete is training for, soonest first. */
+export function listStoredRaceTargets(): RaceTarget[] {
+  const rows = database()
+    .prepare(
+      `SELECT target_id, event_name, race_day, distance_key, distance_m, goal_time_sec,
+              priority, location, notes, created_at
+       FROM race_targets ORDER BY race_day, created_at`
+    )
+    .all() as TargetRow[];
+  return rows.map(toRaceTarget);
+}
+
+export function saveStoredRaceTarget(target: RaceTarget): void {
+  const now = new Date().toISOString();
+  database()
+    .prepare(
+      `INSERT INTO race_targets (
+         target_id, event_name, race_day, distance_key, distance_m, goal_time_sec,
+         priority, location, notes, created_at, updated_at
+       )
+       VALUES (
+         @targetId, @name, @raceDay, @distanceKey, @distance, @goalTime,
+         @priority, @location, @notes, @createdAt, @now
+       )
+       ON CONFLICT(target_id) DO UPDATE SET
+         event_name = excluded.event_name,
+         race_day = excluded.race_day,
+         distance_key = excluded.distance_key,
+         distance_m = excluded.distance_m,
+         goal_time_sec = excluded.goal_time_sec,
+         priority = excluded.priority,
+         location = excluded.location,
+         notes = excluded.notes,
+         updated_at = excluded.updated_at`
+    )
+    .run({
+      targetId: target.targetId,
+      name: target.name,
+      raceDay: target.raceDay,
+      distanceKey: target.distanceKey,
+      distance: target.distance,
+      goalTime: target.goalTime ?? null,
+      priority: target.priority ?? null,
+      location: target.location ?? null,
+      notes: target.notes ?? null,
+      createdAt: target.createdAt,
+      now
+    });
+}
+
+export function deleteStoredRaceTarget(targetId: string): boolean {
+  return database().prepare("DELETE FROM race_targets WHERE target_id = ?").run(targetId).changes > 0;
 }

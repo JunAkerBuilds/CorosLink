@@ -31,6 +31,7 @@ import { RacePlaque, type PlaqueGroup } from "./RacePlaques";
 import { RaceComparison } from "./RaceComparison";
 import { RaceEditorDialog, type RaceEditorTarget } from "./RaceEditorDialog";
 import { RaceProgressChart, type RaceChartPoint } from "./RaceProgressChart";
+import { RaceTargets } from "./RaceTargets";
 import "../races.css";
 
 const ALL = "all";
@@ -216,6 +217,10 @@ export function RacesPanel({
             ? t("1 race from Strava is hidden while Strava is disconnected. Your notes and chip times are kept.")
             : t("{{count}} races from Strava are hidden while Strava is disconnected. Your notes and chip times are kept.", { count: formatNumber(strava.hiddenRaces) })}
         </p>
+      ) : null}
+
+      {journal.overview?.targets?.length ? (
+        <RaceTargets targets={journal.overview.targets} journal={journal} unitSystem={unitSystem} />
       ) : null}
 
       {suggestions.length > 0 ? (

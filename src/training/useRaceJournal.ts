@@ -23,6 +23,8 @@ export interface RaceJournal {
   updateRace: (input: RaceEditInput) => Promise<boolean>;
   removeRace: (raceId: string) => Promise<boolean>;
   addManualRace: (input: ManualRaceInput) => Promise<boolean>;
+  /** Removes a race the athlete was training for. */
+  removeTarget: (targetId: string) => Promise<boolean>;
   importStrava: () => Promise<void>;
 }
 
@@ -48,6 +50,9 @@ export function useRaceJournal(
   const [notice, setNotice] = useState<LocalizableText | null>(null);
   const sample = useMemo(() => (sampleMode ? createSampleRaceOverview() : null), [sampleMode]);
   const requestRef = useRef(0);
+  // The Coach can add a target race while the Races tab is open.
+  const [externalVersion, setExternalVersion] = useState(0);
+  useEffect(() => api.onRacesChanged?.(() => setExternalVersion((value) => value + 1)), [api]);
 
   useEffect(() => {
     if (!enabled || sampleMode) return;
@@ -64,7 +69,7 @@ export function useRaceJournal(
       .finally(() => {
         if (request === requestRef.current) setLoading(false);
       });
-  }, [api, enabled, sampleMode, refreshKey]);
+  }, [api, enabled, sampleMode, refreshKey, externalVersion]);
 
   const run = useCallback(
     async (key: string, action: () => Promise<RaceOverview>, success?: string) => {
@@ -138,6 +143,7 @@ export function useRaceJournal(
     updateRace: (input) => run(`update:${input.raceId}`, () => api.updateRace(input)),
     removeRace: (raceId) => run(`remove:${raceId}`, () => api.removeRace(raceId)),
     addManualRace: (input) => run("add", () => api.addManualRace(input)),
+    removeTarget: (targetId) => run(`target:${targetId}`, () => api.removeRaceTarget(targetId)),
     importStrava: async () => {
       if (sampleMode) return;
       setPending("import");

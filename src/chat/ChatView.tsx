@@ -1,6 +1,9 @@
 import { t, useLanguage, getDateTimeFormat } from "../i18n/tools";
 import { WorkoutEditCard } from "./WorkoutEditCard";
 import { CorosActionCard } from "./CorosActionCard";
+import { CoachReviewCard } from "./CoachReviewCard";
+import { AthleteMemoryNoticeRow } from "./AthleteMemoryNotice";
+import type { ChatSettingsSectionId } from "./chatSettingsSections";
 import { normalizeCoachChartTitle } from "./coachChartFreshness";
 import { ensureDashboardWidget } from "../training/dashboardLayout";
 import {
@@ -2320,6 +2323,8 @@ export function ChatView({
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // The section Coach settings opens at, from a "Memory" link in the transcript.
+  const [settingsSection, setSettingsSection] = useState<ChatSettingsSectionId | undefined>();
   const [fileDragActive, setFileDragActive] = useState(false);
   useEffect(() => {
     if (accountSetupRequest > 0) setSettingsOpen(true);
@@ -3776,6 +3781,24 @@ export function ChatView({
     return entry.kind === "corosAction" ? entry.preview : undefined;
   };
 
+  const handleCoachReview = async (requestId: string, decision: "confirm" | "cancel") => {
+    const sessionId = activeSessionIdRef.current;
+    if (!api || !sessionId) return;
+    const { entry } = await api.coachConfirm({ sessionId, kind: "coachReview", id: requestId, decision });
+    return entry.kind === "coachReview" ? entry.preview : undefined;
+  };
+
+  const handleUndoAthleteMemory = async (noticeId: string) => {
+    const sessionId = activeSessionIdRef.current;
+    if (!api || !sessionId) return;
+    await api.coachConfirm({ sessionId, kind: "athleteMemory", id: noticeId, decision: "cancel" });
+  };
+
+  const openMemorySettings = () => {
+    setSettingsSection("memory");
+    setSettingsOpen(true);
+  };
+
   const handleConfirmWorkoutDelete = async (requestId: string) => {
     const sessionId = activeSessionIdRef.current;
     if (!api || !sessionId || deletingRequestId) return;
@@ -3985,6 +4008,7 @@ export function ChatView({
     api,
     mcpRefreshVersion,
     open: settingsOpen,
+    initialSection: settingsSection,
     chatSettings,
     authStatus,
     claudeStatus,
@@ -4016,7 +4040,10 @@ export function ChatView({
     connectingClaude,
     testingClaude,
     busy: isBusy,
-    onClose: () => setSettingsOpen(false),
+    onClose: () => {
+      setSettingsOpen(false);
+      setSettingsSection(undefined);
+    },
     onSignIn: () => void handleSignIn(),
     onSignOut: () => void handleSignOut(),
     onRefreshClaude: () => void refreshClaudeCodeStatus(),
@@ -4667,6 +4694,32 @@ export function ChatView({
                   <CorosActionCard preview={entry.preview} onConfirm={() => handleConfirmCorosAction(entry.preview.requestId)} />
                 </div>
               </div>;
+            }
+
+            if (entry.kind === "coachReview") {
+              return (
+                <div key={entry.preview.requestId} className="chat-row chat-row-assistant">
+                  <div className="chat-bubble chat-bubble-plan">
+                    <CoachReviewCard
+                      preview={entry.preview}
+                      onConfirm={() => handleCoachReview(entry.preview.requestId, "confirm")}
+                      onDismiss={() => handleCoachReview(entry.preview.requestId, "cancel")}
+                    />
+                  </div>
+                </div>
+              );
+            }
+
+            if (entry.kind === "athleteMemory") {
+              return (
+                <div key={entry.notice.noticeId} className="chat-row chat-row-assistant chat-row-memory">
+                  <AthleteMemoryNoticeRow
+                    notice={entry.notice}
+                    onUndo={() => handleUndoAthleteMemory(entry.notice.noticeId)}
+                    onManage={openMemorySettings}
+                  />
+                </div>
+              );
             }
 
             if (entry.kind === "workoutDelete") {

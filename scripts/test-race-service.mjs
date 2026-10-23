@@ -272,6 +272,36 @@ overview = (await races.importStravaRaces()).overview;
 assert.equal(overview.races.length, 3);
 assert.equal(overview.races.find((entry) => entry.raceId === "strava:8001").notes, "Windy");
 
+// --- Target races --------------------------------------------------------------
+const today = new Date();
+const dayKey = (offset) => {
+  const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + offset);
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+};
+assert.throws(() => races.normalizeRaceTarget({ name: "Old race", raceDay: dayKey(-1), distanceKey: "10k" }), /in the future/);
+assert.throws(() => races.normalizeRaceTarget({ name: "Far race", raceDay: dayKey(4 * 365), distanceKey: "10k" }), /three years/);
+assert.throws(() => races.normalizeRaceTarget({ name: "Trail", raceDay: dayKey(30), distanceKey: "other" }), /race distance/);
+assert.throws(() => races.normalizeRaceTarget({ name: " ", raceDay: dayKey(30), distanceKey: "10k" }), /race name/);
+assert.throws(() => races.normalizeRaceTarget({ name: "Bad date", raceDay: "2026-02-30", distanceKey: "10k" }), /YYYY-MM-DD/);
+let targetEvents = 0;
+const stopTargets = races.onRaceTargetsChanged(() => { targetEvents += 1; });
+const marathon = races.addRaceTarget({ name: "  Valencia Marathon ", raceDay: dayKey(60), distanceKey: "marathon", goalTime: 11700, priority: "A", location: "Valencia", notes: "Goal race" });
+assert.equal(marathon.name, "Valencia Marathon");
+assert.equal(marathon.distance, 42195);
+assert.equal(marathon.goalTime, 11700);
+const trail = races.addRaceTarget({ name: "Sintra Trail", raceDay: `${dayKey(20).slice(0, 4)}-${dayKey(20).slice(4, 6)}-${dayKey(20).slice(6)}`, distanceKey: "other", distance: 27500, priority: "C" });
+assert.equal(trail.raceDay, dayKey(20), "a dashed date is stored as YYYYMMDD");
+assert.equal(targetEvents, 2);
+overview = races.getRaceOverview();
+assert.deepEqual(overview.targets.map((target) => target.name), ["Sintra Trail", "Valencia Marathon"], "soonest first");
+assert.equal(overview.targets[0].distance, 27500);
+assert.equal(overview.races.length, 3, "targets never mix into results");
+overview = races.removeRaceTarget(trail.targetId);
+assert.deepEqual(overview.targets.map((target) => target.targetId), [marathon.targetId]);
+assert.throws(() => races.removeRaceTarget(trail.targetId), /no longer in your list/);
+assert.equal(targetEvents, 3);
+stopTargets();
+
 globalThis.fetch = realFetch;
 fs.rmSync(tempRoot, { recursive: true, force: true });
 console.log("race service tests passed");

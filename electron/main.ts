@@ -165,10 +165,25 @@ import {
   importStravaRaces,
   listRaceActivityIds,
   markActivityAsRace,
+  onRaceTargetsChanged,
   removeRace,
+  removeRaceTarget,
   unmarkActivityAsRace,
   updateRace
 } from "./raceService";
+import {
+  clearAthleteMemory,
+  deleteAthleteFact,
+  listAthleteFacts,
+  onAthleteMemoryChanged,
+  saveAthleteFact
+} from "./athleteMemoryStore";
+import {
+  confirmCoachReview,
+  dismissCoachReview,
+  setCoachLocalSyncReader,
+  undoAthleteMemoryNotice
+} from "./chatAthleteToolsRuntime";
 import type { ManualRaceInput, RaceEditInput } from "./raceTypes";
 import type {
   HevySettingsInput,
@@ -577,7 +592,10 @@ function createCoachHub(): CoachSessionHub {
       cancelStrengthEdit: async (proposalId) => {
         await workoutEdits().tool("cancel_workout_edit", { proposalId }, "coach");
         return workoutEdits().status(proposalId);
-      }
+      },
+      confirmCoachReview,
+      dismissCoachReview,
+      undoAthleteMemory: undoAthleteMemoryNotice
     },
     settings: getChatSettings,
     titler: generateCoachSessionTitle,
@@ -1091,6 +1109,7 @@ app.whenReady().then(() => {
   initializeDatabase(app.getPath("userData"));
   // Local-Only Mode is known before anything below can upload to COROS.
   localData = registerLocalOnlyMode({ getWindow: () => mainWindow });
+  setCoachLocalSyncReader(() => localData?.lastSyncs());
   initializeNativeLanguage();
   hydratePlanDraftStoreFromDatabase();
   prunePlanDraftStore();
@@ -2848,6 +2867,26 @@ function registerIpcHandlers(): void {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("trainingHub:activityRenamed", change);
   });
 
+  // The athlete memory: the Coach writes it from chat, the athlete curates it in Coach settings.
+  ipcMain.handle("coachMemory:list", () => listAthleteFacts());
+  ipcMain.handle("coachMemory:save", (event, input: { id?: string; category: unknown; text: unknown }) => {
+    mainWindowSender(event, "Coach memory");
+    return saveAthleteFact(input, "athlete");
+  });
+  ipcMain.handle("coachMemory:delete", (event, factId: string) => {
+    mainWindowSender(event, "Coach memory");
+    deleteAthleteFact(String(factId));
+    return listAthleteFacts();
+  });
+  ipcMain.handle("coachMemory:clear", (event) => {
+    mainWindowSender(event, "Coach memory");
+    clearAthleteMemory();
+    return listAthleteFacts();
+  });
+  onAthleteMemoryChanged((facts) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("coachMemory:changed", facts);
+  });
+
   ipcMain.handle("races:getOverview", () => getRaceOverview());
   ipcMain.handle("races:listActivityIds", () => listRaceActivityIds());
   ipcMain.handle("races:markActivity", (_event, activity: TrainingHubActivity) =>
@@ -2862,6 +2901,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle("races:update", (_event, input: RaceEditInput) => updateRace(input));
   ipcMain.handle("races:remove", (_event, raceId: string) => removeRace(raceId));
   ipcMain.handle("races:addManual", (_event, input: ManualRaceInput) => addManualRace(input));
+  ipcMain.handle("races:removeTarget", (_event, targetId: string) => removeRaceTarget(targetId));
+  onRaceTargetsChanged(() => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("races:changed");
+  });
   ipcMain.handle("races:importStrava", (_event, full?: boolean) =>
     importStravaRaces(full === true)
   );

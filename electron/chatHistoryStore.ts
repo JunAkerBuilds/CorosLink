@@ -1,3 +1,5 @@
+import { isAthleteFactCategory, type AthleteFact, type AthleteMemoryNotice } from "./athleteMemoryModel";
+import type { CoachReviewPreview } from "./coachReviewTypes";
 import { strengthEditPreviewSchema } from "./workoutEditService";
 import crypto from "node:crypto";
 import { withCoachChartDefaults } from "./coachChartUtils";
@@ -974,9 +976,82 @@ function parseCoachChartPreview(value: unknown): CoachChartPreview | null {
   });
 }
 
+const REVIEW_ACTIONS = ["addTargetRace", "updateZones"];
+const REVIEW_STATES = ["pending", "saving", "saved", "partial", "failed", "dismissed"];
+
+function parseCoachReviewPreview(value: unknown): CoachReviewPreview | null {
+  if (!isRecord(value) || typeof value.requestId !== "string" || typeof value.title !== "string" ||
+    typeof value.summary !== "string" || typeof value.createdAt !== "number" ||
+    !REVIEW_ACTIONS.includes(String(value.action)) || !REVIEW_STATES.includes(String(value.state)) ||
+    !Array.isArray(value.items)) return null;
+  const items = value.items.flatMap((item): CoachReviewPreview["items"] => {
+    if (!isRecord(item) || typeof item.label !== "string" || typeof item.after !== "string") return [];
+    const result = isRecord(item.result) && typeof item.result.ok === "boolean"
+      ? { ok: item.result.ok, ...(typeof item.result.message === "string" ? { message: item.result.message } : {}) }
+      : undefined;
+    return [{
+      label: item.label,
+      after: item.after,
+      ...(typeof item.before === "string" ? { before: item.before } : {}),
+      ...(result ? { result } : {})
+    }];
+  });
+  const notes = Array.isArray(value.notes) ? value.notes.filter((note): note is string => typeof note === "string") : [];
+  return {
+    requestId: value.requestId,
+    action: value.action as CoachReviewPreview["action"],
+    title: value.title,
+    summary: value.summary,
+    items,
+    ...(notes.length ? { notes } : {}),
+    createdAt: value.createdAt,
+    state: value.state as CoachReviewPreview["state"],
+    ...(typeof value.message === "string" ? { message: value.message } : {})
+  };
+}
+
+function parseAthleteFact(value: unknown): AthleteFact | null {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.text !== "string" ||
+    typeof value.createdAt !== "string" || typeof value.updatedAt !== "string") return null;
+  return {
+    id: value.id,
+    category: isAthleteFactCategory(value.category) ? value.category : "other",
+    text: value.text,
+    author: value.author === "athlete" ? "athlete" : "coach",
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt
+  };
+}
+
+function parseAthleteMemoryNotice(value: unknown): AthleteMemoryNotice | null {
+  if (!isRecord(value) || typeof value.noticeId !== "string" || typeof value.at !== "string" ||
+    !["remembered", "updated", "forgot"].includes(String(value.action))) return null;
+  const fact = parseAthleteFact(value.fact);
+  if (!fact) return null;
+  const previous = parseAthleteFact(value.previous);
+  return {
+    noticeId: value.noticeId,
+    action: value.action as AthleteMemoryNotice["action"],
+    fact,
+    ...(previous ? { previous } : {}),
+    at: value.at,
+    ...(value.undone === true ? { undone: true } : {})
+  };
+}
+
 function parseEntry(value: unknown): PersistedChatEntry | null {
   if (!isRecord(value)) {
     return null;
+  }
+
+  if (value.kind === "coachReview") {
+    const preview = parseCoachReviewPreview(value.preview);
+    return preview ? { kind: "coachReview", preview } : null;
+  }
+
+  if (value.kind === "athleteMemory") {
+    const notice = parseAthleteMemoryNotice(value.notice);
+    return notice ? { kind: "athleteMemory", notice } : null;
   }
 
   if (value.kind === "workoutEdit") {

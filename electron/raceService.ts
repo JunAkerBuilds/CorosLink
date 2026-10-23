@@ -18,6 +18,9 @@ import {
 import {
   clearStravaRaceActivities,
   deleteStoredRace,
+  deleteStoredRaceTarget,
+  listStoredRaceTargets,
+  saveStoredRaceTarget,
   getStoredRace,
   listStoredRaces,
   listStravaRaceActivities,
@@ -32,6 +35,8 @@ import type {
   RaceEditInput,
   RaceEntry,
   RaceOverview,
+  RaceTarget,
+  RaceTargetInput,
   StravaRaceImportResult
 } from "./raceTypes";
 import {
@@ -322,7 +327,8 @@ export function getRaceOverview(): RaceOverview {
       connected: strava.connected,
       lastImportedAt: strava.connected ? getSetting(SETTINGS.stravaImportedAt) : undefined,
       hiddenRaces
-    }
+    },
+    targets: listStoredRaceTargets()
   };
 }
 
@@ -482,6 +488,88 @@ export function addManualRace(input: ManualRaceInput): RaceOverview {
     placing: cleanText(input.placing, MAX_PLACING_LENGTH),
     notes: cleanText(input.notes, MAX_NOTES_LENGTH)
   });
+  return getRaceOverview();
+}
+
+const MAX_LOCATION_LENGTH = 120;
+const MAX_TARGET_DAYS_AHEAD = 3 * 365;
+
+function localDayKey(date: Date): string {
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+}
+
+/** A race day as YYYYMMDD, today or later and within three years. */
+export function readRaceDay(value: unknown, today = new Date()): string {
+  const compact = typeof value === "string" ? value.trim().replace(/-/g, "") : "";
+  const match = /^(\d{4})(\d{2})(\d{2})$/.exec(compact);
+  const date = match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : undefined;
+  if (!date || localDayKey(date) !== compact) throw new Error("Enter the race date as YYYY-MM-DD.");
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (date < start) throw new Error("A target race is in the future. Add a finished race as a result instead.");
+  if (date.getTime() - start.getTime() > MAX_TARGET_DAYS_AHEAD * 86_400_000) throw new Error("Choose a race date within the next three years.");
+  return compact;
+}
+
+/** Check a target race and fill in its distance; nothing is saved. */
+export function normalizeRaceTarget(input: RaceTargetInput, today = new Date()): Omit<RaceTarget, "targetId" | "createdAt"> {
+  const name = cleanText(input?.name, MAX_NAME_LENGTH);
+  if (!name) throw new Error("Enter the race name.");
+  const raceDay = readRaceDay(input.raceDay, today);
+  if (!isRaceDistanceKey(input.distanceKey)) throw new Error("Choose a race distance.");
+  const distance = input.distanceKey === "other" ? readDistance(input.distance) : raceDistanceMeters(input.distanceKey);
+  if (distance === undefined) throw new Error("Enter the race distance.");
+  const goalTime = readTime(input.goalTime);
+  const priority = input.priority === "A" || input.priority === "B" || input.priority === "C" ? input.priority : undefined;
+  return {
+    name,
+    raceDay,
+    distanceKey: input.distanceKey,
+    distance,
+    ...(goalTime !== undefined ? { goalTime } : {}),
+    ...(priority ? { priority } : {}),
+    ...(cleanText(input.location, MAX_LOCATION_LENGTH) ? { location: cleanText(input.location, MAX_LOCATION_LENGTH) } : {}),
+    ...(cleanText(input.notes, MAX_NOTES_LENGTH) ? { notes: cleanText(input.notes, MAX_NOTES_LENGTH) } : {})
+  };
+}
+
+const targetListeners = new Set<() => void>();
+
+/** Hears target races added or removed (the Coach adds them too), so an open Races tab can reload. */
+export function onRaceTargetsChanged(listener: () => void): () => void {
+  targetListeners.add(listener);
+  return () => targetListeners.delete(listener);
+}
+
+function targetsChanged(): void {
+  for (const listener of targetListeners) {
+    try {
+      listener();
+    } catch (error) {
+      console.warn("[races] listener failed:", error);
+    }
+  }
+}
+
+export function listRaceTargets(): RaceTarget[] {
+  return listStoredRaceTargets();
+}
+
+export function addRaceTarget(input: RaceTargetInput): RaceTarget {
+  const target: RaceTarget = {
+    ...normalizeRaceTarget(input),
+    targetId: `target:${randomUUID()}`,
+    createdAt: new Date().toISOString()
+  };
+  saveStoredRaceTarget(target);
+  targetsChanged();
+  return target;
+}
+
+export function removeRaceTarget(targetId: string): RaceOverview {
+  if (typeof targetId !== "string" || !deleteStoredRaceTarget(targetId)) {
+    throw new Error("That target race is no longer in your list.");
+  }
+  targetsChanged();
   return getRaceOverview();
 }
 

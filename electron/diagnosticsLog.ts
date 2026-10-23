@@ -286,6 +286,19 @@ export class DiagnosticsLog {
     return this.snapshot();
   }
 
+  /** Recent errors (not notices) whose source passes `match`, newest last; already redacted. */
+  recentErrors(sinceMs: number, match: (source: string) => boolean): Array<{ at: string; source: string; message: string; code?: string; count?: number }> {
+    return this.entries
+      .filter((entry) => !entry.level && match(entry.source) && Date.parse(entry.lastSeen ?? entry.timestamp) >= sinceMs)
+      .map((entry) => ({
+        at: entry.lastSeen ?? entry.timestamp,
+        source: entry.source,
+        message: entry.error.message,
+        ...(entry.error.code ? { code: entry.error.code } : {}),
+        ...(entry.count ? { count: entry.count } : {})
+      }));
+  }
+
   /**
    * `status` lines describe current state (e.g. account connections) and are redacted like errors.
    * `rangeHours` keeps only failures seen in that many recent hours; a repeat counts by its latest occurrence.

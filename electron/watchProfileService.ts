@@ -21,6 +21,8 @@ export interface WatchProfileSummary {
   /** seconds per km */
   thresholdPaceSecondsPerKm: number;
   ftp: number;
+  /** Running critical power, W; 0 when the watch has none. */
+  criticalPower?: number;
   maxHrZones: number[];
   reserveHrZones: number[];
   thresholdHrZones: number[];
@@ -47,7 +49,7 @@ function stored(): { readAt: string; profile: WatchProfile; model?: WatchModelId
 function summarizeWatchProfile(profile: WatchProfile, readAt: string, model?: WatchModelId): WatchProfileSummary {
   return {
     readAt, ...(model ? { model } : {}), maxHr: profile.maxHr, restingHr: profile.restingHr, thresholdHr: profile.thresholdHr, hrZoneType: profile.hrZoneType,
-    thresholdPaceSecondsPerKm: Math.round(profile.thresholdPace / 1000), ftp: profile.ftp,
+    thresholdPaceSecondsPerKm: Math.round(profile.thresholdPace / 1000), ftp: profile.ftp, criticalPower: profile.criticalPower,
     maxHrZones: profile.maxHrZones, reserveHrZones: profile.reserveHrZones, thresholdHrZones: profile.thresholdHrZones,
     paceZonesSecondsPerKm: profile.paceZones.map(value => Math.round(value / 1000))
   };

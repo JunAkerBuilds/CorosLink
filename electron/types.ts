@@ -3423,6 +3423,8 @@ export type ChatTurnStage = "provider" | "tools" | "context" | "model";
 export type ChatStreamInfo =
   | { requestId: string; kind: "workoutEdit"; preview: StrengthEditPreview }
   | { requestId: string; kind: "corosAction"; preview: CoachCorosActionPreview }
+  | { requestId: string; kind: "coachReview"; preview: import("./coachReviewTypes").CoachReviewPreview }
+  | { requestId: string; kind: "athleteMemory"; notice: import("./athleteMemoryModel").AthleteMemoryNotice }
   | {
       requestId: string;
       kind: "context";
@@ -4659,6 +4661,8 @@ export interface CoachCorosActionPreview {
 export type PersistedChatEntry =
   | { kind: "workoutEdit"; preview: StrengthEditPreview }
   | { kind: "corosAction"; preview: CoachCorosActionPreview }
+  | { kind: "coachReview"; preview: import("./coachReviewTypes").CoachReviewPreview }
+  | { kind: "athleteMemory"; notice: import("./athleteMemoryModel").AthleteMemoryNotice }
   | PersistedChatMessageEntry
   | { kind: "coachPrompt"; prompt: CoachInputPrompt }
   | { kind: "planDraft"; draft: PlanDraftPreview }

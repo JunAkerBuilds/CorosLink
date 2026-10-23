@@ -1,0 +1,173 @@
+/* Review cards for Coach writes outside COROS MCP (moving workouts, a target
+   race, watch zones). Built on the plan card (styles.css, coach.css); only the
+   change list, notes and status are new. */
+
+:root .app .chat-view .chat-review-card {
+  max-width: min(100%, 560px);
+}
+
+:root .app .chat-view .chat-review-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 11px;
+  min-width: 0;
+}
+
+:root .app .chat-view .chat-review-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-top: 1px;
+  border: 1px solid var(--coach-ink-8);
+  border-radius: 9px;
+  background: var(--coach-ink-4);
+  color: var(--text-secondary);
+}
+
+:root .app .chat-view .chat-review-items {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--coach-ink-8);
+  border-radius: 11px;
+  background: var(--coach-ink-2);
+  overflow: hidden;
+}
+
+:root .app .chat-view .chat-review-item {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  align-items: center;
+  gap: 4px 14px;
+  min-height: 40px;
+  padding: 8px 12px;
+}
+
+:root .app .chat-view .chat-review-item + .chat-review-item {
+  border-top: 1px solid var(--coach-ink-8);
+}
+
+:root .app .chat-view .chat-review-item-label {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+:root .app .chat-view .chat-review-item-change {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 7px;
+  min-width: 0;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+:root .app .chat-view .chat-review-item-change svg {
+  flex: none;
+  color: var(--text-muted);
+}
+
+:root .app .chat-view .chat-review-item-before {
+  color: var(--text-muted);
+}
+
+:root .app .chat-view .chat-review-item-after {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+:root .app .chat-view .chat-review-item-result {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+:root .app .chat-view .chat-review-item.is-ok .chat-review-item-result svg {
+  color: var(--success-text, #7fd3a0);
+}
+
+:root .app .chat-view .chat-review-item.is-failed .chat-review-item-result {
+  color: var(--danger, #ef8a8a);
+}
+
+:root .app .chat-view .chat-review-notes {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:root .app .chat-view .chat-review-notes li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+:root .app .chat-view .chat-review-notes svg {
+  margin-top: 2px;
+  color: var(--text-muted);
+}
+
+:root .app .chat-view .chat-review-status,
+:root .app .chat-view .chat-review-error {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+:root .app .chat-view .chat-review-status.is-failed,
+:root .app .chat-view .chat-review-error {
+  color: var(--danger, #ef8a8a);
+}
+
+:root .app .chat-view .chat-review-card .chat-plan-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+:root .app .chat-view .chat-review-card .chat-plan-actions svg {
+  color: currentColor;
+}
+
+:root[data-theme="paper"] .app .chat-view .chat-review-card {
+  --danger: #b4232f;
+  --success-text: #1f7a45;
+}
+
+@media (max-width: 520px) {
+  :root .app .chat-view .chat-review-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  :root .app .chat-view .chat-review-item-change {
+    justify-content: flex-start;
+    text-align: left;
+  }
+}
+
+/* A dismissed card is history: its changes read as quiet as their "before". */
+:root .app .chat-view .chat-review-card.is-dismissed .chat-review-item-after {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+:root .app .chat-view .chat-review-card.is-dismissed .chat-review-icon {
+  color: var(--text-muted);
+}

@@ -41,6 +41,7 @@ export const REMOTE_FEATURE_RULES: Readonly<Record<string, PrefixRule>> = {
   chatMcp: LOCAL("COROS MCP"),
   // The handler refuses only the approvals that would write to COROS (COROS actions, strength edits).
   coach: { feature: "Saving Coach changes to COROS", default: "local", channels: { confirm: "routed" } },
+  coachMemory: LOCAL("Coach memory"),
   coachCharts: LOCAL("Coach charts"),
   coros: { feature: "Adding activities to COROS", default: "upload" },
   corosBle: LOCAL("Watch over Bluetooth"),

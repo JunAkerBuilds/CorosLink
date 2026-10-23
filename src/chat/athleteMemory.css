@@ -1,0 +1,368 @@
+/* Coach memory: the editor in Coach settings and the "Coach remembered" row in
+   the transcript. Settings selectors sit under the dialog's own glass tokens
+   (chatSettings.css); the transcript row uses the Coach palette (coach.css).
+   Prefixed with `:root .app` like the sheets they extend. */
+
+/* ---------- Settings: the fact list ---------- */
+
+:root .app .chat-settings-backdrop .chat-memory-groups {
+  display: grid;
+  gap: 14px;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-group h4 {
+  margin: 0 0 7px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--settings-card-border);
+  border-radius: 12px;
+  background: var(--settings-well);
+  overflow: hidden;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-fact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 9px 8px 9px 14px;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-fact + .chat-memory-fact {
+  border-top: 1px solid var(--settings-hairline);
+}
+
+:root .app .chat-settings-backdrop .chat-memory-fact-text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-fact-text p {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-fact-text span {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-actions {
+  display: flex;
+  gap: 2px;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-icon svg {
+  color: currentColor;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-icon:hover:not(:disabled) {
+  border-color: var(--glass-border);
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+:root .app .chat-settings-backdrop .chat-memory-icon.is-danger:hover:not(:disabled) {
+  color: var(--danger, #ef8a8a);
+}
+
+:root .app .chat-settings-backdrop .chat-memory-icon.is-confirm {
+  border-color: transparent;
+  background: var(--settings-primary-bg);
+  color: var(--settings-primary-text);
+}
+
+:root .app .chat-settings-backdrop .chat-memory-icon.is-confirm:hover:not(:disabled) {
+  background: var(--settings-primary-bg);
+  color: var(--settings-primary-text);
+  filter: brightness(1.05);
+}
+
+:root .app .chat-settings-backdrop .chat-memory-icon:disabled {
+  opacity: 0.42;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-icon:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---------- Settings: editing and adding ---------- */
+
+:root .app .chat-settings-backdrop .chat-memory-edit,
+:root .app .chat-settings-backdrop .chat-memory-add {
+  display: grid;
+  grid-template-columns: minmax(124px, 0.32fr) minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-add {
+  grid-template-columns: minmax(124px, 0.3fr) minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-edit select,
+:root .app .chat-settings-backdrop .chat-memory-edit input,
+:root .app .chat-settings-backdrop .chat-memory-add select,
+:root .app .chat-settings-backdrop .chat-memory-add input {
+  min-width: 0;
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-edit select,
+:root .app .chat-settings-backdrop .chat-memory-add select {
+  padding-right: 6px;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-add input::placeholder {
+  color: var(--text-muted);
+}
+
+:root .app .chat-settings-backdrop .chat-memory-edit :is(select, input):focus-visible,
+:root .app .chat-settings-backdrop .chat-memory-add :is(select, input):focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+:root .app .chat-settings-backdrop .chat-memory-add .chat-local-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  min-height: 36px;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-empty {
+  display: grid;
+  gap: 4px;
+  padding: 18px 16px;
+  border: 1px dashed var(--settings-card-border);
+  border-radius: 12px;
+  background: var(--settings-well);
+  text-align: center;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-empty p {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-empty span {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  padding-top: 12px;
+  border-top: 1px solid var(--settings-hairline);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-footer .chat-local-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-footer .chat-memory-clear {
+  border-color: color-mix(in srgb, var(--danger, #ef8a8a) 45%, transparent);
+  color: var(--danger, #ef8a8a);
+}
+
+:root .app .chat-settings-backdrop .chat-memory-footer .chat-memory-clear svg {
+  color: currentColor;
+}
+
+:root .app .chat-settings-backdrop .chat-memory-error {
+  margin: 0;
+  color: var(--danger, #ef8a8a);
+  font-size: 12.5px;
+}
+
+:root[data-theme="paper"] .app .chat-settings-backdrop .chat-memory-section {
+  --danger: #b4232f;
+}
+
+/* ---------- Transcript: "Coach remembered" ---------- */
+
+:root .app .chat-view .chat-memory-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  max-width: min(100%, 620px);
+  padding: 8px 8px 8px 10px;
+  border: 1px solid var(--coach-ink-8);
+  border-radius: 12px;
+  background: var(--coach-ink-2);
+}
+
+:root .app .chat-view .chat-memory-notice-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--coach-ink-4);
+  color: var(--text-secondary);
+}
+
+:root .app .chat-view .chat-memory-notice-body {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+:root .app .chat-view .chat-memory-notice-kicker {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+:root .app .chat-view .chat-memory-notice-text {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+:root .app .chat-view .chat-memory-notice-text .chat-memory-notice-category {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+:root .app .chat-view .chat-memory-notice-previous {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--text-muted) 60%, transparent);
+}
+
+:root .app .chat-view .chat-memory-notice.is-forgot .chat-memory-notice-text,
+:root .app .chat-view .chat-memory-notice.is-undone .chat-memory-notice-text {
+  color: var(--text-secondary);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--text-muted) 70%, transparent);
+}
+
+:root .app .chat-view .chat-memory-notice-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+:root .app .chat-view .chat-memory-notice-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+:root .app .chat-view .chat-memory-notice-actions button svg {
+  color: currentColor;
+}
+
+:root .app .chat-view .chat-memory-notice-actions button:hover:not(:disabled) {
+  border-color: var(--coach-ink-8);
+  background: var(--coach-ink-4);
+  color: var(--text-primary);
+}
+
+:root .app .chat-view .chat-memory-notice-actions button:disabled {
+  opacity: 0.5;
+}
+
+:root .app .chat-view .chat-memory-notice-actions button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+:root .app .chat-view .chat-memory-notice-status {
+  padding: 0 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+:root .app .chat-view .chat-memory-notice-error {
+  grid-column: 2 / -1;
+  margin: 0;
+  color: var(--danger, #ef8a8a);
+  font-size: 12px;
+}
+
+:root[data-theme="paper"] .app .chat-view .chat-memory-notice {
+  --danger: #b4232f;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+@media (max-width: 640px) {
+  :root .app .chat-settings-backdrop .chat-memory-add {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  :root .app .chat-settings-backdrop .chat-memory-add select {
+    grid-column: 1 / -1;
+  }
+}

@@ -33,3 +33,10 @@ export function syncEditedCalendarWorkout(ref: CalendarWorkoutEventRef) {
   validateCalendarWorkoutRef(ref, calendarSourceUserId());
   return syncCalendarEventProviders(providers, ref.userId, ref.happenDay);
 }
+
+/** Bring Google and Apple Calendar up to date for one day, after a change made outside the calendar view. */
+export function syncCalendarDay(happenDay: string) {
+  const userId = calendarSourceUserId();
+  if (!userId) return Promise.resolve({ synced: [] as string[], errors: [] as string[] });
+  return syncCalendarEventProviders(providers, userId, happenDay);
+}

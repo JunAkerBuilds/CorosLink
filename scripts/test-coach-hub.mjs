@@ -105,9 +105,33 @@ function createActions() {
       calls.push(["strengthEdit", proposalId, reviewHash, selectedIds]);
       return { ...structuredClone(strength), state: "finished", items: strength.items.map((item) => ({ ...item, state: selectedIds.includes(item.id) ? "verified" : "cancelled" })) };
     },
-    async cancelStrengthEdit() { return { ...structuredClone(strength), state: "cancelled" }; }
+    async cancelStrengthEdit() { return { ...structuredClone(strength), state: "cancelled" }; },
+    reviewNotSent: false,
+    async confirmCoachReview(requestId) {
+      calls.push(["coachReview", requestId]);
+      if (this.reviewNotSent) throw Object.assign(new Error("Connect your watch over Bluetooth, then click Update watch again."), { notSent: true });
+      return { ...reviewPreview, requestId, state: "saved", message: "Moved.", items: reviewPreview.items.map((item) => ({ ...item, result: { ok: true } })) };
+    },
+    dismissCoachReview(requestId) {
+      calls.push(["dismissReview", requestId]);
+      return { ...reviewPreview, requestId, state: "dismissed" };
+    },
+    undoFails: false,
+    undoAthleteMemory(notice) {
+      calls.push(["undoMemory", notice.noticeId]);
+      if (this.undoFails) throw new Error("This fact changed since. Edit it in Coach settings → Memory.");
+    }
   };
 }
+
+const reviewPreview = {
+  requestId: "rv1", action: "updateZones", title: "Update watch zones", summary: "Your last two threshold runs held 175 bpm.",
+  items: [{ label: "Threshold heart rate", before: "172 bpm", after: "175 bpm" }], createdAt: 1_792_140_000_000, state: "pending"
+};
+const memoryNotice = {
+  noticeId: "mn1", action: "remembered", at: "2026-10-22T08:00:00.000Z",
+  fact: { id: "fabc123", category: "injury", text: "Left calf strain since 2026-10-18.", author: "coach", createdAt: "2026-10-22T08:00:00.000Z", updatedAt: "2026-10-22T08:00:00.000Z" }
+};
 
 const corosPreview = {
   requestId: "r1", title: "Review workout", summary: "45 min easy run", destination: "Calendar",
@@ -598,4 +622,73 @@ filed.hub.deleteSession(filedSession.id);
 await tick();
 assert.deepEqual(removedAttachments, [filedSession.id]);
 
-console.log("coach hub tests passed (shared stream, replay/snapshot, idempotent sends, approvals, restarts, contract shapes, AI titles, files)");
+// ----- Athlete tools: review cards and memory notices -----
+const athlete = createHarness();
+const athleteSession = athlete.hub.createSession("chatgpt");
+athlete.hub.send({ sessionId: athleteSession.id, clientMessageId: "at-1", text: "I tweaked my calf, push tempo back a day" });
+const athleteTurn = athlete.stream.turns[0];
+athleteTurn.send("chat:streamStart");
+athleteTurn.info({ kind: "athleteMemory", notice: memoryNotice });
+athleteTurn.info({ kind: "coachReview", preview: reviewPreview });
+athleteTurn.send("chat:streamDone", { fullText: "Saved the strain and prepared the move." });
+athleteTurn.resolve();
+await tick();
+let athleteEntries = athlete.hub.getSession(athleteSession.id).entries;
+assert.deepEqual(athleteEntries.map((entry) => entry.kind), ["message", "athleteMemory", "coachReview", "message"]);
+const wire = toWireMessages(athleteEntries);
+assert.match(wire[1].content, /Memory remembered \[fabc123\] injury: Left calf strain/);
+assert.match(wire[2].content, /Review card "Update watch zones" \(pending\)/);
+
+// Nothing sent: the card goes back to pending and the error reaches the window.
+athlete.actions.reviewNotSent = true;
+await assert.rejects(
+  athlete.hub.confirm({ sessionId: athleteSession.id, kind: "coachReview", id: "rv1", decision: "confirm" }),
+  /Connect your watch/
+);
+assert.equal(athlete.hub.getSession(athleteSession.id).entries[2].preview.state, "pending");
+athlete.actions.reviewNotSent = false;
+const approved = await athlete.hub.confirm({ sessionId: athleteSession.id, kind: "coachReview", id: "rv1", decision: "confirm" });
+assert.equal(approved.entry.preview.state, "saved");
+assert.equal(approved.entry.preview.items[0].result.ok, true);
+// A settled card answers with itself; nothing runs twice.
+await athlete.hub.confirm({ sessionId: athleteSession.id, kind: "coachReview", id: "rv1", decision: "confirm" });
+assert.equal(athlete.actions.calls.filter((call) => call[0] === "coachReview").length, 2);
+// Remote viewers can't approve.
+await assert.rejects(
+  athlete.hub.confirm({ sessionId: athleteSession.id, kind: "coachReview", id: "rv1", decision: "confirm" }, { kind: "remote", permissions: ["coach:read"] }),
+  (error) => error.code === "forbidden"
+);
+
+// Undo a memory write; a failed undo is a conflict and leaves the row as it was.
+athlete.actions.undoFails = true;
+await assert.rejects(
+  athlete.hub.confirm({ sessionId: athleteSession.id, kind: "athleteMemory", id: "mn1", decision: "cancel" }),
+  (error) => error.code === "conflict"
+);
+assert.equal(athlete.hub.getSession(athleteSession.id).entries[1].notice.undone, undefined);
+athlete.actions.undoFails = false;
+const undone = await athlete.hub.confirm({ sessionId: athleteSession.id, kind: "athleteMemory", id: "mn1", decision: "cancel" });
+assert.equal(undone.entry.notice.undone, true);
+await assert.rejects(
+  athlete.hub.confirm({ sessionId: athleteSession.id, kind: "athleteMemory", id: "mn1", decision: "confirm" }),
+  (error) => error.code === "unsupported"
+);
+
+// A second card can be dismissed instead.
+athlete.hub.send({ sessionId: athleteSession.id, clientMessageId: "at-2", text: "Actually also move Friday" });
+const second = athlete.stream.turns[1];
+second.send("chat:streamStart");
+second.info({ kind: "coachReview", preview: { ...reviewPreview, requestId: "rv2" } });
+second.send("chat:streamDone", { fullText: "Prepared." });
+second.resolve();
+await tick();
+const dismissed = await athlete.hub.confirm({ sessionId: athleteSession.id, kind: "coachReview", id: "rv2", decision: "cancel" });
+assert.equal(dismissed.entry.preview.state, "dismissed");
+
+// Both kinds survive a restart.
+const athleteReloaded = createHarness({ database: athlete.database });
+athleteEntries = athleteReloaded.hub.getSession(athleteSession.id).entries;
+assert.deepEqual(athleteEntries.filter((entry) => entry.kind === "coachReview").map((entry) => entry.preview.state), ["saved", "dismissed"]);
+assert.equal(athleteEntries.find((entry) => entry.kind === "athleteMemory").notice.undone, true);
+
+console.log("coach hub tests passed (shared stream, replay/snapshot, idempotent sends, approvals, restarts, contract shapes, AI titles, files, athlete reviews and memory)");

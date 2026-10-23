@@ -10,6 +10,7 @@ import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus
 import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "../electron/watchfaceAutomationTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "../electron/googleCalendarTypes";
 import type { ManualRaceInput, RaceEditInput, RaceOverview, StravaRaceImportResult } from "../electron/raceTypes";
+import type { AthleteFact, AthleteFactCategory, AthleteMemoryChange } from "../electron/athleteMemoryModel";
 import type { WorkoutJournalEntry, WorkoutJournalSaveInput } from "../electron/workoutJournalTypes";
 import type { CoachConfirmInput, CoachConfirmResult, CoachEventFrame, CoachSendInput, CoachSessionsChange, CoachSnapshot, CoachSubscribeResult } from "../electron/coachHub/coachContract";
 import type { RemoteAccessStatus, RemotePairingCode } from "../electron/remote/contract";
@@ -730,6 +731,14 @@ export interface CorosLinkApi {
   onWorkoutJournalChanged: (callback: () => void) => () => void;
   /** Any schedule write (calendar, Training Library, Coach, automation) landed on COROS. */
   onScheduledWorkoutsChanged?: (callback: () => void) => () => void;
+  /** The Coach's athlete memory, oldest first within each category. */
+  listAthleteFacts: () => Promise<AthleteFact[]>;
+  /** Adds a fact, or edits one by id, as the athlete. */
+  saveAthleteFact: (input: { id?: string; category: AthleteFactCategory; text: string }) => Promise<AthleteMemoryChange>;
+  deleteAthleteFact: (factId: string) => Promise<AthleteFact[]>;
+  clearAthleteMemory: () => Promise<AthleteFact[]>;
+  /** Every memory change, from the Coach or from settings. */
+  onAthleteMemoryChanged?: (callback: (facts: AthleteFact[]) => void) => () => void;
   getRaceOverview: () => Promise<RaceOverview>;
   listRaceActivityIds: () => Promise<string[]>;
   markActivityAsRace: (activity: TrainingHubActivity) => Promise<RaceOverview>;
@@ -738,6 +747,9 @@ export interface CorosLinkApi {
   updateRace: (input: RaceEditInput) => Promise<RaceOverview>;
   removeRace: (raceId: string) => Promise<RaceOverview>;
   addManualRace: (input: ManualRaceInput) => Promise<RaceOverview>;
+  removeRaceTarget: (targetId: string) => Promise<RaceOverview>;
+  /** Target races changed outside the Races tab (the Coach added one). */
+  onRacesChanged?: (callback: () => void) => () => void;
   importStravaRaces: (full?: boolean) => Promise<StravaRaceImportResult>;
   startRpeBackfill: () => Promise<void>;
   getRpeBackfillStatus: () => Promise<{ pending: number; running: boolean }>;

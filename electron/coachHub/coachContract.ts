@@ -108,12 +108,19 @@ export interface CoachSendInput {
   unitSystem?: UnitSystem;
 }
 
-export type CoachConfirmKind = "corosAction" | "workoutDelete" | "planUpload" | "strengthEdit";
+/**
+ * "coachReview" confirms or dismisses a staged Coach write (moves, a target race, zones);
+ * "athleteMemory" with decision "cancel" undoes a memory write.
+ */
+export type CoachConfirmKind = "corosAction" | "workoutDelete" | "planUpload" | "strengthEdit" | "coachReview" | "athleteMemory";
 
 export interface CoachConfirmInput {
   sessionId: string;
   kind: CoachConfirmKind;
-  /** A COROS action's or delete's requestId, a draft's draftId, or a strength edit's proposalId. */
+  /**
+   * A COROS action's, delete's or review's requestId, a draft's draftId, a strength
+   * edit's proposalId, or a memory notice's noticeId.
+   */
   id: string;
   decision: "confirm" | "cancel";
   /** Strength edits only: refused unless it matches the proposal's current hash. */

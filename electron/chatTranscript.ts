@@ -2,6 +2,8 @@
 // builds and saves it; the renderer only renders it, through src/chat/chatTypes.ts.
 // Type-only imports keep this file loadable by Node's strip-types tests.
 import type { StrengthEditPreview } from "./workoutEditTypes";
+import type { AthleteMemoryNotice } from "./athleteMemoryModel";
+import type { CoachReviewPreview } from "./coachReviewTypes";
 import type {
   ActivityVisualPreview,
   ChatFileAttachment,
@@ -81,9 +83,23 @@ export interface ChatCorosActionEntry {
   preview: CoachCorosActionPreview;
 }
 
+/** A staged Coach write: moving workouts, a target race, watch zones. */
+export interface ChatCoachReviewEntry {
+  kind: "coachReview";
+  preview: CoachReviewPreview;
+}
+
+/** "Coach remembered: …", with Undo. */
+export interface ChatAthleteMemoryEntry {
+  kind: "athleteMemory";
+  notice: AthleteMemoryNotice;
+}
+
 export type ChatEntry =
   | ChatWorkoutEditEntry
   | ChatCorosActionEntry
+  | ChatCoachReviewEntry
+  | ChatAthleteMemoryEntry
   | ChatMessageEntry
   | ChatCoachPromptEntry
   | ChatPlanDraftEntry
@@ -124,6 +140,10 @@ export function chatEntryKey(entry: ChatEntry): string | undefined {
       return `workoutDelete:${entry.preview.requestId}`;
     case "workoutEdit":
       return `workoutEdit:${entry.preview.proposalId}`;
+    case "coachReview":
+      return `coachReview:${entry.preview.requestId}`;
+    case "athleteMemory":
+      return `athleteMemory:${entry.notice.noticeId}`;
     case "activityVisual":
     case "fitnessTrend":
     case "hrZoneSummary":
@@ -169,6 +189,14 @@ export function upsertWorkoutEditEntry(entries: ChatEntry[], preview: StrengthEd
   return upsertChatEntry(entries, { kind: "workoutEdit", preview });
 }
 
+export function upsertCoachReviewEntry(entries: ChatEntry[], preview: CoachReviewPreview): ChatEntry[] {
+  return upsertChatEntry(entries, { kind: "coachReview", preview });
+}
+
+export function upsertAthleteMemoryEntry(entries: ChatEntry[], notice: AthleteMemoryNotice): ChatEntry[] {
+  return upsertChatEntry(entries, { kind: "athleteMemory", notice });
+}
+
 export function upsertActivityVisualEntry(entries: ChatEntry[], preview: ActivityVisualPreview): ChatEntry[] {
   return upsertChatEntry(entries, { kind: "activityVisual", preview });
 }
@@ -207,6 +235,27 @@ export function toWireMessages(entries: ChatEntry[]): ChatMessage[] {
       }[state];
       return [{ role: "assistant", content: `COROS action ${state}: ${summary}. Destination: ${destination}${date ? ` on ${date}` : ""}. ${message ?? fallback}` }];
     }
+    if (entry.kind === "coachReview") {
+      const { state, title, summary, message } = entry.preview;
+      const fallback = {
+        pending: "Awaiting the athlete's approval on the review card.",
+        saving: "Being saved now. Do not prepare another copy.",
+        saved: "The athlete approved it and it was saved.",
+        partial: "Only part of it was saved.",
+        failed: "It was not saved.",
+        dismissed: "The athlete dismissed it; nothing changed."
+      }[state];
+      return [{ role: "assistant", content: `Review card "${title}" (${state}): ${summary.replace(/[.!?]+$/, "")}. ${message ?? fallback}` }];
+    }
+    if (entry.kind === "athleteMemory") {
+      const { action, fact, undone } = entry.notice;
+      return [{
+        role: "assistant",
+        content: undone
+          ? `The athlete undid this memory change (${action} ${fact.id}: ${fact.text}).`
+          : `Memory ${action} [${fact.id}] ${fact.category}: ${fact.text}`
+      }];
+    }
     if (entry.kind === "coachPrompt") {
       const choices = entry.prompt.choices
         .map((choice) => `- ${choice.label}`)
@@ -228,7 +277,7 @@ export function toWireMessages(entries: ChatEntry[]): ChatMessage[] {
 }
 
 function persistVisualEntry(entry: ChatEntry): PersistedChatEntry | null {
-  if (entry.kind === "workoutEdit" || entry.kind === "corosAction") return entry;
+  if (entry.kind === "workoutEdit" || entry.kind === "corosAction" || entry.kind === "coachReview" || entry.kind === "athleteMemory") return entry;
   if (entry.kind === "coachPrompt") {
     return { kind: "coachPrompt", prompt: entry.prompt };
   }
@@ -283,7 +332,7 @@ export function fromPersistedEntries(entries: PersistedChatEntry[]): ChatEntry[]
   const result: ChatEntry[] = [];
 
   for (const entry of entries) {
-    if (entry.kind === "workoutEdit" || entry.kind === "corosAction") { result.push(entry); continue; }
+    if (entry.kind === "workoutEdit" || entry.kind === "corosAction" || entry.kind === "coachReview" || entry.kind === "athleteMemory") { result.push(entry); continue; }
     if (entry.kind === "coachPrompt") {
       result.push({ kind: "coachPrompt", prompt: entry.prompt });
       continue;

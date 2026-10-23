@@ -115,6 +115,8 @@ export interface WatchForecast {
   daily: WatchForecastDay[];
   /** Whether air quality came with the forecast (the watch then shows its AQI). */
   airQuality: boolean;
+  /** The place's offset from UTC now, when Open-Meteo reported it (for the Coach's local hours). */
+  utcOffsetSeconds?: number;
 }
 
 type Series = Record<string, Array<number | null> | undefined> & { time?: number[] };
@@ -216,7 +218,8 @@ export async function fetchWatchForecast(latitude: number, longitude: number, fe
     time, date: placeDate(time, placeOffset(time)), weatherCode: finite(days.weather_code?.[index]) ?? -1, min: finite(days.temperature_2m_min?.[index]) ?? NaN,
     max: finite(days.temperature_2m_max?.[index]) ?? NaN, precipitationProbability: finite(days.precipitation_probability_max?.[index])
   })).filter(day => Number.isFinite(day.min) && Number.isFinite(day.max)).slice(0, DAYS);
-  return { latitude, longitude, current, hourly, daily, airQuality: Boolean(air) };
+  const utcOffsetSeconds = finite(data.utc_offset_seconds);
+  return { latitude, longitude, current, hourly, daily, airQuality: Boolean(air), ...(utcOffsetSeconds !== undefined ? { utcOffsetSeconds } : {}) };
 }
 
 /**

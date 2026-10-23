@@ -77,10 +77,46 @@ export interface RaceStravaState {
   hiddenRaces: number;
 }
 
+/** How much a target race matters: A is the season's goal, C a tune-up. */
+export type RacePriority = "A" | "B" | "C";
+
+/** A race the athlete is training for, kept until they remove it. */
+export interface RaceTarget {
+  targetId: string;
+  name: string;
+  /** YYYYMMDD, the athlete's local race day. */
+  raceDay: string;
+  distanceKey: RaceDistanceKey;
+  /** Meters: the standard distance, or the course length for "other". */
+  distance: number;
+  /** Seconds, the finish time the athlete is aiming for. */
+  goalTime?: number;
+  priority?: RacePriority;
+  location?: string;
+  notes?: string;
+  /** ISO 8601. */
+  createdAt: string;
+}
+
+export interface RaceTargetInput {
+  name: string;
+  /** YYYYMMDD or YYYY-MM-DD. */
+  raceDay: string;
+  distanceKey: RaceDistanceKey;
+  /** Meters; required when `distanceKey` is "other". */
+  distance?: number;
+  goalTime?: number;
+  priority?: RacePriority;
+  location?: string;
+  notes?: string;
+}
+
 export interface RaceOverview {
   races: RaceEntry[];
   suggestions: RaceSuggestion[];
   strava: RaceStravaState;
+  /** Races the athlete is training for, soonest first; absent before target races existed. */
+  targets?: RaceTarget[];
 }
 
 /** A field set to `null` clears the athlete's value and falls back to the recording. */

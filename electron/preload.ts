@@ -10,6 +10,7 @@ import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, Watc
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "./calendarSyncTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "./googleCalendarTypes";
 import type { ManualRaceInput, RaceEditInput, RaceOverview, StravaRaceImportResult } from "./raceTypes";
+import type { AthleteFact, AthleteFactCategory, AthleteMemoryChange } from "./athleteMemoryModel";
 import type { WorkoutJournalEntry, WorkoutJournalSaveInput } from "./workoutJournalTypes";
 import type { CoachConfirmInput, CoachConfirmResult, CoachEventFrame, CoachSendInput, CoachSessionsChange, CoachSnapshot, CoachSubscribeResult } from "./coachHub/coachContract";
 import type { RemoteAccessStatus, RemotePairingCode } from "./remote/contract";
@@ -1062,6 +1063,16 @@ const api = {
     ipcRenderer.on("workoutJournal:changed", listener);
     return () => ipcRenderer.removeListener("workoutJournal:changed", listener);
   },
+  listAthleteFacts: (): Promise<AthleteFact[]> => ipcRenderer.invoke("coachMemory:list"),
+  saveAthleteFact: (input: { id?: string; category: AthleteFactCategory; text: string }): Promise<AthleteMemoryChange> =>
+    ipcRenderer.invoke("coachMemory:save", input),
+  deleteAthleteFact: (factId: string): Promise<AthleteFact[]> => ipcRenderer.invoke("coachMemory:delete", factId),
+  clearAthleteMemory: (): Promise<AthleteFact[]> => ipcRenderer.invoke("coachMemory:clear"),
+  onAthleteMemoryChanged: (callback: (facts: AthleteFact[]) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, facts: AthleteFact[]) => callback(facts);
+    ipcRenderer.on("coachMemory:changed", listener);
+    return () => ipcRenderer.removeListener("coachMemory:changed", listener);
+  },
   getRaceOverview: (): Promise<RaceOverview> => ipcRenderer.invoke("races:getOverview"),
   listRaceActivityIds: (): Promise<string[]> => ipcRenderer.invoke("races:listActivityIds"),
   markActivityAsRace: (activity: TrainingHubActivity): Promise<RaceOverview> =>
@@ -1076,6 +1087,13 @@ const api = {
     ipcRenderer.invoke("races:remove", raceId),
   addManualRace: (input: ManualRaceInput): Promise<RaceOverview> =>
     ipcRenderer.invoke("races:addManual", input),
+  removeRaceTarget: (targetId: string): Promise<RaceOverview> =>
+    ipcRenderer.invoke("races:removeTarget", targetId),
+  onRacesChanged: (callback: () => void): (() => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("races:changed", listener);
+    return () => ipcRenderer.removeListener("races:changed", listener);
+  },
   importStravaRaces: (full?: boolean): Promise<StravaRaceImportResult> =>
     ipcRenderer.invoke("races:importStrava", full),
   startRpeBackfill: (): Promise<void> =>

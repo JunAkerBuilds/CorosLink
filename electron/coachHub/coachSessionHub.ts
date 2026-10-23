@@ -25,6 +25,8 @@ import type {
   WorkoutDeletePreview
 } from "../types";
 import type { StrengthEditPreview } from "../workoutEditTypes";
+import type { AthleteMemoryNotice } from "../athleteMemoryModel";
+import type { CoachReviewPreview } from "../coachReviewTypes";
 import {
   SAVED_COACH_EVENTS,
   coachSessionInfo,
@@ -100,6 +102,11 @@ export interface CoachActionDriver {
   strengthEditStatus(proposalId: string): Promise<StrengthEditPreview>;
   confirmStrengthEdit(proposalId: string, reviewHash: string, selectedIds: string[]): Promise<StrengthEditPreview>;
   cancelStrengthEdit(proposalId: string): Promise<StrengthEditPreview>;
+  /** Runs a staged Coach write the athlete approved. */
+  confirmCoachReview(requestId: string): Promise<CoachReviewPreview>;
+  dismissCoachReview(requestId: string): Promise<CoachReviewPreview> | CoachReviewPreview;
+  /** Reverses a memory write from its transcript row. */
+  undoAthleteMemory(notice: AthleteMemoryNotice): Promise<void> | void;
 }
 
 export interface CoachSessionHubOptions {
@@ -501,6 +508,10 @@ export class CoachSessionHub {
           return await this.confirmPlanUpload(state, input);
         case "strengthEdit":
           return await this.confirmStrengthEdit(state, input);
+        case "coachReview":
+          return await this.confirmCoachReview(state, input);
+        case "athleteMemory":
+          return await this.undoAthleteMemory(state, input);
         default:
           throw new CoachHubError("invalid", "Unknown confirmation kind.");
       }
@@ -613,10 +624,47 @@ export class CoachSessionHub {
     return this.update(state, index, { kind: "workoutEdit", preview });
   }
 
+  private async confirmCoachReview(state: SessionState, input: CoachConfirmInput): Promise<CoachConfirmResult> {
+    const index = this.requireEntry(state, "coachReview", input.id);
+    const entry = state.entries[index] as Extract<ChatEntry, { kind: "coachReview" }>;
+    if (entry.preview.state !== "pending") return { index, entry };
+    if (input.decision === "cancel") {
+      const preview = await this.options.actions.dismissCoachReview(input.id);
+      return this.update(state, index, { kind: "coachReview", preview });
+    }
+    const original = entry.preview;
+    this.update(state, index, { kind: "coachReview", preview: { ...original, state: "saving" } });
+    let preview: CoachReviewPreview;
+    try {
+      preview = await this.options.actions.confirmCoachReview(input.id);
+    } catch (error) {
+      // Nothing changed (the watch isn't connected, say); every client offers the button again.
+      this.update(state, index, { kind: "coachReview", preview: original });
+      throw error;
+    }
+    return this.update(state, index, { kind: "coachReview", preview });
+  }
+
+  private async undoAthleteMemory(state: SessionState, input: CoachConfirmInput): Promise<CoachConfirmResult> {
+    const index = this.requireEntry(state, "athleteMemory", input.id);
+    const entry = state.entries[index] as Extract<ChatEntry, { kind: "athleteMemory" }>;
+    if (input.decision !== "cancel") {
+      throw new CoachHubError("unsupported", "A memory change is already saved. Undo it instead.");
+    }
+    if (entry.notice.undone) return { index, entry };
+    try {
+      await this.options.actions.undoAthleteMemory(entry.notice);
+    } catch (error) {
+      throw new CoachHubError("conflict", message(error, "This memory change can't be undone."));
+    }
+    return this.update(state, index, { kind: "athleteMemory", notice: { ...entry.notice, undone: true } });
+  }
+
   private requireEntry(state: SessionState, kind: ChatEntry["kind"], id: string): number {
     const index = state.entries.findIndex((entry) => {
       if (entry.kind !== kind) return false;
-      if (entry.kind === "corosAction" || entry.kind === "workoutDelete") return entry.preview.requestId === id;
+      if (entry.kind === "corosAction" || entry.kind === "workoutDelete" || entry.kind === "coachReview") return entry.preview.requestId === id;
+      if (entry.kind === "athleteMemory") return entry.notice.noticeId === id;
       if (entry.kind === "planDraft") return entry.draft.draftId === id;
       if (entry.kind === "workoutEdit") return entry.preview.proposalId === id;
       return false;
@@ -755,6 +803,12 @@ export class CoachSessionHub {
         break;
       case "workoutDelete":
         this.upsertEntry(state, { kind: "workoutDelete", preview: info.preview }, changes);
+        break;
+      case "coachReview":
+        this.upsertEntry(state, { kind: "coachReview", preview: info.preview }, changes);
+        break;
+      case "athleteMemory":
+        this.upsertEntry(state, { kind: "athleteMemory", notice: info.notice }, changes);
         break;
       case "activityVisual":
         if (this.options.settings().visualizationsEnabled) {

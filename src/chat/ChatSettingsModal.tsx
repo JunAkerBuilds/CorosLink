@@ -24,6 +24,7 @@ const SECTION_GROUPS = ["Coach", "Providers", "Tools"] as const;
 export function ChatSettingsModal({
   api,
   open,
+  initialSection,
   chatSettings,
   authStatus,
   claudeStatus,
@@ -70,6 +71,8 @@ export function ChatSettingsModal({
 }: {
   api: CorosLinkApi | undefined;
   open: boolean;
+  /** Scroll to this section when the dialog opens. */
+  initialSection?: ChatSettingsSectionId;
   chatSettings: ChatSettings;
   authStatus: ChatAuthStatus | null;
   claudeStatus: ClaudeCodeStatus | null;
@@ -168,6 +171,15 @@ export function ChatSettingsModal({
       }
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !initialSection) return;
+    const frame = requestAnimationFrame(() => {
+      setActiveSection(initialSection);
+      document.getElementById(chatSettingsSectionDomId(initialSection))?.scrollIntoView({ block: "start" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [open, initialSection]);
 
   // Highlight the rail entry for whichever section sits nearest the top of
   // the scroll area.

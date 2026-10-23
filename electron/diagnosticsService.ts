@@ -34,6 +34,16 @@ export function recordDiagnosticError(source: string, error: unknown): void {
   try { (recordForTests ?? getLog().record.bind(getLog()))(source, error); } catch { /* Diagnostics are best effort. */ }
 }
 
+/** Sync and connection failures from the last `hours`, for the Coach's data-freshness check. */
+export function recentSyncErrors(hours = 72, limit = 8): Array<{ at: string; source: string; message: string; code?: string; count?: number }> {
+  try {
+    const sync = /^(trainingHub|mcp|corosMcp|corosBle|corosAccount|calendar|calendarSync|googleCalendar|appleCalendar|watch|localData|activityBackup|fitIndex|strava|hevy|intervals)(?::|$)/i;
+    return getLog().recentErrors(Date.now() - hours * 3_600_000, (source) => sync.test(source)).slice(-limit);
+  } catch {
+    return [];
+  }
+}
+
 /** Adds current-state lines (such as account connections) to the top of every report. */
 export function registerDiagnosticStatus(provider: () => string[]): void {
   statusProviders = [...statusProviders, provider];

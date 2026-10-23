@@ -1,5 +1,6 @@
 import { t, useLanguage } from "../i18n/tools";
 import {
+  Brain,
   ChartSpline,
   Cpu,
   Gem,
@@ -16,6 +17,7 @@ import {
 export type ChatSettingsSectionId =
   | "display"
   | "coach"
+  | "memory"
   | "remote"
   | "chatgpt"
   | "openrouter"
@@ -44,6 +46,13 @@ export const CHAT_SETTINGS_SECTIONS: ReadonlyArray<{
     label: "Coach instructions",
     description: "Goals, schedule, and tone your coach should know",
     icon: MessageSquareText,
+    group: "Coach"
+  },
+  {
+    id: "memory",
+    label: "Coach memory",
+    description: "What your coach remembers between conversations",
+    icon: Brain,
     group: "Coach"
   },
   {

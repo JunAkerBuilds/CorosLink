@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Coach remembers what you tell it.** Goals, injuries and niggles, the days you can train, your equipment and preferences now carry over to your next conversation, with any provider. Each time the Coach saves, changes or forgets something, a line in the chat says so, with **Undo**. **Coach settings → Coach memory** lists everything it knows, and you can edit, add or delete facts there.
+- **Coach knows your races, zones and how fresh your data is.** It reads your target races and race results, your watch's heart-rate, pace and power zones, and when your watch and COROS last synced. If you mention a run it can't see yet, it tells you to sync instead of assuming you skipped it.
+- **Target races.** Tell the Coach about a race you're training for and it prepares a card to add it, with a goal time and an A, B or C priority. Target races appear under **Up next** in **Training Hub → Races**, with a countdown and goal pace, and you can remove them there.
+- **Coach checks your plan, the weather and your lifting.** It compares planned and completed workouts day by day (done, partial, missed, over), counting only workouts COROS or you linked to an activity. Before a hard outdoor session it checks the forecast for heat, humidity and air quality, and it reads your actual sets, loads and estimated one-rep max per exercise from COROS, Hevy and Strava before suggesting heavier weights.
+- **Coach can update your zones, after you approve.** It can propose new threshold heart rate, max or resting heart rate and threshold pace for your watch, which apply when you click **Update watch** with the watch connected over Bluetooth.
+
 ### Fixed
 
 - **Saving a strength workout made in the COROS app keeps its exercises' names.** The workout editor saved every exercise you hadn't swapped as "Training" with a generic description, replacing the name and description COROS had stored, so CorosLink showed "Training" when you opened the workout again. HYROX stations had the same problem.

@@ -167,6 +167,73 @@ export function buildAthleteQuestionGuide(): string {
   );
 }
 
+/**
+ * When to use the athlete tools (memory, context, races, compliance, moves,
+ * weather, strength history, zones), each rule only for a tool on offer.
+ */
+export function buildAthleteToolGuide(toolNames: Iterable<string>): string {
+  const names = new Set(toolNames);
+  if (names.size === 0) return "";
+  const lines = ["## Athlete context, memory and planning", `Athlete tools: ${[...names].join(", ")}.`];
+  if (names.has("get_athlete_context")) {
+    lines.push(
+      "At the start of a conversation about training, a plan, a race or recovery, call get_athlete_context once (zones, races, " +
+        "freshness and memory together) before advising; call it again with sections when zones or data freshness matter later."
+    );
+  }
+  if (names.has("remember_athlete_fact")) {
+    lines.push(
+      "When the athlete shares something that will still matter in later conversations (a goal or race, an injury or niggle, " +
+        "the days or hours they can train, equipment or facilities, a coaching preference, a relevant health note), save it with " +
+        "remember_athlete_fact in the same turn, one fact per call. Update a changed fact with replaces_fact_id and remove one that is " +
+        "no longer true with forget_athlete_fact. Never save guesses, one-off session details, or sensitive details the athlete didn't offer."
+    );
+  }
+  if (names.has("get_plan_compliance")) {
+    lines.push(
+      "Before adapting a plan or judging consistency, call get_plan_compliance for the relevant weeks. Count a workout as done only " +
+        "when the tool links an activity; ask about unlinked_activities instead of assuming they were the planned session."
+    );
+  }
+  if (names.has("get_weather_forecast")) {
+    lines.push(
+      "Before prescribing a hard, long or race-pace outdoor session within the next two weeks, check get_weather_forecast for that day. " +
+        "In heat and humidity slow the paces by its pace_adjustment (or prescribe by heart rate or effort), suggest its coolest_window, " +
+        "or move the session to a cooler day; when air quality is unhealthy for sensitive groups or worse, suggest indoor or easy work."
+    );
+  }
+  if (names.has("list_races") || names.has("add_target_race")) {
+    lines.push(
+      "Plan around the athlete's target races (date, priority, goal time) from get_athlete_context or list_races. When the athlete names an " +
+        "upcoming race that isn't saved, offer add_target_race. Base goal paces on recent race results and training, not on hope."
+    );
+  }
+  if (names.has("get_strength_history")) {
+    lines.push(
+      "For strength progression, read get_strength_history first and progress from the loads actually lifted (e1RM trend, top sets, RPE): " +
+        "small load or rep increases when sessions are trending up, holding or backing off when they stall or the athlete reports fatigue."
+    );
+  }
+  if (names.has("propose_zone_update")) {
+    lines.push(
+      "Suggest new thresholds with propose_zone_update only from clear evidence (a recent test, a race, repeated efforts above the old threshold) " +
+        "and after the athlete agrees; explain the evidence in review_summary."
+    );
+  }
+  lines.push(
+    "If an activity the athlete mentions isn't in the data, check Data freshness (or get_athlete_context data_status) and say it may not have " +
+      "synced yet rather than that it didn't happen."
+  );
+  const writes = ["add_target_race", "propose_zone_update"].filter((name) => names.has(name));
+  if (writes.length) {
+    lines.push(
+      `${writes.join(", ")} only prepare a review card: describe it and wait for the athlete's click; ` +
+        "never say it was saved before the card reports it."
+    );
+  }
+  return lines.join("\n");
+}
+
 export function buildCoachSportCapabilityGuide(): string {
   return WORKOUT_SPORTS.map((sport) => {
     const capability = WORKOUT_SPORT_CAPABILITIES[sport];
