@@ -36,6 +36,7 @@ const french: Record<string, string> = {
   "Watch-face ZIP archive": "Archive ZIP de cadran",
   "Export final watch-face ZIP": "Exporter le cadran final au format ZIP",
   "Final watch-face ZIP": "Cadran final ZIP",
+  "Save watch-face image": "Enregistrer l’image du cadran", "PNG image": "Image PNG",
   "Choose a folder for the watch-face ZIPs": "Choisir un dossier pour les cadrans ZIP",
   "Export here": "Exporter ici", "Choose a backup folder": "Choisir un dossier de sauvegarde",
   "Choose an audiobook (select several files to join them)": "Choisir un livre audio (sélectionnez plusieurs fichiers pour les réunir)",

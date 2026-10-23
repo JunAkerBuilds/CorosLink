@@ -324,6 +324,7 @@ import type {
   CorosWatchfaceExistingShareInput,
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceArchiveExportInput,
+  CorosWatchfaceAssetImageSaveInput,
   CorosWatchfaceArchiveFolderExportInput,
   CorosWatchfacePublishInput,
   CorosWatchfaceRasterFontFolder,
@@ -604,6 +605,8 @@ let pendingCorosBluetoothSelection:
   | undefined;
 
 const MAX_RASTER_FONT_SPRITE_FOLDER_BYTES = 12 * 1024 * 1024;
+const MAX_SAVED_ASSET_IMAGE_BYTES = 20 * 1024 * 1024;
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 /** Matches --bg-base in styles.css; updated when the renderer theme changes. */
 const DEFAULT_WINDOW_BACKGROUND = "#111315";
@@ -1711,6 +1714,42 @@ function registerIpcHandlers(): void {
         ? result.filePath
         : `${result.filePath}.zip`;
       await exportCorosWatchfaceArchive(input.archiveId, destinationPath);
+      return { saved: true, filePath: destinationPath };
+    }
+  );
+  // One Studio image (a template PNG or the user's replacement), saved so it
+  // can be recolored and imported again. The renderer only supplies pixels.
+  ipcMain.handle(
+    "watchfaces:saveAssetImage",
+    async (_event, input: CorosWatchfaceAssetImageSaveInput) => {
+      const prefix = "data:image/png;base64,";
+      if (typeof input?.dataUrl !== "string" || !input.dataUrl.startsWith(prefix)) {
+        throw new Error("Only PNG images can be saved.");
+      }
+      const data = Buffer.from(input.dataUrl.slice(prefix.length), "base64");
+      if (
+        data.length > MAX_SAVED_ASSET_IMAGE_BYTES ||
+        !data.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)
+      ) {
+        throw new Error("That image could not be saved.");
+      }
+      const baseName =
+        sanitizeExportFileName(typeof input.name === "string" ? input.name : undefined) ||
+        "watch-face-image";
+      const saveOptions = {
+        title: "Save watch-face image",
+        defaultPath: `${baseName}.png`,
+        filters: [{ name: "PNG image", extensions: ["png"] }]
+      };
+      const result =
+        mainWindow && !mainWindow.isDestroyed()
+          ? await dialog.showSaveDialog(mainWindow, localizeDialogOptions(saveOptions))
+          : await dialog.showSaveDialog(localizeDialogOptions(saveOptions));
+      if (result.canceled || !result.filePath) return { saved: false };
+      const destinationPath = result.filePath.toLowerCase().endsWith(".png")
+        ? result.filePath
+        : `${result.filePath}.png`;
+      await fs.promises.writeFile(destinationPath, data);
       return { saved: true, filePath: destinationPath };
     }
   );

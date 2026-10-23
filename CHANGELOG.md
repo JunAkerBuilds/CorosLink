@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Download a template's images from Studio.** Select a template asset, such as an analog hand, a center cap or a data icon, and choose **Download** to save it as a PNG. To recolor it, for example the orange stripes on MELLOW's hands, edit the colors, then choose **Replace image** on the same layer. A hand you import as a new image with Add → Image is a still picture and never turns. Studio saves the template's largest copy at its full canvas size. A hand turns around the exact center of its image, so keep that canvas size. Studio resizes the one image for every watch. If you already replaced the image, **Download** saves your replacement.
+
 ## [0.1.63] - 2026-10-23
 
 ### Added

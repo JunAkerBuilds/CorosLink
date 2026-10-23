@@ -764,6 +764,29 @@ export function listWatchfaceConfigAssets(
   );
 }
 
+/**
+ * The template's copy of a direct PNG on its largest screen. Studio resizes
+ * one imported image for every resolution, so editing this copy and importing
+ * it again never upscales the hand or icon on the bigger watches.
+ */
+export function largestWatchfaceConfigAssetSource(
+  details: CorosWatchfaceTemplateDetails,
+  reference: Pick<WatchfaceConfigAssetReference, "scope" | "configKey">
+): CorosWatchfaceSpriteFile | null {
+  let largest: { file: CorosWatchfaceSpriteFile; screen: number } | null = null;
+  for (const resolution of details.resolutions) {
+    const config = reference.scope === "aod" ? resolution.aodConfig : resolution.config;
+    const value = config[reference.configKey]?.trim();
+    if (!value || !/\.png$/i.test(value)) continue;
+    const archivePath =
+      `${resolution.directory}/${value.replace(/\\/g, "/").replace(/^\.\//, "")}`;
+    const file = resolution.icons.find((candidate) => candidate.path === archivePath);
+    const screen = resolution.width * resolution.height;
+    if (file && (!largest || screen > largest.screen)) largest = { file, screen };
+  }
+  return largest?.file ?? null;
+}
+
 export interface WatchfaceAnalogPreviewLayer {
   configKey:
     | "time_hour_icon"
@@ -3811,6 +3834,19 @@ export async function downscaleArtwork(
   context.imageSmoothingQuality = "high";
   context.drawImage(image, 0, 0, width, height);
   return { dataUrl: canvas.toDataURL("image/png"), width, height };
+}
+
+/** Re-encodes imported JPEG or WebP artwork as PNG; PNGs pass through. */
+export async function artworkPngDataUrl(dataUrl: string): Promise<string> {
+  if (dataUrl.startsWith("data:image/png;base64,")) return dataUrl;
+  const image = await loadStudioImage(dataUrl, false);
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d", { colorSpace: "display-p3" });
+  if (!context) throw new Error("This image could not be converted to PNG.");
+  context.drawImage(image, 0, 0);
+  return canvas.toDataURL("image/png");
 }
 
 function isAodSprite(file: CorosWatchfaceSpriteFile): boolean {

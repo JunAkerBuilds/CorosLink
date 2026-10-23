@@ -1993,4 +1993,8 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Letters": "字母",
   "Translate for watch languages": "按手表语言翻译",
   "Watches set to a language picked in Send show these words in that language. The font needs that language's letters.": "设置为“发送”中所选语言的手表会以该语言显示这些文字。字体需要包含该语言的字符。",
+  "Saved {{value1}}.": "已保存{{value1}}。",
+  "Could not save the image.": "无法保存图片。",
+  "This template has no image to download here.": "此模板在这里没有可下载的图片。",
+  "Save this image as a PNG to edit it. Keep the canvas size, then choose Replace image.": "将此图片保存为 PNG 以便编辑。保持画布尺寸不变，然后选择“替换图片”。",
 };

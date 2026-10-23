@@ -1992,4 +1992,8 @@ export const watchfacesPortuguese: Record<string, string> = {
   "Letters": "Letras",
   "Translate for watch languages": "Traduzir para os idiomas do relógio",
   "Watches set to a language picked in Send show these words in that language. The font needs that language's letters.": "Os relógios num idioma escolhido em Enviar mostram estas palavras nesse idioma. O tipo de letra tem de ter as letras desse idioma.",
+  "Saved {{value1}}.": "Guardado: {{value1}}.",
+  "Could not save the image.": "Não foi possível guardar a imagem.",
+  "This template has no image to download here.": "Este modelo não tem nenhuma imagem para transferir aqui.",
+  "Save this image as a PNG to edit it. Keep the canvas size, then choose Replace image.": "Guarde esta imagem em PNG para a editar. Mantenha o tamanho da tela e depois escolha Substituir imagem.",
 };

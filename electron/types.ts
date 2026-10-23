@@ -339,6 +339,14 @@ export interface CorosWatchfaceArchiveExportInput {
   name: string;
 }
 
+/** One Studio image saved as a PNG; the destination comes from the dialog. */
+export interface CorosWatchfaceAssetImageSaveInput {
+  /** `data:image/png;base64,…` pixels of the template image or replacement. */
+  dataUrl: string;
+  /** Suggested file name without the extension. */
+  name: string;
+}
+
 /** A folder the user picked for a multi-watch export; the path stays in main. */
 export interface CorosWatchfaceExportFolder {
   folderId: string;

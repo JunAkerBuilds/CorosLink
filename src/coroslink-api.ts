@@ -165,6 +165,7 @@ import type {
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceProjectExportResult,
   CorosWatchfaceArchiveExportInput,
+  CorosWatchfaceAssetImageSaveInput,
   CorosWatchfaceArchiveFolderExportInput,
   CorosWatchfaceExportFolder,
   CorosWatchfaceArtwork,
@@ -394,6 +395,9 @@ export interface CorosLinkApi {
   ) => Promise<CorosWatchfaceProjectExportResult>;
   exportCorosWatchfaceArchive: (
     input: CorosWatchfaceArchiveExportInput
+  ) => Promise<CorosWatchfaceProjectExportResult>;
+  saveCorosWatchfaceAssetImage: (
+    input: CorosWatchfaceAssetImageSaveInput
   ) => Promise<CorosWatchfaceProjectExportResult>;
   chooseCorosWatchfaceExportFolder: () => Promise<CorosWatchfaceExportFolder | null>;
   exportCorosWatchfaceArchiveToFolder: (

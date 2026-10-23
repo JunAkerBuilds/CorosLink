@@ -52,6 +52,8 @@ export const nativeChinese: Readonly<Record<string, string>> = {
   "Watch-face ZIP archive": "表盘 ZIP 归档",
   "Export final watch-face ZIP": "导出最终表盘 ZIP",
   "Final watch-face ZIP": "最终表盘 ZIP",
+  "Save watch-face image": "保存表盘图片",
+  "PNG image": "PNG 图片",
   "Choose a folder for the watch-face ZIPs": "选择保存表盘 ZIP 的文件夹",
   "Export here": "导出到此处",
   "Choose a backup folder": "选择备份文件夹",

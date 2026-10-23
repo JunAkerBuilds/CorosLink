@@ -165,6 +165,7 @@ import type {
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceProjectExportResult,
   CorosWatchfaceArchiveExportInput,
+  CorosWatchfaceAssetImageSaveInput,
   CorosWatchfaceArchiveFolderExportInput,
   CorosWatchfaceExportFolder,
   CorosWatchfaceArtwork,
@@ -467,6 +468,10 @@ const api = {
     input: CorosWatchfaceArchiveExportInput
   ): Promise<CorosWatchfaceProjectExportResult> =>
     ipcRenderer.invoke("watchfaces:exportArchive", input),
+  saveCorosWatchfaceAssetImage: (
+    input: CorosWatchfaceAssetImageSaveInput
+  ): Promise<CorosWatchfaceProjectExportResult> =>
+    ipcRenderer.invoke("watchfaces:saveAssetImage", input),
   chooseCorosWatchfaceExportFolder: (): Promise<CorosWatchfaceExportFolder | null> =>
     ipcRenderer.invoke("watchfaces:chooseExportFolder"),
   exportCorosWatchfaceArchiveToFolder: (

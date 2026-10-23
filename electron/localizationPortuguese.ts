@@ -52,6 +52,8 @@ export const nativePortuguese: Readonly<Record<string, string>> = {
   "Watch-face ZIP archive": "Arquivo ZIP de mostrador",
   "Export final watch-face ZIP": "Exportar mostrador final em ZIP",
   "Final watch-face ZIP": "Mostrador final em ZIP",
+  "Save watch-face image": "Guardar imagem do mostrador",
+  "PNG image": "Imagem PNG",
   "Choose a folder for the watch-face ZIPs": "Escolher uma pasta para os ZIP dos mostradores",
   "Export here": "Exportar aqui",
   "Choose a backup folder": "Escolher uma pasta para cópias de segurança",

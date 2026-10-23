@@ -454,6 +454,7 @@ import {
   configAssetDefaultsToNativeSize,
   controlStatusLayoutGroupId,
   applyConfigTextEditsToDetails,
+  artworkPngDataUrl,
   buildDisabledControlComplicationOverrides,
   buildDisabledWatchfaceConfigAssetOverrides,
   buildWatchfaceConfigAssetOverrides,
@@ -475,6 +476,7 @@ import {
   corosConfigColorToCss,
   exerciseProgressStyleForResolution,
   kcalProgressStyleForResolution,
+  largestWatchfaceConfigAssetSource,
   loadStudioImage,
   mergeAssetReplacements,
   mergeConfigOverrides,
@@ -5856,6 +5858,33 @@ export function WatchfaceEditor({
       onNotice(t("{{value1}} replaced for every supported resolution.", { value1: t(reference.label) }));
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : t("Could not replace the template image."));
+    }
+  }
+
+  // Saves what the inspector shows: the replacement, or the template PNG at
+  // its largest resolution with the full canvas (hands keep their pivot).
+  async function downloadConfigAsset(reference: WatchfaceConfigAssetReference) {
+    try {
+      const replacement = design.configAssetOverrides?.[reference.id]?.replacement;
+      const source = replacement
+        ? null
+        : (modeSourceDetails
+            ? largestWatchfaceConfigAssetSource(modeSourceDetails, reference)
+            : null) ?? reference.source;
+      const image = replacement ?? (source ? (await loadAssets([source.path]))[0] : undefined);
+      if (!image) {
+        onError(t("This template has no image to download here."));
+        return;
+      }
+      const result = await api.saveCorosWatchfaceAssetImage({
+        dataUrl: await artworkPngDataUrl(image.dataUrl),
+        name: `${t(reference.label)} ${image.width}x${image.height}`
+      });
+      if (result.saved) {
+        onNotice(t("Saved {{value1}}.", { value1: t(reference.label) }));
+      }
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : t("Could not save the image."));
     }
   }
 
@@ -12129,6 +12158,7 @@ export function WatchfaceEditor({
         <div className="wf-config-asset-actions">
           <button type="button" className="secondary-button" onClick={() => void chooseConfigAsset(reference)}><ImagePlus size={15} /> {override?.replacement ? t("Replace again") : previewDataUrl ? t("Replace image") : t("Import image")}</button>
           <button type="button" className="secondary-button" onClick={() => browseOfficialConfigAsset(reference)}><Sparkles size={15} />{" "}{t("Official")}</button>
+          {previewDataUrl ? <button type="button" className="secondary-button" title={t("Save this image as a PNG to edit it. Keep the canvas size, then choose Replace image.")} onClick={() => void downloadConfigAsset(reference)}><Download size={15} /> {t("Download")}</button> : null}
           {override?.replacement ? <button type="button" className="secondary-button" onClick={() => restoreConfigAsset(reference)}><RotateCcw size={15} /> {reference.source ? t("Restore original") : t("Remove image")}</button> : null}
           {templateResized ? <button type="button" className="secondary-button" onClick={() => resetStatusIconSize(reference)}><RotateCcw size={15} /> {t("Reset size")}</button> : null}
         </div>
