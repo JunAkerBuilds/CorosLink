@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.63] - 2026-10-23
+
 ### Added
 
 - **Rename past activities.** Click the pencil beside an activity's title, or double-click the title, in the activity details or in the Calendar's day panel. Press Enter to save the new name to COROS, the same change Training Hub makes, or Esc to keep the old one. Names can be up to 150 bytes, Training Hub's limit. CorosLink reads the activity back from COROS to confirm the name was saved, and the Activities list, Overview and Calendar update at once. In Local-Only Mode the name changes only on this computer.
@@ -16,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Watchmaker and external AI tools work on detailed watch faces again.** On a face with a weather indicator and several digit fonts, every Watchmaker request failed with "The automation payload contains too many or too much image data", so the assistant couldn't read the face, let alone change it. The editor tools gave up past 128 images, and a weather indicator alone has 82. They now take up to 2048. A font sheet shared by many layers also counts once toward the size limit instead of once per layer.
 - **Sleep and daily health work with a COROS server you added yourself.** If you removed the built-in COROS server from MCP Servers and added a COROS address yourself, such as the European `https://mcpeu.coros.com/mcp`, the Coach could use it but the Training Hub couldn't find it. Its sleep card showed no sleep, and **Connect COROS data access** failed with "Unknown MCP server "coros"". Sleep, daily health and health insights now use that server. So do the Coach's Save to COROS review cards and its COROS permission switches, which it also bypassed. Local-Only Mode signs it out with the rest of COROS. With no COROS server at all, **Connect COROS data access** adds the built-in one back, on your account's region.
 - **Long workout names keep their words on the watch.** A workout name longer than 39 bytes, such as "2026 Block 6 Threshold Build W3D4: Recovery Run", was cut mid-word when sent over Bluetooth. The watch joins the two parts with a space, so the run was recorded as "… Reco very Run". Names now break between words. Planned workouts on the watch get the fix at the next calendar sync. A workout sent on its own needs to be sent again.
+- **The Strength page's loading notice is translated.** "Reading 5 more sessions from COROS. The map fills in as they arrive." stayed in English in every language. It now reads in French, Portuguese and Chinese, with the right singular or plural. In the body map's Muscle groups list, Back reads Dos, Costas or 背部 instead of the word for going back, and the Chinese names for hamstrings and shoulders are corrected.
 
 ## [0.1.62] - 2026-10-22
 
