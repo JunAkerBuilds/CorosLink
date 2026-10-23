@@ -1,23 +1,43 @@
 import type { WatchfaceSnapMeasurement } from "./watchfaceEditorSnapping";
 
-/** Keeps all stacked canvases at CSS pixels × capped device-pixel ratio. */
+/**
+ * Keeps all stacked canvases at the pixels they cover on screen: CSS pixels ×
+ * capped device-pixel ratio × stage zoom. The zoom is a CSS transform that
+ * clientWidth never sees, so without it a zoomed dial stretches the unzoomed
+ * bitmap. Zooming stops adding pixels at twice the face's own resolution,
+ * past which its sprites have no more detail to show.
+ */
 export function resizeWatchfaceCanvasBackings(
   canvases: Array<HTMLCanvasElement | null>,
-  devicePixelRatio: number
+  devicePixelRatio: number,
+  stageZoom = 1,
+  faceWidth = 0
 ): boolean {
   const dpr = Math.min(Math.max(1, devicePixelRatio || 1), 2);
   let changed = false;
   for (const canvas of canvases) {
     if (!canvas) continue;
-    const width = Math.max(1, Math.round(canvas.clientWidth * dpr));
-    const height = Math.max(1, Math.round(canvas.clientHeight * dpr));
+    const zoomLimit = canvas.clientWidth > 0 ? (faceWidth * 2) / canvas.clientWidth : 0;
+    const scale = Math.min(dpr * Math.max(1, stageZoom), Math.max(dpr, zoomLimit));
+    const width = Math.max(1, Math.round(canvas.clientWidth * scale));
+    const height = Math.max(1, Math.round(canvas.clientHeight * scale));
     if (canvas.width === width && canvas.height === height) continue;
+    // Resizing clears a canvas. Carry the old pixels over, stretched, so a zoom
+    // step shows the last frame until the sharp one has rendered, not a blank dial.
+    let previous: HTMLCanvasElement | null = null;
+    if (canvas.width > 1 && canvas.height > 1) {
+      previous = document.createElement("canvas");
+      previous.width = canvas.width;
+      previous.height = canvas.height;
+      previous.getContext("2d", { colorSpace: "display-p3" })?.drawImage(canvas, 0, 0);
+    }
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext("2d", { colorSpace: "display-p3" });
     if (context) {
       context.imageSmoothingEnabled = true;
       context.imageSmoothingQuality = "high";
+      if (previous) context.drawImage(previous, 0, 0, width, height);
     }
     changed = true;
   }

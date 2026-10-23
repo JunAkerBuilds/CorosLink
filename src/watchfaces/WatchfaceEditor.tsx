@@ -927,6 +927,7 @@ function isSpriteTransformDrag(
   );
 }
 
+/** Backing size of the stacked preview canvases until they are first measured. */
 const PREVIEW_SIZE = 520;
 /** Layer kinds check_contrast measures when no ids are given: the readable ones. */
 const CONTRAST_LAYER_KINDS = new Set<EditorLayer["kind"]>([
@@ -1578,32 +1579,6 @@ export function WatchfaceEditor({
     if (selectedId) setPropertiesTab((tab) => (tab === "ai" ? tab : "selection"));
   }, [selectedId]);
 
-  useEffect(() => {
-    const stage = previewStackRef.current;
-    if (!stage || typeof ResizeObserver === "undefined") return;
-    let frame = 0;
-    const resize = () => {
-      window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(() => {
-        const preview = previewCanvasRef.current;
-        if (!preview) return;
-        const changed = resizeWatchfaceCanvasBackings([
-          previewCanvasRef.current,
-          dragPreviewCanvasRef.current,
-          overlayCanvasRef.current
-        ], window.devicePixelRatio || 1);
-        if (changed) setCanvasBackingRevision((revision) => revision + 1);
-      });
-    };
-    const observer = new ResizeObserver(resize);
-    observer.observe(stage);
-    resize();
-    return () => {
-      observer.disconnect();
-      window.cancelAnimationFrame(frame);
-    };
-  }, []);
-
   // Fit the dial to the actual center pane, including wrapped preview controls.
   useEffect(() => {
     const stage = previewStackRef.current?.parentElement;
@@ -2240,9 +2215,39 @@ export function WatchfaceEditor({
     },
     [previewResolution, design.kcalProgress, design.exerciseProgress, design.accentColor, simulationScenario?.values]
   );
+  // Every stacked canvas renders at the pixels it covers on screen, so the
+  // face is never drawn small and then stretched up to the dial's size.
+  const stageScale = stageZoom === "fit" ? 1 : stageZoom;
+  useEffect(() => {
+    const stage = previewStackRef.current;
+    if (!stage || typeof ResizeObserver === "undefined") return;
+    let frame = 0;
+    const resize = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const preview = previewCanvasRef.current;
+        if (!preview) return;
+        const changed = resizeWatchfaceCanvasBackings([
+          backgroundCanvasRef.current,
+          arcOverlayCanvasRef.current,
+          previewCanvasRef.current,
+          dragPreviewCanvasRef.current,
+          overlayCanvasRef.current
+        ], window.devicePixelRatio || 1, stageScale, previewWidth);
+        if (changed) setCanvasBackingRevision((revision) => revision + 1);
+      });
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(stage);
+    resize();
+    return () => {
+      observer.disconnect();
+      window.cancelAnimationFrame(frame);
+    };
+  }, [stageScale, previewWidth]);
   useEffect(() => {
     paintArcOverlay();
-  }, [paintArcOverlay]);
+  }, [paintArcOverlay, canvasBackingRevision]);
   const watchPreviewResolution = useMemo(
     () => previewDetails?.resolutions.find(
       (resolution) => resolution.directory === watchPreviewDirectory
@@ -2686,7 +2691,7 @@ export function WatchfaceEditor({
     };
     void paint();
     return () => { cancelled = true; };
-  }, [previewBackgroundDataUrl, previewStudioOptions.previewMode]);
+  }, [previewBackgroundDataUrl, previewStudioOptions.previewMode, canvasBackingRevision]);
   const selectedElementId = selectedId.startsWith("bgel:")
     ? selectedId.slice("bgel:".length)
     : null;
@@ -4066,8 +4071,8 @@ export function WatchfaceEditor({
           queue.pending = null;
           try {
             const frame = document.createElement("canvas");
-            frame.width = PREVIEW_SIZE;
-            frame.height = PREVIEW_SIZE;
+            frame.width = next.canvas.width;
+            frame.height = next.canvas.height;
             await drawStudioPreview(
               frame,
               next.backgroundDataUrl,
