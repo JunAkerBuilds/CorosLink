@@ -488,6 +488,7 @@ import {
   setCorosMcpAccountSource
 } from "./corosMcpService";
 import {
+  corosMcpServerId,
   disconnectMcpServer,
   ensureAllMcpConnected,
   getMcpStatuses,
@@ -1143,7 +1144,8 @@ app.whenReady().then(() => {
   // Sleep and daily health load once COROS MCP connects, however it connected.
   onMcpConnectionChanged((id, connected) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("mcp:connectionChanged", { id, connected });
+      // coros: the server COROS features use, which an athlete may have added under another id.
+      mainWindow.webContents.send("mcp:connectionChanged", { id, connected, coros: id === corosMcpServerId() });
     }
   });
   // COROS ended the session (signed out), or a dead one was renewed from the saved login.

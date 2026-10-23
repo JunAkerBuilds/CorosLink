@@ -69,6 +69,9 @@ if (!phase) {
         closedUrls.push(this.url);
         this.onclose?.();
       }
+      async callTool({ name }) {
+        return { content: [{ type: "text", text: `${this.url} ${name}` }] };
+      }
     }
   });
   stubModule("@modelcontextprotocol/sdk/client/streamableHttp.js", {
@@ -146,7 +149,8 @@ if (!phase) {
       await manager.disconnectMcpServer("coros");
       store.removeMcpServer("coros");
       assert.deepEqual(closedUrls, ["https://mcpus.coros.com/mcp"]);
-      assert.deepEqual(manager.getAllMcpTools().map((tool) => tool.name), ["coros-eu__training"]);
+      // The athlete's own COROS server now serves COROS features and the Coach's coros__ tools.
+      assert.deepEqual(manager.getAllMcpTools().map((tool) => tool.name), ["coros__training"]);
       for (const key of corosKeys) assert.equal(database.getSetting(key), undefined);
       assert.equal(database.getSetting("mcp.coros-eu.tokens"), "saved-regional-authorization");
       assert.equal(database.getSetting("unrelated.preference"), "keep");
@@ -154,15 +158,29 @@ if (!phase) {
       assert.deepEqual(store.listMcpServers().map((server) => server.id), ["coros-eu"]);
       await manager.ensureAllMcpConnected();
       assert.deepEqual(connectedUrls, [regionalUrl]);
-      assert.equal(await coros.ensureCorosMcpConnected(), false);
-      assert.deepEqual(coros.getCorosMcpStatus(), { connected: false, authorized: false, tools: [] });
-      await assert.rejects(coros.connectCorosMcp(), /Unknown MCP server/);
+      // Sleep and daily health follow the remaining COROS server.
+      assert.equal(await coros.ensureCorosMcpConnected(), true);
+      const status = coros.getCorosMcpStatus();
+      assert.deepEqual([status.connected, status.authorized, status.tools.map((tool) => tool.name)], [true, true, ["training"]]);
+      assert.equal((await coros.connectCorosMcp()).connected, true);
+      assert.deepEqual(connectedUrls, [regionalUrl], "Already connected: no second connection");
+      assert.equal(await coros.callCorosMcpTool("training", {}), `${regionalUrl} training`);
+      assert.equal(await manager.callMcpTool("coros__training", {}), `${regionalUrl} training`);
+      assert.equal(store.getMcpServer("coros"), undefined, "The removed built-in stays removed");
       await manager.disconnectMcpServer("coros-eu");
       store.removeMcpServer("coros-eu");
     } else if (phase === "empty") {
       assert.deepEqual(store.listMcpServers(), []);
       await manager.ensureAllMcpConnected();
       assert.deepEqual(connectedUrls, []);
+      // Background loads add nothing; the athlete's Connect brings the built-in back.
+      assert.deepEqual(await coros.connectCorosMcp(null, false), { connected: false, authorized: false, tools: [] });
+      assert.deepEqual(store.listMcpServers(), []);
+      assert.equal((await coros.connectCorosMcp()).connected, true);
+      assert.equal(store.getMcpServer("coros").builtin, true);
+      assert.deepEqual(connectedUrls, ["https://mcpus.coros.com/mcp"]);
+      await manager.disconnectMcpServer("coros");
+      store.removeMcpServer("coros");
       // Users can intentionally add COROS again with their preferred endpoint.
       store.addMcpServer({ id: "coros", name: "COROS", url: regionalUrl });
     } else if (phase === "restored") {

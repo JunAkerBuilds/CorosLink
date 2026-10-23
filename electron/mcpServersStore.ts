@@ -173,6 +173,21 @@ export function addMcpServer(
   return getMcpServer(id, db)!;
 }
 
+/**
+ * Puts the built-in COROS server back after the athlete removed it, as the
+ * first-run seed in database.ts adds it. Connecting moves it to the account's
+ * region, as on a new install.
+ */
+export function restoreCorosMcpServer(db = requireDatabase()): McpServerConfig {
+  db.prepare(
+    `INSERT INTO mcp_servers (id, name, url, transport, auth_type, scope, enabled, builtin, sort_order)
+     VALUES ('coros', 'COROS', 'https://mcpus.coros.com/mcp', 'streamable-http', 'oauth',
+             'openid mcp.tools offline_access', 1, 1, 0)
+     ON CONFLICT(id) DO NOTHING`
+  ).run();
+  return getMcpServer("coros", db)!;
+}
+
 export function updateMcpServer(
   id: string,
   patch: Partial<McpServerInput>,

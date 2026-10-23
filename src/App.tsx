@@ -940,8 +940,8 @@ export default function App() {
     if (!api?.onMcpConnectionChanged) {
       return;
     }
-    return api.onMcpConnectionChanged(({ id, connected }) => {
-      if (id !== "coros" || !connected) {
+    return api.onMcpConnectionChanged(({ coros, connected }) => {
+      if (!coros || !connected) {
         return;
       }
       // A load's own reconnect lands here too; that load already reads the data.

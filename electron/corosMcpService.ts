@@ -1,15 +1,16 @@
 import type { BrowserWindow } from "electron";
-import { corosMcpUrl, isCorosMcpUrl } from "./corosMcpRegions";
+import { COROS_MCP_SERVER_ID, corosMcpUrl, isCorosMcpUrl } from "./corosMcpRegions";
 import {
   callMcpTool,
   connectMcpServer,
+  corosMcpServerId,
   disconnectMcpServer,
   ensureMcpServerConnected,
   getMcpServerCachedTools,
   getMcpServerStatus,
   getMcpServerTools
 } from "./mcpClientManager";
-import { getMcpServer } from "./mcpServersStore";
+import { getMcpServer, restoreCorosMcpServer } from "./mcpServersStore";
 import { prefixToolName } from "./mcpToolNames";
 import type {
   CorosMcpAccount,
@@ -19,11 +20,10 @@ import type {
 } from "./types";
 
 // Back-compat shim: COROS is now the built-in "coros" entry of the generic MCP
-// registry (electron/mcpClientManager.ts). These wrappers keep the original
+// registry (electron/mcpClientManager.ts), or a COROS endpoint the athlete
+// added in its place (corosMcpServerId). These wrappers keep the original
 // signatures so sleepDataService, dailyHealthDataService, and the chatMcp:*
 // IPC handlers keep working unchanged.
-
-const COROS = "coros";
 
 // Main wires in the account from the Training Hub and Watch Faces sessions, so
 // this module stays free of those services.
@@ -71,20 +71,26 @@ function readCorosAccount(): CorosMcpAccount {
 }
 
 export function getCorosMcpStatus(): CorosMcpStatus {
-  const status = getMcpServerStatus(COROS);
+  const id = corosMcpServerId();
+  const status = id ? getMcpServerStatus(id) : undefined;
   return {
     connected: status?.connected ?? false,
     authorized: status?.authenticated ?? false,
-    tools: getMcpServerCachedTools(COROS)
+    tools: id ? getMcpServerCachedTools(id) : []
   };
 }
 
-/** The athlete's Connect (interactive), or a silent reconnect with the saved authorization. */
+/**
+ * The athlete's Connect (interactive), or a silent reconnect with the saved
+ * authorization. Their Connect brings back a COROS server they had removed.
+ */
 export async function connectCorosMcp(
   mainWindow?: BrowserWindow | null,
   interactive = true
 ): Promise<CorosMcpStatus> {
-  await connectMcpServerWithCorosAccount(COROS, interactive, mainWindow ?? null);
+  let id = corosMcpServerId();
+  if (!id && interactive) id = restoreCorosMcpServer().id;
+  if (id) await connectMcpServerWithCorosAccount(id, interactive, mainWindow ?? null);
   return getCorosMcpStatus();
 }
 
@@ -93,28 +99,32 @@ export async function connectCorosMcp(
  * turns a disabled server on. Background loads use this.
  */
 export async function ensureCorosMcpConnected(): Promise<boolean> {
-  return ensureMcpServerConnected(COROS);
+  const id = corosMcpServerId();
+  return id ? ensureMcpServerConnected(id) : false;
 }
 
 export async function disconnectCorosMcp(): Promise<CorosMcpStatus> {
-  await disconnectMcpServer(COROS);
+  const id = corosMcpServerId();
+  if (id) await disconnectMcpServer(id);
   return getCorosMcpStatus();
 }
 
 export async function listCorosMcpTools(): Promise<CorosMcpTool[]> {
-  if (!getMcpServerStatus(COROS)?.connected) {
+  const id = corosMcpServerId();
+  if (!id || !getMcpServerStatus(id)?.connected) {
     throw new Error("COROS MCP is not connected.");
   }
-  return getMcpServerTools(COROS);
+  return getMcpServerTools(id);
 }
 
 export function getCorosMcpTools(): CorosMcpTool[] {
-  return getMcpServerCachedTools(COROS);
+  const id = corosMcpServerId();
+  return id ? getMcpServerCachedTools(id) : [];
 }
 
 export async function callCorosMcpTool(
   name: string,
   args: Record<string, unknown>
 ): Promise<string> {
-  return callMcpTool(prefixToolName(COROS, name), args);
+  return callMcpTool(prefixToolName(COROS_MCP_SERVER_ID, name), args);
 }

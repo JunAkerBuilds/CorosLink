@@ -16,12 +16,11 @@ import {
 } from "./trainingHubService";
 import {
   callMcpTool,
+  corosMcpServerId,
   ensureAllMcpConnected,
   getAllMcpTools,
-  getMcpAuthorizationKey,
-  getMcpServerCachedTools
+  getMcpAuthorizationKey
 } from "./mcpClientManager";
-import { prefixToolName } from "./mcpToolNames";
 import { claudeCanUseCorosTool, coachMcpTools, corosCoachRoutingInstructions, isCorosWorkoutWrite } from "./coachCorosTools";
 import { createCorosActionService } from "./coachCorosActions";
 import {
@@ -1519,14 +1518,11 @@ function getAllChatTools(): CorosMcpTool[] {
 export function getClaudeCodeTools(
   permissions: ClaudeCodePermissions
 ): CorosMcpTool[] {
-  // COROS remote tools are permission-gated by their (unprefixed) names, then
-  // exposed prefixed. Other MCP servers the user configured are exposed in full.
-  const remoteTools = [
-    ...getMcpServerCachedTools("coros")
-      .filter((tool) => claudeCanUseCorosTool(tool.name, permissions))
-      .map((tool) => ({ ...tool, name: prefixToolName("coros", tool.name) })),
-    ...getAllMcpTools().filter((tool) => !tool.name.startsWith("coros__"))
-  ];
+  // COROS remote tools ("coros__", whatever the server's id) are permission-gated
+  // by their unprefixed names. Other MCP servers the user configured are exposed in full.
+  const remoteTools = getAllMcpTools().filter(
+    (tool) => !tool.name.startsWith("coros__") || claudeCanUseCorosTool(tool.name.slice(7), permissions)
+  );
   const activityTools = permissions.recentActivities
     ? getChatActivityTools()
     : [];
@@ -1572,7 +1568,7 @@ const corosActions = createCorosActionService({
   call: callMcpTool,
   load: () => getSetting("chat.corosActions"),
   save: value => setSetting("chat.corosActions", value),
-  connectionKey: () => getMcpAuthorizationKey("coros"),
+  connectionKey: () => getMcpAuthorizationKey(corosMcpServerId() ?? "coros"),
   canConfirm: claude => !claude || getChatSettings().claudeCode.permissions.upcomingWorkouts
 });
 

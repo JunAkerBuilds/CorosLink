@@ -53,6 +53,7 @@ const mocks = {
   "./trainingHubService": { getTrainingHubStatus: () => ({ authenticated: false }) },
   "./mcpClientManager": {
     ensureAllMcpConnected: () => mcpSetup(),
+    corosMcpServerId: () => 'coros',
     getMcpAuthorizationKey: () => 'test-authorization',
     getAllMcpTools: () => remoteTools,
     getMcpServerCachedTools: () => remoteTools.filter(t => t.name.startsWith('coros__')).map(t => ({ ...t, name: t.name.slice(7) })),

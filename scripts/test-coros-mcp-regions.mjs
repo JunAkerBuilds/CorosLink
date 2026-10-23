@@ -10,7 +10,8 @@ const {
   corosMcpUrl,
   corosSignInEmailScript,
   isCorosMcpUrl,
-  isCorosSignInPage
+  isCorosSignInPage,
+  pickCorosMcpServer
 } = await import(`${modUrl.href}?c=${Date.now()}`);
 
 // Every regional endpoint COROS publishes, plus the US alias.
@@ -100,5 +101,17 @@ vm.runInNewContext(corosSignInEmailScript("runner@example.com"), {
   HTMLInputElement: class {},
   Event
 });
+
+// COROS features follow the built-in server, or a COROS endpoint added in its place.
+const server = (id, url, enabled = true) => ({ id, url, enabled });
+const builtin = server("coros", "https://mcpus.coros.com/mcp");
+const added = server("coros-mcp-eu", "https://mcpeu.coros.com/mcp");
+const strava = server("strava", "https://mcp.strava.com/mcp");
+assert.equal(pickCorosMcpServer([strava, added, builtin]), builtin);
+assert.equal(pickCorosMcpServer([strava, added]), added, "Removed built-in: the athlete's own COROS server");
+assert.equal(pickCorosMcpServer([{ ...builtin, enabled: false }, added]), added, "An enabled one wins");
+assert.deepEqual(pickCorosMcpServer([{ ...builtin, enabled: false }, { ...added, enabled: false }]), { ...builtin, enabled: false });
+assert.equal(pickCorosMcpServer([strava]), undefined);
+assert.equal(pickCorosMcpServer([]), undefined);
 
 console.log("coros-mcp-regions tests passed");

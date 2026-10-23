@@ -12,7 +12,9 @@ import { cloudActivitySource, cloudHealthSource } from "../localSync/cloudSource
 import { LocalArchive } from "../localSync/localArchive";
 import { LocalDataService } from "../localSync/localDataService";
 import { SyncCaptureLog, syncCaptureEnabled } from "../localSync/syncCapture";
+import { COROS_MCP_SERVER_ID, isCorosMcpUrl } from "../corosMcpRegions";
 import { disconnectMcpServer } from "../mcpClientManager";
+import { listMcpServers } from "../mcpServersStore";
 import { configureLocalTraining, logoutTrainingHub } from "../trainingHubService";
 import { dataMode, networkPolicy } from "./bootstrap";
 import { localAccountFromWatchProfile } from "../watchProfileService";
@@ -33,7 +35,6 @@ export interface LocalOnlyMainOptions {
   getWindow: () => BrowserWindow | undefined;
 }
 
-const COROS_MCP_ID = "coros";
 /** "allowed" once the user agreed to replace a training plan on the watch that CorosLink didn't put there. */
 const PLAN_REPLACEMENT_SETTING = "watch.planReplacement";
 /** The calendar last confirmed on each watch (content hash by local device id), so an unchanged one isn't resent. */
@@ -70,7 +71,12 @@ function registerCredentialActions(): void {
     forgetCloudSession: async () => {
       logoutTrainingHub();
       logoutCorosWatchfaces();
-      await disconnectMcpServer(COROS_MCP_ID, { clearAuthorization: true }).catch(() => undefined);
+      // The built-in COROS server, and any COROS endpoint the athlete added by hand.
+      const corosIds = new Set([COROS_MCP_SERVER_ID]);
+      for (const server of listMcpServers()) if (isCorosMcpUrl(server.url)) corosIds.add(server.id);
+      await Promise.all([...corosIds].map((id) =>
+        disconnectMcpServer(id, { clearAuthorization: true }).catch(() => undefined)
+      ));
     },
     forgetWatchKey: () => { forgetCorosWatchKey(); }
   });

@@ -1382,11 +1382,11 @@ const api = {
   getMcpStatuses: (): Promise<McpServerStatus[]> =>
     ipcRenderer.invoke("mcp:statuses"),
   onMcpConnectionChanged: (
-    callback: (change: { id: string; connected: boolean }) => void
+    callback: (change: { id: string; connected: boolean; coros: boolean }) => void
   ): (() => void) => {
     const listener = (
       _event: Electron.IpcRendererEvent,
-      change: { id: string; connected: boolean }
+      change: { id: string; connected: boolean; coros: boolean }
     ) => callback(change);
     ipcRenderer.on("mcp:connectionChanged", listener);
     return () => ipcRenderer.removeListener("mcp:connectionChanged", listener);

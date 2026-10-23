@@ -34,6 +34,25 @@ export function corosMcpUrl(region: CorosWatchfaceRegion): string {
   return COROS_MCP_URLS[region];
 }
 
+/** Id of the built-in COROS server, also the "coros__" prefix of COROS tools. */
+export const COROS_MCP_SERVER_ID = "coros";
+
+/**
+ * The server COROS features use (sleep, daily health, the Coach's COROS tools):
+ * the built-in entry, or else a COROS endpoint the athlete added themselves,
+ * for example after removing the built-in one. An enabled one wins.
+ */
+export function pickCorosMcpServer<T extends { id: string; url: string; enabled: boolean }>(
+  servers: readonly T[]
+): T | undefined {
+  const coros = servers.filter(
+    (server) => server.id === COROS_MCP_SERVER_ID || isCorosMcpUrl(server.url)
+  );
+  const first = (list: T[]) =>
+    list.find((server) => server.id === COROS_MCP_SERVER_ID) ?? list[0];
+  return first(coros.filter((server) => server.enabled)) ?? first(coros);
+}
+
 /** COROS's OAuth sign-in form, where a known account email can be filled in. */
 export function isCorosSignInPage(url: string): boolean {
   const parsed = parseHttpsUrl(url);

@@ -888,9 +888,9 @@ export interface CorosLinkApi {
   getCorosMcpAccount: () => Promise<CorosMcpAccount>;
   disconnectMcpServer: (id: string) => Promise<void>;
   getMcpStatuses: () => Promise<McpServerStatus[]>;
-  /** An MCP server connected or lost its connection. */
+  /** An MCP server connected or lost its connection; coros when it is the one COROS features use. */
   onMcpConnectionChanged?: (
-    callback: (change: { id: string; connected: boolean }) => void
+    callback: (change: { id: string; connected: boolean; coros: boolean }) => void
   ) => () => void;
   setMcpBearer: (id: string, token: string) => Promise<void>;
   uploadTrainingPlanDraft: (

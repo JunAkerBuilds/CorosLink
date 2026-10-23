@@ -43,7 +43,11 @@ stub("../dist-electron/mcpServersStore.js", {
   listMcpServers: () => [...servers.values()],
   getMcpBearer: () => undefined,
   mcpSecretKey: (id, key) => `mcp.${id}.${key}`,
-  updateMcpServer: (id, changes) => Object.assign(servers.get(id), changes)
+  updateMcpServer: (id, changes) => Object.assign(servers.get(id), changes),
+  restoreCorosMcpServer: () => {
+    register("coros", US, true);
+    return servers.get("coros");
+  }
 });
 stub("@modelcontextprotocol/sdk/client/index.js", { Client: class {
   async connect(transport) {
@@ -142,6 +146,7 @@ stopListening();
 // A server the athlete disabled stays off for background loads and anything
 // else that asks, until their own Connect turns it back on.
 servers.get("coros").enabled = false;
+servers.get("coros-eu").enabled = false;
 settings.set("corosMcp.tokens", Buffer.from(JSON.stringify({
   access_token: "a", refresh_token: "r", token_type: "Bearer"
 })).toString("base64"));
@@ -155,10 +160,37 @@ await coros.connectCorosMcp(null);
 assert.equal(servers.get("coros").enabled, true, "Connect turns it back on");
 assert.equal(connections.length, 1);
 await manager.disconnectMcpServer("coros", { clearAuthorization: false });
+
+// An enabled COROS server the athlete added is used before a disabled built-in, which stays off.
+servers.get("coros").enabled = false;
+servers.get("coros-eu").enabled = true;
+connections.length = 0;
+await coros.connectCorosMcp(null);
+assert.equal(servers.get("coros").enabled, false);
+assert.equal(connections.at(-1).url, EU);
+await manager.disconnectMcpServer("coros-eu", { clearAuthorization: false });
+servers.get("coros").enabled = true;
 settings.delete("corosMcp.tokens");
 
-// A removed COROS server stays removed.
+// Without the built-in server, COROS features use the one the athlete added.
+coros.setCorosMcpAccountSource(() => ({ email: "runner@example.com", region: "eu" }));
 servers.delete("coros");
-await assert.rejects(coros.connectCorosMcp(null), /Unknown MCP server/);
+connections.length = 0;
+assert.equal((await coros.connectCorosMcp(null)).connected, true);
+assert.deepEqual(connections, [{ url: EU, loginHint: "runner@example.com" }]);
+assert.equal(coros.getCorosMcpStatus().connected, true);
+await coros.disconnectCorosMcp();
+assert.equal(servers.has("coros-eu"), true, "Disconnecting keeps the athlete's server");
 
-console.log("coros-mcp-account tests passed (region, email hint, authorized, added, silent, in-flight, connection events, disabled stays off)");
+// With no COROS server at all, background loads add none; the athlete's Connect brings COROS back.
+servers.delete("coros-eu");
+connections.length = 0;
+assert.deepEqual(await coros.connectCorosMcp(null, false), { connected: false, authorized: false, tools: [] });
+assert.equal(await coros.ensureCorosMcpConnected(), false);
+assert.equal(servers.has("coros"), false);
+await coros.connectCorosMcp(null);
+assert.equal(servers.get("coros").builtin, true);
+assert.deepEqual(connections, [{ url: EU, loginHint: "runner@example.com" }], "Restored on the account's region");
+await coros.disconnectCorosMcp();
+
+console.log("coros-mcp-account tests passed (region, email hint, authorized, added, silent, in-flight, connection events, disabled stays off, added in place of the built-in, restored)");

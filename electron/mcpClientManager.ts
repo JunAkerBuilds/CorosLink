@@ -18,7 +18,12 @@ import type {
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { deleteSettings, getSetting, setSetting } from "./database";
 import { recordDiagnosticError } from "./diagnosticsService";
-import { corosSignInEmailScript, isCorosSignInPage } from "./corosMcpRegions";
+import {
+  COROS_MCP_SERVER_ID,
+  corosSignInEmailScript,
+  isCorosSignInPage,
+  pickCorosMcpServer
+} from "./corosMcpRegions";
 import {
   getMcpBearer,
   getMcpServer,
@@ -923,18 +928,31 @@ export async function ensureAllMcpConnected(): Promise<void> {
 
 // ----- tools -----
 
-/** All tools from connected servers, names prefixed "<id>__<tool>". */
+/**
+ * The registered server COROS features use, whatever its id: an athlete who
+ * removed the built-in "coros" entry may have added a COROS endpoint by hand.
+ */
+export function corosMcpServerId(): string | undefined {
+  return pickCorosMcpServer(listMcpServers())?.id;
+}
+
+/**
+ * All tools from connected servers, names prefixed "<id>__<tool>". The COROS
+ * server's tools are always "coros__<tool>", so the Coach's COROS routing,
+ * permissions and save confirmations apply to it under any id.
+ */
 export function getAllMcpTools(): CorosMcpTool[] {
   const tools: CorosMcpTool[] = [];
+  const servers = listMcpServers();
+  const corosId = pickCorosMcpServer(servers)?.id;
   const enabledIds = new Set(
-    listMcpServers()
-      .filter((server) => server.enabled)
-      .map((server) => server.id)
+    servers.filter((server) => server.enabled).map((server) => server.id)
   );
   for (const [id, rt] of runtimes) {
     if (!enabledIds.has(id) || !rt.client) continue;
+    const prefix = id === corosId ? COROS_MCP_SERVER_ID : id;
     for (const tool of rt.tools) {
-      tools.push({ ...tool, name: prefixToolName(id, tool.name) });
+      tools.push({ ...tool, name: prefixToolName(prefix, tool.name) });
     }
   }
   return tools;
@@ -971,10 +989,15 @@ export async function callMcpTool(
   if (!split) {
     throw new Error(`Unknown tool "${prefixedName}".`);
   }
-  const rt = runtime(split.serverId);
-  const server = getMcpServer(split.serverId);
+  const corosId = corosMcpServerId();
+  // "coros__" names whichever server COROS features use (see getAllMcpTools).
+  const serverId =
+    split.serverId === COROS_MCP_SERVER_ID ? corosId ?? split.serverId : split.serverId;
+  const isCoros = serverId === corosId;
+  const rt = runtime(serverId);
+  const server = getMcpServer(serverId);
   if (!server || !server.enabled) {
-    throw new Error(`MCP server "${split.serverId}" is unavailable or disabled.`);
+    throw new Error(`MCP server "${serverId}" is unavailable or disabled.`);
   }
   const serverName = server.name;
   if (!rt.client) {
@@ -986,8 +1009,8 @@ export async function callMcpTool(
   // Health cards and the Coach turn most COROS tool failures into an empty state or chat
   // text, so every failed COROS call is recorded here. Other servers' tool text can carry
   // the user's own content (documents, mail), so it stays out of the shareable report.
-  const source = `mcp:${split.serverId}/${split.toolName}`;
-  const recordsFailures = split.serverId === "coros";
+  const source = `mcp:${serverId}/${split.toolName}`;
+  const recordsFailures = isCoros;
   const failed = (message: string, cause?: unknown): Error => {
     const error = new Error(message, cause === undefined ? undefined : { cause });
     if (recordsFailures) recordDiagnosticError(source, error);
@@ -999,7 +1022,7 @@ export async function callMcpTool(
     result = await rt.client.callTool({ name: split.toolName, arguments: args });
   } catch (caught) {
     const detail = caught instanceof Error ? caught.message : String(caught);
-    throw failed(formatToolFailure(serverName, split.serverId, split.toolName, detail), caught);
+    throw failed(formatToolFailure(serverName, isCoros, split.toolName, detail), caught);
   }
 
   const content = Array.isArray(result.content) ? result.content : [];
@@ -1019,11 +1042,11 @@ export async function callMcpTool(
 
   if (result.isError) {
     throw failed(
-      formatToolFailure(serverName, split.serverId, split.toolName, combined || text || "unknown error")
+      formatToolFailure(serverName, isCoros, split.toolName, combined || text || "unknown error")
     );
   }
   if (/service exceptions?/i.test(combined || text)) {
-    throw failed(formatToolFailure(serverName, split.serverId, split.toolName, combined || text));
+    throw failed(formatToolFailure(serverName, isCoros, split.toolName, combined || text));
   }
   // COROS answers some bad calls with this notice instead of an error; callers decide what it means.
   if (recordsFailures && /tool call anomalies detected/i.test(combined || text)) {
@@ -1034,13 +1057,13 @@ export async function callMcpTool(
 
 function formatToolFailure(
   serverName: string,
-  serverId: string,
+  coros: boolean,
   toolName: string,
   detail: string
 ): string {
   const trimmed = detail.trim();
   // Preserve the COROS-specific guidance the coach relies on.
-  if (serverId === "coros") {
+  if (coros) {
     if (/service exceptions?/i.test(trimmed)) {
       if (/recovery|health|fitness|training.?load|daily/i.test(toolName)) {
         return (
