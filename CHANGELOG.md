@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Long workout names keep their words on the watch.** A workout name longer than 39 bytes, such as "2026 Block 6 Threshold Build W3D4: Recovery Run", was cut mid-word when sent over Bluetooth. The watch joins the two parts with a space, so the run was recorded as "… Reco very Run". Names now break between words. Planned workouts on the watch get the fix at the next calendar sync. A workout sent on its own needs to be sent again.
+
 ## [0.1.62] - 2026-10-22
 
 ### Added

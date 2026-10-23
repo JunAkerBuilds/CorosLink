@@ -134,10 +134,19 @@ export function cutUtf8(text: string, limit: number): string {
   return out;
 }
 
-/** Names longer than 39 bytes continue in `extend_name` (51 bytes), as the app splits them. */
+/**
+ * Names longer than 39 bytes continue in `extend_name` (51 bytes). The watch
+ * joins the two with a space ("…W3D4: Recovery Run" was recorded as
+ * "…W3D4: Reco very Run"), so the split takes the last space that fits and
+ * leaves it out. A name with no space in its first 39 bytes is cut mid-word.
+ */
 function splitName(name: string): { name: string; extendName?: string } {
   const head = cutUtf8(name, 39);
-  return head.length < name.length ? { name: head, extendName: cutUtf8(name.slice(head.length), 51) } : { name: head };
+  if (head.length === name.length) return { name: head };
+  const space = name.lastIndexOf(" ", head.length);
+  return space > 0
+    ? { name: name.slice(0, space), extendName: cutUtf8(name.slice(space + 1), 51) }
+    : { name: head, extendName: cutUtf8(name.slice(head.length), 51) };
 }
 
 /** The app tracks the highest built-in name key ("T1234") the watch must translate. */

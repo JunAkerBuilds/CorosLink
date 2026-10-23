@@ -77,13 +77,27 @@ const program = {
   ]
 };
 
-await test("workout: the app's ProgramLite, names split at 39 bytes", () => {
+// [name, extend_name] of a workout sent under `name`.
+const splitWorkoutName = name => {
+  const summary = fields(fields(encodeProgramLite({ ...program, name })).get(1)[0]);
+  return [summary.get(2)[0].toString(), summary.get(20)?.[0].toString()];
+};
+
+await test("workout: names over 39 bytes split at a space, which the watch's join puts back", () => {
+  assert.deepEqual(splitWorkoutName("2026 Block 6 Threshold Build W3D4: Recovery Run"), ["2026 Block 6 Threshold Build W3D4:", "Recovery Run"]);
+  assert.deepEqual(splitWorkoutName("Recovery Run"), ["Recovery Run", undefined]);
+  assert.deepEqual(splitWorkoutName("A  B".padEnd(45, "c")), ["A ", "B".padEnd(42, "c")], "only the space the watch adds is left out");
+  assert.deepEqual(splitWorkoutName("x".repeat(45)), ["x".repeat(39), "x".repeat(6)], "no space: cut at 39 bytes");
+  assert.deepEqual(splitWorkoutName("×".repeat(25)), ["×".repeat(19), "×".repeat(6)], "without splitting a character");
+  const [head, tail] = splitWorkoutName(`Long ${"y".repeat(100)}`);
+  assert.deepEqual([head, Buffer.byteLength(tail)], ["Long", 51], "extend_name holds 51 bytes");
+});
+
+await test("workout: the app's ProgramLite", () => {
   const lite = fields(encodeProgramLite(program));
   const summary = fields(lite.get(1)[0]);
   assert.equal(summary.get(1)[0], 1792390000000000n);
-  const name = summary.get(2)[0].toString();
-  assert.equal(Buffer.byteLength(name), 39, "39 bytes, without splitting the ×");
-  assert.equal(name + summary.get(20)[0].toString(), program.name);
+  assert.deepEqual([summary.get(2)[0].toString(), summary.get(20)[0].toString()], ["Intervals 5 × 1 km with a long", "descriptive name"]);
   assert.equal(summary.get(11)[0], 1234n, "highest built-in name key");
   const steps = lite.get(2).map(fields);
   assert.equal(steps.length, 4, "repeat groups are kept");
