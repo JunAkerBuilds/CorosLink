@@ -18,7 +18,8 @@ const {
   buildStrengthAnalytics,
   estimateOneRepMax,
   formatVolumeKg,
-  formatWeightKg
+  formatWeightKg,
+  pendingNotice
 } = await load(
   "src",
   "strength",
@@ -247,5 +248,15 @@ assert.equal(emptyAnalytics.summary.sessions, 0);
 assert.equal(emptyAnalytics.summary.avgSessionVolumeKg, 0);
 assert.equal(emptyAnalytics.muscleMax.sets, 0);
 assert.equal(emptyAnalytics.muscles.length, MUSCLES.length);
+
+// ---- Pending notice ----
+
+assert.equal(pendingNotice({ coros: 0, strava: 0 }), null);
+assert.equal(pendingNotice({ coros: 1, strava: 0 }), "Reading 1 more session from COROS. The map fills in as it arrives.");
+assert.equal(pendingNotice({ coros: 3, strava: 0 }), "Reading 3 more sessions from COROS. The map fills in as they arrive.");
+assert.equal(pendingNotice({ coros: 0, strava: 1 }), "Reading notes for 1 more session from Strava.");
+assert.equal(pendingNotice({ coros: 0, strava: 4 }), "Reading notes for 4 more sessions from Strava.");
+assert.equal(pendingNotice({ coros: 1, strava: 1 }), "Reading 2 more sessions from COROS and Strava. The map fills in as they arrive.");
+assert.equal(pendingNotice({ coros: 1_234, strava: 0 }), "Reading 1,234 more sessions from COROS. The map fills in as they arrive.");
 
 console.log("strength-analytics tests passed");

@@ -2148,5 +2148,4 @@ export const trainingFrench: Record<string, string> = {
   "Reading {{count}} more sessions from COROS. The map fills in as they arrive.": "Lecture de {{count}} séances supplémentaires depuis COROS. La carte se remplit à leur arrivée.",
   "Reading notes for 1 more session from Strava.": "Lecture des notes d’une séance supplémentaire depuis Strava.",
   "Reading notes for {{count}} more sessions from Strava.": "Lecture des notes de {{count}} séances supplémentaires depuis Strava.",
-  "muscle:Back": "Dos",
 };
