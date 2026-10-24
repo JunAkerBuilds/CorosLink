@@ -10,6 +10,7 @@ import type { WorkoutEditorContext, WorkoutEditorDocument, TrainingPlanEntry } f
 const fixture = window as unknown as {
   editorLoads: number;
   switchLanguage: typeof setLanguage;
+  rerenderEditor: (source: "plan" | "library") => void;
   showCalendar: () => void;
 };
 fixture.editorLoads = 0;
@@ -33,7 +34,15 @@ const planEntry = {
   programId: "library-run", weekIndex: 0, dayIndex: 0
 } as TrainingPlanEntry;
 let root = createRoot(document.getElementById("root")!);
-root.render(<UnitSystemProvider><WorkoutEditorModal api={editorApi} planEntry={planEntry} onClose={() => {}} onError={() => {}} /></UnitSystemProvider>);
+// Parents pass a fresh editRef literal / planEntry object on every render, as the Training Library does.
+fixture.rerenderEditor = (source) => root.render(
+  <UnitSystemProvider>
+    {source === "plan"
+      ? <WorkoutEditorModal api={editorApi} planEntry={{ ...planEntry }} onClose={() => {}} onError={() => {}} />
+      : <WorkoutEditorModal api={editorApi} editRef={{ kind: "library", programId: "library-run" }} onClose={() => {}} onError={() => {}} onSaved={() => {}} />}
+  </UnitSystemProvider>
+);
+fixture.rerenderEditor("plan");
 
 fixture.showCalendar = () => {
   setLanguage("en");

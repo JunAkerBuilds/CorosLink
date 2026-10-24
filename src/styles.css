@@ -29333,8 +29333,7 @@ tr.data-intervals-row-missing {
   overflow: hidden;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
-  background:
-    radial-gradient(118% 84% at 50% 4%, #ffffff 0%, #f1f2f4 58%, #dfe3e8 100%);
+  background: #ffffff;
   box-shadow: var(--glass-inset);
   max-height: 420px;
 }
@@ -29351,6 +29350,40 @@ tr.data-intervals-row-missing {
 
 .exercise-preview-stage video.is-ready {
   opacity: 1;
+  cursor: pointer;
+}
+
+.exercise-preview-playback {
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+  z-index: 2;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(20, 24, 30, 0.62);
+  color: #ffffff;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.exercise-preview-stage:hover .exercise-preview-playback,
+.exercise-preview-playback:focus-visible,
+.exercise-preview-playback.is-paused {
+  opacity: 1;
+}
+
+.exercise-preview-playback:hover {
+  background: rgba(20, 24, 30, 0.82);
+}
+
+.exercise-preview-playback:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .exercise-preview-status {
@@ -30124,6 +30157,7 @@ tr.data-intervals-row-missing {
 .workout-editor-basics textarea,
 .workout-step-card input,
 .workout-step-card select,
+.workout-step-card textarea,
 .workout-repeat-card input,
 .workout-repeat-card select {
   min-width: 0;
@@ -30135,9 +30169,20 @@ tr.data-intervals-row-missing {
   font: inherit;
 }
 
+.workout-editor-basics textarea::placeholder,
+.workout-step-card textarea::placeholder {
+  color: var(--text-muted);
+}
+
 .workout-editor-basics textarea {
   resize: vertical;
-  min-height: 66px;
+  min-height: 56px;
+}
+
+/* The description is the one long field; give it the full row instead of
+   half of one with an empty gutter beside it. */
+.workout-editor-basics .calendar-field:has(> textarea) {
+  grid-column: 1 / -1;
 }
 
 .workout-editor-basics small {
@@ -30201,6 +30246,26 @@ tr.data-intervals-row-missing {
 
 .workout-editor-add-actions .ghost-button {
   padding-inline: 9px;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.workout-editor-structure-header .ghost-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text-primary) 22%, var(--glass-border));
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+/* Exercises are what a strength session is made of; that add reads first. */
+.workout-editor-add-actions .ghost-button.is-primary {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--glass-border));
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.workout-editor-add-actions .ghost-button.is-primary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--glass-border));
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .workout-editor-nodes {
@@ -30221,13 +30286,27 @@ tr.data-intervals-row-missing {
 }
 
 .workout-step-card {
-  --step-color: #35c76f;
+  --step-color: var(--accent);
   position: relative;
   overflow: hidden;
   border: 1px solid var(--glass-border);
-  border-left: 4px solid var(--step-color);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--glass-bg) 92%, var(--step-color) 8%);
+  background: var(--glass-bg);
+}
+
+/* The step kind reads from a slim rail. Tinting every card by its kind turned a
+   strength session (all exercises) into one green slab. */
+.workout-step-card::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 0;
+  z-index: 1;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--step-color);
+  pointer-events: none;
 }
 
 .workout-step-card.is-warmup { --step-color: #f0a72e; }
@@ -30312,14 +30391,137 @@ tr.data-intervals-row-missing {
 
 .workout-strength-step-heading strong {
   color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 680;
+  font-size: 13.5px;
+  font-weight: 600;
 }
 
 .workout-strength-step-heading span {
-  color: var(--text-muted);
-  font-size: 10.5px;
+  color: var(--text-secondary);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+/* --- foldable strength steps --- */
+
+.workout-step-card.is-open,
+.workout-step-card.is-collapsed {
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.workout-step-card.is-open .workout-step-header,
+.workout-step-card.is-collapsed .workout-step-header {
+  min-height: 56px;
+  cursor: pointer;
+}
+
+.workout-step-card.is-collapsed .workout-step-header {
+  border-bottom-color: transparent;
+}
+
+.workout-step-card.is-collapsed:hover {
+  border-color: color-mix(in srgb, var(--text-primary) 12%, var(--glass-border));
+  background: var(--glass-bg-hover);
+}
+
+/* The open step lifts on neutral graphite; colour stays on the rail. */
+.workout-step-card.is-open {
+  border-color: color-mix(in srgb, var(--text-primary) 14%, var(--glass-border));
+  background: color-mix(in srgb, var(--glass-bg-hover) 55%, var(--glass-bg));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+}
+
+:root[data-theme="paper"] .workout-step-card.is-open {
+  background: var(--surface);
+  box-shadow: 0 10px 26px rgba(36, 45, 41, 0.08);
+}
+
+.workout-step-card.has-error {
+  border-top-color: color-mix(in srgb, #f28b8b 55%, var(--glass-border));
+  border-right-color: color-mix(in srgb, #f28b8b 55%, var(--glass-border));
+  border-bottom-color: color-mix(in srgb, #f28b8b 55%, var(--glass-border));
+}
+
+.workout-step-card.is-collapsed .workout-field-error {
+  padding-top: 0;
+}
+
+/* The movement's cover frame, or the step kind's glyph when there is none. */
+.workout-step-glyph {
+  position: relative;
+  display: grid;
+  width: 46px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--step-color) 34%, var(--glass-border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--step-color) 14%, transparent);
+  color: var(--step-color);
+}
+
+.workout-step-glyph.has-thumbnail {
+  border-color: var(--glass-border);
+  background: #ffffff;
+  color: #9aa1ab;
+}
+
+.workout-step-glyph img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.workout-step-glyph img.is-loaded {
+  opacity: 1;
+}
+
+.workout-step-header .workout-step-toggle {
+  margin-left: 4px;
+  color: var(--text-secondary);
+}
+
+.workout-step-toggle svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s ease;
+}
+
+.workout-step-toggle svg.is-open {
+  transform: rotate(180deg);
+}
+
+/* In a foldable header the step kind is a quiet pill after the title, not a
+   heading louder than the exercise it describes. */
+.workout-step-card.is-open .workout-step-header .workout-step-kind-select {
+  width: auto;
+  min-width: 124px;
+}
+
+.workout-step-card.is-open .workout-step-header .workout-step-kind-select .app-select-trigger {
+  min-height: 30px;
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+  padding: 0 8px 0 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.workout-step-card.is-open .workout-step-header > input {
+  flex: 1;
+  height: 34px;
+  padding-block: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.workout-step-reveal {
+  overflow: hidden;
 }
 
 .workout-step-actions {
@@ -30432,6 +30634,8 @@ tr.data-intervals-row-missing {
 .workout-strength-instructions textarea {
   min-height: 62px;
   resize: vertical;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .workout-strength-instructions small {
@@ -30474,7 +30678,7 @@ tr.data-intervals-row-missing {
 .workout-step-card .set-line input:focus-visible,
 .workout-step-card .rest-picker input:focus-visible,
 .workout-step-card .rest-picker button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--step-color, var(--accent)) 80%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 80%, transparent);
   outline-offset: 3px;
 }
 
@@ -30527,9 +30731,10 @@ tr.data-intervals-row-missing {
 }
 
 .workout-step-card .rest-picker > button.is-selected {
-  border-color: color-mix(in srgb, var(--step-color, var(--accent)) 55%, transparent);
-  background: color-mix(in srgb, var(--step-color, var(--accent)) 18%, transparent);
+  border-color: color-mix(in srgb, var(--text-primary) 34%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 13%, transparent);
   color: var(--text-primary);
+  box-shadow: var(--glass-inset);
 }
 
 .workout-step-card .rest-picker-custom input {
@@ -30543,8 +30748,26 @@ tr.data-intervals-row-missing {
 }
 
 .workout-step-card .rest-picker-custom input:focus {
-  border-color: color-mix(in srgb, var(--step-color, var(--accent)) 70%, var(--glass-border));
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--glass-border));
   box-shadow: none;
+}
+
+/* Inside the editor's cards the prescription and plate stay neutral; the
+   accent is kept for primary actions and focus. */
+.workout-step-card .set-line-cell:focus-within {
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+.workout-step-card .exercise-preview-targets li.is-prime {
+  border-color: color-mix(in srgb, var(--text-primary) 26%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 9%, transparent);
+  color: var(--text-primary);
+}
+
+.workout-step-card .exercise-preview-angles > button:hover,
+.workout-step-card .exercise-preview-angles > button:focus-visible {
+  border-color: color-mix(in srgb, var(--text-primary) 24%, var(--glass-border));
+  background: var(--glass-bg-hover);
 }
 
 .workout-control-group > label,
@@ -30566,6 +30789,12 @@ tr.data-intervals-row-missing {
 .workout-control-group select {
   width: 100%;
   min-height: 34px;
+}
+
+/* Same height as the select triggers beside them, so labels share a baseline. */
+.workout-control-group input {
+  height: 40px;
+  padding-block: 0;
 }
 
 .workout-control-group .app-select {
@@ -30699,8 +30928,8 @@ tr.data-intervals-row-missing {
   gap: 2px;
 }
 
-.workout-estimate small { color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; }
-.workout-estimate strong { color: var(--text-primary); font-size: 12px; font-variant-numeric: tabular-nums; }
+.workout-estimate small { color: var(--text-muted); font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.workout-estimate strong { color: var(--text-primary); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .workout-estimate > span:first-child:not(:only-child) strong { color: var(--accent-strong); }
 .workout-estimate .is-error { display: flex; align-items: center; color: #f28b8b; font-size: 11px; }
 
@@ -30712,10 +30941,35 @@ tr.data-intervals-row-missing {
 }
 
 .workout-editor-footer-actions .ghost-button,
-.workout-editor-footer-actions .primary-button {
+.workout-editor-footer-actions .primary-button,
+.workout-editor-state .ghost-button {
   display: inline-flex;
+  min-height: 38px;
   align-items: center;
+  justify-content: center;
   gap: 7px;
+  border-radius: var(--radius-sm);
+  padding: 0 16px;
+  font-size: 13px;
+}
+
+/* .ghost-button has no global skin; without this Cancel rendered as a bare
+   system button. */
+.workout-editor-footer-actions .ghost-button,
+.workout-editor-state .ghost-button {
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.workout-editor-footer-actions .ghost-button:hover:not(:disabled),
+.workout-editor-state .ghost-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text-primary) 22%, var(--glass-border));
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
 }
 
 .workout-editor-confirm {

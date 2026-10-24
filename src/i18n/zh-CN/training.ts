@@ -615,6 +615,8 @@ export const trainingChinese: Readonly<Record<string, string>> = {
   "Loading calendar connection…": "正在加载日历连接...",
   "Loading COROS exercises...": "正在加载 COROS 练习...",
   "Loading demonstration": "装载演示",
+  "Pause demonstration": "暂停演示",
+  "Play demonstration": "播放演示",
   "Loading event…": "加载事件...",
   "Loading library…": "正在加载库...",
   "Loading route…": "加载路线...",

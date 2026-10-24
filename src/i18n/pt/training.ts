@@ -615,6 +615,8 @@ export const trainingPortuguese: Record<string, string> = {
   "Loading calendar connection…": "A carregar ligação ao calendário…",
   "Loading COROS exercises...": "A carregar exercícios COROS...",
   "Loading demonstration": "A carregar demonstração",
+  "Pause demonstration": "Pausar demonstração",
+  "Play demonstration": "Reproduzir demonstração",
   "Loading event…": "A carregar evento…",
   "Loading library…": "A carregar biblioteca…",
   "Loading route…": "A carregar percurso…",

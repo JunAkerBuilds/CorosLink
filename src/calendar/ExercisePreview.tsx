@@ -1,7 +1,7 @@
 import { getLocale, useLanguage, t } from "../i18n/training";
-import { AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertCircle, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import { useReducedMotion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { WorkoutExerciseOption } from "../../electron/types";
 import { MUSCLE_BY_ID, resolveExerciseTargets } from "../strength/muscles";
 
@@ -34,6 +34,8 @@ export function ExercisePreview({
   const reducedMotion = useReducedMotion();
   const [angleIndex, setAngleIndex] = useState(0);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [paused, setPaused] = useState(Boolean(reducedMotion));
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const angles = useMemo(
     () => option?.media?.filter((entry) => entry.videoUrl) ?? [],
@@ -64,9 +66,28 @@ export function ExercisePreview({
 
   useEffect(() => {
     setStatus("loading");
-  }, [angle?.videoUrl]);
+    setPaused(Boolean(reducedMotion));
+  }, [angle?.videoUrl, reducedMotion]);
+
+  /*
+   * A looping demo needs one control, not the browser's full bar (scrubber,
+   * fullscreen, download menu) laid over a 270 px plate. Clicking the clip
+   * itself pauses it too.
+   */
+  const togglePlayback = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) void video.play().catch(() => undefined);
+    else video.pause();
+  };
 
   if (!angle?.videoUrl) return null;
+  /*
+   * With a cover frame the clip is shown from the start: the poster stands in
+   * until the first frame, which is the same picture, so nothing swaps. The
+   * spinner is only for clips COROS ships without one.
+   */
+  const poster = angle.coverUrl ?? option?.thumbnailUrl;
 
   return (
     <section
@@ -74,7 +95,7 @@ export function ExercisePreview({
       aria-label={t("{{value1}} demonstration", { value1: String(name || t("Exercise")) })}
     >
       <div className="exercise-preview-stage">
-        {status === "loading" ? (
+        {status === "loading" && !poster ? (
           <div className="exercise-preview-status" role="status">
             <span className="exercise-preview-spinner" aria-hidden="true" />
             <strong>{t("Loading demonstration")}</strong>
@@ -89,10 +110,10 @@ export function ExercisePreview({
         ) : null}
         <video
           key={angle.videoUrl}
-          className={status === "ready" ? "is-ready" : ""}
+          ref={videoRef}
+          className={status === "ready" || (status === "loading" && poster) ? "is-ready" : ""}
           src={angle.videoUrl}
-          poster={angle.coverUrl ?? option?.thumbnailUrl}
-          controls
+          poster={poster}
           autoPlay={!reducedMotion}
           muted
           loop={!reducedMotion}
@@ -100,8 +121,22 @@ export function ExercisePreview({
           preload="metadata"
           onLoadedData={() => setStatus("ready")}
           onError={() => setStatus("error")}
+          onPlay={() => setPaused(false)}
+          onPause={() => setPaused(true)}
+          onClick={togglePlayback}
           aria-label={t("{{value1}} demonstration, angle {{value2}} of {{value3}}", { value1: String(name || t("Exercise")), value2: String(angleIndex + 1), value3: String(angles.length) })}
         />
+        {status === "ready" ? (
+          <button
+            type="button"
+            className={`exercise-preview-playback${paused ? " is-paused" : ""}`}
+            aria-label={paused ? t("Play demonstration") : t("Pause demonstration")}
+            title={paused ? t("Play demonstration") : t("Pause demonstration")}
+            onClick={togglePlayback}
+          >
+            {paused ? <Play size={13} aria-hidden="true" /> : <Pause size={13} aria-hidden="true" />}
+          </button>
+        ) : null}
       </div>
 
       {angles.length > 1 ? (

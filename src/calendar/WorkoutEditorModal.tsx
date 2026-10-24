@@ -7,14 +7,21 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  Dumbbell,
+  Flag,
+  Flame,
   GripVertical,
+  Link2,
   LoaderCircle,
   Plus,
   Save,
+  Snowflake,
+  Timer,
   Trash2,
   Ungroup,
   X
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, ReactElement } from "react";
 import { createPortal } from "react-dom";
@@ -161,6 +168,94 @@ function stepTitle(kind: RunWorkoutEditorStepKind): string {
         : t("Training");
 }
 
+/** Strength calls its working step an exercise, matching the add buttons. */
+function stepKindLabel(kind: RunWorkoutEditorStepKind, sport: WorkoutSport): string {
+  return sport === "strength" && kind === "training" ? t("Exercise") : stepTitle(kind);
+}
+
+const STEP_KIND_ICONS: Record<RunWorkoutEditorStepKind, LucideIcon> = {
+  warmup: Flame,
+  training: Dumbbell,
+  rest: Timer,
+  cooldown: Snowflake,
+  sendOff: Flag
+};
+
+/** Opens on the first exercise rather than a warm-up, so the editor never starts fully folded. */
+function firstStepId(nodes: RunWorkoutEditorNode[]): string | null {
+  const steps = nodes.flatMap((node) => node.nodeType === "step" ? [node] : node.steps);
+  return (steps.find((step) => step.kind === "training") ?? steps[0])?.id ?? null;
+}
+
+function exerciseThumbnail(option: WorkoutExerciseOption | undefined): string | undefined {
+  return option?.media?.find((media) => media.coverUrl)?.coverUrl ?? option?.thumbnailUrl;
+}
+
+/*
+ * The exercise library outlives one editor. Main caches COROS's catalog for
+ * five minutes but answers every call with a fresh 382-object copy, so the
+ * renderer keeps its own: a reopened editor shows the list at once, and a
+ * quiet refresh only replaces it when something actually changed.
+ */
+const EXERCISE_LIBRARY_REFRESH_MS = 60_000;
+const exerciseLibraries = new Map<WorkoutSport, { options: WorkoutExerciseOption[]; loadedAt: number }>();
+const exerciseLibraryRequests = new Map<WorkoutSport, Promise<WorkoutExerciseOption[]>>();
+
+function exerciseLibrarySignature(options: WorkoutExerciseOption[]): string {
+  return options.map((option) => `${option.id}:${option.name}:${option.media?.[0]?.videoUrl ?? ""}`).join("|");
+}
+
+function loadExerciseLibrary(api: CorosLinkApi, sport: WorkoutSport): Promise<WorkoutExerciseOption[]> {
+  const pending = exerciseLibraryRequests.get(sport);
+  if (pending) return pending;
+  const request = api.listWorkoutExercises(sport)
+    .then((options) => {
+      const cached = exerciseLibraries.get(sport);
+      const kept = cached && exerciseLibrarySignature(cached.options) === exerciseLibrarySignature(options)
+        ? cached.options
+        : options;
+      exerciseLibraries.set(sport, { options: kept, loadedAt: Date.now() });
+      return kept;
+    })
+    .finally(() => exerciseLibraryRequests.delete(sport));
+  exerciseLibraryRequests.set(sport, request);
+  return request;
+}
+
+/** How long the skeleton may wait for the library and step pictures before the form shows anyway. */
+const SESSION_REVEAL_WAIT_MS = 1_200;
+
+function settleWithin<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
+  if (ms <= 0) return Promise.resolve(undefined);
+  return Promise.race([
+    promise.catch(() => undefined),
+    new Promise<undefined>((resolve) => window.setTimeout(() => resolve(undefined), ms))
+  ]);
+}
+
+function preloadImage(url: string): Promise<void> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve();
+    image.onerror = () => resolve();
+    image.src = url;
+  });
+}
+
+/** Cover frames the session paints on arrival: every row's tile and the open step's demonstration poster. */
+function sessionPictureUrls(nodes: RunWorkoutEditorNode[], options: WorkoutExerciseOption[], openId: string | null): string[] {
+  const byId = new Map(options.map((option) => [option.id, option]));
+  const urls = new Set<string>();
+  for (const step of nodes.flatMap((node) => node.nodeType === "step" ? [node] : node.steps)) {
+    const option = step.exerciseId ? byId.get(step.exerciseId) : undefined;
+    const tile = exerciseThumbnail(option);
+    if (tile) urls.add(tile);
+    const poster = option?.media?.find((media) => media.videoUrl)?.coverUrl;
+    if (step.id === openId && poster) urls.add(poster);
+  }
+  return [...urls];
+}
+
 const STRENGTH_REST_PRESETS = [0, 30, 45, 60, 90, 120, 180] as const;
 
 type StrengthLoadMode = "unspecified" | "bodyweight" | "added";
@@ -181,6 +276,7 @@ function strengthTargetSummary(target: RunWorkoutEditorTarget): string {
   if (target.type === "reps") return t("{{count}} reps", { count: target.count });
   if (target.type === "time") return clockFromSeconds(target.seconds);
   if (target.type === "open") return t("Open");
+  if (target.type === "hrRecovery") return `${target.bpm} bpm`;
   return target.type;
 }
 
@@ -273,6 +369,8 @@ export function WorkoutEditorModal({
   const [exerciseOptions, setExerciseOptions] = useState<WorkoutExerciseOption[]>([]);
   const [exerciseOptionsLoading, setExerciseOptionsLoading] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
+  /** The one strength step shown in full; the rest fold to summary rows. */
+  const [openStepId, setOpenStepId] = useState<string | null>(null);
   const previewSequence = useRef(0);
   const planMode = Boolean(planEntry);
   const planWorkout = useMemo<PlanWorkoutEntryInput | undefined>(() => {
@@ -285,11 +383,26 @@ export function WorkoutEditorModal({
     };
   }, [planEntry]);
 
+  /*
+   * Parents pass editRef as an inline literal and planEntry from a fresh
+   * find(), so both change identity whenever the parent renders, and the app
+   * re-renders on its own polls. Load by what they name instead: keyed on
+   * identity, every such render reloaded the workout and threw the draft away.
+   */
+  const editRefKey = editRef ? JSON.stringify(editRef) : "";
+  const stableEditRef = useMemo(() => editRef, [editRefKey]);
+  const loadKey = planEntry ? `plan:${planEntry.id}` : editRefKey;
+  const planSource = useRef({ planEntry, planWorkout });
+  planSource.current = { planEntry, planWorkout };
+
   useEffect(() => {
     let cancelled = false;
+    const { planEntry, planWorkout } = planSource.current;
+    const editRef = stableEditRef;
     setDocument(null);
     setDraft(null);
     setLoadError(null);
+    setOpenStepId(null);
     const load = async (): Promise<WorkoutEditorDocument> => {
       if (!planEntry) {
         if (!editRef) throw new Error(t("No workout was selected."));
@@ -318,16 +431,40 @@ export function WorkoutEditorModal({
         canEdit: true
       };
     };
-    void load().then((loaded) => {
-      if (!cancelled) {
-        setDocument(loaded);
-        setDraft(structuredClone(loaded.draft));
+    void load().then(async (loaded) => {
+      if (cancelled) return;
+      const sport = loaded.draft.sport;
+      const openId = firstStepId(loaded.draft.nodes);
+      let options: WorkoutExerciseOption[] | undefined;
+      if (sport === "strength" || sport === "hyrox") {
+        /*
+         * Reveal the session in one piece. Painting the form first and then
+         * swapping in the library, six row pictures and the demonstration as
+         * each landed read as the dialog flickering for a second.
+         */
+        const revealBy = Date.now() + SESSION_REVEAL_WAIT_MS;
+        const cached = exerciseLibraries.get(sport)?.options;
+        options = cached ?? await settleWithin(loadExerciseLibrary(api, sport), revealBy - Date.now());
+        if (cancelled) return;
+        if (options) {
+          await settleWithin(
+            Promise.all(sessionPictureUrls(loaded.draft.nodes, options, openId).map(preloadImage)),
+            revealBy - Date.now()
+          );
+        }
+        if (cancelled) return;
+        /* Same batch as the draft, so the first paint already has the pictures. */
+        if (options) setExerciseOptions(options);
+        setExerciseOptionsLoading(!options);
       }
+      setDocument(loaded);
+      setDraft(structuredClone(loaded.draft));
+      setOpenStepId(openId);
     }).catch((cause: unknown) => {
       if (!cancelled) setLoadError(cause instanceof Error ? cause.message : String(cause));
     });
     return () => { cancelled = true; };
-  }, [api, editRef, planEntry, planWorkout, unitSystem]);
+  }, [api, loadKey, stableEditRef, unitSystem]);
 
   useEffect(() => {
     const sport = draft?.sport;
@@ -337,10 +474,17 @@ export function WorkoutEditorModal({
       return;
     }
     let active = true;
-    setExerciseOptionsLoading(true);
-    void api.listWorkoutExercises(sport)
+    const cached = exerciseLibraries.get(sport);
+    if (cached) {
+      setExerciseOptions(cached.options);
+      setExerciseOptionsLoading(false);
+      if (Date.now() - cached.loadedAt < EXERCISE_LIBRARY_REFRESH_MS) return;
+    } else {
+      setExerciseOptionsLoading(true);
+    }
+    void loadExerciseLibrary(api, sport)
       .then((options) => { if (active) setExerciseOptions(options); })
-      .catch(() => { if (active) setExerciseOptions([]); })
+      .catch(() => { if (active && !cached) setExerciseOptions([]); })
       .finally(() => { if (active) setExerciseOptionsLoading(false); });
     return () => { active = false; };
   }, [api, draft?.sport]);
@@ -353,6 +497,7 @@ export function WorkoutEditorModal({
 
   useEffect(() => {
     const sequence = ++previewSequence.current;
+    const editRef = stableEditRef;
     if (!document || !draft || !document.canEdit || !validation.valid || planMode || !editRef) {
       setPreview(null);
       setPreviewing(false);
@@ -380,12 +525,36 @@ export function WorkoutEditorModal({
         });
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [api, document, draft, editRef, planMode, unitSystem, validation.valid]);
+  }, [api, document, draft, stableEditRef, planMode, unitSystem, validation.valid]);
 
   const requestClose = useCallback(() => {
     if (dirty && !saving) setConfirmClose(true);
     else onClose();
   }, [dirty, onClose, saving]);
+
+  const strengthSession = draft?.sport === "strength";
+  const revealStepId = useRef<string | null>(null);
+  const addStep = (kind: RunWorkoutEditorStepKind) => {
+    if (!draft) return;
+    const step = emptyStep(kind, draft.sport);
+    setDraft({ ...draft, nodes: [...draft.nodes, step] });
+    setOpenStepId(step.id);
+    revealStepId.current = step.id;
+  };
+  const toggleStep = (id: string) => setOpenStepId((current) => current === id ? null : id);
+
+  /*
+   * A step added at the end of a long session opens below the fold; bring it
+   * into view, with the cursor in its movement search so the name can be typed.
+   */
+  useEffect(() => {
+    const id = revealStepId.current;
+    if (!id) return;
+    revealStepId.current = null;
+    const card = window.document.querySelector(`[data-step-id="${CSS.escape(id)}"]`);
+    card?.querySelector<HTMLInputElement>(".exercise-combobox-input input")?.focus({ preventScroll: true });
+    card?.scrollIntoView({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" });
+  }, [draft, reducedMotion]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -634,7 +803,7 @@ export function WorkoutEditorModal({
                   </label>
                   <label className="calendar-field">
                     <span>{t("Description")}</span>
-                    <textarea maxLength={300} rows={3} value={draft.overview} disabled={!document.canEdit || saving} onChange={(event) => setDraft({ ...draft, overview: event.target.value })} />
+                    <textarea maxLength={300} rows={2} value={draft.overview} disabled={!document.canEdit || saving} onChange={(event) => setDraft({ ...draft, overview: event.target.value })} />
                     <small>{draft.overview.length}/300</small>
                     {validation.errors.overview ? <em>{validation.errors.overview}</em> : null}
                   </label>
@@ -658,12 +827,9 @@ export function WorkoutEditorModal({
                         <button
                           key={kind}
                           type="button"
-                          className="ghost-button"
+                          className={`ghost-button${kind === "training" ? " is-primary" : ""}`}
                           disabled={!document.canEdit || saving}
-                          onClick={() => setDraft({
-                            ...draft,
-                            nodes: [...draft.nodes, emptyStep(kind, draft.sport)]
-                          })}
+                          onClick={() => addStep(kind)}
                         >
                           <Plus size={14} aria-hidden="true" /> {t(label)}
                         </button>
@@ -676,7 +842,7 @@ export function WorkoutEditorModal({
                 </div>
 
                 {draft.nodes.length === 0 ? (
-                  <div className="workout-editor-empty"><p>{t("No workout steps yet.")}</p><button type="button" className="primary-button" onClick={() => setDraft({ ...draft, nodes: [emptyStep("training", draft.sport)] })}>{draft.sport === "strength" ? t("Add first exercise") : t("Add first step")}</button></div>
+                  <div className="workout-editor-empty"><p>{t("No workout steps yet.")}</p><button type="button" className="primary-button" onClick={() => addStep("training")}>{draft.sport === "strength" ? t("Add first exercise") : t("Add first step")}</button></div>
                 ) : (
                   <div className="workout-editor-nodes">
                     {draft.nodes.map((node, index) => (
@@ -693,6 +859,8 @@ export function WorkoutEditorModal({
                               ?? validation.errors[`nodes.${index}.sets`]
                               ?? validation.errors[`nodes.${index}.rest`]}
                             disabled={!document.canEdit || saving} draggable
+                            open={openStepId === node.id}
+                            onToggle={strengthSession ? () => toggleStep(node.id) : undefined}
                             onDragStart={(event) => event.dataTransfer.setData("text/workout-node", node.id)}
                             onDropCard={node.editable ? (sourceId) => groupByDrop(sourceId, node.id) : undefined}
                             onChange={(step) => updateStep({ nodeId: node.id }, () => step)}
@@ -707,6 +875,8 @@ export function WorkoutEditorModal({
                             exerciseOptions={exerciseOptions}
                             exerciseOptionsLoading={exerciseOptionsLoading}
                             disabled={!document.canEdit || saving}
+                            openStepId={openStepId}
+                            onStepToggle={strengthSession ? toggleStep : undefined}
                             onDragStart={(event) => event.dataTransfer.setData("text/workout-node", node.id)}
                             onChange={(group) => setDraft({ ...draft, nodes: draft.nodes.map((item) => item.id === group.id ? group : item) })}
                             onMove={(direction) => moveAt({ nodeId: node.id }, direction)}
@@ -780,13 +950,24 @@ interface StepCardProps {
   onDelete: () => void;
   onGroup?: () => void;
   onUngroup?: () => void;
+  /** Whether a foldable card is showing its fields. */
+  open?: boolean;
+  /** Present when the card folds to a summary row (strength sessions); absent keeps it always open. */
+  onToggle?: () => void;
 }
 
-function StepCard({ step, context, sport, exerciseOptions, exerciseOptionsLoading, error, disabled, draggable, onDragStart, onDropCard, onChange, onMove, onDuplicate, onDelete, onGroup, onUngroup }: StepCardProps) {
+function StepCard({ step, context, sport, exerciseOptions, exerciseOptionsLoading, error, disabled, draggable, onDragStart, onDropCard, onChange, onMove, onDuplicate, onDelete, onGroup, onUngroup, open, onToggle }: StepCardProps) {
   useLanguage();
+  const reducedMotion = useReducedMotion();
   const locked = disabled || !step.editable;
   const capability = WORKOUT_SPORT_CAPABILITIES[sport];
   const strengthExercise = sport === "strength" && step.kind === "training";
+  const collapsible = onToggle !== undefined;
+  const expanded = !collapsible || Boolean(open);
+  const thumbnailUrl = strengthExercise && step.exerciseId
+    ? exerciseThumbnail(exerciseOptions.find((option) => option.id === step.exerciseId))
+    : undefined;
+  const KindIcon = STEP_KIND_ICONS[step.kind];
   const changeKind = (kind: RunWorkoutEditorStepKind) => {
     let target = step.target;
     const targetTypes = workoutTargetsForStep(sport, kind, step.exerciseKind);
@@ -820,54 +1001,132 @@ function StepCard({ step, context, sport, exerciseOptions, exerciseOptionsLoadin
       ...(kind === "sendOff" ? { sendOffSeconds: step.sendOffSeconds ?? 120 } : {})
     });
   };
+  const kindSelect = (
+    <SelectDropdown<RunWorkoutEditorStepKind> translateLabel={t}
+      className="workout-step-kind-select"
+      label={t("Step kind")}
+      value={step.kind}
+      options={capability.stepKinds.map((kind) => ({ value: kind, label: stepKindLabel(kind, sport) }))}
+      disabled={locked}
+      portal
+      onChange={changeKind}
+    />
+  );
+  const nameInput = (
+    <input aria-label={t("Step name")} value={step.name} disabled={locked} maxLength={90} onChange={(event) => onChange({ ...step, name: event.target.value })} />
+  );
+  const heading = (
+    <div className="workout-strength-step-heading">
+      <strong>{strengthExercise
+        ? step.exerciseName?.trim() || t("Choose an exercise")
+        : step.name.trim() || stepKindLabel(step.kind, sport)}</strong>
+      <span>{strengthExercise ? strengthStepSummary(step) : strengthTargetSummary(step.target)}</span>
+    </div>
+  );
+  const fields = strengthExercise ? (
+    <StrengthStepFields
+      step={step}
+      context={context}
+      exerciseOptions={exerciseOptions}
+      exerciseOptionsLoading={exerciseOptionsLoading}
+      disabled={locked}
+      onChange={onChange}
+    />
+  ) : (
+    <div className="workout-step-fields">
+      <TargetFields step={step} context={context} sport={sport} disabled={locked} onChange={onChange} />
+      <IntensityFields step={step} context={context} sport={sport} disabled={locked} onChange={onChange} />
+      {step.kind === "sendOff" ? <label className="workout-control-group"><span>{t("Send-off interval")}</span><ClockInput label={t("Send-off interval")} seconds={step.sendOffSeconds ?? 120} disabled={locked} onChange={(seconds) => onChange({ ...step, sendOffSeconds: seconds })} /></label> : null}
+      {capability.requiresExercise && step.kind === "training" ? <div className="workout-control-group workout-exercise-control"><span>{t("Exercise")}</span><ExerciseCombobox value={step.exerciseName ?? ""} selectedId={step.exerciseId} options={exerciseOptions} placeholder={t("Search by COROS exercise name")} label={t("Exercise")} loading={exerciseOptionsLoading} disabled={locked} onChange={(selection) => onChange({ ...step, exerciseName: selection.name, exerciseId: selection.id, exerciseKind: selection.exerciseKind })} />{step.exerciseId ? <small>{t("COROS exercise selected")}</small> : <small>{t("Select one exact COROS exercise before saving.")}</small>}</div> : null}
+    </div>
+  );
   return (
-    <motion.article layout className={`workout-step-card is-${step.kind} ${!step.editable ? "is-locked" : ""}`} draggable={draggable && !disabled} onDragStartCapture={onDragStart} onDragOver={(event) => { if (onDropCard) event.preventDefault(); }} onDrop={(event) => { if (!onDropCard) return; event.preventDefault(); onDropCard(event.dataTransfer.getData("text/workout-node")); }}>
-      <header className="workout-step-header">
+    <motion.article
+      layout={reducedMotion ? false : "position"}
+      data-step-id={step.id}
+      className={`workout-step-card is-${step.kind}${!step.editable ? " is-locked" : ""}${collapsible ? expanded ? " is-open" : " is-collapsed" : ""}${error ? " has-error" : ""}`}
+      draggable={draggable && !disabled}
+      onDragStartCapture={onDragStart}
+      onDragOver={(event) => { if (onDropCard) event.preventDefault(); }}
+      onDrop={(event) => { if (!onDropCard) return; event.preventDefault(); onDropCard(event.dataTransfer.getData("text/workout-node")); }}
+    >
+      <header
+        className="workout-step-header"
+        onClick={collapsible ? (event) => {
+          /* The whole row folds, except where a click lands on one of its controls. */
+          if ((event.target as HTMLElement).closest("button, input, textarea, a, [role='listbox'], [role='option'], .app-select")) return;
+          onToggle();
+        } : undefined}
+      >
         <GripVertical className="workout-drag-handle" size={18} aria-hidden="true" />
-        <SelectDropdown<RunWorkoutEditorStepKind> translateLabel={t}
-          className="workout-step-kind-select"
-          label={t("Step kind")}
-          value={step.kind}
-          options={capability.stepKinds.map((kind) => ({ value: kind, label: stepTitle(kind) }))}
-          disabled={locked}
-          portal
-          onChange={changeKind}
-        />
-        {strengthExercise ? (
-          <div className="workout-strength-step-heading">
-            <strong>{step.exerciseName?.trim() || t("Choose an exercise")}</strong>
-            <span>{strengthStepSummary(step)}</span>
-          </div>
+        {collapsible ? (
+          <>
+            {/* A chosen exercise gets the picture tile from the start, so its cover never flashes in over a dark glyph. */}
+            <span className={`workout-step-glyph${thumbnailUrl || (strengthExercise && step.exerciseId) ? " has-thumbnail" : ""}`} aria-hidden="true">
+              <KindIcon size={15} />
+              {thumbnailUrl ? (
+                <img
+                  key={thumbnailUrl}
+                  ref={(node) => { if (node?.complete && node.naturalWidth) node.classList.add("is-loaded"); }}
+                  src={thumbnailUrl}
+                  alt=""
+                  decoding="async"
+                  onLoad={(event) => event.currentTarget.classList.add("is-loaded")}
+                  onError={(event) => { event.currentTarget.hidden = true; }}
+                />
+              ) : null}
+            </span>
+            {expanded && !strengthExercise ? nameInput : heading}
+            {expanded ? kindSelect : null}
+          </>
         ) : (
-          <input aria-label={t("Step name")} value={step.name} disabled={locked} maxLength={90} onChange={(event) => onChange({ ...step, name: event.target.value })} />
+          <>
+            {kindSelect}
+            {strengthExercise ? heading : nameInput}
+          </>
         )}
         <div className="workout-step-actions">
           <IconAction label={t("Move up")} onClick={() => onMove(-1)} disabled={disabled}><ChevronUp /></IconAction>
           <IconAction label={t("Move down")} onClick={() => onMove(1)} disabled={disabled}><ChevronDown /></IconAction>
-          {onGroup ? <IconAction label={t("Group with previous step")} onClick={onGroup} disabled={disabled}><GripVertical /></IconAction> : null}
+          {/* Summary rows keep a disabled slot on the first step so every row's icons line up. */}
+          {onGroup || (collapsible && !onUngroup) ? <IconAction label={t("Group with previous step")} onClick={() => onGroup?.()} disabled={disabled || !onGroup}><Link2 /></IconAction> : null}
           {onUngroup && step.editable ? <IconAction label={t("Remove from repeat")} onClick={onUngroup} disabled={disabled}><Ungroup /></IconAction> : null}
           <IconAction label={t("Duplicate step")} onClick={onDuplicate} disabled={disabled || !step.editable}><Copy /></IconAction>
           <IconAction label={t("Delete step")} onClick={onDelete} disabled={disabled}><Trash2 /></IconAction>
+          {collapsible ? (
+            <button
+              type="button"
+              className="workout-icon-action workout-step-toggle"
+              aria-expanded={expanded}
+              aria-label={expanded ? t("Collapse") : t("Expand")}
+              title={expanded ? t("Collapse") : t("Expand")}
+              onClick={onToggle}
+            >
+              <ChevronDown className={expanded ? "is-open" : undefined} />
+            </button>
+          ) : null}
         </div>
       </header>
       {step.unsupportedReason ? <div className="workout-step-warning"><AlertTriangle size={14} aria-hidden="true" />{step.unsupportedReason}</div> : null}
-      {strengthExercise ? (
-        <StrengthStepFields
-          step={step}
-          context={context}
-          exerciseOptions={exerciseOptions}
-          exerciseOptionsLoading={exerciseOptionsLoading}
-          disabled={locked}
-          onChange={onChange}
-        />
-      ) : (
-        <div className="workout-step-fields">
-          <TargetFields step={step} context={context} sport={sport} disabled={locked} onChange={onChange} />
-          <IntensityFields step={step} context={context} sport={sport} disabled={locked} onChange={onChange} />
-          {step.kind === "sendOff" ? <label className="workout-control-group"><span>{t("Send-off interval")}</span><ClockInput label={t("Send-off interval")} seconds={step.sendOffSeconds ?? 120} disabled={locked} onChange={(seconds) => onChange({ ...step, sendOffSeconds: seconds })} /></label> : null}
-          {capability.requiresExercise && step.kind === "training" ? <div className="workout-control-group workout-exercise-control"><span>{t("Exercise")}</span><ExerciseCombobox value={step.exerciseName ?? ""} selectedId={step.exerciseId} options={exerciseOptions} placeholder={t("Search by COROS exercise name")} label={t("Exercise")} loading={exerciseOptionsLoading} disabled={locked} onChange={(selection) => onChange({ ...step, exerciseName: selection.name, exerciseId: selection.id, exerciseKind: selection.exerciseKind })} />{step.exerciseId ? <small>{t("COROS exercise selected")}</small> : <small>{t("Select one exact COROS exercise before saving.")}</small>}</div> : null}
-        </div>
-      )}
+      {collapsible ? (
+        <AnimatePresence initial={false}>
+          {expanded ? (
+            <motion.div
+              key="fields"
+              className="workout-step-reveal"
+              initial={reducedMotion ? false : { height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
+              exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+              transition={reducedMotion ? { duration: 0 } : {
+                height: { duration: 0.24, ease: [0.4, 0, 0.2, 1] },
+                opacity: { duration: 0.14, ease: "easeOut" }
+              }}
+            >
+              {fields}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      ) : fields}
       {error ? <p className="workout-field-error">{error}</p> : null}
     </motion.article>
   );
@@ -895,6 +1154,8 @@ function StrengthStepFields({
   const hasExercisePreview = Boolean(
     selectedExercise?.media?.some((media) => media.videoUrl)
   );
+  /* Hold the plate's column while the library loads, so the form does not jump sideways when it arrives. */
+  const awaitingPreview = !selectedExercise && exerciseOptionsLoading && Boolean(step.exerciseId);
   const sets = step.sets ?? 1;
   const restSeconds = step.restValue ?? 0;
   const loadMode = strengthLoadMode(step.intensity);
@@ -928,7 +1189,7 @@ function StrengthStepFields({
   };
 
   return (
-    <div className={`workout-strength-fields${hasExercisePreview ? " has-preview" : ""}`}>
+    <div className={`workout-strength-fields${hasExercisePreview || awaitingPreview ? " has-preview" : ""}`}>
       <div className="workout-strength-form">
         <section className="strength-block">
           <h4>{t("Movement")}</h4>
@@ -950,7 +1211,7 @@ function StrengthStepFields({
             })}
           />
           {exerciseOptionsLoading ? (
-            <p className="strength-block-note">{t("Loading the COROS exercise library.")}</p>
+            step.exerciseId ? null : <p className="strength-block-note">{t("Loading the COROS exercise library.")}</p>
           ) : exerciseOptions.length === 0 ? (
             <p className="strength-block-note">{t("Reconnect COROS to load the exercise library.")}</p>
           ) : !step.exerciseId ? (
@@ -1112,6 +1373,17 @@ function StrengthStepFields({
             showTargets
           />
         </aside>
+      ) : awaitingPreview ? (
+        <aside className="workout-strength-preview" aria-hidden="true">
+          <div className="exercise-preview">
+            <div className="exercise-preview-stage">
+              <div className="exercise-preview-status">
+                <span className="exercise-preview-spinner" />
+                <strong>{t("Loading demonstration")}</strong>
+              </div>
+            </div>
+          </div>
+        </aside>
       ) : null}
     </div>
   );
@@ -1177,6 +1449,8 @@ function IntensityFields({ step, context, sport, disabled, onChange }: { step: R
   useLanguage();
   const intensity = step.intensity;
   const intensityTypes = workoutIntensitiesForStep(sport, step.kind, step.exerciseKind);
+  /* A picker whose only choice is "Not set" (strength warm-ups, rests, cool-downs) is noise. */
+  if (intensityTypes.length === 1 && intensityTypes[0] === "none" && step.intensity.type === "none") return null;
   const paceFactor = context.paceUnit === "mi" ? 1.609344 : 1;
   const setIntensity = (next: RunWorkoutEditorIntensity) => onChange({ ...step, intensity: next });
   const numberRange = (low: number, high: number, lowLabel: string, highLabel: string, update: (low: number, high: number) => WorkoutIntensityInput, min = 0, max = 3000) => (
@@ -1274,8 +1548,9 @@ function PowerPercentPreview({ intensity, context, reference, zoneKey }: { inten
   return <p className="workout-control-hint">{t("Derived preview:")} {Math.round(reference * low / 100)}–{Math.round(reference * high / 100)} W.</p>;
 }
 
-function RepeatCard({ group, nodeIndex, context, sport, exerciseOptions, exerciseOptionsLoading, errors, disabled, onDragStart, onChange, onMove, onDuplicate, onDelete, onStepChange, onStepMove, onStepDuplicate, onStepDelete, onStepUngroup }: {
+function RepeatCard({ group, nodeIndex, context, sport, exerciseOptions, exerciseOptionsLoading, errors, disabled, openStepId, onStepToggle, onDragStart, onChange, onMove, onDuplicate, onDelete, onStepChange, onStepMove, onStepDuplicate, onStepDelete, onStepUngroup }: {
   group: RunWorkoutEditorRepeatGroup; nodeIndex: number; context: WorkoutEditorContext; sport: WorkoutSport; exerciseOptions: WorkoutExerciseOption[]; exerciseOptionsLoading: boolean; errors: Record<string, string>; disabled: boolean;
+  openStepId?: string | null; onStepToggle?: (id: string) => void;
   onDragStart: (event: DragEvent) => void; onChange: (group: RunWorkoutEditorRepeatGroup) => void; onMove: (direction: -1 | 1) => void; onDuplicate: () => void; onDelete: () => void;
   onStepChange: (id: string, step: RunWorkoutEditorStep) => void; onStepMove: (id: string, direction: -1 | 1) => void; onStepDuplicate: (id: string) => void; onStepDelete: (id: string) => void; onStepUngroup: (id: string) => void;
 }) {
@@ -1285,7 +1560,7 @@ function RepeatCard({ group, nodeIndex, context, sport, exerciseOptions, exercis
   return <motion.section layout className="workout-repeat-card" draggable={!disabled} onDragStartCapture={onDragStart}>
     <header className="workout-repeat-header"><GripVertical size={18} aria-hidden="true" /><input aria-label={t("Repeat group name")} value={group.name} disabled={locked} onChange={(event) => onChange({ ...group, name: event.target.value })} /><div className="workout-repeat-count"><span>{t("Repeat")}</span><button type="button" disabled={locked || group.repeat <= 1} onClick={() => onChange({ ...group, repeat: group.repeat - 1 })}>−</button><input aria-label={t("Repeat count")} type="number" min="1" max="99" value={group.repeat} disabled={locked} onChange={(event) => onChange({ ...group, repeat: Number(event.target.value) })} /><button type="button" disabled={locked || group.repeat >= 99} onClick={() => onChange({ ...group, repeat: group.repeat + 1 })}>+</button></div><div className="workout-step-actions"><IconAction label={t("Move group up")} onClick={() => onMove(-1)} disabled={disabled}><ChevronUp /></IconAction><IconAction label={t("Move group down")} onClick={() => onMove(1)} disabled={disabled}><ChevronDown /></IconAction><IconAction label={t("Duplicate group")} onClick={onDuplicate} disabled={duplicateLocked}><Copy /></IconAction><IconAction label={t("Delete group")} onClick={onDelete} disabled={disabled}><Trash2 /></IconAction></div></header>
     {errors[`nodes.${nodeIndex}.repeat`] ? <p className="workout-field-error">{errors[`nodes.${nodeIndex}.repeat`]}</p> : null}
-    <div className="workout-repeat-steps">{group.steps.map((step, childIndex) => <StepCard key={step.id} step={step} location={{ nodeId: group.id, childId: step.id }} context={context} sport={sport} exerciseOptions={exerciseOptions} exerciseOptionsLoading={exerciseOptionsLoading} disabled={disabled} draggable error={errors[`nodes.${nodeIndex}.steps.${childIndex}.target`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.intensity`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.exercise`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.sets`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.rest`]} onDragStart={(event) => event.dataTransfer.setData("text/workout-node", step.id)} onDropCard={(sourceId) => { const from = group.steps.findIndex((candidate) => candidate.id === sourceId); const to = group.steps.findIndex((candidate) => candidate.id === step.id); if (from >= 0 && to >= 0) onChange({ ...group, steps: moveItem(group.steps, from, to) }); }} onChange={(next) => onStepChange(step.id, next)} onMove={(direction) => onStepMove(step.id, direction)} onDuplicate={() => onStepDuplicate(step.id)} onDelete={() => onStepDelete(step.id)} onUngroup={() => onStepUngroup(step.id)} />)}</div>
+    <div className="workout-repeat-steps">{group.steps.map((step, childIndex) => <StepCard key={step.id} step={step} location={{ nodeId: group.id, childId: step.id }} context={context} sport={sport} exerciseOptions={exerciseOptions} exerciseOptionsLoading={exerciseOptionsLoading} disabled={disabled} draggable open={openStepId === step.id} onToggle={onStepToggle ? () => onStepToggle(step.id) : undefined} error={errors[`nodes.${nodeIndex}.steps.${childIndex}.target`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.intensity`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.exercise`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.sets`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.rest`]} onDragStart={(event) => event.dataTransfer.setData("text/workout-node", step.id)} onDropCard={(sourceId) => { const from = group.steps.findIndex((candidate) => candidate.id === sourceId); const to = group.steps.findIndex((candidate) => candidate.id === step.id); if (from >= 0 && to >= 0) onChange({ ...group, steps: moveItem(group.steps, from, to) }); }} onChange={(next) => onStepChange(step.id, next)} onMove={(direction) => onStepMove(step.id, direction)} onDuplicate={() => onStepDuplicate(step.id)} onDelete={() => onStepDelete(step.id)} onUngroup={() => onStepUngroup(step.id)} />)}</div>
     <button type="button" className="ghost-button workout-repeat-add" disabled={locked} onClick={() => onChange({ ...group, steps: [...group.steps, emptyStep("rest", sport)] })}><Plus size={14} aria-hidden="true" /> {t("Add step to repeat")}</button>
   </motion.section>;
 }

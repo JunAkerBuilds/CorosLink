@@ -58,6 +58,20 @@ async function main() {
     await switchLanguage("en", "Edit");
     assert.equal(await js(`document.querySelector(${JSON.stringify(workoutName)}).value`), "My unsaved workout");
 
+    // The app re-renders on its own polls; a parent render with a fresh planEntry or editRef object must not reload the draft.
+    await js(`rerenderEditor("plan")`);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    assert.equal(await js(`document.querySelector(${JSON.stringify(workoutName)})?.value`), "My unsaved workout", "a parent re-render keeps the plan draft");
+    assert.equal(await js("editorLoads"), 1, "a fresh planEntry object for the same entry does not reload");
+    await js(`rerenderEditor("library")`);
+    await until("editorLoads === 2", "library workout loaded");
+    await until(`!!document.querySelector(${JSON.stringify(workoutName)})`, "library workout rendered");
+    await fill(workoutName, "My unsaved library edit");
+    await js(`rerenderEditor("library")`);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    assert.equal(await js(`document.querySelector(${JSON.stringify(workoutName)})?.value`), "My unsaved library edit", "a parent re-render keeps the library draft");
+    assert.equal(await js("editorLoads"), 2, "an inline editRef literal naming the same workout does not reload");
+
     await js("showCalendar()");
     const clientId = '.calendar-connection-setup input:not([type="password"])';
     await until(`!!document.querySelector(${JSON.stringify(clientId)})`, "Google setup loaded");
