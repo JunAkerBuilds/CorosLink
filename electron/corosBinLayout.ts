@@ -47,8 +47,9 @@ type PositionedField = [string, number, number, string, string];
 // unknown records can be recompiled. Every generation shares one record table
 // that simply ends earlier in older/smaller headers: 0xbaa (260px MIP v0, after
 // the date tables), 0xfd8 (416px v2, after the chart block), 0x1164 (v4),
-// 0x11a0 (NOMAD v2) and 0x1202 (4.9.9 exporter). Records past a header's end
-// do not exist and are skipped rather than guessed.
+// 0x11a0 (NOMAD v2), 0x1202 (4.9.9 exporter) and 0x1222 (some official faces;
+// Studio's activity-total decimal points). Records past a header's end do not
+// exist and are skipped rather than guessed.
 export const hex = (value: number) => `0x${value.toString(16)}`;
 /** The magic is the screen size reversed plus a variant letter: `614A` = A416, `062R` = R260. */
 export function parseCorosFaceMagic(magic: string): { size: number; variant: "A" | "R" } | null {
@@ -369,6 +370,9 @@ const RESOURCES: [string, number, string][] = [
   ["weekElevation.unit", 0x1160, "week_elev_unit_icon"],
   ["todayRun.unit", 0x108e, "today_run_unit_icon"], ["todaySwim.unit", 0x10ac, "today_swim_unit_icon"], ["todayBike.unit", 0x10ca, "today_bike_unit_icon"],
   ["weekRun.unit", 0x1106, "week_run_unit_icon"], ["weekSwim.unit", 0x1124, "week_swim_unit_icon"], ["weekBike.unit", 0x1142, "week_bike_unit_icon"],
+  // Decimal points of the totals, past the end of a 0x1202 header (studioFields.ts).
+  ["todayRun.decimal", 0x1202, "today_run_point_icon"], ["todaySwim.decimal", 0x1206, "today_swim_point_icon"], ["todayBike.decimal", 0x120a, "today_bike_point_icon"],
+  ["weekRun.decimal", 0x1212, "week_run_point_icon"], ["weekSwim.decimal", 0x1216, "week_swim_point_icon"], ["weekBike.decimal", 0x121a, "week_bike_point_icon"],
   ["sunriseset.colon", 0x118c, "sunriseset_colon_icon"],
   ["stamina.percent", 0x1018, "stamina_percent_icon"]
 ];
@@ -701,7 +705,7 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
     magic: headers[0].magic, variant: headers[0].variant,
     completeness: "partial", byteOrder: "little-endian", pointerBase: "absolute-file-offset",
     limitations: [
-      "Header sizes 0xbaa–0x1202 share one record table; records beyond a header's end are skipped, never guessed.",
+      "Header sizes 0xbaa–0x1222 share one record table; records beyond a header's end are skipped, never guessed.",
       "Unknown records, analog pointer rotation, fishing arcs, lunar data and auto-alignment are not reconstructed.",
       "Chart readouts are decoded as alternatives; the plotted history and the runtime chart group are supplied by the watch.",
       "Preview values, active control choice, state-frame selection and theme appearance are samples, not recovered runtime state.",

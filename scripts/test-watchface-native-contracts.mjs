@@ -39,7 +39,18 @@ assert.equal(role("sunriseset", "symbols").states[0].meaning, "Time colon");
 assert.deepEqual(role("chart", "icon", { chartSource: "chart_moonrise" }).states.map(state => state.meaning), ["Moonrise", "Moonset"]);
 assert.equal(role("chart", "icon", { chartSource: "chart_step" }).spriteCount, 1);
 assert.deepEqual(role("weather_temp_min", "unit").states.map(state => state.meaning), ["Unit °C (metric)", "Unit °F (imperial)"]);
-assert.deepEqual(role("today_swim", "unit").states.map(state => state.meaning), ["Unit m (metric)", "Unit yd (imperial)"]);
+// PACE Pro 3.2008.0 counts metric swims in kilometres, like runs (issue #153).
+assert.deepEqual(role("today_swim", "unit").states.map(state => state.meaning), ["Unit km (metric)", "Unit yd (imperial)"]);
+assert.deepEqual(role("week_run", "unit").states.map(state => state.meaning), ["Unit km (metric)", "Unit mi (imperial)"]);
+// Distance totals have a decimal point, shown by default only for swims.
+assert.deepEqual(parts.nativeParts("week_swim", parts.defaultNativeDataStyle("week_swim")), ["icon", "value", "decimal", "unit"]);
+assert.deepEqual(parts.nativeParts("week_elev", parts.defaultNativeDataStyle("week_elev")), ["icon", "value", "unit"]);
+assert.equal(parts.nativePart("week_swim", parts.defaultNativeDataStyle("week_swim"), "decimal").enabled, true);
+assert.equal(parts.nativePart("today_run", parts.defaultNativeDataStyle("today_run"), "decimal").enabled, false);
+assert.equal(parts.nativePart("week_swim", { ...parts.defaultNativeDataStyle("week_swim"), parts: { decimal: { enabled: false } } }, "decimal").enabled, false);
+assert.equal(role("week_swim", "decimal").states[0].meaning, "Decimal point");
+assert.ok(catalog.nativeFieldKeys(catalog.NATIVE_DATA_BY_ID.get("week_swim")).includes("week_swim_point_icon"), "export clears a stale decimal point");
+assert.equal(catalog.NATIVE_DATA_BY_ID.get("week_elev").decimalKey, undefined);
 assert.deepEqual(role("today_elev", "unit").states.map(state => state.meaning), ["Unit m (metric)", "Unit ft (imperial)"]);
 assert.equal(role("weather_temp", "unit").spriteCount, 1);
 assert.equal(role("weather_uv", "states").states[5].meaning, "Extreme UV (11+)");

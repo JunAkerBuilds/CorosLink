@@ -12,7 +12,7 @@ const {FIELDS}=require('../dist-electron/watchfaceCompiler/fields.js');
 const {cbzCompress,encodeImageBlock,encodeFramesBlock}=require('../dist-electron/watchfaceCompiler/bitmap.js');
 const {parseConfig,parsePos,parseRect,rgb222}=require('../dist-electron/watchfaceCompiler/config.js');
 const {decodePng}=require('../dist-electron/watchfaceCompiler/png.js');
-const {findCorosBitmapBlocks,decodeCorosBitmapFrame}=require('../dist-electron/corosBinLayout.js');
+const {findCorosBitmapBlocks,decodeCorosBitmapFrame,decodeCorosLayout}=require('../dist-electron/corosBinLayout.js');
 const unzipper=require('unzipper');
 const {getWatchfaceTarget}=require('../dist-electron/watchfaceTargets.js');
 
@@ -142,6 +142,24 @@ try {
  assert.deepEqual([heartBin.readInt32LE(0xf86),heartBin.readInt32LE(0xf8a),...[0,2,4,6].map(i=>heartBin.readInt16LE(0xf92+i))],[227,293,270,293,335,328]);
  assert.ok(heartBin.readUInt32LE(0xf8e)>heartBin.readUInt32LE(0xf74),'the heart icon block follows the step icon, as in official NOMAD');
  assert.equal(heartBin.readUInt32LE(0xf9c),heartBin.readUInt32LE(0xf82),'one font block shared with chart_step');
+ assert.equal(heartBin.readUInt16LE(0x138),0x1202,'faces without decimal points keep COROS\'s header size');
+ // CorosLink-only decimal points of activity totals (issue #153): PACE Pro reads them past the 0x1202 header.
+ const swimConfig='[week_swim_icon_pos]={100,200}\n[week_swim_icon]=swim.png\n[week_swim_rect]={130,200,200,230,left|vcenter}\n[week_swim_font]=num\n[week_swim_unit_icon]=unit\n[week_swim_point_icon]=point.png\n';
+ const swimFiles=[['info.json',Buffer.from('{}')],['watchface_416x416/swim.png',png(3,2)],['watchface_416x416/point.png',png(2,7)],['watchface_416x416/unit/00.png',png(5,7)],['watchface_416x416/unit/01.png',png(5,7)],...Array.from({length:10},(_,d)=>[`watchface_416x416/num/${d}.png`,png(4,7)])];
+ const swim=(config,aod)=>compileWatchface(new Map([...swimFiles,['watchface_416x416/config.txt',Buffer.from(config)],...(aod?[['watchface_416x416/AODconfig.txt',Buffer.from(aod)]]:[])]),{faceId:1}).bin;
+ const swimBin=swim(swimConfig);
+ assert.equal(swimBin.readUInt16LE(0x138),0x1222,'a decimal point extends the header, as some official faces are');
+ const pointAt=swimBin.readUInt32LE(0x1216);
+ assert.ok(pointAt>0,'week swim point at 0x1202 + 4 × 5');
+ assert.deepEqual([swimBin.readUInt16LE(pointAt),swimBin.readUInt16LE(pointAt+2),swimBin[pointAt+6]],[2,7,1],'the point is a single image');
+ assert.ok(pointAt>swimBin.readUInt32LE(0x1124),'the point block follows the unit block');
+ assert.deepEqual([0x1202,0x1206,0x120a,0x120e,0x1212,0x121a,0x121e].map(offset=>swimBin.readUInt32LE(offset)),[0,0,0,0,0,0,0],'other totals keep no point');
+ const swimLayout=decodeCorosLayout(swimBin,findCorosBitmapBlocks(swimBin,0x1222));
+ assert.ok(swimLayout.modes[0].elements.some(element=>element.id==='weekSwim.decimal'&&element.active&&element.config?.asset==='week_swim_point_icon'),'recovery reads the point back');
+ const swimAod=swim(swimConfig,'[week_swim_icon_pos]={100,200}\n[week_swim_icon]=swim.png\n');
+ assert.deepEqual([swimAod.readUInt32LE(0x322),swimAod.readUInt16LE(0x1222+0x138),swimAod.toString('latin1',0x1222,0x1226)],[0x1222,0x1222,'614A'],'the AOD header follows at the same size');
+ assert.equal(swim(swimConfig.replace(/\[week_swim_point_icon\][^\n]*\n/,'')).readUInt16LE(0x138),0x1202,'without the point the header stays 0x1202');
+ assert.equal(swim(swimConfig.replace(/\[week_swim_icon_pos\][^\n]*\n/,'')).readUInt16LE(0x138),0x1202,'a point without its total is not written');
  console.log(`Built-in compiler units, worker compile (${compiled.durationMs} ms), headers, CRC, AOD, warnings and face errors passed.`);
 
  // Only CorosLink's compiler: the old COROS-compiler switch is ignored, and every watch builds through the same service.

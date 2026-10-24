@@ -19,6 +19,7 @@ export function nativeParts(id: string, style: Style): Part[] {
   if (field?.kind === "solar") return ["icon", "value", "symbols", "progress"];
   return [
     ...(field && nativeHasIcon(field) ? ["icon" as const] : []), "value",
+    ...(field?.decimalKey ? ["decimal" as const] : []),
     ...(field?.unit || field?.unitKey ? ["unit" as const] : []),
     ...(id.startsWith("weather_temp") ? ["symbols" as const] : []),
     // Drawn between minimum and maximum, which the watch shows as one reading.
@@ -46,9 +47,10 @@ export function nativePart(id: string, style: Style, part: Part) {
     noDataMask: { x: 0, y: 58, width, height },
     separator: { x: 0, y: 0, width: valueStyle?.digitWidth ?? (valueStyle?.width ?? 96) / 4, height: valueHeight }
   }[part];
-  const custom = style.parts?.[part];
+  const custom = style.parts?.[part], field = NATIVE_DATA_BY_ID.get(id);
   return {
-    enabled: custom?.enabled ?? (!["background", "mask", "noDataMask"].includes(part) && !(chartMoon && part === "plot") && !(["stamina", "weather_uv"].includes(id) && part === "states")),
+    enabled: custom?.enabled ?? (!["background", "mask", "noDataMask"].includes(part) && !(chartMoon && part === "plot") && !(["stamina", "weather_uv"].includes(id) && part === "states") &&
+      !(part === "decimal" && field?.decimalKey && !field.decimalShown)),
     color: custom?.color ?? style.color, fontFamily: custom?.fontFamily || style.fontFamily || "Arial",
     fontWeight: custom?.fontWeight ?? style.fontWeight ?? 400,
     fontStyle: custom?.fontStyle ?? style.fontStyle ?? "normal",
@@ -155,7 +157,8 @@ export function nativeAssetText(id: string, style: Style, role: Role, index: num
   if (role === "states") return id === "sleep_hrv_level" ? `HRV ${index}` : null;
   if (role === "unit") {
     if (id.startsWith("weather_temp_")) return index ? "°F" : "°C";
-    return NATIVE_DATA_BY_ID.get(id)?.unit ?? (id.endsWith("elev") ? (index ? "ft" : "m") : id.endsWith("swim") ? (index ? "yd" : "m") : (index ? "mi" : "km"));
+    // Metric swims count in kilometres like runs; imperial ones in yards (watchfaceNativeCatalog.ts).
+    return NATIVE_DATA_BY_ID.get(id)?.unit ?? (id.endsWith("elev") ? (index ? "ft" : "m") : id.endsWith("swim") ? (index ? "yd" : "km") : (index ? "mi" : "km"));
   }
   if (role !== "icon") return null;
   if (isNativeTime(id, style)) return index ? "↓" : "↑";

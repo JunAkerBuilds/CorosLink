@@ -106,6 +106,12 @@ export async function recoverWatchfaceDesign(
     const unitKey = field.percentKey ?? field.unitKey ?? (field.id === "weather_temp" ? "weather_dgree_icon" :
       field.id.startsWith("weather_temp_") ? "weather_temp_max_min_dgree_icon" : "");
     if (unitKey && hasValue) await addPart("unit", unitKey);
+    // A face without a decimal point of its own gets one sized to its digits,
+    // shown where the catalog shows it by default (swims).
+    if (field.decimalKey && hasValue) {
+      if (source(field.decimalKey).length) await addPart("decimal", field.decimalKey);
+      else parts.decimal = { width: Math.max(1, Math.round(font!.width / 2)), height: font!.height };
+    }
     if (field.id.startsWith("weather_temp") && hasValue) await addPart("symbols",
       field.id === "weather_temp" ? "weather_negasign_icon" : "weather_temp_max_min_negasign_icon");
     // The "/" official faces draw between minimum and maximum. Earlier Studio

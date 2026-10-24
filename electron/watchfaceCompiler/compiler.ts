@@ -16,10 +16,11 @@ import { getWatchfaceTarget, watchfaceBinTarget, type WatchfaceBinTarget } from 
  * File: normal header (0x1202 bytes), AOD header (0x1202, only with an
  * AODconfig.txt), then image blocks and indirect records in COROS's write
  * order. Bytes 8–11 hold the file length − 18 and 12–13 a CRC-16/CCITT-FALSE
- * of everything from byte 18.
+ * of everything from byte 18. A face with Studio fields past 0x1202 (activity
+ * totals' decimal points) gets 0x1222-byte headers, as some official faces have.
  */
 export const PACE_PRO_BIN = watchfaceBinTarget(getWatchfaceTarget("pace-pro")!);
-const HEADER = 0x1202;
+const HEADER = 0x1202, EXTENDED_HEADER = 0x1222;
 
 export interface CompileOptions {
   /** Face ID stored at byte 4; CorosLink derives a stable one from the archive. */
@@ -159,9 +160,15 @@ function isDirectory(files: ArchiveFiles, path: string): boolean {
   return false;
 }
 
+/** The header size that holds every field a layout writes. */
+function headerSize(configs: Map<string, string>[]): number {
+  const extended = configs.some(config => Object.entries(FIELDS).some(([key, [, offset]]) => offset >= HEADER && written(config, key)));
+  return extended ? EXTENDED_HEADER : HEADER;
+}
+
 function buildLayout(config: Map<string, string>, mode: "normal" | "aod", stream: BlockStream, info: Record<string, unknown>,
-  options: CompileOptions, files: ArchiveFiles, warnings: Set<string>): Buffer {
-  const header = Buffer.alloc(HEADER), target = stream.target;
+  options: CompileOptions, files: ArchiveFiles, warnings: Set<string>, size: number): Buffer {
+  const header = Buffer.alloc(size), target = stream.target;
   // COROS resolves only backslash-separated paths; a "/" makes the image unreadable (pointer 0).
   const path = (value: string) => {
     if (value.includes("/")) { warnings.add(`${value} uses "/"; write it as ${value.replace(/\//g, "\\")}.`); return ""; }
@@ -182,7 +189,7 @@ function buildLayout(config: Map<string, string>, mode: "normal" | "aod", stream
     ((flag("watchface_time_format") & 3) << 2) | (flag("watchface_default_theme_color") << 4)) & 0xff;
   // Firmware fills AOD with black regardless of this color byte.
   if (mode === "normal" && config.has("bg_color")) header[0x22] = rgb222(parseNumber(config.get("bg_color")!));
-  header.writeUInt16LE(HEADER, 0x138);
+  header.writeUInt16LE(size, 0x138);
   header[0x13b] = typeof info.o_diy_version === "number" ? info.o_diy_version & 0xff : 0;
   // Official BINs include an AOD background, although COROS's DIY exporter
   // skips it. Studio's AOD artwork may omit its position; default to {0,0}.
@@ -317,10 +324,12 @@ export function compileWatchface(files: ArchiveFiles, options: CompileOptions): 
   if (configText === undefined) throw new WatchfaceCompileError(`This archive has no ${target.screen} × ${target.screen} ${target.label} layout.`);
   const aodText = text(`${target.layout}/AODconfig.txt`);
   const warnings = new Set<string>();
-  const stream = new BlockStream(aodText !== undefined ? HEADER * 2 : HEADER, files, warnings, target);
-  const normal = buildLayout(parseConfig(configText), "normal", stream, info, options, files, warnings);
-  const aod = aodText !== undefined ? buildLayout(parseConfig(aodText), "aod", stream, info, options, files, warnings) : null;
-  if (aod) normal.writeUInt32LE(HEADER, 0x322);
+  const normalConfig = parseConfig(configText), aodConfig = aodText !== undefined ? parseConfig(aodText) : undefined;
+  const size = headerSize(aodConfig ? [normalConfig, aodConfig] : [normalConfig]);
+  const stream = new BlockStream(aodConfig ? size * 2 : size, files, warnings, target);
+  const normal = buildLayout(normalConfig, "normal", stream, info, options, files, warnings, size);
+  const aod = aodConfig ? buildLayout(aodConfig, "aod", stream, info, options, files, warnings, size) : null;
+  if (aod) normal.writeUInt32LE(size, 0x322);
   const bin = Buffer.concat([normal, ...(aod ? [aod] : []), ...stream.bytes()]);
   bin.writeUInt32LE(bin.length - 18, 8);
   bin.writeUInt16LE(crc16(bin.subarray(18)), 12);

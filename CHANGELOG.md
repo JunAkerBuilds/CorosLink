@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Swim totals on watch faces show their distance, not a rounded 0 or 1** ([#153](https://github.com/JunAkerBuilds/CorosLink/issues/153)). In metric units the watch counts swims in kilometres, like runs, and rounds to a whole number, so a 750 m week showed `1` and 300 m showed `0`. Studio drew those layers in metres. Today's and weekly swim layers now have a **Decimal point**, on by default, so 750 m reads `0.75 km`. In imperial units swims count in yards, so a decimal point shows hundredths of a yard. Runs and rides can turn it on for `12.34` instead of `12`. Studio's swim unit now reads km, and the preview rounds like the watch when the point is off. CorosLink's compiler writes the point; COROS's own compiler ignores it. Firmware analysis points to this fix, but it isn't yet confirmed on a watch.
 - **No more "Service exceptions" for `/activity/fit/getImportSportList` in the error report.** Since 0.1.63 it appeared each time Training Hub loaded. CorosLink read sport names from that address, but COROS uses it for its list of FIT imports, so the request always failed and CorosLink used its own sport names. It no longer makes the request, and sport names stay the same.
 
 ## [0.1.63] - 2026-10-23

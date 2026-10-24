@@ -52,10 +52,19 @@ export function nativeDataPreviewValue(id: string, style: Style, scenario?: Watc
   if (id === "chart" && style.chartSource === "chart_moon") return "7";
   return NATIVE_DATA_BY_ID.get(id)?.sample ?? "0";
 }
+/**
+ * The sample as the watch prints it. An activity distance shows two decimals
+ * with its decimal point and rounds to a whole number without one.
+ */
+export function nativeDataDisplayValue(id: string, style: Style, scenario?: WatchfacePreviewScenario): string {
+  const value = nativeDataPreviewValue(id, style, scenario), number = Number(value);
+  if (!NATIVE_DATA_BY_ID.get(id)?.decimalKey || !value.trim() || !Number.isFinite(number)) return value;
+  return nativePart(id, style, "decimal").enabled ? number.toFixed(2) : String(Math.round(number));
+}
 /** The value's glyphs and where they start inside the value part, in part units. */
 function nativeValueRun(id: string, style: Style, scenario?: WatchfacePreviewScenario) {
   const digits = nativePart(id, style, "value");
-  const characters = nativeDataPreviewValue(id, style, scenario).slice(0, isNativeTime(id, style) ? 5 : 6);
+  const characters = nativeDataDisplayValue(id, style, scenario).slice(0, isNativeTime(id, style) ? 5 : 6);
   const width = [...characters].reduce((sum, char) => sum + (/\d/.test(char) ? digits.digitWidth : char === "." ? nativePart(id, style, "decimal").width : nativePart(id, style, "symbols").width), 0);
   return { characters, width, x: digits.x + (digits.align === "right" ? digits.width - width : digits.align === "center" ? (digits.width - width) / 2 : 0) };
 }
@@ -348,6 +357,7 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
             if (field.unitKey) await sprite("unit", 1);
             values[field.percentKey ?? field.unitKey!] = field.unitKey ? folders.unit : unit;
           }
+          if (field.decimalKey && part("decimal").enabled) values[field.decimalKey] = await sprite("decimal");
           if (id === "weather_temp") {
             values.weather_negasign_icon = await sprite("symbols", 0);
             values.weather_dgree_icon = await sprite("unit");

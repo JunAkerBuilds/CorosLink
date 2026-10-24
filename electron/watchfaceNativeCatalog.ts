@@ -19,6 +19,10 @@ export interface NativeDataDefinition {
   unit?: string;
   percentKey?: string;
   unitKey?: string;
+  /** CorosLink-only decimal point of an activity total (watchfaceCompiler/studioFields.ts). */
+  decimalKey?: string;
+  /** Whether that point shows unless the layer turns it off. */
+  decimalShown?: boolean;
   stateKey?: string;
   stateCount?: number;
   /** Position key of a state table when it is not `${id}_pos`. */
@@ -28,6 +32,8 @@ export interface NativeDataDefinition {
   note?: string;
 }
 const number = (id: string, label: string, category: NativeDataDefinition["category"], sample: string, version = 3, extra: Partial<NativeDataDefinition> = {}): NativeDataDefinition => ({ id, label, category, sample, version, kind: "number", ...extra });
+const SWIM_NOTE = "In metric units the watch counts swims in kilometres, like runs, and in imperial units in yards. Without the decimal point it rounds to whole kilometres, so 750 m shows 1; with it, 0.75. The decimal point needs CorosLink's compiler and is not yet confirmed on a watch.";
+const DISTANCE_NOTE = "The watch rounds to whole kilometres or miles. Turn on the decimal point to show hundredths, such as 12.34. The decimal point needs CorosLink's compiler and is not yet confirmed on a watch.";
 export const NATIVE_DATA_FIELDS: readonly NativeDataDefinition[] = [
   number("date_year", "Year", "Calendar", "2026", 3, { configPrefix: "control_number_date_year", valueOnly: true,
     note: "Live calendar year binding recovered from COROS 4.9.9. Independently positioned and visible in the editor; it does not require a visible selectable metric. Unlike month/day, COROS stores it in the shared control container. Export preserves the required origin and converts editor coordinates automatically; do not enable or move the selectable metric to place the year. Preview follows the simulation date; device support requires on-watch verification." }),
@@ -59,9 +65,15 @@ export const NATIVE_DATA_FIELDS: readonly NativeDataDefinition[] = [
   // seated with a filling ring, a "move" frame, then a dimmed inactive frame.
   { id: "sedentary", label: "Sedentary reminder", category: "Health", kind: "state", sample: "2", version: 4, stateKey: "sedentary_icon_dir", positionKey: "sedentary_icon_pos", stateCount: 7 },
   number("baro", "Barometer", "Weather", "1013"),
+  // PACE Pro 3.2008.0 gets distances in hundredths of a km or mile (of a yard
+  // for imperial swims) and rounds them to whole units unless the face gives
+  // the total a decimal point (studioFields.ts). So a metric swim counts in
+  // kilometres too: 750 m showed 1 and 300 m showed 0 (issue #153).
   ...(["today", "week"] as const).flatMap(period => ([
     ["run", "running"], ["bike", "cycling"], ["swim", "swimming"], ["elev", "elevation"]
-  ] as const).map(([type, label]) => number(`${period}_${type}`, `${period === "today" ? "Today's" : "Weekly"} ${label}`, "Training", type === "elev" ? "240" : "12", 3, { unitKey: `${period}_${type}_unit_icon` }))),
+  ] as const).map(([type, label]) => number(`${period}_${type}`, `${period === "today" ? "Today's" : "Weekly"} ${label}`, "Training",
+    type === "elev" ? "240" : type === "swim" ? "1.85" : "12.34", 3, { unitKey: `${period}_${type}_unit_icon`,
+      ...(type === "elev" ? {} : { decimalKey: `${period}_${type}_point_icon`, decimalShown: type === "swim", note: type === "swim" ? SWIM_NOTE : DISTANCE_NOTE }) }))),
   { id: "sunriseset", label: "Sunrise / sunset progress", category: "Astronomy", kind: "solar", sample: "06:24", version: 5 },
   // WFChartInfo.sun_angle: a readout of the native chart block that the watch
   // shows in its sun chart group (official NOMAD draws it in the temperature slot).
@@ -186,7 +198,7 @@ export function nativeFieldKeys(field: NativeDataDefinition): string[] {
   if (field.kind === "state") return [field.stateKey!, nativeStatePositionKey(field)];
   if (field.kind === "solar") return ["sunriseset_hour_rect", "sunriseset_minute_rect", "sunriseset_font", "sunriseset_icon_pos", "sunriseset_sunrise_icon", "sunriseset_sunset_icon", "sunriseset_colon_icon", "sunriseset_progress_pos", "sunrise_progress", "sunset_progress"];
   if (field.kind === "chart") return [...NATIVE_CHART_SHARED_KEYS, "chart_sun_icon_pos", "chart_sun_icon", ...NATIVE_CHART_SOURCES.flatMap(({ id }) => nativeChartSourceKeys(id))];
-  return [`${nativeConfigPrefix(field)}_rect`, `${nativeConfigPrefix(field)}_font`, ...(nativeHasIcon(field) ? [`${field.id}_icon_pos`, `${field.id}_icon`] : []), ...(field.percentKey ? [field.percentKey] : []), ...(field.unitKey ? [field.unitKey] : []), ...(field.stateKey ? [`${field.id}_level_pos`, field.stateKey] : [])];
+  return [`${nativeConfigPrefix(field)}_rect`, `${nativeConfigPrefix(field)}_font`, ...(nativeHasIcon(field) ? [`${field.id}_icon_pos`, `${field.id}_icon`] : []), ...(field.percentKey ? [field.percentKey] : []), ...(field.unitKey ? [field.unitKey] : []), ...(field.decimalKey ? [field.decimalKey] : []), ...(field.stateKey ? [`${field.id}_level_pos`, field.stateKey] : [])];
 }
 export const NATIVE_DATA_CONFIG_KEYS = new Set([
   ...NATIVE_DATA_FIELDS.flatMap(nativeFieldKeys),
