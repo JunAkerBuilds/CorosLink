@@ -294,17 +294,6 @@ interface TrainingHubDashboardData {
   };
 }
 
-interface TrainingHubSportListData {
-  sportList?: RawSportType[];
-  dataList?: RawSportType[];
-}
-
-interface RawSportType {
-  sportType?: number;
-  sportName?: string;
-  name?: string;
-}
-
 interface RawDailyMetric {
   happenDay?: string | number;
   date?: string | number;
@@ -1669,24 +1658,12 @@ export async function getDailyMetrics(
   return metrics;
 }
 
-export async function getSportTypeMap(): Promise<TrainingHubSportType[]> {
-  try {
-    const data = await trainingHubGet<TrainingHubSportListData>(
-      "/activity/fit/getImportSportList"
-    );
-    const list = data.sportList ?? data.dataList ?? [];
-
-    const fromApi = list
-      .map((item) => ({
-        sportType: item.sportType ?? 0,
-        sportName: item.sportName ?? item.name ?? ""
-      }))
-      .filter((item) => item.sportType > 0 && item.sportName.trim());
-
-    return mergeSportTypeEntries(fromApi);
-  } catch {
-    return mergeSportTypeEntries([]);
-  }
+// Training Hub has no sport-type list, so names come from the built-in table.
+// /activity/fit/getImportSportList, read here through 0.1.63, is the FIT-import
+// job list behind the web app's upload-progress popup (POST { size: 10 });
+// a GET of it always failed with 1001 "Service exceptions".
+export function getSportTypeMap(): TrainingHubSportType[] {
+  return mergeSportTypeEntries([]);
 }
 
 // Each route sport maps to a COROS activity category so we compare like-for-like
@@ -1762,12 +1739,8 @@ export async function getActivityPaceBaselines(offline?: { activities: TrainingH
 
   // Resolve sport type → name; the activity list doesn't carry names itself.
   const sportNames = new Map<number, string>();
-  try {
-    for (const sport of offline ? mergeSportTypeEntries([]) : await getSportTypeMap()) {
-      sportNames.set(sport.sportType, sport.sportName);
-    }
-  } catch {
-    // Without names we can't tell runs from walks, so bail to safe defaults.
+  for (const sport of getSportTypeMap()) {
+    sportNames.set(sport.sportType, sport.sportName);
   }
 
   const pacesByCategory: Record<PaceCategory, number[]> = {

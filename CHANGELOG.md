@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Download a template's images from Studio.** Select a template asset, such as an analog hand, a center cap or a data icon, and choose **Download** to save it as a PNG. To recolor it, for example the orange stripes on MELLOW's hands, edit the colors, then choose **Replace image** on the same layer. A hand you import as a new image with Add → Image is a still picture and never turns. Studio saves the template's largest copy at its full canvas size. A hand turns around the exact center of its image, so keep that canvas size. Studio resizes the one image for every watch. If you already replaced the image, **Download** saves your replacement.
 
+### Fixed
+
+- **No more "Service exceptions" for `/activity/fit/getImportSportList` in the error report.** Since 0.1.63 it appeared each time Training Hub loaded. CorosLink read sport names from that address, but COROS uses it for its list of FIT imports, so the request always failed and CorosLink used its own sport names. It no longer makes the request, and sport names stay the same.
+
 ## [0.1.63] - 2026-10-23
 
 ### Added
