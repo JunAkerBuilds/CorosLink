@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.64] - 2026-10-24
+
 ### Added
 
 - **Download a template's images from Studio.** Select a template asset, such as an analog hand, a center cap or a data icon, and choose **Download** to save it as a PNG. To recolor it, for example the orange stripes on MELLOW's hands, edit the colors, then choose **Replace image** on the same layer. A hand you import as a new image with Add → Image is a still picture and never turns. Studio saves the template's largest copy at its full canvas size. A hand turns around the exact center of its image, so keep that canvas size. Studio resizes the one image for every watch. If you already replaced the image, **Download** saves your replacement.
@@ -15,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Swim totals on watch faces show their distance, not a rounded 0 or 1** ([#153](https://github.com/JunAkerBuilds/CorosLink/issues/153)). In metric units the watch counts swims in kilometres, like runs, and rounds to a whole number, so a 750 m week showed `1` and 300 m showed `0`. Studio drew those layers in metres. Today's and weekly swim layers now have a **Decimal point**, on by default, so 750 m reads `0.75 km`. In imperial units swims count in yards, so a decimal point shows hundredths of a yard. Runs and rides can turn it on for `12.34` instead of `12`. Studio's swim unit now reads km, and the preview rounds like the watch when the point is off. CorosLink's compiler writes the point; COROS's own compiler ignores it. Firmware analysis points to this fix, but it isn't yet confirmed on a watch.
 - **No more "Service exceptions" for `/activity/fit/getImportSportList` in the error report.** Since 0.1.63 it appeared each time Training Hub loaded. CorosLink read sport names from that address, but COROS uses it for its list of FIT imports, so the request always failed and CorosLink used its own sport names. It no longer makes the request, and sport names stay the same.
+- **Naps show up in Training Hub.** COROS's sleep overview lists naps on lines CorosLink didn't read, so every nap was dropped and a day with only a nap showed no sleep at all. The sleep card now shows the nap, with its times on hover, or None on a day without one. Past 7 nights shows a single nap's times under its duration, and a nap-only day shows the nap instead of No data.
+
+### Security
+
+- Updated Electron to 42.11.16, which stops trusting certificates from compromised eMudhra intermediate certificate authorities.
+- Updated Zod to 4.6.7, so validating an oversized list can no longer exhaust memory, and body-parser and fast-uri, which the MCP SDK behind Coach and Watchmaker uses. A request with trailing bytes after a compressed body can no longer stall a local MCP server, and URIs with spoofed schemes or hosts are parsed correctly.
+- Updated undici, which is only used while building the installers.
 
 ## [0.1.63] - 2026-10-23
 
