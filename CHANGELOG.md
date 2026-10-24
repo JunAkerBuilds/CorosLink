@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.65] - 2026-10-24
+
+### Changed
+
+- **A clearer editor for strength workouts.** In the Training Library, each exercise in a strength workout folds into one row showing its picture, name, and sets × reps @ load with rest, so a six-exercise session fits on one screen. Click a row to open it; one opens at a time. **+ Exercise** adds an exercise at the end, opens it and puts the cursor in the movement search. The step type is now a small dropdown beside the exercise name instead of a large "Training" heading, and on strength steps it reads Exercise. The demonstration has a single play/pause button instead of the browser's video controls, and you can click the clip to pause it. Warm-up, rest and cool-down steps no longer show an intensity picker whose only choice is Not set. Cards are now plain, with the step type's color on a thin edge instead of tinting the whole card green.
+
+### Fixed
+
+- **Editing a strength workout no longer throws away your changes.** The editor reloaded the workout every couple of seconds, so edits disappeared, the dialog jumped back to the top and the demonstration restarted.
+- **The strength editor opens without flickering.** It used to paint the form first and then swap in the exercise library, each exercise's picture and the demonstration one after another. It now shows the whole session at once and remembers the exercise library between edits, so reopening an editor is quick. The demonstration starts on its cover picture instead of a loading spinner.
+- **Cancel and Exercise instructions in the workout editor match the rest of the app.** Cancel looked like a plain gray system button, and the instructions box used a gray background with a typewriter-style font.
+
 ## [0.1.64] - 2026-10-24
 
 ### Added
