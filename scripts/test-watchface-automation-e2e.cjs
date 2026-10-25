@@ -462,6 +462,10 @@ async function main() {
     window.hide();
     await window.webContents.executeJavaScript(`[...document.querySelectorAll('.wf-layer-picker-filters button')].find(button=>button.textContent==='Charts').click()`);
     assert.equal(await window.webContents.executeJavaScript("document.querySelectorAll('.wf-layer-picker-results [data-add-option]').length"),require('../dist-electron/watchfaceNativeCatalog.js').NATIVE_CHART_SOURCES.length,"Category filter shows every chart source");
+    // Status images a face lacks (airplane, sleep mode, Bluetooth, Do Not Disturb) are addable from Device.
+    await window.webContents.executeJavaScript(`[...document.querySelectorAll('.wf-layer-picker-filters button')].find(button=>button.textContent==='Device').click()`);
+    await until(() => window.webContents.executeJavaScript("[...document.querySelectorAll('.wf-layer-picker-results [data-add-option]')].map(option=>option.textContent).join('|')"), text => /Airplane mode indicator/.test(text) && /Sleep mode indicator/.test(text), "Device lists the airplane and sleep mode indicators");
+    await window.webContents.executeJavaScript(`[...document.querySelectorAll('.wf-layer-picker-filters button')].find(button=>button.textContent==='Charts').click()`);
     await until(() => window.webContents.executeJavaScript("document.querySelector('.wf-layer-picker').getBoundingClientRect().height<=581"), Boolean, "individual categories use a compact picker");
     await until(() => window.webContents.executeJavaScript(`(() => {
       const strip=document.querySelector('[role="tablist"][aria-label="Data categories"]');
@@ -478,7 +482,7 @@ async function main() {
     assert.equal(await window.webContents.executeJavaScript("document.activeElement.textContent"),"All","resizing the picker preserves keyboard focus on the selected tab");
     await window.webContents.executeJavaScript(`[...document.querySelectorAll('.wf-layer-picker-filters button')].find(button=>button.textContent==='All').click()`);
     await setSimulationInput("Search data fields", "sleep");
-    assert.equal(await window.webContents.executeJavaScript("document.querySelectorAll('.wf-layer-picker-results [data-add-option]').length"),2);
+    assert.equal(await window.webContents.executeJavaScript("document.querySelectorAll('.wf-layer-picker-results [data-add-option]').length"),3,"Sleep score, sleep HRV status and the sleep mode indicator");
     await setSimulationInput("Search data fields", "no-such-field");
     assert.equal(await window.webContents.executeJavaScript("document.querySelector('.wf-layer-picker-empty strong').textContent"),"No matching data fields");
     await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Search data fields"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);

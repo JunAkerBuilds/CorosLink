@@ -514,6 +514,7 @@ import {
   virtualControlIconCanvasSize,
   isControlComplicationEnabled,
   isTemplateTimeColonEnabled,
+  isVirtualStandaloneStatusIconKey,
   watchfaceArcCutIsDateSlash,
   WATCHFACE_COMPLICATIONS,
   WATCHFACE_MONTH_LABELS,
@@ -5844,10 +5845,10 @@ export function WatchfaceEditor({
     });
   }
 
-  async function chooseConfigAsset(reference: WatchfaceConfigAssetReference, preset?: CorosWatchfaceArtwork) {
+  async function chooseConfigAsset(reference: WatchfaceConfigAssetReference, preset?: CorosWatchfaceArtwork): Promise<boolean> {
     try {
       const selected = preset ?? await api.chooseCorosWatchfaceArtwork();
-      if (!selected) return;
+      if (!selected) return false;
       updateConfigAsset(reference, {
         enabled: true,
         replacement: await downscaleArtwork(selected),
@@ -5856,8 +5857,10 @@ export function WatchfaceEditor({
           : {})
       });
       onNotice(t("{{value1}} replaced for every supported resolution.", { value1: t(reference.label) }));
+      return true;
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : t("Could not replace the template image."));
+      return false;
     }
   }
 
@@ -7276,7 +7279,7 @@ export function WatchfaceEditor({
       mode: "image",
       title: t("Official image for {{value1}}", { value1: t(reference.label) }),
       defaultCategory: officialCategoryForConfigKey(reference.configKey),
-      onPick: (frames, frameIndex) => chooseConfigAsset(reference, officialFrameArtwork(frames, frameIndex))
+      onPick: async (frames, frameIndex) => { await chooseConfigAsset(reference, officialFrameArtwork(frames, frameIndex)); }
     });
   }
 
@@ -9332,6 +9335,20 @@ export function WatchfaceEditor({
         category: addCategoryForLayer(layer),
         added: layer.visible,
         onAdd: () => layer.visible ? selectQuickStartItem(layer.id) : restoreFirmwareLayer(layer)
+      })),
+    // Status images the face does not have yet (Bluetooth, Do Not Disturb, airplane
+    // and sleep mode): picking one asks for the image, then selects the new layer.
+    // Its inspector offers the official COROS images afterwards.
+    ...layers
+      .filter((layer) => layer.kind === "configAsset" && !layer.present && layer.configAssetId &&
+        configAssetsById.get(layer.configAssetId)?.scope === "config" &&
+        isVirtualStandaloneStatusIconKey(configAssetsById.get(layer.configAssetId)!.configKey))
+      .map((layer) => ({
+        id: layer.id,
+        label: layer.label,
+        category: "Device" as const,
+        added: false,
+        onAdd: () => void chooseConfigAsset(configAssetsById.get(layer.configAssetId!)!).then((added) => { if (added) selectQuickStartItem(layer.id); })
       }))
   ];
   faceAddOptions.sort((left, right) => faceAddOptionRank(left.id) - faceAddOptionRank(right.id));

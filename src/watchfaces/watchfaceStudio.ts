@@ -969,6 +969,11 @@ const VIRTUAL_STANDALONE_STATUS_ICON_KEYS = [
   "sleep_mode_icon"
 ] as const;
 
+/** Whether a config key is a standalone status image Studio can add to a face that lacks it. */
+export function isVirtualStandaloneStatusIconKey(configKey: string): boolean {
+  return (VIRTUAL_STANDALONE_STATUS_ICON_KEYS as readonly string[]).includes(configKey);
+}
+
 /**
  * The compiler writes `bluetooth_icon_pos` and `no_disturb_icon_pos` only when
  * the face also has one of that indicator's own icons, and the airplane and

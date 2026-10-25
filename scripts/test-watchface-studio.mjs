@@ -57,6 +57,7 @@ import {
   exerciseProgressStyleForResolution,
   getAvailableComplications,
   withStatusIconCompanions,
+  isVirtualStandaloneStatusIconKey,
   getAmPmCapability,
   getFixedMetricCapabilities,
   getTemplateBackgroundAssetPaths,
@@ -2299,6 +2300,11 @@ assert.deepEqual(
     { configKey: "sleep_mode_icon", position: { x: 313, y: 68 } }
   ],
   "airplane and sleep images preview at their indicator's position"
+);
+assert.deepEqual(
+  ["airplane_icon", "sleep_mode_icon", "bluetooth_off_icon", "no_disturb_on_icon", "control_bluetooth_off_icon", "battery_icon", "weather_icon_dir"].map(isVirtualStandaloneStatusIconKey),
+  [true, true, true, true, false, false, false],
+  "the Add menu offers the standalone status images, not control-slot or template ones"
 );
 // COROS's compiler writes those positions only beside the indicator's own icon, so a face without one gets a transparent companion.
 const statusDesign = { configAssetOverrides: { "config:airplane_icon": statusImage, "config:sleep_mode_icon": statusImage } };
