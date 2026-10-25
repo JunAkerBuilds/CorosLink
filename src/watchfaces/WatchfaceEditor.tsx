@@ -6033,26 +6033,32 @@ export function WatchfaceEditor({
           ? { nativeSize: configAssetCanUseNativeSize(reference.configKey, Boolean(reference.source)) }
           : {})
       };
+      // Leave a group that already shows on the face where it is. Otherwise
+      // keep the position only if the image lands inside the dial: an offset
+      // left from an earlier image (or config edit) can point off the screen.
       const groupOnFace = layers.some((layer) =>
         layer.layoutGroupId === groupId && layer.present && layer.visible);
-      const currentOffset = design.layoutOffsets?.[groupId];
       let offset: { dx: number; dy: number } | null = null;
-      if (
-        !groupOnFace &&
-        !watchfaceControlStatusPosition(master, reference.configKey) &&
-        !(currentOffset && (currentOffset.dx || currentOffset.dy))
-      ) {
+      if (!groupOnFace) {
         const drafted = deriveDesignDetails(modeSourceDetails, {
           ...design,
           configAssetOverrides: { ...(design.configAssetOverrides ?? {}), [reference.id]: override }
         }).previewDetails;
         const draftedMaster = pickPreviewResolution(drafted);
-        const base = draftedMaster
+        const placed = draftedMaster
           ? watchfaceControlStatusPosition(draftedMaster, reference.configKey)?.position
           : null;
-        if (base) {
+        const radius = Math.min(master.width, master.height) / 2;
+        const insideDial = placed && [
+          [placed.x, placed.y],
+          [placed.x + artwork.width, placed.y],
+          [placed.x, placed.y + artwork.height],
+          [placed.x + artwork.width, placed.y + artwork.height]
+        ].every(([x, y]) => Math.hypot(x - master.width / 2, y - master.height / 2) <= radius);
+        if (placed && !insideDial) {
           const target = defaultStatusIndicatorPosition(groupId, master, artwork);
-          offset = { dx: target.x - base.x, dy: target.y - base.y };
+          const current = design.layoutOffsets?.[groupId] ?? { dx: 0, dy: 0 };
+          offset = { dx: current.dx + target.x - placed.x, dy: current.dy + target.y - placed.y };
         }
       }
       setDesign((prev) => ({
