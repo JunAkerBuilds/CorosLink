@@ -81,12 +81,23 @@ export function applyWatchfaceLayoutCommand(
   };
   const locked = new Set(design.lockedLayerIds ?? []);
   const included = new Set<string>();
+  const covered = new Set<string>();
   const items = (ids as string[]).flatMap((id, index) => {
-    if (included.has(id)) return [];
-    const members = [...expand(id)];
-    for (const member of members) {
+    if (covered.has(id)) return [];
+    const expanded = [...expand(id)];
+    for (const member of expanded) {
       if (locked.has(member)) fail("layer.locked", `Unlock ${member} before moving this selection.`);
     }
+    // A shared firmware position also lists the states the face has no image
+    // for (Bluetooth on beside Bluetooth off). They have no box but move with
+    // that position, so they ride along instead of blocking the placement.
+    const members = expanded.filter((member) => {
+      const layer = byId.get(member);
+      return member === id || !layer || layer.bounds || !layer.movementKey ||
+        !expanded.some((other) => other !== member &&
+          byId.get(other)?.bounds && byId.get(other)?.movementKey === layer.movementKey);
+    });
+    for (const member of expanded) covered.add(member);
     const bounds = members.map((member) => {
       const layer = byId.get(member);
       if (!layer) fail("layer.missing", `Layer ${member} is unavailable in this template and mode.`);

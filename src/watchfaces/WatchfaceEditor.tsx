@@ -19,6 +19,11 @@ import { watchfaceAutomationAssetContracts } from "./watchfaceAutomationAssetCon
 import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES, defaultNativeDataStyle, drawNativeDataPreview, keepNativeOwnedKeys, minMaxTemperatureRun, nativeDataSize, nativeLayerChartPages, nativeLayerStyle } from "./nativeData";
 import { glyphBaselineMovements, visibleGlyphBounds } from "./watchfaceGlyphLayout";
 import { finalizeWatchfaceStatusIcons } from "./watchfaceStatusExport.ts";
+import {
+  defaultStatusIndicatorPosition,
+  renderDefaultBatteryStates,
+  renderDefaultStatusIndicator
+} from "./watchfaceDefaultIndicators.ts";
 import { WatchfaceExportPreview } from "./WatchfaceExportPreview";
 import {
   effectiveWatchLanguages,
@@ -516,6 +521,7 @@ import {
   isControlComplicationEnabled,
   isTemplateTimeColonEnabled,
   isVirtualStandaloneStatusIconKey,
+  watchfaceControlStatusPosition,
   watchfaceArcCutIsDateSlash,
   WATCHFACE_COMPLICATIONS,
   WATCHFACE_MONTH_LABELS,
@@ -6005,6 +6011,92 @@ export function WatchfaceEditor({
     });
   }
 
+  /**
+   * Adds a Bluetooth, Do Not Disturb, airplane or sleep mode image the
+   * template lacks, drawn by Studio (watchfaceDefaultIndicators), so no file
+   * is needed. Export writes it to every watch size. A group with nothing on
+   * the face yet is moved from the export fallback, a corner the round screen
+   * hides, to a spot inside the dial.
+   */
+  async function addStatusIndicator(reference: WatchfaceConfigAssetReference, layerId: string) {
+    const master = modeSourceDetails ? pickPreviewResolution(modeSourceDetails) : null;
+    const groupId = controlStatusLayoutGroupId(reference.configKey);
+    if (!modeSourceDetails || !master || !groupId) return;
+    try {
+      const artwork = await renderDefaultStatusIndicator(reference.configKey, master.height, design.digitColor);
+      if (!artwork) return;
+      const override = {
+        ...(design.configAssetOverrides?.[reference.id] ?? {}),
+        enabled: true,
+        replacement: artwork,
+        ...(configAssetDefaultsToNativeSize(reference.configKey)
+          ? { nativeSize: configAssetCanUseNativeSize(reference.configKey, Boolean(reference.source)) }
+          : {})
+      };
+      const groupOnFace = layers.some((layer) =>
+        layer.layoutGroupId === groupId && layer.present && layer.visible);
+      const currentOffset = design.layoutOffsets?.[groupId];
+      let offset: { dx: number; dy: number } | null = null;
+      if (
+        !groupOnFace &&
+        !watchfaceControlStatusPosition(master, reference.configKey) &&
+        !(currentOffset && (currentOffset.dx || currentOffset.dy))
+      ) {
+        const drafted = deriveDesignDetails(modeSourceDetails, {
+          ...design,
+          configAssetOverrides: { ...(design.configAssetOverrides ?? {}), [reference.id]: override }
+        }).previewDetails;
+        const draftedMaster = pickPreviewResolution(drafted);
+        const base = draftedMaster
+          ? watchfaceControlStatusPosition(draftedMaster, reference.configKey)?.position
+          : null;
+        if (base) {
+          const target = defaultStatusIndicatorPosition(groupId, master, artwork);
+          offset = { dx: target.x - base.x, dy: target.y - base.y };
+        }
+      }
+      setDesign((prev) => ({
+        ...prev,
+        configAssetOverrides: {
+          ...(prev.configAssetOverrides ?? {}),
+          [reference.id]: { ...(prev.configAssetOverrides?.[reference.id] ?? {}), ...override }
+        },
+        ...(offset ? { layoutOffsets: { ...prev.layoutOffsets, [groupId]: offset } } : {}),
+        removedLayerIds: (prev.removedLayerIds ?? []).filter((id) => id !== layerId)
+      }));
+      selectQuickStartItem(layerId);
+      onNotice(t("{{value1}} added. Replace its image in the inspector.", { value1: t(reference.label) }));
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : t("Could not add the indicator."));
+    }
+  }
+
+  /**
+   * A fixed battery icon for a template without one: Studio's twelve states
+   * in COROS order, at the export's default spot under the time. The
+   * inspector swaps in official or imported states.
+   */
+  function addDefaultBatteryIcon() {
+    const master = modeSourceDetails ? pickPreviewResolution(modeSourceDetails) : null;
+    if (!master) return;
+    const stateReplacements = renderDefaultBatteryStates(master.width, design.digitColor);
+    setDesign((prev) => ({
+      ...prev,
+      configAssetOverrides: {
+        ...(prev.configAssetOverrides ?? {}),
+        "config:battery_icon": {
+          ...(prev.configAssetOverrides?.["config:battery_icon"] ?? {}),
+          enabled: true,
+          stateReplacements
+        }
+      },
+      layerVisibility: { ...prev.layerVisibility, batteryIcon: true },
+      removedLayerIds: (prev.removedLayerIds ?? []).filter((id) => id !== "batteryIcon")
+    }));
+    selectQuickStartItem("batteryIcon");
+    onNotice(t("Battery icon added. Replace its images in the inspector."));
+  }
+
   function setBatteryIconScale(
     scale: number,
     overrideId:
@@ -9343,11 +9435,18 @@ export function WatchfaceEditor({
         label: layer.label,
         category: addCategoryForLayer(layer),
         added: layer.visible,
-        onAdd: () => layer.visible ? selectQuickStartItem(layer.id) : restoreFirmwareLayer(layer)
+        onAdd: () => layer.visible
+          ? selectQuickStartItem(layer.id)
+          // A template without a fixed battery icon has nothing to restore.
+          : layer.id === "batteryIcon" && !layer.present &&
+              !design.configAssetOverrides?.["config:battery_icon"]?.replacement &&
+              !Object.keys(design.configAssetOverrides?.["config:battery_icon"]?.stateReplacements ?? {}).length
+            ? addDefaultBatteryIcon()
+            : restoreFirmwareLayer(layer)
       })),
     // Status images the face does not have yet (Bluetooth, Do Not Disturb, airplane
-    // and sleep mode): picking one asks for the image, then selects the new layer.
-    // Its inspector offers the official COROS images afterwards.
+    // and sleep mode) arrive with Studio's own artwork and select the new layer.
+    // Its inspector replaces the image with an official COROS or imported one.
     ...layers
       .filter((layer) => layer.kind === "configAsset" && !layer.present && layer.configAssetId &&
         configAssetsById.get(layer.configAssetId)?.scope === "config" &&
@@ -9357,7 +9456,7 @@ export function WatchfaceEditor({
         label: layer.label,
         category: "Device" as const,
         added: false,
-        onAdd: () => void chooseConfigAsset(configAssetsById.get(layer.configAssetId!)!).then((added) => { if (added) selectQuickStartItem(layer.id); })
+        onAdd: () => void addStatusIndicator(configAssetsById.get(layer.configAssetId!)!, layer.id)
       }))
   ];
   faceAddOptions.sort((left, right) => faceAddOptionRank(left.id) - faceAddOptionRank(right.id));
@@ -10626,6 +10725,18 @@ export function WatchfaceEditor({
                   configTextBaselines[activePath]
             );
             const resolutionOptions = details?.resolutions ?? [];
+            // Edits live per file, so a size that is not selected can keep one
+            // (a status icon moved off a smaller screen). Mark every edited size.
+            const editedDirectories = new Set(
+              Object.entries(design.configTextEdits ?? {})
+                .filter(([path, text]) => configTextBaselines[path] !== text)
+                .map(([path]) => path.split("/")[0])
+            );
+            const otherEditedSizes = resolutionOptions
+              .filter((resolution) =>
+                resolution.directory !== editorDirectory &&
+                editedDirectories.has(resolution.directory))
+              .map((resolution) => `${resolution.width}×${resolution.height}`);
             return renderPropertySection(
               "config",
               t("Config files"),
@@ -10644,10 +10755,16 @@ export function WatchfaceEditor({
                           value={resolution.directory}
                         >
                           {resolution.width}×{resolution.height}
+                          {editedDirectories.has(resolution.directory) ? t(" · edited") : ""}
                         </option>
                       ))}
                     </select>
                   </label>
+                ) : null}
+                {otherEditedSizes.length > 0 ? (
+                  <p className="wf-archive-note">
+                    {t("Also edited: {{value1}}. Each size keeps its own file.", { value1: otherEditedSizes.join(", ") })}
+                  </p>
                 ) : null}
                 <div
                   className="wf-preview-mode-switch wf-raw-config-tabs"

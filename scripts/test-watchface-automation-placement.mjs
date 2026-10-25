@@ -615,4 +615,17 @@ const chartPlaced = activeDesign(apply([{ op: "place_layers", layerIds: ["native
   value(chartDesign))).nativeData.chart;
 assert.deepEqual(chartPlaced, chartModule.moveChartReadout(chart, chart.x - 10, chart.y + 5), "place_layers moves the edited readout too");
 
+// A Bluetooth-off image added to a template without one shares its position
+// with Bluetooth on and airplane, which have no image and so no box.
+const statusDesign = { ...baseDesign, configAssetOverrides: {
+  "config:bluetooth_off_icon": { enabled: true, nativeSize: true, replacement: { dataUrl: png, width: 20, height: 30 } }
+} };
+const statusScene = sceneFor(statusDesign);
+assert.equal(statusScene.layers.find((item) => item.id === "configAsset:config:bluetooth_on_icon")?.bounds ?? null, null,
+  "the fixture's Bluetooth on state has no image");
+const statusPlaced = apply([{ op: "place_layers", layerIds: ["configAsset:config:bluetooth_off_icon"], anchor: "top-left", x: 50, y: 200 }],
+  value(statusDesign));
+const statusBox = layer(sceneFor(activeDesign(statusPlaced)), "configAsset:config:bluetooth_off_icon").bounds;
+assert.deepEqual([statusBox.x0, statusBox.y0], [50, 200], "states without an image don't block placing an added status image");
+
 console.log("watchface automation placement tests passed");

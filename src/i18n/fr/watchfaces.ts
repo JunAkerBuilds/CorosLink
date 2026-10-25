@@ -1971,4 +1971,8 @@ export const watchfacesFrench: Record<string, string> = {
   "Could not save the image.": "Impossible d’enregistrer l’image.",
   "This template has no image to download here.": "Ce modèle n’a pas d’image à télécharger ici.",
   "Save this image as a PNG to edit it. Keep the canvas size, then choose Replace image.": "Enregistrez cette image en PNG pour la modifier. Conservez la taille du canevas, puis choisissez Remplacer l’image.",
+  "{{value1}} added. Replace its image in the inspector.": "{{value1}} ajouté. Remplacez son image dans l’inspecteur.",
+  "Could not add the indicator.": "Impossible d’ajouter l’indicateur.",
+  "Battery icon added. Replace its images in the inspector.": "Icône de batterie ajoutée. Remplacez ses images dans l’inspecteur.",
+  "Also edited: {{value1}}. Each size keeps its own file.": "Également modifié : {{value1}}. Chaque taille garde son propre fichier.",
 };

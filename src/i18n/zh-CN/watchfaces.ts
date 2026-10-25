@@ -2008,4 +2008,8 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Could not save the image.": "无法保存图片。",
   "This template has no image to download here.": "此模板在这里没有可下载的图片。",
   "Save this image as a PNG to edit it. Keep the canvas size, then choose Replace image.": "将此图片保存为 PNG 以便编辑。保持画布尺寸不变，然后选择“替换图片”。",
+  "{{value1}} added. Replace its image in the inspector.": "已添加{{value1}}。可在检查器中替换其图像。",
+  "Could not add the indicator.": "无法添加指示器。",
+  "Battery icon added. Replace its images in the inspector.": "已添加电池图标。可在检查器中替换其图像。",
+  "Also edited: {{value1}}. Each size keeps its own file.": "另已编辑：{{value1}}。每种尺寸使用各自的文件。",
 };

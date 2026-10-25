@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Bluetooth, Do Not Disturb, airplane and sleep indicators on any face.** In Studio, **Add → Device** lists every status indicator the template doesn't have. Pick one and it appears inside the dial with Studio's own icon, drawn like COROS's: a Bluetooth symbol or a bell, struck through in red while disconnected or muted, a plane, a bed. No image file is needed. Choose **Official** or **Replace again** on the layer to change it. Studio writes it for every watch size, including the 240–280 px screens of APEX 4, NOMAD and VERTIX.
+- **A battery icon for faces without one.** On a template with no fixed battery icon, **Add → Battery icon** did nothing. It now adds a twelve-state battery (charging, empty, then 10–100%) under the time; swap in official or your own states on the layer.
 - **Weekly training load and AQI level artwork in Studio.** Both layers now have a **State artwork** component, like stress's: seven images each, off until you turn it on. AQI's frames are no data and then the six US EPA bands, from Good to Hazardous; weekly load's levels are not known, so Studio previews them in steps and claims no meaning for them. Faces that already carry the artwork open with it. The counts and order aren't yet confirmed on a watch.
 - **Lunar date in Studio.** Add **Lunar year**, **Lunar month** and **Lunar day** under Calendar. The watch draws them only while its language is Chinese; Studio writes both the Simplified and Traditional tables. The year is a stem, a branch and 年, the month names include a leap-month marker, the day has 30 names, and the preview follows the simulation date. Not yet confirmed on a watch.
 - **Airplane and sleep indicators in Studio.** Two more status images sit beside Bluetooth and Do Not Disturb in the layer list. The watch shows the airplane image where the Bluetooth indicator goes while airplane mode is on, and the sleep image where Do Not Disturb goes while sleep mode is on.
@@ -18,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Opening an official face that has a barometer control now reads its position and trend icons correctly.
+- **The Studio AI can move a status indicator it just added.** Placing a new Bluetooth-off image failed with "bluetooth_on_icon does not support placement", because the states without an image blocked the move. The AI is also told to add these indicators through Studio rather than by editing config files.
+- **Config files edited for other watch sizes are marked.** Project → Config files shows one watch size at a time, so an edit left on another size stayed out of sight; a Bluetooth line copied from 800×800 put the icon off the 260×260 screen. The size list now marks every edited file and names the other edited sizes.
 
 ## [0.1.65] - 2026-10-24
 

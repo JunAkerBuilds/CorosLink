@@ -109,6 +109,18 @@ Record a `dynamic_assets` requirement and inspect previews with
 template's state count. Fonts, weather icons and progress indicators also need
 their own documented glyph, state or native-parameter contracts.
 
+Bluetooth, Do Not Disturb, airplane and sleep mode images are config assets
+(`configAsset:config:bluetooth_off_icon`, `…bluetooth_on_icon`,
+`…no_disturb_on_icon`, `…no_disturb_off_icon`, `…airplane_icon`,
+`…sleep_mode_icon`). A template without one still supports it: `merge`
+`{enabled: true, nativeSize: true, replacement}` (master pixels) into
+`/design/configAssetOverrides` under its id. Studio then writes the key, the
+PNG and a scaled position for every watch size. Bluetooth and airplane share
+one position, Do Not Disturb and sleep the other; move the visible layer with
+`place_layers`. Never add them through raw `configTextEdits`: each config file
+belongs to one watch size, so a line written for 800×800 is wrong or missing
+on the 240–280 trees.
+
 Read `capabilities.assetContracts` for **every** component before scheduling
 image generation. It identifies complete digit/label sets, ordered state sets,
 single images, rotating hands, and firmware-drawn components with zero sprites.

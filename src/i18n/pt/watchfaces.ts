@@ -2007,4 +2007,8 @@ export const watchfacesPortuguese: Record<string, string> = {
   "Could not save the image.": "Não foi possível guardar a imagem.",
   "This template has no image to download here.": "Este modelo não tem nenhuma imagem para transferir aqui.",
   "Save this image as a PNG to edit it. Keep the canvas size, then choose Replace image.": "Guarde esta imagem em PNG para a editar. Mantenha o tamanho da tela e depois escolha Substituir imagem.",
+  "{{value1}} added. Replace its image in the inspector.": "{{value1}} adicionado. Substitua a imagem no inspector.",
+  "Could not add the indicator.": "Não foi possível adicionar o indicador.",
+  "Battery icon added. Replace its images in the inspector.": "Ícone de bateria adicionado. Substitua as imagens no inspector.",
+  "Also edited: {{value1}}. Each size keeps its own file.": "Também editado: {{value1}}. Cada tamanho mantém o seu próprio ficheiro.",
 };
