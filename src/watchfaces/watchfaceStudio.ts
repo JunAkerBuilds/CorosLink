@@ -974,48 +974,6 @@ export function isVirtualStandaloneStatusIconKey(configKey: string): boolean {
   return (VIRTUAL_STANDALONE_STATUS_ICON_KEYS as readonly string[]).includes(configKey);
 }
 
-/**
- * The compiler writes `bluetooth_icon_pos` and `no_disturb_icon_pos` only when
- * the face also has one of that indicator's own icons, and the airplane and
- * sleep images are drawn at those positions. So an airplane or sleep image
- * added to a face without the indicator gets a transparent 1x1 companion
- * (`bluetooth_off_icon` or `no_disturb_off_icon`), which makes the position
- * survive any compiler, COROS's included.
- */
-const STATUS_ICON_COMPANIONS = {
-  airplane_icon: {
-    own: ["bluetooth_icon", "bluetooth_on_icon", "bluetooth_off_icon"],
-    add: "bluetooth_off_icon"
-  },
-  sleep_mode_icon: {
-    own: ["no_disturb_icon", "no_disturb_on_icon", "no_disturb_off_icon"],
-    add: "no_disturb_off_icon"
-  }
-} as const;
-const TRANSPARENT_PIXEL_DATA_URL =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=";
-
-/** The design with a transparent indicator icon beside each added airplane or sleep image that needs one. */
-export function withStatusIconCompanions<
-  Design extends { configAssetOverrides?: Record<string, CorosWatchfaceConfigAssetOverride> }
->(details: CorosWatchfaceTemplateDetails, design: Design): Design {
-  const overrides = design.configAssetOverrides ?? {};
-  let next = overrides;
-  for (const scope of ["config", "aod"] as const) {
-    for (const [configKey, { own, add }] of Object.entries(STATUS_ICON_COMPANIONS)) {
-      const added = overrides[watchfaceConfigAssetId(scope, configKey)];
-      const companionId = watchfaceConfigAssetId(scope, add);
-      if (!added?.replacement || added.enabled === false || overrides[companionId]) continue;
-      const hasOwnIcon = details.resolutions.some((resolution) =>
-        own.some((key) => Boolean((scope === "aod" ? resolution.aodConfig : resolution.config)?.[key]?.trim()))
-      );
-      if (hasOwnIcon) continue;
-      next = { ...next, [companionId]: { replacement: { dataUrl: TRANSPARENT_PIXEL_DATA_URL, width: 1, height: 1 } } };
-    }
-  }
-  return next === overrides ? design : { ...design, configAssetOverrides: next };
-}
-
 export type WatchfaceControlStatusLayoutGroupId =
   (typeof CONTROL_STATUS_PREVIEW_DEFINITIONS)[number]["layoutGroupId"];
 

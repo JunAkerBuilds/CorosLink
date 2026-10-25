@@ -18,6 +18,7 @@ import { describeNativeDataComponents } from "./nativeDataAutomation";
 import { watchfaceAutomationAssetContracts } from "./watchfaceAutomationAssetContracts";
 import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES, defaultNativeDataStyle, drawNativeDataPreview, keepNativeOwnedKeys, minMaxTemperatureRun, nativeDataSize, nativeLayerChartPages, nativeLayerStyle } from "./nativeData";
 import { glyphBaselineMovements, visibleGlyphBounds } from "./watchfaceGlyphLayout";
+import { finalizeWatchfaceStatusIcons } from "./watchfaceStatusExport.ts";
 import { WatchfaceExportPreview } from "./WatchfaceExportPreview";
 import {
   effectiveWatchLanguages,
@@ -5853,7 +5854,7 @@ export function WatchfaceEditor({
         enabled: true,
         replacement: await downscaleArtwork(selected),
         ...(configAssetDefaultsToNativeSize(reference.configKey)
-          ? { nativeSize: Boolean(reference.source) }
+          ? { nativeSize: configAssetCanUseNativeSize(reference.configKey, Boolean(reference.source)) }
           : {})
       });
       onNotice(t("{{value1}} replaced for every supported resolution.", { value1: t(reference.label) }));
@@ -7714,7 +7715,7 @@ export function WatchfaceEditor({
         renderExportBackground(snapshotBackground)
       ]);
       const {
-        assetReplacements,
+        assetReplacements: composedAssetReplacements,
         configOverrides: composedConfigOverrides,
         minWatchFaceVersion
       } = composition;
@@ -7724,7 +7725,7 @@ export function WatchfaceEditor({
       // and AOD configs, and no later composition step may be allowed to drop
       // those deletion sentinels before the archive service receives them.
       // Keys a native field writes (Current weather's "°" and minus) stay its own.
-      const configOverrides = mergeConfigOverrides(
+      const visibleConfigOverrides = mergeConfigOverrides(
         composedConfigOverrides,
         keepNativeOwnedKeys(
           buildDisabledWatchfaceConfigAssetOverrides(
@@ -7737,6 +7738,14 @@ export function WatchfaceEditor({
           currentDetails,
           currentDesign
         )
+      );
+      // Hidden Bluetooth/DND artwork must not erase the shared coordinates
+      // required by airplane/sleep. Repair only after the last visibility pass.
+      const { assetReplacements, configOverrides } = await finalizeWatchfaceStatusIcons(
+        exportSourceDetails,
+        composedAssetReplacements,
+        visibleConfigOverrides,
+        loadAssets
       );
       const buildFirmwareType = destination?.firmwareType ?? targetFirmwareType;
       const buildWatchModel = destination?.watchModel ?? targetWatchModel;

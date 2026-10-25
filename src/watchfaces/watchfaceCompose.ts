@@ -21,7 +21,6 @@ import {
   buildControlIconPositionOverrides,
   buildWatchfaceConfigAssetOverrides,
   buildWatchfaceConfigAssetReplacements,
-  withStatusIconCompanions,
   buildDateSpriteComposition,
   buildDateStyleOverrides,
   buildLayerVisibilityOverrides,
@@ -622,11 +621,9 @@ export function buildTemplateWeekdayLanguageOverrides(
 
 export async function composeWatchfaceReplacements(
   details: CorosWatchfaceTemplateDetails,
-  authoredDesign: CorosWatchfaceDesignState,
+  design: CorosWatchfaceDesignState,
   loadAssets: WatchfaceAssetLoader
 ): Promise<WatchfaceComposeResult> {
-  // An airplane or sleep image needs the position its indicator's icon writes.
-  const design = withStatusIconCompanions(details, authoredDesign);
   const {
     timeFormatOverrides,
     metricOverrides,

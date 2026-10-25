@@ -250,7 +250,9 @@ for (const newline of ["\n", "\r\n"]) {
     bluetooth_on_icon: "studio\\bluetooth_on\\00.png",
     no_disturb_on_icon: "studio\\dnd_on\\00.png",
     no_disturb_off_icon: "studio\\dnd_off\\00.png",
-    no_disturb_icon_pos: "{64,64}"
+    no_disturb_icon_pos: "{64,64}",
+    airplane_icon: "studio\\airplane\\00.png",
+    sleep_mode_icon: "studio\\sleep_mode\\00.png"
   };
   const baseline = `[time_hour_high_pos]={1,2}${newline}`;
   const result = applyCorosWatchfaceConfigOverrides(baseline, statusOverrides);

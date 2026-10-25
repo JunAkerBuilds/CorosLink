@@ -56,7 +56,6 @@ import {
   detailsForPreviewResolution,
   exerciseProgressStyleForResolution,
   getAvailableComplications,
-  withStatusIconCompanions,
   isVirtualStandaloneStatusIconKey,
   getAmPmCapability,
   getFixedMetricCapabilities,
@@ -2306,29 +2305,8 @@ assert.deepEqual(
   [true, true, true, true, false, false, false],
   "the Add menu offers the standalone status images, not control-slot or template ones"
 );
-// COROS's compiler writes those positions only beside the indicator's own icon, so a face without one gets a transparent companion.
-const statusDesign = { configAssetOverrides: { "config:airplane_icon": statusImage, "config:sleep_mode_icon": statusImage } };
-const companioned = withStatusIconCompanions(emptyStandaloneStatusDetails, statusDesign);
-assert.deepEqual(
-  ["config:bluetooth_off_icon", "config:no_disturb_off_icon"].map(id => [companioned.configAssetOverrides[id]?.replacement?.width, companioned.configAssetOverrides[id]?.replacement?.height]),
-  [[1, 1], [1, 1]],
-  "a face without the indicators gets 1x1 transparent companions"
-);
-assert.equal(
-  withStatusIconCompanions({ archiveId: "own-status", resolutions: [standaloneStatusResolution] }, statusDesign),
-  statusDesign,
-  "a face that already has both indicators' icons is left alone"
-);
-assert.equal(
-  withStatusIconCompanions(emptyStandaloneStatusDetails, { configAssetOverrides: { "config:airplane_icon": { ...statusImage, enabled: false } } }).configAssetOverrides["config:bluetooth_off_icon"],
-  undefined,
-  "a hidden airplane image needs no companion"
-);
-assert.equal(
-  companioned.configAssetOverrides["config:airplane_icon"],
-  statusImage,
-  "the companion step keeps the authored overrides"
-);
+// Companion images are checked against final visibility during export;
+// test-watchface-status.cjs covers their pixels and compiled positions.
 const hiddenBluetoothStatusDetails = applyConfigOverridesToDetails(
   {
     archiveId: "control-status",

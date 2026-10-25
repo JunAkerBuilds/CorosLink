@@ -883,6 +883,50 @@ async function main() {
     "regenerated studio sprites should replace the previous bytes even when dimensions change"
   );
 
+  // --- Added airplane/sleep icons must survive normal and AOD export -----
+  const statusValues = {
+    airplane_icon: "studio\\airplane\\00.png",
+    sleep_mode_icon: "studio\\sleep_mode\\00.png",
+    bluetooth_off_icon: "studio\\bluetooth_off\\00.png",
+    no_disturb_off_icon: "studio\\dnd_off\\00.png",
+    bluetooth_icon_pos: "{72,273}",
+    no_disturb_icon_pos: "{64,64}"
+  };
+  const statusAssets = Object.entries(statusValues)
+    .filter(([key]) => key.endsWith("_icon"))
+    .map(([key, value]) => ({
+      path: `watchface_800x800/${value.replaceAll("\\", "/")}`,
+      data: key.endsWith("_off_icon") ? solidPng(1, 1, 0) : sourceIcon
+    }));
+  const statusConfigPaths = [
+    "watchface_800x800/config.txt",
+    "watchface_800x800/AODconfig.txt"
+  ];
+  const withStatusIcons = await watchfaces.createCorosWatchfaceArchive({
+    sourceArchiveId: starter.archiveId,
+    backgroundDataUrl: pngDataUrl(icon),
+    configOverrides: statusConfigPaths.map((path) => ({ path, values: statusValues })),
+    assetReplacements: statusAssets.map(({ path, data }) => ({
+      path, dataUrl: pngDataUrl(data), create: true
+    }))
+  });
+  const statusOutput = await findCreatorOutput(withStatusIcons);
+  assert.ok(statusOutput, "status icon archive should be created from a template without status fields");
+  const statusZip = await unzipper.Open.file(statusOutput.path);
+  for (const configPath of statusConfigPaths) {
+    const configEntry = statusZip.files.find((entry) => entry.path === configPath);
+    assert.ok(configEntry, `${configPath} should remain in the archive`);
+    const config = watchfaces.parseCorosWatchfaceConfig((await configEntry.buffer()).toString("utf8"));
+    for (const [key, value] of Object.entries(statusValues)) {
+      assert.equal(config[key], value, `${configPath} must retain ${key}`);
+    }
+  }
+  for (const { path: assetPath, data } of statusAssets) {
+    const assetEntry = statusZip.files.find((entry) => entry.path === assetPath);
+    assert.ok(assetEntry, `${assetPath} should be packaged with its config reference`);
+    assert.deepEqual(await assetEntry.buffer(), data);
+  }
+
   // --- Weather must be wired into normal and always-on configs ----------
   const withAodWeather = await watchfaces.createCorosWatchfaceArchive({
     sourceArchiveId: starter.archiveId,
