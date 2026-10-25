@@ -55,6 +55,13 @@ assert.deepEqual(role("today_elev", "unit").states.map(state => state.meaning), 
 assert.equal(role("weather_temp", "unit").spriteCount, 1);
 assert.equal(role("weather_uv", "states").states[5].meaning, "Extreme UV (11+)");
 assert.equal(role("stamina", "states").states[10].meaning, "Stamina 100%");
+assert.deepEqual(role("stress", "states").states.map(state => state.meaning), ["No stress data", "Relaxed stress (0–25)", "Low stress (26–50)", "Medium stress (51–75)", "High stress (76–100)"]);
+assert.equal(parts.nativePart("stress", parts.defaultNativeDataStyle("stress"), "states").enabled, false, "stress artwork starts hidden, like stamina's");
+// The firmware reads stress artwork at stress_level_icon_pos; stamina and UV use ${id}_level_pos.
+assert.deepEqual(catalog.nativeFieldKeys(catalog.NATIVE_DATA_BY_ID.get("stress")).slice(-2), ["stress_level_icon_pos", "stress_level_icon"]);
+assert.deepEqual(catalog.nativeFieldKeys(catalog.NATIVE_DATA_BY_ID.get("stamina")).slice(-2), ["stamina_level_pos", "stamina_level_icon"]);
+assert.equal(catalog.nativeStatePositionKey(catalog.NATIVE_DATA_BY_ID.get("weather_uv")), "weather_uv_level_pos");
+assert.equal(catalog.nativeStatePositionKey(catalog.NATIVE_DATA_BY_ID.get("sleep_hrv_level")), "sleep_hrv_level_pos");
 assert.equal(role("sedentary", "states").states[6].meaning, "Inactive (dimmed)");
 assert.ok(role("sleep_hrv_level", "states").states.every(state => state.meaningSource === "unknown"));
 assert.equal(role("chart", "states", { chartSource: "chart_moon" }).spriteCount, 30);
@@ -71,6 +78,8 @@ console.log("Native sprite contract tests passed for all fields and chart source
 
 assert.deepEqual(role("stamina", "states").verification.scenarios.map(sample => [sample.scenario.values.stamina, sample.expectedPreviewStateIndex]), [["0", "0"], ["50", "5"], ["100", "10"]]);
 assert.deepEqual(role("weather_uv", "states").verification.scenarios.map(sample => [sample.scenario.values.weather_uv, sample.expectedPreviewStateIndex]), [["-1", "0"], ["6", "3"], ["11", "5"]]);
+assert.deepEqual(role("stress", "states").verification.scenarios.map(sample => [sample.scenario.values.stress, sample.expectedPreviewStateIndex]), [["-1", "0"], ["38", "2"], ["88", "4"]]);
+assert.equal(role("stress", "states", { stateCount: 4 }).verification.supported, false);
 assert.deepEqual(role("chart", "states", { chartSource: "chart_moon" }).verification.scenarios.map(sample => sample.scenario.values.chart_moon), ["0", "15", "29"]);
 assert.deepEqual(role("weather_direction", "states", { stateCount: 8 }).verification.scenarios.map(sample => sample.scenario.values.weather_direction), ["0", "4", "7"]);
 assert.equal(role("weather_uv", "states", { stateCount: 8 }).verification.supported, false);

@@ -88,3 +88,29 @@ const offsetYear = (await recoverWatchfaceDesign(withYear, loadAssets)).nativeDa
 assert.deepEqual([offsetYear.x, offsetYear.y], [140, 260], "Native year recovers its absolute position from the control origin");
 assert.equal(offsetYear.parts.value.x, 0);
 assert.equal(offsetYear.parts.value.y, 0);
+
+// Stress level artwork sits at the firmware's stress_level_icon_pos, not the
+// ${id}_level_pos stamina and UV use, and keeps every frame.
+const withStress = structuredClone(plain);
+withStress.resolutions[0].directory = directory;
+Object.assign(withStress.resolutions[0].config, {
+  stress_rect: "{100,200,172,248,left|vcenter}",
+  stress_font: "stress_digits",
+  stress_level_icon_pos: "{60,190}",
+  stress_level_icon: "stress_levels"
+});
+withStress.resolutions[0].spriteFolders = [folder("stress_digits", 10, 18, 48), folder("stress_levels", 5, 32, 32)];
+const recoveredStress = (await recoverWatchfaceDesign(withStress, loadAssets)).nativeData.stress;
+assert.deepEqual([recoveredStress.x, recoveredStress.y], [60, 190], "The group starts at the level artwork");
+assert.deepEqual(recoveredStress.parts.states, { enabled: true, width: 32, height: 32, x: 0, y: 0 });
+assert.deepEqual([recoveredStress.parts.value.x, recoveredStress.parts.value.y], [40, 10]);
+assert.equal(recoveredStress.stateCount, 5);
+assert.equal(Object.keys(recoveredStress.assets.states).length, 5, "Every stress frame is kept");
+
+// Level artwork alone, with no number, still recovers.
+delete withStress.resolutions[0].config.stress_rect;
+const stressArtOnly = (await recoverWatchfaceDesign(withStress, loadAssets)).nativeData.stress;
+assert.deepEqual([stressArtOnly.x, stressArtOnly.y], [60, 190]);
+assert.equal(stressArtOnly.parts.value.enabled, false);
+assert.equal(stressArtOnly.parts.states.enabled, true);
+console.log("Recovered stress level artwork tests passed");

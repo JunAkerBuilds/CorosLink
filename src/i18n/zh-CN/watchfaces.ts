@@ -1458,6 +1458,7 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "The watch draws the maximum straight after the minimum and its separator, not at a position of its own. With both shown, move the minimum to place the reading.": "手表在最小值及其分隔符之后直接绘制最大值，而不是在其自己的位置。两者都显示后，移动最小值以放置读数。",
   "In metric units the watch counts swims in kilometres, like runs, and in imperial units in yards. Without the decimal point it rounds to whole kilometres, so 750 m shows 1; with it, 0.75. The decimal point needs CorosLink's compiler and is not yet confirmed on a watch.": "公制单位下，手表与跑步一样以公里计算游泳距离；英制单位下以码计算。没有小数点时会四舍五入到整公里，因此 750 米显示为 1；有小数点时显示 0.75。小数点需要 CorosLink 的编译器，尚未在手表上确认。",
   "The watch rounds to whole kilometres or miles. Turn on the decimal point to show hundredths, such as 12.34. The decimal point needs CorosLink's compiler and is not yet confirmed on a watch.": "手表会四舍五入到整公里或整英里。打开小数点可显示百分位，例如 12.34。小数点需要 CorosLink 的编译器，尚未在手表上确认。",
+  "State artwork has five frames: no data, then Relaxed (0–25), Low (26–50), Medium (51–75) and High (76–100). The order is not yet confirmed on a watch.": "状态图像共五帧：无数据，然后依次为轻松（0–25）、低（26–50）、中等（51–75）和高（76–100）。此顺序尚未在手表上确认。",
   "Wind direction": "风向",
   "Not available right now": "现在不可用",
   "Live AQI is unavailable in current PACE Pro testing, including in the watch’s Weather widget. The editor uses a sample value. Availability depends on COROS weather data.": "在当前的 PACE Pro 测试中，包括 COROS 手表的天气小部件中，实时 AQI 不可用。编辑器使用示例值。可用性取决于 COROS 天气数据。",

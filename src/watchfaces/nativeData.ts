@@ -346,7 +346,7 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
         }
       } else if (field.kind === "number") {
         if (field.stateKey && part("states").enabled) {
-          values[`${id}_level_pos`] = point("states");
+          values[nativeStatePositionKey(field)] = point("states");
           values[field.stateKey] = folders.states;
           for (const index of nativeRoleIndices(id, style, "states")) await sprite("states", index);
         }
@@ -675,10 +675,13 @@ export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: nu
       // PLANET has eleven stamina frames, from empty (0) to full (100%). UV
       // level artwork is categorical (DASHBOARD: unknown, low, moderate, high,
       // very high, extreme), so the sample index maps through the WHO bands.
-      const uv = Number(value);
-      const state = id === "stamina" ? Math.floor(Number(value) / 10)
-        : id === "weather_uv" ? (!Number.isFinite(uv) || uv < 0 ? 0 : uv < 3 ? 1 : uv < 6 ? 2 : uv < 8 ? 3 : uv < 11 ? 4 : 5)
-        : Math.trunc(Number(value));
+      // Stress maps its score through COROS's bands: no data, then relaxed,
+      // low, medium, high.
+      const reading = Number(value);
+      const state = id === "stamina" ? Math.floor(reading / 10)
+        : id === "weather_uv" ? (!Number.isFinite(reading) || reading < 0 ? 0 : reading < 3 ? 1 : reading < 6 ? 2 : reading < 8 ? 3 : reading < 11 ? 4 : 5)
+        : id === "stress" ? (!Number.isFinite(reading) || reading < 0 ? 0 : reading <= 25 ? 1 : reading <= 50 ? 2 : reading <= 75 ? 3 : 4)
+        : Math.trunc(reading);
       await draw("states", Math.max(0, Math.min((moon ? 30 : nativeStateCount(id, style)) - 1, state || 0)));
     }
     if (available.includes("icon") && part("icon").enabled) await draw("icon");

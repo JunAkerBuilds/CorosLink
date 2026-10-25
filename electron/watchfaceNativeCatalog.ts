@@ -25,7 +25,7 @@ export interface NativeDataDefinition {
   decimalShown?: boolean;
   stateKey?: string;
   stateCount?: number;
-  /** Position key of a state table when it is not `${id}_pos`. */
+  /** Position key of a state table when it is not `${id}_pos`, or of a number's level artwork when it is not `${id}_level_pos`. */
   positionKey?: string;
   availability?: NativeDataAvailability;
   /** Shown in the inspector: scope or runtime caveats that are not an availability problem. */
@@ -58,7 +58,12 @@ export const NATIVE_DATA_FIELDS: readonly NativeDataDefinition[] = [
   } }),
   number("week_tl", "Weekly training load", "Training", "420"),
   number("stamina", "Stamina", "Health", "82", 3, { unit: "%", percentKey: "stamina_percent_icon", stateKey: "stamina_level_icon", stateCount: 11 }),
-  number("stress", "Stress", "Health", "28"),
+  // The 4.9.9 parser reads stress_level_icon as a categorical level at
+  // stress_level_icon_pos (not stress_level_pos). The watch reports stress as
+  // level 1–4 (corosDailyRecord.ts), so five frames: no data, then those four.
+  // No official face with this artwork has been found to confirm the count.
+  number("stress", "Stress", "Health", "28", 3, { stateKey: "stress_level_icon", positionKey: "stress_level_icon_pos", stateCount: 5,
+    note: "State artwork has five frames: no data, then Relaxed (0–25), Low (26–50), Medium (51–75) and High (76–100). The order is not yet confirmed on a watch." }),
   number("sleep_score", "Sleep score", "Health", "86", 6),
   { id: "sleep_hrv_level", label: "Sleep HRV status", category: "Health", kind: "state", sample: "1", version: 3, stateKey: "sleep_hrv_level_icon", stateCount: 8 },
   // WFStatusInfo.sedentary: official DASHBOARD (format 4) ships seven frames —
@@ -189,8 +194,9 @@ export const NATIVE_CHART_FIXED_EQUIVALENTS: Readonly<Record<string, { nativeDat
   chart_heart_rate: { metric: "heartRate" }
 };
 
+/** Where a state table, or a number's level artwork, is placed. */
 export function nativeStatePositionKey(field: NativeDataDefinition): string {
-  return field.positionKey ?? `${field.id}_pos`;
+  return field.positionKey ?? (field.kind === "state" ? `${field.id}_pos` : `${field.id}_level_pos`);
 }
 export function nativeConfigPrefix(field: NativeDataDefinition): string { return field.configPrefix ?? field.id; }
 export function nativeHasIcon(field: NativeDataDefinition): boolean { return !field.valueOnly && !field.id.startsWith("weather_temp"); }
@@ -198,7 +204,7 @@ export function nativeFieldKeys(field: NativeDataDefinition): string[] {
   if (field.kind === "state") return [field.stateKey!, nativeStatePositionKey(field)];
   if (field.kind === "solar") return ["sunriseset_hour_rect", "sunriseset_minute_rect", "sunriseset_font", "sunriseset_icon_pos", "sunriseset_sunrise_icon", "sunriseset_sunset_icon", "sunriseset_colon_icon", "sunriseset_progress_pos", "sunrise_progress", "sunset_progress"];
   if (field.kind === "chart") return [...NATIVE_CHART_SHARED_KEYS, "chart_sun_icon_pos", "chart_sun_icon", ...NATIVE_CHART_SOURCES.flatMap(({ id }) => nativeChartSourceKeys(id))];
-  return [`${nativeConfigPrefix(field)}_rect`, `${nativeConfigPrefix(field)}_font`, ...(nativeHasIcon(field) ? [`${field.id}_icon_pos`, `${field.id}_icon`] : []), ...(field.percentKey ? [field.percentKey] : []), ...(field.unitKey ? [field.unitKey] : []), ...(field.decimalKey ? [field.decimalKey] : []), ...(field.stateKey ? [`${field.id}_level_pos`, field.stateKey] : [])];
+  return [`${nativeConfigPrefix(field)}_rect`, `${nativeConfigPrefix(field)}_font`, ...(nativeHasIcon(field) ? [`${field.id}_icon_pos`, `${field.id}_icon`] : []), ...(field.percentKey ? [field.percentKey] : []), ...(field.unitKey ? [field.unitKey] : []), ...(field.decimalKey ? [field.decimalKey] : []), ...(field.stateKey ? [nativeStatePositionKey(field), field.stateKey] : [])];
 }
 export const NATIVE_DATA_CONFIG_KEYS = new Set([
   ...NATIVE_DATA_FIELDS.flatMap(nativeFieldKeys),

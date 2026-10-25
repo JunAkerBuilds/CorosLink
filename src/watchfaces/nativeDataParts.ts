@@ -49,7 +49,7 @@ export function nativePart(id: string, style: Style, part: Part) {
   }[part];
   const custom = style.parts?.[part], field = NATIVE_DATA_BY_ID.get(id);
   return {
-    enabled: custom?.enabled ?? (!["background", "mask", "noDataMask"].includes(part) && !(chartMoon && part === "plot") && !(["stamina", "weather_uv"].includes(id) && part === "states") &&
+    enabled: custom?.enabled ?? (!["background", "mask", "noDataMask"].includes(part) && !(chartMoon && part === "plot") && !(["stamina", "weather_uv", "stress"].includes(id) && part === "states") &&
       !(part === "decimal" && field?.decimalKey && !field.decimalShown)),
     color: custom?.color ?? style.color, fontFamily: custom?.fontFamily || style.fontFamily || "Arial",
     fontWeight: custom?.fontWeight ?? style.fontWeight ?? 400,

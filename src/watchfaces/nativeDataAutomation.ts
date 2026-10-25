@@ -31,6 +31,7 @@ function nativeSpriteMeaning(id: string, style: CorosWatchfaceNativeDataStyle, r
     // not a claim that every template/device has the same firmware ordering.
     if (id === "weather_uv" && count === 6) return preview(["Unknown UV", "Low UV (0–2)", "Moderate UV (3–5)", "High UV (6–7)", "Very high UV (8–10)", "Extreme UV (11+)"][index]);
     if (id === "stamina" && count === 11) return preview(`Stamina ${index * 10}%`);
+    if (id === "stress" && count === 5) return preview(["No stress data", "Relaxed stress (0–25)", "Low stress (26–50)", "Medium stress (51–75)", "High stress (76–100)"][index]);
     if (id === "weather_direction" && count === 16) return preview(`Direction arrow rotated ${index * 22.5}° clockwise from up; firmware direction mapping unverified`);
     if (id === "chart" && style.chartSource === "chart_moon") return preview(`Moon phase index ${index} of 30; editor cycle starts dark at 0, full at 15; firmware phase mapping unverified`);
     if (id === "sedentary" && count === 7) return { meaning: index < 5 ? `Seated with filling ring, state ${index}; timing threshold unknown` : index === 5 ? "Move reminder" : "Inactive (dimmed)", meaningSource: "recovered-template" as const };
@@ -44,14 +45,16 @@ function nativeStateVerification(id: string, style: CorosWatchfaceNativeDataStyl
     ? "The editor UV selector implements six categorical states; this template has a different state count. State behavior cannot be verified with these scenarios."
     : id === "stamina" && indices.length !== 11
       ? "The editor stamina selector implements eleven 10-percent states; this template has a different state count. State behavior cannot be verified with these scenarios."
-      : indices.length < 2 ? "This component does not expose multiple selectable states." : undefined;
+      : id === "stress" && indices.length !== 5
+        ? "The editor stress selector implements five categorical states; this template has a different state count. State behavior cannot be verified with these scenarios."
+        : indices.length < 2 ? "This component does not expose multiple selectable states." : undefined;
   const sampled = [...new Set([indices[0], indices[Math.floor(indices.length / 2)], indices.at(-1)])].filter((index): index is string => index !== undefined);
   const key = id === "chart" ? style.chartSource ?? "chart_stress" : id;
   return {
     tool: "render_preview", supported: !limitation, scope: "editor-state-selection",
     ...(limitation ? { limitation } : {}),
     scenarios: limitation ? [] : sampled.map(index => ({
-      scenario: { values: { [key]: id === "stamina" ? String(Number(index) * 10) : id === "weather_uv" ? ["-1", "0", "3", "6", "8", "11"][Number(index)] : index } },
+      scenario: { values: { [key]: id === "stamina" ? String(Number(index) * 10) : id === "weather_uv" ? ["-1", "0", "3", "6", "8", "11"][Number(index)] : id === "stress" ? ["-1", "10", "38", "63", "88"][Number(index)] : index } },
       expectedPreviewStateIndex: index
     })),
     note: "Verify complete installed artwork and distinct rendered sample states. This proves editor state selection only, not firmware timing, health-category meaning or live on-watch behavior. Unknown state meanings must remain explicitly unknown."

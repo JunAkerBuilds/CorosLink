@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Stress level artwork in Studio.** A stress layer now has a **State artwork** component, like stamina's: five images, for no data and then Relaxed, Low, Medium and High. It's off until you turn it on, and you import your own images for it. Official faces that carry stress level artwork open with it as part of the stress layer. The order of the images isn't yet confirmed on a watch.
+
 ## [0.1.65] - 2026-10-24
 
 ### Changed

@@ -66,7 +66,7 @@ export async function recoverWatchfaceDesign(
     const iconPosition = source(`${field.id}_icon`).length
       ? parseConfigPos(config[`${field.id}_icon_pos`]) : null;
     const statePosition = field.stateKey && source(field.stateKey).length
-      ? parseConfigPos(config[`${field.id}_level_pos`]) : null;
+      ? parseConfigPos(config[nativeStatePositionKey(field)]) : null;
     // Level artwork can stand alone (DASHBOARD's UV arc has no numeric readout).
     if (!hasValue && !statePosition) continue;
     const anchor = hasValue ? rect! : statePosition ?? iconPosition!;
