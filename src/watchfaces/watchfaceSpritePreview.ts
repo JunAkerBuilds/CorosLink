@@ -33,7 +33,8 @@ export function controlIconConfigKey(
  * icon per data choice plus the colon and negative sign shared by every
  * choice. They are edited beside the metric instead of in the Template
  * assets list. The battery choice keeps its own stateful sprite layer, and
- * the barometer is not offered by the editor.
+ * the barometer has three trend icons instead of one, which stay in the
+ * Template assets list.
  */
 export function isSelectableSlotConfigAssetKey(configKey: string): boolean {
   if (

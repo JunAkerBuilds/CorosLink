@@ -1,5 +1,6 @@
 import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceNativePartStyle as PartStyle } from "../../electron/types";
 import { NATIVE_DATA_BY_ID, nativeHasIcon } from "../../electron/watchfaceNativeCatalog";
+import { LUNAR_FRAME_TEXTS, isLunarField } from "./lunarDate";
 
 export function defaultNativeDataStyle(id: string): Style {
   return { enabled: true, x: 280, y: 500, scale: 1, color: "#ffffff", ...(id === "chart" ? { chartSource: "chart_stress", chartWidth: 240, chartHeight: 120 } : {}) };
@@ -36,7 +37,8 @@ export function nativePart(id: string, style: Style, part: Part) {
   const defaults = {
     value: { x: !nativeParts(id, style).includes("icon") || style.parts?.icon?.enabled === false ? 0 : 40, y: 0, width: 96, height: 48 },
     icon: { x: 0, y: 0, width: 36, height: 48 },
-    states: { x: 0, y: 0, width: chartMoon ? 48 : 96, height: 48 },
+    // A lunar frame holds one stem, branch or 年, or a two-character month or day name.
+    states: { x: 0, y: 0, width: chartMoon ? 48 : id === "lunar_year" ? 44 : isLunarField(id) ? 88 : 96, height: 48 },
     unit: { x: 0, y: 0, width: 38, height: 48 },
     symbols: { x: 0, y: 0, width: id.startsWith("weather_temp") ? 38 : isNativeTime(id, style) ? 18 : 24, height: 48 },
     progress: { x: 0, y: 58, width: 24, height: 24 },
@@ -49,7 +51,7 @@ export function nativePart(id: string, style: Style, part: Part) {
   }[part];
   const custom = style.parts?.[part], field = NATIVE_DATA_BY_ID.get(id);
   return {
-    enabled: custom?.enabled ?? (!["background", "mask", "noDataMask"].includes(part) && !(chartMoon && part === "plot") && !(["stamina", "weather_uv", "stress"].includes(id) && part === "states") &&
+    enabled: custom?.enabled ?? (!["background", "mask", "noDataMask"].includes(part) && !(chartMoon && part === "plot") && !(["stamina", "weather_uv", "stress", "weather_aqi", "week_tl"].includes(id) && part === "states") &&
       !(part === "decimal" && field?.decimalKey && !field.decimalShown)),
     color: custom?.color ?? style.color, fontFamily: custom?.fontFamily || style.fontFamily || "Arial",
     fontWeight: custom?.fontWeight ?? style.fontWeight ?? 400,
@@ -154,7 +156,7 @@ export function nativeAssetText(id: string, style: Style, role: Role, index: num
   if (role === "decimal") return ".";
   if (role === "separator") return "/";
   if (role === "progress") return index ? "☾" : "☀";
-  if (role === "states") return id === "sleep_hrv_level" ? `HRV ${index}` : null;
+  if (role === "states") return id === "sleep_hrv_level" ? `HRV ${index}` : isLunarField(id) ? LUNAR_FRAME_TEXTS[id][index] ?? "" : null;
   if (role === "unit") {
     if (id.startsWith("weather_temp_")) return index ? "°F" : "°C";
     // Metric swims count in kilometres like runs; imperial ones in yards (watchfaceNativeCatalog.ts).

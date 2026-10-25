@@ -56,6 +56,7 @@ import {
   detailsForPreviewResolution,
   exerciseProgressStyleForResolution,
   getAvailableComplications,
+  withStatusIconCompanions,
   getAmPmCapability,
   getFixedMetricCapabilities,
   getTemplateBackgroundAssetPaths,
@@ -864,61 +865,94 @@ assert.equal(
   "the synthesized configuration should be recognized when the project reloads"
 );
 
-// Barometer is permanently disabled: the static branch aborts the COROS phone
-// app during sync (a protobuf CHECK) and the directional value never binds to a
-// display slot, so it can never be a usable selectable. Enabling it in a design
-// must synthesize nothing, and any barometer keys already in a template must be
-// deleted. See memory: coros-watchface-barometer-unusable.
+// The barometer is a selectable like the others. Studio writes COROS's
+// directional branch (three trend icons, integer and decimal rectangles, one
+// font, a decimal point): COROS's compiler fails on the static one.
 assert.equal(
   isControlComplicationEnabled(
     details,
     { controlComplicationEnabled: { barometer: true } },
     "barometer"
   ),
-  false,
-  "barometer must report disabled even when the design flag is on"
+  true,
+  "barometer follows its design flag like any other selectable"
 );
-assert.ok(
-  getAvailableComplications(details).every(({ id }) => id !== "barometer"),
-  "barometer must never be offered as an available complication"
+assert.equal(
+  isControlComplicationEnabled(details, {}, "barometer"),
+  false,
+  "a barometer missing from the imported template defaults off"
 );
 
-const forcedOffBarometer =
-  buildControlComplicationConfigurationOverrides(noControlDetails, {
-    controlComplicationEnabled: { barometer: true }
-  });
+const enabledBarometer = buildControlComplicationConfigurationOverrides(
+  noControlDetails,
+  { controlComplicationEnabled: { barometer: true } }
+);
 for (const candidate of noControlDetails.resolutions) {
-  const override = forcedOffBarometer.find(
+  const override = enabledBarometer.find(
     ({ path }) => path === `${candidate.directory}/config.txt`
   );
+  assert.equal(override?.values.rect_control1_pos, "{0,0}");
   for (const key of [
     "control_barometer_down_icon",
     "control_barometer_flat_icon",
     "control_barometer_up_icon",
-    "control_barometer_integer_rect",
-    "control_barometer_decimal_rect",
-    "control_barometer_icon",
-    "control_barometer_rect",
-    "control_barometer_font"
+    "control_barometer_font",
+    "control_point_icon"
   ]) {
-    assert.equal(
-      override?.values?.[key],
-      undefined,
-      `enabling barometer must not synthesize ${key}`
+    assert.ok(override?.values?.[key], `enabling barometer must write ${key}`);
+  }
+  for (const key of ["control_barometer_integer_rect", "control_barometer_decimal_rect"]) {
+    assert.match(
+      override?.values?.[key] ?? "",
+      /^\{\d+,\d+,\d+,\d+,hcenter\|vcenter\}$/,
+      `enabling barometer must write ${key}`
+    );
+  }
+  assert.match(override?.values?.control_barometer_icon_pos ?? "", /^\{\d+,\d+\}$/);
+  for (const key of ["control_barometer_icon", "control_barometer_rect"]) {
+    assert.ok(
+      override?.values?.[key] === undefined || override.values[key] === "__COROSLINK_DELETE_CONFIG_KEY__",
+      `${key} (the static branch) must not be written`
     );
   }
 }
+const configuredBarometer = applyConfigOverridesToDetails(
+  noControlDetails,
+  enabledBarometer
+);
 assert.equal(
-  hasControlComplication(
-    applyConfigOverridesToDetails(noControlDetails, forcedOffBarometer),
-    "barometer"
-  ),
-  false,
-  "barometer must never become selectable, even when enabled in the design"
+  hasControlComplication(configuredBarometer, "barometer"),
+  true,
+  "the synthesized barometer is recognized when the project reloads"
 );
 
-// A template that already ships barometer keys must have them stripped, since
-// the complication is permanently disabled.
+// A template on the static branch is converted to the directional one.
+const staticBarometerTemplate = {
+  ...noControlDetails,
+  resolutions: noControlDetails.resolutions.map((candidate) => ({
+    ...candidate,
+    config: {
+      ...candidate.config,
+      rect_control1_pos: "{0,0}",
+      control_barometer_icon: "icon\\coroslink_barometer.png",
+      control_barometer_rect: "{10,10,160,50,hcenter|vcenter}"
+    }
+  }))
+};
+const convertedBarometer = buildControlComplicationConfigurationOverrides(
+  staticBarometerTemplate,
+  { controlComplicationEnabled: { barometer: true } }
+);
+for (const candidate of staticBarometerTemplate.resolutions) {
+  const override = convertedBarometer.find(
+    ({ path }) => path === `${candidate.directory}/config.txt`
+  );
+  assert.equal(override?.values?.control_barometer_icon, "__COROSLINK_DELETE_CONFIG_KEY__");
+  assert.equal(override?.values?.control_barometer_rect, "__COROSLINK_DELETE_CONFIG_KEY__");
+  assert.ok(override?.values?.control_barometer_up_icon, "the directional trend icons replace the static icon");
+}
+
+// A template that already ships the directional branch keeps its own rectangles.
 const templateWithBarometer = {
   ...noControlDetails,
   resolutions: noControlDetails.resolutions.map((candidate) => ({
@@ -926,18 +960,35 @@ const templateWithBarometer = {
     config: {
       ...candidate.config,
       rect_control1_pos: "{0,0}",
+      control_barometer_icon_pos: "{2,3}",
       control_barometer_integer_rect: "{10,10,120,50,hcenter|vcenter}",
       control_barometer_decimal_rect: "{124,10,160,50,hcenter|vcenter}",
-      control_barometer_down_icon: "icon\\coroslink_barometer_down.png",
+      control_barometer_down_icon: "icon\\down.png",
+      control_barometer_flat_icon: "icon\\flat.png",
+      control_barometer_up_icon: "icon\\up.png",
       control_barometer_font: "13x19",
       control_barometer_font_color: ""
     }
   }))
 };
-const strippedBarometer =
-  buildControlComplicationConfigurationOverrides(templateWithBarometer, {
-    controlComplicationEnabled: { barometer: true }
-  });
+const keptBarometer = buildControlComplicationConfigurationOverrides(
+  templateWithBarometer,
+  { controlComplicationEnabled: { barometer: true } }
+);
+for (const candidate of templateWithBarometer.resolutions) {
+  const override = keptBarometer.find(
+    ({ path }) => path === `${candidate.directory}/config.txt`
+  );
+  for (const key of ["control_barometer_integer_rect", "control_barometer_decimal_rect", "control_barometer_down_icon", "control_barometer_icon_pos"]) {
+    assert.equal(override?.values?.[key], undefined, `an enabled barometer keeps the template's ${key}`);
+  }
+}
+
+// Turning it off removes the whole group again.
+const strippedBarometer = buildControlComplicationConfigurationOverrides(
+  templateWithBarometer,
+  { controlComplicationEnabled: { barometer: false } }
+);
 for (const candidate of templateWithBarometer.resolutions) {
   const override = strippedBarometer.find(
     ({ path }) => path === `${candidate.directory}/config.txt`
@@ -951,7 +1002,7 @@ for (const candidate of templateWithBarometer.resolutions) {
     assert.equal(
       override?.values?.[key],
       "__COROSLINK_DELETE_CONFIG_KEY__",
-      `disabled barometer must delete existing ${key}`
+      `a disabled barometer must delete existing ${key}`
     );
   }
 }
@@ -2216,6 +2267,61 @@ assert.equal(
   virtualStandaloneStatusOverrides?.no_disturb_icon_pos,
   "{712,64}",
   "an added Do Not Disturb state should receive an editable on-screen position"
+);
+// The airplane and sleep images are drawn at the Bluetooth and Do Not Disturb indicators' positions
+// (PACE Pro firmware 3.2008.0, 0x4cb4c4), so they share those position keys.
+const statusImage = { replacement: { dataUrl: "data:image/png;base64,AA==", width: 24, height: 24 } };
+const airplaneSleepOverrides = buildWatchfaceConfigAssetOverrides(
+  emptyStandaloneStatusDetails,
+  { "config:airplane_icon": statusImage, "config:sleep_mode_icon": statusImage }
+)[0]?.values;
+assert.match(airplaneSleepOverrides?.airplane_icon ?? "", /^studio\\.+\\00\.png$/, "an added airplane image receives a Studio-owned PNG path");
+assert.match(airplaneSleepOverrides?.sleep_mode_icon ?? "", /^studio\\.+\\00\.png$/, "an added sleep image receives a Studio-owned PNG path");
+assert.equal(airplaneSleepOverrides?.bluetooth_icon_pos, "{64,64}", "the airplane image takes the Bluetooth indicator's position key");
+assert.equal(airplaneSleepOverrides?.no_disturb_icon_pos, "{712,64}", "the sleep image takes the Do Not Disturb indicator's position key");
+assert.deepEqual(
+  listWatchfaceConfigAssets(emptyStandaloneStatusDetails, undefined, [], true)
+    .filter(({ configKey }) => ["airplane_icon", "sleep_mode_icon"].includes(configKey))
+    .map(({ id, label }) => [id, label]),
+  [["config:airplane_icon", "Airplane mode indicator"], ["config:sleep_mode_icon", "Sleep mode indicator"]],
+  "Studio offers the airplane and sleep images beside the other standalone status icons"
+);
+assert.deepEqual(
+  getWatchfaceControlStatusPreviewLayers({
+    ...standaloneStatusResolution,
+    config: { ...standaloneStatusResolution.config, airplane_icon: "icon\\plane.png", sleep_mode_icon: "icon\\bed.png" },
+    icons: [...standaloneStatusResolution.icons, { path: "watchface_800x800/icon/plane.png", width: 42, height: 42 }, { path: "watchface_800x800/icon/bed.png", width: 42, height: 42 }]
+  }).filter(({ controlRelative }) => !controlRelative).map(({ configKey, position }) => ({ configKey, position })),
+  [
+    { configKey: "bluetooth_off_icon", position: { x: 69, y: 68 } },
+    { configKey: "no_disturb_on_icon", position: { x: 313, y: 68 } },
+    { configKey: "airplane_icon", position: { x: 69, y: 68 } },
+    { configKey: "sleep_mode_icon", position: { x: 313, y: 68 } }
+  ],
+  "airplane and sleep images preview at their indicator's position"
+);
+// COROS's compiler writes those positions only beside the indicator's own icon, so a face without one gets a transparent companion.
+const statusDesign = { configAssetOverrides: { "config:airplane_icon": statusImage, "config:sleep_mode_icon": statusImage } };
+const companioned = withStatusIconCompanions(emptyStandaloneStatusDetails, statusDesign);
+assert.deepEqual(
+  ["config:bluetooth_off_icon", "config:no_disturb_off_icon"].map(id => [companioned.configAssetOverrides[id]?.replacement?.width, companioned.configAssetOverrides[id]?.replacement?.height]),
+  [[1, 1], [1, 1]],
+  "a face without the indicators gets 1x1 transparent companions"
+);
+assert.equal(
+  withStatusIconCompanions({ archiveId: "own-status", resolutions: [standaloneStatusResolution] }, statusDesign),
+  statusDesign,
+  "a face that already has both indicators' icons is left alone"
+);
+assert.equal(
+  withStatusIconCompanions(emptyStandaloneStatusDetails, { configAssetOverrides: { "config:airplane_icon": { ...statusImage, enabled: false } } }).configAssetOverrides["config:bluetooth_off_icon"],
+  undefined,
+  "a hidden airplane image needs no companion"
+);
+assert.equal(
+  companioned.configAssetOverrides["config:airplane_icon"],
+  statusImage,
+  "the companion step keeps the authored overrides"
 );
 const hiddenBluetoothStatusDetails = applyConfigOverridesToDetails(
   {

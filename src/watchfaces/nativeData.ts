@@ -1,10 +1,11 @@
 import type { CorosWatchfaceAssetReplacement, CorosWatchfaceConfigOverride, CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceResolutionDetails, CorosWatchfaceTemplateDetails } from "../../electron/types";
 import type { ChartPageCompanions } from "./recoveredWatchfaceDesign";
-import { NATIVE_CHART_DAILY_PAGES, NATIVE_CHART_PAGES, NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartDailyPage, nativeChartGroup, nativeChartRepresentation, nativeChartSourceKeys, nativeFieldKeys, nativeConfigPrefix, nativeHasIcon, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_CHART_DAILY_PAGES, NATIVE_CHART_PAGES, NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartDailyPage, nativeChartGroup, nativeChartRepresentation, nativeChartSourceKeys, nativeFieldKeys, nativeConfigPrefix, nativeHasIcon, nativeStatePositionKey, nativeTraditionalKey } from "../../electron/watchfaceNativeCatalog";
 import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, offsetConfigValue, parseConfigPos, parseConfigRect, pickPreviewResolution, resizeAndTintSprite } from "./watchfaceStudio";
 import { isNativeTime, nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRolePart, nativeRoleIndices, nativeStateCount, nativeTextFontSize } from "./nativeDataParts";
 import { chartGraphBounds, chartPageFillers, chartReadoutBounds, chartReadoutFolder, chartReadoutPage, chartSourceOf, storedChartReadouts } from "./chartReadouts";
 import { parseSimulationDateTime, type WatchfacePreviewScenario } from "./watchfaceSimulation";
+import { LUNAR_SPAN, isLunarField, lunarDateOf, lunarFrames } from "./lunarDate";
 import { fillWatchfaceText, measureWatchfaceText, setWatchfaceCanvasFont } from "./watchfaceFontSnapshots";
 export { NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS, NATIVE_DATA_BY_ID } from "../../electron/watchfaceNativeCatalog";
 export type NativeData = Record<string, Style>;
@@ -178,13 +179,16 @@ export async function nativeDataAsset(id: string, style: Style, role: Role, inde
       };
       // Text wider than its sprite shrinks evenly. fillText's maxWidth would
       // squeeze it instead, so "UV" read as a narrower font than its number.
+      // The lunar leap-month marker is drawn first and the month follows half a
+      // frame later, so the marker belongs in the left half of its frame.
+      const cell = id === "lunar_month" && role === "states" && index === 12 ? width / 2 : width;
       let fontSize = nativeTextFontSize(height);
       setSize(fontSize);
       const textWidth = measureWatchfaceText(ctx, text).width;
-      if (textWidth > width) { fontSize = Math.max(1, Math.floor(fontSize * width / textWidth)); setSize(fontSize); }
+      if (textWidth > cell) { fontSize = Math.max(1, Math.floor(fontSize * cell / textWidth)); setSize(fontSize); }
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       // Letter spacing also follows the last character; centre the visible text.
-      fillWatchfaceText(ctx, text, (width + fontSize * part.letterSpacing) / 2, height / 2, width);
+      fillWatchfaceText(ctx, text, (cell + fontSize * part.letterSpacing) / 2, height / 2, cell);
     } else if (role === "states" && id === "weather_direction") {
       ctx.translate(width / 2, height / 2); ctx.rotate(index * Math.PI / 8);
       const r = Math.min(width, height) * 0.35;
@@ -341,7 +345,14 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
       if (field.kind === "state") {
         if (part("states").enabled) {
           values[field.stateKey!] = folders.states;
-          values[nativeStatePositionKey(field)] = point("states");
+          if (field.rectKey && isLunarField(id)) {
+            // The watch lays the reading (up to three frames wide) out inside this
+            // rectangle, and reads the Traditional tables when its language is
+            // Traditional Chinese, so both get the same frames and rectangle.
+            values[field.rectKey] = rect("states", 0, part("states").width * LUNAR_SPAN[id]);
+            values[nativeTraditionalKey(field.stateKey!)] = folders.states;
+            values[nativeTraditionalKey(field.rectKey)] = values[field.rectKey];
+          } else values[nativeStatePositionKey(field)] = point("states");
           for (let i = 0; i < nativeStateCount(id, style); i++) await sprite("states", i);
         }
       } else if (field.kind === "number") {
@@ -671,16 +682,23 @@ export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: nu
     // faces lay them over chart_bg), so only graph pages draw it.
     const graph = id === "chart" ? nativeChartRepresentation(source) : undefined;
     if (graph && graph !== "none" && part("background").enabled) await draw("background");
-    if (available.includes("states") && part("states").enabled) {
+    if (isLunarField(id) && part("states").enabled) {
+      // The firmware draws a lunar reading as consecutive frames of one table.
+      const frameWidth = part("states").width, drawn = lunarFrames(id, lunarDateOf(scenario?.dateTime ? parseSimulationDateTime(scenario.dateTime) : new Date()));
+      for (const { frame, offset } of drawn) await draw("states", Math.min(nativeStateCount(id, style) - 1, frame), part("states").x + offset * frameWidth, part("states").y);
+    } else if (available.includes("states") && part("states").enabled) {
       // PLANET has eleven stamina frames, from empty (0) to full (100%). UV
       // level artwork is categorical (DASHBOARD: unknown, low, moderate, high,
       // very high, extreme), so the sample index maps through the WHO bands.
       // Stress maps its score through COROS's bands: no data, then relaxed,
-      // low, medium, high.
+      // low, medium, high. AQI maps through the US EPA bands. The watch's own
+      // weekly-load levels are unknown, so that preview just steps the sample.
       const reading = Number(value);
       const state = id === "stamina" ? Math.floor(reading / 10)
         : id === "weather_uv" ? (!Number.isFinite(reading) || reading < 0 ? 0 : reading < 3 ? 1 : reading < 6 ? 2 : reading < 8 ? 3 : reading < 11 ? 4 : 5)
         : id === "stress" ? (!Number.isFinite(reading) || reading < 0 ? 0 : reading <= 25 ? 1 : reading <= 50 ? 2 : reading <= 75 ? 3 : 4)
+        : id === "weather_aqi" ? (!Number.isFinite(reading) || reading < 0 ? 0 : reading <= 50 ? 1 : reading <= 100 ? 2 : reading <= 150 ? 3 : reading <= 200 ? 4 : reading <= 300 ? 5 : 6)
+        : id === "week_tl" ? (!Number.isFinite(reading) || reading < 1 ? 0 : Math.min(6, 1 + Math.floor(reading / 150)))
         : Math.trunc(reading);
       await draw("states", Math.max(0, Math.min((moon ? 30 : nativeStateCount(id, style)) - 1, state || 0)));
     }

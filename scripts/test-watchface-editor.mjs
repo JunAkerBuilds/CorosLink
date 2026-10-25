@@ -668,12 +668,14 @@ assert.deepEqual(
     hiddenConfigAssetDetails
   ).map((reference) => reference.id),
   [
+    "config:airplane_icon",
     "config:bluetooth_off_icon",
     "config:bluetooth_on_icon",
     "config:no_disturb_on_icon",
-    "config:no_disturb_off_icon"
+    "config:no_disturb_off_icon",
+    "config:sleep_mode_icon"
   ],
-  "hidden config assets and addable standalone status states must remain in the layer panel"
+  "hidden config assets and addable standalone status states, airplane and sleep mode included, must remain in the layer panel"
 );
 assert.equal(
   listWatchfaceEditorConfigAssets(

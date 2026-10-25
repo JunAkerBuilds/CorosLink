@@ -39,3 +39,5 @@ console.log("Simulation passed: calendar rollovers, leap years, boundaries, vali
 
 assert.ok(!simulation.WATCHFACE_SIMULATION_CAPABILITIES.values.includes("date_year"), "the year is driven by dateTime, not a manual sample");
 assert.throws(() => parse({ values: { date_year: "1999" } }), /date_year/);
+assert.ok(["lunar_year", "lunar_month", "lunar_day"].every(id => !simulation.WATCHFACE_SIMULATION_CAPABILITIES.values.includes(id)), "the lunar date is driven by dateTime too");
+assert.throws(() => parse({ values: { lunar_day: "3" } }), /follow the calendar/);

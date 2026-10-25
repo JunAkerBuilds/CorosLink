@@ -160,6 +160,41 @@ try {
  assert.deepEqual([swimAod.readUInt32LE(0x322),swimAod.readUInt16LE(0x1222+0x138),swimAod.toString('latin1',0x1222,0x1226)],[0x1222,0x1222,'614A'],'the AOD header follows at the same size');
  assert.equal(swim(swimConfig.replace(/\[week_swim_point_icon\][^\n]*\n/,'')).readUInt16LE(0x138),0x1202,'without the point the header stays 0x1202');
  assert.equal(swim(swimConfig.replace(/\[week_swim_icon_pos\][^\n]*\n/,'')).readUInt16LE(0x138),0x1202,'a point without its total is not written');
+ // Records COROS's own compiler writes for fields the field probe never reached (offsets read from it on 2026-10-25).
+ const blockOf=(b,offset)=>{const at=b.readUInt32LE(offset);return at?[b.readUInt16LE(at),b.readUInt16LE(at+2),b[at+6]]:null;};
+ const numFont=Array.from({length:10},(_,d)=>[`watchface_416x416/num/${d}.png`,png(4,5)]);
+ const bare=(config,files)=>compileWatchface(new Map([['info.json',Buffer.from('{}')],['watchface_416x416/config.txt',Buffer.from(config)],...files]),{faceId:1}).bin;
+ // The selectable barometer, directional branch: position 0x396, down/flat/up icons 0x39e/0x3a2/0x3a6, integer rectangle 0x3aa, decimal rectangle 0x3b4, font 0x3be, tint 0x3c2.
+ const baroConfig=['[rect_control1_pos]={50,250}','[control_barometer_icon_pos]={3,4}','[control_barometer_down_icon]=down.png','[control_barometer_flat_icon]=flat.png','[control_barometer_up_icon]=up.png',
+  '[control_barometer_integer_rect]={20,0,70,30,hcenter|vcenter}','[control_barometer_decimal_rect]={75,0,100,30,hcenter|vcenter}','[control_barometer_font]=num','[control_barometer_font_color]=0xff0000','[control_point_icon]=point.png'].join('\n')+'\n';
+ const baroFiles=[['watchface_416x416/down.png',png(11,7)],['watchface_416x416/flat.png',png(12,8)],['watchface_416x416/up.png',png(13,9)],['watchface_416x416/point.png',png(2,7)],...numFont];
+ const baroBin=bare(baroConfig,baroFiles);
+ assert.deepEqual([baroBin.readInt32LE(0x396),baroBin.readInt32LE(0x39a)],[3,4],'barometer position');
+ assert.deepEqual([blockOf(baroBin,0x39e),blockOf(baroBin,0x3a2),blockOf(baroBin,0x3a6)],[[11,7,1],[12,8,1],[13,9,1]],'three trend icons');
+ assert.deepEqual([baroBin.readInt16LE(0x3aa),baroBin.readInt16LE(0x3ae),baroBin.readInt16LE(0x3b4),baroBin.readInt16LE(0x3b8)],[20,70,75,100],'integer and decimal rectangles');
+ assert.deepEqual(blockOf(baroBin,0x3be),[4,5,10],'one digit font');
+ assert.equal(baroBin[0x3c2],0x30,'font tint as rgb222');
+ assert.equal(baroBin[0x13a],0,'the barometer needs no format version');
+ assert.equal(baroBin.readUInt32LE(0x4c2)>0,true,'the decimal point is the shared control_point_icon');
+ assert.equal(bare(baroConfig.replace(/\[control_barometer_font\][^\n]*\n/,''),baroFiles).readInt16LE(0x3aa),0,'the rectangles wait for the font, as in COROS');
+ assert.equal(bare(baroConfig.replace(/\[rect_control1_pos\][^\n]*\n/,''),baroFiles).readUInt32LE(0x39e),0,'control records wait for the control origin');
+ const baroLayout=decodeCorosLayout(baroBin,findCorosBitmapBlocks(baroBin,0x1202));
+ const baroElements=baroLayout.modes[0].elements.filter(element=>element.control==='barometer'&&element.active);
+ assert.deepEqual(baroElements.map(element=>element.id).sort(),['control.barometer.decimal','control.barometer.down','control.barometer.flat','control.barometer.up','control.barometer.value'],'recovery reads the barometer record back');
+ assert.deepEqual(baroElements.find(element=>element.id==='control.barometer.down').position,{x:3,y:4},'the trend icons share the record position');
+ // The airplane and sleep images are drawn at the Bluetooth and Do Not Disturb positions (firmware 0x4cb4c4); the compiler writes those only beside the indicator's own icon.
+ const statusFiles=[['watchface_416x416/blank.png',png(1,1,()=>[0,0,0,0])],['watchface_416x416/air.png',png(30,28)],['watchface_416x416/bed.png',png(32,30)]];
+ const statusBin=bare('[bluetooth_icon_pos]={30,40}\n[bluetooth_off_icon]=blank.png\n[airplane_icon]=air.png\n[no_disturb_icon_pos]={330,40}\n[no_disturb_off_icon]=blank.png\n[sleep_mode_icon]=bed.png\n',statusFiles);
+ assert.deepEqual([statusBin.readInt32LE(0x26),statusBin.readInt32LE(0x42),blockOf(statusBin,0x56),blockOf(statusBin,0x52)],[30,330,[30,28,1],[32,30,1]],'airplane and sleep images beside their indicators');
+ const lonelyAirplane=bare('[bluetooth_icon_pos]={30,40}\n[airplane_icon]=air.png\n',statusFiles);
+ assert.deepEqual([lonelyAirplane.readInt32LE(0x26),blockOf(lonelyAirplane,0x56)],[0,[30,28,1]],'an airplane image alone leaves its position unwritten, which is why Studio adds a blank indicator icon');
+ // The lunar date tables: a rectangle and a frame table each, Simplified at 0xbaa and Traditional at 0xbda; one folder serves both.
+ const lunarFrames=(n,w,h)=>Array.from({length:n},(_,i)=>[`watchface_416x416/ly/${String(i).padStart(2,'0')}.png`,png(w,h,()=>[i*9,20,40,255])]);
+ const lunarBin=bare('[chinese_lunar_year_rect]={10,20,142,68,left|vcenter}\n[chinese_lunar_year_icon_dir]=ly\n[chinese_tw_lunar_year_rect]={10,20,142,68,left|vcenter}\n[chinese_tw_lunar_year_icon_dir]=ly\n',lunarFrames(23,44,48));
+ assert.deepEqual([lunarBin.readInt16LE(0xbaa),lunarBin.readInt16LE(0xbae),lunarBin[0xbb2],blockOf(lunarBin,0xbb4)],[10,142,0x11,[44,48,23]],'year table: rectangle, left|vcenter, 23 frames');
+ assert.equal(lunarBin.readUInt32LE(0xbe4),lunarBin.readUInt32LE(0xbb4),'the Traditional table shares the Simplified block');
+ assert.equal(lunarBin[0x13a],1,'the lunar date needs format version 1');
+ assert.equal(bare('[chinese_lunar_year_rect]={10,20,142,68,left|vcenter}\n',[]).readInt16LE(0xbaa),0,'the rectangle waits for its frames');
  console.log(`Built-in compiler units, worker compile (${compiled.durationMs} ms), headers, CRC, AOD, warnings and face errors passed.`);
 
  // Only CorosLink's compiler: the old COROS-compiler switch is ignored, and every watch builds through the same service.

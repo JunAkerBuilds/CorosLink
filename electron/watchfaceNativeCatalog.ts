@@ -27,11 +27,14 @@ export interface NativeDataDefinition {
   stateCount?: number;
   /** Position key of a state table when it is not `${id}_pos`, or of a number's level artwork when it is not `${id}_level_pos`. */
   positionKey?: string;
+  /** A state table the parser places with a rectangle rather than a position (the lunar date's frames). */
+  rectKey?: string;
   availability?: NativeDataAvailability;
   /** Shown in the inspector: scope or runtime caveats that are not an availability problem. */
   note?: string;
 }
 const number = (id: string, label: string, category: NativeDataDefinition["category"], sample: string, version = 3, extra: Partial<NativeDataDefinition> = {}): NativeDataDefinition => ({ id, label, category, sample, version, kind: "number", ...extra });
+const LUNAR_NOTE = "The watch draws the Chinese calendar date only while its language is Chinese, from this table's frames: the year as a stem, a branch and 年 (23 frames), the month as 12 names and a leap marker (13), the day as 30 names. The preview follows the simulation date. Not yet confirmed on a watch.";
 const SWIM_NOTE = "In metric units the watch counts swims in kilometres, like runs, and in imperial units in yards. Without the decimal point it rounds to whole kilometres, so 750 m shows 1; with it, 0.75. The decimal point needs CorosLink's compiler and is not yet confirmed on a watch.";
 const DISTANCE_NOTE = "The watch rounds to whole kilometres or miles. Turn on the decimal point to show hundredths, such as 12.34. The decimal point needs CorosLink's compiler and is not yet confirmed on a watch.";
 export const NATIVE_DATA_FIELDS: readonly NativeDataDefinition[] = [
@@ -51,12 +54,23 @@ export const NATIVE_DATA_FIELDS: readonly NativeDataDefinition[] = [
   // The level artwork is a categorical set: official DASHBOARD ships six frames
   // (unknown, then low → extreme) and no numeric UV readout.
   number("weather_uv", "UV index", "Weather", "4", 0, { stateKey: "weather_uv_level_icon", stateCount: 6 }),
-  number("weather_aqi", "Air quality index", "Weather", "32", 0, { availability: {
+  // The 4.9.9 parser reads weather_aqi_level_icon as a categorical band image at
+  // weather_aqi_level_pos (WFWeatherInfo.aqi_level). Seven frames, no data then
+  // the six US EPA bands, as UV has no data then its WHO bands. No official face
+  // carries this artwork (RUBY HORIZON has an icon-less AQI value only), so the
+  // count and order are not confirmed on a watch.
+  number("weather_aqi", "Air quality index", "Weather", "32", 0, { stateKey: "weather_aqi_level_icon", stateCount: 7,
+    note: "State artwork has seven frames: no data, then Good (0–50), Moderate (51–100), Unhealthy for sensitive groups (101–150), Unhealthy (151–200), Very unhealthy (201–300) and Hazardous (301+). The order is not yet confirmed on a watch.",
+    availability: {
     status: "unavailable",
     label: "Not available right now",
     message: "Live AQI is unavailable in current PACE Pro testing, including in the watch’s Weather widget. The editor uses a sample value. Availability depends on COROS weather data."
   } }),
-  number("week_tl", "Weekly training load", "Training", "420"),
+  // WFTrainingLoadInfo.level: week_tl_level_icon at week_tl_level_pos. How many
+  // levels the watch reports is not established, so this holds seven frames
+  // (no data, then six) to leave room, and Studio claims no meaning for them.
+  number("week_tl", "Weekly training load", "Training", "420", 3, { stateKey: "week_tl_level_icon", stateCount: 7,
+    note: "State artwork has seven frames: no data, then six levels. The watch's own levels and their order are not yet confirmed, so the editor previews them in 150-point steps of the sample load only." }),
   number("stamina", "Stamina", "Health", "82", 3, { unit: "%", percentKey: "stamina_percent_icon", stateKey: "stamina_level_icon", stateCount: 11 }),
   // The 4.9.9 parser reads stress_level_icon as a categorical level at
   // stress_level_icon_pos (not stress_level_pos). The watch reports stress as
@@ -65,6 +79,14 @@ export const NATIVE_DATA_FIELDS: readonly NativeDataDefinition[] = [
   number("stress", "Stress", "Health", "28", 3, { stateKey: "stress_level_icon", positionKey: "stress_level_icon_pos", stateCount: 5,
     note: "State artwork has five frames: no data, then Relaxed (0–25), Low (26–50), Medium (51–75) and High (76–100). The order is not yet confirmed on a watch." }),
   number("sleep_score", "Sleep score", "Health", "86", 6),
+  // The lunar date: PACE Pro firmware 3.2008.0 draws these frame tables only while
+  // the watch language is Chinese (Simplified reads chinese_lunar_*, Traditional
+  // chinese_tw_lunar_*; Studio writes both). The year table holds 23 frames (stem,
+  // branch, 年), the month 13 (months, then the leap marker) and the day 30. See
+  // src/watchfaces/lunarDate.ts. Official faces with these keys are not known.
+  { id: "lunar_year", label: "Lunar year", category: "Calendar", kind: "state", sample: "0", version: 1, stateKey: "chinese_lunar_year_icon_dir", rectKey: "chinese_lunar_year_rect", stateCount: 23, note: LUNAR_NOTE },
+  { id: "lunar_month", label: "Lunar month", category: "Calendar", kind: "state", sample: "0", version: 1, stateKey: "chinese_lunar_month_icon_dir", rectKey: "chinese_lunar_month_rect", stateCount: 13, note: LUNAR_NOTE },
+  { id: "lunar_day", label: "Lunar day", category: "Calendar", kind: "state", sample: "0", version: 1, stateKey: "chinese_lunar_day_icon_dir", rectKey: "chinese_lunar_day_rect", stateCount: 30, note: LUNAR_NOTE },
   { id: "sleep_hrv_level", label: "Sleep HRV status", category: "Health", kind: "state", sample: "1", version: 3, stateKey: "sleep_hrv_level_icon", stateCount: 8 },
   // WFStatusInfo.sedentary: official DASHBOARD (format 4) ships seven frames —
   // seated with a filling ring, a "move" frame, then a dimmed inactive frame.
@@ -194,6 +216,8 @@ export const NATIVE_CHART_FIXED_EQUIVALENTS: Readonly<Record<string, { nativeDat
   chart_heart_rate: { metric: "heartRate" }
 };
 
+/** The Traditional Chinese twin of a Simplified lunar key; the watch reads whichever matches its language. */
+export function nativeTraditionalKey(key: string): string { return key.replace(/^chinese_lunar_/, "chinese_tw_lunar_"); }
 /** Where a state table, or a number's level artwork, is placed. */
 export function nativeStatePositionKey(field: NativeDataDefinition): string {
   return field.positionKey ?? (field.kind === "state" ? `${field.id}_pos` : `${field.id}_level_pos`);
@@ -201,6 +225,7 @@ export function nativeStatePositionKey(field: NativeDataDefinition): string {
 export function nativeConfigPrefix(field: NativeDataDefinition): string { return field.configPrefix ?? field.id; }
 export function nativeHasIcon(field: NativeDataDefinition): boolean { return !field.valueOnly && !field.id.startsWith("weather_temp"); }
 export function nativeFieldKeys(field: NativeDataDefinition): string[] {
+  if (field.kind === "state" && field.rectKey) return [field.stateKey!, field.rectKey, nativeTraditionalKey(field.stateKey!), nativeTraditionalKey(field.rectKey)];
   if (field.kind === "state") return [field.stateKey!, nativeStatePositionKey(field)];
   if (field.kind === "solar") return ["sunriseset_hour_rect", "sunriseset_minute_rect", "sunriseset_font", "sunriseset_icon_pos", "sunriseset_sunrise_icon", "sunriseset_sunset_icon", "sunriseset_colon_icon", "sunriseset_progress_pos", "sunrise_progress", "sunset_progress"];
   if (field.kind === "chart") return [...NATIVE_CHART_SHARED_KEYS, "chart_sun_icon_pos", "chart_sun_icon", ...NATIVE_CHART_SOURCES.flatMap(({ id }) => nativeChartSourceKeys(id))];

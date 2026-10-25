@@ -13353,10 +13353,9 @@ export function WatchfaceEditor({
     if (!details || !modeSourceDetails) {
       return null;
     }
-    const supported = (previewMode === "aod"
+    const supported = previewMode === "aod"
       ? getAvailableComplications(modeSourceDetails)
-      : WATCHFACE_COMPLICATIONS
-    ).filter((complication) => complication.id !== "barometer");
+      : WATCHFACE_COMPLICATIONS;
     const previewChoices = supported.filter((complication) =>
       isControlComplicationEnabled(modeSourceDetails, design, complication.id)
     );

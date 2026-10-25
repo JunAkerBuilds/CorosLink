@@ -26,6 +26,23 @@ const DECIMAL_TOTALS = TOTALS.filter(total => !total.endsWith("_elev"));
  * 750 m swim reads 1 without the point and 0.75 with it (issue #153).
  */
 export const STUDIO_FIELDS: Readonly<Record<string, readonly [FieldKind, number, readonly string[], number]>> = {
+  // The selectable barometer control (directional branch), a record the 4.9.9
+  // parser reads but the field probe never reached: its native compiler aborts
+  // unless the whole branch is present, and the probe set every barometer key at
+  // once. Offsets, gates and write order were read from COROS's own compiler on
+  // 2026-10-25 with one complete directional branch (a position, all three trend
+  // icons, integer and decimal rectangles, a font, `control_point_icon`):
+  // position 0x396, down/flat/up icons 0x39e/0x3a2/0x3a6, integer rectangle
+  // 0x3aa, decimal rectangle 0x3b4, font 0x3be, tint byte 0x3c2. The rectangles
+  // and font need `control_barometer_integer_rect` plus the font; any missing
+  // icon makes COROS's compiler fail. The format version stays untouched.
+  control_barometer_icon_pos: ["pos", 0x396, ["control_barometer_down_icon"], 0],
+  control_barometer_down_icon: ["icon", 0x39e, ["control_barometer_icon_pos"], 0],
+  control_barometer_flat_icon: ["icon", 0x3a2, ["control_barometer_icon_pos"], 0],
+  control_barometer_up_icon: ["icon", 0x3a6, ["control_barometer_icon_pos"], 0],
+  control_barometer_integer_rect: ["rect", 0x3aa, ["control_barometer_font"], 0],
+  control_barometer_decimal_rect: ["rect", 0x3b4, ["control_barometer_integer_rect"], 0],
+  control_barometer_font: ["frames", 0x3be, ["control_barometer_integer_rect"], 0],
   chart_heart_rate_icon_pos: ["pos", 0xf86, ["chart_heart_rate_icon"], 2],
   chart_heart_rate_icon: ["icon", 0xf8e, ["chart_heart_rate_icon_pos"], 2],
   chart_heart_rate_rect: ["rect", 0xf92, ["chart_heart_rate_font"], 2],
@@ -33,11 +50,18 @@ export const STUDIO_FIELDS: Readonly<Record<string, readonly [FieldKind, number,
   ...Object.fromEntries(DECIMAL_TOTALS.map(total => [`${total}_point_icon`, ["icon", 0x1202 + 4 * TOTALS.indexOf(total), [`${total}_icon_pos`], 4] as const]))
 };
 
+/** Colour bytes of Studio-side fields, in fields.ts's COLORS shape: [offset, owner]. */
+export const STUDIO_COLORS: Readonly<Record<string, readonly [number, string]>> = {
+  control_barometer_font_color: [0x3c2, "control_barometer_font"]
+};
+
 /**
  * Where each Studio image key joins WRITE_ORDER: after the named key. In
- * official NOMAD the heart-rate icon block follows the step readout's.
+ * official NOMAD the heart-rate icon block follows the step readout's. COROS
+ * writes the barometer's blocks between the battery level and the temperature.
  */
 export const STUDIO_WRITE_AFTER: Readonly<Record<string, readonly string[]>> = {
+  control_battery_level_font: ["control_barometer_down_icon", "control_barometer_flat_icon", "control_barometer_up_icon", "control_barometer_font"],
   chart_step_font: ["chart_heart_rate_icon", "chart_heart_rate_font"],
   ...Object.fromEntries(DECIMAL_TOTALS.map(total => [`${total}_unit_icon`, [`${total}_point_icon`]]))
 };

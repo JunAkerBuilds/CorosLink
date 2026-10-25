@@ -1,5 +1,6 @@
 import type { WatchfaceStudioOptions } from "./watchfaceStudio";
 import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES } from "../../electron/watchfaceNativeCatalog";
+import { isLunarField } from "./lunarDate";
 
 /** Preview state is intentionally separate from the saved/exported design. */
 export interface WatchfacePreviewScenario {
@@ -23,8 +24,8 @@ export const SIMULATION_SPEEDS = [1, 60, 3600, 86400] as const;
 export const WATCHFACE_SIMULATION_CAPABILITIES = {
   editorOnly: true,
   speeds: SIMULATION_SPEEDS,
-  dateTime: "ISO date-time, years 1900–9999. No offset means local time; time-zone offsets are converted to local time. Drives clock, AM/PM, weekday, month, day and native date_year in configured layers.",
-  values: ["battery", "steps", "heartRate", "calories", "exercise", "elevation", "temperature", "floors", "barometer", "sunrise", "sunset", "kcalProgress", "exerciseProgress", ...NATIVE_DATA_FIELDS.filter(field => field.id !== "date_year").map(field => field.id), ...NATIVE_CHART_SOURCES.map(source => source.id)],
+  dateTime: "ISO date-time, years 1900–9999. No offset means local time; time-zone offsets are converted to local time. Drives clock, AM/PM, weekday, month, day, native date_year and the lunar date in configured layers.",
+  values: ["battery", "steps", "heartRate", "calories", "exercise", "elevation", "temperature", "floors", "barometer", "sunrise", "sunset", "kcalProgress", "exerciseProgress", ...NATIVE_DATA_FIELDS.filter(field => field.id !== "date_year" && !isLunarField(field.id)).map(field => field.id), ...NATIVE_CHART_SOURCES.map(source => source.id)],
   valueFormat: "String samples. Use h:mm for time fields, numbers for other values, integer state indices for wind direction / HRV / moon phase. Battery and progress: 0–100. temperature is the watch sensor; weather_temp is weather temperature. They are independent. Values replace the current map. Unspecified fields use their design samples.",
   weather: { condition: "Asset index 0–40", night: "Boolean selecting day/night artwork" },
   chartHistory: "2–120 normalized numbers between 0 and 1; sample plot heights, not firmware-generated history.",
@@ -75,6 +76,7 @@ export function parseWatchfacePreviewScenario(value: unknown): WatchfacePreviewS
     const entries = Object.entries(raw.values);
     if (entries.length > 64 || entries.some(([key, entry]) => key.length > 80 || typeof entry !== "string" || entry.length > 160)) throw new Error("Use at most 64 values with string values up to 160 characters.");
     if (entries.some(([key]) => key === "date_year")) throw new Error("date_year follows the calendar. Set scenario.dateTime to preview a different year.");
+    if (entries.some(([key]) => isLunarField(key))) throw new Error("The lunar year, month and day follow the calendar. Set scenario.dateTime to preview a different date.");
     result.values = Object.fromEntries(entries) as Record<string, string>;
     for (const key of ["battery", "kcalProgress", "exerciseProgress"]) {
       if (result.values[key] !== undefined && (!result.values[key].trim() || !Number.isFinite(Number(result.values[key])) || Number(result.values[key]) < 0 || Number(result.values[key]) > 100)) throw new Error(`${key} must be between 0 and 100.`);

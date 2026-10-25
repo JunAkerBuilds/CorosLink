@@ -130,7 +130,9 @@ export async function recoverWatchfaceDesign(
   for (const field of NATIVE_DATA_FIELDS) {
     if (field.kind !== "state" || !field.stateKey) continue;
     const file = source(field.stateKey)[0];
-    const position = parseConfigPos(config[nativeStatePositionKey(field)]);
+    // A lunar table is placed by the rectangle the watch lays its reading out in.
+    const rect = field.rectKey ? parseConfigRect(config[field.rectKey]) : null;
+    const position = field.rectKey ? rect && { x: rect.x0, y: rect.y0 } : parseConfigPos(config[nativeStatePositionKey(field)]);
     if (!file || !position) continue;
     const states = await sprites(field.stateKey);
     nativeData[field.id] = { enabled: true, ...position, scale: 1, color: "#ffffff", stateCount: Object.keys(states).length,

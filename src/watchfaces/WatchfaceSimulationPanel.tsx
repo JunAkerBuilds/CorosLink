@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { FlaskConical, Pause, Play, X } from "lucide-react";
 import type { CorosWatchfaceDesignState } from "../../electron/types";
 import { NATIVE_DATA_FIELDS, nativeDataPreviewValue } from "./nativeData";
+import { isLunarField } from "./lunarDate";
 import { advanceSimulationDateTime, createWatchfaceSimulation, parseSimulationDateTime, simulationDateTime, simulationPreset, SIMULATION_SPEEDS, type WatchfaceSimulation } from "./watchfaceSimulation";
 import "./watchfaceSimulation.css";
 
@@ -90,8 +91,8 @@ export function WatchfaceSimulationPanel({ simulation, onChange, design }: { sim
           <SampleValue label={t("Exercise progress (%)")} value={simulation.values.exerciseProgress ?? String(design.exerciseProgress?.previewPercent ?? 63)} min={0} max={100} onCommit={value => setValue("exerciseProgress", value)} />
           {design.weatherIndicator?.enabled && <><label>{t("Weather artwork")}<select aria-label={t("Simulated weather condition")} value={simulation.weather?.condition ?? 0} onChange={event => patch({ weather: { night: simulation.weather?.night ?? false, condition: Number(event.target.value) } })}>{Array.from({ length: 41 }, (_, index) => <option key={index} value={index}>{t("State")}{" "}{String(index).padStart(2, "0")}</option>)}</select></label><label>{t("Weather set")}<select aria-label={t("Simulated weather day or night")} value={simulation.weather?.night ? "night" : "day"} onChange={event => patch({ weather: { condition: simulation.weather?.condition ?? 0, night: event.target.value === "night" } })}><option value="day">{t("Day")}</option><option value="night">{t("Night")}</option></select></label></>}
         </div></details>
-        {Object.entries(design.nativeData ?? {}).some(([id, style]) => id !== "weather_temp" && id !== "date_year" && style.enabled) && <details><summary>{t("Health, training & astronomy")}</summary><p>{t("Sample values and asset states for the native fields on this face.")}</p><div className="wf-simulation-grid">
-          {NATIVE_DATA_FIELDS.filter(field => field.id !== "weather_temp" && field.id !== "date_year" && design.nativeData?.[field.id]?.enabled).map(field => {
+        {Object.entries(design.nativeData ?? {}).some(([id, style]) => id !== "weather_temp" && id !== "date_year" && !isLunarField(id) && style.enabled) && <details><summary>{t("Health, training & astronomy")}</summary><p>{t("Sample values and asset states for the native fields on this face.")}</p><div className="wf-simulation-grid">
+          {/* The lunar date follows the simulated date and time, like the year. */NATIVE_DATA_FIELDS.filter(field => field.id !== "weather_temp" && field.id !== "date_year" && !isLunarField(field.id) && design.nativeData?.[field.id]?.enabled).map(field => {
             const style = design.nativeData![field.id];
             const key = field.id === "chart" ? style.chartSource ?? "chart_stress" : field.id;
             const fallback = nativeDataPreviewValue(field.id, style);

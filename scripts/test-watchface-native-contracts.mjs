@@ -62,6 +62,23 @@ assert.deepEqual(catalog.nativeFieldKeys(catalog.NATIVE_DATA_BY_ID.get("stress")
 assert.deepEqual(catalog.nativeFieldKeys(catalog.NATIVE_DATA_BY_ID.get("stamina")).slice(-2), ["stamina_level_pos", "stamina_level_icon"]);
 assert.equal(catalog.nativeStatePositionKey(catalog.NATIVE_DATA_BY_ID.get("weather_uv")), "weather_uv_level_pos");
 assert.equal(catalog.nativeStatePositionKey(catalog.NATIVE_DATA_BY_ID.get("sleep_hrv_level")), "sleep_hrv_level_pos");
+// AQI and weekly-load level artwork sit at weather_aqi_level_pos and week_tl_level_pos.
+assert.deepEqual(role("weather_aqi", "states").states.map(state => state.meaning), ["No AQI data", "Good AQI (0–50)", "Moderate AQI (51–100)", "Unhealthy for sensitive groups (101–150)", "Unhealthy AQI (151–200)", "Very unhealthy AQI (201–300)", "Hazardous AQI (301+)"]);
+assert.ok(role("week_tl", "states").states.every(state => state.meaningSource === "unknown"), "the watch's weekly-load levels are not known");
+assert.equal(role("week_tl", "states").spriteCount, 7);
+for (const id of ["weather_aqi", "week_tl"]) assert.equal(parts.nativePart(id, parts.defaultNativeDataStyle(id), "states").enabled, false, `${id} artwork starts hidden`);
+assert.deepEqual(catalog.nativeFieldKeys(catalog.NATIVE_DATA_BY_ID.get("weather_aqi")).slice(-2), ["weather_aqi_level_pos", "weather_aqi_level_icon"]);
+assert.deepEqual(catalog.nativeFieldKeys(catalog.NATIVE_DATA_BY_ID.get("week_tl")).slice(-2), ["week_tl_level_pos", "week_tl_level_icon"]);
+// The lunar date: three frame tables the watch places by rectangle, read from the
+// Simplified and the Traditional keys alike (src/watchfaces/lunarDate.ts).
+assert.deepEqual(["lunar_year", "lunar_month", "lunar_day"].map(id => role(id, "states").spriteCount), [23, 13, 30]);
+assert.equal(role("lunar_year", "states").states[2].meaning, "Heavenly stem 丙 (year, frame 2)");
+assert.equal(role("lunar_year", "states").states[22].meaning, "Year character 年 (drawn after the branch)");
+assert.equal(role("lunar_month", "states").states[12].meaning, "Leap-month marker 闰, drawn in the left half of its frame before the month");
+assert.equal(role("lunar_day", "states").states[14].meaning, "Lunar day 15 十五");
+assert.equal(parts.nativePart("lunar_day", parts.defaultNativeDataStyle("lunar_day"), "states").enabled, true, "lunar frames carry their text, so they start shown");
+assert.deepEqual(catalog.nativeFieldKeys(catalog.NATIVE_DATA_BY_ID.get("lunar_month")), ["chinese_lunar_month_icon_dir", "chinese_lunar_month_rect", "chinese_tw_lunar_month_icon_dir", "chinese_tw_lunar_month_rect"]);
+assert.equal(role("lunar_year", "states").verification.supported, false, "lunar frames follow the date, not a state value");
 assert.equal(role("sedentary", "states").states[6].meaning, "Inactive (dimmed)");
 assert.ok(role("sleep_hrv_level", "states").states.every(state => state.meaningSource === "unknown"));
 assert.equal(role("chart", "states", { chartSource: "chart_moon" }).spriteCount, 30);
@@ -80,6 +97,9 @@ assert.deepEqual(role("stamina", "states").verification.scenarios.map(sample => 
 assert.deepEqual(role("weather_uv", "states").verification.scenarios.map(sample => [sample.scenario.values.weather_uv, sample.expectedPreviewStateIndex]), [["-1", "0"], ["6", "3"], ["11", "5"]]);
 assert.deepEqual(role("stress", "states").verification.scenarios.map(sample => [sample.scenario.values.stress, sample.expectedPreviewStateIndex]), [["-1", "0"], ["38", "2"], ["88", "4"]]);
 assert.equal(role("stress", "states", { stateCount: 4 }).verification.supported, false);
+assert.deepEqual(role("weather_aqi", "states").verification.scenarios.map(sample => [sample.scenario.values.weather_aqi, sample.expectedPreviewStateIndex]), [["-1", "0"], ["125", "3"], ["350", "6"]]);
+assert.deepEqual(role("week_tl", "states").verification.scenarios.map(sample => [sample.scenario.values.week_tl, sample.expectedPreviewStateIndex]), [["-1", "0"], ["375", "3"], ["825", "6"]]);
+assert.equal(role("weather_aqi", "states", { stateCount: 6 }).verification.supported, false);
 assert.deepEqual(role("chart", "states", { chartSource: "chart_moon" }).verification.scenarios.map(sample => sample.scenario.values.chart_moon), ["0", "15", "29"]);
 assert.deepEqual(role("weather_direction", "states", { stateCount: 8 }).verification.scenarios.map(sample => sample.scenario.values.weather_direction), ["0", "4", "7"]);
 assert.equal(role("weather_uv", "states", { stateCount: 8 }).verification.supported, false);

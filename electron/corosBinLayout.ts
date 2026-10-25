@@ -320,6 +320,12 @@ const NUMBERS: PositionedField[] = [
     ["korean", 0xa5a, 0xa6a, 0xa7a], ["russian", 0xa8a, 0xa9a, 0xaaa]
   ] as const).flatMap(([language, month, day, week]) => ([["month", month], ["day", day], ["week", week]] as const).map(([part, offset]) =>
     [`date.${language}.${part}`, offset, offset + 10, `${language}_date_${part}_rect`, `${language}_date_${part}_font`] as PositionedField)),
+  // The lunar date, in the tables PACE Pro firmware 3.2008.0 reads while the watch
+  // language is Simplified (0xbaa) or Traditional (0xbda) Chinese: a rectangle to
+  // lay the reading out in, then a frame table (year 23 frames, month 13, day 30).
+  ...([["chinese_lunar", "lunar", 0xbaa], ["chinese_tw_lunar", "lunarTw", 0xbda]] as const).flatMap(([prefix, id, first]) =>
+    (["year", "month", "day"] as const).map((part, i) =>
+      [`${id}.${part}`, first + i * 0x10, first + i * 0x10 + 10, `${prefix}_${part}_rect`, `${prefix}_${part}_icon_dir`] as PositionedField)),
   ["weather.temperature", 0xc56, 0xc60, "weather_temp_rect", "weather_temp_font"],
   ["weather.wind", 0xc78, 0xc82, "weather_wind_rect", "weather_wind_font"],
   ["weather.minimum", 0xc96, 0xca0, "weather_temp_min_rect", "weather_temp_min_font"],
@@ -381,7 +387,6 @@ const RESOURCES: [string, number, string][] = [
 // exercise (12) follow as 28-byte records (position, icon, rect, font, tint).
 const CONTROLS: [string, number, number, number][] = [
   ["temperature", 0x376, 0x382, 0x38c],
-  ["barometer", 0x39e, 0x3aa, 0x3be],
   ["hr", 0x3c4, 0x3d0, 0x3da],
   ["floor", 0x3e0, 0x3ec, 0x3f6],
   ["elevation", 0x3fc, 0x408, 0x412],
@@ -525,11 +530,21 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
         { rect: `control_${name}_rect`, asset: `control_${name}_font` });
     }
     // WF_DT_BATTERY (2) at 0x35a keeps the level table and value under its own
-    // key names; the barometer item carries a second (decimal) rectangle.
+    // key names. The barometer item (0x396, 38 bytes) is a different record: one
+    // position, the down/flat/up trend icons, an integer and a decimal rectangle
+    // over one font, then its tint byte at 0x3c2 (COROS 4.9.9 compiler, probed
+    // 2026-10-25; it was once read as an icon record at 0x39e, whose first word is
+    // really the down-icon pointer).
     add("control.battery.states", "icon", { position: point(0x35a), geometryOffset: base + 0x35a, control: "battery" }, base + 0x362,
       { position: "control_battery_icon_pos", asset: "control_battery_icon_dir" });
     add("control.battery.value", "number", { rect: rectangle(base + 0x366), geometryOffset: base + 0x366, control: "battery" }, base + 0x370,
       { rect: "control_battery_level_rect", asset: "control_battery_level_font" });
+    for (const [trend, pointer] of [["down", 0x39e], ["flat", 0x3a2], ["up", 0x3a6]] as const) {
+      add(`control.barometer.${trend}`, "icon", { position: point(0x396), geometryOffset: base + 0x396, control: "barometer" }, base + pointer,
+        { position: "control_barometer_icon_pos", asset: `control_barometer_${trend}_icon` });
+    }
+    add("control.barometer.value", "number", { rect: rectangle(base + 0x3aa), geometryOffset: base + 0x3aa, control: "barometer" }, base + 0x3be,
+      { rect: "control_barometer_integer_rect", asset: "control_barometer_font" });
     add("control.barometer.decimal", "number", { rect: rectangle(base + 0x3b4), geometryOffset: base + 0x3b4, control: "barometer" }, base + 0x3be,
       { rect: "control_barometer_decimal_rect", asset: "control_barometer_font" });
     for (const [name, pos, hour, minute, font] of [["sunrise", 0x418, 0x424, 0x42e, 0x438], ["sunset", 0x43e, 0x44a, 0x454, 0x45e], ["exercise", 0x49c, 0x4a8, 0x4b2, 0x4bc]] as const) {

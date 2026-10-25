@@ -18,6 +18,7 @@ async function renderNativeData(details) {
   nativeData.stamina.parts = { states: { enabled:true, x:0, y:50, width:100, height:50 } };
   nativeData.stamina.assetTexts = { states: Object.fromEntries(Array.from({length:11}, (_,i)=>[String(i), String(i*10)+'%'])) };
   nativeData.stress.parts = { states: { enabled:true, x:0, y:50, width:60, height:30 } };
+  for (const id of ['weather_aqi','week_tl']) nativeData[id].parts = { states: { enabled:true, x:0, y:50, width:60, height:30 } };
   nativeData.stress.assetTexts = { states: Object.fromEntries(['--','R','L','M','H'].map((text,i)=>[String(i), text])) };
   const design = { version:1, backgroundColor:'#000000', accentColor:'#ffffff', artwork:null,zoom:1,fontFamily:'',digitColor:'#ffffff',tintLabels:false,tintIcons:false,previewComplication:'heartRate',metricChanges:{},metricStyles:{},timeStyles:{},staticSeparators:{colon:{enabled:false,x:0,y:0,size:10,color:'#ffffff'},dateSlash:{enabled:false,x:0,y:0,size:10,color:'#ffffff'}},layoutOffsets:{},designSprites:[],nativeData };
   const diagnostics = validateWatchfaceAutomationDocument({design,projectName:'Native data'}, {details});
@@ -350,6 +351,16 @@ async function renderNativeData(details) {
       assert.equal(resolution.spriteFolders.find(f=>f.folder===resolution.config.stress_level_icon)?.files.length,5,'All stress frames survive export at every resolution');
       assert.match(resolution.config.stress_level_icon_pos,/^\{/,'Stress artwork is placed at the key the firmware reads');
       assert.equal(resolution.config.stress_level_pos,undefined,'No invented stress_level_pos key');
+      for (const [key,count] of [['week_tl_level_icon',7],['weather_aqi_level_icon',7],['chinese_lunar_year_icon_dir',23],['chinese_lunar_month_icon_dir',13],['chinese_lunar_day_icon_dir',30]]) {
+        assert.equal(resolution.spriteFolders.find(f=>f.folder===resolution.config[key])?.files.length,count,`All ${key} frames survive export at every resolution`);
+      }
+      assert.match(resolution.config.week_tl_level_pos,/^\{/,'Weekly load artwork is placed at week_tl_level_pos');
+      assert.match(resolution.config.weather_aqi_level_pos,/^\{/,'AQI artwork is placed at weather_aqi_level_pos');
+      for (const part of ['year','month','day']) {
+        assert.match(resolution.config[`chinese_lunar_${part}_rect`],/^\{\d+,\d+,\d+,\d+,left\|vcenter\}$/,`Lunar ${part} is laid out in a rectangle`);
+        assert.equal(resolution.config[`chinese_tw_lunar_${part}_rect`],resolution.config[`chinese_lunar_${part}_rect`],`The Traditional ${part} rectangle matches`);
+        assert.equal(resolution.config[`chinese_tw_lunar_${part}_icon_dir`],resolution.config[`chinese_lunar_${part}_icon_dir`],`The Traditional ${part} table shares the folder`);
+      }
     }
     const saved=await service.saveCorosWatchfaceProject({name:'Native data round trip',sourceArchiveId:source.archiveId,design:result.design,previewDataUrl:result.preview});
     const loaded=await service.loadCorosWatchfaceProject(saved.projectId);

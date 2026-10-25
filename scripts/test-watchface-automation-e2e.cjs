@@ -171,8 +171,8 @@ async function main() {
     assert.equal((await tool("get_context")).editorOpen, false);
     const schema = await tool("get_schema");
     assert.ok(schema);
-    assert.equal(schema.nativeData.fields.length,27);
-    assert.equal(schema.nativeData.chartSources.length,12);
+    assert.equal(schema.nativeData.fields.length,require('../dist-electron/watchfaceNativeCatalog.js').NATIVE_DATA_FIELDS.length,'get_schema lists every native field the catalog has');
+    assert.equal(schema.nativeData.chartSources.length,require('../dist-electron/watchfaceNativeCatalog.js').NATIVE_CHART_SOURCES.length,'get_schema lists every chart source the catalog has');
     assert.equal(schema.document.$defs.nativeDataStyle.properties.assets.properties.icon.additionalProperties.$ref,'#/$defs/pngImageValue');
     assert.equal(schema.document.$defs.weatherIndicator.properties.assets.properties.day.additionalProperties.$ref,'#/$defs/pngImageValue');
     const nativeDefaults=id=>schema.nativeData.fields.find(field=>field.id===id).defaults;
@@ -461,7 +461,7 @@ async function main() {
     await fs.writeFile(path.join(temporaryRoot, "add-menu.png"), (await window.webContents.capturePage()).toPNG());
     window.hide();
     await window.webContents.executeJavaScript(`[...document.querySelectorAll('.wf-layer-picker-filters button')].find(button=>button.textContent==='Charts').click()`);
-    assert.equal(await window.webContents.executeJavaScript("document.querySelectorAll('.wf-layer-picker-results [data-add-option]').length"),12,"Category filter shows every chart source");
+    assert.equal(await window.webContents.executeJavaScript("document.querySelectorAll('.wf-layer-picker-results [data-add-option]').length"),require('../dist-electron/watchfaceNativeCatalog.js').NATIVE_CHART_SOURCES.length,"Category filter shows every chart source");
     await until(() => window.webContents.executeJavaScript("document.querySelector('.wf-layer-picker').getBoundingClientRect().height<=581"), Boolean, "individual categories use a compact picker");
     await until(() => window.webContents.executeJavaScript(`(() => {
       const strip=document.querySelector('[role="tablist"][aria-label="Data categories"]');

@@ -649,6 +649,8 @@ function configAssetLabel(
     no_disturb_on_icon: "Do Not Disturb indicator",
     no_disturb_off_icon: "Do Not Disturb off indicator",
     touch_lock_icon: "Touch lock indicator",
+    airplane_icon: "Airplane mode indicator",
+    sleep_mode_icon: "Sleep mode indicator",
     negative_sign_icon: "Negative sign",
     control_negative_sign_icon: "Control negative sign",
     arc_cut_icon: "Date separator",
@@ -931,6 +933,24 @@ const CONTROL_STATUS_PREVIEW_DEFINITIONS = [
     positionKey: "no_disturb_icon_pos",
     controlRelative: false
   },
+  // The firmware draws the airplane image at the Bluetooth indicator's position
+  // while airplane mode is on, and the sleep image at the Do Not Disturb
+  // indicator's position while sleep mode is on (PACE Pro 3.2008.0, 0x4cb4c4).
+  // Neither has a position key of its own, so each moves with its indicator.
+  {
+    layoutGroupId: "bluetoothStatus",
+    label: "Airplane mode indicator",
+    configKey: "airplane_icon",
+    positionKey: "bluetooth_icon_pos",
+    controlRelative: false
+  },
+  {
+    layoutGroupId: "doNotDisturbStatus",
+    label: "Sleep mode indicator",
+    configKey: "sleep_mode_icon",
+    positionKey: "no_disturb_icon_pos",
+    controlRelative: false
+  },
   {
     layoutGroupId: "touchLockStatus",
     label: "Touch lock indicator",
@@ -944,8 +964,52 @@ const VIRTUAL_STANDALONE_STATUS_ICON_KEYS = [
   "bluetooth_off_icon",
   "bluetooth_on_icon",
   "no_disturb_on_icon",
-  "no_disturb_off_icon"
+  "no_disturb_off_icon",
+  "airplane_icon",
+  "sleep_mode_icon"
 ] as const;
+
+/**
+ * The compiler writes `bluetooth_icon_pos` and `no_disturb_icon_pos` only when
+ * the face also has one of that indicator's own icons, and the airplane and
+ * sleep images are drawn at those positions. So an airplane or sleep image
+ * added to a face without the indicator gets a transparent 1x1 companion
+ * (`bluetooth_off_icon` or `no_disturb_off_icon`), which makes the position
+ * survive any compiler, COROS's included.
+ */
+const STATUS_ICON_COMPANIONS = {
+  airplane_icon: {
+    own: ["bluetooth_icon", "bluetooth_on_icon", "bluetooth_off_icon"],
+    add: "bluetooth_off_icon"
+  },
+  sleep_mode_icon: {
+    own: ["no_disturb_icon", "no_disturb_on_icon", "no_disturb_off_icon"],
+    add: "no_disturb_off_icon"
+  }
+} as const;
+const TRANSPARENT_PIXEL_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=";
+
+/** The design with a transparent indicator icon beside each added airplane or sleep image that needs one. */
+export function withStatusIconCompanions<
+  Design extends { configAssetOverrides?: Record<string, CorosWatchfaceConfigAssetOverride> }
+>(details: CorosWatchfaceTemplateDetails, design: Design): Design {
+  const overrides = design.configAssetOverrides ?? {};
+  let next = overrides;
+  for (const scope of ["config", "aod"] as const) {
+    for (const [configKey, { own, add }] of Object.entries(STATUS_ICON_COMPANIONS)) {
+      const added = overrides[watchfaceConfigAssetId(scope, configKey)];
+      const companionId = watchfaceConfigAssetId(scope, add);
+      if (!added?.replacement || added.enabled === false || overrides[companionId]) continue;
+      const hasOwnIcon = details.resolutions.some((resolution) =>
+        own.some((key) => Boolean((scope === "aod" ? resolution.aodConfig : resolution.config)?.[key]?.trim()))
+      );
+      if (hasOwnIcon) continue;
+      next = { ...next, [companionId]: { replacement: { dataUrl: TRANSPARENT_PIXEL_DATA_URL, width: 1, height: 1 } } };
+    }
+  }
+  return next === overrides ? design : { ...design, configAssetOverrides: next };
+}
 
 export type WatchfaceControlStatusLayoutGroupId =
   (typeof CONTROL_STATUS_PREVIEW_DEFINITIONS)[number]["layoutGroupId"];
@@ -1127,7 +1191,9 @@ const NATIVE_CONFIG_ICON_KEYS = new Set([
   "control_sunset_icon",
   "control_temperature_icon",
   "no_disturb_off_icon",
-  "no_disturb_on_icon"
+  "no_disturb_on_icon",
+  "airplane_icon",
+  "sleep_mode_icon"
 ]);
 
 /**
@@ -5290,13 +5356,6 @@ const BAROMETER_STATIC_KEYS = [
   "control_barometer_icon",
   "control_barometer_rect"
 ] as const;
-const BAROMETER_DIRECTIONAL_KEYS = [
-  "control_barometer_down_icon",
-  "control_barometer_flat_icon",
-  "control_barometer_up_icon",
-  "control_barometer_integer_rect",
-  "control_barometer_decimal_rect"
-] as const;
 /** Mirrors the parser's mutually exclusive static vs directional branches. */
 export function barometerDisplayModeForConfig(
   config: Record<string, string>
@@ -5352,9 +5411,6 @@ export function getAvailableComplications(
   }
   return WATCHFACE_COMPLICATIONS.filter(
     (complication) =>
-      // Barometer is not a usable selectable complication (see
-      // isControlComplicationEnabled); never offer it as a choice.
-      complication.id !== "barometer" &&
       resolutionHasControlComplication(resolution, complication) &&
       Boolean(
         findSpriteFolder(
@@ -5421,12 +5477,6 @@ export function isControlComplicationEnabled(
   design: ControlComplicationSelection,
   id: WatchfaceComplicationId
 ): boolean {
-  // Barometer is unusable on COROS firmware: the static branch aborts the
-  // phone app during sync (protobuf CHECK) and no shipping face binds the
-  // directional value to a slot, so it never renders. Force it off so the
-  // compose pipeline deletes any control_barometer_* keys instead of
-  // synthesizing them, and never reaches the crashing static branch.
-  if (id === "barometer") return false;
   const configured = design.controlComplicationEnabled?.[id];
   if (configured !== undefined) {
     return configured;
@@ -5697,7 +5747,7 @@ function fallbackStandaloneStatusIconPosition(
     resolution.width,
     resolution.height
   ) * 0.08));
-  const x = configKey.startsWith("no_disturb_")
+  const x = configKey.startsWith("no_disturb_") || configKey === "sleep_mode_icon"
     ? Math.max(0, resolution.width - margin - width)
     : margin;
   return `{${x},${margin}}`;
@@ -5720,13 +5770,10 @@ function addMissingControlComplication(
   resolution: CorosWatchfaceResolutionDetails,
   config: Record<string, string>,
   complication: WatchfaceComplicationDefinition,
-  barometerMode: WatchfaceBarometerMode | undefined,
+  _barometerMode: WatchfaceBarometerMode | undefined,
   aod: boolean
 ): Record<string, string> {
   const values: Record<string, string> = {};
-  const resolvedBarometerMode = complication.id === "barometer"
-    ? barometerMode ?? barometerDisplayModeForConfig(config)
-    : undefined;
   if (
     complication.id !== "barometer" &&
     hasUsableControlSlot(config) &&
@@ -5759,39 +5806,31 @@ function addMissingControlComplication(
   const iconPositionKey = `control_${complication.controlPrefix}_icon_pos`;
   const iconKey = `control_${complication.controlPrefix}_icon`;
   if (complication.id === "barometer") {
-    if (resolvedBarometerMode === "static") {
-      for (const key of BAROMETER_DIRECTIONAL_KEYS) {
-        if (Object.prototype.hasOwnProperty.call(config, key)) {
-          values[key] = COROS_CONFIG_DELETE_VALUE;
-        }
+    // COROS's compiler fails on the static branch (one icon and one rectangle), so
+    // only the directional branch is ever written; a static template is converted.
+    for (const key of BAROMETER_STATIC_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(config, key)) {
+        values[key] = COROS_CONFIG_DELETE_VALUE;
       }
-      if (!config.control_barometer_icon?.trim()) {
-        values.control_barometer_icon = BAROMETER_ICON_RELATIVE_PATH.replace(
-          /\//g,
-          "\\"
-        );
-      }
-      values.control_barometer_rect = baseRect;
-    } else {
-      for (const key of BAROMETER_STATIC_KEYS) {
-        if (Object.prototype.hasOwnProperty.call(config, key)) {
-          values[key] = COROS_CONFIG_DELETE_VALUE;
-        }
-      }
+    }
+    if (
+      parseConfigRect(config.control_barometer_integer_rect) === null ||
+      parseConfigRect(config.control_barometer_decimal_rect) === null
+    ) {
       const splitRect = splitControlRect(baseRect, 0.78) ?? {
         hour: baseRect,
         minute: baseRect
       };
       values.control_barometer_integer_rect = splitRect.hour;
       values.control_barometer_decimal_rect = splitRect.minute;
-      for (const trend of BAROMETER_TRENDS) {
-        const trendKey = `control_barometer_${trend}_icon`;
-        if (!config[trendKey]) {
-          values[trendKey] = barometerTrendIconRelativePath(trend).replace(
-            /\//g,
-            "\\"
-          );
-        }
+    }
+    for (const trend of BAROMETER_TRENDS) {
+      const trendKey = `control_barometer_${trend}_icon`;
+      if (!config[trendKey]) {
+        values[trendKey] = barometerTrendIconRelativePath(trend).replace(
+          /\//g,
+          "\\"
+        );
       }
     }
     if (!config.control_point_icon?.trim()) {

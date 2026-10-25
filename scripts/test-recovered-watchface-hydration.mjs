@@ -114,3 +114,33 @@ assert.deepEqual([stressArtOnly.x, stressArtOnly.y], [60, 190]);
 assert.equal(stressArtOnly.parts.value.enabled, false);
 assert.equal(stressArtOnly.parts.states.enabled, true);
 console.log("Recovered stress level artwork tests passed");
+
+// Weekly-load and AQI level artwork sit at their own ${id}_level_pos keys and keep every frame.
+const withLevels = structuredClone(plain);
+withLevels.resolutions[0].directory = directory;
+Object.assign(withLevels.resolutions[0].config, {
+  week_tl_level_pos: "{30,40}", week_tl_level_icon: "load_levels",
+  weather_aqi_level_pos: "{30,140}", weather_aqi_level_icon: "aqi_levels"
+});
+withLevels.resolutions[0].spriteFolders = [folder("load_levels", 7, 32, 24), folder("aqi_levels", 7, 40, 28)];
+const recoveredLevels = (await recoverWatchfaceDesign(withLevels, loadAssets)).nativeData;
+assert.deepEqual([recoveredLevels.week_tl.x, recoveredLevels.week_tl.y, recoveredLevels.week_tl.stateCount], [30, 40, 7]);
+assert.equal(Object.keys(recoveredLevels.week_tl.assets.states).length, 7, "Every weekly-load frame is kept");
+assert.deepEqual(recoveredLevels.week_tl.parts.states, { enabled: true, width: 32, height: 24, x: 0, y: 0 });
+assert.deepEqual([recoveredLevels.weather_aqi.x, recoveredLevels.weather_aqi.y, recoveredLevels.weather_aqi.stateCount], [30, 140, 7]);
+assert.equal(recoveredLevels.weather_aqi.parts.value.enabled, false, "AQI artwork recovers without a number");
+
+// The lunar date is placed by the rectangle the watch lays its reading out in.
+const withLunar = structuredClone(plain);
+withLunar.resolutions[0].directory = directory;
+Object.assign(withLunar.resolutions[0].config, {
+  chinese_lunar_year_rect: "{20,30,152,78,left|vcenter}", chinese_lunar_year_icon_dir: "lunar_year",
+  chinese_lunar_day_rect: "{20,120,108,168,left|vcenter}", chinese_lunar_day_icon_dir: "lunar_day"
+});
+withLunar.resolutions[0].spriteFolders = [folder("lunar_year", 23, 44, 48), folder("lunar_day", 30, 88, 48)];
+const recoveredLunar = (await recoverWatchfaceDesign(withLunar, loadAssets)).nativeData;
+assert.deepEqual([recoveredLunar.lunar_year.x, recoveredLunar.lunar_year.y, recoveredLunar.lunar_year.stateCount], [20, 30, 23], "The year table starts at its rectangle");
+assert.deepEqual(recoveredLunar.lunar_year.parts.states, { enabled: true, x: 0, y: 0, width: 44, height: 48 });
+assert.equal(Object.keys(recoveredLunar.lunar_day.assets.states).length, 30, "Every lunar day frame is kept");
+assert.equal(recoveredLunar.lunar_month, undefined, "A table the face lacks is not invented");
+console.log("Recovered weekly-load, AQI and lunar artwork tests passed");

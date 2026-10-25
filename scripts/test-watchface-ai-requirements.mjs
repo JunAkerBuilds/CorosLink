@@ -309,7 +309,7 @@ test("weather day and night need complete generated sets and their own actual st
 });
 
 test("all supported native state selectors verify actual low middle high states", () => {
-  for (const [nativeId, style] of [["stamina", {}], ["weather_uv", {}], ["stress", {}], ["weather_direction", { stateCount: 8 }], ["sleep_hrv_level", {}], ["sedentary", {}], ["chart", { chartSource: "chart_moon" }]]) {
+  for (const [nativeId, style] of [["stamina", {}], ["weather_uv", {}], ["stress", {}], ["weather_aqi", {}], ["week_tl", {}], ["weather_direction", { stateCount: 8 }], ["sleep_hrv_level", {}], ["sedentary", {}], ["chart", { chartSource: "chart_moon" }]]) {
     const { tracker, check, contract, calls } = componentFixture(`native:${nativeId}:states`, { nativeId, style });
     assert.equal(contract.verification.scope, "editor-state-selection");
     assert.throws(() => check(["document", ...calls.slice(1, -1)]), /verification.scenarios/);
@@ -357,7 +357,7 @@ test("dynamic preview evidence must explicitly identify its display mode", () =>
 });
 
 test("incompatible native mappings and unselectable roles cannot claim dynamic verification", () => {
-  for (const [nativeId, stateCount] of [["stamina", 12], ["weather_uv", 7], ["stress", 4]]) {
+  for (const [nativeId, stateCount] of [["stamina", 12], ["weather_uv", 7], ["stress", 4], ["weather_aqi", 6], ["week_tl", 6]]) {
     const { check, contract } = componentFixture(`native:${nativeId}:states`, { nativeId, style: { stateCount } });
     assert.equal(contract.verification.supported, false);
     assert.throws(() => check(), /verification is unavailable/);

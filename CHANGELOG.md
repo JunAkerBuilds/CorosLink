@@ -9,7 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Weekly training load and AQI level artwork in Studio.** Both layers now have a **State artwork** component, like stress's: seven images each, off until you turn it on. AQI's frames are no data and then the six US EPA bands, from Good to Hazardous; weekly load's levels are not known, so Studio previews them in steps and claims no meaning for them. Faces that already carry the artwork open with it. The counts and order aren't yet confirmed on a watch.
+- **Lunar date in Studio.** Add **Lunar year**, **Lunar month** and **Lunar day** under Calendar. The watch draws them only while its language is Chinese; Studio writes both the Simplified and Traditional tables. The year is a stem, a branch and 年, the month names include a leap-month marker, the day has 30 names, and the preview follows the simulation date. Not yet confirmed on a watch.
+- **Airplane and sleep indicators in Studio.** Two more status images sit beside Bluetooth and Do Not Disturb in the layer list. The watch shows the airplane image where the Bluetooth indicator goes while airplane mode is on, and the sleep image where Do Not Disturb goes while sleep mode is on.
+- **The barometer is a selectable again.** Pick Barometer among the selectable data. COROS's compiler fails on the layout Studio used to be able to write, so Studio writes only the one that compiles, and CorosLink's own compiler now writes that record.
 - **Stress level artwork in Studio.** A stress layer now has a **State artwork** component, like stamina's: five images, for no data and then Relaxed, Low, Medium and High. It's off until you turn it on, and you import your own images for it. Official faces that carry stress level artwork open with it as part of the stress layer. The order of the images isn't yet confirmed on a watch.
+
+### Fixed
+
+- Opening an official face that has a barometer control now reads its position and trend icons correctly.
 
 ## [0.1.65] - 2026-10-24
 

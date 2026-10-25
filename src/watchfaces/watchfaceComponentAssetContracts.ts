@@ -148,7 +148,7 @@ export function watchfaceComponentAssetContracts(
         editReplacementPath: `/design/configAssetOverrides/${pointer(asset.id)}/replacement`,
         imageValueShape: "replacement = {dataUrl:{assetId},width,height}; dimensions describe the authored PNG.",
         behavior: /^time_(hour|minute|second)_icon$/.test(asset.configKey) ? "One hand image; firmware rotates it using live time. Do not generate one frame per angle."
-          : /bluetooth|disturb|touch_lock/.test(asset.configKey) ? "One conditional status image for this exact config key; retain separate on/off keys present in the template."
+          : /bluetooth|disturb|touch_lock|airplane|sleep_mode/.test(asset.configKey) ? "One conditional status image for this exact config key; retain separate on/off keys present in the template."
           : "One image for this slot. Decorations and masks do not supply live values or progress by themselves."
       });
     }
