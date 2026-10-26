@@ -130,6 +130,7 @@
     "test:activity-backup": "npm run build:electron && node scripts/test-activity-backup.mjs",
     "test:aws-sigv4": "npm run build:electron && node scripts/test-aws-sigv4.mjs",
     "test:zip-store": "npm run build:electron && node scripts/test-zip-store.mjs",
+    "test:png-recompress": "node --experimental-strip-types scripts/test-png-recompress.mjs",
     "test:coros-upload-config": "npm run build:electron && node scripts/test-coros-upload-config.mjs",
     "test:coros-watchfaces": "npm run build:electron && node scripts/test-coros-watchface-service.mjs",
     "test:coros-multi-watch": "npm run build:electron && node scripts/test-coros-multi-watch.mjs",

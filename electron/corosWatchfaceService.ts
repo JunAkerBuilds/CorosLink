@@ -13,6 +13,7 @@ import {
   storeCorosCredentials
 } from "./corosCredentialStore";
 import { createStoreZip } from "./zipStore";
+import { recompressPngLossless } from "./pngRecompress";
 import { recoverCompiledCorosWatchface } from "./corosCompiledWatchface";
 import { parseCorosFaceMagic } from "./corosBinLayout";
 import { fitGeneratedWatchfaceFontRects } from "./watchfaceExportFontBounds";
@@ -128,6 +129,9 @@ const MOBILE_APP_VERSION = 1125929972137984;
 const MOBILE_USER_SETTING_SCOPE = "CAEQARgBIAEoATABOAFAAQ==";
 const API_SUCCESS = "0000";
 const MAX_OFFICIAL_ARCHIVE_BYTES = 25 * 1024 * 1024;
+// COROS answers 9021 "The file size exceeds limit" above this. Measured
+// 2026-10-26: 10,485,760 bytes saved, one byte more was refused.
+const MAX_COROS_UPLOAD_BYTES = 10 * 1024 * 1024;
 const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
 const MAX_INFO_BYTES = 1024 * 1024;
 const MAX_SHARE_PAGE_BYTES = 1024 * 1024;
@@ -3391,7 +3395,7 @@ export async function publishCorosWatchface(
     throw new Error("Background image ID must be a non-negative integer.");
   }
 
-  const archiveBytes = await fs.promises.readFile(freshArchive.path);
+  const archiveBytes = await fitCorosUploadLimit(await fs.promises.readFile(freshArchive.path));
   if (!/^\d+$/.test(freshArchive.sourceTemplateId)) {
     throw new Error("Invalid COROS source template ID.");
   }
@@ -3451,6 +3455,37 @@ export async function publishCorosWatchface(
     templateId,
     name
   });
+}
+
+/**
+ * Brings an archive under COROS's upload limit without changing what the watch
+ * shows: every PNG is re-encoded losslessly. Archives already small enough go
+ * up untouched, and ones that still do not fit stop here with their size.
+ */
+async function fitCorosUploadLimit(archiveBytes: Buffer<ArrayBuffer>): Promise<Buffer<ArrayBuffer>> {
+  if (archiveBytes.length <= MAX_COROS_UPLOAD_BYTES) return archiveBytes;
+  const unzipper = require("unzipper") as UnzipperModule;
+  const entries = await Promise.all((await unzipper.Open.buffer(archiveBytes)).files
+    .filter(entry => entry.type === "File")
+    .map(async entry => ({ name: entry.path, data: await entry.buffer() })));
+  // Four at a time keeps the zlib thread pool busy without holding every
+  // decoded image in memory at once.
+  let next = 0;
+  await Promise.all(Array.from({ length: 4 }, async () => {
+    while (next < entries.length) {
+      const entry = entries[next++];
+      if (/\.png$/i.test(entry.name)) entry.data = await recompressPngLossless(entry.data);
+    }
+  }));
+  // createStoreZip concatenates fresh buffers, so this is never a SharedArrayBuffer view.
+  const compressed = createStoreZip(entries) as Buffer<ArrayBuffer>;
+  if (compressed.length > MAX_COROS_UPLOAD_BYTES) {
+    const megabytes = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1);
+    throw new Error(
+      `This face is ${megabytes(compressed.length)} MB even after lossless compression, and COROS accepts custom faces up to ${megabytes(MAX_COROS_UPLOAD_BYTES)} MB. Remove some images or use smaller ones, then publish again.`
+    );
+  }
+  return compressed;
 }
 
 export async function createCorosWatchfaceShareLink(
