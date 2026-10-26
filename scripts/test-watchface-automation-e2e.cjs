@@ -49,7 +49,6 @@ async function main() {
   let conversionAuthError = null;
   let manualLoginAttempts = 0;
   let savedLoginAttempts = 0;
-  let restoreCarrierAfterLogin = async () => {};
   const accountStatus = () => ({ authenticated, secureStorageAvailable: true, savedCredentialsAvailable: true, savedEmail: "saved@example.test", suggestedRegion: "us" });
 
   // These are the production preload/service IPC contracts used by the real
@@ -66,7 +65,7 @@ async function main() {
       assert.equal(remember, true);
       manualLoginAttempts++;
       if (manualLoginAttempts === 1) throw new Error("The email or password is incorrect.");
-      await restoreCarrierAfterLogin();
+      conversionAuthError = null;
       authenticated = true;
       return accountStatus();
     },
@@ -587,9 +586,10 @@ async function main() {
       const groups=[...document.querySelectorAll('.wf-native-graph-style')];
       return !document.querySelector('select[aria-label="Graph type"]')
         && groups.map(group=>group.getAttribute('aria-label')).join()==='Bar style,Line style'
-        && groups[0].querySelector('.wf-native-part-badge')?.textContent==='This page' && !groups[1].querySelector('.wf-native-part-badge')
+        && groups.every(group=>!group.querySelector('.wf-native-part-badge'))
+        && [...document.querySelectorAll('.watchface-studio-summary')].some(note=>note.textContent.includes('Readouts only.'))
         && Boolean(document.querySelector('input[aria-label="Line thickness"]') && document.querySelector('input[aria-label="Upper curve"]') && document.querySelector('input[aria-label="Lower curve"]'));
-    })()`),'Bar and line styles are both editable; a stress chart marks bars as its page style');
+    })()`),'Bar and line styles are both editable; a stress page explains that it has readouts only and marks neither graph style as active');
     const graphToggleSize=await window.webContents.executeJavaScript(`(() => { const box=document.querySelector('input[aria-label="Show Graph"]').getBoundingClientRect(); return {width:box.width,height:box.height}; })()`);
     assert.ok(graphToggleSize.width<=20&&graphToggleSize.height<=20,'Graph visibility checkbox fits the inspector');
     await window.webContents.executeJavaScript(`document.querySelector('input[aria-label="Show Graph"]').click()`);
@@ -621,9 +621,10 @@ async function main() {
     const graphParts=document.capabilities.layers.find(layer=>layer.id==='native:chart').nativeData.components;
     assert.equal(graphParts.find(part=>part.id==='plot').effectiveStyle.width,300);
     assert.equal(graphParts.find(part=>part.id==='decimal').positionEditable,false);
-    assert.equal(document.capabilities.nativeData.fieldIds.length,27);
+    const expectedNativeFieldIds = require('../dist-electron/watchfaceNativeCatalog.js').NATIVE_DATA_FIELDS.map(field=>field.id).sort();
+    assert.deepEqual([...document.capabilities.nativeData.fieldIds].sort(),expectedNativeFieldIds,'Document capabilities include every native field');
     const resource=await client.readResource({uri:document.capabilities.schemaResource});
-    assert.equal(JSON.parse(resource.contents[0].text).nativeData.fields.length,27,'Advertised schema resource resolves');
+    assert.deepEqual(JSON.parse(resource.contents[0].text).nativeData.fields.map(field=>field.id).sort(),expectedNativeFieldIds,'Advertised schema resource resolves with every native field');
     await tool("undo",nativeIdentity()); document=await tool("get_document");
     assert.equal(document.design.nativeData.today_run,undefined);
     await tool("redo",nativeIdentity()); document=await tool("get_document");
@@ -1011,18 +1012,16 @@ async function main() {
     assert.equal(document.sessionId, dialogSession, "conversion picker keeps the original editor mounted");
     const previousSession = document.sessionId;
     const originalDesign = structuredClone(document.design);
-    // Exercise the real service's missing-session error on a first-use cache miss.
-    const pace4CarrierPath = path.join(carrierCache, "pace-4.zip");
-    const pace4Carrier = await fs.readFile(pace4CarrierPath);
-    await fs.unlink(pace4CarrierPath);
-    restoreCarrierAfterLogin = () => fs.writeFile(pace4CarrierPath, pace4Carrier);
+    // A cache miss now converts with a local carrier while signed out. Exercise
+    // the sign-in recovery UI with an explicit authentication error instead.
+    conversionAuthError = "Sign in to your COROS mobile account to continue.";
     await window.webContents.executeJavaScript('document.querySelector(".wf-convert-button").click()');
     await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog .primary-button"))'), Boolean, "convert button");
     await window.webContents.executeJavaScript(`(() => { const select = document.querySelector('.watchface-convert-dialog select'); select.value = 'pace-4'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
     await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog .primary-button").click()');
     await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog input[type=password]"))'), Boolean, "conversion sign-in dialog");
     assert.match(await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog").textContent'), /Sign in to download support for PACE 4/);
-    assert.equal(await window.webContents.executeJavaScript('document.activeElement === document.querySelector(".watchface-convert-dialog select")'), true, "focus moves into sign-in");
+    await until(() => window.webContents.executeJavaScript('document.activeElement === document.querySelector(".watchface-convert-dialog .watchface-region-select [role=combobox]")'), Boolean, "focus moves into sign-in");
     assert.equal(await window.webContents.executeJavaScript('(() => { const dialog = document.querySelector(".watchface-convert-dialog"); const back = dialog.querySelector(".watchface-modal-actions button"); return back.getBoundingClientRect().bottom <= dialog.getBoundingClientRect().bottom; })()'), true, "sign-in actions fit in the dialog");
     window.showInactive();
     await fs.writeFile(path.join(temporaryRoot, "watch-conversion-sign-in.png"), (await window.webContents.capturePage()).toPNG());
@@ -1046,9 +1045,10 @@ async function main() {
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value);
         input.dispatchEvent(new Event('input', { bubbles: true }));
       }
-      const region = form.querySelector('select');
-      region.value = 'eu'; region.dispatchEvent(new Event('change', { bubbles: true }));
     })()`);
+    await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog .watchface-region-select [role=combobox]").click()');
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector("[role=listbox][aria-label=\\"Account region\\"]"))'), Boolean, "account region options");
+    await window.webContents.executeJavaScript(`[...document.querySelectorAll('[role=listbox][aria-label="Account region"] [role=option]')].find(option=>option.textContent.trim()==='Europe').click()`);
     await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog form").requestSubmit()');
     await until(() => window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog [role=alert]")?.textContent ?? ""'), text => text.includes("email or password is incorrect"), "inline login error");
     assert.equal(await window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog input[type=password]"))'), true, "failed login keeps the sign-in form open");
