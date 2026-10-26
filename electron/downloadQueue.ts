@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import {
-  hasAvailableDownloadForUrl,
-  markYouTubeDownloaded
+  createDownloadAvailabilityCheck,
+  markYouTubeDownloaded,
+  type DownloadAvailabilityCheck
 } from "./database";
 import { computeOverallProgress } from "./downloadProgress";
 import {
@@ -40,8 +41,23 @@ function snapshot(): DownloadJob[] {
   );
 }
 
+// yt-dlp reports progress many times a second; each emit sorts and sends
+// every retained job to the renderer. Byte-progress-only updates are
+// coalesced to this cadence, while phase, track and status changes still go
+// out immediately (and carry any pending progress with them).
+const PROGRESS_EMIT_INTERVAL_MS = 150;
+let pendingProgressEmit: ReturnType<typeof setTimeout> | undefined;
+
 function emit(): void {
+  if (pendingProgressEmit !== undefined) {
+    clearTimeout(pendingProgressEmit);
+    pendingProgressEmit = undefined;
+  }
   listener?.(snapshot());
+}
+
+function emitProgress(): void {
+  pendingProgressEmit ??= setTimeout(emit, PROGRESS_EMIT_INTERVAL_MS);
 }
 
 function touch(job: DownloadJob): void {
@@ -63,13 +79,14 @@ export function enqueueDownloads(items: DownloadQueueItem[]): DownloadJob[] {
 
   const created: DownloadJob[] = [];
   const now = new Date().toISOString();
+  let hasAvailableDownload: DownloadAvailabilityCheck | undefined;
 
   for (const item of items) {
     const job = createQueuedJob(item, now);
     if (
       !job ||
       activeUrls.has(job.url) ||
-      hasAvailableDownloadForUrl(
+      (hasAvailableDownload ??= createDownloadAvailabilityCheck())(
         job.url,
         job.entryType === "search" ? job.fileBaseName : undefined
       )
@@ -348,9 +365,12 @@ async function runJob(job: DownloadJob): Promise<void> {
 
 function runJobDownload(job: DownloadJob): Promise<DownloadAudioResult> {
   const onProgress = (update: DownloadProgressUpdate) => {
+    const before = `${job.phase}|${job.activity}|${job.trackIndex}|${job.trackTotal}|${job.currentTrackTitle}|${job.completedTrackCount}`;
     mergeProgressUpdate(job, update);
     touch(job);
-    emit();
+    const after = `${job.phase}|${job.activity}|${job.trackIndex}|${job.trackTotal}|${job.currentTrackTitle}|${job.completedTrackCount}`;
+    if (before === after) emitProgress();
+    else emit();
   };
   const runtime = {
     jobId: job.id,

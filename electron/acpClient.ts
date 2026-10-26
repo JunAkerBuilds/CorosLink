@@ -3,13 +3,9 @@ import crypto from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { stripVTControlCharacters } from "node:util";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  type CallToolResult
-} from "@modelcontextprotocol/sdk/types.js";
+import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { mcpServerSdk } from "./mcpSdk";
 import type { CorosMcpTool } from "./types";
 
 // Shared by the Coach providers that run an Agent Client Protocol (ACP) agent:
@@ -260,6 +256,7 @@ export async function startToolBridge(
   callbacks: ToolBridgeCallbacks
 ): Promise<ToolBridge> {
   const token = crypto.randomBytes(32).toString("base64url");
+  const { McpServer, StreamableHTTPServerTransport, CallToolRequestSchema, ListToolsRequestSchema } = mcpServerSdk();
   // Raw JSON schemas, so the handlers go on the protocol server directly.
   const server = new McpServer(
     { name: serverName, version: "1.0.0" },

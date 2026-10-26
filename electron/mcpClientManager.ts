@@ -4,13 +4,9 @@ import http from "node:http";
 import { isWebUrl } from "./externalLinks";
 import { expectedError } from "./diagnosticsLog";
 import type { AddressInfo } from "node:net";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
-import {
-  UnauthorizedError,
-  type OAuthClientProvider
-} from "@modelcontextprotocol/sdk/client/auth.js";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
+import { mcpClientSdk } from "./mcpSdk";
 import type {
   OAuthClientInformationFull,
   OAuthClientMetadata,
@@ -679,7 +675,7 @@ async function activateClient(
     rt.tools = tools;
     rt.toolsRefresh = undefined;
     rt.toolsCheckedAt = Date.now();
-    client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
+    client.setNotificationHandler(mcpClientSdk().ToolListChangedNotificationSchema, async () => {
       if (rt.client === client) {
         await refreshTools(server).catch((error) => recordDiagnosticError(`mcp:${server.id}/tools`, error));
       }
@@ -699,6 +695,7 @@ function buildTransport(server: McpServerConfig, authProvider?: McpOAuthProvider
     );
   }
   if (server.authType === "oauth" && authProvider) {
+    const { StreamableHTTPClientTransport } = mcpClientSdk();
     return new StreamableHTTPClientTransport(new URL(server.url), { authProvider });
   }
   // bearer / none: send a static Authorization header when a bearer is stored.
@@ -707,6 +704,7 @@ function buildTransport(server: McpServerConfig, authProvider?: McpOAuthProvider
     const token = getMcpBearer(server.id);
     if (token) headers.Authorization = `Bearer ${token}`;
   }
+  const { StreamableHTTPClientTransport } = mcpClientSdk();
   return new StreamableHTTPClientTransport(new URL(server.url), {
     requestInit: { headers }
   });
@@ -723,6 +721,7 @@ async function connectOnce(
 ): Promise<void> {
   const rt = runtime(server.id);
   if (rt.client) return;
+  const { Client, UnauthorizedError } = mcpClientSdk();
 
   if (server.authType !== "oauth") {
     const transport = buildTransport(server);

@@ -3,13 +3,21 @@ import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { app, BrowserWindow, shell } from "electron";
-import { autoUpdater, CancellationToken } from "electron-updater";
+import type { CancellationToken } from "electron-updater";
 import { getSetting, setSetting } from "./database";
 import type { AppUpdateSnapshot } from "./types";
 
 const AUTO_CHECK_KEY = "updater.autoCheck";
 const AUTO_DOWNLOAD_KEY = "updater.autoDownload";
 const STARTUP_CHECK_DELAY_MS = 5000;
+
+// electron-updater takes noticeable time to load, and development builds
+// never use it; load it the first time the updater actually runs.
+let updaterModule: typeof import("electron-updater") | undefined;
+function electronUpdater(): typeof import("electron-updater") {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return (updaterModule ??= require("electron-updater") as typeof import("electron-updater"));
+}
 
 let mainWindow: BrowserWindow | undefined;
 let listenersRegistered = false;
@@ -241,6 +249,7 @@ function registerAutoUpdaterListeners(): void {
   }
 
   listenersRegistered = true;
+  const { autoUpdater } = electronUpdater();
   // Applying an update is always an explicit choice from the update prompt or
   // update controls. In particular, choosing "Not now" must not silently
   // install the already-downloaded update when the app later quits.
@@ -370,7 +379,7 @@ export async function checkForAppUpdates(): Promise<AppUpdateSnapshot> {
   }
 
   try {
-    await autoUpdater.checkForUpdates();
+    await electronUpdater().autoUpdater.checkForUpdates();
   } catch (error) {
     setSnapshot({ status: "error", error: formatUpdaterError(error) });
   }
@@ -400,6 +409,7 @@ export async function downloadAppUpdate(): Promise<AppUpdateSnapshot> {
     return getAppUpdateSnapshot();
   }
 
+  const { autoUpdater, CancellationToken } = electronUpdater();
   const cancellation = new CancellationToken();
   setSnapshot({ status: "downloading", downloadPercent: 0, error: undefined });
 
@@ -497,7 +507,7 @@ export async function quitAndInstallUpdate(): Promise<{
   }
 
   setImmediate(() => {
-    autoUpdater.quitAndInstall(false, true);
+    electronUpdater().autoUpdater.quitAndInstall(false, true);
   });
 
   return { installMethod: "restart" };

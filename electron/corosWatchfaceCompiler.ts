@@ -17,7 +17,8 @@ import type { WatchModelId } from "./watchModels";
  */
 const MAX_ARCHIVE = 64 * 1024 * 1024;
 interface ZipEntry { path: string; type: string; uncompressedSize: number; buffer(): Promise<Buffer> }
-const unzipper = require("unzipper") as { Open: {
+// Loaded when a face is compiled, not at app startup.
+const loadUnzipper = () => require("unzipper") as { Open: {
   file(filename: string): Promise<{ files: ZipEntry[] }>;
 } };
 export interface CompiledWatchfaceFile {
@@ -71,7 +72,7 @@ export async function prepareLocalWatchfaceZip(filename: string, preferred?: Wat
   Promise<{ zip: Buffer; files: Map<string, Buffer>; faceId: number; target: WatchfaceTarget }> {
   const stat = await fs.promises.stat(filename);
   if (!stat.isFile() || stat.size > MAX_ARCHIVE) throw new Error("Choose a final watch face DAT/ZIP smaller than 64 MB.");
-  const directory = await unzipper.Open.file(filename);
+  const directory = await loadUnzipper().Open.file(filename);
   if (directory.files.length > 8192) throw new Error("The watch face archive has too many files.");
   let expanded = 0;
   for (const entry of directory.files) {

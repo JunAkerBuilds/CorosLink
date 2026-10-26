@@ -762,15 +762,92 @@ export function hasAvailableDownloadForUrl(
     .prepare("SELECT title, file_path FROM downloads")
     .all() as Array<{ title: string; file_path: string }>;
 
+  // Compare metadata before touching the disk: probing every row's file is
+  // what made this scan slow on large libraries.
   return titleRows.some(
     (row) =>
-      fs.existsSync(row.file_path) &&
       ((youtubeVideoId !== undefined &&
         (youtubeVideoIdFromValue(row.title) === youtubeVideoId ||
           youtubeVideoIdFromValue(row.file_path) === youtubeVideoId)) ||
         (expectedTitleKey !== undefined &&
-          downloadTitleKey(row.title) === expectedTitleKey)),
+          downloadTitleKey(row.title) === expectedTitleKey)) &&
+      fs.existsSync(row.file_path),
   );
+}
+
+export type DownloadAvailabilityCheck = (
+  url: string,
+  expectedTitle?: string
+) => boolean;
+
+/**
+ * Same answers as `hasAvailableDownloadForUrl`, for checking a whole enqueue
+ * batch: the downloads table is read and indexed once, and only files whose
+ * metadata matches are probed (each at most once). Build a fresh check per
+ * batch; it does not see rows added afterwards.
+ */
+export function createDownloadAvailabilityCheck(): DownloadAvailabilityCheck {
+  const rows = requireDatabase()
+    .prepare("SELECT url, title, file_path FROM downloads")
+    .all() as Array<{ url: string; title: string; file_path: string }>;
+  const byUrl = new Map<string, string[]>();
+  const bySpotifyTrackId = new Map<string, string[]>();
+  let byYoutubeVideoId: Map<string, string[]> | undefined;
+  let byTitleKey: Map<string, string[]> | undefined;
+  const exists = new Map<string, boolean>();
+  const add = (index: Map<string, string[]>, key: string | undefined, filePath: string) => {
+    if (key === undefined) return;
+    const paths = index.get(key);
+    if (paths) paths.push(filePath);
+    else index.set(key, [filePath]);
+  };
+  const anyExists = (paths: string[] | undefined) =>
+    paths?.some((filePath) => {
+      let found = exists.get(filePath);
+      if (found === undefined) {
+        found = fs.existsSync(filePath);
+        exists.set(filePath, found);
+      }
+      return found;
+    }) ?? false;
+
+  for (const row of rows) {
+    add(byUrl, row.url, row.file_path);
+    add(bySpotifyTrackId, spotifyTrackIdFromSourceUrl(row.url), row.file_path);
+  }
+
+  return (url, expectedTitle) => {
+    const spotifyTrackId = spotifyTrackIdFromSourceUrl(url);
+    if (
+      anyExists(byUrl.get(url)) ||
+      (spotifyTrackId !== undefined && anyExists(bySpotifyTrackId.get(spotifyTrackId)))
+    ) {
+      return true;
+    }
+
+    const youtubeVideoId = youtubeVideoIdFromValue(url);
+    const expectedTitleKey = downloadTitleKey(expectedTitle);
+    if (youtubeVideoId !== undefined) {
+      if (!byYoutubeVideoId) {
+        byYoutubeVideoId = new Map();
+        for (const row of rows) {
+          const titleId = youtubeVideoIdFromValue(row.title);
+          const pathId = youtubeVideoIdFromValue(row.file_path);
+          add(byYoutubeVideoId, titleId, row.file_path);
+          if (pathId !== titleId) add(byYoutubeVideoId, pathId, row.file_path);
+        }
+      }
+      if (anyExists(byYoutubeVideoId.get(youtubeVideoId))) return true;
+    }
+    if (expectedTitleKey !== undefined) {
+      if (!byTitleKey) {
+        byTitleKey = new Map();
+        for (const row of rows) add(byTitleKey, downloadTitleKey(row.title), row.file_path);
+      }
+      if (anyExists(byTitleKey.get(expectedTitleKey))) return true;
+    }
+    return false;
+  };
 }
 
 function downloadTitleKey(title?: string): string | undefined {

@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import { UnitSystemProvider } from '../../src/units/UnitSystemProvider';
 import { PrivacySettings } from '../../src/settings/PrivacySettings';
+import '../../src/i18n/allCatalogs';
 import { setLanguage } from '../../src/i18n';
 import type { CorosLinkApi } from '../../src/coroslink-api';
 import type { WatchSyncProgress } from '../../electron/localSync/localDataTypes';

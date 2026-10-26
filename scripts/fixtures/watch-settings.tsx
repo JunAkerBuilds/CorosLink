@@ -6,6 +6,7 @@ import { WatchSystemSettings } from '../../src/settings/WatchSystemSettings';
 import { OverviewWeatherCard } from '../../src/overview/OverviewWeatherCard';
 import { OVERVIEW_WEATHER_STORAGE_KEY } from '../../src/overview/overviewWeather';
 import { decodeExtSwitches, decodeSwitches } from '../../electron/corosWatchSettings';
+import '../../src/i18n/allCatalogs';
 import { setLanguage } from '../../src/i18n';
 import type { CorosLinkApi } from '../../src/coroslink-api';
 import type { WatchModelId } from '../../electron/watchModels';

@@ -1,0 +1,7 @@
+/* "Show N more" sits in the track stack's grid as one row-height cell. */
+.library-track-stack > .library-show-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  grid-column: 1 / -1;
+}

@@ -32,6 +32,7 @@
     "test:audiobooks": "npm run build:electron && electron scripts/test-audiobooks.cjs",
     "test:combined-download-cache": "npm run build:electron && node scripts/test-combined-download-cache.mjs",
     "test:download-progress": "npm run build:electron && node scripts/test-download-progress.mjs",
+    "test:download-availability": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-download-availability.cjs",
     "test:route-location": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-route-location.mjs",
     "test:overview-weather": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-overview-weather.mjs",
     "test:overview-briefing": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-overview-briefing.mjs",

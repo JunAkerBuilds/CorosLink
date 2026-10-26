@@ -8,6 +8,7 @@ import {
   parseRaceTime,
   toDateInputValue
 } from "../src/training/raceFormat.ts";
+import "../src/i18n/allCatalogs.ts";
 import { setLanguage } from "../src/i18n/locale.ts";
 
 assert.equal(formatRaceTime(1331), "22:11");

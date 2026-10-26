@@ -5,6 +5,7 @@ import { SelectDropdown } from '../../src/components/SelectDropdown';
 import { ApiAccountSettings } from '../../src/settings/ApiAccountSettings';
 import { LanguageSettings } from '../../src/settings/LanguageSettings';
 import { TrainingHubHeader } from '../../src/training/components/TrainingHubHeader';
+import '../../src/i18n/allCatalogs';
 import { initializeLanguage, setLanguage, t, useLanguage, formatNumber, formatDate } from '../../src/i18n';
 import type { CorosLinkApi } from '../../src/coroslink-api';
 import '../../src/styles.css';

@@ -1795,4 +1795,5 @@ export const toolsChinese: Readonly<Record<string, string>> = {
   "Which Google plans include Antigravity": "哪些 Google 方案包含 Antigravity",
   "Antigravity": "Antigravity",
   "Google's Antigravity agent with your Google account": "使用您 Google 帐号的 Google Antigravity 代理",
+  "Show {{count}} more": "再显示 {{count}} 首",
 };

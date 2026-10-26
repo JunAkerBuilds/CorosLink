@@ -55,8 +55,11 @@ import type { TrainingHubViewProps } from "./types";
 import type { TrainingHubActivity } from "../../electron/types";
 import { createTrainingHubSampleData, type TrainingHubSampleData } from "./sampleData";
 import { useWatchSync } from "../watch/watchSyncState";
-import loginPageBackground from "../../public/assets/training-hub/Login-page-bg.png";
 import { runViewMorph } from "../viewMorph";
+
+// A public file, so the build ships one copy. Absolute, because a relative
+// url() inside a custom property can resolve against the stylesheet using it.
+const loginPageBackground = new URL("./assets/training-hub/Login-page-bg.png", document.baseURI).href;
 
 /** Set on <html> while the sleep card and its page morph; sleepWeek.css names the moving parts under them. */
 const SLEEP_MORPH_OPEN = "is-sleep-morph-open";

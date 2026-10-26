@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { UnitSystemProvider } from '../../src/units/UnitSystemProvider';
 import { WatchConnectionMenu } from '../../src/watch/WatchConnectionMenu';
+import '../../src/i18n/allCatalogs';
 import { setLanguage } from '../../src/i18n';
 import { resetWatchSync } from '../../src/watch/watchSyncState';
 import type { CorosLinkApi } from '../../src/coroslink-api';

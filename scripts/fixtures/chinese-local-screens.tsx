@@ -11,6 +11,7 @@ import { createTrainingHubSampleData } from '../../src/training/sampleData';
 import { WatchfacePhoneSendCard } from '../../src/watchfaces/WatchfacePhoneSendCard';
 import { UnitSystemProvider } from '../../src/units/UnitSystemProvider';
 import { ThemeProvider } from '../../src/theme/ThemeProvider';
+import '../../src/i18n/allCatalogs';
 import { setLanguage, useLanguage } from '../../src/i18n';
 import type { RouteSurfacePreference } from '../../electron/types';
 import type { CorosLinkApi } from '../../src/coroslink-api';

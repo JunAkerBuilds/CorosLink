@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { localizedText, renderLocalizedText } from '../src/i18n/messages.ts';
-import { frenchMessages, translate, t, resolveLanguage, getLanguage, getLocale, setLanguage, initializeLanguage, subscribeLanguage, formatDate, formatNumber, LANGUAGE_STORAGE_KEY } from '../src/i18n/locale.ts';
+import { frenchMessages } from '../src/i18n/allCatalogs.ts';
+import { translate, t, resolveLanguage, getLanguage, getLocale, setLanguage, initializeLanguage, subscribeLanguage, formatDate, formatNumber, LANGUAGE_STORAGE_KEY } from '../src/i18n/locale.ts';
 import { t as trainingT } from '../src/i18n/trainingLocale.ts';
 import { t as watchfaceT } from '../src/i18n/watchfacesLocale.ts';
 import { t as toolsT } from '../src/i18n/toolsLocale.ts';

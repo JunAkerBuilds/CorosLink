@@ -31,6 +31,7 @@ import {
   sumBytes,
 } from "./libraryUtils";
 import { trackAvatarColor, trackInitial } from "./trackAvatar";
+import "./libraryPanels.css";
 import {
   defineSelectionPreference,
   selectionIsOneOf,
@@ -215,6 +216,35 @@ interface LibrarySyncLayoutProps {
   localCount: number;
   watchConnected: boolean;
   syncing?: boolean;
+}
+
+// Rows render a page at a time: thousands of mounted rows made every
+// selection toggle and search keystroke re-render the whole library.
+// Selection and bulk actions still cover the complete filtered list.
+const LIBRARY_ROW_PAGE_SIZE = 200;
+
+/** Rows to render; returns to the first page when the query, filter or sort changes. */
+function useLibraryRowLimit(resetKey: string): [number, () => void] {
+  const [state, setState] = useState({ resetKey, limit: LIBRARY_ROW_PAGE_SIZE });
+  if (state.resetKey !== resetKey) {
+    setState({ resetKey, limit: LIBRARY_ROW_PAGE_SIZE });
+  }
+  const limit = state.resetKey === resetKey ? state.limit : LIBRARY_ROW_PAGE_SIZE;
+  return [limit, () => setState((current) => ({ ...current, limit: current.limit + LIBRARY_ROW_PAGE_SIZE }))];
+}
+
+function LibraryShowMore({ remaining, onShowMore }: { remaining: number; onShowMore: () => void }) {
+  if (remaining <= 0) {
+    return null;
+  }
+
+  return (
+    <div className="library-show-more">
+      <button className="secondary-button compact-button" type="button" onClick={onShowMore}>
+        {t("Show {{count}} more", { count: Math.min(LIBRARY_ROW_PAGE_SIZE, remaining) })}
+      </button>
+    </div>
+  );
 }
 
 export function LibrarySyncLayout({
@@ -428,6 +458,9 @@ export function LocalLibraryPanel({
 
     return sortLocalTrackItems(filtered, sort);
   }, [localTrackItems, searchTerms, sort, trackFilter, language]);
+  const [rowLimit, showMoreRows] = useLibraryRowLimit(
+    `${deferredSearchQuery}\u0000${trackFilter}\u0000${JSON.stringify(sort)}`,
+  );
   const visibleIds = useMemo(
     () => visibleLocalItems.map(({ track }) => track.id),
     [visibleLocalItems, language],
@@ -684,7 +717,7 @@ export function LocalLibraryPanel({
             }
           />
         ) : (
-          visibleLocalItems.map(({ track, fileName, onWatch }) => {
+          visibleLocalItems.slice(0, rowLimit).map(({ track, fileName, onWatch }) => {
             const selected = selectedIds.has(track.id);
 
             return (
@@ -766,6 +799,7 @@ export function LocalLibraryPanel({
             );
           })
         )}
+        <LibraryShowMore remaining={visibleLocalItems.length - rowLimit} onShowMore={showMoreRows} />
       </div>
 
       {someSelected ? (
@@ -876,6 +910,9 @@ export function WatchLibraryPanel({
 
     return sortWatchTrackItems(filtered, sort);
   }, [searchTerms, sort, watchTrackItems, language]);
+  const [rowLimit, showMoreRows] = useLibraryRowLimit(
+    `${deferredSearchQuery}\u0000${JSON.stringify(sort)}`,
+  );
   const visibleWatchTracks = useMemo(
     () => visibleWatchItems.map(({ track }) => track),
     [visibleWatchItems, language],
@@ -1035,7 +1072,7 @@ export function WatchLibraryPanel({
             {visibleWatchTracks.length === 0 ? (
               <LibraryEmptyState title={emptyTitle()} />
             ) : (
-              visibleWatchTracks.map((track) => {
+              visibleWatchTracks.slice(0, rowLimit).map((track) => {
                 const selected = selectedPaths.has(track.relativePath);
 
                 return (
@@ -1085,6 +1122,7 @@ export function WatchLibraryPanel({
                 );
               })
             )}
+            <LibraryShowMore remaining={visibleWatchTracks.length - rowLimit} onShowMore={showMoreRows} />
           </div>
 
           {someSelected ? (

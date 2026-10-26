@@ -1,12 +1,11 @@
 import { t, useLanguage } from "../i18n";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Download, Sparkles } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import rehypeRaw from "rehype-raw";
-import rehypeSanitize from "rehype-sanitize";
-import remarkGfm from "remark-gfm";
 import appLogo from "../../build/icon-animated.svg";
 import type { AppUpdateSnapshot } from "../../electron/types";
+
+// The Markdown pipeline loads only once a prompt is actually shown.
+const UpdateReleaseNotes = lazy(() => import("./UpdateReleaseNotes"));
 
 const DISMISSED_UPDATE_VERSION_KEY =
   "coroslink.updatePrompt.dismissedVersion";
@@ -172,19 +171,9 @@ export function UpdateAvailablePrompt({
 
         <div className="update-prompt-changelog" tabIndex={0}>
           {releaseNotes ? (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeRaw, rehypeSanitize]}
-              components={{
-                a: ({ children, ...props }) => (
-                  <a {...props} target="_blank" rel="noreferrer">
-                    {children}
-                  </a>
-                ),
-              }}
-            >
-              {releaseNotes}
-            </ReactMarkdown>
+            <Suspense fallback={null}>
+              <UpdateReleaseNotes markdown={releaseNotes} />
+            </Suspense>
           ) : (
             <p>
               {t("This release includes the latest improvements and bug fixes.")} </p>

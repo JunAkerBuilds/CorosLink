@@ -4,7 +4,6 @@ import { annotateDiagnosticRequest } from "./diagnosticsLog";
 import fs from "node:fs";
 import path from "node:path";
 import { app, nativeImage, safeStorage } from "electron";
-import QRCode from "qrcode";
 import { deleteSettings, getSetting, setSetting } from "./database";
 import {
   clearStoredCorosCredentials,
@@ -73,6 +72,10 @@ import type {
   CorosPairedDevice,
   WatchModelId
 } from "./types";
+
+// QR codes are drawn on demand; keep the library out of app startup.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const loadQRCode = () => require("qrcode") as typeof import("qrcode");
 
 // COROS accounts are region-bound: a mobile session is only valid on the host
 // its account was registered on. Hitting the wrong host returns "Account is not
@@ -3549,7 +3552,7 @@ async function requestCorosWatchfaceShareLink(
   const expiresAt = Number.isFinite(link.data?.expireTimestamp)
     ? new Date(link.data!.expireTimestamp!).toISOString()
     : new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
-  const qrDataUrl = await QRCode.toDataURL(url, {
+  const qrDataUrl = await loadQRCode().toDataURL(url, {
     margin: 1,
     width: 360,
     errorCorrectionLevel: "M"

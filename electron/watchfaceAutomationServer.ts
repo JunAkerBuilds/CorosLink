@@ -2,10 +2,10 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
+import { mcpServerSdk } from "./mcpSdk";
 import { z } from "zod/v4";
 import {
   createWatchfaceAutomationAssetStore,
@@ -519,6 +519,7 @@ export class WatchfaceAutomationServer {
   }
 
   private createMcpServer(): McpServer {
+    const { McpServer } = mcpServerSdk();
     const server = new McpServer(
       { name: this.options.name ?? "coroslink-watchface-studio", version: "1.0.0" },
       { capabilities: this.options.tools ? {} : { resources: {} }, instructions: this.options.instructions ?? (
@@ -604,7 +605,7 @@ export class WatchfaceAutomationServer {
     let session = sessionId ? this.sessions.get(sessionId) : undefined;
     if (sessionId && !session) return this.sendJsonError(response, 404, -32002, "Unknown or expired MCP session.");
     if (!session) {
-      if (request.method !== "POST" || !isInitializeRequest(body)) {
+      if (request.method !== "POST" || !mcpServerSdk().isInitializeRequest(body)) {
         return this.sendJsonError(response, 400, -32000, "A valid MCP session or initialize request is required.");
       }
       if (this.sessions.size + this.initializingSessions >= MAX_SESSIONS) {
@@ -613,7 +614,7 @@ export class WatchfaceAutomationServer {
       this.initializingSessions += 1;
       const mcpServer = this.createMcpServer();
       let transport!: StreamableHTTPServerTransport;
-      transport = new StreamableHTTPServerTransport({
+      transport = new (mcpServerSdk().StreamableHTTPServerTransport)({
         sessionIdGenerator: () => crypto.randomUUID(),
         onsessioninitialized: (id) => {
           this.sessions.set(id, { server: mcpServer, transport, lastSeen: Date.now() });

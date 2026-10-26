@@ -1,22 +1,24 @@
 import type { WatchModelId, WatchStatus } from "../electron/types";
-import apexHero from "../public/assets/apex-hero.webp";
-import apex2Hero from "../public/assets/apex-2-hero.webp";
-import apex2ProHero from "../public/assets/apex-2-pro-hero.webp";
-import apex4Hero from "../public/assets/apex-4-hero.webp";
-import apexProHero from "../public/assets/apex-pro-hero.webp";
-import nomadHero from "../public/assets/nomad-hero.webp";
-import pace2Hero from "../public/assets/pace-2-hero.webp";
-import pace3Hero from "../public/assets/pace-3-hero.webp";
-import pace4Hero from "../public/assets/pace-4-hero.webp";
-import pace4ProHero from "../public/assets/pace-4-pro-hero.png";
-import paceProHero from "../public/assets/pace-pro-hero.webp";
-import vertix2Hero from "../public/assets/vertix-2-hero.webp";
-import vertix2sHero from "../public/assets/vertix-2s-hero.webp";
 export {
   getWatchfaceDeviceProfile,
   getWatchfaceDeviceProfileByFirmware,
   type WatchfaceDeviceProfile
 } from "../electron/watchModels";
+
+// Public files, referenced by URL so the build ships one copy of each.
+const apexHero = "./assets/apex-hero.webp";
+const apex2Hero = "./assets/apex-2-hero.webp";
+const apex2ProHero = "./assets/apex-2-pro-hero.webp";
+const apex4Hero = "./assets/apex-4-hero.webp";
+const apexProHero = "./assets/apex-pro-hero.webp";
+const nomadHero = "./assets/nomad-hero.webp";
+const pace2Hero = "./assets/pace-2-hero.webp";
+const pace3Hero = "./assets/pace-3-hero.webp";
+const pace4Hero = "./assets/pace-4-hero.webp";
+const pace4ProHero = "./assets/pace-4-pro-hero.png";
+const paceProHero = "./assets/pace-pro-hero.webp";
+const vertix2Hero = "./assets/vertix-2-hero.webp";
+const vertix2sHero = "./assets/vertix-2s-hero.webp";
 
 export const PACE_PRO_BYTES = 32 * 1024 * 1024 * 1024;
 export const PACE_4_BYTES = 4 * 1024 * 1024 * 1024;

@@ -14,7 +14,8 @@ import "./native-sidebar.css";
 import "./toolbar.css";
 
 installRendererDiagnostics(window.corosLink);
-initializeLanguage();
+// Loads only the selected language's catalogs; the first render waits for them.
+const languageReady = initializeLanguage();
 
 // Older running preload builds and non-macOS windows retain the opaque fallback.
 if (window.corosLink?.nativeSidebarGlass) {
@@ -26,12 +27,14 @@ applyTheme(readStoredTheme());
 // Apply persisted per-sport colors so the heatmap tints correctly on first paint.
 applySportColors(readStoredSportColors());
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <ThemeProvider>
-      <UnitSystemProvider>
-        <App />
-      </UnitSystemProvider>
-    </ThemeProvider>
-  </React.StrictMode>
-);
+void languageReady.finally(() => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <ThemeProvider>
+        <UnitSystemProvider>
+          <App />
+        </UnitSystemProvider>
+      </ThemeProvider>
+    </React.StrictMode>
+  );
+});

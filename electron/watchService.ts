@@ -175,9 +175,18 @@ const WATCH_STATUS_CACHE_TTL_MS = 60_000;
 let cachedWatchStatus:
   | { status: WatchStatus; volumeKey: string; expiresAt: number }
   | undefined;
+// Concurrent polls (several windows, panels and the 15 s renderer poll) share
+// one scan of the same volumes instead of each walking the drive.
+let watchStatusScan:
+  | { volumeKey: string; generation: number; promise: Promise<WatchStatus> }
+  | undefined;
+// Bumped by invalidation so a scan that started before a write never caches
+// or hands out its now-stale result.
+let watchStatusGeneration = 0;
 
 export function invalidateWatchStatusCache(): void {
   cachedWatchStatus = undefined;
+  watchStatusGeneration += 1;
 }
 
 export async function getWatchStatus(): Promise<WatchStatus> {
@@ -192,51 +201,34 @@ export async function getWatchStatus(): Promise<WatchStatus> {
       return cachedWatchStatus.status;
     }
 
-    const candidates = await findDriveCandidates(volumes);
-    const selected = candidates[0];
-
-    if (!selected) {
-      const status: WatchStatus = {
-        connected: false,
-        checkedAt: new Date().toISOString(),
-        tracks: [],
-        candidates
-      };
-      cachedWatchStatus = {
-        status,
-        volumeKey,
-        expiresAt: Date.now() + WATCH_STATUS_CACHE_TTL_MS
-      };
-      return status;
+    const generation = watchStatusGeneration;
+    if (
+      watchStatusScan &&
+      watchStatusScan.volumeKey === volumeKey &&
+      watchStatusScan.generation === generation
+    ) {
+      return await watchStatusScan.promise;
     }
 
-    const musicPath = selected.musicPath;
-    const mapPath = selected.mapPath;
-    const tracks = musicPath ? listWatchTracks(musicPath) : [];
-    const model = resolveWatchModel(selected.name, selected.totalBytes);
-
-    const status: WatchStatus = {
-      connected: true,
-      checkedAt: new Date().toISOString(),
-      name: selected.name,
-      model,
-      rootPath: selected.rootPath,
-      musicPath,
-      mapPath,
-      mapSizeBytes: selected.mapSizeBytes,
-      mapFileCount: selected.mapFileCount,
-      totalBytes: selected.totalBytes,
-      freeBytes: selected.freeBytes,
-      usedBytes: selected.usedBytes,
-      tracks,
-      candidates
-    };
-    cachedWatchStatus = {
-      status,
+    const scan = {
       volumeKey,
-      expiresAt: Date.now() + WATCH_STATUS_CACHE_TTL_MS
+      generation,
+      promise: scanWatchStatus(volumes)
     };
-    return status;
+    watchStatusScan = scan;
+    try {
+      const status = await scan.promise;
+      if (generation === watchStatusGeneration) {
+        cachedWatchStatus = {
+          status,
+          volumeKey,
+          expiresAt: Date.now() + WATCH_STATUS_CACHE_TTL_MS
+        };
+      }
+      return status;
+    } finally {
+      if (watchStatusScan === scan) watchStatusScan = undefined;
+    }
   } catch (error) {
     return {
       connected: false,
@@ -246,6 +238,44 @@ export async function getWatchStatus(): Promise<WatchStatus> {
       error: error instanceof Error ? error.message : String(error)
     };
   }
+}
+
+async function scanWatchStatus(volumes: RawVolume[]): Promise<WatchStatus> {
+  const candidates = await findDriveCandidates(volumes);
+  const selected = candidates[0];
+
+  if (!selected) {
+    const status: WatchStatus = {
+      connected: false,
+      checkedAt: new Date().toISOString(),
+      tracks: [],
+      candidates
+    };
+    return status;
+  }
+
+  const musicPath = selected.musicPath;
+  const mapPath = selected.mapPath;
+  const tracks = musicPath ? await listWatchTracks(musicPath) : [];
+  const model = resolveWatchModel(selected.name, selected.totalBytes);
+
+  const status: WatchStatus = {
+    connected: true,
+    checkedAt: new Date().toISOString(),
+    name: selected.name,
+    model,
+    rootPath: selected.rootPath,
+    musicPath,
+    mapPath,
+    mapSizeBytes: selected.mapSizeBytes,
+    mapFileCount: selected.mapFileCount,
+    totalBytes: selected.totalBytes,
+    freeBytes: selected.freeBytes,
+    usedBytes: selected.usedBytes,
+    tracks,
+    candidates
+  };
+  return status;
 }
 
 export function getWatchConnectionSmokeOption(): WatchConnectionSmokeOptionId {
@@ -438,7 +468,7 @@ async function findDriveCandidates(
     const hasMapFolder = Boolean(mapPath);
 
     const storage = getStorageStats(volume.rootPath, volume.name);
-    const mapStats = mapPath ? getDirectoryStats(mapPath) : {};
+    const mapStats = mapPath ? await getDirectoryStats(mapPath) : {};
     candidates.push({
       name: volume.name,
       rootPath: volume.rootPath,
@@ -557,33 +587,46 @@ function listLinuxVolumes(): RawVolume[] {
   });
 }
 
-function listWatchTracks(musicPath: string): WatchTrack[] {
-  const tracks: WatchTrack[] = [];
+// Removable storage can be slow; walk it asynchronously so a cold scan never
+// blocks the main process, statting a bounded number of files at a time.
+const WATCH_SCAN_STAT_CONCURRENCY = 16;
 
-  function walk(currentPath: string): void {
-    for (const entry of fs.readdirSync(currentPath, { withFileTypes: true })) {
+async function walkFiles(
+  rootPath: string,
+  include: (name: string) => boolean,
+  visit: (absolutePath: string, stats: fs.Stats) => void
+): Promise<void> {
+  const files: string[] = [];
+  async function walk(currentPath: string): Promise<void> {
+    for (const entry of await fs.promises.readdir(currentPath, { withFileTypes: true })) {
       const absolutePath = path.join(currentPath, entry.name);
       if (entry.isDirectory()) {
-        walk(absolutePath);
-        continue;
+        await walk(absolutePath);
+      } else if (entry.isFile() && include(entry.name)) {
+        files.push(absolutePath);
       }
-
-      if (!entry.isFile() || !isWatchMusicFile(entry.name)) {
-        continue;
-      }
-
-      const stats = fs.statSync(absolutePath);
-      tracks.push({
-        name: entry.name,
-        relativePath: path.relative(musicPath, absolutePath),
-        absolutePath,
-        sizeBytes: stats.size,
-        modifiedAt: stats.mtime.toISOString()
-      });
     }
   }
 
-  walk(musicPath);
+  await walk(rootPath);
+  for (let start = 0; start < files.length; start += WATCH_SCAN_STAT_CONCURRENCY) {
+    const batch = files.slice(start, start + WATCH_SCAN_STAT_CONCURRENCY);
+    const stats = await Promise.all(batch.map((file) => fs.promises.stat(file)));
+    batch.forEach((file, index) => visit(file, stats[index]));
+  }
+}
+
+async function listWatchTracks(musicPath: string): Promise<WatchTrack[]> {
+  const tracks: WatchTrack[] = [];
+  await walkFiles(musicPath, isWatchMusicFile, (absolutePath, stats) => {
+    tracks.push({
+      name: path.basename(absolutePath),
+      relativePath: path.relative(musicPath, absolutePath),
+      absolutePath,
+      sizeBytes: stats.size,
+      modifiedAt: stats.mtime.toISOString()
+    });
+  });
   return tracks.sort((left, right) => left.name.localeCompare(right.name));
 }
 
@@ -627,33 +670,18 @@ function getStorageStats(rootPath: string, volumeName: string): StorageStats {
   }
 }
 
-function getDirectoryStats(directoryPath: string): {
+async function getDirectoryStats(directoryPath: string): Promise<{
   mapSizeBytes?: number;
   mapFileCount?: number;
-} {
+}> {
   let sizeBytes = 0;
   let fileCount = 0;
 
-  function walk(currentPath: string): void {
-    for (const entry of fs.readdirSync(currentPath, { withFileTypes: true })) {
-      const absolutePath = path.join(currentPath, entry.name);
-      if (entry.isDirectory()) {
-        walk(absolutePath);
-        continue;
-      }
-
-      if (!entry.isFile()) {
-        continue;
-      }
-
-      const stats = fs.statSync(absolutePath);
+  try {
+    await walkFiles(directoryPath, () => true, (_absolutePath, stats) => {
       sizeBytes += stats.size;
       fileCount += 1;
-    }
-  }
-
-  try {
-    walk(directoryPath);
+    });
     return {
       mapSizeBytes: sizeBytes,
       mapFileCount: fileCount

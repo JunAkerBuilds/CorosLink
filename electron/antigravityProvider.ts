@@ -28,8 +28,9 @@ import type {
 // data folder and gives it a private GEMINI_HOME, so its sign-in, settings
 // and conversations never touch the athlete's own Gemini or Antigravity setup.
 
+// Loaded when the agent is installed, not at app startup.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const unzipper = require("unzipper") as {
+const loadUnzipper = () => require("unzipper") as {
   Open: {
     file(filename: string): Promise<{
       files: Array<{ path: string; type: string; uncompressedSize: number; stream(): Readable }>;
@@ -286,7 +287,7 @@ async function runInstall(
   const staging = `${dirs.runtime}.partial-${crypto.randomUUID().slice(0, 8)}`;
   try {
     await mkdir(staging, { recursive: true, mode: 0o700 });
-    const directory = await unzipper.Open.file(archive);
+    const directory = await loadUnzipper().Open.file(archive);
     const members = directory.files.filter((entry) => entry.type === "File");
     const expected = new Set([names.executable, names.harness]);
     if (

@@ -1,5 +1,4 @@
 import { app, powerSaveBlocker, safeStorage, shell } from "electron";
-import QRCode from "qrcode";
 import type { CoachSessionHub } from "../coachHub/coachSessionHub";
 import type { ChatProvider, ChatSettings } from "../types";
 import type { ChatModelOption } from "../chatModels";
@@ -26,6 +25,10 @@ import {
   type RemoteSettingsStore
 } from "./identity";
 import { RemoteServer, remoteLanAddresses, type RelayTrust } from "./server";
+
+// QR codes are drawn on demand; keep the library out of app startup.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const loadQRCode = () => require("qrcode") as typeof import("qrcode");
 
 /**
  * Remote access as the app runs it: one environment server for the Coach hub,
@@ -291,7 +294,7 @@ export class RemoteAccess {
       name: computerName(),
       secret: pairing.secret
     });
-    const qrDataUrl = await QRCode.toDataURL(link, { margin: 1, width: 360, errorCorrectionLevel: "M" });
+    const qrDataUrl = await loadQRCode().toDataURL(link, { margin: 1, width: 360, errorCorrectionLevel: "M" });
     if (this.pairingTimer) clearTimeout(this.pairingTimer);
     // Tell the window when the code lapses unused.
     this.pairingTimer = setTimeout(() => this.changed(), pairing.expiresAt - Date.now() + 500);

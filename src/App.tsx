@@ -322,7 +322,11 @@ function getLatestReleasePreview(changelog: string): {
   };
 }
 
-const DEV_UPDATE_PREVIEW = getLatestReleasePreview(changelogMarkdown);
+// Production builds drop the changelog text and parser; only the development
+// update preview reads it.
+const DEV_UPDATE_PREVIEW = IS_DEVELOPMENT_BUILD
+  ? getLatestReleasePreview(changelogMarkdown)
+  : null;
 const TRAINING_HISTORY_PAGE_SIZE = 100;
 const TRAINING_HISTORY_MAX_PAGES = 100;
 
@@ -1499,7 +1503,7 @@ export default function App() {
   }
 
   function showDevUpdatePreview() {
-    if (!IS_DEVELOPMENT_BUILD) {
+    if (!IS_DEVELOPMENT_BUILD || !DEV_UPDATE_PREVIEW) {
       return;
     }
 

@@ -24,6 +24,7 @@ import {
 } from "three";
 import type { GeoHeatBucket, GlobePoint } from "./activityVisitHeatmap";
 import { Globe } from "./Globe";
+import { isWindowCovered, subscribeWindowCover } from "../hooks/windowCover";
 
 interface ActivityGlobeRendererProps {
   frameKey: string;
@@ -562,8 +563,9 @@ const ActivityGlobeRendererComponent = forwardRef<
   );
 
   // globe.gl redraws every frame even when nothing moves. Stop the loop while
-  // the window is backgrounded (the same rule as body.is-backgrounded) or the
-  // globe is scrolled out of view; the canvas keeps showing its last frame.
+  // the window is backgrounded (the same rule as body.is-backgrounded), the
+  // globe is scrolled out of view, or a full-window overlay such as the
+  // welcome tour covers it; the canvas keeps showing its last frame.
   useEffect(() => {
     const container = containerRef.current;
     if (!ready || !container) {
@@ -573,7 +575,8 @@ const ActivityGlobeRendererComponent = forwardRef<
     let paused = false;
     const sync = () => {
       const globe = globeRef.current;
-      const shouldPause = !onScreen || document.hidden || !document.hasFocus();
+      const shouldPause =
+        !onScreen || document.hidden || !document.hasFocus() || isWindowCovered();
       if (!globe || shouldPause === paused) {
         return;
       }
@@ -589,12 +592,14 @@ const ActivityGlobeRendererComponent = forwardRef<
       sync();
     });
     observer.observe(container);
+    const unsubscribeCover = subscribeWindowCover(sync);
     document.addEventListener("visibilitychange", sync);
     window.addEventListener("focus", sync);
     window.addEventListener("blur", sync);
     sync();
     return () => {
       observer.disconnect();
+      unsubscribeCover();
       document.removeEventListener("visibilitychange", sync);
       window.removeEventListener("focus", sync);
       window.removeEventListener("blur", sync);

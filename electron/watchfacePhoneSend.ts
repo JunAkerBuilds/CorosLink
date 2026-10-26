@@ -1,8 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import http from "node:http";
 import os from "node:os";
-import QRCode from "qrcode";
 import type { WatchfacePhoneSend, WatchfacePhoneSendStatus } from "./watchfacePhoneSendTypes";
+
+// QR codes are drawn on demand; keep the library out of app startup.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const loadQRCode = () => require("qrcode") as typeof import("qrcode");
 
 /**
  * Send to iPhone: serves one final watch-face archive on this computer's local
@@ -153,7 +156,7 @@ export async function startWatchfacePhoneSend(
 
   const name = input.name.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, MAX_NAME_LENGTH) || "Custom watch face";
   const link = encodePhoneFaceLink({ hosts, port, token, sha256, size: data.length, name, model: input.model });
-  const qrDataUrl = await QRCode.toDataURL(link, { margin: 1, width: 360, errorCorrectionLevel: "M" });
+  const qrDataUrl = await loadQRCode().toDataURL(link, { margin: 1, width: 360, errorCorrectionLevel: "M" });
   return { link, qrDataUrl, name, size: data.length, hosts, expiresAt };
 }
 

@@ -1770,4 +1770,5 @@ export const toolsFrench: Record<string, string> = {
   "Which Google plans include Antigravity": "Offres Google qui incluent Antigravity",
   "Antigravity": "Antigravity",
   "Google's Antigravity agent with your Google account": "L’agent Antigravity de Google avec votre compte Google",
+  "Show {{count}} more": "Afficher {{count}} de plus",
 };

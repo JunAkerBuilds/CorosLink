@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import "../src/i18n/allCatalogs.ts";
 import { getLanguage, setLanguage } from "../src/i18n/locale.ts";
 import { t } from "../src/i18n/watchfacesLocale.ts";
 import {

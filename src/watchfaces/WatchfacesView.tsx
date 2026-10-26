@@ -5,6 +5,8 @@ import {
   type CSSProperties,
   type FormEvent,
   type ReactNode,
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -81,7 +83,7 @@ import {
 import { BatteryHistoryPanel } from "./BatteryHistoryPanel";
 import { OnWatchPanel } from "./OnWatchPanel";
 import { watchLinkSupported } from "./watchLink";
-import { carriedWatchfacePreferences, WatchfaceEditor, type WatchfaceCarriedPreferences } from "./WatchfaceEditor";
+import { carriedWatchfacePreferences, type WatchfaceCarriedPreferences } from "./watchfaceCarriedPreferences";
 import { renderDesignBackground } from "./watchfaceBackground";
 import { deriveDesignDetails, toStudioOptions } from "./watchfaceCompose";
 import { pickScratchBaseTheme } from "./watchfaceBlankStart";
@@ -278,6 +280,8 @@ interface WatchfaceConversionDraft {
 const DEFAULT_FIRMWARE_TYPE = "COROS W332";
 const DEFAULT_MODEL_VERSION = "W332-3.1708.0";
 const IS_DEVELOPMENT_BUILD = import.meta.env.DEV;
+// Browsing faces never needs the editor; load it when a face is opened.
+const WatchfaceEditor = lazy(() => import("./WatchfaceEditor").then(module => ({ default: module.WatchfaceEditor })));
 const COMMUNITY_MODEL_BY_WATCH: Partial<Record<WatchModelId, string>> = {
   "pace-4-pro": "PACE 4 Pro",
   "pace-pro": "PACE Pro",
@@ -1476,34 +1480,36 @@ export function WatchfacesView({
         }`}
         aria-hidden={!active}
       >
-        <WatchfaceEditor
-          key={studioSession.id}
-          api={api}
-          active={active && !conversionDraft && !conversionBusy}
-          conversionBusy={conversionBusy || Boolean(conversionDraft)}
-          sessionId={studioSession.id}
-          starterArchive={studioSession.archive}
-          targetFirmwareType={studioSession.targetFirmwareType}
-          targetWatchModel={studioSession.targetWatchModel}
-          initialDesign={studioSession.initialDesign}
-          startBlank={studioSession.startBlank}
-          carriedPreferences={studioSession.carriedPreferences}
-          initialProjectId={studioSession.project?.projectId}
-          initialProjectName={studioSession.project?.name ?? studioSession.initialName}
-          initiallyDirty={studioSession.initiallyDirty}
-          showDevelopmentTools={IS_DEVELOPMENT_BUILD && showDevelopmentTools}
-          onBack={returnToHub}
-          backRequestId={queuedCommunityRequest?.requestId}
-          onBackCancelled={() => setQueuedCommunityRequest(null)}
-          onArchiveCreated={setBuiltArchive}
-          onPublish={openPublish}
-          onProjectSaved={handleProjectSaved}
-          onConvertTarget={beginWatchConversion}
-          onAutomationConvert={openAutomatedConversion}
-          onError={showStudioError}
-          onNotice={showStudioNotice}
-          onClearMessages={clearMessages}
-        />
+        <Suspense fallback={<div className="watchface-editor-loading" role="status" aria-label={t("Loading")} />}>
+          <WatchfaceEditor
+            key={studioSession.id}
+            api={api}
+            active={active && !conversionDraft && !conversionBusy}
+            conversionBusy={conversionBusy || Boolean(conversionDraft)}
+            sessionId={studioSession.id}
+            starterArchive={studioSession.archive}
+            targetFirmwareType={studioSession.targetFirmwareType}
+            targetWatchModel={studioSession.targetWatchModel}
+            initialDesign={studioSession.initialDesign}
+            startBlank={studioSession.startBlank}
+            carriedPreferences={studioSession.carriedPreferences}
+            initialProjectId={studioSession.project?.projectId}
+            initialProjectName={studioSession.project?.name ?? studioSession.initialName}
+            initiallyDirty={studioSession.initiallyDirty}
+            showDevelopmentTools={IS_DEVELOPMENT_BUILD && showDevelopmentTools}
+            onBack={returnToHub}
+            backRequestId={queuedCommunityRequest?.requestId}
+            onBackCancelled={() => setQueuedCommunityRequest(null)}
+            onArchiveCreated={setBuiltArchive}
+            onPublish={openPublish}
+            onProjectSaved={handleProjectSaved}
+            onConvertTarget={beginWatchConversion}
+            onAutomationConvert={openAutomatedConversion}
+            onError={showStudioError}
+            onNotice={showStudioNotice}
+            onClearMessages={clearMessages}
+          />
+        </Suspense>
         {conversionDraft ? (
           <WatchfaceConversionDialog name={conversionDraft.name} sourceFirmwareType={conversionDraft.sourceFirmwareType}
             bakes={Boolean(conversionDraft.bakeForWatch)}

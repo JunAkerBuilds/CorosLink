@@ -1,6 +1,6 @@
 @font-face {
   font-family: "Kaushan Script";
-  src: url("../../public/assets/fonts/kaushan-script/KaushanScript-Regular.ttf") format("truetype");
+  src: url("/assets/fonts/kaushan-script/KaushanScript-Regular.ttf") format("truetype");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
@@ -19,7 +19,7 @@
   inset: -20px 10% 0 38%;
   pointer-events: none;
   opacity: .75;
-  background: url("../../public/assets/training-hub/Login-page-bg.png") center 68% / cover no-repeat;
+  background: url("/assets/training-hub/Login-page-bg.png") center 68% / cover no-repeat;
   mask-image: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent);
 }
 

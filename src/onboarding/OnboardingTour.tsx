@@ -33,6 +33,7 @@ import {
 import logoBase from "../../build/icon-base.svg";
 import logoSync from "../../build/icon-sync.svg";
 import { LANGUAGES, formatNumber, t, useLanguage } from "../i18n";
+import { useCoversWindow } from "../hooks/windowCover";
 import { useTheme } from "../theme/ThemeProvider";
 import type { Theme } from "../theme/theme";
 import { useUnitSystem } from "../units/UnitSystemProvider";
@@ -497,6 +498,7 @@ export interface OnboardingTourProps {
 
 export function OnboardingTour({ trainingConnected, watchConnected, onClose }: OnboardingTourProps) {
   useLanguage();
+  useCoversWindow();
   const [index, setIndex] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [leaving, setLeaving] = useState(false);

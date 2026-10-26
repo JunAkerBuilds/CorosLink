@@ -1,4 +1,4 @@
-import { getLocale, formatNumber, t } from "../i18n/toolsLocale";
+import { getDateTimeFormat, formatNumber, t } from "../i18n/toolsLocale";
 import type { LocalTrack, WatchTrack } from "../../electron/types";
 import {
   musicFileNamesMatch,
@@ -107,13 +107,15 @@ export function formatBytes(bytes: number): string {
   return `${formatNumber(value, { minimumFractionDigits: value >= 10 ? 0 : 1, maximumFractionDigits: value >= 10 ? 0 : 1 })} ${t(units[exponent])}`;
 }
 
+const LIBRARY_DATE_OPTIONS: Intl.DateTimeFormatOptions = {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+};
+
 export function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(getLocale(), {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return getDateTimeFormat(LIBRARY_DATE_OPTIONS).format(new Date(value));
 }
 
 export function sumBytes(tracks: { sizeBytes: number }[]): number {

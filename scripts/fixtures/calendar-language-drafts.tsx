@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { WorkoutEditorModal } from "../../src/calendar/WorkoutEditorModal";
 import { CalendarConnections } from "../../src/calendar/CalendarConnections";
 import { UnitSystemProvider } from "../../src/units/UnitSystemProvider";
+import '../../src/i18n/allCatalogs';
 import { setLanguage } from "../../src/i18n";
 import type { CorosLinkApi } from "../../src/coroslink-api";
 import type { WorkoutEditorContext, WorkoutEditorDocument, TrainingPlanEntry } from "../../electron/types";

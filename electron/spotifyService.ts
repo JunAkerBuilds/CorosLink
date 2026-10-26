@@ -6,7 +6,11 @@ import http from "node:http";
 import https from "node:https";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
-import SpotifyWebApi from "spotify-web-api-node";
+import type SpotifyWebApi from "spotify-web-api-node";
+
+// The Spotify client is loaded the first time Spotify is used, not at startup.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const loadSpotifyWebApi = () => require("spotify-web-api-node") as typeof SpotifyWebApi;
 import {
   deleteSettings,
   getSetting,
@@ -158,7 +162,8 @@ export async function loginSpotify(
 ): Promise<SpotifyStatus> {
   const token = await authorizeGrant(APP_GRANT, parentWindow);
 
-  const api = new SpotifyWebApi({ accessToken: token.access_token });
+  const SpotifyClient = loadSpotifyWebApi();
+  const api = new SpotifyClient({ accessToken: token.access_token });
   const profile = await api.getMe();
   setSetting(SETTINGS.userId, profile.body.id);
   setSetting(
@@ -518,7 +523,8 @@ function firstDownloadedTrack(tracks: LocalTrack[]): LocalTrack {
 }
 
 async function getAuthorizedSpotifyApi(): Promise<SpotifyWebApi> {
-  return new SpotifyWebApi({
+  const SpotifyClient = loadSpotifyWebApi();
+  return new SpotifyClient({
     accessToken: await getGrantAccessToken(APP_GRANT)
   });
 }
