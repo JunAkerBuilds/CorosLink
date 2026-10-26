@@ -94,7 +94,7 @@ A rotatable 3D muscle map that shades each muscle by how hard you've worked it, 
 
 ### Watch Face Studio (experimental)
 
-Design custom COROS watch faces in a layer-based editor — fonts, colors, artwork, live metrics, and an always-on variant — then hand it off to the COROS app via QR. Browse and remix community faces, or let the built-in AI make edits for you.
+Design custom COROS watch faces in a layer-based editor — fonts, colors, artwork, live metrics, and an always-on variant — then hand it off to the COROS app via QR. Browse and remix community faces, or let the built-in AI make edits for you. See the [Watch Face Studio guide](docs/watch-face-studio.md) for everything the editor offers.
 
 <p align="center">
   <picture>
