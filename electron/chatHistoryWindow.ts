@@ -17,6 +17,7 @@ export const CHAT_HISTORY_TOKEN_BUDGETS: Record<ChatProvider, number> = {
   chatgpt: 48_000,
   "claude-code": 48_000,
   "gemini-cli": 48_000,
+  antigravity: 48_000,
   openrouter: 32_000,
   local: 8_000
 };

@@ -19930,7 +19930,8 @@ tr.data-intervals-row-missing {
   --chat-select-tone-soft: rgba(217, 119, 87, 0.15);
 }
 
-.chat-provider-menu .app-select-option[data-value="gemini-cli"] {
+.chat-provider-menu .app-select-option[data-value="gemini-cli"],
+.chat-provider-menu .app-select-option[data-value="antigravity"] {
   --chat-select-tone: #5ea8f2;
   --chat-select-tone-strong: #a3cdfb;
   --chat-select-tone-soft: rgba(94, 168, 242, 0.15);
@@ -24051,7 +24052,10 @@ tr.data-intervals-row-missing {
 
 :root[data-theme="paper"]
   .chat-provider-menu
-  .app-select-option[data-value="gemini-cli"] {
+  .app-select-option[data-value="gemini-cli"],
+:root[data-theme="paper"]
+  .chat-provider-menu
+  .app-select-option[data-value="antigravity"] {
   --chat-select-tone: #2a6db5;
   --chat-select-tone-strong: #1d5290;
   --chat-select-tone-soft: rgba(42, 109, 181, 0.11);

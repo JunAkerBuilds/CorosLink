@@ -4,6 +4,7 @@ import {
   Cpu,
   Gem,
   MessageSquareText,
+  Orbit,
   Plug,
   Smartphone,
   Sparkles,
@@ -20,6 +21,7 @@ export type ChatSettingsSectionId =
   | "openrouter"
   | "claude"
   | "gemini"
+  | "antigravity"
   | "local"
   | "mcp";
 
@@ -77,6 +79,13 @@ export const CHAT_SETTINGS_SECTIONS: ReadonlyArray<{
     label: "Gemini",
     description: "Use Gemini CLI signed in on this computer",
     icon: Gem,
+    group: "Providers"
+  },
+  {
+    id: "antigravity",
+    label: "Antigravity",
+    description: "Google's Antigravity agent with your Google account",
+    icon: Orbit,
     group: "Providers"
   },
   {

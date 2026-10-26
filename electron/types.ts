@@ -3075,7 +3075,13 @@ export interface CoachInputPrompt {
   answeredAt?: number;
 }
 
-export type ChatProvider = "chatgpt" | "claude-code" | "gemini-cli" | "openrouter" | "local";
+export type ChatProvider =
+  | "chatgpt"
+  | "claude-code"
+  | "gemini-cli"
+  | "antigravity"
+  | "openrouter"
+  | "local";
 
 export type ClaudeCodeConnectionState =
   | "not-installed"
@@ -3150,6 +3156,46 @@ export interface GeminiCliConnectionTest {
   message: string;
 }
 
+export type AntigravityConnectionState =
+  | ClaudeCodeConnectionState
+  | "installing"
+  | "unsupported";
+
+export interface AntigravityConfig {
+  /** A model id from the account's list. Empty = the account default. */
+  model?: string;
+  lastConnectionStatus?: AntigravityConnectionState;
+  lastCheckedAt?: string;
+}
+
+export interface AntigravityInstallProgress {
+  phase: "downloading" | "extracting";
+  receivedBytes: number;
+  totalBytes: number;
+}
+
+export interface AntigravityStatus {
+  state: AntigravityConnectionState;
+  /** The runtime is downloaded and verified. */
+  installed: boolean;
+  authenticated: boolean;
+  /** The pinned runtime release. */
+  version?: string;
+  /** The runtime download's size for this computer. */
+  downloadBytes?: number;
+  install?: AntigravityInstallProgress;
+  /** Google's sign-in page while a sign-in waits, to reopen if the browser tab was closed. */
+  signInUrl?: string;
+  checkedAt: string;
+  message: string;
+}
+
+export interface AntigravityConnectionTest {
+  ok: boolean;
+  status: AntigravityStatus;
+  message: string;
+}
+
 export interface LocalChatConfig {
   /** OpenAI-compatible API base URL, normalized to end in /v1. */
   baseUrl: string;
@@ -3202,6 +3248,7 @@ export interface ChatSettings {
   chatgpt: ChatGptConfig;
   claudeCode: ClaudeCodeConfig;
   geminiCli: GeminiCliConfig;
+  antigravity: AntigravityConfig;
   openRouter: OpenRouterConfig;
   local: LocalChatConfig;
   sidebarOpen?: boolean;

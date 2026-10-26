@@ -36,6 +36,10 @@ export const GEMINI_MODEL_OPTIONS: ChatModelOption[] = [
   { value: "flash-lite", label: "Gemini Flash-Lite" }
 ];
 
+// Antigravity lists the account's models when a session starts; until then
+// only the account default is offered.
+export const ANTIGRAVITY_MODEL_OPTIONS: ChatModelOption[] = [{ value: "", label: "Default" }];
+
 export const OPENROUTER_MODEL_OPTIONS: ChatModelOption[] = [
   { value: "openrouter/auto", label: "Auto Router" },
   { value: "openrouter/free", label: "Free Router" }
@@ -76,6 +80,7 @@ export function getChatGptModelCandidates(
 export function getChatModelOptions(provider: string): ChatModelOption[] {
   if (provider === "claude-code") return CLAUDE_MODEL_OPTIONS;
   if (provider === "gemini-cli") return GEMINI_MODEL_OPTIONS;
+  if (provider === "antigravity") return ANTIGRAVITY_MODEL_OPTIONS;
   if (provider === "openrouter") return OPENROUTER_MODEL_OPTIONS;
   return CHATGPT_MODEL_OPTIONS;
 }

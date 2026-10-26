@@ -37,6 +37,7 @@ let chatSettings = {
   chatgpt: {},
   claudeCode: { model: "opus" },
   geminiCli: { model: "flash" },
+  antigravity: {},
   openRouter: { model: "openrouter/auto" },
   local: { model: "llama3" }
 };
@@ -415,14 +416,16 @@ try {
     // Provider and model: readable by anyone, changed with coach:operate, and shown to every client.
     const catalog = (await view.call("coach.getModels")).result;
     assert.equal(catalog.provider, "claude-code");
-    assert.deepEqual(catalog.providers.map((row) => row.id), ["chatgpt", "claude-code", "gemini-cli", "openrouter", "local"]);
+    assert.deepEqual(catalog.providers.map((row) => row.id), ["chatgpt", "claude-code", "gemini-cli", "antigravity", "openrouter", "local"]);
     assert.equal(catalog.providers[1].model, "opus");
     assert.deepEqual(catalog.providers[1].models.map((row) => row.value), ["", "opus"], "the live Claude list");
     assert.ok(catalog.providers[0].models.length > 1, "ChatGPT falls back to the static list");
     assert.equal(catalog.providers[2].label, "Gemini");
     assert.equal(catalog.providers[2].model, "flash");
     assert.ok(catalog.providers[2].models.some((row) => row.value === "flash"), "Gemini falls back to its aliases");
-    assert.deepEqual(catalog.providers[4].models, [{ value: "llama3", label: "llama3" }]);
+    assert.equal(catalog.providers[3].label, "Antigravity");
+    assert.deepEqual(catalog.providers[3].models, [{ value: "", label: "Default" }], "Antigravity offers the account default until signed in");
+    assert.deepEqual(catalog.providers[5].models, [{ value: "llama3", label: "llama3" }]);
     assert.equal((await view.call("coach.setModel", { provider: "chatgpt", model: "gpt-5.5" })).error.requiredPermission, "coach:operate");
     assert.equal((await a.call("coach.setModel", { provider: "nope" })).error.code, "invalid");
     const changed = (await a.call("coach.setModel", { provider: "chatgpt", model: "gpt-5.5" })).result;

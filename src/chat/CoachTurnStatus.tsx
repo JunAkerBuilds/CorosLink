@@ -10,6 +10,7 @@ const CLOCK_AFTER_SECONDS = 3;
 function providerName(provider: ChatProvider): string {
   if (provider === "claude-code") return "Claude";
   if (provider === "gemini-cli") return "Gemini";
+  if (provider === "antigravity") return "Antigravity";
   if (provider === "openrouter") return "OpenRouter";
   if (provider === "local") return t("Local model");
   return "ChatGPT";

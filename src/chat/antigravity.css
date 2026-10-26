@@ -1,0 +1,41 @@
+/* Antigravity's setup panel and settings section; layout comes from the shared
+   CLI provider styles (chat-claude-*), only the download bar is its own. */
+
+.chat-antigravity-login-panel > svg {
+  color: #a3cdfb;
+}
+
+:root[data-theme="paper"] .chat-antigravity-login-panel > svg {
+  color: #2a6db5;
+}
+
+.antigravity-progress {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  height: 4px;
+  margin-top: 8px;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  appearance: none;
+  background: color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+
+.chat-login-panel .antigravity-progress {
+  margin: 4px auto 0;
+}
+
+.antigravity-progress::-webkit-progress-bar {
+  background: transparent;
+}
+
+.antigravity-progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: #5ea8f2;
+  transition: width 0.3s ease;
+}
+
+:root[data-theme="paper"] .antigravity-progress::-webkit-progress-value {
+  background: #2a6db5;
+}

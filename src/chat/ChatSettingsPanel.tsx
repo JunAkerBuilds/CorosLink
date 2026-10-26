@@ -26,6 +26,7 @@ import type {
 import { CoachInstructionsSettings } from "./CoachInstructionsSettings";
 import { RemoteAccessSettings } from "./RemoteAccessSettings";
 import { McpServersPanel } from "./McpServersPanel";
+import { AntigravitySettingsSection, type AntigravityControls } from "./antigravity";
 import { formatChatModelLabel, useChatModelOptions } from "./ModelSwitch";
 import {
   ChatSettingsSectionHeader,
@@ -91,6 +92,7 @@ export function ChatSettingsPanel({
   authStatus,
   claudeStatus,
   gemini,
+  antigravity,
   openRouterApiKey,
   openRouterConnection,
   localApiKey,
@@ -134,6 +136,7 @@ export function ChatSettingsPanel({
   authStatus: ChatAuthStatus | null;
   claudeStatus: ClaudeCodeStatus | null;
   gemini: GeminiSettingsControls;
+  antigravity: AntigravityControls;
   openRouterApiKey: string;
   openRouterConnection: OpenRouterConnectionTest | null;
   localApiKey: string;
@@ -657,6 +660,13 @@ export function ChatSettingsPanel({
         <p className="chat-settings-copy">
           {t("Gemini gets the same Coach tools as ChatGPT; its own file, shell, and web tools stay off. Coaching prompts and the COROS data it requests go to Google under your Gemini CLI sign-in. Drafts stay local until you click an upload or delete button.")}</p>
       </section>
+
+      <AntigravitySettingsSection
+        api={api}
+        chatSettings={chatSettings}
+        controls={antigravity}
+        busy={busy}
+      />
 
       <section
         className="chat-settings-section"

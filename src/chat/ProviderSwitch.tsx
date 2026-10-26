@@ -1,5 +1,5 @@
 import { t, useLanguage } from "../i18n/tools";
-import { Bot, Gem, Network, Sparkles, Terminal } from "lucide-react";
+import { Bot, Gem, Network, Orbit, Sparkles, Terminal } from "lucide-react";
 import type { ChatProvider } from "../../electron/types";
 import { SelectDropdown } from "../components/SelectDropdown";
 
@@ -7,13 +7,14 @@ const OPTIONS: Array<{ value: ChatProvider; label: string }> = [
   { value: "chatgpt", label: "ChatGPT" },
   { value: "claude-code", label: "Claude" },
   { value: "gemini-cli", label: "Gemini" },
+  { value: "antigravity", label: "Antigravity" },
   { value: "openrouter", label: "OpenRouter" },
   { value: "local", label: "Local model" }
 ];
 
 function getProviderTone(provider: ChatProvider) {
   if (provider === "claude-code") return "claude";
-  if (provider === "gemini-cli") return "gemini";
+  if (provider === "gemini-cli" || provider === "antigravity") return "gemini";
   if (provider === "openrouter") return "openrouter";
   if (provider === "local") return "local";
   return "gpt";
@@ -25,6 +26,9 @@ function renderProviderIcon(provider: ChatProvider) {
   }
   if (provider === "gemini-cli") {
     return <Gem size={14} strokeWidth={2.1} aria-hidden="true" />;
+  }
+  if (provider === "antigravity") {
+    return <Orbit size={14} strokeWidth={2.1} aria-hidden="true" />;
   }
   if (provider === "local") {
     return <Bot size={14} strokeWidth={2.1} aria-hidden="true" />;

@@ -75,6 +75,7 @@ function calendarDay(date = new Date()): string {
 function providerName(provider: ChatProvider): string {
   if (provider === "claude-code") return "Claude Code";
   if (provider === "gemini-cli") return "Gemini CLI";
+  if (provider === "antigravity") return "Antigravity";
   if (provider === "local") return "Local model";
   return "ChatGPT";
 }
@@ -211,6 +212,9 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
       } else if (settings.provider === "gemini-cli") {
         const status = await api.getGeminiCliStatus();
         if (active) setAvailability({ provider: settings.provider, label, ready: status.authenticated, detail: status.authenticated ? status.message : "Connect Gemini CLI in Training Coach settings." });
+      } else if (settings.provider === "antigravity") {
+        const status = await api.getAntigravityStatus();
+        if (active) setAvailability({ provider: settings.provider, label, ready: status.authenticated, detail: status.authenticated ? status.message : "Set up Antigravity in Training Coach settings." });
       } else {
         const configured = Boolean(settings.local.baseUrl.trim() && settings.local.model.trim());
         let ready = configured;

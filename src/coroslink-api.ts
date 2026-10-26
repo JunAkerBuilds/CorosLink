@@ -127,6 +127,8 @@ import type {
   ClaudeCodeStatus,
   GeminiCliConnectionTest,
   GeminiCliStatus,
+  AntigravityConnectionTest,
+  AntigravityStatus,
   PersistedChatEntry,
   ChatStreamStart,
   ChatStreamToken,
@@ -861,6 +863,15 @@ export interface CorosLinkApi {
   connectGeminiCli: () => Promise<GeminiCliStatus>;
   testGeminiCliConnection: () => Promise<GeminiCliConnectionTest>;
   openGeminiCliSetupGuide: (topic: "install" | "sign-in") => Promise<void>;
+  getAntigravityStatus: () => Promise<AntigravityStatus>;
+  /** Starts the verified runtime download; poll the status for progress. */
+  installAntigravity: () => Promise<AntigravityStatus>;
+  removeAntigravity: () => Promise<AntigravityStatus>;
+  /** Opens Google's sign-in page; poll the status until it connects. */
+  connectAntigravity: () => Promise<AntigravityStatus>;
+  disconnectAntigravity: () => Promise<AntigravityStatus>;
+  testAntigravityConnection: () => Promise<AntigravityConnectionTest>;
+  openAntigravityGuide: () => Promise<void>;
   loginChat: () => Promise<ChatAuthStatus>;
   logoutChat: () => Promise<ChatAuthStatus>;
   sendChat: (

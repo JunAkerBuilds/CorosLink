@@ -1,19 +1,18 @@
-import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { execFile } from "node:child_process";
 import crypto from "node:crypto";
 import { constants as fsConstants } from "node:fs";
 import { access, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
-import http from "node:http";
-import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { promisify, stripVTControlCharacters } from "node:util";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  type CallToolResult
-} from "@modelcontextprotocol/sdk/types.js";
+  AcpAgent,
+  acpErrorMessage,
+  startToolBridge,
+  toolBridgeServer,
+  truncate,
+  type ToolBridge
+} from "./acpClient";
 import type { ChatModelOption } from "./chatModels";
 import type {
   ChatMessage,
@@ -27,7 +26,9 @@ import type {
 // server that lives only as long as the request.
 
 const execFileAsync = promisify(execFile);
-const DETECTION_TIMEOUT_MS = 15_000;
+// Node's cold start loading the CLI's node_modules alone takes 16–39 s on
+// Windows (gemini-cli#11511), even for `--version`.
+const DETECTION_TIMEOUT_MS = process.platform === "win32" ? 60_000 : 15_000;
 const TEST_TIMEOUT_MS = 90_000;
 const REQUEST_TIMEOUT_MS = 3 * 60_000;
 // Starting a session signs in and connects the tool bridge; a first-time
@@ -39,8 +40,6 @@ const LOGIN_TIMEOUT_MS = 6 * 60_000;
 const MAX_TOOL_CALLS = 24;
 const ACP_PROTOCOL_VERSION = 1;
 const MCP_SERVER_NAME = "coroslink";
-const MCP_ENDPOINT = "/mcp";
-const STDERR_TAIL_BYTES = 4_000;
 const SIGN_IN_REQUIRED_MESSAGE =
   "Gemini CLI needs a sign-in. Use Google sign-in with a Gemini Code Assist Standard or Enterprise account, or set up a Gemini API key or Vertex AI in Gemini CLI.";
 
@@ -161,10 +160,10 @@ async function nvmCandidates(): Promise<string[]> {
   }
 }
 
-async function findGeminiOnPath(): Promise<string | undefined> {
+async function findOnPath(name: string): Promise<string | undefined> {
   try {
     const command = process.platform === "win32" ? "where.exe" : "which";
-    const { stdout } = await execFileAsync(command, ["gemini"], {
+    const { stdout } = await execFileAsync(command, [name], {
       timeout: 5_000,
       windowsHide: true
     });
@@ -194,7 +193,7 @@ export async function detectGeminiCliExecutable(
     }
   }
 
-  const fromPath = await findGeminiOnPath();
+  const fromPath = await findOnPath("gemini");
   return fromPath && (await isExecutable(fromPath)) ? fromPath : undefined;
 }
 
@@ -276,6 +275,15 @@ export async function getGeminiAuthState(
   }
 }
 
+// Google's successor to Gemini CLI. It has no ACP mode, so Coach can't run
+// through it; finding it only explains why Gemini CLI is missing or stalls.
+const ANTIGRAVITY_NOTE =
+  "Antigravity CLI (agy) is installed, but it can't run Coach: it has no Agent Client Protocol mode. Coach needs Gemini CLI signed in with a Gemini API key or Vertex AI.";
+
+async function antigravityNote(): Promise<string> {
+  return (await findOnPath("agy")) ? ` ${ANTIGRAVITY_NOTE}` : "";
+}
+
 // One Google sign-in at a time; it outlives the request that started it.
 let pendingLogin: Promise<void> | null = null;
 let lastLoginError: string | undefined;
@@ -348,7 +356,8 @@ export async function getGeminiCliStatus(
       authenticated: false,
       checkedAt,
       message:
-        "Gemini CLI is not installed. Install it, sign it in, then check again."
+        "Gemini CLI is not installed. Install it, sign it in, then check again." +
+        (await antigravityNote())
     };
   }
 
@@ -364,7 +373,9 @@ export async function getGeminiCliStatus(
       authenticated: false,
       executablePath,
       checkedAt,
-      message: `Gemini CLI was found but could not launch: ${launchFailureMessage(caught)}`
+      message:
+        `Gemini CLI was found but could not launch: ${launchFailureMessage(caught)}` +
+        (await antigravityNote())
     };
   }
 
@@ -458,7 +469,7 @@ export async function launchGeminiCliLogin(
   lastLoginError = undefined;
   pendingLogin = (async () => {
     await prepareWorkspace(workspaceDir);
-    const agent = AcpAgent.start(executablePath, await acpArgs(executablePath), {
+    const agent = startGeminiAgent(executablePath, await acpArgs(executablePath), {
       cwd: workspaceDir,
       env: createGeminiEnvironment(executablePath)
     });
@@ -564,7 +575,7 @@ async function startCheckSession(
   options: { rememberRefusal: boolean }
 ): Promise<ChatModelOption[]> {
   await prepareWorkspace(workspaceDir);
-  const agent = AcpAgent.start(executablePath, await acpArgs(executablePath), {
+  const agent = startGeminiAgent(executablePath, await acpArgs(executablePath), {
     cwd: workspaceDir,
     env: createGeminiEnvironment(executablePath)
   });
@@ -651,7 +662,7 @@ export async function streamGeminiCliCompletion(
     await prepareWorkspace(options.workspaceDir);
     promptFile = await writeSystemPrompt(options.workspaceDir, options.instructions);
     if (options.tools.length > 0) {
-      bridge = await startToolBridge(options.tools, {
+      bridge = await startToolBridge(MCP_SERVER_NAME, options.tools, {
         ...options,
         onActivity: () => armIdleTimeout()
       });
@@ -660,7 +671,7 @@ export async function streamGeminiCliCompletion(
     const args = await acpArgs(options.executablePath);
     if (options.model) args.push("--model", options.model);
     if (options.signal.aborted) throw new Error("cancelled");
-    agent = AcpAgent.start(options.executablePath, args, {
+    agent = startGeminiAgent(options.executablePath, args, {
       cwd: options.workspaceDir,
       env: createGeminiEnvironment(options.executablePath, { GEMINI_SYSTEM_MD: promptFile })
     });
@@ -692,16 +703,7 @@ export async function streamGeminiCliCompletion(
     try {
       session = (await agent.request("session/new", {
         cwd: options.workspaceDir,
-        mcpServers: bridge
-          ? [
-              {
-                type: "http",
-                name: MCP_SERVER_NAME,
-                url: bridge.url,
-                headers: [{ name: "Authorization", value: `Bearer ${bridge.token}` }]
-              }
-            ]
-          : []
+        mcpServers: bridge ? [toolBridgeServer(bridge, MCP_SERVER_NAME)] : []
       })) as { sessionId?: string; models?: GeminiSessionModels };
     } catch (caught) {
       if (timedOut || externallyCancelled || options.signal.aborted) throw caught;
@@ -921,19 +923,25 @@ async function execGemini(
   args: string[]
 ): Promise<{ stdout: string; stderr: string }> {
   const shell = needsShell(executablePath);
-  const result = await execFileAsync(shell ? `"${executablePath}"` : executablePath, args, {
+  const pending = execFileAsync(shell ? `"${executablePath}"` : executablePath, args, {
     timeout: DETECTION_TIMEOUT_MS,
     windowsHide: true,
     shell,
     env: createGeminiEnvironment(executablePath),
     maxBuffer: 1024 * 1024
   });
+  // Gemini CLI reads piped stdin as prompt text, and a pipe left open (or a
+  // prompt from a newer release) holds `--version` until the check times out.
+  pending.child.stdin?.end();
+  const result = await pending;
   return { stdout: result.stdout, stderr: result.stderr };
 }
 
 function launchFailureMessage(caught: unknown): string {
   const error = caught as Error & { stderr?: string; killed?: boolean };
-  if (error.killed) return "the launch check timed out.";
+  if (error.killed) {
+    return `it did not answer \`--version\` within ${DETECTION_TIMEOUT_MS / 1000} seconds.`;
+  }
   const detail = stripVTControlCharacters(error.stderr || error.message || String(caught)).trim();
   if (/env: node|node: (No such file|not found)/i.test(detail)) {
     return "Node.js was not found next to the gemini launcher. Reinstall Gemini CLI or set its path.";
@@ -941,263 +949,20 @@ function launchFailureMessage(caught: unknown): string {
   return truncate(detail.split(/\r?\n/)[0] ?? "launch failed.", 300);
 }
 
-class AcpError extends Error {
-  constructor(
-    message: string,
-    readonly code?: number
-  ) {
-    super(message);
-    this.name = "AcpError";
-  }
-}
-
-function acpErrorMessage(caught: unknown): string {
-  if (caught instanceof Error) return caught.message;
-  return String(caught || "Unknown error");
-}
-
-/** A Gemini CLI process speaking ACP: newline-delimited JSON-RPC 2.0 on stdio. */
-class AcpAgent {
-  onNotification?: (method: string, params: unknown) => void;
-  private nextId = 1;
-  private readonly pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
-  private buffer = "";
-  private stderrTail = "";
-  private exited = false;
-  private readonly exitedPromise: Promise<void>;
-
-  private constructor(private readonly child: ChildProcessWithoutNullStreams) {
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => this.receive(chunk));
-    child.stderr.on("data", (chunk: string) => {
-      this.stderrTail = (this.stderrTail + chunk).slice(-STDERR_TAIL_BYTES);
-    });
-    child.stdin.on("error", () => undefined);
-    child.on("error", (error) => this.fail(error));
-    this.exitedPromise = new Promise((resolve) => child.once("close", () => resolve()));
-    child.on("exit", (code, signal) => {
-      const detail = stripVTControlCharacters(this.stderrTail).trim().split(/\r?\n/).filter(Boolean).at(-1);
-      this.fail(
-        new Error(
-          detail
-            ? `Gemini CLI exited: ${detail}`
-            : `Gemini CLI exited (${code ?? signal ?? "unknown"}).`
-        )
-      );
-    });
-  }
-
-  static start(
-    executablePath: string,
-    args: string[],
-    options: { cwd: string; env: NodeJS.ProcessEnv }
-  ): AcpAgent {
-    const shell = needsShell(executablePath);
-    const child = spawn(shell ? `"${executablePath}"` : executablePath, args, {
-      cwd: options.cwd,
-      env: options.env,
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-      shell
-    });
-    return new AcpAgent(child);
-  }
-
-  initialize(): Promise<unknown> {
-    return this.request("initialize", {
-      protocolVersion: ACP_PROTOCOL_VERSION,
-      clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-      clientInfo: { name: "coroslink", title: "CorosLink", version: "1.0.0" }
-    });
-  }
-
-  request(method: string, params: unknown): Promise<unknown> {
-    if (this.exited) return Promise.reject(new Error("Gemini CLI is not running."));
-    const id = this.nextId++;
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.write({ jsonrpc: "2.0", id, method, params });
-    });
-  }
-
-  notify(method: string, params: unknown): void {
-    if (!this.exited) this.write({ jsonrpc: "2.0", method, params });
-  }
-
-  close(): void {
-    if (this.exited) return;
-    this.child.stdin.end();
-    this.child.kill();
-  }
-
-  /** Ends the process and returns what it printed to stderr, which it may hold until exit. */
-  async stop(waitMs = 3_000): Promise<string> {
-    this.close();
-    await Promise.race([
-      this.exitedPromise,
-      new Promise((resolve) => setTimeout(resolve, waitMs))
-    ]);
-    return this.stderrTail;
-  }
-
-  private write(message: unknown): void {
-    this.child.stdin.write(`${JSON.stringify(message)}\n`);
-  }
-
-  private receive(chunk: string): void {
-    this.buffer += chunk;
-    const lines = this.buffer.split("\n");
-    this.buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      let message: {
-        id?: number | string;
-        method?: string;
-        params?: unknown;
-        result?: unknown;
-        error?: { code?: number; message?: string };
-      };
-      try {
-        message = JSON.parse(line);
-      } catch {
-        continue; // Stray log output.
-      }
-      if (message.method && message.id !== undefined) {
-        this.answer(message.id, message.method);
-      } else if (message.method) {
-        this.onNotification?.(message.method, message.params);
-      } else if (typeof message.id === "number") {
-        const pending = this.pending.get(message.id);
-        if (!pending) continue;
-        this.pending.delete(message.id);
-        if (message.error) {
-          pending.reject(new AcpError(message.error.message || "Gemini CLI request failed.", message.error.code));
-        } else {
-          pending.resolve(message.result);
-        }
-      }
-    }
-  }
-
-  /**
-   * Requests from the agent. CorosLink's tools are pre-approved through
-   * `--allowed-mcp-server-names`, so anything that still asks is one of
-   * Gemini's own tools and is declined. Files and terminals are not offered.
-   */
-  private answer(id: number | string, method: string): void {
-    if (method === "session/request_permission") {
-      this.write({ jsonrpc: "2.0", id, result: { outcome: { outcome: "cancelled" } } });
-      return;
-    }
-    this.write({
-      jsonrpc: "2.0",
-      id,
-      error: { code: -32601, message: `CorosLink does not support ${method}.` }
-    });
-  }
-
-  private fail(error: Error): void {
-    this.exited = true;
-    for (const pending of this.pending.values()) pending.reject(error);
-    this.pending.clear();
-  }
-}
-
-// ----- Tool bridge -----
-
-interface ToolBridge {
-  url: string;
-  token: string;
-  close(): Promise<void>;
-}
-
 /**
- * A loopback MCP server for one request. Only the Gemini process holds its
- * random bearer token, and it closes when the request ends.
+ * Gemini CLI as an ACP agent. CorosLink's tools are pre-approved through
+ * `--allowed-mcp-server-names`, so any permission it still asks for is one of
+ * Gemini's own tools, and the default answer declines it.
  */
-async function startToolBridge(
-  tools: CorosMcpTool[],
-  callbacks: GeminiCliToolCallbacks & { onActivity(): void }
-): Promise<ToolBridge> {
-  const token = crypto.randomBytes(32).toString("base64url");
-  // Raw JSON schemas, so the handlers go on the protocol server directly.
-  const server = new McpServer(
-    { name: MCP_SERVER_NAME, version: "1.0.0" },
-    {
-      capabilities: { tools: {} },
-      instructions:
-        "Use only these CorosLink tools for approved training data, plan drafts, and calendar changes. Uploads and deletions always require explicit athlete confirmation via the buttons in chat."
-    }
-  );
-  server.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: tools.map((tool) => ({
-      name: tool.name,
-      description: tool.description ?? "CorosLink Coach tool",
-      inputSchema: { ...tool.inputSchema, type: "object" as const }
-    }))
-  }));
-  server.server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
-    const name = request.params.name;
-    if (!tools.some((tool) => tool.name === name)) {
-      return { isError: true, content: [{ type: "text", text: `Error: unknown tool ${name}` }] };
-    }
-    callbacks.onToolCallStart?.(name);
-    callbacks.onActivity();
-    try {
-      const output = await callbacks.onToolCall(name, request.params.arguments ?? {});
-      return { content: [{ type: "text", text: output }] };
-    } catch (caught) {
-      const message = acpErrorMessage(caught);
-      callbacks.onToolCallError?.(name, message);
-      return { isError: true, content: [{ type: "text", text: `Error: ${message}` }] };
-    } finally {
-      callbacks.onActivity();
-    }
+function startGeminiAgent(
+  executablePath: string,
+  args: string[],
+  options: { cwd: string; env: NodeJS.ProcessEnv }
+): AcpAgent {
+  return AcpAgent.start(executablePath, args, {
+    ...options,
+    label: "Gemini CLI",
+    shell: needsShell(executablePath)
   });
-
-  let transport: StreamableHTTPServerTransport | undefined;
-  const httpServer = http.createServer((request, response) => {
-    // Compare bytes: a non-ASCII header can match the token's length in characters but not in bytes.
-    const supplied = Buffer.from(request.headers.authorization?.match(/^Bearer (\S+)$/)?.[1] ?? "");
-    const expected = Buffer.from(token);
-    const authorized =
-      supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected);
-    if (request.url !== MCP_ENDPOINT || !authorized || request.headers.origin || !transport) {
-      response.writeHead(request.url !== MCP_ENDPOINT ? 404 : 401).end();
-      return;
-    }
-    transport.handleRequest(request, response).catch(() => {
-      if (!response.headersSent) response.writeHead(500);
-      response.end();
-    });
-  });
-  await new Promise<void>((resolve, reject) => {
-    httpServer.once("error", reject);
-    httpServer.listen(0, "127.0.0.1", () => {
-      httpServer.off("error", reject);
-      resolve();
-    });
-  });
-  const { port } = httpServer.address() as AddressInfo;
-  transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => crypto.randomUUID(),
-    enableDnsRebindingProtection: true,
-    allowedHosts: [`127.0.0.1:${port}`]
-  });
-  await server.connect(transport);
-
-  return {
-    url: `http://127.0.0.1:${port}${MCP_ENDPOINT}`,
-    token,
-    close: async () => {
-      await server.close().catch(() => undefined);
-      httpServer.closeAllConnections();
-      await new Promise<void>((resolve) => httpServer.close(() => resolve()));
-    }
-  };
 }
 
-function truncate(value: string, max: number): string {
-  return value.length <= max ? value : `${value.slice(0, max)}…`;
-}

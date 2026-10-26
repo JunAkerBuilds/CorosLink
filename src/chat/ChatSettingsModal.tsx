@@ -11,6 +11,7 @@ import type {
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { ChatSettingsPanel, type GeminiSettingsControls } from "./ChatSettingsPanel";
+import type { AntigravityControls } from "./antigravity";
 import {
   CHAT_SETTINGS_SECTIONS,
   chatSettingsSectionDomId,
@@ -27,6 +28,7 @@ export function ChatSettingsModal({
   authStatus,
   claudeStatus,
   gemini,
+  antigravity,
   openRouterApiKey,
   openRouterConnection,
   localApiKey,
@@ -72,6 +74,7 @@ export function ChatSettingsModal({
   authStatus: ChatAuthStatus | null;
   claudeStatus: ClaudeCodeStatus | null;
   gemini: GeminiSettingsControls;
+  antigravity: AntigravityControls;
   openRouterApiKey: string;
   openRouterConnection: OpenRouterConnectionTest | null;
   localApiKey: string;
@@ -270,6 +273,7 @@ export function ChatSettingsModal({
             authStatus={authStatus}
             claudeStatus={claudeStatus}
             gemini={gemini}
+            antigravity={antigravity}
             openRouterApiKey={openRouterApiKey}
             openRouterConnection={openRouterConnection}
             localApiKey={localApiKey}

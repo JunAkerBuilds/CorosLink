@@ -433,6 +433,12 @@ import {
   detectLocalChatServers,
   connectClaudeCode,
   connectGeminiCli,
+  connectAntigravity,
+  disconnectAntigravity,
+  getAntigravityConnectionStatus,
+  installAntigravity,
+  removeAntigravity,
+  testAntigravity,
   getClaudeCodeConnectionStatus,
   getGeminiCliConnectionStatus,
   recheckGeminiCliConnectionStatus,
@@ -2058,6 +2064,22 @@ function registerIpcHandlers(): void {
         ? "https://geminicli.com/docs/get-started/installation/"
         : "https://geminicli.com/docs/get-started/authentication/"
     )
+  );
+
+  ipcMain.handle("chat:getAntigravityStatus", () => getAntigravityConnectionStatus());
+
+  ipcMain.handle("chat:installAntigravity", () => installAntigravity());
+
+  ipcMain.handle("chat:removeAntigravity", () => removeAntigravity());
+
+  ipcMain.handle("chat:connectAntigravity", () => connectAntigravity());
+
+  ipcMain.handle("chat:disconnectAntigravity", () => disconnectAntigravity());
+
+  ipcMain.handle("chat:testAntigravityConnection", () => testAntigravity());
+
+  ipcMain.handle("chat:openAntigravityGuide", () =>
+    shell.openExternal("https://antigravity.google/docs/plans")
   );
 
   ipcMain.handle("chat:login", () => loginChat(mainWindow));

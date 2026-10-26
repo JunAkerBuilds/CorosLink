@@ -1,6 +1,6 @@
 import { t, useLanguage } from "../i18n/tools";
 import { useEffect, useState } from "react";
-import { Gem, Network, Sparkles, Terminal } from "lucide-react";
+import { Gem, Network, Orbit, Sparkles, Terminal } from "lucide-react";
 import type { ChatProvider } from "../../electron/types";
 import {
   getChatModelOptions,
@@ -12,23 +12,29 @@ import { SelectDropdown, type SelectOption } from "../components/SelectDropdown"
 // Last live list per provider, so a remounted picker opens on real versions.
 const liveModelOptions = new Map<ChatProvider, ChatModelOption[]>();
 
+const LIVE_CATALOG_PROVIDERS = new Set<ChatProvider>([
+  "claude-code",
+  "gemini-cli",
+  "antigravity",
+  "chatgpt"
+]);
+
 /**
- * The provider's live model catalog (Claude Code's, Gemini CLI's or the
- * ChatGPT account's), starting from the last known or static list while it loads.
+ * The provider's live model catalog (Claude Code's, Gemini CLI's,
+ * Antigravity's or the ChatGPT account's), starting from the last known or
+ * static list while it loads. `ready` going true (a sign-in finishing) reloads it.
  */
 export function useChatModelOptions(
   api: CorosLinkApi | undefined,
-  provider: ChatProvider
+  provider: ChatProvider,
+  ready = true
 ): ChatModelOption[] {
   const initial = () =>
     liveModelOptions.get(provider) ?? getChatModelOptions(provider);
   const [options, setOptions] = useState(initial);
   useEffect(() => {
     setOptions(initial());
-    if (
-      !api ||
-      (provider !== "claude-code" && provider !== "gemini-cli" && provider !== "chatgpt")
-    ) {
+    if (!api || !ready || !LIVE_CATALOG_PROVIDERS.has(provider)) {
       return;
     }
     let active = true;
@@ -44,7 +50,7 @@ export function useChatModelOptions(
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, provider]);
+  }, [api, provider, ready]);
   return options;
 }
 
@@ -64,6 +70,10 @@ function renderClaudeIcon() {
 
 function renderGeminiIcon() {
   return <Gem size={14} strokeWidth={2.1} aria-hidden="true" />;
+}
+
+function renderAntigravityIcon() {
+  return <Orbit size={14} strokeWidth={2.1} aria-hidden="true" />;
 }
 
 function renderOpenRouterIcon() {
@@ -104,13 +114,15 @@ export function ModelSwitch({
       ? "Claude"
       : provider === "gemini-cli"
         ? "Gemini"
-        : provider === "openrouter"
-          ? "OpenRouter"
-          : "ChatGPT";
+        : provider === "antigravity"
+          ? "Antigravity"
+          : provider === "openrouter"
+            ? "OpenRouter"
+            : "ChatGPT";
   const tone =
     provider === "claude-code"
       ? "claude"
-      : provider === "gemini-cli"
+      : provider === "gemini-cli" || provider === "antigravity"
         ? "gemini"
         : provider === "openrouter"
           ? "openrouter"
@@ -120,6 +132,8 @@ export function ModelSwitch({
       ? renderClaudeIcon
       : provider === "gemini-cli"
         ? renderGeminiIcon
+        : provider === "antigravity"
+          ? renderAntigravityIcon
         : provider === "openrouter"
           ? renderOpenRouterIcon
           : renderChatGptIcon;

@@ -24,6 +24,9 @@ export const CHAT_SETTINGS_KEYS = {
   geminiModel: "chat.geminiCli.model",
   geminiLastConnectionStatus: "chat.geminiCli.lastConnectionStatus",
   geminiLastCheckedAt: "chat.geminiCli.lastCheckedAt",
+  antigravityModel: "chat.antigravity.model",
+  antigravityLastConnectionStatus: "chat.antigravity.lastConnectionStatus",
+  antigravityLastCheckedAt: "chat.antigravity.lastCheckedAt",
   localBaseUrl: "chat.local.baseUrl",
   localModel: "chat.local.model",
   localApiKey: "chat.local.apiKey",
@@ -92,6 +95,14 @@ export function readChatSettingsFromStore(
       ),
       lastCheckedAt:
         store.get(CHAT_SETTINGS_KEYS.geminiLastCheckedAt) || undefined
+    },
+    antigravity: {
+      model: store.get(CHAT_SETTINGS_KEYS.antigravityModel) || undefined,
+      lastConnectionStatus: normalizeAntigravityConnectionStatus(
+        store.get(CHAT_SETTINGS_KEYS.antigravityLastConnectionStatus)
+      ),
+      lastCheckedAt:
+        store.get(CHAT_SETTINGS_KEYS.antigravityLastCheckedAt) || undefined
     },
     local: {
       baseUrl:
@@ -197,6 +208,12 @@ export function saveChatSettingsToStore(
       settings.geminiCli.lastCheckedAt
     );
   }
+  const antigravityModel = settings.antigravity?.model?.trim();
+  if (antigravityModel) {
+    store.set(CHAT_SETTINGS_KEYS.antigravityModel, antigravityModel);
+  } else {
+    store.delete([CHAT_SETTINGS_KEYS.antigravityModel]);
+  }
   store.set(
     CHAT_SETTINGS_KEYS.localBaseUrl,
     normalizeLocalChatBaseUrl(settings.local.baseUrl)
@@ -262,14 +279,19 @@ export function saveChatSettingsToStore(
  */
 export function saveCliConnectionStatus(
   store: ChatSettingsStore,
-  provider: "claude-code" | "gemini-cli",
-  state: NonNullable<ChatSettings["claudeCode"]["lastConnectionStatus"]>,
+  provider: "claude-code" | "gemini-cli" | "antigravity",
+  state: NonNullable<ChatSettings["antigravity"]["lastConnectionStatus"]>,
   checkedAt: string
 ): boolean {
   const keys =
     provider === "claude-code"
       ? [CHAT_SETTINGS_KEYS.claudeLastConnectionStatus, CHAT_SETTINGS_KEYS.claudeLastCheckedAt]
-      : [CHAT_SETTINGS_KEYS.geminiLastConnectionStatus, CHAT_SETTINGS_KEYS.geminiLastCheckedAt];
+      : provider === "gemini-cli"
+        ? [CHAT_SETTINGS_KEYS.geminiLastConnectionStatus, CHAT_SETTINGS_KEYS.geminiLastCheckedAt]
+        : [
+            CHAT_SETTINGS_KEYS.antigravityLastConnectionStatus,
+            CHAT_SETTINGS_KEYS.antigravityLastCheckedAt
+          ];
   if (store.get(keys[0]) === state) return false;
   store.set(keys[0], state);
   store.set(keys[1], checkedAt);
@@ -281,6 +303,7 @@ function normalizeProvider(value: unknown): ChatProvider {
     value === "local" ||
     value === "claude-code" ||
     value === "gemini-cli" ||
+    value === "antigravity" ||
     value === "openrouter"
   ) {
     return value;
@@ -299,4 +322,12 @@ function normalizeCliConnectionStatus(
     value === "usage-limit-reached"
     ? value
     : undefined;
+}
+
+function normalizeAntigravityConnectionStatus(
+  value: unknown
+): ChatSettings["antigravity"]["lastConnectionStatus"] {
+  return value === "installing" || value === "unsupported"
+    ? value
+    : normalizeCliConnectionStatus(value);
 }

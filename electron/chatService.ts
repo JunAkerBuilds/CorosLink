@@ -102,6 +102,18 @@ import {
   testGeminiCliConnection as runGeminiCliConnectionTest
 } from "./geminiCliProvider";
 import {
+  AntigravityProviderError,
+  getAntigravitySessionModels,
+  getAntigravityStatus as inspectAntigravityStatus,
+  installAntigravityRuntime,
+  listAntigravityModels,
+  removeAntigravityRuntime,
+  signInToAntigravity,
+  signOutOfAntigravity,
+  streamAntigravityCompletion,
+  testAntigravityConnection as runAntigravityConnectionTest
+} from "./antigravityProvider";
+import {
   CHAT_SETTINGS_KEYS,
   readChatSettingsFromStore,
   saveChatSettingsToStore,
@@ -117,6 +129,7 @@ import {
 import {
   CHATGPT_AUTO_CATALOG,
   CHATGPT_FALLBACK_MODELS,
+  ANTIGRAVITY_MODEL_OPTIONS,
   CLAUDE_MODEL_OPTIONS,
   GEMINI_MODEL_OPTIONS,
   chatGptModelOptionsFromCatalog,
@@ -145,6 +158,8 @@ import type {
   CorosMcpTool,
   GeminiCliConnectionTest,
   GeminiCliStatus,
+  AntigravityConnectionTest,
+  AntigravityStatus,
   LocalChatDiscovery,
   LocalChatConfig,
   LocalChatConnectionTest,
@@ -431,6 +446,60 @@ export async function testGeminiCliConnection(): Promise<GeminiCliConnectionTest
 /** As recordClaudeCodeStatus: written on a change of state, path never pinned. */
 function recordGeminiCliStatus(status: GeminiCliStatus): void {
   saveCliConnectionStatus(chatSettingsStore, "gemini-cli", status.state, status.checkedAt);
+}
+
+/** CorosLink's own Antigravity folder: runtime, private home and workspace. */
+function antigravityRoot(): string {
+  return path.join(app.getPath("userData"), "antigravity");
+}
+
+/** Only Google's sign-in page is ever opened for Antigravity. */
+function openAntigravitySignIn(url: string): void {
+  void shell.openExternal(url).catch((error: unknown) => {
+    console.warn("[chat] could not open the Antigravity sign-in page:", error instanceof Error ? error.message : error);
+  });
+}
+
+export async function getAntigravityConnectionStatus(): Promise<AntigravityStatus> {
+  const status = await inspectAntigravityStatus(antigravityRoot());
+  recordAntigravityStatus(status);
+  return status;
+}
+
+/** Starts the verified download; the status reports its progress. */
+export async function installAntigravity(): Promise<AntigravityStatus> {
+  installAntigravityRuntime(antigravityRoot());
+  return getAntigravityConnectionStatus();
+}
+
+export async function removeAntigravity(): Promise<AntigravityStatus> {
+  await removeAntigravityRuntime(antigravityRoot());
+  antigravityModelCache = null;
+  return getAntigravityConnectionStatus();
+}
+
+export async function connectAntigravity(): Promise<AntigravityStatus> {
+  antigravityModelCache = null;
+  const status = await signInToAntigravity(antigravityRoot(), openAntigravitySignIn);
+  recordAntigravityStatus(status);
+  return status;
+}
+
+export async function disconnectAntigravity(): Promise<AntigravityStatus> {
+  antigravityModelCache = null;
+  const status = await signOutOfAntigravity(antigravityRoot());
+  recordAntigravityStatus(status);
+  return status;
+}
+
+export async function testAntigravity(): Promise<AntigravityConnectionTest> {
+  const result = await runAntigravityConnectionTest(antigravityRoot());
+  recordAntigravityStatus(result.status);
+  return result;
+}
+
+function recordAntigravityStatus(status: AntigravityStatus): void {
+  saveCliConnectionStatus(chatSettingsStore, "antigravity", status.state, status.checkedAt);
 }
 
 export function listChatSessionsForProvider(provider: ChatProvider) {
@@ -1107,6 +1176,84 @@ export async function streamChat(
       return;
     }
 
+    if (settings.provider === "antigravity") {
+      stage("provider");
+      const status = await unlessCancelled(getAntigravityConnectionStatus(), signal);
+      if (!status.authenticated) {
+        throw new AntigravityProviderError(
+          status.message,
+          status.installed ? "auth" : "not-installed"
+        );
+      }
+
+      stage("tools");
+      await unlessCancelled(ensureAllMcpConnected(), signal);
+      const chatTools = getAllChatTools();
+      stage("context");
+      const prompt = await unlessCancelled(
+        buildTrainingContext(undefined, unitSystem, settings.customInstructions),
+        signal
+      );
+      const effectiveInstructions = composeCoachInstructions(prompt, chatTools, historyNote);
+      const { hasData } = prompt;
+
+      send("chat:streamStart", { requestId });
+      send("chat:streamInfo", {
+        requestId,
+        kind: "context",
+        snapshotIncluded: hasData,
+        mcpEnabled: chatTools.length > 0
+      });
+      stage("model");
+
+      const result = await streamAntigravityCompletion({
+        root: antigravityRoot(),
+        instructions: effectiveInstructions,
+        messages: history.messages,
+        tools: chatTools,
+        signal,
+        model: settings.antigravity.model,
+        onToken: (delta) => {
+          fullText += delta;
+          send("chat:streamToken", { requestId, delta });
+        },
+        onThinking: (delta) => {
+          send("chat:streamInfo", { requestId, kind: "thinking", delta });
+        },
+        onToolCallStart: (toolName) => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "mcp",
+            tool: toolName,
+            status: "call"
+          });
+        },
+        onToolCallError: (toolName, message) => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "mcp",
+            tool: toolName,
+            status: "failed",
+            message
+          });
+        },
+        // The tool bridge offers only chatTools and refuses any other name.
+        onToolCall: async (toolName, args) => {
+          console.log("[chat] Antigravity tool call:", toolName);
+          return executeChatTool(toolName, args, send, requestId, unitSystem);
+        }
+      });
+      fullText = result.fullText;
+      recordAntigravityStatus({
+        ...status,
+        state: "connected",
+        checkedAt: new Date().toISOString(),
+        message: "Antigravity is connected and ready for Coach conversations."
+      });
+      send("chat:streamDone", { requestId, fullText });
+      return;
+    }
+
     if (settings.provider === "openrouter") {
       const apiKey = readStoredOpenRouterApiKey();
       if (!apiKey) {
@@ -1457,6 +1604,27 @@ export async function streamChat(
           checkedAt: new Date().toISOString(),
           message: error instanceof Error ? error.message : "Gemini request failed."
         });
+      }
+      if (provider === "antigravity") {
+        const failure =
+          error instanceof AntigravityProviderError ? error.kind : "connection";
+        // A cancelled turn says nothing about the connection.
+        if (failure !== "cancelled") {
+          recordAntigravityStatus({
+            state:
+              failure === "usage-limit"
+                ? "usage-limit-reached"
+                : failure === "auth"
+                  ? "sign-in-required"
+                  : failure === "not-installed"
+                    ? "not-installed"
+                    : "connection-failed",
+            installed: failure !== "not-installed",
+            authenticated: failure !== "auth" && failure !== "not-installed",
+            checkedAt: new Date().toISOString(),
+            message: error instanceof Error ? error.message : "Antigravity request failed."
+          });
+        }
       }
       const authError = Boolean(
         (error as Error & { authError?: boolean }).authError
@@ -1928,6 +2096,22 @@ async function completeOnce(
     return result.fullText || text;
   }
 
+  if (provider === "antigravity") {
+    const status = await inspectAntigravityStatus(antigravityRoot());
+    if (!status.authenticated) throw new Error(status.message);
+    const result = await streamAntigravityCompletion({
+      root: antigravityRoot(),
+      instructions,
+      messages,
+      tools: [],
+      signal,
+      timeoutMs: TITLE_TIMEOUT_MS,
+      onToken,
+      onToolCall: async () => ""
+    });
+    return result.fullText || text;
+  }
+
   if (provider === "openrouter") {
     const apiKey = readStoredOpenRouterApiKey();
     if (!apiKey) throw new Error("No OpenRouter API key.");
@@ -2191,6 +2375,33 @@ async function listGeminiModelOptions(): Promise<ChatModelOption[]> {
   return options;
 }
 
+let antigravityModelCache: { at: number; options: Promise<ChatModelOption[]> } | null = null;
+
+/** Starting a session never signs in here, so listing can't open a browser. */
+async function listAntigravityModelOptions(): Promise<ChatModelOption[]> {
+  const status = await inspectAntigravityStatus(antigravityRoot());
+  if (!status.authenticated) return ANTIGRAVITY_MODEL_OPTIONS;
+  if (antigravityModelCache && Date.now() - antigravityModelCache.at < MODELS_CACHE_MS) {
+    return antigravityModelCache.options;
+  }
+  const seen = getAntigravitySessionModels();
+  const options = listAntigravityModels(antigravityRoot())
+    .then((listed) => {
+      if (listed.length < 2) throw new Error("Antigravity listed no models");
+      return listed;
+    })
+    .catch((error: unknown) => {
+      console.warn(
+        "[chat] Antigravity model list unavailable:",
+        error instanceof Error ? error.message : error
+      );
+      if (antigravityModelCache?.options === options) antigravityModelCache = null;
+      return seen.length >= 2 ? seen : ANTIGRAVITY_MODEL_OPTIONS;
+    });
+  antigravityModelCache = { at: Date.now(), options };
+  return options;
+}
+
 /**
  * Model picker rows for a Coach provider, from the provider's own live
  * catalog where it has one. Falls back to the static list on any failure.
@@ -2200,6 +2411,7 @@ export async function listChatModelOptions(
 ): Promise<ChatModelOption[]> {
   if (provider === "claude-code") return listClaudeModelOptions();
   if (provider === "gemini-cli") return listGeminiModelOptions();
+  if (provider === "antigravity") return listAntigravityModelOptions();
   if (provider === "chatgpt") {
     return chatGptModelOptionsFromCatalog(await listChatGptModels());
   }

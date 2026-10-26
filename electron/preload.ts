@@ -127,6 +127,8 @@ import type {
   ClaudeCodeStatus,
   GeminiCliConnectionTest,
   GeminiCliStatus,
+  AntigravityConnectionTest,
+  AntigravityStatus,
   PersistedChatEntry,
   ChatStreamStart,
   ChatStreamToken,
@@ -1305,6 +1307,20 @@ const api = {
     ipcRenderer.invoke("chat:testGeminiCliConnection"),
   openGeminiCliSetupGuide: (topic: "install" | "sign-in"): Promise<void> =>
     ipcRenderer.invoke("chat:openGeminiCliSetupGuide", topic),
+  getAntigravityStatus: (): Promise<AntigravityStatus> =>
+    ipcRenderer.invoke("chat:getAntigravityStatus"),
+  installAntigravity: (): Promise<AntigravityStatus> =>
+    ipcRenderer.invoke("chat:installAntigravity"),
+  removeAntigravity: (): Promise<AntigravityStatus> =>
+    ipcRenderer.invoke("chat:removeAntigravity"),
+  connectAntigravity: (): Promise<AntigravityStatus> =>
+    ipcRenderer.invoke("chat:connectAntigravity"),
+  disconnectAntigravity: (): Promise<AntigravityStatus> =>
+    ipcRenderer.invoke("chat:disconnectAntigravity"),
+  testAntigravityConnection: (): Promise<AntigravityConnectionTest> =>
+    ipcRenderer.invoke("chat:testAntigravityConnection"),
+  openAntigravityGuide: (): Promise<void> =>
+    ipcRenderer.invoke("chat:openAntigravityGuide"),
   loginChat: (): Promise<ChatAuthStatus> => ipcRenderer.invoke("chat:login"),
   logoutChat: (): Promise<ChatAuthStatus> => ipcRenderer.invoke("chat:logout"),
   // Fire-and-forget: assistant text arrives via the onChat* subscriptions.
