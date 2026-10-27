@@ -11,7 +11,6 @@
 .hub-widget-content { min-width: 0; flex: 1; }
 .hub-widget-content > * { min-height: var(--widget-min-height, 0px); }
 .hub-widget-content > .panel { margin: 0; }
-.hub-widget-content .training-recovery-column { grid-area: auto; }
 .hub-dashboard.is-editing .hub-dashboard-widget { cursor: grab; touch-action: none; user-select: none; }
 .hub-dashboard.is-editing .hub-widget-content { pointer-events: none; }
 .hub-dashboard.is-editing .hub-dashboard-widget:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: var(--radius-lg); }

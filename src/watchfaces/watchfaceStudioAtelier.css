@@ -1489,39 +1489,6 @@
   color: var(--text-primary);
 }
 
-/* Model and effort read as quiet text choices, not boxed fields. */
-:root .watchface-shell.watchface-shell--studio .wf-ai-select {
-  border-radius: 9px;
-  color: var(--atl-titanium);
-  transition: background-color 140ms ease, color 140ms ease;
-}
-
-:root .watchface-shell.watchface-shell--studio .wf-ai-select:hover {
-  background: var(--atl-control-hover);
-  color: var(--text-primary);
-}
-
-:root .watchface-shell.watchface-shell--studio .wf-ai-select select {
-  field-sizing: content;
-  height: 28px;
-  min-height: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  color: inherit;
-  padding: 0 22px 0 8px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-:root .watchface-shell.watchface-shell--studio .wf-ai-select.has-icon select {
-  padding-left: 26px;
-}
-
-:root .watchface-shell.watchface-shell--studio .wf-ai-select svg {
-  color: var(--atl-titanium-dim);
-}
-
 :root .watchface-shell.watchface-shell--studio .wf-ai-toolbar :is(.wf-ai-icon, .wf-ai-send):focus-visible {
   outline: 2px solid var(--wf-focus);
   outline-offset: 2px;

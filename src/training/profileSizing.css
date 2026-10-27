@@ -51,7 +51,6 @@
 .panel.training-scores-panel[data-chart-size="mini"] .score-bar { padding: 4px 0; gap: 3px; }
 .panel.training-race-panel[data-chart-size="mini"] .race-card { padding-block: 5px; gap: 6px; }
 .panel.training-race-panel[data-chart-size="mini"] .race-card-time { font-size: 13px; }
-.panel.training-race-panel[data-chart-size="mini"] .training-race-level { padding: 2px 6px; font-size: 10px; }
 @container profile-card (max-width: 620px) {
   .panel.training-zone-panel[data-chart-size]:not([data-chart-size="mini"]) .training-zone-body { grid-template-columns: 90px minmax(0, 1fr); gap: 12px; align-content: center; }
   .panel.training-zone-panel[data-chart-size] .training-zone-table { grid-column: 1 / -1; }

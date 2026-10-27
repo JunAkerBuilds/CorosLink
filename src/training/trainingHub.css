@@ -296,10 +296,6 @@
   display: none;
 }
 
-.training-hub-tab-panel .training-activities-split-panel {
-  --training-activities-pane-height: clamp(460px, calc(100dvh - 330px), 960px);
-}
-
 :root[data-theme="paper"] .training-hub-header::before {
   opacity: .28;
   filter: contrast(1.12) saturate(1.15);

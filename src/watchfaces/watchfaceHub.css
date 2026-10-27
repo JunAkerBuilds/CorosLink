@@ -241,17 +241,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.watchface-shell--hub .wf-hub-group {
-  display: grid;
-  gap: 14px;
-}
-
-.watchface-shell--hub .wf-hub-group + .wf-hub-group {
-  margin-top: 10px;
-  border-top: 1px solid var(--wf-faces-edge);
-  padding-top: 14px;
-}
-
 .watchface-shell--hub .wf-hub-filter-summary {
   display: flex;
   align-items: center;
@@ -1109,10 +1098,6 @@
   font-size: var(--wf-text-sm);
   line-height: 1.5;
   text-wrap: pretty;
-}
-
-.watchface-shell--hub .wf-new-face-watch {
-  white-space: nowrap;
 }
 
 .watchface-shell--hub .wf-new-face-option:hover:not(:disabled) {

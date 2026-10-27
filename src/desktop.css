@@ -76,19 +76,6 @@ summary:focus-visible {
   font-size: 12px;
 }
 
-.app-header-current-view {
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-weight: 550;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.app-header-context-separator {
-  flex-shrink: 0;
-  opacity: 0.6;
-}
-
 .app .app-header-end {
   flex-wrap: nowrap;
   gap: 8px;
@@ -300,8 +287,6 @@ summary:focus-visible {
   background: var(--glass-bg);
   box-shadow: none;
 }
-
-
 
 .app .app-body > .content {
   margin: 0 12px 12px 8px;
@@ -687,85 +672,9 @@ summary:focus-visible {
   letter-spacing: 0;
 }
 
-.app .dashboard-hero-row {
-  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.85fr);
-  gap: 18px;
-}
-
-.app .dashboard-hero-row--no-hero {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.app .dashboard-hero--product {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
-  min-height: 300px;
-  padding: 28px 32px;
-  gap: 16px;
-  border-radius: 14px;
-  background: var(--glass-surface);
-  box-shadow: var(--shadow-card);
-  backdrop-filter: var(--frosted-filter);
-  -webkit-backdrop-filter: var(--frosted-filter);
-  text-align: left;
-}
-
-.app .dashboard-hero--product::before {
-  background: radial-gradient(ellipse at 80% 25%, var(--surface-highlight), transparent 65%);
-  opacity: 1;
-}
-
-.app .dashboard-hero--product::after {
-  display: none;
-}
-
-.app .dashboard-hero--product .dashboard-hero-copy {
-  gap: 12px;
-  order: 0;
-  justify-items: start;
-}
-
 .app .dashboard-hero-brand {
   font-size: 10px;
   letter-spacing: 0.22em;
-}
-
-.app .dashboard-hero-model {
-  color: var(--text-primary);
-  font-size: clamp(30px, 3vw, 42px);
-  font-weight: 650;
-  letter-spacing: -0.045em;
-  line-height: 1.1;
-}
-
-.app .dashboard-hero-tagline {
-  font-size: 12px;
-}
-
-.app .dashboard-hero-features {
-  gap: 10px;
-  margin-top: 9px;
-}
-
-.app .dashboard-hero-features li {
-  gap: 9px;
-  font-size: 11px;
-  font-weight: 450;
-}
-
-.app .dashboard-hero-feature-icon {
-  width: 20px;
-  height: 20px;
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-}
-
-.app .dashboard-hero--product .dashboard-hero-image {
-  order: 0;
-  max-height: 260px;
-  width: 100%;
-  animation: none;
-  filter: drop-shadow(0 18px 16px rgba(0, 0, 0, 0.18));
 }
 
 .app .dashboard-status {
@@ -783,18 +692,8 @@ summary:focus-visible {
   -webkit-backdrop-filter: var(--frosted-filter);
 }
 
-.app .dashboard-status-header {
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
 .app .dashboard-status-lead {
   gap: 12px;
-}
-
-.app .dashboard-status-header h2 {
-  font-size: 16px;
 }
 
 .app .watch-status-icon {
@@ -844,74 +743,11 @@ summary:focus-visible {
   font-size: 10px;
 }
 
-.app .dashboard-metrics {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.app .metric-tile {
-  --metric-accent: var(--text-secondary);
-  gap: 7px;
-  border: 1px solid var(--glass-border);
-  border-radius: 14px;
-  padding: 20px;
-  background:
-    radial-gradient(ellipse at top right, color-mix(in srgb, var(--metric-accent) 5%, transparent), transparent 78%),
-    var(--glass-surface);
-  box-shadow: var(--shadow-card);
-  backdrop-filter: var(--frosted-filter);
-  -webkit-backdrop-filter: var(--frosted-filter);
-}
-
-.app .metric-tile-icon {
-  position: absolute;
-  top: 18px;
-  right: 16px;
-  width: 30px;
-  height: 30px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--text-muted);
-  box-shadow: none;
-}
-
-.app .metric-tile .eyebrow {
-  padding-right: 36px;
-  margin: 0;
-  font-size: 11px;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
 .app .metric-value {
   font-size: 29px;
   font-weight: 500;
   letter-spacing: -0.045em;
   font-variant-numeric: tabular-nums;
-}
-
-.app .metric-tile > span {
-  font-size: 10px;
-  font-weight: 400;
-}
-
-.app .metric-tile-button:hover {
-  border-color: var(--line-strong);
-  box-shadow: var(--shadow-card);
-  transform: none;
-}
-
-.app .metric-tile-button:hover .metric-tile-icon {
-  color: var(--accent);
-  box-shadow: none;
-}
-
-.app .metric-tile-button:focus-visible {
-  outline-offset: -3px;
 }
 
 .app .dashboard-recent {
@@ -978,33 +814,6 @@ summary:focus-visible {
   animation-delay: 0ms;
 }
 
-@media (max-width: 1200px) {
-  .app-header-context-label,
-  .app-header-context-separator {
-    display: none;
-  }
-
-  .app .dashboard-hero-row {
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 0.8fr);
-  }
-
-  .app .dashboard-hero-row--no-hero {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .app .dashboard-hero--product {
-    padding: 24px;
-  }
-
-  .app .metric-tile {
-    padding-inline: 16px;
-  }
-
-  .app .metric-tile-icon {
-    right: 14px;
-  }
-}
-
 @media (max-width: 1000px) {
   .app .library-sync-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -1014,18 +823,6 @@ summary:focus-visible {
 
   .app .app-body > .content {
     padding: 24px 20px;
-  }
-
-  .app .dashboard-hero-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .app .dashboard-hero--product {
-    min-height: 260px;
-  }
-
-  .app .dashboard-hero--product .dashboard-hero-image {
-    max-height: 220px;
   }
 
   .app .dashboard-status:has(.storage-ring) {
@@ -1038,14 +835,6 @@ summary:focus-visible {
     grid-row: 1 / 3;
     width: 100px;
     height: 100px;
-  }
-
-  .app .storage-ring-caption {
-    text-align: left;
-  }
-
-  .app .dashboard-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
 }
@@ -1087,10 +876,6 @@ summary:focus-visible {
     align-items: flex-start;
     flex-wrap: wrap;
     gap: 16px;
-  }
-
-  .app .dashboard-hero--product {
-    padding: 20px;
   }
 
   .app .dashboard-status {
