@@ -45,10 +45,7 @@ import {
 } from "./corosBleTrainingProtocol";
 import type { CorosWifiMusicIdentity, CorosWifiMusicStatus } from "./corosWifiMusicTypes";
 import { connectedWatchfaceTarget, isValidatedWatch, watchfaceBinTarget, watchfaceTargetHardware, watchfaceTargetsForMagic, type WatchfaceTarget } from "./watchfaceTargets";
-
-// QR codes are drawn on demand; keep the library out of app startup.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const loadQRCode = () => require("qrcode") as typeof import("qrcode");
+import { qrCodeDataUrl } from "./qrCode";
 
 const BOND_SETTING = "coros.ble.bond";
 const AUTH_SETTING = "coros.ble.accountAuth";
@@ -436,7 +433,7 @@ export class CorosNativeBleService {
     const issuedAt = Date.now();
     const code = encodePhonePairingCode(key, deviceName, issuedAt);
     // Low error correction keeps the code sparse; a screen doesn't smudge.
-    const qrDataUrl = await loadQRCode().toDataURL(code, { errorCorrectionLevel: "L", margin: 2, width: 520 });
+    const qrDataUrl = await qrCodeDataUrl(code, { errorCorrectionLevel: "L", margin: 2, width: 520 });
     return { qrDataUrl, issuedAt, expiresAt: issuedAt + PHONE_PAIRING_DISPLAY_MS, account: `•••• ${key.accountUserId.slice(-4)}`, deviceName };
   }
 
