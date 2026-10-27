@@ -13,6 +13,7 @@ import {
   isPersonalRecordPopulated
 } from "../formatters";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
+import { useTrainingHubActive } from "../trainingHubActive";
 import { formatDistanceValue } from "../../units/units";
 import {
   defineSelectionPreference,
@@ -183,7 +184,8 @@ export function usePersonalRecordCelebration(
     [records, getLocale()]
   );
 
-  useEffect(() => {
+  // Run by <PersonalRecordCelebrationCheck> while the hub is on screen.
+  const check = useCallback(() => {
     if (!enabled || !signaturesKey) {
       return;
     }
@@ -264,10 +266,23 @@ export function usePersonalRecordCelebration(
     overlayNonce: state?.phase === "overlay" ? state.nonce : null,
     cardCelebration:
       state?.phase === "card" && record ? { signature: state.signature, nonce: state.nonce } : null,
+    check,
     replay,
     test,
     dismiss
   };
+}
+
+/**
+ * Checks for new records while Training Hub is on screen. One that lands while
+ * the hub is parked behind another view is celebrated on the next visit.
+ */
+export function PersonalRecordCelebrationCheck({ check }: { check: () => void }) {
+  const active = useTrainingHubActive();
+  useEffect(() => {
+    if (active) check();
+  }, [active, check]);
+  return null;
 }
 
 interface PersonalRecordCelebrationOverlayProps {

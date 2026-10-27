@@ -1872,6 +1872,22 @@ button.resources-tour {
   display: none !important;
 }
 
+/* Training Hub stays mounted between visits. Parked, content-visibility skips
+   its rendering but keeps its layout, so coming back needs no remount and its
+   charts see no resize. */
+.content-training-panel {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.content-training-panel.view-panel-parked {
+  content-visibility: hidden;
+  height: 0;
+  overflow: hidden;
+}
+
 .content-fill:has(> .content-coach-panel:not(.view-panel-hidden)) {
   padding: 0;
 }

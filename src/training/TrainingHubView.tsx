@@ -1,6 +1,6 @@
 import { getLocale, useLanguage, t } from "../i18n/training";
 import { widgetCatalog, widgetPreset, type WidgetId } from "./dashboardLayout";
-import { type CSSProperties, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type CSSProperties, memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ArrowRightFromLine,
   ChartNoAxesColumnIncreasing,
@@ -26,9 +26,11 @@ import { FitnessBalanceCard } from "./components/FitnessBalanceCard";
 import { FitnessTrendPanel } from "./components/FitnessTrendPanel";
 import { PersonalRecordsPanel } from "./components/PersonalRecordsPanel";
 import {
+  PersonalRecordCelebrationCheck,
   PersonalRecordCelebrationOverlay,
   usePersonalRecordCelebration
 } from "./components/PersonalRecordCelebration";
+import { WhileTrainingHubActive } from "./trainingHubActive";
 import { RacePredictorCards } from "./components/RacePredictorCards";
 import { RecoveryRing } from "./components/RecoveryRing";
 import { HealthInsightsPanel } from "./components/HealthInsightsPanel";
@@ -65,12 +67,14 @@ const loginPageBackground = new URL("./assets/training-hub/Login-page-bg.png", d
 const SLEEP_MORPH_OPEN = "is-sleep-morph-open";
 const SLEEP_MORPH_CLOSE = "is-sleep-morph-close";
 
-export function TrainingHubView(props: TrainingHubViewProps) {
+// Memoized: App keeps the hub mounted while other views are open, so its own
+// re-renders must not re-render this whole dashboard.
+export const TrainingHubView = memo(function TrainingHubView(props: TrainingHubViewProps) {
   useLanguage();
   return import.meta.env.DEV
     ? <TrainingHubPreview {...props} />
     : <TrainingHubContent {...props} />;
-}
+});
 
 function TrainingHubPreview(props: TrainingHubViewProps) {
   useLanguage();
@@ -678,12 +682,15 @@ function TrainingHubContent({
         </>
       ) : null}
 
+      <PersonalRecordCelebrationCheck check={prCelebration.check} />
       {prCelebration.overlayRecord ? (
-        <PersonalRecordCelebrationOverlay
-          key={prCelebration.overlayNonce}
-          record={prCelebration.overlayRecord}
-          onDismiss={prCelebration.dismiss}
-        />
+        <WhileTrainingHubActive>
+          <PersonalRecordCelebrationOverlay
+            key={prCelebration.overlayNonce}
+            record={prCelebration.overlayRecord}
+            onDismiss={prCelebration.dismiss}
+          />
+        </WhileTrainingHubActive>
       ) : null}
     </div>
     {showSleepPage ? (

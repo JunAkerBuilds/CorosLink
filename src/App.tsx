@@ -142,6 +142,8 @@ import {
   isLocalTrackOnWatch,
 } from "./media/libraryUtils";
 import { trackAvatarColor, trackInitial } from "./media/trackAvatar";
+import { useStableHandlers } from "./hooks/useStableHandlers";
+import { TrainingHubActiveContext } from "./training/trainingHubActive";
 import { useTimeOfDayGreeting } from "./hooks/useTimeOfDayGreeting";
 import { OverviewWeatherCard } from "./overview/OverviewWeatherCard";
 import { readCachedOverviewWeather, shareWeatherLocationWithWatch } from "./overview/overviewWeather";
@@ -414,6 +416,9 @@ export default function App() {
   const [watchfacesMounted, setWatchfacesMounted] = useState(
     activeView === "watchfaces",
   );
+  // Training Hub takes ~300 ms to mount, so after the first visit it stays
+  // mounted (hidden) and coming back is instant.
+  const [trainingMounted, setTrainingMounted] = useState(activeView === "training");
   const [coachPrefill, setCoachPrefill] = useState<CoachPrefill | null>(null);
   const [pendingCoachPlan, setPendingCoachPlan] = useState<TrainingPlanDocument | null>(null);
   const [calendarRefreshToken, setCalendarRefreshToken] = useState(0);
@@ -711,6 +716,9 @@ export default function App() {
     if (activeView === "watchfaces") {
       setWatchfacesMounted(true);
     }
+    if (activeView === "training") {
+      setTrainingMounted(true);
+    }
   }, [activeView]);
 
   useEffect(() => {
@@ -812,7 +820,9 @@ export default function App() {
   }, []);
 
   const applyTrainingHubStatus = useCallback((status: TrainingHubStatus) => {
-    setTrainingHubStatus(status);
+    // Re-read on every visit; an unchanged status must not re-render the hub,
+    // which would replay every chart's entrance animation.
+    setTrainingHubStatus((current) => (sameJson(current, status) ? current : status));
     if (status.email) {
       setTrainingHubEmail(status.email);
     }
@@ -2098,6 +2108,24 @@ export default function App() {
     }
   }
 
+  // Same identity on every render, so the memoized Training Hub skips App's
+  // re-renders while it is open or parked in the background.
+  const trainingHubHandlers = useStableHandlers({
+    onVerifyTwoFactor: handleTrainingHubVerify2fa,
+    onResendTwoFactor: handleTrainingHubResend2fa,
+    onCancelTwoFactor: handleTrainingHubCancel2fa,
+    onLogin: handleTrainingHubLogin,
+    onReconnect: handleTrainingHubReconnect,
+    onLogout: handleTrainingHubLogout,
+    onRefresh: handleTrainingHubRefresh,
+    onExportFile: handleTrainingHubExport,
+    onNavigationRequestHandled: () => setTrainingHubNavigation(null),
+    onOpenCoach: (prefill: CoachPrefill | null) => {
+      setCoachPrefill(prefill);
+      setActiveView("coach");
+    },
+  });
+
   async function handleDownload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!api) {
@@ -2934,50 +2962,60 @@ export default function App() {
                 />
               </Suspense>
             ) : null}
-            {activeView === "training" ? (
-              <Suspense fallback={<DeferredSurfaceFallback label={t("training")} />}>
-                <LazyTrainingHubView
-                  api={api}
-                  status={trainingDataStatus}
-                  onSyncWatch={localOnly && trainingHubLoaded ? requestWatchSync : undefined}
-                  localDataVersion={localDataVersion}
-                  email={trainingHubEmail}
-                  password={trainingHubPassword}
-                  remember={trainingHubRemember}
-                  twoFactorEmail={trainingHub2faEmail}
-                  twoFactorCode={trainingHub2faCode}
-                  onTwoFactorCodeChange={setTrainingHub2faCode}
-                  onVerifyTwoFactor={handleTrainingHubVerify2fa}
-                  onResendTwoFactor={handleTrainingHubResend2fa}
-                  onCancelTwoFactor={handleTrainingHubCancel2fa}
-                  activities={trainingHubActivities}
-                  upcomingWorkouts={trainingHubUpcomingWorkouts}
-                  snapshot={trainingHubSnapshot}
-                  sportTypes={trainingHubSportTypes}
-                  rpeBackfill={rpeBackfill}
-                  activityDetail={trainingHubActivityDetail}
-                  selectedActivity={selectedTrainingHubActivity}
-                  busy={busy}
-                  sleepConnecting={sleepConnecting}
-                  onEmailChange={setTrainingHubEmail}
-                  onPasswordChange={setTrainingHubPassword}
-                  onRememberChange={setTrainingHubRemember}
-                  onLogin={handleTrainingHubLogin}
-                  onReconnect={handleTrainingHubReconnect}
-                  onLogout={handleTrainingHubLogout}
-                  onRefresh={handleTrainingHubRefresh}
-                  onLoadDetail={handleTrainingHubActivityDetail}
-                  onExportFile={handleTrainingHubExport}
-                  onRenameActivity={handleTrainingHubRenameActivity}
-                  navigationRequest={trainingHubNavigation}
-                  onNavigationRequestHandled={() => setTrainingHubNavigation(null)}
-                  onOpenCalendarWorkout={openCalendarWorkout}
-                  onOpenCoach={(prefill) => {
-                    setCoachPrefill(prefill);
-                    setActiveView("coach");
-                  }}
-                />
-              </Suspense>
+            {trainingMounted || activeView === "training" ? (
+              <div
+                className={[
+                  "content-training-panel",
+                  activeView !== "training" && "view-panel-parked",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                aria-hidden={activeView !== "training"}
+                inert={activeView !== "training"}
+              >
+                <TrainingHubActiveContext value={activeView === "training"}>
+                  <Suspense fallback={<DeferredSurfaceFallback label={t("training")} />}>
+                    <LazyTrainingHubView
+                      api={api}
+                      status={trainingDataStatus}
+                      onSyncWatch={localOnly && trainingHubLoaded ? requestWatchSync : undefined}
+                      localDataVersion={localDataVersion}
+                      email={trainingHubEmail}
+                      password={trainingHubPassword}
+                      remember={trainingHubRemember}
+                      twoFactorEmail={trainingHub2faEmail}
+                      twoFactorCode={trainingHub2faCode}
+                      onTwoFactorCodeChange={setTrainingHub2faCode}
+                      onVerifyTwoFactor={trainingHubHandlers.onVerifyTwoFactor}
+                      onResendTwoFactor={trainingHubHandlers.onResendTwoFactor}
+                      onCancelTwoFactor={trainingHubHandlers.onCancelTwoFactor}
+                      activities={trainingHubActivities}
+                      upcomingWorkouts={trainingHubUpcomingWorkouts}
+                      snapshot={trainingHubSnapshot}
+                      sportTypes={trainingHubSportTypes}
+                      rpeBackfill={rpeBackfill}
+                      activityDetail={trainingHubActivityDetail}
+                      selectedActivity={selectedTrainingHubActivity}
+                      busy={busy}
+                      sleepConnecting={sleepConnecting}
+                      onEmailChange={setTrainingHubEmail}
+                      onPasswordChange={setTrainingHubPassword}
+                      onRememberChange={setTrainingHubRemember}
+                      onLogin={trainingHubHandlers.onLogin}
+                      onReconnect={trainingHubHandlers.onReconnect}
+                      onLogout={trainingHubHandlers.onLogout}
+                      onRefresh={trainingHubHandlers.onRefresh}
+                      onLoadDetail={handleTrainingHubActivityDetail}
+                      onExportFile={trainingHubHandlers.onExportFile}
+                      onRenameActivity={handleTrainingHubRenameActivity}
+                      navigationRequest={trainingHubNavigation}
+                      onNavigationRequestHandled={trainingHubHandlers.onNavigationRequestHandled}
+                      onOpenCalendarWorkout={openCalendarWorkout}
+                      onOpenCoach={trainingHubHandlers.onOpenCoach}
+                    />
+                  </Suspense>
+                </TrainingHubActiveContext>
+              </div>
             ) : null}
             {IS_DEVELOPMENT_BUILD &&
             showDevelopmentTools &&
