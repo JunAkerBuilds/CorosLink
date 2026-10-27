@@ -22231,6 +22231,35 @@ tr.data-intervals-row-missing {
   color: var(--text-danger, #e66c6c);
 }
 
+.chat-move-changes {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.chat-move-changes li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-move-change-name {
+  color: var(--text-secondary);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-move-change-days {
+  flex: none;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .chat-delete-details {
   display: grid;
   gap: 8px;

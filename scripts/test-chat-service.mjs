@@ -70,7 +70,8 @@ const workoutGuide = buildWorkoutToolGuide([
   "upload_training_plan",
   "list_scheduled_workouts",
   "delete_workout",
-  "move_workout"
+  "move_workout",
+  "reschedule_workouts"
 ]);
 assert.match(workoutGuide, /exactly one standalone workout/);
 assert.match(workoutGuide, /call draft_workout/);
@@ -82,6 +83,7 @@ assert.match(workoutGuide, /naming mismatch alone is never a reason/);
 assert.match(workoutGuide, /call the same draft tool again in the same response/);
 assert.match(workoutGuide, /stage a confirmation card/);
 assert.match(workoutGuide, /call move_workout once/);
+assert.match(workoutGuide, /call reschedule_workouts once with every move and removal/);
 assert.ok(workoutGuide.includes(buildCoachSportCapabilityGuide()));
 // Each rule once: the guide repeats nothing the base prompt says.
 for (const rule of [/typed intensity field/g, /rest_type=1/g, /search_coros_exercises first/g, /Delete from COROS/g]) {

@@ -144,6 +144,12 @@ export function buildWorkoutToolGuide(toolNames: Iterable<string>): string {
         "delete plus a new schedule for it. The athlete must click Move on COROS before anything changes."
     );
   }
+  if (names.has("reschedule_workouts")) {
+    lines.push(
+      "When several workouts change at once (illness, travel, a reshuffled week), call reschedule_workouts once with " +
+        "every move and removal, so the athlete approves the whole change on one card."
+    );
+  }
   if (drafts) {
     lines.push("", "Supported workout capabilities (generated from the validator):", buildCoachSportCapabilityGuide());
   }

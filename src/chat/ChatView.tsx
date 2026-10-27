@@ -1570,44 +1570,61 @@ function DeletePreviewCard({
   useLanguage();
   const move = preview.action === "move";
   const swap = move && Boolean(preview.swapWorkoutName);
+  const changes = move ? preview.changes ?? [] : [];
+  const listed = changes.length > 1;
   return (
     <div className={`chat-plan-card ${move ? "chat-move-card" : "chat-delete-card"}`}>
       <div className="chat-plan-card-header">
-        <h4>{swap ? t("Swap workouts") : move ? t("Move workout") : t("Delete workout")}</h4>
+        <h4>{swap ? t("Swap workouts") : listed ? t("Reschedule workouts") : move ? t("Move workout") : t("Delete workout")}</h4>
         <span className="chat-plan-card-summary">{preview.summary}</span>
       </div>
-      <dl className="chat-delete-details">
-        {move ? null : (
-          <div>
-            <dt>{t("Target")}</dt>
-            <dd>{deleteTargetLabel(preview.target)}</dd>
-          </div>
-        )}
-        {preview.workoutName ? (
-          <div>
-            <dt>{t("Workout")}</dt>
-            <dd>{preview.workoutName}</dd>
-          </div>
-        ) : null}
-        {preview.scheduleDate ? (
-          <div>
-            <dt>{t("Date")}</dt>
-            <dd>{preview.scheduleDate}</dd>
-          </div>
-        ) : null}
-        {move && preview.newScheduleDate ? (
-          <div>
-            <dt>{t("New date")}</dt>
-            <dd>{preview.newScheduleDate}</dd>
-          </div>
-        ) : null}
-        {preview.swapWorkoutName ? (
-          <div>
-            <dt>{t("Swap with")}</dt>
-            <dd>{preview.swapWorkoutName}</dd>
-          </div>
-        ) : null}
-      </dl>
+      {listed ? (
+        <ol className="chat-move-changes">
+          {changes.map((change, index) => (
+            <li key={`${change.workoutName}-${change.scheduleDate}-${index}`}>
+              <span className="chat-move-change-name">{change.workoutName}</span>
+              <span className="chat-move-change-days">
+                {change.newScheduleDate
+                  ? t("{{from}} → {{to}}", { from: change.scheduleDate, to: change.newScheduleDate })
+                  : t("{{date}} · removed", { date: change.scheduleDate })}
+              </span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <dl className="chat-delete-details">
+          {move ? null : (
+            <div>
+              <dt>{t("Target")}</dt>
+              <dd>{deleteTargetLabel(preview.target)}</dd>
+            </div>
+          )}
+          {preview.workoutName ? (
+            <div>
+              <dt>{t("Workout")}</dt>
+              <dd>{preview.workoutName}</dd>
+            </div>
+          ) : null}
+          {preview.scheduleDate ? (
+            <div>
+              <dt>{t("Date")}</dt>
+              <dd>{preview.scheduleDate}</dd>
+            </div>
+          ) : null}
+          {move && preview.newScheduleDate ? (
+            <div>
+              <dt>{t("New date")}</dt>
+              <dd>{preview.newScheduleDate}</dd>
+            </div>
+          ) : null}
+          {preview.swapWorkoutName ? (
+            <div>
+              <dt>{t("Swap with")}</dt>
+              <dd>{preview.swapWorkoutName}</dd>
+            </div>
+          ) : null}
+        </dl>
+      )}
       {preview.state === "deleted" || preview.state === "moved" ? (
         <p className="chat-plan-success">{preview.message}</p>
       ) : (

@@ -136,6 +136,56 @@ await test("the Coach can draft a plan and put it on the local calendar", async 
   assert.equal(after.length, before + 2);
 });
 
+await test("the Coach moves, swaps and reschedules calendar workouts behind one card each", async () => {
+  const onDays = async () => (await hub.listScheduledWorkoutEntries(day(0), day(10)))
+    .filter((entry) => entry.name.startsWith("Coach")).map((entry) => [entry.happenDay, entry.name]);
+  const stage = async (tool, args) => {
+    let card;
+    const response = JSON.parse(await chatWorkoutTools.handleChatWorkoutTool(tool, args, { onWorkoutDelete: (preview) => { card = preview; } }));
+    assert.equal(response.ok, true, response.error);
+    assert.equal(card.action, "move");
+    assert.deepEqual(await onDays(), before, "nothing changes until the card is approved");
+    return card;
+  };
+  let before = await onDays();
+  assert.deepEqual(before, [[day(4), "Coach easy"], [day(6), "Coach intervals"]]);
+
+  let card = await stage("move_workout", { schedule_date: day(4), workout_name: "Coach easy", new_date: day(5) });
+  assert.equal(card.newScheduleDate, `${day(5).slice(0, 4)}-${day(5).slice(4, 6)}-${day(5).slice(6)}`);
+  await chatWorkoutTools.confirmWorkoutDeleteById(card.requestId);
+  before = await onDays();
+  assert.deepEqual(before, [[day(5), "Coach easy"], [day(6), "Coach intervals"]]);
+  await assert.rejects(chatWorkoutTools.confirmWorkoutDeleteById(card.requestId), /already moved/);
+
+  card = await stage("move_workout", { schedule_date: day(5), workout_name: "Coach easy", new_date: day(6), swap: true });
+  assert.equal(card.swapWorkoutName, "Coach intervals");
+  await chatWorkoutTools.confirmWorkoutDeleteById(card.requestId);
+  before = await onDays();
+  assert.deepEqual(before, [[day(5), "Coach intervals"], [day(6), "Coach easy"]]);
+
+  const refused = async (changes, pattern) => {
+    const response = JSON.parse(await chatWorkoutTools.handleChatWorkoutTool("reschedule_workouts", { changes }));
+    assert.equal(response.ok, false);
+    assert.match(response.error, pattern);
+  };
+  await refused([{ schedule_date: day(5), workout_name: "Coach intervals", new_date: day(7), remove: true }], /new_date to move it, or remove/);
+  await refused([{ schedule_date: day(5), workout_name: "Coach intervals", new_date: day(-1) }], /before today/);
+  await refused([
+    { schedule_date: day(5), workout_name: "Coach intervals", new_date: day(7) },
+    { schedule_date: day(5), workout_name: "Coach intervals", remove: true }
+  ], /already in this card/);
+
+  card = await stage("reschedule_workouts", { changes: [
+    { schedule_date: day(5), workout_name: "Coach intervals", new_date: day(8) },
+    { schedule_date: day(6), workout_name: "Coach easy", remove: true }
+  ] });
+  assert.equal(card.summary, "Move 1 workout and remove 1 workout");
+  assert.deepEqual(card.changes.map((change) => [change.workoutName, Boolean(change.newScheduleDate)]), [["Coach intervals", true], ["Coach easy", false]]);
+  const result = await chatWorkoutTools.confirmWorkoutDeleteById(card.requestId);
+  assert.equal(result.message, "Moved 1 workout and removed 1 from the calendar.");
+  assert.deepEqual(await onDays(), [[day(8), "Coach intervals"]]);
+});
+
 await test("automatic sync: off by default, then on schedule, idle-only, retrying sooner after a miss, leaving a user's connection up", async () => {
   const { WatchAutoSync, autoSyncState, setAutoSync, nextAutoSyncAt } = await load("watchAutoSyncService.js");
   assert.equal(autoSyncState().enabled, false, "off until the user turns it on");

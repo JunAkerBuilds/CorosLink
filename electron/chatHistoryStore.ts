@@ -404,6 +404,19 @@ function parseWorkoutDeletePreview(value: unknown): WorkoutDeletePreview | null 
     ...(value.action === "move" ? { action: value.action } : {}),
     ...(typeof value.newScheduleDate === "string" ? { newScheduleDate: value.newScheduleDate } : {}),
     ...(typeof value.swapWorkoutName === "string" ? { swapWorkoutName: value.swapWorkoutName } : {}),
+    ...(Array.isArray(value.changes)
+      ? {
+          changes: value.changes.filter(isRecord).flatMap((change) =>
+            typeof change.workoutName === "string" && typeof change.scheduleDate === "string"
+              ? [{
+                  workoutName: change.workoutName,
+                  scheduleDate: change.scheduleDate,
+                  ...(typeof change.newScheduleDate === "string" ? { newScheduleDate: change.newScheduleDate } : {})
+                }]
+              : []
+          )
+        }
+      : {}),
     ...(value.state === "pending" || value.state === "deleted" || value.state === "moved" || value.state === "failed"
       ? { state: value.state }
       : {}),

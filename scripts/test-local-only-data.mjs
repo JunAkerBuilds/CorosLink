@@ -241,6 +241,27 @@ try {
     await localSource.renameActivity(run.activityId, "Lunch run");
   });
 
+  await test("the Coach renames an activity it's asked to, and open views hear it", async () => {
+    const { configureDataSources } = await load("localSync/activitySource.js");
+    const { handleChatActivityTool, onCoachActivityRenamed } = await load("chatActivityTools.js");
+    const unused = { kind: "unused" };
+    configureDataSources({ useLocal: () => true, localActivities: localSource, cloudActivities: unused, localHealth: unused, cloudHealth: unused });
+    const [run] = await localSource.listActivities(1, 50);
+    const heard = [];
+    const stop = onCoachActivityRenamed((change) => heard.push(change));
+    assert.equal(
+      await handleChatActivityTool("rename_activity", { activity_id: run.activityId, name: " Hill repeats, felt strong " }),
+      `Renamed activity ${run.activityId} to "Hill repeats, felt strong" (was "Lunch run").`
+    );
+    assert.equal((await localSource.listActivities(1, 50))[0].name, "Hill repeats, felt strong");
+    assert.deepEqual(heard, [{ activityId: run.activityId, name: "Hill repeats, felt strong" }]);
+    await assert.rejects(handleChatActivityTool("rename_activity", { activity_id: run.activityId, name: "x".repeat(151) }), /too long/);
+    await assert.rejects(handleChatActivityTool("rename_activity", { activity_id: run.activityId, name: "  " }), /name is required/);
+    assert.equal((await localSource.listActivities(1, 50))[0].name, "Hill repeats, felt strong", "a refused name changes nothing");
+    stop();
+    await localSource.renameActivity(run.activityId, "Lunch run");
+  });
+
   // ----- watch sync -----
 
   function fakeWatch(initial, options = {}) {

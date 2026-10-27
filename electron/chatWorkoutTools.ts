@@ -39,6 +39,7 @@ import type {
   TrainingPlanDocument,
   UploadPlanResult,
   WorkoutDeletePreview,
+  WorkoutRescheduleChange,
   UnitSystem
 } from "./types";
 import {
@@ -75,6 +76,8 @@ interface StoredDeleteRequest {
   params: DeleteWorkoutParams;
   /** Present when the card moves (or swaps) a calendar workout instead of deleting one. */
   move?: MoveWorkoutPlan;
+  /** Present for reschedule_workouts: several moves and removals behind one card. */
+  reschedule?: ReschedulePlan;
   preview: WorkoutDeletePreview;
   createdAt: number;
   executedAt?: number;
@@ -96,6 +99,20 @@ interface MoveWorkoutPlan {
   /** A swap whose first half already landed; a retry only moves swapWith. */
   firstMoved?: boolean;
 }
+
+/** A move when newDate is set, otherwise a removal from the calendar. */
+interface RescheduleStep {
+  workout: ScheduledWorkoutRef;
+  newDate?: string;
+}
+
+interface ReschedulePlan {
+  steps: RescheduleStep[];
+  /** Indexes of steps that already landed; a retry skips them. */
+  done: number[];
+}
+
+const MAX_RESCHEDULE_CHANGES = 14;
 
 interface DeleteWorkoutParams {
   target: "scheduled" | "library" | "both";
@@ -205,7 +222,8 @@ export const CHAT_WORKOUT_TOOL_NAMES = [
   "upload_training_plan",
   "list_scheduled_workouts",
   "delete_workout",
-  "move_workout"
+  "move_workout",
+  "reschedule_workouts"
 ] as const;
 
 export type ChatWorkoutToolName = (typeof CHAT_WORKOUT_TOOL_NAMES)[number];
@@ -398,6 +416,36 @@ export function getChatWorkoutTools(): CorosMcpTool[] {
         },
         required: ["new_date"]
       }
+    },
+    {
+      name: "reschedule_workouts",
+      description:
+        "Stage several calendar changes behind one Move on COROS card — for illness, travel, or reshuffling a week. " +
+        "Each change moves one workout to new_date, or removes it from the calendar with remove: true. " +
+        "Use plan_id + id_in_plan from list_scheduled_workouts, or schedule_date + workout_name. " +
+        "Swap two workouts by moving each to the other's day. Never moves anything directly. New days must be today or later.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          changes: {
+            type: "array",
+            minItems: 1,
+            maxItems: MAX_RESCHEDULE_CHANGES,
+            items: {
+              type: "object",
+              properties: {
+                schedule_date: { type: "string", description: "Current day of the workout, YYYYMMDD" },
+                workout_name: { type: "string", description: "Workout name to match on schedule_date" },
+                plan_id: { type: "string", description: "Schedule plan ID" },
+                id_in_plan: { type: "string", description: "Schedule idInPlan" },
+                new_date: { type: "string", description: "Day to move it to, YYYYMMDD. Omit when removing." },
+                remove: { type: "boolean", description: "Remove it from the calendar instead of moving it." }
+              }
+            }
+          }
+        },
+        required: ["changes"]
+      }
     }
   ];
   // The exercise catalog is COROS's; without a session it can't be searched.
@@ -458,6 +506,9 @@ export async function handleChatWorkoutTool(
   }
   if (name === "move_workout") {
     return handleMoveWorkout(args, options?.onWorkoutDelete);
+  }
+  if (name === "reschedule_workouts") {
+    return handleRescheduleWorkouts(args, options?.onWorkoutDelete);
   }
   return handleDeleteWorkout(args, options?.onWorkoutDelete);
 }
@@ -1025,6 +1076,37 @@ function scheduledWorkoutRef(entry: Awaited<ReturnType<typeof listScheduledWorko
   };
 }
 
+/** One calendar entry, by plan_id + id_in_plan or by schedule_date + workout_name. */
+async function findScheduledWorkout(match: {
+  scheduleDate?: string;
+  workoutName?: string;
+  planId?: string;
+  idInPlan?: string;
+}): Promise<Awaited<ReturnType<typeof listScheduledWorkoutEntries>>[number]> {
+  const { scheduleDate, workoutName, planId, idInPlan } = match;
+  const candidates = scheduleDate
+    ? await listScheduledWorkoutEntries(scheduleDate, scheduleDate)
+    : await listScheduledWorkoutEntries(
+        formatScheduleDay(new Date()),
+        formatScheduleDay(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000))
+      );
+  const matches = planId && idInPlan
+    ? candidates.filter((entry) => entry.planId === planId && entry.idInPlan === idInPlan)
+    : candidates.filter((entry) => entry.name === workoutName);
+  if (matches.length > 1) {
+    throw new Error(
+      `Multiple scheduled workouts named "${workoutName}" on ${scheduleDate}. Use plan_id and id_in_plan to disambiguate.`
+    );
+  }
+  const found = matches[0];
+  if (!found) {
+    throw new Error(
+      `Scheduled workout not found on the calendar${workoutName ? `: "${workoutName}"` : ""}${scheduleDate ? ` on ${scheduleDate}` : ""}.`
+    );
+  }
+  return found;
+}
+
 async function resolveMoveWorkoutPlan(args: Record<string, unknown>): Promise<MoveWorkoutPlan> {
   const scheduleDate = compactDayArg(args, "schedule_date", "schedule_date", "scheduleDate");
   const newDate = compactDayArg(args, "new_date", "new_date", "newDate");
@@ -1037,19 +1119,7 @@ async function resolveMoveWorkoutPlan(args: Record<string, unknown>): Promise<Mo
   }
 
   const today = formatScheduleDay(new Date());
-  const candidates = scheduleDate
-    ? await listScheduledWorkoutEntries(scheduleDate, scheduleDate)
-    : await listScheduledWorkoutEntries(today, formatScheduleDay(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)));
-  const matches = planId && idInPlan
-    ? candidates.filter((entry) => entry.planId === planId && entry.idInPlan === idInPlan)
-    : candidates.filter((entry) => entry.name === workoutName);
-  if (matches.length > 1) {
-    throw new Error(
-      `Multiple scheduled workouts named "${workoutName}" on ${scheduleDate}. Use plan_id and id_in_plan to disambiguate.`
-    );
-  }
-  const source = matches[0];
-  if (!source) throw new Error("Scheduled workout not found on the calendar.");
+  const source = await findScheduledWorkout({ scheduleDate, workoutName, planId, idInPlan });
   if (source.happenDay === newDate) throw new Error("The workout is already on new_date.");
   if (newDate < today) throw new Error("COROS does not allow scheduling workouts before today.");
 
@@ -1129,6 +1199,142 @@ async function handleMoveWorkout(
   } catch (caught) {
     return JSON.stringify({ ok: false, error: caught instanceof Error ? caught.message : String(caught) });
   }
+}
+
+async function resolveReschedulePlan(args: Record<string, unknown>): Promise<ReschedulePlan> {
+  const changes = Array.isArray(args.changes) ? args.changes : [];
+  if (changes.length === 0) throw new Error("changes needs at least one workout.");
+  if (changes.length > MAX_RESCHEDULE_CHANGES) {
+    throw new Error(`At most ${MAX_RESCHEDULE_CHANGES} changes per card; stage the rest in another call.`);
+  }
+  const today = formatScheduleDay(new Date());
+  const steps: RescheduleStep[] = [];
+  const seen = new Set<string>();
+  for (const [index, raw] of changes.entries()) {
+    const change = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+    const label = `changes[${index}]`;
+    const scheduleDate = compactDayArg(change, `${label}.schedule_date`, "schedule_date", "scheduleDate");
+    const newDate = compactDayArg(change, `${label}.new_date`, "new_date", "newDate");
+    const workoutName = optionalArg(change, "workout_name", "workoutName");
+    const planId = optionalArg(change, "plan_id", "planId");
+    const idInPlan = optionalArg(change, "id_in_plan", "idInPlan");
+    const remove = change.remove === true || change.remove === "true";
+    if (!(planId && idInPlan) && !(scheduleDate && workoutName)) {
+      throw new Error(`${label}: identify the workout with schedule_date + workout_name, or plan_id + id_in_plan.`);
+    }
+    if (remove === Boolean(newDate)) {
+      throw new Error(`${label}: give new_date to move it, or remove: true to take it off the calendar.`);
+    }
+    const workout = scheduledWorkoutRef(await findScheduledWorkout({ scheduleDate, workoutName, planId, idInPlan }));
+    const key = `${workout.planId}:${workout.idInPlan}`;
+    if (seen.has(key)) throw new Error(`${label}: "${workout.name}" is already in this card.`);
+    seen.add(key);
+    if (newDate) {
+      if (newDate === workout.happenDay) throw new Error(`${label}: "${workout.name}" is already on ${newDate}.`);
+      if (newDate < today) throw new Error(`${label}: COROS does not allow scheduling workouts before today.`);
+    }
+    steps.push(newDate ? { workout, newDate } : { workout });
+  }
+  return { steps, done: [] };
+}
+
+function rescheduleChanges(plan: ReschedulePlan): WorkoutRescheduleChange[] {
+  return plan.steps.map((step) => ({
+    workoutName: step.workout.name,
+    scheduleDate: formatDisplayScheduleDate(step.workout.happenDay) ?? step.workout.happenDay,
+    ...(step.newDate ? { newScheduleDate: formatDisplayScheduleDate(step.newDate) } : {})
+  }));
+}
+
+function buildRescheduleSummary(plan: ReschedulePlan): string {
+  const moves = plan.steps.filter((step) => step.newDate).length;
+  const removals = plan.steps.length - moves;
+  const parts = [
+    moves ? `move ${moves} workout${moves === 1 ? "" : "s"}` : "",
+    removals ? `remove ${removals} workout${removals === 1 ? "" : "s"}` : ""
+  ].filter(Boolean);
+  const text = parts.join(" and ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+async function handleRescheduleWorkouts(
+  args: Record<string, unknown>,
+  onWorkoutDelete?: (preview: WorkoutDeletePreview) => void
+): Promise<string> {
+  try {
+    const reschedule = await resolveReschedulePlan(args);
+    const first = reschedule.steps[0]!;
+    const single = reschedule.steps.length === 1;
+    const preview: WorkoutDeletePreview = {
+      requestId: crypto.randomUUID(),
+      // "move" so phones that predate change lists still show a move card.
+      action: "move",
+      target: "scheduled",
+      workoutName: single ? first.workout.name : `${reschedule.steps.length} workouts`,
+      ...(single ? { scheduleDate: formatDisplayScheduleDate(first.workout.happenDay) } : {}),
+      ...(single && first.newDate ? { newScheduleDate: formatDisplayScheduleDate(first.newDate) } : {}),
+      changes: rescheduleChanges(reschedule),
+      summary: buildRescheduleSummary(reschedule)
+    };
+    deleteRequests().set(preview.requestId, {
+      requestId: preview.requestId,
+      params: { target: "scheduled", plan_id: first.workout.planId, id_in_plan: first.workout.idInPlan },
+      reschedule,
+      preview,
+      createdAt: Date.now()
+    });
+    persistDeleteRequests();
+    onWorkoutDelete?.(preview);
+    return JSON.stringify({
+      ok: true,
+      request_id: preview.requestId,
+      preview,
+      message:
+        "Reschedule staged. Tell the athlete to review the card and click Move on COROS when ready. " +
+        "Do not claim anything moved until they confirm."
+    });
+  } catch (caught) {
+    return JSON.stringify({ ok: false, error: caught instanceof Error ? caught.message : String(caught) });
+  }
+}
+
+async function executeReschedule(stored: StoredDeleteRequest, plan: ReschedulePlan): Promise<DeleteWorkoutResult> {
+  for (const [index, step] of plan.steps.entries()) {
+    if (plan.done.includes(index)) continue;
+    try {
+      if (step.newDate) {
+        await rescheduleWorkoutWithNotes(step.workout, step.newDate);
+      } else {
+        await deleteWorkout({
+          target: "scheduled",
+          schedule_date: step.workout.happenDay,
+          plan_id: step.workout.planId,
+          id_in_plan: step.workout.idInPlan
+        });
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      const landed = plan.done.length;
+      throw new Error(
+        `${landed ? `${landed} of ${plan.steps.length} changes landed; ` : ""}` +
+          `"${step.workout.name}" (${formatDisplayScheduleDate(step.workout.happenDay)}) didn't change: ${reason}`
+      );
+    }
+    plan.done.push(index);
+    persistDeleteRequests();
+  }
+  stored.executedAt = Date.now();
+  persistDeleteRequests();
+  const moved = plan.steps.filter((step) => step.newDate).length;
+  const removed = plan.steps.length - moved;
+  return {
+    removedFromSchedule: removed > 0,
+    removedFromLibrary: false,
+    message: [
+      moved ? `Moved ${moved} workout${moved === 1 ? "" : "s"}` : "",
+      removed ? `removed ${removed} from the calendar` : ""
+    ].filter(Boolean).join(" and ") + "."
+  };
 }
 
 async function executeMove(stored: StoredDeleteRequest, move: MoveWorkoutPlan): Promise<DeleteWorkoutResult> {
@@ -1332,6 +1538,10 @@ export async function confirmWorkoutDeleteById(
   if (stored.move) {
     if (stored.executedAt) throw new Error("This workout was already moved.");
     return executeMove(stored, stored.move);
+  }
+  if (stored.reschedule) {
+    if (stored.executedAt) throw new Error("These changes were already made.");
+    return executeReschedule(stored, stored.reschedule);
   }
   if (stored.executedAt) {
     throw new Error("This workout was already deleted.");

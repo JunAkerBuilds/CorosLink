@@ -16,6 +16,7 @@ import type { CalendarEventTiming, CalendarWorkoutEventRef } from "./calendarSyn
 import { registerWorkoutAutomation } from "./workoutAutomation";
 import { listWorkoutJournal, onWorkoutJournalChanged, rescheduleWorkoutWithNotes, saveWorkoutJournal } from "./workoutJournalService";
 import type { WorkoutJournalSaveInput } from "./workoutJournalTypes";
+import { onCoachActivityRenamed } from "./chatActivityTools";
 import { app, BrowserWindow, dialog, nativeTheme, session, shell, ShareMenu } from "electron";
 import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow, recordDiagnosticNotice, registerDiagnosticStatus } from "./diagnosticsService";
 import { corosAccountDiagnostics } from "./corosAccountDiagnostics";
@@ -2842,6 +2843,9 @@ function registerIpcHandlers(): void {
   );
   onWorkoutJournalChanged(() => {
     mainWindow?.webContents.send("workoutJournal:changed");
+  });
+  onCoachActivityRenamed((change) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("trainingHub:activityRenamed", change);
   });
 
   ipcMain.handle("races:getOverview", () => getRaceOverview());

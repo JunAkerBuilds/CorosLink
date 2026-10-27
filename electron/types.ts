@@ -4596,6 +4596,14 @@ export interface DeleteWorkoutResult {
   message: string;
 }
 
+/** One line of a reschedule card: a move when newScheduleDate is set, otherwise a removal. */
+export interface WorkoutRescheduleChange {
+  workoutName: string;
+  /** YYYY-MM-DD */
+  scheduleDate: string;
+  newScheduleDate?: string;
+}
+
 export interface WorkoutDeletePreview {
   requestId: string;
   /** Absent on delete cards. A move re-adds the workout on newScheduleDate, then removes the original. */
@@ -4608,6 +4616,8 @@ export interface WorkoutDeletePreview {
   newScheduleDate?: string;
   /** Move only: the workout on newScheduleDate that trades places with this one. */
   swapWorkoutName?: string;
+  /** reschedule_workouts: every workout the card changes, in the order they run. */
+  changes?: WorkoutRescheduleChange[];
   summary: string;
   /** Absent on cards staged before approvals were shared across devices: pending. */
   state?: "pending" | "deleted" | "moved" | "failed";

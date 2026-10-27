@@ -8,6 +8,7 @@ import {
   formatActivitySeriesForChat
 } from "./trainingHubService";
 import { currentActivitySource } from "./localSync/activitySource";
+import { ACTIVITY_NAME_MAX_BYTES, activityNameBytes } from "./activityName";
 import { trainingDataAvailable } from "./localSync/trainingDataAccess";
 import type {
   ActivityHrTrendPreview,
@@ -30,12 +31,22 @@ import {
 
 export const CHAT_ACTIVITY_TOOL_NAMES = [
   "list_recent_activities",
-  "get_activity_detail"
+  "get_activity_detail",
+  "rename_activity"
 ] as const;
 
 export type ChatActivityToolName = (typeof CHAT_ACTIVITY_TOOL_NAMES)[number];
 
 const MAX_LAPS = 50;
+
+type ActivityRenameListener = (change: { activityId: string; name: string }) => void;
+const renameListeners = new Set<ActivityRenameListener>();
+
+/** Main forwards Coach renames so open views (Activities, Calendar, Overview) show the new name. */
+export function onCoachActivityRenamed(listener: ActivityRenameListener): () => void {
+  renameListeners.add(listener);
+  return () => renameListeners.delete(listener);
+}
 
 export function isChatActivityTool(name: string): name is ChatActivityToolName {
   return (CHAT_ACTIVITY_TOOL_NAMES as readonly string[]).includes(name);
@@ -93,6 +104,21 @@ export function getChatActivityTools(): CorosMcpTool[] {
         },
         required: ["activity_id", "sport_type"]
       }
+    },
+    {
+      name: "rename_activity",
+      description:
+        "Rename a recorded activity on COROS (and in CorosLink). Only when the athlete asks for a new name; " +
+        "use the name they give, or one you proposed and they accepted. Use activity_id from list_recent_activities. " +
+        "Notes about how it went belong in log_workout_debrief, not the name.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          activity_id: { type: "string", description: "COROS activity ID (labelId)" },
+          name: { type: "string", description: "The new name, at most 150 bytes." }
+        },
+        required: ["activity_id", "name"]
+      }
     }
   ];
 }
@@ -111,7 +137,34 @@ export async function handleChatActivityTool(
   if (name === "list_recent_activities") {
     return handleListRecentActivities(args, callbacks?.unitSystem ?? "metric");
   }
+  if (name === "rename_activity") {
+    return handleRenameActivity(args);
+  }
   return handleGetActivityDetail(args, callbacks);
+}
+
+async function handleRenameActivity(args: Record<string, unknown>): Promise<string> {
+  const activityId = String(args.activity_id ?? args.activityId ?? "").trim();
+  const requested = String(args.name ?? "").trim();
+  if (!activityId) {
+    throw new Error("activity_id is required. Call list_recent_activities first to find the correct ID.");
+  }
+  if (!requested) throw new Error("name is required.");
+  if (activityNameBytes(requested) > ACTIVITY_NAME_MAX_BYTES) {
+    throw new Error(`That name is too long for COROS (max ${ACTIVITY_NAME_MAX_BYTES} bytes). Shorten it and try again.`);
+  }
+  try {
+    // COROS's write answers empty either way; the start time lets the rename be read back.
+    const listed = (await currentActivitySource().listActivities(1, 50)).find(
+      (activity) => activity.activityId === activityId
+    );
+    const saved = await currentActivitySource().renameActivity(activityId, requested, listed?.startTime);
+    for (const listener of renameListeners) listener({ activityId, name: saved });
+    const previous = listed?.name ? ` (was "${listed.name}")` : "";
+    return `Renamed activity ${activityId} to "${saved}"${previous}.`;
+  } catch (caught) {
+    throw formatActivityToolError("rename_activity", caught);
+  }
 }
 
 async function handleListRecentActivities(
