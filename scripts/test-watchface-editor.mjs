@@ -48,6 +48,7 @@ import {
   alignWatchfaceItems,
   distributeWatchfaceItems,
   expandWatchfaceGroupSelection,
+  separableWatchfaceBoxIds,
   normalizeWatchfaceEditorGroups,
   syncLegacyWatchfaceGroups,
   watchfaceSelectionUnits
@@ -957,6 +958,12 @@ assert.deepEqual(distributeWatchfaceItems(layoutItems, "horizontal"), {
   b: { dx: 10, dy: 0 },
   c: { dx: 0, dy: 0 }
 });
+// Touching edges don't overlap; a box inside another can't be measured apart from it.
+assert.deepEqual([...separableWatchfaceBoxIds([
+  ...layoutItems,
+  { id: "d", bounds: { x0: 10, y0: 0, x1: 20, y1: 10 } },
+  { id: "e", bounds: { x0: 72, y0: 42, x1: 76, y1: 46 } }
+])].sort(), ["a", "b", "d"]);
 const legacyDesign = syncLegacyWatchfaceGroups({
   version: 1,
   linkedLayerGroups: [["a", "b"], ["b", "c"]]

@@ -17,7 +17,7 @@ import { addChartPage, chartDragSplit, chartGraphBounds, chartReadoutBounds, cha
 import { describeNativeDataComponents } from "./nativeDataAutomation";
 import { watchfaceAutomationAssetContracts } from "./watchfaceAutomationAssetContracts";
 import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES, defaultNativeDataStyle, drawNativeDataPreview, keepNativeOwnedKeys, minMaxTemperatureRun, nativeDataSize, nativeLayerChartPages, nativeLayerStyle } from "./nativeData";
-import { glyphBaselineMovements, visibleGlyphBounds } from "./watchfaceGlyphLayout";
+import { glyphBaselineMovements, visibleInkBounds } from "./watchfaceGlyphLayout";
 import { finalizeWatchfaceStatusIcons } from "./watchfaceStatusExport.ts";
 import {
   defaultStatusIndicatorPosition,
@@ -641,6 +641,7 @@ import {
 } from "./watchfaceLayerOpacity";
 import {
   alignWatchfaceItems,
+  separableWatchfaceBoxIds,
   distributeWatchfaceItems,
   editorGroupForLayer,
   expandWatchfaceGroupSelection,
@@ -919,6 +920,13 @@ interface WatchfacePrecomposedDrag {
   baseFrame: HTMLCanvasElement;
   movingFrame: HTMLCanvasElement;
   clipBounds: WatchfaceEditorBounds;
+  /** What the selection and every other target visibly draw; snapping lines these up instead of the boxes. */
+  ink?: WatchfaceDragInk;
+}
+
+interface WatchfaceDragInk {
+  moving: WatchfaceEditorBounds | null;
+  targets: Map<string, WatchfaceEditorBounds>;
 }
 
 interface WatchfaceSpriteTransformDraft {
@@ -3013,31 +3021,48 @@ export function WatchfaceEditor({
     ));
   }
 
-  function alignSelection(alignment: WatchfaceAlignment) {
+  /**
+   * Aligns or distributes what the selection visibly draws, not its boxes:
+   * a box is the slot the watch reserves, so its edges sit away from the text.
+   */
+  async function applyInkLayout(
+    minimumItems: number,
+    movementsFor: (items: ReturnType<typeof selectedLayoutItems>) => Record<string, { dx: number; dy: number }>
+  ) {
     const items = selectedLayoutItems();
-    if (items.length === 0) return;
-    applyLayoutMovements(
-      alignWatchfaceItems(
-        items,
-        alignment,
-        items.length === 1
-          ? { x0: 0, y0: 0, x1: previewWidth, y1: previewHeight }
-          : undefined
-      ),
-      items
-    );
+    if (items.length < minimumItems || aligningGlyphs) return;
+    const snapshot = historyRef.current.present.value.design;
+    setAligningGlyphs(true);
+    try {
+      const measured = [];
+      // A unit that draws nothing here (hidden, empty) keeps its box.
+      for (const item of items) measured.push({ ...item, bounds: (await measureSelectionInk(item, true)) ?? item.bounds });
+      if (mountedRef.current && previewSessionRef.current === sessionId && historyRef.current.present.value.design === snapshot && automationModeRef.current === previewMode) {
+        applyLayoutMovements(movementsFor(measured), items);
+      }
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : t("Could not measure the selected text."));
+    } finally { setAligningGlyphs(false); }
   }
 
-  /** Visible ink of one selection unit drawn alone, in master pixels; strokes and effects left out. */
-  async function measureSelectionInk(item: ReturnType<typeof selectedLayoutItems>[number]) {
+  function alignSelection(alignment: WatchfaceAlignment) {
+    void applyInkLayout(1, (items) => alignWatchfaceItems(
+      items,
+      alignment,
+      items.length === 1
+        ? { x0: 0, y0: 0, x1: previewWidth, y1: previewHeight }
+        : undefined
+    ));
+  }
+
+  /** Visible ink of one selection unit drawn alone, in master pixels; effects (and strokes, unless kept) left out. */
+  async function measureSelectionInk(item: ReturnType<typeof selectedLayoutItems>[number], keepStrokes = false) {
     const isolated = isolateDragDesigns({ kind: "layout", targetId: item.layerIds[0]!,
       startX: 0, startY: 0, baseX: 0, baseY: 0, snapId: item.id,
       baseBounds: item.bounds, selectionIds: item.layerIds });
-    const frame = await renderDragFrame({ ...isolated.moving, layerStrokes: {}, layerEffects: {} });
-    const bounds = visibleGlyphBounds(frame);
-    return bounds
-      ? { top: bounds.top * previewHeight / frame.height, bottom: bounds.bottom * previewHeight / frame.height }
-      : null;
+    const frame = await renderDragFrame({ ...isolated.moving, ...(keepStrokes ? {} : { layerStrokes: {} }), layerEffects: {} });
+    const bounds = visibleInkBounds(frame);
+    return bounds ? scaleWatchfaceBounds(bounds, previewWidth / frame.width, previewHeight / frame.height) : null;
   }
 
   /** The resizable Bluetooth or Do Not Disturb icon a layer draws, if any. */
@@ -3072,7 +3097,7 @@ export function WatchfaceEditor({
       let target = 0;
       for (const item of others) {
         const ink = await measureSelectionInk(item);
-        if (ink) target = Math.max(target, ink.bottom - ink.top);
+        if (ink) target = Math.max(target, ink.y1 - ink.y0);
       }
       if (target <= 0) throw new Error(t("Could not measure the selected text."));
       // Both states of a status icon draw in one isolated frame, so one ratio per group.
@@ -3082,7 +3107,7 @@ export function WatchfaceEditor({
         const groupId = controlStatusLayoutGroupId(reference.configKey) ?? reference.id;
         if (ratios.has(groupId)) continue;
         const ink = await measureSelectionInk(item);
-        if (ink && ink.bottom > ink.top) ratios.set(groupId, { reference, ratio: target / (ink.bottom - ink.top) });
+        if (ink && ink.y1 > ink.y0) ratios.set(groupId, { reference, ratio: target / (ink.y1 - ink.y0) });
       }
       if (mountedRef.current && previewSessionRef.current === sessionId && historyRef.current.present.value.design === snapshot && automationModeRef.current === previewMode) {
         for (const { reference, ratio } of ratios.values()) {
@@ -3104,8 +3129,8 @@ export function WatchfaceEditor({
       for (const item of items) {
         const bounds = await measureSelectionInk(item);
         if (bounds) measured.push({ id: item.id,
-          top: bounds.top,
-          bottom: bounds.bottom,
+          top: bounds.y0,
+          bottom: bounds.y1,
           colon: item.layerIds.every((id) => {
             const layer = layers.find((candidate) => candidate.id === id);
             return layer?.staticSeparatorId === "colon" || /colon/i.test(layer?.label ?? "");
@@ -3120,9 +3145,7 @@ export function WatchfaceEditor({
   }
 
   function distributeSelection(direction: WatchfaceDistribution) {
-    const items = selectedLayoutItems();
-    if (items.length < 3) return;
-    applyLayoutMovements(distributeWatchfaceItems(items, direction), items);
+    void applyInkLayout(3, (items) => distributeWatchfaceItems(items, direction));
   }
 
   function hideDragVisual() {
@@ -3483,6 +3506,39 @@ export function WatchfaceEditor({
     return `${ids.slice().sort().join("|")}${ids.includes("native:chart") ? `#${drag.chartPart ?? "readout"}` : ""}`;
   }
 
+  /** Visible ink in master pixels: the moving frame whole, and each target inside its own box. */
+  function measureDragInk(
+    movingFrame: HTMLCanvasElement,
+    targetFrame: HTMLCanvasElement,
+    targets: WatchfaceSnapTarget[]
+  ): WatchfaceDragInk {
+    const toFrame = targetFrame.width / previewWidth;
+    const fromFrame = (box: WatchfaceEditorBounds) => scaleWatchfaceBounds(box, previewWidth / targetFrame.width, previewHeight / targetFrame.height);
+    const separable = separableWatchfaceBoxIds(targets.filter((target) => target.visible !== false));
+    const measured = new Map<string, WatchfaceEditorBounds>();
+    for (const target of targets) {
+      if (!separable.has(target.id)) continue;
+      const ink = visibleInkBounds(targetFrame, scaleWatchfaceBounds(target.bounds, toFrame, targetFrame.height / previewHeight));
+      if (ink) measured.set(target.id, fromFrame(ink));
+    }
+    const moving = visibleInkBounds(movingFrame);
+    return {
+      moving: moving ? scaleWatchfaceBounds(moving, previewWidth / movingFrame.width, previewHeight / movingFrame.height) : null,
+      targets: measured
+    };
+  }
+
+  /** Ink measured for this drag's selection, once its precomposed frames have it. */
+  function dragInk(drag: WatchfaceDragState): WatchfaceDragInk | null {
+    const cached = precomposedDragRef.current;
+    return drag.kind !== "selectorIcon" && !isSpriteTransformDrag(drag) &&
+      cached?.ink && cached.design === design &&
+      cached.previewDirectory === (watchPreviewResolution?.directory ?? "") &&
+      cached.selectionKey === dragFramesKey(drag, dragMovementIds(drag))
+      ? cached.ink
+      : null;
+  }
+
   function prepareDragVisual(drag: WatchfaceDragState) {
     if (!details) return;
     const preparationId = ++dragPreparationIdRef.current;
@@ -3598,6 +3654,15 @@ export function WatchfaceEditor({
         clipBounds: isolated.clipBounds
       };
       precomposedDragRef.current = cached;
+      // Ink comes after the drag frames so it never delays them; until it
+      // lands, snapping uses the boxes.
+      const targets = placementSnapTargets(primaryId).filter((target) => !selectionIds.includes(target.id));
+      void renderDragFrame(makeWatchfaceDragForegroundDesign(isolated.base)).then((targetFrame) => {
+        if (precomposedDragRef.current !== cached) return;
+        cached.ink = measureDragInk(movingFrame, targetFrame, targets);
+      }).catch(() => {
+        // Snapping keeps using the boxes.
+      });
       const active = dragVisualRef.current;
       if (
         active &&
@@ -4632,7 +4697,8 @@ export function WatchfaceEditor({
     point: { x: number; y: number },
     bypassSnap: boolean,
     axisLock: "x" | "y" | null,
-    targets: WatchfaceSnapTarget[]
+    targets: WatchfaceSnapTarget[],
+    movingInk?: WatchfaceEditorBounds | null
   ): { dx: number; dy: number; baseBounds: WatchfaceEditorBounds } {
     const rawDx = axisLock === "y" ? 0 : point.x - drag.startX;
     const rawDy = axisLock === "x" ? 0 : point.y - drag.startY;
@@ -4663,7 +4729,7 @@ export function WatchfaceEditor({
     const result = snapWatchfaceBounds({
       movingId: drag.snapId,
       movingBounds: translateWatchfaceBounds(
-        baseBounds,
+        movingInk ?? baseBounds,
         rawDx,
         rawDy
       ),
@@ -5150,18 +5216,24 @@ export function WatchfaceEditor({
     axisLockHeld: boolean
   ) {
     const axisLock = dragAxisLock(drag, point, axisLockHeld);
-    const targets = placementSnapTargets(drag.snapId);
-    const resolved = resolveDragMovement(drag, point, bypassSnap, axisLock, targets);
+    // Snap, guides and gaps all use what layers visibly draw once it is measured.
+    const ink = dragInk(drag);
+    const targets = placementSnapTargets(drag.snapId).map((target) => {
+      const measured = ink?.targets.get(target.id);
+      return measured ? { ...target, bounds: measured } : target;
+    });
+    const resolved = resolveDragMovement(drag, point, bypassSnap, axisLock, targets, ink?.moving);
     const movement = clampDragMovement(drag, resolved);
     const bounds = translateWatchfaceBounds(resolved.baseBounds, movement.dx, movement.dy);
+    const visibleBounds = translateWatchfaceBounds(ink?.moving ?? resolved.baseBounds, movement.dx, movement.dy);
     snapMeasurementsRef.current = watchfaceNeighborMeasurements(
-      bounds,
+      visibleBounds,
       targets,
       (gap) => `${Math.round(gap * watchCoordinateScale)}`
     );
     // Show every object the selection lines up with, not just the one it
     // snapped to; face-level guides (grid, safe area, rulers) stay as picked.
-    const alignment = watchfaceAlignmentGuides(bounds, targets, previewWidth, previewHeight);
+    const alignment = watchfaceAlignmentGuides(visibleBounds, targets, previewWidth, previewHeight);
     snapGuidesRef.current = [
       ...snapGuidesRef.current.filter((guide) => guide.kind !== "layer" && guide.kind !== "face-center" && guide.kind !== "spacing"),
       ...alignment
@@ -10194,18 +10266,18 @@ export function WatchfaceEditor({
           ) : null}
           {canEditActiveMode && selectedMovableIds.some((id) => !isPositionLocked(id)) ? (
             <div className="wf-contextual-align-bar" role="toolbar" aria-label={t("Align and distribute selection")}>
-              <button type="button" title={t("Align left")} aria-label={t("Align left")} onClick={() => alignSelection("left")}><AlignHorizontalJustifyStart size={15} /></button>
-              <button type="button" title={t("Align horizontal centers")} aria-label={t("Align horizontal centers")} onClick={() => alignSelection("center-x")}><AlignHorizontalJustifyCenter size={15} /></button>
-              <button type="button" title={t("Align right")} aria-label={t("Align right")} onClick={() => alignSelection("right")}><AlignHorizontalJustifyEnd size={15} /></button>
+              <button type="button" title={t("Align left")} aria-label={t("Align left")} disabled={aligningGlyphs} onClick={() => alignSelection("left")}><AlignHorizontalJustifyStart size={15} /></button>
+              <button type="button" title={t("Align horizontal centers")} aria-label={t("Align horizontal centers")} disabled={aligningGlyphs} onClick={() => alignSelection("center-x")}><AlignHorizontalJustifyCenter size={15} /></button>
+              <button type="button" title={t("Align right")} aria-label={t("Align right")} disabled={aligningGlyphs} onClick={() => alignSelection("right")}><AlignHorizontalJustifyEnd size={15} /></button>
               <span aria-hidden="true" />
-              <button type="button" title={t("Align top")} aria-label={t("Align top")} onClick={() => alignSelection("top")}><AlignVerticalJustifyStart size={15} /></button>
-              <button type="button" title={t("Align vertical centers")} aria-label={t("Align vertical centers")} onClick={() => alignSelection("center-y")}><AlignVerticalJustifyCenter size={15} /></button>
-              <button type="button" title={t("Align bottom")} aria-label={t("Align bottom")} onClick={() => alignSelection("bottom")}><AlignVerticalJustifyEnd size={15} /></button>
+              <button type="button" title={t("Align top")} aria-label={t("Align top")} disabled={aligningGlyphs} onClick={() => alignSelection("top")}><AlignVerticalJustifyStart size={15} /></button>
+              <button type="button" title={t("Align vertical centers")} aria-label={t("Align vertical centers")} disabled={aligningGlyphs} onClick={() => alignSelection("center-y")}><AlignVerticalJustifyCenter size={15} /></button>
+              <button type="button" title={t("Align bottom")} aria-label={t("Align bottom")} disabled={aligningGlyphs} onClick={() => alignSelection("bottom")}><AlignVerticalJustifyEnd size={15} /></button>
               <button type="button" title={t("Align visible glyph baselines; center colons beside the tallest glyphs")} aria-label={t("Align glyph baselines")} disabled={aligningGlyphs || selectedLayoutItems().length < 2} onClick={() => void alignGlyphBaselines()}>{t("Baseline", undefined, "alignToolbar")}</button>
               {heightMatch.icons.length > 0 ? <button type="button" title={t("Resize the selected Bluetooth and Do Not Disturb icons to the visible height of the other selected layers")} aria-label={t("Match icon height to the selected text")} disabled={aligningGlyphs || heightMatch.others.length === 0} onClick={() => void matchStatusIconHeights()}>{t("Match height")}</button> : null}
               <span aria-hidden="true" />
-              <button type="button" title={t("Distribute horizontal spacing")} aria-label={t("Distribute horizontal spacing")} disabled={selectedLayoutItems().length < 3} onClick={() => distributeSelection("horizontal")}><AlignHorizontalSpaceBetween size={15} /></button>
-              <button type="button" title={t("Distribute vertical spacing")} aria-label={t("Distribute vertical spacing")} disabled={selectedLayoutItems().length < 3} onClick={() => distributeSelection("vertical")}><AlignVerticalSpaceBetween size={15} /></button>
+              <button type="button" title={t("Distribute horizontal spacing")} aria-label={t("Distribute horizontal spacing")} disabled={aligningGlyphs || selectedLayoutItems().length < 3} onClick={() => distributeSelection("horizontal")}><AlignHorizontalSpaceBetween size={15} /></button>
+              <button type="button" title={t("Distribute vertical spacing")} aria-label={t("Distribute vertical spacing")} disabled={aligningGlyphs || selectedLayoutItems().length < 3} onClick={() => distributeSelection("vertical")}><AlignVerticalSpaceBetween size={15} /></button>
               <span aria-hidden="true" />
               <button type="button" title={t("Group selection")} aria-label={t("Group selection")} disabled={selectedLayoutItems().length < 2} onClick={linkSelectedLayers}><Group size={15} /></button>
               <button type="button" title={t("Ungroup selection")} aria-label={t("Ungroup selection")} disabled={!selectionCanUnlink} onClick={unlinkSelectedLayers}><Ungroup size={15} /></button>

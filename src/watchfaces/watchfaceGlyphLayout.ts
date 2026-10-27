@@ -208,6 +208,26 @@ export async function spaceWatchfaceGlyph(dataUrl: string, tracking = 0): Promis
   return canvas.toDataURL("image/png");
 }
 
+/** Visible pixels inside a region of the canvas (whole canvas by default), in canvas pixels. */
+export function visibleInkBounds(
+  canvas: HTMLCanvasElement,
+  region = { x0: 0, y0: 0, x1: canvas.width, y1: canvas.height }
+): { x0: number; y0: number; x1: number; y1: number } | null {
+  const left = Math.max(0, Math.floor(region.x0)), top = Math.max(0, Math.floor(region.y0));
+  const width = Math.min(canvas.width, Math.ceil(region.x1)) - left;
+  const height = Math.min(canvas.height, Math.ceil(region.y1)) - top;
+  if (width <= 0 || height <= 0) return null;
+  const pixels = canvas.getContext("2d", { willReadFrequently: true })!
+    .getImageData(left, top, width, height).data;
+  let x0 = width, y0 = height, x1 = -1, y1 = -1;
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    if (pixels[(y * width + x) * 4 + 3]! < 8) continue;
+    x0 = Math.min(x0, x); y0 = Math.min(y0, y);
+    x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+  }
+  return x1 < 0 ? null : { x0: left + x0, y0: top + y0, x1: left + x1 + 1, y1: top + y1 + 1 };
+}
+
 export function visibleGlyphBounds(canvas: HTMLCanvasElement): { top: number; bottom: number } | null {
   const ink = measure(canvas);
   return ink.height ? { top: ink.y, bottom: ink.y + ink.height } : null;

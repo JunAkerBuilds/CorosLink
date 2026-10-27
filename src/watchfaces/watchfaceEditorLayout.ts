@@ -39,6 +39,20 @@ export function unionWatchfaceBounds(
   );
 }
 
+/**
+ * Boxes whose pixels can be read from one shared frame: a box that overlaps
+ * another can't tell its own ink from its neighbour's, so it keeps its edges.
+ */
+export function separableWatchfaceBoxIds(
+  items: WatchfaceLayoutItem[]
+): Set<string> {
+  return new Set(items.filter((item) => !items.some((other) =>
+    other !== item &&
+    other.bounds.x0 < item.bounds.x1 && item.bounds.x0 < other.bounds.x1 &&
+    other.bounds.y0 < item.bounds.y1 && item.bounds.y0 < other.bounds.y1
+  )).map((item) => item.id));
+}
+
 export function alignWatchfaceItems(
   items: WatchfaceLayoutItem[],
   alignment: WatchfaceAlignment,
