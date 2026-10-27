@@ -420,7 +420,7 @@ export function ActivityDetailPanel({
           ) : null}
           {zones.hr || zones.pace || zones.gap ? (
             <ActivityTimeInZones
-              key={detail.activityId ?? "activity"}
+              key={`zones-${detail.activityId ?? "activity"}`}
               zones={zones}
               // On a trail the ground sets the pace; effort pace is the fair scale.
               initialKind={streamSportType === 102 ? "gap" : undefined}
@@ -437,7 +437,7 @@ export function ActivityDetailPanel({
           {import.meta.env.DEV ? <RunEfficiencyPanel detail={detail} listActivity={listActivity} /> : null}
           {streams ? (
             <ActivityChannels
-              key={detail.activityId ?? "activity"}
+              key={`channels-${detail.activityId ?? "activity"}`}
               streams={streams}
               cycling={cycling}
               elevationGain={detail.elevationGain}
