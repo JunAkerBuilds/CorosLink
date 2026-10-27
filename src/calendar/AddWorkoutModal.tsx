@@ -1,5 +1,5 @@
 import { formatIntensityType, formatWorkoutSport } from "./workoutLabels";
-import { t, getLocale, useLanguage } from "../i18n/training";
+import { t, getLocale, useLanguage, formatNumber } from "../i18n/training";
 import { useLocalOnlyView } from "../privacy/localOnlyView";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
@@ -847,10 +847,10 @@ function formatBuilderDistance(
   unitSystem: UnitSystem
 ): string {
   if (unit === "swim") {
-    return `${Math.round(distance).toLocaleString(getLocale())} ${swimDistanceUnit(unitSystem)}`;
+    return `${formatNumber(Math.round(distance))} ${swimDistanceUnit(unitSystem)}`;
   }
   const rounded = Math.round(distance * 10) / 10;
-  return `${rounded.toLocaleString(getLocale())} ${distanceUnit(unitSystem)}`;
+  return `${formatNumber(rounded)} ${distanceUnit(unitSystem)}`;
 }
 
 function BuilderIntensityFields({ row, sport, context, exerciseOptions, exercisesLoading, onChange }: { row: BuilderRow; sport: WorkoutSport; context?: WorkoutEditorContext; exerciseOptions: WorkoutExerciseOption[]; exercisesLoading: boolean; onChange: (update: Partial<BuilderRow>) => void }) {
@@ -2321,7 +2321,7 @@ export function AddWorkoutModal({
                 <dl className="calendar-quick-preview-metrics">
                   <div>
                     <dt>{t("Distance")}</dt>
-                    <dd>{quickDistanceValid ? `${quickDistance.toLocaleString(getLocale())} ${distanceUnit(unitSystem)}` : "-"}</dd>
+                    <dd>{quickDistanceValid ? `${formatNumber(quickDistance)} ${distanceUnit(unitSystem)}` : "-"}</dd>
                   </div>
                   <div>
                     <dt>{t("Target pace")}</dt>
@@ -2338,7 +2338,7 @@ export function AddWorkoutModal({
                   <div>
                     <strong>{t("Run")}</strong>
                     <small>
-                      {quickDistanceValid ? `${quickDistance.toLocaleString(getLocale())} ${distanceUnit(unitSystem)}` : t("Set a distance")}
+                      {quickDistanceValid ? `${formatNumber(quickDistance)} ${distanceUnit(unitSystem)}` : t("Set a distance")}
                       {quickPaceLabel && quickPaceValid ? t(" at {{value1}}", { value1: String(quickPaceLabel) }) : t(" at open pace")}
                     </small>
                   </div>
@@ -2351,7 +2351,7 @@ export function AddWorkoutModal({
                     <>
                       <span>{t("Workout total")}</span>
                       <strong>
-                        {quickDistance.toLocaleString(getLocale())} {distanceUnit(unitSystem)}
+                        {formatNumber(quickDistance)} {distanceUnit(unitSystem)}
                         {quickDuration ? t(", about {{value1}}", { value1: String(quickDuration) }) : ""}
                       </strong>
                     </>

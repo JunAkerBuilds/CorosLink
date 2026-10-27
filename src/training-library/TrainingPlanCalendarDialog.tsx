@@ -1,4 +1,4 @@
-import { getLocale, getDateTimeFormat, useLanguage, t } from "../i18n/training";
+import { getLocale, getDateTimeFormat, useLanguage, t, formatDate } from "../i18n/training";
 import { useLocalOnlyView } from "../privacy/localOnlyView";
 import {
   AlertTriangle,
@@ -137,7 +137,7 @@ function initialFromDate(plan: TrainingPlanDocument, today: string): string {
 }
 
 function weekdayName(value: Date): string {
-  return value.toLocaleDateString(getLocale(), { weekday: "long" });
+  return formatDate(value, { weekday: "long" });
 }
 
 export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperation, onClose, onComplete }: TrainingPlanCalendarDialogProps) {

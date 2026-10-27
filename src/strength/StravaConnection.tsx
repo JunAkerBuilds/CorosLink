@@ -1,4 +1,4 @@
-import { renderLocalizedText, type LocalizableText, t, useLanguage, getLocale } from "../i18n/training";
+import { renderLocalizedText, type LocalizableText, t, useLanguage, formatDate } from "../i18n/training";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ExternalLink, Link2, Loader2 } from "lucide-react";
 import type { StravaStatus } from "../../electron/types";
@@ -17,7 +17,7 @@ function formatSyncTime(value?: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? t("Not synced yet")
-    : t("Last synced {{time}}", { time: date.toLocaleString(getLocale(), {
+    : t("Last synced {{time}}", { time: formatDate(date, {
         month: "short",
         day: "numeric",
         hour: "numeric",

@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../../i18n/tools";
+import { t, useLanguage, formatNumber } from "../../i18n/tools";
 import {
   Bike,
   Dumbbell,
@@ -388,7 +388,7 @@ function SportChip({
       {count === undefined ? (
         <span className="backup-chip-count is-pending" aria-hidden="true" />
       ) : (
-        <span className="backup-chip-count">{count.toLocaleString(getLocale())}</span>
+        <span className="backup-chip-count">{formatNumber(count)}</span>
       )}
     </button>
   );

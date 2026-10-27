@@ -1,4 +1,4 @@
-import { t, getLocale, getDateTimeFormat } from "../i18n/toolsLocale";
+import { t, getDateTimeFormat, formatDate } from "../i18n/toolsLocale";
 import type {
   TrainingHubActivity,
   TrainingHubSleepRecord,
@@ -42,7 +42,7 @@ export interface ReadinessOptions {
 const STALE_SYNC_MS = 12 * 3_600_000;
 
 function syncTimeText(ms: number): string {
-  return new Date(ms).toLocaleString(getLocale(), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return formatDate(new Date(ms), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 /** Recovery verdict, phrased around today's plan when there is one. */

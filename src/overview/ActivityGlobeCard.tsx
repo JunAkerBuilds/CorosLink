@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale, getDateTimeFormat } from "../i18n/tools";
+import { t, useLanguage, getDateTimeFormat, formatNumber } from "../i18n/tools";
 import {
   CalendarDays,
   MousePointer2,
@@ -765,13 +765,13 @@ export function ActivityGlobeCard({
     {
       label: t("Activities"),
       tone: "activities",
-      value: overall.count.toLocaleString(getLocale()),
+      value: formatNumber(overall.count),
       unit: "",
     },
     {
       label: t("Places visited"),
       tone: "places",
-      value: mapPlaceCount.toLocaleString(getLocale()),
+      value: formatNumber(mapPlaceCount),
       unit: "",
     },
   ];
@@ -780,7 +780,7 @@ export function ActivityGlobeCard({
       ? {
           id: "routes",
           label: t("GPS routes"),
-          value: routes.length.toLocaleString(getLocale()),
+          value: formatNumber(routes.length),
           unit: "",
           icon: Route,
         }
@@ -789,9 +789,9 @@ export function ActivityGlobeCard({
       ? {
           id: "elevation",
           label: t("Elevation gained"),
-          value: Math.round(
+          value: formatNumber(Math.round(
             metersToElevation(overall.totalElevationMeters, unitSystem),
-          ).toLocaleString(getLocale()),
+          )),
           unit: elevationUnit(unitSystem),
           icon: Mountain,
         }
@@ -800,7 +800,7 @@ export function ActivityGlobeCard({
       ? {
           id: "load",
           label: t("Training load"),
-          value: Math.round(overall.totalTrainingLoad).toLocaleString(getLocale()),
+          value: formatNumber(Math.round(overall.totalTrainingLoad)),
           unit: "TL",
           icon: Gauge,
         }
@@ -809,7 +809,7 @@ export function ActivityGlobeCard({
       ? {
           id: "calories",
           label: t("Calories"),
-          value: Math.round(overall.totalCalories).toLocaleString(getLocale()),
+          value: formatNumber(Math.round(overall.totalCalories)),
           unit: "kcal",
           icon: Flame,
         }
@@ -955,7 +955,7 @@ export function ActivityGlobeCard({
             <header className="training-map-places-head">
               <h3>{t("Places")}</h3>
               {placeCount > 0 ? (
-                <span className="training-map-count">{placeCount.toLocaleString(getLocale())}</span>
+                <span className="training-map-count">{formatNumber(placeCount)}</span>
               ) : null}
               {placeCount > pageSize ? (
                 <div className="training-map-pager">
@@ -1008,15 +1008,12 @@ export function ActivityGlobeCard({
                 <dl className="training-map-detail-metrics">
                   <div>
                     <dt>{t("Activities")}</dt>
-                    <dd>{selectedLocation.activities.length.toLocaleString(getLocale())}</dd>
+                    <dd>{formatNumber(selectedLocation.activities.length)}</dd>
                   </div>
                   <div>
                     <dt>{t("Distance")}</dt>
                     <dd>
-                      {metersToDisplayDistance(selectedLocation.distanceMeters, unitSystem).toLocaleString(
-                        getLocale(),
-                        { maximumFractionDigits: 1 },
-                      )}
+                      {formatNumber(metersToDisplayDistance(selectedLocation.distanceMeters, unitSystem), { maximumFractionDigits: 1 })}
                       <small>{distanceUnit(unitSystem)}</small>
                     </dd>
                   </div>
@@ -1039,8 +1036,8 @@ export function ActivityGlobeCard({
                     </span>
                     <strong>
                       {selectedLocation.elevationMeters > 0
-                        ? `${Math.round(metersToElevation(selectedLocation.elevationMeters, unitSystem)).toLocaleString(getLocale())} ${elevationUnit(unitSystem)}`
-                        : `${metersToDisplayDistance(selectedLocation.distanceMeters, unitSystem).toLocaleString(getLocale(), { maximumFractionDigits: 1 })} ${distanceUnit(unitSystem)}`}
+                        ? `${formatNumber(Math.round(metersToElevation(selectedLocation.elevationMeters, unitSystem)))} ${elevationUnit(unitSystem)}`
+                        : `${formatNumber(metersToDisplayDistance(selectedLocation.distanceMeters, unitSystem), { maximumFractionDigits: 1 })} ${distanceUnit(unitSystem)}`}
                     </strong>
                   </div>
                   {selectedLocation.trend.length > 1 ? (
@@ -1157,12 +1154,12 @@ export function ActivityGlobeCard({
                           </small>
                         </span>
                         <span className="training-map-place-stats">
-                          <strong>{summary.activities.length.toLocaleString(getLocale())}</strong>
+                          <strong>{formatNumber(summary.activities.length)}</strong>
                           {" "}
                           {summary.activities.length === 1 ? t("activity") : t("activities")}
                           {" · "}
                           <strong>
-                            {metersToDisplayDistance(summary.distanceMeters, unitSystem).toLocaleString(getLocale(), {
+                            {formatNumber(metersToDisplayDistance(summary.distanceMeters, unitSystem), {
                               maximumFractionDigits: 0,
                             })}
                           </strong>
@@ -1252,7 +1249,7 @@ export function ActivityGlobeCard({
               <span>
                 {visitsLoading
                   ? t("Mapping GPS activity")
-                  : t("{{p0}} GPS {{p1}}", { p0: routes.length.toLocaleString(getLocale()), p1: routes.length === 1 ? t("route") : t("routes") })}
+                  : t("{{p0}} GPS {{p1}}", { p0: formatNumber(routes.length), p1: routes.length === 1 ? t("route") : t("routes") })}
               </span>
             </div>
           </div>

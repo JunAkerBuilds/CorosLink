@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../../i18n/tools";
+import { t, useLanguage, formatDate, formatNumber } from "../../i18n/tools";
 import {
   CheckCircle2,
   Loader2,
@@ -31,7 +31,7 @@ function formatWhen(iso?: string): string | null {
   if (!iso) return null;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleString(getLocale(), {
+  return formatDate(date, {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -106,7 +106,7 @@ export function FitIndexPanel({ api }: { api: CorosLinkApi }) {
         <dl className="fit-index-stats">
           <div className={status && status.indexed > 0 ? "fit-index-stat is-ready" : "fit-index-stat"}>
             <dt>{t("Activities indexed")}</dt>
-            <dd>{status ? status.indexed.toLocaleString(getLocale()) : "–"}</dd>
+            <dd>{status ? formatNumber(status.indexed) : "–"}</dd>
           </div>
           <div className="fit-index-stat">
             <dt>{t("Cache on disk")}</dt>

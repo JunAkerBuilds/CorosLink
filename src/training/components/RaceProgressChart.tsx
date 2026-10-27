@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../../i18n/training";
+import { t, useLanguage, getLocale, formatDate } from "../../i18n/training";
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import { formatRaceDate, formatRaceTime } from "../raceFormat";
 
@@ -58,7 +58,7 @@ function dateTicks(lo: number, hi: number, max: number): { value: number; label:
   const stride = Math.max(1, Math.ceil(candidates.length / max));
   // Past a year every month carries its year, as "Jun ’24" so it never reads as a day.
   const label = (month: Date) => {
-    const name = month.toLocaleDateString(getLocale(), { month: "short" });
+    const name = formatDate(month, { month: "short" });
     return spanYears > 1 ? `${name} ’${String(month.getFullYear()).slice(-2)}` : name;
   };
   return candidates

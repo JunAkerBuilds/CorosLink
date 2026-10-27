@@ -1,4 +1,4 @@
-import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage, getLocale, formatDate } from "../i18n/watchfaces";
 import { WATCHFACE_TARGETS, getWatchfaceTarget } from "../../electron/watchfaceTargets";
 import { drawNativeDataPreview } from "./nativeData";
 import {
@@ -4833,7 +4833,7 @@ function formatRelativeUpdatedAt(value: string, now = Date.now()): string {
   if (hours < 48) return t("yesterday");
   const days = Math.floor(hours / 24);
   if (days < 7) return t("{{days}}d ago", { days });
-  return new Date(timestamp).toLocaleDateString(getLocale(), {
+  return formatDate(new Date(timestamp), {
     month: "short",
     day: "numeric",
     year: new Date(timestamp).getFullYear() === new Date(now).getFullYear()
@@ -4846,7 +4846,7 @@ function formatExactUpdatedAt(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.valueOf())
     ? t("Update time unavailable")
-    : t("Updated {{date}}", { date: date.toLocaleString(getLocale(), { dateStyle: "medium", timeStyle: "short" }) });
+    : t("Updated {{date}}", { date: formatDate(date, { dateStyle: "medium", timeStyle: "short" }) });
 }
 
 function watchfaceCatalogLabel(catalog: CorosWatchfaceThemeCatalog): string {

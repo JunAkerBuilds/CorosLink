@@ -1,4 +1,4 @@
-import { useLanguage, getLocale, t } from "../../i18n/training";
+import { useLanguage, getLocale, t, formatNumber, formatDate } from "../../i18n/training";
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Activity, Bike, CalendarDays, ChevronLeft, ChevronRight, Dumbbell, Flag, Flame,
   Footprints, Gauge, Heart, LayoutGrid, List, Loader2, MapPin, Mountain, Search, Sparkles, Timer, X } from "lucide-react";
@@ -57,11 +57,11 @@ function ActivitySummary({ activities }: { activities: TrainingHubActivity[] }) 
   const totals = useMemo(() => activityTotals(activities), [activities, getLocale()]);
   const timeline = useMemo(() => activityTimeline(activities), [activities, getLocale()]);
   const metrics = [
-    { key: "count", label: t("Total Activities"), value: totals.count.toLocaleString(getLocale()), icon: PersonSimpleRun, color: "#52dfab", bars: true, note: "In this selection" },
+    { key: "count", label: t("Total Activities"), value: formatNumber(totals.count), icon: PersonSimpleRun, color: "#52dfab", bars: true, note: "In this selection" },
     { key: "distance", label: t("Total Distance"), value: totals.distance === undefined ? "—" : formatDistanceMeters(totals.distance, unitSystem), icon: MapPin, color: "#65dcec", bars: false, note: "Distance covered" },
     { key: "duration", label: t("Total Time"), value: totals.duration === undefined ? "—" : formatDurationSeconds(totals.duration), icon: Timer, color: "#c995f5", bars: true, note: "Time in motion" },
     { key: "pace", label: t("Avg Pace"), value: formatPaceSecondsPerKm(totals.pace, unitSystem), icon: Gauge, color: "#58ddd4", bars: false, note: "Running & walking" },
-    { key: "calories", label: t("Calories"), value: totals.calories === undefined ? "—" : `${Math.round(totals.calories).toLocaleString(getLocale())} kcal`, icon: Flame, color: "#f7aa54", bars: true, note: "Energy burned" }
+    { key: "calories", label: t("Calories"), value: totals.calories === undefined ? "—" : `${formatNumber(Math.round(totals.calories))} kcal`, icon: Flame, color: "#f7aa54", bars: true, note: "Energy burned" }
   ] as const;
   return <div className="activities-summary" aria-label={t("Activity totals")}>
     {metrics.map(({ key, label, value, icon: Icon, color, bars, note }) =>
@@ -140,7 +140,7 @@ function ActivityCalendar({ activities, onOpen }: { activities: TrainingHubActiv
   const offset = (month.getDay() + 6) % 7;
   const cells = Math.ceil((offset + dayCount) / 7) * 7;
   return <section className="activities-calendar" aria-label={t("Activity calendar")}>
-    <header><h2>{month.toLocaleDateString(getLocale(), { month: "long", year: "numeric" })}</h2><div>
+    <header><h2>{formatDate(month, { month: "long", year: "numeric" })}</h2><div>
       <button type="button" aria-label={t("Previous month")} onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}><ChevronLeft size={17} /></button>
       <button type="button" onClick={() => { const now = new Date(); setMonth(new Date(now.getFullYear(), now.getMonth(), 1)); }}>{t("Today")}</button>
       <button type="button" aria-label={t("Next month")} onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}><ChevronRight size={17} /></button>

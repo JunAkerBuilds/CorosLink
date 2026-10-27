@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../../i18n/training";
+import { t, useLanguage, formatDate, formatNumber } from "../../i18n/training";
 import type { RaceDistanceKey, RaceEntry } from "../../../electron/raceTypes";
 import { formatRaceDelta, formatRaceTime } from "../raceFormat";
 
@@ -45,7 +45,7 @@ function Sparkline({ values }: { values: number[] }) {
 }
 
 function monthYear(epochSeconds: number): string {
-  return new Date(epochSeconds * 1000).toLocaleDateString(getLocale(), { month: "short", year: "numeric" });
+  return formatDate(new Date(epochSeconds * 1000), { month: "short", year: "numeric" });
 }
 
 /**
@@ -68,7 +68,7 @@ export function RacePlaque({
   const first = races[0];
   const improvement = valueOf(best) - valueOf(first);
   const all = group.distanceKey === "all";
-  const count = races.length === 1 ? t("1 race") : t("{{count}} races", { count: races.length.toLocaleString(getLocale()) });
+  const count = races.length === 1 ? t("1 race") : t("{{count}} races", { count: formatNumber(races.length) });
   // On a narrow plaque only the gap shows; the words drop out (see races.css).
   const trend =
     races.length === 1 ? (
@@ -136,7 +136,7 @@ export function MiniPlaque({ race, label, value }: { race: RaceEntry; label: str
       <span className="race-plaque-meta">
         <span>{race.name}</span>
         <span>
-          {new Date(race.startTime * 1000).toLocaleDateString(getLocale(), {
+          {formatDate(new Date(race.startTime * 1000), {
             month: "short",
             day: "numeric",
             year: "numeric"

@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { t, useLanguage, formatDate } from "../i18n/watchfaces";
 import {
   useCallback,
   useEffect,
@@ -70,7 +70,6 @@ interface PanelMessage {
   cancelled?: boolean;
   changed?: boolean;
 }
-
 
 interface GeneratedImage {
   assetId: string;
@@ -257,7 +256,7 @@ function relativeTime(iso: string): string {
   if (hours < 24) return t("{{hours}}h ago", { hours });
   const days = Math.round(hours / 24);
   if (days < 7) return t("{{days}}d ago", { days });
-  return new Date(then).toLocaleDateString(getLocale());
+  return formatDate(new Date(then));
 }
 
 function stepLabel(step: ToolStep): string {

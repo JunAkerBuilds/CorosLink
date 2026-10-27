@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale, formatDate } from "../i18n/tools";
+import { t, useLanguage, getLocale, formatDate, formatNumber } from "../i18n/tools";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   AlertCircle, BatteryMedium, Bluetooth, ChevronDown, ChevronLeft, ChevronRight, Download, Info, KeyRound, LayoutGrid, Loader2,
@@ -677,10 +677,10 @@ function WatchConnectionDetails({ snapshot, api, watchKeySaved, watchKey: watchK
     [t("COROS session"), snapshot.connected && snapshot.systemBind === "authenticated" ? t("Authenticated")
       : snapshot.systemBind === "failed" ? t("Authentication failed") : t("Not authenticated")],
     [t("Clock"), snapshot.connected && snapshot.clockSetAt
-      ? t("Set from this computer at {{p0}}", { p0: new Date(snapshot.clockSetAt).toLocaleTimeString(getLocale(), { hour: "numeric", minute: "2-digit" }) })
+      ? t("Set from this computer at {{p0}}", { p0: formatDate(new Date(snapshot.clockSetAt), { hour: "numeric", minute: "2-digit" }) })
       : "—"],
     [t("Weather"), snapshot.connected && snapshot.weatherSentAt
-      ? t("Forecast sent at {{p0}}", { p0: new Date(snapshot.weatherSentAt).toLocaleTimeString(getLocale(), { hour: "numeric", minute: "2-digit" }) })
+      ? t("Forecast sent at {{p0}}", { p0: formatDate(new Date(snapshot.weatherSentAt), { hour: "numeric", minute: "2-digit" }) })
       : snapshot.connected && snapshot.weatherFailedAt ? t("The watch didn't take the forecast this time. CorosLink sends it again next time the watch connects.")
       : snapshot.connected ? onChoosePlace
         ? <button type="button" className="watch-link-inline-button" onClick={onChoosePlace}>{t("Choose a place")}</button>
@@ -707,11 +707,11 @@ function WatchConnectionDetails({ snapshot, api, watchKeySaved, watchKey: watchK
       </section> : null}
       {developerTools && snapshot.channels.length ? <details className="watch-link-channels">
         <summary>{t("Live BLE channels")}</summary>
-        <p>{snapshot.pairingManagedByOS ? t("{{p0}} COROS control writes · pairing managed by your operating system", { p0: (snapshot.controlWrites ?? 0).toLocaleString(getLocale()) })
-          : t("Computer → adapter {{p0}} packets · adapter → computer {{p1}} packets", { p0: (snapshot.hostToAdapterPackets ?? 0).toLocaleString(getLocale()), p1: (snapshot.adapterToHostPackets ?? 0).toLocaleString(getLocale()) })}</p>
+        <p>{snapshot.pairingManagedByOS ? t("{{p0}} COROS control writes · pairing managed by your operating system", { p0: formatNumber(snapshot.controlWrites ?? 0) })
+          : t("Computer → adapter {{p0}} packets · adapter → computer {{p1}} packets", { p0: formatNumber(snapshot.hostToAdapterPackets ?? 0), p1: formatNumber(snapshot.adapterToHostPackets ?? 0) })}</p>
         <ul>{snapshot.channels.map(channel => <li key={channel.name} className={channel.subscribed ? "is-live" : ""}>
           <strong>{channel.name}</strong>
-          <span>{channel.subscribed ? t("Listening") : t("Disconnected")} · {channel.notifications.toLocaleString(getLocale())}  {t("notifications ·")} {channel.receivedBytes.toLocaleString(getLocale())}  {t("bytes")}</span>
+          <span>{channel.subscribed ? t("Listening") : t("Disconnected")} · {formatNumber(channel.notifications)}  {t("notifications ·")} {formatNumber(channel.receivedBytes)}  {t("bytes")}</span>
         </li>)}</ul>
       </details> : null}
       {/* Only when the watch needs a sign-in; a saved key with the watch away needs nothing more than connecting. */}
@@ -750,7 +750,7 @@ function satelliteData(assist: CorosNativeBleSnapshot["gpsAssistance"], connecte
   // A reply in an unknown format, or a date far from today, wasn't read as expected: shown as no data (the bytes stay in the snapshot).
   const plausible = !assist?.validUntil || Math.abs(assist.validUntil - Date.now()) < 400 * 86_400_000;
   if (!assist || assist.format === "unknown" || !plausible) return "—";
-  const until = assist.validUntil && new Date(assist.validUntil).toLocaleString(getLocale(), { dateStyle: "medium", timeStyle: "short" });
+  const until = assist.validUntil && formatDate(new Date(assist.validUntil), { dateStyle: "medium", timeStyle: "short" });
   const value = !assist.validUntil ? t("None on the watch")
     : assist.validUntil > Date.now() ? t("Valid until {{p0}}", { p0: until }) : t("Expired {{p0}}", { p0: until });
   // With the watch away it may have been updated since (by the COROS app, say), so say when this was read.

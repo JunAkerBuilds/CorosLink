@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { t, useLanguage, formatDate } from "../i18n/watchfaces";
 import { useEffect, useId, useRef, useState } from "react";
 import { FlaskConical, Pause, Play, X } from "lucide-react";
 import type { CorosWatchfaceDesignState } from "../../electron/types";
@@ -74,7 +74,7 @@ export function WatchfaceSimulationPanel({ simulation, onChange, design }: { sim
       <label className="wf-simulation-enable"><input type="checkbox" checked={simulation.enabled} onChange={event => patch({ enabled: event.target.checked, playing: false })} />{" "}{t("Enable simulation")}</label>
       <fieldset disabled={!simulation.enabled}>
         <SimulationCalendar dateTime={simulation.dateTime} onChange={dateTime => patch({ dateTime, playing: false })} />
-        <p>{parseSimulationDateTime(simulation.dateTime).toLocaleDateString(getLocale(), { weekday: "long" })}{" "}{t("· Local time · Weekday follows the date")}</p>
+        <p>{formatDate(parseSimulationDateTime(simulation.dateTime), { weekday: "long" })}{" "}{t("· Local time · Weekday follows the date")}</p>
         <div className="wf-simulation-actions">
           <button type="button" onClick={() => patch({ playing: !simulation.playing })}>{simulation.playing ? <Pause size={14} /> : <Play size={14} />}{simulation.playing ? t("Pause") : t("Play")}</button>
           <select aria-label={t("Simulation speed")} value={simulation.speed} onChange={event => patch({ speed: Number(event.target.value) })}>{SIMULATION_SPEEDS.map(speed => <option key={speed} value={speed}>{speed === 1 ? t("Real time") : speed === 60 ? t("1 minute / second") : speed === 3600 ? t("1 hour / second") : t("1 day / second")}</option>)}</select>

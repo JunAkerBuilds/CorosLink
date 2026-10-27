@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { t, useLanguage, getLocale, formatDate } from "../i18n/watchfaces";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   BatteryCharging,
@@ -212,7 +212,7 @@ function formatDay(value: string): string {
   const date = new Date(`${value}T12:00:00`);
   return Number.isNaN(date.valueOf())
     ? value
-    : date.toLocaleDateString(getLocale(), { weekday: "short", month: "short", day: "numeric" });
+    : formatDate(date, { weekday: "short", month: "short", day: "numeric" });
 }
 
 function formatPercent(value: number): string {

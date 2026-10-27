@@ -1183,7 +1183,7 @@ export function OverviewLaunchpad({
       detail: upcomingCount > 0
         ? upcomingCount === 1
           ? t("1 workout in the next two weeks")
-          : t("{{count}} workouts in the next two weeks", { count: upcomingCount.toLocaleString(getLocale()) })
+          : t("{{count}} workouts in the next two weeks", { count: formatNumber(upcomingCount) })
         : t("Plan your next block")
     },
     {
@@ -1192,7 +1192,7 @@ export function OverviewLaunchpad({
       detail: trackCount > 0
         ? trackCount === 1
           ? t("1 track · {{size}}", { size: librarySize })
-          : t("{{count}} tracks · {{size}}", { count: trackCount.toLocaleString(getLocale()), size: librarySize })
+          : t("{{count}} tracks · {{size}}", { count: formatNumber(trackCount), size: librarySize })
         : t("Load music for your runs")
     }
   ];

@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/tools";
+import { t, useLanguage, formatDate } from "../i18n/tools";
 import {
   Bike,
   CalendarDays,
@@ -579,7 +579,7 @@ function GearCard({
         <span style={{ width: `${progress}%` }} />
       </div>
       <div className="gear-card-meta">
-        <span>{t("Since")} {new Date(`${gear.firstUseDay}T00:00:00`).toLocaleDateString(getLocale())}</span>
+        <span>{t("Since")} {formatDate(new Date(`${gear.firstUseDay}T00:00:00`))}</span>
         <span>{sportNames.join(" · ") || t("No activities")}</span>
       </div>
     </article>

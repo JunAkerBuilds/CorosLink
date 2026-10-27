@@ -1,4 +1,4 @@
-import { formatNumber, getLocale, t, useLanguage } from "../../i18n/training";
+import { formatNumber, t, useLanguage, formatDate } from "../../i18n/training";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Gauge, Loader2 } from "lucide-react";
 import type { TrainingHubActivity, TrainingHubActivityDetail } from "../../../electron/types";
@@ -366,7 +366,7 @@ function EfficiencyTrendChart({ points, usual, width, height, from, to }: {
       ))}
       {weeks.map((time) => (
         <text key={time} className="run-efficiency-axis" x={x(time)} y={height - 4} textAnchor={time === to ? "end" : time === from ? "start" : "middle"}>
-          {new Date(time * 1000).toLocaleDateString(getLocale(), { month: "short", day: "numeric" })}
+          {formatDate(new Date(time * 1000), { month: "short", day: "numeric" })}
         </text>
       ))}
     </svg>

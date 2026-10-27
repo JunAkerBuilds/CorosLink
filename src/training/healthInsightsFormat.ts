@@ -1,4 +1,4 @@
-import { getLocale } from "../i18n/trainingLocale";
+import { getLocale, formatDate } from "../i18n/trainingLocale";
 /** Time and number helpers shared by the health insight cards. */
 export const DAY_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -7,9 +7,9 @@ export const toEpoch = (time: string) => new Date(DAY_ONLY.test(time) ? `${time}
 export function formatTime(value: string | number, mode: "day" | "clock" | "full"): string {
   const date = new Date(typeof value === "number" ? value : toEpoch(value));
   if (!Number.isFinite(date.getTime())) return String(value);
-  if (mode === "day") return date.toLocaleDateString(getLocale(), { month: "short", day: "numeric" });
-  if (mode === "clock") return date.toLocaleTimeString(getLocale(), { hour: "numeric", minute: "2-digit" });
-  return date.toLocaleString(getLocale(), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  if (mode === "day") return formatDate(date, { month: "short", day: "numeric" });
+  if (mode === "clock") return formatDate(date, { hour: "numeric", minute: "2-digit" });
+  return formatDate(date, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 export const formatNumber = (value: number, digits = 0) => value.toLocaleString(getLocale(), { maximumFractionDigits: digits });

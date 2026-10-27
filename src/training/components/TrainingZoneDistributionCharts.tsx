@@ -1,4 +1,4 @@
-import { getLocale, useLanguage, t } from "../../i18n/training";
+import { getLocale, useLanguage, t, formatNumber } from "../../i18n/training";
 import type { ChartCardSize } from "../widgetSizing";
 import "../chartSizing.css";
 import "../profileSizing.css";
@@ -208,7 +208,7 @@ function usePrefersReducedMotion() {
 }
 
 function formatPercent(value: number): string {
-  return (value / 100).toLocaleString(getLocale(), { style: "percent", maximumFractionDigits: 1 });
+  return formatNumber(value / 100, { style: "percent", maximumFractionDigits: 1 });
 }
 
 function formatDisplayLabel(label: string): string {

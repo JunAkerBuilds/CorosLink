@@ -1,4 +1,4 @@
-import { useLanguage, t, getLocale } from "../i18n/training";
+import { useLanguage, t, getLocale, formatDate } from "../i18n/training";
 import {
   CalendarDays,
   Check,
@@ -210,7 +210,7 @@ function CalendarConnection({
   const connecting = busy === "connect" || status?.connecting;
   const choosingCalendar = calendars.length > 0;
   const lastSynced = status?.lastSyncedAt
-    ? new Date(status.lastSyncedAt).toLocaleString(getLocale(), {
+    ? formatDate(new Date(status.lastSyncedAt), {
         month: "short",
         day: "numeric",
         hour: "numeric",

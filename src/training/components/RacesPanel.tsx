@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../../i18n/training";
+import { t, useLanguage, getLocale, formatNumber, formatDate } from "../../i18n/training";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   Check,
@@ -214,7 +214,7 @@ export function RacesPanel({
           <Info size={15} aria-hidden="true" />
           {strava.hiddenRaces === 1
             ? t("1 race from Strava is hidden while Strava is disconnected. Your notes and chip times are kept.")
-            : t("{{count}} races from Strava are hidden while Strava is disconnected. Your notes and chip times are kept.", { count: strava.hiddenRaces.toLocaleString(getLocale()) })}
+            : t("{{count}} races from Strava are hidden while Strava is disconnected. Your notes and chip times are kept.", { count: formatNumber(strava.hiddenRaces) })}
         </p>
       ) : null}
 
@@ -573,7 +573,7 @@ function RaceRow({
     >
       <span className="race-node" aria-hidden="true" />
       <button type="button" className="race-row-main" aria-expanded={expanded} aria-controls={detailId} onClick={onToggle}>
-        <span className="race-row-date">{date.toLocaleDateString(getLocale(), { month: "short", day: "numeric" })}</span>
+        <span className="race-row-date">{formatDate(date, { month: "short", day: "numeric" })}</span>
         <span className="race-row-title">
           <strong>{race.name}</strong>
           <span>

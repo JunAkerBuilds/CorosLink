@@ -1,4 +1,4 @@
-import { getLocale, useLanguage, t } from "../i18n/training";
+import { getLocale, useLanguage, t, formatDate } from "../i18n/training";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowRight, CalendarClock, ChevronDown, Loader2 } from "lucide-react";
@@ -28,8 +28,7 @@ function writeOpen(open: boolean) {
 
 function formatClock(time: string): string {
   const minutes = toMinutes(time);
-  return new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60)
-    .toLocaleTimeString(getLocale(), { hour: "numeric", minute: "2-digit" });
+  return formatDate(new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60), { hour: "numeric", minute: "2-digit" });
 }
 
 function timingSummary(timing: CalendarEventTiming): string {

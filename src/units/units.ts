@@ -1,7 +1,7 @@
 import type { UnitSystem } from "../../electron/types";
 import { parsePersistedUnitSystem } from "../../electron/unitSystem";
 import * as sharedUnits from "../../electron/unitSystem";
-import { getLocale } from "../i18n/locale";
+import { formatNumber } from "../i18n/locale";
 export { parsePersistedUnitSystem };
 export {
   FEET_PER_METER,
@@ -34,11 +34,11 @@ export type { UnitSystem } from "../../electron/types";
 // for display. Machine-readable values and pace clocks never pass through here.
 function localizedUnitValue(value: string): string {
   return value.replace(/^(-?\d+)(?:\.(\d+))?(?= )/, (number, _integer, fraction: string | undefined) =>
-    new Intl.NumberFormat(getLocale(), {
+    formatNumber(Number(number), {
       useGrouping: false,
       minimumFractionDigits: fraction?.length ?? 0,
       maximumFractionDigits: fraction?.length ?? 0,
-    }).format(Number(number)));
+    }));
 }
 
 export function formatDistanceValue(...args: Parameters<typeof sharedUnits.formatDistanceValue>): string {

@@ -1,4 +1,4 @@
-import { getLocale, getDateTimeFormat, useLanguage, t } from "../../i18n/training";
+import { getDateTimeFormat, useLanguage, t, formatDate, formatNumber } from "../../i18n/training";
 import type { ChartCardSize } from "../widgetSizing";
 import "../chartSizing.css";
 import { useEffect, useId, useState, type ReactNode } from "react";
@@ -51,9 +51,7 @@ interface TrainingTrendChartsProps {
 type ChartValueFormatter = (value: number) => string;
 
 function formatRoundedValue(value: number): string {
-  return new Intl.NumberFormat(getLocale(), {
-    maximumFractionDigits: 1
-  }).format(value);
+  return formatNumber(value, { maximumFractionDigits: 1 });
 }
 
 function formatSleepDuration(value: number): string {
@@ -128,7 +126,7 @@ function formatTooltipHeading(date: unknown, fallback: unknown): string {
     Number(raw.slice(6, 8))
   );
 
-  return parsed.toLocaleDateString(getLocale(), {
+  return formatDate(parsed, {
     weekday: "short",
     month: "short",
     day: "numeric"

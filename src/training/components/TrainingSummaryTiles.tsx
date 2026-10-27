@@ -1,4 +1,4 @@
-import { useLanguage, t, getLocale } from "../../i18n/training";
+import { useLanguage, t, formatNumber } from "../../i18n/training";
 import { useId, type ReactNode } from "react";
 import { ChevronRight, Flame, Footprints, Heart, Zap } from "lucide-react";
 import type { TrainingHubDailyHealthRecord } from "../../../electron/types";
@@ -176,7 +176,7 @@ function formatWholeNumber(value?: number): string {
     return "–";
   }
 
-  return Math.round(value).toLocaleString(getLocale());
+  return formatNumber(Math.round(value));
 }
 
 export function TrainingSummaryTiles({

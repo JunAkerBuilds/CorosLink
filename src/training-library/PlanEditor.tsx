@@ -1,5 +1,5 @@
 import { formatWorkoutSport } from "../calendar/workoutLabels";
-import { getLocale, useLanguage, t } from "../i18n/training";
+import { getLocale, useLanguage, t, formatDate } from "../i18n/training";
 import {
   AlertTriangle,
   ArrowDown,
@@ -92,7 +92,7 @@ function entryDate(plan: TrainingPlanDocument, weekIndex: number, dayIndex: numb
   const date = new Date(`${plan.startDate}T12:00:00`);
   if (Number.isNaN(date.valueOf())) return undefined;
   date.setDate(date.getDate() + weekIndex * 7 + dayIndex);
-  return date.toLocaleDateString(getLocale(), { month: "short", day: "numeric" });
+  return formatDate(date, { month: "short", day: "numeric" });
 }
 
 function weekDateRange(plan: TrainingPlanDocument, weekIndex: number): string | undefined {
@@ -106,7 +106,7 @@ function planDayName(startDate: string | undefined, dayIndex: number): string {
   const date = new Date(`${startDate}T12:00:00`);
   if (Number.isNaN(date.valueOf())) return t(DAY_NAMES[dayIndex]!);
   date.setDate(date.getDate() + dayIndex);
-  return date.toLocaleDateString(getLocale(), { weekday: "short" });
+  return formatDate(date, { weekday: "short" });
 }
 
 export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offline, onCalendar, onSave, onClose }: PlanEditorProps) {

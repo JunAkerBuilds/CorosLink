@@ -118,7 +118,7 @@ function formatWeight(kg: number, unitSystem: UnitSystem, empty = "—"): string
   if (kg <= 0) return empty;
   const display = kilogramsToDisplayWeight(kg, unitSystem);
   const value = Number.isInteger(display)
-    ? display.toLocaleString(getLocale())
+    ? formatNumber(display)
     : formatNumber(display, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   return `${value} ${weightUnit(unitSystem)}`;
 }
@@ -131,7 +131,7 @@ function splitWeight(
   if (kg <= 0) return { value: "—", unit: "" };
   const display = kilogramsToDisplayWeight(kg, unitSystem);
   return {
-    value: Number.isInteger(display) ? display.toLocaleString(getLocale()) : formatNumber(display, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+    value: Number.isInteger(display) ? formatNumber(display) : formatNumber(display, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
     unit: weightUnit(unitSystem)
   };
 }
@@ -142,7 +142,7 @@ function formatVolume(kg: number, unitSystem: UnitSystem, empty = "—"): string
   if (unitSystem === "metric" && display >= 1000) {
     return `${formatNumber((display / 1000), { minimumFractionDigits: display >= 10_000 ? 0 : 1, maximumFractionDigits: display >= 10_000 ? 0 : 1 })} ${t("tonnes")}`;
   }
-  return `${Math.round(display).toLocaleString(getLocale())} ${weightUnit(unitSystem)}`;
+  return `${formatNumber(Math.round(display))} ${weightUnit(unitSystem)}`;
 }
 
 function formatDuration(seconds: number): string {
@@ -236,7 +236,7 @@ function ComparisonCard({
           label: "Reps",
           latest: latest.totalReps,
           previous: previous.totalReps,
-          format: (value: number) => Math.round(value).toLocaleString(getLocale())
+          format: (value: number) => formatNumber(Math.round(value))
         }
       ]
     : [
@@ -244,13 +244,13 @@ function ComparisonCard({
           label: "Sets",
           latest: latest.sets.length,
           previous: previous.sets.length,
-          format: (value: number) => Math.round(value).toLocaleString(getLocale())
+          format: (value: number) => formatNumber(Math.round(value))
         },
         {
           label: "Reps",
           latest: latest.totalReps,
           previous: previous.totalReps,
-          format: (value: number) => Math.round(value).toLocaleString(getLocale())
+          format: (value: number) => formatNumber(Math.round(value))
         },
         {
           label: "Work time",
@@ -408,7 +408,7 @@ export function ExerciseExplorer({
   const rail = [
     { label: "Sessions", value: String(data.sessions.length) },
     { label: "Sets", value: String(data.totalSets) },
-    { label: "Reps", value: data.totalReps.toLocaleString(getLocale()) },
+    { label: "Reps", value: formatNumber(data.totalReps) },
     {
       label: "Volume",
       value: formatVolume(data.totalVolumeKg, unitSystem, "Bodyweight")

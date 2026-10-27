@@ -37,7 +37,7 @@ import {
 } from "@phosphor-icons/react";
 import logoBase from "../../build/icon-base.svg";
 import logoSync from "../../build/icon-sync.svg";
-import { LANGUAGES, formatDate, formatNumber, getLocale, t, useLanguage, type Language } from "../i18n";
+import { LANGUAGES, formatDate, formatNumber, getLocale, getNumberFormat, t, useLanguage, type Language } from "../i18n";
 import {
   distanceUnit,
   elevationUnit,
@@ -81,7 +81,7 @@ const percent = (fraction: number) => formatNumber(fraction, { style: "percent" 
 
 /** The number and its sign apart, so the sign can sit smaller ("92 %" in French). */
 function percentParts(fraction: number): { value: string; sign: string } {
-  const parts = new Intl.NumberFormat(getLocale(), { style: "percent" }).formatToParts(fraction);
+  const parts = getNumberFormat({ style: "percent" }).formatToParts(fraction);
   const numeric = new Set(["integer", "group", "decimal", "fraction"]);
   return {
     value: parts.filter((part) => numeric.has(part.type)).map((part) => part.value).join(""),

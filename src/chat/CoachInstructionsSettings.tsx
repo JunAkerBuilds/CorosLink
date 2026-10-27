@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/tools";
+import { t, useLanguage, formatNumber } from "../i18n/tools";
 import { useEffect, useId, useState } from "react";
 import { ChevronDown, Loader2, Save } from "lucide-react";
 import { MAX_CUSTOM_COACH_INSTRUCTIONS } from "../../electron/types";
@@ -101,7 +101,7 @@ export function CoachInstructionsSettings({
           {saving ? t("Saving…") : dirty ? t("Unsaved changes") : saved || value ? t("Saved") : t("Leave blank to use defaults")}
         </span>
         <span id={countId}>
-          {draft.length.toLocaleString(getLocale())} / {MAX_CUSTOM_COACH_INSTRUCTIONS.toLocaleString(getLocale())}  {t("characters")}</span>
+          {formatNumber(draft.length)} / {formatNumber(MAX_CUSTOM_COACH_INSTRUCTIONS)}  {t("characters")}</span>
       </div>
       {saveError ? (
         <p className="chat-custom-instructions-error" role="alert">

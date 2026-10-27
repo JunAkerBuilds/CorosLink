@@ -1,4 +1,4 @@
-import { getLocale } from "../i18n/toolsLocale";
+import { getDateTimeFormat } from "../i18n/toolsLocale";
 import type { ChatSessionSummary } from "../../electron/types";
 
 export type ChatSessionGroupLabel =
@@ -70,19 +70,9 @@ const SESSION_TIME_FORMATS = {
   date: { month: "short", day: "numeric" }
 } satisfies Record<string, Intl.DateTimeFormatOptions>;
 
-// Building a formatter is costly and the list renders while Coach streams, so
-// each one is kept per locale; the language can change while the app runs.
-const sessionFormatters = new Map<string, Intl.DateTimeFormat>();
-
+// The list renders while Coach streams; getDateTimeFormat keeps each formatter per locale.
 function sessionFormatter(style: keyof typeof SESSION_TIME_FORMATS): Intl.DateTimeFormat {
-  const locale = getLocale();
-  const key = `${locale}|${style}`;
-  let formatter = sessionFormatters.get(key);
-  if (!formatter) {
-    formatter = new Intl.DateTimeFormat(locale, SESSION_TIME_FORMATS[style]);
-    sessionFormatters.set(key, formatter);
-  }
-  return formatter;
+  return getDateTimeFormat(SESSION_TIME_FORMATS[style]);
 }
 
 export function formatSessionRelativeTime(updatedAt: string): string {

@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/tools";
+import { t, useLanguage, getLocale, formatDate } from "../i18n/tools";
 import { useMemo } from "react";
 import { Pin, PinOff, RefreshCw, Sparkles } from "lucide-react";
 import {
@@ -100,7 +100,7 @@ function formatWindow(preview: CoachChartPreview): string {
 function formatResolvedAt(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString(getLocale(), { month: "short", day: "numeric" });
+  return formatDate(date, { month: "short", day: "numeric" });
 }
 
 function CoachChartTooltip({

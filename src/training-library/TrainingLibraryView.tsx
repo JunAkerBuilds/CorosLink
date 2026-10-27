@@ -1,5 +1,5 @@
 import { formatWorkoutSport } from "../calendar/workoutLabels";
-import { formatNumber, getLocale, t, useLanguage } from "../i18n/training";
+import { formatNumber, getLocale, t, useLanguage, formatDate } from "../i18n/training";
 import { useLocalOnlyView } from "../privacy/localOnlyView";
 import {
   AlertTriangle,
@@ -129,13 +129,13 @@ function happenDayToDate(value: string): Date {
 function shortDate(date: Date): string {
   return Number.isNaN(date.valueOf())
     ? "Unknown"
-    : date.toLocaleDateString(getLocale(), { month: "short", day: "numeric" });
+    : formatDate(date, { month: "short", day: "numeric" });
 }
 
 function weekdayLabel(date: Date): string {
   return Number.isNaN(date.valueOf())
     ? ""
-    : date.toLocaleDateString(getLocale(), { weekday: "short" });
+    : formatDate(date, { weekday: "short" });
 }
 
 function activityDate(activity: TrainingHubActivity): string {

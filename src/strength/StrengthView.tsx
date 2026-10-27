@@ -1,4 +1,4 @@
-import { formatNumber, t, getLocale, useLanguage } from "../i18n/training";
+import { formatNumber, t, getLocale, useLanguage, formatDate } from "../i18n/training";
 import {
   useCallback,
   useEffect,
@@ -188,7 +188,7 @@ function formatSyncTime(value?: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? t("Not synced yet")
-    : t("Last synced {{value1}}", { value1: String(date.toLocaleString(getLocale(), {
+    : t("Last synced {{value1}}", { value1: String(formatDate(date, {
         month: "short",
         day: "numeric",
         hour: "numeric",
@@ -247,7 +247,7 @@ function summaryOnlyFacts(session: StrengthSession): { facts: string[]; chips: s
   const avgHr = session.avgHr ?? summary.avgHr;
   if (avgHr) facts.push(`${avgHr} bpm avg`);
   const calories = session.calories ?? summary.calories;
-  if (calories) facts.push(`${Math.round(calories).toLocaleString(getLocale())} kcal`);
+  if (calories) facts.push(`${formatNumber(Math.round(calories))} kcal`);
   const chips = [session.sportName ?? "Gym session"];
   if (session.strava?.relativeEffort) {
     chips.push(`Relative Effort ${Math.round(session.strava.relativeEffort)}`);
@@ -272,13 +272,13 @@ function totalWeightParts(kg: number, unitSystem: UnitSystem): FigurePart[] {
     const tonnes = kg / 1000;
     return [
       {
-        value: tonnes >= 10 ? Math.round(tonnes).toLocaleString(getLocale()) : formatNumber(tonnes, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+        value: tonnes >= 10 ? formatNumber(Math.round(tonnes)) : formatNumber(tonnes, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
         unit: t("tonnes")
       }
     ];
   }
   const display = kilogramsToDisplayWeight(kg, unitSystem);
-  return [{ value: Math.round(display).toLocaleString(getLocale()), unit: weightUnit(unitSystem) }];
+  return [{ value: formatNumber(Math.round(display)), unit: weightUnit(unitSystem) }];
 }
 
 /** A single lift keeps its half-kilo; a season's tonnage does not. */
@@ -287,7 +287,7 @@ function liftWeightParts(kg: number, unitSystem: UnitSystem): FigurePart[] {
   return [
     {
       value: Number.isInteger(display)
-        ? display.toLocaleString(getLocale())
+        ? formatNumber(display)
         : formatNumber(display, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
       unit: weightUnit(unitSystem)
     }
@@ -368,7 +368,7 @@ function buildWeekSeries(weeks: WeekBucket[], windowDays: number): WeekPoint[] {
     const bucket = byWeekStart.get(Math.floor(at / 1000));
     points.push({
       weekStart: Math.floor(at / 1000),
-      label: new Date(at).toLocaleDateString(getLocale(), {
+      label: formatDate(new Date(at), {
         month: "short",
         day: "numeric"
       }),
@@ -947,13 +947,13 @@ export function StrengthView({
           key: "lifted",
           label: t("Weight lifted"),
           parts: totalWeightParts(summary.volumeKg, unitSystem),
-          caption: t("Across {{count}} sets", { count: Math.round(summary.sets).toLocaleString(getLocale()) })
+          caption: t("Across {{count}} sets", { count: formatNumber(Math.round(summary.sets)) })
         }
       : {
           key: "sets",
           label: t("Sets"),
-          parts: [{ value: Math.round(summary.sets).toLocaleString(getLocale()) }],
-          caption: t("{{count}} reps", { count: Math.round(summary.reps).toLocaleString(getLocale()) })
+          parts: [{ value: formatNumber(Math.round(summary.sets)) }],
+          caption: t("{{count}} reps", { count: formatNumber(Math.round(summary.reps)) })
         },
     {
       key: "time",
@@ -1371,7 +1371,7 @@ export function StrengthView({
         <p className="strength-notice is-attribution" role="note">
           <Info size={15} aria-hidden="true" />
           <span>
-            {t("COROS recorded {{value1}} working {{value2}} only as Full Body, so {{value3}} excluded from the map. Specific attribution is available for {{value4}} of {{value5}} working sets.", { value1: String(genericSetCount.toLocaleString(getLocale())), value2: String(genericSetCount === 1 ? t("set") : t("sets")), value3: String(genericSetCount === 1 ? t("it is") : t("they are")), value4: String(attributedSetCount.toLocaleString(getLocale())), value5: String(workingSetCount.toLocaleString(getLocale())) })}
+            {t("COROS recorded {{value1}} working {{value2}} only as Full Body, so {{value3}} excluded from the map. Specific attribution is available for {{value4}} of {{value5}} working sets.", { value1: String(formatNumber(genericSetCount)), value2: String(genericSetCount === 1 ? t("set") : t("sets")), value3: String(genericSetCount === 1 ? t("it is") : t("they are")), value4: String(formatNumber(attributedSetCount)), value5: String(formatNumber(workingSetCount)) })}
           </span>
         </p>
       ) : null}
@@ -1382,7 +1382,7 @@ export function StrengthView({
           <span>
             {summaryOnlyStravaSessions === 1
               ? t("1 session comes from Strava alone. Strava's API does not share the Exercises tab, so it counts toward sessions and time but not sets or the map.")
-              : t("{{count}} sessions come from Strava alone. Strava's API does not share the Exercises tab, so they count toward sessions and time but not sets or the map.", { count: summaryOnlyStravaSessions.toLocaleString(getLocale()) })}
+              : t("{{count}} sessions come from Strava alone. Strava's API does not share the Exercises tab, so they count toward sessions and time but not sets or the map.", { count: formatNumber(summaryOnlyStravaSessions) })}
           </span>
         </p>
       ) : null}
@@ -1478,7 +1478,7 @@ export function StrengthView({
               <h3>{t("No specific muscle data")}</h3>
               <p>
                 {genericSetCount > 0
-                  ? t("COROS recorded {{value1}} working {{value2}} only as Full Body. Session totals remain available, but the map stays neutral because no specific muscles were identified.", { value1: String(genericSetCount.toLocaleString(getLocale())), value2: String(genericSetCount === 1 ? t("set") : t("sets")) })
+                  ? t("COROS recorded {{value1}} working {{value2}} only as Full Body. Session totals remain available, but the map stays neutral because no specific muscles were identified.", { value1: String(formatNumber(genericSetCount)), value2: String(genericSetCount === 1 ? t("set") : t("sets")) })
                   : t("None of the exercises in this window could be matched to specific muscles. Session totals remain available, but the map stays neutral.")}
               </p>
             </div>

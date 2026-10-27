@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../../i18n/tools";
+import { t, useLanguage, formatNumber } from "../../i18n/tools";
 import {
   CheckCircle2,
   DatabaseBackup,
@@ -39,7 +39,7 @@ function formatTotalDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.round((seconds % 3600) / 60);
   if (hours >= 10) {
-    return `${Math.round(seconds / 3600).toLocaleString(getLocale())} h`;
+    return `${formatNumber(Math.round(seconds / 3600))} h`;
   }
   return hours > 0 ? t("{{p0}} h {{p1}} min", { p0: hours, p1: minutes }) : t("{{p0}} min", { p0: minutes });
 }
@@ -176,7 +176,7 @@ export function ActivityBackupPanel({ api }: { api: CorosLinkApi }) {
   );
   const startLabel =
     matched !== undefined && !counting && previewState.status === "ready"
-      ? t("Download {{p0}} {{p1}}", { p0: matched.toLocaleString(getLocale()), p1: matched === 1 ? t("activity") : t("activities") })
+      ? t("Download {{p0}} {{p1}}", { p0: formatNumber(matched), p1: matched === 1 ? t("activity") : t("activities") })
       : resolvedFilters.filters
         ? t("Download matching")
         : t("Start backup");
@@ -221,7 +221,7 @@ export function ActivityBackupPanel({ api }: { api: CorosLinkApi }) {
               <>
                 <p className="backup-summary-count">
                   {matched !== undefined ? (
-                    <strong>{matched.toLocaleString(getLocale())}</strong>
+                    <strong>{formatNumber(matched)}</strong>
                   ) : (
                     <span className="backup-summary-skeleton" aria-hidden="true" />
                   )}
@@ -233,7 +233,7 @@ export function ActivityBackupPanel({ api }: { api: CorosLinkApi }) {
                 <p className="backup-summary-of">
                   {preview
                     ? resolvedFilters.filters
-                      ? t("of {{p0}} on Training Hub", { p0: preview.total.toLocaleString(getLocale()) })
+                      ? t("of {{p0}} on Training Hub", { p0: formatNumber(preview.total) })
                       : t("Everything on Training Hub")
                     : t("Counting your Training Hub activities…")}
                 </p>
@@ -242,9 +242,9 @@ export function ActivityBackupPanel({ api }: { api: CorosLinkApi }) {
                     <div>
                       <dt>{t("Distance")}</dt>
                       <dd>
-                        {Math.round(
+                        {formatNumber(Math.round(
                           metersToDisplayDistance(preview.distanceMeters, unitSystem)
-                        ).toLocaleString(getLocale())}{" "}
+                        ))}{" "}
                         {distanceUnit(unitSystem)}
                       </dd>
                     </div>

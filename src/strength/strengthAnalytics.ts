@@ -1,4 +1,4 @@
-import { formatNumber, getLocale, t } from "../i18n/trainingLocale";
+import { formatNumber, t, formatDate } from "../i18n/trainingLocale";
 /**
  * Aggregations behind the Strength view.
  *
@@ -189,7 +189,7 @@ export function startOfWeekMs(timestampMs: number): number {
 }
 
 function weekLabel(weekStartMs: number): string {
-  return new Date(weekStartMs).toLocaleDateString(getLocale(), {
+  return formatDate(new Date(weekStartMs), {
     month: "short",
     day: "numeric"
   });
@@ -540,7 +540,7 @@ export function formatVolumeKg(
   if (unitSystem === "metric" && value >= 1000) {
     return `${formatNumber((value / 1000), { minimumFractionDigits: value >= 10_000 ? 0 : 1, maximumFractionDigits: value >= 10_000 ? 0 : 1 })} ${t("tonnes")}`;
   }
-  return `${Math.round(kilogramsToDisplayWeight(value, unitSystem)).toLocaleString(getLocale())} ${weightUnit(unitSystem)}`;
+  return `${formatNumber(Math.round(kilogramsToDisplayWeight(value, unitSystem)))} ${weightUnit(unitSystem)}`;
 }
 
 export function formatWeightKg(
