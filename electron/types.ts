@@ -4353,11 +4353,7 @@ export type RunWorkoutStepInput =
   | RunWorkoutCreateStep
   | RunWorkoutCreateRepeatGroup;
 
-export type WorkoutCreateStepKind = RunWorkoutCreateStepKind;
-export type WorkoutCreateTargetType = RunWorkoutCreateTargetType;
 export type WorkoutCreateStep = RunWorkoutCreateStep;
-export type WorkoutCreateRepeatGroup = RunWorkoutCreateRepeatGroup;
-export type WorkoutStepInput = RunWorkoutStepInput;
 
 export interface CorosTrainingPlanDraftInput {
   name: string;
@@ -4522,14 +4518,6 @@ export interface RunWorkoutEditorDraft {
   sportOptions?: WorkoutSportOptions;
   nodes: RunWorkoutEditorNode[];
 }
-
-export type WorkoutEditorStepKind = RunWorkoutEditorStepKind;
-export type WorkoutEditorTarget = RunWorkoutEditorTarget;
-export type WorkoutEditorIntensity = RunWorkoutEditorIntensity;
-export type WorkoutEditorStep = RunWorkoutEditorStep;
-export type WorkoutEditorRepeatGroup = RunWorkoutEditorRepeatGroup;
-export type WorkoutEditorNode = RunWorkoutEditorNode;
-export type WorkoutEditorDraft = RunWorkoutEditorDraft;
 
 export interface WorkoutZone {
   index: number;

@@ -196,23 +196,6 @@ function distanceTrack(records: FitRecord[]): Array<{ t: number; d: number; ts: 
   return track;
 }
 
-/** Timer seconds at which cumulative distance `target` is reached (interpolated). */
-export function timeAtDistance(records: FitRecord[], target: number): number | null {
-  const track = distanceTrack(records);
-  if (track.length === 0 || target > track[track.length - 1].d) return null;
-  if (target <= track[0].d) return track[0].t;
-  for (let index = 1; index < track.length; index += 1) {
-    const prev = track[index - 1];
-    const next = track[index];
-    if (next.d >= target) {
-      const span = next.d - prev.d;
-      const ratio = span > 0 ? (target - prev.d) / span : 1;
-      return prev.t + (next.t - prev.t) * ratio;
-    }
-  }
-  return null;
-}
-
 type DistanceTrack = ReturnType<typeof distanceTrack>;
 
 /**

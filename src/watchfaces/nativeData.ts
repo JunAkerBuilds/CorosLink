@@ -1,6 +1,6 @@
 import type { CorosWatchfaceAssetReplacement, CorosWatchfaceConfigOverride, CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceResolutionDetails, CorosWatchfaceTemplateDetails } from "../../electron/types";
 import type { ChartPageCompanions } from "./recoveredWatchfaceDesign";
-import { NATIVE_CHART_DAILY_PAGES, NATIVE_CHART_PAGES, NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartDailyPage, nativeChartGroup, nativeChartRepresentation, nativeChartSourceKeys, nativeFieldKeys, nativeConfigPrefix, nativeHasIcon, nativeStatePositionKey, nativeTraditionalKey } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_CHART_PAGES, NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartDailyPage, nativeChartRepresentation, nativeChartSourceKeys, nativeFieldKeys, nativeConfigPrefix, nativeHasIcon, nativeStatePositionKey, nativeTraditionalKey } from "../../electron/watchfaceNativeCatalog";
 import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, offsetConfigValue, parseConfigPos, parseConfigRect, pickPreviewResolution, resizeAndTintSprite } from "./watchfaceStudio";
 import { isNativeTime, nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRolePart, nativeRoleIndices, nativeStateCount, nativeTextFontSize } from "./nativeDataParts";
 import { chartGraphBounds, chartPageFillers, chartReadoutBounds, chartReadoutFolder, chartReadoutPage, chartSourceOf, storedChartReadouts } from "./chartReadouts";
@@ -205,10 +205,6 @@ export async function nativeDataAsset(id: string, style: Style, role: Role, inde
       ctx.fillRect(0, 0, width, height);
     }
   });
-}
-
-export function moonPhaseAsset(style: Style, phase: number, scale: number): Promise<string> {
-  return nativeDataAsset("chart", { ...style, chartSource: "chart_moon" }, "states", phase, scale);
 }
 
 /** Frames in a COROS weather-condition table (`weather_icon_dir`). */

@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { t, useLanguage } from "../i18n/watchfaces";
 import { AlignCenter, AlignLeft, AlignRight } from "lucide-react";
 import { useId } from "react";
 

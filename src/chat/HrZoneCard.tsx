@@ -113,7 +113,7 @@ function formatPercent(value: number): string {
 }
 
 function ZoneTooltip({ active, payload }: TooltipContentProps) {
-  const { language } = useLanguage();
+  useLanguage();
   if (!active || !payload?.length) {
     return null;
   }

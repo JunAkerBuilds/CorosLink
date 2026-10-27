@@ -429,16 +429,6 @@ export function parseCoachChartSpec(value: unknown): CoachChartSpec {
   };
 }
 
-export function coachChartUsesMetrics(spec: CoachChartSpec): boolean {
-  return spec.series.some((entry) => entry.metric);
-}
-
-export function coachChartNeedsSleep(spec: CoachChartSpec): boolean {
-  return [...spec.series, ...(spec.tiles ?? [])].some(
-    (entry) => isDailyMetric(entry.metric) && COACH_CHART_SLEEP_METRICS.includes(entry.metric)
-  );
-}
-
 /** The chart's own window: kind plus the number of days it spans. */
 export function coachChartWindow(spec: CoachChartSpec): { kind: CoachChartWindowKind; days: number } {
   const kind = coachChartWindowKind(spec.series);
@@ -449,10 +439,6 @@ export function coachChartWindow(spec: CoachChartSpec): { kind: CoachChartWindow
     return { kind, days: spec.days ?? COACH_CHART_DEFAULT_DAYS };
   }
   return { kind, days: spec.days ?? COACH_CHART_TILE_DAILY_DAYS };
-}
-
-export function coachChartWindowDays(spec: CoachChartSpec): number {
-  return coachChartWindow(spec).days;
 }
 
 export interface CoachChartNeeds {

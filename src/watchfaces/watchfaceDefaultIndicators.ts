@@ -38,11 +38,6 @@ const GLYPHS: Record<string, IndicatorGlyph> = {
   }
 };
 
-/** Whether Studio has built-in artwork for this status image. */
-export function hasDefaultStatusIndicator(configKey: string): boolean {
-  return Object.hasOwn(GLYPHS, configKey);
-}
-
 /** The indicator as a standalone SVG, for tests and previews. */
 export function defaultStatusIndicatorSvg(configKey: string, color: string): string | null {
   const glyph = GLYPHS[configKey];

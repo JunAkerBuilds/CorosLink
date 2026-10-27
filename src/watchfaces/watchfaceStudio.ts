@@ -4002,45 +4002,6 @@ export async function buildStudioReplacements(
   return replacements;
 }
 
-/** Counts what a style selection will regenerate, for the UI summary. */
-export function summarizeStudioReplacements(
-  details: CorosWatchfaceTemplateDetails,
-  options: WatchfaceStudioOptions
-): { digits: number; labels: number; icons: number } {
-  let digits = 0;
-  let labels = 0;
-  let icons = 0;
-  for (const resolution of details.resolutions) {
-    for (const folder of resolution.spriteFolders) {
-      if (
-        folder.kind === "digits" &&
-        shouldRenderWatchfaceText("0123456789", options.fontFamily, options)
-      ) {
-        digits += folder.files.length;
-      } else if (folder.kind === "week") {
-        labels += folder.files.filter(
-          (_, index) =>
-            rasterFontSupportsText(options.rasterFont, WEEKDAY_LABELS[index] ?? "DAY") ||
-            options.tintLabels
-        ).length;
-      } else if (folder.kind === "month") {
-        labels += folder.files.filter(
-          (_, index) =>
-            shouldRenderWatchfaceText(
-              corosMonthLabelForSpriteIndex(index) ?? String(index),
-              options.fontFamily,
-              options
-            ) || options.tintLabels
-        ).length;
-      }
-    }
-    if (options.tintIcons) {
-      icons += resolution.icons.length;
-    }
-  }
-  return { digits, labels, icons };
-}
-
 export interface WatchfaceLayoutOffset {
   dx: number;
   dy: number;
@@ -8316,21 +8277,6 @@ export function applyWeekdayLanguageOverrides(
   return { replacements: [...replacements.values()], configOverrides };
 }
 
-/** Generates isolated date sprites in the template's firmware-native canvases. */
-export async function buildDateSpriteReplacements(
-  details: CorosWatchfaceTemplateDetails,
-  styles: WatchfaceDateStyles,
-  options: Pick<
-    WatchfaceStudioOptions,
-    "fontFamily" | "digitColor" | "tintLabels" | "fontWeight" | "fontStyle" | "letterSpacing" | "rasterFont"
-  >,
-  loadAssets: WatchfaceAssetLoader
-): Promise<CorosWatchfaceAssetReplacement[]> {
-  return (
-    await buildDateSpriteComposition(details, styles, options, loadAssets)
-  ).replacements;
-}
-
 /** Applies config overrides to a details copy for live previewing. */
 export function applyConfigOverridesToDetails(
   details: CorosWatchfaceTemplateDetails,
@@ -9051,21 +8997,6 @@ export function computeLayoutOffsetLimits(
           }
     ])
   );
-}
-
-/** The smallest movable group containing the point, if any. */
-export function layoutGroupAtPoint(
-  bounds: WatchfaceLayoutGroupBounds[],
-  x: number,
-  y: number
-): WatchfaceLayoutGroupBounds | null {
-  return bounds
-    .filter((box) => x >= box.x0 && x <= box.x1 && y >= box.y0 && y <= box.y1)
-    .sort(
-      (left, right) =>
-        (left.x1 - left.x0) * (left.y1 - left.y0) -
-        (right.x1 - right.x0) * (right.y1 - right.y0)
-    )[0] ?? null;
 }
 
 function spriteSizeForPosKey(

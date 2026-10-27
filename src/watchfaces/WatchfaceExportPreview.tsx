@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { t, useLanguage } from "../i18n/watchfaces";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bluetooth, Check, CircleCheck, Download, Info, Languages, Loader2, Send, TriangleAlert, Watch, X } from "lucide-react";
 import type { CorosWatchfaceArchive, CorosWatchfaceTemplateAsset, CorosWatchfaceTemplateDetails } from "../../electron/types";

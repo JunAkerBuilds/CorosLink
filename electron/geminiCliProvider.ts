@@ -38,7 +38,6 @@ const MODEL_LIST_TIMEOUT_MS = 30_000;
 const LOGIN_TIMEOUT_MS = 6 * 60_000;
 // Gemini's ACP loop has no turn cap of its own in older releases.
 const MAX_TOOL_CALLS = 24;
-const ACP_PROTOCOL_VERSION = 1;
 const MCP_SERVER_NAME = "coroslink";
 const SIGN_IN_REQUIRED_MESSAGE =
   "Gemini CLI needs a sign-in. Use Google sign-in with a Gemini Code Assist Standard or Enterprise account, or set up a Gemini API key or Vertex AI in Gemini CLI.";

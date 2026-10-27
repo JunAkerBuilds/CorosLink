@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { t, useLanguage } from "../i18n/watchfaces";
 import { Loader2 } from "lucide-react";
 import { type CSSProperties, useEffect, useState } from "react";
 import {

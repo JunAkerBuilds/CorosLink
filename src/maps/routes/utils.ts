@@ -3,7 +3,6 @@ import type {
   ActivityPaceBaseline,
   GeneratedRoute,
   RouteActivityType,
-  RouteElevationPreference,
   RouteSurfacePreference,
   TrainingHubTrackPoint
 } from "../../../electron/types";
@@ -89,19 +88,6 @@ export function formatMeters(
     return "—";
   }
   return `${Math.round(metersToElevation(value, unitSystem))} ${elevationUnit(unitSystem)}`;
-}
-
-export function formatElevationPreference(
-  preference: RouteElevationPreference
-): string {
-  switch (preference) {
-    case "flatter":
-      return t("Prefer flatter");
-    case "hilly":
-      return t("Prefer hilly");
-    default:
-      return t("Any elevation");
-  }
 }
 
 /**

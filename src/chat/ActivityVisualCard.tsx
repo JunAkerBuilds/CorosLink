@@ -42,7 +42,7 @@ function formatPaceValue(
 }
 
 function HrTooltip({ active, payload, label }: TooltipContentProps) {
-  const { language } = useLanguage();
+  useLanguage();
   if (!active || !payload?.length) {
     return null;
   }

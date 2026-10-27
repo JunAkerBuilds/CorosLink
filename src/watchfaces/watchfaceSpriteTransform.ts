@@ -276,24 +276,6 @@ export function watchfaceTransformOriginPoint(
   };
 }
 
-/** Changes the pivot while preserving the image's current visual position. */
-export function rebaseWatchfaceTransformOrigin(
-  transform: WatchfaceSpriteTransform,
-  previous: CorosWatchfaceTransformOrigin | undefined,
-  next: CorosWatchfaceTransformOrigin | undefined
-): WatchfaceSpriteTransform {
-  const previousPivot = watchfaceTransformOriginPoint(transform, previous);
-  const normalizedNext = normalizeWatchfaceTransformOrigin(next);
-  const localX = (normalizedNext.x - 0.5) * transform.width;
-  const localY = (normalizedNext.y - 0.5) * transform.height;
-  const radians = (transform.rotation * Math.PI) / 180;
-  return {
-    ...transform,
-    x: previousPivot.x - localX * Math.cos(radians) + localY * Math.sin(radians),
-    y: previousPivot.y - localX * Math.sin(radians) - localY * Math.cos(radians)
-  };
-}
-
 /**
  * Applies an axis-aligned selection-box resize to freeform children. Child
  * rotations are preserved while their centers and rendered dimensions follow

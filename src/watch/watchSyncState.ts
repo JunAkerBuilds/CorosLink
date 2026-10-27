@@ -115,8 +115,3 @@ export async function runWatchSync(api: CorosLinkApi, connect?: () => Promise<bo
   }
 }
 
-/** Test fixtures start each scenario from nothing. */
-export function resetWatchSync(): void {
-  view = EMPTY;
-  listeners.forEach(listener => listener());
-}

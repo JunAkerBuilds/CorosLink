@@ -1,4 +1,4 @@
-import { t, useLanguage , getLocale} from "../../i18n/tools";
+import { t, useLanguage } from "../../i18n/tools";
 import {
   Activity,
   Bluetooth,
@@ -208,7 +208,7 @@ function Metric({
   unit?: string;
   label: string;
 }) {
-  const { language } = useLanguage();
+  useLanguage();
   return (
     <div className="route-metric">
       <span className="route-metric-value">

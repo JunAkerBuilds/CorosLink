@@ -241,10 +241,6 @@ export function metersToCorosDistance(meters: number): number {
   return Math.round(meters * 100);
 }
 
-export function corosDistanceToMeters(value: number): number {
-  return value / 100;
-}
-
 export function parsePace(pace: string): {
   intensity_type: number;
   intensity_value: number;

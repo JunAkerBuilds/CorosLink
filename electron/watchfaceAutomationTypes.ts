@@ -134,14 +134,6 @@ export type WatchfaceAutomationCommand =
       copyFrom?: "current";
     };
 
-export interface WatchfaceAutomationApplyCommandsInput {
-  sessionId: string;
-  baseRevision: number;
-  commands: WatchfaceAutomationCommand[];
-  label?: string;
-  mode?: "current" | "aod";
-}
-
 export const WATCHFACE_AUTOMATION_PROTOCOL_VERSION = 1;
 
 export const WATCHFACE_AUTOMATION_METHODS = {

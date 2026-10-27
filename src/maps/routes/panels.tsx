@@ -1,4 +1,4 @@
-import { t, useLanguage , getLocale} from "../../i18n/tools";
+import { t, useLanguage } from "../../i18n/tools";
 import {
   Compass,
   Layers,

@@ -1879,14 +1879,6 @@ export function listFitIndexActivityIds(): Set<string> {
   return new Set(rows.map((row) => row.activity_id));
 }
 
-export function deleteFitIndexRow(activityId: string): void {
-  requireDatabase().prepare("DELETE FROM fit_index WHERE activity_id = ?").run(activityId);
-}
-
-export function clearFitIndex(): void {
-  requireDatabase().exec("DELETE FROM fit_index");
-}
-
 /**
  * Cache the parsed set-by-set breakdown of one strength activity. A session
  * with no breakdown (a gym-cardio activity, or a watch that recorded no
@@ -2500,12 +2492,6 @@ export function pruneChatPlanDrafts(cutoffMs: number): number {
     .prepare("DELETE FROM chat_plan_drafts WHERE created_at < ? AND uploaded_at IS NULL")
     .run(cutoffMs);
   return result.changes;
-}
-
-export function deleteChatPlanDraft(draftId: string): void {
-  requireDatabase()
-    .prepare("DELETE FROM chat_plan_drafts WHERE draft_id = ?")
-    .run(draftId);
 }
 
 interface TrainingPlanRow {

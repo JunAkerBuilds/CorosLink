@@ -95,7 +95,7 @@ export function AudiobooksView({
   onMessage,
   onError,
 }: AudiobooksViewProps) {
-  const { language } = useLanguage();
+  useLanguage();
   const api = window.corosLink;
   const [tab, setTab] = useState<AudiobookTab>(readStoredTab);
   const [books, setBooks] = useState<Audiobook[]>([]);
@@ -725,7 +725,7 @@ function BookShelf({
   onImport: () => void;
   onBrowseFree: () => void;
 }) {
-  const { language } = useLanguage();
+  useLanguage();
   if (books.length === 0) {
     return (
       <div className="audiobook-empty">
@@ -956,7 +956,7 @@ function BookRow({
 }
 
 function BookProgress({ progress }: { progress?: AudiobookProgress }) {
-  const { language } = useLanguage();
+  useLanguage();
   const percent = Math.round((progress?.progress ?? 0) * 100);
   return (
     <div className="audiobook-progress" role="status" aria-live="polite">
@@ -979,7 +979,7 @@ function BookProgress({ progress }: { progress?: AudiobookProgress }) {
 
 /** One tick per part, so the order the watch will play in stays visible. */
 function WatchMeter({ onWatch, total }: { onWatch: number; total: number }) {
-  const { language } = useLanguage();
+  useLanguage();
   if (total === 0) return null;
   const label =
     onWatch === 0
@@ -1287,7 +1287,7 @@ function BookCover({
   /** Small covers are plain boards unless asked to carry the title. */
   showTitle?: boolean;
 }) {
-  const { language } = useLanguage();
+  useLanguage();
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [coverUrl]);
 

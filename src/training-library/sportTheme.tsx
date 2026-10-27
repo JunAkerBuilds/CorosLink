@@ -35,7 +35,6 @@ import {
 import type { CSSProperties } from "react";
 import type { TrainingPlanDocument, WorkoutSport } from "../../electron/types";
 
-
 export interface SportTheme {
   /** CSS colour — a customizable --sport-* token where one exists. */
   color: string;
@@ -138,33 +137,6 @@ export function SportDot({ sport }: { sport: WorkoutSport | undefined }) {
       title={sport ? formatWorkoutSport(sport) : undefined}
     >
       <Icon size={10} strokeWidth={2.2} aria-hidden="true" />
-    </span>
-  );
-}
-
-interface SportMixDotsProps {
-  sports: readonly WorkoutSport[];
-  /** Per-sport workout counts; sports sort most-first when provided. */
-  counts?: Partial<Record<WorkoutSport, number>>;
-}
-
-/** A row of mini icon chips, one per sport in a plan's mix. */
-export function SportMixDots({ sports, counts }: SportMixDotsProps) {
-  useLanguage();
-  if (!sports.length) return null;
-  const ordered = counts
-    ? [...sports].sort((left, right) => (counts[right] ?? 0) - (counts[left] ?? 0))
-    : [...sports];
-  const visible = ordered.slice(0, 4);
-  const overflow = ordered.length - visible.length;
-  return (
-    <span
-      className="tl-sport-dots"
-      role="img"
-      aria-label={ordered.map((sport) => formatWorkoutSport(sport)).join(", ")}
-    >
-      {visible.map((sport) => <SportDot key={sport} sport={sport} />)}
-      {overflow > 0 ? <b>+{overflow}</b> : null}
     </span>
   );
 }

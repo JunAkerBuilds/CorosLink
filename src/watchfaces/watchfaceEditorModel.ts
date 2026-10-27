@@ -6,7 +6,6 @@ import type {
 } from "../../electron/types";
 import {
   analogCenterLayoutGroupId,
-  applyConfigOverridesToDetails,
   applyLayoutToDetails,
   batteryPreviewStateIndex,
   configAssetCanvasSize,

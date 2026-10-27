@@ -115,7 +115,7 @@ function CoachChartTooltip({
   series: CoachChartResolvedSeries[];
   palette: (color: CoachChartColor) => SeriesPalette;
 }) {
-  const { language } = useLanguage();
+  useLanguage();
   if (!active || !payload?.length) {
     return null;
   }

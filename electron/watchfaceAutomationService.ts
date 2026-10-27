@@ -235,13 +235,6 @@ function automationServiceError(code: string, message: string): Error & { code: 
   return Object.assign(new Error(message), { code });
 }
 
-export function createWatchfaceAutomationDispatcher(
-  rendererDispatch: RendererDispatch
-): (method: string, params: Record<string, unknown>) => Promise<unknown> {
-  const service = new WatchfaceAutomationService(rendererDispatch);
-  return (method, params) => service.dispatch(method, params);
-}
-
 function requiredString(value: unknown, name: string): string {
   if (typeof value !== "string" || !value.trim() || value.length > 4096 || value.includes("\0")) {
     throw new Error(`${name} must be a non-empty bounded string.`);

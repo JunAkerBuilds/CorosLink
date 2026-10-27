@@ -3,7 +3,7 @@ import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 
 import { Activity, Bike, CalendarDays, ChevronLeft, ChevronRight, Dumbbell, Flag, Flame,
   Footprints, Gauge, Heart, LayoutGrid, List, Loader2, MapPin, Mountain, Search, Sparkles, Timer, X } from "lucide-react";
 import { PersonSimpleRun, PersonSimpleWalk, PersonSimpleSwim } from "@phosphor-icons/react";
-import type { RouteGeocodeResult, TrainingHubActivity, TrainingHubActivityDetail, TrainingHubSportType } from "../../../electron/types";
+import type { RouteGeocodeResult, TrainingHubActivity, TrainingHubSportType } from "../../../electron/types";
 import type { TrainingHubViewProps } from "../types";
 import { activityCategory, activityTimeline, activityTimestamp, activityTotals, lapPacing, selectActivities,
   type ActivityCategory, type ActivitySort, type LapPacing } from "../activityCollection";

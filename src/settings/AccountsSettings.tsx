@@ -1,4 +1,4 @@
-import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage , getLocale} from "../i18n";
+import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage } from "../i18n";
 import { CartoAccountSettings } from "./CartoAccountSettings";
 import { useEffect, useState } from "react";
 import {

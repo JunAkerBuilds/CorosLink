@@ -542,7 +542,7 @@ function GearCard({
   gear: CorosGear;
   unitSystem: "metric" | "imperial";
 }) {
-  const { language } = useLanguage();
+  useLanguage();
   const Icon = gear.type === 1 ? Footprints : Bike;
   const usedMeters = Math.max(
     0,

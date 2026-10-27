@@ -2016,10 +2016,6 @@ button.resources-tour {
   min-height: 0;
 }
 
-.stack.stack-fill > .output-panel {
-  flex-shrink: 0;
-}
-
 .content-overview {
   padding-top: 0;
 }
@@ -10503,30 +10499,8 @@ td span {
   display: block;
 }
 
-.output-panel pre {
-  max-height: 170px;
-  margin: 0;
-  overflow: auto;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-sm);
-  background: rgba(0, 0, 0, 0.35);
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  backdrop-filter: blur(var(--glass-blur));
-  color: var(--text-secondary);
-  padding: 12px;
-  font-size: 12px;
-  white-space: pre-wrap;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
-}
-
 .output-panel pre::-webkit-scrollbar {
   width: 6px;
-}
-
-.output-panel pre::-webkit-scrollbar-thumb {
-  border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.15);
 }
 
 .training-file-panel,
@@ -24391,11 +24365,6 @@ tr.data-intervals-row-missing {
 
 :root[data-theme="paper"] .watch-dot--muted {
   fill: rgba(38, 34, 28, 0.28);
-}
-
-:root[data-theme="paper"] .output-panel pre {
-  background: rgba(38, 34, 28, 0.04);
-  scrollbar-color: rgba(38, 34, 28, 0.15) transparent;
 }
 
 :root[data-theme="paper"] .output-panel pre::-webkit-scrollbar-thumb {

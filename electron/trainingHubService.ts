@@ -2154,10 +2154,6 @@ export async function deleteWorkoutProgram(programId: string): Promise<void> {
   deleteTrainingWorkoutMetadata(id);
 }
 
-export async function listWorkoutPrograms(): Promise<Record<string, unknown>[]> {
-  return listLibraryWorkoutPrograms();
-}
-
 export async function listLibraryWorkouts(): Promise<TrainingHubLibraryWorkout[]> {
   return (await queryLibraryWorkouts()).workouts;
 }
@@ -3645,7 +3641,6 @@ export function parseUpcomingWorkouts(
     }
 
     const idInPlan = String(entity.idInPlan ?? "");
-    const planProgramId = String(entity.planProgramId ?? "");
     const program = resolveScheduledProgram(
       entity,
       index,
@@ -4277,14 +4272,6 @@ const RECORD_TYPE_ELEVATION_GAIN = 103;
 
 function isPlausiblePaceSecondsPerKm(value: number): boolean {
   return value >= 120 && value <= 900;
-}
-
-function corosCentimetersToMeters(value?: number): number | undefined {
-  if (value === undefined || !Number.isFinite(value) || value <= 0) {
-    return undefined;
-  }
-
-  return value / 100;
 }
 
 function normalizePersonalRecordDuration(value?: number): number | undefined {
@@ -6817,15 +6804,6 @@ function toOptionalNumber(value: unknown): number | undefined {
   }
 
   return undefined;
-}
-
-function normalizeCalories(value: unknown): number | undefined {
-  const numeric = toOptionalNumber(value);
-  if (numeric === undefined) {
-    return undefined;
-  }
-
-  return numeric > 1000 ? Math.round(numeric / 1000) : Math.round(numeric);
 }
 
 function formatRaceDistanceLabel(

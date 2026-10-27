@@ -1,4 +1,3 @@
-import { t, getLocale } from "../i18n/trainingLocale";
 import type { TrainingHubActivity } from "../../electron/types";
 import { activityMovingSeconds, activitySpeedKmh } from "../../electron/activityTime";
 import { activityCategory, activityTimestamp } from "./activityCollection";
@@ -14,7 +13,6 @@ const DAY_MS = 86_400_000;
 
 /** Sports that get their own wing. Running is COROS's own record board. */
 export type HallSport = "run" | "ride" | "swim" | "walk";
-export const HALL_SPORTS: HallSport[] = ["run", "ride", "swim", "walk"];
 
 export const HALL_SPORT_LABELS: Record<HallSport, string> = {
   run: "Running",

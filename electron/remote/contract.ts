@@ -137,10 +137,6 @@ export const DEFAULT_GRANT_PERMISSIONS: readonly CoachPermission[] = ["coach:rea
 /** A view-only grant. */
 export const VIEW_ONLY_PERMISSIONS: readonly CoachPermission[] = ["coach:read"];
 
-export function isCoachPermission(value: unknown): value is CoachPermission {
-  return typeof value === "string" && (COACH_PERMISSIONS as readonly string[]).includes(value);
-}
-
 /**
  * The permissions an exchange ends up with: the grant's, narrowed to the ones
  * requested when the client asks for fewer. Never wider than `granted`.

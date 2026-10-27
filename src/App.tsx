@@ -594,14 +594,10 @@ export default function App() {
   const [calendarNavigation, setCalendarNavigation] =
     useState<CalendarNavigationRequest | null>(null);
   const calendarNavigationSequence = useRef(0);
-  const [url, setUrl] = useState("");
-  const [autoTransfer, setAutoTransfer] = useState(true);
-  const autoTransferRef = useRef(autoTransfer);
   const watchConnectedRef = useRef(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<LocalizableText | null>(null);
   const [error, setError] = useState<LocalizableText | null>(null);
-  const [lastOutput, setLastOutput] = useState<string[]>([]);
   const [appUpdateSnapshot, setAppUpdateSnapshot] = useState<AppUpdateSnapshot>(
     {
       supported: false,
@@ -704,10 +700,6 @@ export default function App() {
     void api.isWindowFullscreen?.().then(syncFullscreen);
     return api.onWindowFullscreenChange(syncFullscreen);
   }, [api]);
-
-  useEffect(() => {
-    autoTransferRef.current = autoTransfer;
-  }, [autoTransfer]);
 
   useEffect(() => {
     if (activeView === "coach") {
@@ -1344,7 +1336,7 @@ export default function App() {
       if (hasNewlyCompleted) {
         void refreshAll();
 
-        if (autoTransferRef.current && watchConnectedRef.current && api) {
+        if (watchConnectedRef.current && api) {
           void (async () => {
             let transferred = 0;
             for (const job of newlyCompleted) {
@@ -1833,7 +1825,6 @@ export default function App() {
     let transferred = false;
     if (
       skipped === 0 &&
-      autoTransferRef.current &&
       watchConnectedRef.current
     ) {
       try {
@@ -2125,38 +2116,6 @@ export default function App() {
       setActiveView("coach");
     },
   });
-
-  async function handleDownload(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!api) {
-      return;
-    }
-
-    const trimmedUrl = url.trim();
-    if (!trimmedUrl) {
-      return;
-    }
-
-    setError(null);
-    setMessage(null);
-
-    try {
-      const jobs = await api.enqueueYouTubeDownloads([{ url: trimmedUrl }]);
-      if (jobs.length === 0) {
-        setMessage(localizedText(() => t("That download is already downloaded or queued.")));
-        return;
-      }
-
-      setUrl("");
-      setMessage(
-        localizedText(() => autoTransfer && watchStatus?.connected
-          ? t("Download queued. Tracks will auto-transfer when ready.")
-          : t("Download queued.")),
-      );
-    } catch (caught) {
-      setError(localizedText(() => toErrorMessage(caught)));
-    }
-  }
 
   async function handleYouTubeVisit(visitUrl: string, title?: string) {
     if (!api || !isYouTubeUrl(visitUrl)) {
@@ -2837,7 +2796,6 @@ export default function App() {
                     watchConnected={Boolean(watchStatus?.connected)}
                     busy={busy}
                     transferProgress={transferProgress}
-                    lastOutput={lastOutput}
                     onTransfer={handleTransfer}
                     onTransferAll={handleTransferAll}
                     onTransferDownloads={handleTransferDownloads}
@@ -3686,7 +3644,6 @@ function MediaOverviewTab({
         />
       </div>
 
-
       {downloads.length > 0 && !musicHidden ? (
         <section className="panel dashboard-recent dashboard-block">
           <div className="section-heading">
@@ -3737,7 +3694,6 @@ interface MediaLibraryTabProps {
   watchConnected: boolean;
   busy: string | null;
   transferProgress: TrackTransferProgress | null;
-  lastOutput: string[];
   onTransfer: (id: string) => void;
   onTransferAll: () => void;
   onTransferDownloads: (tracks: LocalTrack[]) => void;
@@ -3757,7 +3713,6 @@ function MediaLibraryTab({
   watchConnected,
   busy,
   transferProgress,
-  lastOutput,
   onTransfer,
   onTransferAll,
   onTransferDownloads,
@@ -3937,15 +3892,6 @@ function MediaLibraryTab({
           }
         />
       </section>
-
-      {lastOutput.length > 0 ? (
-        <section className="panel output-panel">
-          <div className="section-heading compact">
-            <h2>{t("Last download")}</h2>
-          </div>
-          <pre>{lastOutput.slice(-8).join("\n")}</pre>
-        </section>
-      ) : null}
     </div>
   );
 }
@@ -6230,156 +6176,6 @@ function SpotifyBrandIcon({
   );
 }
 
-interface WatchViewProps {
-  watchStatus: WatchStatus | null;
-  storage: {
-    totalBytes: number;
-    usedBytes: number;
-    freeBytes?: number;
-    percent: number;
-    capacityLabel: string;
-  } | null;
-  busy: string | null;
-  onDeleteWatchTrack: (track: LocalTrackLike) => void;
-}
-
-function WatchView({
-  watchStatus,
-  storage,
-  busy,
-  onDeleteWatchTrack,
-}: WatchViewProps) {
-  useLanguage();
-  const watchPresentation = getWatchPresentation(watchStatus);
-  const connected = Boolean(watchStatus?.connected);
-  const tracks = watchStatus?.tracks ?? [];
-  const storageTitle =
-    watchPresentation.state === "connected-known"
-      ? watchPresentation.displayName
-      : connected
-        ? (watchStatus?.name ?? t("COROS Watch"))
-        : t("No watch connected");
-
-  return (
-    <div className="stack">
-      <section className="panel">
-        <div className="storage-row">
-          <div>
-            <p className="eyebrow">{t("Storage")}</p>
-            <h2>{storageTitle}</h2>
-          </div>
-          {connected && storage ? (
-            <div className="storage-numbers">
-              <strong>{formatBytes(storage.usedBytes)}</strong>
-              <span>{t("of")} {formatBytes(storage.totalBytes)}</span>
-            </div>
-          ) : null}
-        </div>
-        {connected && storage ? (
-          <>
-            <div className="storage-bar" aria-label={t("Watch storage usage")}>
-              <span style={{ width: `${storage.percent}%` }} />
-            </div>
-            <div className="storage-meta">
-              <span>{storage.percent}{t("% used")}</span>
-              <span>
-                {storage.freeBytes !== undefined
-                  ? t("{{value0}} free", { value0: formatBytes(storage.freeBytes) })
-                  : t(storage.capacityLabel)}
-              </span>
-            </div>
-          </>
-        ) : (
-          <p className="connect-hint">
-            {t("Connect your COROS watch via USB to sync music")} </p>
-        )}
-      </section>
-
-      <section className="panel">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">{t("Watch Music Folder")}</p>
-            <h2>{tracks.length} {t("MP3 file(s)")}</h2>
-          </div>
-          <FolderOpen size={22} aria-hidden="true" />
-        </div>
-
-        <WatchTrackTable
-          tracks={tracks}
-          busy={busy}
-          connected={connected}
-          onDeleteWatchTrack={onDeleteWatchTrack}
-        />
-      </section>
-    </div>
-  );
-}
-
-type LocalTrackLike = {
-  name: string;
-  relativePath: string;
-};
-
-interface WatchTrackTableProps {
-  tracks: LocalTrackLike[];
-  busy: string | null;
-  connected: boolean;
-  onDeleteWatchTrack: (track: LocalTrackLike) => void;
-}
-
-function WatchTrackTable({
-  tracks,
-  busy,
-  connected,
-  onDeleteWatchTrack,
-}: WatchTrackTableProps) {
-  useLanguage();
-  if (!connected) {
-    return <EmptyState title={t("Connect a COROS watch")} />;
-  }
-
-  if (tracks.length === 0) {
-    return <EmptyState title={t("No MP3 files on the watch")} />;
-  }
-
-  return (
-    <div className="table-shell">
-      <table>
-        <thead>
-          <tr>
-            <th>{t("Track")}</th>
-            <th>{t("Folder Path")}</th>
-            <th aria-label={t("Actions")} />
-          </tr>
-        </thead>
-        <tbody>
-          {tracks.map((track) => (
-            <tr key={track.relativePath}>
-              <td>
-                <strong>{track.name}</strong>
-              </td>
-              <td>{track.relativePath}</td>
-              <td>
-                <div className="row-actions">
-                  <button
-                    className="icon-button danger"
-                    type="button"
-                    title={t("Delete from watch")}
-                    disabled={busy === `delete-watch:${track.relativePath}`}
-                    onClick={() => onDeleteWatchTrack(track)}
-                  >
-                    <Trash2 size={17} aria-hidden="true" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 interface ToastItem {
   id: number;
   kind: "success" | "error";
@@ -8463,22 +8259,6 @@ function isJobStalled(job: DownloadJob): boolean {
   const idleMs = Date.now() - updatedAt;
   const thresholdMs = job.phase === "starting" ? 45_000 : 20_000;
   return idleMs >= thresholdMs;
-}
-
-function viewTitle(view: View): string {
-  if (view === "overview") {
-    return t("Overview");
-  }
-
-  if (view === "media") {
-    return t("Media");
-  }
-
-  if (view === "maps") {
-    return t("Maps");
-  }
-
-  return t("Training Hub");
 }
 
 function formatBytes(bytes: number): string {

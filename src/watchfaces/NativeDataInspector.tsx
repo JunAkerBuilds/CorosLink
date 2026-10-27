@@ -4,7 +4,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { FolderInput, ImagePlus, Plus, RotateCcw, Trash2 } from "lucide-react";
 import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceNativePartStyle } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
-import { NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeDataAsset, nativeDataPreviewValue } from "./nativeData";
+import { NATIVE_DATA_BY_ID, nativeDataAsset, nativeDataPreviewValue } from "./nativeData";
 import { NATIVE_CHART_BAR_PAGES, NATIVE_CHART_FIXED_EQUIVALENTS, NATIVE_CHART_PAGES, nativeChartReadoutLabel, nativeChartRepresentation } from "../../electron/watchfaceNativeCatalog";
 import { nativeAssetText, nativeComponentFontSize, nativeFontRole, nativeFontSizePart, nativeHasGlyphArt, nativePart, nativePartForFontSize, nativePartHasPosition, nativeParts, nativeRoleDrawsText, nativeRoleIndices, nativeScaleForFontSize, withNativeFont } from "./nativeDataParts";
 import { chartReadoutHidden } from "./chartReadouts";

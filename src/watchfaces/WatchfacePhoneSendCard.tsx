@@ -1,4 +1,4 @@
-import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage } from "../i18n/watchfaces";
 import { useEffect, useRef, useState } from "react";
 import { Check, CircleCheck, Copy, EyeOff, Loader2, QrCode, Share, Smartphone } from "lucide-react";
 import type { CorosWatchfaceArchive } from "../../electron/types";

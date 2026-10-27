@@ -51,8 +51,6 @@ export const LUNAR_FRAME_TEXTS: Readonly<Record<LunarField, readonly string[]>> 
   lunar_day: DAYS
 };
 
-export const LUNAR_FRAME_COUNTS: Readonly<Record<LunarField, number>> = { lunar_year: 23, lunar_month: 13, lunar_day: 30 };
-
 /** How many frame widths a table's reading is laid out in: a year is three frames, a leap month one and a half. */
 export const LUNAR_SPAN: Readonly<Record<LunarField, number>> = { lunar_year: 3, lunar_month: 1.5, lunar_day: 1 };
 

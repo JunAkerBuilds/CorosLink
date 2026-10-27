@@ -52,11 +52,6 @@ export function setFitIndexProgressListener(
   progressListener = listener;
 }
 
-/** Tests point the cache somewhere writable without an Electron app. */
-export function setFitCacheDirForTesting(dir: string | null): void {
-  cacheDirOverride = dir;
-}
-
 export function fitCacheDir(): string {
   return cacheDirOverride ?? path.join(app.getPath("userData"), "fit-cache");
 }
@@ -215,11 +210,6 @@ export function listIndexedSummaries(query: FitIndexQuery = {}): FitActivitySumm
   return listFitIndexRows(query)
     .map((row) => parseSummary(row))
     .filter((summary): summary is FitActivitySummary => summary !== null);
-}
-
-export function getIndexedSummary(activityId: string): FitActivitySummary | null {
-  const row = getFitIndexRow(activityId);
-  return row ? parseSummary(row) : null;
 }
 
 async function cacheSizeBytes(): Promise<number> {

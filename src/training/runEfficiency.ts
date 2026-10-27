@@ -59,9 +59,6 @@ const SAMPLING = {
   longest: 8 * 3600
 } as const;
 
-export const EFFICIENCY_STEP_SECONDS = SAMPLING.every;
-export const HR_LAG_SECONDS = SAMPLING.heartLag;
-
 export type EfficiencyGapReason =
   | "warmUp"
   | "end"

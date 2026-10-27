@@ -1,4 +1,4 @@
-import { t, useLanguage , getLocale} from "../../i18n/tools";
+import { t, useLanguage } from "../../i18n/tools";
 import { useCartoApiKey } from "./useCartoApiKey";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";

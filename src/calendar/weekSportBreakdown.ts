@@ -1,4 +1,3 @@
-import { t, getLocale } from "../i18n/trainingLocale";
 import type {
   TrainingHubActivity,
   TrainingHubScheduledWorkoutEntry,

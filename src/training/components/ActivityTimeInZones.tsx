@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../../i18n/training";
+import { t, useLanguage } from "../../i18n/training";
 import { useState, type CSSProperties } from "react";
 import { HeartPulse } from "lucide-react";
 import { useTheme } from "../../theme/ThemeProvider";

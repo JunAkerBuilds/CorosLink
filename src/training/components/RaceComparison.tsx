@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../../i18n/training";
+import { t, useLanguage } from "../../i18n/training";
 import type { CSSProperties } from "react";
 import { X } from "lucide-react";
 import type { RaceEntry } from "../../../electron/raceTypes";

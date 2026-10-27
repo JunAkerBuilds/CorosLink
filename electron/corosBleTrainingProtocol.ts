@@ -29,10 +29,6 @@ export const TRAINING_BLOCK_BYTES = 4096;
 /** CONFIG_TRAINING `type`: the workout library, or the training-calendar plan. */
 export const TRAINING_KIND = { workouts: 0, plan: 1 } as const;
 
-// ----- minimal protobuf writer (proto3: defaults are not written) -----
-
-type Scalar = number | bigint | boolean | string;
-
 export class WorkoutNotSendableError extends Error {}
 /** The workout has zone or percentage targets, which the watch can't resolve. */
 class ZoneTargetsError extends WorkoutNotSendableError {}
@@ -313,7 +309,6 @@ export interface ScheduledWorkoutForWatch {
 }
 
 const dayKey = (date: Date) => `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
-const dateOf = (day: string) => new Date(Number(day.slice(0, 4)), Number(day.slice(4, 6)) - 1, Number(day.slice(6, 8)));
 const daysBetween = (from: string, to: string) => Math.round((Date.UTC(+to.slice(0, 4), +to.slice(4, 6) - 1, +to.slice(6, 8)) - Date.UTC(+from.slice(0, 4), +from.slice(4, 6) - 1, +from.slice(6, 8))) / 86_400_000);
 
 /** Monday of the week `now` falls in, and the last day of the 35-day window. */

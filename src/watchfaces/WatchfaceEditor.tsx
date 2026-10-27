@@ -229,7 +229,6 @@ function EditableHexColorInput({
   );
 }
 
-
 import {
   AlignHorizontalJustifyCenter,
   AlignHorizontalJustifyEnd,
@@ -464,7 +463,6 @@ import {
   artworkPngDataUrl,
   buildDisabledControlComplicationOverrides,
   buildDisabledWatchfaceConfigAssetOverrides,
-  buildWatchfaceConfigAssetOverrides,
   detailsForCompositionMode,
   detailsForPreviewResolution,
   dateSpriteCanvasSize,
@@ -5203,7 +5201,6 @@ export function WatchfaceEditor({
     movement: { dx: number; dy: number }
   ): { dx: number; dy: number } {
     const clamped = clampSingleDragMovement(drag, movement);
-    const primaryId = drag.kind === "selectorIcon" ? "complication" : drag.snapId;
     const linked = dragMovementIds(drag);
     if (linked.length < 2) return clamped;
     return clampMovementForSelectionIds(linked, clamped);
@@ -8295,109 +8292,6 @@ export function WatchfaceEditor({
     }));
     setSelectedId("");
     setSelectedIds([]);
-  }
-
-  function nudgeSingleSelected(dx: number, dy: number) {
-    if (selectedElement) {
-      updateElement(selectedElement.id, {
-        x: Math.max(
-          0,
-          Math.min(
-            BACKGROUND_SPACE,
-            selectedElement.x + dx * (BACKGROUND_SPACE / previewWidth)
-          )
-        ),
-        y: Math.max(
-          0,
-          Math.min(
-            BACKGROUND_SPACE,
-            selectedElement.y + dy * (BACKGROUND_SPACE / previewHeight)
-          )
-        )
-      });
-      return;
-    }
-    if (!selectedLayer) return;
-    if (selectedLayer.kind === "customSprite" && selectedLayer.spriteId) {
-      const sprite = (design.designSprites ?? []).find(
-        (candidate) => candidate.id === selectedLayer.spriteId
-      );
-      if (sprite) {
-        updateSprite(sprite.id, {
-          x: Math.max(0, Math.min(previewWidth, sprite.x + dx)),
-          y: Math.max(
-            0,
-            Math.min(previewResolution?.height ?? previewWidth, sprite.y + dy)
-          )
-        });
-      }
-      return;
-    }
-    if (selectedLayer.staticSeparatorId) {
-      const separator = design.staticSeparators[selectedLayer.staticSeparatorId];
-      const halfWidth = Math.max(24, separator.size * 0.65) / 2;
-      const halfHeight = Math.max(24, separator.size * 1.15) / 2;
-      updateStaticSeparator(selectedLayer.staticSeparatorId, {
-        x: Math.max(halfWidth, Math.min(previewWidth - halfWidth, separator.x + dx)),
-        y: Math.max(
-          halfHeight,
-          Math.min((previewResolution?.height ?? previewWidth) - halfHeight, separator.y + dy)
-        )
-      });
-      return;
-    }
-    if (selectedLayer.ampmIndicator && design.ampmIndicator) {
-      const capability = details ? getAmPmCapability(details) : null;
-      const width = (capability?.icon.width ?? 0) * design.ampmIndicator.scale;
-      const height = (capability?.icon.height ?? 0) * design.ampmIndicator.scale;
-      updateAmPmIndicator({
-        x: Math.max(0, Math.min(previewWidth - width, design.ampmIndicator.x + dx)),
-        y: Math.max(
-          0,
-          Math.min((previewResolution?.height ?? previewWidth) - height, design.ampmIndicator.y + dy)
-        )
-      });
-      return;
-    }
-    if (selectedLayer.nativeDataId && design.nativeData?.[selectedLayer.nativeDataId]) {
-      const style = design.nativeData[selectedLayer.nativeDataId]; const size = nativeDataSize(selectedLayer.nativeDataId, style);
-      updateNativeData(selectedLayer.nativeDataId, {x: Math.max(0,Math.min(previewWidth-size.width,style.x+dx)), y:Math.max(0,Math.min(previewHeight-size.height,style.y+dy))});return;
-    }
-    if (selectedLayer.weatherIndicator && design.weatherIndicator) {
-      const capability = details ? getWeatherCapability(details) : null;
-      const width = (capability?.size.width ?? 0) * design.weatherIndicator.scale;
-      const height = (capability?.size.height ?? 0) * design.weatherIndicator.scale;
-      updateWeatherIndicator({
-        x: Math.max(0, Math.min(previewWidth - width, design.weatherIndicator.x + dx)),
-        y: Math.max(
-          0,
-          Math.min((previewResolution?.height ?? previewWidth) - height, design.weatherIndicator.y + dy)
-        )
-      });
-      return;
-    }
-    if (selectedLayer.layoutGroupId && selectedLayer.capabilities.position) {
-      const groupId = selectedLayer.layoutGroupId;
-      const offset = design.layoutOffsets?.[groupId] ?? { dx: 0, dy: 0 };
-      const limits = layoutLimits[groupId];
-      const fallback = Math.max(previewWidth, previewResolution?.height ?? previewWidth);
-      setDesign((current) => ({
-        ...current,
-        layoutOffsets: {
-          ...current.layoutOffsets,
-          [groupId]: {
-            dx: Math.max(
-              limits?.minDx ?? -fallback,
-              Math.min(limits?.maxDx ?? fallback, offset.dx + dx)
-            ),
-            dy: Math.max(
-              limits?.minDy ?? -fallback,
-              Math.min(limits?.maxDy ?? fallback, offset.dy + dy)
-            )
-          }
-        }
-      }));
-    }
   }
 
   function nudgeSelected(dx: number, dy: number) {

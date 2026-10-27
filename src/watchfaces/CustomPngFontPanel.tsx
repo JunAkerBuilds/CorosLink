@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { t, useLanguage } from "../i18n/watchfaces";
 import { CircleAlert, Files, FolderOpen, LayoutGrid, Sparkles, Trash2 } from "lucide-react";
 import { OfficialAssetBrowser, officialAssetToSpriteFolder } from "./OfficialAssetBrowser";
 import { useEffect, useRef, useState } from "react";

@@ -1,4 +1,4 @@
-import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage, getLocale } from "../i18n/training";
+import { renderLocalizedText, type LocalizableText, t, useLanguage, getLocale } from "../i18n/training";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ExternalLink, Link2, Loader2 } from "lucide-react";
 import type { StravaStatus } from "../../electron/types";

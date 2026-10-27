@@ -1,4 +1,4 @@
-import { t, useLanguage , getLocale} from "../../i18n/tools";
+import { t, useLanguage } from "../../i18n/tools";
 import {
   AlertCircle,
   CheckCircle2,
@@ -1054,7 +1054,7 @@ function AdvancedRouting({
   onMessage: (message: string | null) => void;
   onError: (message: string | null) => void;
 }) {
-  const { language } = useLanguage();
+  useLanguage();
   const [open, setOpen] = useState(false);
   const [backend, setBackend] = useState<RouteBackend>("keyless");
   const [apiKey, setApiKey] = useState("");
@@ -1157,7 +1157,7 @@ function ShareModal({
   session: RouteShareSession;
   onClose: () => void;
 }) {
-  const { language } = useLanguage();
+  useLanguage();
   return (
     <div className="route-share-overlay" role="dialog" aria-modal="true">
       <div className="route-share-modal">

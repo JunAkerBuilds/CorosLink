@@ -207,50 +207,6 @@ export function extractTrackPoints(
   return (detail?.track?.points ?? []).filter(isGlobePoint);
 }
 
-export function extractCentroid(
-  detail: TrainingHubActivityDetail | null | undefined,
-): GlobePoint | null {
-  const points = extractTrackPoints(detail);
-  if (points.length < 2) {
-    return null;
-  }
-
-  let latSum = 0;
-  let lonSum = 0;
-  for (const point of points) {
-    latSum += point.lat;
-    lonSum += point.lon;
-  }
-
-  return {
-    lat: latSum / points.length,
-    lon: lonSum / points.length,
-  };
-}
-
-export function rememberVisitCentroid(
-  activityId: string,
-  point: GlobePoint | null,
-): void {
-  hydrateGeoCache();
-  rememberCacheEntry(VISIT_CACHE, activityId, point);
-  scheduleGeoCacheWrite();
-}
-
-export function rememberActivityRoute(
-  activityId: string,
-  points: GlobePoint[] | null,
-): void {
-  hydrateGeoCache();
-  if (!points || points.length < 2) {
-    rememberCacheEntry(ROUTE_CACHE, activityId, null);
-    scheduleGeoCacheWrite();
-    return;
-  }
-  rememberCacheEntry(ROUTE_CACHE, activityId, sampleGlobePoints(points));
-  scheduleGeoCacheWrite();
-}
-
 export function rememberActivityGeo(
   activityId: string,
   detail: TrainingHubActivityDetail | null | undefined,

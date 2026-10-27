@@ -228,11 +228,6 @@ export function visibleInkBounds(
   return x1 < 0 ? null : { x0: left + x0, y0: top + y0, x1: left + x1 + 1, y1: top + y1 + 1 };
 }
 
-export function visibleGlyphBounds(canvas: HTMLCanvasElement): { top: number; bottom: number } | null {
-  const ink = measure(canvas);
-  return ink.height ? { top: ink.y, bottom: ink.y + ink.height } : null;
-}
-
 export function glyphBaselineMovements(items: Array<{ id: string; top: number; bottom: number; colon?: boolean }>): Record<string, { dx: number; dy: number }> {
   const reference = items.filter((item) => !item.colon).sort((a, b) => (b.bottom - b.top) - (a.bottom - a.top))[0];
   if (!reference) return {};

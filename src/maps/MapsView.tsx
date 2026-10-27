@@ -2,7 +2,6 @@ import { t, useLanguage } from "../i18n/tools";
 import {
   AlertCircle,
   Download,
-  Globe,
   HardDrive,
   Loader2,
   Map as MapIcon,
@@ -94,7 +93,7 @@ export function MapsView({
   onError,
   onOpenWatchMenu
 }: MapsViewProps) {
-  const { language } = useLanguage();
+  useLanguage();
   const [activeTab, setActiveTab] = useSelectionPreference(
     MAPS_TAB_PREFERENCE
   );
@@ -145,7 +144,7 @@ function MapsTabButton({
   label: string;
   onClick: () => void;
 }) {
-  const { language } = useLanguage();
+  useLanguage();
   return (
     <button
       type="button"
@@ -768,7 +767,7 @@ function CorosMapsTab({
 }
 
 function WatchStoragePanel({ status }: { status: WatchStatus | null }) {
-  const { language } = useLanguage();
+  useLanguage();
   if (!status?.connected) {
     return (
       <div className="watch-storage is-empty">
@@ -845,7 +844,7 @@ function WatchStorageLegend({
   label: string;
   value: string;
 }) {
-  const { language } = useLanguage();
+  useLanguage();
   return (
     <div className="watch-storage-legend-item">
       <span className={`watch-storage-swatch ${swatch}`} aria-hidden="true" />
@@ -862,7 +861,7 @@ function MapInstallProgressPanel({
   progress: CorosMapInstallProgress;
   onCancel: () => void;
 }) {
-  const { language } = useLanguage();
+  useLanguage();
   const percent = Math.round(Math.max(0, Math.min(progress.progress, 1)) * 100);
   const phaseLabel =
     progress.phase === "failed"
@@ -942,7 +941,7 @@ function MapRegionRow({
   onInstallCached: (packageId: string) => void;
   onDeleteCached: (packageId: string) => void;
 }) {
-  const { language } = useLanguage();
+  useLanguage();
   const regionLabel =
     group.parent === "global"
       ? t("Full region")
@@ -1000,7 +999,7 @@ function MapPackageCell({
   onInstallCached: (packageId: string) => void;
   onDeleteCached: (packageId: string) => void;
 }) {
-  const { language } = useLanguage();
+  useLanguage();
   if (!pkg) {
     return (
       <>
@@ -1179,7 +1178,7 @@ function CachedMapRow({
   onInstall: (packageId: string) => void;
   onDelete: (packageId: string) => void;
 }) {
-  const { language } = useLanguage();
+  useLanguage();
   const tooLarge = freeBytes !== undefined && cached.sizeBytes > freeBytes;
   const installing =
     busy === `install-cache:${cached.packageId}` ||
@@ -1239,7 +1238,7 @@ function CachedMapRow({
 }
 
 function MapsEmpty({ icon, title }: { icon: ReactNode; title: string }) {
-  const { language } = useLanguage();
+  useLanguage();
   return (
     <div className="maps-empty">
       {icon}

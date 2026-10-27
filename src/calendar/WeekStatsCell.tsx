@@ -1,4 +1,4 @@
-import { formatNumber, useLanguage, t , getLocale} from "../i18n/training";
+import { formatNumber, useLanguage, t } from "../i18n/training";
 import {
   Activity,
   Bike,

@@ -5,7 +5,6 @@ import {
   ExternalLink,
   Loader2,
   RefreshCw,
-  X,
 } from "lucide-react";
 import {
   useCallback,
@@ -693,36 +692,3 @@ export function CalendarConnections({ api, initialProvider = "google", suggested
   );
 }
 
-export function CalendarConnectionsDialog({
-  api,
-  onClose,
-}: {
-  api: CorosLinkApi;
-  onClose: () => void;
-}) {
-  useLanguage();
-  const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const element = dialog.current;
-    element?.showModal();
-    return () => element?.close();
-  }, []);
-  return (
-    <dialog
-      className="calendar-connection-dialog"
-      ref={dialog}
-      aria-label={t("Connect your calendar")}
-      onCancel={onClose}
-    >
-      <button
-        type="button"
-        className="icon-button calendar-connection-close"
-        aria-label={t("Close calendar connection")}
-        onClick={onClose}
-      >
-        <X size={18} aria-hidden="true" />
-      </button>
-      <CalendarConnections api={api} />
-    </dialog>
-  );
-}

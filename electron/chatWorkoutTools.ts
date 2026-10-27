@@ -452,14 +452,6 @@ export function getChatWorkoutTools(): CorosMcpTool[] {
   return local && !hubStatus.authenticated ? tools.filter(tool => tool.name !== "search_coros_exercises") : tools;
 }
 
-export function getStoredPlanDraft(draftId: string): StoredPlanDraft | undefined {
-  return draftStore.get(draftId);
-}
-
-export function listStoredPlanDrafts(): PlanDraftPreview[] {
-  return [...draftStore.values()].map((entry) => entry.preview);
-}
-
 export async function handleChatWorkoutTool(
   name: ChatWorkoutToolName,
   args: Record<string, unknown>,
@@ -1637,15 +1629,6 @@ export async function uploadPlanDraftById(
   persistPlanDraft(stored);
   markChatPlanDraftUploaded(draftId, stored.uploadedAt);
   return result;
-}
-
-function summarizeUploadResult(result: UploadPlanResult): Record<string, unknown> {
-  return {
-    plan_name: result.planName,
-    workouts_created: result.workoutsCreated,
-    workouts_scheduled: result.workoutsScheduled,
-    entries: result.entries
-  };
 }
 
 /** Remove drafts older than 24 hours */

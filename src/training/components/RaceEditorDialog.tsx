@@ -1,4 +1,4 @@
-import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage, getLocale } from "../../i18n/training";
+import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage } from "../../i18n/training";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Loader2, Trash2, X } from "lucide-react";
 import type { ManualRaceInput, RaceDistanceKey, RaceEditInput, RaceEntry } from "../../../electron/raceTypes";

@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { t, useLanguage } from "../i18n/watchfaces";
 import { useId } from "react";
 import { Check, Loader2, TriangleAlert, X } from "lucide-react";
 import type { CorosDirectWatchfaceStatus } from "../../electron/corosBleWatchfaceTypes";

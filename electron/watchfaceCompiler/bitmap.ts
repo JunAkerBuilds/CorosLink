@@ -55,12 +55,6 @@ export function toLut256(image: RgbaImage): Uint8Array | null {
   return out;
 }
 
-export function countColors(image: RgbaImage, limit = 256): number {
-  const view = new DataView(image.data.buffer, image.data.byteOffset, image.data.byteLength), seen = new Set<number>();
-  for (let pixel = 0; pixel < image.width * image.height && seen.size <= limit; pixel++) seen.add(view.getUint32(pixel * 4, true));
-  return seen.size;
-}
-
 /**
  * Quantizes to 256 colors with dithering, standing in for libimagequant
  * (`Bitmap::ToQuantLut256Buffer`: default attributes, dithering level 1).

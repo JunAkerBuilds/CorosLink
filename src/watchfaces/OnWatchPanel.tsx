@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { t, useLanguage } from "../i18n/watchfaces";
 import { lazy, Suspense, useState } from "react";
 import { BatteryMedium, Bluetooth, Settings2, Watch } from "lucide-react";
 import type { CorosNativeBleSnapshot } from "../../electron/corosNativeBleTypes";

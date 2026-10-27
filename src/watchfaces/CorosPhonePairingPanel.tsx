@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { t, useLanguage } from "../i18n/watchfaces";
 import { useEffect, useState } from "react";
 import { EyeOff, Loader2, QrCode, ShieldAlert, Smartphone } from "lucide-react";
 import type { CorosPhonePairingCode } from "../../electron/corosNativeBleTypes";

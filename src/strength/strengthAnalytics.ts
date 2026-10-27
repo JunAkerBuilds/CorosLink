@@ -533,20 +533,6 @@ export function daysSince(timestamp?: number): number | undefined {
   return Math.max(0, Math.round((today.getTime() - then.getTime()) / MS_PER_DAY));
 }
 
-export function formatDaysSince(timestamp?: number): string {
-  const days = daysSince(timestamp);
-  if (days === undefined) {
-    return t("Not trained");
-  }
-  if (days === 0) {
-    return t("Today");
-  }
-  if (days === 1) {
-    return t("Yesterday");
-  }
-  return t("{{value1}} days ago", { value1: String(days) });
-}
-
 export function formatVolumeKg(
   value: number,
   unitSystem: UnitSystem

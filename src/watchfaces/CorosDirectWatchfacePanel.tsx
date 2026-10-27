@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { t, useLanguage } from "../i18n/watchfaces";
 import { useEffect, useRef, useState } from "react";
 import { Download, FileCode2, FolderOpen, Loader2, RefreshCw, Send, Watch } from "lucide-react";
 import type { CorosDirectWatchfacePreview } from "../../electron/corosBleWatchfaceTypes";

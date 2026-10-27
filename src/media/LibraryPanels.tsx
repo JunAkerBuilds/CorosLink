@@ -255,7 +255,7 @@ export function LibrarySyncLayout({
   watchConnected,
   syncing = false,
 }: LibrarySyncLayoutProps) {
-  const { language } = useLanguage();
+  useLanguage();
   return (
     <div className="library-sync-grid">
       {localPanel}
@@ -283,7 +283,7 @@ function LibraryConnector({
   watchConnected: boolean;
   syncing: boolean;
 }) {
-  const { language } = useLanguage();
+  useLanguage();
   let state: ConnectorState = "idle";
   if (!watchConnected) {
     state = "disconnected";
@@ -1172,7 +1172,7 @@ function WatchStorageMeter({
   watchStatus: WatchStatus | null;
   tracksSize: number;
 }) {
-  const { language } = useLanguage();
+  useLanguage();
   const totalBytes = watchStatus?.totalBytes;
   if (!totalBytes || totalBytes <= 0) {
     return null;
@@ -1219,7 +1219,7 @@ function SortButton<Key extends string>({
   sort,
   onSort,
 }: SortButtonProps<Key>) {
-  const { language } = useLanguage();
+  useLanguage();
   const active = sort.key === sortKey;
   const Icon = active
     ? sort.direction === "asc"
@@ -1243,7 +1243,7 @@ function SortButton<Key extends string>({
 }
 
 function WatchConnectIllustration() {
-  const { language } = useLanguage();
+  useLanguage();
   return (
     <div className="watch-connect-illustration">
       <svg
@@ -1310,7 +1310,7 @@ function LibraryEmptyState({
   subtitle?: string;
   variant?: "default" | "watch";
 }) {
-  const { language } = useLanguage();
+  useLanguage();
   return (
     <div
       className={`library-empty-state${

@@ -1,4 +1,4 @@
-import { t, getLocale } from "../../i18n/toolsLocale";
+import { t } from "../../i18n/toolsLocale";
 import type {
   RouteActivityType,
   RouteGeometry,
