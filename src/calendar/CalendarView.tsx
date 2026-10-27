@@ -79,6 +79,7 @@ import { useCalendarData } from "./useCalendarData";
 import { calendarSyncButtonState } from "./calendarSyncStatus";
 import { WorkoutEditorModal } from "./WorkoutEditorModal";
 import { WorkoutLibraryModal } from "./WorkoutLibraryModal";
+import { sameJson } from "../sameJson";
 import {
   defineSelectionPreference,
   selectionIsBoolean,
@@ -311,12 +312,9 @@ export function CalendarView({
           api.getGoogleCalendarStatus(),
           api.getAppleCalendarStatus()
         ]);
-        // IPC returns fresh objects every 3 s; keep the current ones when nothing
-        // changed, or the whole calendar re-renders on every poll.
+        // Polled every 3 s; without this the whole calendar re-renders on every poll.
         if (!cancelled) {
-          setCalendarStatuses((current) =>
-            JSON.stringify(current) === JSON.stringify(statuses) ? current : statuses
-          );
+          setCalendarStatuses((current) => (sameJson(current, statuses) ? current : statuses));
         }
       } catch {
         if (!cancelled) setCalendarStatuses(null);

@@ -1,4 +1,4 @@
-import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage, getLocale, getDateTimeFormat } from "./i18n";
+import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage, getDateTimeFormat, formatNumber } from "./i18n";
 import { setLocalOnlyView } from "./privacy/localOnlyView";
 import {
   AlertCircle,
@@ -163,6 +163,7 @@ import {
   type WatchPresentation,
 } from "./watchModels";
 import changelogMarkdown from "../CHANGELOG.md?raw";
+import { sameJson } from "./sameJson";
 
 type View = PrimaryView;
 type MediaTab =
@@ -347,15 +348,6 @@ async function listAllTrainingHubActivities(
     }
   }
   return activities;
-}
-
-/**
- * IPC hands back a fresh object on every call. Polled App state keeps its
- * current value when the payload is unchanged, otherwise App and every mounted
- * view re-render for nothing.
- */
-function sameJson(current: unknown, next: unknown): boolean {
-  return JSON.stringify(current) === JSON.stringify(next);
 }
 
 let appleMusicSelectedPlaylistIdMemory = "";
@@ -8272,7 +8264,7 @@ function formatBytes(bytes: number): string {
     units.length - 1,
   );
   const value = bytes / 1024 ** exponent;
-  return `${new Intl.NumberFormat(getLocale(), { minimumFractionDigits: value >= 10 ? 0 : 1, maximumFractionDigits: value >= 10 ? 0 : 1 }).format(value)} ${units[exponent]}`;
+  return `${formatNumber(value, { minimumFractionDigits: value >= 10 ? 0 : 1, maximumFractionDigits: value >= 10 ? 0 : 1 })} ${units[exponent]}`;
 }
 
 function formatDate(value: string): string {
