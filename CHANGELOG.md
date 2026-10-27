@@ -5,10 +5,14 @@ All notable changes to CorosLink are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.67] - 2026-10-27
 
 ### Added
 
+- **Load, Resting HR, Steps and Calories open their own page.** In Training Hub, click one of these cards and it opens into a page like the sleep page: the last 7, 30 or 90 days, today against your average, a day-by-day chart you can click to see that day's activities, weekly totals and your weekday pattern. Load also shows your load balance, and Resting HR shows overnight HRV.
+- **Import a compiled BIN as an editable face.** **Import watch face** in Studio now takes `.bin` files as well as ZIP and DAT. CorosLink turns the BIN back into an editable face, the way it opens official faces, and picks the watch for you when the screen size matches only one model.
+- **Clear and semi-transparent shape fills in Studio.** Fill, gradient stops and line color now have **Clear** and an opacity percentage. A shape with a clear fill keeps its outline.
+- **Move the simulation panel.** Drag Studio's **Simulation** panel by its heading to move it out of the way of the preview, and double-click the heading to put it back.
 - **Coach remembers what you tell it.** Goals, injuries and niggles, the days you can train, your equipment and preferences now carry over to your next conversation, with any provider. Each time the Coach saves, changes or forgets something, a line in the chat says so, with **Undo**. **Coach settings → Coach memory** lists everything it knows, and you can edit, add or delete facts there.
 - **Coach knows your races, zones and how fresh your data is.** It reads your target races and race results, your watch's heart-rate, pace and power zones, and when your watch and COROS last synced. If you mention a run it can't see yet, it tells you to sync instead of assuming you skipped it.
 - **Target races.** Tell the Coach about a race you're training for and it prepares a card to add it, with a goal time and an A, B or C priority. Target races appear under **Up next** in **Training Hub → Races**, with a countdown and goal pace, and you can remove them there.
@@ -19,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Time in zones no longer repeats on activity details.** The Time in zones card could appear again and again on an activity's page as its data updated.
 - **Smooth edges on faces you compile in CorosLink.** Anti-aliased text, icons and backgrounds with more than 256 colors came out slightly jagged next to the same face installed with a COROS share link: CorosLink scattered dither noise along soft edges. It now dithers only smooth gradients, as the COROS app does, so edges stay clean and gradients still don't band.
 - **Backgrounds on memory-in-pixel watches now match a COROS share-link install pixel for pixel.** For PACE 3, APEX 4, NOMAD and VERTIX 2/2S, CorosLink approximated the photo treatment the COROS app gives backgrounds, so colors and dither patterns differed. It now follows COROS's steps exactly, including the thin black ring COROS draws round the edge, and blends soft-edged backgrounds over the face's background color. Picker thumbnails are no longer dithered, as in COROS.
 - **Saving a strength workout made in the COROS app keeps its exercises' names.** The workout editor saved every exercise you hadn't swapped as "Training" with a generic description, replacing the name and description COROS had stored, so CorosLink showed "Training" when you opened the workout again. HYROX stations had the same problem.
