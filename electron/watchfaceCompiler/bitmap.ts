@@ -1,3 +1,4 @@
+import { mipRingCover } from "./mipRing";
 import type { RgbaImage } from "./png";
 
 /**
@@ -484,72 +485,234 @@ export const MIP_EXPORTER_FLAG = 0x08;
 /** A channel's 2-bit level, as COROS rounds it: 0–42, 43–127, 128–212, 213–255. */
 const level = (value: number) => value < 43 ? 0 : value < 128 ? 1 : value < 213 ? 2 : 3;
 
-/** `Bitmap::To2222Buffer` for sprites, fonts and icons. Alpha below 64 is fully transparent; color is not premultiplied. */
-export function to2222(image: RgbaImage): Uint8Array {
+/**
+ * `Bitmap::To2222Buffer` for sprites, fonts and icons. Alpha below 64 is fully transparent; color is
+ * not premultiplied. With `smoothEdges` (experimental), partly transparent pixels use `smoothEdge`
+ * instead; opaque and fully transparent pixels stay exactly as COROS writes them.
+ */
+export function to2222(image: RgbaImage, smoothEdges = false): Uint8Array {
   const out = new Uint8Array(image.width * image.height).fill(0xff), pixels = image.data;
   for (let index = 0; index < out.length; index++) {
     const at = index * 4, alpha = pixels[at + 3]!;
+    if (smoothEdges && alpha > 0 && alpha < 255) { out[index] = smoothEdge(pixels[at]!, pixels[at + 1]!, pixels[at + 2]!, alpha); continue; }
     if (alpha < 64) continue;
     out[index] = ((3 - (alpha >> 6)) << 6) | (level(pixels[at]!) << 4) | (level(pixels[at + 1]!) << 2) | level(pixels[at + 2]!);
   }
   return out;
 }
 
-/** COROS's default memory-in-pixel tone curve (`rgb_curve_xy`), linearly interpolated. */
-const TONE = (() => {
-  const points = [[0, 0], [41, 13], [105, 50], [155, 115], [200, 183], [255, 255]] as const;
-  return Array.from({ length: 256 }, (_, x) => {
-    for (let i = 1; i < points.length; i++) {
-      const [x1, y1] = points[i]!;
-      if (x <= x1) { const [x0, y0] = points[i - 1]!; return y0 + (x - x0) * (y1 - y0) / (x1 - x0); }
+/**
+ * Experimental: the byte for a partly transparent sprite pixel that looks closest to the source
+ * once the watch draws it. The watch reads the 2-bit alpha as k/3 opacity (the firmware turns it
+ * back into standard ARGB2222 for its GPU), so COROS's `alpha >> 6` drops alpha 1–63 and turns
+ * 192–254 opaque. This picks the opacity and the color levels together, minimizing the squared
+ * error of the blend over each level a channel behind it can hold (0, 85, 170, 255). The error is
+ * scaled by 765 to stay in integers, so ties break the same way everywhere: lowest k, then lowest level.
+ */
+function smoothEdge(r: number, g: number, b: number, alpha: number): number {
+  let best = 0xff, bestError = Infinity;
+  for (let k = 0; k <= 3; k++) {
+    let error = 0, color = 0;
+    for (const channel of [r, g, b]) {
+      let channelBest = 0, channelError = Infinity;
+      for (let value = 0; value <= (k ? 3 : 0); value++) {
+        let sum = 0;
+        for (const behind of [0, 85, 170, 255]) {
+          const difference = 21675 * value * k - 3 * channel * alpha + behind * (3 * alpha - 255 * k);
+          sum += difference * difference;
+        }
+        if (sum < channelError) { channelError = sum; channelBest = value; }
+      }
+      error += channelError; color = (color << 2) | channelBest;
     }
-    return 255;
+    if (error < bestError) { bestError = error; best = k ? ((3 - k) << 6) | color : 0xff; }
+  }
+  return best;
+}
+
+/**
+ * a × b + c rounded once, as arm64's fused `fmadd`/`fmsub` compute it; COROS's color math is
+ * compiled to them. Dekker's exact product and Knuth's exact sum, then one rounding.
+ */
+function fma(a: number, b: number, c: number): number {
+  const p = a * b, split = 134217729;
+  let t = split * a;
+  const ah = t - (t - a), al = a - ah;
+  t = split * b;
+  const bh = t - (t - b), bl = b - bh;
+  const error = ((ah * bh - p) + ah * bl + al * bh) + al * bl;
+  const s = p + c, v = s - p;
+  return s + (((p - (s - v)) + (c - v)) + error);
+}
+
+/**
+ * COROS's default memory-in-pixel tone curve (`rgb_curve_xy`), as `Bitmap::ApplyRgbCurve` builds
+ * it: a natural cubic spline (tk::spline, solved with its band matrix) through the points,
+ * evaluated at each channel value and truncated.
+ */
+const TONE = (() => {
+  const x = [0, 41, 105, 155, 200, 255], y = [0, 13, 50, 115, 183, 255], n = x.length;
+  const a = Array.from({ length: n }, () => new Array<number>(n).fill(0)), rhs = new Array<number>(n).fill(0);
+  for (let i = 1; i < n - 1; i++) {
+    a[i]![i - 1] = 1 / 3 * (x[i]! - x[i - 1]!);
+    a[i]![i] = 2 / 3 * (x[i + 1]! - x[i - 1]!);
+    a[i]![i + 1] = 1 / 3 * (x[i + 1]! - x[i]!);
+    rhs[i] = (y[i + 1]! - y[i]!) / (x[i + 1]! - x[i]!) - (y[i]! - y[i - 1]!) / (x[i]! - x[i - 1]!);
+  }
+  a[0]![0] = 2; a[n - 1]![n - 1] = 2;
+  // band_matrix::lu_decompose (one band each side), then l_solve and r_solve.
+  const diagonal = a.map((row, i) => 1 / row[i]!);
+  for (let i = 0; i < n; i++) {
+    for (let j = Math.max(0, i - 1); j <= Math.min(n - 1, i + 1); j++) a[i]![j]! *= diagonal[i]!;
+    a[i]![i] = 1;
+  }
+  for (let k = 0; k < n - 1; k++) {
+    const factor = -a[k + 1]![k]! / a[k]![k]!;
+    a[k + 1]![k] = -factor;
+    a[k + 1]![k + 1] = fma(factor, a[k]![k + 1]!, a[k + 1]![k + 1]!);
+  }
+  const forward = new Array<number>(n), c = new Array<number>(n);
+  for (let i = 0; i < n; i++) forward[i] = rhs[i]! * diagonal[i]! - (i > 0 ? a[i]![i - 1]! * forward[i - 1]! : 0);
+  for (let i = n - 1; i >= 0; i--) c[i] = (forward[i]! - (i < n - 1 ? a[i]![i + 1]! * c[i + 1]! : 0)) / a[i]![i]!;
+  const b = new Array<number>(n), d = new Array<number>(n);
+  for (let i = 0; i < n - 1; i++) {
+    const h = x[i + 1]! - x[i]!;
+    d[i] = 1 / 3 * (c[i + 1]! - c[i]!) / h;
+    b[i] = (y[i + 1]! - y[i]!) / h - 1 / 3 * (2 * c[i]! + c[i + 1]!) * h;
+  }
+  const last = x[n - 1]! - x[n - 2]!;
+  b[n - 1] = 3 * d[n - 2]! * last * last + 2 * c[n - 2]! * last + b[n - 2]!;
+  return Uint8Array.from({ length: 256 }, (_, value) => {
+    let i = n - 1;
+    while (i > 0 && x[i]! > value) i--;
+    const h = value - x[i]!;
+    return Math.trunc(fma(fma(fma(i < n - 1 ? d[i]! : 0, h, c[i]!), h, b[i]!), h, y[i]!));
   });
 })();
 
+/** `Bitmap::AddMidtones(0, −5, 0)` (`color_balance`): only green moves, by the gamma 2^0.05. */
+const GREEN = Uint8Array.from({ length: 256 }, (_, value) => value ? Math.min(255, Math.trunc(Math.pow(value / 255, Math.pow(2, 0.05)) * 255)) : 0);
+
 /**
- * Backgrounds and thumbnails get COROS's photo treatment for memory-in-pixel screens
- * (`AggRender::OptimizeBitmap` with `WFConfigBuilder::NewDefaultCfg`): the tone curve, +25
- * saturation, a −5 green midtone shift, then Floyd–Steinberg dithering to the 64 displayable
- * colors. Close to COROS, not byte-identical.
+ * `Bitmap::ApplyRgbCurve`'s saturation step (`hsv_saturation_addition` 25, applied as +25% in HSL),
+ * which runs on the source color before the curve. Truncates and clamps like COROS.
  */
-export function mipBackground(image: RgbaImage): Uint8Array {
-  const { width, height, data: pixels } = image, count = width * height;
-  const rgb = new Float64Array(count * 3), out = new Uint8Array(count).fill(0xff);
-  for (let index = 0; index < count; index++) {
-    const at = index * 4;
-    let r = TONE[pixels[at]!]!, g = TONE[pixels[at + 1]!]!, b = TONE[pixels[at + 2]!]!;
-    // Saturation +25 (of 255) in HSV, keeping hue and value.
-    const maximum = Math.max(r, g, b), minimum = Math.min(r, g, b);
-    if (maximum > 0 && maximum > minimum) {
-      const saturation = (maximum - minimum) / maximum, scale = Math.min(1, saturation + 25 / 255) / saturation;
-      r = maximum - (maximum - r) * scale; g = maximum - (maximum - g) * scale; b = maximum - (maximum - b) * scale;
-    }
-    rgb[index * 3] = r; rgb[index * 3 + 1] = g - 5; rgb[index * 3 + 2] = b;
+function saturate(pixels: Uint8Array, at: number): void {
+  const amount = 25 / 100, r = pixels[at]!, g = pixels[at + 1]!, b = pixels[at + 2]!;
+  const maximum = Math.max(r, g, b), minimum = Math.min(r, g, b), delta = (maximum - minimum) / 255;
+  if (!(delta > 0)) return;
+  const value = (maximum + minimum) / 255, lightness = value * 0.5;
+  const saturation = delta / (lightness < 0.5 ? value : 2 - value);
+  const scale = 1 / (amount + saturation < 1 ? 1 - amount : saturation) - 1;
+  for (let c = 0; c < 3; c++) {
+    const channel = pixels[at + c]!;
+    pixels[at + c] = clamp(Math.trunc(fma(fma(-lightness, 255, channel), scale, channel)));
   }
-  // Spread the error to opaque neighbours only (7/16, 3/16, 5/16, 1/16).
-  const spread = (x: number, y: number, c: number, error: number) => {
-    for (const [dx, dy, weight] of [[1, 0, 7 / 16], [-1, 1, 3 / 16], [0, 1, 5 / 16], [1, 1, 1 / 16]] as const) {
-      const nx = x + dx, ny = y + dy;
-      if (nx < 0 || nx >= width || ny >= height) continue;
-      const neighbour = ny * width + nx;
-      if (pixels[neighbour * 4 + 3]! >= 64) rgb[neighbour * 3 + c]! += error * weight;
-    }
+}
+
+/** `NewDefaultCfg`'s `enhance_colors`: palette entries dithered as the brighter color, then written back as the original. */
+const ENHANCED: ReadonlyMap<number, number> = new Map([
+  [0x0055ff, 0x0085ff], [0x0055aa, 0x007292], [0x00aaff, 0x00c5ff], [0x005555, 0x005d4d],
+  [0xffaaff, 0xffbff6], [0xff55ff, 0xff82ff], [0x55aaff, 0x62c7ff], [0x5555ff, 0x556cff],
+  [0x55aaaa, 0x55aa93], [0x00aaaa, 0x00aa9b], [0x55ff00, 0x6eff00],
+]);
+
+/**
+ * The 64 displayable colors (`NewDefaultPaletteColor`, which the COROS app sets), in the order
+ * `Rgba8Palette::Distinct` sorts them (by luma), with the enhanced colors swapped in place.
+ * The first of equally near colors wins, so the order matters.
+ */
+const MIP_PALETTE = (() => {
+  const levels = [0, 85, 170, 255], colors: number[] = [];
+  for (const r of levels) for (const g of levels) for (const b of levels) colors.push((r << 16) | (g << 8) | b);
+  const luma = (color: number) => ((color >> 16) & 255) * 299 + ((color >> 8) & 255) * 587 + (color & 255) * 114;
+  return colors.sort((a, b) => luma(a) - luma(b)).map(color => ENHANCED.get(color) ?? color);
+})();
+const ORIGINAL = new Map([...ENHANCED].map(([original, enhanced]) => [enhanced, original]));
+
+/** `Dither::GetBestRgbColor`: the nearest palette color by squared RGB distance, first one on ties. */
+function nearestMip(r: number, g: number, b: number): number {
+  let best = MIP_PALETTE[0]!, distance = Infinity;
+  for (const color of MIP_PALETTE) {
+    const dr = r - ((color >> 16) & 255), dg = g - ((color >> 8) & 255), db = b - (color & 255);
+    const d = dr * dr + dg * dg + db * db;
+    if (d < distance) { distance = d; best = color; }
+  }
+  return best;
+}
+
+/** AGG's `rgba8::lerp` and `prelerp` (8-bit, rounded), with which COROS draws over the background. */
+function aggMultiply(a: number, b: number): number { const t = a * b + 128; return ((t >> 8) + t) >> 8; }
+function aggLerp(p: number, q: number, a: number): number { const t = (q - p) * a + 128 - (p > q ? 1 : 0); return p + (((t >> 8) + t) >> 8); }
+
+/**
+ * Backgrounds get COROS's photo treatment for memory-in-pixel screens, byte for byte:
+ * `WFBin2222Exporter::ToBackground` → `AggRender::OptimizeBitmap` with `WFConfigBuilder::NewDefaultCfg`,
+ * the edge ring, then `To2222Buffer`. On the source's 8-bit pixels, skipping transparent ones:
+ *
+ * 1. saturation +25% (HSL), then the tone curve, each truncated;
+ * 2. green gamma 2^0.05 (`color_balance` 0, −5, 0);
+ * 3. partly transparent pixels blended over `bg_color` (black without one) and made opaque;
+ * 4. Floyd–Steinberg to the 64 colors: raster order, 80% of the error, each share truncated and
+ *    stored clamped in the 8-bit pixel, never into transparent pixels;
+ * 5. the enhanced colors written back as their originals;
+ * 6. a 2 px black anti-aliased circle round the edge (`mipRing.ts`);
+ * 7. rounded like sprites.
+ *
+ * Measured against COROS 4.9.9's own code (emulated) with the 64-color palette its app sets.
+ */
+export function mipBackground(image: RgbaImage, background = 0): Uint8Array {
+  const { width, height } = image, count = width * height, pixels = Uint8Array.from(image.data.subarray(0, count * 4));
+  for (let at = 0; at < count * 4; at += 4) {
+    if (!pixels[at + 3]) continue;
+    saturate(pixels, at);
+    pixels[at] = TONE[pixels[at]!]!; pixels[at + 1] = GREEN[TONE[pixels[at + 1]!]!]!; pixels[at + 2] = TONE[pixels[at + 2]!]!;
+  }
+  const backdrop = [(background >> 16) & 255, (background >> 8) & 255, background & 255];
+  for (let at = 0; at < count * 4; at += 4) {
+    const alpha = pixels[at + 3]!;
+    if (alpha === 0 || alpha === 255) continue;
+    const share = alpha / 255, rest = 1 - share;
+    for (let c = 0; c < 3; c++) pixels[at + c] = Math.trunc(fma(pixels[at + c]!, share, rest * backdrop[c]!));
+    pixels[at + 3] = 255;
+  }
+  const spread = (x: number, y: number, weight: number, errors: readonly number[]) => {
+    const at = (y * width + x) * 4;
+    if (!pixels[at + 3]) return;
+    for (let c = 0; c < 3; c++) pixels[at + c] = clamp(pixels[at + c]! + Math.trunc(errors[c]! * weight));
   };
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const index = y * width + x, alpha = pixels[index * 4 + 3]!;
-      if (alpha < 64) continue;
-      const levels = [0, 0, 0];
-      for (let c = 0; c < 3; c++) {
-        const value = clamp(rgb[index * 3 + c]!), chosen = level(Math.round(value));
-        levels[c] = chosen;
-        spread(x, y, c, value - chosen * 85);
+      const at = (y * width + x) * 4;
+      if (!pixels[at + 3]) continue;
+      const color = nearestMip(pixels[at]!, pixels[at + 1]!, pixels[at + 2]!), chosen = [(color >> 16) & 255, (color >> 8) & 255, color & 255];
+      const errors = chosen.map((value, c) => (pixels[at + c]! - value) * 0.8);
+      pixels.set(chosen, at);
+      if (x < width - 1) spread(x + 1, y, 7 / 16, errors);
+      if (y < height - 1) {
+        if (x > 0) spread(x - 1, y + 1, 3 / 16, errors);
+        spread(x, y + 1, 5 / 16, errors);
+        if (x < width - 1) spread(x + 1, y + 1, 1 / 16, errors);
       }
-      out[index] = ((3 - (alpha >> 6)) << 6) | (levels[0]! << 4) | (levels[1]! << 2) | levels[2]!;
     }
   }
-  return out;
+  for (let at = 0; at < count * 4; at += 4) {
+    if (!pixels[at + 3]) continue;
+    const original = ORIGINAL.get((pixels[at]! << 16) | (pixels[at + 1]! << 8) | pixels[at + 2]!);
+    if (original !== undefined) pixels.set([(original >> 16) & 255, (original >> 8) & 255, original & 255], at);
+  }
+  // COROS draws the ring at every size; its coverage is recorded for the memory-in-pixel screens.
+  const ring = width === height ? mipRingCover(width) : null;
+  if (ring) {
+    const cover = (index: number, amount: number) => {
+      const at = index * 4;
+      for (let c = 0; c < 3; c++) pixels[at + c] = aggLerp(pixels[at + c]!, 0, amount);
+      pixels[at + 3] = pixels[at + 3]! + amount - aggMultiply(pixels[at + 3]!, amount);
+    };
+    ring.cover.forEach((amount, index) => { if (amount) cover(index, amount); });
+    for (const [index, amount] of ring.again) cover(index, amount);
+  }
+  return to2222({ width, height, data: pixels });
 }
 
 /** RLE is chosen from the first frame and applied to all, as for LUT blocks. */
@@ -564,15 +727,20 @@ function mipBlock(frames: Uint8Array[], width: number, height: number): Buffer {
   return Buffer.concat([header, ...parts]);
 }
 
-/** One memory-in-pixel image; backgrounds and thumbnails are dithered, everything else rounded. */
-export function encodeMipImageBlock(image: RgbaImage, inside: InsideType = InsideType.Normal): Buffer {
-  return mipBlock([inside === InsideType.Normal ? to2222(image) : mipBackground(image)], image.width, image.height);
+/**
+ * One memory-in-pixel image. Backgrounds get COROS's photo treatment over `background` (the
+ * face's `bg_color`); thumbnails and everything else are rounded, as COROS does, or with
+ * `smoothEdges` (experimental) sprites get `smoothEdge` at their soft edges.
+ */
+export function encodeMipImageBlock(image: RgbaImage, inside: InsideType = InsideType.Normal, background = 0, smoothEdges = false): Buffer {
+  const frame = inside === InsideType.Background ? mipBackground(image, background) : to2222(image, smoothEdges && inside === InsideType.Normal);
+  return mipBlock([frame], image.width, image.height);
 }
 
-export function encodeMipFramesBlock(images: RgbaImage[]): Buffer {
+export function encodeMipFramesBlock(images: RgbaImage[], smoothEdges = false): Buffer {
   if (!images.length) throw new Error("A frame list needs at least one image.");
   if (images.length > 255) throw new Error("A frame list holds at most 255 images.");
-  return mipBlock(images.map(to2222), images[0]!.width, images[0]!.height);
+  return mipBlock(images.map(image => to2222(image, smoothEdges)), images[0]!.width, images[0]!.height);
 }
 
 /** Frame data past 64 KB, whose u16 ends COROS truncates, so the watch would misread the block. */

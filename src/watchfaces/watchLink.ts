@@ -98,20 +98,30 @@ export function compileSummary(preview: CorosDirectWatchfacePreview): string | n
   return t("Compiled in {{time}}", { time });
 }
 
-const FULL_COLOR_KEY = "coroslink.watchfaces.fullColorBins";
+/** A per-computer on/off preference, off by default. */
+function useStoredFlag(key: string): [boolean, (on: boolean) => void] {
+  const [on, setOn] = useState(() => { try { return localStorage.getItem(key) === "1"; } catch { return false; } });
+  const update = useCallback((next: boolean) => {
+    setOn(next);
+    try { localStorage.setItem(key, next ? "1" : "0"); } catch {}
+  }, [key]);
+  return [on, update];
+}
 
 /**
  * Whether compiles keep images past 256 colors as full-color RGBA (AMOLED watches only).
- * A per-computer preference, off by default: the BIN grows, and the result is not yet
- * confirmed on every watch.
+ * Off by default: the BIN grows, and the result is not yet confirmed on every watch.
  */
 export function useFullColorBins(): [boolean, (on: boolean) => void] {
-  const [on, setOn] = useState(() => { try { return localStorage.getItem(FULL_COLOR_KEY) === "1"; } catch { return false; } });
-  const update = useCallback((next: boolean) => {
-    setOn(next);
-    try { localStorage.setItem(FULL_COLOR_KEY, next ? "1" : "0"); } catch {}
-  }, []);
-  return [on, update];
+  return useStoredFlag("coroslink.watchfaces.fullColorBins");
+}
+
+/**
+ * Whether compiles encode the soft edges of fonts and icons for how a memory-in-pixel watch
+ * blends them, instead of rounding them as COROS does. Off by default: not yet seen on a watch.
+ */
+export function useSmoothMipEdges(): [boolean, (on: boolean) => void] {
+  return useStoredFlag("coroslink.watchfaces.smoothMipEdges");
 }
 
 /** Polls the Bluetooth link while mounted. */

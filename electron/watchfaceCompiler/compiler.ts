@@ -33,6 +33,12 @@ export interface CompileOptions {
    * Lossless, but a full-screen background grows to several hundred KB.
    */
   fullColor?: boolean;
+  /**
+   * Experimental, memory-in-pixel only: encode the soft edges of fonts and icons for how the
+   * watch blends its 2-bit alpha (`smoothEdge` in bitmap.ts) instead of rounding them as COROS
+   * does. Opaque and fully transparent pixels, and backgrounds, stay byte-identical to COROS.
+   */
+  smoothEdges?: boolean;
 }
 
 /** Files of a final archive, keyed by their path inside it (`info.json`, `watchface_416x416/...`). */
@@ -47,7 +53,7 @@ class BlockStream {
   private readonly decoded = new Map<string, RgbaImage | null>();
   offset: number;
   constructor(start: number, private readonly files: ArchiveFiles, private readonly warnings: Set<string>, readonly target: WatchfaceBinTarget,
-    private readonly fullColor = false) { this.offset = start; }
+    private readonly fullColor = false, private readonly smoothEdges = false) { this.offset = start; }
 
   private get layout(): string { return this.target.layout; }
 
@@ -85,13 +91,17 @@ class BlockStream {
     return block;
   }
 
-  /** A single image, deduplicated by path. Missing or unreadable images point at 0, as in COROS. */
-  single(path: string, inside: InsideType = InsideType.Normal, transform?: (image: RgbaImage) => RgbaImage): number {
+  /**
+   * A single image, deduplicated by path. Missing or unreadable images point at 0, as in COROS.
+   * A memory-in-pixel background blends its partly transparent pixels over `background` (`bg_color`).
+   */
+  single(path: string, inside: InsideType = InsideType.Normal, transform?: (image: RgbaImage) => RgbaImage, background = 0): number {
     const cached = this.positions.get(path);
     if (cached !== undefined) return cached;
     const image = this.image(path);
     if (!image) this.missing(path);
-    const encode = this.target.display === "mip" ? encodeMipImageBlock : (image: RgbaImage, inside: InsideType) => encodeImageBlock(image, inside, this.fullColor);
+    const encode = this.target.display === "mip" ? (image: RgbaImage, inside: InsideType) => encodeMipImageBlock(image, inside, background, this.smoothEdges)
+      : (image: RgbaImage, inside: InsideType) => encodeImageBlock(image, inside, this.fullColor);
     const at = image ? this.append(this.checked(encode(transform ? transform(image) : image, inside), path)) : 0;
     this.positions.set(path, at);
     return at;
@@ -113,7 +123,7 @@ class BlockStream {
     if (names.length * repeat > 255) throw new WatchfaceCompileError(`${directory.slice(this.layout.length + 1)} has too many images for one element (COROS allows 255).`);
     const images = Array.from({ length: repeat }, () => names.map(name => this.image(name))).flat();
     if (!images[0]) { this.missing(names[0]!); this.positions.set(names[0]!, 0); return 0; }
-    const encode = this.target.display === "mip" ? encodeMipFramesBlock : (images: RgbaImage[]) => encodeFramesBlock(images, this.fullColor);
+    const encode = this.target.display === "mip" ? (images: RgbaImage[]) => encodeMipFramesBlock(images, this.smoothEdges) : (images: RgbaImage[]) => encodeFramesBlock(images, this.fullColor);
     const at = this.append(this.checked(encode(images.map(image => image ?? { width: 0, height: 0, data: new Uint8Array() })), directory));
     this.positions.set(names[0]!, at);
     return at;
@@ -206,7 +216,7 @@ function buildLayout(config: Map<string, string>, mode: "normal" | "aod", stream
     header.writeInt32LE(x, 0x12); header.writeInt32LE(y, 0x16);
     if (config.has("background_icon")) {
       header.writeUInt32LE(stream.single(path(config.get("background_icon")!), InsideType.Background,
-        image => scaleImage(image, target.screen, target.screen)), 0x1a);
+        image => scaleImage(image, target.screen, target.screen), config.has("bg_color") ? parseNumber(config.get("bg_color")!) & 0xffffff : 0), 0x1a);
     }
   }
   // Only the normal layout has a picker thumbnail.
@@ -334,7 +344,8 @@ export function compileWatchface(files: ArchiveFiles, options: CompileOptions): 
   const warnings = new Set<string>();
   const normalConfig = parseConfig(configText), aodConfig = aodText !== undefined ? parseConfig(aodText) : undefined;
   const size = headerSize(aodConfig ? [normalConfig, aodConfig] : [normalConfig]);
-  const stream = new BlockStream(aodConfig ? size * 2 : size, files, warnings, target, options.fullColor && target.display !== "mip");
+  const stream = new BlockStream(aodConfig ? size * 2 : size, files, warnings, target, options.fullColor && target.display !== "mip",
+    options.smoothEdges === true && target.display === "mip");
   const normal = buildLayout(normalConfig, "normal", stream, info, options, files, warnings, size);
   const aod = aodConfig ? buildLayout(aodConfig, "aod", stream, info, options, files, warnings, size) : null;
   if (aod) normal.writeUInt32LE(size, 0x322);

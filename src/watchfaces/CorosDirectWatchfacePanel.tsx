@@ -4,9 +4,9 @@ import { Download, FileCode2, FolderOpen, Loader2, RefreshCw, Send, Watch } from
 import type { CorosDirectWatchfacePreview } from "../../electron/corosBleWatchfaceTypes";
 import type { CorosWatchfaceCompilerStatus } from "../../electron/corosWatchfaceCompilerTypes";
 import type { CorosLinkApi } from "../coroslink-api";
-import { apiErrorMessage, compileSummary, formatBytes, useFullColorBins, useWatchfaceInstaller } from "./watchLink";
+import { apiErrorMessage, compileSummary, formatBytes, useFullColorBins, useSmoothMipEdges, useWatchfaceInstaller } from "./watchLink";
 import { getWatchfaceTarget, watchfaceBinTarget, type WatchfaceTarget } from "../../electron/watchfaceTargets";
-import { CompileWarnings, FullColorToggle, WatchInstallProgress, WatchSlotPicker, watchInstallResult } from "./WatchInstallParts";
+import { CompileWarnings, FullColorToggle, SmoothEdgesToggle, WatchInstallProgress, WatchSlotPicker, watchInstallResult } from "./WatchInstallParts";
 
 /** The On watch tab: pick a slot, bring a face, install it over Bluetooth. */
 export function CorosDirectWatchfacePanel({ api, ready, connected, watch, betaNote, disabled, onBusy }: {
@@ -25,6 +25,7 @@ export function CorosDirectWatchfacePanel({ api, ready, connected, watch, betaNo
   const [note, setNote] = useState<{ error: boolean; text: string } | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [fullColor, setFullColor] = useFullColorBins();
+  const [smoothEdges, setSmoothEdges] = useSmoothMipEdges();
   const working = useRef(false);
   const canChoose = typeof api.chooseCorosDirectWatchface === "function";
   const canCompile = typeof api.getCorosWatchfaceCompilerStatus === "function" && typeof api.compileCorosDirectWatchface === "function";
@@ -58,7 +59,7 @@ export function CorosDirectWatchfacePanel({ api, ready, connected, watch, betaNo
     if (!compiler?.available) return;
     setCompiling(true);
     try {
-      const next = await api.compileCorosDirectWatchface({ fullColor: fullColor && !mip });
+      const next = await api.compileCorosDirectWatchface({ fullColor: fullColor && !mip, smoothEdges: smoothEdges && mip });
       if (next) { setPreview(next); setShowResult(false); installer.resetStatus(); }
     } catch (caught) { setNote({ error: true, text: apiErrorMessage(caught, t("Could not compile the watch face.")) }); }
     finally { setCompiling(false); }
@@ -126,7 +127,8 @@ export function CorosDirectWatchfacePanel({ api, ready, connected, watch, betaNo
       </div>
     </div>
 
-    {canCompile && !mip ? <FullColorToggle checked={fullColor} disabled={locked} onChange={setFullColor} /> : null}
+    {canCompile ? mip ? <SmoothEdgesToggle checked={smoothEdges} disabled={locked} onChange={setSmoothEdges} />
+      : <FullColorToggle checked={fullColor} disabled={locked} onChange={setFullColor} /> : null}
 
     <CompileWarnings warnings={preview?.compile?.warnings} />
 

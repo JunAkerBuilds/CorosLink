@@ -849,6 +849,8 @@ export const watchfacesPortuguese: Record<string, string> = {
   "Sends over Bluetooth. Experimental.": "Envia por Bluetooth. Experimental.",
   "Full color (experimental)": "Cor total (experimental)",
   "Keeps gradients and soft edges exact, as COROS's own faces do. Larger file, slower to send.": "Mantém os gradientes e os contornos suaves exactos, como nos mostradores da própria COROS. Ficheiro maior, envio mais lento.",
+  "Smooth edges (experimental)": "Contornos suaves (experimental)",
+  "Encodes the soft edges of digits and icons for how the watch draws them, so they step less. Not yet checked on a watch.": "Codifica os contornos suaves dos dígitos e ícones conforme o relógio os desenha, para que fiquem menos serrilhados. Ainda não verificado num relógio.",
   "Watch languages": "Idiomas do relógio",
   "Weekday languages": "Idiomas dos dias da semana",
   "Languages in this watch face": "Idiomas neste mostrador",

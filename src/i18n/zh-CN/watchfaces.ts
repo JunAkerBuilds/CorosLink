@@ -848,6 +848,8 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Sends over Bluetooth. Experimental.": "通过 Bluetooth 发送。实验性的。",
   "Full color (experimental)": "全彩（实验性）",
   "Keeps gradients and soft edges exact, as COROS's own faces do. Larger file, slower to send.": "像 COROS 官方表盘一样完整保留渐变和柔和边缘。文件更大，发送更慢。",
+  "Smooth edges (experimental)": "平滑边缘（实验性）",
+  "Encodes the soft edges of digits and icons for how the watch draws them, so they step less. Not yet checked on a watch.": "按手表的绘制方式编码数字和图标的柔和边缘，减少锯齿。尚未在手表上验证。",
   "Watch languages": "手表语言",
   "Weekday languages": "星期语言",
   "Languages in this watch face": "表盘中的语言",

@@ -27,6 +27,15 @@ export function FullColorToggle({ checked, disabled, onChange }: { checked: bool
   </label>;
 }
 
+/** Memory-in-pixel counterpart of the full-color option: softer sprite edges, off by default. */
+export function SmoothEdgesToggle({ checked, disabled, onChange }: { checked: boolean; disabled?: boolean; onChange: (on: boolean) => void }) {
+  useLanguage();
+  return <label className="watch-full-color">
+    <input type="checkbox" checked={checked} disabled={disabled} onChange={event => onChange(event.target.checked)} />
+    <span><strong>{t("Smooth edges (experimental)")}</strong>{" "}{t("Encodes the soft edges of digits and icons for how the watch draws them, so they step less. Not yet checked on a watch.")}</span>
+  </label>;
+}
+
 /** The watch's face slots as a compact radio strip. Empty slots read as dashed. */
 export function WatchSlotPicker({ installer, disabled, compact = false }: {
   installer: WatchfaceInstaller; disabled?: boolean; compact?: boolean;

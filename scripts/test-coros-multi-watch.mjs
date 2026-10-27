@@ -1,6 +1,7 @@
 // Every watch CorosLink knows, not just PACE Pro: recognizing the connected watch, compiling for its
 // screen (AMOLED and memory-in-pixel), reading its slots, and refusing a BIN built for another screen.
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,7 +11,7 @@ import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 const targets=require('../dist-electron/watchfaceTargets.js');
 const {compileWatchface,WatchfaceCompileError}=require('../dist-electron/watchfaceCompiler/compiler.js');
-const {to2222,encodeMipFramesBlock,mipBlockOverflows}=require('../dist-electron/watchfaceCompiler/bitmap.js');
+const {to2222,encodeMipFramesBlock,encodeMipImageBlock,mipBackground,mipBlockOverflows}=require('../dist-electron/watchfaceCompiler/bitmap.js');
 const {prepareLocalWatchfaceZip}=require('../dist-electron/corosWatchfaceCompiler.js');
 const {createStoreZip}=require('../dist-electron/zipStore.js');
 const {encodeWatchfaceFile,decodeWatchfaceInventory,emptyWatchfaceSlot,selectWatchfaceSlot}=require('../dist-electron/corosBleWatchfaceProtocol.js');
@@ -63,6 +64,57 @@ assert.equal(frames.readUInt16LE(0),3);assert.equal(frames[5],0x08);assert.equal
 assert.equal(frames.readUInt16LE(10),0);assert.equal(frames.readUInt16LE(14),frames.readUInt16LE(12)*2);
 assert.equal(mipBlockOverflows(frames),false);
 
+// --- Memory-in-pixel backgrounds: byte-identical to COROS 4.9.9's OptimizeBitmap + edge ring ---
+// A background that touches every step of COROS's MIP pipeline: gradients, hues, flat
+// enhanced colors, an anti-aliased disc on transparency and partly transparent noise.
+const mipFixture=size=>{
+  let seed=size;const rnd=()=>(seed=(seed*1103515245+12345)&0x7fffffff)/0x7fffffff;
+  const data=new Uint8Array(size*size*4);
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    const at=(y*size+x)*4,u=x/size,v=y/size,band=Math.floor(v*4);
+    let px=band===0?[u*255,u*255,u*255,255]
+      :band===1?[255*Math.abs(Math.sin(u*3)),255*Math.abs(Math.sin(u*3+2)),255*Math.abs(Math.sin(u*3+4)),255]
+      :band===2?(u<0.5?[0x00,0x55,0xff,255]:[0xaa,0xaa,0xaa,255])
+      :[rnd()*256,rnd()*256,rnd()*256,rnd()<0.2?0:rnd()*256];
+    const d=Math.hypot(x+0.5-size*0.7,y+0.5-size*0.3),edge=Math.max(0,Math.min(1,size*0.15-d));
+    if(d<size*0.15+1)px=[200,120,40,Math.round(edge*255)];
+    data.set(px.map(Math.floor),at);
+  }
+  return {width:size,height:size,data};
+};
+// SHA-256 of COROS's own output (libw4-watchface 4.9.9 emulated, 64-color palette, bg_color 0x557799).
+const corosMip={240:'221624c7e07fd546ecea1cda591e8aee94a2f360931c1196aaf241daf15c9c5d',
+  260:'8bfb4f73c37cc8d7738315a8e8dbf87a4dceae53a4520294930913dae607d86c',
+  280:'e98c38cdc9a6944cdf9f4501f11adeade1ae2cd4a3a6e57b86cbf02cabfb6668'};
+for (const [size,hash] of Object.entries(corosMip)) {
+  assert.equal(crypto.createHash('sha256').update(mipBackground(mipFixture(Number(size)),0x557799)).digest('hex'),hash,`${size} px background`);
+}
+{
+  // Transparent pixels stay transparent, apart from the black ring COROS draws round the edge.
+  const clear=mipBackground({width:260,height:260,data:new Uint8Array(260*260*4)});
+  assert.equal(clear[130*260+130],0xff);assert.equal(clear[130*260],0x00,'ring at the left edge');
+  // Thumbnails are only rounded, as COROS does (it photo-processes backgrounds alone).
+  const photo=mipFixture(197);
+  assert.deepEqual(encodeMipImageBlock(photo,2),encodeMipImageBlock(photo,0));
+  assert.notDeepEqual(encodeMipImageBlock(photo,1),encodeMipImageBlock(photo,0));
+}
+
+// --- Smooth edges (experimental): soft sprite edges encoded for the watch's k/3 alpha ---
+{
+  const one=(r,g,b,a,smooth)=>to2222({width:1,height:1,data:Uint8Array.from([r,g,b,a])},smooth)[0];
+  // Opaque and fully transparent pixels stay exactly as COROS writes them.
+  for (let v=0;v<256;v+=5) { assert.equal(one(v,255-v,v>>1,255,true),one(v,255-v,v>>1,255,false)); assert.equal(one(v,v,v,0,true),0xff); }
+  // COROS drops alpha 1–63 and turns 192–254 opaque; the watch draws the levels as 0, 1/3, 2/3, 1.
+  assert.deepEqual([50,63,200,212].map(a=>one(255,255,255,a,false)),[0xff,0xff,0x3f,0x3f]);
+  assert.deepEqual([20,50,63,200,212,213].map(a=>one(255,255,255,a,true)),[0xff,0xaa,0xbf,0x7f,0x7f,0x3f]);
+  const flat=mipFixture(64);flat.data.forEach((_,i)=>{if(i%4===3)flat.data[i]=flat.data[i]<128?0:255;});
+  assert.deepEqual(encodeMipFramesBlock([flat],true),encodeMipFramesBlock([flat]),'a sprite without soft edges is unchanged');
+  const soft=mipFixture(64);
+  assert.notDeepEqual(encodeMipFramesBlock([soft],true),encodeMipFramesBlock([soft]));
+  assert.deepEqual(encodeMipImageBlock(soft,1,0,true),encodeMipImageBlock(soft,1),'backgrounds stay COROS-exact');
+  assert.deepEqual(encodeMipImageBlock(soft,2,0,true),encodeMipImageBlock(soft,2),'thumbnails stay COROS-exact');
+}
+
 // --- Compiling for each kind of screen ---
 const crcTable=Array.from({length:256},(_,n)=>{let c=n;for(let k=0;k<8;k++)c=c&1?0xedb88320^(c>>>1):c>>>1;return c>>>0;});
 const crc32=buf=>{let c=0xffffffff;for(const b of buf)c=crcTable[(c^b)&0xff]^(c>>>8);return(c^0xffffffff)>>>0;};
@@ -87,6 +139,8 @@ assert.equal(apex.bin[background+5],0x08,'memory-in-pixel exporter flag');
 const thumbnail=apex.bin.readUInt32LE(0x1e);
 assert.equal(apex.bin.readUInt16LE(thumbnail),197,'APEX 4 picker thumbnail');
 assert.equal(apex.bin.readUInt32LE(8),apex.bin.length-18);assert.equal(apex.bin.readUInt16LE(12),crc16Ccitt(apex.bin.subarray(18)));
+assert.deepEqual(compileWatchface(face(260),{faceId:7,target:bin('apex-4'),smoothEdges:true}).bin,apex.bin,'smooth edges leave opaque art alone');
+assert.deepEqual(compileWatchface(face(416),{faceId:7,smoothEdges:true}).bin,compileWatchface(face(416),{faceId:7}).bin,'smooth edges are memory-in-pixel only');
 const pace4=compileWatchface(face(466),{faceId:7,target:bin('pace-4-pro')});
 assert.equal(pace4.bin.toString('latin1',0,4),'664A');
 assert.equal(pace4.bin[pace4.bin.readUInt32LE(0x1a)+5],0x20,'AMOLED exporter flag');

@@ -39,7 +39,7 @@ async function main() {
     await js(`${saveBin}.click(); void 0`); await js(`${saveBin}.click(); void 0`);
     await until('compileFixture.calls.length===1');
     // Compiled for the watch Studio built the archive for.
-    assert.deepEqual(await js('compileFixture.calls[0]'), {archiveId:'fixture-archive', name:'Fixture face', firmwareType:'COROS W332'});
+    assert.deepEqual(await js('compileFixture.calls[0]'), {archiveId:'fixture-archive', name:'Fixture face', firmwareType:'COROS W332', fullColor:false, smoothEdges:false});
     assert.equal(await js(`${find('Send to COROS')}.disabled`), true);
     assert.equal(await js(`${find('Close')}.disabled`), true, 'the dialog stays open while compiling');
     assert.equal(await js("document.querySelector('[role=dialog]').getAttribute('aria-busy')"), 'true');

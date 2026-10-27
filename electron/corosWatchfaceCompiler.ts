@@ -27,15 +27,19 @@ export interface CompiledWatchfaceFile {
   model: WatchModelId;
 }
 
+/** Experimental image settings, off by default: full color on AMOLED, smooth edges on memory-in-pixel. */
+export interface WatchfaceImageOptions { fullColor?: boolean; smoothEdges?: boolean }
+
 /**
  * Runs the compiler in a worker thread so a large face never stalls the main process. If the
  * worker cannot start, it compiles in-process. Faults in the compiler itself (rather than in the
  * face) are reported as internal errors.
  */
-function compileBuiltIn(files: ArchiveFiles, faceId: number, target: WatchfaceBinTarget, fullColor = false): Promise<{ bin: Buffer; warnings: string[] }> {
+function compileBuiltIn(files: ArchiveFiles, faceId: number, target: WatchfaceBinTarget, options: WatchfaceImageOptions = {}): Promise<{ bin: Buffer; warnings: string[] }> {
+  const { fullColor = false, smoothEdges = false } = options;
   const internal = (message: string) => new Error(`The compiler hit an internal error: ${message}`);
   const inProcess = () => {
-    try { return Promise.resolve(compileWatchface(files, { faceId, target, fullColor })); }
+    try { return Promise.resolve(compileWatchface(files, { faceId, target, fullColor, smoothEdges })); }
     catch (error) { return Promise.reject(error instanceof WatchfaceCompileError ? error : internal(error instanceof Error ? error.message : String(error))); }
   };
   // Packaged builds unpack the compiler from app.asar (see asarUnpack) so the worker can load it.
@@ -59,7 +63,7 @@ function compileBuiltIn(files: ArchiveFiles, faceId: number, target: WatchfaceBi
       else inProcess().then(resolve, reject);
     }));
     worker.once("exit", () => finish(() => reject(internal("the compiler stopped unexpectedly."))));
-    worker.postMessage({ entries: [...files], faceId, target, fullColor } satisfies WorkerRequest);
+    worker.postMessage({ entries: [...files], faceId, target, fullColor, smoothEdges } satisfies WorkerRequest);
   });
 }
 
@@ -130,9 +134,10 @@ export class CorosWatchfaceCompiler {
   /**
    * Compiles for `target` (the archive's first supported layout, PACE Pro first, when omitted).
    * `fullColor` keeps detailed images unquantized; a face that then outgrows a watch transfer
-   * is built with palettes instead, with a warning.
+   * is built with palettes instead, with a warning. `smoothEdges` encodes memory-in-pixel soft
+   * edges for how the watch blends them (experimental).
    */
-  async compile(filename: string, name: string, target?: WatchfaceTarget, options: { fullColor?: boolean } = {}): Promise<CompiledWatchfaceFile> {
+  async compile(filename: string, name: string, target?: WatchfaceTarget, options: WatchfaceImageOptions = {}): Promise<CompiledWatchfaceFile> {
     if (this.busy) throw new Error("Wait for the current watch face compilation to finish.");
     const job = randomUUID(), started = Date.now();
     this.busy = true; this.phase = "starting"; this.detail = "Preparing watch face…";
@@ -140,10 +145,10 @@ export class CorosWatchfaceCompiler {
       await this.pruneResults();
       const { files, faceId, target: built } = await prepareLocalWatchfaceZip(filename, target);
       this.phase = "compiling"; this.detail = "Compiling watch face…";
-      let { bin, warnings } = await compileBuiltIn(files, faceId, watchfaceBinTarget(built), options.fullColor);
+      let { bin, warnings } = await compileBuiltIn(files, faceId, watchfaceBinTarget(built), options);
       if (options.fullColor && bin.length > WATCHFACE_MAX_BYTES - 16) {
         const full = bin.length;
-        ({ bin, warnings } = await compileBuiltIn(files, faceId, watchfaceBinTarget(built)));
+        ({ bin, warnings } = await compileBuiltIn(files, faceId, watchfaceBinTarget(built), { smoothEdges: options.smoothEdges }));
         warnings.push(`Full color made this face ${(full / 1048576).toFixed(1)} MB, over the ${(WATCHFACE_MAX_BYTES / 1048576).toFixed(1)} MB a watch accepts, so its images use 256-color palettes.`);
       }
       this.phase = "validating"; this.detail = "Checking compiled BIN…";

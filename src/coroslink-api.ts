@@ -322,9 +322,9 @@ export interface CorosLinkApi {
   syncCorosWatchface: (previewId: string, target?: import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfaceTarget) => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfaceStatus>;
   cancelCorosWatchfaceSync: () => Promise<void>;
   getCorosWatchfaceCompilerStatus: () => Promise<import("../electron/corosWatchfaceCompilerTypes").CorosWatchfaceCompilerStatus>;
-  /** `fullColor` keeps images past 256 colors unquantized (AMOLED; larger BIN). */
-  compileCorosDirectWatchface: (options?: { fullColor?: boolean }) => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfacePreview | null>;
-  compileCorosWatchfaceArchive: (input: { archiveId: string; name: string; firmwareType?: string; fullColor?: boolean }) => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfacePreview>;
+  /** `fullColor` keeps images past 256 colors unquantized (AMOLED; larger BIN); `smoothEdges` re-encodes soft sprite edges (memory-in-pixel). Both experimental. */
+  compileCorosDirectWatchface: (options?: { fullColor?: boolean; smoothEdges?: boolean }) => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfacePreview | null>;
+  compileCorosWatchfaceArchive: (input: { archiveId: string; name: string; firmwareType?: string; fullColor?: boolean; smoothEdges?: boolean }) => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfacePreview>;
   saveCorosCompiledWatchface: (previewId: string) => Promise<{ saved: boolean }>;
   getCorosWifiMapStatus: () => Promise<import("../electron/corosWifiMapTypes").CorosWifiMapStatus>;
   previewCorosWifiMap: (tiles: import("../electron/corosWifiMapTypes").CorosWifiMapTile[]) => Promise<import("../electron/corosWifiMapTypes").CorosWifiMapPreview>;

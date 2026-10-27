@@ -8,9 +8,9 @@ import { pickWatchPreviewResolution, type WatchfaceComplicationId, type Watchfac
 import { WATCH_LANGUAGE_NAMES, type WatchfaceWatchLanguages } from "./watchfaceLanguages";
 import type { CorosDirectWatchfacePreview } from "../../electron/corosBleWatchfaceTypes";
 import type { CorosWatchfaceCompilerStatus } from "../../electron/corosWatchfaceCompilerTypes";
-import { apiErrorMessage, compileSummary, connectedWatch, useCorosWatchLink, useFullColorBins, useWatchfaceInstaller, watchBetaNote, watchFaceSyncReady, watchLinkSupported } from "./watchLink";
+import { apiErrorMessage, compileSummary, connectedWatch, useCorosWatchLink, useFullColorBins, useSmoothMipEdges, useWatchfaceInstaller, watchBetaNote, watchFaceSyncReady, watchLinkSupported } from "./watchLink";
 import { getWatchfaceTarget, watchfaceBinTarget } from "../../electron/watchfaceTargets";
-import { CompileWarnings, FullColorToggle, WatchInstallProgress, WatchSlotPicker, watchInstallResult } from "./WatchInstallParts";
+import { CompileWarnings, FullColorToggle, SmoothEdgesToggle, WatchInstallProgress, WatchSlotPicker, watchInstallResult } from "./WatchInstallParts";
 import { WatchfacePhoneSendCard } from "./WatchfacePhoneSendCard";
 import "./watchLink.css";
 
@@ -59,8 +59,9 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
   const [compiler, setCompiler] = useState<CorosWatchfaceCompilerStatus | null>(null);
   const [compiling, setCompiling] = useState(false);
   /** The last BIN compiled from this dialog, keyed to the archive and name it came from, and reusable until `reusableUntil`. */
-  const [bin, setBin] = useState<{ preview: CorosDirectWatchfacePreview; archiveId: string; name: string; fullColor: boolean; reusableUntil: number } | null>(null);
+  const [bin, setBin] = useState<{ preview: CorosDirectWatchfacePreview; archiveId: string; name: string; fullColor: boolean; smoothEdges: boolean; reusableUntil: number } | null>(null);
   const [fullColorSetting, setFullColor] = useFullColorBins();
+  const [smoothEdgesSetting, setSmoothEdges] = useSmoothMipEdges();
   const [binMessage, setBinMessage] = useState("");
   const [installCompile, setInstallCompile] = useState<{ state: "active" | "done" | "failed"; detail?: string } | null>(null);
   const [installNote, setInstallNote] = useState<string | null>(null);
@@ -131,8 +132,9 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
   // The compiler builds the layout of the watch Studio made this archive for (PACE Pro when unknown).
   const faceTarget = getWatchfaceTarget(archive.firmwareType) ?? getWatchfaceTarget("pace-pro")!;
   const faceBin = watchfaceBinTarget(faceTarget);
-  // Memory-in-pixel screens show 64 colors, so full color only applies to AMOLED watches.
-  const fullColor = fullColorSetting && faceBin.display !== "mip";
+  // Memory-in-pixel screens show 64 colors, so full color only applies to AMOLED watches,
+  // and smooth edges (for their 2-bit alpha) only to memory-in-pixel ones.
+  const fullColor = fullColorSetting && faceBin.display !== "mip", smoothEdges = smoothEdgesSetting && faceBin.display === "mip";
   const hasTargetLayout = details.resolutions.some((item) => item.width === faceBin.screen && item.height === faceBin.screen);
   const canCompile = Boolean(result) && !rebuilding && Boolean(trimmedName) && hasTargetLayout &&
     Boolean(compiler?.available) && typeof api.compileCorosWatchfaceArchive === "function";
@@ -146,13 +148,13 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
 
   /** Compiles once per archive and name; Save BIN and Install reuse a recent result. */
   async function compiled(): Promise<CorosDirectWatchfacePreview | null> {
-    if (bin && bin.archiveId === archive.archiveId && bin.name === trimmedName && bin.fullColor === fullColor && Date.now() < bin.reusableUntil) return bin.preview;
+    if (bin && bin.archiveId === archive.archiveId && bin.name === trimmedName && bin.fullColor === fullColor && bin.smoothEdges === smoothEdges && Date.now() < bin.reusableUntil) return bin.preview;
     const archiveId = archive.archiveId, name = trimmedName;
     setCompiling(true);
     try {
-      const next = await api.compileCorosWatchfaceArchive({ archiveId, name, firmwareType: faceTarget.firmwareType, fullColor });
+      const next = await api.compileCorosWatchfaceArchive({ archiveId, name, firmwareType: faceTarget.firmwareType, fullColor, smoothEdges });
       if (currentArchive.current !== archiveId) throw new Error(t("The face changed while compiling. Compile the updated archive."));
-      setBin({ preview: next, archiveId, name, fullColor, reusableUntil: Date.now() + BIN_REUSE_MS });
+      setBin({ preview: next, archiveId, name, fullColor, smoothEdges, reusableUntil: Date.now() + BIN_REUSE_MS });
       return next;
     } finally { setCompiling(false); }
   }
@@ -330,7 +332,8 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
             </div> : null}
             {watchMismatch ? <p className="watch-link-note is-error" role="alert">{watchMismatch}</p> : null}
             {betaNote && !watchMismatch ? <p className="watch-link-note" role="note">{betaNote}</p> : null}
-            {faceBin.display !== "mip" ? <FullColorToggle checked={fullColorSetting} disabled={busy} onChange={setFullColor} /> : null}
+            {faceBin.display !== "mip" ? <FullColorToggle checked={fullColorSetting} disabled={busy} onChange={setFullColor} />
+              : <SmoothEdgesToggle checked={smoothEdgesSetting} disabled={busy} onChange={setSmoothEdges} />}
             {bin?.archiveId === archive.archiveId ? <CompileWarnings warnings={bin.preview.compile?.warnings} /> : null}
             {installResult ? <p className="watch-link-note is-success" role="status">{installResult}</p> : null}
             {installNote || installer.error ? <p className="watch-link-note is-error" role="alert">{installNote ?? installer.error}</p> : null}
