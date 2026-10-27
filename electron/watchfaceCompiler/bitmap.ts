@@ -225,31 +225,184 @@ function nearestSearch(palette: ArrayLike<number>): (r: number, g: number, b: nu
   };
 }
 
-/** Floyd–Steinberg remap to the palette; indices followed by the transposed LUT. */
+// --- Remap: libimagequant's edge-aware Floyd–Steinberg ----------------------
+//
+// Plain error diffusion speckles anti-aliased edges: the error of a stroke's
+// soft rim spills into its neighbours, which then pick unrelated entries.
+// libimagequant (what COROS links) dithers in premultiplied, gamma-adjusted
+// color, scaled per pixel by a dither map that is low on edges and noise and
+// high in smooth gradients whose undithered remap shows banding.
+
+/** libimagequant's internal gamma (0.5499) over sRGB's (0.45455). */
+const GAMMA = 0.5499 / 0.45455;
+const TO_LINEAR = Float32Array.from({ length: 256 }, (_, i) => (i / 255) ** GAMMA);
+
+/** Premultiplied, gamma-adjusted channels in 0–1 (libimagequant's `f_pixel`), alpha last. */
+function toPremultiplied(data: ArrayLike<number>, count: number): Float32Array {
+  const out = new Float32Array(count * 4);
+  for (let i = 0; i < count; i++) {
+    const p = i * 4, a = data[p + 3]! / 255;
+    out[p] = TO_LINEAR[data[p]!]! * a; out[p + 1] = TO_LINEAR[data[p + 1]!]! * a; out[p + 2] = TO_LINEAR[data[p + 2]!]! * a; out[p + 3] = a;
+  }
+  return out;
+}
+
+/** Back to a straight 8-bit channel for the nearest search. */
+const toStraight = (value: number, alpha: number) => Math.round(Math.min(1, Math.max(0, value / alpha)) ** (1 / GAMMA) * 255);
+
+/** 5-pixel cross maximum or minimum (`liq_max3`/`liq_min3`). */
+function cross(src: Uint8Array, width: number, height: number, pick: (a: number, b: number) => number): Uint8Array {
+  const out = new Uint8Array(src.length);
+  for (let y = 0; y < height; y++) {
+    const up = Math.max(0, y - 1) * width, row = y * width, down = Math.min(height - 1, y + 1) * width;
+    for (let x = 0; x < width; x++) {
+      const left = row + Math.max(0, x - 1), right = row + Math.min(width - 1, x + 1);
+      out[row + x] = pick(pick(src[row + x]!, pick(src[left]!, src[right]!)), pick(src[up + x]!, src[down + x]!));
+    }
+  }
+  return out;
+}
+
+/** Box blur of the given radius, rows then columns (`liq_blur`). */
+function blur(src: Uint8Array, width: number, height: number, radius: number): Uint8Array {
+  const pass = (from: Uint8Array, w: number, h: number) => {
+    // Transposes while blurring rows, so running it twice blurs both ways.
+    const out = new Uint8Array(from.length);
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      let sum = from[row]! * radius;
+      for (let i = 0; i <= radius; i++) sum += from[row + Math.min(w - 1, i)]!;
+      for (let x = 0; x < w; x++) {
+        out[x * h + y] = Math.round(sum / (radius * 2 + 1));
+        sum += from[row + Math.min(w - 1, x + radius + 1)]! - from[row + Math.max(0, x - radius)]!;
+      }
+    }
+    return out;
+  };
+  return pass(pass(src, width, height), height, width);
+}
+
+/**
+ * Where dithering helps (`contrast_maps`): 255 on smooth color, low on edges
+ * and on noise, which dithering would only roughen. Null below 4×4 pixels.
+ */
+function contrastMap(color: Float32Array, width: number, height: number): Uint8Array | null {
+  if (width < 4 || height < 4) return null;
+  let noise: Uint8Array = new Uint8Array(width * height), edges: Uint8Array = new Uint8Array(width * height);
+  const curvature = (a: number, b: number, at: number) => {
+    let most = 0;
+    for (let c = 0; c < 4; c++) most = Math.max(most, Math.abs(color[a * 4 + c]! + color[b * 4 + c]! - color[at * 4 + c]! * 2));
+    return most;
+  };
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const at = y * width + x;
+      const horizontal = curvature(y * width + Math.max(0, x - 1), y * width + Math.min(width - 1, x + 1), at);
+      const vertical = curvature(Math.max(0, y - 1) * width + x, Math.min(height - 1, y + 1) * width + x, at);
+      const edge = Math.max(horizontal, vertical);
+      let z = 1 - Math.max(edge - Math.abs(horizontal - vertical) * 0.5, Math.min(horizontal, vertical));
+      z *= z; z *= z;
+      noise[at] = Math.min(255, 85 + Math.trunc(z * 171));
+      edges[at] = Math.max(0, Math.min(255, 255 - Math.trunc(edge * 256)));
+    }
+  }
+  // Noise areas are shrunk and then expanded, which drops thin edges from the noise map.
+  const max = Math.max, min = Math.min;
+  noise = cross(cross(noise, width, height, max), width, height, max);
+  noise = cross(blur(noise, width, height, 3), width, height, max);
+  noise = cross(cross(cross(noise, width, height, min), width, height, min), width, height, min);
+  edges = cross(cross(edges, width, height, min), width, height, max);
+  for (let i = 0; i < edges.length; i++) edges[i] = Math.min(noise[i]!, edges[i]!);
+  return edges;
+}
+
+/**
+ * Raises the dither map inside long runs of one entry in the undithered remap,
+ * where banding shows, and leaves it low where entries change quickly (edges,
+ * texture) — `update_dither_map`.
+ */
+function updateDitherMap(map: Uint8Array, indices: Uint8Array, width: number, height: number) {
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    let last = indices[row]!, lastColumn = 0;
+    for (let x = 1; x < width; x++) {
+      const index = indices[row + x]!;
+      if (index === last && x !== width - 1) continue;
+      let neighbours = 10 * (x - lastColumn);
+      for (let i = lastColumn; i < x; i++) {
+        if (y > 0 && indices[row - width + i] === last) neighbours += 15;
+        if (y < height - 1 && indices[row + width + i] === last) neighbours += 15;
+      }
+      for (; lastColumn <= x; lastColumn++) {
+        map[row + lastColumn] = (map[row + lastColumn]! + 128) * (255 / (255 + 128)) * (1 - 20 / (20 + neighbours));
+      }
+      last = index;
+    }
+  }
+}
+
+/** Edge-aware Floyd–Steinberg remap to the palette; indices followed by the transposed LUT. */
 function remapDithered(image: RgbaImage, palette: Float64Array): Uint8Array {
   const { width, height, data } = image, pixels = width * height, out = new Uint8Array(pixels + 1024);
   const entries = palette.length / 4, rounded = new Uint8Array(entries * 4);
   for (let i = 0; i < rounded.length; i++) rounded[i] = Math.max(0, Math.min(255, Math.round(palette[i]!)));
   for (let i = 0; i < entries; i++) out.set(rounded.subarray(i * 4, i * 4 + 4), pixels + slot(i) * 4);
-  let current = new Float32Array((width + 2) * 4), next = new Float32Array((width + 2) * 4);
   // A direct-mapped memo of nearest entries; dithered images revisit most colors.
-  const cacheKeys = new Uint32Array(1 << 16), cacheValues = new Int16Array(1 << 16).fill(-1), nearestIndex = nearestSearch(rounded);
+  const cacheKeys = new Uint32Array(1 << 16), cacheValues = new Int16Array(1 << 16).fill(-1), search = nearestSearch(rounded);
+  const nearest = (r: number, g: number, b: number, a: number) => {
+    const key = (r << 24 | g << 16 | b << 8 | a) >>> 0, at = Math.imul(key, 0x9e3779b1) >>> 16;
+    let index = cacheValues[at]!;
+    if (index < 0 || cacheKeys[at] !== key) { index = search(r, g, b, a); cacheKeys[at] = key; cacheValues[at] = index; }
+    return index;
+  };
+  const source = toPremultiplied(data, pixels), target = toPremultiplied(rounded, entries);
+  // The undithered remap measures the error dithering may spread, and finds where it bands.
+  let squaredError = 0;
+  for (let i = 0; i < pixels; i++) {
+    const p = i * 4, index = nearest(data[p]!, data[p + 1]!, data[p + 2]!, data[p + 3]!);
+    out[i] = index;
+    for (let c = 0; c < 4; c++) squaredError += (source[p + c]! - target[index * 4 + c]!) ** 2;
+  }
+  const maxError = Math.max(squaredError / pixels * 2.4, 16 / 256);
+  const map = contrastMap(source, width, height);
+  if (map) updateDitherMap(map, out, width, height);
+  const level = 15 / 16 / (map ? 255 : 1);
+  let current = new Float32Array((width + 2) * 4), next = new Float32Array((width + 2) * 4);
+  const pixel = [0, 0, 0, 0];
   for (let y = 0; y < height; y++) {
     next.fill(0);
-    for (let x = 0; x < width; x++) {
-      const p = (y * width + x) * 4, e = (x + 1) * 4;
-      const r = clamp(data[p]! + current[e]!), g = clamp(data[p + 1]! + current[e + 1]!), b = clamp(data[p + 2]! + current[e + 2]!), a = clamp(data[p + 3]! + current[e + 3]!);
-      const key = ((r | 0) << 24 | (g | 0) << 16 | (b | 0) << 8 | (a | 0)) >>> 0;
-      const slot = Math.imul(key, 0x9e3779b1) >>> 16;
-      let index = cacheValues[slot]!;
-      if (index < 0 || cacheKeys[slot] !== key) { index = nearestIndex(r | 0, g | 0, b | 0, a | 0); cacheKeys[slot] = key; cacheValues[slot] = index; }
-      out[y * width + x] = index;
+    const forward = y % 2 === 0, step = forward ? 1 : -1;
+    for (let x = forward ? 0 : width - 1; x >= 0 && x < width; x += step) {
+      const i = y * width + x, p = i * 4, e = (x + 1) * 4, weight = level * (map ? map[i]! : 1);
+      // `get_dithered_pixel`: the carried error, scaled back if it would push a channel far out of range.
+      let ratio = 1, spread = 0;
+      for (let c = 0; c < 3; c++) {
+        const value = source[p + c]!, error = current[e + c]! * weight;
+        if (value + error > 1.1) ratio = Math.min(ratio, (1.1 - value) / error);
+        else if (value + error < -0.1) ratio = Math.min(ratio, (-0.1 - value) / error);
+        spread += error * error;
+      }
+      const alphaError = current[e + 3]! * weight;
+      spread += alphaError * alphaError;
+      if (spread > maxError) ratio *= 0.8;
+      if (spread < 2 / 256 / 256) for (let c = 0; c < 4; c++) pixel[c] = source[p + c]!;
+      else {
+        for (let c = 0; c < 3; c++) pixel[c] = source[p + c]! + current[e + c]! * weight * ratio;
+        pixel[3] = Math.min(1, Math.max(0, source[p + 3]! + alphaError));
+      }
+      const alpha = pixel[3]!, a = Math.round(alpha * 255);
+      const index = a === 0 ? nearest(0, 0, 0, 0) : nearest(toStraight(pixel[0]!, alpha), toStraight(pixel[1]!, alpha), toStraight(pixel[2]!, alpha), a);
+      out[i] = index;
+      let error = 0;
+      for (let c = 0; c < 4; c++) { pixel[c] = pixel[c]! - target[index * 4 + c]!; error += pixel[c]! ** 2; }
+      // A very large error is only partly passed on, so it cannot pop up as a stray dot further along.
+      const damp = error > maxError ? 0.75 : 1;
       for (let c = 0; c < 4; c++) {
-        const error = (c === 0 ? r : c === 1 ? g : c === 2 ? b : a) - rounded[index * 4 + c]!;
-        current[e + 4 + c] += error * 7 / 16;
-        next[e - 4 + c] += error * 3 / 16;
-        next[e + c] += error * 5 / 16;
-        next[e + 4 + c] += error / 16;
+        const value = pixel[c]! * damp;
+        current[e + step * 4 + c] += value * 7 / 16;
+        next[e - step * 4 + c] += value * 3 / 16;
+        next[e + c] += value * 5 / 16;
+        next[e + step * 4 + c] += value / 16;
       }
     }
     [current, next] = [next, current];
