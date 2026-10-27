@@ -28,7 +28,8 @@
   "triggers": { "crons": ["*/5 * * * *"] },
 
   // Secrets (set with `wrangler secret put`, never committed):
-  //   CF_API_TOKEN, RELAY_SIGNING_KEY, APNS_PRIVATE_KEY
+  //   CF_API_TOKEN, RELAY_SIGNING_KEY, APNS_PRIVATE_KEY, APNS_SANDBOX_PRIVATE_KEY
+  // APNs keys are topic-specific (com.akerrules.clink), one per environment.
   "vars": {
     "RELAY_STAGE": "production",
     "RELAY_ORIGIN": "https://relay.coroslink.com",
@@ -43,6 +44,7 @@
     "TUNNEL_ZONE_NAME": "coroslinkrelay.com",
     "RELAY_SIGNING_KEY_ID": "relay-2026-10",
     "APNS_KEY_ID": "",
+    "APNS_SANDBOX_KEY_ID": "",
     "APNS_TEAM_ID": "",
     "APNS_BUNDLE_ID": "com.akerrules.clink",
     // off | dry-run | enabled. Changing it is a deploy.
@@ -75,6 +77,7 @@
         "TUNNEL_ZONE_NAME": "coroslinkrelay.com",
         "RELAY_SIGNING_KEY_ID": "relay-dev-2026-10",
         "APNS_KEY_ID": "",
+        "APNS_SANDBOX_KEY_ID": "",
         "APNS_TEAM_ID": "",
         "APNS_BUNDLE_ID": "com.akerrules.clink",
         "RELAY_TUNNEL_CLEANUP_MODE": "dry-run"
