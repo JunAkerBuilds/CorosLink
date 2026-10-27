@@ -959,7 +959,7 @@ export function WatchfacesView({
       openStudio(
         selected,
         selected.editableProject?.name ??
-          (selected.fileName.replace(/\.(zip|dat)$/i, "") ||
+          (selected.fileName.replace(/\.(zip|dat|bin)$/i, "") ||
             t("Custom watch face"))
       );
     } catch (caught) {
@@ -1392,7 +1392,7 @@ export function WatchfacesView({
       api.setWatchfaceAutomationReady("editor", false);
       openStudio(
         archive,
-        input.name ?? project?.name ?? archive.fileName.replace(/\.(zip|dat)$/i, ""),
+        input.name ?? project?.name ?? archive.fileName.replace(/\.(zip|dat|bin)$/i, ""),
         project,
         project?.design,
         false,
@@ -4723,7 +4723,7 @@ function ImportWatchfaceDialog({
           <X size={17} aria-hidden="true" />
         </button>
         <h2 id="watchface-import-title">{t("Import watch face")}</h2>
-        <p id="watchface-import-description">{t("Open a local DIY archive or paste an official COROS watch-face share link.")}</p>
+        <p id="watchface-import-description">{t("Open a local DIY archive or compiled BIN, or paste an official COROS watch-face share link.")}</p>
 
         <button
           className="secondary-button watchface-import-file"
@@ -4731,7 +4731,7 @@ function ImportWatchfaceDialog({
           disabled={busy}
           onClick={onChooseArchive}
         >
-          <Upload size={16} aria-hidden="true" />{t("Choose ZIP or DAT archive")}</button>
+          <Upload size={16} aria-hidden="true" />{t("Choose ZIP, DAT or BIN file")}</button>
 
         <div className="watchface-import-divider" aria-hidden="true">
           <span>{t("or import from COROS")}</span>

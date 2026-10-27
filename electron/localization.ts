@@ -29,7 +29,7 @@ const french: Record<string, string> = {
   "Save compiled watch face BIN": "Enregistrer le cadran BIN compilé",
   "Compiled watch face BIN": "Cadran BIN compilé",
   "Choose a COROS custom watchface archive": "Choisir une archive de cadran COROS personnalisé",
-  "Watchface archive": "Archive de cadran",
+  "Watch face archive or compiled BIN": "Archive de cadran ou BIN compilé",
   "Choose watchface artwork": "Choisir l’illustration du cadran",
   "Images": "Images", "Choose a PNG watchface sprite folder": "Choisir un dossier de sprites PNG pour le cadran",
   "Export editable watch face for website": "Exporter le cadran modifiable pour le site web",

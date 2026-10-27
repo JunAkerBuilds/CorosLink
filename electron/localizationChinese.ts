@@ -44,7 +44,7 @@ export const nativeChinese: Readonly<Record<string, string>> = {
   "Save compiled watch face BIN": "保存已编译的表盘 BIN",
   "Compiled watch face BIN": "已编译的表盘 BIN",
   "Choose a COROS custom watchface archive": "选择 COROS 自定义表盘归档",
-  "Watchface archive": "表盘归档",
+  "Watch face archive or compiled BIN": "表盘存档或已编译 BIN",
   "Choose watchface artwork": "选择表盘图像素材",
   "Images": "图片",
   "Choose a PNG watchface sprite folder": "选择表盘 PNG 素材文件夹",

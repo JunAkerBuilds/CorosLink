@@ -1638,8 +1638,8 @@ function registerIpcHandlers(): void {
       properties: ["openFile"],
       filters: [
         {
-          name: "Watchface archive",
-          extensions: ["zip", "dat"]
+          name: "Watch face archive or compiled BIN",
+          extensions: ["zip", "dat", "bin"]
         }
       ]
     };

@@ -19,7 +19,7 @@ import { fitGeneratedWatchfaceFontRects } from "./watchfaceExportFontBounds";
 import { finalizeWatchfaceDeviceLayout, restoreWatchfaceDateLayout } from "./watchfaceDeviceLayout";
 import { convertWatchfaceEntries, type WatchfaceConversionEntry, prepareRecoveredWatchfaceExport, normalizeConversionPath, RETAINED_AOD_CONFIG } from "./watchfaceArchiveConversion";
 import { standardizeWatchfacePackage } from "./watchfaceDistribution";
-import { getWatchfaceTarget, type WatchfaceTarget } from "./watchfaceTargets";
+import { getWatchfaceTarget, watchfaceTargetsForMagic, type WatchfaceTarget } from "./watchfaceTargets";
 import { WATCHFACE_TEMPLATE_SNAPSHOT } from "./watchfaceCatalogSnapshot";
 import {
   COROS_BLE_LOGIN_KEY_SETTING, COROS_BLE_IMPORTED_KEY_SETTING, COROS_WATCH_KEY_CHECK_SETTING, corosBleLoginKeyId, decodeCorosBleLoginKey,
@@ -1290,6 +1290,47 @@ export async function saveCorosGear(
   return queryCorosGear();
 }
 
+/** A compiled on-watch BIN (614A, 062R…), or null for anything else. */
+async function readCompiledWatchface(filePath: string): Promise<Buffer | null> {
+  const handle = await fs.promises.open(path.resolve(filePath), "r");
+  try {
+    const head = Buffer.alloc(4);
+    const { bytesRead } = await handle.read(head, 0, 4, 0);
+    if (bytesRead < 4 || !parseCorosFaceMagic(head.toString("latin1"))) return null;
+    const { size } = await handle.stat();
+    if (size > MAX_ARCHIVE_BYTES) throw new Error("The watch face file must be under 100 MB.");
+    return await fs.promises.readFile(path.resolve(filePath));
+  } finally {
+    await handle.close();
+  }
+}
+
+/** Opens a compiled BIN the way Studio opens an official face: an editable recovered copy. */
+async function selectCompiledWatchface(filePath: string, bytes: Buffer): Promise<CorosWatchfaceArchive> {
+  const name = path.basename(filePath).replace(/\.bin$/i, "")
+    .replace(/[\u0000-\u001f\u007f/\\:*?"<>|]/g, "").trim().slice(0, 60) || "COROS watchface";
+  const recovered = recoverCompiledCorosWatchface(bytes, name);
+  const outputDirectory = path.join(app.getPath("userData"), "watchface-official-editor");
+  await fs.promises.mkdir(outputDirectory, { recursive: true });
+  const editablePath = path.join(outputDirectory, `${name}-${crypto.randomUUID().slice(0, 8)}.zip`);
+  await fs.promises.writeFile(editablePath, recovered.zip);
+  try {
+    const inspected = await inspectArchive(editablePath);
+    // Same-screen watches (APEX 4 and NOMAD) share one BIN, so only a unique fit names the watch.
+    const targets = watchfaceTargetsForMagic(bytes.toString("latin1", 0, 4));
+    const selected: SelectedArchive = {
+      ...inspected,
+      fileName: `${name}.bin`,
+      ...(targets.length === 1 ? { firmwareType: targets[0].firmwareType } : {})
+    };
+    selectedArchives.set(selected.archiveId, selected);
+    return toPublicArchive(selected);
+  } catch (caught) {
+    await fs.promises.rm(editablePath, { force: true });
+    throw caught;
+  }
+}
+
 /**
  * Validate the selected package before it can be published. The opaque ID
  * deliberately prevents the renderer from asking the main process to upload
@@ -1298,6 +1339,8 @@ export async function saveCorosGear(
 export async function selectCorosWatchfaceArchive(
   archivePath: string
 ): Promise<CorosWatchfaceArchive> {
+  const compiled = await readCompiledWatchface(archivePath);
+  if (compiled) return selectCompiledWatchface(archivePath, compiled);
   const editablePackage = await readCorosWatchfaceProjectPackage(archivePath);
   if (!editablePackage) {
     const selected = await inspectArchive(archivePath);

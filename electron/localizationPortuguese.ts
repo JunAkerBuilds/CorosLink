@@ -44,7 +44,7 @@ export const nativePortuguese: Readonly<Record<string, string>> = {
   "Save compiled watch face BIN": "Guardar mostrador BIN compilado",
   "Compiled watch face BIN": "Mostrador BIN compilado",
   "Choose a COROS custom watchface archive": "Escolher um arquivo de mostrador COROS personalizado",
-  "Watchface archive": "Arquivo de mostrador",
+  "Watch face archive or compiled BIN": "Arquivo de mostrador ou BIN compilado",
   "Choose watchface artwork": "Escolher a imagem do mostrador",
   "Images": "Imagens",
   "Choose a PNG watchface sprite folder": "Escolher uma pasta de sprites PNG do mostrador",
