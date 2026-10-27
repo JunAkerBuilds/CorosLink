@@ -101,7 +101,7 @@ export function buildWorkoutToolGuide(toolNames: Iterable<string>): string {
     lines.push(
       "Classify every workout-generation request before drafting. For exactly one standalone workout, including " +
         "a workout for today or a reusable session on the local authoring route, call draft_workout and let the athlete " +
-        "choose Workout Library or Calendar from its confirmation card; set calendar_date only when the athlete names a date. " +
+        "choose Workout Library or Calendar from its confirmation card; set calendar_date when the athlete names a day or you suggest the workout for one. " +
         "Never disguise it as a one-workout training plan. For a multi-day or multi-week schedule, call draft_training_plan. " +
         "Use the draft tools to validate and preview before anything is saved.",
       "Always provide sport on every new workout, including sport=run. Put every prescribed heart rate, pace, effort pace, " +

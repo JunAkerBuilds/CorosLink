@@ -1437,7 +1437,7 @@ export function buildDraftWorkoutInputSchema(): Record<string, unknown> {
         type: "string",
         pattern: "^\\d{8}$",
         description:
-          "Optional suggested calendar date (YYYYMMDD) when the athlete explicitly asks for a day. The athlete can change it before confirming."
+          "Optional suggested calendar date (YYYYMMDD) when the athlete asks for a day or you suggest the workout for one. The athlete can change it before confirming."
       }
     },
     required: ["workout"]

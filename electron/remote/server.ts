@@ -15,6 +15,7 @@ import {
   MINT_REQUEST_LIFETIME_SECONDS,
   REMOTE_CAPABILITIES,
   REMOTE_FILES_CAPABILITY,
+  REMOTE_PLAN_OPTIONS_CAPABILITY,
   REMOTE_PROTOCOL_VERSION,
   REMOTE_ROUTES,
   RELAY_MINT_REQUEST_TYP,
@@ -784,7 +785,11 @@ export class RemoteServer {
       platform: platform ?? process.platform,
       appVersion,
       protocol: REMOTE_PROTOCOL_VERSION,
-      capabilities: [...REMOTE_CAPABILITIES, ...(this.options.attachments ? [REMOTE_FILES_CAPABILITY] : [])],
+      capabilities: [
+        ...REMOTE_CAPABILITIES,
+        REMOTE_PLAN_OPTIONS_CAPABILITY,
+        ...(this.options.attachments ? [REMOTE_FILES_CAPABILITY] : [])
+      ],
       keyThumbprint: this.options.identity.kid
     };
   }
@@ -1153,13 +1158,16 @@ export class RemoteServer {
     const decision = params.decision;
     if (decision !== "confirm" && decision !== "cancel") throw invalidParams("decision must be confirm or cancel.");
     const reviewHash = stringParam(params, "reviewHash", 200, false);
-    // Remote approvals take the desktop card's defaults (no options).
+    // Remote approvals take the desktop card's defaults, except the two choices a phone's
+    // workout card offers: Calendar or Workout Library, and the day.
+    const options = kind === "planUpload" ? planUploadOptions(params.options) : undefined;
     return {
       sessionId: stringParam(params, "sessionId")!,
       kind: kind as CoachConfirmInput["kind"],
       id: stringParam(params, "id")!,
       decision,
-      ...(reviewHash ? { reviewHash } : {})
+      ...(reviewHash ? { reviewHash } : {}),
+      ...(options ? { options } : {})
     };
   }
 
@@ -1168,6 +1176,28 @@ export class RemoteServer {
     if (!this.network || port === null) return { lanRoutes: [] };
     return { lanRoutes: this.lanAddresses().map((host) => ({ host, port })) };
   }
+}
+
+/** A phone's `options` for a plan upload: `calendar` or `workoutLibrary`, and a real day (`2026-10-28` or `20261028`). */
+export function planUploadOptions(value: unknown): CoachConfirmInput["options"] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "object" || Array.isArray(value)) throw invalidParams("options must be an object.");
+  const { destination, scheduleDate } = value as Record<string, unknown>;
+  if (destination !== undefined && destination !== "calendar" && destination !== "workoutLibrary") {
+    throw invalidParams("options.destination must be calendar or workoutLibrary.");
+  }
+  let day: string | undefined;
+  if (scheduleDate !== undefined) {
+    const match = typeof scheduleDate === "string" ? /^(\d{4})-?(\d{2})-?(\d{2})$/.exec(scheduleDate) : null;
+    const date = match ? new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))) : null;
+    if (!match || !date || date.getUTCMonth() !== Number(match[2]) - 1 || date.getUTCDate() !== Number(match[3])) {
+      throw invalidParams("options.scheduleDate must be a day, YYYY-MM-DD.");
+    }
+    if (destination === "workoutLibrary") throw invalidParams("A library workout has no day.");
+    day = `${match[1]}-${match[2]}-${match[3]}`;
+  }
+  if (!destination && !day) return undefined;
+  return { ...(destination ? { destination } : { destination: "calendar" as const }), ...(day ? { scheduleDate: day } : {}) };
 }
 
 function forbiddenMessage(permission: CoachPermission): string {

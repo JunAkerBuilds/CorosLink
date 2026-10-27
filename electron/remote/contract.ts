@@ -32,6 +32,8 @@ export const REMOTE_PROTOCOL_VERSION = COACH_PROTOCOL_VERSION;
 export const REMOTE_CAPABILITIES = ["coach"] as const;
 /** Listed too when this computer keeps files a phone attaches (`REMOTE_ROUTES.attachments`). */
 export const REMOTE_FILES_CAPABILITY = "coach.files";
+/** `coach.confirm` honours a phone's `options.destination` and `options.scheduleDate` for a one-off workout draft. */
+export const REMOTE_PLAN_OPTIONS_CAPABILITY = "coach.planOptions";
 
 export const REMOTE_ROUTES = {
   descriptor: "/v1/descriptor",

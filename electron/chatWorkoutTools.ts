@@ -301,7 +301,7 @@ export function getChatWorkoutTools(): CorosMcpTool[] {
       description:
         "Validate and store one standalone workout for athlete review. " +
         "Use this for one-off requests such as today's run, a single gym session, or one workout to reuse later; " +
-        "do not wrap a one-off workout in draft_training_plan. Set calendar_date only when the athlete names a date. " +
+        "do not wrap a one-off workout in draft_training_plan. Set calendar_date when the athlete names a day or you suggest it for one (today, tomorrow, Saturday's long run), so the phone card can add it to the calendar in one tap. " +
         "Put prescribed HR, pace, power, cadence, stroke, weight, RPE, or grade in each step's typed intensity field. " +
         "For Strength and HYROX, call search_coros_exercises first and pass its exact exercise IDs and names. " +
         "Returns a workout card where the athlete can choose Workout Library or Calendar and confirm.",

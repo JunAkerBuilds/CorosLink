@@ -24,7 +24,7 @@ import {
 // a Coach hub driven by a fake provider, and the remote_* tables in an
 // in-memory database. Modelled on test-watchface-automation-server.mjs.
 // Run under Electron as Node (npm run test:remote).
-const { RemoteServer, remoteLanAddresses, isTailscaleIPv4 } = requireDist("./remote/server.js");
+const { RemoteServer, remoteLanAddresses, isTailscaleIPv4, planUploadOptions } = requireDist("./remote/server.js");
 const { RemoteAuth } = requireDist("./remote/auth.js");
 const { loadOrCreateRemoteIdentity } = requireDist("./remote/identity.js");
 const { SAVED_COACH_EVENTS, applyCoachEvent, coachStateFromSnapshot } = requireDist("./remote/contract.js");
@@ -94,7 +94,7 @@ try {
       platform: "darwin",
       appVersion: "9.9.9",
       protocol: 1,
-      capabilities: ["coach", "coach.files"],
+      capabilities: ["coach", "coach.planOptions", "coach.files"],
       keyThumbprint: identity.kid
     });
     assert.equal(identity.kid, await jose.calculateJwkThumbprint(identity.publicJwk, "sha256"), "RFC 7638 thumbprint");
@@ -462,6 +462,32 @@ try {
     assert.equal((await a.call("coach.confirm", { sessionId, kind: "other", id: "x", decision: "confirm" })).error.code, "invalid");
     const notFound = await a.call("coach.confirm", { sessionId, kind: "corosAction", id: "x", decision: "confirm" });
     assert.equal(notFound.error.code, "not_found");
+
+    // A phone's workout card picks the day; other kinds and other choices stay the card's defaults.
+    const confirmed = [];
+    const realConfirm = hub.confirm;
+    hub.confirm = async (input) => { confirmed.push(input); return { index: 0, entry: { kind: "toolNotice", message: "ok" } }; };
+    try {
+      await a.call("coach.confirm", { sessionId, kind: "planUpload", id: "d1", decision: "confirm", options: { destination: "calendar", scheduleDate: "2026-10-28" } });
+      await a.call("coach.confirm", { sessionId, kind: "planUpload", id: "d2", decision: "confirm", options: { scheduleDate: "20261029" } });
+      await a.call("coach.confirm", { sessionId, kind: "planUpload", id: "d3", decision: "confirm" });
+      await a.call("coach.confirm", { sessionId, kind: "corosAction", id: "c1", decision: "confirm", options: { destination: "calendar" } });
+      assert.deepEqual(confirmed.map((input) => input.options), [
+        { destination: "calendar", scheduleDate: "2026-10-28" },
+        { destination: "calendar", scheduleDate: "2026-10-29" },
+        undefined,
+        undefined
+      ]);
+      const bad = await a.call("coach.confirm", { sessionId, kind: "planUpload", id: "d4", decision: "confirm", options: { destination: "localPlan" } });
+      assert.equal(bad.error.code, "invalid");
+      assert.equal(confirmed.length, 4, "a refused option never reaches the hub");
+    } finally {
+      hub.confirm = realConfirm;
+    }
+    assert.equal(planUploadOptions(undefined), undefined);
+    assert.deepEqual(planUploadOptions({ destination: "workoutLibrary" }), { destination: "workoutLibrary" });
+    assert.throws(() => planUploadOptions({ scheduleDate: "2026-02-30" }), /YYYY-MM-DD/);
+    assert.throws(() => planUploadOptions({ destination: "workoutLibrary", scheduleDate: "2026-10-28" }), /no day/);
     view.ws.send("not json");
     await waitFor(() => view.frames.some((frame) => frame.id === null), { message: "an error for a bad frame" });
     view.ws.close();
