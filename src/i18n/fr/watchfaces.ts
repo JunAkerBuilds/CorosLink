@@ -1982,4 +1982,9 @@ export const watchfacesFrench: Record<string, string> = {
   "Could not add the indicator.": "Impossible d’ajouter l’indicateur.",
   "Battery icon added. Replace its images in the inspector.": "Icône de batterie ajoutée. Remplacez ses images dans l’inspecteur.",
   "Also edited: {{value1}}. Each size keeps its own file.": "Également modifié : {{value1}}. Chaque taille garde son propre fichier.",
+  "Edges": "Contours",
+  "Smooth": "Lisses",
+  "Hard": "Nets",
+  "Anti-aliased edges, like COROS's own digits": "Contours lissés, comme les chiffres de COROS",
+  "Every pixel fully on or off. Only for very small digits; looks jagged on AMOLED.": "Chaque pixel est entièrement allumé ou éteint. Réservé aux très petits chiffres ; crénelé sur AMOLED.",
 };

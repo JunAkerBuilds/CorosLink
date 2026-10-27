@@ -6893,7 +6893,7 @@ export function WatchfaceEditor({
 
   function setMetricStyle(
     metricId: WatchfaceMetricId,
-    patch: { align?: "left" | "center" | "right"; color?: string; scale?: number; fontSize?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
+    patch: { solidAlpha?: boolean; align?: "left" | "center" | "right"; color?: string; scale?: number; fontSize?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
   ) {
     setDesign((prev) => {
       const current = prev.metricStyles?.[metricId] ?? { scale: 1 };
@@ -7052,7 +7052,7 @@ export function WatchfaceEditor({
 
   function setTimeStyle(
     partId: WatchfaceTimePartId,
-    patch: { color?: string; scale?: number; fontSize?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
+    patch: { solidAlpha?: boolean; color?: string; scale?: number; fontSize?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
   ) {
     setDesign((prev) => {
       const current = prev.timeStyles?.[partId] ?? { scale: 1 };
@@ -7132,6 +7132,7 @@ export function WatchfaceEditor({
       fontSize?: number;
       labelStyle?: "upper" | "title" | "full";
       translateLabels?: boolean;
+      solidAlpha?: boolean;
     }
   ) {
     setDesign((prev) => {
@@ -12746,6 +12747,7 @@ export function WatchfaceEditor({
                 })()}
                 <label>{t("Rotation")}<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle("battery", { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               </div>
+              {renderGlyphEdgesField(style?.solidAlpha, (solidAlpha) => setMetricStyle("battery", { solidAlpha }))}
               <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel="Battery data" onActivate={() => setMetricStyle("battery", { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont })} />
             </div>,
             { disabled: isPositionLocked(layer.id) }
@@ -12784,6 +12786,7 @@ export function WatchfaceEditor({
                 })()}
                 <label>{t("Rotation")}<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setTimeStyle(layer.timePartId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               </div>
+              {renderGlyphEdgesField(style?.solidAlpha, (solidAlpha) => setTimeStyle(layer.timePartId!, { solidAlpha }))}
               <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel={layer.label} onActivate={() => setTimeStyle(layer.timePartId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont })} />
             </div>,
             { disabled: isPositionLocked(layer.id) }
@@ -12923,6 +12926,7 @@ export function WatchfaceEditor({
                   : <label>{t("Scale")}<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle(layer.metricId!, { scale: Math.max(0.01, scale) })} /></label>}
                 {supportsWatchfaceSpriteRotation(layer.metricId) ? <label>{t("Rotation")}<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle(layer.metricId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label> : null}
               </div>
+              {templateDigitsOnly ? null : renderGlyphEdgesField(style?.solidAlpha, (solidAlpha) => setMetricStyle(layer.metricId!, { solidAlpha }))}
               {templateDigitsOnly ? null : (
                 <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel={layer.label} onActivate={() => setMetricStyle(layer.metricId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont })} />
               )}
@@ -13269,6 +13273,7 @@ export function WatchfaceEditor({
               ) : null}
               </>}
               <label className="watchface-inspector-field"><span>{t("Rotation")}</span><EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setDateStyle(partId, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
+              {renderGlyphEdgesField(style?.solidAlpha, (solidAlpha) => setDateStyle(partId, { solidAlpha }))}
               <CustomPngFontPanel
                 api={api}
                 {...rasterFolderImportProps}
@@ -13805,6 +13810,7 @@ export function WatchfaceEditor({
           design.selectableMetricStyle?.rotation,
           (rotation) => setSelectableMetricStyle({ rotation })
         )}
+        {renderGlyphEdgesField(design.selectableMetricStyle?.solidAlpha, (solidAlpha) => setSelectableMetricStyle({ solidAlpha }))}
         <p className="watchface-studio-summary">{t("Move this Selectable metric layer to position its icon and value together. Sensor temperature uses the watch's thermometer and can be affected by body heat. Add Current weather under Weather for weather data.")}</p>
           </>
         ) : (
@@ -14011,6 +14017,22 @@ export function WatchfaceEditor({
           <span>px</span>
         </span>
       </label>
+    );
+  }
+
+  /**
+   * Smooth keeps anti-aliased glyph edges. Hard exports 0/255 alpha
+   * (`solidAlpha`), which only suits tiny digits; on AMOLED it looks jagged.
+   */
+  function renderGlyphEdgesField(solid: boolean | undefined, onChange: (solidAlpha: boolean | undefined) => void) {
+    return (
+      <div className="field wf-number-align-field">
+        <span>{t("Edges")}</span>
+        <div className="wf-number-align" role="group" aria-label={t("Edges")}>
+          <button type="button" aria-pressed={!solid} title={t("Anti-aliased edges, like COROS's own digits")} onClick={() => { if (solid) onChange(undefined); }}>{t("Smooth")}</button>
+          <button type="button" aria-pressed={Boolean(solid)} title={t("Every pixel fully on or off. Only for very small digits; looks jagged on AMOLED.")} onClick={() => { if (!solid) onChange(true); }}>{t("Hard")}</button>
+        </div>
+      </div>
     );
   }
 

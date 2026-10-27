@@ -2019,4 +2019,9 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Could not add the indicator.": "无法添加指示器。",
   "Battery icon added. Replace its images in the inspector.": "已添加电池图标。可在检查器中替换其图像。",
   "Also edited: {{value1}}. Each size keeps its own file.": "另已编辑：{{value1}}。每种尺寸使用各自的文件。",
+  "Edges": "边缘",
+  "Smooth": "平滑",
+  "Hard": "锐利",
+  "Anti-aliased edges, like COROS's own digits": "抗锯齿边缘，与 COROS 自带数字一致",
+  "Every pixel fully on or off. Only for very small digits; looks jagged on AMOLED.": "每个像素完全显示或完全透明。仅适合很小的数字；在 AMOLED 上会有锯齿。",
 };

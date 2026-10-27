@@ -2018,4 +2018,9 @@ export const watchfacesPortuguese: Record<string, string> = {
   "Could not add the indicator.": "Não foi possível adicionar o indicador.",
   "Battery icon added. Replace its images in the inspector.": "Ícone de bateria adicionado. Substitua as imagens no inspector.",
   "Also edited: {{value1}}. Each size keeps its own file.": "Também editado: {{value1}}. Cada tamanho mantém o seu próprio ficheiro.",
+  "Edges": "Contornos",
+  "Smooth": "Suaves",
+  "Hard": "Nítidos",
+  "Anti-aliased edges, like COROS's own digits": "Contornos suavizados, como os dígitos da COROS",
+  "Every pixel fully on or off. Only for very small digits; looks jagged on AMOLED.": "Cada píxel totalmente aceso ou apagado. Só para dígitos muito pequenos; fica serrilhado em AMOLED.",
 };
