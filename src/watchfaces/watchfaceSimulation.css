@@ -15,7 +15,10 @@
   color: var(--text-primary); font-size: 12px; text-align: left;
 }
 .watchface-shell .wf-simulation-heading, .watchface-shell .wf-simulation-actions { display: flex; align-items: center; gap: 6px; }
-.watchface-shell .wf-simulation-heading { justify-content: space-between; font-size: 14px; }
+.watchface-shell .wf-simulation-heading { justify-content: space-between; font-size: 14px; cursor: grab; touch-action: none; user-select: none; margin: -14px -14px 0; padding: 14px 14px 6px; position: sticky; top: -14px; z-index: 1; background: inherit; border-radius: 12px 12px 0 0; }
+.watchface-shell .wf-simulation-heading:active { cursor: grabbing; }
+.watchface-shell .wf-simulation-heading strong { display: inline-flex; align-items: center; gap: 6px; }
+.watchface-shell .wf-simulation-heading .wf-simulation-grip { color: var(--text-muted); }
 .watchface-shell .wf-simulation-panel p { margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
 .watchface-shell .wf-simulation-enable { display: flex; align-items: center; gap: 8px; }
 .watchface-shell .wf-simulation-panel fieldset { display: grid; min-width: 0; gap: 12px; border: 0; padding: 0; margin: 0; }

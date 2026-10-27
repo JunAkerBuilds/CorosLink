@@ -895,6 +895,7 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Watch face simulation": "表盘模拟",
   "Simulation": "模拟",
   "Close simulation": "关闭模拟",
+  "Drag to move · Double-click to reset": "拖动以移动 · 双击复位",
   "Try sample data on this face. Your saved design and watch data stay unchanged.": "尝试在此 表盘上的示例数据。您保存的设计和 手表数据保持不变。",
   "Enable simulation": "启用模拟",
   "· Local time · Weekday follows the date": "· 当地时间 · 星期随日期变化",

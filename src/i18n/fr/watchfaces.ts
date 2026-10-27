@@ -894,6 +894,7 @@ export const watchfacesFrench: Record<string, string> = {
   "Watch face simulation": "Simulation du cadran",
   "Simulation": "Simulation",
   "Close simulation": "Fermer la simulation",
+  "Drag to move · Double-click to reset": "Faites glisser pour déplacer · Double-cliquez pour réinitialiser",
   "Try sample data on this face. Your saved design and watch data stay unchanged.": "Essayez des données d’exemple. Votre cadran enregistré et les données de la montre sont conservés.",
   "Enable simulation": "Activer la simulation",
   "· Local time · Weekday follows the date": "· Heure locale · Le jour de semaine suit la date",

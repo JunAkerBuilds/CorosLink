@@ -896,6 +896,7 @@ export const watchfacesPortuguese: Record<string, string> = {
   "Watch face simulation": "Simulação do mostrador",
   "Simulation": "Simulação",
   "Close simulation": "Fechar simulação",
+  "Drag to move · Double-click to reset": "Arraste para mover · Clique duplo para repor",
   "Try sample data on this face. Your saved design and watch data stay unchanged.": "Experimente dados de exemplo neste mostrador. O design guardado e os dados do relógio não são alterados.",
   "Enable simulation": "Activar simulação",
   "· Local time · Weekday follows the date": "· Hora local · O dia da semana segue a data",
