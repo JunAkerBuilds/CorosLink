@@ -36,6 +36,8 @@ import { RecoveryRing } from "./components/RecoveryRing";
 import { HealthInsightsPanel } from "./components/HealthInsightsPanel";
 import { SleepSummaryPanel } from "./components/SleepSummaryPanel";
 import { SleepWeekPage } from "./components/SleepWeekPage";
+import { MetricDetailPage } from "./components/MetricDetailPage";
+import type { MetricKind } from "./metricDetail";
 import { TrainingHeatmapPanel } from "./components/TrainingHeatmapPanel";
 import { TrainingSummaryTiles } from "./components/TrainingSummaryTiles";
 import { TrainingActivities } from "./components/TrainingActivities";
@@ -66,6 +68,9 @@ const loginPageBackground = new URL("./assets/training-hub/Login-page-bg.png", d
 /** Set on <html> while the sleep card and its page morph; sleepWeek.css names the moving parts under them. */
 const SLEEP_MORPH_OPEN = "is-sleep-morph-open";
 const SLEEP_MORPH_CLOSE = "is-sleep-morph-close";
+/** The same for a daily stat card (load, resting HR, steps, calories) and its page; see metricDetail.css. */
+const METRIC_MORPH_OPEN = "is-metric-morph-open";
+const METRIC_MORPH_CLOSE = "is-metric-morph-close";
 
 // Memoized: App keeps the hub mounted while other views are open, so its own
 // re-renders must not re-render this whole dashboard.
@@ -233,12 +238,37 @@ function TrainingHubContent({
       }
     });
   };
+  // Each daily stat card opens its metric's page the same way.
+  const [metricPage, setMetricPage] = useState<MetricKind | null>(null);
+  const [metricOrigin, setMetricOrigin] = useState<MetricKind | undefined>();
+  const openMetricPage = (metric: MetricKind) => {
+    const scroller = hubRef.current?.closest<HTMLElement>(".content");
+    hubScrollTop.current = scroller?.scrollTop ?? 0;
+    runViewMorph(METRIC_MORPH_OPEN, () => setMetricPage(metric), {
+      prepare: () => setMetricOrigin(metric),
+      after: () => { if (scroller) scroller.scrollTop = 0; }
+    });
+  };
+  const closeMetricPage = () => {
+    const scroller = hubRef.current?.closest<HTMLElement>(".content");
+    runViewMorph(METRIC_MORPH_CLOSE, () => setMetricPage(null), {
+      after: () => {
+        if (scroller) scroller.scrollTop = hubScrollTop.current;
+        hubRef.current?.querySelector<HTMLElement>(".training-stat-card.is-morph-origin .training-stat-card__summary")?.focus({ preventScroll: true });
+      }
+    });
+  };
+  const loadHealthHistory = useCallback(
+    async (days: number) => (await api.getTrainingDailyHealthData(days)).records,
+    [api]
+  );
   const [activityOpenRequest, setActivityOpenRequest] =
     useState<{ activity: TrainingHubActivity; requestId: number } | null>(null);
   useEffect(() => {
     if (!navigationRequest) return;
     const { tab, activity, requestId } = navigationRequest;
     setSleepPageOpen(false);
+    setMetricPage(null);
     setActiveTab(tab);
     setVisitedTabs(current => current.includes(tab) ? current : [...current, tab]);
     if (activity) setActivityOpenRequest({ activity, requestId });
@@ -286,10 +316,12 @@ function TrainingHubContent({
   };
 
   const showSleepPage = sleepPageOpen && connected;
+  const shownMetricPage = connected && !showSleepPage ? metricPage : null;
+  const behindPage = showSleepPage || shownMetricPage !== null;
 
   return (
     <>
-    <div ref={hubRef} className={`stack training-dashboard${showSleepPage ? " is-behind-page" : ""}`} inert={showSleepPage}>
+    <div ref={hubRef} className={`stack training-dashboard${behindPage ? " is-behind-page" : ""}`} inert={behindPage}>
       {connected || onToggleSample ? (
         <TrainingHubHeader
           connected={connected}
@@ -598,7 +630,8 @@ function TrainingHubContent({
                 case "daily-load": case "daily-heart": case "daily-steps": case "daily-calories":
                   return <TrainingSummaryTiles summary={summary} trendPoints={snapshot?.trendPoints}
                     healthRecords={snapshot?.dailyHealth?.records} layout="stack"
-                    metrics={[widget.id.slice(6) as "load" | "heart" | "steps" | "calories"]} className="hub-daily-stat" local={local} />;
+                    metrics={[widget.id.slice(6) as MetricKind]} className="hub-daily-stat" local={local}
+                    onOpen={openMetricPage} morphOrigin={metricOrigin} />;
                 case "fitness": return <FitnessTrendPanel snapshot={snapshot} activities={activities} local={local} />;
                 case "sleep": return <SleepSummaryPanel sleep={snapshot?.sleep} connecting={sleepConnecting} refreshing={busy === "training-refresh"} local={status?.dataSource === "local"} onConnect={sampleMode || status?.dataSource === "local" ? undefined : () => api.connectCorosMcp()} onOpenWeek={openSleepPage} />;
                 case "vo2": return <Vo2MaxWidget snapshot={snapshot} local={local} />;
@@ -695,6 +728,10 @@ function TrainingHubContent({
     </div>
     {showSleepPage ? (
       <SleepWeekPage records={snapshot?.sleep?.records ?? []} trendPoints={snapshot?.trendPoints} local={status?.dataSource === "local"} onBack={closeSleepPage} />
+    ) : null}
+    {shownMetricPage ? (
+      <MetricDetailPage kind={shownMetricPage} trendPoints={snapshot?.trendPoints} healthRecords={snapshot?.dailyHealth?.records}
+        activities={activities} local={local} loadHealthHistory={sampleMode ? undefined : loadHealthHistory} onBack={closeMetricPage} />
     ) : null}
     </>
   );

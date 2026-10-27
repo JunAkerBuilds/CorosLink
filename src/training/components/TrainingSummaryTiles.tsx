@@ -18,6 +18,10 @@ interface TrainingSummaryTilesProps {
   className?: string;
   /** Local-Only Mode: resting HR needs a night's sleep with the watch, so an empty card says so. */
   local?: boolean;
+  /** Stack widgets open the metric's own page instead of expanding in place. */
+  onOpen?: (metric: TrainingSummaryMetric) => void;
+  /** The card that last opened its page: it pairs with the page in the morph. */
+  morphOrigin?: TrainingSummaryMetric;
 }
 
 type TrainingSummaryMetric = "load" | "heart" | "steps" | "calories";
@@ -100,6 +104,8 @@ interface StatCardProps {
   tone?: "load" | "heart" | "steps" | "calories";
   /** Shown in place of "Recent history will appear after syncing." when the card has no readings. */
   emptyHint?: string;
+  onOpen?: () => void;
+  morphOrigin?: boolean;
 }
 
 function StatCard({
@@ -111,9 +117,36 @@ function StatCard({
   readings = [],
   variant = "bar",
   tone = "load",
-  emptyHint
+  emptyHint,
+  onOpen,
+  morphOrigin = false
 }: StatCardProps) {
   useLanguage();
+  if (variant === "widget" && onOpen) {
+    return (
+      <div className={`training-stat-card is-widget tone-${tone}${morphOrigin ? " is-morph-origin" : ""}`} data-metric={tone}>
+        <button type="button" className="training-stat-card__summary" onClick={onOpen}
+          aria-label={t("{{value1}}: {{value2}} {{value3}}. Open details", { value1: String(label), value2: String(value), value3: String(detail) })}>
+          <span className="training-stat-card__header">
+            <span className="training-stat-card__icon" aria-hidden="true">
+              {icon}
+            </span>
+            <span className="training-stat-card__label">{t(label)}</span>
+            <ChevronRight className="training-stat-card__chevron" size={16} aria-hidden="true" />
+          </span>
+          <span className="training-stat-card__reading">
+            <strong className={`training-stat-card__value${value === "–" || value === "-" ? " is-empty" : ""}`}>
+              {value}
+            </strong>
+            <span className="training-stat-card__detail">{detail}</span>
+          </span>
+          <span className="training-stat-card__chart" aria-hidden="true">
+            <StatChart readings={readings} bars={tone === "steps" || tone === "calories"} />
+          </span>
+        </button>
+      </div>
+    );
+  }
   if (variant === "widget") {
     return (
       <details className={`training-stat-card is-widget tone-${tone}`}>
@@ -186,7 +219,9 @@ export function TrainingSummaryTiles({
   layout = "row",
   metrics = ["load", "heart"],
   className,
-  local = false
+  local = false,
+  onOpen,
+  morphOrigin
 }: TrainingSummaryTilesProps) {
   useLanguage();
   const rhrReadings = recentReadings(trendPoints.map((point) => ({ date: point.date, value: point.rhr !== undefined && point.rhr > 0 ? point.rhr : undefined })));
@@ -218,6 +253,8 @@ export function TrainingSummaryTiles({
           readings={recentReadings(trendPoints.map((point) => ({ date: point.date, value: point.trainingLoad })))}
           variant={variant}
           tone="load"
+          onOpen={onOpen ? () => onOpen("load") : undefined}
+          morphOrigin={morphOrigin === "load"}
         />
       ) : null}
 
@@ -238,6 +275,8 @@ export function TrainingSummaryTiles({
           readings={rhrReadings}
           variant={variant}
           tone="heart"
+          onOpen={onOpen ? () => onOpen("heart") : undefined}
+          morphOrigin={morphOrigin === "heart"}
           emptyHint={rhrHint}
         />
       ) : null}
@@ -251,6 +290,8 @@ export function TrainingSummaryTiles({
           readings={recentReadings(healthRecords.map((record) => ({ date: record.happenDay, value: record.steps })))}
           variant={variant}
           tone="steps"
+          onOpen={onOpen ? () => onOpen("steps") : undefined}
+          morphOrigin={morphOrigin === "steps"}
         />
       ) : null}
 
@@ -263,6 +304,8 @@ export function TrainingSummaryTiles({
           readings={recentReadings(healthRecords.map((record) => ({ date: record.happenDay, value: record.calories })))}
           variant={variant}
           tone="calories"
+          onOpen={onOpen ? () => onOpen("calories") : undefined}
+          morphOrigin={morphOrigin === "calories"}
         />
       ) : null}
     </div>

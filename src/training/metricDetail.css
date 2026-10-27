@@ -1,0 +1,1372 @@
+/* Daily stat pages: Load, Resting HR, Steps and Calories. Each card on the
+   Training Hub morphs into its page (rules at the end of this file); the page
+   shares the sleep page's back button and layout rhythm, tinted with the
+   card's own hue. */
+.metric-page {
+  --m-hue: #fb923c;
+  --m-ink: #fdba74;
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  max-width: 1240px;
+  margin-inline: auto;
+  color: var(--text-primary);
+}
+
+.metric-page.tone-heart { --m-hue: #f472b6; --m-ink: #f9a8d4; }
+.metric-page.tone-steps { --m-hue: #38bdf8; --m-ink: #7dd3fc; }
+.metric-page.tone-calories { --m-hue: #a78bfa; --m-ink: #c4b5fd; }
+
+.metric-surface {
+  --m-card: linear-gradient(160deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02));
+  --m-card-border: rgba(255, 255, 255, 0.075);
+  --m-card-rim: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --m-well: rgba(0, 0, 0, 0.22);
+  --m-well-rim: inset 0 1px 2px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  --m-hairline: color-mix(in srgb, var(--text-muted) 16%, transparent);
+  --m-chip: rgba(255, 255, 255, 0.07);
+  --m-good: #4fe39a;
+  --m-watch: #ffbf5e;
+  --m-high: #ff7a86;
+  --m-tip: #0d0f14;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: clip;
+  isolation: isolate;
+  container: metric-page / inline-size;
+  border: 1px solid color-mix(in srgb, var(--m-hue) 20%, var(--glass-border));
+  border-radius: 24px;
+  background:
+    radial-gradient(720px 360px at 100% 0%, color-mix(in srgb, var(--m-hue) 16%, transparent), transparent 70%),
+    radial-gradient(560px 420px at -10% 110%, color-mix(in srgb, var(--m-hue) 7%, transparent), transparent 70%),
+    linear-gradient(172deg, #1a1d22, #15171b 38%, #111316);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.32), inset 0 1px 0 #ffffff1c, inset 0 0 0 1px #ffffff08;
+}
+
+/* ── Hero ─────────────────────────────────────────────────────────── */
+.metric-hero {
+  display: grid;
+  gap: 18px;
+  padding: 22px 26px 24px;
+}
+
+.metric-topline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.metric-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.metric-glyph {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid color-mix(in srgb, var(--m-hue) 34%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--m-hue) 22%, transparent);
+  color: var(--m-ink);
+  box-shadow: inset 0 1px 3px color-mix(in srgb, var(--m-hue) 22%, transparent);
+}
+
+.metric-glyph svg {
+  stroke-width: 2.2px;
+}
+
+.metric-page:is(.tone-load, .tone-heart) .metric-glyph svg {
+  fill: currentColor;
+}
+
+/* Segmented 7D / 30D / 90D in a recessed well. */
+.metric-range {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--m-well);
+  box-shadow: var(--m-well-rim);
+}
+
+.metric-range button {
+  min-width: 46px;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.metric-range button:hover {
+  color: var(--text-primary);
+}
+
+.metric-range button.is-active {
+  background: color-mix(in srgb, var(--m-hue) 22%, rgba(255, 255, 255, 0.06));
+  color: var(--text-primary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.metric-range button:focus-visible {
+  outline: 2px solid var(--m-hue);
+  outline-offset: 1px;
+}
+
+.metric-headline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 24px;
+}
+
+.metric-headline h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: clamp(1.45rem, 3.2cqi, 1.85rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.metric-loading {
+  color: var(--text-muted);
+}
+
+.metric-figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 10px;
+  margin-top: 22px;
+}
+
+.metric-figure strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: clamp(2.6rem, 6.4cqi, 3.5rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 0.95;
+}
+
+.metric-figure strong.is-empty {
+  color: var(--text-muted);
+}
+
+.metric-figure-unit {
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.metric-figure-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.metric-average {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  min-width: 180px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: var(--m-well);
+  box-shadow: var(--m-well-rim);
+}
+
+.metric-average-label {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.metric-average strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.metric-average strong small,
+.metric-stat-value small,
+.metric-hrv-figure strong small {
+  margin-left: 4px;
+  color: var(--text-secondary);
+  font-family: var(--font-body, inherit);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* Pills: change vs the previous period, and verdicts against your own normal. */
+.metric-change,
+.metric-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--m-chip);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.metric-change.is-up svg {
+  color: var(--m-ink);
+}
+
+.metric-change.is-good,
+.metric-verdict.is-good {
+  background: color-mix(in srgb, var(--m-good) 13%, transparent);
+  color: var(--m-good);
+}
+
+.metric-change.is-watch,
+.metric-verdict.is-watch {
+  background: color-mix(in srgb, var(--m-watch) 13%, transparent);
+  color: var(--m-watch);
+}
+
+.metric-verdict.is-high {
+  background: color-mix(in srgb, var(--m-high) 14%, transparent);
+  color: var(--m-high);
+}
+
+.metric-verdict.is-steady {
+  color: var(--text-primary);
+}
+
+/* ── Body ─────────────────────────────────────────────────────────── */
+.metric-body {
+  display: grid;
+  gap: 16px;
+  padding: 4px 26px 24px;
+}
+
+.metric-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--m-card-border);
+  border-radius: 18px;
+  background: var(--m-card);
+  box-shadow: var(--m-card-rim);
+}
+
+.metric-card-head h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.metric-card-head p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.metric-card-note {
+  margin: 14px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.metric-muted {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Stat tiles */
+.metric-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric-stat {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "icon label"
+    "value value"
+    "foot foot";
+  align-items: center;
+  gap: 10px 8px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--m-card-border);
+  border-radius: 16px;
+  background: var(--m-card);
+  box-shadow: var(--m-card-rim);
+}
+
+.metric-stat.is-accent {
+  border-color: color-mix(in srgb, var(--m-hue) 26%, transparent);
+  background:
+    radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--m-hue) 14%, transparent), transparent 70%),
+    var(--m-card);
+}
+
+.metric-stat-icon {
+  grid-area: icon;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--m-hue) 16%, transparent);
+  color: var(--m-ink);
+}
+
+.metric-stat-label {
+  grid-area: label;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.metric-stat-value {
+  grid-area: value;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-stat-foot {
+  grid-area: foot;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+/* Chart + day detail */
+.metric-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.75fr) minmax(280px, 1fr);
+  align-items: stretch;
+  gap: 16px;
+}
+
+.metric-trend {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 16px;
+}
+
+/* ── Daily chart ──────────────────────────────────────────────────── */
+.metric-chart {
+  --plot-h: 236px;
+  --y-w: 40px;
+  display: grid;
+  grid-template-columns: var(--y-w) minmax(0, 1fr);
+  grid-template-rows: var(--plot-h) auto;
+  column-gap: 8px;
+  align-self: end;
+  color: var(--m-hue);
+}
+
+.metric-chart-y {
+  position: relative;
+}
+
+.metric-chart-y span {
+  position: absolute;
+  right: 0;
+  transform: translateY(50%);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.metric-chart-plot {
+  position: relative;
+  min-width: 0;
+}
+
+.metric-chart-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.metric-chart-grid i {
+  position: absolute;
+  inset-inline: 0;
+  border-top: 1px solid var(--m-hairline);
+}
+
+.metric-chart-grid b {
+  position: absolute;
+  inset-inline: 0;
+  z-index: 2;
+  border-top: 1.5px dashed color-mix(in srgb, var(--m-ink) 70%, transparent);
+}
+
+.metric-chart-grid b span {
+  position: absolute;
+  right: 0;
+  bottom: 3px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--m-tip) 78%, transparent);
+  color: var(--m-ink);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.metric-chart-grid b.is-goal {
+  z-index: 1;
+  border-top-color: color-mix(in srgb, var(--m-good) 50%, transparent);
+}
+
+.metric-chart-grid b.is-goal span {
+  top: 3px;
+  right: auto;
+  bottom: auto;
+  left: 0;
+  color: var(--m-good);
+}
+
+.metric-chart-line {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.metric-chart-cols {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+}
+
+.metric-col {
+  position: relative;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.metric-col::before {
+  content: "";
+  position: absolute;
+  inset: -6px 1px -6px;
+  border-radius: 8px;
+  background: transparent;
+  transition: background 140ms ease;
+}
+
+.metric-col:hover::before {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.metric-col.is-selected::before {
+  background: color-mix(in srgb, var(--m-hue) 11%, transparent);
+}
+
+.metric-col:focus-visible {
+  outline: none;
+}
+
+.metric-col:focus-visible::before {
+  box-shadow: inset 0 0 0 2px var(--m-hue);
+}
+
+.metric-bar {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: min(72%, 26px);
+  height: max(var(--h), 3px);
+  border-radius: 6px 6px 2px 2px;
+  background: linear-gradient(180deg, var(--m-hue), color-mix(in srgb, var(--m-hue) 45%, transparent));
+  opacity: 0.62;
+  transform: translateX(-50%);
+  transition: opacity 140ms ease, height 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.metric-chart.is-90 .metric-bar {
+  width: 72%;
+  border-radius: 3px 3px 1px 1px;
+}
+
+.metric-bar.is-zero {
+  height: 3px;
+  background: color-mix(in srgb, var(--text-muted) 40%, transparent);
+}
+
+.metric-col:hover .metric-bar,
+.metric-col.is-peak .metric-bar {
+  opacity: 0.85;
+}
+
+.metric-col.is-selected .metric-bar {
+  opacity: 1;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--m-hue) 45%, transparent);
+}
+
+.metric-dot {
+  position: absolute;
+  bottom: var(--h);
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--m-hue);
+  box-shadow: 0 0 0 2px #15171b;
+  transform: translate(-50%, 50%);
+}
+
+.metric-chart.is-90 .metric-dot {
+  width: 4px;
+  height: 4px;
+  box-shadow: none;
+}
+
+.metric-col.is-selected .metric-dot,
+.metric-col:hover .metric-dot {
+  width: 11px;
+  height: 11px;
+  background: var(--m-ink);
+  box-shadow: 0 0 0 3px #15171b, 0 0 12px color-mix(in srgb, var(--m-hue) 60%, transparent);
+}
+
+.metric-tip {
+  position: absolute;
+  bottom: calc(var(--h) + 10px);
+  left: 50%;
+  z-index: 3;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: var(--m-tip);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate(-50%, 4px);
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.metric-col:hover .metric-tip,
+.metric-col:focus-visible .metric-tip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.metric-col.is-missing::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-muted) 45%, transparent);
+  transform: translate(-50%, 50%);
+}
+
+.metric-chart-x {
+  grid-column: 2;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  padding-top: 10px;
+}
+
+.metric-chart-x span {
+  overflow: visible;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.metric-chart:not(.is-7) .metric-chart-x span {
+  text-align: left;
+}
+
+.metric-chart-x span.is-today {
+  color: var(--m-ink);
+  font-weight: 700;
+}
+
+.metric-chart:not(.is-7) .metric-chart-x span.is-today {
+  direction: rtl;
+  text-align: right;
+}
+
+/* ── Day detail ───────────────────────────────────────────────────── */
+.metric-day {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  border-color: color-mix(in srgb, var(--m-hue) 16%, var(--m-card-border));
+}
+
+.metric-day-head {
+  display: grid;
+  gap: 10px;
+}
+
+.metric-day-date {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.metric-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--m-chip);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.metric-pill.is-accent {
+  background: color-mix(in srgb, var(--m-hue) 18%, transparent);
+  color: var(--m-ink);
+}
+
+.metric-pill.is-good {
+  background: color-mix(in srgb, var(--m-good) 14%, transparent);
+  color: var(--m-good);
+}
+
+.metric-day-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.metric-day-figure strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 44px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.metric-day-figure strong.is-empty {
+  color: var(--text-muted);
+}
+
+.metric-day-figure span {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.metric-day-compare {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.metric-goal {
+  display: grid;
+  gap: 8px;
+}
+
+.metric-goal-track {
+  display: block;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--m-well);
+  box-shadow: var(--m-well-rim);
+}
+
+.metric-goal-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--m-hue) 55%, transparent), var(--m-hue));
+}
+
+.metric-goal-copy {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.metric-day-section {
+  display: grid;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--m-hairline);
+}
+
+.metric-day-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.metric-day-section-title span {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--m-chip);
+  color: var(--text-primary);
+  letter-spacing: 0;
+}
+
+.metric-activities {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.metric-activities li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--m-well);
+  box-shadow: var(--m-well-rim);
+}
+
+.metric-activities i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sport);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sport) 20%, transparent);
+}
+
+.metric-activity-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-activity-meta {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-activity-value {
+  min-width: 34px;
+  color: var(--m-ink);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-align: right;
+}
+
+.metric-day-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.metric-day-metrics div {
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: var(--m-well);
+  box-shadow: var(--m-well-rim);
+}
+
+.metric-day-metrics dt {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.metric-day-metrics dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* ── Insights row ─────────────────────────────────────────────────── */
+.metric-insights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.metric-insights:empty {
+  display: none;
+}
+
+.metric-weeks-bars,
+.metric-pattern-bars {
+  display: grid;
+  grid-template-columns: repeat(var(--n, 8), minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+  height: 168px;
+  margin-top: 18px;
+}
+
+.metric-pattern-bars {
+  --n: 7;
+}
+
+.metric-week,
+.metric-pattern-day {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  justify-items: center;
+  gap: 6px;
+  height: 100%;
+  min-width: 0;
+}
+
+.metric-week-value,
+.metric-pattern-value {
+  align-self: end;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.metric-week-bar,
+.metric-pattern-bar {
+  align-self: end;
+  width: min(100%, 30px);
+  height: calc(var(--h) * 100%);
+  min-height: 3px;
+  border-radius: 7px 7px 3px 3px;
+  background: color-mix(in srgb, var(--m-hue) 34%, rgba(255, 255, 255, 0.04));
+}
+
+.metric-week.is-current .metric-week-bar,
+.metric-pattern-day.is-top .metric-pattern-bar {
+  background: linear-gradient(180deg, var(--m-hue), color-mix(in srgb, var(--m-hue) 50%, transparent));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--m-hue) 35%, transparent);
+}
+
+.metric-week.is-current .metric-week-value,
+.metric-pattern-day.is-top .metric-pattern-value {
+  color: var(--text-primary);
+}
+
+.metric-week.is-current .metric-week-bar {
+  background:
+    repeating-linear-gradient(135deg, transparent 0 5px, rgba(0, 0, 0, 0.14) 5px 8px),
+    linear-gradient(180deg, var(--m-hue), color-mix(in srgb, var(--m-hue) 50%, transparent));
+}
+
+.metric-week.is-missing .metric-week-bar {
+  background: color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+
+.metric-week-label,
+.metric-pattern-label {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.metric-week.is-current .metric-week-label,
+.metric-pattern-day.is-top .metric-pattern-label {
+  color: var(--m-ink);
+  font-weight: 700;
+}
+
+/* Load balance gauge */
+.metric-balance {
+  --zone: var(--m-good);
+}
+
+.metric-balance.is-low { --zone: #7cbcff; }
+.metric-balance.is-high { --zone: var(--m-watch); }
+.metric-balance.is-spike { --zone: var(--m-high); }
+
+.metric-balance-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.metric-balance-figure strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.metric-balance-zone {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--zone) 15%, transparent);
+  color: var(--zone);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.metric-balance-gauge {
+  position: relative;
+  display: flex;
+  gap: 3px;
+  height: 10px;
+  margin-top: 18px;
+}
+
+.metric-balance-gauge span {
+  border-radius: 3px;
+  opacity: 0.4;
+}
+
+.metric-balance-gauge span:first-child { border-radius: 999px 3px 3px 999px; }
+.metric-balance-gauge span:nth-last-child(2) { border-radius: 3px 999px 999px 3px; }
+.metric-balance-gauge .is-low { background: #7cbcff; }
+.metric-balance-gauge .is-optimal { background: var(--m-good); }
+.metric-balance-gauge .is-high { background: var(--m-watch); }
+.metric-balance-gauge .is-spike { background: var(--m-high); }
+
+.metric-balance.is-low .metric-balance-gauge .is-low,
+.metric-balance.is-optimal .metric-balance-gauge .is-optimal,
+.metric-balance.is-high .metric-balance-gauge .is-high,
+.metric-balance.is-spike .metric-balance-gauge .is-spike {
+  opacity: 1;
+}
+
+.metric-balance-gauge i {
+  position: absolute;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  border: 3px solid var(--zone);
+  border-radius: 50%;
+  background: #15171b;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  transform: translate(-50%, -50%);
+}
+
+.metric-balance-scale {
+  position: relative;
+  height: 16px;
+  margin-top: 6px;
+}
+
+.metric-balance-scale span {
+  position: absolute;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  transform: translateX(-50%);
+}
+
+.metric-balance-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.metric-balance-split div {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--m-well);
+  box-shadow: var(--m-well-rim);
+}
+
+.metric-balance-split dt {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.metric-balance-split dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* HRV companion */
+.metric-hrv {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+}
+
+.metric-hrv-figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+  margin-top: 16px;
+}
+
+.metric-hrv-figure strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.metric-hrv-base {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.metric-hrv-line {
+  width: 100%;
+  height: 96px;
+  margin-top: 18px;
+  overflow: visible;
+  color: #a78bfa;
+}
+
+.metric-hrv-baseline {
+  stroke: color-mix(in srgb, var(--text-muted) 70%, transparent);
+  stroke-dasharray: 4 4;
+  stroke-width: 1.5;
+}
+
+.metric-footnote {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.metric-footnote svg {
+  flex-shrink: 0;
+  color: var(--m-ink);
+}
+
+/* ── Narrow windows ───────────────────────────────────────────────── */
+@container metric-page (max-width: 900px) {
+  .metric-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .metric-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container metric-page (max-width: 560px) {
+  .metric-hero {
+    padding: 18px 18px 20px;
+  }
+
+  .metric-body {
+    padding: 4px 18px 18px;
+  }
+
+  .metric-headline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .metric-average {
+    justify-items: start;
+  }
+
+  .metric-chart {
+    --plot-h: 190px;
+    --y-w: 32px;
+  }
+
+  .metric-insights {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .metric-bar,
+  .metric-tip,
+  .metric-col::before,
+  .metric-range button {
+    transition: none;
+  }
+}
+
+/* ── Paper ────────────────────────────────────────────────────────── */
+:root[data-theme="paper"] .metric-page { --m-hue: #d4600f; --m-ink: #9a4508; }
+:root[data-theme="paper"] .metric-page.tone-heart { --m-hue: #d43f8d; --m-ink: #a02866; }
+:root[data-theme="paper"] .metric-page.tone-steps { --m-hue: #1690cc; --m-ink: #0b6694; }
+:root[data-theme="paper"] .metric-page.tone-calories { --m-hue: #7a5ae0; --m-ink: #5639b5; }
+
+:root[data-theme="paper"] .metric-surface {
+  --m-card: #ffffff;
+  --m-card-border: color-mix(in srgb, var(--text-muted) 20%, transparent);
+  --m-card-rim: 0 1px 2px rgba(40, 44, 70, 0.05);
+  --m-well: #f2f3f5;
+  --m-well-rim: inset 0 1px 2px rgba(40, 44, 70, 0.07), inset 0 0 0 1px rgba(40, 44, 70, 0.04);
+  --m-hairline: color-mix(in srgb, var(--text-muted) 20%, transparent);
+  --m-chip: rgba(38, 42, 60, 0.07);
+  --m-good: #12784a;
+  --m-watch: #9a5a00;
+  --m-high: #bf3344;
+  --m-tip: #ffffff;
+  border-color: color-mix(in srgb, var(--text-muted) 24%, transparent);
+  background:
+    radial-gradient(720px 360px at 100% 0%, color-mix(in srgb, var(--m-hue) 9%, transparent), transparent 70%),
+    linear-gradient(172deg, #f8f8f6, #f0f1ef);
+  box-shadow: 0 18px 48px rgba(26, 30, 56, 0.12), inset 0 1px 0 #ffffff;
+}
+
+:root[data-theme="paper"] .metric-glyph {
+  background: color-mix(in srgb, var(--m-hue) 13%, transparent);
+  box-shadow: none;
+}
+
+:root[data-theme="paper"] .metric-range button.is-active {
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(26, 30, 56, 0.16);
+}
+
+:root[data-theme="paper"] .metric-average {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+:root[data-theme="paper"] :is(.metric-change, .metric-verdict) {
+  box-shadow: inset 0 0 0 1px rgba(38, 42, 60, 0.06);
+}
+
+:root[data-theme="paper"] .metric-col:hover::before {
+  background: rgba(38, 42, 60, 0.04);
+}
+
+:root[data-theme="paper"] .metric-dot {
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+:root[data-theme="paper"] :is(.metric-col.is-selected, .metric-col:hover) .metric-dot {
+  box-shadow: 0 0 0 3px #ffffff, 0 0 10px color-mix(in srgb, var(--m-hue) 40%, transparent);
+}
+
+:root[data-theme="paper"] .metric-tip {
+  box-shadow: 0 4px 14px rgba(26, 30, 56, 0.16), inset 0 0 0 1px rgba(38, 42, 60, 0.08);
+}
+
+:root[data-theme="paper"] .metric-chart-grid b span {
+  background: rgba(255, 255, 255, 0.86);
+}
+
+:root[data-theme="paper"] .metric-balance.is-low { --zone: #2361bd; }
+
+:root[data-theme="paper"] .metric-balance-gauge .is-low { background: #2361bd; }
+
+:root[data-theme="paper"] .metric-balance-gauge i {
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(26, 30, 56, 0.2);
+}
+
+:root[data-theme="paper"] .metric-hrv-line {
+  color: #6d4fd6;
+}
+
+/* ── Card ⇄ page morph ────────────────────────────────────────────────
+   TrainingHubView commits the switch inside a View Transition with
+   html.is-metric-morph-open or -close set. Only the card that opened the
+   page carries .is-morph-origin, so it alone pairs with the page surface;
+   its round icon glides into the page's glyph and the hub title into the
+   back button, while the rest crossfades (same recipe as the sleep page). */
+:root:is(.is-metric-morph-open, .is-metric-morph-close) .training-dashboard:not(.is-behind-page) .training-stat-card.is-morph-origin,
+:root:is(.is-metric-morph-open, .is-metric-morph-close) .metric-surface {
+  view-transition-name: metric-surface;
+}
+
+:root:is(.is-metric-morph-open, .is-metric-morph-close) .training-dashboard:not(.is-behind-page) .training-stat-card.is-morph-origin .training-stat-card__icon,
+:root:is(.is-metric-morph-open, .is-metric-morph-close) .metric-glyph {
+  view-transition-name: metric-glyph;
+}
+
+:root:is(.is-metric-morph-open, .is-metric-morph-close) .training-dashboard:not(.is-behind-page) .training-hub-heading h1,
+:root:is(.is-metric-morph-open, .is-metric-morph-close) .metric-page .sleep-week-back-label {
+  width: fit-content;
+  view-transition-name: metric-hub-title;
+}
+
+:root:is(.is-metric-morph-open, .is-metric-morph-close)::view-transition-group(*) {
+  animation-duration: 520ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root:is(.is-metric-morph-open, .is-metric-morph-close)::view-transition-group(metric-surface) {
+  overflow: clip;
+  border-radius: 24px;
+  background: #181a1e;
+}
+
+:root:is(.is-metric-morph-open, .is-metric-morph-close)::view-transition-old(metric-surface),
+:root:is(.is-metric-morph-open, .is-metric-morph-close)::view-transition-new(metric-surface) {
+  height: 100%;
+  object-fit: none;
+  object-position: left top;
+}
+
+:root:is(.is-metric-morph-open, .is-metric-morph-close)::view-transition-old(metric-surface) {
+  animation: metric-morph-out 150ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+:root:is(.is-metric-morph-open, .is-metric-morph-close)::view-transition-new(metric-surface) {
+  animation: metric-morph-in 280ms cubic-bezier(0, 0, 0.2, 1) 120ms both;
+}
+
+:root:is(.is-metric-morph-open, .is-metric-morph-close)::view-transition-group(metric-glyph),
+:root:is(.is-metric-morph-open, .is-metric-morph-close)::view-transition-group(metric-hub-title) {
+  z-index: 3;
+}
+
+:root:is(.is-metric-morph-open, .is-metric-morph-close)::view-transition-image-pair(root) {
+  isolation: isolate;
+}
+
+:root:is(.is-metric-morph-open, .is-metric-morph-close)::view-transition-old(root) {
+  z-index: 1;
+  mix-blend-mode: plus-lighter;
+  animation: metric-morph-out 260ms linear both;
+}
+
+:root:is(.is-metric-morph-open, .is-metric-morph-close)::view-transition-new(root) {
+  z-index: 2;
+  mix-blend-mode: plus-lighter;
+  animation: metric-morph-in 260ms linear both;
+}
+
+:root[data-theme="paper"]:is(.is-metric-morph-open, .is-metric-morph-close)::view-transition-group(metric-surface) {
+  background: #f3f4f2;
+}
+
+@keyframes metric-morph-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes metric-morph-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The hub card is now a button that opens the page. */
+button.training-stat-card__summary {
+  width: 100%;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
