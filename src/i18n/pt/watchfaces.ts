@@ -670,6 +670,8 @@ export const watchfacesPortuguese: Record<string, string> = {
   "Make background color transparent": "Tornar a cor de fundo transparente",
   "Clear": "Limpar",
   "Color opacity": "Opacidade da cor",
+  "{{value1}} hex color": "{{value1}} em hexadecimal",
+  "Make {{value1}} transparent": "Tornar {{value1}} transparente",
   "Changes only the color behind your photo and watch data.": "Altera apenas a cor por trás da sua fotografia e dos dados do relógio.",
   "Background artwork preview": "Pré-visualização da arte de fundo",
   "Replace photo": "Substituir fotografia",

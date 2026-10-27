@@ -1014,6 +1014,36 @@ function toRgbaColor(hex: string, alpha: number): string {
   return `rgba(${channels[0]}, ${channels[1]}, ${channels[2]}, ${alpha})`;
 }
 
+/** Color swatch, hex, Clear and an opacity %, stored as hex when opaque. */
+function AlphaColorField({ label, value, onValueChange }: {
+  label: string;
+  value: string;
+  onValueChange: (value: string) => void;
+}) {
+  useLanguage();
+  const color = parseBackgroundColor(value);
+  const write = (hex: string, alpha: number) =>
+    onValueChange(alpha >= 1 ? hex : toRgbaColor(hex, Math.max(0, alpha)));
+  const pickHex = (hex: string) => write(hex, color.isTransparent ? 1 : color.alpha);
+  return (
+    <>
+      <label className="field">{label}<span className="watchface-color-control">
+          <WatchfaceColorInput value={color.hex} onValueChange={pickHex} />
+          <EditableHexColorInput aria-label={t("{{value1}} hex color", { value1: label })} value={color.hex} onValueChange={pickHex} />
+          <button className="watchface-color-none" type="button" aria-label={t("Make {{value1}} transparent", { value1: label })} disabled={color.isTransparent} onClick={() => onValueChange("transparent")}>{t("Clear")}</button>
+        </span>
+      </label>
+      <label className="watchface-inspector-field">
+        <span>{t("{{value1}} opacity", { value1: label })}</span>
+        <span className="wf-input-with-unit">
+          <EditableNumberInput min="0" max="100" step="1" value={Math.round(color.alpha * 100)} fallback={100} onValueChange={(opacity) => write(color.hex, Math.min(100, opacity) / 100)} />
+          <span>%</span>
+        </span>
+      </label>
+    </>
+  );
+}
+
 function browserPlacementStorage(): Storage | undefined {
   if (typeof window === "undefined") return undefined;
   try {
@@ -14955,12 +14985,12 @@ export function WatchfaceEditor({
                   />{t("Gradient fill")}</label>
                 {element.gradient ? (
                   <>
-                    <label className="field">{t("From")}<span className="watchface-color-control"><WatchfaceColorInput value={element.gradient.from} onValueChange={(color) => set({ gradient: { ...element.gradient!, from: color } })} /><code>{element.gradient.from}</code></span></label>
-                    <label className="field">{t("To")}<span className="watchface-color-control"><WatchfaceColorInput value={element.gradient.to} onValueChange={(color) => set({ gradient: { ...element.gradient!, to: color } })} /><code>{element.gradient.to}</code></span></label>
+                    <AlphaColorField label={t("From")} value={element.gradient.from} onValueChange={(color) => set({ gradient: { ...element.gradient!, from: color } })} />
+                    <AlphaColorField label={t("To")} value={element.gradient.to} onValueChange={(color) => set({ gradient: { ...element.gradient!, to: color } })} />
                     <label className="watchface-inspector-field"><span>{t("Gradient angle")}</span><EditableNumberInput min="0" max="360" step="1" value={element.gradient.angle} fallback={0} onValueChange={(angle) => set({ gradient: { ...element.gradient!, angle: normalizeWatchfaceRotation(angle) } })} /></label>
                   </>
                 ) : (
-                  <label className="field">{t("Fill")}<span className="watchface-color-control"><WatchfaceColorInput value={element.fill} onValueChange={(color) => set({ fill: color })} /><code>{element.fill}</code></span></label>
+                  <AlphaColorField label={t("Fill")} value={element.fill} onValueChange={(fill) => set({ fill })} />
                 )}
                 {element.kind === "rect" ? (
                   <label className="watchface-inspector-field"><span>{t("Corner radius")}</span><EditableNumberInput min="0" max="200" step="1" value={element.cornerRadius} fallback={0} onValueChange={(cornerRadius) => set({ cornerRadius: Math.max(0, cornerRadius) })} /></label>
@@ -14969,7 +14999,7 @@ export function WatchfaceEditor({
             ) : null}
             {element.kind === "line" ? (
               <>
-                <label className="field">{t("Color")}<span className="watchface-color-control"><WatchfaceColorInput value={element.color} onValueChange={(color) => set({ color })} /><code>{element.color}</code></span></label>
+                <AlphaColorField label={t("Color")} value={element.color} onValueChange={(color) => set({ color })} />
                 <label className="watchface-inspector-field"><span>{t("Thickness")}</span><EditableNumberInput min="1" max="60" step="1" value={element.strokeWidth} fallback={1} onValueChange={(strokeWidth) => set({ strokeWidth: Math.max(1, strokeWidth) })} /></label>
               </>
             ) : null}

@@ -669,6 +669,8 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Make background color transparent": "使背景颜色透明",
   "Clear": "清除",
   "Color opacity": "颜色不透明度",
+  "{{value1}} hex color": "{{value1}} 十六进制颜色",
+  "Make {{value1}} transparent": "将{{value1}}设为透明",
   "Changes only the color behind your photo and watch data.": "仅更改照片和 手表数据背后的颜色。",
   "Background artwork preview": "背景图像预览",
   "Replace photo": "替换照片",

@@ -392,10 +392,12 @@ export function renderWatchfaceCanvasDecorationsWithOpacity(
   effects: CorosWatchfaceShadowEffect[],
   sourceOpacity: number,
   scale = 1,
-  includePadding = false
+  includePadding = false,
+  /** Traces strokes from this canvas instead, so see-through fills keep their outline. */
+  silhouette?: HTMLCanvasElement
 ): { canvas: HTMLCanvasElement; padding: WatchfaceEffectPadding } {
   const opacity = Math.max(0, Math.min(1, sourceOpacity));
-  if (opacity === 1) {
+  if (opacity === 1 && !silhouette) {
     return renderWatchfaceCanvasDecorations(
       source,
       strokes,
@@ -405,7 +407,7 @@ export function renderWatchfaceCanvasDecorationsWithOpacity(
     );
   }
   const strokeOnly = renderWatchfaceCanvasStrokes(
-    source,
+    silhouette ?? source,
     strokes,
     scale,
     includePadding,

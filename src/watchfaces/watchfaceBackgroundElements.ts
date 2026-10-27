@@ -230,6 +230,26 @@ function drawBackgroundElement(
   context.restore();
 }
 
+/** Opaque copy of a shape so strokes follow it even when its fill is see-through. */
+function backgroundElementSilhouette(
+  element: CorosWatchfaceBackgroundElement
+): HTMLCanvasElement | undefined {
+  if (element.kind !== "rect" && element.kind !== "ellipse" && element.kind !== "line") return undefined;
+  const silhouette = document.createElement("canvas");
+  silhouette.width = BACKGROUND_SPACE;
+  silhouette.height = BACKGROUND_SPACE;
+  const silhouetteContext = silhouette.getContext("2d");
+  if (!silhouetteContext) return undefined;
+  drawBackgroundElement(
+    silhouetteContext,
+    element.kind === "line"
+      ? { ...element, color: "#ffffff" }
+      : { ...element, fill: "#ffffff", gradient: undefined },
+    1
+  );
+  return silhouette;
+}
+
 /** Draws every background element into a context already scaled to 800px. */
 export function drawBackgroundElements(
   context: CanvasRenderingContext2D,
@@ -258,7 +278,10 @@ export function drawBackgroundElements(
         layer,
         strokes,
         effects,
-        Math.max(0, Math.min(1, element.opacity ?? 1))
+        Math.max(0, Math.min(1, element.opacity ?? 1)),
+        1,
+        false,
+        strokes.length > 0 ? backgroundElementSilhouette(element) : undefined
       ).canvas,
       0,
       0
