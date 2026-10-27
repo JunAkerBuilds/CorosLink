@@ -18,6 +18,7 @@
 //   GET    /v1/auth/sessions     access:write                   -> {sessions: RemoteDevice[]}
 //   DELETE /v1/auth/sessions/:id access:write                   revokes one session
 //   POST   /v1/relay/mint        relay-signed request           -> MintHttpResponse
+//   POST   /v1/coach/attachments coach:operate + RemoteFileUpload -> {attachment: ChatFileAttachment}
 //   GET    /v1/ws?ticket=…       WebSocket: CoachRpcRequest in, CoachRpcResponse and events out
 //
 // A DPoP-bound request carries `Authorization: DPoP <sessionToken>` and a
@@ -29,6 +30,8 @@ export * from "../coachHub/coachContract";
 
 export const REMOTE_PROTOCOL_VERSION = COACH_PROTOCOL_VERSION;
 export const REMOTE_CAPABILITIES = ["coach"] as const;
+/** Listed too when this computer keeps files a phone attaches (`REMOTE_ROUTES.attachments`). */
+export const REMOTE_FILES_CAPABILITY = "coach.files";
 
 export const REMOTE_ROUTES = {
   descriptor: "/v1/descriptor",
@@ -38,6 +41,7 @@ export const REMOTE_ROUTES = {
   session: "/v1/auth/session",
   sessions: "/v1/auth/sessions",
   mint: "/v1/relay/mint",
+  attachments: "/v1/coach/attachments",
   ws: "/v1/ws"
 } as const;
 
@@ -55,6 +59,8 @@ export const SESSION_IDLE_TTL_MS = 90 * 24 * 60 * 60_000;
 export const DPOP_MAX_SKEW_SECONDS = 60;
 /** Request bodies and WebSocket frames from clients. */
 export const MAX_REMOTE_BODY_BYTES = 64 * 1024;
+/** An attachment upload: one file as base64, so a 32 MB original fits with its page images. */
+export const MAX_REMOTE_UPLOAD_BYTES = 56 * 1024 * 1024;
 
 // ----- Descriptor, grants and tickets -----
 
@@ -93,6 +99,26 @@ export interface WebSocketTicket {
 /** Where this computer can also be reached, for the phone to learn while connected. */
 export interface EnvironmentInfo {
   lanRoutes: Array<{ host: string; port: number }>;
+}
+
+// ----- Attachments -----
+
+/**
+ * One file a phone attaches to a Coach message, prepared as the desktop
+ * window prepares it (src/chat/coachFiles.ts): document text already
+ * extracted, images downscaled, scans rendered to page images. Bytes are
+ * base64. The answer's attachment `id` goes in `coach.send`'s `files`.
+ */
+export interface RemoteFileUpload {
+  sessionId: string;
+  name: string;
+  mimeType: string;
+  kind: "image" | "document";
+  original: string;
+  text?: string;
+  pageCount?: number;
+  truncated?: boolean;
+  images?: Array<{ mimeType: "image/jpeg" | "image/png"; data: string; width: number; height: number }>;
 }
 
 // ----- Permissions -----

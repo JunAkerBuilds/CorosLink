@@ -24,7 +24,7 @@ import {
   type RemoteSecretBox,
   type RemoteSettingsStore
 } from "./identity";
-import { RemoteServer, remoteLanAddresses, type RelayTrust } from "./server";
+import { RemoteServer, remoteLanAddresses, type RelayTrust, type RemoteAttachmentStore } from "./server";
 
 // QR codes are drawn on demand; keep the library out of app startup.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -62,6 +62,7 @@ export interface RemoteAccessOptions {
   chatSettings?: () => ChatSettings;
   saveChatSettings?: (settings: ChatSettings) => ChatSettings;
   chatModels?: (provider: ChatProvider) => Promise<ChatModelOption[]>;
+  attachments?: RemoteAttachmentStore;
 }
 
 export class RemoteAccess {
@@ -187,6 +188,7 @@ export class RemoteAccess {
         chatSettings: this.options.chatSettings,
         saveChatSettings: this.options.saveChatSettings,
         chatModels: this.options.chatModels,
+        attachments: this.options.attachments,
         port: preferredRemotePort(settings),
         nextPort: () => randomRemotePort(),
         onPortChanged: (port) => saveRemotePort(settings, port),

@@ -3,15 +3,18 @@ import type { Duplex } from "node:stream";
 import os from "node:os";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 import type { CoachSessionHub } from "../coachHub/coachSessionHub";
-import type { ChatProvider, ChatSettings } from "../types";
+import { CoachAttachmentError } from "../coachAttachments";
+import type { ChatFileAttachment, ChatProvider, ChatSettings, CoachFileUpload } from "../types";
 import { getChatModelOptions, type ChatModelOption } from "../chatModels";
 import { phoneSendAddresses } from "../watchfacePhoneSend";
 import {
   COACH_RPC_PERMISSIONS,
   ENVIRONMENT_MINT_RESPONSE_TYP,
   MAX_REMOTE_BODY_BYTES,
+  MAX_REMOTE_UPLOAD_BYTES,
   MINT_REQUEST_LIFETIME_SECONDS,
   REMOTE_CAPABILITIES,
+  REMOTE_FILES_CAPABILITY,
   REMOTE_PROTOCOL_VERSION,
   REMOTE_ROUTES,
   RELAY_MINT_REQUEST_TYP,
@@ -49,6 +52,13 @@ export interface RelayTrust {
   keys: Array<{ kty: "EC"; crv: "P-256"; x: string; y: string; kid: string; alg?: string }>;
 }
 
+export interface RemoteAttachmentStore {
+  /** Throws CoachAttachmentError, with a message for the athlete, for a file it refuses. */
+  save(sessionId: string, upload: CoachFileUpload): Promise<ChatFileAttachment>;
+  /** A stored file's summary, or null when it is gone. */
+  get(sessionId: string, id: string): Promise<ChatFileAttachment | null>;
+}
+
 export type RemoteHub = Pick<
   CoachSessionHub,
   "listSessions" | "getSession" | "createSession" | "subscribe" | "send" | "cancel" | "deleteSession" | "confirm"
@@ -66,6 +76,8 @@ export interface RemoteServerOptions {
   saveChatSettings?: (settings: ChatSettings) => ChatSettings;
   /** The live model catalog for a provider; the static list without it. */
   chatModels?: (provider: ChatProvider) => Promise<ChatModelOption[]>;
+  /** Where files a phone attaches are kept (coachAttachments.ts); without it phones can't attach. */
+  attachments?: RemoteAttachmentStore;
   /** The port to try first (identity.ts saves it). */
   port: number;
   /** The saved port was taken and the server moved; save the new one. */
@@ -192,13 +204,18 @@ function sendError(response: ServerResponse, error: RemoteAuthError): void {
 }
 
 /**
- * The JSON object body, up to 64 KB. A larger one is refused without reading it
- * into memory; the rest is drained, so the client gets the 413 instead of a reset.
+ * The JSON object body, up to 64 KB unless `limit` says otherwise. A larger one is
+ * refused without reading it into memory; the rest is drained, so the client gets
+ * the 413 instead of a reset.
  */
-function readJsonBody(request: IncomingMessage, required: boolean): Promise<Record<string, unknown>> {
+function readJsonBody(
+  request: IncomingMessage,
+  required: boolean,
+  limit = MAX_REMOTE_BODY_BYTES
+): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const tooLarge = new HttpError(413, "too_large", "The request is too large.");
-    if (Number(request.headers["content-length"] ?? 0) > MAX_REMOTE_BODY_BYTES) {
+    if (Number(request.headers["content-length"] ?? 0) > limit) {
       request.resume();
       reject(tooLarge);
       return;
@@ -215,7 +232,7 @@ function readJsonBody(request: IncomingMessage, required: boolean): Promise<Reco
     request.on("data", (chunk: Buffer) => {
       if (settled) return;
       total += chunk.length;
-      if (total > MAX_REMOTE_BODY_BYTES) fail(tooLarge);
+      if (total > limit) fail(tooLarge);
       else chunks.push(chunk);
     });
     request.on("error", fail);
@@ -333,6 +350,8 @@ const CONFIRM_KINDS = ["corosAction", "workoutDelete", "planUpload", "strengthEd
 const MAX_BUFFERED_BYTES = 4 * 1024 * 1024;
 const MAX_SUBSCRIPTIONS_PER_SOCKET = 8;
 const MAX_MESSAGE_LENGTH = 20_000;
+/** As MAX_COACH_UPLOADS_PER_MESSAGE in coachAttachments.ts. */
+const MAX_REMOTE_FILES_PER_MESSAGE = 6;
 
 export class RemoteServer {
   private server: http.Server | null = null;
@@ -376,7 +395,7 @@ export class RemoteServer {
           : this.options.defaultProvider();
         return { result: { session: coachSessionInfo(this.options.hub.createSession(provider)) } };
       },
-      "coach.send": (_client, params) => ({ result: this.options.hub.send(this.sendInput(params)) }),
+      "coach.send": async (_client, params) => ({ result: this.options.hub.send(await this.sendInput(params)) }),
       "coach.cancel": (_client, params) => ({
         result: this.options.hub.cancel(stringParam(params, "sessionId")!)
       }),
@@ -699,6 +718,29 @@ export class RemoteServer {
         const body = await readJsonBody(request, true);
         return sendJson(response, 200, await this.mint(body.request));
       }
+      case REMOTE_ROUTES.attachments: {
+        if (method !== "POST") throw this.methodNotAllowed("POST");
+        this.limit(this.authLimiter, key);
+        const store = this.options.attachments;
+        if (!store) throw new HttpError(404, "not_found", "This CorosLink can't keep files from a phone. Update it.");
+        // Authenticated before the body is read, so only a paired device can send megabytes.
+        await this.authenticate(request, method, url, "coach:operate");
+        const body = await readJsonBody(request, true, MAX_REMOTE_UPLOAD_BYTES);
+        const { sessionId, upload } = this.fileUpload(body);
+        try {
+          this.options.hub.getSession(sessionId);
+        } catch {
+          throw new HttpError(404, "not_found", "This conversation is no longer on your computer.");
+        }
+        try {
+          return sendJson(response, 200, { attachment: await store.save(sessionId, upload) });
+        } catch (error) {
+          if (error instanceof CoachAttachmentError) {
+            throw new HttpError(400, "invalid_request", boundedMessage(error, "That file could not be attached."));
+          }
+          throw error;
+        }
+      }
       case REMOTE_ROUTES.ws:
         throw new HttpError(400, "invalid_request", "Open this address as a WebSocket.");
       default:
@@ -742,7 +784,7 @@ export class RemoteServer {
       platform: platform ?? process.platform,
       appVersion,
       protocol: REMOTE_PROTOCOL_VERSION,
-      capabilities: [...REMOTE_CAPABILITIES],
+      capabilities: [...REMOTE_CAPABILITIES, ...(this.options.attachments ? [REMOTE_FILES_CAPABILITY] : [])],
       keyThumbprint: this.options.identity.kid
     };
   }
@@ -1011,7 +1053,7 @@ export class RemoteServer {
     };
   }
 
-  private sendInput(params: Record<string, unknown>): CoachSendInput {
+  private async sendInput(params: Record<string, unknown>): Promise<CoachSendInput> {
     const sessionId = stringParam(params, "sessionId")!;
     const clientMessageId = stringParam(params, "clientMessageId")!;
     const text = params.text;
@@ -1033,12 +1075,75 @@ export class RemoteServer {
         ...(typeof answerText === "string" ? { text: answerText } : {})
       };
     }
-    // Attachments and units are the desktop's; remote sends use its last units.
+    // Files were uploaded to REMOTE_ROUTES.attachments first; chart attachments and units
+    // are the desktop's, and remote sends use its last units.
+    const files = await this.sendFiles(sessionId, params.files);
     return {
       sessionId,
       clientMessageId,
       ...(typeof text === "string" ? { text } : {}),
-      ...(promptAnswer ? { promptAnswer } : {})
+      ...(promptAnswer ? { promptAnswer } : {}),
+      ...(files.length ? { files } : {})
+    };
+  }
+
+  /** `coach.send`'s `files`: IDs of attachments uploaded to this conversation. */
+  private async sendFiles(sessionId: string, ids: unknown): Promise<ChatFileAttachment[]> {
+    if (ids === undefined || ids === null) return [];
+    if (!Array.isArray(ids) || ids.length > MAX_REMOTE_FILES_PER_MESSAGE || ids.some((id) => typeof id !== "string" || !id || id.length > 128)) {
+      throw invalidParams(`files must be up to ${MAX_REMOTE_FILES_PER_MESSAGE} attachment IDs.`);
+    }
+    if (!ids.length) return [];
+    const store = this.options.attachments;
+    if (!store) throw new RpcError({ code: "unsupported", message: "This CorosLink can't keep files from a phone. Update it." });
+    const files = await Promise.all(ids.map((id: string) => store.get(sessionId, id).catch(() => null)));
+    if (files.some((file) => !file)) throw invalidParams("An attached file is no longer on your computer. Attach it again.");
+    return files as ChatFileAttachment[];
+  }
+
+  /** The upload route's body, checked field by field; coachAttachments.ts checks the contents. */
+  private fileUpload(body: Record<string, unknown>): { sessionId: string; upload: CoachFileUpload } {
+    const invalid = (message: string) => new HttpError(400, "invalid_request", message);
+    const text = (key: string, max: number, required = true): string | undefined => {
+      const value = body[key];
+      if (value === undefined || value === null) {
+        if (required) throw invalid(`${key} is required.`);
+        return undefined;
+      }
+      if (typeof value !== "string" || value.length > max) throw invalid(`${key} must be a string.`);
+      return value;
+    };
+    const bytes = (value: unknown, key: string): Uint8Array => {
+      if (typeof value !== "string" || !value || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) throw invalid(`${key} must be base64.`);
+      return new Uint8Array(Buffer.from(value, "base64"));
+    };
+    const sessionId = text("sessionId", 200)!;
+    const kind = body.kind;
+    if (kind !== "image" && kind !== "document") throw invalid("kind must be image or document.");
+    const rawImages = body.images ?? [];
+    if (!Array.isArray(rawImages) || rawImages.length > 12) throw invalid("images must be a list of up to 12.");
+    const images = rawImages.map((image: unknown) => {
+      const value = (image ?? {}) as Record<string, unknown>;
+      return {
+        mimeType: value.mimeType as "image/jpeg" | "image/png",
+        data: bytes(value.data, "images.data"),
+        width: value.width as number,
+        height: value.height as number
+      };
+    });
+    const pageCount = body.pageCount;
+    return {
+      sessionId,
+      upload: {
+        name: text("name", 400)!,
+        mimeType: text("mimeType", 200)!,
+        kind,
+        original: bytes(body.original, "original"),
+        ...(typeof body.text === "string" ? { text: text("text", 2_000_000) } : {}),
+        ...(typeof pageCount === "number" ? { pageCount } : {}),
+        ...(body.truncated === true ? { truncated: true } : {}),
+        images
+      }
     };
   }
 

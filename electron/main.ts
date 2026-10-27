@@ -1106,7 +1106,12 @@ app.whenReady().then(() => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("chat:settingsChanged", saved);
       return saved;
     },
-    chatModels: listChatModelOptions
+    chatModels: listChatModelOptions,
+    // Files a phone attaches land in the same store as the window's.
+    attachments: {
+      save: (sessionId, upload) => coachAttachments().save(sessionId, upload),
+      get: (sessionId, id) => coachAttachments().summary(sessionId, id)
+    }
   });
   // Opening one's own private face from the website: the catalog may ask with the account token.
   const account = remoteAccess.cloud.account;

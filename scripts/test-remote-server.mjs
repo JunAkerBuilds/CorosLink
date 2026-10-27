@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import fs from "node:fs";
 import net from "node:net";
+import os from "node:os";
+import path from "node:path";
 import WebSocket from "ws";
 import {
   createDeviceKey,
@@ -25,6 +28,7 @@ const { RemoteServer, remoteLanAddresses, isTailscaleIPv4 } = requireDist("./rem
 const { RemoteAuth } = requireDist("./remote/auth.js");
 const { loadOrCreateRemoteIdentity } = requireDist("./remote/identity.js");
 const { SAVED_COACH_EVENTS, applyCoachEvent, coachStateFromSnapshot } = requireDist("./remote/contract.js");
+const { createCoachAttachmentStore } = requireDist("./coachAttachments.js");
 
 const LAN = "192.168.77.5";
 const TUNNEL = "env-test.tunnel.example";
@@ -42,6 +46,8 @@ let chatSettings = {
   local: { model: "llama3" }
 };
 let relayTrust = null;
+const attachmentRoot = fs.mkdtempSync(path.join(os.tmpdir(), "remote-attachments-"));
+const attachmentStore = createCoachAttachmentStore(attachmentRoot);
 const portChanges = [];
 let connectionChanges = 0;
 
@@ -53,6 +59,10 @@ const server = new RemoteServer({
   defaultProvider: () => "claude-code",
   chatSettings: () => chatSettings,
   saveChatSettings: (settings) => (chatSettings = settings),
+  attachments: {
+    save: (sessionId, upload) => attachmentStore.save(sessionId, upload),
+    get: (sessionId, id) => attachmentStore.summary(sessionId, id)
+  },
   chatModels: async (provider) => (provider === "claude-code" ? [{ value: "", label: "Account default" }, { value: "opus", label: "Claude Opus 5.5" }] : []),
   port: 0,
   onPortChanged: (port) => portChanges.push(port),
@@ -84,7 +94,7 @@ try {
       platform: "darwin",
       appVersion: "9.9.9",
       protocol: 1,
-      capabilities: ["coach"],
+      capabilities: ["coach", "coach.files"],
       keyThumbprint: identity.kid
     });
     assert.equal(identity.kid, await jose.calculateJwkThumbprint(identity.publicJwk, "sha256"), "RFC 7638 thumbprint");
@@ -455,6 +465,56 @@ try {
     view.ws.send("not json");
     await waitFor(() => view.frames.some((frame) => frame.id === null), { message: "an error for a bad frame" });
     view.ws.close();
+  }
+
+  // ----- Files a phone attaches -----
+  {
+    // A 1×1 JPEG's first bytes are enough for the store's type check.
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]).toString("base64");
+    const upload = (key, token, body) => authed(key, token, { path: "/v1/coach/attachments", body });
+    const image = await upload(phoneA, tokenA, {
+      sessionId,
+      name: "Photo.jpg",
+      mimeType: "image/jpeg",
+      kind: "image",
+      original: jpeg,
+      images: [{ mimeType: "image/jpeg", data: jpeg, width: 1, height: 1 }]
+    });
+    assert.equal(image.status, 200, image.text);
+    assert.equal(image.json.attachment.name, "Photo.jpg");
+    assert.equal(image.json.attachment.kind, "image");
+    const plan = await upload(phoneA, tokenA, {
+      sessionId,
+      name: "plan.md",
+      mimeType: "text/markdown",
+      kind: "document",
+      original: Buffer.from("# Week 1\nEasy runs").toString("base64"),
+      text: "# Week 1\nEasy runs"
+    });
+    assert.equal(plan.status, 200, plan.text);
+    assert.equal(plan.json.attachment.textChars, 18);
+
+    const refused = await upload(phoneA, tokenA, { sessionId, name: "tool.exe", mimeType: "application/x", kind: "document", original: jpeg, text: "x" });
+    assert.equal(refused.status, 400);
+    assert.equal(refused.json.error.message, "tool.exe is not a supported file.", "the store's own words");
+    assert.equal((await upload(phoneA, tokenA, { sessionId, name: "a.md", mimeType: "text/markdown", kind: "document", original: "not base64!", text: "x" })).status, 400);
+    assert.equal((await upload(phoneA, tokenA, { sessionId: "missing", name: "a.md", mimeType: "text/markdown", kind: "document", original: jpeg, text: "x" })).status, 404);
+    const viewOnly = await upload(viewer, tokenViewer, { sessionId, name: "a.md", mimeType: "text/markdown", kind: "document", original: jpeg, text: "x" });
+    assert.equal(viewOnly.status, 403, "view-only devices can't attach");
+
+    const c = await connect(phoneA, tokenA);
+    const ids = [image.json.attachment.id, plan.json.attachment.id];
+    const sent = await c.call("coach.send", { sessionId, clientMessageId: "f-1", text: "", files: ids });
+    assert.ok(sent.result?.requestId, JSON.stringify(sent));
+    const entry = hub.getSession(sessionId).entries.findLast((candidate) => candidate.kind === "message" && candidate.role === "user");
+    assert.deepEqual(entry.files.map((file) => file.name), ["Photo.jpg", "plan.md"], "a message may be only files");
+    const turn = stream.turns.at(-1);
+    turn.send("chat:streamDone", { fullText: "Nice plan." });
+    turn.resolve();
+
+    assert.equal((await c.call("coach.send", { sessionId, clientMessageId: "f-2", text: "hi", files: ["gone"] })).error.code, "invalid");
+    assert.equal((await c.call("coach.send", { sessionId, clientMessageId: "f-3", text: "hi", files: "x" })).error.code, "invalid");
+    c.ws.close();
   }
 
   // ----- Revocation closes sockets; the session is gone -----

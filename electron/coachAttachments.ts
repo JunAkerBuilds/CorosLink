@@ -48,6 +48,8 @@ export class CoachAttachmentError extends Error {}
 export interface CoachAttachmentStore {
   save(sessionId: string, upload: CoachFileUpload): Promise<ChatFileAttachment>;
   load(sessionId: string, id: string): Promise<LoadedCoachAttachment | null>;
+  /** A stored file's summary, without reading its contents. */
+  summary(sessionId: string, id: string): Promise<ChatFileAttachment | null>;
   /** The kept original, when it is a type the system may open. */
   originalPath(sessionId: string, id: string): Promise<string | null>;
   /** The first image as a data URL, for transcript thumbnails. */
@@ -127,6 +129,10 @@ export function createCoachAttachmentStore(root: string): CoachAttachmentStore {
       } catch {
         return null;
       }
+    },
+
+    async summary(sessionId, id) {
+      return (await readMeta(attachmentDir(sessionId, id)))?.attachment ?? null;
     },
 
     async originalPath(sessionId, id) {
