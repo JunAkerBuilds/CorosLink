@@ -12,9 +12,10 @@ const {FIELDS}=require('../dist-electron/watchfaceCompiler/fields.js');
 const {cbzCompress,encodeImageBlock,encodeFramesBlock}=require('../dist-electron/watchfaceCompiler/bitmap.js');
 const {parseConfig,parsePos,parseRect,rgb222}=require('../dist-electron/watchfaceCompiler/config.js');
 const {decodePng}=require('../dist-electron/watchfaceCompiler/png.js');
+const {scaleImage}=require('../dist-electron/watchfaceCompiler/scale.js');
 const {findCorosBitmapBlocks,decodeCorosBitmapFrame,decodeCorosLayout}=require('../dist-electron/corosBinLayout.js');
 const unzipper=require('unzipper');
-const {getWatchfaceTarget}=require('../dist-electron/watchfaceTargets.js');
+const {getWatchfaceTarget,watchfaceBinTarget}=require('../dist-electron/watchfaceTargets.js');
 
 // Minimal PNG writer: colorType 6 RGBA unless given, rows already in the target format.
 const crcTable=Array.from({length:256},(_,n)=>{let c=n;for(let k=0;k<8;k++)c=c&1?0xedb88320^(c>>>1):c>>>1;return c>>>0;});
@@ -195,6 +196,28 @@ try {
  assert.equal(lunarBin.readUInt32LE(0xbe4),lunarBin.readUInt32LE(0xbb4),'the Traditional table shares the Simplified block');
  assert.equal(lunarBin[0x13a],1,'the lunar date needs format version 1');
  assert.equal(bare('[chinese_lunar_year_rect]={10,20,142,68,left|vcenter}\n',[]).readInt16LE(0xbaa),0,'the rectangle waits for its frames');
+ // Full color: images past 256 colors stay RLE RGBA (format 3), as in COROS's own faces; palettes stay where they are exact.
+ const ramp=png(32,16,(x,y)=>[x*8,y*16,(x*y)&255,255]);
+ const fullFiles=[['watchface_416x416/bg.png',ramp],['watchface_416x416/flat.png',png(8,8,(x)=>x<4?[255,0,0,255]:[0,0,255,128])],['watchface_416x416/thumb.png',ramp],
+  ...Array.from({length:3},(_,i)=>[`watchface_416x416/fr/${i}.png`,i===1?ramp:png(32,16,()=>[i*80,0,0,255])])];
+ const fullConfig='[background_icon_pos]={0,0}\n[background_icon]=bg.png\n[bluetooth_icon_pos]={1,1}\n[bluetooth_icon]=flat.png\n[time_hour_high_pos]={2,2}\n[time_hour_high_font]=fr\n';
+ const fullBin=(fullColor,target)=>compileWatchface(new Map([['info.json',Buffer.from('{"m_preview":"watchface_416x416/thumb.png"}')],['watchface_416x416/config.txt',Buffer.from(fullConfig)],...fullFiles]),{faceId:1,fullColor,target}).bin;
+ const fullBlocks=bin=>findCorosBitmapBlocks(bin,0x1202);
+ const bgBlock=bin=>{const at=bin.readUInt32LE(0x1a);return fullBlocks(bin).find(b=>b.offset===at);};
+ const full=fullBin(true),plain=fullBin(false);
+ const fullBg=bgBlock(full);
+ assert.equal(fullBg.version,3,'a detailed background is stored as RGBA');
+ assert.equal(fullBg.encoding>>8,0x20,'with the 0x20 exporter flag (and RLE when it is smaller), like official faces');
+ assert.ok(decodeCorosBitmapFrame(full,fullBg,0).equals(Buffer.from(scaleImage(decodePng(ramp),416,416).data)),'losslessly, after scaling to the screen');
+ assert.equal(bgBlock(plain).version,1,'without full color it is quantized to a palette');
+ const fullBlockAt=(bin,offset)=>fullBlocks(bin).find(b=>b.offset===bin.readUInt32LE(offset));
+ assert.equal(fullBlockAt(full,0x2e).version,1,'an image that fits 256 colors keeps its exact palette');
+ const frames=fullBlocks(full).find(b=>b.frameCount===3);
+ assert.equal(frames.version,3,'a frame list with one detailed frame is all RGBA');
+ assert.ok(decodeCorosBitmapFrame(full,frames,1).equals(Buffer.from(decodePng(ramp).data)));
+ assert.equal(fullBlocks(full).filter(b=>b.version===3).length,2,'the thumbnail stays a palette');
+ const apexFull=compileWatchface(new Map([['info.json',Buffer.from('{}')],['watchface_260x260/config.txt',Buffer.from('[background_icon_pos]={0,0}\n[background_icon]=bg.png\n')],['watchface_260x260/bg.png',ramp]]),{faceId:1,fullColor:true,target:watchfaceBinTarget(getWatchfaceTarget('apex-4'))}).bin;
+ assert.ok(apexFull.equals(compileWatchface(new Map([['info.json',Buffer.from('{}')],['watchface_260x260/config.txt',Buffer.from('[background_icon_pos]={0,0}\n[background_icon]=bg.png\n')],['watchface_260x260/bg.png',ramp]]),{faceId:1,target:watchfaceBinTarget(getWatchfaceTarget('apex-4'))}).bin),'memory-in-pixel watches ignore full color');
  console.log(`Built-in compiler units, worker compile (${compiled.durationMs} ms), headers, CRC, AOD, warnings and face errors passed.`);
 
  // Only CorosLink's compiler: the old COROS-compiler switch is ignored, and every watch builds through the same service.
@@ -209,5 +232,12 @@ try {
  assert.equal(apexBuilt.model,'apex-4');
  assert.equal((await fs.readFile(apexBuilt.filePath)).toString('latin1',0,4),'062R','APEX 4 builds its own memory-in-pixel BIN');
  await assert.rejects(only.compile(await make('apex-only.dat',apex),'APEX',getWatchfaceTarget('pace-pro')),/416 × 416 PACE Pro/);
- console.log('One compiler for every watch: no COROS engine, stable output, APEX 4 memory-in-pixel BIN passed.');
+ // Full color that would outgrow a watch transfer falls back to palettes, with a warning.
+ let seed=7;const noise=()=>png(416,416,()=>{seed=(seed*1103515245+12345)&0x7fffffff;return[seed&255,(seed>>8)&255,(seed>>16)&255,255];});
+ const huge=[entry('info.json','{"m_name":"Huge"}'),entry('watchface_416x416/config.txt','[background_icon_pos]={0,0}\n[background_icon]=bg.png\n[time_hour_high_pos]={0,0}\n[time_hour_high_font]=n\n'),
+  entry('watchface_416x416/bg.png',noise()),...Array.from({length:4},(_,i)=>entry(`watchface_416x416/n/${i}.png`,noise()))];
+ const hugeBuilt=await only.compile(await make('huge.dat',huge),'Huge',undefined,{fullColor:true});
+ assert.ok(hugeBuilt.bytes<3*1024*1024,'built with palettes instead');
+ assert.ok(hugeBuilt.warnings.some(warning=>/^Full color made this face \d+\.\d MB, over the 3\.1 MB/.test(warning)),'and says why');
+ console.log('One compiler for every watch: no COROS engine, stable output, APEX 4 memory-in-pixel BIN, full-color size fallback passed.');
 }finally{await fs.rm(temp,{recursive:true,force:true});}

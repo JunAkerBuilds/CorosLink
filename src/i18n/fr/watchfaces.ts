@@ -845,6 +845,8 @@ export const watchfacesFrench: Record<string, string> = {
   "Cancel install": "Annuler l’installation",
   "Compiles on this computer. ": "Compilation sur cet ordinateur. ",
   "Sends over Bluetooth. Experimental.": "Envoi par Bluetooth. Expérimental.",
+  "Full color (experimental)": "Pleine couleur (expérimental)",
+  "Keeps gradients and soft edges exact, as COROS's own faces do. Larger file, slower to send.": "Conserve les dégradés et les contours adoucis à l'identique, comme les cadrans de COROS. Fichier plus lourd, envoi plus lent.",
   "Watch languages": "Langues de la montre",
   "Weekday languages": "Langues des jours de semaine",
   "Languages in this watch face": "Langues de ce cadran",

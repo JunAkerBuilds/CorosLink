@@ -417,10 +417,14 @@ const clamp = (value: number) => value < 0 ? 0 : value > 255 ? 255 : value;
 export interface EncodedFrame { format: number; data: Uint8Array }
 
 /** `WFBin8888Exporter::LoadPngWithFormat`: color format 255 is automatic, 1 LUT, 3 RGBA. */
-export function encodeFrame(image: RgbaImage, colorFormat: 255 | 1 | 3, inside: InsideType): EncodedFrame {
+export function encodeFrame(image: RgbaImage, colorFormat: 255 | 1 | 3, inside: InsideType, fullColor = false): EncodedFrame {
   if (colorFormat === 3) return { format: FORMAT_RGBA, data: toRgba(image) };
-  const lut = inside === InsideType.Normal ? toLut256(image) : null;
-  return { format: FORMAT_LUT, data: lut ?? toQuantLut256(image) };
+  const lut = toLut256(image);
+  if (lut) return { format: FORMAT_LUT, data: lut };
+  // Full color keeps what would be quantized as straight RGBA, as COROS's own faces do. The
+  // thumbnail stays a palette: the watch renders its picker thumbnail itself.
+  if (fullColor && colorFormat === 255 && inside !== InsideType.Thumbnail) return { format: FORMAT_RGBA, data: toRgba(image) };
+  return { format: FORMAT_LUT, data: toQuantLut256(image) };
 }
 
 function blockHeader(image: { width: number; height: number }, compressed: boolean, frames: number, format: number): Buffer {
@@ -435,8 +439,8 @@ function blockHeader(image: { width: number; height: number }, compressed: boole
 }
 
 /** One image as a block (`InsertBinPositionOfIconByPath`: automatic format and compression). */
-export function encodeImageBlock(image: RgbaImage, inside: InsideType = InsideType.Normal): Buffer {
-  const frame = encodeFrame(image, 255, inside);
+export function encodeImageBlock(image: RgbaImage, inside: InsideType = InsideType.Normal, fullColor = false): Buffer {
+  const frame = encodeFrame(image, 255, inside, fullColor);
   const compressed = cbzCompress(frame.data);
   const useRle = compressed.length < frame.data.length;
   const data = useRle ? compressed : Buffer.from(frame.data);
@@ -446,15 +450,17 @@ export function encodeImageBlock(image: RgbaImage, inside: InsideType = InsideTy
 }
 
 /**
- * An ordered frame list as one block (`GetBinPositionOfIconList`). Frames are
- * always LUT palettes, each exact when it fits 256 colors and quantized
- * otherwise: the RGBA fallback is gated on `Bitmap::Add2Lut256`, which COROS
- * stubs to return true. RLE is chosen from the first frame and applied to all.
+ * An ordered frame list as one block (`GetBinPositionOfIconList`). COROS's
+ * frames are always LUT palettes, each exact when it fits 256 colors and
+ * quantized otherwise: the RGBA fallback is gated on `Bitmap::Add2Lut256`,
+ * which COROS stubs to return true. RLE is chosen from the first frame and applied to all.
  */
-export function encodeFramesBlock(images: RgbaImage[]): Buffer {
+export function encodeFramesBlock(images: RgbaImage[], fullColor = false): Buffer {
   if (!images.length) throw new Error("A frame list needs at least one image.");
   if (images.length > 255) throw new Error("A frame list holds at most 255 images.");
-  const frames = images.map(image => encodeFrame(image, 1, InsideType.Normal));
+  // One format per block: in full color, a list with any frame past 256 colors is all RGBA.
+  const rgba = fullColor && images.some(image => !toLut256(image));
+  const frames = images.map(image => encodeFrame(image, rgba ? 3 : 1, InsideType.Normal));
   const useRle = cbzCompress(frames[0]!.data).length < frames[0]!.data.length;
   const parts = frames.map(frame => useRle ? cbzCompress(frame.data) : Buffer.from(frame.data));
   const table = Buffer.alloc((images.length + 1) * 4);

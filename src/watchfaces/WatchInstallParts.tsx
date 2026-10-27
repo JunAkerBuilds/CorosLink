@@ -18,6 +18,15 @@ export function CompileWarnings({ warnings }: { warnings?: string[] }) {
   </div>;
 }
 
+/** The full-color opt-in next to a compile action (AMOLED watches; see `useFullColorBins`). */
+export function FullColorToggle({ checked, disabled, onChange }: { checked: boolean; disabled?: boolean; onChange: (on: boolean) => void }) {
+  useLanguage();
+  return <label className="watch-full-color">
+    <input type="checkbox" checked={checked} disabled={disabled} onChange={event => onChange(event.target.checked)} />
+    <span><strong>{t("Full color (experimental)")}</strong>{" "}{t("Keeps gradients and soft edges exact, as COROS's own faces do. Larger file, slower to send.")}</span>
+  </label>;
+}
+
 /** The watch's face slots as a compact radio strip. Empty slots read as dashed. */
 export function WatchSlotPicker({ installer, disabled, compact = false }: {
   installer: WatchfaceInstaller; disabled?: boolean; compact?: boolean;

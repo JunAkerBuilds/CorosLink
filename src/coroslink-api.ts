@@ -322,8 +322,9 @@ export interface CorosLinkApi {
   syncCorosWatchface: (previewId: string, target?: import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfaceTarget) => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfaceStatus>;
   cancelCorosWatchfaceSync: () => Promise<void>;
   getCorosWatchfaceCompilerStatus: () => Promise<import("../electron/corosWatchfaceCompilerTypes").CorosWatchfaceCompilerStatus>;
-  compileCorosDirectWatchface: () => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfacePreview | null>;
-  compileCorosWatchfaceArchive: (input: { archiveId: string; name: string; firmwareType?: string }) => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfacePreview>;
+  /** `fullColor` keeps images past 256 colors unquantized (AMOLED; larger BIN). */
+  compileCorosDirectWatchface: (options?: { fullColor?: boolean }) => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfacePreview | null>;
+  compileCorosWatchfaceArchive: (input: { archiveId: string; name: string; firmwareType?: string; fullColor?: boolean }) => Promise<import("../electron/corosBleWatchfaceTypes").CorosDirectWatchfacePreview>;
   saveCorosCompiledWatchface: (previewId: string) => Promise<{ saved: boolean }>;
   getCorosWifiMapStatus: () => Promise<import("../electron/corosWifiMapTypes").CorosWifiMapStatus>;
   previewCorosWifiMap: (tiles: import("../electron/corosWifiMapTypes").CorosWifiMapTile[]) => Promise<import("../electron/corosWifiMapTypes").CorosWifiMapPreview>;

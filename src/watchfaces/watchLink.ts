@@ -98,6 +98,22 @@ export function compileSummary(preview: CorosDirectWatchfacePreview): string | n
   return t("Compiled in {{time}}", { time });
 }
 
+const FULL_COLOR_KEY = "coroslink.watchfaces.fullColorBins";
+
+/**
+ * Whether compiles keep images past 256 colors as full-color RGBA (AMOLED watches only).
+ * A per-computer preference, off by default: the BIN grows, and the result is not yet
+ * confirmed on every watch.
+ */
+export function useFullColorBins(): [boolean, (on: boolean) => void] {
+  const [on, setOn] = useState(() => { try { return localStorage.getItem(FULL_COLOR_KEY) === "1"; } catch { return false; } });
+  const update = useCallback((next: boolean) => {
+    setOn(next);
+    try { localStorage.setItem(FULL_COLOR_KEY, next ? "1" : "0"); } catch {}
+  }, []);
+  return [on, update];
+}
+
 /** Polls the Bluetooth link while mounted. */
 export function useCorosWatchLink(api: CorosLinkApi, intervalMs = 2000) {
   const [snapshot, setSnapshot] = useState<CorosNativeBleSnapshot | null>(null);

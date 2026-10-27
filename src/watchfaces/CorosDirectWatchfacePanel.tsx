@@ -4,9 +4,9 @@ import { Download, FileCode2, FolderOpen, Loader2, RefreshCw, Send, Watch } from
 import type { CorosDirectWatchfacePreview } from "../../electron/corosBleWatchfaceTypes";
 import type { CorosWatchfaceCompilerStatus } from "../../electron/corosWatchfaceCompilerTypes";
 import type { CorosLinkApi } from "../coroslink-api";
-import { apiErrorMessage, compileSummary, formatBytes, useWatchfaceInstaller } from "./watchLink";
-import { getWatchfaceTarget, type WatchfaceTarget } from "../../electron/watchfaceTargets";
-import { CompileWarnings, WatchInstallProgress, WatchSlotPicker, watchInstallResult } from "./WatchInstallParts";
+import { apiErrorMessage, compileSummary, formatBytes, useFullColorBins, useWatchfaceInstaller } from "./watchLink";
+import { getWatchfaceTarget, watchfaceBinTarget, type WatchfaceTarget } from "../../electron/watchfaceTargets";
+import { CompileWarnings, FullColorToggle, WatchInstallProgress, WatchSlotPicker, watchInstallResult } from "./WatchInstallParts";
 
 /** The On watch tab: pick a slot, bring a face, install it over Bluetooth. */
 export function CorosDirectWatchfacePanel({ api, ready, connected, watch, betaNote, disabled, onBusy }: {
@@ -24,6 +24,7 @@ export function CorosDirectWatchfacePanel({ api, ready, connected, watch, betaNo
   const [compiler, setCompiler] = useState<CorosWatchfaceCompilerStatus | null>(null);
   const [note, setNote] = useState<{ error: boolean; text: string } | null>(null);
   const [showResult, setShowResult] = useState(false);
+  const [fullColor, setFullColor] = useFullColorBins();
   const working = useRef(false);
   const canChoose = typeof api.chooseCorosDirectWatchface === "function";
   const canCompile = typeof api.getCorosWatchfaceCompilerStatus === "function" && typeof api.compileCorosDirectWatchface === "function";
@@ -57,7 +58,7 @@ export function CorosDirectWatchfacePanel({ api, ready, connected, watch, betaNo
     if (!compiler?.available) return;
     setCompiling(true);
     try {
-      const next = await api.compileCorosDirectWatchface();
+      const next = await api.compileCorosDirectWatchface({ fullColor: fullColor && !mip });
       if (next) { setPreview(next); setShowResult(false); installer.resetStatus(); }
     } catch (caught) { setNote({ error: true, text: apiErrorMessage(caught, t("Could not compile the watch face.")) }); }
     finally { setCompiling(false); }
@@ -76,6 +77,8 @@ export function CorosDirectWatchfacePanel({ api, ready, connected, watch, betaNo
   }
 
   const locked = disabled || compiling || transferring;
+  // Memory-in-pixel screens show 64 colors, so full color only applies to AMOLED watches.
+  const mip = watch ? watchfaceBinTarget(watch).display === "mip" : false;
   // A BIN only fits watches with its screen; the watch would refuse another.
   const builtFor = preview?.models?.map(model => getWatchfaceTarget(model)?.label).filter(Boolean).join(" or ");
   const mismatch = watch && preview?.models && !preview.models.includes(watch.model)
@@ -122,6 +125,8 @@ export function CorosDirectWatchfacePanel({ api, ready, connected, watch, betaNo
         </button> : null}
       </div>
     </div>
+
+    {canCompile && !mip ? <FullColorToggle checked={fullColor} disabled={locked} onChange={setFullColor} /> : null}
 
     <CompileWarnings warnings={preview?.compile?.warnings} />
 

@@ -472,6 +472,30 @@
   margin-left: auto;
 }
 
+/* Full-color opt-in ------------------------------------------------------- */
+
+.watch-full-color {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.watch-full-color input {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.watch-full-color strong { color: var(--text-primary); font-weight: 600; }
+.watch-full-color:has(input:disabled) { cursor: default; opacity: 0.6; }
+
 /* Compile warnings -------------------------------------------------------- */
 
 .watch-compile-warnings {

@@ -27,6 +27,12 @@ export interface CompileOptions {
   faceId: number;
   /** The watch to build for; PACE Pro when omitted. */
   target?: WatchfaceBinTarget;
+  /**
+   * Keep images past 256 colors as straight RGBA instead of quantizing them (AMOLED only).
+   * COROS's DIY compiler never does; its own catalog faces do, so the firmware draws them.
+   * Lossless, but a full-screen background grows to several hundred KB.
+   */
+  fullColor?: boolean;
 }
 
 /** Files of a final archive, keyed by their path inside it (`info.json`, `watchface_416x416/...`). */
@@ -40,7 +46,8 @@ class BlockStream {
   private readonly positions = new Map<string, number>();
   private readonly decoded = new Map<string, RgbaImage | null>();
   offset: number;
-  constructor(start: number, private readonly files: ArchiveFiles, private readonly warnings: Set<string>, readonly target: WatchfaceBinTarget) { this.offset = start; }
+  constructor(start: number, private readonly files: ArchiveFiles, private readonly warnings: Set<string>, readonly target: WatchfaceBinTarget,
+    private readonly fullColor = false) { this.offset = start; }
 
   private get layout(): string { return this.target.layout; }
 
@@ -84,7 +91,7 @@ class BlockStream {
     if (cached !== undefined) return cached;
     const image = this.image(path);
     if (!image) this.missing(path);
-    const encode = this.target.display === "mip" ? encodeMipImageBlock : encodeImageBlock;
+    const encode = this.target.display === "mip" ? encodeMipImageBlock : (image: RgbaImage, inside: InsideType) => encodeImageBlock(image, inside, this.fullColor);
     const at = image ? this.append(this.checked(encode(transform ? transform(image) : image, inside), path)) : 0;
     this.positions.set(path, at);
     return at;
@@ -106,7 +113,7 @@ class BlockStream {
     if (names.length * repeat > 255) throw new WatchfaceCompileError(`${directory.slice(this.layout.length + 1)} has too many images for one element (COROS allows 255).`);
     const images = Array.from({ length: repeat }, () => names.map(name => this.image(name))).flat();
     if (!images[0]) { this.missing(names[0]!); this.positions.set(names[0]!, 0); return 0; }
-    const encode = this.target.display === "mip" ? encodeMipFramesBlock : encodeFramesBlock;
+    const encode = this.target.display === "mip" ? encodeMipFramesBlock : (images: RgbaImage[]) => encodeFramesBlock(images, this.fullColor);
     const at = this.append(this.checked(encode(images.map(image => image ?? { width: 0, height: 0, data: new Uint8Array() })), directory));
     this.positions.set(names[0]!, at);
     return at;
@@ -327,7 +334,7 @@ export function compileWatchface(files: ArchiveFiles, options: CompileOptions): 
   const warnings = new Set<string>();
   const normalConfig = parseConfig(configText), aodConfig = aodText !== undefined ? parseConfig(aodText) : undefined;
   const size = headerSize(aodConfig ? [normalConfig, aodConfig] : [normalConfig]);
-  const stream = new BlockStream(aodConfig ? size * 2 : size, files, warnings, target);
+  const stream = new BlockStream(aodConfig ? size * 2 : size, files, warnings, target, options.fullColor && target.display !== "mip");
   const normal = buildLayout(normalConfig, "normal", stream, info, options, files, warnings, size);
   const aod = aodConfig ? buildLayout(aodConfig, "aod", stream, info, options, files, warnings, size) : null;
   if (aod) normal.writeUInt32LE(size, 0x322);

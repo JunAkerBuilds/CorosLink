@@ -1405,19 +1405,19 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle("corosBle:watchfaceCancel", () => corosNativeBle.cancelWatchfaceSync());
   ipcMain.handle("corosBle:compilerStatus", () => getCorosWatchfaceCompiler().status());
-  ipcMain.handle("corosBle:compileWatchface", async () => {
+  ipcMain.handle("corosBle:compileWatchface", async (_event, compileOptions?: { fullColor?: unknown }) => {
     const options: OpenDialogOptions = { title: "Compile a custom watch face to BIN", properties: ["openFile"],
       filters: [{ name: "Final watch face DAT/ZIP", extensions: ["dat", "zip"] }] };
     const result = mainWindow && !mainWindow.isDestroyed() ? await dialog.showOpenDialog(mainWindow, localizeDialogOptions(options)) : await dialog.showOpenDialog(localizeDialogOptions(options));
     if (result.canceled || !result.filePaths[0]) return null;
     const compiler = getCorosWatchfaceCompiler();
     // For the connected watch; with none, the archive's first supported layout (PACE Pro first).
-    const compiled = await compiler.compile(result.filePaths[0], path.basename(result.filePaths[0]), corosNativeBle.connectedWatchTarget());
+    const compiled = await compiler.compile(result.filePaths[0], path.basename(result.filePaths[0]), corosNativeBle.connectedWatchTarget(), { fullColor: compileOptions?.fullColor === true });
     const preview = await corosNativeBle.prepareWatchface(compiled.filePath, true);
     compiler.remember(preview.id, compiled.filePath);
     return { ...preview, compile: { durationMs: compiled.durationMs, warnings: compiled.warnings } };
   });
-  ipcMain.handle("watchfaces:compileBin", async (_event, input: { archiveId: string; name: string; firmwareType?: string }) => {
+  ipcMain.handle("watchfaces:compileBin", async (_event, input: { archiveId: string; name: string; firmwareType?: string; fullColor?: unknown }) => {
     if (!input || typeof input.archiveId !== "string" || typeof input.name !== "string") throw new Error("Build a final watch face archive before compiling.");
     // Studio builds the archive for one watch; compile that watch's layout.
     const target = typeof input.firmwareType === "string" ? getWatchfaceTarget(input.firmwareType) : undefined;
@@ -1427,7 +1427,7 @@ function registerIpcHandlers(): void {
       const filename = path.join(temporary, "source.dat");
       await exportCorosWatchfaceArchive(input.archiveId, filename);
       const compiler = getCorosWatchfaceCompiler();
-      const compiled = await compiler.compile(filename, input.name, target);
+      const compiled = await compiler.compile(filename, input.name, target, { fullColor: input.fullColor === true });
       const preview = await corosNativeBle.prepareWatchface(compiled.filePath, true);
       compiler.remember(preview.id, compiled.filePath);
       return { ...preview, compile: { durationMs: compiled.durationMs, warnings: compiled.warnings } };

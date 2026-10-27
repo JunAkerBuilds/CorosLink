@@ -688,6 +688,11 @@ the template's translations. Your choice is remembered.
 The watch connection itself lives in the toolbar watch menu. **Compile** and
 **Save BIN** also work offline, for installing later.
 
+On AMOLED watches, **Full color (experimental)** stores images with more than
+256 colors exactly instead of as a palette, at the cost of a larger file. How
+CorosLink's compiler compares with COROS's is in
+[CorosLink's watch face compiler](watchface-compiler.md).
+
 COROS rejects uploads over 10 MiB. Larger faces are re-encoded without
 changing any pixel before upload; a face that still doesn't fit stops with
 its size and the limit.
