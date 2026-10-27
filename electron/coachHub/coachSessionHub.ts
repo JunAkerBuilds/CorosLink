@@ -551,13 +551,15 @@ export class CoachSessionHub {
     if (input.decision === "cancel") {
       throw new CoachHubError("unsupported", "A delete request can't be dismissed. Leave it instead.");
     }
-    if (entry.preview.state === "deleted") return { index, entry };
+    if (entry.preview.state === "deleted" || entry.preview.state === "moved") return { index, entry };
+    const move = entry.preview.action === "move";
     let preview: WorkoutDeletePreview;
     try {
       const result = await this.options.actions.confirmWorkoutDelete(input.id);
-      preview = { ...entry.preview, state: "deleted", message: result.message };
+      preview = { ...entry.preview, state: move ? "moved" : "deleted", message: result.message };
     } catch (error) {
-      preview = { ...entry.preview, state: "failed", message: message(error, "Failed to delete workout from COROS.") };
+      const fallback = move ? "Failed to move workout on COROS." : "Failed to delete workout from COROS.";
+      preview = { ...entry.preview, state: "failed", message: message(error, fallback) };
     }
     return this.update(state, index, { kind: "workoutDelete", preview });
   }

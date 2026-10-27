@@ -138,6 +138,12 @@ export function buildWorkoutToolGuide(toolNames: Iterable<string>): string {
         "confirm via the button."
     );
   }
+  if (names.has("move_workout")) {
+    lines.push(
+      "To move a calendar workout to another day, or swap two days' workouts, call move_workout once; never stage a " +
+        "delete plus a new schedule for it. The athlete must click Move on COROS before anything changes."
+    );
+  }
   if (drafts) {
     lines.push("", "Supported workout capabilities (generated from the validator):", buildCoachSportCapabilityGuide());
   }

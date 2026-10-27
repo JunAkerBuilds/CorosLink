@@ -17,10 +17,11 @@ import {
 } from "react";
 import {
   Activity,
+  ArrowRightLeft,
   ArrowUp,
   ArrowUpRight,
-  BookOpen,
   Bookmark,
+  BookOpen,
   CalendarDays,
   ChartLine,
   ChevronDown,
@@ -1567,17 +1568,21 @@ function DeletePreviewCard({
   onConfirm: () => void;
 }) {
   useLanguage();
+  const move = preview.action === "move";
+  const swap = move && Boolean(preview.swapWorkoutName);
   return (
-    <div className="chat-plan-card chat-delete-card">
+    <div className={`chat-plan-card ${move ? "chat-move-card" : "chat-delete-card"}`}>
       <div className="chat-plan-card-header">
-        <h4>{t("Delete workout")}</h4>
+        <h4>{swap ? t("Swap workouts") : move ? t("Move workout") : t("Delete workout")}</h4>
         <span className="chat-plan-card-summary">{preview.summary}</span>
       </div>
       <dl className="chat-delete-details">
-        <div>
-          <dt>{t("Target")}</dt>
-          <dd>{deleteTargetLabel(preview.target)}</dd>
-        </div>
+        {move ? null : (
+          <div>
+            <dt>{t("Target")}</dt>
+            <dd>{deleteTargetLabel(preview.target)}</dd>
+          </div>
+        )}
         {preview.workoutName ? (
           <div>
             <dt>{t("Workout")}</dt>
@@ -1590,8 +1595,20 @@ function DeletePreviewCard({
             <dd>{preview.scheduleDate}</dd>
           </div>
         ) : null}
+        {move && preview.newScheduleDate ? (
+          <div>
+            <dt>{t("New date")}</dt>
+            <dd>{preview.newScheduleDate}</dd>
+          </div>
+        ) : null}
+        {preview.swapWorkoutName ? (
+          <div>
+            <dt>{t("Swap with")}</dt>
+            <dd>{preview.swapWorkoutName}</dd>
+          </div>
+        ) : null}
       </dl>
-      {preview.state === "deleted" ? (
+      {preview.state === "deleted" || preview.state === "moved" ? (
         <p className="chat-plan-success">{preview.message}</p>
       ) : (
         <>
@@ -1601,16 +1618,18 @@ function DeletePreviewCard({
         <div className="chat-plan-actions">
           <button
             type="button"
-            className="chat-delete-confirm"
+            className={move ? "chat-plan-upload" : "chat-delete-confirm"}
             onClick={onConfirm}
             disabled={deleting}
           >
             {deleting ? (
               <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
+            ) : move ? (
+              <ArrowRightLeft size={14} aria-hidden="true" />
             ) : (
               <Trash2 size={14} aria-hidden="true" />
             )}
-            {t("Delete from COROS")}</button>
+            {move ? t("Move on COROS") : t("Delete from COROS")}</button>
         </div>
         </>
       )}
@@ -2600,7 +2619,8 @@ export function ChatView({
           (after.kind === "corosAction" && before?.kind === "corosAction" &&
             before.preview.state !== "saved" && after.preview.state === "saved") ||
           (after.kind === "workoutDelete" && before?.kind === "workoutDelete" &&
-            before.preview.state !== "deleted" && after.preview.state === "deleted");
+            before.preview.state !== after.preview.state &&
+            (after.preview.state === "deleted" || after.preview.state === "moved"));
         if (saved) onPlanUploadedRef.current?.();
       }
       state = next;
@@ -3752,7 +3772,10 @@ export function ChatView({
         decision: "confirm"
       });
       if (entry.kind === "workoutDelete" && entry.preview.state === "failed") {
-        onError(entry.preview.message ?? t("Failed to delete workout from COROS."));
+        onError(
+          entry.preview.message ??
+            (entry.preview.action === "move" ? t("Failed to move workout on COROS.") : t("Failed to delete workout from COROS."))
+        );
       }
     } catch (caught) {
       onError(

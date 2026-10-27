@@ -401,7 +401,10 @@ function parseWorkoutDeletePreview(value: unknown): WorkoutDeletePreview | null 
       typeof value.scheduleDate === "string" ? value.scheduleDate : undefined,
     programId: typeof value.programId === "string" ? value.programId : undefined,
     summary: value.summary,
-    ...(value.state === "pending" || value.state === "deleted" || value.state === "failed"
+    ...(value.action === "move" ? { action: value.action } : {}),
+    ...(typeof value.newScheduleDate === "string" ? { newScheduleDate: value.newScheduleDate } : {}),
+    ...(typeof value.swapWorkoutName === "string" ? { swapWorkoutName: value.swapWorkoutName } : {}),
+    ...(value.state === "pending" || value.state === "deleted" || value.state === "moved" || value.state === "failed"
       ? { state: value.state }
       : {}),
     ...(typeof value.message === "string" ? { message: value.message } : {})

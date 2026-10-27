@@ -69,7 +69,8 @@ const workoutGuide = buildWorkoutToolGuide([
   "search_coros_exercises",
   "upload_training_plan",
   "list_scheduled_workouts",
-  "delete_workout"
+  "delete_workout",
+  "move_workout"
 ]);
 assert.match(workoutGuide, /exactly one standalone workout/);
 assert.match(workoutGuide, /call draft_workout/);
@@ -80,6 +81,7 @@ assert.match(workoutGuide, /call search_coros_exercises first/);
 assert.match(workoutGuide, /naming mismatch alone is never a reason/);
 assert.match(workoutGuide, /call the same draft tool again in the same response/);
 assert.match(workoutGuide, /stage a confirmation card/);
+assert.match(workoutGuide, /call move_workout once/);
 assert.ok(workoutGuide.includes(buildCoachSportCapabilityGuide()));
 // Each rule once: the guide repeats nothing the base prompt says.
 for (const rule of [/typed intensity field/g, /rest_type=1/g, /search_coros_exercises first/g, /Delete from COROS/g]) {
@@ -88,6 +90,7 @@ for (const rule of [/typed intensity field/g, /rest_type=1/g, /search_coros_exer
 // Without the calendar permission there are no delete tools, so no delete rule either.
 const draftOnlyGuide = buildWorkoutToolGuide(["draft_workout", "draft_training_plan", "search_coros_exercises"]);
 assert.ok(!draftOnlyGuide.includes("delete_workout"));
+assert.ok(!draftOnlyGuide.includes("move_workout"));
 assert.ok(!draftOnlyGuide.includes("list_scheduled_workouts"));
 assert.equal(buildWorkoutToolGuide([]), "");
 assert.match(buildAthleteQuestionGuide(), /call request_coach_input/);

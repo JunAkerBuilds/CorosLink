@@ -4598,13 +4598,19 @@ export interface DeleteWorkoutResult {
 
 export interface WorkoutDeletePreview {
   requestId: string;
+  /** Absent on delete cards. A move re-adds the workout on newScheduleDate, then removes the original. */
+  action?: "delete" | "move";
   target: "scheduled" | "library" | "both";
   workoutName?: string;
   scheduleDate?: string;
   programId?: string;
+  /** Move only: the day the workout goes to (YYYY-MM-DD). */
+  newScheduleDate?: string;
+  /** Move only: the workout on newScheduleDate that trades places with this one. */
+  swapWorkoutName?: string;
   summary: string;
   /** Absent on cards staged before approvals were shared across devices: pending. */
-  state?: "pending" | "deleted" | "failed";
+  state?: "pending" | "deleted" | "moved" | "failed";
   /** COROS's result, or why the delete failed. */
   message?: string;
 }

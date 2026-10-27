@@ -1709,7 +1709,8 @@ export function getClaudeCodeTools(
     if (
       tool.name === "upload_training_plan" ||
       tool.name === "list_scheduled_workouts" ||
-      tool.name === "delete_workout"
+      tool.name === "delete_workout" ||
+      tool.name === "move_workout"
     ) {
       return permissions.upcomingWorkouts;
     }

@@ -14,7 +14,7 @@ import { initializeNativeLanguage, localizeDialogOptions, nativeText, setNativeL
 import { listCalendarWorkoutEntries } from "./calendarWorkoutEventStorage";
 import type { CalendarEventTiming, CalendarWorkoutEventRef } from "./calendarSyncTypes";
 import { registerWorkoutAutomation } from "./workoutAutomation";
-import { followRescheduledWorkout, listWorkoutJournal, onWorkoutJournalChanged, saveWorkoutJournal } from "./workoutJournalService";
+import { listWorkoutJournal, onWorkoutJournalChanged, rescheduleWorkoutWithNotes, saveWorkoutJournal } from "./workoutJournalService";
 import type { WorkoutJournalSaveInput } from "./workoutJournalTypes";
 import { app, BrowserWindow, dialog, nativeTheme, session, shell, ShareMenu } from "electron";
 import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow, recordDiagnosticNotice, registerDiagnosticStatus } from "./diagnosticsService";
@@ -119,7 +119,6 @@ import {
   onTrainingHubSessionChange,
   getUpcomingWorkouts,
   listTrainingHubActivities,
-  listScheduledWorkoutEntries,
   listLibraryWorkouts,
   duplicateLibraryWorkout,
   listWorkoutExercises,
@@ -127,7 +126,6 @@ import {
   scheduleLibraryWorkout,
   createAndScheduleWorkout,
   createLibraryWorkout,
-  rescheduleScheduledWorkout,
   copyScheduledWorkout,
   removeScheduledWorkout,
   getWorkoutForEdit,
@@ -2652,7 +2650,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "trainingHub:rescheduleWorkout",
-    async (
+    (
       _event,
       entry: {
         planId: string;
@@ -2661,16 +2659,7 @@ function registerIpcHandlers(): void {
         happenDay: string;
       },
       newHappenDay: string
-    ) => {
-      const moved = await rescheduleScheduledWorkout(entry, newHappenDay);
-      if (!moved) return;
-      // The re-added workout gets a new idInPlan; its brief and debrief follow it.
-      const target = (await listScheduledWorkoutEntries(newHappenDay, newHappenDay).catch(() => []))
-        .find((candidate) => candidate.idInPlan === moved.idInPlan);
-      if (target) {
-        followRescheduledWorkout(entry, { planId: target.planId, idInPlan: target.idInPlan, happenDay: newHappenDay });
-      }
-    }
+    ) => rescheduleWorkoutWithNotes(entry, newHappenDay)
   );
 
   ipcMain.handle(

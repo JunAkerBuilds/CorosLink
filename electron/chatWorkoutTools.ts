@@ -51,6 +51,7 @@ import {
   trainingPlanFromCoachDraftPreview
 } from "./trainingPlanDomain";
 import { saveLocalTrainingPlan } from "./trainingLibraryService";
+import { rescheduleWorkoutWithNotes } from "./workoutJournalService";
 import {
   EXERCISE_SEARCH_EQUIPMENT,
   EXERCISE_SEARCH_MOVEMENTS,
@@ -72,9 +73,28 @@ interface StoredPlanDraft {
 interface StoredDeleteRequest {
   requestId: string;
   params: DeleteWorkoutParams;
+  /** Present when the card moves (or swaps) a calendar workout instead of deleting one. */
+  move?: MoveWorkoutPlan;
   preview: WorkoutDeletePreview;
   createdAt: number;
   executedAt?: number;
+}
+
+interface ScheduledWorkoutRef {
+  planId: string;
+  idInPlan: string;
+  planProgramId?: string;
+  happenDay: string;
+  name: string;
+}
+
+/** Resolved when the card is staged, so the athlete approves exactly these entries. */
+interface MoveWorkoutPlan {
+  workout: ScheduledWorkoutRef;
+  newDate: string;
+  swapWith?: ScheduledWorkoutRef;
+  /** A swap whose first half already landed; a retry only moves swapWith. */
+  firstMoved?: boolean;
 }
 
 interface DeleteWorkoutParams {
@@ -184,7 +204,8 @@ export const CHAT_WORKOUT_TOOL_NAMES = [
   "draft_training_plan",
   "upload_training_plan",
   "list_scheduled_workouts",
-  "delete_workout"
+  "delete_workout",
+  "move_workout"
 ] as const;
 
 export type ChatWorkoutToolName = (typeof CHAT_WORKOUT_TOOL_NAMES)[number];
@@ -351,6 +372,32 @@ export function getChatWorkoutTools(): CorosMcpTool[] {
         },
         required: ["target"]
       }
+    },
+    {
+      name: "move_workout",
+      description:
+        "Stage moving a calendar workout to another day, or swapping two calendar workouts, as one step. " +
+        "Use this instead of delete_workout plus a new schedule. Shows a Move on COROS button in chat — never moves directly. " +
+        "Identify the workout with schedule_date + workout_name, or plan_id + id_in_plan from list_scheduled_workouts. " +
+        "Set swap to true to also move the workout on new_date back to the original day; name it with " +
+        "swap_workout_name or swap_id_in_plan when new_date has more than one. Both days must be today or later.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          schedule_date: { type: "string", description: "Current day of the workout, YYYYMMDD" },
+          workout_name: { type: "string", description: "Workout name to match on schedule_date" },
+          plan_id: { type: "string", description: "Schedule plan ID" },
+          id_in_plan: { type: "string", description: "Schedule idInPlan" },
+          new_date: { type: "string", description: "Day to move the workout to, YYYYMMDD" },
+          swap: {
+            type: "boolean",
+            description: "Swap with the workout on new_date instead of only moving. Default false."
+          },
+          swap_workout_name: { type: "string", description: "Name of the workout on new_date to swap with" },
+          swap_id_in_plan: { type: "string", description: "idInPlan of the workout on new_date to swap with" }
+        },
+        required: ["new_date"]
+      }
     }
   ];
   // The exercise catalog is COROS's; without a session it can't be searched.
@@ -408,6 +455,9 @@ export async function handleChatWorkoutTool(
   }
   if (name === "list_scheduled_workouts") {
     return handleListScheduledWorkouts(args, options?.unitSystem ?? "metric");
+  }
+  if (name === "move_workout") {
+    return handleMoveWorkout(args, options?.onWorkoutDelete);
   }
   return handleDeleteWorkout(args, options?.onWorkoutDelete);
 }
@@ -951,6 +1001,167 @@ async function handleDeleteWorkout(
   }
 }
 
+function optionalArg(args: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = args[key];
+    if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
+  }
+  return undefined;
+}
+
+function compactDayArg(args: Record<string, unknown>, label: string, ...keys: string[]): string | undefined {
+  const value = optionalArg(args, ...keys)?.replace(/-/g, "");
+  if (value !== undefined && !/^\d{8}$/.test(value)) throw new Error(`${label} must be YYYYMMDD.`);
+  return value;
+}
+
+function scheduledWorkoutRef(entry: Awaited<ReturnType<typeof listScheduledWorkoutEntries>>[number]): ScheduledWorkoutRef {
+  return {
+    planId: entry.planId,
+    idInPlan: entry.idInPlan,
+    planProgramId: entry.planProgramId,
+    happenDay: entry.happenDay,
+    name: entry.name
+  };
+}
+
+async function resolveMoveWorkoutPlan(args: Record<string, unknown>): Promise<MoveWorkoutPlan> {
+  const scheduleDate = compactDayArg(args, "schedule_date", "schedule_date", "scheduleDate");
+  const newDate = compactDayArg(args, "new_date", "new_date", "newDate");
+  const workoutName = optionalArg(args, "workout_name", "workoutName");
+  const planId = optionalArg(args, "plan_id", "planId");
+  const idInPlan = optionalArg(args, "id_in_plan", "idInPlan");
+  if (!newDate) throw new Error("new_date is required (YYYYMMDD).");
+  if (!(planId && idInPlan) && !(scheduleDate && workoutName)) {
+    throw new Error("Identify the workout with schedule_date + workout_name, or plan_id + id_in_plan.");
+  }
+
+  const today = formatScheduleDay(new Date());
+  const candidates = scheduleDate
+    ? await listScheduledWorkoutEntries(scheduleDate, scheduleDate)
+    : await listScheduledWorkoutEntries(today, formatScheduleDay(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)));
+  const matches = planId && idInPlan
+    ? candidates.filter((entry) => entry.planId === planId && entry.idInPlan === idInPlan)
+    : candidates.filter((entry) => entry.name === workoutName);
+  if (matches.length > 1) {
+    throw new Error(
+      `Multiple scheduled workouts named "${workoutName}" on ${scheduleDate}. Use plan_id and id_in_plan to disambiguate.`
+    );
+  }
+  const source = matches[0];
+  if (!source) throw new Error("Scheduled workout not found on the calendar.");
+  if (source.happenDay === newDate) throw new Error("The workout is already on new_date.");
+  if (newDate < today) throw new Error("COROS does not allow scheduling workouts before today.");
+
+  const plan: MoveWorkoutPlan = { workout: scheduledWorkoutRef(source), newDate };
+  if (args.swap !== true && args.swap !== "true") return plan;
+
+  if (source.happenDay < today) {
+    throw new Error("A past workout can't be swapped: the other workout would move before today.");
+  }
+  const swapName = optionalArg(args, "swap_workout_name", "swapWorkoutName");
+  const swapId = optionalArg(args, "swap_id_in_plan", "swapIdInPlan");
+  const onNewDate = await listScheduledWorkoutEntries(newDate, newDate);
+  const swapMatches = onNewDate.filter((entry) =>
+    swapId ? entry.idInPlan === swapId : swapName ? entry.name === swapName : true
+  );
+  if (swapMatches.length === 0) {
+    throw new Error(`No workout${swapName ? ` named "${swapName}"` : ""} on ${newDate} to swap with.`);
+  }
+  if (swapMatches.length > 1) {
+    throw new Error(
+      `${newDate} has ${swapMatches.length} matching workouts (` +
+        swapMatches.map((entry) => `"${entry.name}" id_in_plan ${entry.idInPlan}`).join(", ") +
+        "). Pass swap_id_in_plan to pick one."
+    );
+  }
+  return { ...plan, swapWith: scheduledWorkoutRef(swapMatches[0]!) };
+}
+
+function buildMoveSummary(plan: MoveWorkoutPlan): string {
+  const from = formatDisplayScheduleDate(plan.workout.happenDay);
+  const to = formatDisplayScheduleDate(plan.newDate);
+  if (plan.swapWith) {
+    return `Swap "${plan.workout.name}" (${from}) with "${plan.swapWith.name}" (${to})`;
+  }
+  return `Move "${plan.workout.name}" from ${from} to ${to}`;
+}
+
+async function handleMoveWorkout(
+  args: Record<string, unknown>,
+  onWorkoutDelete?: (preview: WorkoutDeletePreview) => void
+): Promise<string> {
+  try {
+    const move = await resolveMoveWorkoutPlan(args);
+    const preview: WorkoutDeletePreview = {
+      requestId: crypto.randomUUID(),
+      action: "move",
+      target: "scheduled",
+      workoutName: move.workout.name,
+      scheduleDate: formatDisplayScheduleDate(move.workout.happenDay),
+      newScheduleDate: formatDisplayScheduleDate(move.newDate),
+      ...(move.swapWith ? { swapWorkoutName: move.swapWith.name } : {}),
+      summary: buildMoveSummary(move)
+    };
+    deleteRequests().set(preview.requestId, {
+      requestId: preview.requestId,
+      params: {
+        target: "scheduled",
+        schedule_date: move.workout.happenDay,
+        workout_name: move.workout.name,
+        plan_id: move.workout.planId,
+        id_in_plan: move.workout.idInPlan
+      },
+      move,
+      preview,
+      createdAt: Date.now()
+    });
+    persistDeleteRequests();
+    onWorkoutDelete?.(preview);
+    return JSON.stringify({
+      ok: true,
+      request_id: preview.requestId,
+      preview,
+      message:
+        "Move request staged. Tell the athlete to review the card and click Move on COROS when ready. " +
+        "Do not claim the workout was moved until they confirm."
+    });
+  } catch (caught) {
+    return JSON.stringify({ ok: false, error: caught instanceof Error ? caught.message : String(caught) });
+  }
+}
+
+async function executeMove(stored: StoredDeleteRequest, move: MoveWorkoutPlan): Promise<DeleteWorkoutResult> {
+  const from = formatDisplayScheduleDate(move.workout.happenDay);
+  const to = formatDisplayScheduleDate(move.newDate);
+  if (!move.firstMoved) {
+    await rescheduleWorkoutWithNotes(move.workout, move.newDate);
+    move.firstMoved = true;
+    persistDeleteRequests();
+  }
+  if (move.swapWith) {
+    try {
+      await rescheduleWorkoutWithNotes(move.swapWith, move.workout.happenDay);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Moved "${move.workout.name}" to ${to}, but "${move.swapWith.name}" is still on ${to}: ${reason}`
+      );
+    }
+  }
+  stored.executedAt = Date.now();
+  persistDeleteRequests();
+  return {
+    removedFromSchedule: false,
+    removedFromLibrary: false,
+    workoutName: move.workout.name,
+    scheduleDate: to,
+    message: move.swapWith
+      ? `Swapped "${move.workout.name}" to ${to} and "${move.swapWith.name}" to ${from}.`
+      : `Moved "${move.workout.name}" from ${from} to ${to}.`
+  };
+}
+
 function parseDeleteWorkoutParams(
   args: Record<string, unknown>
 ): DeleteWorkoutParams {
@@ -1117,6 +1328,10 @@ export async function confirmWorkoutDeleteById(
   const stored = deleteRequests().get(requestId);
   if (!stored) {
     throw new Error("Workout delete request not found or expired.");
+  }
+  if (stored.move) {
+    if (stored.executedAt) throw new Error("This workout was already moved.");
+    return executeMove(stored, stored.move);
   }
   if (stored.executedAt) {
     throw new Error("This workout was already deleted.");

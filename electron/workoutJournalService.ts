@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { calendarHash } from "./calendarSyncUtils";
 import { calendarSourceUserId } from "./calendarWorkoutEventStorage";
+import { listScheduledWorkoutEntries, rescheduleScheduledWorkout } from "./trainingHubService";
 import { findJournalEntry, mergeJournalEntry, normalizeHappenDay } from "./workoutJournalModel";
 import {
   deleteJournalRow,
@@ -72,5 +73,20 @@ export function followRescheduledWorkout(
     }
   } catch {
     // Notes are a convenience; never fail the move over them.
+  }
+}
+
+/** Move a calendar workout to another day; its brief and debrief follow it. */
+export async function rescheduleWorkoutWithNotes(
+  entry: { planId: string; idInPlan: string; planProgramId?: string; happenDay: string },
+  newHappenDay: string
+): Promise<void> {
+  const moved = await rescheduleScheduledWorkout(entry, newHappenDay);
+  if (!moved) return;
+  // The re-added workout gets a new idInPlan.
+  const target = (await listScheduledWorkoutEntries(newHappenDay, newHappenDay).catch(() => []))
+    .find((candidate) => candidate.idInPlan === moved.idInPlan);
+  if (target) {
+    followRescheduledWorkout(entry, { planId: target.planId, idInPlan: target.idInPlan, happenDay: newHappenDay });
   }
 }
