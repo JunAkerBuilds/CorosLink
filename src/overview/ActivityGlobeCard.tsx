@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/tools";
+import { t, useLanguage, getLocale, getDateTimeFormat } from "../i18n/tools";
 import {
   CalendarDays,
   MousePointer2,
@@ -153,7 +153,7 @@ function formatVisitDate(value?: number): string {
   if (!timestamp) {
     return t("Date unavailable");
   }
-  return new Intl.DateTimeFormat(getLocale(), {
+  return getDateTimeFormat({
     month: "short",
     day: "numeric",
     year: "numeric",

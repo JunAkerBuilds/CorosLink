@@ -1,4 +1,4 @@
-import { getLocale, useLanguage, t } from "../../i18n/training";
+import { getLocale, getDateTimeFormat, useLanguage, t } from "../../i18n/training";
 import { Bike, Footprints, PersonStanding, Trophy, Waves, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import type {
@@ -133,7 +133,7 @@ function happenDayTime(happenDay?: string): number | null {
 /** "Sep 29" this year, "Aug 16, 2025" before it; `full` always shows the year. */
 function formatRecordTime(time: number, full = false): string {
   const date = new Date(time);
-  return new Intl.DateTimeFormat(getLocale(), {
+  return getDateTimeFormat({
     month: "short",
     day: "numeric",
     ...(full || date.getFullYear() !== new Date().getFullYear() ? { year: "numeric" } : {})

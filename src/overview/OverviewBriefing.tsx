@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale, formatNumber } from "../i18n/tools";
+import { t, useLanguage, getLocale, getDateTimeFormat, formatNumber } from "../i18n/tools";
 import { lazy, Suspense, useEffect, useId, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { ArrowUpRight, Check, ChevronRight, Loader2, LogIn, RefreshCw } from "lucide-react";
 import {
@@ -918,7 +918,7 @@ function WeekStrip({ week }: { week: WeekSummary }) {
           const done = day.load > 0 || day.sessions > 0;
           const height = (value: number) => `${Math.max(8, (value / week.peak) * 100)}%`;
           const title = [
-            new Intl.DateTimeFormat(getLocale(), { weekday: "long", month: "short", day: "numeric" }).format(
+            getDateTimeFormat({ weekday: "long", month: "short", day: "numeric" }).format(
               new Date(Number(day.happenDay.slice(0, 4)), Number(day.happenDay.slice(4, 6)) - 1, Number(day.happenDay.slice(6, 8)))
             ),
             done ? `${day.load} TL · ${day.sessions} ${day.sessions === 1 ? t("session") : t("sessions")}` : undefined,
@@ -1138,7 +1138,7 @@ function OverviewConnectHero({ onConnect }: { onConnect: () => void }) {
                   <span className="overview-week-dot" />
                 )}
               </span>
-              <span className="overview-week-day">{new Intl.DateTimeFormat(getLocale(), { weekday: "narrow" }).format(new Date(2024, 0, 1 + index))}</span>
+              <span className="overview-week-day">{getDateTimeFormat({ weekday: "narrow" }).format(new Date(2024, 0, 1 + index))}</span>
             </li>
           ))}
         </ol>

@@ -1,5 +1,5 @@
 import { formatWorkoutSport } from "../calendar/workoutLabels";
-import { useLanguage, getLocale, t } from "../i18n/training";
+import { useLanguage, getLocale, getDateTimeFormat, t } from "../i18n/training";
 import { useLocalOnlyView } from "../privacy/localOnlyView";
 import {
   AlertTriangle,
@@ -184,8 +184,8 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
     const validStart = !Number.isNaN(start.valueOf());
     const end = validStart ? new Date(start) : null;
     if (end) end.setDate(end.getDate() + Math.max(1, weeks) * 7 - 1);
-    const dayFmt = new Intl.DateTimeFormat(getLocale(), { month: "short", day: "numeric" });
-    const fullFmt = new Intl.DateTimeFormat(getLocale(), { month: "short", day: "numeric", year: "numeric" });
+    const dayFmt = getDateTimeFormat({ month: "short", day: "numeric" });
+    const fullFmt = getDateTimeFormat({ month: "short", day: "numeric", year: "numeric" });
     const total = Number.isFinite(weeks * sessionsPerWeek) ? weeks * sessionsPerWeek : 0;
     return {
       total,

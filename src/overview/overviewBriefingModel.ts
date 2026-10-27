@@ -1,4 +1,4 @@
-import { t, getLocale } from "../i18n/toolsLocale";
+import { t, getLocale, getDateTimeFormat } from "../i18n/toolsLocale";
 import type {
   TrainingHubActivity,
   TrainingHubSleepRecord,
@@ -245,7 +245,7 @@ export function buildWeekSummary(
       : undefined;
     return {
       happenDay,
-      weekday: new Intl.DateTimeFormat(getLocale(), { weekday: "narrow" }).format(date),
+      weekday: getDateTimeFormat({ weekday: "narrow" }).format(date),
       dayOfMonth: date.getDate(),
       isToday: happenDay === todayKey,
       isFuture: happenDay > todayKey,
@@ -444,14 +444,14 @@ export function formatActivityWhen(startTime?: number, now = new Date()): string
   const day = getLocalHappenDayKey(date);
   const today = getLocalHappenDayKey(now);
   const yesterday = getLocalHappenDayKey(addDays(now, -1));
-  const time = new Intl.DateTimeFormat(getLocale(), { hour: "numeric", minute: "2-digit" }).format(date);
+  const time = getDateTimeFormat({ hour: "numeric", minute: "2-digit" }).format(date);
   const elapsedDays = (now.getTime() - date.getTime()) / 86_400_000;
   const label = day === today
     ? t("Today")
     : day === yesterday
       ? t("Yesterday")
       : elapsedDays < 6
-        ? new Intl.DateTimeFormat(getLocale(), { weekday: "long" }).format(date)
-        : new Intl.DateTimeFormat(getLocale(), { month: "short", day: "numeric" }).format(date);
+        ? getDateTimeFormat({ weekday: "long" }).format(date)
+        : getDateTimeFormat({ month: "short", day: "numeric" }).format(date);
   return `${label} · ${time}`;
 }

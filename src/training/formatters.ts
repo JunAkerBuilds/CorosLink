@@ -1,4 +1,4 @@
-import { t, getLocale, formatNumber } from "../i18n/trainingLocale";
+import { t, getLocale, getDateTimeFormat, formatNumber } from "../i18n/trainingLocale";
 import type { UnitSystem } from "../../electron/types";
 import {
   distanceUnit,
@@ -18,12 +18,12 @@ export function formatTrainingLongTimestamp(value?: number): string {
   }
 
   const date = new Date(value < 10_000_000_000 ? value * 1000 : value);
-  const day = new Intl.DateTimeFormat(getLocale(), {
+  const day = getDateTimeFormat({
     month: "short",
     day: "numeric",
     year: "numeric"
   }).format(date);
-  const time = new Intl.DateTimeFormat(getLocale(), {
+  const time = getDateTimeFormat({
     hour: "numeric",
     minute: "2-digit"
   }).format(date);
@@ -36,7 +36,7 @@ export function formatTrainingTimestamp(value?: number): string {
   }
 
   const timestamp = value < 10_000_000_000 ? value * 1000 : value;
-  return new Intl.DateTimeFormat(getLocale(), {
+  return getDateTimeFormat({
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -53,7 +53,7 @@ export function formatTrainingTableWhen(value?: number): string {
   const date = new Date(timestamp);
   const sameYear = date.getFullYear() === new Date().getFullYear();
 
-  return new Intl.DateTimeFormat(getLocale(), {
+  return getDateTimeFormat({
     month: "numeric",
     day: "numeric",
     ...(sameYear ? {} : { year: "2-digit" }),
@@ -232,7 +232,7 @@ export function formatHappenDayLabel(value: string): string {
   const year = Number(value.slice(0, 4));
   const month = Number(value.slice(4, 6)) - 1;
   const day = Number(value.slice(6, 8));
-  return new Intl.DateTimeFormat(getLocale(), {
+  return getDateTimeFormat({
     weekday: "short",
     month: "short",
     day: "numeric"
@@ -345,12 +345,12 @@ export function formatUpcomingWorkoutDate(happenDay: string): string {
   );
 
   if (diffDays > 0 && diffDays <= 6) {
-    return new Intl.DateTimeFormat(getLocale(), {
+    return getDateTimeFormat({
       weekday: "short"
     }).format(date);
   }
 
-  return new Intl.DateTimeFormat(getLocale(), {
+  return getDateTimeFormat({
     month: "short",
     day: "numeric"
   }).format(date);
@@ -570,7 +570,7 @@ export function formatRecordDateShort(happenDay?: string): string {
   const month = Number(happenDay.slice(4, 6)) - 1;
   const day = Number(happenDay.slice(6, 8));
 
-  return new Intl.DateTimeFormat(getLocale(), {
+  return getDateTimeFormat({
     month: "short",
     day: "numeric",
     year: "numeric"

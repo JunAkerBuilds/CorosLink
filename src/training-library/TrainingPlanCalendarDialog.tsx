@@ -1,4 +1,4 @@
-import { getLocale, useLanguage, t } from "../i18n/training";
+import { getLocale, getDateTimeFormat, useLanguage, t } from "../i18n/training";
 import { useLocalOnlyView } from "../privacy/localOnlyView";
 import {
   AlertTriangle,
@@ -65,7 +65,7 @@ function displayDay(value: string): string {
 }
 
 function displayRange(first: Date, last: Date): string {
-  const format = new Intl.DateTimeFormat(getLocale(), { month: "short", day: "numeric" });
+  const format = getDateTimeFormat({ month: "short", day: "numeric" });
   if (first.valueOf() === last.valueOf()) return format.format(first);
   // formatRange adds the year once a range crosses one, which the summary cell has no room for.
   return first.getFullYear() === last.getFullYear()

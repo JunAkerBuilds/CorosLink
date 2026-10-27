@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../../i18n/training";
+import { t, useLanguage, getDateTimeFormat } from "../../i18n/training";
 import { CloudOff } from "lucide-react";
 import type { HealthInsightResult } from "../../../electron/healthInsightsTypes";
 import { DAY_ONLY, badgeTone, formatNumber, localDay, parseRange, toEpoch } from "../healthInsightsFormat";
@@ -36,7 +36,7 @@ export function sleepHrvNightLabel(night: string, now = new Date()): string {
   const end = new Date(`${night}T12:00:00`);
   const start = new Date(end);
   start.setDate(end.getDate() - 1);
-  const span = new Intl.DateTimeFormat(getLocale(), { month: "short", day: "numeric" }).formatRange(start, end);
+  const span = getDateTimeFormat({ month: "short", day: "numeric" }).formatRange(start, end);
   return night === localDay(now) ? t("Last night · {{span}}", { span }) : t("Night of {{span}}", { span });
 }
 

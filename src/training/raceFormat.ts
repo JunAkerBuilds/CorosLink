@@ -1,4 +1,4 @@
-import { t, getLocale } from "../i18n/trainingLocale";
+import { t, getDateTimeFormat } from "../i18n/trainingLocale";
 import type { RaceEntry } from "../../electron/raceTypes";
 import type { UnitSystem } from "../../electron/types";
 import { raceDistanceLabel } from "../../electron/raceModel";
@@ -67,7 +67,7 @@ export function formatRaceDistance(
 
 /** Epoch seconds → "Jul 1, 2026". */
 export function formatRaceDate(epochSeconds: number): string {
-  return new Intl.DateTimeFormat(getLocale(), {
+  return getDateTimeFormat({
     month: "short",
     day: "numeric",
     year: "numeric"

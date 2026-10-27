@@ -1,4 +1,4 @@
-import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage, getLocale } from "./i18n";
+import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage, getLocale, getDateTimeFormat } from "./i18n";
 import { setLocalOnlyView } from "./privacy/localOnlyView";
 import {
   AlertCircle,
@@ -3589,7 +3589,7 @@ function MediaOverviewTab({
       <header className="dashboard-welcome dashboard-block">
         <div>
           <p className="dashboard-date">
-            {new Intl.DateTimeFormat(getLocale(), {
+            {getDateTimeFormat({
               weekday: "long",
               month: "long",
               day: "numeric",
@@ -8458,7 +8458,7 @@ function formatBytes(bytes: number): string {
 }
 
 function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(getLocale(), {
+  return getDateTimeFormat({
     month: "short",
     day: "numeric",
     hour: "numeric",

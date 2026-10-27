@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../../i18n/training";
+import { t, useLanguage, getDateTimeFormat } from "../../i18n/training";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { WorkBucket } from "../hallOfBests";
 import {
@@ -30,7 +30,7 @@ export function formatHours(seconds: number): string {
 }
 
 function bucketLabel(start: number, unit: "week" | "month", withYear = false): string {
-  return new Intl.DateTimeFormat(getLocale(), {
+  return getDateTimeFormat({
     month: "short",
     ...(unit === "week" ? { day: "numeric" } : {}),
     ...(withYear ? { year: "numeric" } : {})

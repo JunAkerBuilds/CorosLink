@@ -1,4 +1,4 @@
-import { getLocale, useLanguage, t } from "../../i18n/training";
+import { getLocale, getDateTimeFormat, useLanguage, t } from "../../i18n/training";
 import {
   memo,
   useEffect,
@@ -185,7 +185,7 @@ function TrainingHeatmapPanelComponent({
   const summary = useMemo(() => buildHeatmapSummary(cells), [cells, getLocale()]);
   // Monday-first narrow weekday names in the app language (2024-01-01 was a Monday).
   const weekdayLabels = useMemo(() => {
-    const format = new Intl.DateTimeFormat(getLocale(), { weekday: "narrow" });
+    const format = getDateTimeFormat({ weekday: "narrow" });
     return Array.from({ length: 7 }, (_, day) => format.format(new Date(2024, 0, 1 + day)));
   }, [getLocale()]);
   // Color each day by the sport of that day's highest-training-load activity.

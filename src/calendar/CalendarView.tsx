@@ -311,7 +311,13 @@ export function CalendarView({
           api.getGoogleCalendarStatus(),
           api.getAppleCalendarStatus()
         ]);
-        if (!cancelled) setCalendarStatuses(statuses);
+        // IPC returns fresh objects every 3 s; keep the current ones when nothing
+        // changed, or the whole calendar re-renders on every poll.
+        if (!cancelled) {
+          setCalendarStatuses((current) =>
+            JSON.stringify(current) === JSON.stringify(statuses) ? current : statuses
+          );
+        }
       } catch {
         if (!cancelled) setCalendarStatuses(null);
       }

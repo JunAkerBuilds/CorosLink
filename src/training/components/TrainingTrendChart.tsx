@@ -1,4 +1,4 @@
-import { getLocale, useLanguage, t } from "../../i18n/training";
+import { getLocale, getDateTimeFormat, useLanguage, t } from "../../i18n/training";
 import type { ChartCardSize } from "../widgetSizing";
 import "../chartSizing.css";
 import { useEffect, useId, useState, type ReactNode } from "react";
@@ -139,7 +139,7 @@ function formatTooltipHeading(date: unknown, fallback: unknown): string {
 function formatAxisDay(value: string): string {
   if (!/^\d{8}$/.test(value)) return value;
   const date = new Date(Number(value.slice(0, 4)), Number(value.slice(4, 6)) - 1, Number(value.slice(6, 8)));
-  return new Intl.DateTimeFormat(getLocale(), { day: "2-digit", month: "2-digit" }).format(date);
+  return getDateTimeFormat({ day: "2-digit", month: "2-digit" }).format(date);
 }
 
 function TrendChartTooltip({

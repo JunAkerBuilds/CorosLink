@@ -1,4 +1,4 @@
-import { getLocale, useLanguage, t } from "../i18n/training";
+import { useLanguage, t, getDateTimeFormat } from "../i18n/training";
 import { Check, CalendarPlus, Moon, Plus } from "lucide-react";
 import { useLayoutEffect, useRef, type CSSProperties, type KeyboardEvent } from "react";
 import type {
@@ -87,7 +87,7 @@ function agendaEntries(day: CalendarDay): AgendaEntry[] {
 }
 
 const clockDate = (minutes: number) => new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60);
-const clockFormat = () => new Intl.DateTimeFormat(getLocale(), { hour: "numeric", minute: "2-digit" });
+const clockFormat = () => getDateTimeFormat({ hour: "numeric", minute: "2-digit" });
 
 function clockLabel(minutes: number): string {
   return clockFormat().format(clockDate(minutes));
@@ -396,11 +396,11 @@ export function CalendarAgenda({
                     >
                       <h4 className="calendar-agenda-date">
                         <span className="sr-only">
-                          {new Intl.DateTimeFormat(getLocale(), { weekday: "long", month: "long", day: "numeric" }).format(date)}
+                          {getDateTimeFormat({ weekday: "long", month: "long", day: "numeric" }).format(date)}
                           {day.isToday ? `, ${t("Today")}` : ""}
                         </span>
                         <span className="calendar-agenda-weekday" aria-hidden="true">
-                          {day.isToday ? t("Today", undefined, "calendarDay") : new Intl.DateTimeFormat(getLocale(), { weekday: "short" }).format(date)}
+                          {day.isToday ? t("Today", undefined, "calendarDay") : getDateTimeFormat({ weekday: "short" }).format(date)}
                         </span>
                         <span className="calendar-agenda-daynum" aria-hidden="true">
                           {date.getDate()}

@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/tools";
+import { t, useLanguage, getDateTimeFormat } from "../i18n/tools";
 import { WorkoutEditCard } from "./WorkoutEditCard";
 import { CorosActionCard } from "./CorosActionCard";
 import { normalizeCoachChartTitle } from "./coachChartFreshness";
@@ -589,9 +589,9 @@ function planDateParts(
   const date = planDateFromSchedule(scheduleDate);
   if (!date) return undefined;
   return {
-    weekday: new Intl.DateTimeFormat(getLocale(), { weekday: "short" }).format(date),
+    weekday: getDateTimeFormat({ weekday: "short" }).format(date),
     day: String(date.getDate()),
-    month: new Intl.DateTimeFormat(getLocale(), { month: "short" }).format(date)
+    month: getDateTimeFormat({ month: "short" }).format(date)
   };
 }
 
@@ -599,7 +599,7 @@ function planDateParts(
 function formatPlanDateLabel(scheduleDate: string): string {
   const date = planDateFromSchedule(scheduleDate);
   if (!date) return scheduleDate;
-  return new Intl.DateTimeFormat(getLocale(), {
+  return getDateTimeFormat({
     weekday: "short",
     month: "short",
     day: "numeric"
@@ -622,7 +622,7 @@ function planWeekStart(date: Date): Date {
 
 function formatPlanWeekRange(start: Date): string {
   const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
-  const month = new Intl.DateTimeFormat(getLocale(), { month: "short" });
+  const month = getDateTimeFormat({ month: "short" });
   if (start.getMonth() === end.getMonth()) {
     return `${month.format(start)} ${start.getDate()}-${end.getDate()}`;
   }
