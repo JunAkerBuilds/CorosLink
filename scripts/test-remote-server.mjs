@@ -50,6 +50,48 @@ const attachmentRoot = fs.mkdtempSync(path.join(os.tmpdir(), "remote-attachments
 const attachmentStore = createCoachAttachmentStore(attachmentRoot);
 const portChanges = [];
 let connectionChanges = 0;
+// Training Hub's calendar for training.scheduledSteps: a run/walk in miles (paces COROS MCP drops)
+// and a workout with a threshold-percentage step, which has no exact steps to give.
+const mile = (seconds) => Math.round((seconds / 1.609344) * 1000);
+const scheduleAsked = [];
+const scheduledPrograms = async (startDay, endDay) => {
+  scheduleAsked.push([startDay, endDay]);
+  return [
+    {
+      happenDay: "20261029", idInPlan: "7", planId: "481333460374569066",
+      program: {
+        sportType: 1,
+        exercises: [
+          { id: "1", exerciseType: 1, targetType: 2, targetValue: 300, intensityType: 0, groupId: "0" },
+          { id: "2", exerciseType: 2, isGroup: true, sets: 8, groupId: "0" },
+          { id: "3", exerciseType: 2, targetType: 2, targetValue: 120, intensityType: 3, intensityValue: mile(570), intensityValueExtend: mile(600), intensityMultiplier: 1000, groupId: "2" },
+          { id: "4", exerciseType: 4, targetType: 2, targetValue: 60, intensityType: 0, groupId: "2" },
+          { id: "5", exerciseType: 3, targetType: 5, targetValue: 160934, intensityType: 2, intensityValue: 120, intensityValueExtend: 135, groupId: "0" }
+        ]
+      }
+    },
+    {
+      happenDay: "20261031", idInPlan: "8",
+      program: { sportType: 1, exercises: [{ id: "1", exerciseType: 2, targetType: 5, targetValue: 500000, intensityType: 3, isIntensityPercent: true, intensityPercent: 95000, groupId: "0" }] }
+    },
+    { happenDay: "20261101", idInPlan: "9", program: { sportType: 4, overview: "  Pull day: rows, pull-ups and curls.  ", exercises: [{ id: "1", exerciseType: 2, targetType: 3, targetValue: 10 }] } },
+    // Runna's "Tempo 2-1" as Training Hub keeps it: each step's pace in its name, the pace target 0.
+    {
+      happenDay: "20261028", idInPlan: "10",
+      program: {
+        sportType: 1,
+        overview: "sid_run_training",
+        exercises: [
+          { id: "1", name: "1.5km warm up", exerciseType: 1, targetType: 5, targetValue: 150000, intensityType: 0, groupId: "0" },
+          { id: "2", name: "2km at 5:10/km", exerciseType: 2, targetType: 5, targetValue: 200000, intensityType: 3, intensityValue: 0, intensityValueExtend: 0, groupId: "0" },
+          { id: "3", name: "120s rest", exerciseType: 4, targetType: 2, targetValue: 120, groupId: "0" },
+          { id: "4", name: "Training", exerciseType: 2, targetType: 5, targetValue: 100000, intensityType: 3, intensityValue: 285, intensityValueExtend: 305, groupId: "0" },
+          { id: "5", name: "sid_run_cool_down_dist", exerciseType: 3, targetType: 5, targetValue: 50000, groupId: "0" }
+        ]
+      }
+    }
+  ];
+};
 
 const server = new RemoteServer({
   identity,
@@ -63,6 +105,7 @@ const server = new RemoteServer({
     save: (sessionId, upload) => attachmentStore.save(sessionId, upload),
     get: (sessionId, id) => attachmentStore.summary(sessionId, id)
   },
+  scheduledPrograms,
   chatModels: async (provider) => (provider === "claude-code" ? [{ value: "", label: "Account default" }, { value: "opus", label: "Claude Opus 5.5" }] : []),
   port: 0,
   onPortChanged: (port) => portChanges.push(port),
@@ -94,7 +137,7 @@ try {
       platform: "darwin",
       appVersion: "9.9.9",
       protocol: 1,
-      capabilities: ["coach", "coach.planOptions", "coach.files"],
+      capabilities: ["coach", "coach.planOptions", "coach.files", "training.steps"],
       keyThumbprint: identity.kid
     });
     assert.equal(identity.kid, await jose.calculateJwkThumbprint(identity.publicJwk, "sha256"), "RFC 7638 thumbprint");
@@ -447,6 +490,35 @@ try {
     assert.equal(chatSettings.geminiCli.model, "pro");
     assert.equal((await a.call("coach.setModel", { provider: "claude-code", model: "" })).result.providers[1].model, "", "account default");
     assert.equal((await a.call("coach.setModel", { provider: "claude-code", model: "opus" })).result.provider, "claude-code");
+
+    // Planned workouts' exact steps, readable with coach:read, in C-LINK's step shape.
+    const planned = (await view.call("training.scheduledSteps", { startDay: "20261026", endDay: "20261129" })).result.workouts;
+    assert.deepEqual(scheduleAsked.at(-1), ["20261026", "20261129"]);
+    assert.deepEqual(planned.map((row) => [row.day, row.idInPlan]), [["2026-10-29", "7"], ["2026-10-31", "8"], ["2026-11-01", "9"], ["2026-10-28", "10"]]);
+    assert.deepEqual(planned[3].steps, [
+      { step: { _0: { kind: 1, target: { distance: { meters: 1500 } }, note: "1.5km warm up" } } },
+      { step: { _0: { kind: 2, target: { distance: { meters: 2000 } }, note: "2km at 5:10/km" } } },
+      { step: { _0: { kind: 3, target: { time: { seconds: 120 } }, note: "120s rest" } } },
+      { step: { _0: { kind: 2, target: { distance: { meters: 1000 } }, metric: 2, intensity: { range: { low: 285, high: 305 } } } } },
+      { step: { _0: { kind: 4, target: { distance: { meters: 500 } } } } }
+    ], "a pace stored as 0 is no target; Runna's paces are seconds per km; the coach's step names are kept, COROS's defaults aren't");
+    assert.equal(planned[0].planId, "481333460374569066");
+    assert.deepEqual(planned[0].steps, [
+      { step: { _0: { kind: 1, target: { time: { seconds: 300 } } } } },
+      { repeats: { times: 8, steps: [
+        { kind: 2, target: { time: { seconds: 120 } }, metric: 2, intensity: { range: { low: 354.182, high: 372.823 } } },
+        { kind: 3, target: { time: { seconds: 60 } } }
+      ] } },
+      { step: { _0: { kind: 4, target: { distance: { meters: 1609.34 } }, metric: 1, intensity: { range: { low: 120, high: 135 } } } } }
+    ], "walks are rests, the cool-down stays one, mile paces to the millisecond");
+    assert.equal(planned[1].steps, null, "a percentage of threshold isn't an exact step");
+    assert.equal(planned[2].steps, null, "strength has no distance or time steps");
+    assert.equal(planned[2].description, "Pull day: rows, pull-ups and curls.", "every workout with a description sends it");
+    assert.equal(planned[0].description, undefined);
+    assert.equal(planned[3].description, undefined, "COROS's built-in keys aren't a description");
+    assert.equal((await view.call("training.scheduledSteps", { startDay: "20261026", endDay: "20270101" })).error.code, "invalid", "at most 62 days");
+    assert.equal((await view.call("training.scheduledSteps", { startDay: "2026-10-26", endDay: "20261029" })).error.code, "invalid");
+    assert.equal((await view.call("training.scheduledSteps", { startDay: "20261030", endDay: "20261029" })).error.code, "invalid");
 
     // Deleting from the phone removes the conversation for every client, subscribed or not.
     const doomed = (await a.call("coach.createSession")).result.session.id;

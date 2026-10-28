@@ -1,3 +1,4 @@
+import { programDescription, type ScheduledProgram } from "./remote/scheduledSteps";
 import { buildScheduledWorkoutEditRequest } from "./corosWorkoutEditor";
 import { annotateDiagnosticRequest } from "./diagnosticsLog";
 import { recordDiagnosticError } from "./diagnosticsService";
@@ -1813,6 +1814,35 @@ export async function getUpcomingWorkouts(
 }
 
 /**
+ * Every workout on the calendar from `startDay` to `endDay` (YYYYMMDD) with COROS's
+ * own program, past days included: for a phone that wants a workout's exact steps.
+ */
+export async function getScheduledPrograms(startDay: string, endDay: string): Promise<ScheduledProgram[]> {
+  const raw = await trainingHubGet<Record<string, unknown>>("/training/schedule/query", {
+    startDate: startDay,
+    endDate: endDay,
+    supportRestExercise: 1
+  });
+  const entities = extractArray(raw, ["entities"]) ?? [];
+  const programs = extractArray(raw, ["programs"]) ?? [];
+  const { programsByIdInPlan, programsById } = buildScheduledProgramMaps(programs);
+  const scheduled: ScheduledProgram[] = [];
+  entities.forEach((item, index) => {
+    if (!item || typeof item !== "object") return;
+    const entity = item as Record<string, unknown>;
+    // Status 3 is a workout taken off the calendar.
+    if (toOptionalNumber(entity.status) === 3) return;
+    scheduled.push({
+      happenDay: String(entity.happenDay ?? ""),
+      idInPlan: String(entity.idInPlan ?? "") || undefined,
+      planId: String(entity.planId ?? "") || undefined,
+      program: resolveScheduledProgram(entity, index, programsByIdInPlan, programsById, programs)
+    });
+  });
+  return scheduled;
+}
+
+/**
  * GROUNDWORK (not yet wired to the UI): push a generated route to the user's
  * COROS account so it syncs to the watch through the COROS phone app over
  * Bluetooth — the only viable one-click path from the desktop, since COROS
@@ -2900,6 +2930,7 @@ export function parseScheduledWorkoutEntries(
       volume: formatUpcomingWorkoutVolume(program, entity),
       trainingLoad: resolveUpcomingWorkoutLoad(program, entity),
       exercises: parseScheduledExercises(program),
+      description: programDescription(program),
       rawProgram: program,
       corosActivity: resolveCorosActivity(entity)
     });

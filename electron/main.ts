@@ -133,6 +133,7 @@ import {
   previewWorkoutEdit,
   saveWorkoutEdit,
   getWorkoutProgramDetail,
+  getScheduledPrograms,
   loginTrainingHub,
   verifyTrainingHubTwoFactor,
   resendTrainingHubTwoFactorCode,
@@ -1131,7 +1132,9 @@ app.whenReady().then(() => {
     attachments: {
       save: (sessionId, upload) => coachAttachments().save(sessionId, upload),
       get: (sessionId, id) => coachAttachments().summary(sessionId, id)
-    }
+    },
+    // A planned workout's exact steps for the phone, where COROS MCP can't give them.
+    scheduledPrograms: getScheduledPrograms
   });
   // Opening one's own private face from the website: the catalog may ask with the account token.
   const account = remoteAccess.cloud.account;

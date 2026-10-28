@@ -2,6 +2,7 @@ import { getLocale, useLanguage, t } from "../i18n/training";
 import { motion, useReducedMotion } from "motion/react";
 import {
   Activity,
+  AlignLeft,
   Bike,
   Clock,
   Dumbbell,
@@ -242,6 +243,16 @@ export function ScheduledWorkoutDetail({
           ))}
         </dl>
       </motion.div>
+
+      {entry.description ? (
+        <motion.section className="sched-description" {...rise(0.03)}>
+          <h4>
+            <AlignLeft size={14} aria-hidden="true" />
+            {t("Description")}
+          </h4>
+          <p>{entry.description}</p>
+        </motion.section>
+      ) : null}
 
       {view.nodes.length > 0 ? (
         <motion.div className="sched-structure" {...rise(0.06)}>

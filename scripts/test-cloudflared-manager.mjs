@@ -15,12 +15,15 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const requireDist = createRequire(path.join(repoRoot, "dist-electron", "main.js"));
 const {
   CLOUDFLARED_ASSETS,
+  CLOUDFLARED_MIN_VERSION,
   CLOUDFLARED_VERSION,
   CloudflaredSupervisor,
   cloudflaredTarget,
   downloadCloudflared,
   extractTarMember,
   findCloudflared,
+  isVulnerableCloudflared,
+  parseCloudflaredVersion,
   isIntelMac,
   managedCloudflaredPath,
   probeEdgePorts
@@ -189,12 +192,28 @@ try {
     assert.equal(await find(), null, "nothing installed: ask before downloading");
 
     const own = fakeBinary("own");
-    assert.deepEqual(await find({ COROSLINK_CLOUDFLARED_PATH: own }), { path: own, source: "env", version: null });
+    assert.deepEqual(await find({ COROSLINK_CLOUDFLARED_PATH: own }), { path: own, source: "env", version: "2026.10.5" });
     await assert.rejects(find({ COROSLINK_CLOUDFLARED_PATH: path.join(root, "nope") }), /COROSLINK_CLOUDFLARED_PATH/);
     assert.deepEqual(await find({ PATH: [emptyPath, path.dirname(own)].join(path.delimiter) }), {
       path: own,
       source: "path",
-      version: null
+      version: "2026.10.5"
+    });
+    const silent = fakeBinary("no-version", { FAKE_CLOUDFLARED_VERSION: "none" });
+    assert.deepEqual(await find({ PATH: path.dirname(silent) }), { path: silent, source: "path", version: null });
+
+    // A build that trusts the compromised eMudhra intermediates is never run.
+    assert.equal(isVulnerableCloudflared("2026.10.2"), true);
+    assert.equal(isVulnerableCloudflared(CLOUDFLARED_MIN_VERSION), false);
+    assert.equal(isVulnerableCloudflared(null), false);
+    assert.equal(parseCloudflaredVersion("cloudflared version 2026.10.5 (built 2026-10-27-13:25 UTC)"), "2026.10.5");
+    const vulnerable = fakeBinary("vulnerable", { FAKE_CLOUDFLARED_VERSION: "2026.10.1" });
+    await assert.rejects(find({ COROSLINK_CLOUDFLARED_PATH: vulnerable }), /2026\.10\.1.*compromised certificates/);
+    assert.equal(await find({ PATH: path.dirname(vulnerable) }), null, "an old one on PATH: ask to download the pin");
+    assert.deepEqual(await find({ PATH: [path.dirname(vulnerable), path.dirname(own)].join(path.delimiter) }), {
+      path: own,
+      source: "path",
+      version: "2026.10.5"
     });
 
     // A downloaded build that doesn't hash to the pin is removed, not run.
@@ -204,11 +223,17 @@ try {
     assert.equal(await find(), null);
     assert.equal(fs.existsSync(managed), false);
 
-    // An older download keeps running until the pinned one is in.
-    const older = managedCloudflaredPath(userDataDir, "2025.1.0", "darwin");
+    // An older download below the minimum isn't run while the pin downloads...
+    const unsafe = managedCloudflaredPath(userDataDir, "2026.10.1", "darwin");
+    fs.mkdirSync(path.dirname(unsafe), { recursive: true });
+    fs.writeFileSync(unsafe, "unsafe", { mode: 0o755 });
+    assert.equal(await find(), null);
+
+    // ...but a safe older one keeps running until the pinned one is in.
+    const older = managedCloudflaredPath(userDataDir, CLOUDFLARED_MIN_VERSION, "darwin");
     fs.mkdirSync(path.dirname(older), { recursive: true });
     fs.writeFileSync(older, "older", { mode: 0o755 });
-    assert.deepEqual(await find(), { path: older, source: "managed", version: "2025.1.0", stale: true });
+    assert.deepEqual(await find(), { path: older, source: "managed", version: CLOUDFLARED_MIN_VERSION, stale: true });
   }
 
   // ----- Running it -----

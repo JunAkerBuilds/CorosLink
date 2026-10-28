@@ -354,7 +354,7 @@ cloud = new CloudLink({
   arch: "arm64",
   userDataDir: root,
   now,
-  findCloudflared: async () => ({ path: fakeBinary, source: "managed", version: "2026.10.1" }),
+  findCloudflared: async () => ({ path: fakeBinary, source: "managed", version: "2026.10.5" }),
   downloadCloudflared: async () => {
     throw new Error("No downloads in this test.");
   },

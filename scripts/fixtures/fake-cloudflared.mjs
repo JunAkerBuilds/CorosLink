@@ -8,6 +8,7 @@
 // FAKE_CLOUDFLARED_DELAY_MS  wait before registering (default 20)
 // FAKE_CLOUDFLARED_FAILURES  unreachable: dials that time out (default 6)
 // FAKE_CLOUDFLARED_THEN  unreachable: `register` to get out after them
+// FAKE_CLOUDFLARED_VERSION  what `--version` reports (default 2026.10.5; `none` for no version)
 import crypto from "node:crypto";
 import fs from "node:fs";
 
@@ -18,6 +19,12 @@ const log = (event, extra = {}) => {
     `${JSON.stringify({ event, name: process.env.FAKE_CLOUDFLARED_NAME ?? "fake", pid: process.pid, at: Date.now(), ...extra })}\n`
   );
 };
+
+if (process.argv[2] === "--version") {
+  const version = process.env.FAKE_CLOUDFLARED_VERSION ?? "2026.10.5";
+  process.stdout.write(version === "none" ? "cloudflared DEV\n" : `cloudflared version ${version} (built 2026-10-27-13:25 UTC)\n`);
+  process.exit(0);
+}
 
 const token = process.env.TUNNEL_TOKEN ?? "";
 log("start", {
