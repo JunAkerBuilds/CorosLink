@@ -13,7 +13,8 @@ import zlib from "node:zlib";
  * token in TUNNEL_TOKEN (never in argv, where any process can read it).
  *
  * A cloudflared on PATH or at COROSLINK_CLOUDFLARED_PATH is the person's own
- * choice: it is used as is and never replaced or updated.
+ * choice: it is never replaced or updated, but one older than
+ * CLOUDFLARED_MIN_VERSION is passed over (see there).
  *
  * Intel Macs: Cloudflare stops publishing darwin-amd64 builds in 2027. The
  * pinned build keeps working; once newer pins have no Intel asset, Intel Macs
@@ -38,52 +39,60 @@ export interface CloudflaredAsset {
 }
 
 /**
- * cloudflared 2026.10.1 (published 2026-10-15).
+ * cloudflared 2026.10.5 (published 2026-10-27).
  *
  * Checksums come from the "SHA256 Checksums" list in Cloudflare's release
- * notes, https://github.com/cloudflare/cloudflared/releases/tag/2026.10.1.
+ * notes, https://github.com/cloudflare/cloudflared/releases/tag/2026.10.5.
  * For the two macOS .tgz files those notes list the hash of the `cloudflared`
  * binary inside the archive, not of the archive, so `binarySha256` is
  * Cloudflare's number and the archive's `sha256` is GitHub's published asset
- * digest (GET /repos/cloudflare/cloudflared/releases/tags/2026.10.1, `digest`).
- * Both were checked against the downloaded files on 2026-10-16. For Linux and
+ * digest (GET /repos/cloudflare/cloudflared/releases/tags/2026.10.5, `digest`).
+ * Both were checked against the downloaded files on 2026-10-27. For Linux and
  * Windows the two sources agree.
  */
-export const CLOUDFLARED_VERSION = "2026.10.1";
+export const CLOUDFLARED_VERSION = "2026.10.5";
 const RELEASE_BASE = `https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}`;
+
+/**
+ * The oldest cloudflared CorosLink runs. Earlier builds still trust eight
+ * eMudhra (emSign) intermediates with weak private keys (Cloudflare's notice
+ * of 2026-10-20); 2026.10.2 dropped them, and 2026.10.3 fixed macOS builds not
+ * installed with Homebrew. Applies to every source, the person's own included.
+ */
+export const CLOUDFLARED_MIN_VERSION = "2026.10.3";
 
 export const CLOUDFLARED_ASSETS: Record<CloudflaredTarget, CloudflaredAsset> = {
   "darwin-arm64": {
     target: "darwin-arm64",
     url: `${RELEASE_BASE}/cloudflared-darwin-arm64.tgz`,
-    size: 19_807_806,
-    sha256: "647615df99d49cd179ea5e13ef760b9bbfb33630f6ae62f87e33dfadda60adcc",
+    size: 19_840_425,
+    sha256: "184c7d4f5f977348243a6d7ca8f6cf6073b9b2746cfe8c1fe15aa59e9a522bf0",
     archive: "tgz",
-    binarySha256: "35b7e34c9a3f214d80d859c4223450c69e583c7668d228c45771026fe376cab9"
+    binarySha256: "2b23964528ddcd641c1449275df8b5b51e3c7193b5257919846331bc5bc13b0f"
   },
   "darwin-amd64": {
     target: "darwin-amd64",
     url: `${RELEASE_BASE}/cloudflared-darwin-amd64.tgz`,
-    size: 21_768_449,
-    sha256: "3b0dbaf378337e9d7fb6cd235a76d1d6a7dee434c2d8edf9281164fb6a3837ab",
+    size: 21_798_374,
+    sha256: "6699392fed92367808c248c2d90bed66e49bbf66e1b4ee3e4141230f3f7391b3",
     archive: "tgz",
-    binarySha256: "8ccc6383aef109c8d88965937649a796febbb166dab4b73345e820623aee1ede"
+    binarySha256: "cb09afb9b4d0a4730de477ac710aebb6107568930a8345775629bf264f70c284"
   },
   "windows-amd64": {
     target: "windows-amd64",
     url: `${RELEASE_BASE}/cloudflared-windows-amd64.exe`,
-    size: 55_325_120,
-    sha256: "4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6",
+    size: 55_343_328,
+    sha256: "db4e4c413612a0916f3e1679d3caaf376f94911952d163028fb726fb2e0516a9",
     archive: null,
-    binarySha256: "4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6"
+    binarySha256: "db4e4c413612a0916f3e1679d3caaf376f94911952d163028fb726fb2e0516a9"
   },
   "linux-amd64": {
     target: "linux-amd64",
     url: `${RELEASE_BASE}/cloudflared-linux-amd64`,
-    size: 40_227_032,
-    sha256: "3bfc539f45d2620c71debb7a86be0efa737ed5ccbad9eb85c787116900e5c586",
+    size: 40_263_303,
+    sha256: "e1bc0cf084fd9e590554fe769a86b1db46701c3f847a43d902f7b974a4e16298",
     archive: null,
-    binarySha256: "3bfc539f45d2620c71debb7a86be0efa737ed5ccbad9eb85c787116900e5c586"
+    binarySha256: "e1bc0cf084fd9e590554fe769a86b1db46701c3f847a43d902f7b974a4e16298"
   }
 };
 
@@ -116,7 +125,7 @@ export type CloudflaredSource = "env" | "path" | "managed";
 export interface ResolvedCloudflared {
   path: string;
   source: CloudflaredSource;
-  /** Known for downloaded builds only. */
+  /** Null when the person's own build doesn't say (`cloudflared --version`). */
   version: string | null;
   /** A downloaded build older than the pinned one: run it until the new one is in. */
   stale?: boolean;
@@ -148,10 +157,38 @@ async function fileSha256(file: string): Promise<string> {
   return hash.digest("hex");
 }
 
+/** `cloudflared version 2026.10.5 (built …)` → "2026.10.5"; null when it doesn't say. */
+export function parseCloudflaredVersion(output: string): string | null {
+  return /\bversion\s+(\d{4}\.\d{1,2}\.\d{1,3})\b/i.exec(output)?.[1] ?? null;
+}
+
+const probedVersions = new Map<string, { mtimeMs: number; version: string | null }>();
+
+/** Asks the person's own cloudflared its version (again only after the file changes). */
+async function probeVersion(binary: string, env: NodeJS.ProcessEnv): Promise<string | null> {
+  const stat = await fs.promises.stat(binary);
+  const cached = probedVersions.get(binary);
+  if (cached?.mtimeMs === stat.mtimeMs) return cached.version;
+  const output = await new Promise<string>((resolve) => {
+    execFile(binary, ["--version"], { env, timeout: 10_000, windowsHide: true }, (_error, stdout, stderr) =>
+      resolve(`${stdout ?? ""}\n${stderr ?? ""}`)
+    );
+  });
+  const version = parseCloudflaredVersion(output);
+  probedVersions.set(binary, { mtimeMs: stat.mtimeMs, version });
+  return version;
+}
+
+/** A known version older than CLOUDFLARED_MIN_VERSION (one that doesn't say gets the benefit of the doubt). */
+export function isVulnerableCloudflared(version: string | null): boolean {
+  return version !== null && compareVersions(version, CLOUDFLARED_MIN_VERSION) < 0;
+}
+
 /**
  * The cloudflared to run: COROSLINK_CLOUDFLARED_PATH, then one on PATH, then
  * the downloaded pinned build (re-hashed once per launch), then an older
- * downloaded build. Null means none: ask before downloading.
+ * downloaded build. Builds older than CLOUDFLARED_MIN_VERSION are passed over
+ * (an override that old is an error). Null means none: ask before downloading.
  */
 export async function findCloudflared(input: FindCloudflaredInput): Promise<ResolvedCloudflared | null> {
   const override = input.env.COROSLINK_CLOUDFLARED_PATH?.trim();
@@ -159,13 +196,23 @@ export async function findCloudflared(input: FindCloudflaredInput): Promise<Reso
     if (!(await isExecutableFile(override, input.platform))) {
       throw new Error("COROSLINK_CLOUDFLARED_PATH doesn't point at a cloudflared CorosLink can run.");
     }
-    return { path: override, source: "env", version: null };
+    const version = await probeVersion(override, input.env);
+    if (isVulnerableCloudflared(version)) {
+      throw new Error(
+        `The cloudflared at COROSLINK_CLOUDFLARED_PATH is version ${version}, which trusts compromised certificates. Update it to ${CLOUDFLARED_MIN_VERSION} or later.`
+      );
+    }
+    return { path: override, source: "env", version };
   }
   const name = cloudflaredBinaryName(input.platform);
   for (const directory of (input.env.PATH ?? input.env.Path ?? "").split(path.delimiter)) {
     if (!directory || !path.isAbsolute(directory)) continue;
     const candidate = path.join(directory, name);
-    if (await isExecutableFile(candidate, input.platform)) return { path: candidate, source: "path", version: null };
+    if (!(await isExecutableFile(candidate, input.platform))) continue;
+    const version = await probeVersion(candidate, input.env);
+    // Too old to trust: fall through to the pinned build rather than run it.
+    if (isVulnerableCloudflared(version)) continue;
+    return { path: candidate, source: "path", version };
   }
   const target = cloudflaredTarget(input.platform, input.arch);
   const managed = managedCloudflaredPath(input.userDataDir, CLOUDFLARED_VERSION, input.platform);
@@ -202,7 +249,12 @@ async function findOlderManaged(input: FindCloudflaredInput): Promise<ResolvedCl
     return null;
   }
   const older = versions
-    .filter((version) => /^\d{4}\.\d{1,2}\.\d{1,3}$/.test(version) && compareVersions(version, CLOUDFLARED_VERSION) < 0)
+    .filter(
+      (version) =>
+        /^\d{4}\.\d{1,2}\.\d{1,3}$/.test(version) &&
+        compareVersions(version, CLOUDFLARED_VERSION) < 0 &&
+        !isVulnerableCloudflared(version)
+    )
     .sort(compareVersions)
     .reverse();
   for (const version of older) {
