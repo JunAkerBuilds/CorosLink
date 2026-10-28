@@ -4397,6 +4397,8 @@ export interface TrainingHubScheduledWorkoutEntry {
   volume?: string;
   trainingLoad?: number;
   exercises?: TrainingHubScheduledExercise[];
+  /** The workout's description as its coach wrote it (the program's `overview`), when it has one. */
+  description?: string;
   /** Raw program payload from schedule/query — required to re-add the workout when rescheduling. */
   rawProgram?: Record<string, unknown>;
   /**

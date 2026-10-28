@@ -1,4 +1,5 @@
 import { app, powerSaveBlocker, safeStorage, shell } from "electron";
+import type { ScheduledProgram } from "./scheduledSteps";
 import type { CoachSessionHub } from "../coachHub/coachSessionHub";
 import type { ChatProvider, ChatSettings } from "../types";
 import type { ChatModelOption } from "../chatModels";
@@ -60,6 +61,7 @@ export interface RemoteAccessOptions {
   saveChatSettings?: (settings: ChatSettings) => ChatSettings;
   chatModels?: (provider: ChatProvider) => Promise<ChatModelOption[]>;
   attachments?: RemoteAttachmentStore;
+  scheduledPrograms?: (startDay: string, endDay: string) => Promise<ScheduledProgram[]>;
 }
 
 export class RemoteAccess {
@@ -186,6 +188,7 @@ export class RemoteAccess {
         saveChatSettings: this.options.saveChatSettings,
         chatModels: this.options.chatModels,
         attachments: this.options.attachments,
+        scheduledPrograms: this.options.scheduledPrograms,
         port: preferredRemotePort(settings),
         nextPort: () => randomRemotePort(),
         onPortChanged: (port) => saveRemotePort(settings, port),

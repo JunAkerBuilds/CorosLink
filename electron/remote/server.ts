@@ -1,4 +1,5 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
+import { SCHEDULED_STEPS_MAX_DAYS, scheduledStepsRange, scheduledStepsRows, type ScheduledProgram } from "./scheduledSteps";
 import type { Duplex } from "node:stream";
 import os from "node:os";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
@@ -17,6 +18,7 @@ import {
   REMOTE_FILES_CAPABILITY,
   REMOTE_PLAN_OPTIONS_CAPABILITY,
   REMOTE_PROTOCOL_VERSION,
+  REMOTE_SCHEDULED_STEPS_CAPABILITY,
   REMOTE_ROUTES,
   RELAY_MINT_REQUEST_TYP,
   coachSessionInfo,
@@ -79,6 +81,8 @@ export interface RemoteServerOptions {
   chatModels?: (provider: ChatProvider) => Promise<ChatModelOption[]>;
   /** Where files a phone attaches are kept (coachAttachments.ts); without it phones can't attach. */
   attachments?: RemoteAttachmentStore;
+  /** The calendar's workouts with COROS's own programs, from Training Hub; without it phones can't ask for steps. */
+  scheduledPrograms?: (startDay: string, endDay: string) => Promise<ScheduledProgram[]>;
   /** The port to try first (identity.ts saves it). */
   port: number;
   /** The saved port was taken and the server moved; save the new one. */
@@ -428,6 +432,14 @@ export class RemoteServer {
           permissions: client.session.permissions
         })
       }),
+      "training.scheduledSteps": async (_client, params) => {
+        if (!this.options.scheduledPrograms) {
+          throw new RpcError({ code: "unsupported", message: "This CorosLink can't read workout steps for a phone." });
+        }
+        const range = scheduledStepsRange(params);
+        if (!range) throw invalidParams(`startDay and endDay must be YYYYMMDD, at most ${SCHEDULED_STEPS_MAX_DAYS} days apart.`);
+        return { result: { workouts: scheduledStepsRows(await this.options.scheduledPrograms(range.startDay, range.endDay)) } };
+      },
       "environment.info": () => ({ result: this.environmentInfo() })
     };
   }
@@ -788,7 +800,8 @@ export class RemoteServer {
       capabilities: [
         ...REMOTE_CAPABILITIES,
         REMOTE_PLAN_OPTIONS_CAPABILITY,
-        ...(this.options.attachments ? [REMOTE_FILES_CAPABILITY] : [])
+        ...(this.options.attachments ? [REMOTE_FILES_CAPABILITY] : []),
+        ...(this.options.scheduledPrograms ? [REMOTE_SCHEDULED_STEPS_CAPABILITY] : [])
       ],
       keyThumbprint: this.options.identity.kid
     };

@@ -34,6 +34,8 @@ export const REMOTE_CAPABILITIES = ["coach"] as const;
 export const REMOTE_FILES_CAPABILITY = "coach.files";
 /** `coach.confirm` honours a phone's `options.destination` and `options.scheduleDate` for a one-off workout draft. */
 export const REMOTE_PLAN_OPTIONS_CAPABILITY = "coach.planOptions";
+/** Listed too when `training.scheduledSteps` gives planned workouts' exact steps from Training Hub (scheduledSteps.ts). */
+export const REMOTE_SCHEDULED_STEPS_CAPABILITY = "training.steps";
 
 export const REMOTE_ROUTES = {
   descriptor: "/v1/descriptor",
@@ -161,6 +163,7 @@ export const COACH_RPC_PERMISSIONS = {
   "coach.getModels": "coach:read",
   "coach.setModel": "coach:operate",
   "coach.confirm": "coach:approve",
+  "training.scheduledSteps": "coach:read",
   "environment.info": "coach:read"
 } as const satisfies Record<string, CoachPermission>;
 
