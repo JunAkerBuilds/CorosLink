@@ -75,6 +75,42 @@ const scheduledPrograms = async (startDay, endDay) => {
       program: { sportType: 1, exercises: [{ id: "1", exerciseType: 2, targetType: 5, targetValue: 500000, intensityType: 3, isIntensityPercent: true, intensityPercent: 95000, groupId: "0" }] }
     },
     { happenDay: "20261101", idInPlan: "9", program: { sportType: 4, overview: "  Pull day: rows, pull-ups and curls.  ", exercises: [{ id: "1", exerciseType: 2, targetType: 3, targetValue: 10 }] } },
+    // A pool swim by stroke, a gym session by exercise and weight, and a ride by % of FTP and speed.
+    {
+      happenDay: "20261102", idInPlan: "11",
+      program: {
+        sportType: 3,
+        exercises: [
+          { id: "1", exerciseType: 1, targetType: 5, targetValue: 20000, intensityType: 5, intensityValue: 1, groupId: "0" },
+          { id: "2", exerciseType: 2, isGroup: true, sets: 4, groupId: "0" },
+          { id: "3", exerciseType: 2, targetType: 5, targetValue: 10000, intensityType: 5, intensityValue: 2, groupId: "2" },
+          { id: "4", exerciseType: 4, targetType: 2, targetValue: 20, groupId: "2" },
+          { id: "5", exerciseType: 3, targetType: 5, targetValue: 10000, intensityType: 0, groupId: "0" }
+        ]
+      }
+    },
+    {
+      happenDay: "20261103", idInPlan: "12",
+      program: {
+        sportType: 4,
+        exercises: [
+          { id: "1", exerciseType: 2, isGroup: true, sets: 3, groupId: "0" },
+          { id: "2", name: "T1061", overview: "sid_strength_squats", exerciseType: 2, targetType: 3, targetValue: 10, intensityType: 1, intensityValue: 20, intensityValueExtend: 20, intensityDisplayUnit: 6, groupId: "1" },
+          { id: "3", name: "T1100", overview: "sid_strength_push_ups", exerciseType: 2, targetType: 3, targetValue: 15, intensityType: 1, intensityCustom: 1, groupId: "1" },
+          { id: "4", exerciseType: 4, targetType: 2, targetValue: 90, groupId: "1" }
+        ]
+      }
+    },
+    {
+      happenDay: "20261104", idInPlan: "13",
+      program: {
+        sportType: 2,
+        exercises: [
+          { id: "1", exerciseType: 2, targetType: 2, targetValue: 1200, intensityType: 9, isIntensityPercent: true, intensityCustom: 3, intensityPercent: 88000, intensityPercentExtend: 94000, groupId: "0" },
+          { id: "2", exerciseType: 3, targetType: 2, targetValue: 600, intensityType: 4, intensityValue: 2500, intensityValueExtend: 3000, groupId: "0" }
+        ]
+      }
+    },
     // Runna's "Tempo 2-1" as Training Hub keeps it: each step's pace in its name, the pace target 0.
     {
       happenDay: "20261028", idInPlan: "10",
@@ -494,8 +530,27 @@ try {
     // Planned workouts' exact steps, readable with coach:read, in C-LINK's step shape.
     const planned = (await view.call("training.scheduledSteps", { startDay: "20261026", endDay: "20261129" })).result.workouts;
     assert.deepEqual(scheduleAsked.at(-1), ["20261026", "20261129"]);
-    assert.deepEqual(planned.map((row) => [row.day, row.idInPlan]), [["2026-10-29", "7"], ["2026-10-31", "8"], ["2026-11-01", "9"], ["2026-10-28", "10"]]);
+    assert.deepEqual(planned.map((row) => [row.day, row.idInPlan]), [["2026-10-29", "7"], ["2026-10-31", "8"], ["2026-11-01", "9"], ["2026-11-02", "11"], ["2026-11-03", "12"], ["2026-11-04", "13"], ["2026-10-28", "10"]]);
     assert.deepEqual(planned[3].steps, [
+      { step: { _0: { kind: 1, target: { distance: { meters: 200 } }, note: "Freestyle" } } },
+      { repeats: { times: 4, steps: [
+        { kind: 2, target: { distance: { meters: 100 } }, note: "Breaststroke" },
+        { kind: 3, target: { time: { seconds: 20 } } }
+      ] } },
+      { step: { _0: { kind: 4, target: { distance: { meters: 100 } } } } }
+    ], "a swim's strokes are its steps' notes");
+    assert.deepEqual(planned[4].steps, [
+      { repeats: { times: 3, steps: [
+        { kind: 2, target: { reps: { count: 10 } }, note: "Squats @ 20 kg" },
+        { kind: 2, target: { reps: { count: 15 } }, note: "Push Ups" },
+        { kind: 3, target: { time: { seconds: 90 } } }
+      ] } }
+    ], "a gym session names each exercise, its weight and reps");
+    assert.deepEqual(planned[5].steps, [
+      { step: { _0: { kind: 2, target: { time: { seconds: 1200 } }, metric: 4, intensity: { percent: { low: 88, high: 94 } } } } },
+      { step: { _0: { kind: 4, target: { time: { seconds: 600 } }, metric: 2, intensity: { range: { low: 120, high: 144 } } } } }
+    ], "a ride's % of FTP is power against threshold, its speed a pace C-LINK shows as km/h");
+    assert.deepEqual(planned[6].steps, [
       { step: { _0: { kind: 1, target: { distance: { meters: 1500 } }, note: "1.5km warm up" } } },
       { step: { _0: { kind: 2, target: { distance: { meters: 2000 } }, note: "2km at 5:10/km" } } },
       { step: { _0: { kind: 3, target: { time: { seconds: 120 } }, note: "120s rest" } } },
@@ -511,11 +566,13 @@ try {
       ] } },
       { step: { _0: { kind: 4, target: { distance: { meters: 1609.34 } }, metric: 1, intensity: { range: { low: 120, high: 135 } } } } }
     ], "walks are rests, the cool-down stays one, mile paces to the millisecond");
-    assert.equal(planned[1].steps, null, "a percentage of threshold isn't an exact step");
-    assert.equal(planned[2].steps, null, "strength has no distance or time steps");
+    assert.deepEqual(planned[1].steps, [
+      { step: { _0: { kind: 2, target: { distance: { meters: 5000 } }, metric: 3, intensity: { percent: { low: 95, high: 95 } } } } }
+    ], "a percentage of threshold pace is the coach's exact step");
+    assert.deepEqual(planned[2].steps, [{ step: { _0: { kind: 2, target: { reps: { count: 10 } } } } }], "an unnamed exercise is still its reps");
     assert.equal(planned[2].description, "Pull day: rows, pull-ups and curls.", "every workout with a description sends it");
     assert.equal(planned[0].description, undefined);
-    assert.equal(planned[3].description, undefined, "COROS's built-in keys aren't a description");
+    assert.equal(planned[6].description, undefined, "COROS's built-in keys aren't a description");
     assert.equal((await view.call("training.scheduledSteps", { startDay: "20261026", endDay: "20270101" })).error.code, "invalid", "at most 62 days");
     assert.equal((await view.call("training.scheduledSteps", { startDay: "2026-10-26", endDay: "20261029" })).error.code, "invalid");
     assert.equal((await view.call("training.scheduledSteps", { startDay: "20261030", endDay: "20261029" })).error.code, "invalid");

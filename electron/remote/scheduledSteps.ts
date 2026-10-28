@@ -11,7 +11,7 @@
 // A workout with any step C-LINK can't show exactly gets `steps: null`, never
 // a step with its target left out.
 
-import { paceDivisor } from "../workoutCapabilities";
+import { decodeCorosPercent, paceDivisor, SWIM_STROKE_IDS, workoutExerciseName } from "../workoutCapabilities";
 
 export interface ScheduledProgram {
   /** YYYYMMDD */
@@ -25,13 +25,14 @@ export type WireTarget =
   | { distance: { meters: number } }
   | { time: { seconds: number } }
   | { ascent: { meters: number } }
-  | { open: Record<string, never> };
+  | { open: Record<string, never> }
+  | { reps: { count: number } };
 
 export interface WireStep {
   kind: 1 | 2 | 3 | 4;
   target: WireTarget;
-  metric?: 1 | 2 | 4;
-  intensity?: { range: { low: number; high: number } };
+  metric?: 1 | 2 | 3 | 4;
+  intensity?: { range: { low: number; high: number } } | { percent: { low: number; high: number } };
   /** The coach's own name for the step, word for word ("2km at 5:10/km"). */
   note?: string;
 }
@@ -56,8 +57,21 @@ const num = (value: unknown): number => {
   return typeof parsed === "number" && Number.isFinite(parsed) ? parsed : 0;
 };
 
-/** Only sports whose steps are distances, times and paces: runs, rides and trail runs. */
-const STEP_SPORTS = new Set([1, 2, 5]);
+/** Sports whose steps name an exercise (a gym's squats, a HYROX station) rather than a distance or time. */
+const EXERCISE_SPORTS = new Set([4, 9]);
+
+const STROKE_NAMES: Readonly<Record<number, string>> = {
+  [SWIM_STROKE_IDS.freestyle]: "Freestyle",
+  [SWIM_STROKE_IDS.breaststroke]: "Breaststroke",
+  [SWIM_STROKE_IDS.backstroke]: "Backstroke",
+  [SWIM_STROKE_IDS.butterfly]: "Butterfly",
+  [SWIM_STROKE_IDS.drills]: "Drills",
+  [SWIM_STROKE_IDS.individualMedley]: "Individual medley",
+  [SWIM_STROKE_IDS.mix]: "Mixed strokes"
+};
+
+/** COROS's `hrType` for a percentage of lactate threshold heart rate, the one threshold C-LINK names. */
+const HR_TYPE_LTHR = 3;
 
 /**
  * The step's name when a coach wrote one: Runna names each step with its pace
@@ -71,14 +85,28 @@ function stepNote(exercise: Record<string, unknown>): string | undefined {
   return name.slice(0, 200);
 }
 
+/** "Squats @ 20 kg", "Push-ups" for bodyweight: a gym step's exercise and its weight, as C-LINK shows it. */
+function exerciseNote(exercise: Record<string, unknown>, sportType: number): string | undefined {
+  const name = EXERCISE_SPORTS.has(sportType) ? workoutExerciseName(exercise) : "";
+  const named = name && !/^[TS]\d+$/i.test(name) && !/^sid_/i.test(name) ? name.slice(0, 200) : stepNote(exercise);
+  if (num(exercise.intensityType) !== 1 || num(exercise.intensityCustom) === 1) return named;
+  const kg = num(exercise.intensityValue);
+  if (kg <= 0) return named;
+  const pounds = num(exercise.intensityDisplayUnit) === 7;
+  const weight = `${Number((pounds ? kg * 2.2046226218 : kg).toFixed(1))} ${pounds ? "lb" : "kg"}`;
+  return named ? `${named} @ ${weight}` : weight;
+}
+
 /**
  * One COROS exercise as a step. exerciseType 1 warm-up, 2 training, 3 cool-down,
- * 4 rest; targetType 1 open, 2 seconds, 5 centimetres, 8 ascent in centimetres;
- * intensityType 2 heart rate (bpm), 3 pace (seconds per km, `paceDivisor`),
- * 6 power (W); a target stored as 0 is none (a Runna step's pace is in its name).
- * A percentage, zone preset or any other intensity is left to the workout as a whole: null.
+ * 4 rest; targetType 1 open, 2 seconds, 3 reps, 5 centimetres, 8 ascent in centimetres;
+ * intensityType 1 weight (kg, in the note), 2 heart rate (bpm, or % of LTHR),
+ * 3 pace (seconds per km, `paceDivisor`, or % of threshold pace), 4 speed (km/h × 100,
+ * a ride's), 5 swim stroke (in the note), 6 power (W), 9 % of FTP; a target stored as 0
+ * is none (a Runna step's pace is in its name). Any other intensity, or a percentage of
+ * something C-LINK can't name, is left to the workout as a whole: null.
  */
-export function wireStep(exercise: Record<string, unknown>): WireStep | null {
+export function wireStep(exercise: Record<string, unknown>, sportType = 1): WireStep | null {
   const kind = ({ 1: 1, 2: 2, 3: 4, 4: 3 } as const)[num(exercise.exerciseType) as 1 | 2 | 3 | 4];
   if (!kind) return null;
   const value = num(exercise.targetValue);
@@ -87,15 +115,25 @@ export function wireStep(exercise: Record<string, unknown>): WireStep | null {
     case 0:
     case 1: target = { open: {} }; break;
     case 2: if (value <= 0) return null; target = { time: { seconds: value } }; break;
+    case 3: if (value <= 0) return null; target = { reps: { count: Math.round(value) } }; break;
     case 5: if (value <= 0) return null; target = { distance: { meters: value / 100 } }; break;
     case 8: if (value <= 0) return null; target = { ascent: { meters: value / 100 } }; break;
     default: return null;
   }
-  const note = stepNote(exercise);
-  const plain: WireStep = { kind, target, ...(note ? { note } : {}) };
   const type = num(exercise.intensityType);
-  if (type === 0) return plain;
-  if (exercise.isIntensityPercent === true || num(exercise.intensityCustom) !== 0) return null;
+  const stroke = type === 5 ? STROKE_NAMES[num(exercise.intensityValue)] : undefined;
+  const note = exerciseNote(exercise, sportType) ?? stroke;
+  const plain: WireStep = { kind, target, ...(note ? { note } : {}) };
+  if (type === 0 || type === 1 || (type === 5 && num(exercise.intensityValue) === 0)) return plain;
+  if (type === 5) return stroke ? plain : null;
+  if (exercise.isIntensityPercent === true) {
+    const metric = type === 3 ? 3 : type === 9 ? 4 : type === 2 && num(exercise.hrType) === HR_TYPE_LTHR ? 1 : undefined;
+    const lowPercent = decodeCorosPercent(exercise.intensityPercent) ?? 0;
+    const highPercent = decodeCorosPercent(exercise.intensityPercentExtend) || lowPercent;
+    if (!metric || lowPercent <= 0) return null;
+    return { ...plain, metric, intensity: { percent: { low: Math.min(lowPercent, highPercent), high: Math.max(lowPercent, highPercent) } } };
+  }
+  if (num(exercise.intensityCustom) !== 0) return null;
   const low = num(exercise.intensityValue);
   const high = num(exercise.intensityValueExtend) || low;
   if (low === 0 && high === 0 && [2, 3, 6].includes(type)) return plain;
@@ -107,12 +145,18 @@ export function wireStep(exercise: Record<string, unknown>): WireStep | null {
     return divisor ? { ...plain, metric: 2, intensity: range(divisor) } : null;
   }
   if (type === 6) return { ...plain, metric: 4, intensity: range(1) };
+  // A ride's speed as the pace C-LINK shows back as km/h: seconds per km, the faster end low.
+  if (type === 4 && sportType === 2) {
+    const [slow, fast] = [Math.min(low, high) / 100, Math.max(low, high) / 100];
+    return { ...plain, metric: 2, intensity: { range: { low: 3600 / fast, high: 3600 / slow } } };
+  }
   return null;
 }
 
 /** A program's steps in order, a repeat group's members under it; null when one can't be shown exactly. */
 export function wireBlocks(program: Record<string, unknown> | undefined): WireBlock[] | null {
-  if (!program || !STEP_SPORTS.has(num(program.sportType))) return null;
+  if (!program) return null;
+  const sportType = num(program.sportType) || 1;
   const exercises = Array.isArray(program.exercises)
     ? (program.exercises as unknown[]).filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
     : [];
@@ -123,11 +167,11 @@ export function wireBlocks(program: Record<string, unknown> | undefined): WireBl
   const blocks: WireBlock[] = [];
   for (const exercise of exercises) {
     if (exercise.isGroup === true) {
-      const members = exercises.filter((member) => member.isGroup !== true && groupOf(member) === id(exercise)).map(wireStep);
+      const members = exercises.filter((member) => member.isGroup !== true && groupOf(member) === id(exercise)).map((member) => wireStep(member, sportType));
       if (!members.length || members.some((member) => member === null)) return null;
       blocks.push({ repeats: { times: Math.max(1, Math.round(num(exercise.sets))), steps: members as WireStep[] } });
     } else if (groupOf(exercise) === "0" || groupOf(exercise) === "" || !groups.has(groupOf(exercise))) {
-      const step = wireStep(exercise);
+      const step = wireStep(exercise, sportType);
       if (!step) return null;
       blocks.push({ step: { _0: step } });
     }

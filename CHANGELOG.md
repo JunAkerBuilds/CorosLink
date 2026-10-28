@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Workout descriptions on the calendar.** Open a planned workout and its panel now shows the plan's description, the overview the coach or plan wrote for it, above the steps.
-- **Planned workouts with their steps on your phone.** A paired phone can now read each workout on your calendar with its exact steps and description from Training Hub. That includes workouts COROS's own connection leaves out, such as plans in miles and Runna plans.
+- **Planned workouts with their steps on your phone.** A paired phone can now read each workout on your calendar with its exact steps and description from Training Hub. That includes workouts COROS's own connection leaves out, such as plans in miles and Runna plans. Runs, rides, swims and gym sessions all come with their steps: a swim's strokes, each gym exercise with its weight and reps, a ride's % of FTP or speed, and targets set as a percentage of threshold pace or threshold heart rate.
 - **Smooth or hard edges for digits in Studio.** Every digit layer has an **Edges** setting: **Smooth**, the default, or **Hard**. The Studio AI sometimes turned on hard edges for step, heart rate, calorie and battery numbers, which made them look pixelated. It now leaves them smooth unless you ask, and you can switch any face's digits back to Smooth.
 
 ### Fixed
