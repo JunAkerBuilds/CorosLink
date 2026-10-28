@@ -842,6 +842,19 @@ function reverseKey<T extends string>(mapping: Readonly<Record<T, number>>, valu
   return (Object.keys(mapping) as T[]).find((key) => mapping[key] === value);
 }
 
+/** Seconds per km a pace step can mean: 1:00 to 60:00 per km. */
+const PACE_SECONDS = [60, 3600];
+
+/**
+ * What a pace's values are divided by to give seconds per km. COROS writes
+ * milliseconds with `intensityMultiplier` 1000; Runna writes seconds (300 for
+ * 5:00/km). The one that gives a pace a runner can hold wins; null when neither does.
+ */
+export function paceDivisor(low: number, high: number, multiplier: number): number | null {
+  const fits = (divisor: number) => [low, high].every((value) => value / divisor >= PACE_SECONDS[0]! && value / divisor <= PACE_SECONDS[1]!);
+  return [multiplier || 1000, 1].find(fits) ?? null;
+}
+
 export function decodeCorosIntensity(
   exercise: Record<string, unknown>,
   context?: WorkoutEditorContext
@@ -888,7 +901,8 @@ export function decodeCorosIntensity(
         ? { intensity: { type: intensityType, preset: definition.preset, zoneId: custom } }
         : { intensity: { type: intensityType, lowPercent: Math.min(percentLow, percentHigh), highPercent: Math.max(percentLow, percentHigh) } };
     }
-    const multiplier = finiteNumber(exercise.intensityMultiplier) || 1_000;
+    const stored = finiteNumber(exercise.intensityMultiplier) || 1_000;
+    const multiplier = paceDivisor(value, valueExtend, stored) ?? stored;
     const [lowSecondsPerKm, highSecondsPerKm] = range(value / multiplier, valueExtend / multiplier);
     return {
       intensity: {

@@ -207,6 +207,10 @@ function decodeIntensity(
       return {};
     }
     if (intensity.type === "pace" || intensity.type === "effortPace") {
+      // Runna stores each step's pace as 0 and writes it in the step's name.
+      if (intensity.lowSecondsPerKm <= 0 && intensity.highSecondsPerKm <= 0) {
+        return {};
+      }
       const formatted = formatWorkoutIntensity({
         ...intensity,
         displayUnit: unitSystem === "imperial" ? "mi" : "km"

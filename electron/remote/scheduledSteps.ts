@@ -11,6 +11,8 @@
 // A workout with any step C-LINK can't show exactly gets `steps: null`, never
 // a step with its target left out.
 
+import { paceDivisor } from "../workoutCapabilities";
+
 export interface ScheduledProgram {
   /** YYYYMMDD */
   happenDay: string;
@@ -106,19 +108,6 @@ export function wireStep(exercise: Record<string, unknown>): WireStep | null {
   }
   if (type === 6) return { ...plain, metric: 4, intensity: range(1) };
   return null;
-}
-
-/** Seconds per km a pace step can mean: 1:00 to 60:00 per km. */
-const PACE_SECONDS = [60, 3600];
-
-/**
- * What a pace's values are divided by to give seconds per km. COROS writes
- * milliseconds with `intensityMultiplier` 1000; Runna writes seconds (300 for
- * 5:00/km). The one that gives a pace a runner can hold wins; null when neither does.
- */
-export function paceDivisor(low: number, high: number, multiplier: number): number | null {
-  const fits = (divisor: number) => [low, high].every((value) => value / divisor >= PACE_SECONDS[0]! && value / divisor <= PACE_SECONDS[1]!);
-  return [multiplier || 1000, 1].find(fits) ?? null;
 }
 
 /** A program's steps in order, a repeat group's members under it; null when one can't be shown exactly. */
