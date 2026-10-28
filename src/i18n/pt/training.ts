@@ -252,6 +252,7 @@ export const trainingPortuguese: Record<string, string> = {
   "Close calendar connection": "Fechar ligação ao calendário",
   "Close calendar preview": "Fechar pré-visualização do calendário",
   "Close details": "Fechar detalhes",
+  "Open the full activity page": "Abrir a página completa da atividade",
   "Close Exercise Explorer": "Fechar explorador de exercícios",
   "Close exercise suggestions": "Fechar sugestões de exercícios",
   "Close expanded map": "Fechar mapa ampliado",

@@ -1,0 +1,84 @@
+/* ── Calendar aside ⇄ full activity page ───────────────────────────────
+   DayDetailPanel commits the switch inside a View Transition with
+   html.is-activity-page-morph set. The name lives only on the side that is
+   showing, so the aside pairs with the page's surface (and back): the box
+   grows from the right-hand panel into the centred page while the calendar
+   and the page's backdrop crossfade underneath. */
+
+/* The page sits over the aside. The aside stays mounted (closing the page
+   lands back on it) but leaves rendering, so its map and charts aren't kept
+   composited under the page's backdrop blur. */
+.calendar-detail-panel.is-expanded,
+.calendar-detail-backdrop.is-behind-page {
+  display: none;
+}
+
+:root.is-activity-page-morph .calendar-detail-panel:not(.is-expanded),
+:root.is-activity-page-morph .calendar-activity-page[open] .activity-dialog-surface {
+  view-transition-name: activity-page-surface;
+}
+
+/* The morph is the entrance; the page's own rise-in and backdrop fade would double it. */
+:root.is-activity-page-morph .calendar-activity-page .activity-dialog-surface,
+:root.is-activity-page-morph .calendar-activity-page::backdrop {
+  animation: none;
+}
+
+:root.is-activity-page-morph::view-transition-group(*) {
+  animation-duration: 480ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Glass doesn't survive capture (its backdrop isn't in the snapshot), so the
+   growing box carries a solid surface; each side keeps its natural size,
+   pinned top-left, and the two fade through rather than over each other. */
+:root.is-activity-page-morph::view-transition-group(activity-page-surface) {
+  overflow: clip;
+  border-radius: 24px;
+  background: var(--bg-base);
+}
+
+:root.is-activity-page-morph::view-transition-old(activity-page-surface),
+:root.is-activity-page-morph::view-transition-new(activity-page-surface) {
+  height: 100%;
+  object-fit: none;
+  object-position: left top;
+}
+
+:root.is-activity-page-morph::view-transition-old(activity-page-surface) {
+  animation: activity-page-morph-out 140ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+:root.is-activity-page-morph::view-transition-new(activity-page-surface) {
+  animation: activity-page-morph-in 260ms cubic-bezier(0, 0, 0.2, 1) 110ms both;
+}
+
+/* styles.css gives the root a theme-reveal; here it is a true crossfade, blended
+   plus-lighter so unchanged pixels (sidebar, window chrome) stay still. */
+:root.is-activity-page-morph::view-transition-image-pair(root) {
+  isolation: isolate;
+}
+
+:root.is-activity-page-morph::view-transition-old(root) {
+  z-index: 1;
+  mix-blend-mode: plus-lighter;
+  animation: activity-page-morph-out 260ms linear both;
+}
+
+:root.is-activity-page-morph::view-transition-new(root) {
+  z-index: 2;
+  mix-blend-mode: plus-lighter;
+  animation: activity-page-morph-in 260ms linear both;
+}
+
+@keyframes activity-page-morph-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes activity-page-morph-in {
+  from {
+    opacity: 0;
+  }
+}

@@ -1380,6 +1380,7 @@ export function CalendarView({
 
       <DayDetailPanel
         api={api}
+        onMessage={onMessage}
         userId={status?.userId}
         onEventSaved={(event) => {
           setSelection(current => current?.kind === "scheduled" ? { ...current, entry: { ...current.entry, calendarEvent: event } } : current);

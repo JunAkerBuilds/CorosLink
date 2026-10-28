@@ -252,6 +252,7 @@ export const trainingChinese: Readonly<Record<string, string>> = {
   "Close calendar connection": "关闭日历连接",
   "Close calendar preview": "关闭日历预览",
   "Close details": "关闭详情",
+  "Open the full activity page": "打开完整活动页面",
   "Close Exercise Explorer": "关闭动作浏览器",
   "Close exercise suggestions": "关闭训练建议",
   "Close expanded map": "关闭展开的地图",

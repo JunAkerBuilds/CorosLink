@@ -6,7 +6,8 @@
 .activities-search input::placeholder { color: var(--text-muted); }
 .activities-sport-filters, .activities-display-controls { display: flex; align-items: center; gap: 9px; }
 .activities-display-controls { margin-left: auto; gap: 16px; }
-.activities-browser button, .activities-browser select { font-family: inherit; cursor: pointer; }
+/* The detail dialog also opens outside the browser (the calendar's full activity page). */
+:is(.activities-browser, .activities-detail-dialog) :is(button, select) { font-family: inherit; cursor: pointer; }
 .activities-sport-filters button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; padding: 7px 14px; border: 1px solid var(--glass-border); border-radius: 24px; background: var(--glass-bg); color: var(--text-primary); font-size: 12px; white-space: nowrap; }
 .activity-sport-all, .activity-sport-run { --activity-color: #5ce5a2; }
 .activity-sport-ride { --activity-color: #f5d34e; }
@@ -112,7 +113,11 @@
 .activities-detail-dialog { width: min(1120px, calc(100vw - 48px)); max-height: calc(100dvh - 48px); padding: 0; border: 0; overflow: visible; background: transparent; color: var(--text-primary); }
 .activities-detail-dialog[open] { display: flex; flex-direction: column; }
 .activities-detail-dialog::backdrop { background: radial-gradient(110% 80% at 50% 0%, #0d1f1a99, #03070ccc 70%); -webkit-backdrop-filter: blur(16px) saturate(120%); backdrop-filter: blur(16px) saturate(120%); animation: activity-dialog-fade 220ms ease-out; }
-.activity-dialog-surface { --dialog-panel-bg: linear-gradient(160deg, #ffffff09, #ffffff03), color-mix(in srgb, var(--surface) 62%, transparent); --dialog-hairline: color-mix(in srgb, var(--text-muted) 18%, transparent); --dialog-glow: color-mix(in srgb, var(--activity-color) 22%, transparent); position: relative; display: flex; flex-direction: column; min-height: 0; max-height: calc(100dvh - 48px); overflow: clip; isolation: isolate; container-type: inline-size; border: 1px solid color-mix(in srgb, var(--activity-color) 22%, var(--glass-border)); border-radius: 24px; background: radial-gradient(640px 480px at -40px -140px, var(--dialog-glow), transparent 68%), radial-gradient(560px 440px at calc(100% + 120px) calc(100% + 160px), color-mix(in srgb, var(--activity-color) 9%, transparent), transparent 70%), linear-gradient(165deg, color-mix(in srgb, var(--surface) 90%, transparent), color-mix(in srgb, var(--bg-base) 84%, transparent)); -webkit-backdrop-filter: blur(36px) saturate(150%); backdrop-filter: blur(36px) saturate(150%); box-shadow: 0 50px 140px #000000b3, inset 0 1px 0 #ffffff1c, inset 0 0 0 1px #ffffff08; animation: activity-dialog-in 260ms cubic-bezier(.2, .8, .2, 1); }
+/* GPU budget: scrolling the body redraws every blur it damages, and with the surface, footer and laps-header
+   blurs stacked on the ::backdrop blur, the first scroll after the GPU idles took ~160 ms to execute (blank
+   frames in Electron). The surface sits on the already-blurred ::backdrop, so it needs no blur of its own;
+   the sticky bars are near-opaque instead. */
+.activity-dialog-surface { --dialog-panel-bg: linear-gradient(160deg, #ffffff09, #ffffff03), color-mix(in srgb, var(--surface) 62%, transparent); --dialog-hairline: color-mix(in srgb, var(--text-muted) 18%, transparent); --dialog-glow: color-mix(in srgb, var(--activity-color) 22%, transparent); position: relative; display: flex; flex-direction: column; min-height: 0; max-height: calc(100dvh - 48px); overflow: clip; isolation: isolate; container-type: inline-size; border: 1px solid color-mix(in srgb, var(--activity-color) 22%, var(--glass-border)); border-radius: 24px; background: radial-gradient(640px 480px at -40px -140px, var(--dialog-glow), transparent 68%), radial-gradient(560px 440px at calc(100% + 120px) calc(100% + 160px), color-mix(in srgb, var(--activity-color) 9%, transparent), transparent 70%), linear-gradient(165deg, color-mix(in srgb, var(--surface) 90%, transparent), color-mix(in srgb, var(--bg-base) 84%, transparent)); box-shadow: 0 50px 140px #000000b3, inset 0 1px 0 #ffffff1c, inset 0 0 0 1px #ffffff08; animation: activity-dialog-in 260ms cubic-bezier(.2, .8, .2, 1); }
 .activity-dialog-header { position: relative; z-index: 1; display: grid; gap: 14px; padding: 18px 22px 20px; border-bottom: 1px solid var(--dialog-hairline); }
 .activity-dialog-topline { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--text-secondary); }
 .activity-dialog-close { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; padding: 0; border: 1px solid var(--glass-border); border-radius: 11px; background: var(--glass-bg); color: var(--text-secondary); transition: color 160ms ease, border-color 160ms ease, background 160ms ease, transform 220ms cubic-bezier(.2, .8, .2, 1); }
@@ -191,14 +196,14 @@
 .activities-detail-dialog .training-laps-section { gap: 14px; padding: 14px 16px 16px; border: 1px solid var(--glass-border); border-radius: 16px; background: var(--dialog-panel-bg); box-shadow: inset 0 1px 0 #ffffff10; }
 .activities-detail-dialog .training-laps-section .table-shell { max-height: 300px; border: 1px solid color-mix(in srgb, var(--text-muted) 16%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--bg-base) 55%, transparent); }
 .activities-detail-dialog .training-laps-section table { min-width: 0; }
-.activities-detail-dialog .training-laps-section thead th { padding: 11px 16px; border-bottom: 1px solid color-mix(in srgb, var(--text-muted) 22%, transparent); background: color-mix(in srgb, var(--surface) 94%, transparent); color: var(--text-muted); font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
+.activities-detail-dialog .training-laps-section thead th { padding: 11px 16px; border-bottom: 1px solid color-mix(in srgb, var(--text-muted) 22%, transparent); background: color-mix(in srgb, var(--surface) 98%, transparent); -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--text-muted); font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
 .activities-detail-dialog .training-laps-section td { padding: 11px 16px; border-bottom: 1px solid color-mix(in srgb, var(--text-muted) 12%, transparent); font-size: 13px; font-variant-numeric: tabular-nums; }
 .activities-detail-dialog .training-laps-section tbody tr:last-child td { border-bottom: 0; }
 .activities-detail-dialog .training-laps-section tbody tr:hover { background: color-mix(in srgb, var(--activity-color) 6%, transparent); }
 .activities-detail-dialog .training-laps-section td:first-child { width: 44px; color: var(--text-muted); font-weight: 600; }
 /* Raw JSON + sticky action footer */
 .activities-detail-dialog .training-raw-json { border-radius: 12px; background: color-mix(in srgb, var(--bg-base) 75%, transparent); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
-.activity-detail-footer { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; gap: 10px; margin: 4px -22px 0; padding: 14px 22px 18px; border-top: 1px solid var(--dialog-hairline); background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 80%, transparent), color-mix(in srgb, var(--bg-base) 88%, transparent)); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+.activity-detail-footer { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; gap: 10px; margin: 4px -22px 0; padding: 14px 22px 18px; border-top: 1px solid var(--dialog-hairline); background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, transparent), color-mix(in srgb, var(--bg-base) 97%, transparent)); }
 .activity-detail-footer-spacer { flex: 1; }
 .activity-detail-footer .secondary-button { gap: 8px; min-height: 40px; padding: 0 15px; border-radius: 11px; background: var(--glass-bg); color: var(--text-primary); font-size: 13px; font-weight: 600; box-shadow: none; }
 .activity-detail-footer .secondary-button:hover:not(:disabled) { transform: none; color: var(--text-primary); border-color: color-mix(in srgb, var(--activity-color) 50%, transparent); box-shadow: none; }
@@ -209,7 +214,7 @@
 .activity-detail-footer .activity-detail-view-map:hover { transform: translateY(-1px); filter: brightness(1.06); box-shadow: 0 12px 30px color-mix(in srgb, var(--activity-color) 45%, transparent); }
 @keyframes activity-dialog-in { from { opacity: 0; transform: translateY(16px) scale(.985); } to { opacity: 1; transform: none; } }
 @keyframes activity-dialog-fade { from { opacity: 0; } to { opacity: 1; } }
-.activities-browser button:focus-visible, .activities-browser select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+:is(.activities-browser, .activities-detail-dialog) :is(button, select):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .activities-browser .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 :root[data-theme="paper"] .activity-sport-all, :root[data-theme="paper"] .activity-sport-run { --activity-color: #19845a; }
@@ -230,9 +235,9 @@
 :root[data-theme="paper"] .activities-detail-dialog .activity-route-map-canvas .leaflet-control-zoom { --map-chip-bg: #ffffffd9; --map-chip-fg: #1f2a25; --map-chip-border: #1f2a2526; box-shadow: 0 6px 18px #1f2a2526; }
 :root[data-theme="paper"] .activities-detail-dialog .activity-route-map-canvas .leaflet-control-zoom a:hover { background: #1f2a250f; color: #000; }
 :root[data-theme="paper"] .activities-detail-dialog .activity-route-map-canvas .leaflet-control-attribution { background: #ffffffcc; }
-:root[data-theme="paper"] .activities-detail-dialog .training-laps-section thead th { background: #f5f7f5f2; }
+:root[data-theme="paper"] .activities-detail-dialog .training-laps-section thead th { background: #f5f7f5fa; }
 :root[data-theme="paper"] .activities-detail-dialog .training-raw-json { background: #f3f5f2; }
-:root[data-theme="paper"] .activity-detail-footer { background: linear-gradient(180deg, #ffffffcc, #f7f9f6e6); }
+:root[data-theme="paper"] .activity-detail-footer { background: linear-gradient(180deg, #fffffff5, #f7f9f6f7); }
 :root[data-theme="paper"] .activity-detail-footer .activity-detail-view-map { color: #ffffff; }
 
 @container (max-width: 1200px) {

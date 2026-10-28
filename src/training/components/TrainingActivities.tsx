@@ -1,5 +1,5 @@
 import { useLanguage, getLocale, t, formatNumber, formatDate } from "../../i18n/training";
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Activity, Bike, CalendarDays, ChevronLeft, ChevronRight, Dumbbell, Flag, Flame,
   Footprints, Gauge, Heart, LayoutGrid, List, Loader2, MapPin, Mountain, Search, Sparkles, Timer, X } from "lucide-react";
 import { PersonSimpleRun, PersonSimpleWalk, PersonSimpleSwim } from "@phosphor-icons/react";
@@ -254,17 +254,20 @@ const pacingCopy: Record<LapPacing, string> = {
   "positive-split": "You went out fast and eased off in the back half."
 };
 
-function ActivityDetailDialog({ inline = false, opened, sportTypes, activityDetail, busy, sampleMode, resolveLocation, raceTags, onLoadDetail, onExportFile, onRename, onClose }: {
-  inline?: boolean; opened: TrainingHubActivity | null; onClose: () => void;
+/** The full activity page: a modal here, a sidebar in list view, and the page the calendar aside expands into. */
+export function ActivityDetailDialog({ inline = false, className, opened, sportTypes, activityDetail, busy, sampleMode, resolveLocation, raceTags, onLoadDetail, onExportFile, onRename, onClose }: {
+  inline?: boolean; className?: string; opened: TrainingHubActivity | null; onClose: () => void;
   onRename?: (activity: TrainingHubActivity, name: string) => Promise<void>;
-} & Pick<Props, "sportTypes" | "activityDetail" | "busy" | "sampleMode" | "resolveLocation" | "raceTags" | "onLoadDetail" | "onExportFile">) {
+  onExportFile?: Props["onExportFile"];
+} & Pick<Props, "sportTypes" | "activityDetail" | "busy" | "sampleMode" | "resolveLocation" | "raceTags" | "onLoadDetail">) {
   useLanguage();
   const dialog = useRef<HTMLDialogElement>(null);
   const headingId = useId();
   const [location, setLocation] = useState<string | null>(null);
   const resolveLocationRef = useRef(resolveLocation);
   resolveLocationRef.current = resolveLocation;
-  useEffect(() => {
+  // Layout effect so a View Transition that commits `opened` captures the dialog already open.
+  useLayoutEffect(() => {
     // A rename hands over a new copy of the open activity; the dialog is already up.
     if (opened) { if (!dialog.current?.open) dialog.current?.showModal(); }
     else dialog.current?.close();
@@ -331,7 +334,9 @@ function ActivityDetailDialog({ inline = false, opened, sportTypes, activityDeta
     </div> : null;
   if (inline) return <aside className={`activities-detail-dialog activities-detail-sidebar activity-sport-${category}`} aria-labelledby={headingId}>{content}</aside>;
   // Keep the dialog shell unfiltered so fixed map and export portals stay viewport-relative.
-  return <dialog ref={dialog} className={`activities-detail-dialog activity-sport-${category}`} aria-labelledby={headingId} onCancel={onClose} onClose={() => { if (opened) onClose(); }}
+  // Escape goes through onClose (not the native close) so a host can morph the page away.
+  return <dialog ref={dialog} className={`activities-detail-dialog activity-sport-${category}${className ? ` ${className}` : ""}`} aria-labelledby={headingId}
+    onCancel={event => { event.preventDefault(); onClose(); }} onClose={() => { if (opened) onClose(); }}
     onClick={event => { if (event.target === event.currentTarget) { const rect = event.currentTarget.getBoundingClientRect();
       if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) onClose(); } }}>
     {content}
