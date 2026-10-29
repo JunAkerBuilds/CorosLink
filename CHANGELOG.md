@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Antigravity sign-in says what it's waiting for.** While you sign in, Coach settings shows whether Antigravity is still starting, waiting for Google's page or checking your plan. If a step is slow, it also shows Antigravity's last message. Closed Google's tab? **Open Google's page** brings it back, and **Cancel sign-in** stops a sign-in that hangs. **Check** now asks Google again after a refusal, instead of showing the old answer.
 - **Tidier activity panels.** Laps fit the calendar's side panel, and an activity with no distance and no height change no longer shows a flat elevation line.
 
+### Security
+
+- **Coach's local tool servers use @hono/node-server 2.1.5.** Versions before 2.1.3 could let a request to a static path skip a server's checks (GHSA-rmxm-3fg6-px4f). CorosLink doesn't serve static files through it, but now ships the fixed version anyway.
+
 ## [0.1.68] - 2026-10-28
 
 ### Added
