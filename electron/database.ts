@@ -1717,9 +1717,9 @@ export function renameStoredTrainingActivity(activityId: string, name: string): 
 }
 
 /**
- * Activities on/after `sinceEpochSeconds` whose feel_type or note has never
- * been fetched (NULL), NEWEST first — recent sessions are the most likely to be
- * rated, so they populate the heatmap soonest.
+ * Activities on/after `sinceEpochSeconds` whose feel_type has never been
+ * fetched (NULL), NEWEST first — recent sessions are the most likely to be
+ * rated, so they populate the heatmap soonest. Fetching one caches its note too.
  */
 export function listTrainingActivitiesMissingFeelType(
   sinceEpochSeconds: number,
@@ -1729,7 +1729,7 @@ export function listTrainingActivitiesMissingFeelType(
     .prepare(
       `SELECT activity_id, sport_type
        FROM training_activities
-       WHERE (feel_type IS NULL OR note IS NULL) AND start_time >= ?
+       WHERE feel_type IS NULL AND start_time >= ?
        ORDER BY start_time DESC
        LIMIT ?`
     )
@@ -1743,7 +1743,7 @@ export function listTrainingActivitiesMissingFeelType(
   }));
 }
 
-/** How many activities in the window still need a detail fetch for feelType or note. */
+/** How many activities in the window still need a feelType fetch. */
 export function countTrainingActivitiesMissingFeelType(
   sinceEpochSeconds: number
 ): number {
@@ -1751,10 +1751,30 @@ export function countTrainingActivitiesMissingFeelType(
     .prepare(
       `SELECT count(*) AS n
        FROM training_activities
-       WHERE (feel_type IS NULL OR note IS NULL) AND start_time >= ?`
+       WHERE feel_type IS NULL AND start_time >= ?`
     )
     .get(sinceEpochSeconds) as { n: number };
   return row.n;
+}
+
+/**
+ * Activities on/after `sinceEpochSeconds` whose feeling is cached but whose note
+ * was never fetched (rows from before notes were stored), NEWEST first.
+ */
+export function listTrainingActivitiesMissingNote(
+  sinceEpochSeconds: number,
+  limit: number
+): { activityId: string; sportType: number }[] {
+  const rows = requireDatabase()
+    .prepare(
+      `SELECT activity_id, sport_type
+       FROM training_activities
+       WHERE feel_type IS NOT NULL AND note IS NULL AND start_time >= ?
+       ORDER BY start_time DESC
+       LIMIT ?`
+    )
+    .all(sinceEpochSeconds, limit) as { activity_id: string; sport_type: number }[];
+  return rows.map((row) => ({ activityId: row.activity_id, sportType: row.sport_type }));
 }
 
 /** Total count of training activities on/after `sinceEpochSeconds`. */

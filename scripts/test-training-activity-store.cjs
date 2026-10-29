@@ -34,8 +34,13 @@ try {
   legacy.close();
 
   const {
+    countTrainingActivitiesMissingFeelType,
     initializeDatabase,
     listStoredTrainingActivities,
+    listTrainingActivitiesMissingFeelType,
+    listTrainingActivitiesMissingNote,
+    setTrainingActivityFeelType,
+    setTrainingActivityNote,
     upsertTrainingActivities
   } = require("../dist-electron/database.js");
   const db = initializeDatabase(root);
@@ -72,8 +77,19 @@ try {
     undefined
   );
 
+  // Notes came after feelings: an activity with its feeling cached is not
+  // refetched by the feeling backfill; only the slow note backfill asks for it.
+  setTrainingActivityFeelType("legacy-run", 3);
+  assert.deepEqual(listTrainingActivitiesMissingFeelType(0, 10).map((row) => row.activityId), ["no-moving"]);
+  assert.equal(countTrainingActivitiesMissingFeelType(0), 1);
+  assert.deepEqual(listTrainingActivitiesMissingNote(0, 10), [{ activityId: "legacy-run", sportType: 100 }]);
+  setTrainingActivityNote("legacy-run", "");
+  assert.deepEqual(listTrainingActivitiesMissingNote(0, 10), [], "\"\" means fetched, no note");
+  // Not rated yet: the feeling backfill fetches it, note included, so it isn't on the note list.
+  assert.deepEqual(listTrainingActivitiesMissingNote(0, 10), []);
+
   db.close();
-  console.log("Training activity store passed: moving_time migration, upsert and read-back.");
+  console.log("Training activity store passed: moving_time migration, upsert, read-back, feeling and note backfill queues.");
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

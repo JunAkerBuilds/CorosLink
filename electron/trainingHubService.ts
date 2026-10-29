@@ -30,6 +30,7 @@ import {
   listStoredTrainingActivities,
   listStrengthActivitiesMissingDetail,
   listTrainingActivitiesMissingFeelType,
+  listTrainingActivitiesMissingNote,
   listTrainingActivityRpeInputs,
   renameStoredTrainingActivity,
   setSetting,
@@ -1451,6 +1452,7 @@ export async function backfillFeelTypes(): Promise<void> {
     return;
   }
   feelBackfillRunning = true;
+  let drained = false;
   try {
     const since = heatmapWindowStartEpochSeconds();
     const userId = getStoredAuth()?.userId;
@@ -1469,6 +1471,7 @@ export async function backfillFeelTypes(): Promise<void> {
           !attempted.has(activityId) && !feelBackfillFailedIds.has(activityId)
       );
       if (pending.length === 0) {
+        drained = true;
         break;
       }
       for (const { activityId, sportType } of pending) {
@@ -1502,6 +1505,84 @@ export async function backfillFeelTypes(): Promise<void> {
     }
   } finally {
     feelBackfillRunning = false;
+  }
+  // Every feeling is in; older activities' notes follow, a few at a time.
+  if (drained) void backfillActivityNotes();
+}
+
+// Notes arrived after feelings, so activities synced before then have their
+// feeling cached but no note. Each one costs a full detail fetch (~1 MB), so
+// they trickle in instead of draining at once: a small batch, seconds apart,
+// batches well apart, and a daily cap that holds across restarts. Opening an
+// activity, and every new activity's feel fetch, caches its note right away.
+const NOTE_BACKFILL_BATCH = 8;
+const NOTE_BACKFILL_DELAY_MS = 5_000;
+const NOTE_BACKFILL_INTERVAL_MS = 20 * 60 * 1000;
+const NOTE_BACKFILL_DAILY_CAP = 120;
+const NOTE_BACKFILL_SETTING = "trainingHub.noteBackfill";
+let noteBackfillRunning = false;
+let noteBackfillLastRunAt = 0;
+
+/** Today's note fetches so far, from the setting; a new local day starts at 0. */
+function noteBackfillToday(): { day: string; count: number } {
+  const day = happenDayFromDate(new Date());
+  try {
+    const saved = JSON.parse(getSetting(NOTE_BACKFILL_SETTING) ?? "null") as { day?: unknown; count?: unknown } | null;
+    if (saved?.day === day && typeof saved.count === "number") return { day, count: saved.count };
+  } catch {
+    // Unreadable: start the day over.
+  }
+  return { day, count: 0 };
+}
+
+/**
+ * One gentle batch of note fetches for activities synced before notes were
+ * stored. Runs only after the feeling backfill is done, never alongside it.
+ */
+export async function backfillActivityNotes(): Promise<void> {
+  if (noteBackfillRunning || feelBackfillRunning || !getStoredAuth()) return;
+  if (Date.now() - noteBackfillLastRunAt < NOTE_BACKFILL_INTERVAL_MS) return;
+  if (Date.now() < feelBackfillCooldownUntil) return;
+  const today = noteBackfillToday();
+  const budget = Math.min(NOTE_BACKFILL_BATCH, NOTE_BACKFILL_DAILY_CAP - today.count);
+  if (budget <= 0) return;
+  noteBackfillRunning = true;
+  noteBackfillLastRunAt = Date.now();
+  try {
+    const userId = getStoredAuth()?.userId;
+    const pending = listTrainingActivitiesMissingNote(
+      heatmapWindowStartEpochSeconds(),
+      budget + feelBackfillFailedIds.size
+    )
+      .filter(({ activityId }) => !feelBackfillFailedIds.has(activityId))
+      .slice(0, budget);
+    let failures = 0;
+    for (const [index, { activityId, sportType }] of pending.entries()) {
+      if (index > 0) await delay(NOTE_BACKFILL_DELAY_MS);
+      // Counted before the request, so a crash mid-batch can't overspend the day.
+      today.count += 1;
+      setSetting(NOTE_BACKFILL_SETTING, JSON.stringify(today));
+      try {
+        const raw = await trainingHubRequest<Record<string, unknown>>("/activity/detail/query", {
+          method: "POST",
+          params: { labelId: activityId, sportType, ...(userId ? { userId } : {}) }
+        });
+        setTrainingActivityNote(activityId, readActivityNote(raw) ?? "");
+        failures = 0;
+      } catch {
+        feelBackfillFailedIds.add(activityId);
+        failures += 1;
+        // Two in a row: COROS is struggling or limiting us; back off like the feeling backfill.
+        if (failures >= 2) {
+          feelBackfillCooldownUntil = Date.now() + FEEL_BACKFILL_COOLDOWN_MS;
+          return;
+        }
+      }
+    }
+  } catch {
+    // Best effort: notes are extra, never block anything on them.
+  } finally {
+    noteBackfillRunning = false;
   }
 }
 
