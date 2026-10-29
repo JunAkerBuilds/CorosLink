@@ -100,6 +100,12 @@ function database() {
         updated_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS race_routes (
+        coros_activity_id TEXT PRIMARY KEY,
+        points_json TEXT NOT NULL,
+        fetched_at TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS strava_race_activities (
         activity_id TEXT PRIMARY KEY,
         athlete_id TEXT NOT NULL,
@@ -362,4 +368,21 @@ export function saveStoredRaceTarget(target: RaceTarget): void {
 
 export function deleteStoredRaceTarget(targetId: string): boolean {
   return database().prepare("DELETE FROM race_targets WHERE target_id = ?").run(targetId).changes > 0;
+}
+
+/** A race recording's course, simplified for a phone; [] when COROS has no GPS for it. */
+export function getStoredRaceRoute(corosActivityId: string): [number, number][] | undefined {
+  const row = database()
+    .prepare("SELECT points_json FROM race_routes WHERE coros_activity_id = ?")
+    .get(corosActivityId) as { points_json: string } | undefined;
+  return row ? parseJson<[number, number][]>(row.points_json) : undefined;
+}
+
+export function saveStoredRaceRoute(corosActivityId: string, points: [number, number][]): void {
+  database()
+    .prepare(
+      `INSERT INTO race_routes (coros_activity_id, points_json, fetched_at) VALUES (?, ?, ?)
+       ON CONFLICT(coros_activity_id) DO UPDATE SET points_json = excluded.points_json, fetched_at = excluded.fetched_at`
+    )
+    .run(corosActivityId, JSON.stringify(points), new Date().toISOString());
 }

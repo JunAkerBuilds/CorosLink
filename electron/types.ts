@@ -2385,6 +2385,8 @@ export interface TrainingHubActivity {
   calories?: number;
   trainingLoad?: number;
   elevationGain?: number;
+  /** The athlete's own note on the activity in COROS (cached from its detail). */
+  note?: string;
 }
 
 export interface RpeDistributionBucket {
@@ -2765,6 +2767,8 @@ export interface TrainingHubActivityDetail {
   normalizedPower?: number;
   avgCadence?: number;
   maxCadence?: number;
+  /** The athlete's own note on the activity in COROS (`sportFeelInfo.sportNote`). */
+  note?: string;
   laps: TrainingHubActivityLap[];
   /**
    * The lap table's alternative groupings, ordered laps → splits → whole.

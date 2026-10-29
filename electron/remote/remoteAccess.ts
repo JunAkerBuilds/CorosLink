@@ -25,7 +25,7 @@ import {
   type RemoteSecretBox,
   type RemoteSettingsStore
 } from "./identity";
-import { RemoteServer, remoteLanAddresses, type RelayTrust, type RemoteAttachmentStore } from "./server";
+import { RemoteServer, remoteLanAddresses, type RelayTrust, type RemoteAttachmentStore, type RemoteServerOptions } from "./server";
 import { qrCodeDataUrl } from "../qrCode";
 
 /**
@@ -62,6 +62,10 @@ export interface RemoteAccessOptions {
   chatModels?: (provider: ChatProvider) => Promise<ChatModelOption[]>;
   attachments?: RemoteAttachmentStore;
   scheduledPrograms?: (startDay: string, endDay: string) => Promise<ScheduledProgram[]>;
+  activityNotes?: RemoteServerOptions["activityNotes"];
+  gear?: RemoteServerOptions["gear"];
+  races?: RemoteServerOptions["races"];
+  raceRoute?: RemoteServerOptions["raceRoute"];
 }
 
 export class RemoteAccess {
@@ -189,6 +193,10 @@ export class RemoteAccess {
         chatModels: this.options.chatModels,
         attachments: this.options.attachments,
         scheduledPrograms: this.options.scheduledPrograms,
+        activityNotes: this.options.activityNotes,
+        gear: this.options.gear,
+        races: this.options.races,
+        raceRoute: this.options.raceRoute,
         port: preferredRemotePort(settings),
         nextPort: () => randomRemotePort(),
         onPortChanged: (port) => saveRemotePort(settings, port),

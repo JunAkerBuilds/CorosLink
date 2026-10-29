@@ -1,11 +1,21 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { SCHEDULED_STEPS_MAX_DAYS, scheduledStepsRange, scheduledStepsRows, type ScheduledProgram } from "./scheduledSteps";
+import {
+  ACTIVITY_NOTES_MAX_DAYS,
+  activityNoteRows,
+  activityNotesRange,
+  remoteGear,
+  remoteRaces,
+  type ActivityNoteSource
+} from "./trainingShare";
+import type { RaceOverview } from "../raceTypes";
+import type { RaceRoute } from "../raceService";
 import type { Duplex } from "node:stream";
 import os from "node:os";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 import type { CoachSessionHub } from "../coachHub/coachSessionHub";
 import { CoachAttachmentError } from "../coachAttachments";
-import type { ChatFileAttachment, ChatProvider, ChatSettings, CoachFileUpload } from "../types";
+import type { ChatFileAttachment, ChatProvider, ChatSettings, CoachFileUpload, CorosGearCatalog } from "../types";
 import { getChatModelOptions, type ChatModelOption } from "../chatModels";
 import { phoneSendAddresses } from "../watchfacePhoneSend";
 import {
@@ -19,6 +29,9 @@ import {
   REMOTE_PLAN_OPTIONS_CAPABILITY,
   REMOTE_PROTOCOL_VERSION,
   REMOTE_SCHEDULED_STEPS_CAPABILITY,
+  REMOTE_ACTIVITY_NOTES_CAPABILITY,
+  REMOTE_GEAR_CAPABILITY,
+  REMOTE_RACES_CAPABILITY,
   REMOTE_ROUTES,
   RELAY_MINT_REQUEST_TYP,
   coachSessionInfo,
@@ -83,6 +96,13 @@ export interface RemoteServerOptions {
   attachments?: RemoteAttachmentStore;
   /** The calendar's workouts with COROS's own programs, from Training Hub; without it phones can't ask for steps. */
   scheduledPrograms?: (startDay: string, endDay: string) => Promise<ScheduledProgram[]>;
+  /** Cached COROS activity notes started in [since, until) epoch seconds; without it phones can't ask for notes. */
+  activityNotes?: (since: number, until: number) => ActivityNoteSource[];
+  /** The COROS account's gear; without it phones can't ask for gear. */
+  gear?: () => Promise<CorosGearCatalog>;
+  /** Races and targets (raceService); with `raceRoute`, phones can ask for races. */
+  races?: () => RaceOverview;
+  raceRoute?: (raceId: string) => Promise<RaceRoute | null>;
   /** The port to try first (identity.ts saves it). */
   port: number;
   /** The saved port was taken and the server moved; save the new one. */
@@ -439,6 +459,34 @@ export class RemoteServer {
         const range = scheduledStepsRange(params);
         if (!range) throw invalidParams(`startDay and endDay must be YYYYMMDD, at most ${SCHEDULED_STEPS_MAX_DAYS} days apart.`);
         return { result: { workouts: scheduledStepsRows(await this.options.scheduledPrograms(range.startDay, range.endDay)) } };
+      },
+      "training.activityNotes": (_client, params) => {
+        if (!this.options.activityNotes) {
+          throw new RpcError({ code: "unsupported", message: "This CorosLink can't share activity notes with a phone." });
+        }
+        const range = activityNotesRange(params);
+        if (!range) throw invalidParams(`startDay and endDay must be YYYYMMDD, at most ${ACTIVITY_NOTES_MAX_DAYS} days apart.`);
+        return { result: { notes: activityNoteRows(this.options.activityNotes(range.since, range.until)) } };
+      },
+      "training.gear": async () => {
+        if (!this.options.gear) {
+          throw new RpcError({ code: "unsupported", message: "This CorosLink can't share gear with a phone." });
+        }
+        return { result: remoteGear(await this.options.gear()) };
+      },
+      "training.races": () => {
+        if (!this.options.races) {
+          throw new RpcError({ code: "unsupported", message: "This CorosLink can't share races with a phone." });
+        }
+        return { result: remoteRaces(this.options.races()) };
+      },
+      "training.raceRoute": async (_client, params) => {
+        if (!this.options.raceRoute) {
+          throw new RpcError({ code: "unsupported", message: "This CorosLink can't share race routes with a phone." });
+        }
+        const route = await this.options.raceRoute(stringParam(params, "raceId")!);
+        if (!route) throw new RpcError({ code: "not_found", message: "That race has no COROS recording on this computer." });
+        return { result: route };
       },
       "environment.info": () => ({ result: this.environmentInfo() })
     };
@@ -801,7 +849,10 @@ export class RemoteServer {
         ...REMOTE_CAPABILITIES,
         REMOTE_PLAN_OPTIONS_CAPABILITY,
         ...(this.options.attachments ? [REMOTE_FILES_CAPABILITY] : []),
-        ...(this.options.scheduledPrograms ? [REMOTE_SCHEDULED_STEPS_CAPABILITY] : [])
+        ...(this.options.scheduledPrograms ? [REMOTE_SCHEDULED_STEPS_CAPABILITY] : []),
+        ...(this.options.activityNotes ? [REMOTE_ACTIVITY_NOTES_CAPABILITY] : []),
+        ...(this.options.gear ? [REMOTE_GEAR_CAPABILITY] : []),
+        ...(this.options.races && this.options.raceRoute ? [REMOTE_RACES_CAPABILITY] : [])
       ],
       keyThumbprint: this.options.identity.kid
     };

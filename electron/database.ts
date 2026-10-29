@@ -93,6 +93,7 @@ interface TrainingActivityRow {
   end_time: number | null;
   duration: number | null;
   moving_time: number | null;
+  note?: string | null;
   distance: number | null;
   avg_hr: number | null;
   max_hr: number | null;
@@ -438,6 +439,9 @@ export function initializeDatabase(userDataPath: string): Database.Database {
   // moving_time = list workoutTime (timer seconds, excl. pauses); duration
   // stays elapsed. NULL = synced before moving time was stored.
   ensureColumn(db, "training_activities", "moving_time", "INTEGER");
+  // note caches the athlete's COROS activity note (sportFeelInfo.sportNote);
+  // "" = fetched, no note. NULL = never fetched, like feel_type.
+  ensureColumn(db, "training_activities", "note", "TEXT");
   migrateChatSessionProviderConstraint(db);
   migrateChatTranscriptsToSessions(db);
   // After the provider rebuild above, which recreates chat_sessions.
@@ -1587,7 +1591,8 @@ function toTrainingActivity(row: TrainingActivityRow): TrainingHubActivity {
     maxHr: row.max_hr ?? undefined,
     calories: row.calories ?? undefined,
     trainingLoad: row.training_load ?? undefined,
-    elevationGain: row.elevation_gain ?? undefined
+    elevationGain: row.elevation_gain ?? undefined,
+    note: row.note || undefined
   };
 }
 
@@ -1667,6 +1672,39 @@ export function setTrainingActivityFeelType(
     .run(feelType, activityId);
 }
 
+/** Cache the athlete's COROS note for one activity. "" = no note. */
+export function setTrainingActivityNote(activityId: string, note: string): void {
+  requireDatabase()
+    .prepare(`UPDATE training_activities SET note = ? WHERE activity_id = ?`)
+    .run(note, activityId);
+}
+
+/** Activities with a note, started in [since, until) epoch seconds, oldest first. */
+export function listTrainingActivityNotes(
+  sinceEpochSeconds: number,
+  untilEpochSeconds: number
+): { activityId: string; sportType: number; startTime: number; note: string }[] {
+  const rows = requireDatabase()
+    .prepare(
+      `SELECT activity_id, sport_type, start_time, note
+       FROM training_activities
+       WHERE note IS NOT NULL AND note != '' AND start_time >= ? AND start_time < ?
+       ORDER BY start_time ASC`
+    )
+    .all(sinceEpochSeconds, untilEpochSeconds) as {
+    activity_id: string;
+    sport_type: number;
+    start_time: number;
+    note: string;
+  }[];
+  return rows.map((row) => ({
+    activityId: row.activity_id,
+    sportType: row.sport_type,
+    startTime: row.start_time,
+    note: row.note
+  }));
+}
+
 /** Keep the stored copies in step after a rename, so offline views and Coach see the new name. */
 export function renameStoredTrainingActivity(activityId: string, name: string): void {
   const database = requireDatabase();
@@ -1679,8 +1717,8 @@ export function renameStoredTrainingActivity(activityId: string, name: string): 
 }
 
 /**
- * Activities on/after `sinceEpochSeconds` whose feel_type has never been
- * fetched (NULL), NEWEST first — recent sessions are the most likely to be
+ * Activities on/after `sinceEpochSeconds` whose feel_type or note has never
+ * been fetched (NULL), NEWEST first — recent sessions are the most likely to be
  * rated, so they populate the heatmap soonest.
  */
 export function listTrainingActivitiesMissingFeelType(
@@ -1691,7 +1729,7 @@ export function listTrainingActivitiesMissingFeelType(
     .prepare(
       `SELECT activity_id, sport_type
        FROM training_activities
-       WHERE feel_type IS NULL AND start_time >= ?
+       WHERE (feel_type IS NULL OR note IS NULL) AND start_time >= ?
        ORDER BY start_time DESC
        LIMIT ?`
     )
@@ -1705,7 +1743,7 @@ export function listTrainingActivitiesMissingFeelType(
   }));
 }
 
-/** How many activities in the window still need a feelType fetch. */
+/** How many activities in the window still need a detail fetch for feelType or note. */
 export function countTrainingActivitiesMissingFeelType(
   sinceEpochSeconds: number
 ): number {
@@ -1713,7 +1751,7 @@ export function countTrainingActivitiesMissingFeelType(
     .prepare(
       `SELECT count(*) AS n
        FROM training_activities
-       WHERE feel_type IS NULL AND start_time >= ?`
+       WHERE (feel_type IS NULL OR note IS NULL) AND start_time >= ?`
     )
     .get(sinceEpochSeconds) as { n: number };
   return row.n;
@@ -1759,7 +1797,7 @@ export function listStoredTrainingActivities(limit = 500): TrainingHubActivity[]
     .prepare(
       `SELECT activity_id, name, sport_type, sport_name, start_time, end_time,
               duration, moving_time, distance, avg_hr, max_hr, calories,
-              training_load, elevation_gain
+              training_load, elevation_gain, note
        FROM training_activities
        ORDER BY start_time DESC
        LIMIT ?`

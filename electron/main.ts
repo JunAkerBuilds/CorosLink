@@ -47,6 +47,7 @@ import {
   getSetting,
   initializeDatabase,
   listDownloads,
+  listTrainingActivityNotes,
   markDownloadTransferred,
   setSetting
 } from "./database";
@@ -134,6 +135,7 @@ import {
   saveWorkoutEdit,
   getWorkoutProgramDetail,
   getScheduledPrograms,
+  getTrainingHubActivityDetail,
   loginTrainingHub,
   verifyTrainingHubTwoFactor,
   resendTrainingHubTwoFactorCode,
@@ -163,6 +165,7 @@ import {
   clearStravaRaceData,
   dismissRaceSuggestion,
   getRaceOverview,
+  getRaceRoute,
   importStravaRaces,
   listRaceActivityIds,
   markActivityAsRace,
@@ -1137,7 +1140,16 @@ app.whenReady().then(() => {
       get: (sessionId, id) => coachAttachments().summary(sessionId, id)
     },
     // A planned workout's exact steps for the phone, where COROS MCP can't give them.
-    scheduledPrograms: getScheduledPrograms
+    scheduledPrograms: getScheduledPrograms,
+    // The athlete's COROS activity notes, gear and races, for the phone.
+    activityNotes: listTrainingActivityNotes,
+    gear: queryCorosGear,
+    races: getRaceOverview,
+    raceRoute: (raceId) =>
+      getRaceRoute(raceId, async (activityId, sportType) => {
+        const detail = await getTrainingHubActivityDetail(activityId, sportType);
+        return detail.trackFetchFailed ? undefined : (detail.track?.points ?? []);
+      })
   });
   // Opening one's own private face from the website: the catalog may ask with the account token.
   const account = remoteAccess.cloud.account;

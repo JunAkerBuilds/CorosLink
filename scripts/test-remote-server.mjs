@@ -129,6 +129,25 @@ const scheduledPrograms = async (startDay, endDay) => {
   ];
 };
 
+// The athlete's training data a phone reads: notes, gear and races.
+const notesAsked = [];
+const activityNotes = (since, until) => {
+  notesAsked.push([since, until]);
+  return [{ activityId: "478", sportType: 100, startTime: new Date(2026, 9, 27, 7, 30).getTime() / 1000, note: "Legs heavy after the hills" }];
+};
+const gearCatalog = {
+  gear: [{ gearId: "481200000000000001", name: "Novablast 5", brandName: "ASICS", type: 1, sportTypeList: [100], firstUseDay: "2026-06-01", initialDistanceMeters: 0, lifeDistanceMeters: 800000, realDistanceMeters: 412300, notify: true }],
+  supportedInfo: [{ type: 1, sportTypeList: [100, 101] }]
+};
+const raceOverview = {
+  races: [{ raceId: "coros:478", source: "coros", corosActivityId: "478", name: "Ottawa Half", startTime: 1780000000, distanceKey: "half", distanceIsManual: false, officialDistance: 21097.5, officialTime: 5850, officialTimeIsManual: true }],
+  suggestions: [{ activity: { activityId: "479", sportType: 100 }, distanceKey: "5k", reasons: ["Named like a race"] }],
+  strava: { connected: false, hiddenRaces: 0 },
+  targets: [{ targetId: "target:1", name: "Valencia Marathon", raceDay: "20261206", distanceKey: "marathon", distance: 42195, createdAt: "2026-10-01T00:00:00.000Z" }]
+};
+const raceRoute = async (raceId) =>
+  raceId === "coros:478" ? { raceId, corosActivityId: "478", points: [[45.4, -75.7], [45.41, -75.69]] } : null;
+
 const server = new RemoteServer({
   identity,
   auth,
@@ -142,6 +161,10 @@ const server = new RemoteServer({
     get: (sessionId, id) => attachmentStore.summary(sessionId, id)
   },
   scheduledPrograms,
+  activityNotes,
+  gear: async () => gearCatalog,
+  races: () => raceOverview,
+  raceRoute,
   chatModels: async (provider) => (provider === "claude-code" ? [{ value: "", label: "Account default" }, { value: "opus", label: "Claude Opus 5.5" }] : []),
   port: 0,
   onPortChanged: (port) => portChanges.push(port),
@@ -173,7 +196,7 @@ try {
       platform: "darwin",
       appVersion: "9.9.9",
       protocol: 1,
-      capabilities: ["coach", "coach.planOptions", "coach.files", "training.steps"],
+      capabilities: ["coach", "coach.planOptions", "coach.files", "training.steps", "training.notes", "training.gear", "training.races"],
       keyThumbprint: identity.kid
     });
     assert.equal(identity.kid, await jose.calculateJwkThumbprint(identity.publicJwk, "sha256"), "RFC 7638 thumbprint");
@@ -576,6 +599,19 @@ try {
     assert.equal((await view.call("training.scheduledSteps", { startDay: "20261026", endDay: "20270101" })).error.code, "invalid", "at most 62 days");
     assert.equal((await view.call("training.scheduledSteps", { startDay: "2026-10-26", endDay: "20261029" })).error.code, "invalid");
     assert.equal((await view.call("training.scheduledSteps", { startDay: "20261030", endDay: "20261029" })).error.code, "invalid");
+
+    // Activity notes, gear and races, readable with coach:read.
+    const notes = (await view.call("training.activityNotes", { startDay: "20261001", endDay: "20261031" })).result.notes;
+    assert.deepEqual(notes, [{ activityId: "478", sportType: 100, startTime: notes[0].startTime, note: "Legs heavy after the hills", day: "2026-10-27" }]);
+    assert.deepEqual(notesAsked.at(-1), [new Date(2026, 9, 1).getTime() / 1000, new Date(2026, 10, 1).getTime() / 1000], "whole local days, end inclusive");
+    assert.equal((await view.call("training.activityNotes", { startDay: "20250101", endDay: "20261031" })).error.code, "invalid", "at most a year");
+    assert.equal((await view.call("training.activityNotes", { startDay: "20261031", endDay: "20261001" })).error.code, "invalid");
+    assert.deepEqual((await view.call("training.gear")).result, { gear: gearCatalog.gear });
+    const shared = (await view.call("training.races")).result;
+    assert.deepEqual(shared, { races: raceOverview.races, targets: raceOverview.targets }, "suggestions stay on the computer");
+    assert.deepEqual((await view.call("training.raceRoute", { raceId: "coros:478" })).result.points, [[45.4, -75.7], [45.41, -75.69]]);
+    assert.equal((await view.call("training.raceRoute", { raceId: "manual:1" })).error.code, "not_found");
+    assert.equal((await view.call("training.raceRoute", {})).error.code, "invalid");
 
     // Deleting from the phone removes the conversation for every client, subscribed or not.
     const doomed = (await a.call("coach.createSession")).result.session.id;

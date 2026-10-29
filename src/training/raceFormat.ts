@@ -7,9 +7,12 @@ import { formatDistanceValue } from "../units/units";
 /** The race service keeps its reason strings independent of the UI language. */
 export function formatRaceSuggestionReason(reason: string): string {
   const speedup = /^(\d+)% quicker than your usual pace$/.exec(reason);
-  return speedup
-    ? t("{{percent}}% quicker than your usual pace", { percent: speedup[1] })
-    : t(reason);
+  if (speedup) return t("{{percent}}% quicker than your usual pace", { percent: speedup[1] });
+  const result = /^Same day as your result: (.+)$/.exec(reason);
+  if (result) return t("Same day as your result: {{name}}", { name: result[1] });
+  const target = /^Your target race day: (.+)$/.exec(reason);
+  if (target) return t("Your target race day: {{name}}", { name: target[1] });
+  return t(reason);
 }
 
 /** "22:11" or "1:40:15"; tenths only when a chip time carries them. */

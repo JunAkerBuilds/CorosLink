@@ -302,6 +302,50 @@ assert.throws(() => races.removeRaceTarget(trail.targetId), /no longer in your l
 assert.equal(targetEvents, 3);
 stopTargets();
 
+// --- Past races: a typed-in result finds its recording -------------------------
+const oldHalfStart = new Date(2025, 3, 6, 8, 5).getTime() / 1000;
+const pastHalf = run("oldhalf", 0, 21.3, 5900, { startTime: oldHalfStart, name: "Morning Run" });
+database.upsertTrainingActivities([pastHalf]);
+overview = races.addManualRace({
+  name: "Ottawa Half",
+  startTime: new Date(2025, 3, 6, 12).getTime() / 1000,
+  distanceKey: "half",
+  officialTime: 5850,
+  placing: "312th",
+  notes: "PB"
+});
+const pastMatch = overview.suggestions.find((suggestion) => suggestion.activity.activityId === "oldhalf");
+assert.ok(pastMatch, "an older recording on a typed-in result's day is suggested");
+assert.deepEqual(pastMatch.reasons, ["Same day as your result: Ottawa Half"]);
+assert.equal(pastMatch.distanceKey, "half");
+const before = overview.races.length;
+overview = races.markActivityAsRace(pastHalf);
+assert.equal(overview.races.length, before, "the typed-in result folds into its recording");
+const merged = overview.races.find((entry) => entry.raceId === "coros:oldhalf");
+assert.equal(merged.name, "Ottawa Half");
+assert.equal(merged.officialTime, 5850);
+assert.equal(merged.placing, "312th");
+assert.equal(merged.notes, "PB");
+assert.equal(merged.recordedDistance, 21300);
+assert.ok(!overview.races.some((entry) => entry.source === "manual" && entry.name === "Ottawa Half"));
+
+// Its course is read once from COROS, then kept.
+let trackReads = 0;
+const fetchTrack = async () => {
+  trackReads += 1;
+  return Array.from({ length: 900 }, (_, index) => ({ lat: 45.4 + index / 1e5, lon: -75.7 }));
+};
+const route = await races.getRaceRoute("coros:oldhalf", fetchTrack);
+assert.equal(route.corosActivityId, "oldhalf");
+assert.ok(route.points.length > 1 && route.points.length <= 400);
+assert.deepEqual((await races.getRaceRoute("coros:oldhalf", fetchTrack)).points, route.points);
+assert.equal(trackReads, 1, "cached after the first read");
+const unanswered = await races.getRaceRoute("coros:canada", async () => undefined);
+assert.deepEqual(unanswered.points, [], "no answer from COROS");
+assert.equal((await races.getRaceRoute("coros:canada", fetchTrack)).points.length > 0, true, "and asked again next time");
+assert.equal(await races.getRaceRoute("strava:8001", fetchTrack), null, "no COROS recording");
+assert.equal(await races.getRaceRoute("coros:missing", fetchTrack), null);
+
 globalThis.fetch = realFetch;
 fs.rmSync(tempRoot, { recursive: true, force: true });
 console.log("race service tests passed");

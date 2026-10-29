@@ -11,9 +11,14 @@ import {
   detectRaceDistance,
   isRaceDistanceKey,
   isRaceSportType,
+  localRaceDay,
+  matchPastRaces,
   raceDistanceMeters,
+  recordingMatchesRace,
+  simplifyRaceRoute,
   suggestRaces,
-  type BuildUpRun
+  type BuildUpRun,
+  type PastRaceHint
 } from "./raceModel";
 import {
   clearStravaRaceActivities,
@@ -22,9 +27,11 @@ import {
   listStoredRaceTargets,
   saveStoredRaceTarget,
   getStoredRace,
+  getStoredRaceRoute,
   listStoredRaces,
   listStravaRaceActivities,
   saveStoredRace,
+  saveStoredRaceRoute,
   upsertStravaRaceActivity,
   type RaceActivitySnapshot,
   type StoredRace,
@@ -35,6 +42,7 @@ import type {
   RaceEditInput,
   RaceEntry,
   RaceOverview,
+  RaceSuggestion,
   RaceTarget,
   RaceTargetInput,
   StravaRaceImportResult
@@ -264,6 +272,34 @@ function toRaceEntry(
   };
 }
 
+/** A typed-in result with no recording, as a day to look for one on. */
+function manualResultHint(row: StoredRace): PastRaceHint | undefined {
+  if (row.source !== "manual" || row.status !== "race" || !row.snapshot) return undefined;
+  return {
+    kind: "result",
+    name: row.eventName ?? row.snapshot.name ?? "Race",
+    raceDay: localRaceDay(row.snapshot.startTime),
+    distance: row.officialDistance ?? (row.distanceKey ? raceDistanceMeters(row.distanceKey) : undefined)
+  };
+}
+
+function pastTargetHints(targets: readonly RaceTarget[], today = localDayKey(new Date())): PastRaceHint[] {
+  return targets
+    .filter((target) => target.raceDay < today)
+    .map((target) => ({ kind: "target", name: target.name, raceDay: target.raceDay, distance: target.distance }));
+}
+
+/** Matches to known past races lead; a heuristic suggestion for the same run keeps its reasons after them. */
+function mergeSuggestions(matched: RaceSuggestion[], heuristic: RaceSuggestion[]): RaceSuggestion[] {
+  const merged = new Map(matched.map((suggestion) => [suggestion.activity.activityId, suggestion]));
+  for (const suggestion of heuristic) {
+    const match = merged.get(suggestion.activity.activityId);
+    if (match) match.reasons.push(...suggestion.reasons);
+    else merged.set(suggestion.activity.activityId, suggestion);
+  }
+  return [...merged.values()].sort((a, b) => (b.activity.startTime ?? 0) - (a.activity.startTime ?? 0));
+}
+
 export function getRaceOverview(): RaceOverview {
   const strava = reconcileStravaAccess();
   const history = loadCorosHistory();
@@ -313,7 +349,15 @@ export function getRaceOverview(): RaceOverview {
   const stravaRaceStarts = deduped
     .filter((race) => race.source === "strava")
     .map((race) => race.startTime);
-  const suggestions = suggestRaces([...history.byId.values()], known).filter(
+  const targets = listStoredRaceTargets();
+  const hints = [
+    ...stored.flatMap((row) => manualResultHint(row) ?? []),
+    ...pastTargetHints(targets)
+  ];
+  const suggestions = mergeSuggestions(
+    matchPastRaces(history.raceRuns, known, hints),
+    suggestRaces([...history.byId.values()], known)
+  ).filter(
     (suggestion) =>
       !stravaRaceStarts.some(
         (start) => Math.abs(start - (suggestion.activity.startTime ?? 0)) <= MATCH_WINDOW_SEC
@@ -328,7 +372,7 @@ export function getRaceOverview(): RaceOverview {
       lastImportedAt: strava.connected ? getSetting(SETTINGS.stravaImportedAt) : undefined,
       hiddenRaces
     },
-    targets: listStoredRaceTargets()
+    targets
   };
 }
 
@@ -374,6 +418,42 @@ function absorbStravaTwin(target: StoredRace, startTime: number): StoredRace {
   };
 }
 
+/**
+ * Fold a result typed in without a recording into the recording of the same
+ * race, and take the event's name and distance from a target race on that day.
+ */
+function absorbKnownRace(target: StoredRace, activity: TrainingHubActivity): StoredRace {
+  let next = target;
+  const result = listStoredRaces().find((row) => {
+    const hint = manualResultHint(row);
+    return hint !== undefined && recordingMatchesRace(activity, hint);
+  });
+  if (result) {
+    deleteStoredRace(result.raceId);
+    next = {
+      ...next,
+      eventName: next.eventName ?? result.eventName,
+      distanceKey: next.distanceKey ?? result.distanceKey,
+      officialDistance: next.officialDistance ?? result.officialDistance,
+      officialTime: next.officialTime ?? result.officialTime,
+      placing: next.placing ?? result.placing,
+      notes: next.notes ?? result.notes
+    };
+  }
+  const planned = listStoredRaceTargets().find((race) =>
+    recordingMatchesRace(activity, { kind: "target", name: race.name, raceDay: race.raceDay, distance: race.distance })
+  );
+  if (planned) {
+    next = {
+      ...next,
+      eventName: next.eventName ?? planned.name,
+      distanceKey: next.distanceKey ?? planned.distanceKey,
+      officialDistance: next.officialDistance ?? (planned.distanceKey === "other" ? planned.distance : undefined)
+    };
+  }
+  return next;
+}
+
 export function markActivityAsRace(input: TrainingHubActivity): RaceOverview {
   const activity = requireActivity(input);
   const raceId = corosRaceId(activity.activityId);
@@ -388,6 +468,7 @@ export function markActivityAsRace(input: TrainingHubActivity): RaceOverview {
     snapshot
   };
   if (snapshot) race = absorbStravaTwin(race, snapshot.startTime);
+  race = absorbKnownRace(race, activity);
   saveStoredRace(race);
   return getRaceOverview();
 }
@@ -489,6 +570,35 @@ export function addManualRace(input: ManualRaceInput): RaceOverview {
     notes: cleanText(input.notes, MAX_NOTES_LENGTH)
   });
   return getRaceOverview();
+}
+
+export interface RaceRoute {
+  raceId: string;
+  corosActivityId: string;
+  /** [lat, lon], start to finish; empty when COROS has no GPS for the recording. */
+  points: [number, number][];
+}
+
+/**
+ * The course of a race recorded on COROS, read once from the activity's GPS
+ * and kept. `null` for a race with no COROS recording (manual, Strava-only).
+ */
+export async function getRaceRoute(
+  raceId: string,
+  fetchTrack: (activityId: string, sportType: number) => Promise<readonly { lat?: number; lon?: number }[] | undefined>
+): Promise<RaceRoute | null> {
+  const race = typeof raceId === "string" ? getStoredRace(raceId) : undefined;
+  if (!race || race.status !== "race" || !race.corosActivityId) return null;
+  const activityId = race.corosActivityId;
+  let points = getStoredRaceRoute(activityId);
+  if (!points) {
+    const track = await fetchTrack(activityId, race.snapshot?.sportType ?? 100);
+    // No answer is not "no GPS": keep nothing so the next ask fetches again.
+    if (track === undefined) return { raceId, corosActivityId: activityId, points: [] };
+    points = simplifyRaceRoute(track);
+    saveStoredRaceRoute(activityId, points);
+  }
+  return { raceId, corosActivityId: activityId, points };
 }
 
 const MAX_LOCATION_LENGTH = 120;

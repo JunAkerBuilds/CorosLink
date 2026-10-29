@@ -36,6 +36,12 @@ export const REMOTE_FILES_CAPABILITY = "coach.files";
 export const REMOTE_PLAN_OPTIONS_CAPABILITY = "coach.planOptions";
 /** Listed too when `training.scheduledSteps` gives planned workouts' exact steps from Training Hub (scheduledSteps.ts). */
 export const REMOTE_SCHEDULED_STEPS_CAPABILITY = "training.steps";
+/** Listed too when `training.activityNotes` gives the athlete's COROS activity notes (trainingShare.ts). */
+export const REMOTE_ACTIVITY_NOTES_CAPABILITY = "training.notes";
+/** Listed too when `training.gear` gives the athlete's COROS gear with COROS's distances. */
+export const REMOTE_GEAR_CAPABILITY = "training.gear";
+/** Listed too when `training.races` and `training.raceRoute` give races, targets and race courses. */
+export const REMOTE_RACES_CAPABILITY = "training.races";
 
 export const REMOTE_ROUTES = {
   descriptor: "/v1/descriptor",
@@ -164,6 +170,10 @@ export const COACH_RPC_PERMISSIONS = {
   "coach.setModel": "coach:operate",
   "coach.confirm": "coach:approve",
   "training.scheduledSteps": "coach:read",
+  "training.activityNotes": "coach:read",
+  "training.gear": "coach:read",
+  "training.races": "coach:read",
+  "training.raceRoute": "coach:read",
   "environment.info": "coach:read"
 } as const satisfies Record<string, CoachPermission>;
 

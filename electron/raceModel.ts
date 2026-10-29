@@ -179,6 +179,110 @@ export function suggestRaces(
   return suggestions.reverse().slice(0, MAX_SUGGESTIONS);
 }
 
+// ----- Past races -----
+
+/** A past race the athlete knows about without a recording: a typed-in result or a target whose day has come. */
+export interface PastRaceHint {
+  kind: "result" | "target";
+  name: string;
+  /** YYYYMMDD, the athlete's local race day. */
+  raceDay: string;
+  /** Meters, when the race has a known length. */
+  distance?: number;
+}
+
+// A recording of a known race may include a warm-up jog on the same watch
+// session, or stop short of a long course, so the window is wider than for
+// detecting a distance.
+const HINT_SHORT_TOLERANCE = 0.9;
+const HINT_LONG_TOLERANCE = 1.2;
+
+/** YYYYMMDD for epoch seconds, in local time. */
+export function localRaceDay(epochSeconds: number): string {
+  const date = new Date(epochSeconds * 1000);
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+}
+
+/** Whether a recording on a race's day is that race: right sport, and its distance when the race has one. */
+export function recordingMatchesRace(activity: TrainingHubActivity, hint: PastRaceHint): boolean {
+  if (!isRaceSportType(activity.sportType) || activity.startTime === undefined) return false;
+  if (localRaceDay(activity.startTime) !== hint.raceDay) return false;
+  if (hint.distance === undefined) return true;
+  const ratio = (activity.distance ?? 0) / hint.distance;
+  return ratio >= HINT_SHORT_TOLERANCE && ratio <= HINT_LONG_TOLERANCE;
+}
+
+/** The suggestion reason for a recording found on a known race's day. */
+export function pastRaceReason(hint: PastRaceHint): string {
+  return hint.kind === "result" ? `Same day as your result: ${hint.name}` : `Your target race day: ${hint.name}`;
+}
+
+/**
+ * Recordings, older ones included, that look like a race the athlete already
+ * knows about: on the day of a result typed in without a recording, or of a
+ * target race that has passed. One recording per race, the closest in length.
+ */
+export function matchPastRaces(
+  activities: readonly TrainingHubActivity[],
+  known: ReadonlySet<string>,
+  hints: readonly PastRaceHint[]
+): RaceSuggestion[] {
+  const byActivity = new Map<string, RaceSuggestion>();
+  for (const hint of hints) {
+    let best: TrainingHubActivity | undefined;
+    let bestError = Number.POSITIVE_INFINITY;
+    for (const activity of activities) {
+      if (known.has(activity.activityId) || !recordingMatchesRace(activity, hint)) continue;
+      const error = hint.distance === undefined ? 0 : Math.abs(Math.log((activity.distance ?? 0) / hint.distance));
+      if (error < bestError) {
+        best = activity;
+        bestError = error;
+      }
+    }
+    if (!best) continue;
+    const existing = byActivity.get(best.activityId);
+    if (existing) {
+      existing.reasons.push(pastRaceReason(hint));
+    } else {
+      byActivity.set(best.activityId, {
+        activity: best,
+        distanceKey: detectRaceDistance(hint.distance ?? best.distance),
+        reasons: [pastRaceReason(hint)]
+      });
+    }
+  }
+  return [...byActivity.values()].sort((a, b) => (b.activity.startTime ?? 0) - (a.activity.startTime ?? 0));
+}
+
+// ----- Routes -----
+
+/** Points a race course is cut down to for a phone: enough for a map, a few kilobytes on the wire. */
+export const RACE_ROUTE_MAX_POINTS = 400;
+
+/**
+ * The GPS points of a recording as [lat, lon], every nth kept so at most
+ * `maxPoints` remain, the finish always included, to 5 decimals (about a metre).
+ */
+export function simplifyRaceRoute(
+  points: readonly { lat?: number; lon?: number }[],
+  maxPoints = RACE_ROUTE_MAX_POINTS
+): [number, number][] {
+  const fixes = points.filter(
+    (point): point is { lat: number; lon: number } =>
+      Number.isFinite(point.lat) && Number.isFinite(point.lon) && !(point.lat === 0 && point.lon === 0)
+  );
+  if (fixes.length < 2) return [];
+  const stride = Math.max(1, Math.ceil((fixes.length - 1) / (maxPoints - 1)));
+  const kept: [number, number][] = [];
+  const round = (value: number) => Math.round(value * 1e5) / 1e5;
+  for (let index = 0; index < fixes.length; index += stride) {
+    kept.push([round(fixes[index]!.lat), round(fixes[index]!.lon)]);
+  }
+  const last = fixes[fixes.length - 1]!;
+  if ((fixes.length - 1) % stride !== 0) kept.push([round(last.lat), round(last.lon)]);
+  return kept;
+}
+
 // ----- Build-up -----
 
 export const BUILD_UP_WEEKS = 8;

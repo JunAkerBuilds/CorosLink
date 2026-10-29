@@ -34,6 +34,7 @@ import {
   renameStoredTrainingActivity,
   setSetting,
   setTrainingActivityFeelType,
+  setTrainingActivityNote,
   upsertStrengthSessionDetail,
   upsertTrainingActivities
 } from "./database";
@@ -1146,8 +1147,10 @@ export async function getTrainingHubActivityDetail(
   );
 
   let detail = parseActivityDetail(raw);
-  // Opportunistically cache the end-of-activity feeling while we have the detail.
+  // Opportunistically cache the end-of-activity feeling and note while we have the detail.
   cacheFeelTypeFromDetail(activityId, raw);
+  const note = readActivityNote(raw);
+  if (note) detail = { ...detail, note };
   if (listActivity) {
     detail = mergeActivityDetailWithList(detail, listActivity);
   }
@@ -1345,11 +1348,30 @@ export async function getRacePredictor(): Promise<TrainingHubRacePredictor> {
   return dashboard.racePredictor;
 }
 
-// Pull sportFeelInfo.feelType out of a raw /activity/detail payload and cache
-// it (0 = the user left it unrated; 1..5 = a smiley). The raw payload comes
-// from a successful, envelope-validated response, so a missing/invalid
-// sportFeelInfo genuinely means "never rated" — persist 0 in that case too,
-// otherwise the row stays NULL and the backfill would refetch it forever.
+const MAX_ACTIVITY_NOTE_LENGTH = 4000;
+
+/**
+ * The athlete's note on an activity. COROS's apps keep it beside the feeling
+ * (`SportData.sportNote`, saved with `feelType`), so the detail carries it in
+ * `sportFeelInfo`; the top-level spelling is read too in case a payload
+ * flattens it.
+ */
+export function readActivityNote(raw: Record<string, unknown>): string | undefined {
+  const feelInfo = raw.sportFeelInfo as Record<string, unknown> | undefined;
+  for (const value of [feelInfo?.sportNote, raw.sportNote]) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim().slice(0, MAX_ACTIVITY_NOTE_LENGTH);
+    }
+  }
+  return undefined;
+}
+
+// Pull sportFeelInfo.feelType and the athlete's note out of a raw
+// /activity/detail payload and cache them (feelType 0 = the user left it
+// unrated; 1..5 = a smiley; note "" = none). The raw payload comes from a
+// successful, envelope-validated response, so a missing/invalid
+// sportFeelInfo genuinely means "never rated" — persist 0 and "" in that case
+// too, otherwise the row stays NULL and the backfill would refetch it forever.
 function cacheFeelTypeFromDetail(
   activityId: string,
   raw: Record<string, unknown>
@@ -1361,6 +1383,7 @@ function cacheFeelTypeFromDetail(
       activityId,
       feelType !== undefined && Number.isInteger(feelType) ? feelType : 0
     );
+    setTrainingActivityNote(activityId, readActivityNote(raw) ?? "");
   } catch {
     // best-effort cache; never block the detail request on it.
   }

@@ -351,6 +351,13 @@ export function ActivityDetailPanel({
         </div>
       )}
 
+      {detail.note ? (
+        <figure className="activity-detail-note">
+          <figcaption>{t("Your note")}</figcaption>
+          <blockquote>{detail.note}</blockquote>
+        </figure>
+      ) : null}
+
       {detail.strength ? (
         <>
           <StrengthDetailPanel strength={detail.strength} />

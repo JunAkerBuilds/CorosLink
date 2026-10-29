@@ -5,7 +5,10 @@ import {
   detectRaceDistance,
   equivalentTime,
   hasRaceLikeName,
+  localRaceDay,
+  matchPastRaces,
   raceGroupKey,
+  simplifyRaceRoute,
   suggestRaces
 } from "../electron/raceModel.ts";
 
@@ -121,5 +124,48 @@ assert.equal(progress.get("f").groupKey, "other:7000");
 assert.equal(progress.get("f").deltaToPrevious, -50);
 assert.equal(Math.round(progress.get("c").fiveKEquivalent), 1439);
 assert.equal(raceGroupKey({ distanceKey: "half", officialDistance: 21097.5 }), "half");
+
+// Past races: a recording on the day of a typed-in result or a passed target.
+{
+  const noon = new Date(2025, 4, 18, 9, 30).getTime() / 1000;
+  const raceDayKey = localRaceDay(noon);
+  assert.equal(raceDayKey, "20250518");
+  const recording = (id, km, extra = {}) => ({ activityId: id, sportType: 100, startTime: noon, distance: km * 1000, duration: 3600, ...extra });
+  const warmUp = recording("warmup", 2.1, { startTime: noon - 3600 });
+  const half = recording("half", 21.4);
+  const nextDay = recording("nextday", 21.1, { startTime: noon + 86_400 });
+  const indoor = recording("indoor", 21.1, { sportType: 101 });
+  const hints = [
+    { kind: "result", name: "Ottawa Half", raceDay: raceDayKey, distance: 21097.5 },
+    { kind: "target", name: "Spring Half", raceDay: raceDayKey, distance: 21097.5 },
+    { kind: "result", name: "Unrecorded 10K", raceDay: "20240101", distance: 10000 }
+  ];
+  const matched = matchPastRaces([warmUp, half, nextDay, indoor], new Set(), hints);
+  assert.deepEqual(matched.map((suggestion) => suggestion.activity.activityId), ["half"], "one per race, closest length, right sport and day");
+  assert.equal(matched[0].distanceKey, "half");
+  assert.deepEqual(matched[0].reasons, ["Same day as your result: Ottawa Half", "Your target race day: Spring Half"]);
+  assert.deepEqual(matchPastRaces([half], new Set(["half"]), hints), [], "tagged or dismissed runs stay out");
+  assert.deepEqual(
+    matchPastRaces([recording("long", 27)], new Set(), hints),
+    [],
+    "far longer than the race is not it"
+  );
+  assert.deepEqual(
+    matchPastRaces([recording("any", 7)], new Set(), [{ kind: "target", name: "Fun run", raceDay: raceDayKey }]).map((s) => s.activity.activityId),
+    ["any"],
+    "a race with no length matches on the day alone"
+  );
+}
+
+// Routes: at most 400 points, the finish kept, empty and zero fixes dropped.
+{
+  const track = Array.from({ length: 1001 }, (_, index) => ({ lat: 45 + index / 1e4, lon: -75.123456 }));
+  const route = simplifyRaceRoute([{ lat: 0, lon: 0 }, { distance: 5 }, ...track]);
+  assert.ok(route.length <= 400 && route.length > 300, String(route.length));
+  assert.deepEqual(route[0], [45, -75.12346]);
+  assert.deepEqual(route.at(-1), [45.1, -75.12346]);
+  assert.deepEqual(simplifyRaceRoute([{ lat: 45, lon: -75 }]), []);
+  assert.equal(simplifyRaceRoute(track.slice(0, 50)).length, 50);
+}
 
 console.log("race model tests passed");
