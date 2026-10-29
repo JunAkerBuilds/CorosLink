@@ -449,6 +449,9 @@ import {
   connectClaudeCode,
   connectGeminiCli,
   connectAntigravity,
+  cancelAntigravityConnection,
+  recheckAntigravityConnection,
+  reopenAntigravitySignIn,
   disconnectAntigravity,
   getAntigravityConnectionStatus,
   installAntigravity,
@@ -2101,6 +2104,12 @@ function registerIpcHandlers(): void {
   ipcMain.handle("chat:connectAntigravity", () => connectAntigravity());
 
   ipcMain.handle("chat:disconnectAntigravity", () => disconnectAntigravity());
+
+  ipcMain.handle("chat:recheckAntigravity", () => recheckAntigravityConnection());
+
+  ipcMain.handle("chat:cancelAntigravitySignIn", () => cancelAntigravityConnection());
+
+  ipcMain.handle("chat:reopenAntigravitySignIn", () => reopenAntigravitySignIn());
 
   ipcMain.handle("chat:testAntigravityConnection", () => testAntigravity());
 

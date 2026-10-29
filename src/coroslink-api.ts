@@ -883,6 +883,10 @@ export interface CorosLinkApi {
   /** Opens Google's sign-in page; poll the status until it connects. */
   connectAntigravity: () => Promise<AntigravityStatus>;
   disconnectAntigravity: () => Promise<AntigravityStatus>;
+  /** "Check again": asks Google again when a refusal or failed sign-in is showing. */
+  recheckAntigravity: () => Promise<AntigravityStatus>;
+  cancelAntigravitySignIn: () => Promise<AntigravityStatus>;
+  reopenAntigravitySignIn: () => Promise<void>;
   testAntigravityConnection: () => Promise<AntigravityConnectionTest>;
   openAntigravityGuide: () => Promise<void>;
   loginChat: () => Promise<ChatAuthStatus>;

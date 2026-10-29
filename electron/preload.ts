@@ -1335,6 +1335,12 @@ const api = {
     ipcRenderer.invoke("chat:connectAntigravity"),
   disconnectAntigravity: (): Promise<AntigravityStatus> =>
     ipcRenderer.invoke("chat:disconnectAntigravity"),
+  recheckAntigravity: (): Promise<AntigravityStatus> =>
+    ipcRenderer.invoke("chat:recheckAntigravity"),
+  cancelAntigravitySignIn: (): Promise<AntigravityStatus> =>
+    ipcRenderer.invoke("chat:cancelAntigravitySignIn"),
+  reopenAntigravitySignIn: (): Promise<void> =>
+    ipcRenderer.invoke("chat:reopenAntigravitySignIn"),
   testAntigravityConnection: (): Promise<AntigravityConnectionTest> =>
     ipcRenderer.invoke("chat:testAntigravityConnection"),
   openAntigravityGuide: (): Promise<void> =>

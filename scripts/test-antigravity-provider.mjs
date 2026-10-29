@@ -19,12 +19,15 @@ const {
   antigravityModelOptions,
   antigravityReleaseFor,
   answerAntigravityPermission,
+  cancelAntigravitySignIn,
   getAntigravitySessionModels,
   getAntigravityStatus,
   installAntigravityRuntime,
   listAntigravityModels,
   normalizeAntigravityError,
   parseAntigravitySignInUrl,
+  pendingAntigravitySignInUrl,
+  recheckAntigravity,
   signInToAntigravity,
   signOutOfAntigravity,
   streamAntigravityCompletion,
@@ -52,6 +55,13 @@ try {
   );
   assert.equal(parseAntigravitySignInUrl(line.replace("http%3A%2F%2F127.0.0.1", "http%3A%2F%2Fevil.example")), undefined);
   assert.equal(parseAntigravitySignInUrl(line.replace("https://", "http://")), undefined);
+  // Gemini CLI's loopback redirect (localhost and a callback path) is Google's page too.
+  const callbackLine = line.replace("http%3A%2F%2F127.0.0.1%3A50754%2F", "http%3A%2F%2Flocalhost%3A50754%2Foauth2callback");
+  assert.equal(parseAntigravitySignInUrl(callbackLine), callbackLine.slice(callbackLine.indexOf("https://")));
+  assert.equal(
+    parseAntigravitySignInUrl(line.replace("http%3A%2F%2F127.0.0.1%3A50754%2F", "http%3A%2F%2Flocalhost.evil.example%3A80%2F")),
+    undefined
+  );
 
   const env = antigravityEnvironment(
     { home: "/h", harnessPath: "/r/localharness_external", temp: "/t" },
@@ -268,11 +278,31 @@ try {
   });
   await assert.rejects(hung, (error) => error.kind === "cancelled");
 
+  // A refusal is remembered, so the saved sign-in looks lapsed until Check again asks Google.
+  await writeFile(path.join(acpDir, "refuse-once"), "");
+  await assert.rejects(listAntigravityModels(root));
+  const refused = await getAntigravityStatus(root);
+  assert.equal(refused.state, "sign-in-required");
+  assert.equal((await getAntigravityStatus(root)).state, "sign-in-required", "reading the status alone never clears it");
+  const rechecked = await recheckAntigravity(root);
+  assert.equal(rechecked.state, "connected", rechecked.message);
+
+  // A sign-in whose Google page never comes can be cancelled, without an error left on screen.
+  await writeFile(path.join(acpDir, "stall-auth"), "");
+  const waiting = await signInToAntigravity(root, () => assert.fail("no page to open"));
+  assert.equal(waiting.state, "connecting");
+  assert.equal((await getAntigravityStatus(root)).state, "connecting");
+  assert.equal(pendingAntigravitySignInUrl(), undefined);
+  const cancelled = await cancelAntigravitySignIn(root);
+  assert.notEqual(cancelled.state, "connecting");
+  assert.doesNotMatch(cancelled.message, /did not finish/);
+  await rm(path.join(acpDir, "stall-auth"));
+
   const signedOut = await signOutOfAntigravity(root);
   assert.equal(signedOut.state, "sign-in-required");
   await assert.rejects(stat(path.join(acpDir, "acp_token.json")));
 
-  console.log("antigravity provider tests passed (helpers, install, sign-in, ACP stream, tool bridge, permissions, models, cleanup, cancel, sign-out)");
+  console.log("antigravity provider tests passed (helpers, install, sign-in, ACP stream, tool bridge, permissions, models, cleanup, cancel, recheck, cancelled sign-in, sign-out)");
 } finally {
   await rm(scratch, { recursive: true, force: true });
 }
@@ -299,6 +329,7 @@ async function handle(message) {
   if (message.id !== undefined && waiting.has(message.id)) { waiting.get(message.id)(message.result); return; }
   if (message.method === "initialize") return send({ id: message.id, result: { protocolVersion: message.params.protocolVersion, authMethods: [{ id: "oauth-personal" }] } });
   if (message.method === "authenticate") {
+    if (fs.existsSync(path.join(acp, "stall-auth"))) return;
     process.stderr.write("I1026 credential_manager.py] Credentials missing\\n" + LINK + "\\n");
     setTimeout(() => { fs.writeFileSync(token, "{}"); send({ id: message.id, result: {} }); }, 300);
     return;
@@ -306,6 +337,7 @@ async function handle(message) {
   if (message.method === "session/new") {
     // Without a saved sign-in the real agent starts the browser flow and waits.
     if (!fs.existsSync(token)) { process.stderr.write(LINK + "\\n"); return; }
+    if (fs.existsSync(path.join(acp, "refuse-once"))) { fs.rmSync(path.join(acp, "refuse-once")); process.stderr.write(LINK + "\\n"); return; }
     if (process.env.GEMINI_API_KEY === undefined && process.env.BROWSER && process.env.ANTIGRAVITY_HARNESS_PATH && process.env.AGY_ACP_FORCE_FILE_STORAGE === "1") checks.push("env:ok");
     const meta = message.params._meta?.antigravity ?? {};
     if (Array.isArray(meta.enabledTools) && meta.enabledTools.length === 0 && meta.eagerMcpServers?.[0] === "coroslink" && meta.systemPrompt?.append === "COACH INSTRUCTIONS") checks.push("meta:ok");

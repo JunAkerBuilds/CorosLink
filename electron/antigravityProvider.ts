@@ -107,6 +107,8 @@ const MCP_SERVER_NAME = "coroslink";
 const AUTH_METHOD = "oauth-personal";
 const AUTH_LINK_PREFIX = "Open the following link to authenticate the ACP server: ";
 const SIGN_IN_REQUIRED_MESSAGE = "Sign in to Antigravity with your Google account.";
+// The agent prints Google's link within seconds of being asked to sign in.
+const SIGN_IN_LINK_WAIT_MS = 20_000;
 
 export type AntigravityFailureKind =
   | "not-installed"
@@ -331,7 +333,16 @@ export async function removeAntigravityRuntime(root: string): Promise<void> {
 
 // ----- Sign-in state -----
 
-let pendingLogin: { promise: Promise<void>; url?: string } | undefined;
+interface PendingLogin {
+  promise: Promise<void>;
+  url?: string;
+  startedAt: number;
+  /** Stops the agent; the sign-in then ends without an error. */
+  cancel?: () => void;
+  cancelled?: boolean;
+}
+
+let pendingLogin: PendingLogin | undefined;
 let lastLoginError: string | undefined;
 /** A refusal from Google, held until the athlete signs in again. */
 let lastRefusal: string | undefined;
@@ -405,7 +416,11 @@ export async function getAntigravityStatus(root: string): Promise<AntigravitySta
       installed: true,
       authenticated: false,
       signInUrl: pendingLogin.url,
-      message: "Finish signing in with Google in your browser."
+      message: pendingLogin.url
+        ? "Finish signing in with Google in your browser. Closed the page? Open it again."
+        : Date.now() - pendingLogin.startedAt > SIGN_IN_LINK_WAIT_MS
+          ? "Google's sign-in page didn't open. Cancel and try again."
+          : "Opening Google's sign-in page…"
     };
   }
   if (!(await hasSavedSignIn(root)) || lastRefusal) {
@@ -445,7 +460,7 @@ export function parseAntigravitySignInUrl(line: string): string | undefined {
     url.host !== "accounts.google.com" ||
     url.username ||
     url.password ||
-    !/^http:\/\/127\.0\.0\.1:\d{2,5}\/$/.test(redirect)
+    !/^http:\/\/(127\.0\.0\.1|localhost):\d{2,5}\/[\w\-./]*$/.test(redirect)
   ) {
     return undefined;
   }
@@ -466,7 +481,7 @@ export async function signInToAntigravity(
 
   lastLoginError = undefined;
   lastRefusal = undefined;
-  const login: { promise: Promise<void>; url?: string } = { promise: Promise.resolve() };
+  const login: PendingLogin = { promise: Promise.resolve(), startedAt: Date.now() };
   login.promise = (async () => {
     await prepareHome(root);
     const launch = await launchAgent(root, {
@@ -476,6 +491,8 @@ export async function signInToAntigravity(
         openUrl(url);
       }
     });
+    login.cancel = () => launch.agent.close();
+    if (login.cancelled) launch.agent.close();
     const timer = setTimeout(() => launch.agent.close(), LOGIN_TIMEOUT_MS);
     try {
       await launch.agent.initialize(ACP_PROTOCOL_VERSION);
@@ -488,6 +505,7 @@ export async function signInToAntigravity(
       rememberModels(session.configOptions);
       await launch.trackSession(session.sessionId);
     } catch (caught) {
+      if (login.cancelled) return;
       const error = normalizeAntigravityError(caught);
       if (error.kind === "auth" || error.kind === "usage-limit") lastRefusal = error.message;
       throw error;
@@ -508,8 +526,49 @@ export async function signInToAntigravity(
     ...status,
     state: "connecting",
     checkedAt: new Date().toISOString(),
-    message: "Finish signing in with Google in your browser."
+    message: "Opening Google's sign-in page…"
   };
+}
+
+/** Stops a sign-in that is waiting on Google, so the athlete can start again. */
+export async function cancelAntigravitySignIn(root: string): Promise<AntigravityStatus> {
+  const login = pendingLogin;
+  if (login) {
+    login.cancelled = true;
+    login.cancel?.();
+    await login.promise;
+  }
+  return getAntigravityStatus(root);
+}
+
+/** Google's page for the sign-in that is waiting, to open again after the tab was closed. */
+export function pendingAntigravitySignInUrl(): string | undefined {
+  return pendingLogin?.url;
+}
+
+/**
+ * "Check again": a refusal or failed sign-in is remembered in memory, so reading
+ * the status alone never changes it. With a saved sign-in, this asks Google again
+ * by starting a session (no prompt is sent), and the status follows the answer.
+ */
+export async function recheckAntigravity(root: string): Promise<AntigravityStatus> {
+  if (pendingLogin || !(lastRefusal || lastLoginError) || !(await hasSavedSignIn(root))) {
+    return getAntigravityStatus(root);
+  }
+  lastRefusal = undefined;
+  lastLoginError = undefined;
+  try {
+    await listAntigravityModels(root);
+  } catch (caught) {
+    const error = normalizeAntigravityError(caught);
+    if (!lastRefusal) {
+      lastRefusal =
+        error.kind === "auth" || error.kind === "usage-limit"
+          ? error.message
+          : `Couldn't reach Antigravity to check the sign-in: ${truncate(error.message, 200)}`;
+    }
+  }
+  return getAntigravityStatus(root);
 }
 
 /** Removes the saved Google sign-in from CorosLink's private Antigravity home. */

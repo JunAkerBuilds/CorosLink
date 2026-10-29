@@ -10,7 +10,8 @@ import {
   LogOut,
   Orbit,
   RefreshCw,
-  Trash2
+  Trash2,
+  X
 } from "lucide-react";
 import type { AntigravityStatus, ChatSettings } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
@@ -22,16 +23,28 @@ import "./antigravity.css";
 // signs it in with Google. These are its controls in Coach settings and on
 // the setup screen shown while it isn't ready.
 
-type AntigravityAction = "checking" | "installing" | "connecting" | "testing" | "signing-out" | "removing";
+type AntigravityAction =
+  | "checking"
+  | "installing"
+  | "connecting"
+  | "cancelling"
+  | "testing"
+  | "signing-out"
+  | "removing";
 
 export interface AntigravityControls {
   status: AntigravityStatus | null;
   action: AntigravityAction | null;
   /** Re-reads the status without a spinner or clearing an error on screen. */
   reload(): void;
+  /** "Check again": asks Google again when a refusal or failed sign-in is showing. */
   refresh(): void;
   install(): void;
   connect(): void;
+  /** Stops a sign-in that waits on Google. */
+  cancelSignIn(): void;
+  /** Opens Google's page again for the sign-in that waits. */
+  reopenSignIn(): void;
   disconnect(): void;
   test(): void;
   remove(): void;
@@ -41,6 +54,8 @@ export interface AntigravityControls {
 
 /** Download and sign-in both finish outside the call that starts them. */
 const POLL_MS = { installing: 1000, connecting: 2000 } as const;
+/** A check that answers at once still shows its spinner, so the click is seen. */
+const MIN_CHECK_MS = 600;
 
 export function useAntigravity({
   api,
@@ -68,7 +83,11 @@ export function useAntigravity({
       setAction(kind);
       onError(null);
       try {
+        const started = Date.now();
         const result = await call();
+        if (kind === "checking") {
+          await new Promise((resolve) => setTimeout(resolve, Math.max(0, MIN_CHECK_MS - (Date.now() - started))));
+        }
         if ("ok" in result) {
           setStatus(result.status);
           if (!result.ok) onError(result.message);
@@ -98,9 +117,12 @@ export function useAntigravity({
     status,
     action,
     reload: () => void api?.getAntigravityStatus().then(setStatus).catch(() => undefined),
-    refresh: () => void run("checking", () => api!.getAntigravityStatus(), t("Could not check Antigravity.")),
+    refresh: () => void run("checking", () => api!.recheckAntigravity(), t("Could not check Antigravity.")),
     install: () => void run("installing", () => api!.installAntigravity(), t("The Antigravity download failed.")),
     connect: () => void run("connecting", () => api!.connectAntigravity(), t("Google sign-in failed.")),
+    cancelSignIn: () =>
+      void run("cancelling", () => api!.cancelAntigravitySignIn(), t("Could not cancel the Google sign-in.")),
+    reopenSignIn: () => void api?.reopenAntigravitySignIn(),
     disconnect: () => void run("signing-out", () => api!.disconnectAntigravity(), t("Could not sign out of Antigravity.")),
     test: () => void run("testing", () => api!.testAntigravityConnection(), t("Antigravity connection test failed.")),
     remove: () => void run("removing", () => api!.removeAntigravity(), t("Could not remove the Antigravity download.")),
@@ -153,6 +175,30 @@ function InstallProgress({ status }: { status: AntigravityStatus | null }) {
       value={value}
       aria-label={antigravityStatusLabel(status)}
     />
+  );
+}
+
+/** While a sign-in waits on Google: open the page again, or give up and start over. */
+function WaitingActions({ controls, className }: { controls: AntigravityControls; className: string }) {
+  const { status, action } = controls;
+  if (status?.state !== "connecting") return null;
+  return (
+    <>
+      {status.signInUrl ? (
+        <button type="button" className={className} onClick={controls.reopenSignIn} disabled={Boolean(action)}>
+          <ExternalLink size={14} aria-hidden="true" />
+          {t("Open Google's page")}
+        </button>
+      ) : null}
+      <button type="button" className={className} onClick={controls.cancelSignIn} disabled={Boolean(action)}>
+        {action === "cancelling" ? (
+          <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
+        ) : (
+          <X size={14} aria-hidden="true" />
+        )}
+        {t("Cancel sign-in")}
+      </button>
+    </>
   );
 }
 
@@ -267,6 +313,7 @@ export function AntigravitySettingsSection({
           {t("Check")}
         </button>
         <PrimaryAction controls={controls} busy={busy} className="chat-local-action primary" />
+        <WaitingActions controls={controls} className="chat-local-action" />
         {status?.state === "connected" ? (
           <>
             <button type="button" className="chat-local-action primary" onClick={controls.test} disabled={working || busy}>
@@ -319,6 +366,7 @@ export function AntigravityGatePanel({ controls }: { controls: AntigravityContro
         {status?.state === "unsupported" ? null : (
           <PrimaryAction controls={controls} className="primary-button" />
         )}
+        <WaitingActions controls={controls} className="secondary-button" />
         <button
           type="button"
           className="secondary-button"

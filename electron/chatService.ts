@@ -125,6 +125,9 @@ import {
   listAntigravityModels,
   removeAntigravityRuntime,
   signInToAntigravity,
+  cancelAntigravitySignIn,
+  pendingAntigravitySignInUrl,
+  recheckAntigravity,
   signOutOfAntigravity,
   streamAntigravityCompletion,
   testAntigravityConnection as runAntigravityConnectionTest
@@ -500,6 +503,26 @@ export async function connectAntigravity(): Promise<AntigravityStatus> {
   const status = await signInToAntigravity(antigravityRoot(), openAntigravitySignIn);
   recordAntigravityStatus(status);
   return status;
+}
+
+/** "Check again": asks Google again when a refusal or failed sign-in is on screen. */
+export async function recheckAntigravityConnection(): Promise<AntigravityStatus> {
+  antigravityModelCache = null;
+  const status = await recheckAntigravity(antigravityRoot());
+  recordAntigravityStatus(status);
+  return status;
+}
+
+export async function cancelAntigravityConnection(): Promise<AntigravityStatus> {
+  const status = await cancelAntigravitySignIn(antigravityRoot());
+  recordAntigravityStatus(status);
+  return status;
+}
+
+/** Opens Google's page again for the sign-in that is waiting. */
+export function reopenAntigravitySignIn(): void {
+  const url = pendingAntigravitySignInUrl();
+  if (url) openAntigravitySignIn(url);
 }
 
 export async function disconnectAntigravity(): Promise<AntigravityStatus> {
