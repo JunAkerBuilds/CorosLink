@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { chmod, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import {
@@ -337,6 +338,11 @@ interface PendingLogin {
   promise: Promise<void>;
   url?: string;
   startedAt: number;
+  /** Where the sign-in is, so a slow step says which one it is. */
+  phase: "starting" | "signing-in" | "checking-plan";
+  phaseStartedAt: number;
+  /** The agent's latest log line, shown when a step is slow. */
+  lastLine?: string;
   /** Stops the agent; the sign-in then ends without an error. */
   cancel?: () => void;
   cancelled?: boolean;
@@ -416,11 +422,7 @@ export async function getAntigravityStatus(root: string): Promise<AntigravitySta
       installed: true,
       authenticated: false,
       signInUrl: pendingLogin.url,
-      message: pendingLogin.url
-        ? "Finish signing in with Google in your browser. Closed the page? Open it again."
-        : Date.now() - pendingLogin.startedAt > SIGN_IN_LINK_WAIT_MS
-          ? "Google's sign-in page didn't open. Cancel and try again."
-          : "Opening Google's sign-in page…"
+      message: pendingLoginMessage(pendingLogin)
     };
   }
   if (!(await hasSavedSignIn(root)) || lastRefusal) {
@@ -441,6 +443,27 @@ export async function getAntigravityStatus(root: string): Promise<AntigravitySta
     authenticated: true,
     message: "Antigravity is signed in with your Google account."
   };
+}
+
+/** What a waiting sign-in is doing; a slow step says so, with the agent's last words. */
+function pendingLoginMessage(login: PendingLogin): string {
+  const slow = Date.now() - login.phaseStartedAt > SIGN_IN_LINK_WAIT_MS;
+  const lastWords = login.lastLine ? ` Antigravity's last message: "${truncate(login.lastLine, 200)}"` : "";
+  switch (login.phase) {
+    case "starting":
+      return slow
+        ? "Antigravity is still starting. Its first start can take a few minutes, longer on Windows while your antivirus checks it." + lastWords
+        : "Starting Antigravity…";
+    case "signing-in":
+      if (login.url) return "Finish signing in with Google in your browser. Closed the page? Open it again.";
+      return slow
+        ? "Antigravity hasn't given Google's sign-in page yet. Wait a little, or cancel and try again." + lastWords
+        : "Opening Google's sign-in page…";
+    case "checking-plan":
+      return slow
+        ? "Signed in. Google is still checking that your plan includes Antigravity." + lastWords
+        : "Signed in. Checking that your Google plan includes Antigravity…";
+  }
 }
 
 /** Google's sign-in page, and nothing else, may be opened from what the agent prints. */
@@ -481,7 +504,12 @@ export async function signInToAntigravity(
 
   lastLoginError = undefined;
   lastRefusal = undefined;
-  const login: PendingLogin = { promise: Promise.resolve(), startedAt: Date.now() };
+  const now = Date.now();
+  const login: PendingLogin = { promise: Promise.resolve(), startedAt: now, phase: "starting", phaseStartedAt: now };
+  const enter = (phase: PendingLogin["phase"]) => {
+    login.phase = phase;
+    login.phaseStartedAt = Date.now();
+  };
   login.promise = (async () => {
     await prepareHome(root);
     const launch = await launchAgent(root, {
@@ -489,6 +517,10 @@ export async function signInToAntigravity(
         if (login.url) return;
         login.url = url;
         openUrl(url);
+      },
+      onLogLine: (line) => {
+        const text = stripVTControlCharacters(line).trim();
+        if (text && !text.includes(AUTH_LINK_PREFIX)) login.lastLine = text;
       }
     });
     login.cancel = () => launch.agent.close();
@@ -496,8 +528,10 @@ export async function signInToAntigravity(
     const timer = setTimeout(() => launch.agent.close(), LOGIN_TIMEOUT_MS);
     try {
       await launch.agent.initialize(ACP_PROTOCOL_VERSION);
+      enter("signing-in");
       await launch.agent.request("authenticate", { methodId: AUTH_METHOD });
       // Signing in is not enough: Google checks the account's plan when a session starts.
+      enter("checking-plan");
       const session = (await launch.agent.request("session/new", sessionParams(root, undefined, ""))) as {
         sessionId?: string;
         configOptions?: unknown;
@@ -526,7 +560,7 @@ export async function signInToAntigravity(
     ...status,
     state: "connecting",
     checkedAt: new Date().toISOString(),
-    message: "Opening Google's sign-in page…"
+    message: "Starting Antigravity…"
   };
 }
 
@@ -742,7 +776,12 @@ interface Launch {
 
 async function launchAgent(
   root: string,
-  options: { onSignInUrl?: (url: string) => void; onPermission?: (params: unknown) => unknown }
+  options: {
+    onSignInUrl?: (url: string) => void;
+    onPermission?: (params: unknown) => unknown;
+    /** Every line the agent logs, for a sign-in that needs to say where it is. */
+    onLogLine?: (line: string) => void;
+  }
 ): Promise<Launch> {
   const runtime = await installedRuntime(root);
   if (!runtime) {
@@ -760,6 +799,7 @@ async function launchAgent(
       label: "Antigravity",
       onPermission: options.onPermission,
       onStderrLine: (line) => {
+        options.onLogLine?.(line);
         const url = parseAntigravitySignInUrl(line);
         if (!url) return;
         if (options.onSignInUrl) {

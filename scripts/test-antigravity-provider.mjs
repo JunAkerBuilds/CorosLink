@@ -292,6 +292,11 @@ try {
   const waiting = await signInToAntigravity(root, () => assert.fail("no page to open"));
   assert.equal(waiting.state, "connecting");
   assert.equal((await getAntigravityStatus(root)).state, "connecting");
+  // The waiting state says which step it's on: the agent answered, so it's waiting on Google's link.
+  for (let i = 0; i < 50 && (await getAntigravityStatus(root)).message === "Starting Antigravity…"; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.equal((await getAntigravityStatus(root)).message, "Opening Google's sign-in page…");
   assert.equal(pendingAntigravitySignInUrl(), undefined);
   const cancelled = await cancelAntigravitySignIn(root);
   assert.notEqual(cancelled.state, "connecting");
