@@ -393,8 +393,11 @@ function requireActivity(activity: TrainingHubActivity): TrainingHubActivity {
   return activity;
 }
 
-/** Fold a Strava-only race row into the COROS recording of the same race. */
-function absorbStravaTwin(target: StoredRace, startTime: number): StoredRace {
+/**
+ * Fold a Strava-only race row into the COROS recording of the same race. The
+ * twin's id goes into `absorbed`; the caller deletes it with the save.
+ */
+function absorbStravaTwin(target: StoredRace, startTime: number, absorbed: string[]): StoredRace {
   const stravaStarts = new Map(
     listStravaRaceActivities().map((activity) => [activity.activityId, activity.startTime])
   );
@@ -405,7 +408,7 @@ function absorbStravaTwin(target: StoredRace, startTime: number): StoredRace {
     return stravaStart !== undefined && Math.abs(stravaStart - startTime) <= MATCH_WINDOW_SEC;
   });
   if (!twin) return target;
-  deleteStoredRace(twin.raceId);
+  absorbed.push(twin.raceId);
   return {
     ...target,
     stravaActivityId: target.stravaActivityId ?? twin.stravaActivityId,
@@ -421,15 +424,19 @@ function absorbStravaTwin(target: StoredRace, startTime: number): StoredRace {
 /**
  * Fold a result typed in without a recording into the recording of the same
  * race, and take the event's name and distance from a target race on that day.
+ * Only an unambiguous result is folded: with two typed-in results that could
+ * be this recording, neither is touched. Its id goes into `absorbed`.
  */
-function absorbKnownRace(target: StoredRace, activity: TrainingHubActivity): StoredRace {
+function absorbKnownRace(target: StoredRace, activity: TrainingHubActivity, absorbed: string[]): StoredRace {
   let next = target;
-  const result = listStoredRaces().find((row) => {
+  const results = listStoredRaces().filter((row) => {
+    if (absorbed.includes(row.raceId)) return false;
     const hint = manualResultHint(row);
     return hint !== undefined && recordingMatchesRace(activity, hint);
   });
+  const result = results.length === 1 ? results[0] : undefined;
   if (result) {
-    deleteStoredRace(result.raceId);
+    absorbed.push(result.raceId);
     next = {
       ...next,
       eventName: next.eventName ?? result.eventName,
@@ -467,9 +474,10 @@ export function markActivityAsRace(input: TrainingHubActivity): RaceOverview {
     corosActivityId: activity.activityId,
     snapshot
   };
-  if (snapshot) race = absorbStravaTwin(race, snapshot.startTime);
-  race = absorbKnownRace(race, activity);
-  saveStoredRace(race);
+  const absorbed: string[] = [];
+  if (snapshot) race = absorbStravaTwin(race, snapshot.startTime, absorbed);
+  race = absorbKnownRace(race, activity, absorbed);
+  saveStoredRace(race, absorbed);
   return getRaceOverview();
 }
 

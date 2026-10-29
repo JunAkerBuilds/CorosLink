@@ -523,8 +523,11 @@ export async function signInToAntigravity(
         if (text && !text.includes(AUTH_LINK_PREFIX)) login.lastLine = text;
       }
     });
+    if (login.cancelled) {
+      await launch.close();
+      return;
+    }
     login.cancel = () => launch.agent.close();
-    if (login.cancelled) launch.agent.close();
     const timer = setTimeout(() => launch.agent.close(), LOGIN_TIMEOUT_MS);
     try {
       await launch.agent.initialize(ACP_PROTOCOL_VERSION);
@@ -549,10 +552,11 @@ export async function signInToAntigravity(
     }
   })()
     .catch((caught: unknown) => {
-      lastLoginError = truncate(acpErrorMessage(caught), 300);
+      if (!login.cancelled) lastLoginError = truncate(acpErrorMessage(caught), 300);
     })
     .finally(() => {
-      pendingLogin = undefined;
+      // A cancelled sign-in may finish after a new one started.
+      if (pendingLogin === login) pendingLogin = undefined;
     });
   pendingLogin = login;
 
@@ -569,8 +573,14 @@ export async function cancelAntigravitySignIn(root: string): Promise<Antigravity
   const login = pendingLogin;
   if (login) {
     login.cancelled = true;
-    login.cancel?.();
-    await login.promise;
+    if (login.cancel) {
+      login.cancel();
+      await login.promise;
+    } else {
+      // Still starting: nothing to stop yet. The launch closes itself once it is up,
+      // so don't make the athlete wait for a slow first start.
+      if (pendingLogin === login) pendingLogin = undefined;
+    }
   }
   return getAntigravityStatus(root);
 }

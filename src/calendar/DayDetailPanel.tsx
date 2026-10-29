@@ -88,7 +88,13 @@ export function DayDetailPanel({
   useEffect(() => {
     setConfirmDelete(false);
     setExpanded(false);
-  }, [selection?.kind === "activity" ? selection.activity.activityId : selection]);
+  }, [
+    selection?.kind === "activity"
+      ? selection.activity.activityId
+      : selection
+        ? JSON.stringify([selection.entry.planId, selection.entry.idInPlan, selection.entry.happenDay])
+        : null
+  ]);
 
   useEffect(() => {
     setDetail(null);
@@ -314,7 +320,8 @@ export function DayDetailPanel({
         opened={pageOpen ? activity : null}
         activityDetail={detail}
         sportTypes={sportTypes}
-        busy={exporting ?? (loadingDetail && activity ? `training-detail:${activity.activityId}` : null)}
+        // A loading detail wins: any other busy key with no detail reads as a failed load.
+        busy={loadingDetail && activity ? `training-detail:${activity.activityId}` : exporting}
         resolveLocation={api.reverseGeocodeRouteLocation}
         raceTags={raceJournal}
         onExportFile={(exported, fileType) => void exportFile(exported, fileType)}

@@ -329,6 +329,22 @@ assert.equal(merged.notes, "PB");
 assert.equal(merged.recordedDistance, 21300);
 assert.ok(!overview.races.some((entry) => entry.source === "manual" && entry.name === "Ottawa Half"));
 
+// Two typed-in results that could both be one recording: neither is folded in.
+const doubleStart = new Date(2025, 4, 11, 9, 0).getTime() / 1000;
+const doubleRun = run("doublerun", 0, 5.2, 1250, { startTime: doubleStart, name: "Morning Run" });
+database.upsertTrainingActivities([doubleRun]);
+for (const name of ["Park 5K", "Charity 5K"]) {
+  races.addManualRace({ name, startTime: new Date(2025, 4, 11, 12).getTime() / 1000, distanceKey: "5k", officialTime: 1240 });
+}
+overview = races.markActivityAsRace(doubleRun);
+const doubleRace = overview.races.find((entry) => entry.raceId === "coros:doublerun");
+assert.equal(doubleRace.officialTimeIsManual, false, "an ambiguous result lends nothing");
+assert.equal(
+  overview.races.filter((entry) => entry.source === "manual" && /5K$/.test(entry.name)).length,
+  2,
+  "and both typed-in results stay"
+);
+
 // Its course is read once from COROS, then kept.
 let trackReads = 0;
 const fetchTrack = async () => {

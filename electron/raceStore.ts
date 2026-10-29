@@ -174,8 +174,21 @@ export function getStoredRace(raceId: string): StoredRace | undefined {
   return row ? toStoredRace(row) : undefined;
 }
 
-/** Insert or replace a race row whole; callers merge with `getStoredRace` first. */
-export function saveStoredRace(race: StoredRace): void {
+/**
+ * Insert or replace a race row whole; callers merge with `getStoredRace` first.
+ * `absorbedRaceIds` (rows folded into this one) are deleted in the same transaction.
+ */
+export function saveStoredRace(race: StoredRace, absorbedRaceIds: readonly string[] = []): void {
+  const db = database();
+  db.transaction(() => {
+    writeStoredRace(race);
+    for (const raceId of absorbedRaceIds) {
+      if (raceId !== race.raceId) deleteStoredRace(raceId);
+    }
+  })();
+}
+
+function writeStoredRace(race: StoredRace): void {
   const now = new Date().toISOString();
   database()
     .prepare(

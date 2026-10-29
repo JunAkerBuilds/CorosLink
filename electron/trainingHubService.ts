@@ -1522,6 +1522,17 @@ const NOTE_BACKFILL_DAILY_CAP = 120;
 const NOTE_BACKFILL_SETTING = "trainingHub.noteBackfill";
 let noteBackfillRunning = false;
 let noteBackfillLastRunAt = 0;
+let noteBackfillTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** The next batch, NOTE_BACKFILL_INTERVAL_MS on; a feeling backfill may also start one sooner. */
+function scheduleNoteBackfill(): void {
+  if (noteBackfillTimer) clearTimeout(noteBackfillTimer);
+  noteBackfillTimer = setTimeout(() => {
+    noteBackfillTimer = undefined;
+    void backfillActivityNotes();
+  }, NOTE_BACKFILL_INTERVAL_MS);
+  noteBackfillTimer.unref?.();
+}
 
 /** Today's note fetches so far, from the setting; a new local day starts at 0. */
 function noteBackfillToday(): { day: string; count: number } {
@@ -1537,15 +1548,28 @@ function noteBackfillToday(): { day: string; count: number } {
 
 /**
  * One gentle batch of note fetches for activities synced before notes were
- * stored. Runs only after the feeling backfill is done, never alongside it.
+ * stored, then the next one scheduled while any may be left. Runs only after
+ * the feeling backfill is done; a feeling backfill that starts mid-batch takes
+ * over, and this batch stops before its next request.
  */
 export async function backfillActivityNotes(): Promise<void> {
-  if (noteBackfillRunning || feelBackfillRunning || !getStoredAuth()) return;
-  if (Date.now() - noteBackfillLastRunAt < NOTE_BACKFILL_INTERVAL_MS) return;
-  if (Date.now() < feelBackfillCooldownUntil) return;
+  if (noteBackfillRunning || !getStoredAuth()) return;
+  if (feelBackfillRunning || Date.now() - noteBackfillLastRunAt < NOTE_BACKFILL_INTERVAL_MS) {
+    // The feeling backfill restarts this when it drains; the timer covers the interval.
+    if (!feelBackfillRunning) scheduleNoteBackfill();
+    return;
+  }
+  if (Date.now() < feelBackfillCooldownUntil) {
+    scheduleNoteBackfill();
+    return;
+  }
   const today = noteBackfillToday();
   const budget = Math.min(NOTE_BACKFILL_BATCH, NOTE_BACKFILL_DAILY_CAP - today.count);
-  if (budget <= 0) return;
+  if (budget <= 0) {
+    // Today's cap is spent; check again later, the count resets on a new day.
+    scheduleNoteBackfill();
+    return;
+  }
   noteBackfillRunning = true;
   noteBackfillLastRunAt = Date.now();
   try {
@@ -1557,8 +1581,14 @@ export async function backfillActivityNotes(): Promise<void> {
       .filter(({ activityId }) => !feelBackfillFailedIds.has(activityId))
       .slice(0, budget);
     let failures = 0;
+    let stopped = false;
     for (const [index, { activityId, sportType }] of pending.entries()) {
       if (index > 0) await delay(NOTE_BACKFILL_DELAY_MS);
+      // The feeling backfill has priority and never shares COROS with this one.
+      if (feelBackfillRunning) {
+        stopped = true;
+        break;
+      }
       // Counted before the request, so a crash mid-batch can't overspend the day.
       today.count += 1;
       setSetting(NOTE_BACKFILL_SETTING, JSON.stringify(today));
@@ -1575,10 +1605,13 @@ export async function backfillActivityNotes(): Promise<void> {
         // Two in a row: COROS is struggling or limiting us; back off like the feeling backfill.
         if (failures >= 2) {
           feelBackfillCooldownUntil = Date.now() + FEEL_BACKFILL_COOLDOWN_MS;
+          scheduleNoteBackfill();
           return;
         }
       }
     }
+    // A full batch means more may be waiting; a stopped one resumes when the feelings drain.
+    if (!stopped && pending.length === budget) scheduleNoteBackfill();
   } catch {
     // Best effort: notes are extra, never block anything on them.
   } finally {
