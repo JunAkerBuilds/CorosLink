@@ -234,6 +234,8 @@ interface CorosLinkWatchfaceProjectManifest {
   sourceTemplateId: string;
   firmwareType?: string;
   design: CorosWatchfaceProjectExportInput["design"];
+  /** See CorosWatchfaceEditableProject.openAsTemplate. `design` stays for versions without it. */
+  openAsTemplate?: boolean;
 }
 
 interface CorosLinkWatchfaceProjectPackage {
@@ -1372,7 +1374,8 @@ export async function selectCorosWatchfaceArchive(
       : {}),
     editableProject: {
       name: editablePackage.manifest.name,
-      design: editablePackage.manifest.design
+      design: editablePackage.manifest.design,
+      ...(editablePackage.manifest.openAsTemplate === true ? { openAsTemplate: true } : {})
     }
   };
   selectedArchives.set(selected.archiveId, selected);
@@ -1537,11 +1540,16 @@ export async function readCorosWatchfaceProjectPackage(
   const normalizedFirmwareType = normalizeOptionalFirmwareType(
     manifest.firmwareType
   );
-  const { firmwareType: _firmwareType, ...manifestWithoutFirmwareType } = manifest;
+  const {
+    firmwareType: _firmwareType,
+    openAsTemplate: _openAsTemplate,
+    ...manifestWithoutOptionalFields
+  } = manifest;
   manifest = {
-    ...manifestWithoutFirmwareType,
+    ...manifestWithoutOptionalFields,
     name: sanitizeProjectName(manifest.name),
-    ...(normalizedFirmwareType ? { firmwareType: normalizedFirmwareType } : {})
+    ...(normalizedFirmwareType ? { firmwareType: normalizedFirmwareType } : {}),
+    ...(manifest.openAsTemplate === true ? { openAsTemplate: true } : {})
   };
   validateProjectDesign(manifest.design);
   const starterArchive = await resolvedStarterEntry.buffer();

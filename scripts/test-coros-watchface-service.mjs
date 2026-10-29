@@ -1055,6 +1055,21 @@ try {
     "editable website ZIP should preserve the original starter archive exactly"
   );
   assert.deepEqual(editablePackage.preview, preview);
+  assert.equal(editablePackage.manifest.openAsTemplate, undefined, "Studio's own exports keep their design");
+
+  // C-LINK exports a finished face that should open as Studio opens the face
+  // itself; only `true` counts, and the design stays for older versions.
+  for (const [flag, expected] of [[true, true], ["yes", undefined], [false, undefined]]) {
+    const phonePath = path.join(tempDirectory, `phone-${String(flag)}.zip`);
+    await fs.writeFile(phonePath, createStoreZip([
+      { name: "coroslink-project.json", data: Buffer.from(JSON.stringify({ ...editablePackage.manifest, openAsTemplate: flag })) },
+      { name: "starter.dat", data: archive },
+      { name: "preview.png", data: preview }
+    ]));
+    const phonePackage = await readCorosWatchfaceProjectPackage(phonePath);
+    assert.equal(phonePackage.manifest.openAsTemplate, expected);
+    assert.deepEqual(phonePackage.manifest.design, editableDesign);
+  }
 
   // A recovered official face keeps its firmware blob and layout record in the
   // local starter, and older recoveries lack the DIY manifest fields. The

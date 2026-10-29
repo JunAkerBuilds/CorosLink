@@ -5,6 +5,12 @@ All notable changes to CorosLink are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Faces from C-LINK open in Studio as projects.** On the phone, **Export for CorosLink desktop** on a face you made or remixed in C-LINK saves a project ZIP. Import it in Studio and the face opens just as it is on your watch, with its own background, separators and data icons, ready to keep editing.
+
 ## [0.1.68] - 2026-10-28
 
 ### Added

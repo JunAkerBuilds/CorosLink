@@ -754,16 +754,18 @@ export function WatchfacesView({
         ? watchStatus?.model
         : undefined);
     applyDetectedFirmwareType(targetFirmwareType);
-    // A blank start takes only the layout, never a design bundled with it.
+    // A blank start takes only the layout, never a design bundled with it. A
+    // finished face exported from C-LINK opens as Studio opens the face itself.
     const bundledProject = startBlank ? undefined : archive.editableProject;
+    const bundledDesign = bundledProject?.openAsTemplate ? undefined : bundledProject?.design;
     setStudioSession({
       id: createWatchfaceEditorSessionId(project?.projectId ?? archive.archiveId),
       archive,
       project,
-      ...(transferredDesign || project?.design || bundledProject?.design
+      ...(transferredDesign || project?.design || bundledDesign
         ? {
             initialDesign:
-              transferredDesign ?? project?.design ?? bundledProject?.design
+              transferredDesign ?? project?.design ?? bundledDesign
           }
         : {}),
       initialName:

@@ -1464,6 +1464,12 @@ export interface CorosWatchfaceProjectSaveInput {
 export interface CorosWatchfaceEditableProject {
   name: string;
   design: CorosWatchfaceDesignState;
+  /**
+   * The starter is a finished face no one has edited in Studio yet (C-LINK on a
+   * phone exports these): open it as Studio opens any face, reading its own
+   * background, separators and data sprites, rather than starting from `design`.
+   */
+  openAsTemplate?: boolean;
 }
 
 export interface CorosWatchfaceProjectExportInput
