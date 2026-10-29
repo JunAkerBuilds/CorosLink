@@ -112,7 +112,7 @@ export function ActivityTimeInZones({ zones, initialKind }: ActivityTimeInZonesP
           </div>
         ) : (
           <span className="activity-detail-visual-note">
-            {t("Mostly")}<strong>Z{dominantPosition + 1}{names?.[dominantPosition] ? ` ${t(names[dominantPosition])}` : ""}</strong>
+            {t("Mostly")}{" "}<strong>Z{dominantPosition + 1}{names?.[dominantPosition] ? ` ${t(names[dominantPosition])}` : ""}</strong>
           </span>
         )}
       </div>

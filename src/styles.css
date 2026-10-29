@@ -23035,6 +23035,8 @@ tr.data-intervals-row-missing {
   min-height: 0;
   overflow-y: auto;
   padding: 18px 20px;
+  /* The activity panel's narrow layouts (zones legend, laps) key off their container. */
+  container-type: inline-size;
 }
 
 .calendar-detail-empty {

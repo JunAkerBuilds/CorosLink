@@ -34,3 +34,16 @@
 .activities-detail-sidebar .training-laps-groups { padding: 2px; gap: 2px; }
 .activities-detail-sidebar .training-laps-groups .library-filter-option { min-height: 24px; padding: 0 7px; font-size: 11px; }
 .activities-detail-sidebar .training-lap-fastest { margin-left: 6px; padding: 0 5px; font-size: 9px; line-height: 15px; }
+
+/* The global 720px table floor is for full-width lists; laps size to their panel
+   (the calendar aside is ~520px) and scroll only when a column truly can't fit. */
+.training-laps-section table { min-width: 0; }
+.training-laps-section th, .training-laps-section td { white-space: nowrap; }
+@container (max-width: 640px) {
+  .training-laps-section th, .training-laps-section td { padding: 10px 8px; }
+}
+
+/* The athlete's own COROS note on the activity, under the heading. */
+.activity-detail-note { margin: 0 0 14px; padding: 10px 14px; border-left: 2px solid var(--activity-color, var(--accent)); border-radius: 0 10px 10px 0; background: color-mix(in srgb, var(--text-muted) 8%, transparent); }
+.activity-detail-note figcaption { margin-bottom: 4px; color: var(--text-muted); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.activity-detail-note blockquote { margin: 0; color: var(--text-primary); font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }

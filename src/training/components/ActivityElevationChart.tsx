@@ -59,21 +59,27 @@ function ElevationTooltip({
 export function ActivityElevationChart({ track }: ActivityElevationChartProps) {
   useLanguage();
   const { unitSystem } = useUnitSystem();
-  const data = useMemo(() => {
+  const { data, hasDistance } = useMemo(() => {
     const points = track?.points ?? [];
     const withElevation = points.filter(
       (point) => point.elevation !== undefined && Number.isFinite(point.elevation)
     );
 
     if (withElevation.length < 2) {
-      return [];
+      return { data: [], hasDistance: false };
     }
 
     const useDistance = withElevation.some(
       (point) => point.distance !== undefined && point.distance > 0
     );
+    // A flat line with nowhere travelled (a treadmill, a run that never got
+    // going) is no profile at all.
+    if (!useDistance) {
+      const heights = withElevation.map((point) => point.elevation!);
+      if (Math.max(...heights) - Math.min(...heights) < 1) return { data: [], hasDistance: false };
+    }
 
-    return withElevation.map((point, index): ElevationDatum => {
+    const data = withElevation.map((point, index): ElevationDatum => {
       const distance =
         useDistance && point.distance !== undefined
           ? metersToDisplayDistance(point.distance, unitSystem)
@@ -86,6 +92,7 @@ export function ActivityElevationChart({ track }: ActivityElevationChartProps) {
         elevation: metersToElevation(point.elevation!, unitSystem)
       };
     });
+    return { data, hasDistance: useDistance };
   }, [track, unitSystem, getLocale()]);
 
   if (data.length < 2) {
@@ -105,10 +112,11 @@ export function ActivityElevationChart({ track }: ActivityElevationChartProps) {
           </defs>
           <XAxis
             dataKey="label"
-            tick={{ fill: trainingChartColors.text, fontSize: 11 }}
             axisLine={false}
             tickLine={false}
             minTickGap={24}
+            // Sample numbers mean nothing on an axis; without distance it stays bare.
+            tick={hasDistance ? { fill: trainingChartColors.text, fontSize: 11 } : false}
           />
           <YAxis
             tick={{ fill: trainingChartColors.text, fontSize: 11 }}

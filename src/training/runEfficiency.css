@@ -175,3 +175,8 @@
 :root[data-theme="paper"] .run-efficiency-footer {
   border-top-color: color-mix(in srgb, var(--text-muted) 30%, transparent);
 }
+
+/* The panel sizes to what it shows: a one-line note shouldn't sit in the visual panels' 220px box. */
+.run-efficiency-panel { min-height: 0; align-content: start; }
+.run-efficiency-panel .activity-detail-visual-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.run-efficiency-panel .activity-detail-visual-heading h3 { display: flex; align-items: center; gap: 7px; }
