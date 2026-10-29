@@ -7,9 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.69] - 2026-10-29
+
 ### Added
 
+- **Open the full activity page from the calendar.** Click the expand button on a recorded activity in the calendar and its side panel grows into the full activity page from the Activities tab, with laps, race marking and export. Close it to go back to the panel where you left off.
+- **Your COROS activity notes.** The note you wrote on an activity in the COROS app now shows on its activity page. Notes for older activities fill in gradually in the background, a few at a time.
+- **Past races found from what you already know.** **Training Hub → Races** now suggests the recording from the day of a result you typed in, or of a target race whose day has passed. Mark it as a race and the result you typed in merges into it, keeping your official time, placing and notes.
+- **Notes, gear and races on your phone.** A paired phone can now read your COROS activity notes, your gear with COROS's distances, and your races and target races, along with the course of each race recorded on COROS.
 - **Faces from C-LINK open in Studio as projects.** On the phone, **Export for CorosLink desktop** on a face you made or remixed in C-LINK saves a project ZIP. Import it in Studio and the face opens just as it is on your watch, with its own background, separators and data icons, ready to keep editing.
+
+### Changed
+
+- **Antigravity sign-in says what it's waiting for.** While you sign in, Coach settings shows whether Antigravity is still starting, waiting for Google's page or checking your plan. If a step is slow, it also shows Antigravity's last message. Closed Google's tab? **Open Google's page** brings it back, and **Cancel sign-in** stops a sign-in that hangs. **Check** now asks Google again after a refusal, instead of showing the old answer.
+- **Tidier activity panels.** Laps fit the calendar's side panel, and an activity with no distance and no height change no longer shows a flat elevation line.
 
 ## [0.1.68] - 2026-10-28
 
