@@ -28333,6 +28333,20 @@ tr.data-intervals-row-missing {
   line-height: 1.35;
 }
 
+/* Language tiles carry only a name: shorter, and as many per row as fit. */
+.settings-language-panel .settings-unit-options {
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+}
+
+.settings-language-panel .settings-unit-options button {
+  align-items: center;
+  min-height: 0;
+}
+
+.settings-language-panel .settings-unit-radio {
+  margin-top: 0;
+}
+
 .settings-sport-hint {
   max-width: 760px;
   margin: 7px 0 14px;

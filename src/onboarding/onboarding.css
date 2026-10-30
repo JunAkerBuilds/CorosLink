@@ -617,7 +617,7 @@
 
 .onb-languages {
   display: grid;
-  gap: 10px;
+  gap: 7px;
   margin-top: 26px;
 }
 
@@ -640,7 +640,7 @@
 .onb-greeting {
   display: grid;
   width: 88px;
-  height: 44px;
+  height: 36px;
   place-items: center;
   border-radius: 9px;
   background: var(--onb-well);
@@ -2311,12 +2311,17 @@ span.onb-track-state.is-copying {
   }
 
   .onb-languages {
-    gap: 8px;
+    gap: 5px;
     margin-top: 14px;
   }
 
+  .onb-languages .onb-choice.is-row {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+
   .onb-greeting {
-    height: 38px;
+    height: 30px;
   }
 }
 

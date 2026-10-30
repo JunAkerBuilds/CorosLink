@@ -38,6 +38,11 @@ async function main() {
   assert.equal(confirmation.cancelId, 0);
   assert.equal(native.nativeText('FIT file'), 'FIT 文件');
   assert.equal(native.localizeDialogOptions({ defaultPath: '/tmp/Back.bin' }).buttonLabel, '保存');
+  native.setNativeLanguage('es');
+  assert.ok(Menu.getApplicationMenu().items.some(item => item.label === 'Edición'));
+  assert.equal(native.localizeDialogOptions({ buttons: ['Cancel', 'Delete from watch'], message: 'Delete “Élodie” from the watch?' }).message, '¿Eliminar «Élodie» del reloj?');
+  assert.equal(native.nativeText('FIT file'), 'Archivo FIT');
+  native.setNativeLanguage('zh-CN');
   assert.throws(() => native.setNativeLanguage('de'), /Unsupported/);
   native.setNativeLanguage('en');
   assert.ok(Menu.getApplicationMenu().items.some(item => item.label === 'Edit'));
@@ -149,12 +154,18 @@ async function main() {
     const portugueseScreenshot = path.join(app.getPath('userData'), 'portuguese-desktop.png');
     await fs.writeFile(portugueseScreenshot, (await win.webContents.capturePage()).toPNG());
     console.log(`Portuguese desktop screenshot: ${portugueseScreenshot}`);
+    await click('.settings-language-panel button[lang="es"]');
+    await until(`document.querySelector('.settings-language-panel h2').textContent === 'Idioma de la app'`);
+    assert.equal(await js('document.documentElement.lang'), 'es');
+    assert.equal(await js('document.querySelector("#fixture-values span").textContent'), '1234,5');
+    assert.equal(await js('document.querySelectorAll("#fixture-values span")[1].textContent'), 'octubre');
+    assert.equal(database.getSetting('app.language'), 'es');
     await click('.settings-language-panel button[lang=en]');
     await until(`document.querySelector('.settings-language-panel h2').textContent === 'App language'`);
     assert.equal(await js('document.querySelector(".app-select-value-label").textContent'), 'Overview');
     assert.equal(database.getSetting('app.language'), 'en');
     assert.equal(errors.length, 0, errors.join('\n'));
-    console.log('Desktop localization UI passed: native Chinese/French menu/dialog persistence, live Chinese/French/English switching, sidebar, training tabs, translated and literal dropdown labels/typeahead, locale formatting, reload and unchanged form payloads.');
+    console.log('Desktop localization UI passed: native Chinese/French menu/dialog persistence, live Chinese/French/Portuguese/Spanish/English switching, sidebar, training tabs, translated and literal dropdown labels/typeahead, locale formatting, reload and unchanged form payloads.');
   } finally {
     clearTimeout(watchdog);
     win?.destroy();
