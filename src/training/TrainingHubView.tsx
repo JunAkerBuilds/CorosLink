@@ -40,7 +40,7 @@ import { MetricDetailPage } from "./components/MetricDetailPage";
 import type { MetricKind } from "./metricDetail";
 import { TrainingHeatmapPanel } from "./components/TrainingHeatmapPanel";
 import { TrainingSummaryTiles } from "./components/TrainingSummaryTiles";
-import { TrainingActivities } from "./components/TrainingActivities";
+import { ActivityDetailDialog, TrainingActivities } from "./components/TrainingActivities";
 import { RacesPanel } from "./components/RacesPanel";
 import { useRaceJournal } from "./useRaceJournal";
 import { TrainingTrendCharts } from "./components/TrainingTrendChart";
@@ -54,6 +54,7 @@ import { RunningEfficiencyWidget } from "./components/RunEfficiency";
 import { rememberEfficiencyProfile, setEfficiencySource } from "./activityInsights";
 import { TrainingHubHeader, type TrainingHubTab } from "./components/TrainingHubHeader";
 import "./trainingHub.css";
+import "./activityPage.css";
 import { CustomizableDashboard } from "./components/CustomizableDashboard";
 import type { TrainingHubViewProps } from "./types";
 import type { TrainingHubActivity } from "../../electron/types";
@@ -71,6 +72,9 @@ const SLEEP_MORPH_CLOSE = "is-sleep-morph-close";
 /** The same for a daily stat card (load, resting HR, steps, calories) and its page; see metricDetail.css. */
 const METRIC_MORPH_OPEN = "is-metric-morph-open";
 const METRIC_MORPH_CLOSE = "is-metric-morph-close";
+/** The same for an activity card and its detail page; see activityPage.css. */
+const ACTIVITY_MORPH_OPEN = "is-activity-morph-open";
+const ACTIVITY_MORPH_CLOSE = "is-activity-morph-close";
 
 // Memoized: App keeps the hub mounted while other views are open, so its own
 // re-renders must not re-render this whole dashboard.
@@ -258,6 +262,32 @@ function TrainingHubContent({
       }
     });
   };
+  // An activity opens as a page too (the Activities list keeps its inline detail).
+  const [activityPage, setActivityPage] = useState<TrainingHubActivity | null>(null);
+  const [activityOrigin, setActivityOrigin] = useState<TrainingHubActivity["activityId"] | null>(null);
+  const openActivityPage = useCallback((activity: TrainingHubActivity) => {
+    const scroller = hubRef.current?.closest<HTMLElement>(".content");
+    hubScrollTop.current = scroller?.scrollTop ?? 0;
+    runViewMorph(ACTIVITY_MORPH_OPEN, () => setActivityPage(activity), {
+      prepare: () => setActivityOrigin(activity.activityId),
+      after: () => { if (scroller) scroller.scrollTop = 0; }
+    });
+  }, []);
+  const closeActivityPage = () => {
+    const scroller = hubRef.current?.closest<HTMLElement>(".content");
+    runViewMorph(ACTIVITY_MORPH_CLOSE, () => setActivityPage(null), {
+      after: () => {
+        if (scroller) scroller.scrollTop = hubScrollTop.current;
+        hubRef.current?.querySelector<HTMLElement>(".activity-card.is-morph-origin .activity-card-body, .activities-calendar-day .is-morph-origin")
+          ?.focus({ preventScroll: true });
+      }
+    });
+  };
+  // The page holds its own copy of the activity, so it takes the new name too.
+  const renameActivityPage = onRenameActivity && !sampleMode ? async (renamed: TrainingHubActivity, name: string) => {
+    const saved = await onRenameActivity(renamed, name);
+    setActivityPage(current => current?.activityId === renamed.activityId ? { ...current, name: saved } : current);
+  } : undefined;
   const loadHealthHistory = useCallback(
     async (days: number) => (await api.getTrainingDailyHealthData(days)).records,
     [api]
@@ -269,6 +299,7 @@ function TrainingHubContent({
     const { tab, activity, requestId } = navigationRequest;
     setSleepPageOpen(false);
     setMetricPage(null);
+    setActivityPage(null);
     setActiveTab(tab);
     setVisitedTabs(current => current.includes(tab) ? current : [...current, tab]);
     if (activity) setActivityOpenRequest({ activity, requestId });
@@ -317,7 +348,8 @@ function TrainingHubContent({
 
   const showSleepPage = sleepPageOpen && connected;
   const shownMetricPage = connected && !showSleepPage ? metricPage : null;
-  const behindPage = showSleepPage || shownMetricPage !== null;
+  const shownActivityPage = connected && !showSleepPage && !shownMetricPage ? activityPage : null;
+  const behindPage = showSleepPage || shownMetricPage !== null || shownActivityPage !== null;
 
   return (
     <>
@@ -678,6 +710,8 @@ function TrainingHubContent({
                 onRenameActivity={onRenameActivity}
                 raceTags={raceJournal}
                 openRequest={activityOpenRequest}
+                onOpenPage={openActivityPage}
+                morphOriginId={activityOrigin}
               />
             ) : null}
           </div>
@@ -732,6 +766,11 @@ function TrainingHubContent({
     {shownMetricPage ? (
       <MetricDetailPage kind={shownMetricPage} trendPoints={snapshot?.trendPoints} healthRecords={snapshot?.dailyHealth?.records}
         activities={activities} local={local} loadHealthHistory={sampleMode ? undefined : loadHealthHistory} onBack={closeMetricPage} />
+    ) : null}
+    {shownActivityPage ? (
+      <ActivityDetailDialog page opened={shownActivityPage} sportTypes={sportTypes} activityDetail={activityDetail} busy={busy}
+        sampleMode={sampleMode} resolveLocation={api.reverseGeocodeRouteLocation} raceTags={raceJournal}
+        onLoadDetail={onLoadDetail} onExportFile={onExportFile} onRename={renameActivityPage} onClose={closeActivityPage} />
     ) : null}
     </>
   );

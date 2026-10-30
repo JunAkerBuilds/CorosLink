@@ -1,6 +1,6 @@
 import { useLanguage, getLocale, t, formatNumber, formatDate } from "../../i18n/training";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Activity, Bike, CalendarDays, ChevronLeft, ChevronRight, Dumbbell, Flag, Flame,
+import { Activity, ArrowLeft, Bike, CalendarDays, ChevronLeft, ChevronRight, Dumbbell, Flag, Flame,
   Footprints, Gauge, Heart, LayoutGrid, List, Loader2, MapPin, Mountain, Search, Sparkles, Timer, X } from "lucide-react";
 import { PersonSimpleRun, PersonSimpleWalk, PersonSimpleSwim } from "@phosphor-icons/react";
 import type { RouteGeocodeResult, TrainingHubActivity, TrainingHubSportType } from "../../../electron/types";
@@ -81,10 +81,14 @@ type Props = Pick<TrainingHubViewProps, "activities" | "sportTypes" | "selectedA
   raceTags?: Pick<RaceJournal, "raceActivityIds" | "pending" | "readOnly" | "toggleActivity">;
   /** Opens this activity's detail when another view links straight to it. */
   openRequest?: { activity: TrainingHubActivity; requestId: number } | null;
+  /** When set, grid and calendar open an activity as the host's own page instead of a dialog. */
+  onOpenPage?: (activity: TrainingHubActivity) => void;
+  /** The activity whose card the host's page morphs from and back to. */
+  morphOriginId?: number | string | null;
 };
 
-function ActivityCard({ activity, sportTypes, busy, sampleMode, onLoadDetail, onExportFile, loadPreview, isRace = false }: {
-  activity: TrainingHubActivity; sportTypes: TrainingHubSportType[]; isRace?: boolean;
+function ActivityCard({ activity, sportTypes, busy, sampleMode, onLoadDetail, onExportFile, loadPreview, isRace = false, isMorphOrigin = false }: {
+  activity: TrainingHubActivity; sportTypes: TrainingHubSportType[]; isRace?: boolean; isMorphOrigin?: boolean;
 } & Pick<Props, "busy" | "sampleMode" | "onLoadDetail" | "onExportFile" | "loadPreview">) {
   useLanguage();
   const { unitSystem } = useUnitSystem();
@@ -102,7 +106,7 @@ function ActivityCard({ activity, sportTypes, busy, sampleMode, onLoadDetail, on
         ? `${formatDurationSeconds(moving / (metersToSwimDistance(activity.distance, unitSystem) / 100))} /100${swimDistanceUnit(unitSystem)}` : "—"
       : formatPaceSecondsPerKm(pace, unitSystem);
   const indoor = [101, 201, 300, 400, 402, 701, 800, 801].includes(activity.sportType);
-  return <article className={`activity-card activity-sport-${category}`}>
+  return <article className={`activity-card activity-sport-${category}${isMorphOrigin ? " is-morph-origin" : ""}`}>
     <header className="activity-card-heading">
       <span className="activity-card-sport-icon"><Icon size={29} aria-hidden="true" /></span>
       <div className="activity-card-title"><h3><button type="button" onClick={() => onLoadDetail(activity)} title={name}>{name}</button></h3>
@@ -128,7 +132,7 @@ function ActivityCard({ activity, sportTypes, busy, sampleMode, onLoadDetail, on
   </article>;
 }
 
-function ActivityCalendar({ activities, onOpen }: { activities: TrainingHubActivity[]; onOpen: (activity: TrainingHubActivity) => void }) {
+function ActivityCalendar({ activities, onOpen, morphOriginId }: { activities: TrainingHubActivity[]; onOpen: (activity: TrainingHubActivity) => void; morphOriginId?: Props["morphOriginId"] }) {
   useLanguage();
   const [month, setMonth] = useState(() => {
     const latest = Math.max(0, ...activities.map(activity => activityTimestamp(activity.startTime)));
@@ -158,7 +162,7 @@ function ActivityCalendar({ activities, onOpen }: { activities: TrainingHubActiv
         }) : [];
         return <div className={`activities-calendar-day${inMonth ? "" : " is-outside"}`} key={index}>
           {inMonth ? <><span>{day}</span>{matches.map(activity => <button type="button" key={activity.activityId}
-            className={`activity-sport-${activityCategory(activity.sportType)}`} onClick={() => onOpen(activity)}
+            className={`activity-sport-${activityCategory(activity.sportType)}${activity.activityId === morphOriginId ? " is-morph-origin" : ""}`} onClick={() => onOpen(activity)}
             title={`${activity.name || resolveSportName(activity)} · ${formatTrainingTimestamp(activity.startTime)}`}>
               <i aria-hidden="true" />{activity.name || resolveSportName(activity) || t("Activity")}</button>)}</> : null}
         </div>;
@@ -168,7 +172,7 @@ function ActivityCalendar({ activities, onOpen }: { activities: TrainingHubActiv
 }
 
 export function TrainingActivities({ activities, sportTypes, selectedActivity, activityDetail, busy,
-  onLoadDetail, onExportFile, onRenameActivity, loadPreview, resolveLocation, raceTags, openRequest, sampleMode = false }: Props) {
+  onLoadDetail, onExportFile, onRenameActivity, loadPreview, resolveLocation, raceTags, openRequest, onOpenPage, morphOriginId, sampleMode = false }: Props) {
   useLanguage();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<ActivityCategory>("all");
@@ -180,7 +184,11 @@ export function TrainingActivities({ activities, sportTypes, selectedActivity, a
   const names = useMemo(() => new Map(sportTypes.map(sport => [sport.sportType, sport.sportName])), [sportTypes, getLocale()]);
   const filtered = useMemo(() => selectActivities(activities, category, query, sort, names), [activities, category, query, sort, names, getLocale()]);
   useEffect(() => { setLimit(24); }, [category, query, sort]);
-  function openActivity(activity: TrainingHubActivity) { setOpened(activity); onLoadDetail(activity); }
+  // The list keeps its inline detail; elsewhere a host page, when there is one, replaces the dialog.
+  function openActivity(activity: TrainingHubActivity) {
+    onLoadDetail(activity);
+    if (onOpenPage && view !== "list") onOpenPage(activity); else setOpened(activity);
+  }
   // The open dialog holds its own copy of the activity, so it takes the new name too.
   const renameActivity = onRenameActivity && !sampleMode ? async (activity: TrainingHubActivity, name: string) => {
     const saved = await onRenameActivity(activity, name);
@@ -214,12 +222,12 @@ export function TrainingActivities({ activities, sportTypes, selectedActivity, a
       {filtered.length === 0 ? <div className="activities-empty"><Search size={29} aria-hidden="true" /><h2>{activities.length ? t("No matching activities") : t("Your next chapter starts here")}</h2>
         <p>{activities.length ? t("Try another sport or search term.") : t("Refresh Training Hub to load your recorded activities.")}</p>
         {activities.length ? <button type="button" onClick={() => { setQuery(""); setCategory("all"); }}>{t("Clear filters")}</button> : null}</div>
-        : view === "calendar" ? <ActivityCalendar activities={filtered} onOpen={openActivity} />
+        : view === "calendar" ? <ActivityCalendar activities={filtered} onOpen={openActivity} morphOriginId={morphOriginId} />
         : view === "list" ? <div className="activities-list-view"><TrainingActivityTable activities={filtered.slice(0, limit)} sportTypes={sportTypes}
           selectedActivityId={opened?.activityId ?? null} busy={busy} exportDisabled={sampleMode} onLoadDetail={openActivity} onExportFile={onExportFile} /></div>
         : <div className="activities-card-grid">{filtered.slice(0, limit).map(activity => <ActivityCard key={activity.activityId}
           activity={activity} sportTypes={sportTypes} busy={busy} sampleMode={sampleMode} onLoadDetail={openActivity} onExportFile={onExportFile} loadPreview={loader}
-          isRace={raceTags?.raceActivityIds.has(activity.activityId)} />)}</div>}
+          isRace={raceTags?.raceActivityIds.has(activity.activityId)} isMorphOrigin={activity.activityId === morphOriginId} />)}</div>}
       <div className="activities-browser-footer"><span>{view === "calendar" ? t("Activities by month") : t("Showing {{value1}} of {{value2}} activities", { value1: String(Math.min(limit, filtered.length)), value2: String(filtered.length) })}</span>
         {view !== "calendar" && filtered.length > limit ? <button type="button" onClick={() => setLimit(current => current + 24)}>{t("Show more activities")}</button> : null}
         {view === "grid" ? <span className="activities-map-attribution">{t("Maps ©")} <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">{t("OpenStreetMap contributors")}</a></span> : null}
@@ -255,13 +263,18 @@ const pacingCopy: Record<LapPacing, string> = {
 };
 
 /** The full activity page: a modal here, a sidebar in list view, and the page the calendar aside expands into. */
-export function ActivityDetailDialog({ inline = false, className, opened, sportTypes, activityDetail, busy, sampleMode, resolveLocation, raceTags, onLoadDetail, onExportFile, onRename, onClose }: {
+export function ActivityDetailDialog({ inline = false, page = false, className, opened, sportTypes, activityDetail, busy, sampleMode, resolveLocation, raceTags, onLoadDetail, onExportFile, onRename, onClose }: {
   inline?: boolean; className?: string; opened: TrainingHubActivity | null; onClose: () => void;
+  /** A page in the content column (the hub morphs into it); onClose goes back. */
+  page?: boolean;
   onRename?: (activity: TrainingHubActivity, name: string) => Promise<void>;
   onExportFile?: Props["onExportFile"];
 } & Pick<Props, "sportTypes" | "activityDetail" | "busy" | "sampleMode" | "resolveLocation" | "raceTags" | "onLoadDetail">) {
   useLanguage();
   const dialog = useRef<HTMLDialogElement>(null);
+  const back = useRef<HTMLButtonElement>(null);
+  // The card that opened the page is gone; start keyboard focus on the way back.
+  useEffect(() => { if (page) back.current?.focus({ preventScroll: true }); }, [page]);
   const headingId = useId();
   const [location, setLocation] = useState<string | null>(null);
   const resolveLocationRef = useRef(resolveLocation);
@@ -304,8 +317,8 @@ export function ActivityDetailDialog({ inline = false, className, opened, sportT
   const [praise, encouragementNote] = encouragement[category];
   const content = opened ? <div className="activity-dialog-surface">
       <header className="activity-dialog-header">
-        <div className="activity-dialog-topline"><span>{t("Activity Details")}</span>
-          <button type="button" className="activity-dialog-close" aria-label={t("Close activity details")} onClick={onClose}><X size={19} aria-hidden="true" /></button></div>
+        {page ? null : <div className="activity-dialog-topline"><span>{t("Activity Details")}</span>
+          <button type="button" className="activity-dialog-close" aria-label={t("Close activity details")} onClick={onClose}><X size={19} aria-hidden="true" /></button></div>}
         <div className="activity-dialog-hero">
           <span className="activity-dialog-sport"><Icon size={34} aria-hidden="true" /></span>
           <div className="activity-dialog-title">
@@ -332,6 +345,16 @@ export function ActivityDetailDialog({ inline = false, className, opened, sportT
             onExportFile={onExportFile} exportDisabled={sampleMode} />}
       </div>
     </div> : null;
+  if (page) return <section className={`activities-detail-dialog activity-page activity-sport-${category}`} aria-labelledby={headingId}
+    onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) onClose(); }}>
+    <div className="sleep-week-page-head">
+      <button ref={back} type="button" className="sleep-week-back" onClick={onClose} aria-label={t("Back to Training Hub")}>
+        <ArrowLeft size={16} strokeWidth={2.3} aria-hidden="true" />
+        <span className="sleep-week-back-label">{t("Training Hub")}</span>
+      </button>
+    </div>
+    {content}
+  </section>;
   if (inline) return <aside className={`activities-detail-dialog activities-detail-sidebar activity-sport-${category}`} aria-labelledby={headingId}>{content}</aside>;
   // Keep the dialog shell unfiltered so fixed map and export portals stay viewport-relative.
   // Escape goes through onClose (not the native close) so a host can morph the page away.

@@ -1,0 +1,118 @@
+/* ── Activity page ─────────────────────────────────────────────────────
+   The activity dialog's surface laid into the content column, like the
+   sleep and metric pages: the app toolbar stays, the hub hides behind it
+   (sleepWeek.css), and the page scrolls with .content instead of inside a
+   capped body. The back button is the sleep page's. */
+.activities-detail-dialog.activity-page {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  max-width: 1240px;
+  max-height: none;
+  margin-inline: auto;
+}
+
+.activity-page .activity-dialog-surface {
+  max-height: none;
+  box-shadow: 0 30px 80px #00000059, inset 0 1px 0 #ffffff1c, inset 0 0 0 1px #ffffff08;
+  animation: none;
+}
+
+/* The body no longer scrolls on its own, so the sticky action footer pins to
+   the bottom of the window's content scroller. */
+.activity-page .activity-dialog-body {
+  overflow: visible;
+  overscroll-behavior: auto;
+}
+
+.activity-page .activity-dialog-header {
+  padding-top: 22px;
+}
+
+/* ── Card ⇄ page morph ────────────────────────────────────────────────
+   TrainingHubView commits the switch inside a View Transition with
+   html.is-activity-morph-open or -close set. Only the card that opened the
+   page carries .is-morph-origin, so it alone pairs with the page surface;
+   its sport glyph glides into the page's and the hub title into the back
+   button, while the rest crossfades (same recipe as the sleep page). */
+:root:is(.is-activity-morph-open, .is-activity-morph-close) .training-dashboard:not(.is-behind-page) :is(.activity-card, .activities-calendar-day button).is-morph-origin,
+:root:is(.is-activity-morph-open, .is-activity-morph-close) .activity-page .activity-dialog-surface {
+  view-transition-name: activity-surface;
+}
+
+:root:is(.is-activity-morph-open, .is-activity-morph-close) .training-dashboard:not(.is-behind-page) .activity-card.is-morph-origin .activity-card-sport-icon,
+:root:is(.is-activity-morph-open, .is-activity-morph-close) .activity-page .activity-dialog-sport {
+  view-transition-name: activity-glyph;
+}
+
+:root:is(.is-activity-morph-open, .is-activity-morph-close) .training-dashboard:not(.is-behind-page) .training-hub-heading h1,
+:root:is(.is-activity-morph-open, .is-activity-morph-close) .activity-page .sleep-week-back-label {
+  width: fit-content;
+  view-transition-name: activity-hub-title;
+}
+
+:root:is(.is-activity-morph-open, .is-activity-morph-close)::view-transition-group(*) {
+  animation-duration: 520ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Glass doesn't survive capture, so the growing box carries a solid surface;
+   each side keeps its natural size, pinned top-left, and they fade through. */
+:root:is(.is-activity-morph-open, .is-activity-morph-close)::view-transition-group(activity-surface) {
+  overflow: clip;
+  border-radius: 24px;
+  background: #181a1e;
+}
+
+:root:is(.is-activity-morph-open, .is-activity-morph-close)::view-transition-old(activity-surface),
+:root:is(.is-activity-morph-open, .is-activity-morph-close)::view-transition-new(activity-surface) {
+  height: 100%;
+  object-fit: none;
+  object-position: left top;
+}
+
+:root:is(.is-activity-morph-open, .is-activity-morph-close)::view-transition-old(activity-surface) {
+  animation: activity-morph-out 150ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+:root:is(.is-activity-morph-open, .is-activity-morph-close)::view-transition-new(activity-surface) {
+  animation: activity-morph-in 280ms cubic-bezier(0, 0, 0.2, 1) 120ms both;
+}
+
+:root:is(.is-activity-morph-open, .is-activity-morph-close)::view-transition-group(activity-glyph),
+:root:is(.is-activity-morph-open, .is-activity-morph-close)::view-transition-group(activity-hub-title) {
+  z-index: 3;
+}
+
+/* styles.css gives the root a theme-reveal; here it is a true crossfade. */
+:root:is(.is-activity-morph-open, .is-activity-morph-close)::view-transition-image-pair(root) {
+  isolation: isolate;
+}
+
+:root:is(.is-activity-morph-open, .is-activity-morph-close)::view-transition-old(root) {
+  z-index: 1;
+  mix-blend-mode: plus-lighter;
+  animation: activity-morph-out 260ms linear both;
+}
+
+:root:is(.is-activity-morph-open, .is-activity-morph-close)::view-transition-new(root) {
+  z-index: 2;
+  mix-blend-mode: plus-lighter;
+  animation: activity-morph-in 260ms linear both;
+}
+
+:root[data-theme="paper"]:is(.is-activity-morph-open, .is-activity-morph-close)::view-transition-group(activity-surface) {
+  background: #f3f4f2;
+}
+
+@keyframes activity-morph-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes activity-morph-in {
+  from {
+    opacity: 0;
+  }
+}
