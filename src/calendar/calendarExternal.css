@@ -1,0 +1,118 @@
+/* Hevy and Strava gym sessions in the calendar: chip source tag, detail panel. */
+
+.calendar-chip-meta.calendar-chip-source {
+  color: var(--text-secondary);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.external-workout {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.external-workout-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.external-workout-stat {
+  padding: 10px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md, 10px);
+  background: var(--glass-bg);
+}
+
+.external-workout-stat dt {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.external-workout-stat dd {
+  margin: 4px 0 0;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.external-workout h4 {
+  margin: 0 0 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.external-workout-notes p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.external-workout-exercises {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.external-workout-exercise {
+  padding-bottom: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+
+.external-workout-exercise:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.external-workout-sets {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.external-workout-sets li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.external-workout-sets li.is-warmup {
+  color: var(--text-secondary);
+}
+
+.external-workout-set-index {
+  min-width: 22px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.external-workout-sets li.is-warmup .external-workout-set-index {
+  min-width: auto;
+}
+
+.external-workout-set-rpe {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+a.calendar-detail-action {
+  text-decoration: none;
+}

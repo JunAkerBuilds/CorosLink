@@ -1,5 +1,6 @@
 import { useLanguage, t } from "../i18n/training";
 import type {
+  StrengthSession,
   TrainingHubActivity,
   TrainingHubScheduledWorkoutEntry
 } from "../../electron/types";
@@ -57,6 +58,7 @@ interface CalendarGridProps {
   highlightedWorkoutKey: string | null;
   onSelectScheduled: (day: CalendarDay, entry: TrainingHubScheduledWorkoutEntry) => void;
   onSelectActivity: (day: CalendarDay, activity: TrainingHubActivity) => void;
+  onSelectExternal: (session: StrengthSession) => void;
   onToggleScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
   onAdd: (dateKey: string) => void;
   onCopyDay: (day: CalendarDay) => void;
@@ -82,6 +84,7 @@ export function CalendarGrid({
   highlightedWorkoutKey,
   onSelectScheduled,
   onSelectActivity,
+  onSelectExternal,
   onToggleScheduled,
   onAdd,
   onCopyDay,
@@ -172,6 +175,7 @@ export function CalendarGrid({
                   highlightedWorkoutKey={highlightedWorkoutKey}
                   onSelectScheduled={(entry) => onSelectScheduled(day, entry)}
                   onSelectActivity={(activity) => onSelectActivity(day, activity)}
+                  onSelectExternal={onSelectExternal}
                   onToggleScheduled={onToggleScheduled}
                   onAdd={onAdd}
                   onCopyDay={onCopyDay}

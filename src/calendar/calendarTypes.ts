@@ -1,4 +1,5 @@
 import type {
+  StrengthSession,
   TrainingHubActivity,
   TrainingHubDailyMetric,
   TrainingHubScheduledWorkoutEntry
@@ -30,6 +31,8 @@ export interface CalendarDay {
   unplannedActivities: TrainingHubActivity[];
   /** Briefs and debriefs saved for this day's workouts. */
   journal?: WorkoutJournalEntry[];
+  /** Hevy and Strava gym sessions COROS did not record. */
+  externalWorkouts: StrengthSession[];
 }
 
 export interface WeeklyStats {

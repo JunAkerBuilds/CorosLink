@@ -65,6 +65,7 @@ import type {
   StravaStatus,
   StrengthHistory,
   StrengthHistoryRequest,
+  StrengthSession,
   TrainingHubActivity,
   TrainingHubActivityDetail,
   TrainingHubActivityFileType,
@@ -1045,6 +1046,8 @@ const api = {
     ipcRenderer.invoke("trainingHub:getDailyMetrics", dateList),
   syncStrengthHistory: (request?: StrengthHistoryRequest): Promise<StrengthHistory> =>
     ipcRenderer.invoke("trainingHub:syncStrengthHistory", request),
+  listExternalWorkouts: (startDay: string, endDay: string): Promise<StrengthSession[]> =>
+    ipcRenderer.invoke("calendar:listExternalWorkouts", startDay, endDay),
   getHevyStatus: (): Promise<HevyStatus> => ipcRenderer.invoke("hevy:getStatus"),
   connectHevy: (apiKey: string): Promise<HevyStatus> =>
     ipcRenderer.invoke("hevy:connect", apiKey),

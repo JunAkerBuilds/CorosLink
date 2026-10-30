@@ -65,6 +65,7 @@ import type {
   StravaStatus,
   StrengthHistory,
   StrengthHistoryRequest,
+  StrengthSession,
   TrainingHubActivity,
   TrainingHubActivityDetail,
   TrainingHubActivityFileType,
@@ -723,6 +724,8 @@ export interface CorosLinkApi {
   getTrainingDashboard: () => Promise<TrainingHubDashboard>;
   getDailyMetrics: (dateList: string[]) => Promise<TrainingHubDailyMetrics>;
   syncStrengthHistory: (request?: StrengthHistoryRequest) => Promise<StrengthHistory>;
+  /** Hevy/Strava gym sessions in a day range that COROS did not record. */
+  listExternalWorkouts: (startDay: string, endDay: string) => Promise<StrengthSession[]>;
   getHevyStatus: () => Promise<HevyStatus>;
   connectHevy: (apiKey: string) => Promise<HevyStatus>;
   updateHevySettings: (input: HevySettingsInput) => Promise<HevyStatus>;

@@ -2,6 +2,7 @@ import { useLanguage, t } from "../i18n/training";
 import { Check, ClipboardPaste, Copy, FlaskConical, GripVertical, Plus, Target } from "lucide-react";
 import { useState, type DragEvent } from "react";
 import type {
+  StrengthSession,
   TrainingHubActivity,
   TrainingHubScheduledWorkoutEntry,
   UnitSystem
@@ -33,13 +34,16 @@ import {
 import { dayNumber } from "./dateUtils";
 import type { WorkoutJournalEntry } from "../../electron/workoutJournalTypes";
 import { journalEntryForActivity, journalEntryForPair } from "./journalRefs";
+import { externalWorkoutName, externalWorkoutSource, externalWorkoutStatsLine } from "./externalWorkouts";
 import "./workoutJournal.css";
+import "./calendarExternal.css";
 
 interface DayCellProps {
   day: CalendarDay;
   mode: CalendarGridMode;
   onSelectScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
   onSelectActivity: (activity: TrainingHubActivity) => void;
+  onSelectExternal: (session: StrengthSession) => void;
   onToggleScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
   isScheduledSelected: (entry: TrainingHubScheduledWorkoutEntry) => boolean;
   isScheduledCopied: (entry: TrainingHubScheduledWorkoutEntry) => boolean;
@@ -322,6 +326,7 @@ export function DayCell({
   mode,
   onSelectScheduled,
   onSelectActivity,
+  onSelectExternal,
   onToggleScheduled,
   isScheduledSelected,
   isScheduledCopied,
@@ -486,6 +491,34 @@ export function DayCell({
             ) : null}
           </button>
         ))}
+        {day.externalWorkouts.map((session) => {
+          const source = externalWorkoutSource(session);
+          const name = externalWorkoutName(session);
+          return (
+            <button
+              key={`external-${session.activityId}`}
+              type="button"
+              className={[
+                "calendar-chip",
+                "calendar-chip-activity",
+                "calendar-chip-external",
+                `calendar-sport-${sportColorCategory(session.sportType)}`,
+                selectionMode && "is-selection-unavailable"
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              onClick={() => onSelectExternal(session)}
+              disabled={selectionMode}
+              title={`${name} · ${source}`}
+            >
+              <span className="calendar-chip-title">
+                <span className="calendar-chip-name">{name}</span>
+              </span>
+              <span className="calendar-chip-meta">{externalWorkoutStatsLine(session)}</span>
+              <span className="calendar-chip-meta calendar-chip-source">{source}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

@@ -57,7 +57,7 @@ function keepsPair(pair: PlannedActualPair, kind: CalendarEntryKind): boolean {
 }
 
 /**
- * The day with hidden entries left out of `pairs` and `unplannedActivities`
+ * The day with hidden entries left out of `pairs`, `unplannedActivities` and `externalWorkouts`
  * (what the calendar draws). `scheduled` and `activities` stay whole, so day
  * actions such as copy and the week totals still see everything.
  */
@@ -70,7 +70,11 @@ export function filterCalendarDay(day: CalendarDay, filter: CalendarFilter): Cal
     unplannedActivities:
       filter.kind === "planned"
         ? []
-        : day.unplannedActivities.filter((activity) => !hidden.has(activityFamily(activity)))
+        : day.unplannedActivities.filter((activity) => !hidden.has(activityFamily(activity))),
+    externalWorkouts:
+      filter.kind === "planned"
+        ? []
+        : day.externalWorkouts.filter((session) => !hidden.has(activitySportFamily(session.sportType)))
   };
 }
 
@@ -83,7 +87,10 @@ export function countCalendarSports(
   const add = (family: WeekSportFamily) => counts.set(family, (counts.get(family) ?? 0) + 1);
   for (const day of days) {
     for (const pair of day.pairs) if (keepsPair(pair, kind)) add(pairSportFamily(pair));
-    if (kind !== "planned") for (const activity of day.unplannedActivities) add(activityFamily(activity));
+    if (kind !== "planned") {
+      for (const activity of day.unplannedActivities) add(activityFamily(activity));
+      for (const session of day.externalWorkouts) add(activitySportFamily(session.sportType));
+    }
   }
   return CALENDAR_SPORT_FAMILIES.filter((family) => counts.has(family)).map((family) => ({
     family,
@@ -92,5 +99,5 @@ export function countCalendarSports(
 }
 
 export function countCalendarEntries(days: CalendarDay[]): number {
-  return days.reduce((total, day) => total + day.pairs.length + day.unplannedActivities.length, 0);
+  return days.reduce((total, day) => total + day.pairs.length + day.unplannedActivities.length + day.externalWorkouts.length, 0);
 }

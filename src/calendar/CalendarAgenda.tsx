@@ -2,6 +2,7 @@ import { useLanguage, t, getDateTimeFormat } from "../i18n/training";
 import { Check, CalendarPlus, Moon, Plus } from "lucide-react";
 import { useLayoutEffect, useRef, type CSSProperties, type KeyboardEvent } from "react";
 import type {
+  StrengthSession,
   TrainingHubActivity,
   TrainingHubScheduledWorkoutEntry,
   UnitSystem
@@ -14,6 +15,7 @@ import {
 import { sportColorCategory } from "../training/sportColors";
 import { resolveSportName } from "../training/sportTypes";
 import { activityFamily, pairSportFamily } from "./calendarFilters";
+import { externalWorkoutName, externalWorkoutSource, externalWorkoutStatsLine } from "./externalWorkouts";
 import {
   scheduledWorkoutKey,
   type CalendarDay,
@@ -24,9 +26,10 @@ import { readCalendarContextTarget, type CalendarContextTarget } from "./Calenda
 import { dateFromKey, weekRangeLabel } from "./dateUtils";
 import { activityStatsLine, completionTone, JournalMark } from "./DayCell";
 import { journalEntryForActivity, journalEntryForPair } from "./journalRefs";
-import { WEEK_SPORT_FAMILY_META, type WeekSportFamily } from "./weekSportBreakdown";
+import { activitySportFamily, WEEK_SPORT_FAMILY_META, type WeekSportFamily } from "./weekSportBreakdown";
 import { WEEK_SPORT_ICONS } from "./WeekStatsCell";
 import "./calendarAgenda.css";
+import "./calendarExternal.css";
 
 interface CalendarAgendaProps {
   weeks: CalendarWeek[];
@@ -40,6 +43,7 @@ interface CalendarAgendaProps {
   onShowEverything: () => void;
   onSelectScheduled: (day: CalendarDay, entry: TrainingHubScheduledWorkoutEntry) => void;
   onSelectActivity: (day: CalendarDay, activity: TrainingHubActivity) => void;
+  onSelectExternal: (session: StrengthSession) => void;
   onToggleScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
   onAdd: (dateKey: string) => void;
   onContextMenu: (target: CalendarContextTarget) => void;
@@ -47,7 +51,8 @@ interface CalendarAgendaProps {
 
 type AgendaEntry =
   | { kind: "pair"; pair: PlannedActualPair; minutes: number }
-  | { kind: "activity"; activity: TrainingHubActivity; minutes: number };
+  | { kind: "activity"; activity: TrainingHubActivity; minutes: number }
+  | { kind: "external"; session: StrengthSession; minutes: number };
 
 // Same hues as the grid's planned-chip categories.
 const CATEGORY_COLORS: Record<string, string> = {
@@ -81,6 +86,11 @@ function agendaEntries(day: CalendarDay): AgendaEntry[] {
       kind: "activity" as const,
       activity,
       minutes: minutesOfDay(activity.startTime) ?? -1
+    })),
+    ...day.externalWorkouts.map((session) => ({
+      kind: "external" as const,
+      session,
+      minutes: minutesOfDay(session.startTime) ?? -1
     }))
   ];
   return entries.sort((left, right) => left.minutes - right.minutes);
@@ -177,6 +187,7 @@ export function CalendarAgenda({
   onShowEverything,
   onSelectScheduled,
   onSelectActivity,
+  onSelectExternal,
   onToggleScheduled,
   onAdd,
   onContextMenu
@@ -188,7 +199,7 @@ export function CalendarAgenda({
     .map((week) => ({
       week,
       days: week.days.filter(
-        (day) => day.inMonth && (day.isToday || day.pairs.length > 0 || day.unplannedActivities.length > 0)
+        (day) => day.inMonth && (day.isToday || day.pairs.length > 0 || day.unplannedActivities.length > 0 || day.externalWorkouts.length > 0)
       )
     }))
     .filter(({ days }) => days.length > 0);
@@ -320,8 +331,39 @@ export function CalendarAgenda({
     );
   };
 
+  const renderExternal = (session: StrengthSession, minutes: number) => {
+    const family = activitySportFamily(session.sportType);
+    const Icon = WEEK_SPORT_ICONS[family];
+    const stats = externalWorkoutStatsLine(session);
+    return (
+      <button
+        type="button"
+        className={["calendar-agenda-entry", "is-done", selectionMode && "is-selection-unavailable"].filter(Boolean).join(" ")}
+        style={{ "--entry-accent": `var(--sport-${sportColorCategory(session.sportType)})` } as CSSProperties}
+        disabled={selectionMode}
+        onClick={() => onSelectExternal(session)}
+      >
+        <span className="calendar-agenda-glyph" aria-hidden="true">
+          <Icon size={16} strokeWidth={2.1} />
+        </span>
+        <span className="calendar-agenda-main">
+          <span className="calendar-agenda-title">
+            <span className="calendar-agenda-name">{externalWorkoutName(session)}</span>
+          </span>
+          <span className="calendar-agenda-meta">
+            {[t(WEEK_SPORT_FAMILY_META[family].label), stats || undefined].filter(Boolean).join(" · ")}
+          </span>
+        </span>
+        <span className="calendar-agenda-aside">
+          <span className="calendar-agenda-status is-recorded">{externalWorkoutSource(session)}</span>
+          {minutes >= 0 ? <span className="calendar-agenda-time">{clockLabel(minutes)}</span> : null}
+        </span>
+      </button>
+    );
+  };
+
   const listedCount = listedWeeks.reduce(
-    (total, { days }) => total + days.reduce((sum, day) => sum + day.pairs.length + day.unplannedActivities.length, 0),
+    (total, { days }) => total + days.reduce((sum, day) => sum + day.pairs.length + day.unplannedActivities.length + day.externalWorkouts.length, 0),
     0
   );
 
@@ -408,10 +450,12 @@ export function CalendarAgenda({
                       </h4>
                       <ul className="calendar-agenda-entries">
                         {entries.map((entry) => (
-                          <li key={entry.kind === "pair" ? `pair-${scheduledWorkoutKey(entry.pair.scheduled)}` : `activity-${entry.activity.activityId}`}>
+                          <li key={entry.kind === "pair" ? `pair-${scheduledWorkoutKey(entry.pair.scheduled)}` : entry.kind === "activity" ? `activity-${entry.activity.activityId}` : `external-${entry.session.activityId}`}>
                             {entry.kind === "pair"
                               ? renderPair(day, entry.pair, entry.minutes)
-                              : renderActivity(day, entry.activity, entry.minutes)}
+                              : entry.kind === "activity"
+                                ? renderActivity(day, entry.activity, entry.minutes)
+                                : renderExternal(entry.session, entry.minutes)}
                           </li>
                         ))}
                         {entries.length === 0 ? (

@@ -146,7 +146,7 @@ import {
   uploadActivityFitToCoros,
   uploadTrainingPlan
 } from "./trainingHubService";
-import { syncStrengthHistory } from "./strengthHistoryService";
+import { listCalendarStrengthSessions, syncStrengthHistory } from "./strengthHistoryService";
 import {
   connectHevy,
   disconnectHevy,
@@ -2884,6 +2884,11 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "trainingHub:syncStrengthHistory",
     (_event, request?: StrengthHistoryRequest) => syncStrengthHistory(request)
+  );
+
+  ipcMain.handle(
+    "calendar:listExternalWorkouts",
+    (_event, startDay: string, endDay: string) => listCalendarStrengthSessions(startDay, endDay)
   );
 
   ipcMain.handle("hevy:getStatus", () => getHevyStatus());

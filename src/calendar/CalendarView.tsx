@@ -15,6 +15,7 @@ import {
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CalendarConnectionStatus } from "../../electron/calendarSyncTypes";
 import type {
+  StrengthSession,
   TrainingHubActivity,
   TrainingHubScheduledWorkoutEntry,
   TrainingHubSportType,
@@ -61,6 +62,7 @@ import {
 } from "./calendarTypes";
 import type { CalendarDragPayload } from "./calendarDrag";
 import { DayDetailPanel } from "./DayDetailPanel";
+import { ExternalWorkoutPanel } from "./ExternalWorkoutPanel";
 import {
   CalendarContextMenu,
   MOD_KEY_LABEL,
@@ -290,6 +292,7 @@ export function CalendarView({
   const handledNavigationId = useRef<number | null>(null);
   const navigationSelection = useRef<CalendarSelection | null>(null);
   const [selection, setSelection] = useState<CalendarSelection | null>(null);
+  const [externalSelection, setExternalSelection] = useState<StrengthSession | null>(null);
   const [addTarget, setAddTarget] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -1327,6 +1330,7 @@ export function CalendarView({
           onShowEverything={() => setFilter(DEFAULT_CALENDAR_FILTER)}
           onSelectScheduled={(day, entry) => setSelection({ kind: "scheduled", day, entry })}
           onSelectActivity={(day, activity) => setSelection({ kind: "activity", day, activity })}
+          onSelectExternal={setExternalSelection}
           onToggleScheduled={toggleScheduledSelection}
           onAdd={setAddTarget}
           onContextMenu={(target) => {
@@ -1343,6 +1347,7 @@ export function CalendarView({
           selectedWorkoutKeys={selectedWorkoutKeys}
           highlightedWorkoutKey={highlightedWorkoutKey}
           onSelectScheduled={(day, entry) => setSelection({ kind: "scheduled", day, entry })}
+          onSelectExternal={setExternalSelection}
           onSelectActivity={(day, activity: TrainingHubActivity) =>
             setSelection({ kind: "activity", day, activity })
           }
@@ -1377,6 +1382,8 @@ export function CalendarView({
           onClose={closeContextMenu}
         />
       ) : null}
+
+      <ExternalWorkoutPanel session={externalSelection} onClose={() => setExternalSelection(null)} />
 
       <DayDetailPanel
         api={api}

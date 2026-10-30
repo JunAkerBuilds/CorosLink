@@ -2,6 +2,7 @@ import { getLocale } from "../i18n/trainingLocale";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ManualActivityLink,
+  StrengthSession,
   TrainingHubActivity,
   TrainingHubDailyMetric,
   TrainingHubScheduledWorkoutEntry
@@ -36,6 +37,20 @@ interface UseCalendarDataOptions {
   isInMonth: (dateKey: string) => boolean;
 }
 
+/**
+ * The watch also recorded this session (COROS uploads to Strava, and a Hevy
+ * log often runs alongside a watch activity): the COROS activity already
+ * stands for it. Same rule as the Strength view's merge: starts within 30 min.
+ */
+function duplicatesCorosActivity(session: StrengthSession, activities: TrainingHubActivity[]): boolean {
+  if (session.startTime === undefined) return false;
+  return activities.some((activity) => {
+    if (!activity.startTime) return false;
+    const start = activity.startTime < 10_000_000_000 ? activity.startTime : activity.startTime / 1000;
+    return Math.abs(start - session.startTime!) <= 30 * 60;
+  });
+}
+
 export function useCalendarData({
   api,
   authenticated,
@@ -58,6 +73,7 @@ export function useCalendarData({
   const [journal, setJournal] = useState<WorkoutJournalEntry[]>([]);
   const [journalVersion, setJournalVersion] = useState(0);
   const [manualLinks, setManualLinks] = useState<ManualActivityLink[]>([]);
+  const [externalWorkouts, setExternalWorkouts] = useState<StrengthSession[]>([]);
   const manualLinksRef = useRef(manualLinks);
   manualLinksRef.current = manualLinks;
   const cacheRef = useRef(new Map<string, CalendarRangeData>());
@@ -149,6 +165,27 @@ export function useCalendarData({
       })
       .catch(() => {
         if (!cancelled) setManualLinks([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, authenticated, rangeKey, refreshToken, version]);
+
+  // Hevy and Strava sessions come from their own APIs, so they never hold up COROS.
+  useEffect(() => {
+    if (!api?.listExternalWorkouts || !authenticated || !rangeStart || !rangeEnd) {
+      setExternalWorkouts([]);
+      return;
+    }
+    let cancelled = false;
+    void api
+      .listExternalWorkouts(rangeStart, rangeEnd)
+      .then((sessions) => {
+        if (!cancelled) setExternalWorkouts(sessions);
+      })
+      .catch(() => {
+        if (!cancelled) setExternalWorkouts([]);
       });
     return () => {
       cancelled = true;
@@ -260,6 +297,7 @@ export function useCalendarData({
     const activitiesByDay = new Map<string, TrainingHubActivity[]>();
     const metricByDay = new Map<string, TrainingHubDailyMetric>();
     const journalByDay = new Map<string, WorkoutJournalEntry[]>();
+    const externalByDay = new Map<string, StrengthSession[]>();
 
     for (const entry of data?.scheduled ?? []) {
       const list = scheduledByDay.get(entry.happenDay) ?? [];
@@ -277,6 +315,15 @@ export function useCalendarData({
     }
     for (const metric of data?.metrics ?? []) {
       metricByDay.set(metric.happenDay, metric);
+    }
+    for (const session of externalWorkouts) {
+      const key = happenDayFromTimestamp(session.startTime);
+      if (!key || duplicatesCorosActivity(session, activitiesByDay.get(key) ?? [])) {
+        continue;
+      }
+      const list = externalByDay.get(key) ?? [];
+      list.push(session);
+      externalByDay.set(key, list);
     }
     for (const entry of journal) {
       const list = journalByDay.get(entry.happenDay) ?? [];
@@ -306,7 +353,8 @@ export function useCalendarData({
           metric: metricByDay.get(dateKey),
           pairs,
           unplannedActivities: unplanned,
-          journal: journalByDay.get(dateKey)
+          journal: journalByDay.get(dateKey),
+          externalWorkouts: externalByDay.get(dateKey) ?? []
         };
       });
 
@@ -331,7 +379,7 @@ export function useCalendarData({
         }
       };
     });
-  }, [data, journal, manualLinks, weekKeys, isInMonth, getLocale()]);
+  }, [data, journal, manualLinks, externalWorkouts, weekKeys, isInMonth, getLocale()]);
 
   /** True once the weeks hold the visible range's own data (cached or fetched). */
   const ready = loadedRangeKey === rangeKey;

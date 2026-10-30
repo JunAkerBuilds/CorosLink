@@ -102,3 +102,78 @@ export async function syncStrengthHistory(
     ...(notices.length > 0 ? { notices } : {})
   };
 }
+
+/** Calendar paging must not re-sync on every month flip. */
+const CALENDAR_SYNC_INTERVAL_MS = 5 * 60_000;
+const calendarSynced = {
+  hevy: { at: 0, days: 0 },
+  strava: { at: 0, days: 0 }
+};
+
+function localDayStartEpochSeconds(dayKey: string): number | undefined {
+  const match = /^(\d{4})-?(\d{2})-?(\d{2})$/.exec(dayKey);
+  if (!match) return undefined;
+  return Math.floor(
+    new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).getTime() / 1000
+  );
+}
+
+async function calendarProviderSessions(
+  provider: "hevy" | "strava",
+  days: number
+): Promise<StrengthSession[]> {
+  const synced = calendarSynced[provider];
+  const fresh = Date.now() - synced.at < CALENDAR_SYNC_INTERVAL_MS && synced.days >= days;
+  const stored = () =>
+    provider === "hevy" ? getStoredHevyStrengthSessions(days) : getStoredStravaStrengthSessions(days);
+  if (fresh) return stored();
+  try {
+    const result =
+      provider === "hevy"
+        ? await syncHevyStrengthHistory(days, false)
+        : await syncStravaStrengthHistory(days, false);
+    calendarSynced[provider] = { at: Date.now(), days };
+    return result.sessions;
+  } catch {
+    return stored();
+  }
+}
+
+/**
+ * Hevy and Strava gym sessions between two local days (inclusive, YYYYMMDD
+ * or YYYY-MM-DD) that COROS did not record itself, for the calendar.
+ * Sessions matched to a COROS activity are dropped: the calendar already
+ * shows that activity.
+ */
+export async function listCalendarStrengthSessions(
+  startDay: string,
+  endDay: string
+): Promise<StrengthSession[]> {
+  const hevyConnected = getHevyStatus().connected;
+  const stravaConnected = getStravaStatus().connected;
+  const rangeStart = localDayStartEpochSeconds(startDay);
+  const rangeEndDay = localDayStartEpochSeconds(endDay);
+  if ((!hevyConnected && !stravaConnected) || rangeStart === undefined || rangeEndDay === undefined) {
+    return [];
+  }
+  // Workouts only exist up to today; look back far enough to cover the range.
+  const days = Math.ceil((windowStartEpochSeconds(0) - rangeStart) / 86_400);
+  if (days < 0) return [];
+  const windowDays = Math.max(1, Math.min(365, days));
+
+  const [hevySessions, stravaSessions] = await Promise.all([
+    hevyConnected ? calendarProviderSessions("hevy", windowDays) : Promise.resolve([]),
+    stravaConnected ? calendarProviderSessions("strava", windowDays) : Promise.resolve([])
+  ]);
+  const corosSessions = listStoredStrengthSessions(windowStartEpochSeconds(windowDays));
+  const rangeEnd = rangeEndDay + 86_400;
+  return selectStrengthSessions("combined", corosSessions, hevySessions, stravaSessions)
+    .filter((session) => session.source !== "coros" && !session.sourceIds?.coros)
+    .filter(
+      (session) =>
+        session.startTime !== undefined &&
+        session.startTime >= rangeStart &&
+        session.startTime < rangeEnd
+    )
+    .sort((left, right) => (left.startTime ?? 0) - (right.startTime ?? 0));
+}

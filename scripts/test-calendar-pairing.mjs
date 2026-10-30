@@ -91,7 +91,7 @@ const walks = [walkA, walkB, walkC];
 // Week totals count moving time, like the cards.
 {
   const { pairs, unplanned } = pairPlannedWithActual([], walks);
-  const stats = computeWeeklyStats([{ dateKey: "20261020", inMonth: true, isToday: true, isPast: false, scheduled: [], activities: walks, pairs, unplannedActivities: unplanned }]);
+  const stats = computeWeeklyStats([{ dateKey: "20261020", inMonth: true, isToday: true, isPast: false, scheduled: [], activities: walks, pairs, unplannedActivities: unplanned, externalWorkouts: [] }]);
   assert.equal(stats.activityTimeSeconds, 1621 + 1164 + 1309);
 }
 

@@ -240,7 +240,7 @@ export function canonicalExerciseDisplayName(name: string): string {
   return base || name;
 }
 
-function exerciseDisplayName(nameKey: string, rawName: string | undefined): string {
+export function exerciseDisplayName(nameKey: string, rawName: string | undefined): string {
   const resolved = resolveExerciseName(nameKey, rawName);
   return /^[TS]\d/.test(resolved)
     ? "Unnamed exercise"

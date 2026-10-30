@@ -20,6 +20,8 @@ const lift = { planId: "p", idInPlan: "2", planProgramId: "2", happenDay: "20261
 const trailRun = { activityId: "t", name: "Hill loop", sportType: 102 };
 const walkA = { activityId: "a", name: "Port of Spain Walk", sportType: 900 };
 const walkB = { activityId: "b", name: "Sangre Grande Walk", sportType: 900 };
+// A Hevy gym session the watch did not record.
+const hevyLift = { activityId: "hevy:h", source: "hevy", name: "Push Day", sportType: 402 };
 const day = {
   dateKey: "20261020",
   inMonth: true,
@@ -29,7 +31,8 @@ const day = {
   activities: [trailRun, walkA, walkB],
   // The run was done as a trail run; the strength session was missed.
   pairs: [{ scheduled: run, activity: trailRun, completionPct: 96 }, { scheduled: lift }],
-  unplannedActivities: [walkA, walkB]
+  unplannedActivities: [walkA, walkB],
+  externalWorkouts: [hevyLift]
 };
 
 // A pair counts as what was done, else what was planned.
@@ -51,11 +54,19 @@ assert.equal(filterCalendarDay(day, DEFAULT_CALENDAR_FILTER), day);
   assert.equal(countCalendarEntries([day]) - countCalendarEntries([filtered]), 2);
 }
 
+// Hiding strength drops the missed lift plan and the Hevy session.
+{
+  const filtered = filterCalendarDay(day, { kind: "all", hiddenSports: ["strength"] });
+  assert.deepEqual(filtered.externalWorkouts, []);
+  assert.deepEqual(filtered.pairs.map((pair) => pair.scheduled.idInPlan), ["1"]);
+}
+
 // Planned: every plan (done or missed), no freestyle activities.
 {
   const filtered = filterCalendarDay(day, { kind: "planned", hiddenSports: [] });
   assert.deepEqual(filtered.pairs.map((pair) => pair.scheduled.idInPlan), ["1", "2"]);
   assert.deepEqual(filtered.unplannedActivities, []);
+  assert.deepEqual(filtered.externalWorkouts, []);
 }
 
 // Completed: every recorded activity, no plan nobody did.
@@ -63,18 +74,19 @@ assert.equal(filterCalendarDay(day, DEFAULT_CALENDAR_FILTER), day);
   const filtered = filterCalendarDay(day, { kind: "completed", hiddenSports: [] });
   assert.deepEqual(filtered.pairs.map((pair) => pair.scheduled.idInPlan), ["1"]);
   assert.deepEqual(filtered.unplannedActivities.map((activity) => activity.activityId), ["a", "b"]);
+  assert.deepEqual(filtered.externalWorkouts.map((session) => session.activityId), ["hevy:h"]);
 }
 
 // Kind and sport combine.
 {
-  const filtered = filterCalendarDay(day, { kind: "completed", hiddenSports: ["walk", "trail"] });
+  const filtered = filterCalendarDay(day, { kind: "completed", hiddenSports: ["walk", "trail", "strength"] });
   assert.equal(countCalendarEntries([filtered]), 0);
 }
 
 // Sport counts follow the kind and come in display order.
 assert.deepEqual(countCalendarSports([day], "all"), [
   { family: "trail", count: 1 },
-  { family: "strength", count: 1 },
+  { family: "strength", count: 2 },
   { family: "walk", count: 2 }
 ]);
 assert.deepEqual(countCalendarSports([day], "planned"), [
@@ -83,6 +95,7 @@ assert.deepEqual(countCalendarSports([day], "planned"), [
 ]);
 assert.deepEqual(countCalendarSports([day], "completed"), [
   { family: "trail", count: 1 },
+  { family: "strength", count: 1 },
   { family: "walk", count: 2 }
 ]);
 
