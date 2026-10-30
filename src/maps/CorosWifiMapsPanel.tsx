@@ -156,6 +156,8 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu, watchStatus, onWatchS
   const usbWatch = watchStatus?.connected && watchStatus.rootPath ? watchStatus : null;
   const transfer: Transfer = transferChosen || !(api.localOnlyAtLaunch || usbWatch) ? savedTransfer : "usb";
   const usb = transfer === "usb";
+  // A copy keeps its progress and Cancel on screen even if the drive drops out mid-transfer.
+  const copying = usb && (downloading || Boolean(install?.active));
   const tooBig = size.state === "ready" && "neededBytes" in size.preview && size.preview.neededBytes !== undefined &&
     size.preview.freeBytes !== undefined && size.preview.neededBytes > size.preview.freeBytes;
   const full = tiles.length >= MAX_AREAS;
@@ -275,6 +277,9 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu, watchStatus, onWatchS
 
   const copy = async () => {
     if (size.state !== "ready" || !size.preview.fileCount || tooBig) return;
+    // USB may only be the default because the watch is plugged in; pin it so the panel doesn't
+    // switch to Wi-Fi if the drive drops out while the copy runs.
+    setTransferChosen(true); setSavedTransfer("usb");
     setDownloading(true); setNotice(null);
     const label = summarize(tiles.map(tile => names[key(tile)] || pointLabel(tile)));
     try {
@@ -378,7 +383,7 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu, watchStatus, onWatchS
           </div>}
 
           <div className="wifi-maps-plan-foot">
-            {usb ? usbWatch ? <>
+            {usb ? usbWatch || copying ? <>
               <SizeSummary size={size} hasTiles={tiles.length > 0} usb onRetry={() => setSizeRetry(count => count + 1)} />
               {size.state === "ready" && "neededBytes" in size.preview && size.preview.neededBytes !== undefined && size.preview.fileCount ? tooBig
                 ? <p className="wifi-maps-size-error" role="alert"><TriangleAlert size={15} aria-hidden="true" />

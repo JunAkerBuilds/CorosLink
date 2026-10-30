@@ -200,6 +200,19 @@ async function main() {
     await win.loadURL(`${page}?plugged`);
     await until(`document.querySelector('.wifi-maps-transfer') !== null`);
     assert.equal(await checked(), 'USB cable', 'a plugged-in watch starts on USB');
+    // USB only by default: the drive dropping mid-copy keeps USB, the progress and Cancel.
+    await until(`document.querySelector('.wifi-maps-download')?.disabled === false`);
+    await click('.wifi-maps-download');
+    await until(`window.calls.some(call => call.operation === 'install')`);
+    await js(`window.pushProgress({ active: true, phase: 'downloading', label: 'Ho Chi Minh City', copiedBytes: 8000000, totalBytes: 21286347, copiedFiles: 0, totalFiles: 2, progress: 0.38, updatedAt: new Date().toISOString() }); void 0`);
+    await js(`window.setWatch(null); void 0`);
+    await until(`document.querySelector('.map-install-progress .secondary-button')?.textContent === 'Cancel'`);
+    assert.equal(await checked(), 'USB cable', 'a copy keeps USB when the drive drops out');
+    await js(`window.pushProgress({ active: false, phase: 'failed', label: 'Ho Chi Minh City', copiedBytes: 8000000, totalBytes: 21286347, copiedFiles: 0, totalFiles: 2, progress: 0.38, error: 'The watch disconnected while installing maps.', updatedAt: new Date().toISOString() });
+      window.finishCopy('The watch disconnected while installing maps.'); void 0`);
+    await until(`document.querySelector('.wifi-maps-notice.is-error')?.textContent.includes('disconnected')`);
+    assert.equal(await checked(), 'USB cable', 'the copy pinned USB as the choice');
+    await js(`window.setWatch({ connected: true, rootPath: '/Volumes/PACE 4', model: 'pace-4', freeBytes: 2500000000 }); void 0`);
     await click('.wifi-maps-transfer-option');
     assert.equal(await checked(), 'Watch Wi-Fi', 'a choice still wins');
 
