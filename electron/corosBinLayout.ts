@@ -69,8 +69,10 @@ export function readLayoutHeaders(bytes: Buffer) {
     }
     // Version-0 headers leave the size field empty; the background bitmap is
     // always the first block, so its pointer marks the end of that header.
+    // A plain black dial (DIGITS2) has no background pointer; the first
+    // bitmap block after the minimum header still marks the end.
     const declared = bytes.readUInt16LE(offset + 0x138);
-    const length = declared || (mode === "normal" ? bytes.readUInt32LE(offset + 0x1a) : 0);
+    const length = declared || (mode === "normal" ? bytes.readUInt32LE(offset + 0x1a) || firstBitmapBlockOffset(bytes) : 0);
     if (length < MIN_HEADER || length > MAX_HEADER) throw new Error(`Unsupported layout size ${hex(length)}; refusing to guess offsets.`);
     if (offset + length > bytes.length) throw new Error(`Truncated ${mode} layout.`);
     return { mode, offset, length, version: bytes[offset + 0x13a], magic, width: face.size, height: face.size, variant: face.variant };
@@ -80,6 +82,13 @@ export function readLayoutHeaders(bytes: Buffer) {
   if (!aodOffset) return [normal];
   if (aodOffset < normal.length) throw new Error("AOD header overlaps the normal header.");
   return [normal, header(aodOffset, "aod")];
+}
+
+function firstBitmapBlockOffset(bytes: Buffer) {
+  for (let offset = MIN_HEADER; offset + 14 <= Math.min(bytes.length, MAX_HEADER + 14); offset++) {
+    if (readBitmapBlockAt(bytes, offset, true)) return offset;
+  }
+  return 0;
 }
 
 export interface CorosBitmapBlock {
