@@ -1,9 +1,10 @@
 """Watch faces, music, notifications and watch events on the Windows/Linux worker, against a fake watch."""
 import asyncio, binascii, importlib.util, sys, unittest
+from unittest import mock
 from pathlib import Path
 from types import SimpleNamespace
 from coros_ble_protocol import ProtocolError
-from coros_ble_music import MusicPageReceiver, music_frames, valid_music_delete_file, decode_watch_interaction
+from coros_ble_music import MusicPageReceiver, music_frames, valid_music_delete_file, decode_usb_access, decode_watch_interaction
 from coros_ble_route import send_file_block, validate_file_block, WATCHFACE_FILE, MUSIC_DELETE_FILE
 
 sys.modules.setdefault('bleak', SimpleNamespace(BleakClient=object, BleakScanner=object))
@@ -137,6 +138,17 @@ class TransferTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(session.state['watchEvents'][0]['kind'], 'media-control')
         self.assertIsNone(decode_watch_interaction(b'\xc5\x00\x09\x01\x0a'))
         session.disconnected(None); self.assertNotIn('watchEvents', session.state)
+
+    def test_usb_access_events(self):
+        session, watch = session_with()
+        emitted = []
+        with mock.patch.object(worker, 'emit', emitted.append):
+            session.notification(watch.channels['control'], bytes([0x0d, 0, 0x11, 1, 0, 0x12]))
+            session.notification(watch.channels['control'], bytes([0x0d, 0, 0x11, 1, 1, 0x13]))
+            session.notification(watch.channels['control'], bytes([0x0d, 0, 0x11, 1, 0, 0x13]))
+        self.assertEqual(emitted, [{'event': 'usb-access-request'}, {'event': 'usb-access-closed'}])
+        self.assertNotIn('watchEvents', session.state)
+        self.assertIsNone(decode_usb_access(b'\x0d\x00\x11\x01\x02\x14'))
 
 
 if __name__ == '__main__': unittest.main()

@@ -2,9 +2,11 @@ import { app, dialog, shell, safeStorage } from "electron";
 import type { BrowserWindow, OpenDialogOptions } from "electron";
 import { localizeDialogOptions } from "./localization";
 import crypto from "node:crypto";
-import { once } from "node:events";
 import fs from "node:fs";
 import path from "node:path";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import {
   addGeneratedRoute,
   deleteAllGeneratedRoutes as deleteAllSavedGeneratedRoutes,
@@ -63,6 +65,10 @@ import {
   searchNominatim
 } from "./routing/nominatim";
 import { getWatchStatus, invalidateWatchStatusCache } from "./watchService";
+import { listMapAreaFiles } from "./corosWifiMapService";
+import type { CorosMapAreaFile, CorosMapAreaPreview } from "./corosWifiMapTypes";
+import { getWatchfaceDeviceProfile, type WatchModelId } from "./watchModels";
+import { watchSupports } from "./localSync/watchSyncModels";
 import {
   formatDistanceValue,
   normalizeUnitSystem
@@ -716,8 +722,6 @@ export async function downloadCorosMapPackageToCache(
 
   const cacheFileName = getCorosMapCacheFileName(mapPackage);
   const filePath = path.join(cacheDirectory, cacheFileName);
-  const partPath = `${filePath}.part`;
-  await fs.promises.rm(partPath, { force: true });
 
   const response = await fetchImpl(mapPackage.downloadUrl, {
     signal: options.signal
@@ -736,22 +740,10 @@ export async function downloadCorosMapPackageToCache(
       : mapPackage.sizeBytes;
   let receivedBytes = 0;
   let lastProgressAt = 0;
-  const file = fs.createWriteStream(partPath, { flags: "w" });
-  const reader = response.body.getReader();
-
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) {
-        break;
-      }
-
-      const chunk = Buffer.from(value);
-      receivedBytes += chunk.byteLength;
-      if (!file.write(chunk)) {
-        await once(file, "drain");
-      }
-
+  await downloadResponseToFile(response, filePath, {
+    signal: options.signal,
+    onBytes: bytes => {
+      receivedBytes += bytes;
       const now = Date.now();
       if (now - lastProgressAt >= DOWNLOAD_PROGRESS_MIN_INTERVAL_MS) {
         lastProgressAt = now;
@@ -762,16 +754,7 @@ export async function downloadCorosMapPackageToCache(
         });
       }
     }
-
-    file.end();
-    await once(file, "finish");
-  } catch (caught) {
-    file.destroy();
-    await fs.promises.rm(partPath, { force: true });
-    throw caught;
-  }
-
-  await fs.promises.rename(partPath, filePath);
+  });
   const finalStats = await fs.promises.stat(filePath);
   options.onProgress?.({
     receivedBytes: finalStats.size,
@@ -973,6 +956,172 @@ export async function installCorosMapFolder(
     if (ownsInstallSession) {
       endCorosMapInstall();
     }
+  }
+}
+
+/**
+ * Streams a response body to `filePath` through `<filePath>.part`, renamed into place only when
+ * complete. Write errors (disk full, a locked file) and a body over `maxBytes` reject the
+ * promise; the partial file is removed. The caller checks the final size.
+ */
+async function downloadResponseToFile(response: Response, filePath: string,
+  options: { maxBytes?: number; signal?: AbortSignal; onBytes?: (bytes: number) => void } = {}): Promise<number> {
+  if (!response.body) throw new Error("COROS returned an empty map download.");
+  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+  const partPath = `${filePath}.part`;
+  let received = 0;
+  const count = new Transform({
+    transform(chunk: Buffer, _encoding, done) {
+      received += chunk.byteLength;
+      if (options.maxBytes !== undefined && received > options.maxBytes) {
+        done(new Error("COROS sent a map file larger than listed."));
+        return;
+      }
+      options.onBytes?.(chunk.byteLength);
+      done(null, chunk);
+    }
+  });
+  try {
+    await pipeline(Readable.fromWeb(response.body as WebReadableStream<Uint8Array>), count,
+      fs.createWriteStream(partPath), { signal: options.signal });
+    await fs.promises.rename(partPath, filePath);
+    return received;
+  } catch (caught) {
+    // Best effort: on Windows a just-closed file can briefly refuse removal; the next download overwrites it.
+    await fs.promises.rm(partPath, { force: true }).catch(() => undefined);
+    throw caught;
+  }
+}
+
+const COROS_AREA_TILE_HOST = "https://map-oss-us.coros.com/osm";
+
+/** Where an area file sits, both in the cache and on the watch: the official region packages' layout. */
+function corosAreaFilePath(file: CorosMapAreaFile): string {
+  return path.join(file.layer, file.quadkey.slice(0, 3), file.name);
+}
+
+/**
+ * COROS's model ID ("W336") for the plugged-in watch. Its drive's name can be just "COROS WATCH",
+ * so the watch connected over Bluetooth stands in; an unknown watch gets nothing.
+ */
+function areaMapDeviceModel(model: WatchModelId | undefined, bluetoothModel?: WatchModelId): string {
+  const resolved = model ?? bluetoothModel;
+  if (!resolved) throw new Error("Connect your watch to CorosLink over Bluetooth so CorosLink can tell which watch it is.");
+  const hardware = watchSupports("areaMaps", resolved) ? getWatchfaceDeviceProfile(resolved)?.firmwareType.replace(/^COROS\s+/i, "") : undefined;
+  if (!hardware) throw new Error("Not available on this watch.");
+  return hardware;
+}
+
+/** Bytes the watch still takes on: files it holds at another size are replaced, so only the difference counts. */
+async function areaBytesStillNeeded(files: CorosMapAreaFile[], installedPath: string): Promise<number> {
+  let needed = 0;
+  for (const file of files) {
+    const existing = await statFileIfPresent(path.join(installedPath, corosAreaFilePath(file)));
+    needed += Math.max(0, file.sizeBytes - (existing?.size ?? 0));
+  }
+  return needed;
+}
+
+/** Size of the chosen areas, and what the plugged-in watch still needs. */
+export async function previewCorosMapAreas(tiles: unknown, bluetoothModel?: WatchModelId): Promise<CorosMapAreaPreview> {
+  const status = await getWatchStatus();
+  if (!status.connected || !status.rootPath) throw new Error("Connect your watch with its USB cable before copying maps.");
+  const files = await listMapAreaFiles(tiles, areaMapDeviceModel(status.model, bluetoothModel));
+  return {
+    fileCount: files.length,
+    sizeBytes: files.reduce((sum, file) => sum + file.sizeBytes, 0),
+    neededBytes: await areaBytesStillNeeded(files, status.mapPath ?? path.join(status.rootPath, "Map")),
+    freeBytes: status.freeBytes
+  };
+}
+
+async function downloadCorosAreaFile(file: CorosMapAreaFile, destination: string, signal: AbortSignal | undefined,
+  onBytes: (bytes: number) => void): Promise<void> {
+  const url = `${COROS_AREA_TILE_HOST}/tiles_${file.version}/${file.layer}/${file.name}`;
+  validateOfficialCorosDownloadUrl(url);
+  const response = await fetch(url, { signal, redirect: "error" });
+  if (!response.ok || !response.body) throw new Error(`COROS map download failed: ${response.status} ${response.statusText}`);
+  const received = await downloadResponseToFile(response, destination, { maxBytes: file.sizeBytes, signal, onBytes });
+  if (received !== file.sizeBytes) {
+    await fs.promises.rm(destination, { force: true }).catch(() => undefined);
+    throw new Error("A map file downloaded incompletely. Try again.");
+  }
+}
+
+/**
+ * Copies chosen map areas to a watch over its USB cable, instead of the watch fetching
+ * them over Wi-Fi: this computer downloads the same per-area files COROS packs for the
+ * Wi-Fi download, keeps them in the map cache, and copies the ones the watch lacks.
+ */
+export async function installCorosMapAreas(tiles: unknown, label: string,
+  options: { cacheDirectory?: string; bluetoothModel?: WatchModelId } = {}): Promise<CorosMapInstallResult> {
+  const name = typeof label === "string" && label.trim() ? label.trim().slice(0, 120) : "Map areas";
+  const status = await getWatchStatus();
+  if (!status.connected || !status.rootPath) throw new Error("Connect your watch with its USB cable before copying maps.");
+  const deviceModel = areaMapDeviceModel(status.model, options.bluetoothModel);
+  const installedPath = status.mapPath ?? path.join(status.rootPath, "Map");
+  const cacheDirectory = options.cacheDirectory ?? getCorosMapCacheDirectory();
+  const cacheRoot = path.join(cacheDirectory, "areas");
+  const staging = path.join(cacheDirectory, `area-install-${crypto.randomUUID()}`);
+  beginCorosMapInstall();
+  const signal = getCorosMapInstallSignal();
+  let totalBytes = 0, totalFiles = 0, downloadedBytes = 0, downloadedFiles = 0, lastProgressAt = 0;
+  const publishDownload = (force = false) => {
+    const now = Date.now();
+    if (!force && now - lastProgressAt < DOWNLOAD_PROGRESS_MIN_INTERVAL_MS) return;
+    lastProgressAt = now;
+    publishCorosMapInstallProgress({
+      active: true, phase: "downloading", label: name, installedPath, copiedBytes: downloadedBytes, totalBytes,
+      copiedFiles: downloadedFiles, totalFiles, progress: totalBytes > 0 ? Math.min(downloadedBytes / totalBytes, 1) : 0,
+      updatedAt: new Date().toISOString()
+    });
+  };
+  try {
+    publishCorosMapInstallProgress({
+      active: true, phase: "preparing", label: name, installedPath, copiedBytes: 0, totalBytes: 0, copiedFiles: 0, totalFiles: 0,
+      progress: 0, updatedAt: new Date().toISOString()
+    });
+    const files = await listMapAreaFiles(tiles, deviceModel);
+    if (!files.length) throw new Error("COROS has no map files for these areas.");
+    totalFiles = files.length;
+    totalBytes = files.reduce((sum, file) => sum + file.sizeBytes, 0);
+    if (status.freeBytes !== undefined && (await areaBytesStillNeeded(files, installedPath)) > status.freeBytes) {
+      throw new Error("The selected map areas are larger than the free space on the watch.");
+    }
+    for (const file of files) {
+      assertCorosMapInstallNotCancelled(signal);
+      const cached = path.join(cacheRoot, corosAreaFilePath(file));
+      if ((await statFileIfPresent(cached))?.size !== file.sizeBytes) {
+        await downloadCorosAreaFile(file, cached, signal, bytes => { downloadedBytes += bytes; publishDownload(); });
+      } else downloadedBytes += file.sizeBytes;
+      downloadedFiles += 1;
+      publishDownload(true);
+      // Only the chosen areas go to the watch, so they're linked into a package of their own.
+      const staged = path.join(staging, "map", corosAreaFilePath(file));
+      await fs.promises.mkdir(path.dirname(staged), { recursive: true });
+      await fs.promises.link(cached, staged).catch(() => fs.promises.copyFile(cached, staged));
+    }
+    return await installCorosMapFolder(staging, { label: name });
+  } catch (caught) {
+    if (isCorosMapInstallCancelledError(caught) || signal?.aborted) {
+      if (corosMapInstallProgress?.phase !== "cancelled") {
+        publishCorosMapInstallCancelled({ label: name, installedPath, totalBytes, totalFiles,
+          copiedBytes: corosMapInstallProgress?.copiedBytes ?? 0, copiedFiles: corosMapInstallProgress?.copiedFiles ?? 0,
+          progress: corosMapInstallProgress?.progress ?? 0 });
+      }
+      throw new CorosMapInstallCancelledError();
+    }
+    if (corosMapInstallProgress?.phase !== "failed") {
+      publishCorosMapInstallProgress({
+        active: false, phase: "failed", label: name, installedPath, copiedBytes: corosMapInstallProgress?.copiedBytes ?? 0, totalBytes,
+        copiedFiles: corosMapInstallProgress?.copiedFiles ?? 0, totalFiles, progress: corosMapInstallProgress?.progress ?? 0,
+        error: toErrorMessage(caught), updatedAt: new Date().toISOString()
+      });
+    }
+    throw caught;
+  } finally {
+    endCorosMapInstall();
+    await fs.promises.rm(staging, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 

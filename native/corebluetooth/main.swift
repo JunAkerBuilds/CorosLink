@@ -558,6 +558,7 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         let controlNotify = channels[0].1.replacingOccurrences(of: "0001", with: "0003")
         let bulkNotify = channels[1].1.replacingOccurrences(of: "0001", with: "0003")
         if uuid == controlNotify || uuid == bulkNotify { record("rx", uuid == controlNotify ? "control" : "bulk", data) }
+        if uuid == controlNotify, let usbAccess = decodeUsbAccess(data) { emit(["event": usbAccess]); return }
         if operation == "musicInventoryPage", uuid == controlNotify || uuid == bulkNotify {
             do {
                 guard let receiver = musicReceiver else { return }
@@ -714,6 +715,14 @@ func decodeWatchInteraction(_ data: Data) -> [String: Any]? {
     }
     if data[0] == 2, data.count == 4, data[2] == 2 { return ["kind": "call-rejected"] }
     return nil
+}
+
+/// The watch's USB-storage prompt (3.2008.0 firmware): `0D 00 11 01 xx sum`, xx 0 while it
+/// asks (every 5 s), 1 when the prompt closes without an answer from the app.
+func decodeUsbAccess(_ data: Data) -> String? {
+    guard data.count == 6, data[0] == 0x0D, data[1] == 0, data[2] == 0x11, data[3] == 1, data[4] <= 1,
+          data[2] &+ data[3] &+ data[4] == data[5] else { return nil }
+    return data[4] == 0 ? "usb-access-request" : "usb-access-closed"
 }
 
 /// Files CorosLink pushes like the phone app: workout, weather, training calendar and GPS assistance.

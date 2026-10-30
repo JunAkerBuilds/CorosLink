@@ -217,6 +217,15 @@ def valid_music_delete_file(file):
     return len(fields) == 4
 
 
+def decode_usb_access(data):
+    """The watch's USB-storage prompt (3.2008.0 firmware): 0D 00 11 01 xx sum, xx 0 while it asks
+    (every 5 s), 1 when the prompt closes without an answer from the app."""
+    data = bytes(data)
+    if len(data) != 6 or data[:4] != b'\x0d\x00\x11\x01' or data[4] > 1 or sum(data[2:5]) & 255 != data[5]:
+        return None
+    return 'usb-access-request' if data[4] == 0 else 'usb-access-closed'
+
+
 def decode_watch_interaction(data):
     """Only the bounded unsolicited events traced in the W332 firmware; nothing else enters UI state."""
     data = bytes(data)

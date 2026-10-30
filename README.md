@@ -106,6 +106,7 @@ Design custom COROS watch faces in a layer-based editor — fonts, colors, artwo
 ### Maps & Routes (beta)
 
 - Download official COROS Landscape/Topo map regions and install them over USB
+- Pick map areas on a grid and copy just those over USB (the watch never goes online), or have the watch download them over its Wi-Fi
 - Generate loop or point-to-point routes (OpenRouteService), or import GPX from Strava, Komoot, etc.
 - Elevation profile, pace estimates, GPX export, and QR share to the COROS phone app
 

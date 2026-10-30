@@ -24,7 +24,7 @@ from bleak import BleakClient, BleakScanner
 from bleak.exc import BleakBluetoothNotAvailableError, BleakError, BleakGATTProtocolError, BleakGATTProtocolErrorCode
 from coros_ble_protocol import Decoder, ProtocolError, frames
 from coros_ble_route import DATA_FILES, MUSIC_DELETE_FILE, ROUTE_FILE, WATCHFACE_FILE, send_file_block
-from coros_ble_music import MusicDeleteReceiver, MusicPageReceiver, decode_watch_interaction
+from coros_ble_music import MusicDeleteReceiver, MusicPageReceiver, decode_usb_access, decode_watch_interaction
 from coros_ble_activity import SyncBlockReceiver
 
 CHANNELS = {
@@ -358,6 +358,10 @@ class SystemSession:
         channel['notifications'] += 1
         channel['receivedBytes'] += len(data)
         channel['lastNotificationAt'] = int(time.time() * 1000)
+        usb_access = decode_usb_access(data) if channel['name'] == 'control' else None
+        if usb_access is not None:
+            emit({'event': usb_access})
+            return
         if channel['name'] in ('control', 'bulk') and self.music_queue is not None and not self.music_queue.full():
             self.music_queue.put_nowait((channel['name'] == 'control', bytes(data)))
         if channel['name'] != 'control':

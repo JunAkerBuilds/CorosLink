@@ -14,6 +14,13 @@ export const SETTINGS_SET_OPCODE = 0xa6;
 export const SETTINGS_GET_OPCODE = 0xa7;
 export const SETTING_SWITCH = 0;
 export const SETTING_USER_INFO = 10;
+/**
+ * The answer to the watch's USB-storage prompt, one byte: 1 opens the drive, 0 declines.
+ * 3.2008.0 firmware keeps the drive closed ("Open the COROS App to authorize") once
+ * 30 s have passed since the last answer, and only while its prompt is showing does
+ * this setting reach it.
+ */
+export const SETTING_USB_ACCESS = 0x31;
 
 export interface WatchProfile {
   /** Lower bounds of zones 1–5 (bpm); zone 5 runs to max HR. */

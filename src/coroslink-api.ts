@@ -329,6 +329,12 @@ export interface CorosLinkApi {
   getCorosWifiMapStatus: () => Promise<import("../electron/corosWifiMapTypes").CorosWifiMapStatus>;
   previewCorosWifiMap: (tiles: import("../electron/corosWifiMapTypes").CorosWifiMapTile[]) => Promise<import("../electron/corosWifiMapTypes").CorosWifiMapPreview>;
   downloadCorosWifiMap: (previewId: string) => Promise<{ taskId: string; status: import("../electron/corosWifiMapTypes").CorosWifiMapStatus }>;
+  /** Takes a pending or running Wi-Fi map download off the watch. */
+  removeCorosWifiMapDownload: (taskId: string) => Promise<import("../electron/corosWifiMapTypes").CorosWifiMapStatus>;
+  /** Size of the chosen areas, and what a watch plugged in over USB still needs. */
+  previewCorosMapAreas: (tiles: import("../electron/corosWifiMapTypes").CorosWifiMapTile[]) => Promise<import("../electron/corosWifiMapTypes").CorosMapAreaPreview>;
+  /** Downloads the chosen areas on this computer and copies them to the watch's USB drive. */
+  installCorosMapAreas: (tiles: import("../electron/corosWifiMapTypes").CorosWifiMapTile[], label: string) => Promise<CorosMapInstallResult>;
   getCorosRouteSyncStatus: () => Promise<import("../electron/corosBleRouteTypes").CorosRouteSyncStatus>;
   syncCorosRoute: (routeId: string) => Promise<import("../electron/corosBleRouteTypes").CorosRouteSyncStatus>;
   getWatchProfile: () => Promise<import("../electron/watchProfileService").WatchProfileSummary | null>;
