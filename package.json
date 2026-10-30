@@ -46,6 +46,7 @@
     "test:calendar-sync-status": "node --experimental-strip-types scripts/test-calendar-sync-status.mjs",
     "test:watch-settings-ui": "electron scripts/test-watch-settings-ui.cjs",
     "test:watch-menu-ui": "electron scripts/test-watch-menu-ui.cjs",
+    "test:map-areas-ui": "electron scripts/test-map-areas-ui.cjs",
     "test:privacy-settings-ui": "electron scripts/test-privacy-settings-ui.cjs",
     "test:watch-commands": "npm run build:electron && cross-env TZ=Asia/Ho_Chi_Minh node scripts/test-coros-watch-commands.mjs && cross-env TZ=Asia/Kolkata node scripts/test-coros-watch-commands.mjs && cross-env TZ=America/St_Johns node scripts/test-coros-watch-commands.mjs && cross-env TZ=America/New_York node scripts/test-coros-watch-commands.mjs",
     "test:sleep-duration": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-sleep-duration.mjs",

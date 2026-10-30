@@ -4560,7 +4560,7 @@ td span {
 }
 
 .maps-view {
-  /* Wireless maps (src/maps/wifiMaps.css) keeps its own scrollable panel. */
+  /* Map areas (src/maps/wifiMaps.css) keeps its own scrollable panel. */
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -4772,6 +4772,12 @@ td span {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.map-install-progress-actions .map-install-cancel {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 12.5px;
 }
 
 .map-install-progress-actions p {

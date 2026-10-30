@@ -89,7 +89,10 @@ for(const platform of ['darwin','win32','linux']) {
   // Devices advertising the watch's name, by Bluetooth identity, and their serial numbers; `ignorePin` is a helper
   // that connects by name regardless.
   let nearby=['os-id'],ignorePin=false;const serials={};
-  vm.runInNewContext(fs.readFileSync(filename,'utf8'),{exports,Buffer,Error,setTimeout,clearTimeout,
+  // The service's clock, moved forward to step past waits measured in seconds.
+  let clockOffset=0;
+  class ShiftedDate extends Date { static now(){ return Date.now()+clockOffset; } }
+  vm.runInNewContext(fs.readFileSync(filename,'utf8'),{exports,Buffer,Error,setTimeout,clearTimeout,AbortController,Date:ShiftedDate,
     process:{platform,arch:'x64',env:{BUMBLE_SNOOPER:'unsafe',BUMBLE_LOGLEVEL:'DEBUG'},resourcesPath:'/resources'},
     require(id){
       if(id==='electron')return {app:{isPackaged:false,getAppPath:()=>'/project'},safeStorage:{isEncryptionAvailable:()=>true,
@@ -160,6 +163,8 @@ for(const platform of ['darwin','win32','linux']) {
                 worker.deletedPlans=(worker.deletedPlans??[]).concat(removed);worker.plans=worker.plans.filter(id=>!removed.includes(id));payload=Buffer.from([1]);
               }
             }
+            // Subcommand 5 removes a download; with the USB cable in, the watch refuses with 0x1A.
+            else if(request.opcode===0xb6&&data[0]===5){worker.removedTasks=(worker.removedTasks??[]).concat(data.subarray(1).toString('latin1'));payload=Buffer.from([worker.usbPlugged?0x1a:1]);}
             else if(request.opcode===0xb6){assert.equal(data.toString('hex'),'0bff');payload=Buffer.from([1,0]);}
             else if(request.opcode===0xaa) {
               assert.equal(data.toString('hex'),'00');
@@ -547,6 +552,58 @@ for(const platform of ['darwin','win32','linux']) {
     connectModel='COROS W332';await service.disconnect();
     assert.equal((await service.connect(false,{backend:'system'})).watchModel,'pace-pro');
   }
+  // A watch plugged into a computer asks the app every 5 s while it shows "Open the COROS App to authorize".
+  // CorosLink asks once; the answer is setting 0x31. A prompt the watch closes itself is never answered.
+  {
+    const usbAnswers=()=>writes.filter(x=>x.opcode===0xa6&&Buffer.from(x.payload,'base64')[0]===0x31).map(x=>Buffer.from(x.payload,'base64').toString('hex'));
+    const event=name=>workers.at(-1).stdout.emit('data',JSON.stringify({event:name})+'\n');
+    const settle=()=>new Promise(resolve=>setTimeout(resolve,30));
+    let asked=0;
+    service.setUsbAccessPrompt(signal=>{asked+=1;return new Promise(resolve=>signal.addEventListener('abort',()=>resolve(false)));});
+    event('usb-access-request');event('usb-access-request');await settle();
+    assert.equal(asked,1,'repeated requests ask once');
+    event('usb-access-closed');await settle();
+    assert.deepEqual(usbAnswers(),[],'a prompt the watch closed gets no answer');
+    service.setUsbAccessPrompt(async()=>{asked+=1;return true;});
+    event('usb-access-request');await settle();event('usb-access-request');await settle();
+    assert.equal(asked,2,'a new prompt is asked about again, its repeats are not');
+    assert.deepEqual(usbAnswers(),['310101'],'allowing opens the drive');
+    // Don't Allow: the watch isn't asked about again for 30 s, then it is.
+    clockOffset+=7_000;
+    service.setUsbAccessPrompt(async()=>{asked+=1;return false;});
+    event('usb-access-request');await settle();
+    assert.deepEqual(usbAnswers(),['310101','310100'],'declining closes the watch\'s prompt');
+    clockOffset+=14_000;event('usb-access-request');await settle();
+    assert.equal(asked,3,'no asking again right after Don\'t Allow');
+    clockOffset+=17_000;event('usb-access-request');await settle();
+    assert.equal(asked,4,'asked again once the watch would ask anew');
+    // A sync holding the link: the answer waits for it instead of being dropped.
+    clockOffset+=31_000;
+    service.setUsbAccessPrompt(async()=>{asked+=1;return true;});
+    let release;
+    const sync=service.runLocalSync(()=>new Promise(resolve=>{release=resolve;}));
+    await settle();
+    event('usb-access-request');await settle();
+    assert.equal(asked,5);
+    const before=usbAnswers().length;
+    await new Promise(resolve=>setTimeout(resolve,400));
+    assert.equal(usbAnswers().length,before,'nothing interleaves with the sync');
+    assert.equal(diagnostics.some(d=>d.source==='corosBle:usbAccess'),false,'the answer is kept, not dropped');
+    release();await sync;
+    await new Promise(resolve=>setTimeout(resolve,400));
+    assert.deepEqual(usbAnswers().slice(before),['310101'],'sent once the link is free');
+    // The link drops while the question is open: it's withdrawn, and nothing is sent or reconnected.
+    clockOffset+=31_000;
+    let withdrawn=false;
+    service.setUsbAccessPrompt(signal=>{asked+=1;return new Promise(resolve=>signal.addEventListener('abort',()=>{withdrawn=true;resolve(true);}));});
+    const connects=writes.filter(x=>x.operation==='connect').length,answers=usbAnswers().length;
+    event('usb-access-request');await settle();
+    event('disconnected');await new Promise(resolve=>setTimeout(resolve,300));
+    assert.equal(withdrawn,true,'the dialog closes');
+    assert.equal(usbAnswers().length,answers,'no answer after the link went');
+    assert.equal(writes.filter(x=>x.operation==='connect').length,connects,'no reconnect to deliver it');
+    clockOffset+=31_000;
+  }
   // Faces and messages go over the computer's Bluetooth on macOS, Windows and Linux alike.
   {
     const preview=await service.prepareWatchface(facePath);
@@ -626,6 +683,20 @@ for(const platform of ['darwin','win32','linux']) {
     assert.equal((await service.connect(false,{backend:'system'})).systemBind,'authenticated');
   }
   const mapStatus=await service.wifiMapStatus();assert.equal(mapStatus.authenticated,true);assert.equal(mapStatus.supported,true);assert.equal(mapStatus.tasks.length,0);
+  // Cancelling a Wi-Fi map download: subcommand 5 with the task's ID, then a fresh task list.
+  {
+    const removing=service.removeWifiMapDownload('GAO6Uadj');
+    assert.throws(()=>service.downloadWifiMap('unused'),/Wait for the watch to cancel the map download/,'a cancel has its own busy message');
+    const removed=await removing;
+    assert.equal(removed.tasks.length,0,'the list is read again');
+    assert.deepEqual(workers.at(-1).removedTasks,['GAO6Uadj']);
+    const before=writes.length;
+    await assert.rejects(service.removeWifiMapDownload('../x'),/Choose a download/,'only an ID from the watch\'s list');
+    workers.at(-1).usbPlugged=true;
+    await assert.rejects(service.removeWifiMapDownload('GAO6Uadj'),/Unplug the watch's USB cable/);
+    workers.at(-1).usbPlugged=false;
+    assert.equal(writes.slice(before).filter(x=>x.opcode===0xb6&&Buffer.from(x.payload,'base64')[0]===5).length,1,'a bad ID never reaches the watch');
+  }
   const route={id:'route-test',name:'Test trail',createdAt:'2026-10-08T12:00:00Z',distanceMeters:20000,
     points:Array.from({length:1000},(_,i)=>({lat:43+Math.sin(i/80)/200,lon:-79+i/10000}))};
   assert.equal((await service.syncRoute(route)).phase,'complete');

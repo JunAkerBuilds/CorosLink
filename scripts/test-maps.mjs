@@ -16,8 +16,10 @@ const {
   geocodeRouteLocation,
   getCorosMapInstallProgress,
   inspectCorosMapFolder,
+  installCorosMapAreas,
   installCorosMapFolder,
   parseRouteCoordinateInput,
+  previewCorosMapAreas,
   parseCorosMapManifest,
   setCorosMapInstallProgressListener
 } = await import(`${serviceUrl.href}?cacheBust=${Date.now()}`);
@@ -209,6 +211,17 @@ try {
   assert.equal(cached.sizeBytes, payload.length);
   assert.equal(fs.readFileSync(cached.filePath, "utf8"), payload.toString());
   assert.equal(progressUpdates.at(-1)?.progress, 1);
+
+  // A cache folder it can't write to: the download fails with the write error instead of
+  // throwing it out of the stream (an uncaught exception in the app) and hanging.
+  const readOnly = path.join(cacheRoot, "read-only");
+  await fs.promises.mkdir(readOnly);
+  await fs.promises.chmod(readOnly, 0o555);
+  await assert.rejects(() => downloadCorosMapPackageToCache(pkg, {
+    cacheDirectory: readOnly,
+    fetchImpl: async () => new Response(payload, { status: 200, headers: { "content-length": String(payload.length) } })
+  }), /EACCES|permission/i);
+  await fs.promises.chmod(readOnly, 0o755);
 } finally {
   await fs.promises.rm(cacheRoot, { recursive: true, force: true });
 }
@@ -509,6 +522,101 @@ try {
   assert.match(failures[0].message, /No track or route points/);
 } finally {
   fs.rmSync(batchDir, { recursive: true, force: true });
+}
+
+// ---- Map areas over USB: the per-area files the watch fetches over Wi-Fi are downloaded
+// here, kept in the cache, and copied to the watch's drive in the official packages' layout. ----
+{
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "coroslink-map-areas-"));
+  const watchRoot = path.join(root, "COROS PACE 4");
+  const cache = path.join(root, "cache");
+  const area = [{ x: 101, y: 60 }];
+  const files = { "S1322301V00.t": Buffer.alloc(3000, 1), "C1322301V00.t": Buffer.alloc(1000, 2) };
+  const tileRequests = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    const href = String(url);
+    if (href === "https://mapstatic.coros.com/") return new Response('<script>window.__assetsPath("public/main-abc.js")</script>');
+    if (href.endsWith("/coros-map/public/main-abc.js")) return new Response('load("public/index-def.js")');
+    if (href.endsWith("/coros-map/public/index-def.js")) return new Response('prod:{app_id:"1234567890",app_secret:"0123456789abcdef0123456789abcdef"}');
+    if (href === "https://mapstatic.coros.com/openapi/tileMap/getMapPackage") {
+      const body = JSON.parse(init.body);
+      assert.equal(body.action, "check");
+      assert.equal(body.deviceModel, "W336", "the plugged-in watch's model");
+      assert.deepEqual(body.list.map(item => item.quadkey), ["1322301"]);
+      return Response.json({ code: 200, data: { fileSize: 4000, fileCount: 2, files: [
+        { name: "S1322301V00.t", size: 3000, style: "OSM", version: "V00" }, { name: "C1322301V00.t", size: 1000, style: "CSM", version: "V00" }] } });
+    }
+    const tile = /^https:\/\/map-oss-us\.coros\.com\/osm\/tiles_V00\/(VSM|VCM)\/([SC]1322301V00\.t)$/.exec(href);
+    if (tile && (tile[1] === "VSM") === tile[2].startsWith("S")) { tileRequests.push(tile[2]); return new Response(files[tile[2]]); }
+    throw new Error(`Unexpected request ${href}`);
+  };
+  try {
+    const landscape = path.join(watchRoot, "Map", "VSM", "132", "S1322301V00.t");
+    const contours = path.join(watchRoot, "Map", "VCM", "132", "C1322301V00.t");
+    await fs.promises.mkdir(path.dirname(landscape), { recursive: true });
+    process.env.COROS_WATCH_PATH = watchRoot;
+    const preview = await previewCorosMapAreas(area);
+    assert.equal(preview.fileCount, 2);
+    assert.equal(preview.sizeBytes, 4000);
+    assert.equal(preview.neededBytes, 4000);
+    assert.equal(typeof preview.freeBytes, "number");
+
+    // A same-size landscape file already on the watch isn't counted or copied again.
+    await fs.promises.writeFile(landscape, Buffer.alloc(3000, 9));
+    assert.equal((await previewCorosMapAreas(area)).neededBytes, 1000);
+    const phases = [];
+    setCorosMapInstallProgressListener(progress => { if (progress) phases.push(progress.phase); });
+    const result = await installCorosMapAreas(area, "Ho Chi Minh City", { cacheDirectory: cache });
+    assert.equal(result.installedPath.toLowerCase(), path.join(watchRoot, "Map").toLowerCase(), "the watch's own Map folder");
+    assert.deepEqual(await fs.promises.readFile(contours), files["C1322301V00.t"]);
+    assert.deepEqual(await fs.promises.readFile(landscape), Buffer.alloc(3000, 9));
+    assert.deepEqual(await fs.promises.readFile(path.join(cache, "areas", "VSM", "132", "S1322301V00.t")), files["S1322301V00.t"]);
+    assert.deepEqual((await fs.promises.readdir(cache)).sort(), ["areas"], "the staging package is removed");
+    assert.ok(phases.includes("downloading") && phases.indexOf("downloading") < phases.indexOf("copying"));
+    assert.equal(phases.at(-1), "completed");
+    assert.deepEqual(tileRequests.sort(), ["C1322301V00.t", "S1322301V00.t"]);
+
+    // Copying the area again takes it from this computer's cache.
+    await fs.promises.rm(contours);
+    await installCorosMapAreas(area, "Ho Chi Minh City", { cacheDirectory: cache });
+    assert.deepEqual(await fs.promises.readFile(contours), files["C1322301V00.t"]);
+    assert.equal(tileRequests.length, 2, "no second download");
+
+    // A cache it can't write to: the copy fails with the reason and frees the next copy.
+    const lockedCache = path.join(root, "locked-cache");
+    await fs.promises.mkdir(path.join(lockedCache, "areas", "VCM", "132"), { recursive: true });
+    await fs.promises.chmod(path.join(lockedCache, "areas", "VCM", "132"), 0o555);
+    await fs.promises.rm(contours);
+    await assert.rejects(() => installCorosMapAreas(area, "Ho Chi Minh City", { cacheDirectory: lockedCache }), /EACCES|permission/i);
+    assert.equal(getCorosMapInstallProgress()?.phase, "failed");
+    await fs.promises.chmod(path.join(lockedCache, "areas", "VCM", "132"), 0o755);
+    await installCorosMapAreas(area, "Ho Chi Minh City", { cacheDirectory: cache });
+    assert.deepEqual(await fs.promises.readFile(contours), files["C1322301V00.t"], "the next copy isn't locked out");
+
+    // A drive named just "COROS WATCH" doesn't say which watch it is: the watch on Bluetooth does, else nothing is copied.
+    const generic = path.join(root, "COROS WATCH");
+    await fs.promises.mkdir(generic);
+    process.env.COROS_WATCH_PATH = generic;
+    await assert.rejects(() => previewCorosMapAreas(area), /over Bluetooth/);
+    await assert.rejects(() => installCorosMapAreas(area, "", { cacheDirectory: cache }), /over Bluetooth/);
+    assert.equal((await previewCorosMapAreas(area, "pace-4")).neededBytes, 4000);
+    await installCorosMapAreas(area, "Ho Chi Minh City", { cacheDirectory: cache, bluetoothModel: "pace-4" });
+    assert.equal(fs.existsSync(path.join(generic, "Map", "VSM", "132", "S1322301V00.t")), true);
+
+    // Watches whose firmware doesn't read area maps are refused before anything downloads.
+    const pace3 = path.join(root, "COROS PACE 3");
+    await fs.promises.mkdir(pace3);
+    process.env.COROS_WATCH_PATH = pace3;
+    await assert.rejects(() => installCorosMapAreas(area, "", { cacheDirectory: cache }), /Not available on this watch/);
+    await assert.rejects(() => installCorosMapAreas(area, "", { cacheDirectory: cache, bluetoothModel: "pace-4" }), /Not available on this watch/,
+      "the drive's own model wins over the Bluetooth watch");
+  } finally {
+    globalThis.fetch = realFetch;
+    setCorosMapInstallProgressListener(null);
+    delete process.env.COROS_WATCH_PATH;
+    await fs.promises.rm(root, { recursive: true, force: true });
+  }
 }
 
 console.log("Maps service tests passed.");

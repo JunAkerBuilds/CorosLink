@@ -2,13 +2,14 @@ import { t, useLanguage } from "../i18n/tools";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./wifiMaps.css";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import {
-  Bluetooth, CircleCheck, Download, Loader2, MapPin, Search, SquareMousePointer, TriangleAlert, Wifi, X, ZoomIn
+  Bluetooth, CircleCheck, Download, HardDriveDownload, Loader2, MapPin, Search, SquareMousePointer, TriangleAlert, Usb, Wifi, X, ZoomIn
 } from "lucide-react";
 import type { CorosLinkApi } from "../coroslink-api";
-import type { CorosWifiMapPreview, CorosWifiMapStatus, CorosWifiMapTask, CorosWifiMapTile } from "../../electron/corosWifiMapTypes";
-import type { RouteGeocodeResult } from "../../electron/types";
+import type { CorosMapAreaPreview, CorosWifiMapPreview, CorosWifiMapStatus, CorosWifiMapTask, CorosWifiMapTile } from "../../electron/corosWifiMapTypes";
+import type { CorosMapInstallProgress, RouteGeocodeResult, WatchStatus } from "../../electron/types";
+import { MapInstallProgressPanel } from "./MapInstallProgressPanel";
 import { formatBytes } from "../media/libraryUtils";
 import { apiErrorMessage, watchDisplayName } from "../watchfaces/watchLink";
 import { defineSelectionPreference, useSelectionPreference } from "../preferences/selectionPreferences";
@@ -19,7 +20,13 @@ interface Props {
   api: CorosLinkApi;
   /** Opens the toolbar watch menu, where every Bluetooth connection starts. */
   onOpenWatchMenu?: () => void;
+  /** The watch plugged in over USB, for copying areas without the watch's Wi-Fi. */
+  watchStatus?: WatchStatus | null;
+  onWatchStatusChange?: (status: WatchStatus) => void;
 }
+
+/** Wi-Fi: the watch fetches the areas itself. USB: this computer fetches them and copies them to the watch's drive. */
+type Transfer = "wifi" | "usb";
 
 const MAX_AREAS = 16;
 /** Below this zoom a COROS tile is under ~32 px wide: too small to aim at. */
@@ -33,7 +40,7 @@ interface SavedView { lat: number; lon: number; zoom: number }
 type SizeCheck =
   | { state: "idle" }
   | { state: "checking" }
-  | { state: "ready"; preview: CorosWifiMapPreview; checkedAt: number }
+  | { state: "ready"; preview: CorosWifiMapPreview | CorosMapAreaPreview; checkedAt: number }
   | { state: "error"; message: string };
 type Notice = { tone: "success" | "error" | "info"; text: string };
 type FocusRequest = { id: number; tiles: CorosWifiMapTile[] } | { id: number; lat: number; lon: number };
@@ -50,6 +57,11 @@ const SELECTION_PREFERENCE = defineSelectionPreference<SavedSelection>({
     return Boolean(saved) && Array.isArray(saved!.tiles) && saved!.tiles.length <= MAX_AREAS && saved!.tiles.every(isTile) &&
       Boolean(saved!.names) && typeof saved!.names === "object" && Object.values(saved!.names).every(name => typeof name === "string");
   }
+});
+const TRANSFER_PREFERENCE = defineSelectionPreference<Transfer>({
+  key: "maps.areaTransfer",
+  defaultValue: "wifi",
+  validate: (value): value is Transfer => value === "wifi" || value === "usb"
 });
 const VIEW_PREFERENCE = defineSelectionPreference<SavedView | null>({
   key: "maps.wifiView",
@@ -114,8 +126,14 @@ function taskView(task: CorosWifiMapTask): { tone: "warn" | "busy" | "error" | "
   }
 }
 
-export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
+export function CorosWifiMapsPanel({ api, onOpenWatchMenu, watchStatus, onWatchStatusChange }: Props) {
   useLanguage();
+  const [savedTransfer, setSavedTransfer, transferMeta] = useSelectionPreference(TRANSFER_PREFERENCE);
+  /** Until the user picks one, USB is the choice in Local-Only Mode or with a watch plugged in. */
+  const [transferChosen, setTransferChosen] = useState(transferMeta.restored);
+  const [install, setInstall] = useState<CorosMapInstallProgress | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [taskError, setTaskError] = useState<{ id: string; message: string } | null>(null);
   const [status, setStatus] = useState<CorosWifiMapStatus | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
   const [selection, setSelection] = useSelectionPreference(SELECTION_PREFERENCE);
@@ -135,8 +153,15 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
   const { tiles, names } = selection;
   const tilesKey = tiles.map(key).join("|");
   const ready = Boolean(status?.supported && status.connected && status.authenticated);
+  const usbWatch = watchStatus?.connected && watchStatus.rootPath ? watchStatus : null;
+  const transfer: Transfer = transferChosen || !(api.localOnlyAtLaunch || usbWatch) ? savedTransfer : "usb";
+  const usb = transfer === "usb";
+  // A copy keeps its progress and Cancel on screen even if the drive drops out mid-transfer.
+  const copying = usb && (downloading || Boolean(install?.active));
+  const tooBig = size.state === "ready" && "neededBytes" in size.preview && size.preview.neededBytes !== undefined &&
+    size.preview.freeBytes !== undefined && size.preview.neededBytes > size.preview.freeBytes;
   const full = tiles.length >= MAX_AREAS;
-  const link = linkState(status);
+  const link = usb ? usbWatch ? { tone: "ok" as const, label: t("Plugged in") } : { tone: "off" as const, label: t("Not plugged in") } : linkState(status);
   const taskNames = readTaskNames();
   const doneTasks = status?.tasks.filter(task => task.state === "complete") ?? [];
 
@@ -152,22 +177,32 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
     return () => { stopped = true; clearTimeout(timer); };
   }, [api]);
 
+  useEffect(() => {
+    let alive = true;
+    void api.getCorosMapInstallProgress().then(progress => { if (alive) setInstall(progress); }).catch(() => {});
+    const unsubscribe = api.onCorosMapInstallProgressUpdate(setInstall);
+    return () => { alive = false; unsubscribe(); };
+  }, [api]);
+
+  // Over USB the size is what this watch still needs, so it's checked once the watch is plugged in;
+  // the Bluetooth link only matters for Wi-Fi.
+  const canCheckSize = usb ? Boolean(usbWatch) : ready;
   // The size check is free and side-effect-free, so run it whenever the plan settles.
   useEffect(() => {
     const sequence = ++sizeSequence.current;
-    if (!ready || !tiles.length) { setSize({ state: "idle" }); return; }
+    if (!canCheckSize || !tiles.length) { setSize({ state: "idle" }); return; }
     setSize({ state: "checking" });
     const timer = setTimeout(async () => {
       try {
-        const preview = await api.previewCorosWifiMap(tiles);
+        const preview = usb ? await api.previewCorosMapAreas(tiles) : await api.previewCorosWifiMap(tiles);
         if (sequence === sizeSequence.current) setSize({ state: "ready", preview, checkedAt: Date.now() });
       } catch (error) {
         if (sequence === sizeSequence.current) setSize({ state: "error", message: apiErrorMessage(error, t("Could not check the map size.")) });
       }
     }, 450);
     return () => clearTimeout(timer);
-    // tilesKey captures every change to `tiles`.
-  }, [api, ready, tilesKey, sizeRetry]); // eslint-disable-line react-hooks/exhaustive-deps
+    // tilesKey captures every change to `tiles`; the watch's drive and free space change what it still needs.
+  }, [api, canCheckSize, tilesKey, sizeRetry, usb, usbWatch?.rootPath, usbWatch?.freeBytes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const nameArea = (tile: CorosWifiMapTile) => {
     const id = key(tile);
@@ -240,8 +275,26 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
     finally { setConnecting(false); }
   };
 
+  const copy = async () => {
+    if (size.state !== "ready" || !size.preview.fileCount || tooBig) return;
+    // USB may only be the default because the watch is plugged in; pin it so the panel doesn't
+    // switch to Wi-Fi if the drive drops out while the copy runs.
+    setTransferChosen(true); setSavedTransfer("usb");
+    setDownloading(true); setNotice(null);
+    const label = summarize(tiles.map(tile => names[key(tile)] || pointLabel(tile)));
+    try {
+      const result = await api.installCorosMapAreas(tiles, label);
+      onWatchStatusChange?.(result.watch);
+      setSelection({ tiles: [], names: {} });
+      setNotice({ tone: "success", text: t("{{p0}} is on your watch. Eject the watch before you unplug it.", { p0: label }) });
+    } catch (error) {
+      const message = apiErrorMessage(error, t("Could not copy the maps to the watch."));
+      if (message !== t("Transfer cancelled.")) setNotice({ tone: "error", text: message });
+    } finally { setDownloading(false); }
+  };
+
   const download = async () => {
-    if (size.state !== "ready" || !size.preview.fileCount) return;
+    if (size.state !== "ready" || !size.preview.fileCount || !("id" in size.preview)) return;
     setDownloading(true); setNotice(null);
     try {
       const preview = Date.now() - size.checkedAt > PREVIEW_MAX_AGE_MS ? await api.previewCorosWifiMap(tiles) : size.preview;
@@ -257,6 +310,14 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
     } finally { setDownloading(false); }
   };
 
+  const removeTask = async (task: CorosWifiMapTask) => {
+    setRemoving(task.id); setTaskError(null);
+    try { setStatus(await api.removeCorosWifiMapDownload(task.id)); }
+    catch (error) { setTaskError({ id: task.id, message: apiErrorMessage(error, t("Could not cancel the download on the watch.")) }); }
+    finally { setRemoving(null); }
+  };
+  const chooseTransfer = (value: Transfer) => { setNotice(null); setTransferChosen(true); setSavedTransfer(value); };
+
   const hint = zoom < GRID_MIN_ZOOM ? { icon: <ZoomIn size={14} aria-hidden="true" />, text: t("Zoom in or click the map to choose areas") }
     : hoverTile ? (() => {
       const id = key(hoverTile), selected = tiles.some(value => key(value) === id);
@@ -270,10 +331,11 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
 
   return <section className="panel wifi-maps-panel">
     <div className="section-heading wifi-maps-heading">
-      <div><p className="eyebrow">{eyebrowWatch}  {t("· Wireless maps")}</p><h2>{t("Download maps to your watch")}</h2></div>
+      <div><p className="eyebrow">{eyebrowWatch}  {t("· Map areas")}</p><h2>{t("Download maps to your watch")}</h2></div>
       <span className={`wifi-maps-link is-${link.tone}`} role="status">{link.label}</span>
     </div>
-    <p className="wifi-maps-lede">{t("Pick the areas you train in. The watch fetches them over its own Wi-Fi; CorosLink starts the download and follows progress over Bluetooth.")}</p>
+    <p className="wifi-maps-lede">{usb ? t("Pick the areas you train in. CorosLink downloads them on this computer and copies them to the watch over its USB cable, so the watch never goes online.")
+      : t("Pick the areas you train in. The watch fetches them over its own Wi-Fi; CorosLink starts the download and follows progress over Bluetooth.")}</p>
 
     <div className="wifi-maps-workspace">
       <div className="wifi-maps-stage">
@@ -285,6 +347,9 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
 
       <aside className="wifi-maps-aside" aria-label={t("Map download plan")}>
         <div className="wifi-maps-plan">
+          <div className="wifi-maps-plan-mode">
+            <TransferSwitch value={transfer} disabled={downloading} onChange={chooseTransfer} />
+          </div>
           <div className="wifi-maps-plan-head">
             <h3>{t("Selected areas")}</h3>
             <span className={full ? "wifi-maps-count is-full" : "wifi-maps-count"}>{tiles.length} / {MAX_AREAS}</span>
@@ -318,7 +383,27 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
           </div>}
 
           <div className="wifi-maps-plan-foot">
-            {ready ? <>
+            {usb ? usbWatch || copying ? <>
+              <SizeSummary size={size} hasTiles={tiles.length > 0} usb onRetry={() => setSizeRetry(count => count + 1)} />
+              {size.state === "ready" && "neededBytes" in size.preview && size.preview.neededBytes !== undefined && size.preview.fileCount ? tooBig
+                ? <p className="wifi-maps-size-error" role="alert"><TriangleAlert size={15} aria-hidden="true" />
+                  <span>{t("The watch needs {{p0}} for these areas and has {{p1}} free. Remove areas or free up space on the watch.", { p0: formatBytes(size.preview.neededBytes), p1: formatBytes(size.preview.freeBytes ?? 0) })}</span></p>
+                : <p className="wifi-maps-space">{!size.preview.neededBytes ? t("These areas are already on the watch.")
+                  : size.preview.neededBytes < size.preview.sizeBytes
+                    ? t("{{p0}} to copy · {{p1}} free on the watch", { p0: formatBytes(size.preview.neededBytes), p1: formatBytes(size.preview.freeBytes ?? 0) })
+                    : t("{{p0}} free on the watch", { p0: formatBytes(size.preview.freeBytes ?? 0) })}</p> : null}
+              {install?.active ? <MapInstallProgressPanel progress={install} onCancel={() => void api.cancelCorosMapInstall()} />
+                : <button type="button" className="primary-button wifi-maps-download"
+                  disabled={downloading || size.state !== "ready" || !size.preview.fileCount || tooBig}
+                  onClick={() => void copy()}>
+                  {downloading ? <Loader2 size={16} className="spin" aria-hidden="true" /> : <HardDriveDownload size={16} aria-hidden="true" />}
+                  {downloading ? t("Copying…") : t("Copy to watch")}
+                </button>}
+            </> : <div className="wifi-maps-connect">
+              <Usb size={18} aria-hidden="true" />
+              <div><strong>{t("Plug in your watch")}</strong>
+                <p>{t("Connect it with its USB cable. If the watch asks you to open the COROS App, connect it to CorosLink over Bluetooth and choose Allow.")}</p></div>
+            </div> : ready ? <>
               <SizeSummary size={size} hasTiles={tiles.length > 0} onRetry={() => setSizeRetry(count => count + 1)} />
               <button type="button" className="primary-button wifi-maps-download"
                 disabled={downloading || size.state !== "ready" || !size.preview.fileCount}
@@ -327,14 +412,14 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
                 {downloading ? t("Starting download…") : t("Download to watch")}
               </button>
             </> : <ConnectCallout status={status} connecting={connecting} onConnect={() => void connect()} viaMenu={Boolean(onOpenWatchMenu)} />}
-            {ready && status?.validated === false ? <p className="wifi-maps-notice" role="note">
+            {!usb && ready && status?.validated === false ? <p className="wifi-maps-notice" role="note">
               <TriangleAlert size={15} aria-hidden="true" />
               <span>{t("Map downloads on")} {status.watchLabel ?? "this watch"}  {t("are in beta: they were tested on PACE Pro. If the watch refuses the download, it may not support Wi-Fi maps.")}</span>
             </p> : null}
             {notice ? <p className={`wifi-maps-notice is-${notice.tone}`} role={notice.tone === "error" ? "alert" : "status"}>
               {notice.tone === "success" ? <CircleCheck size={15} aria-hidden="true" /> : <TriangleAlert size={15} aria-hidden="true" />}
               <span>{notice.text}</span>
-            </p> : <p className="wifi-maps-foot-note"><Wifi size={14} aria-hidden="true" />
+            </p> : usb ? null : <p className="wifi-maps-foot-note"><Wifi size={14} aria-hidden="true" />
               <span>{t("The watch needs a saved Wi-Fi network. Keep it on the watch face while it downloads.")}</span></p>}
           </div>
         </div>
@@ -342,19 +427,30 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
         {status?.tasks.length || pollError ? <section className="wifi-maps-tasks" aria-live="polite" aria-label={t("Downloads on watch")}>
           <h3><Wifi size={15} aria-hidden="true" />{t("On your watch")}</h3>
           {pollError ? <p className="wifi-maps-notice is-error" role="alert"><TriangleAlert size={15} aria-hidden="true" /><span>{pollError}</span></p> : null}
+          {/* The watch won't cancel a download while its USB cable is in. */}
+          {usbWatch && status?.tasks.some(task => task.state !== "complete")
+            ? <p className="wifi-maps-task-note">{t("Unplug the watch to cancel a download.")}</p> : null}
           {status?.tasks.map((task, index) => {
             if (task.state === "complete") return null;
             const view = taskView(task);
             const percent = task.totalBytes ? Math.round((task.downloadedBytes / task.totalBytes) * 100) : 0;
+            const taskName = taskNames[task.id] ?? t("Map download {{p0}}", { p0: index + 1 });
+            const failed = task.state === "failed";
             return <div key={task.id} className="wifi-maps-task">
               <div className="wifi-maps-task-head">
-                <strong>{taskNames[task.id] ?? t("Map download {{p0}}", { p0: index + 1 })}</strong>
+                <strong>{taskName}</strong>
                 <span className={`wifi-maps-task-state is-${view.tone}`}>{view.label}</span>
+                <button type="button" className="wifi-maps-text-button wifi-maps-task-cancel" disabled={Boolean(removing) || downloading || Boolean(usbWatch)}
+                  aria-label={failed ? t("Remove {{p0}} from the watch", { p0: taskName }) : t("Cancel {{p0}} on the watch", { p0: taskName })}
+                  onClick={() => void removeTask(task)}>
+                  {removing === task.id ? <Loader2 size={13} className="spin" aria-hidden="true" /> : null}{failed ? t("Remove") : t("Cancel")}
+                </button>
               </div>
               <div className={`wifi-maps-task-bar is-${view.tone}`} role="progressbar" aria-label={t("{{p0}} progress", { p0: taskNames[task.id] ?? t("Map download {{p0}}", { p0: index + 1 }) })}
                 aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></div>
               <small>{task.totalBytes ? t("{{p0}} of {{p1}} · {{p2}}%", { p0: formatBytes(task.downloadedBytes), p1: formatBytes(task.totalBytes), p2: percent }) : t("Size pending")}
                 {task.errorCode ? t(" · Watch error {{p0}}", { p0: task.errorCode }) : ""}</small>
+              {taskError?.id === task.id ? <p className="wifi-maps-notice is-error" role="alert"><TriangleAlert size={15} aria-hidden="true" /><span>{taskError.message}</span></p> : null}
             </div>;
           })}
           {doneTasks.length ? <p className="wifi-maps-tasks-done"><CircleCheck size={15} aria-hidden="true" />
@@ -366,11 +462,14 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu }: Props) {
   </section>;
 }
 
-function SizeSummary({ size, hasTiles, onRetry }: { size: SizeCheck; hasTiles: boolean; onRetry: () => void }) {
+/** The areas' size. Over USB part of it may already be on the watch, so it isn't called a download size. */
+function SizeSummary({ size, hasTiles, usb = false, onRetry }: { size: SizeCheck; hasTiles: boolean; usb?: boolean; onRetry: () => void }) {
   useLanguage();
-  if (!hasTiles) return <div className="wifi-maps-size is-empty"><span>{t("Download size")}</span><em>{t("Add an area to check")}</em></div>;
+  // "Size" here is how much space the files take, not dimensions as elsewhere in the app.
+  const label = usb ? t("Size", undefined, "fileSize") : t("Download size");
+  if (!hasTiles) return <div className="wifi-maps-size is-empty"><span>{label}</span><em>{t("Add an area to check")}</em></div>;
   if (size.state === "checking" || size.state === "idle") {
-    return <div className="wifi-maps-size"><span>{t("Download size")}</span><em><Loader2 size={14} className="spin" aria-hidden="true" />{t("Checking…")}</em></div>;
+    return <div className="wifi-maps-size"><span>{label}</span><em><Loader2 size={14} className="spin" aria-hidden="true" />{t("Checking…")}</em></div>;
   }
   if (size.state === "error") {
     return <div className="wifi-maps-size-error" role="alert"><TriangleAlert size={15} aria-hidden="true" /><span>{size.message}</span>
@@ -380,8 +479,32 @@ function SizeSummary({ size, hasTiles, onRetry }: { size: SizeCheck; hasTiles: b
     return <div className="wifi-maps-size-error"><TriangleAlert size={15} aria-hidden="true" /><span>{t("COROS has no map data for these areas. Choose areas with land.")}</span></div>;
   }
   return <div className="wifi-maps-size">
-    <span>{t("Download size")}<small>{size.preview.fileCount}  {t("map file")}{size.preview.fileCount === 1 ? "" : "s"}</small></span>
+    <span>{label}<small>{size.preview.fileCount === 1 ? t("1 map file") : t("{{p0}} map files", { p0: size.preview.fileCount })}</small></span>
     <strong>{formatBytes(size.preview.sizeBytes)}</strong>
+  </div>;
+}
+
+/** Wi-Fi or USB cable: a radio group, so Tab enters it once and the arrow keys change the choice. */
+function TransferSwitch({ value, disabled, onChange }: { value: Transfer; disabled: boolean; onChange: (value: Transfer) => void }) {
+  useLanguage();
+  const buttons = useRef<Partial<Record<Transfer, HTMLButtonElement | null>>>({});
+  const options: Array<[Transfer, ReactNode, string]> = [
+    ["wifi", <Wifi key="icon" size={14} aria-hidden="true" />, t("Watch Wi-Fi")],
+    ["usb", <Usb key="icon" size={14} aria-hidden="true" />, t("USB cable")]
+  ];
+  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    event.preventDefault();
+    const next: Transfer = value === "wifi" ? "usb" : "wifi";
+    onChange(next);
+    buttons.current[next]?.focus();
+  };
+  return <div className="wifi-maps-transfer" role="radiogroup" aria-label={t("How the maps get to the watch")}>
+    {options.map(([option, icon, label]) =>
+      <button key={option} ref={element => { buttons.current[option] = element; }} type="button" role="radio"
+        aria-checked={value === option} tabIndex={value === option ? 0 : -1} disabled={disabled} onKeyDown={onKeyDown}
+        className={value === option ? "wifi-maps-transfer-option is-active" : "wifi-maps-transfer-option"}
+        onClick={() => onChange(option)}>{icon}{label}</button>)}
   </div>;
 }
 

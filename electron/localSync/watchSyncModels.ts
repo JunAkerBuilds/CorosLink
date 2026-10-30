@@ -48,9 +48,10 @@ export const SATELLITE_FORMAT_MODELS: Readonly<Record<CepFormat, ReadonlySet<Wat
  *
  * Reading (EXPERIMENTAL_SYNC_MODELS) and each write are kept as separate lists on
  * purpose: each is checked on its own, so a new model can be read
- * from before anything is written to it. Today the same five models pass every check.
+ * from before anything is written to it. The five models pass every check except USB access and
+ * area maps, which the PACE 3's build wasn't checked for.
  */
-export type WatchFeature = "settings" | "profile" | "clockFormat" | "weather" | "workouts" | "calendar" | "satelliteData";
+export type WatchFeature = "settings" | "profile" | "clockFormat" | "weather" | "workouts" | "calendar" | "satelliteData" | "usbAccess" | "areaMaps";
 
 export const WATCH_FEATURE_MODELS: Readonly<Record<WatchFeature, ReadonlySet<WatchModelId>>> = {
   /** System switches (settings 0 and 31) written from Watch settings. */
@@ -66,7 +67,18 @@ export const WATCH_FEATURE_MODELS: Readonly<Record<WatchFeature, ReadonlySet<Wat
   /** The training calendar (SendFile 42). */
   calendar: EXPERIMENTAL_SYNC_MODELS,
   /** GPS assistance (SendFile 13, 68 and 70): every model that takes at least one format. */
-  satelliteData: new Set(Object.values(SATELLITE_FORMAT_MODELS).flatMap(models => [...models]))
+  satelliteData: new Set(Object.values(SATELLITE_FORMAT_MODELS).flatMap(models => [...models])),
+  /**
+   * The answer to the watch's USB-storage prompt (setting 0x31). Traced in the PACE 4,
+   * PACE 4 Pro, PACE Pro and APEX 4 3.2008.0 firmware; the PACE 3 build has the prompt
+   * but its handler was not traced.
+   */
+  usbAccess: new Set(["pace-4", "pace-4-pro", "pace-pro", "apex-4"]),
+  /**
+   * Per-area maps copied to the watch's drive (Map/VSM and Map/VCM, the layout the Wi-Fi download
+   * leaves). The four watches whose 3.2008.0 firmware reads them; copied and shown on a PACE 4.
+   */
+  areaMaps: new Set(["pace-4", "pace-4-pro", "pace-pro", "apex-4"])
 };
 
 export function watchTakesSatelliteFormat(format: CepFormat, model: WatchModelId | undefined): boolean {

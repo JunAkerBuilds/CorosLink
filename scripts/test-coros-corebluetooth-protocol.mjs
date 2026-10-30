@@ -59,7 +59,12 @@ expect(media?["kind"] as? String == "media-control" && media?["action"] as? Int 
 for frame: [UInt8] in [[], [0xc5], [0xc5,0,2], [0xc5,0,2,1,4], [0xc5,1,2,1,3], [0xc5,0,8,1,9], [0xa5,0,2,1,3], [0x79,0,2,1,3], [2,0,1,1]] {
   expect(decodeWatchInteraction(Data(frame)) == nil, "ignore unsupported/corrupt/fragmented events")
 }
-print("CoreBluetooth file validation, bounded music deletion, both acknowledgement orders, storage framing and watch interaction decoder passed.")
+expect(decodeUsbAccess(Data([0x0d,0,0x11,1,0,0x12])) == "usb-access-request", "decode USB access request")
+expect(decodeUsbAccess(Data([0x0d,0,0x11,1,1,0x13])) == "usb-access-closed", "decode USB access prompt closed")
+for frame: [UInt8] in [[0x0d,0,0x11,1,0,0x13], [0x0d,1,0x11,1,0,0x12], [0x0d,0,0x11,1,2,0x14], [0x0d,0,0x12,1,0,0x13], [0x0e,0,0x11,1,0,0x12], [0x0d,0,0x11,1,0]] {
+  expect(decodeUsbAccess(Data(frame)) == nil, "ignore other or corrupt USB access frames")
+}
+print("CoreBluetooth file validation, bounded music deletion, both acknowledgement orders, storage framing, watch interaction and USB access decoders passed.")
 `;
   const filename = path.join(directory, 'protocol.swift');
   await fs.writeFile(filename, swift);
