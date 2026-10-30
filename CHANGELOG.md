@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Spanish.** Choose Español in Settings → App language. Every Spanish system locale, Spain and Latin America alike, picks it on first launch; menus, file dialogs and macOS permission prompts are translated too.
+
 ## [0.1.70] - 2026-10-30
 
 ### Added

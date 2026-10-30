@@ -38,7 +38,7 @@
 
 ## Features
 
-The desktop interface supports English, French, Portuguese and Simplified Chinese. Choose a language in **Settings → App language** to switch immediately. Dates and numbers follow the selected language. See the [localization guide](src/i18n/README.md) to contribute another language.
+The desktop interface supports English, Spanish, French, Portuguese and Simplified Chinese. Choose a language in **Settings → App language** to switch immediately. Dates and numbers follow the selected language. See the [localization guide](src/i18n/README.md) to contribute another language.
 
 ### Training Hub & Coach
 

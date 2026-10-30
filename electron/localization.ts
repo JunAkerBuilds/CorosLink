@@ -4,6 +4,7 @@ import { getSetting, setSetting } from "./database";
 import { preferredLanguage, supportedLanguage, type Language } from "./appLanguage";
 import { nativeChinese } from "./localizationChinese";
 import { nativePortuguese } from "./localizationPortuguese";
+import { nativeSpanish } from "./localizationSpanish";
 let language: Language = "en";
 const french: Record<string, string> = {
   "File": "Fichier", "Edit": "Édition", "View": "Affichage", "Window": "Fenêtre", "Help": "Aide",
@@ -69,12 +70,12 @@ const french: Record<string, string> = {
 
 export function nativeText(source: string): string {
   if (language === "en") return source;
-  const messages = language === "zh-CN" ? nativeChinese : language === "pt" ? nativePortuguese : french;
+  const messages = language === "zh-CN" ? nativeChinese : language === "pt" ? nativePortuguese : language === "es" ? nativeSpanish : french;
   if (Object.hasOwn(messages, source)) return messages[source];
   const removal = /^Delete “([\s\S]*)” from the watch\?$/.exec(source);
-  if (removal) return { fr: `Supprimer « ${removal[1]} » de la montre ?`, pt: `Eliminar «${removal[1]}» do relógio?`, "zh-CN": `要从手表中删除“${removal[1]}”吗？` }[language];
+  if (removal) return { es: `¿Eliminar «${removal[1]}» del reloj?`, fr: `Supprimer « ${removal[1]} » de la montre ?`, pt: `Eliminar «${removal[1]}» do relógio?`, "zh-CN": `要从手表中删除“${removal[1]}”吗？` }[language];
   const fileType = /^([A-Z0-9]+) file$/.exec(source);
-  return fileType ? { fr: `Fichier ${fileType[1]}`, pt: `Ficheiro ${fileType[1]}`, "zh-CN": `${fileType[1]} 文件` }[language] : source;
+  return fileType ? { es: `Archivo ${fileType[1]}`, fr: `Fichier ${fileType[1]}`, pt: `Ficheiro ${fileType[1]}`, "zh-CN": `${fileType[1]} 文件` }[language] : source;
 }
 
 /** Localize presentation only; paths, file extensions and response indexes stay stable. */
@@ -114,7 +115,7 @@ export function initializeNativeLanguage(): void {
 }
 
 export function setNativeLanguage(value: unknown): void {
-  if (value !== "en" && value !== "fr" && value !== "pt" && value !== "zh-CN") throw new Error("Unsupported app language.");
+  if (value !== "en" && value !== "es" && value !== "fr" && value !== "pt" && value !== "zh-CN") throw new Error("Unsupported app language.");
   language = value;
   setSetting("app.language", language);
   updateApplicationMenu();

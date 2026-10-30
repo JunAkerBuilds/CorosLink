@@ -26,7 +26,8 @@ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { la
 
 // Portuguese has one catalog, like French and Chinese: every Portuguese locale, Brazilian included, gets "pt" (European Portuguese).
 for (const locale of ['pt', 'PT', 'pt-PT', 'pt_PT', 'pt-BR', 'pt_BR', 'pt-AO', 'pt-MZ']) assert.equal(resolveLanguage(locale), 'pt', locale);
-for (const locale of ['ptx', 'por', 'es-PT']) assert.equal(resolveLanguage(locale), 'en', locale);
+for (const locale of ['ptx', 'por', 'gl-PT']) assert.equal(resolveLanguage(locale), 'en', locale);
+assert.equal(resolveLanguage('es-PT'), 'es', 'Spanish in Portugal stays Spanish');
 assert.equal(preferredLanguage(['de-DE', 'pt-PT', 'zh-CN']), 'pt');
 assert.equal(preferredLanguage(['pt-BR', 'fr-FR']), 'pt');
 assert.deepEqual(LANGUAGES.filter(entry => entry.value.startsWith('pt')).map(entry => [entry.value, entry.label]), [['pt', 'Português']]);

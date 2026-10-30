@@ -1,10 +1,12 @@
 /** Canonical UI languages, shared by the renderer and native process. */
-export type Language = "en" | "fr" | "pt" | "zh-CN";
+export type Language = "en" | "es" | "fr" | "pt" | "zh-CN";
 
 export function supportedLanguage(value: unknown): Language | undefined {
   if (typeof value !== "string") return undefined;
   const locale = value.replaceAll("_", "-");
   if (/^en(?:-|$)/i.test(locale)) return "en";
+  // One neutral Spanish catalog serves Spain and Latin America alike.
+  if (/^es(?:-|$)/i.test(locale)) return "es";
   if (/^fr(?:-|$)/i.test(locale)) return "fr";
   // One Portuguese catalog, in European Portuguese, serves every Portuguese locale, Brazilian included.
   if (/^pt(?:-|$)/i.test(locale)) return "pt";

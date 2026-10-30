@@ -1,0 +1,5 @@
+/* macOS permission prompts follow the system language, independently of the app preference. */
+"NSBluetoothAlwaysUsageDescription" = "CorosLink usa Bluetooth para conectarse a tu reloj COROS, leer la información del dispositivo y autenticar la sesión del reloj.";
+"NSBluetoothPeripheralUsageDescription" = "CorosLink usa Bluetooth para conectarse a tu reloj COROS.";
+"NSLocalNetworkUsageDescription" = "CorosLink envía los archivos MP3 elegidos a tu reloj COROS, y las esferas a C-LINK en el iPhone, a través de la misma red Wi-Fi.";
+"NSLocationUsageDescription" = "CorosLink solo usa tu ubicación cuando eliges Usar mi ubicación para fijar el punto de partida de una ruta.";

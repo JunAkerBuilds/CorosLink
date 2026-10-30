@@ -4,6 +4,7 @@ export type { Language };
 export const LANGUAGE_STORAGE_KEY = "coroslink.language";
 export const LANGUAGES = [
   { value: "en", label: "English" },
+  { value: "es", label: "Español" },
   { value: "fr", label: "Français" },
   { value: "pt", label: "Português" },
   { value: "zh-CN", label: "简体中文" },
@@ -16,6 +17,7 @@ type LoadedCatalogs = LanguageCatalogs & { readonly merged: Readonly<Record<stri
 
 // Only the selected language's catalogs are loaded; each language is its own chunk.
 const catalogLoaders: Record<TranslatedLanguage, () => Promise<{ default: LanguageCatalogs }>> = {
+  es: () => import("./es/catalogs"),
   fr: () => import("./fr/catalogs"),
   pt: () => import("./pt/catalogs"),
   "zh-CN": () => import("./zh-CN/catalogs"),
@@ -52,7 +54,7 @@ const listeners = new Set<() => void>();
 
 export function getLanguage(): Language { return language; }
 // pt-PT even for Brazilian systems, so dates and numbers match the European Portuguese catalog.
-export function getLocale(): string { return { en: "en-US", fr: "fr-FR", pt: "pt-PT", "zh-CN": "zh-CN" }[language]; }
+export function getLocale(): string { return { en: "en-US", es: "es-ES", fr: "fr-FR", pt: "pt-PT", "zh-CN": "zh-CN" }[language]; }
 export function subscribeLanguage(listener: () => void): () => void {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
