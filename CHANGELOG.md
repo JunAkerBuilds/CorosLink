@@ -7,11 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.70] - 2026-10-30
+
 ### Added
 
+- **Watch faces for PACE 2, APEX 2, APEX 2 Pro, APEX Pro and VERTIX.** Studio can now build and convert faces for these watches, and community faces check compatibility with them when one is connected.
 - **Copy map areas over USB.** In **Maps → Map areas** (formerly Wireless maps), choose **USB cable**, pick the squares you train in and click **Copy to watch**. CorosLink downloads the same maps the watch would fetch over Wi-Fi and copies them to the watch's drive, so the watch never goes online and you only use space for the areas you chose. It shows how much the watch still needs and how much it has free, skips areas already on the watch, and keeps downloaded areas on this computer for next time. This computer gets the maps from COROS, so COROS sees which areas you chose. Tested on PACE 4; PACE 4 Pro, PACE Pro and APEX 4 are in beta.
 - **Cancel a map download waiting on the watch.** Downloads you sent to the watch over Wi-Fi now have **Cancel** in **Maps → Map areas → On your watch**, so a request still waiting for Wi-Fi (or part way through) comes off the watch. Unplug the watch's USB cable first: the watch won't cancel while it's plugged in. Tested on PACE 4.
 - **Allow USB access without the COROS app.** When you plug your watch into a computer and it shows "Open the COROS App to authorize", CorosLink asks whether to allow it, if the watch is connected to CorosLink over Bluetooth. Choose **Allow** and the watch's drive opens on the computer, for music and maps. Tested on PACE 4; PACE 4 Pro, PACE Pro and APEX 4 are in beta.
+
+### Changed
+
+- **Activities open as a page.** In Training Hub, clicking an activity in the grid or calendar opens it as a full page that grows out of its card, like the sleep and metric pages. Back or Esc returns you to the card.
+- **A bigger route map with a hover readout.** The activity page's map now spans the full width with the elevation profile beneath it. Hover the route to see distance, time, pace or speed, heart rate, power and elevation at that point. The expanded map shows the readout too.
+
+### Fixed
+
+- **Antigravity Coach starts on Windows.** Coach no longer hangs and says "Antigravity did not start a session" when Antigravity is the provider on Windows.
+- **Official faces without a background open in Studio.** Plain black dials such as DIGITS2 were refused when opened for editing.
+- **A USB map copy keeps its progress.** If the watch's drive dropped out mid-copy, the panel switched to Wi-Fi and hid the progress and Cancel while the copy kept running.
+- **The activity page's Export / Raw JSON / View on Map bar sits flush at the bottom** without charts showing through under it.
 
 ## [0.1.69] - 2026-10-29
 
