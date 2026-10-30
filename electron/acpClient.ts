@@ -1,7 +1,9 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import crypto from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import path from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -243,6 +245,85 @@ export function toolBridgeServer(bridge: ToolBridge, name: string): Record<strin
     name,
     url: bridge.url,
     headers: [{ name: "Authorization", value: `Bearer ${bridge.token}` }]
+  };
+}
+
+// A stdio MCP server that forwards each line to the loopback bridge from Node.
+// It runs under Electron as Node and needs no packages. The bearer token comes
+// in through the environment, never the command line.
+const STDIO_RELAY_SOURCE = String.raw`"use strict";
+const url = process.env.COROSLINK_BRIDGE_URL;
+const auth = "Bearer " + process.env.COROSLINK_BRIDGE_TOKEN;
+let sessionId = "";
+let protocolVersion = "";
+let queue = Promise.resolve();
+const send = (message) => process.stdout.write(JSON.stringify(message) + "\n");
+async function forward(line) {
+  let message;
+  try { message = JSON.parse(line); } catch { return; }
+  const headers = { authorization: auth, "content-type": "application/json", accept: "application/json, text/event-stream" };
+  if (sessionId) headers["mcp-session-id"] = sessionId;
+  if (protocolVersion) headers["mcp-protocol-version"] = protocolVersion;
+  try {
+    const response = await fetch(url, { method: "POST", headers, body: line });
+    sessionId = response.headers.get("mcp-session-id") || sessionId;
+    const text = await response.text();
+    if (!response.ok && response.status !== 202) throw new Error("HTTP " + response.status + " " + text.slice(0, 200));
+    const bodies = (response.headers.get("content-type") || "").includes("text/event-stream")
+      ? text.split(/\r?\n/).filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim())
+      : [text.trim()];
+    for (const body of bodies) {
+      if (!body) continue;
+      const reply = JSON.parse(body);
+      if (reply && reply.result && typeof reply.result.protocolVersion === "string") protocolVersion = reply.result.protocolVersion;
+      send(reply);
+    }
+  } catch (error) {
+    if (message && message.id !== undefined) send({ jsonrpc: "2.0", id: message.id, error: { code: -32603, message: String(error && error.message || error) } });
+  }
+}
+const pending = new Set();
+let buffer = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  buffer += chunk;
+  const lines = buffer.split("\n");
+  buffer = lines.pop();
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    // The handshake runs in order; after it, tool calls run side by side.
+    const handshake = !sessionId || /"method"\s*:\s*"(initialize|notifications\/initialized)"/.test(line);
+    const run = handshake ? (queue = queue.then(() => forward(line))) : queue.then(() => forward(line));
+    pending.add(run);
+    run.finally(() => pending.delete(run));
+  }
+});
+process.stdin.on("end", () => Promise.all([...pending]).then(() => process.exit(0)));
+`;
+
+/**
+ * The bridge as an ACP stdio `mcpServers` entry: a Node relay the agent starts
+ * and talks to over pipes, so the agent itself never opens a loopback socket.
+ * ACP requires stdio MCP support; HTTP support varies, and Antigravity's own
+ * HTTP client stalls reaching the bridge on Windows.
+ */
+export async function toolBridgeStdioServer(
+  bridge: ToolBridge,
+  name: string,
+  folder: string,
+  nodePath: string = process.execPath
+): Promise<Record<string, unknown>> {
+  const relay = path.join(folder, "coroslink-mcp-relay.cjs");
+  await writeFile(relay, STDIO_RELAY_SOURCE, { mode: 0o600 });
+  return {
+    name,
+    command: nodePath,
+    args: [relay],
+    env: [
+      { name: "ELECTRON_RUN_AS_NODE", value: "1" },
+      { name: "COROSLINK_BRIDGE_URL", value: bridge.url },
+      { name: "COROSLINK_BRIDGE_TOKEN", value: bridge.token }
+    ]
   };
 }
 

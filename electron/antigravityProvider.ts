@@ -10,6 +10,7 @@ import {
   acpErrorMessage,
   startToolBridge,
   toolBridgeServer,
+  toolBridgeStdioServer,
   truncate,
   type ToolBridge
 } from "./acpClient";
@@ -778,6 +779,8 @@ function silentBrowser(platform: NodeJS.Platform, helper: string): NodeJS.Proces
 
 interface Launch {
   agent: AcpAgent;
+  /** This launch's own temporary folder, removed on close. */
+  temp: string;
   signInRequired(): boolean;
   /** A session whose saved conversation is deleted on close. */
   trackSession(sessionId: string | undefined): Promise<void>;
@@ -828,6 +831,7 @@ async function launchAgent(
   const sessions = new Set<string>();
   return {
     agent,
+    temp,
     signInRequired: () => signInRequired,
     trackSession: async (sessionId) => {
       if (sessionId) sessions.add(sessionId);
@@ -858,7 +862,7 @@ async function removeSessionFiles(acpDir: string, sessionId: string): Promise<vo
  * terminal, web, subagents) is switched off, and the tool bridge's tools are
  * declared up front instead of being looked up through file reads.
  */
-function sessionParams(root: string, bridge: ToolBridge | undefined, instructions: string) {
+function sessionParams(root: string, toolServer: Record<string, unknown> | undefined, instructions: string) {
   const antigravity: Record<string, unknown> = {
     enabledTools: [],
     eagerMcpServers: [MCP_SERVER_NAME]
@@ -866,9 +870,18 @@ function sessionParams(root: string, bridge: ToolBridge | undefined, instruction
   if (instructions) antigravity.systemPrompt = { append: instructions };
   return {
     cwd: folders(root).workspace,
-    mcpServers: bridge ? [toolBridgeServer(bridge, MCP_SERVER_NAME)] : [],
+    mcpServers: toolServer ? [toolServer] : [],
     _meta: { antigravity }
   };
+}
+
+/**
+ * Tools reach the agent through a stdio relay: on Windows its own HTTP client
+ * never finishes connecting to the loopback bridge, so session/new hung until
+ * the start timeout. COROSLINK_ANTIGRAVITY_TOOLS=http keeps the old path, for tests.
+ */
+function toolTransport(): "stdio" | "http" {
+  return process.env.COROSLINK_ANTIGRAVITY_TOOLS === "http" ? "http" : "stdio";
 }
 
 /** Approves calls to CorosLink's own tools; anything else is declined. */
@@ -950,9 +963,14 @@ export async function streamAntigravityCompletion(
     };
 
     await agent.initialize(ACP_PROTOCOL_VERSION);
+    const toolServer = bridge
+      ? toolTransport() === "stdio"
+        ? await toolBridgeStdioServer(bridge, MCP_SERVER_NAME, launch.temp)
+        : toolBridgeServer(bridge, MCP_SERVER_NAME)
+      : undefined;
     const session = (await agent.request(
       "session/new",
-      sessionParams(options.root, bridge, options.instructions)
+      sessionParams(options.root, toolServer, options.instructions)
     )) as { sessionId?: string; configOptions?: unknown };
     if (!session.sessionId) throw new Error("Antigravity did not start a session.");
     sessionId = session.sessionId;

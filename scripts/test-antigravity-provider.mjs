@@ -238,7 +238,7 @@ try {
   assert.equal(tokens.join(""), result.fullText);
   assert.equal(
     result.fullText,
-    'You ran {"distance":42.7}. [env:ok meta:ok model:m-pro image:ok tools:get_weekly_mileage ours:selected:allow shell:cancelled]'
+    'You ran {"distance":42.7}. [env:ok meta:ok stdio:ok model:m-pro image:ok tools:get_weekly_mileage ours:selected:allow shell:cancelled]'
   );
   // Coach keeps the transcript; the agent's saved copy and launch folder are gone.
   assert.deepEqual(await readdir(path.join(acpDir, "conversations")), []);
@@ -355,10 +355,12 @@ async function handle(message) {
     const server = message.params.mcpServers[0];
     if (server) {
       const { Client } = requireFromRepo("@modelcontextprotocol/sdk/client/index.js");
-      const { StreamableHTTPClientTransport } = requireFromRepo("@modelcontextprotocol/sdk/client/streamableHttp.js");
+      const { StdioClientTransport } = requireFromRepo("@modelcontextprotocol/sdk/client/stdio.js");
       mcp = new Client({ name: "fake-antigravity", version: "1" });
-      const headers = Object.fromEntries(server.headers.map((header) => [header.name, header.value]));
-      await mcp.connect(new StreamableHTTPClientTransport(new URL(server.url), { requestInit: { headers } }));
+      // Tools come through a stdio relay; the agent never gets the loopback URL.
+      if (server.url === undefined && server.headers === undefined) checks.push("stdio:ok");
+      const env = Object.fromEntries(server.env.map((entry) => [entry.name, entry.value]));
+      await mcp.connect(new StdioClientTransport({ command: server.command, args: server.args, env: { ...process.env, ...env } }));
     }
     return send({ id: message.id, result: { sessionId, configOptions: [
       { id: "model", type: "select", currentValue: "m-flash", options: [
