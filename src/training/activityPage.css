@@ -25,6 +25,30 @@
   overscroll-behavior: auto;
 }
 
+/* The action bar pins to the scroller's bottom edge. .content's bottom
+   padding (16–32px by window size) left a strip under the stuck bar where the
+   charts scrolled past, so the page carries that space itself instead. */
+.content:has(> .content-training-panel > .activity-page) {
+  padding-bottom: 0;
+}
+
+.activities-detail-dialog.activity-page {
+  padding-bottom: 28px;
+}
+
+.activity-page .activity-detail-footer {
+  bottom: -1px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 70%, transparent), color-mix(in srgb, var(--surface) 70%, transparent)),
+    var(--bg-base);
+  box-shadow: 0 -12px 28px -18px #00000080;
+}
+
+:root[data-theme="paper"] .activity-page .activity-detail-footer {
+  background: linear-gradient(180deg, #ffffff, #f7f9f6);
+  box-shadow: 0 -12px 28px -20px #0000002e;
+}
+
 .activity-page .activity-dialog-header {
   padding-top: 22px;
 }
