@@ -49,6 +49,7 @@ import { createRouteCursor } from "../routeCursor";
 import { ActivityChannels } from "./ActivityChannels";
 import { ActivityElevationChart } from "./ActivityElevationChart";
 import { ActivityRouteMap } from "./ActivityRouteMap";
+import { trackRouteProbe } from "./ActivityRouteReadout";
 import { ActivityTimeInZones } from "./ActivityTimeInZones";
 import { RunEfficiencyPanel } from "./RunEfficiency";
 import { StrengthDetailPanel } from "./StrengthDetailPanel";
@@ -211,6 +212,10 @@ export function ActivityDetailPanel({
   const streams = useMemo(
     () => (showcase && detail && !detail.strength ? parseActivityStreams(detail.raw, streamOptions) : null),
     [showcase, detail, streamOptions]
+  );
+  const routeProbe = useMemo(
+    () => (streams?.hasGps ? streams : showcase ? trackRouteProbe(detail?.track) : null),
+    [streams, showcase, detail]
   );
   // COROS's own time-in-zone totals, on every layout. A strength session is
   // scored on heart rate alone.
@@ -389,7 +394,8 @@ export function ActivityDetailPanel({
                 track={detail.track}
                 expanded={showcase ? mapExpanded : undefined}
                 onExpandedChange={showcase ? setMapExpanded : undefined}
-                cursor={streams?.hasGps ? routeCursor : undefined}
+                cursor={routeProbe ? routeCursor : undefined}
+                probe={routeProbe ?? undefined}
               />
             </section>
 

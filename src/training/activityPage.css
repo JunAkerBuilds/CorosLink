@@ -29,6 +29,70 @@
   padding-top: 22px;
 }
 
+/* With the room of a page, the route leads: a wide, tall map with the
+   elevation profile as a strip underneath instead of side by side. */
+.activities-detail-dialog.activity-page .activity-detail-visuals {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.activities-detail-dialog.activity-page .activity-detail-visual-panel .activity-route-map-canvas {
+  height: clamp(380px, 52vh, 560px);
+}
+
+/* Legend and Expand float on the map as chips instead of a row under it. */
+.activities-detail-dialog.activity-page .activity-detail-visual-panel .activity-route-map {
+  position: relative;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.activities-detail-dialog.activity-page .activity-detail-visual-panel .activity-route-footer {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.activities-detail-dialog.activity-page .activity-route-footer > * {
+  pointer-events: auto;
+}
+
+.activities-detail-dialog.activity-page .activity-route-footer .activity-route-legend,
+.activities-detail-dialog.activity-page .activity-detail-visual-panel .activity-route-expand {
+  height: 34px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid #ffffff1f;
+  border-radius: 10px;
+  background: #0a0f14d9;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 6px 20px #00000059;
+  color: #e8edf2;
+  font-size: 12.5px;
+}
+
+.activities-detail-dialog.activity-page .activity-route-footer .activity-route-legend {
+  display: inline-flex;
+  align-items: center;
+}
+
+.activities-detail-dialog.activity-page .activity-detail-visual-panel .activity-route-expand:hover {
+  border-color: color-mix(in srgb, var(--activity-color) 55%, transparent);
+  background: #0a0f14f2;
+  color: var(--activity-color);
+}
+
+.activities-detail-dialog.activity-page .activity-elevation-chart-shell {
+  height: 190px;
+  min-height: 0;
+}
+
+.activities-detail-dialog.activity-page .activity-detail-visual-panel:has(.activity-elevation-chart-shell, .activity-elevation-empty) {
+  min-height: 0;
+}
+
 /* ── Card ⇄ page morph ────────────────────────────────────────────────
    TrainingHubView commits the switch inside a View Transition with
    html.is-activity-morph-open or -close set. Only the card that opened the

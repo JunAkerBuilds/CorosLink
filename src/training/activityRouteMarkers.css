@@ -22,3 +22,129 @@
   white-space: nowrap;
   transform: translate(-50%, -50%);
 }
+
+/* ── Route hover readout ──────────────────────────────────────────────
+   ActivityRouteReadout floats over the map at the sample nearest the
+   pointer. Same dark chip language as the distance markers, so it reads
+   on every tile style. */
+.activity-route-map-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.activity-route-modal-map .activity-route-map-stage {
+  height: 100%;
+}
+
+.activity-route-map-canvas.is-probing {
+  cursor: crosshair;
+}
+
+.activity-route-readout {
+  --readout-gap: 16px;
+  position: absolute;
+  z-index: 700;
+  width: 184px;
+  box-sizing: border-box;
+  padding: 10px 12px 11px;
+  border: 1px solid #ffffff24;
+  border-radius: 12px;
+  background: #0b1015eb;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 12px 32px #00000066;
+  color: #e8edf2;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - var(--readout-gap)));
+}
+
+.activity-route-readout.is-below {
+  transform: translate(-50%, var(--readout-gap));
+}
+
+/* Tail pointing at the snapped point, kept on it when the card is clamped sideways. */
+.activity-route-readout::after {
+  content: "";
+  position: absolute;
+  left: calc(50% + var(--readout-shift, 0px));
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  border: solid #ffffff24;
+  border-width: 0 1px 1px 0;
+  background: #0b1015;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.activity-route-readout.is-below::after {
+  top: -6px;
+  bottom: auto;
+  border-width: 1px 0 0 1px;
+}
+
+.activity-route-readout-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.activity-route-readout-head strong {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  font: 700 17px/1.1 var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+.activity-route-readout-head small,
+.activity-route-readout dd small {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: #9aa4ae;
+}
+
+.activity-route-readout-head span {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9aa4ae;
+}
+
+.activity-route-readout dl {
+  display: grid;
+  gap: 5px;
+  margin: 9px 0 0;
+  padding-top: 9px;
+  border-top: 1px solid #ffffff1a;
+}
+
+.activity-route-readout dl > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.activity-route-readout dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #b5bec7;
+}
+
+.activity-route-readout dt svg {
+  color: var(--readout-tone);
+}
+
+.activity-route-readout dd {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}

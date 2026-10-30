@@ -16,6 +16,8 @@ import { MapLayerControl } from "../../maps/routes/panels";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import type { RouteCursor } from "../routeCursor";
+import type { ActivityStreams } from "../activityStreams";
+import { ActivityRouteReadout } from "./ActivityRouteReadout";
 import { routeDistanceMarkers, type RouteDistanceMarker } from "../routeDistanceMarkers";
 import "../activityRouteMarkers.css";
 import {
@@ -32,6 +34,20 @@ interface ActivityRouteMapProps {
   onExpandedChange?: (expanded: boolean) => void;
   /** Chart hover point and selected stretch to mirror on the inline map. */
   cursor?: RouteCursor;
+  /** Per-second samples with GPS: hovering the route reads them out at that spot. */
+  probe?: ActivityStreams;
+}
+
+/** How close (px) the pointer must come to the line before the readout snaps to it. */
+const PROBE_SNAP_PX = 28;
+/** Points tested per pointer move; longer tracks are thinned evenly. */
+const PROBE_MAX_POINTS = 4000;
+
+interface RouteProbeHit {
+  index: number;
+  x: number;
+  y: number;
+  width: number;
 }
 
 interface RouteGeometry {
@@ -189,7 +205,8 @@ function RouteMapCanvas({
   baseLayer,
   overlays,
   ariaLabel,
-  cursor
+  cursor,
+  probe
 }: {
   route: RouteGeometry;
   distanceMarkers: RouteDistanceMarker[];
@@ -198,6 +215,7 @@ function RouteMapCanvas({
   overlays?: RouteOverlayId[];
   ariaLabel: string;
   cursor?: RouteCursor;
+  probe?: ActivityStreams;
 }) {
   useLanguage();
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -212,6 +230,7 @@ function RouteMapCanvas({
   const appliedBaseLayerRef = useRef(baseLayer);
   const { theme } = useTheme();
   const cartoApiKey = useCartoApiKey();
+  const [hit, setHit] = useState<RouteProbeHit | null>(null);
 
   baseLayerPropRef.current = baseLayer;
 
@@ -374,6 +393,67 @@ function RouteMapCanvas({
     const unsubscribeCursor = cursor?.subscribe(applyCursor);
     applyCursor();
 
+    // Route hover: snap the pointer to the nearest sample and read it out. Layer
+    // points only change with zoom, so they are projected once per zoom level.
+    let probeIndices: number[] = [];
+    let probePoints: L.Point[] | null = null;
+    let probeFrame = 0;
+    let probeEvent: L.LeafletMouseEvent | null = null;
+    if (probe?.hasGps) {
+      const step = Math.max(1, Math.ceil(probe.length / PROBE_MAX_POINTS));
+      for (let index = 0; index < probe.length; index += step) {
+        if (Number.isFinite(probe.lat[index]!) && Number.isFinite(probe.lon[index]!)) probeIndices.push(index);
+      }
+    }
+    const clearProbe = () => {
+      window.cancelAnimationFrame(probeFrame);
+      probeFrame = 0;
+      probeEvent = null;
+      setHit(null);
+      cursor?.set({ point: null });
+    };
+    const runProbe = () => {
+      probeFrame = 0;
+      const event = probeEvent;
+      if (!event || !probe) return;
+      probePoints ??= probeIndices.map((index) => map.latLngToLayerPoint([probe.lat[index]!, probe.lon[index]!]));
+      let best = -1;
+      let bestDistance = PROBE_SNAP_PX * PROBE_SNAP_PX;
+      for (let at = 0; at < probePoints.length; at += 1) {
+        const dx = probePoints[at]!.x - event.layerPoint.x;
+        const dy = probePoints[at]!.y - event.layerPoint.y;
+        const distance = dx * dx + dy * dy;
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = at;
+        }
+      }
+      if (best < 0) {
+        setHit(null);
+        cursor?.set({ point: null });
+        return;
+      }
+      const index = probeIndices[best]!;
+      const latLng: [number, number] = [probe.lat[index]!, probe.lon[index]!];
+      const point = map.latLngToContainerPoint(latLng);
+      setHit({ index, x: point.x, y: point.y, width: container.clientWidth });
+      cursor?.set({ point: latLng });
+    };
+    const onProbeMove = (event: L.LeafletMouseEvent) => {
+      probeEvent = event;
+      if (!probeFrame) probeFrame = window.requestAnimationFrame(runProbe);
+    };
+    const onProbeZoom = () => {
+      probePoints = null;
+      clearProbe();
+    };
+    if (probeIndices.length) {
+      map.on("mousemove", onProbeMove);
+      map.on("mouseout", clearProbe);
+      map.on("zoomstart", onProbeZoom);
+      map.on("dragstart", clearProbe);
+    }
+
     const resizeObserver = new ResizeObserver(() => {
       map.invalidateSize();
       if (!fitted) {
@@ -384,6 +464,8 @@ function RouteMapCanvas({
 
     return () => {
       window.cancelAnimationFrame(animationFrame);
+      window.cancelAnimationFrame(probeFrame);
+      setHit(null);
       unsubscribeCursor?.();
       resizeObserver.disconnect();
       map.remove();
@@ -393,7 +475,7 @@ function RouteMapCanvas({
       routeLineRef.current = null;
       overlayLayersRef.current.clear();
     };
-  }, [route, distanceMarkers, theme, scrollWheelZoom, cartoApiKey, cursor]);
+  }, [route, distanceMarkers, theme, scrollWheelZoom, cartoApiKey, cursor, probe]);
 
   // Swap the base tile layer in place so zoom/pan and the route animation
   // survive a layer change.
@@ -457,12 +539,20 @@ function RouteMapCanvas({
     }
   }, [overlays, route, theme, scrollWheelZoom, cartoApiKey]);
 
-  return (
+  const canvas = (
     <div
       ref={mapContainerRef}
-      className={`activity-route-map-canvas${(baseLayer ?? "street") === "street" && theme !== "paper" ? " is-dark-street" : ""}`}
+      className={`activity-route-map-canvas${(baseLayer ?? "street") === "street" && theme !== "paper" ? " is-dark-street" : ""}${hit ? " is-probing" : ""}`}
       aria-label={ariaLabel}
     />
+  );
+  if (!probe?.hasGps) return canvas;
+  // Leaflet owns the canvas's children, so the readout floats in a wrapper beside it.
+  return (
+    <div className="activity-route-map-stage">
+      {canvas}
+      {hit ? <ActivityRouteReadout streams={probe} index={hit.index} x={hit.x} y={hit.y} width={hit.width} /> : null}
+    </div>
   );
 }
 
@@ -480,7 +570,8 @@ export function ActivityRouteMap({
   track,
   expanded: expandedProp,
   onExpandedChange,
-  cursor
+  cursor,
+  probe
 }: ActivityRouteMapProps) {
   useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -535,7 +626,7 @@ export function ActivityRouteMap({
 
   return (
     <div className="activity-route-map" ref={containerRef}>
-      <RouteMapCanvas route={route} distanceMarkers={distanceMarkers} baseLayer={baseLayer} ariaLabel="Activity route map" cursor={cursor} />
+      <RouteMapCanvas route={route} distanceMarkers={distanceMarkers} baseLayer={baseLayer} ariaLabel="Activity route map" cursor={cursor} probe={probe} />
       <div className="activity-route-footer">
         <RouteLegend />
         <button
@@ -582,6 +673,7 @@ export function ActivityRouteMap({
                     baseLayer={baseLayer}
                     overlays={overlays}
                     ariaLabel="Expanded activity route map"
+                    probe={probe}
                   />
                   <MapLayerControl
                     layers={availableLayers}
