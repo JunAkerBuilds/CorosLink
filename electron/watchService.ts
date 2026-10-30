@@ -87,6 +87,13 @@ const WATCH_CONNECTION_SMOKE_FIXTURES: Record<
     trackNames: ["Trail Mix.mp3"],
     totalBytes: fallbackBytesForModel("nomad")
   },
+  vertix: {
+    volumeName: "COROS VERTIX",
+    createMusicFolder: true,
+    createMapFolder: true,
+    trackNames: ["Basecamp Mix.mp3"],
+    totalBytes: fallbackBytesForModel("vertix")
+  },
   "vertix-2": {
     volumeName: "COROS VERTIX 2",
     createMusicFolder: true,

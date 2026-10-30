@@ -46,6 +46,8 @@ const nameCases = [
   ["COROS-VERTIX-2", "vertix-2"],
   ["VERTIX 2S", "vertix-2s"],
   ["COROS VERTIX 2S", "vertix-2s"],
+  ["COROS VERTIX", "vertix"],
+  ["VERTIX", "vertix"],
   ["COROS APEX 2 PRO", "apex-2-pro"],
   ["APEX 2 PRO", "apex-2-pro"],
   ["COROS APEX 4", "apex-4"],
@@ -131,6 +133,12 @@ assert.deepEqual(getWatchfaceDeviceProfileByFirmware("coros b19s"), {
 assert.deepEqual(getWatchfaceDeviceProfileByFirmware("coros w541"), {
   firmwareType: "COROS W541"
 });
+
+for (const [model, firmwareType] of [["pace-2", "COROS B18"], ["apex-pro", "COROS B17"], ["apex-2", "COROS B21"], ["apex-2-pro", "COROS B20"], ["vertix", "COROS B16"]]) {
+  assert.deepEqual(getWatchfaceDeviceProfile(model), { firmwareType });
+  assert.deepEqual(getWatchfaceDeviceProfileByFirmware(firmwareType.toLowerCase()), { firmwareType });
+}
+assert.equal(fallbackBytesForModel("vertix"), THIRTY_TWO_GB);
 
 assert.deepEqual(getWatchfaceDeviceProfile("pace-4-pro"), { firmwareType: "COROS W337" });
 assert.deepEqual(getWatchfaceDeviceProfileByFirmware(" coros w337 "), { firmwareType: "COROS W337" });

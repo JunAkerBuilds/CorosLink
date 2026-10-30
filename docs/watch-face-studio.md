@@ -34,6 +34,8 @@ the editor and the topic pages say so.
 | NOMAD | MIP | 260 × 260 | The Current face stays on |
 | VERTIX 2 / VERTIX 2S | MIP | 280 × 280 | The Current face stays on |
 | APEX 4 (42 mm / 46 mm) | MIP | 240 / 260 | The Current face stays on |
+| APEX 2 Pro (B20) | MIP | 260 × 260 | The Current face stays on |
+| PACE 2 (B18) / APEX 2 (B21) / APEX Pro (B17) / VERTIX (B16) | MIP | 240 × 240 | The Current face stays on |
 
 Every face also carries an 800 × 800 master layout, which Studio uses as its
 authoring space (the canvas header shows **Master · 800×800**). Exports scale

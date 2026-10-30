@@ -179,6 +179,22 @@ const MODEL_PRESENTATION: Record<
       { icon: "battery", label: "Multi-Day GPS Battery" },
     ],
   },
+  vertix: {
+    state: "connected-known",
+    model: "vertix",
+    displayName: "COROS Vertix",
+    productName: "Vertix",
+    tagline: "Built for Adventure",
+    companion: "Your Vertix companion",
+    connectHint: "",
+    capacityLabel: "32 GB Vertix capacity fallback",
+    fallbackBytes: PACE_PRO_BYTES,
+    features: [
+      { icon: "display", label: "1.2\" Sapphire Touchscreen" },
+      { icon: "weight", label: "Titanium Bezel Build" },
+      { icon: "battery", label: "60 Hours Full GPS" },
+    ],
+  },
   "vertix-2": {
     state: "connected-known",
     model: "vertix-2",

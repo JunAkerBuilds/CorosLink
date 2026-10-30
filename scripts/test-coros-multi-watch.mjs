@@ -25,6 +25,7 @@ assert.equal(byModel('W332-3.2008.0'),'pace-pro');
 assert.equal(byModel('W541'),'apex-4');
 assert.equal(byModel('B19S'),'vertix-2s','the longer hardware ID wins');
 assert.equal(byModel('B19'),'vertix-2');
+for (const [hardware,model] of [['B16','vertix'],['B17','apex-pro'],['B18','pace-2'],['B20','apex-2-pro'],['B21','apex-2']]) assert.equal(byModel(hardware),model);
 assert.equal(byModel('W999'),undefined);
 assert.equal(byModel(undefined),undefined);
 const byName=value=>targets.watchfaceTargetForDeviceName(value)?.model;
@@ -33,24 +34,26 @@ assert.equal(byName('COROS PACE 4 Pro 2F1A'),'pace-4-pro');
 assert.equal(byName('COROS PACE 4 2F1A'),'pace-4');
 assert.equal(byName('COROS VERTIX 2S 81D0'),'vertix-2s');
 assert.equal(byName('COROS APEX 4'),'apex-4');
-assert.equal(byName('COROS APEX 2 Pro 81D0'),undefined);
+assert.equal(byName('COROS APEX 2 Pro 81D0'),'apex-2-pro');
+assert.equal(byName('COROS VERTIX 81D0'),'vertix');
 assert.equal(byName('COROS APEX 4 Pro 81D0'),undefined);
 assert.deepEqual(targets.connectedWatchfaceTarget({modelNumber:'W332',deviceName:'COROS APEX 4 81D0'})?.target.model,'pace-pro','the model number wins');
 assert.equal(targets.connectedWatchfaceTarget({modelNumber:'W999',deviceName:'COROS APEX 4 81D0'})?.source,'name');
-assert.equal(targets.connectedWatchfaceTarget({modelNumber:'W999',deviceName:'COROS APEX 2 Pro 81D0'}),undefined);
+assert.equal(targets.connectedWatchfaceTarget({modelNumber:'W999',deviceName:'COROS APEX 9 81D0'}),undefined);
 assert.equal(targets.isValidatedWatch({modelNumber:'W332',softwareRevision:'V3.2008.0'}),true);
 assert.equal(targets.isValidatedWatch({modelNumber:'W332',softwareRevision:'3.2009.0'}),false);
 assert.equal(targets.isValidatedWatch({modelNumber:'W541',softwareRevision:'3.2008.0'}),false);
 
 // --- BIN shape per watch (magic: screen reversed, A or R; thumbnail measured from COROS) ---
 const expected={'pace-pro':['614A',315],'pace-4-pro':['664A',353],'pace-4':['093A',295],'pace-3':['042R',182],
-  'apex-4':['062R',197],'nomad':['062R',197],'vertix-2':['082R',212],'vertix-2s':['082R',212]};
+  'apex-4':['062R',197],'nomad':['062R',197],'vertix-2':['082R',212],'vertix-2s':['082R',212],
+  'pace-2':['042R',182],'apex-2-pro':['062R',197],'apex-2':['042R',182],'apex-pro':['042R',182],'vertix':['042R',182]};
 for (const target of targets.WATCHFACE_TARGETS) {
   const bin=targets.watchfaceBinTarget(target);
   assert.deepEqual([bin.magic,bin.thumbnail],expected[target.model],target.model);
   assert.equal(bin.layout,`watchface_${target.previewSize}x${target.previewSize}`);
 }
-assert.deepEqual(targets.watchfaceTargetsForMagic('062R').map(t=>t.model).sort(),['apex-4','nomad']);
+assert.deepEqual(targets.watchfaceTargetsForMagic('062R').map(t=>t.model).sort(),['apex-2-pro','apex-4','nomad']);
 assert.deepEqual(targets.watchfaceTargetsForMagic('999A'),[]);
 
 // --- Memory-in-pixel pixels (C-LINK's measured COROS rules) ---
@@ -209,11 +212,11 @@ try {
   const inventory=await service.listWatchfaceSlots();
   assert.equal(inventory.slots.length,5,'a watch reporting five slots has five');
   const shared=await service.prepareWatchface(path.join(dir,'apex.bin'));
-  assert.deepEqual([...shared.models].sort(),['apex-4','nomad']);
+  assert.deepEqual([...shared.models].sort(),['apex-2-pro','apex-4','nomad']);
   const done=await service.syncWatchface(shared.id);
   assert.equal(done.phase,'complete');assert.equal(done.watchSlot,1);assert.ok(sentBlocks>0);
   // A watch CorosLink doesn't recognize gets no face transfers.
-  service.state={...service.state,deviceName:'COROS APEX 2 Pro 81D0',modelNumber:'W999'};
+  service.state={...service.state,deviceName:'COROS APEX 9 81D0',modelNumber:'W999'};
   await assert.rejects(service.listWatchfaceSlots(),/doesn't support/);
 } finally { fs.rmSync(dir,{recursive:true,force:true}); }
 

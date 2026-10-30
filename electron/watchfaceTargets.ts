@@ -9,7 +9,12 @@ export const WATCHFACE_TARGETS = [
   { model: "nomad", label: "NOMAD", firmwareType: "COROS W942", display: "mip", previewSize: 260, sizes: [240, 260, 280, 800] },
   { model: "vertix-2", label: "VERTIX 2", firmwareType: "COROS B19", display: "mip", previewSize: 280, sizes: [240, 260, 280, 800] },
   { model: "vertix-2s", label: "VERTIX 2S", firmwareType: "COROS B19S", display: "mip", previewSize: 280, sizes: [240, 260, 280, 800] },
-  { model: "apex-4", label: "APEX 4", firmwareType: "COROS W541", display: "mip", previewSize: 260, sizes: [240, 260, 280, 800] }
+  { model: "apex-4", label: "APEX 4", firmwareType: "COROS W541", display: "mip", previewSize: 260, sizes: [240, 260, 280, 800] },
+  { model: "pace-2", label: "PACE 2", firmwareType: "COROS B18", display: "mip", previewSize: 240, sizes: [240, 260, 280, 800] },
+  { model: "apex-2-pro", label: "APEX 2 Pro", firmwareType: "COROS B20", display: "mip", previewSize: 260, sizes: [240, 260, 280, 800] },
+  { model: "apex-2", label: "APEX 2", firmwareType: "COROS B21", display: "mip", previewSize: 240, sizes: [240, 260, 280, 800] },
+  { model: "apex-pro", label: "APEX Pro", firmwareType: "COROS B17", display: "mip", previewSize: 240, sizes: [240, 260, 280, 800] },
+  { model: "vertix", label: "VERTIX", firmwareType: "COROS B16", display: "mip", previewSize: 240, sizes: [240, 260, 280, 800] }
 ] as const satisfies ReadonlyArray<{
   model: WatchModelId;
   label: string;
@@ -95,7 +100,7 @@ export function watchfaceBinTarget(target: WatchfaceTarget): WatchfaceBinTarget 
   };
 }
 
-/** The targets a compiled BIN's magic fits; same-screen watches (APEX 4 and NOMAD) share one BIN. */
+/** The targets a compiled BIN's magic fits; same-screen watches (APEX 4, NOMAD and APEX 2 Pro) share one BIN. */
 export function watchfaceTargetsForMagic(magic: string): WatchfaceTarget[] {
   return WATCHFACE_TARGETS.filter(target => watchfaceBinTarget(target).magic === magic);
 }

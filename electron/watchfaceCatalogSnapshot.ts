@@ -3886,5 +3886,3585 @@ export const WATCHFACE_TEMPLATE_SNAPSHOT: Record<string, CorosWatchfaceThemeCach
         "templateType": 1
       }
     ]
+  },
+  "COROS B18": {
+    "savedAt": "2026-10-29T22:15:43.664Z",
+    "themes": [
+      {
+        "id": "260902",
+        "name": "SIMPLE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202609/1789555772I9LIM13EL4PT6AP1906Q.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202609/1789555772EKADBTYVIQTJEFO8ZJE9.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "260526",
+        "name": "BOLD 3",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202605/1779806663P7GKI7A0AL376VY1UUIC.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202605/1779806662IPAFLJ8TN9MJVODIVGYF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "260515",
+        "name": "LOWER DOWN",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202605/1778830863ROC8KBPSBKP4Y61ET3Q3.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202605/1778830863N9U169QRNBSLW8N1Z5VP.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "129999",
+        "name": "BOLD3",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202605/1778496591JQ3D9EDWPGRGFRO9PCY9.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202605/1778496591JOHW3S1FC5GMDC8325FH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "251227",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202512/1766803025J8ND2T0CWJDGUKNA05FO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202512/17668030259OG2WO5Y69TTOKEDPIYK.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "251226",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202512/17667418957FTY8CTO5101PLI39LAH.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202512/17667418954K5R4E7VTI4X76M1HGUR.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10195022",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/1764239108WUGDRXZIAFOTT02FXSPM.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/17642391085QLO4X77VVNF04ROQ6BF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10222282",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/1764237882TL63QVR0QCS1GDXGNB65.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/17642378823YVKFOE9EC0HLREC079O.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10044812",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/1764235298AWR24FGNQPKQC9I4B6NQ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/1764235298M5IJFEGTXVN3WG4WFQRY.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10167762",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/17642348679618HLZ48JBGZVWFWW9K.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/17642348669ECYNEG6USDBN7EAUUIV.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130009",
+        "name": "SYMMETRY",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202404/1713422324MLGHBVCD2DI1RTD6RZME.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202404/17134223244VJ1SYH3UQ4HJXAUXX99.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "130008",
+        "name": "SYMMETRY",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202404/1713422295IZ6RFV6DTFZJHFZLXSVR.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202404/1713422295CS2WI7APKM0HMOESQB2D.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "130005",
+        "name": "SYMMETRY",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202404/1713422266DYKZSFFBWO26WX4ZTJBF.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202404/1713422265VK4RNGNRBXAHJY5M7X78.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "3015",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058911204WI2SK1UVVNF5SZZM025.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/170589112019DGJP7IRQH7KN0ZYMMI.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3014",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705891100J6AIBKBVUL6ZA0U84JKK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891100IBR3TPNTIJDZW76UCLL3.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3013",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705891079SN302Z1VI7MGPVEL5V8M.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891078CEP8QPDCFH6567MIGPHI.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3012",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058910560PHZUERT5WZ21HQSM1FH.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891056M5PUOH7RRD9VZR7ODR15.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3011",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058910370B0HF3NV5QN4D4O9B8M7.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891036MCK6B02DXFY1YNSHY9GH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3010",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890907WPV7ALY0WDAQXPU9Z5O8.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890907R0XX4Z4QQ7POLY2RO2B7.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3009",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890889TBU8KECACLX23W5PUBTE.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/17058908897TMP56259NHRYRW0T8NT.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3008",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890869LKUY7OZPUGDYNI009WS6.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/17058908698C841RPSQLJPSJNX9SNZ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3007",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890850ZY7C8UVS1J7PVYZZZC84.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890850EBV53IEIXAN9LL7VLVNU.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3006",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058908271XMP9AWZ4X28655AWYFC.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890826I8O11B61FZ5WMA0VFSXQ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2620",
+        "name": "EUROPEAN RETRO",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890676K6V8HGSXDWTD899MIZIW.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890676Q8KK43AICQ2W0IUK9NSK.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2720",
+        "name": "EUROPEAN RETRO",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058906554WH0Y2BP6ABHX7BAR5HK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890655QA2QP1UYA7O1A6E463NQ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2321",
+        "name": "EUROPEAN RETRO",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890621IS5V8NHLDX4OGZUDM3VO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/17058906214X1NKCABSBP05VJIIJ0E.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "116400",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1704709219YC9B3ITA298QLHJML37R.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1704709219XMESM5BJ31I8G1143FV0.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "130004",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978977UTTI62YI59GH1YGXPN32.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/1702978976UECVBFZSSSUJ89HDZ03G.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130003",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978951EJDCLJNQPCPAMY1NBIGB.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/17029789510EPWBMG2Q47GNIOL45M7.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130002",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978926WRAQKOBFIMLKOD5TLUC5.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/1702978926Y9XUG3FQOKC1JA2A4TEX.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130000",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978864RN2NS01YFHTGUS954RFK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/170297886482JVKNIQ41KWVBC000D8.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "121001",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1693300339WQQWZE2N7LNU22J38HJL.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1693300339G6FWJMJST5Z3WOLICXQJ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "121000",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1693297260D7CKQGSA6J5AALAE7NNJ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1693297259NF23T25A53POXJMXD31S.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "120064",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/169208430555QONL12KIC0D1R2JG8N.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692084305RXFLJJMN3I23F1R95JQ8.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120063",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692084250QQPVRX8L3M8Y54ZX8PYD.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16920842502ETNRB9138GMQ6TO1C8I.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120062",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692084197ENJS1DT7KN8VJBYBTBGQ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16920841978DA3TI6JSBIBC6BSWGP2.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120061",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692084143JVV458KZ384KSDKN6O7C.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16920841434ZBRAL0EW768LH9K9WPT.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120060",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16920840938WHPT0Z62SJ04XN3AUP4.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692084093IKVSBSFR7YE88WK73CWW.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120054",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017799EQAK8WZ90EHWV31Q0SEK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017798F08XENGD3SEVUL2R5T7O.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120053",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017779JBM0GH6KXUBZIPQJGAZD.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017779EH82FVIV46DIEXV4DIRW.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120052",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017758GR2POCJYBDG8NIYFNROJ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017757YWP9DXUD4ADD1QHFMLCK.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120051",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16920177351T0ZQLXSMTX208IV6U9B.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017735ZU7OIDPS7O6BLO0NQWMB.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120050",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017715WF7G4PN3LGJ04BNRKD3N.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017714G0QX4UYCKZWL81Z9810E.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120025",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/169147424366Q10VK0YK3GDF6641BZ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691474242X16GQUEDG4UBFQLDM4M5.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120023",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691474191H6R9A8JZ729TJUO1MJCX.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691474191N1VQQBKI7Z930H00EI5S.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120021",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691473807J257PF8P9WBS0CETVDDN.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691473807Y78TP7NFH2DCM5B4342I.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120020",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691473777Q9U0W8S9JBURXVAZQ3IY.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691473776PQD2HXDQ68NCTLIQB4TL.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120014",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/169114232894CL4301SM73H8YX6432.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16911423275JXBNARFK0LY7FA5LZSF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120013",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691142297L7S2I5962WON1R3K4ML9.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691142297TSJXKNPMF870MOQL8LKW.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120012",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16911422732QP0CB848JZPATYNLSZ8.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/169114227330ZXTRZBAL6B5RN55R2W.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120011",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691142245IBZQ70KV4C45SMSVSCSG.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691142244RUMVVSWDO3BSGYD2N3P4.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120010",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691142218TEAS5A6WP3186L3OMXCO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16911422188OON78C8TFNL43HQ2G3C.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "116373",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16909799641B3H91DS1WHHXHMFU6XO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979964Z9LMB3QXXBDH4I49UTDR.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "116374",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1690979931COL2J5ILECCDQNDZTUTO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979931SKRPTWJ8YA45Y5CDDDUM.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "116371",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1690979882R66A3PVLGNULDC6MYQ6T.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979881PC4L2A31WGALPTDCUIR0.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "116364",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1690802341QEKJIKX1AQ408J6QH8NC.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1690802341M2OJ55SJV6OGXA947JAL.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1023987",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943688SSL48KXSFQ4TWCNQ0102.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943688K6JTH6JINIIFEY2JDICV.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1026346",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943660VYFBL10YTRLLUQZS7PSV.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943660ZR5TKZ596NI8ER244JIH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1006240",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899436598MGSX6MEA95J460MIS70.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943659KPC4XELYUMZB0VO7EV6C.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1021261",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943635V65D7VWZTCOYRBH97ORZ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943635AAZH25H3ZEOW4SHVIZ42.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1003514",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899436166IIS5F196YY9Y2NMWR9P.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943616XEF40I8XR7AU67TTMLBY.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1018536",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943602IS3LG0W1C996CKFKYQ01.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943602JIUCM8I2DBBIQNZPRPX9.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1019927",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942298MVVXG359VN10L4GADRQP.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422981PFXHA63NY55GITT3LE6.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1018110",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942278AGKTY49C3TWS85ZXWO0B.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942278LSNWXX6OOH7DLDRTJR6D.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1004848",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899422715RTPOTIBS428QWQBX7BA.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942270I81YZR1ZZV221PZKQE1K.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1000363",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942261CLUA1HDVKE5YQU8MGF5L.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942261ZK5UZ7IM1GXQC9I2XH6X.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1019869",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/168994225269T4I2UQF05N4DN2INXX.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942252MKK6XJNU3CNLEIGUSI1X.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1015384",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942246LCFR8O6WGO1XQE1XKOKL.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942246ZZAKQYBXYT2Z2M817T3Q.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1030405",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942229F8HAYTZHT4BNQ60ZQNS4.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422292Y6Y2GVIUFDMVWYDS2AH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1002123",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899422257MR41LVIJ64RAFTO4ZJX.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422251HFCS9UCWNNV6YQW2LFI.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1017144",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899422086BZU1H1EHWHQ3GTLYMZ2.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942207VQNKOVS45MEVU4RA69J0.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1032165",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942183S0GPN0061QWI615JZ67O.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942183WZ6SU6EPCYX3PPWV6J2V.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1001755",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942070JU0C8MY6TFILH42G4IC6.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942070GVZGI2KIWI1EGZW6GONJ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1029439",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899420489CKAYP198V8KWWTAB9GB.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899420475JGLKD9IR4Q90Z3AN9HU.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1031797",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942036USQOBI0PLR0VH39KWXL5.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942036CYYQJ4OQ2VLN4ZTCZLIF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1014050",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942014D6NF98RYPFXCQUI9XTXD.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899420148IQ78JAL6MHB6GNZXJYQ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1026713",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942011QIPDJWFYFZV5NPFQ4G34.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942011DKKPKAGOH5XEULU5RYZA.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1029071",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689941998E4A4S1R1VDQ1WJOP9EC1.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689941998T33BZQ8NX8VF804651QM.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1011325",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/168994198088DLGRI2KUDOYM1WUIET.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689941980NO05N9I5HR7EQG40JHBU.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      }
+    ]
+  },
+  "COROS B20": {
+    "savedAt": "2026-10-29T22:15:43.774Z",
+    "themes": [
+      {
+        "id": "260902",
+        "name": "SIMPLE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202609/1789555772I9LIM13EL4PT6AP1906Q.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202609/1789555772EKADBTYVIQTJEFO8ZJE9.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "260526",
+        "name": "BOLD 3",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202605/1779806663P7GKI7A0AL376VY1UUIC.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202605/1779806662IPAFLJ8TN9MJVODIVGYF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "260515",
+        "name": "LOWER DOWN",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202605/1778830863ROC8KBPSBKP4Y61ET3Q3.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202605/1778830863N9U169QRNBSLW8N1Z5VP.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "129999",
+        "name": "BOLD3",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202605/1778496591JQ3D9EDWPGRGFRO9PCY9.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202605/1778496591JOHW3S1FC5GMDC8325FH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "251227",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202512/1766803025J8ND2T0CWJDGUKNA05FO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202512/17668030259OG2WO5Y69TTOKEDPIYK.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "251226",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202512/17667418957FTY8CTO5101PLI39LAH.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202512/17667418954K5R4E7VTI4X76M1HGUR.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10195022",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/1764239108WUGDRXZIAFOTT02FXSPM.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/17642391085QLO4X77VVNF04ROQ6BF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10222282",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/1764237882TL63QVR0QCS1GDXGNB65.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/17642378823YVKFOE9EC0HLREC079O.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10044812",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/1764235298AWR24FGNQPKQC9I4B6NQ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/1764235298M5IJFEGTXVN3WG4WFQRY.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10167762",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/17642348679618HLZ48JBGZVWFWW9K.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/17642348669ECYNEG6USDBN7EAUUIV.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130009",
+        "name": "SYMMETRY",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202404/1713422324MLGHBVCD2DI1RTD6RZME.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202404/17134223244VJ1SYH3UQ4HJXAUXX99.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "130008",
+        "name": "SYMMETRY",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202404/1713422295IZ6RFV6DTFZJHFZLXSVR.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202404/1713422295CS2WI7APKM0HMOESQB2D.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "130005",
+        "name": "SYMMETRY",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202404/1713422266DYKZSFFBWO26WX4ZTJBF.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202404/1713422265VK4RNGNRBXAHJY5M7X78.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "3015",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058911204WI2SK1UVVNF5SZZM025.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/170589112019DGJP7IRQH7KN0ZYMMI.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3014",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705891100J6AIBKBVUL6ZA0U84JKK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891100IBR3TPNTIJDZW76UCLL3.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3013",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705891079SN302Z1VI7MGPVEL5V8M.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891078CEP8QPDCFH6567MIGPHI.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3012",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058910560PHZUERT5WZ21HQSM1FH.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891056M5PUOH7RRD9VZR7ODR15.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3011",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058910370B0HF3NV5QN4D4O9B8M7.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891036MCK6B02DXFY1YNSHY9GH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3010",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890907WPV7ALY0WDAQXPU9Z5O8.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890907R0XX4Z4QQ7POLY2RO2B7.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3009",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890889TBU8KECACLX23W5PUBTE.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/17058908897TMP56259NHRYRW0T8NT.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3008",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890869LKUY7OZPUGDYNI009WS6.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/17058908698C841RPSQLJPSJNX9SNZ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3007",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890850ZY7C8UVS1J7PVYZZZC84.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890850EBV53IEIXAN9LL7VLVNU.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3006",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058908271XMP9AWZ4X28655AWYFC.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890826I8O11B61FZ5WMA0VFSXQ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2620",
+        "name": "EUROPEAN RETRO",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890676K6V8HGSXDWTD899MIZIW.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890676Q8KK43AICQ2W0IUK9NSK.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2720",
+        "name": "EUROPEAN RETRO",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058906554WH0Y2BP6ABHX7BAR5HK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890655QA2QP1UYA7O1A6E463NQ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2321",
+        "name": "EUROPEAN RETRO",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890621IS5V8NHLDX4OGZUDM3VO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/17058906214X1NKCABSBP05VJIIJ0E.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "116400",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1704709219YC9B3ITA298QLHJML37R.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1704709219XMESM5BJ31I8G1143FV0.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "130004",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978977UTTI62YI59GH1YGXPN32.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/1702978976UECVBFZSSSUJ89HDZ03G.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130003",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978951EJDCLJNQPCPAMY1NBIGB.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/17029789510EPWBMG2Q47GNIOL45M7.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130002",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978926WRAQKOBFIMLKOD5TLUC5.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/1702978926Y9XUG3FQOKC1JA2A4TEX.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130000",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978864RN2NS01YFHTGUS954RFK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/170297886482JVKNIQ41KWVBC000D8.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "121001",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1693300339WQQWZE2N7LNU22J38HJL.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1693300339G6FWJMJST5Z3WOLICXQJ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "121000",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1693297260D7CKQGSA6J5AALAE7NNJ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1693297259NF23T25A53POXJMXD31S.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "120064",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/169208430555QONL12KIC0D1R2JG8N.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692084305RXFLJJMN3I23F1R95JQ8.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120063",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692084250QQPVRX8L3M8Y54ZX8PYD.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16920842502ETNRB9138GMQ6TO1C8I.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120062",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692084197ENJS1DT7KN8VJBYBTBGQ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16920841978DA3TI6JSBIBC6BSWGP2.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120061",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692084143JVV458KZ384KSDKN6O7C.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16920841434ZBRAL0EW768LH9K9WPT.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120060",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16920840938WHPT0Z62SJ04XN3AUP4.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692084093IKVSBSFR7YE88WK73CWW.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120054",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017799EQAK8WZ90EHWV31Q0SEK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017798F08XENGD3SEVUL2R5T7O.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120053",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017779JBM0GH6KXUBZIPQJGAZD.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017779EH82FVIV46DIEXV4DIRW.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120052",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017758GR2POCJYBDG8NIYFNROJ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017757YWP9DXUD4ADD1QHFMLCK.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120051",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16920177351T0ZQLXSMTX208IV6U9B.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017735ZU7OIDPS7O6BLO0NQWMB.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120050",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017715WF7G4PN3LGJ04BNRKD3N.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017714G0QX4UYCKZWL81Z9810E.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120025",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/169147424366Q10VK0YK3GDF6641BZ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691474242X16GQUEDG4UBFQLDM4M5.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120023",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691474191H6R9A8JZ729TJUO1MJCX.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691474191N1VQQBKI7Z930H00EI5S.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120021",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691473807J257PF8P9WBS0CETVDDN.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691473807Y78TP7NFH2DCM5B4342I.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120020",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691473777Q9U0W8S9JBURXVAZQ3IY.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691473776PQD2HXDQ68NCTLIQB4TL.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120014",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/169114232894CL4301SM73H8YX6432.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16911423275JXBNARFK0LY7FA5LZSF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120013",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691142297L7S2I5962WON1R3K4ML9.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691142297TSJXKNPMF870MOQL8LKW.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120012",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16911422732QP0CB848JZPATYNLSZ8.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/169114227330ZXTRZBAL6B5RN55R2W.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120011",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691142245IBZQ70KV4C45SMSVSCSG.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691142244RUMVVSWDO3BSGYD2N3P4.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120010",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691142218TEAS5A6WP3186L3OMXCO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16911422188OON78C8TFNL43HQ2G3C.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "116373",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16909799641B3H91DS1WHHXHMFU6XO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979964Z9LMB3QXXBDH4I49UTDR.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "116374",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1690979931COL2J5ILECCDQNDZTUTO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979931SKRPTWJ8YA45Y5CDDDUM.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "116371",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1690979882R66A3PVLGNULDC6MYQ6T.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979881PC4L2A31WGALPTDCUIR0.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "116364",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1690802341QEKJIKX1AQ408J6QH8NC.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1690802341M2OJ55SJV6OGXA947JAL.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1023987",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943688SSL48KXSFQ4TWCNQ0102.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943688K6JTH6JINIIFEY2JDICV.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1026346",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943660VYFBL10YTRLLUQZS7PSV.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943660ZR5TKZ596NI8ER244JIH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1006240",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899436598MGSX6MEA95J460MIS70.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943659KPC4XELYUMZB0VO7EV6C.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1021261",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943635V65D7VWZTCOYRBH97ORZ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943635AAZH25H3ZEOW4SHVIZ42.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1003514",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899436166IIS5F196YY9Y2NMWR9P.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943616XEF40I8XR7AU67TTMLBY.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1018536",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943602IS3LG0W1C996CKFKYQ01.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943602JIUCM8I2DBBIQNZPRPX9.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1019927",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942298MVVXG359VN10L4GADRQP.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422981PFXHA63NY55GITT3LE6.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1018110",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942278AGKTY49C3TWS85ZXWO0B.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942278LSNWXX6OOH7DLDRTJR6D.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1004848",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899422715RTPOTIBS428QWQBX7BA.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942270I81YZR1ZZV221PZKQE1K.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1000363",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942261CLUA1HDVKE5YQU8MGF5L.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942261ZK5UZ7IM1GXQC9I2XH6X.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1019869",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/168994225269T4I2UQF05N4DN2INXX.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942252MKK6XJNU3CNLEIGUSI1X.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1015384",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942246LCFR8O6WGO1XQE1XKOKL.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942246ZZAKQYBXYT2Z2M817T3Q.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1030405",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942229F8HAYTZHT4BNQ60ZQNS4.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422292Y6Y2GVIUFDMVWYDS2AH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1002123",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899422257MR41LVIJ64RAFTO4ZJX.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422251HFCS9UCWNNV6YQW2LFI.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1017144",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899422086BZU1H1EHWHQ3GTLYMZ2.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942207VQNKOVS45MEVU4RA69J0.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1032165",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942183S0GPN0061QWI615JZ67O.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942183WZ6SU6EPCYX3PPWV6J2V.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1001755",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942070JU0C8MY6TFILH42G4IC6.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942070GVZGI2KIWI1EGZW6GONJ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1029439",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899420489CKAYP198V8KWWTAB9GB.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899420475JGLKD9IR4Q90Z3AN9HU.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1031797",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942036USQOBI0PLR0VH39KWXL5.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942036CYYQJ4OQ2VLN4ZTCZLIF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1014050",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942014D6NF98RYPFXCQUI9XTXD.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899420148IQ78JAL6MHB6GNZXJYQ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1026713",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942011QIPDJWFYFZV5NPFQ4G34.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942011DKKPKAGOH5XEULU5RYZA.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1029071",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689941998E4A4S1R1VDQ1WJOP9EC1.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689941998T33BZQ8NX8VF804651QM.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1011325",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/168994198088DLGRI2KUDOYM1WUIET.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689941980NO05N9I5HR7EQG40JHBU.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      }
+    ]
+  },
+  "COROS B21": {
+    "savedAt": "2026-10-29T22:15:43.973Z",
+    "themes": [
+      {
+        "id": "260902",
+        "name": "SIMPLE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202609/1789555772I9LIM13EL4PT6AP1906Q.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202609/1789555772EKADBTYVIQTJEFO8ZJE9.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "260526",
+        "name": "BOLD 3",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202605/1779806663P7GKI7A0AL376VY1UUIC.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202605/1779806662IPAFLJ8TN9MJVODIVGYF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "260515",
+        "name": "LOWER DOWN",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202605/1778830863ROC8KBPSBKP4Y61ET3Q3.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202605/1778830863N9U169QRNBSLW8N1Z5VP.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "129999",
+        "name": "BOLD3",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202605/1778496591JQ3D9EDWPGRGFRO9PCY9.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202605/1778496591JOHW3S1FC5GMDC8325FH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "251227",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202512/1766803025J8ND2T0CWJDGUKNA05FO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202512/17668030259OG2WO5Y69TTOKEDPIYK.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "251226",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202512/17667418957FTY8CTO5101PLI39LAH.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202512/17667418954K5R4E7VTI4X76M1HGUR.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10195022",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/1764239108WUGDRXZIAFOTT02FXSPM.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/17642391085QLO4X77VVNF04ROQ6BF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10222282",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/1764237882TL63QVR0QCS1GDXGNB65.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/17642378823YVKFOE9EC0HLREC079O.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10044812",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/1764235298AWR24FGNQPKQC9I4B6NQ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/1764235298M5IJFEGTXVN3WG4WFQRY.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10167762",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/17642348679618HLZ48JBGZVWFWW9K.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/17642348669ECYNEG6USDBN7EAUUIV.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130009",
+        "name": "SYMMETRY",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202404/1713422324MLGHBVCD2DI1RTD6RZME.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202404/17134223244VJ1SYH3UQ4HJXAUXX99.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "130008",
+        "name": "SYMMETRY",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202404/1713422295IZ6RFV6DTFZJHFZLXSVR.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202404/1713422295CS2WI7APKM0HMOESQB2D.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "130005",
+        "name": "SYMMETRY",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202404/1713422266DYKZSFFBWO26WX4ZTJBF.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202404/1713422265VK4RNGNRBXAHJY5M7X78.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "3015",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058911204WI2SK1UVVNF5SZZM025.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/170589112019DGJP7IRQH7KN0ZYMMI.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3014",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705891100J6AIBKBVUL6ZA0U84JKK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891100IBR3TPNTIJDZW76UCLL3.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3013",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705891079SN302Z1VI7MGPVEL5V8M.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891078CEP8QPDCFH6567MIGPHI.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3012",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058910560PHZUERT5WZ21HQSM1FH.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891056M5PUOH7RRD9VZR7ODR15.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3011",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058910370B0HF3NV5QN4D4O9B8M7.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891036MCK6B02DXFY1YNSHY9GH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3010",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890907WPV7ALY0WDAQXPU9Z5O8.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890907R0XX4Z4QQ7POLY2RO2B7.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3009",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890889TBU8KECACLX23W5PUBTE.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/17058908897TMP56259NHRYRW0T8NT.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3008",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890869LKUY7OZPUGDYNI009WS6.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/17058908698C841RPSQLJPSJNX9SNZ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3007",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890850ZY7C8UVS1J7PVYZZZC84.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890850EBV53IEIXAN9LL7VLVNU.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3006",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058908271XMP9AWZ4X28655AWYFC.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890826I8O11B61FZ5WMA0VFSXQ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2620",
+        "name": "EUROPEAN RETRO",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890676K6V8HGSXDWTD899MIZIW.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890676Q8KK43AICQ2W0IUK9NSK.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2720",
+        "name": "EUROPEAN RETRO",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058906554WH0Y2BP6ABHX7BAR5HK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890655QA2QP1UYA7O1A6E463NQ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2321",
+        "name": "EUROPEAN RETRO",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890621IS5V8NHLDX4OGZUDM3VO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/17058906214X1NKCABSBP05VJIIJ0E.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "116400",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1704709219YC9B3ITA298QLHJML37R.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1704709219XMESM5BJ31I8G1143FV0.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "130004",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978977UTTI62YI59GH1YGXPN32.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/1702978976UECVBFZSSSUJ89HDZ03G.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130003",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978951EJDCLJNQPCPAMY1NBIGB.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/17029789510EPWBMG2Q47GNIOL45M7.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130002",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978926WRAQKOBFIMLKOD5TLUC5.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/1702978926Y9XUG3FQOKC1JA2A4TEX.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130000",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978864RN2NS01YFHTGUS954RFK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/170297886482JVKNIQ41KWVBC000D8.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "121001",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1693300339WQQWZE2N7LNU22J38HJL.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1693300339G6FWJMJST5Z3WOLICXQJ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "121000",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1693297260D7CKQGSA6J5AALAE7NNJ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1693297259NF23T25A53POXJMXD31S.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "120064",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/169208430555QONL12KIC0D1R2JG8N.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692084305RXFLJJMN3I23F1R95JQ8.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120063",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692084250QQPVRX8L3M8Y54ZX8PYD.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16920842502ETNRB9138GMQ6TO1C8I.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120062",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692084197ENJS1DT7KN8VJBYBTBGQ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16920841978DA3TI6JSBIBC6BSWGP2.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120061",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692084143JVV458KZ384KSDKN6O7C.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16920841434ZBRAL0EW768LH9K9WPT.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120060",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16920840938WHPT0Z62SJ04XN3AUP4.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692084093IKVSBSFR7YE88WK73CWW.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120054",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017799EQAK8WZ90EHWV31Q0SEK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017798F08XENGD3SEVUL2R5T7O.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120053",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017779JBM0GH6KXUBZIPQJGAZD.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017779EH82FVIV46DIEXV4DIRW.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120052",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017758GR2POCJYBDG8NIYFNROJ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017757YWP9DXUD4ADD1QHFMLCK.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120051",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16920177351T0ZQLXSMTX208IV6U9B.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017735ZU7OIDPS7O6BLO0NQWMB.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120050",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017715WF7G4PN3LGJ04BNRKD3N.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017714G0QX4UYCKZWL81Z9810E.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120025",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/169147424366Q10VK0YK3GDF6641BZ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691474242X16GQUEDG4UBFQLDM4M5.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120023",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691474191H6R9A8JZ729TJUO1MJCX.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691474191N1VQQBKI7Z930H00EI5S.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120021",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691473807J257PF8P9WBS0CETVDDN.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691473807Y78TP7NFH2DCM5B4342I.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120020",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691473777Q9U0W8S9JBURXVAZQ3IY.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691473776PQD2HXDQ68NCTLIQB4TL.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120014",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/169114232894CL4301SM73H8YX6432.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16911423275JXBNARFK0LY7FA5LZSF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120013",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691142297L7S2I5962WON1R3K4ML9.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691142297TSJXKNPMF870MOQL8LKW.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120012",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16911422732QP0CB848JZPATYNLSZ8.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/169114227330ZXTRZBAL6B5RN55R2W.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120011",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691142245IBZQ70KV4C45SMSVSCSG.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691142244RUMVVSWDO3BSGYD2N3P4.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120010",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691142218TEAS5A6WP3186L3OMXCO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16911422188OON78C8TFNL43HQ2G3C.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "116373",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16909799641B3H91DS1WHHXHMFU6XO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979964Z9LMB3QXXBDH4I49UTDR.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "116374",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1690979931COL2J5ILECCDQNDZTUTO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979931SKRPTWJ8YA45Y5CDDDUM.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "116371",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1690979882R66A3PVLGNULDC6MYQ6T.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979881PC4L2A31WGALPTDCUIR0.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "116364",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1690802341QEKJIKX1AQ408J6QH8NC.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1690802341M2OJ55SJV6OGXA947JAL.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1023987",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943688SSL48KXSFQ4TWCNQ0102.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943688K6JTH6JINIIFEY2JDICV.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1026346",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943660VYFBL10YTRLLUQZS7PSV.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943660ZR5TKZ596NI8ER244JIH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1006240",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899436598MGSX6MEA95J460MIS70.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943659KPC4XELYUMZB0VO7EV6C.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1021261",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943635V65D7VWZTCOYRBH97ORZ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943635AAZH25H3ZEOW4SHVIZ42.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1003514",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899436166IIS5F196YY9Y2NMWR9P.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943616XEF40I8XR7AU67TTMLBY.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1018536",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943602IS3LG0W1C996CKFKYQ01.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943602JIUCM8I2DBBIQNZPRPX9.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1019927",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942298MVVXG359VN10L4GADRQP.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422981PFXHA63NY55GITT3LE6.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1018110",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942278AGKTY49C3TWS85ZXWO0B.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942278LSNWXX6OOH7DLDRTJR6D.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1004848",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899422715RTPOTIBS428QWQBX7BA.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942270I81YZR1ZZV221PZKQE1K.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1000363",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942261CLUA1HDVKE5YQU8MGF5L.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942261ZK5UZ7IM1GXQC9I2XH6X.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1019869",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/168994225269T4I2UQF05N4DN2INXX.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942252MKK6XJNU3CNLEIGUSI1X.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1015384",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942246LCFR8O6WGO1XQE1XKOKL.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942246ZZAKQYBXYT2Z2M817T3Q.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1030405",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942229F8HAYTZHT4BNQ60ZQNS4.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422292Y6Y2GVIUFDMVWYDS2AH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1002123",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899422257MR41LVIJ64RAFTO4ZJX.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422251HFCS9UCWNNV6YQW2LFI.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1017144",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899422086BZU1H1EHWHQ3GTLYMZ2.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942207VQNKOVS45MEVU4RA69J0.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1032165",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942183S0GPN0061QWI615JZ67O.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942183WZ6SU6EPCYX3PPWV6J2V.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1001755",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942070JU0C8MY6TFILH42G4IC6.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942070GVZGI2KIWI1EGZW6GONJ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1029439",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899420489CKAYP198V8KWWTAB9GB.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899420475JGLKD9IR4Q90Z3AN9HU.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1031797",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942036USQOBI0PLR0VH39KWXL5.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942036CYYQJ4OQ2VLN4ZTCZLIF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1014050",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942014D6NF98RYPFXCQUI9XTXD.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899420148IQ78JAL6MHB6GNZXJYQ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1026713",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942011QIPDJWFYFZV5NPFQ4G34.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942011DKKPKAGOH5XEULU5RYZA.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1029071",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689941998E4A4S1R1VDQ1WJOP9EC1.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689941998T33BZQ8NX8VF804651QM.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1011325",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/168994198088DLGRI2KUDOYM1WUIET.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689941980NO05N9I5HR7EQG40JHBU.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      }
+    ]
+  },
+  "COROS B17": {
+    "savedAt": "2026-10-29T22:15:44.082Z",
+    "themes": [
+      {
+        "id": "260902",
+        "name": "SIMPLE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202609/1789555772I9LIM13EL4PT6AP1906Q.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202609/1789555772EKADBTYVIQTJEFO8ZJE9.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "260526",
+        "name": "BOLD 3",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202605/1779806663P7GKI7A0AL376VY1UUIC.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202605/1779806662IPAFLJ8TN9MJVODIVGYF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "260515",
+        "name": "LOWER DOWN",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202605/1778830863ROC8KBPSBKP4Y61ET3Q3.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202605/1778830863N9U169QRNBSLW8N1Z5VP.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "129999",
+        "name": "BOLD3",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202605/1778496591JQ3D9EDWPGRGFRO9PCY9.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202605/1778496591JOHW3S1FC5GMDC8325FH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "251227",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202512/1766803025J8ND2T0CWJDGUKNA05FO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202512/17668030259OG2WO5Y69TTOKEDPIYK.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "251226",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202512/17667418957FTY8CTO5101PLI39LAH.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202512/17667418954K5R4E7VTI4X76M1HGUR.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10195022",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/1764239108WUGDRXZIAFOTT02FXSPM.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/17642391085QLO4X77VVNF04ROQ6BF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10222282",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/1764237882TL63QVR0QCS1GDXGNB65.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/17642378823YVKFOE9EC0HLREC079O.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10044812",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/1764235298AWR24FGNQPKQC9I4B6NQ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/1764235298M5IJFEGTXVN3WG4WFQRY.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10167762",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/17642348679618HLZ48JBGZVWFWW9K.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/17642348669ECYNEG6USDBN7EAUUIV.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130009",
+        "name": "SYMMETRY",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202404/1713422324MLGHBVCD2DI1RTD6RZME.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202404/17134223244VJ1SYH3UQ4HJXAUXX99.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "130008",
+        "name": "SYMMETRY",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202404/1713422295IZ6RFV6DTFZJHFZLXSVR.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202404/1713422295CS2WI7APKM0HMOESQB2D.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "130005",
+        "name": "SYMMETRY",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202404/1713422266DYKZSFFBWO26WX4ZTJBF.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202404/1713422265VK4RNGNRBXAHJY5M7X78.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "3015",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058911204WI2SK1UVVNF5SZZM025.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/170589112019DGJP7IRQH7KN0ZYMMI.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3014",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705891100J6AIBKBVUL6ZA0U84JKK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891100IBR3TPNTIJDZW76UCLL3.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3013",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705891079SN302Z1VI7MGPVEL5V8M.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891078CEP8QPDCFH6567MIGPHI.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3012",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058910560PHZUERT5WZ21HQSM1FH.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891056M5PUOH7RRD9VZR7ODR15.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3011",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058910370B0HF3NV5QN4D4O9B8M7.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891036MCK6B02DXFY1YNSHY9GH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3010",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890907WPV7ALY0WDAQXPU9Z5O8.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890907R0XX4Z4QQ7POLY2RO2B7.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3009",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890889TBU8KECACLX23W5PUBTE.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/17058908897TMP56259NHRYRW0T8NT.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3008",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890869LKUY7OZPUGDYNI009WS6.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/17058908698C841RPSQLJPSJNX9SNZ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3007",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890850ZY7C8UVS1J7PVYZZZC84.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890850EBV53IEIXAN9LL7VLVNU.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3006",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058908271XMP9AWZ4X28655AWYFC.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890826I8O11B61FZ5WMA0VFSXQ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2620",
+        "name": "EUROPEAN RETRO",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890676K6V8HGSXDWTD899MIZIW.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890676Q8KK43AICQ2W0IUK9NSK.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2720",
+        "name": "EUROPEAN RETRO",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058906554WH0Y2BP6ABHX7BAR5HK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890655QA2QP1UYA7O1A6E463NQ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2321",
+        "name": "EUROPEAN RETRO",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890621IS5V8NHLDX4OGZUDM3VO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/17058906214X1NKCABSBP05VJIIJ0E.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "116400",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1704709219YC9B3ITA298QLHJML37R.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1704709219XMESM5BJ31I8G1143FV0.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "130004",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978977UTTI62YI59GH1YGXPN32.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/1702978976UECVBFZSSSUJ89HDZ03G.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130003",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978951EJDCLJNQPCPAMY1NBIGB.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/17029789510EPWBMG2Q47GNIOL45M7.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130002",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978926WRAQKOBFIMLKOD5TLUC5.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/1702978926Y9XUG3FQOKC1JA2A4TEX.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130000",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978864RN2NS01YFHTGUS954RFK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/170297886482JVKNIQ41KWVBC000D8.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "121001",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1693300339WQQWZE2N7LNU22J38HJL.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1693300339G6FWJMJST5Z3WOLICXQJ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "121000",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1693297260D7CKQGSA6J5AALAE7NNJ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1693297259NF23T25A53POXJMXD31S.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "120064",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/169208430555QONL12KIC0D1R2JG8N.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692084305RXFLJJMN3I23F1R95JQ8.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120063",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692084250QQPVRX8L3M8Y54ZX8PYD.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16920842502ETNRB9138GMQ6TO1C8I.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120062",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692084197ENJS1DT7KN8VJBYBTBGQ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16920841978DA3TI6JSBIBC6BSWGP2.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120061",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692084143JVV458KZ384KSDKN6O7C.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16920841434ZBRAL0EW768LH9K9WPT.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120060",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16920840938WHPT0Z62SJ04XN3AUP4.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692084093IKVSBSFR7YE88WK73CWW.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120054",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017799EQAK8WZ90EHWV31Q0SEK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017798F08XENGD3SEVUL2R5T7O.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120053",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017779JBM0GH6KXUBZIPQJGAZD.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017779EH82FVIV46DIEXV4DIRW.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120052",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017758GR2POCJYBDG8NIYFNROJ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017757YWP9DXUD4ADD1QHFMLCK.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120051",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16920177351T0ZQLXSMTX208IV6U9B.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017735ZU7OIDPS7O6BLO0NQWMB.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120050",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017715WF7G4PN3LGJ04BNRKD3N.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017714G0QX4UYCKZWL81Z9810E.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120025",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/169147424366Q10VK0YK3GDF6641BZ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691474242X16GQUEDG4UBFQLDM4M5.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120023",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691474191H6R9A8JZ729TJUO1MJCX.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691474191N1VQQBKI7Z930H00EI5S.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120021",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691473807J257PF8P9WBS0CETVDDN.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691473807Y78TP7NFH2DCM5B4342I.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120020",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691473777Q9U0W8S9JBURXVAZQ3IY.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691473776PQD2HXDQ68NCTLIQB4TL.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120014",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/169114232894CL4301SM73H8YX6432.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16911423275JXBNARFK0LY7FA5LZSF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120013",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691142297L7S2I5962WON1R3K4ML9.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691142297TSJXKNPMF870MOQL8LKW.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120012",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16911422732QP0CB848JZPATYNLSZ8.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/169114227330ZXTRZBAL6B5RN55R2W.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120011",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691142245IBZQ70KV4C45SMSVSCSG.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691142244RUMVVSWDO3BSGYD2N3P4.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120010",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691142218TEAS5A6WP3186L3OMXCO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16911422188OON78C8TFNL43HQ2G3C.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "116373",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16909799641B3H91DS1WHHXHMFU6XO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979964Z9LMB3QXXBDH4I49UTDR.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "116374",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1690979931COL2J5ILECCDQNDZTUTO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979931SKRPTWJ8YA45Y5CDDDUM.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "116371",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1690979882R66A3PVLGNULDC6MYQ6T.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979881PC4L2A31WGALPTDCUIR0.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "116364",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1690802341QEKJIKX1AQ408J6QH8NC.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1690802341M2OJ55SJV6OGXA947JAL.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1023987",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943688SSL48KXSFQ4TWCNQ0102.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943688K6JTH6JINIIFEY2JDICV.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1026346",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943660VYFBL10YTRLLUQZS7PSV.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943660ZR5TKZ596NI8ER244JIH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1006240",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899436598MGSX6MEA95J460MIS70.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943659KPC4XELYUMZB0VO7EV6C.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1021261",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943635V65D7VWZTCOYRBH97ORZ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943635AAZH25H3ZEOW4SHVIZ42.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1003514",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899436166IIS5F196YY9Y2NMWR9P.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943616XEF40I8XR7AU67TTMLBY.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1018536",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943602IS3LG0W1C996CKFKYQ01.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943602JIUCM8I2DBBIQNZPRPX9.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1019927",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942298MVVXG359VN10L4GADRQP.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422981PFXHA63NY55GITT3LE6.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1018110",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942278AGKTY49C3TWS85ZXWO0B.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942278LSNWXX6OOH7DLDRTJR6D.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1004848",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899422715RTPOTIBS428QWQBX7BA.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942270I81YZR1ZZV221PZKQE1K.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1000363",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942261CLUA1HDVKE5YQU8MGF5L.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942261ZK5UZ7IM1GXQC9I2XH6X.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1019869",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/168994225269T4I2UQF05N4DN2INXX.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942252MKK6XJNU3CNLEIGUSI1X.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1015384",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942246LCFR8O6WGO1XQE1XKOKL.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942246ZZAKQYBXYT2Z2M817T3Q.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1030405",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942229F8HAYTZHT4BNQ60ZQNS4.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422292Y6Y2GVIUFDMVWYDS2AH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1002123",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899422257MR41LVIJ64RAFTO4ZJX.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422251HFCS9UCWNNV6YQW2LFI.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1017144",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899422086BZU1H1EHWHQ3GTLYMZ2.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942207VQNKOVS45MEVU4RA69J0.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1032165",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942183S0GPN0061QWI615JZ67O.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942183WZ6SU6EPCYX3PPWV6J2V.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1001755",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942070JU0C8MY6TFILH42G4IC6.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942070GVZGI2KIWI1EGZW6GONJ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1029439",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899420489CKAYP198V8KWWTAB9GB.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899420475JGLKD9IR4Q90Z3AN9HU.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1031797",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942036USQOBI0PLR0VH39KWXL5.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942036CYYQJ4OQ2VLN4ZTCZLIF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1014050",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942014D6NF98RYPFXCQUI9XTXD.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899420148IQ78JAL6MHB6GNZXJYQ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1026713",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942011QIPDJWFYFZV5NPFQ4G34.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942011DKKPKAGOH5XEULU5RYZA.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1029071",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689941998E4A4S1R1VDQ1WJOP9EC1.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689941998T33BZQ8NX8VF804651QM.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1011325",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/168994198088DLGRI2KUDOYM1WUIET.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689941980NO05N9I5HR7EQG40JHBU.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      }
+    ]
+  },
+  "COROS B16": {
+    "savedAt": "2026-10-29T22:15:44.196Z",
+    "themes": [
+      {
+        "id": "260902",
+        "name": "SIMPLE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202609/1789555772I9LIM13EL4PT6AP1906Q.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202609/1789555772EKADBTYVIQTJEFO8ZJE9.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "260526",
+        "name": "BOLD 3",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202605/1779806663P7GKI7A0AL376VY1UUIC.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202605/1779806662IPAFLJ8TN9MJVODIVGYF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "260515",
+        "name": "LOWER DOWN",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202605/1778830863ROC8KBPSBKP4Y61ET3Q3.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202605/1778830863N9U169QRNBSLW8N1Z5VP.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "129999",
+        "name": "BOLD3",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202605/1778496591JQ3D9EDWPGRGFRO9PCY9.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202605/1778496591JOHW3S1FC5GMDC8325FH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "251227",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202512/1766803025J8ND2T0CWJDGUKNA05FO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202512/17668030259OG2WO5Y69TTOKEDPIYK.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "251226",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202512/17667418957FTY8CTO5101PLI39LAH.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202512/17667418954K5R4E7VTI4X76M1HGUR.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10195022",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/1764239108WUGDRXZIAFOTT02FXSPM.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/17642391085QLO4X77VVNF04ROQ6BF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10222282",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/1764237882TL63QVR0QCS1GDXGNB65.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/17642378823YVKFOE9EC0HLREC079O.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10044812",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/1764235298AWR24FGNQPKQC9I4B6NQ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/1764235298M5IJFEGTXVN3WG4WFQRY.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "10167762",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202511/17642348679618HLZ48JBGZVWFWW9K.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202511/17642348669ECYNEG6USDBN7EAUUIV.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130009",
+        "name": "SYMMETRY",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202404/1713422324MLGHBVCD2DI1RTD6RZME.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202404/17134223244VJ1SYH3UQ4HJXAUXX99.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "130008",
+        "name": "SYMMETRY",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202404/1713422295IZ6RFV6DTFZJHFZLXSVR.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202404/1713422295CS2WI7APKM0HMOESQB2D.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "130005",
+        "name": "SYMMETRY",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202404/1713422266DYKZSFFBWO26WX4ZTJBF.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202404/1713422265VK4RNGNRBXAHJY5M7X78.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "3015",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058911204WI2SK1UVVNF5SZZM025.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/170589112019DGJP7IRQH7KN0ZYMMI.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3014",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705891100J6AIBKBVUL6ZA0U84JKK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891100IBR3TPNTIJDZW76UCLL3.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3013",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705891079SN302Z1VI7MGPVEL5V8M.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891078CEP8QPDCFH6567MIGPHI.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3012",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058910560PHZUERT5WZ21HQSM1FH.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891056M5PUOH7RRD9VZR7ODR15.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3011",
+        "name": "BOLD2",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058910370B0HF3NV5QN4D4O9B8M7.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891036MCK6B02DXFY1YNSHY9GH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3010",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890907WPV7ALY0WDAQXPU9Z5O8.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890907R0XX4Z4QQ7POLY2RO2B7.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3009",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890889TBU8KECACLX23W5PUBTE.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/17058908897TMP56259NHRYRW0T8NT.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3008",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890869LKUY7OZPUGDYNI009WS6.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/17058908698C841RPSQLJPSJNX9SNZ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3007",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890850ZY7C8UVS1J7PVYZZZC84.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890850EBV53IEIXAN9LL7VLVNU.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "3006",
+        "name": "BOLD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058908271XMP9AWZ4X28655AWYFC.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890826I8O11B61FZ5WMA0VFSXQ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2620",
+        "name": "EUROPEAN RETRO",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890676K6V8HGSXDWTD899MIZIW.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890676Q8KK43AICQ2W0IUK9NSK.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2720",
+        "name": "EUROPEAN RETRO",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/17058906554WH0Y2BP6ABHX7BAR5HK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890655QA2QP1UYA7O1A6E463NQ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "2321",
+        "name": "EUROPEAN RETRO",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1705890621IS5V8NHLDX4OGZUDM3VO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/17058906214X1NKCABSBP05VJIIJ0E.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "116400",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202401/1704709219YC9B3ITA298QLHJML37R.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202401/1704709219XMESM5BJ31I8G1143FV0.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "130004",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978977UTTI62YI59GH1YGXPN32.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/1702978976UECVBFZSSSUJ89HDZ03G.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130003",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978951EJDCLJNQPCPAMY1NBIGB.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/17029789510EPWBMG2Q47GNIOL45M7.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130002",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978926WRAQKOBFIMLKOD5TLUC5.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/1702978926Y9XUG3FQOKC1JA2A4TEX.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "130000",
+        "name": "SERIF",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202312/1702978864RN2NS01YFHTGUS954RFK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202312/170297886482JVKNIQ41KWVBC000D8.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "121001",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1693300339WQQWZE2N7LNU22J38HJL.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1693300339G6FWJMJST5Z3WOLICXQJ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "121000",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1693297260D7CKQGSA6J5AALAE7NNJ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1693297259NF23T25A53POXJMXD31S.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "120064",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/169208430555QONL12KIC0D1R2JG8N.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692084305RXFLJJMN3I23F1R95JQ8.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120063",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692084250QQPVRX8L3M8Y54ZX8PYD.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16920842502ETNRB9138GMQ6TO1C8I.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120062",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692084197ENJS1DT7KN8VJBYBTBGQ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16920841978DA3TI6JSBIBC6BSWGP2.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120061",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692084143JVV458KZ384KSDKN6O7C.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16920841434ZBRAL0EW768LH9K9WPT.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120060",
+        "name": "DIFFUSE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16920840938WHPT0Z62SJ04XN3AUP4.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692084093IKVSBSFR7YE88WK73CWW.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120054",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017799EQAK8WZ90EHWV31Q0SEK.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017798F08XENGD3SEVUL2R5T7O.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120053",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017779JBM0GH6KXUBZIPQJGAZD.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017779EH82FVIV46DIEXV4DIRW.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120052",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017758GR2POCJYBDG8NIYFNROJ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017757YWP9DXUD4ADD1QHFMLCK.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120051",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16920177351T0ZQLXSMTX208IV6U9B.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017735ZU7OIDPS7O6BLO0NQWMB.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120050",
+        "name": "AROUND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1692017715WF7G4PN3LGJ04BNRKD3N.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017714G0QX4UYCKZWL81Z9810E.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120025",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/169147424366Q10VK0YK3GDF6641BZ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691474242X16GQUEDG4UBFQLDM4M5.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120023",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691474191H6R9A8JZ729TJUO1MJCX.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691474191N1VQQBKI7Z930H00EI5S.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120021",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691473807J257PF8P9WBS0CETVDDN.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691473807Y78TP7NFH2DCM5B4342I.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120020",
+        "name": "DIVIDED",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691473777Q9U0W8S9JBURXVAZQ3IY.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691473776PQD2HXDQ68NCTLIQB4TL.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120014",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/169114232894CL4301SM73H8YX6432.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16911423275JXBNARFK0LY7FA5LZSF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120013",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691142297L7S2I5962WON1R3K4ML9.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691142297TSJXKNPMF870MOQL8LKW.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120012",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16911422732QP0CB848JZPATYNLSZ8.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/169114227330ZXTRZBAL6B5RN55R2W.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120011",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691142245IBZQ70KV4C45SMSVSCSG.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1691142244RUMVVSWDO3BSGYD2N3P4.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "120010",
+        "name": "STANDARD",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1691142218TEAS5A6WP3186L3OMXCO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/16911422188OON78C8TFNL43HQ2G3C.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "116373",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/16909799641B3H91DS1WHHXHMFU6XO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979964Z9LMB3QXXBDH4I49UTDR.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "116374",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1690979931COL2J5ILECCDQNDZTUTO.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979931SKRPTWJ8YA45Y5CDDDUM.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "116371",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202308/1690979882R66A3PVLGNULDC6MYQ6T.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979881PC4L2A31WGALPTDCUIR0.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "116364",
+        "name": "PAPER CLIP",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1690802341QEKJIKX1AQ408J6QH8NC.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1690802341M2OJ55SJV6OGXA947JAL.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1023987",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943688SSL48KXSFQ4TWCNQ0102.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943688K6JTH6JINIIFEY2JDICV.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1026346",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943660VYFBL10YTRLLUQZS7PSV.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943660ZR5TKZ596NI8ER244JIH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1006240",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899436598MGSX6MEA95J460MIS70.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943659KPC4XELYUMZB0VO7EV6C.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1021261",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943635V65D7VWZTCOYRBH97ORZ.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943635AAZH25H3ZEOW4SHVIZ42.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1003514",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899436166IIS5F196YY9Y2NMWR9P.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943616XEF40I8XR7AU67TTMLBY.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1018536",
+        "name": "CENTER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689943602IS3LG0W1C996CKFKYQ01.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943602JIUCM8I2DBBIQNZPRPX9.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1019927",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942298MVVXG359VN10L4GADRQP.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422981PFXHA63NY55GITT3LE6.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1018110",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942278AGKTY49C3TWS85ZXWO0B.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942278LSNWXX6OOH7DLDRTJR6D.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1004848",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899422715RTPOTIBS428QWQBX7BA.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942270I81YZR1ZZV221PZKQE1K.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1000363",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942261CLUA1HDVKE5YQU8MGF5L.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942261ZK5UZ7IM1GXQC9I2XH6X.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1019869",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/168994225269T4I2UQF05N4DN2INXX.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942252MKK6XJNU3CNLEIGUSI1X.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1015384",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942246LCFR8O6WGO1XQE1XKOKL.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942246ZZAKQYBXYT2Z2M817T3Q.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1030405",
+        "name": "LARGE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942229F8HAYTZHT4BNQ60ZQNS4.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422292Y6Y2GVIUFDMVWYDS2AH.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1002123",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899422257MR41LVIJ64RAFTO4ZJX.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422251HFCS9UCWNNV6YQW2LFI.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1017144",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899422086BZU1H1EHWHQ3GTLYMZ2.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942207VQNKOVS45MEVU4RA69J0.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1032165",
+        "name": "MELLOW",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942183S0GPN0061QWI615JZ67O.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942183WZ6SU6EPCYX3PPWV6J2V.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1001755",
+        "name": "SLENDER",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942070JU0C8MY6TFILH42G4IC6.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942070GVZGI2KIWI1EGZW6GONJ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1029439",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/16899420489CKAYP198V8KWWTAB9GB.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899420475JGLKD9IR4Q90Z3AN9HU.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1031797",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942036USQOBI0PLR0VH39KWXL5.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942036CYYQJ4OQ2VLN4ZTCZLIF.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1014050",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942014D6NF98RYPFXCQUI9XTXD.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/16899420148IQ78JAL6MHB6GNZXJYQ.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1026713",
+        "name": "DIAMOND",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689942011QIPDJWFYFZV5NPFQ4G34.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942011DKKPKAGOH5XEULU5RYZA.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 2
+      },
+      {
+        "id": "1029071",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/1689941998E4A4S1R1VDQ1WJOP9EC1.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689941998T33BZQ8NX8VF804651QM.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      },
+      {
+        "id": "1011325",
+        "name": "MAGAZINE",
+        "previewImageUrl": "https://s3.coros.com/watchface_template/202307/168994198088DLGRI2KUDOYM1WUIET.png",
+        "packageUrl": "https://s3.coros.com/watchface_template/202307/1689941980NO05N9I5HR7EQG40JHBU.zip",
+        "watchFaceVersion": 0,
+        "diyVersion": 1,
+        "templateType": 1
+      }
+    ]
   }
 };

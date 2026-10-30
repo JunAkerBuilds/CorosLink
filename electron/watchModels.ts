@@ -5,6 +5,7 @@ export type WatchModelId =
   | "pace-3"
   | "pace-2"
   | "nomad"
+  | "vertix"
   | "vertix-2"
   | "vertix-2s"
   | "apex-4"
@@ -17,6 +18,7 @@ export const PACE_PRO_BYTES = 32 * 1024 * 1024 * 1024;
 export const PACE_4_BYTES = 4 * 1024 * 1024 * 1024;
 export const PACE_3_BYTES = PACE_4_BYTES;
 export const NOMAD_BYTES = PACE_PRO_BYTES;
+export const VERTIX_BYTES = PACE_PRO_BYTES;
 export const VERTIX_2_BYTES = PACE_PRO_BYTES;
 export const VERTIX_2S_BYTES = PACE_PRO_BYTES;
 export const APEX_4_BYTES = PACE_PRO_BYTES;
@@ -60,6 +62,21 @@ const WATCHFACE_DEVICE_PROFILES: Partial<
   },
   "apex-4": {
     firmwareType: "COROS W541"
+  },
+  "pace-2": {
+    firmwareType: "COROS B18"
+  },
+  "apex-2-pro": {
+    firmwareType: "COROS B20"
+  },
+  "apex-2": {
+    firmwareType: "COROS B21"
+  },
+  "apex-pro": {
+    firmwareType: "COROS B17"
+  },
+  vertix: {
+    firmwareType: "COROS B16"
   }
 };
 
@@ -125,6 +142,10 @@ function matchWatchModelFromName(
     return "vertix-2";
   }
 
+  if (/\bVERTIX\b/.test(normalized) && !/\bVERTIX\s*\d/.test(normalized)) {
+    return "vertix";
+  }
+
   if (/\bAPEX\s*4\b/.test(normalized)) {
     return "apex-4";
   }
@@ -160,6 +181,7 @@ export function fallbackBytesForModel(model?: WatchModelId): number {
     model === "pace-4-pro" ||
     model === "pace-pro" ||
     model === "nomad" ||
+    model === "vertix" ||
     model === "vertix-2" ||
     model === "vertix-2s" ||
     model === "apex-4" ||
