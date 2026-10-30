@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { CorosWifiMapPreview, CorosWifiMapTile } from "./corosWifiMapTypes";
+import type { CorosMapAreaFile, CorosWifiMapPreview, CorosWifiMapTile } from "./corosWifiMapTypes";
 import { corosMapQuadkey } from "./corosMapGrid";
 
 const HOST = "https://mapstatic.coros.com";
@@ -83,7 +83,27 @@ async function packageRequest(tiles: CorosWifiMapTile[], action: "check" | "down
   catch (error) { throw error instanceof SyntaxError ? new Error("COROS map service returned an invalid response.") : error; }
   if (response.code !== 200 || !response.data || !Number.isSafeInteger(response.data.fileSize) || response.data.fileSize < 0 ||
       !Number.isSafeInteger(response.data.fileCount) || response.data.fileCount < 0) throw new Error("COROS could not prepare the selected map areas.");
-  return response.data as { fileSize: number; fileCount: number; map_id?: string };
+  return response.data as { fileSize: number; fileCount: number; map_id?: string; files?: unknown };
+}
+
+/**
+ * The files COROS packs for these areas, as the watch fetches them over Wi-Fi: per area,
+ * the landscape map (S<quadkey>V<nn>.t, layer VSM) and its contour lines (C…, layer VCM).
+ */
+export async function listMapAreaFiles(input: unknown, deviceModel = "W332"): Promise<CorosMapAreaFile[]> {
+  const tiles = normalizeWifiMapTiles(input);
+  const quadkeys = new Set(tiles.map(corosMapQuadkey));
+  const data = await packageRequest(tiles, "check", deviceModel);
+  if (!Array.isArray(data.files) || data.files.length !== data.fileCount) throw new Error("COROS returned an invalid map file list.");
+  const files = data.files.map((file: { name?: unknown; size?: unknown }) => {
+    const match = typeof file?.name === "string" ? /^([SC])([0-3]{7})(V\d{2})\.t$/.exec(file.name) : null;
+    if (!match || !quadkeys.has(match[2]!) || !Number.isSafeInteger(file.size) || (file.size as number) <= 0 || (file.size as number) > 2_000_000_000) {
+      throw new Error("COROS returned an invalid map file list.");
+    }
+    return { name: file.name as string, layer: match[1] === "S" ? "VSM" : "VCM", quadkey: match[2]!, version: match[3]!, sizeBytes: file.size as number } satisfies CorosMapAreaFile;
+  });
+  if (new Set(files.map(file => file.name)).size !== files.length) throw new Error("COROS returned an invalid map file list.");
+  return files;
 }
 
 export async function previewWifiMap(input: unknown, deviceModel = "W332"): Promise<CorosWifiMapPreview> {

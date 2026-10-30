@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Copy map areas over USB.** In **Maps → Map areas** (formerly Wireless maps), choose **USB cable**, pick the squares you train in and click **Copy to watch**. CorosLink downloads the same maps the watch would fetch over Wi-Fi and copies them to the watch's drive, so the watch never goes online and you only use space for the areas you chose. It shows how much the watch still needs and how much it has free, skips areas already on the watch, and keeps downloaded areas on this computer for next time. This computer gets the maps from COROS, so COROS sees which areas you chose. Tested on PACE 4; PACE 4 Pro, PACE Pro and APEX 4 are in beta.
+- **Cancel a map download waiting on the watch.** Downloads you sent to the watch over Wi-Fi now have **Cancel** in **Maps → Map areas → On your watch**, so a request still waiting for Wi-Fi (or part way through) comes off the watch. Unplug the watch's USB cable first: the watch won't cancel while it's plugged in. Tested on PACE 4.
+- **Allow USB access without the COROS app.** When you plug your watch into a computer and it shows "Open the COROS App to authorize", CorosLink asks whether to allow it, if the watch is connected to CorosLink over Bluetooth. Choose **Allow** and the watch's drive opens on the computer, for music and maps. Tested on PACE 4; PACE 4 Pro, PACE Pro and APEX 4 are in beta.
+
 ## [0.1.69] - 2026-10-29
 
 ### Added

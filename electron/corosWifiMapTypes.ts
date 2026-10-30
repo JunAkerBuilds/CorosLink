@@ -5,6 +5,21 @@ export interface CorosWifiMapPreview {
   fileCount: number;
   sizeBytes: number;
 }
+/** One per-area map file (PMTiles) and the watch folder it goes in: Map/<layer>/<first 3 quadkey digits>/<name>. */
+export interface CorosMapAreaFile {
+  name: string;
+  layer: "VSM" | "VCM";
+  quadkey: string;
+  version: string;
+  sizeBytes: number;
+}
+export interface CorosMapAreaPreview {
+  fileCount: number;
+  sizeBytes: number;
+  /** What the connected watch still needs (files it already holds don't count); absent without a watch. */
+  neededBytes?: number;
+  freeBytes?: number;
+}
 export interface CorosWifiMapTask {
   id: string;
   state: "queued" | "downloading" | "complete" | "failed" | "unknown";

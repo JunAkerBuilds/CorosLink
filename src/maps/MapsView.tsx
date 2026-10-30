@@ -31,6 +31,7 @@ import { SelectDropdown } from "../components/SelectDropdown";
 import { formatBytes } from "../media/libraryUtils";
 import { RouteStudio } from "./routes/RouteStudio";
 import { CorosWifiMapsPanel } from "./CorosWifiMapsPanel";
+import { MapInstallProgressPanel } from "./MapInstallProgressPanel";
 import {
   defineSelectionPreference,
   selectionIsBoolean,
@@ -102,7 +103,7 @@ export function MapsView({
     <div className="maps-view stack">
       <div className="media-tabs-shell">
         <nav className="media-tabs" aria-label={t("Maps sections")}>
-          <MapsTabButton active={activeTab === "wifi"} icon={<Download size={16} aria-hidden="true" />} label={t("Wireless maps")} onClick={() => setActiveTab("wifi")} />
+          <MapsTabButton active={activeTab === "wifi"} icon={<Download size={16} aria-hidden="true" />} label={t("Map areas")} onClick={() => setActiveTab("wifi")} />
           <MapsTabButton
             active={activeTab === "coros"}
             icon={<MapIcon size={16} aria-hidden="true" />}
@@ -118,7 +119,8 @@ export function MapsView({
         </nav>
       </div>
 
-      {activeTab === "wifi" ? <CorosWifiMapsPanel api={api} onOpenWatchMenu={onOpenWatchMenu} /> : activeTab === "coros" ? (
+      {activeTab === "wifi" ? <CorosWifiMapsPanel api={api} onOpenWatchMenu={onOpenWatchMenu}
+        watchStatus={watchStatus} onWatchStatusChange={onWatchStatusChange} /> : activeTab === "coros" ? (
         <CorosMapsTab
           api={api}
           watchStatus={watchStatus}
@@ -850,64 +852,6 @@ function WatchStorageLegend({
       <span className={`watch-storage-swatch ${swatch}`} aria-hidden="true" />
       <span className="watch-storage-legend-label">{label}</span>
       <strong>{value}</strong>
-    </div>
-  );
-}
-
-function MapInstallProgressPanel({
-  progress,
-  onCancel
-}: {
-  progress: CorosMapInstallProgress;
-  onCancel: () => void;
-}) {
-  useLanguage();
-  const percent = Math.round(Math.max(0, Math.min(progress.progress, 1)) * 100);
-  const phaseLabel =
-    progress.phase === "failed"
-      ? t("Install failed")
-      : progress.phase === "cancelled"
-        ? t("Transfer cancelled")
-        : progress.phase === "completed"
-          ? t("Install complete")
-          : progress.phase === "preparing"
-            ? t("Preparing install")
-            : t("Copying to watch");
-
-  return (
-    <div
-      className={
-        progress.phase === "failed"
-          ? "map-install-progress is-failed"
-          : progress.phase === "cancelled"
-            ? "map-install-progress is-cancelled"
-            : "map-install-progress"
-      }
-    >
-      <div className="map-install-progress-heading">
-        <strong>{phaseLabel}</strong>
-        <span>{percent}%</span>
-      </div>
-      <div className="map-download-progress-track">
-        <span style={{ width: `${Math.max(2, percent)}%` }} />
-      </div>
-      <small>
-        {progress.label} · {formatBytes(progress.copiedBytes)}  {t("of")}{" "}
-        {formatBytes(progress.totalBytes)} · {progress.copiedFiles}/
-        {progress.totalFiles}  {t("files")}</small>
-      {progress.error ? (
-        <p className="map-install-error">{progress.error}</p>
-      ) : progress.active ? (
-        <div className="map-install-progress-actions">
-          <p>{t("Keep the watch connected until the copy finishes.")}</p>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={onCancel}
-          >
-            {t("Cancel transfer")}</button>
-        </div>
-      ) : null}
     </div>
   );
 }

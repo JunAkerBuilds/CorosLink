@@ -300,7 +300,9 @@ import {
   importRouteFromGpx,
   installCachedCorosMap,
   installCachedCorosMaps,
+  installCorosMapAreas,
   listCachedCorosMaps,
+  previewCorosMapAreas,
   listCorosMapDownloadJobs,
   listGeneratedRoutes,
   getGeneratedRouteDetails,
@@ -1462,6 +1464,10 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle("corosBle:mapStatus", () => corosNativeBle.wifiMapStatus());
   ipcMain.handle("corosBle:mapPreview", (_event, tiles: unknown) => corosNativeBle.previewWifiMap(tiles));
+  ipcMain.handle("corosBle:mapRemove", (event, taskId: unknown) => {
+    mainWindowSender(event, "map downloads");
+    return corosNativeBle.removeWifiMapDownload(typeof taskId === "string" ? taskId : "");
+  });
   ipcMain.handle("corosBle:mapDownload", (event, previewId: string) => {
     mainWindowSender(event, "map downloads");
     return corosNativeBle.downloadWifiMap(previewId);
@@ -1471,6 +1477,26 @@ function registerIpcHandlers(): void {
   corosNativeBle.setConnectedPush(() => watchWeatherFile());
   corosNativeBle.setProfileSink((profile, model) => storeWatchProfile(profile, new Date(), model));
   corosNativeBle.setSwitchesSink((switches, ext, model) => storeWatchSwitches(switches, ext, new Date(), model));
+  // The watch asks this when it's plugged into a computer, as the COROS app's "Connect device to computer" does.
+  corosNativeBle.setUsbAccessPrompt(async signal => {
+    // macOS lays buttons out right to left, Windows and Linux left to right: Allow sits where each
+    // platform puts the affirmative button. Return means Don't Allow, as the watch may be on a computer the user doesn't trust.
+    const options = localizeDialogOptions({
+      type: "question" as const, buttons: ["Allow", "Don't Allow"], defaultId: 1, cancelId: 1, noLink: true, signal,
+      message: "Let your watch share its files over USB?",
+      detail: "Your watch is plugged into a computer. Allow only if you trust that computer.",
+    });
+    const owner = mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() ? mainWindow : undefined;
+    // The watch waits on this answer, so the question shouldn't sit unseen behind other windows.
+    if (owner?.isMinimized()) owner.restore();
+    if (process.platform === "darwin") app.dock?.bounce("informational"); else owner?.flashFrame(true);
+    try {
+      const result = owner ? await dialog.showMessageBox(owner, options) : await dialog.showMessageBox(options);
+      return result.response === 0;
+    } finally {
+      if (owner && !owner.isDestroyed()) owner.flashFrame(false);
+    }
+  });
   ipcMain.handle("watch:getProfile", () => getWatchProfile() ?? null);
   ipcMain.handle("watch:updateProfile", (event, edits: unknown) => {
     mainWindowSender(event, "watch settings");
@@ -3136,6 +3162,16 @@ function registerIpcHandlers(): void {
       }
     }
   );
+
+  // A watch's drive can be named just "COROS WATCH"; the watch on Bluetooth tells which model it is.
+  ipcMain.handle("maps:previewCorosMapAreas", (_event, tiles: unknown) => previewCorosMapAreas(tiles, corosNativeBle.connectedWatchTarget()?.model));
+  ipcMain.handle("maps:installCorosMapAreas", async (_event, tiles: unknown, label: unknown) => {
+    try {
+      return await installCorosMapAreas(tiles, typeof label === "string" ? label : "", { bluetoothModel: corosNativeBle.connectedWatchTarget()?.model });
+    } catch (error) {
+      throw toCorosMapInstallIpcError(error);
+    }
+  });
 
   ipcMain.handle("maps:deleteCachedCorosMap", (_event, packageId: string) =>
     deleteCachedCorosMap(packageId)

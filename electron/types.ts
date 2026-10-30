@@ -1870,6 +1870,7 @@ export interface CorosMapInstallResult extends CorosMapLocalSelection {
 
 export type CorosMapInstallPhase =
   | "preparing"
+  | "downloading"
   | "copying"
   | "completed"
   | "failed"

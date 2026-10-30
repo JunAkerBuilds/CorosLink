@@ -13,7 +13,7 @@ import {
 import { expectedError } from "./diagnosticsLog";
 import { CorosBleOperationError, CorosBleTrace } from "./corosBleTrace";
 import { COROS_BLE_LOGIN_KEY_SETTING, COROS_WATCH_KEY_CHECK_SETTING, corosBleLoginKeyId, createCorosLoginCredential, nextWatchKeyCheck, type CorosBleLoginKey } from "./corosBleLoginKey";
-import { decodeWifiMapTasks, encodeWifiMapStart, requireWifiDownloadReady } from "./corosBleWifiProtocol";
+import { decodeWifiMapTasks, encodeWifiMapStart, encodeWifiTaskRemove, requireWifiDownloadReady, requireWifiTaskRemoved } from "./corosBleWifiProtocol";
 import { createWifiMapTask, previewWifiMap } from "./corosWifiMapService";
 import type { CorosWifiMapPreview, CorosWifiMapStatus } from "./corosWifiMapTypes";
 import { decodeRouteInventory, encodeWatchRoute, encodeRouteBlockHeader, routeSlot, ROUTE_BLOCK_BYTES } from "./corosBleRouteProtocol";
@@ -30,7 +30,7 @@ import { CorosWifiMusicService } from "./corosWifiMusicService";
 import { encodePhonePairingCode, PHONE_PAIRING_DISPLAY_MS } from "./corosBlePhonePairing";
 import type { CorosPhonePairingCode } from "./corosNativeBleTypes";
 import { assertReadableSyncFile, PEDOMETER_OPCODE } from "./localSync/activityProtocol";
-import { decodeSettings, encodeSettings, encodeSettingsRequest, SETTING_SWITCH, SETTING_USER_INFO, SETTINGS_GET_OPCODE, SETTINGS_SET_OPCODE } from "./corosWatchProfile";
+import { decodeSettings, encodeSettings, encodeSettingsRequest, SETTING_SWITCH, SETTING_USB_ACCESS, SETTING_USER_INFO, SETTINGS_GET_OPCODE, SETTINGS_SET_OPCODE } from "./corosWatchProfile";
 import { applyFwInfoGpsAssistance, decodeBindGpsAssistance, SETTING_FW_INFO, type WatchGpsAssistance } from "./corosWatchGpsAssist";
 import { encodeCepTransfer, unixMsOfWatchHour, type CepFile } from "./corosWatchCep";
 import { decodeSwitches, decodeSwitchWord, SETTING_SWITCH_EXT } from "./corosWatchSettings";
@@ -63,7 +63,7 @@ type ConnectMode = "user" | "internal" | "background";
 
 /** Everything that holds the watch link. busyWith() checks them all, so a new task can't be missed by one guard. */
 type LinkTask = "wifiMusic" | "wifiMusicRestore" | "activityScreen" | "localSync" | "push" | "musicInventory" | "musicDelete" |
-  "route" | "watchface" | "watchfaceInventory" | "mapStarting" | "connecting" | "scanning" | "closing";
+  "route" | "watchface" | "watchfaceInventory" | "mapStarting" | "mapRemoving" | "connecting" | "scanning" | "closing";
 
 /** What the user is told when the watch is busy with a task (shown in the app as is). */
 const BUSY_MESSAGE: Record<LinkTask, string> = {
@@ -78,6 +78,7 @@ const BUSY_MESSAGE: Record<LinkTask, string> = {
   watchface: "Wait for the watch face to finish sending to the watch.",
   watchfaceInventory: "Wait for CorosLink to finish reading the watch faces on the watch.",
   mapStarting: "Wait for the map download to start.",
+  mapRemoving: "Wait for the watch to cancel the map download.",
   connecting: "Wait for the watch to finish connecting.",
   scanning: "Wait for the Bluetooth scan to finish.",
   closing: "Wait for the watch to disconnect."
@@ -89,6 +90,13 @@ const BUSY_MESSAGE: Record<LinkTask, string> = {
  * is removed first) or a setting written without the app knowing.
  */
 const FINISH_WATCH_WORK_MS = 30_000;
+
+/** After an answer, requests the watch sent before it arrived (it asks every 5 s) aren't asked again. */
+const USB_ACCESS_ANSWER_QUIET_MS = 6_000;
+/** After Don't Allow, the watch isn't asked about again for as long as it waits after an Allow. */
+const USB_ACCESS_DECLINE_QUIET_MS = 30_000;
+/** How long an answer waits for a sync or transfer to free the link. */
+const USB_ACCESS_WAIT_MS = 10 * 60_000;
 
 export class CorosNativeBleService {
   private worker?: ChildProcessWithoutNullStreams;
@@ -112,6 +120,7 @@ export class CorosNativeBleService {
   private scanning?: Promise<CorosNativeBleSnapshot>;
   private mapPolling?: Promise<CorosWifiMapStatus>;
   private mapStarting?: Promise<{ taskId: string; status: CorosWifiMapStatus }>;
+  private mapRemoving?: Promise<void>;
   private routeTask?: Promise<CorosRouteSyncStatus>;
   /** Files and settings pushed like the phone app does: workouts, weather, calendar (CONFIG_TRAINING, SendFile 41/80/42). */
   private pushTask?: Promise<unknown>;
@@ -183,6 +192,7 @@ export class CorosNativeBleService {
       watchface: () => this.watchfaceTask,
       watchfaceInventory: () => this.watchfaceInventoryTask,
       mapStarting: () => this.mapStarting,
+      mapRemoving: () => this.mapRemoving,
       connecting: () => this.connecting,
       scanning: () => this.scanning,
       closing: () => this.closing || this.quitting
@@ -324,6 +334,11 @@ export class CorosNativeBleService {
             if (response.event === "disconnected" && this.pending.size === 0 && this.stopping !== worker) {
               recordDiagnosticError("corosBle:link", this.bleError("The watch disconnected.", "link", response.detail));
             }
+            // An answer can no longer reach the watch, so its question is withdrawn.
+            if (response.event === "disconnected") this.usbAccess?.abort();
+            if (response.event === "usb-access-request" || response.event === "usb-access-closed") {
+              this.usbAccessEvent(response.event === "usb-access-request");
+            }
             continue;
           }
           if (response.bondUpdate) {
@@ -446,6 +461,7 @@ export class CorosNativeBleService {
     if (this.worker !== worker) return;
     this.trace.add(deliberate ? "worker closed" : "worker failed", { pending: this.pending.size, reason: message });
     this.worker = undefined;
+    this.usbAccess?.abort();
     this.musicInventory = undefined;
     this.state = { ...this.state, phase: this.state.phase === "failed" ? "failed" : "disconnected", connected: false, encrypted: false,
       systemBind: this.state.systemBind === "unavailable" ? "unavailable" : "not_authenticated", authenticatedAt: undefined, clockSetAt: undefined, weatherSentAt: undefined, weatherFailedAt: undefined, watchEvents: undefined,
@@ -1218,6 +1234,8 @@ export class CorosNativeBleService {
   wifiMapStatus(): Promise<CorosWifiMapStatus> {
     this.mapPolling ??= (async () => {
       if (this.connecting) await this.connecting;
+      // The list is read after a cancel, never alongside it.
+      if (this.mapRemoving) await this.mapRemoving.catch(() => undefined);
       const state = this.publicState();
       const recognized = connectedWatchfaceTarget(state)?.target;
       const result: CorosWifiMapStatus = { supported: Boolean(recognized), watchLabel: recognized?.label, validated: isValidatedWatch(state),
@@ -1248,6 +1266,18 @@ export class CorosNativeBleService {
       return { taskId, status: await this.wifiMapStatus() };
     })().finally(() => { this.mapStarting = undefined; });
     return this.mapStarting;
+  }
+
+  /** Takes a map download off the watch's list before (or while) it runs over Wi-Fi, then reads the list again. */
+  removeWifiMapDownload(taskId: string): Promise<CorosWifiMapStatus> {
+    const busy = this.busyWith();
+    if (busy) return Promise.reject(new Error(BUSY_MESSAGE[busy]));
+    this.mapRemoving = (async () => {
+      this.requireTransferSession();
+      await this.mapPolling?.catch(() => {});
+      requireWifiTaskRemoved(await this.controlCommand(0xb6, encodeWifiTaskRemove(taskId)));
+    })().finally(() => { this.mapRemoving = undefined; });
+    return this.mapRemoving.then(() => this.wifiMapStatus());
   }
 
   routeSyncStatus(): CorosRouteSyncStatus { return { ...this.routeProgress }; }
@@ -1422,6 +1452,55 @@ export class CorosNativeBleService {
     const profile = (await this.readProfileReply()).get(SETTING_USER_INFO);
     if (!profile?.length) throw new Error("The watch did not return its training profile.");
     return profile;
+  }
+
+  /** Asks the user whether the watch may open its drive over USB (main shows the dialog). */
+  private usbAccessPrompt?: (signal: AbortSignal) => Promise<boolean>;
+  /**
+   * The open question, from asking until the answer reaches the watch. Aborted when the
+   * watch closes its prompt (cable out, or dismissed on the watch) or the link goes.
+   */
+  private usbAccess?: AbortController;
+  /** Requests before this time aren't asked about: they were sent before the last answer arrived. */
+  private usbAccessQuietUntil = 0;
+
+  setUsbAccessPrompt(prompt: (signal: AbortSignal) => Promise<boolean>): void {
+    this.usbAccessPrompt = prompt;
+  }
+
+  /**
+   * A watch on 3.2008.0 firmware plugged into a computer keeps its drive closed and shows
+   * "Open the COROS App to authorize". While that prompt is up it asks the connected app
+   * every 5 s; the answer is setting 0x31, which opens the drive at once and spares the
+   * watch from asking again for 30 s.
+   */
+  private usbAccessEvent(requested: boolean): void {
+    if (!requested) { this.usbAccess?.abort(); return; }
+    if (this.usbAccess || Date.now() < this.usbAccessQuietUntil || !this.usbAccessPrompt || !this.state.connected ||
+        this.state.systemBind !== "authenticated" || !watchSupports("usbAccess", this.watchTarget()?.model)) return;
+    const controller = new AbortController();
+    this.usbAccess = controller;
+    void (async () => {
+      const allowed = await this.usbAccessPrompt!(controller.signal);
+      // A sync or transfer holding the link finishes first; the watch keeps its prompt up meanwhile.
+      if (!(await this.whenLinkFree(controller.signal))) return;
+      await this.pushOperation(async () => requireWatchAcknowledgement(
+        await this.controlCommand(SETTINGS_SET_OPCODE, encodeSettings([[SETTING_USB_ACCESS, Buffer.from([allowed ? 1 : 0])]])), "USB access answer"));
+      // The watch closes its prompt on any answer. Requests already sent aren't asked again,
+      // and after Don't Allow the watch isn't asked about for the 30 s it waits after an Allow.
+      this.usbAccessQuietUntil = Date.now() + (allowed ? USB_ACCESS_ANSWER_QUIET_MS : USB_ACCESS_DECLINE_QUIET_MS);
+    })().catch(error => recordDiagnosticError("corosBle:usbAccess", error instanceof Error ? error : new Error(String(error))))
+      .finally(() => { if (this.usbAccess === controller) this.usbAccess = undefined; });
+  }
+
+  /** True once nothing holds the watch link; false if the question was withdrawn or the watch disconnected first. */
+  private async whenLinkFree(signal: AbortSignal): Promise<boolean> {
+    for (const started = Date.now(); ;) {
+      if (signal.aborted || !this.state.connected) return false;
+      if (!this.busyWith()) return true;
+      if (Date.now() - started > USB_ACCESS_WAIT_MS) throw new Error("The watch stayed busy, so its USB access request wasn't answered.");
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
   }
 
   /** Where the watch's system switches go after each connection (watchSettingsService). */
