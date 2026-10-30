@@ -286,8 +286,11 @@ const COMMUNITY_MODEL_BY_WATCH: Partial<Record<WatchModelId, string>> = {
   "pace-4-pro": "PACE 4 Pro",
   "pace-pro": "PACE Pro",
   "pace-3": "PACE 3",
+  "pace-2": "PACE 2",
+  "apex-pro": "APEX Pro",
   "apex-2": "APEX 2",
   "apex-2-pro": "APEX 2 Pro",
+  "vertix": "VERTIX",
   "vertix-2": "VERTIX 2",
   "vertix-2s": "VERTIX 2S"
 };
