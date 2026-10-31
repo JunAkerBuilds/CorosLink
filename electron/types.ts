@@ -2586,6 +2586,7 @@ export interface TrainingHubActivityTrack {
 export interface TrainingHubActivitySeriesPoint {
   distance?: number;
   hr?: number;
+  /** Seconds per km, swims included (the coach shows a swim's per 100 m). */
   pace?: number;
   power?: number;
   cadence?: number;

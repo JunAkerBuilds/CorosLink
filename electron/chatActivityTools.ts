@@ -19,6 +19,8 @@ import type {
   TrainingHubActivity,
   TrainingHubActivityDetail,
   TrainingHubActivityLap,
+  TrainingHubSwimStroke,
+  TrainingHubSwimSummary,
   UnitSystem
 } from "./types";
 import {
@@ -38,6 +40,8 @@ export const CHAT_ACTIVITY_TOOL_NAMES = [
 export type ChatActivityToolName = (typeof CHAT_ACTIVITY_TOOL_NAMES)[number];
 
 const MAX_LAPS = 50;
+/** A pool swim's lengths: enough for a long session, row by row. */
+const MAX_LENGTHS = 120;
 
 type ActivityRenameListener = (change: { activityId: string; name: string }) => void;
 const renameListeners = new Set<ActivityRenameListener>();
@@ -82,6 +86,9 @@ export function getChatActivityTools(): CorosMcpTool[] {
       description:
         "Fetch detailed COROS activity data including avg/max power and cadence and a " +
         "lap/split breakdown (distance, duration, avg/max HR, pace, power, cadence). " +
+        "For swims synced from the watch it also returns pool length, strokes, SWOLF, stroke rate, " +
+        "best pace and water temperature, and each interval and length with its stroke type, " +
+        "strokes, SWOLF and stroke rate, rests included. " +
         "Use activity_id and sport_type from " +
         "list_recent_activities or the training snapshot. Prefer this local tool over " +
         "COROS MCP for lap and split analysis.",
@@ -450,6 +457,9 @@ export function formatActivityDetailForChat(
 ): string {
   const swim = isSwimActivity(detail.sportType, detail.sportName);
   const cycling = isCyclingActivity(detail.sportType, detail.sportName);
+  // A pool's distances and paces read in the pool's own unit, as the activity page shows them.
+  const poolUnit = detail.swim?.poolLengthUnit;
+  const swimUnits: UnitSystem = poolUnit === "yd" ? "imperial" : poolUnit === "m" ? "metric" : unitSystem;
   // detail.duration is elapsed time including pauses. Like the COROS app,
   // report moving time and derive pace/speed from it (laps are moving too).
   const moving = detail.movingTime ?? detail.duration;
@@ -463,7 +473,8 @@ export function formatActivityDetailForChat(
       ? `Avg speed: ${formatSpeedValue((detail.distance / 1000) / (moving / 3600), unitSystem)}`
       : !swim
         ? `Avg pace: ${formatPaceSeconds(moving / (detail.distance / 1000), unitSystem)}`
-        : undefined
+        // The watch's swim pace leaves out rests at the wall; moving time does not.
+        : `Avg pace: ${formatSwimPace(detail.swim?.avgPace ?? moving / (detail.distance / 100), swimUnits)}${detail.swim?.avgPace !== undefined ? " (rests left out)" : ""}`
     : undefined;
   const summaryParts = [
     detail.name ? `Name: ${detail.name}` : undefined,
@@ -471,7 +482,7 @@ export function formatActivityDetailForChat(
     detail.sportType !== undefined ? `Sport type: ${detail.sportType}` : undefined,
     detail.startTime ? `Date: ${formatIsoDate(detail.startTime)}` : undefined,
     detail.distance
-      ? `Distance: ${formatDistanceValue(detail.distance, unitSystem, { swim })}`
+      ? `Distance: ${formatDistanceValue(detail.distance, swim ? swimUnits : unitSystem, { swim })}`
       : undefined,
     moving
       ? `${showElapsed ? "Moving time" : "Duration"}: ${formatDurationSeconds(moving)}`
@@ -488,10 +499,11 @@ export function formatActivityDetailForChat(
     detail.avgPower ? `Avg power: ${detail.avgPower} W` : undefined,
     detail.maxPower ? `Max power: ${detail.maxPower} W` : undefined,
     detail.normalizedPower ? `Normalized power: ${detail.normalizedPower} W` : undefined,
-    detail.avgCadence
+    // A swim's cadence is its stroke rate, listed with the swim's figures below.
+    detail.avgCadence && !detail.swim
       ? `Avg cadence: ${formatCadence(detail.avgCadence, cycling)}`
       : undefined,
-    detail.maxCadence
+    detail.maxCadence && !detail.swim
       ? `Max cadence: ${formatCadence(detail.maxCadence, cycling)}`
       : undefined,
     detail.trainingLoad ? `Training load: ${detail.trainingLoad}` : undefined,
@@ -499,11 +511,18 @@ export function formatActivityDetailForChat(
   ].filter(Boolean);
 
   const sections = ["Activity detail", summaryParts.join("\n")];
+  if (detail.swim) sections.push("", formatSwimSummary(detail.swim, swimUnits, unitSystem));
+  const swimRows = swim && detail.laps.some((lap) => lap.rest || lap.stroke !== undefined || lap.strokes !== undefined || lap.swolf !== undefined);
 
   // A gym lap list mixes work sets, rests and per-exercise roll-ups, so a lap
   // table would count every set twice; list the parsed sets instead.
   if (detail.strength && detail.strength.exercises.length > 0) {
     sections.push("", formatStrengthSets(detail.strength, unitSystem));
+  } else if (swimRows) {
+    const pool = detail.swim?.poolLength !== undefined;
+    sections.push("", formatSwimRows(pool ? "Intervals" : "Laps", detail.laps, swimUnits, MAX_LAPS));
+    const lengths = detail.lapGroups?.find((group) => group.kind === "lengths");
+    if (lengths) sections.push("", formatSwimRows("Lengths", lengths.laps, swimUnits, MAX_LENGTHS));
   } else if (detail.laps.length > 0) {
     sections.push("", formatLapTable(detail.laps, unitSystem, swim, cycling));
   } else {
@@ -516,7 +535,7 @@ export function formatActivityDetailForChat(
       sections.push(
         formatActivitySeriesForChat(
           downsampleActivitySeries(detail.series),
-          unitSystem,
+          swim ? swimUnits : unitSystem,
           swim,
           cycling
         )
@@ -530,6 +549,69 @@ export function formatActivityDetailForChat(
   }
 
   return sections.join("\n");
+}
+
+const SWIM_STROKE_NAMES: Record<TrainingHubSwimStroke, string> = {
+  freestyle: "freestyle", backstroke: "backstroke", breaststroke: "breaststroke", butterfly: "butterfly",
+  drill: "drill", mixed: "mixed", medley: "individual medley"
+};
+
+/** m:ss per 100 m, or per 100 yd. */
+function formatSwimPace(secondsPer100m: number, unitSystem: UnitSystem): string {
+  const seconds = Math.round(unitSystem === "imperial" ? secondsPer100m * 0.9144 : secondsPer100m);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}/${unitSystem === "imperial" ? "100yd" : "100m"}`;
+}
+
+/** The swim's totals as the watch recorded them; SWOLF is a length's seconds plus its strokes (lower is more efficient). */
+function formatSwimSummary(swim: TrainingHubSwimSummary, swimUnits: UnitSystem, unitSystem: UnitSystem): string {
+  const lengthUnit = swimUnits === "imperial" ? "yd" : "m";
+  const inPoolUnit = (meters: number) => Math.round((swimUnits === "imperial" ? meters / 0.9144 : meters) * 100) / 100;
+  const lines = [
+    "Swim (as the watch recorded it):",
+    swim.poolLength !== undefined ? `Pool length: ${inPoolUnit(swim.poolLength)} ${lengthUnit}` : undefined,
+    swim.lengths !== undefined ? `Lengths swum: ${swim.lengths}` : undefined,
+    swim.swimTime !== undefined ? `Swim time (lengths only, rests left out): ${formatDurationSeconds(swim.swimTime)}` : undefined,
+    swim.bestPace !== undefined ? `Best pace: ${formatSwimPace(swim.bestPace, swimUnits)}` : undefined,
+    swim.strokes !== undefined ? `Total strokes: ${swim.strokes}` : undefined,
+    swim.avgSwolf !== undefined ? `Avg SWOLF: ${swim.avgSwolf}` : undefined,
+    swim.bestSwolf !== undefined ? `Best SWOLF: ${swim.bestSwolf}` : undefined,
+    swim.avgStrokeRate !== undefined ? `Avg stroke rate: ${swim.avgStrokeRate} strokes/min` : undefined,
+    swim.maxStrokeRate !== undefined ? `Max stroke rate: ${swim.maxStrokeRate} strokes/min` : undefined,
+    swim.strokeDistance !== undefined ? `Distance per stroke: ${inPoolUnit(swim.strokeDistance)} ${lengthUnit}` : undefined,
+    swim.waterTemperature !== undefined
+      ? `Water temperature: ${unitSystem === "imperial" ? `${Math.round((swim.waterTemperature * 9) / 5 + 32)} °F` : `${swim.waterTemperature} °C`}`
+      : undefined
+  ].filter(Boolean);
+  return lines.join("\n");
+}
+
+/** A swim's intervals or lengths: stroke, strokes, SWOLF and stroke rate per row, with the rests between them. */
+function formatSwimRows(title: "Intervals" | "Laps" | "Lengths", rows: TrainingHubActivityLap[], swimUnits: UnitSystem, max: number): string {
+  const capped = rows.slice(0, max);
+  const header = `# | Stroke | Lengths | Distance | Duration | Pace | Strokes | SWOLF | Stroke rate | Avg HR | Max HR`;
+  let number = 0;
+  const lines = capped.map((row) => {
+    if (row.rest) {
+      return ["rest", "", "", "", row.duration ? formatDurationSeconds(row.duration) : "—", "", "", "", "", row.avgHr ?? "—", row.maxHr ?? "—"].join(" | ");
+    }
+    number += 1;
+    return [
+      String(number),
+      row.stroke ? SWIM_STROKE_NAMES[row.stroke] : "—",
+      row.lengths ?? "—",
+      row.distance ? formatDistanceValue(row.distance, swimUnits, { swim: true }) : "—",
+      row.duration ? formatDurationSeconds(row.duration) : "—",
+      row.swimPace ? formatSwimPace(row.swimPace, swimUnits) : "—",
+      row.strokes ?? "—",
+      row.swolf ?? "—",
+      row.strokeRate !== undefined ? `${row.strokeRate}/min` : "—",
+      row.avgHr ?? "—",
+      row.maxHr ?? "—"
+    ].join(" | ");
+  });
+  const result = [`${title} (rests between them as "rest" rows):`, header, ...lines];
+  if (rows.length > max) result.push(`… ${rows.length - max} more rows omitted`);
+  return result.join("\n");
 }
 
 function formatStrengthSets(strength: StrengthDetail, unitSystem: UnitSystem): string {

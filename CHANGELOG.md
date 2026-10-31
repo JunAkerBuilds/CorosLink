@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Strokes, SWOLF and lengths for your swims.** Swims synced from your watch now show the stroke, stroke count, SWOLF and stroke rate of every interval, with your rests in between and your fastest marked. **Lengths**, next to **Intervals**, lists each length of a pool swim. A **Swim** card adds pool length, strokes, average and best SWOLF, best pace, stroke rate, distance per stroke and water temperature. Pace is per 100 m, **Swim time** leaves out your rests, and the chart can show your stroke rate and the water temperature. A pool's distances read in its own unit, metres or yards. Exported FIT files include the lengths, strokes, stroke types, SWOLF and pool length.
+- **Strokes, SWOLF and lengths for your swims.** Swims synced from your watch now show the stroke, stroke count, SWOLF and stroke rate of every interval, with your rests in between and your fastest marked. **Lengths**, next to **Intervals**, lists each length of a pool swim. A **Swim** card adds pool length, strokes, average and best SWOLF, best pace, stroke rate, distance per stroke and water temperature. Pace is per 100 m, **Swim time** leaves out your rests, and the chart can show your stroke rate and the water temperature. A pool's distances read in its own unit, metres or yards. Coach reads all of it too, interval by interval and length by length. Exported FIT files include the lengths, strokes, stroke types, SWOLF and pool length.
 
 ### Fixed
 
