@@ -12,11 +12,14 @@ import {
   Mountain,
   Route,
   Timer,
+  Waves,
   Zap,
   type LucideIcon
 } from "lucide-react";
 import { ActivityHeartRateRecovery } from "./ActivityHeartRateRecovery";
 import { ActivityRunningDynamics, ActivityTrainingEffect } from "./ActivityTrainingEffect";
+import { ActivitySwimSummary, formatSwimPace } from "./ActivitySwimSummary";
+import { SwimLapTable } from "./SwimLapTable";
 import type {
   TrainingHubActivity,
   TrainingHubActivityDetail,
@@ -134,13 +137,16 @@ function lapGroupKey(group: TrainingHubActivityLapGroup): string {
   return group.kind === "split" ? `split:${Math.round(group.splitDistance ?? 0)}` : group.kind;
 }
 
-/** COROS splits are whole kilometres (or miles), so name them by length. */
-function lapGroupLabel(group: TrainingHubActivityLapGroup, unitSystem: UnitSystem): string {
+/** COROS splits are whole kilometres (or miles), so name them by length. A pool swim's laps are its intervals. */
+function lapGroupLabel(group: TrainingHubActivityLapGroup, unitSystem: UnitSystem, poolSwim: boolean): string {
   if (group.kind === "laps") {
-    return t("Laps");
+    return poolSwim ? t("Intervals") : t("Laps");
   }
   if (group.kind === "whole") {
     return t("Whole activity");
+  }
+  if (group.kind === "lengths") {
+    return t("Lengths");
   }
   const meters = group.splitDistance ?? 0;
   const km = meters / 1000;
@@ -301,11 +307,26 @@ export function ActivityDetailPanel({
   const elapsed = activitySignificantElapsedSeconds(times);
   const speed = cycling ? activitySpeedKmh(times) : undefined;
   const pace = !cycling && !swim ? activityPaceSecondsPerKm(times) : undefined;
+  // A pool's distances and paces read in the pool's own unit, whatever the app's units.
+  const poolUnit = detail.swim?.poolLengthUnit;
+  const swimUnits: UnitSystem = poolUnit === "yd" ? "imperial" : poolUnit === "m" ? "metric" : unitSystem;
+  // The watch's swim pace leaves out rests; without it, moving time over distance.
+  const swimPace = swim
+    ? detail.swim?.avgPace ?? (moving && times.distance ? moving / (times.distance / 100) : undefined)
+    : undefined;
   const performance = speed !== undefined
     ? formatSpeedValue(speed, unitSystem)
     : pace !== undefined
       ? formatPaceSecondsPerKm(pace, unitSystem)
-      : undefined;
+      : swimPace !== undefined
+        ? formatSwimPace(swimPace, swimUnits)
+        : undefined;
+  // Strokes, SWOLF and rests the watch recorded per lap (local watch swims).
+  const swimLaps = swim && lapRows.some((lap) => lap.rest || lap.strokes !== undefined || lap.swolf !== undefined || lap.stroke !== undefined);
+  const lapCount = swimLaps ? lapRows.filter((lap) => !lap.rest).length : lapRows.length;
+  // A pool swim's laps are its intervals, as the watch calls them; its lengths view is titled so.
+  const poolSwim = swim && detail.swim?.poolLength !== undefined;
+  const lapsTitle = lapGroup?.kind === "lengths" ? t("Lengths") : poolSwim ? t("Intervals") : t("Laps");
   const paceLabel = cycling ? "Avg Speed" : "Avg Pace";
   const lapPerformance = (lap: TrainingHubActivityDetail["laps"][number]): string => {
     if (swim || !lap.distance || !lap.duration) {
@@ -319,18 +340,22 @@ export function ActivityDetailPanel({
     detail.track?.points.some((point) => point.lat !== undefined && point.lon !== undefined)
   );
   const elevation = showcase ? elevationRange(detail) : undefined;
+  // A pool swim has neither a route nor a climb: no empty map and profile above its numbers.
+  const showVisuals = !swim || hasRoute;
 
   const stats: DetailStatProps[] = [
     { label: elapsed === undefined ? t("Duration") : t("Moving Time"), value: formatDurationSeconds(moving), icon: Timer, tone: "#5ce5a2" },
     // The dialog header carries elapsed as a chip, like training load: an
     // eighth tile would wrap onto a row of its own.
     ...(elapsed === undefined || showcase ? [] : [{ label: t("Elapsed"), value: formatDurationSeconds(elapsed) }]),
-    { label: t("Distance"), value: formatDistanceMeters(detail.distance, unitSystem, swim), icon: MapPin, tone: "#65dcec" },
+    { label: t("Distance"), value: formatDistanceMeters(detail.distance, swim ? swimUnits : unitSystem, swim), icon: MapPin, tone: "#65dcec" },
     ...(performance ? [{ label: paceLabel, value: performance, icon: Gauge, tone: "#58ddd4" }] : []),
+    // Moving time includes rests at the wall; the pace above is over the swimming alone.
+    ...(detail.swim?.swimTime !== undefined ? [{ label: t("Swim time"), value: formatDurationSeconds(detail.swim.swimTime), icon: Waves, tone: "#65dcec" }] : []),
     { label: t("Avg HR"), value: showcase ? withUnit(detail.avgHr, "bpm") : formatOptionalNumber(detail.avgHr), icon: Heart, tone: "#ff7288" },
     { label: t("Max HR"), value: showcase ? withUnit(detail.maxHr, "bpm") : formatOptionalNumber(detail.maxHr), icon: HeartPulse, tone: "#c995f5" },
     { label: t("Calories"), value: showcase ? withUnit(detail.calories, "kcal") : formatOptionalNumber(detail.calories), icon: Flame, tone: "#ffb649" },
-    { label: showcase ? t("Elevation Gain") : t("Elevation"), value: formatElevationMeters(detail.elevationGain, unitSystem), icon: Mountain, tone: "#5ce5a2" },
+    ...(swim ? [] : [{ label: showcase ? t("Elevation Gain") : t("Elevation"), value: formatElevationMeters(detail.elevationGain, unitSystem), icon: Mountain, tone: "#5ce5a2" }]),
     // The dialog header already carries training load as a chip.
     ...(showcase ? [] : [{ label: t("Training Load"), value: formatOptionalNumber(detail.trainingLoad), icon: Zap }])
   ];
@@ -383,6 +408,7 @@ export function ActivityDetailPanel({
             ))}
           </div>
 
+          {showVisuals ? (
           <div className="activity-detail-visuals">
             <section className="activity-detail-visual-panel">
               <div className="activity-detail-visual-heading">
@@ -421,6 +447,7 @@ export function ActivityDetailPanel({
               <ActivityElevationChart track={detail.track} />
             </section>
           </div>
+          ) : null}
 
           {labelReading ? (
             <div className="training-label-summary">
@@ -439,9 +466,10 @@ export function ActivityDetailPanel({
               initialKind={streamSportType === 102 ? "gap" : undefined}
             />
           ) : null}
-          {detail.trainingEffect || detail.runningDynamics || detail.heartRateRecovery ? (
+          {detail.trainingEffect || detail.runningDynamics || detail.heartRateRecovery || detail.swim ? (
             <div className="activity-detail-insights">
               {detail.trainingEffect ? <ActivityTrainingEffect effect={detail.trainingEffect} /> : null}
+              {detail.swim ? <ActivitySwimSummary swim={detail.swim} /> : null}
               {detail.runningDynamics ? <ActivityRunningDynamics dynamics={detail.runningDynamics} /> : null}
               {detail.heartRateRecovery ? <ActivityHeartRateRecovery recovery={detail.heartRateRecovery} /> : null}
             </div>
@@ -463,8 +491,8 @@ export function ActivityDetailPanel({
               <div className="training-laps-heading">
                 <h3>
                   {showcase ? <Timer size={17} aria-hidden="true" /> : null}
-                  {t("Laps")} {showcase ? (
-                    <span className="activity-detail-visual-note">{lapRows.length}</span>
+                  {lapsTitle} {showcase ? (
+                    <span className="activity-detail-visual-note">{lapCount}</span>
                   ) : null}
                 </h3>
                 {lapGroup && lapGroups.length > 1 ? (
@@ -480,7 +508,7 @@ export function ActivityDetailPanel({
                           aria-pressed={active}
                           onClick={() => setLapGroupKeyPicked(key)}
                         >
-                          {lapGroupLabel(group, unitSystem)}
+                          {lapGroupLabel(group, unitSystem, poolSwim)}
                         </button>
                       );
                     })}
@@ -488,6 +516,9 @@ export function ActivityDetailPanel({
                 ) : null}
               </div>
               <div className="table-shell">
+                {swimLaps ? (
+                  <SwimLapTable rows={lapRows} compact={!showcase} units={swimUnits} fastest={fastestLaps} />
+                ) : (
                 <table>
                   <thead>
                     <tr>
@@ -537,6 +568,7 @@ export function ActivityDetailPanel({
                     })}
                   </tbody>
                 </table>
+                )}
               </div>
             </div>
           ) : null}

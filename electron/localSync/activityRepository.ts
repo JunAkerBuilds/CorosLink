@@ -267,9 +267,30 @@ export class ActivityRepository {
   }
 
   /** Points an activity at a re-decoded file (same activity, another decoder version's output). */
-  replaceActivityFile(activityId: string, file: { filePath: string; sha256: string; sizeBytes: number }): void {
-    this.db.prepare("UPDATE local_activity_files SET file_path = ?, sha256 = ?, size_bytes = ? WHERE activity_id = ?")
-      .run(file.filePath, file.sha256, file.sizeBytes, activityId);
+  /**
+   * Points an activity at another file of the same recording. With `headline`
+   * the list's values follow the new file too: they come from it.
+   */
+  replaceActivityFile(
+    activityId: string,
+    file: { filePath: string; sha256: string; sizeBytes: number },
+    headline?: Pick<LocalActivityRecord, "startTime" | "endTime" | "duration" | "movingTime" | "distance" | "avgHr" | "maxHr" | "calories" | "elevationGain">
+  ): void {
+    this.db.transaction(() => {
+      this.db.prepare("UPDATE local_activity_files SET file_path = ?, sha256 = ?, size_bytes = ? WHERE activity_id = ?")
+        .run(file.filePath, file.sha256, file.sizeBytes, activityId);
+      if (!headline) return;
+      this.db.prepare(
+        `UPDATE local_activity_files SET start_time = @startTime, end_time = @endTime, duration = @duration, moving_time = @movingTime,
+           distance = @distance, avg_hr = @avgHr, max_hr = @maxHr, calories = @calories, elevation_gain = @elevationGain
+         WHERE activity_id = @activityId`
+      ).run({
+        activityId,
+        startTime: headline.startTime ?? null, endTime: headline.endTime ?? null, duration: headline.duration ?? null,
+        movingTime: headline.movingTime ?? null, distance: headline.distance ?? null, avgHr: headline.avgHr ?? null,
+        maxHr: headline.maxHr ?? null, calories: headline.calories ?? null, elevationGain: headline.elevationGain ?? null
+      });
+    })();
   }
 
   /** Whether any row still references the archived file (content-addressed files can be shared). */

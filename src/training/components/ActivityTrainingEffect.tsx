@@ -38,7 +38,7 @@ function effectLabel(effect: number): string {
   }
 }
 
-interface Item {
+export interface Item {
   label: string;
   value: string;
   unit?: string;
@@ -47,7 +47,7 @@ interface Item {
   tone?: string;
 }
 
-function Items({ items }: { items: Item[] }) {
+export function Items({ items }: { items: Item[] }) {
   return (
     <dl className="activity-effect-items">
       {items.map((item) => (

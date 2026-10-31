@@ -108,6 +108,53 @@ const imperialSwim = formatActivityDetailForChat({
 assert.match(imperialSwim, /Distance: 109 yd/);
 assert.match(imperialSwim, /1 \| 109 yd/);
 
+// A watch-synced pool swim: the coach gets the swim's figures, its intervals and its lengths.
+const poolSwim = {
+  activityId: "swim-2",
+  name: "Pool Swim",
+  sportType: 300,
+  distance: 75,
+  duration: 150,
+  movingTime: 150,
+  avgCadence: 26,
+  maxCadence: 30,
+  swim: {
+    poolLength: 25, poolLengthUnit: "m", lengths: 3, swimTime: 120, strokes: 54, avgStrokeRate: 26, maxStrokeRate: 30, avgSwolf: 58,
+    bestSwolf: 56, strokeDistance: 1.39, avgPace: 160, bestPace: 150, waterTemperature: 29
+  },
+  laps: [
+    { index: 1, distance: 50, duration: 80, avgHr: 108, maxHr: 119, stroke: "mixed", strokes: 34, strokeRate: 25, swolf: 57, lengths: 2, swimPace: 160 },
+    { index: 2, distance: 0, duration: 30, avgHr: 101, maxHr: 108, rest: true },
+    { index: 3, distance: 25, duration: 40, avgHr: 112, maxHr: 118, stroke: "backstroke", strokes: 20, strokeRate: 30, swolf: 60, lengths: 1, swimPace: 160 }
+  ],
+  lapGroups: [
+    { kind: "laps", laps: [], fastestLaps: [] },
+    { kind: "lengths", fastestLaps: [], laps: [
+      { index: 1, distance: 25, duration: 40, stroke: "freestyle", strokes: 16, strokeRate: 24, swolf: 56, lengths: 1, swimPace: 160 },
+      { index: 2, distance: 25, duration: 40, stroke: "breaststroke", strokes: 18, strokeRate: 27, swolf: 58, lengths: 1, swimPace: 160 },
+      { index: 3, distance: 0, duration: 30, rest: true },
+      { index: 4, distance: 25, duration: 40, stroke: "backstroke", strokes: 20, strokeRate: 30, swolf: 60, lengths: 1, swimPace: 160 }
+    ] }
+  ],
+  series: [{ distance: 25, hr: 105, pace: 1600, cadence: 24 }],
+  raw: {}
+};
+const poolSwimText = formatActivityDetailForChat(poolSwim, true);
+for (const line of [
+  /Avg pace: 2:40\/100m \(rests left out\)/, /Pool length: 25 m/, /Lengths swum: 3/, /Swim time \(lengths only, rests left out\): 2:00/,
+  /Best pace: 2:30\/100m/, /Total strokes: 54/, /Avg SWOLF: 58/, /Best SWOLF: 56/, /Avg stroke rate: 26 strokes\/min/,
+  /Max stroke rate: 30 strokes\/min/, /Distance per stroke: 1.39 m/, /Water temperature: 29 °C/,
+  /Intervals \(rests between them/, /1 \| mixed \| 2 \| 50 m \| 1:20 \| 2:40\/100m \| 34 \| 57 \| 25\/min \| 108 \| 119/,
+  /rest \|  \|  \|  \| 0:30 /, /2 \| backstroke \| 1 \| 25 m/,
+  /Lengths \(rests between them/, /1 \| freestyle \| 1 \| 25 m \| 0:40 \| 2:40\/100m \| 16 \| 56 \| 24\/min/, /2 \| breaststroke/,
+  /Pace \/100m \| Power \| Stroke rate/, /2:40 \| — \| 24 \/min/
+]) assert.match(poolSwimText, line);
+assert.doesNotMatch(poolSwimText, /Avg cadence/, "a swim's cadence is its stroke rate");
+// A metre pool stays in metres when the app uses imperial units; the water temperature follows the app.
+const poolSwimImperial = formatActivityDetailForChat(poolSwim, false, "imperial");
+assert.match(poolSwimImperial, /Distance: 75 m/);
+assert.match(poolSwimImperial, /Water temperature: 84 °F/);
+
 const downsampled = downsampleActivitySeries(detail.series ?? [], 3);
 assert.ok(downsampled.length <= 3);
 

@@ -6499,6 +6499,12 @@ export function downsampleActivitySeries(
   return sampled;
 }
 
+/** Seconds per 100 m as m:ss, per 100 yd in imperial units. */
+function swimPaceClock(secondsPer100m: number, unitSystem: UnitSystem): string {
+  const seconds = Math.round(unitSystem === "imperial" ? secondsPer100m * 0.9144 : secondsPer100m);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
 export function formatActivitySeriesForChat(
   points: TrainingHubActivitySeriesPoint[],
   unitSystem: UnitSystem = "metric",
@@ -6510,7 +6516,8 @@ export function formatActivitySeriesForChat(
   }
 
   const cadenceUnit = cycling ? "rpm" : "spm";
-  const header = `Distance | HR | ${cycling ? "Speed" : "Pace"} | Power | Cadence`;
+  // A swim's pace is per 100 m (or 100 yd) and its cadence is the stroke rate.
+  const header = `Distance | HR | ${cycling ? "Speed" : swim ? `Pace /${unitSystem === "imperial" ? "100yd" : "100m"}` : "Pace"} | Power | ${swim ? "Stroke rate" : "Cadence"}`;
   const rows = points.map((point) =>
     [
       point.distance !== undefined
@@ -6520,10 +6527,12 @@ export function formatActivitySeriesForChat(
       point.pace !== undefined
         ? cycling
           ? formatSpeedValue(3600 / point.pace, unitSystem)
-          : formatPaceValue(point.pace, unitSystem).replace(" /", "/")
+          : swim
+            ? swimPaceClock(point.pace / 10, unitSystem)
+            : formatPaceValue(point.pace, unitSystem).replace(" /", "/")
         : "—",
       point.power !== undefined ? `${point.power} W` : "—",
-      point.cadence !== undefined ? `${point.cadence} ${cadenceUnit}` : "—"
+      point.cadence !== undefined ? `${point.cadence} ${swim ? "/min" : cadenceUnit}` : "—"
     ].join(" | ")
   );
 

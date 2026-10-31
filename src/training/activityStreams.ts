@@ -18,6 +18,7 @@
  *   verticalVibration    mm (vertical oscillation)
  *   verticalStrideRatio  % × 10
  *   altitude, slope      m, %
+ *   temperature          °C (CorosLink's own watch activities)
  *   gpsLat, gpsLon       degrees × 1e7
  *
  * Kept free of React and app imports so `scripts/test-activity-streams.mjs`
@@ -35,7 +36,8 @@ export type StreamChannelKey =
   | "vo"
   | "vr"
   | "elevation"
-  | "grade";
+  | "grade"
+  | "temperature";
 
 /** Picker and lane order. */
 export const STREAM_CHANNEL_ORDER: readonly StreamChannelKey[] = [
@@ -49,7 +51,8 @@ export const STREAM_CHANNEL_ORDER: readonly StreamChannelKey[] = [
   "vo",
   "vr",
   "elevation",
-  "grade"
+  "grade",
+  "temperature"
 ];
 
 /**
@@ -249,7 +252,8 @@ function channelReaders(speedKind: StreamSpeedKind): Record<StreamChannelKey, Sa
     vo: (sample) => positive(sample.verticalVibration, 10),
     vr: (sample) => positive(sample.verticalStrideRatio, 10),
     elevation: (sample) => finite(sample.altitude),
-    grade: (sample) => finite(sample.slope)
+    grade: (sample) => finite(sample.slope),
+    temperature: (sample) => finite(sample.temperature)
   };
 }
 

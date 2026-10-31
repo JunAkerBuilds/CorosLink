@@ -362,7 +362,7 @@ export class WatchActivityService {
         // The same watch activity decoded by another decoder version: keep the activity, use the current file.
         const existing = repository.findWatchActivity(deviceId, record.watchActivityId);
         if (existing && existing.format === "fit" && existing.sha256 !== fitStored.sha256 && existing.provenance === "watch") {
-          repository.replaceActivityFile(existing.activityId, { filePath: fitStored.relativePath, sha256: fitStored.sha256, sizeBytes: fitStored.sizeBytes });
+          repository.replaceActivityFile(existing.activityId, { filePath: fitStored.relativePath, sha256: fitStored.sha256, sizeBytes: fitStored.sizeBytes }, headline);
           if (!repository.isFileReferenced(existing.filePath)) await fs.promises.rm(archive.resolve(existing.filePath), { force: true });
           await this.options.indexSummary?.(archive.resolve(fitStored.relativePath), {
             activityId: existing.activityId, sportType, sportName, name: existing.name ?? sportName, startTime: headline.startTime
