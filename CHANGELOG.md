@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.71] - 2026-10-31
+
 ### Added
 
 - **Spanish.** Choose Español in Settings → App language. Every Spanish system locale, Spain and Latin America alike, picks it on first launch; menus, file dialogs and macOS permission prompts are translated too.
+- **Hevy and Strava gym sessions on the calendar.** Strength workouts you logged in Hevy or Strava without your watch now show in Month, Week and List views. Click one to see its totals, every set and your Strava notes. Sessions that match a COROS activity aren't shown twice.
+
+### Changed
+
+- **The language pickers fit five languages.** The onboarding language step and the Settings → App language tiles no longer crowd at small window sizes.
 
 ## [0.1.70] - 2026-10-30
 
