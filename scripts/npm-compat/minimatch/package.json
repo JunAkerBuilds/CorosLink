@@ -1,0 +1,12 @@
+{
+  "name": "minimatch-compat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "minimatch 11 with the callable default export older CommonJS callers expect",
+  "license": "ISC",
+  "main": "index.js",
+  "exports": {
+    "import": "./index.mjs",
+    "require": "./index.js"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "glob-callback-compat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "glob 7's callback API on top of glob 14, for @electron/asar 3",
+  "license": "ISC",
+  "main": "index.js"
+}

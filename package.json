@@ -405,9 +405,13 @@
     "electron": "^42.11.16",
     "electron-builder": "^26.15.6",
     "ffmpeg-static": "^5.3.0",
+    "glob": "file:scripts/npm-compat/glob-callback",
+    "glob-14": "npm:glob@^14.0.3",
     "globe.gl": "^2.46.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.21.0",
+    "minimatch": "file:scripts/npm-compat/minimatch",
+    "minimatch-11": "npm:minimatch@^11.0.3",
     "motion": "^12.42.2",
     "pdfjs-dist": "^6.4.299",
     "react": "^19.2.7",
@@ -431,7 +435,9 @@
     },
     "@modelcontextprotocol/sdk": {
       "@hono/node-server": "^2.1.5"
-    }
+    },
+    "minimatch": "$minimatch",
+    "glob@^7": "$glob"
   },
   "allowScripts": {
     "better-sqlite3@12.11.1": true,
