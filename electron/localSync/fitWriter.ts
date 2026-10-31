@@ -1,12 +1,13 @@
 /**
  * Minimal FIT activity writer (FIT protocol 2.0): file_id, timer events,
- * records, laps, one session and the activity message. Used to store
+ * records, pool lengths, laps, one session and the activity message. Used to store
  * activities decoded from the watch in the same format as imported files, so
  * the existing detail, GPX and export paths apply unchanged.
  *
  * Values FIT has no standard field for are written as developer fields
  * (named in field_description messages): "Effort Pace" on records, as the
- * COROS app exports it, and the watch's training analysis on the session.
+ * COROS app exports it, the watch's training analysis on the session, and a
+ * swim's best SWOLF and each length's SWOLF and heart rate.
  */
 
 const FIT_EPOCH = 631_065_600;
@@ -153,6 +154,8 @@ export interface FitWriterSample {
   verticalRatio?: number;
   /** Grade-adjusted speed, m/s (developer field "Effort Pace", as COROS exports it). */
   effortSpeed?: number;
+  /** °C. */
+  temperature?: number;
 }
 
 /** Running-dynamics averages (mm, ms, %). */
@@ -161,6 +164,46 @@ export interface FitWriterDynamics {
   verticalOscillationMm?: number;
   verticalRatio?: number;
   stepLengthMm?: number;
+}
+
+/** A swim lap's strokes; lengths index `FitWriterActivity.lengths`. */
+export interface FitWriterSwimLap {
+  rest: boolean;
+  /** FIT swim_stroke. */
+  stroke?: number;
+  strokes?: number;
+  swolf?: number;
+  firstLength?: number;
+  lengths?: number;
+  activeLengths?: number;
+}
+
+/** A pool length (length message); an idle one is a rest. */
+export interface FitWriterLength {
+  startTs: number;
+  endTs: number;
+  elapsedSec: number;
+  timerSec: number;
+  calories?: number;
+  active: boolean;
+  avgSpeed?: number;
+  avgHr?: number;
+  maxHr?: number;
+  stroke?: number;
+  strokes?: number;
+  /** Strokes per minute. */
+  strokeRate?: number;
+  swolf?: number;
+}
+
+/** A swim's totals. */
+export interface FitWriterSwim {
+  poolLengthM?: number;
+  poolLengthUnit?: "m" | "yd";
+  activeLengths?: number;
+  strokes?: number;
+  avgSwolf?: number;
+  bestSwolf?: number;
 }
 
 export interface FitWriterLap {
@@ -184,6 +227,7 @@ export interface FitWriterLap {
   ascentM?: number;
   descentM?: number;
   dynamics?: FitWriterDynamics;
+  swim?: FitWriterSwimLap;
 }
 
 /** The watch's training analysis, written as session developer fields (effects use the standard fields). */
@@ -216,8 +260,11 @@ export interface FitWriterActivity extends FitWriterLap {
   maxStepCadence?: number;
   totalStrides?: number;
   training?: FitWriterTraining;
+  swimTotals?: FitWriterSwim;
   activeWindows: Array<[number, number]>;
   laps: FitWriterLap[];
+  /** Pool swims. */
+  lengths?: FitWriterLength[];
   samples: FitWriterSample[];
   createdTs: number;
 }
@@ -246,6 +293,25 @@ const SESSION: readonly FieldSpec[] = [
   [64, BaseType.uint8], [89, BaseType.uint16], [91, BaseType.uint16], [132, BaseType.uint16], [134, BaseType.uint16], [137, BaseType.uint8],
   [92, BaseType.uint8], [93, BaseType.uint8]
 ];
+const RECORD_TEMPERATURE: readonly FieldSpec[] = [[13, BaseType.sint8]];
+const LENGTH: readonly FieldSpec[] = [
+  [253, BaseType.uint32], [254, BaseType.uint16], [0, BaseType.enum], [1, BaseType.enum], [2, BaseType.uint32], [3, BaseType.uint32],
+  [4, BaseType.uint32], [5, BaseType.uint16], [6, BaseType.uint16], [7, BaseType.enum], [9, BaseType.uint8], [11, BaseType.uint16],
+  [12, BaseType.enum]
+];
+/**
+ * Lap: total_cycles (strokes), intensity, num_lengths, first_length_index, avg_stroke_distance, swim_stroke, num_active_lengths,
+ * avg_swolf, avg_strokes_per_length.
+ */
+const LAP_SWIM: readonly FieldSpec[] = [
+  [10, BaseType.uint32], [23, BaseType.enum], [32, BaseType.uint16], [35, BaseType.uint16], [37, BaseType.uint16], [38, BaseType.enum],
+  [40, BaseType.uint16], [73, BaseType.uint16], [90, BaseType.uint16]
+];
+/** Session: num_lengths, avg_stroke_distance, pool_length, pool_length_unit, num_active_lengths, avg_strokes_per_length, avg_swolf. */
+const SESSION_SWIM: readonly FieldSpec[] = [
+  [33, BaseType.uint16], [42, BaseType.uint16], [44, BaseType.uint16], [46, BaseType.enum], [47, BaseType.uint16], [79, BaseType.uint16],
+  [80, BaseType.uint16]
+];
 const ACTIVITY: readonly FieldSpec[] = [[253, BaseType.uint32], [0, BaseType.uint32], [1, BaseType.uint16], [2, BaseType.enum], [3, BaseType.enum], [4, BaseType.enum]];
 
 const DEVELOPER_INDEX = 0;
@@ -263,8 +329,13 @@ const FIT_DEVELOPER_FIELDS = {
   recovery: { number: 9, type: BaseType.uint32, name: "Recovery Time", units: "s" },
   baseFitness: { number: 10, type: BaseType.uint16, name: "Base Fitness", units: "" },
   loadImpact: { number: 11, type: BaseType.uint16, name: "Load Impact", units: "" },
-  fatigue: { number: 12, type: BaseType.sint16, name: "Fatigue", units: "%" }
+  fatigue: { number: 12, type: BaseType.sint16, name: "Fatigue", units: "%" },
+  swolf: { number: 13, type: BaseType.uint16, name: "SWOLF", units: "" },
+  bestSwolf: { number: 14, type: BaseType.uint16, name: "Best SWOLF", units: "" },
+  avgHeartRate: { number: 15, type: BaseType.uint8, name: "Avg Heart Rate", units: "bpm" },
+  maxHeartRate: { number: 16, type: BaseType.uint8, name: "Max Heart Rate", units: "bpm" }
 } as const;
+const LENGTH_FIELDS = ["swolf", "avgHeartRate", "maxHeartRate"] as const;
 const SESSION_TRAINING_FIELDS = [
   "trainingLoad", "aerobicLoad", "anaerobicLoad", "focus", "sevenDayLoad", "recommendedLoadMin", "recommendedLoadMax", "vo2max",
   "recovery", "baseFitness", "loadImpact", "fatigue"
@@ -278,11 +349,24 @@ const EVENT_TYPE_STOP_ALL = 4;
 const EVENT_LAP = 9;
 const EVENT_SESSION = 8;
 const EVENT_ACTIVITY = 26;
+const EVENT_LENGTH = 28;
 const EVENT_TYPE_STOP = 1;
+const LENGTH_IDLE = 0;
+const LENGTH_ACTIVE = 1;
+const INTENSITY_ACTIVE = 0;
+const INTENSITY_REST = 1;
+const DISPLAY_METRIC = 0;
+const DISPLAY_STATUTE = 1;
 
 /** FIT fractional cadence (1/128 rpm) for a steps-per-minute value, beyond the per-leg whole number. */
 const fractionalCadence = (stepsPerMinute: number | undefined) =>
   stepsPerMinute === undefined ? undefined : Math.round((stepsPerMinute / 2 - Math.floor(stepsPerMinute / 2)) * 128);
+
+const strokesPerLength = (strokes: number | undefined, lengths: number | undefined) => (strokes !== undefined && lengths ? strokes / lengths : undefined);
+
+/** Metres per stroke. */
+const strokeDistance = (distanceM: number | undefined, strokes: number | undefined) =>
+  distanceM !== undefined && strokes ? distanceM / strokes : undefined;
 
 const dynamicsValues = (dynamics: FitWriterDynamics | undefined) => [
   scaled(dynamics?.verticalOscillationMm, 10), scaled(dynamics?.groundTimeMs, 10), scaled(dynamics?.verticalRatio, 100), scaled(dynamics?.stepLengthMm, 10)
@@ -292,9 +376,14 @@ export function writeFitActivity(activity: FitWriterActivity): Buffer {
   const fit = new FitBuilder();
   fit.message(0, FILE_ID, [4, MANUFACTURER_COROS, 0, fitTime(activity.createdTs)]);
   const hasEffort = activity.samples.some((sample) => sample.effortSpeed !== undefined);
-  if (hasEffort || activity.training) {
+  const swim = activity.swimTotals;
+  const lengths = activity.lengths ?? [];
+  if (hasEffort || activity.training || swim) {
     fit.message(207, DEVELOPER_DATA_ID, [DEVELOPER_INDEX]);
-    const used = [...(hasEffort ? ["effortPace" as const] : []), ...(activity.training ? SESSION_TRAINING_FIELDS : [])];
+    const used = [
+      ...(hasEffort ? ["effortPace" as const] : []), ...(activity.training ? SESSION_TRAINING_FIELDS : []),
+      ...(swim ? ["bestSwolf" as const] : []), ...(lengths.length ? LENGTH_FIELDS : [])
+    ];
     for (const key of used) {
       const field = FIT_DEVELOPER_FIELDS[key];
       fit.message(206, FIELD_DESCRIPTION, [DEVELOPER_INDEX, field.number, field.type, field.name, field.units]);
@@ -307,6 +396,8 @@ export function writeFitActivity(activity: FitWriterActivity): Buffer {
   let eventIndex = 0;
   const writeEvent = (event: { ts: number; type: number }) => fit.message(21, EVENT, [fitTime(event.ts), EVENT_TIMER, event.type, 0]);
   const recordDeveloper = hasEffort ? [developerSpec("effortPace")] : [];
+  const hasTemperature = activity.samples.some((sample) => sample.temperature !== undefined);
+  const recordFields = hasTemperature ? [...RECORD, ...RECORD_TEMPERATURE] : RECORD;
   for (const sample of activity.samples) {
     // A start goes before records at its second, a stop after them.
     while (eventIndex < events.length) {
@@ -315,31 +406,54 @@ export function writeFitActivity(activity: FitWriterActivity): Buffer {
       writeEvent(event);
       eventIndex += 1;
     }
-    fit.message(20, RECORD, [
+    fit.message(20, recordFields, [
       fitTime(sample.ts), semicircles(sample.lat), semicircles(sample.lon), scaled(sample.alt, 5, 500), sample.hr,
       sample.cadence, scaled(sample.dist, 100), scaled(sample.speed, 1000), sample.power,
-      scaled(sample.verticalOscillation, 10), scaled(sample.groundTime, 10), scaled(sample.verticalRatio, 100), scaled(sample.stepLength, 10)
+      scaled(sample.verticalOscillation, 10), scaled(sample.groundTime, 10), scaled(sample.verticalRatio, 100), scaled(sample.stepLength, 10),
+      ...(hasTemperature ? [sample.temperature] : [])
     ], recordDeveloper, hasEffort ? [sample.effortSpeed] : []);
   }
   for (; eventIndex < events.length; eventIndex++) writeEvent(events[eventIndex]!);
 
+  lengths.forEach((length, index) => {
+    fit.message(101, LENGTH, [
+      fitTime(length.endTs), index, EVENT_LENGTH, EVENT_TYPE_STOP, fitTime(length.startTs), scaled(length.elapsedSec, 1000),
+      scaled(length.timerSec, 1000), length.strokes, scaled(length.avgSpeed, 1000), length.stroke, length.strokeRate, length.calories,
+      length.active ? LENGTH_ACTIVE : LENGTH_IDLE
+    ], LENGTH_FIELDS.map(developerSpec), [length.swolf, length.avgHr, length.maxHr]);
+  });
   activity.laps.forEach((lap, index) => {
-    fit.message(19, LAP, [
+    const lapSwim = lap.swim;
+    fit.message(19, swim ? [...LAP, ...LAP_SWIM] : LAP, [
       fitTime(lap.endTs), index, EVENT_LAP, EVENT_TYPE_STOP, fitTime(lap.startTs), scaled(lap.elapsedSec, 1000), scaled(lap.timerSec, 1000),
       scaled(lap.distanceM, 100), lap.calories, scaled(lap.avgSpeed, 1000), scaled(lap.maxSpeed, 1000), lap.avgHr, lap.maxHr,
       lap.avgCadence, lap.avgPower, lap.maxPower, lap.ascentM, lap.descentM, lap.avgTemperature, lap.minHr, ...dynamicsValues(lap.dynamics),
-      fractionalCadence(lap.avgStepCadence)
+      fractionalCadence(lap.avgStepCadence),
+      ...(swim ? [
+        lapSwim?.strokes, lapSwim?.rest ? INTENSITY_REST : INTENSITY_ACTIVE, lapSwim?.lengths, lapSwim?.firstLength,
+        scaled(strokeDistance(lap.distanceM, lapSwim?.strokes), 100), lapSwim?.stroke, lapSwim?.activeLengths, lapSwim?.swolf,
+        scaled(strokesPerLength(lapSwim?.strokes, lapSwim?.activeLengths), 10)
+      ] : [])
     ]);
   });
   const training = activity.training;
-  fit.message(18, SESSION, [
+  const sessionDeveloper = [...(training ? SESSION_TRAINING_FIELDS.map(developerSpec) : []), ...(swim ? [developerSpec("bestSwolf")] : [])];
+  fit.message(18, swim ? [...SESSION, ...SESSION_SWIM] : SESSION, [
     fitTime(activity.endTs), EVENT_SESSION, EVENT_TYPE_STOP, fitTime(activity.startTs), activity.sport, activity.subSport,
-    scaled(activity.elapsedSec, 1000), scaled(activity.timerSec, 1000), scaled(activity.distanceM, 100), activity.totalStrides, activity.calories,
-    scaled(activity.avgSpeed, 1000), scaled(activity.maxSpeed, 1000), activity.avgHr, activity.maxHr, activity.avgCadence,
+    scaled(activity.elapsedSec, 1000), scaled(activity.timerSec, 1000), scaled(activity.distanceM, 100), swim ? swim.strokes : activity.totalStrides,
+    activity.calories, scaled(activity.avgSpeed, 1000), scaled(activity.maxSpeed, 1000), activity.avgHr, activity.maxHr, activity.avgCadence,
     activity.maxCadence, activity.avgPower, activity.ascentM, activity.descentM, training?.aerobicEffect, 0, activity.laps.length,
     activity.avgTemperature, activity.minHr, ...dynamicsValues(activity.dynamics), training?.anaerobicEffect,
-    fractionalCadence(activity.avgStepCadence), fractionalCadence(activity.maxStepCadence)
-  ], training ? SESSION_TRAINING_FIELDS.map(developerSpec) : [], training ? SESSION_TRAINING_FIELDS.map((key) => training[key]) : []);
+    fractionalCadence(activity.avgStepCadence), fractionalCadence(activity.maxStepCadence),
+    ...(swim ? [
+      activity.lengths ? lengths.length : undefined, scaled(strokeDistance(activity.distanceM, swim.strokes), 100), scaled(swim.poolLengthM, 100),
+      swim.poolLengthUnit === undefined ? undefined : swim.poolLengthUnit === "yd" ? DISPLAY_STATUTE : DISPLAY_METRIC, swim.activeLengths,
+      scaled(strokesPerLength(swim.strokes, swim.activeLengths), 10), swim.avgSwolf
+    ] : [])
+  ], sessionDeveloper, [
+    ...(training ? SESSION_TRAINING_FIELDS.map((key) => training[key]) : []),
+    ...(swim ? [swim.bestSwolf] : [])
+  ]);
   fit.message(34, ACTIVITY, [fitTime(activity.endTs), scaled(activity.timerSec, 1000), 1, 0, EVENT_ACTIVITY, EVENT_TYPE_STOP]);
   return fit.finish();
 }

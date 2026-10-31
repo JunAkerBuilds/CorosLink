@@ -19,6 +19,10 @@ import { COROS_MOBILE_EPOCH } from "./activityProtocol";
  *   0 start, 1 pause/stop, 2 resume, 4 lap, 5 session summary, 6 lap
  *   extension (power, running dynamics), 15 science summary (part 2 holds the
  *   watch's training analysis: load, training effect, focus, 7-day load).
+ *   In a swim, lap records are lengths, intervals or rests (byte 30), and
+ *   the lap and summary bytes a run uses for climb and steps hold strokes,
+ *   stroke rate and SWOLF instead. Checked against COROS's decoding of pool
+ *   and open-water swims.
  * - Kind 8 holds compressed sample series, one channel per record.
  *
  * Only what has been validated is decoded. Anything else is ignored, never
@@ -83,8 +87,33 @@ const CHANNEL = {
   /** Grade-adjusted ("effort") speed, m/s × 360. */
   effortSpeed: 0x11,
   /** Running dynamics: group 1 ground contact (ms), 3 vertical oscillation (mm), 4 vertical ratio (% × 10). */
-  dynamics: 0x26
+  dynamics: 0x26,
+  /** °C, every 10 s (water temperature in a swim). */
+  temperature: 0x09
 } as const;
+
+/** Device sport types of swims. */
+const DEVICE_OPEN_WATER = 2;
+const DEVICE_POOL_SWIM = 3;
+/**
+ * What a swim lap record is (sport info 4, byte 30): a length, a rest, or an
+ * interval (0x10, or 0x44 when the whole swim is one interval). Other values
+ * have not been seen and are ignored.
+ */
+const SWIM_LENGTH = 0x00;
+const SWIM_REST = 0x14;
+const SWIM_INTERVALS: readonly number[] = [0x10, 0x44];
+/** Time the timer ran between two lengths, shorter than this, is turning at the wall, not an idle stretch. */
+const MIN_IDLE_SECONDS = 5;
+/**
+ * The watch's stroke codes → FIT swim_stroke, as COROS's export maps them
+ * (checked by probing each code). 0 and 5 have no FIT stroke.
+ */
+const SWIM_STROKES: Readonly<Record<number, number>> = { 1: 0, 2: 2, 3: 1, 4: 3, 6: 4, 7: 6, 0xff: 5 };
+/** FIT swim_stroke for a mix of strokes. */
+const FIT_STROKE_MIXED = 5;
+/** A pool length that is a whole number of yards (and not of metres) is a yard pool. */
+const CM_PER_YARD = 91.44;
 
 /** Device sport type (start record) → COROS sport type, as COROS maps it. */
 const DEVICE_SPORT_TYPES: Readonly<Record<number, number>> = {
@@ -268,6 +297,36 @@ interface LapDraft {
   stepLengthCm: number;
 }
 
+/**
+ * A swim's lap record (sport info 4): a length, interval or rest. Offsets
+ * after the subtype byte; the end time's milliseconds (u16 @40) and the
+ * paused time inside an interval (u32 @14) give its exact span.
+ */
+interface SwimPartDraft {
+  kind: number;
+  index: number;
+  /** Byte 39: on a length, the number of intervals closed before it; the k-th interval (from 0) owns the lengths showing k. */
+  interval: number;
+  endTs: number;
+  /** Exact end, Unix seconds with milliseconds. */
+  endExact: number;
+  timerCs: number;
+  pausedCs: number;
+  distanceCm: number;
+  calories: number;
+  /** Seconds per 100 m while swimming (rests left out), and the best. */
+  avgPace: number;
+  bestPace: number;
+  avgHr: number;
+  maxHr: number;
+  minHr: number;
+  temperature: number;
+  stroke: number;
+  strokes: number;
+  strokeRate: number;
+  swolf: number;
+}
+
 /** Lap extension (sport info 6): power and running-dynamics averages. */
 interface LapExtension {
   avgPower: number;
@@ -326,9 +385,55 @@ export interface CorosDynamics {
   stepLengthMm?: number;
 }
 
+/** A swim lap's stroke figures as the watch recorded them. */
+export interface CorosSwimLap {
+  /** A rest between intervals: no distance or strokes. */
+  rest: boolean;
+  /** FIT swim_stroke (0 freestyle, 1 backstroke, 2 breaststroke, 3 butterfly, 4 drill, 5 mixed, 6 IM). */
+  stroke?: number;
+  strokes?: number;
+  /** Seconds plus strokes per length. */
+  swolf?: number;
+  /** Pool swims: the lap's lengths, a range of `CorosSession.lengths`. */
+  firstLength?: number;
+  lengths?: number;
+  activeLengths?: number;
+}
+
+/** One pool length, or an idle stretch (a rest, or interval time outside any length). */
+export interface CorosLength {
+  startTs: number;
+  endTs: number;
+  /** Exact, unlike the whole-second time stamps. */
+  elapsedSec: number;
+  timerSec: number;
+  calories: number;
+  active: boolean;
+  avgSpeed?: number;
+  avgHr?: number;
+  maxHr?: number;
+  stroke?: number;
+  strokes?: number;
+  strokeRate?: number;
+  swolf?: number;
+}
+
+/** A swim's totals as the watch recorded them. */
+export interface CorosSwimSummary {
+  /** Pool swims only. */
+  poolLengthM?: number;
+  poolLengthUnit?: "m" | "yd";
+  activeLengths?: number;
+  strokes?: number;
+  avgSwolf?: number;
+  bestSwolf?: number;
+}
+
 export interface CorosLap {
   index: number;
   startTs: number;
+  /** Swim laps: when the watch closed the lap (other laps end where the next begins). */
+  endTs?: number;
   elapsedSec: number;
   timerSec: number;
   distanceM: number;
@@ -344,9 +449,11 @@ export interface CorosLap {
   maxPower?: number;
   minHr?: number;
   avgTemperature?: number;
-  ascentM: number;
-  descentM: number;
+  /** Left out for swims, where the watch stores stroke figures in these bytes. */
+  ascentM?: number;
+  descentM?: number;
   dynamics: CorosDynamics;
+  swim?: CorosSwimLap;
 }
 
 export interface CorosSample {
@@ -367,6 +474,8 @@ export interface CorosSample {
   verticalRatio?: number;
   /** Grade-adjusted speed, m/s. */
   effortSpeed?: number;
+  /** °C. */
+  temperature?: number;
 }
 
 export interface CorosSession {
@@ -394,13 +503,17 @@ export interface CorosSession {
   avgTemperature?: number;
   /** Strides (steps ÷ 2), as COROS exports total cycles for runs. */
   totalStrides?: number;
-  ascentM: number;
-  descentM: number;
+  /** Left out for swims. */
+  ascentM?: number;
+  descentM?: number;
   dynamics: CorosDynamics;
   training?: CorosTraining;
+  swimTotals?: CorosSwimSummary;
   /** Timer-running periods, inclusive Unix seconds. */
   activeWindows: Array<[number, number]>;
   laps: CorosLap[];
+  /** Pool swims: every length and idle stretch, in order. */
+  lengths?: CorosLength[];
   samples: CorosSample[];
 }
 
@@ -421,6 +534,12 @@ interface SessionDraft {
   pauses: Array<{ ts: number; ms: number }>;
   resumes: number[];
   laps: LapDraft[];
+  swimParts: SwimPartDraft[];
+  /** Kind and number of each swim part read: a page read twice repeats them. */
+  swimPartKeys: Set<string>;
+  lapIndexes: Set<number>;
+  /** Start record u16 @6: the pool length in cm (pool swims). */
+  poolLengthCm: number;
   lapExtensions: Map<number, LapExtension>;
   training?: CorosTraining;
   summary?: Buffer;
@@ -462,6 +581,33 @@ function readLap(info: Buffer): LapDraft | undefined {
     minHr: info[28]!,
     temperature: info.readInt8(29),
     stepLengthCm: info[37]!
+  };
+}
+
+/** A swim lap record. Offsets confirmed by probing COROS's decoding (strokes u16 @32, rate u16 @34, SWOLF u16 @36). */
+function readSwimPart(info: Buffer): SwimPartDraft | undefined {
+  if (info.length < 42) return undefined;
+  const endTs = unixTs(info.readUInt32LE(0));
+  return {
+    kind: info[30]!,
+    index: info.readUInt16LE(4),
+    interval: info[39]!,
+    endTs,
+    endExact: endTs + Math.min(info.readUInt16LE(40), 999) / 1000,
+    timerCs: info.readUInt32LE(6),
+    pausedCs: info.readUInt32LE(14),
+    distanceCm: info.readUInt32LE(10),
+    calories: info.readUInt32LE(18),
+    avgPace: info.readUInt16LE(22),
+    bestPace: info.readUInt16LE(24),
+    avgHr: info[26]!,
+    maxHr: info[27]!,
+    minHr: info[28]!,
+    temperature: info.readInt8(29),
+    stroke: info[31]!,
+    strokes: info.readUInt16LE(32),
+    strokeRate: info.readUInt16LE(34),
+    swolf: info.readUInt16LE(36)
   };
 }
 
@@ -520,11 +666,22 @@ function averageOfPresent(values: Array<number | undefined>): number | undefined
   return present.length ? Math.floor(present.reduce((sum, value) => sum + value, 0) / present.length) : undefined;
 }
 
-/** Sample value at `ts` from series segments; between samples, distance and speed interpolate linearly, others take the floored mean. */
-function seriesLookup(segments: CorosSeriesSegment[], linear: boolean): (ts: number) => number | undefined {
+/**
+ * Sample value at `ts` from series segments. Between samples, distance and
+ * speed interpolate linearly, temperature takes the nearer sample (the later
+ * one halfway, as COROS fills it), others the floored mean.
+ */
+function seriesLookup(segments: CorosSeriesSegment[], fill: "linear" | "mean" | "nearest"): (ts: number) => number | undefined {
   const points = new Map<number, number>();
+  // Samples further apart than this are a gap, not a slope; a channel sampled every 10 s still fills in between its samples.
+  const maxGap = new Map<number, number>();
   for (const segment of segments) {
-    segment.values.forEach((value, index) => points.set(segment.startTs + index * Math.max(segment.interval, 1), value));
+    const interval = Math.max(segment.interval, 1);
+    segment.values.forEach((value, index) => {
+      const ts = segment.startTs + index * interval;
+      points.set(ts, value);
+      maxGap.set(ts, Math.max(8, interval));
+    });
   }
   const stamps = [...points.keys()].sort((a, b) => a - b);
   return (ts) => {
@@ -539,18 +696,227 @@ function seriesLookup(segments: CorosSeriesSegment[], linear: boolean): (ts: num
     }
     const before = stamps[low]!;
     const after = stamps[high]!;
-    if (after - before > 8) return undefined;
+    if (after - before > maxGap.get(before)!) return undefined;
     const a = points.get(before)!;
     const b = points.get(after)!;
-    return linear ? a + ((b - a) * (ts - before)) / (after - before) : Math.floor((a + b) / 2);
+    if (fill === "nearest") return (ts - before) * 2 >= after - before ? b : a;
+    return fill === "linear" ? a + ((b - a) * (ts - before)) / (after - before) : Math.floor((a + b) / 2);
   };
 }
+
+/** A temperature sample: stored unsigned, so values past 127 are below zero. */
+const signedTemperature = (value: number) => (value >= 0x8000 ? value - 0x1_0000 : value >= 0x80 && value < 0x100 ? value - 0x100 : value);
 
 function toSigned32(value: number): number {
   return value >= 0x8000_0000 ? value - 0x1_0000_0000 : value;
 }
 
 class ImplausibleSessionError extends Error {}
+
+const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
+const byIndex = (a: SwimPartDraft, b: SwimPartDraft) => a.index - b.index;
+const centiseconds = (seconds: number) => Math.round(seconds * 100) / 100;
+
+function swimLap(part: SwimPartDraft, index: number): CorosLap {
+  const rest = part.kind === SWIM_REST;
+  const timerSec = part.timerCs / 100;
+  const elapsedSec = (part.timerCs + part.pausedCs) / 100;
+  return {
+    index,
+    startTs: Math.floor(part.endExact - elapsedSec),
+    endTs: part.endTs,
+    elapsedSec,
+    timerSec,
+    distanceM: part.distanceCm / 100,
+    calories: Math.round(part.calories / 1000),
+    // The watch's pace leaves out the time spent resting inside an interval, as COROS reports it.
+    avgSpeed: rest ? undefined : part.avgPace > 0 ? 100 / part.avgPace : timerSec > 0 ? part.distanceCm / 100 / timerSec : undefined,
+    maxSpeed: !rest && part.bestPace > 0 ? 100 / part.bestPace : undefined,
+    avgHr: optional(part.avgHr),
+    maxHr: optional(part.maxHr),
+    minHr: optional(part.minHr),
+    avgTemperature: part.temperature !== 0 ? part.temperature : undefined,
+    // A swim's lap cadence is its stroke rate.
+    avgCadence: rest ? undefined : optional(part.strokeRate),
+    dynamics: {},
+    swim: rest ? { rest } : { rest, stroke: SWIM_STROKES[part.stroke], strokes: part.strokes, swolf: optional(part.swolf) }
+  };
+}
+
+function lengthOf(part: SwimPartDraft, start: number, end: number): CorosLength {
+  const timerSec = part.timerCs / 100;
+  return {
+    startTs: Math.floor(start),
+    endTs: Math.floor(end),
+    // Where the watch's stamps leave a length less room than its timer, it still lasted that long.
+    elapsedSec: centiseconds(Math.max(end - start, timerSec)),
+    timerSec,
+    calories: Math.round(part.calories / 1000),
+    active: true,
+    avgSpeed: timerSec > 0 ? part.distanceCm / 100 / timerSec : undefined,
+    avgHr: optional(part.avgHr),
+    maxHr: optional(part.maxHr),
+    stroke: SWIM_STROKES[part.stroke],
+    strokes: part.strokes,
+    strokeRate: optional(part.strokeRate),
+    swolf: optional(part.swolf)
+  };
+}
+
+/**
+ * A lap's lengths on its timeline, each ending where the next one starts at
+ * the latest: the watch can stamp a length after its interval closed, two
+ * lengths with one end time, or a length starting before the rest ahead of
+ * it ended. One pushed against the lap's start moves into the room after it.
+ */
+function placeLengths(parts: SwimPartDraft[], lapStart: number, lapEnd: number): Array<{ part: SwimPartDraft; start: number; end: number }> {
+  const placed: Array<{ part: SwimPartDraft; start: number; end: number }> = [];
+  let next = lapEnd;
+  for (const part of [...parts].sort(byIndex).reverse()) {
+    const end = Math.max(Math.min(part.endExact, next), lapStart);
+    const start = Math.max(end - part.timerCs / 100, lapStart);
+    placed.unshift({ part, start, end });
+    next = start;
+  }
+  placed.forEach((length, index) => {
+    const room = placed[index + 1]?.start ?? lapEnd;
+    length.end = Math.max(length.end, Math.min(length.start + length.part.timerCs / 100, room));
+  });
+  return placed;
+}
+
+/** Seconds the timer had run by an instant: a lookup over the timer windows (in order), so a long swim costs no more per length. */
+function timerClock(windows: Array<[number, number]>): (at: number) => number {
+  const before: number[] = [];
+  let total = 0;
+  for (const [start, end] of windows) {
+    before.push(total);
+    total += end - start;
+  }
+  return (at) => {
+    let low = 0;
+    let high = windows.length - 1;
+    if (high < 0 || at <= windows[0]![0]) return 0;
+    while (low < high) {
+      const middle = (low + high + 1) >> 1;
+      if (windows[middle]![0] <= at) low = middle; else high = middle - 1;
+    }
+    const [start, end] = windows[low]!;
+    return before[low]! + Math.min(at, end) - start;
+  };
+}
+
+/**
+ * A pool swim's lengths and the idle stretches between them: a rest, or time
+ * the timer ran between two lengths of an interval (at the wall, say), as an
+ * idle length where it happened.
+ */
+function intervalLengths(parts: SwimPartDraft[], lapStart: number, lapEnd: number, clock: (at: number) => number): CorosLength[] {
+  const lengths: CorosLength[] = [];
+  let previous = lapStart;
+  const idleUntil = (until: number) => {
+    const timerSec = centiseconds(Math.max(0, clock(until) - clock(previous)));
+    if (timerSec >= MIN_IDLE_SECONDS) {
+      lengths.push({ startTs: Math.floor(previous), endTs: Math.floor(until), elapsedSec: centiseconds(until - previous), timerSec, calories: 0, active: false });
+    }
+  };
+  for (const { part, start, end } of placeLengths(parts, lapStart, lapEnd)) {
+    idleUntil(start);
+    lengths.push(lengthOf(part, start, end));
+    previous = end;
+  }
+  idleUntil(lapEnd);
+  return lengths;
+}
+
+/** A lap for lengths no interval record closed (a swim stopped mid-interval): what they add up to, until the stop. */
+function lapFromLengths(parts: SwimPartDraft[], lengths: CorosLength[], index: number, start: number, stop: number): CorosLap {
+  const active = lengths.filter((length) => length.active);
+  const timerSec = centiseconds(sum(active.map((length) => length.timerSec)));
+  const distanceM = sum(parts.map((part) => part.distanceCm)) / 100;
+  const strokes = new Set(active.map((length) => length.stroke));
+  return {
+    index,
+    startTs: Math.floor(start),
+    endTs: Math.floor(stop),
+    elapsedSec: centiseconds(stop - start),
+    timerSec,
+    distanceM,
+    calories: sum(active.map((length) => length.calories)),
+    avgSpeed: timerSec > 0 ? distanceM / timerSec : undefined,
+    maxHr: optional(Math.max(0, ...active.map((length) => length.maxHr ?? 0))),
+    dynamics: {},
+    swim: { rest: false, stroke: strokes.size === 1 ? [...strokes][0] : FIT_STROKE_MIXED, strokes: sum(active.map((length) => length.strokes ?? 0)) }
+  };
+}
+
+/**
+ * A swim's laps and, in a pool, its lengths. Pool laps are the watch's
+ * intervals and rests in the order it numbered them; the k-th interval owns
+ * the lengths whose interval count (byte 39) is k, and a rest is an idle
+ * length. Open-water laps are the lap records themselves.
+ */
+function swimLapsAndLengths(
+  draft: SessionDraft, windows: Array<[number, number]>, sessionStart: number, stop: number
+): { laps: CorosLap[]; lengths?: CorosLength[]; closed?: boolean } {
+  const parts = draft.swimParts;
+  const clock = timerClock(windows);
+  if (draft.deviceSportType !== DEVICE_POOL_SWIM) {
+    // Laps, unless the watch wrote only interval records.
+    const kinds = parts.some((part) => part.kind === SWIM_LENGTH) ? [SWIM_LENGTH, SWIM_REST] : [...SWIM_INTERVALS, SWIM_REST];
+    const lapRecords = parts.filter((part) => kinds.includes(part.kind)).sort((a, b) => a.endExact - b.endExact);
+    return {
+      laps: lapRecords.map((part, index) => {
+        // The watch closes the last lap when the swim is saved; the swim itself ended at the stop.
+        const lap = swimLap(part, index + 1);
+        if (part.endExact <= stop) return lap;
+        const lapStart = part.endExact - lap.elapsedSec;
+        return { ...lap, endTs: Math.floor(stop), elapsedSec: centiseconds(Math.max(stop - lapStart, lap.timerSec)) };
+      })
+    };
+  }
+  const byInterval = new Map<number, SwimPartDraft[]>();
+  for (const part of parts) {
+    if (part.kind !== SWIM_LENGTH) continue;
+    const own = byInterval.get(part.interval) ?? [];
+    own.push(part);
+    byInterval.set(part.interval, own);
+  }
+  const closers = parts.filter((part) => part.kind === SWIM_REST || SWIM_INTERVALS.includes(part.kind)).sort(byIndex);
+  const laps: CorosLap[] = [];
+  const lengths: CorosLength[] = [];
+  let interval = 0;
+  let lapEnd = sessionStart;
+  for (const closer of closers) {
+    const lap = swimLap(closer, laps.length + 1);
+    const lapStart = closer.endExact - lap.elapsedSec;
+    const firstLength = lengths.length;
+    if (closer.kind === SWIM_REST) {
+      lengths.push({
+        startTs: lap.startTs, endTs: closer.endTs, elapsedSec: lap.elapsedSec, timerSec: lap.timerSec, calories: lap.calories, active: false,
+        avgHr: lap.avgHr, maxHr: lap.maxHr
+      });
+    } else {
+      lengths.push(...intervalLengths(byInterval.get(interval) ?? [], lapStart, closer.endExact, clock));
+      byInterval.delete(interval);
+      interval += 1;
+    }
+    const own = lengths.slice(firstLength);
+    lap.swim = { ...lap.swim!, firstLength, lengths: own.length, activeLengths: own.filter((length) => length.active).length };
+    laps.push(lap);
+    lapEnd = Math.max(lapEnd, closer.endExact);
+  }
+  const unclosed = [...byInterval.values()].flat();
+  if (unclosed.length) {
+    const end = Math.max(stop, lapEnd);
+    const own = intervalLengths(unclosed, lapEnd, end, clock);
+    const lap = lapFromLengths(unclosed, own, laps.length + 1, lapEnd, end);
+    lap.swim = { ...lap.swim!, firstLength: lengths.length, lengths: own.length, activeLengths: own.filter((length) => length.active).length };
+    lengths.push(...own);
+    laps.push(lap);
+  }
+  return { laps, lengths, closed: unclosed.length === 0 };
+}
 
 /** The stop record: the last pause, when no resume followed it. */
 const stopOf = (draft: SessionDraft) => draft.pauses.length > draft.resumes.length ? draft.pauses[draft.pauses.length - 1] : undefined;
@@ -564,9 +930,12 @@ function buildSession(draft: SessionDraft): CorosSession | undefined {
   if (implausibleStop(draft, stop)) throw new ImplausibleSessionError();
   const sportType = DEVICE_SPORT_TYPES[draft.deviceSportType] ?? 98;
   const isRun = RUN_SPORT_TYPES.has(sportType);
+  const isSwim = draft.deviceSportType === DEVICE_POOL_SWIM || draft.deviceSportType === DEVICE_OPEN_WATER;
   const timerSec = summary.readUInt32LE(4) / 100;
   const distanceM = summary.readUInt32LE(0) / 100;
+  /** Seconds per km, or per 100 m in a swim. */
   const bestPace = summary.readUInt16LE(16);
+  const paceDistance = isSwim ? 100 : 1000;
   const altitudeOffset = summary.readInt16LE(30);
 
   // Timer windows: start → pause, resume (+1 s: the watch reports whole seconds and resumes within that second) → next pause.
@@ -583,17 +952,32 @@ function buildSession(draft: SessionDraft): CorosSession | undefined {
   if (activeSeconds > Math.min(MAX_SESSION_SECONDS, Math.max(timerSec * 4, timerSec + WINDOW_SLACK_SECONDS))) throw new ImplausibleSessionError();
 
   const byChannel = (channel: number, group: number) => draft.series.filter((segment) => segment.channel === channel && segment.group === group);
-  const hr = seriesLookup(byChannel(CHANNEL.heartRate, 0), false);
-  const distance = seriesLookup(byChannel(CHANNEL.distance, 0), true);
-  const speed = seriesLookup(byChannel(CHANNEL.speed, 0), true);
-  const cadence = seriesLookup(byChannel(CHANNEL.stepCadence, 0), false);
-  const power = seriesLookup(byChannel(CHANNEL.power, 0), false);
-  const altitude = seriesLookup(byChannel(CHANNEL.altitude, 0), false);
-  const stepLength = seriesLookup(byChannel(CHANNEL.stepLength, 0), false);
-  const effortSpeed = seriesLookup(byChannel(CHANNEL.effortSpeed, 0), true);
-  const groundTime = seriesLookup(byChannel(CHANNEL.dynamics, 1), false);
-  const oscillation = seriesLookup(byChannel(CHANNEL.dynamics, 3), false);
-  const ratio = seriesLookup(byChannel(CHANNEL.dynamics, 4), false);
+  const hr = seriesLookup(byChannel(CHANNEL.heartRate, 0), "mean");
+  const distance = seriesLookup(byChannel(CHANNEL.distance, 0), "linear");
+  const speed = seriesLookup(byChannel(CHANNEL.speed, 0), "linear");
+  const cadence = seriesLookup(byChannel(CHANNEL.stepCadence, 0), "mean");
+  const power = seriesLookup(byChannel(CHANNEL.power, 0), "mean");
+  const altitude = seriesLookup(byChannel(CHANNEL.altitude, 0), "mean");
+  const stepLength = seriesLookup(byChannel(CHANNEL.stepLength, 0), "mean");
+  const effortSpeed = seriesLookup(byChannel(CHANNEL.effortSpeed, 0), "linear");
+  const groundTime = seriesLookup(byChannel(CHANNEL.dynamics, 1), "mean");
+  const oscillation = seriesLookup(byChannel(CHANNEL.dynamics, 3), "mean");
+  const ratio = seriesLookup(byChannel(CHANNEL.dynamics, 4), "mean");
+  const temperature = seriesLookup(
+    byChannel(CHANNEL.temperature, 0).map((segment) => ({ ...segment, values: segment.values.map(signedTemperature) })),
+    "nearest"
+  );
+  const sessionStartExact = draft.startTs + draft.startMs / 1000;
+  const sessionEndExact = stop.ts + stop.ms / 1000;
+  const swim = isSwim ? swimLapsAndLengths(draft, activeWindows, sessionStartExact, sessionEndExact) : undefined;
+  // A pool records no speed: during a length the record takes the length's average speed, as COROS exports it.
+  const lengthSpeeds = (swim?.lengths ?? []).filter((length) => length.active && length.avgSpeed !== undefined);
+  let lengthCursor = 0;
+  const poolSpeed = (ts: number) => {
+    while (lengthCursor < lengthSpeeds.length && lengthSpeeds[lengthCursor]!.endTs < ts) lengthCursor += 1;
+    const length = lengthSpeeds[lengthCursor];
+    return length && ts >= length.startTs ? length.avgSpeed : undefined;
+  };
   // Averages over every recorded sample (not the per-second fill).
   const recorded = (channel: number, group: number) => byChannel(channel, group).flatMap((segment) => segment.values);
   const positions = new Map<number, { lat: number; lon: number }>();
@@ -625,14 +1009,21 @@ function buildSession(draft: SessionDraft): CorosSession | undefined {
         hr: hr(ts),
         dist: distance(ts),
         speed: speed(ts),
-        cadence: isRun ? cadence(ts) : undefined,
+        cadence: isRun || isSwim ? cadence(ts) : undefined,
         power: power(ts),
-        alt: altitude(ts)
+        alt: altitude(ts),
+        temperature: temperature(ts)
       };
       if (values.hr !== undefined && values.hr > 0) sample.hr = values.hr;
       if (values.dist !== undefined) sample.dist = values.dist;
       if (values.speed !== undefined) sample.speed = values.speed / 360;
-      if (values.cadence !== undefined) sample.cadence = Math.floor(values.cadence / 2);
+      else if (swim?.lengths) {
+        const lengthSpeed = poolSpeed(ts);
+        if (lengthSpeed !== undefined) sample.speed = lengthSpeed;
+      }
+      // Steps per minute are halved to FIT's per-leg cadence; a swim's channel is strokes per minute, kept as recorded.
+      if (values.cadence !== undefined) sample.cadence = isSwim ? values.cadence : Math.floor(values.cadence / 2);
+      if (values.temperature !== undefined) sample.temperature = values.temperature;
       if (values.power !== undefined) sample.power = values.power;
       if (values.alt !== undefined) sample.alt = values.alt + altitudeOffset;
       const dynamics = { stepLength: stepLength(ts), groundTime: groundTime(ts), verticalOscillation: oscillation(ts), verticalRatio: ratio(ts), effortSpeed: effortSpeed(ts) };
@@ -645,11 +1036,9 @@ function buildSession(draft: SessionDraft): CorosSession | undefined {
     }
   }
 
-  const sessionStartExact = draft.startTs + draft.startMs / 1000;
-  const sessionEndExact = stop.ts + stop.ms / 1000;
-  const laps: CorosLap[] = [];
+  const laps: CorosLap[] = swim ? swim.laps : [];
   let lapStart = draft.startTs;
-  const sortedLaps = [...draft.laps].sort((a, b) => a.index - b.index);
+  const sortedLaps = swim ? [] : [...draft.laps].sort((a, b) => a.index - b.index);
   sortedLaps.forEach((lap, position) => {
     const last = position === sortedLaps.length - 1;
     const lapTimer = lap.timerCs / 100;
@@ -683,7 +1072,7 @@ function buildSession(draft: SessionDraft): CorosSession | undefined {
     lapStart = lap.endTs;
   });
 
-  return {
+  const common = {
     watchActivityId: `coros-${draft.startTs}-${draft.deviceSportType}`,
     sportType,
     deviceSportType: draft.deviceSportType,
@@ -694,16 +1083,50 @@ function buildSession(draft: SessionDraft): CorosSession | undefined {
     distanceM,
     calories: Math.round(summary.readUInt32LE(10) / 1000),
     avgSpeed: timerSec > 0 ? distanceM / timerSec : undefined,
-    maxSpeed: bestPace > 0 ? 1000 / bestPace : undefined,
+    maxSpeed: bestPace > 0 ? paceDistance / bestPace : undefined,
     avgHr: optional(summary[22]!),
     maxHr: optional(summary[23]!),
+    avgPower: optional(summary.readUInt16LE(45)),
+    minHr: optional(summary[24]!),
+    avgTemperature: summary.readInt8(25) !== 0 ? summary.readInt8(25) : undefined,
+    ...(draft.training ? { training: draft.training } : {}),
+    activeWindows,
+    laps,
+    samples
+  };
+  if (swim) {
+    // Swim summary: strokes u16 @26, best / average SWOLF u16 @30 / @32, stroke rate max @34 / average @35, active lengths u16 @8.
+    const pool = draft.deviceSportType === DEVICE_POOL_SWIM && draft.poolLengthCm > 0;
+    const yards = draft.poolLengthCm / CM_PER_YARD;
+    const poolLengthUnit = Math.abs(yards - Math.round(yards)) < 0.01 && draft.poolLengthCm % 100 !== 0 ? "yd" : "m";
+    // The watch's laps cover a pool swim end to end, the last one until the swim was saved: COROS reports their sum as its elapsed time.
+    const lapsElapsed = centiseconds(sum(laps.map((lap) => lap.elapsedSec)));
+    const lastLapEnd = Math.max(stop.ts, ...laps.map((lap) => lap.endTs ?? 0));
+    const lapsCover = swim.closed && laps.length > 0 && lapsElapsed >= common.elapsedSec && lapsElapsed <= MAX_SESSION_SECONDS;
+    const avgPace = summary.readUInt16LE(14);
+    return {
+      ...common,
+      ...(lapsCover ? { elapsedSec: lapsElapsed, endTs: lastLapEnd } : {}),
+      // Average pace u16 @14 (s/100 m) leaves out rests, as COROS reports it.
+      ...(avgPace > 0 ? { avgSpeed: 100 / avgPace } : {}),
+      avgCadence: optional(summary[35]!),
+      maxCadence: optional(summary[34]!),
+      dynamics: {},
+      swimTotals: {
+        ...(pool ? { poolLengthM: draft.poolLengthCm / 100, poolLengthUnit, activeLengths: summary.readUInt16LE(8) } : {}),
+        strokes: summary.readUInt16LE(26),
+        avgSwolf: optional(summary.readUInt16LE(32)),
+        bestSwolf: optional(summary.readUInt16LE(30))
+      },
+      ...(swim.lengths ? { lengths: swim.lengths } : {})
+    };
+  }
+  return {
+    ...common,
     avgCadence: isRun ? optional(Math.floor(summary[36]! / 2)) : undefined,
     maxCadence: isRun ? optional(Math.floor(summary[37]! / 2)) : undefined,
     avgStepCadence: isRun ? optional(summary[36]!) : undefined,
     maxStepCadence: isRun ? optional(summary[37]!) : undefined,
-    avgPower: optional(summary.readUInt16LE(45)),
-    minHr: optional(summary[24]!),
-    avgTemperature: summary.readInt8(25) !== 0 ? summary.readInt8(25) : undefined,
     totalStrides: optional(Math.floor(summary.readUInt16LE(39) / 2)),
     ascentM: summary.readUInt16LE(26),
     descentM: summary.readUInt16LE(28),
@@ -712,11 +1135,7 @@ function buildSession(draft: SessionDraft): CorosSession | undefined {
       verticalOscillationMm: averageOfPresent(recorded(CHANNEL.dynamics, 3)),
       verticalRatio: (() => { const value = averageOfPresent(recorded(CHANNEL.dynamics, 4)); return value === undefined ? undefined : value / 10; })(),
       stepLengthMm: optional(summary[43]! * 10)
-    },
-    ...(draft.training ? { training: draft.training } : {}),
-    activeWindows,
-    laps,
-    samples
+    }
   };
 }
 
@@ -742,7 +1161,10 @@ export function decodeCorosSportRecordFile(file: Buffer, visit?: (session: Coros
       if (type === INFO_START && info.length >= 16) {
         // A repeated start record for the same activity (a page read twice) continues it.
         if (current?.startTs === ts) continue;
-        current = { startTs: ts, startMs: info.readUInt16LE(14), deviceSportType: info[13]!, pauses: [], resumes: [], laps: [], lapExtensions: new Map(), series: [] };
+        current = {
+          startTs: ts, startMs: info.readUInt16LE(14), deviceSportType: info[13]!, poolLengthCm: info.readUInt16LE(6),
+          pauses: [], resumes: [], laps: [], swimParts: [], swimPartKeys: new Set(), lapIndexes: new Set(), lapExtensions: new Map(), series: []
+        };
         drafts.push(current);
       } else if (!current) {
         continue;
@@ -750,9 +1172,20 @@ export function decodeCorosSportRecordFile(file: Buffer, visit?: (session: Coros
         current.pauses.push({ ts, ms: Math.min(info.readUInt32LE(5), 999) });
       } else if (type === INFO_RESUME) {
         current.resumes.push(ts);
+      } else if (type === INFO_LAP && (current.deviceSportType === DEVICE_POOL_SWIM || current.deviceSportType === DEVICE_OPEN_WATER)) {
+        // Lengths have their own numbers; intervals and rests share one count.
+        const part = readSwimPart(info);
+        const key = part && `${part.kind}:${part.index}`;
+        if (part && !current.swimPartKeys.has(key!)) {
+          current.swimPartKeys.add(key!);
+          current.swimParts.push(part);
+        }
       } else if (type === INFO_LAP) {
         const lap = readLap(info);
-        if (lap && !current.laps.some((existing) => existing.index === lap.index)) current.laps.push(lap);
+        if (lap && !current.lapIndexes.has(lap.index)) {
+          current.lapIndexes.add(lap.index);
+          current.laps.push(lap);
+        }
       } else if (type === INFO_LAP_EXTENSION) {
         const extension = readLapExtension(info);
         if (extension) current.lapExtensions.set(info.readUInt16LE(0), extension);

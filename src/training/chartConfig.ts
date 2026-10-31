@@ -194,7 +194,8 @@ const DARK_ACTIVITY_CHANNEL_COLORS: Record<StreamChannelKey, string> = {
   vo: "#f472b6",
   vr: "#a3e635",
   elevation: "#9a9aa2",
-  grade: "#d6c29a"
+  grade: "#d6c29a",
+  temperature: "#38bdf8"
 };
 
 const PAPER_ACTIVITY_CHANNEL_COLORS: Record<StreamChannelKey, string> = {
@@ -208,7 +209,8 @@ const PAPER_ACTIVITY_CHANNEL_COLORS: Record<StreamChannelKey, string> = {
   vo: "#b8327a",
   vr: "#4d7c0f",
   elevation: "#8a857c",
-  grade: "#7a6a4f"
+  grade: "#7a6a4f",
+  temperature: "#0369a1"
 };
 
 /** One hue per activity channel, shared by the picker, lanes and readout. */

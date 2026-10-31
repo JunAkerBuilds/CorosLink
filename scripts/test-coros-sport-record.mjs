@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { encodeDeltaPack, marker, pages, pauseRecord, record, resumeRecord, seriesRecord, startRecord, summaryRecord, syntheticRun } from "./fixtures/coros-sport-record-fixture.mjs";
+import { encodeDeltaPack, marker, pages, pauseRecord, record, resumeRecord, seriesRecord, startRecord, summaryRecord, syntheticOpenWaterSwim, syntheticPoolSwim, syntheticPoolSwimAtTheWall, syntheticRun } from "./fixtures/coros-sport-record-fixture.mjs";
 
 // Decoder for the PACE 4 sport-record file (SyncData file 14) and the FIT
 // writer that stores decoded activities. Runs against the compiled
@@ -10,14 +11,16 @@ import { encodeDeltaPack, marker, pages, pauseRecord, record, resumeRecord, seri
 //
 // COROSLINK_SPORT_RECORD_ORACLE=<dir> additionally checks a real recording:
 // <dir>/raw-file14.bin against <dir>/coros-export.fit, the COROS app's own
-// export of the same file. Real recordings are never committed.
+// export of the same file. COROSLINK_SWIM_ORACLE=<dir> checks every swim in
+// <dir>/raw-file14.bin against <dir>/coros-export-<start>.fit and .csv.
+// Real recordings are never committed.
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const load = (file) => import(pathToFileURL(path.join(repoRoot, "dist-electron", file)).href);
 const { decodeDeltaPack, decodeCorosSportRecordFile, walkCorosRecords, CorosSportRecordFormatError, MAX_SESSION_SECONDS } = await load("localSync/corosSportRecord.js");
 const { fitCrc } = await load("localSync/fitWriter.js");
 const { decodeSportSyncPayload, corosSessionToFit } = await load("localSync/syncPayloadDecoder.js");
-const { corosSportTypeFromFit, fitSportFromCorosType } = await load("localSync/localActivityDetail.js");
+const { corosSportTypeFromFit, fitSportFromCorosType, localFitActivityDetail } = await load("localSync/localActivityDetail.js");
 const { parseFitActivity } = await load("fitActivity.js");
 
 let passed = 0;
@@ -326,7 +329,7 @@ test("FIT writer: valid header and CRC, and CorosLink's parser reads it back", (
 test("payload decoder: sport records become FIT activities with the watch's sport type", () => {
   const { file } = syntheticRun({ deviceSport: 7 }); // mountain climb: FIT has no equivalent
   const decoded = decodeSportSyncPayload(file);
-  assert.equal(decoded.decoder, "coros-sport-record/v1");
+  assert.equal(decoded.decoder, "coros-sport-record/v2");
   assert.equal(decoded.records.length, 1);
   assert.equal(decoded.records[0].sportType, 105);
   assert.equal(decoded.records[0].headline.startTime, syntheticRun().expected.t0);
@@ -338,6 +341,206 @@ test("sport mapping round-trips for every type FIT can express", () => {
     const { sport, subSport } = fitSportFromCorosType(sportType);
     assert.equal(corosSportTypeFromFit(sport, subSport), sportType, String(sportType));
   }
+});
+
+/** sha256 of the synthetic run's FIT file as 0.1.69 writes it. */
+const RUN_FIT_SHA256 = "27768875d9a3d4b939bcf6c4d5b8a8fe8232229e2209cd188b54af86f11d5160";
+const FIT_FREESTYLE = 0;
+const FIT_BACKSTROKE = 1;
+const FIT_BREASTSTROKE = 2;
+const FIT_MIXED = 5;
+const localRecord = (sportType) => ({ activityId: "local", sportType, source: "watch-ble", provenance: "watch", format: "fit", sha256: "0".repeat(64) });
+
+/**
+ * What any reader may expect of a swim's FIT file: lengths in order without
+ * overlapping, no length or lap with more timer than elapsed time, laps within
+ * the session, and each lap's lengths inside it.
+ */
+function assertSwimFitConsistent(fit, label) {
+  assert.equal(fitCrc(fit), 0, `${label}: file CRC`);
+  const parsed = parseFitActivity(fit);
+  const session = parsed.session;
+  const sessionEnd = session.startTs + session.elapsedSec;
+  parsed.lengths.forEach((length, index) => {
+    assert.ok(length.timerSec <= length.elapsedSec + 0.01, `${label}: length ${index} timer ${length.timerSec} > elapsed ${length.elapsedSec}`);
+    assert.ok(length.startTs <= length.endTs, `${label}: length ${index} ends before it starts`);
+    if (index) assert.ok(length.startTs >= parsed.lengths[index - 1].endTs, `${label}: length ${index} overlaps the one before`);
+  });
+  parsed.laps.forEach((lap, index) => {
+    assert.ok(lap.timerSec <= lap.elapsedSec + 0.01, `${label}: lap ${index} timer > elapsed`);
+    assert.ok(lap.startTs >= session.startTs && lap.startTs + lap.elapsedSec <= sessionEnd + 1, `${label}: lap ${index} outside the session`);
+    const swim = lap.swim;
+    if (swim?.firstLength === undefined) return;
+    assert.ok(swim.firstLength + swim.lengths <= parsed.lengths.length, `${label}: lap ${index} lengths out of range`);
+    for (const length of parsed.lengths.slice(swim.firstLength, swim.firstLength + swim.lengths)) {
+      assert.ok(length.startTs >= lap.startTs && length.endTs <= lap.startTs + lap.elapsedSec + 1, `${label}: lap ${index} length outside the lap`);
+    }
+  });
+  return parsed;
+}
+
+test("synthetic pool swim: intervals, rests and lengths as the watch numbered them", () => {
+  const { file, expected } = syntheticPoolSwim();
+  const { t0 } = expected;
+  const [session] = decodeCorosSportRecordFile(file).sessions;
+  assert.equal(session.sportType, 300);
+  assert.deepEqual(session.swimTotals, { poolLengthM: 25, poolLengthUnit: "m", activeLengths: 3, strokes: 54, avgSwolf: 58, bestSwolf: 56 });
+  assert.deepEqual([session.avgCadence, session.maxCadence, session.avgSpeed, session.maxSpeed], [26, 30, 100 / 160, 100 / 160], "stroke rate; speeds from s/100 m");
+  assert.deepEqual([session.ascentM, session.descentM, session.totalStrides], [undefined, undefined, undefined], "a swim's stroke bytes are not climb or steps");
+  assert.deepEqual([session.elapsedSec, session.endTs - t0], [150, 150]);
+  assert.deepEqual(session.laps.map((lap) => [lap.startTs - t0, lap.endTs - t0, lap.elapsedSec, lap.timerSec, lap.distanceM, lap.calories]), [
+    [0, 80, 80, 80, 50, 14], [80, 110, 30, 30, 0, 3], [110, 150, 40, 40, 25, 7]
+  ]);
+  assert.deepEqual(session.laps.map((lap) => lap.swim), [
+    { rest: false, stroke: FIT_MIXED, strokes: 34, swolf: 57, firstLength: 0, lengths: 2, activeLengths: 2 },
+    { rest: true, firstLength: 2, lengths: 1, activeLengths: 0 },
+    { rest: false, stroke: FIT_BACKSTROKE, strokes: 20, swolf: 60, firstLength: 3, lengths: 1, activeLengths: 1 }
+  ]);
+  assert.deepEqual(session.laps.map((lap) => [lap.avgCadence, lap.avgSpeed, lap.maxSpeed]), [[25, 0.625, 0.625], [undefined, undefined, undefined], [30, 0.625, 0.625]], "a lap's cadence is its stroke rate");
+  assert.deepEqual(session.lengths.map((length) => [length.startTs - t0, length.endTs - t0, length.elapsedSec, length.timerSec, length.active, length.stroke, length.strokes, length.strokeRate, length.swolf]), [
+    [0, 40, 40, 40, true, FIT_FREESTYLE, 16, 24, 56],
+    [40, 80, 40, 40, true, FIT_BREASTSTROKE, 18, 27, 58],
+    [80, 110, 30, 30, false, undefined, undefined, undefined, undefined],
+    // Stamped 25 s after its interval closed: kept inside the interval it belongs to (interval count 1).
+    [110, 150, 40, 40, true, FIT_BACKSTROKE, 20, 30, 60]
+  ]);
+  assert.deepEqual(session.lengths.map((length) => [length.calories, length.avgHr, length.maxHr]), [[6, 105, 112], [8, 110, 119], [3, 101, 108], [7, 112, 118]]);
+  const at = (ts) => session.samples.find((sample) => sample.ts === ts);
+  assert.equal(session.samples.length, 151);
+  assert.deepEqual([at(t0 + 4).cadence, at(t0 + 5).cadence], [22, 22], "strokes per minute as recorded, not halved");
+  assert.deepEqual([14, 15, 64, 65].map((s) => at(t0 + s).temperature), [29, 30, 30, 29], "water temperature: the nearer sample, the later one halfway");
+  assert.deepEqual([at(t0 + 20).speed, at(t0 + 95).speed, at(t0 + 130).speed], [0.625, undefined, 0.625], "a length's speed, none while resting");
+});
+
+test("synthetic pool swim: FIT keeps strokes, SWOLF, lengths, pool length and water temperature", () => {
+  const { file, expected } = syntheticPoolSwim();
+  const [session] = decodeCorosSportRecordFile(file).sessions;
+  const parsed = assertSwimFitConsistent(corosSessionToFit(session), "pool swim");
+  assert.deepEqual([parsed.session.sport, parsed.session.subSport], [5, 17]);
+  assert.deepEqual(parsed.session.swimTotals, { poolLengthM: 25, poolLengthUnit: "m", lengths: 4, activeLengths: 3, strokes: 54, avgSwolf: 58, bestSwolf: 56 });
+  assert.deepEqual([parsed.session.avgCadence, parsed.session.maxCadence, parsed.session.ascentM, parsed.session.totalStrides], [26, 30, undefined, undefined]);
+  close(parsed.session.maxSpeed, 0.625, 0.0005, "max speed");
+  assert.deepEqual(parsed.laps.map((lap) => lap.swim), session.laps.map((lap) => lap.swim));
+  assert.deepEqual(parsed.laps.map((lap) => lap.avgCadence), [25, undefined, 30]);
+  assert.deepEqual(parsed.lengths.map((length) => [length.startTs - expected.t0, length.endTs - expected.t0, length.timerSec, length.active, length.stroke, length.strokes, length.strokeRate, length.swolf, length.calories, length.avgHr, length.maxHr]), [
+    [0, 40, 40, true, FIT_FREESTYLE, 16, 24, 56, 6, 105, 112],
+    [40, 80, 40, true, FIT_BREASTSTROKE, 18, 27, 58, 8, 110, 119],
+    [80, 110, 30, false, undefined, undefined, undefined, undefined, 3, 101, 108],
+    [110, 150, 40, true, FIT_BACKSTROKE, 20, 30, 60, 7, 112, 118]
+  ]);
+  for (const record of parsed.records) {
+    const sample = session.samples.find((s) => s.ts === record.ts);
+    assert.equal(record.temp, sample.temperature, `temperature @${record.ts}`);
+    assert.equal(record.cadence, sample.cadence, `stroke rate @${record.ts}`);
+  }
+
+  const detail = localFitActivityDetail(parsed, localRecord(300));
+  const stream = detail.raw.frequencyList;
+  assert.deepEqual([14, 15].map((s) => stream.find((entry) => entry.timestamp === (expected.t0 + s) * 100).temperature), [29, 30], "water temperature in the chart's samples");
+  assert.deepEqual(detail.swim, {
+    poolLength: 25, poolLengthUnit: "m", lengths: 3, swimTime: 120, strokes: 54, avgStrokeRate: 26, maxStrokeRate: 30, avgSwolf: 58, bestSwolf: 56,
+    strokeDistance: 1.39, avgPace: 160, bestPace: 160, waterTemperature: 29
+  });
+  assert.equal(detail.elevationGain, undefined);
+  assert.deepEqual(detail.laps.map((lap) => [lap.rest ?? false, lap.stroke, lap.strokes, lap.strokeRate, lap.swolf, lap.lengths, lap.swimPace]), [
+    [false, "mixed", 34, 25, 57, 2, 160], [true, undefined, undefined, undefined, undefined, undefined, undefined], [false, "backstroke", 20, 30, 60, 1, 160]
+  ]);
+  assert.deepEqual(detail.lapGroups.map((group) => group.kind), ["laps", "lengths"]);
+  assert.deepEqual(detail.lapGroups[1].laps.map((row) => [row.index, row.distance, row.duration, row.rest ?? false, row.stroke, row.strokes, row.swolf, row.swimPace]), [
+    [1, 25, 40, false, "freestyle", 16, 56, 160], [2, 25, 40, false, "breaststroke", 18, 58, 160],
+    [3, 0, 30, true, undefined, undefined, undefined, undefined], [4, 25, 40, false, "backstroke", 20, 60, 160]
+  ]);
+});
+
+test("swim detail: the fastest interval and length are marked, and nothing when all are as fast", () => {
+  const [session] = decodeCorosSportRecordFile(syntheticPoolSwim().file).sessions;
+  const even = localFitActivityDetail(parseFitActivity(corosSessionToFit(session)), localRecord(300));
+  assert.deepEqual(even.lapGroups.map((group) => group.fastestLaps), [[], []], "every length and interval at 2:40/100 m");
+  // The second length swum in 30 s: the fastest length, in the first interval (its pace the watch's own, 2:00/100 m).
+  const lengths = session.lengths.map((length, index) => (index === 1 ? { ...length, timerSec: 30, avgSpeed: 25 / 30 } : length));
+  const laps = session.laps.map((lap, index) => (index === 0 ? { ...lap, avgSpeed: 100 / 120 } : lap));
+  const detail = localFitActivityDetail(parseFitActivity(corosSessionToFit({ ...session, lengths, laps })), localRecord(300));
+  assert.deepEqual(detail.lapGroups.map((group) => [group.kind, group.fastestLaps]), [["laps", [0]], ["lengths", [1]]]);
+  const run = localFitActivityDetail(parseFitActivity(corosSessionToFit(decodeCorosSportRecordFile(syntheticRun().file).sessions[0])), localRecord(100));
+  assert.equal(run.lapGroups, undefined, "only swims");
+});
+
+test("pool swim as real swims record it: pauses at the wall, an idle stretch, a doubled length, a yard pool", () => {
+  const { file, expected } = syntheticPoolSwimAtTheWall();
+  const { t0 } = expected;
+  const [session] = decodeCorosSportRecordFile(file).sessions;
+  assert.deepEqual(session.swimTotals, { poolLengthM: 22.86, poolLengthUnit: "yd", activeLengths: 5, strokes: 72, avgSwolf: 44, bestSwolf: 42 });
+  assert.equal(session.laps.length, 1, "the unknown lap kind is ignored, not taken for an interval");
+  assert.deepEqual([session.laps[0].startTs - t0, session.laps[0].elapsedSec, session.laps[0].timerSec, session.laps[0].swim.lengths, session.laps[0].swim.activeLengths], [0, 240, 145, 6, 5]);
+  assert.deepEqual(session.lengths.map((length) => [length.startTs - t0, length.endTs - t0, length.timerSec, length.active]), [
+    [0, 30, 30, true],
+    // 2 s on the timer at the wall is turning, not idling; 20 s is an idle stretch where it happened.
+    [61, 91, 30, true], [91, 111, 20, false], [111, 141, 30, true],
+    // Recorded twice with one end time (the watch counts both): one after the other, no overlap.
+    [170, 200, 30, true], [200, 230, 30, true]
+  ]);
+  assert.deepEqual([session.elapsedSec, session.endTs - t0], [240, 240], "the interval closed when the swim was saved, after the stop");
+  const parsed = assertSwimFitConsistent(corosSessionToFit(session), "pool swim at the wall");
+  assert.equal(parsed.session.swimTotals.poolLengthUnit, "yd");
+  assert.equal(localFitActivityDetail(parsed, localRecord(300)).swim.poolLengthUnit, "yd");
+});
+
+test("synthetic pool swim: lengths no interval closed get a lap of their own, ending at the stop", () => {
+  const { file, expected } = syntheticPoolSwim({ unclosed: true });
+  const [session] = decodeCorosSportRecordFile(file).sessions;
+  assert.equal(session.laps.length, 3);
+  const last = session.laps[2];
+  assert.deepEqual([last.startTs - expected.t0, last.endTs - expected.t0, last.distanceM, last.timerSec, last.swim], [
+    110, 150, 25, 40, { rest: false, stroke: FIT_BACKSTROKE, strokes: 20, firstLength: 3, lengths: 1, activeLengths: 1 }
+  ]);
+  assert.deepEqual([session.lengths.length, session.lengths[3].startTs - expected.t0, session.lengths[3].endTs - expected.t0], [4, 110, 150]);
+  assert.equal(session.elapsedSec, 150, "start to stop when the watch didn't close every lap");
+  assertSwimFitConsistent(corosSessionToFit(session), "unclosed pool swim");
+});
+
+test("synthetic open-water swim: laps carry strokes and SWOLF; speeds per 100 m; no lengths or climb", () => {
+  const { file, expected } = syntheticOpenWaterSwim();
+  const [session] = decodeCorosSportRecordFile(file).sessions;
+  assert.equal(session.sportType, 301);
+  assert.deepEqual(session.swimTotals, { strokes: 40, avgSwolf: 65, bestSwolf: 65 }, "no pool length in open water");
+  assert.equal(session.lengths, undefined);
+  assert.deepEqual([session.maxSpeed, session.ascentM, session.avgCadence, session.maxCadence, session.elapsedSec], [100 / 90, undefined, 40, 44, 60]);
+  assert.deepEqual(session.laps.map((lap) => [lap.startTs - expected.t0, lap.elapsedSec, lap.timerSec, lap.avgSpeed, lap.maxSpeed, lap.avgCadence, lap.swim]), [
+    // Closed 10 s after the stop, when the swim was saved: it ends at the stop, with the swim.
+    [0, 60, 60, 1, 100 / 90, 40, { rest: false, stroke: FIT_FREESTYLE, strokes: 40, swolf: 65 }]
+  ]);
+  const sample = session.samples.find((s) => s.ts === expected.t0 + 10);
+  assert.deepEqual([sample.cadence, sample.speed], [18, 300 / 360]);
+  const parsed = parseFitActivity(corosSessionToFit(session));
+  assert.deepEqual(parsed.session.swimTotals, { strokes: 40, avgSwolf: 65, bestSwolf: 65 });
+  assert.deepEqual(parsed.lengths, []);
+  assert.deepEqual(parsed.laps[0].swim, { rest: false, stroke: FIT_FREESTYLE, strokes: 40, swolf: 65 });
+});
+
+test("an imported pool swim without SWOLF gets it from its lengths; another sport's laps get no swim figures", () => {
+  const { file } = syntheticPoolSwim();
+  const [session] = decodeCorosSportRecordFile(file).sessions;
+  // As a file from another app: no SWOLF anywhere.
+  const bare = {
+    ...session,
+    swimTotals: { ...session.swimTotals, avgSwolf: undefined, bestSwolf: undefined },
+    laps: session.laps.map((lap) => ({ ...lap, swim: lap.swim && { ...lap.swim, swolf: undefined } })),
+    lengths: session.lengths.map((length) => ({ ...length, swolf: undefined }))
+  };
+  const parsed = parseFitActivity(corosSessionToFit(bare));
+  assert.deepEqual(parsed.lengths.map((length) => length.swolf), [56, 58, undefined, 60], "seconds plus strokes");
+  assert.deepEqual(parsed.laps.map((lap) => lap.swim.swolf), [57, undefined, 60]);
+  assert.equal(parsed.session.swimTotals.avgSwolf, 58);
+  const run = decodeCorosSportRecordFile(syntheticRun().file).sessions[0];
+  const asRun = parseFitActivity(corosSessionToFit({ ...run, laps: run.laps.map((lap) => ({ ...lap, swim: { rest: true, strokes: 9 } })) }));
+  assert.ok(asRun.laps.every((lap) => lap.swim === undefined));
+});
+
+test("a run's FIT file is unchanged by swim decoding", () => {
+  const { file } = syntheticRun();
+  const fit = corosSessionToFit(decodeCorosSportRecordFile(file).sessions[0]);
+  // The run decoder's output as released; a change here changes every stored run.
+  assert.equal(createHash("sha256").update(fit).digest("hex"), RUN_FIT_SHA256);
 });
 
 const oracle = process.env.COROSLINK_SPORT_RECORD_ORACLE;
@@ -410,4 +613,79 @@ if (oracle) {
   });
 }
 
-console.log(`coros sport record: ${passed} checks passed${oracle ? " (including the real recording)" : ""}`);
+const swimOracle = process.env.COROSLINK_SWIM_ORACLE;
+if (swimOracle) {
+  test("real swims: match the COROS app's own exports", () => {
+    const { sessions } = decodeCorosSportRecordFile(fs.readFileSync(path.join(swimOracle, "raw-file14.bin")));
+    const swims = sessions.filter((session) => session.swimTotals);
+    assert.ok(swims.length >= 2, `${swims.length} swims`);
+    // COROS writes 0 where a rest has no speed, cadence or strokes; CorosLink leaves them out.
+    const same = (mine, theirs, label, tolerance = 0) => {
+      if (theirs === undefined || (theirs === 0 && mine === undefined)) return;
+      close(mine, theirs, tolerance, label);
+    };
+    for (const session of swims) {
+      const base = path.join(swimOracle, `coros-export-${session.startTs}`);
+      const reference = parseFitActivity(fs.readFileSync(`${base}.fit`));
+      const ours = assertSwimFitConsistent(corosSessionToFit(session), session.watchActivityId);
+      const id = session.watchActivityId;
+      for (const [key, value] of Object.entries(reference.session)) {
+        if (key === "subSport" || value === null || typeof value === "object") continue;
+        same(ours.session[key], value, `${id} session.${key}`, key.endsWith("Speed") ? 0.0025 : 0);
+      }
+      assert.equal(ours.session.swimTotals?.poolLengthM, reference.session.swimTotals?.poolLengthM, `${id} pool length`);
+      assert.equal(ours.laps.length, reference.laps.length, `${id} laps`);
+      reference.laps.forEach((lap, index) => {
+        const mine = ours.laps[index];
+        for (const [key, value] of Object.entries(lap)) {
+          // COROS's lap start times follow its export's timeline, which packs lengths back to back.
+          if (key === "startTs" || key === "index" || value === null || typeof value === "object") continue;
+          // An open-water lap the watch closed when the swim was saved ends at the stop, with the swim.
+          if (key === "elapsedSec" && !session.lengths) {
+            close(mine.elapsedSec, Math.min(value, ours.session.elapsedSec), 0.01, `${id} lap ${index}.elapsedSec`);
+            continue;
+          }
+          same(mine[key], value, `${id} lap ${index}.${key}`, key.endsWith("Speed") ? 0.0025 : 0);
+        }
+        for (const key of ["stroke", "strokes", "activeLengths"]) same(mine.swim?.[key], lap.swim?.[key], `${id} lap ${index}.swim.${key}`);
+      });
+      // COROS puts interval time outside any length in one idle length at the interval's end; CorosLink puts it where the timer ran.
+      // (A length the watch records twice can make them add up to more than the interval.)
+      ours.laps.forEach((lap, index) => {
+        if (lap.swim?.firstLength === undefined || lap.swim.rest) return;
+        const timers = ours.lengths.slice(lap.swim.firstLength, lap.swim.firstLength + lap.swim.lengths).reduce((total, length) => total + length.timerSec, 0);
+        assert.ok(lap.timerSec - timers < 5 * (lap.swim.activeLengths + 1), `${id} lap ${index}: ${Math.round(lap.timerSec - timers)} s of the lap is in no length`);
+      });
+      const mineActive = ours.lengths.filter((length) => length.active);
+      const theirsActive = reference.lengths.filter((length) => length.active);
+      assert.equal(mineActive.length, theirsActive.length, `${id} lengths`);
+      theirsActive.forEach((length, index) => {
+        const mine = mineActive[index];
+        for (const key of ["timerSec", "strokes", "stroke", "strokeRate"]) assert.equal(mine[key], length[key], `${id} length ${index}.${key}`);
+        close(mine.avgSpeed, length.avgSpeed, 0.0025, `${id} length ${index}.avgSpeed`);
+        // COROS's FIT floors a length's calories; its own table and lap totals round them, like CorosLink.
+        close(mine.calories, length.calories, 1, `${id} length ${index}.calories`);
+        // SWOLF is the length's time plus its strokes.
+        assert.equal(mine.swolf, Math.round(mine.timerSec + mine.strokes), `${id} length ${index}.swolf`);
+      });
+      const idle = new Set(reference.lengths.filter((length) => !length.active).map((length) => length.timerSec));
+      for (const rest of ours.laps.filter((lap) => lap.swim?.rest)) assert.ok(idle.has(rest.timerSec), `${id} rest of ${rest.timerSec} s`);
+      // COROS's table: the summary row's average SWOLF and total strokes.
+      const rows = fs.readFileSync(`${base}.csv`, "utf8").trim().split(/\r?\n/).map((line) => line.slice(1, -1).split('","'));
+      const column = (name) => rows[0].indexOf(name);
+      const summary = rows.find((row) => row[0] === "Summary");
+      assert.equal(ours.session.swimTotals.avgSwolf, Number(summary[column("Avg SWOLF")]), `${id} average SWOLF`);
+      assert.equal(ours.session.swimTotals.strokes, Number(summary[column("Total Strokes")]), `${id} strokes`);
+      const byTs = new Map(ours.records.map((record) => [record.ts, record]));
+      let temperatures = 0;
+      for (const ref of reference.records) {
+        const mine = byTs.get(ref.ts);
+        if (ref.hr !== undefined && mine?.hr !== undefined) assert.equal(mine.hr, ref.hr, `${id} hr @${ref.ts}`);
+        if (ref.temp !== undefined && mine?.temp !== undefined) { assert.equal(mine.temp, ref.temp, `${id} water temperature @${ref.ts}`); temperatures += 1; }
+      }
+      assert.ok(temperatures > 10, `${id}: ${temperatures} temperatures compared`);
+    }
+  });
+}
+
+console.log(`coros sport record: ${passed} checks passed${oracle ? " (including the real recording)" : ""}${swimOracle ? " (including the real swims)" : ""}`);

@@ -33,13 +33,13 @@ const { nightlyRestingHeartRate, restingHeartRateByDay } = await load("localSync
 const { sleepDays } = await load("localSync/localHealthViews.js");
 const { corosSessionToFit } = await load("localSync/syncPayloadDecoder.js");
 const { CorosSportRecordFormatError, decodeCorosSportRecordFile } = await load("localSync/corosSportRecord.js");
-const { pages, startRecord, syntheticRun } = await import("./fixtures/coros-sport-record-fixture.mjs");
+const { pages, startRecord, syntheticPoolSwim, syntheticRun } = await import("./fixtures/coros-sport-record-fixture.mjs");
 const { syntheticDaily } = await import("./fixtures/coros-daily-fixture.mjs");
 
 /** The decoders' names as stored with each payload, and stand-ins for another decoder version's. */
-const SPORT_DECODER = "coros-sport-record/v1";
+const SPORT_DECODER = "coros-sport-record/v2";
 const DAILY_DECODER = "coros-daily/v1";
-const OTHER_SPORT_DECODER = "coros-sport-record/v0";
+const OTHER_SPORT_DECODER = "coros-sport-record/v1";
 const OTHER_FAILED = `failed:${OTHER_SPORT_DECODER}`;
 
 let passed = 0;
@@ -359,6 +359,30 @@ try {
     assert.deepEqual(store.activities.listPayloads().map((p) => p.decoder), [SPORT_DECODER, OTHER_FAILED]);
     assert.equal(await service.redecodeArchivedPayloads(), 0);
     assert.equal(store.activities.countActivities().fromWatch, 1);
+  });
+
+  await test("an activity decoded again lists the new decode's values, not the old ones", async () => {
+    const store = freshStore("redecode-headline");
+    const watch = fakeWatch(syntheticPoolSwim().file);
+    const service = new WatchActivityService({ repository: store.activities, archive: store.archive, transport: watch.transport });
+    await service.sync();
+    const [fresh] = store.activities.allActivities();
+    assert.deepEqual([fresh.duration, fresh.movingTime, fresh.distance, fresh.elevationGain], [150, 150, 75, undefined]);
+    // As another decoder version listed a swim: its stroke count as climb, a shorter time, another file.
+    const { writeFitActivity } = await load("localSync/fitWriter.js");
+    const oldFit = writeFitActivity({ sport: 5, startTs: fresh.startTime, endTs: fresh.endTime, activeWindows: [[fresh.startTime, fresh.endTime]], laps: [], samples: [], createdTs: fresh.endTime });
+    const oldStored = await store.archive.storeContent("fit", oldFit, "fit");
+    store.activities.replaceActivityFile(fresh.activityId, { filePath: oldStored.relativePath, sha256: oldStored.sha256, sizeBytes: oldStored.sizeBytes });
+    store.db.prepare("UPDATE local_activity_files SET elevation_gain = 54, duration = 148, end_time = end_time - 2").run();
+    store.db.prepare("UPDATE local_sync_payloads SET decoder = ?").run(OTHER_SPORT_DECODER);
+
+    await service.redecodeArchivedPayloads();
+    const [listed] = store.activities.allActivities();
+    assert.equal(listed.sha256, fresh.sha256);
+    assert.deepEqual(
+      [listed.elevationGain, listed.duration, listed.endTime, listed.distance, listed.avgHr, listed.calories],
+      [fresh.elevationGain, fresh.duration, fresh.endTime, fresh.distance, fresh.avgHr, fresh.calories]
+    );
   });
 
   await test("activities decoded by another decoder version get the current decoder's FIT file at startup", async () => {
