@@ -4377,7 +4377,7 @@ function PublishDialog(props: PublishDialogProps) {
                 <Check size={20} />
               </span>
               <h2 id="watchface-publish-title">{props.name}</h2>
-              <p>{t("Scan with the iPhone that has your COROS app.")}</p>
+              <p>{t("Scan with the phone that has your COROS app.")}</p>
             </div>
             <div className="watchface-share-result">
               <img
@@ -4388,7 +4388,7 @@ function PublishDialog(props: PublishDialogProps) {
                 height={260}
               />
               <div className="watchface-share-details">
-                <p>{t("In COROS, save this face and send it to the watch paired with your iPhone.")}</p>
+                <p>{t("In COROS, save this face and send it to the watch paired with your phone.")}</p>
                 <p className="watchface-share-expiry">{t("Link expires")}{" "}{formatExpiry(props.shareLink.expiresAt)}.
                 </p>
                 <div className="watchface-share-actions">

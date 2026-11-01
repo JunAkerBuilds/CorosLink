@@ -2,10 +2,17 @@ import { t, useLanguage, formatDate } from "../i18n/watchfaces";
 import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { FlaskConical, GripHorizontal, Pause, Play, X } from "lucide-react";
 import type { CorosWatchfaceDesignState } from "../../electron/types";
-import { NATIVE_DATA_FIELDS, nativeDataPreviewValue } from "./nativeData";
+import { NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS, nativeDataPreviewValue } from "./nativeData";
 import { isLunarField } from "./lunarDate";
 import { advanceSimulationDateTime, createWatchfaceSimulation, parseSimulationDateTime, simulationDateTime, simulationPreset, SIMULATION_SPEEDS, type WatchfaceSimulation } from "./watchfaceSimulation";
 import "./watchfaceSimulation.css";
+
+type SimulationGroup = "weather" | "training";
+
+/** Sorts the Simulation panel's fields into plain sections rather than COROS's catalog categories (issue #161): sun, moon, tide and barometer read as weather; health and training read as training metrics. */
+function simulationGroup(category: string): SimulationGroup {
+  return category === "Weather" || category === "Astronomy" ? "weather" : "training";
+}
 
 function SimulationCalendar({ dateTime, onChange }: { dateTime: string; onChange: (value: string) => void }) {
   useLanguage();
@@ -81,12 +88,35 @@ export function WatchfaceSimulationPanel({ simulation, onChange, design }: { sim
   }, [open]);
   const patch = (change: Partial<WatchfaceSimulation>) => onChange({ ...simulation, ...change });
   const setValue = (key: string, value: string) => patch({ values: { ...simulation.values, [key]: value } });
-  const common = [
-    ["steps", "Steps", "8420"], ["heartRate", t("Heart rate"), "96"], ["calories", "Calories", "534"], ["elevation", "Elevation", "1284"],
-    ["exercise", "Exercise (h:mm)", "1:24"], ["floors", "Floors", "12"], ["barometer", "Barometer", "1013.2"],
-    ["weather_temp", t("Current weather"), design.nativeData?.weather_temp?.previewValue ?? "18"], ["temperature", t("Sensor temperature"), "18"],
-    ["sunrise", "Sunrise (h:mm)", "6:30"], ["sunset", "Sunset (h:mm)", "19:45"]
-  ];
+  const common: Record<SimulationGroup, string[][]> = {
+    weather: [
+      ["weather_temp", t("Current weather"), design.nativeData?.weather_temp?.previewValue ?? "18"], ["temperature", t("Sensor temperature"), "18"],
+      ["barometer", "Barometer", "1013.2"], ["sunrise", "Sunrise (h:mm)", "6:30"], ["sunset", "Sunset (h:mm)", "19:45"]
+    ],
+    training: [
+      ["steps", "Steps", "8420"], ["heartRate", t("Heart rate"), "96"], ["calories", "Calories", "534"], ["elevation", "Elevation", "1284"],
+      ["exercise", "Exercise (h:mm)", "1:24"], ["floors", "Floors", "12"]
+    ]
+  };
+  // The year and lunar date follow the simulated date and time.
+  const nativeFields = NATIVE_DATA_FIELDS.filter(field => field.id !== "weather_temp" && field.id !== "date_year" && !isLunarField(field.id) && design.nativeData?.[field.id]?.enabled);
+  const nativeGroup = (field: typeof NATIVE_DATA_FIELDS[number]) => {
+    if (field.id !== "chart") return simulationGroup(field.category);
+    const source = design.nativeData?.chart?.chartSource ?? "chart_stress";
+    return simulationGroup(NATIVE_CHART_SOURCES.find(item => item.id === source)?.category ?? "Health");
+  };
+  const renderNative = (group: SimulationGroup) => <>
+    {nativeFields.filter(field => nativeGroup(field) === group).map(field => {
+      const style = design.nativeData![field.id];
+      const key = field.id === "chart" ? style.chartSource ?? "chart_stress" : field.id;
+      const fallback = nativeDataPreviewValue(field.id, style);
+      // Only pure state fields take an index; numeric fields with level artwork keep their value.
+      const stateCount = field.kind === "state" ? style.stateCount ?? field.stateCount : key === "chart_moon" ? 30 : undefined;
+      return <SampleValue key={key} label={t(field.label) + (stateCount ? t(" state") : "")} value={simulation.values[key] ?? fallback} min={stateCount ? 0 : undefined} max={stateCount ? stateCount - 1 : undefined} time={fallback.includes(":")} onCommit={value => setValue(key, value)} />;
+    })}
+    {design.nativeData?.chart?.enabled && nativeGroup(NATIVE_DATA_FIELDS.find(field => field.id === "chart")!) === group && <label>{t("Chart history")}<select aria-label={t("Simulated chart history")} value={!simulation.chartHistory ? "sample" : simulation.chartHistory.every(value => value === 0) ? "empty" : simulation.chartHistory[0] < simulation.chartHistory.at(-1)! ? "rising" : "falling"} onChange={event => patch({ chartHistory: event.target.value === "sample" ? undefined : event.target.value === "empty" ? [0, 0, 0, 0] : event.target.value === "rising" ? [0.1, 0.25, 0.2, 0.5, 0.7, 0.9] : [0.9, 0.7, 0.5, 0.6, 0.25, 0.1] })}><option value="sample">{t("Default sample")}</option><option value="rising">{t("Rising")}</option><option value="falling">{t("Falling")}</option><option value="empty">{t("Zero values")}</option></select></label>}
+  </>;
+  const renderCommon = (group: SimulationGroup) => common[group].map(([key, label, fallback]) => <SampleValue key={key} label={t(label)} value={simulation.values[key] ?? fallback} time={key === "exercise" || key === "sunrise" || key === "sunset"} onCommit={value => setValue(key, value)} />);
   return <div className="wf-simulation" ref={root}>
     <button ref={trigger} type="button" className="wf-simulation-trigger" aria-expanded={open} aria-controls={id} aria-haspopup="dialog" data-enabled={simulation.enabled} onClick={() => setOpen(!open)}>
       <FlaskConical size={15} aria-hidden="true" /> <span className="wf-simulation-trigger-label">{t("Preview data:")}</span> <strong>{simulation.playing ? t("Playing") : simulation.enabled ? t("Sample") : t("Now")}</strong>
@@ -100,35 +130,34 @@ export function WatchfaceSimulationPanel({ simulation, onChange, design }: { sim
       <p>{t("Try sample data on this face. Your saved design and watch data stay unchanged.")}</p>
       <label className="wf-simulation-enable"><input type="checkbox" checked={simulation.enabled} onChange={event => patch({ enabled: event.target.checked, playing: false })} />{" "}{t("Enable simulation")}</label>
       <fieldset disabled={!simulation.enabled}>
-        <SimulationCalendar dateTime={simulation.dateTime} onChange={dateTime => patch({ dateTime, playing: false })} />
-        <p>{formatDate(parseSimulationDateTime(simulation.dateTime), { weekday: "long" })}{" "}{t("· Local time · Weekday follows the date")}</p>
-        <div className="wf-simulation-actions">
-          <button type="button" onClick={() => patch({ playing: !simulation.playing })}>{simulation.playing ? <Pause size={14} /> : <Play size={14} />}{simulation.playing ? t("Pause") : t("Play")}</button>
-          <select aria-label={t("Simulation speed")} value={simulation.speed} onChange={event => patch({ speed: Number(event.target.value) })}>{SIMULATION_SPEEDS.map(speed => <option key={speed} value={speed}>{speed === 1 ? t("Real time") : speed === 60 ? t("1 minute / second") : speed === 3600 ? t("1 hour / second") : t("1 day / second")}</option>)}</select>
-          <button type="button" onClick={() => patch({ dateTime: simulationDateTime(new Date()), playing: false })}>{t("Now")}</button>
-        </div>
-        <div className="wf-simulation-actions">{[[1, "+1 second"], [60, "+1 minute"], [86400, "+1 day"]].map(([seconds, label]) => <button key={seconds} type="button" onClick={() => patch({ dateTime: advanceSimulationDateTime(simulation.dateTime, Number(seconds)), playing: false })}>{t(String(label))}</button>)}</div>
         <div className="wf-simulation-grid">
-          <SampleValue label={t("Battery (%)")} value={simulation.values.battery ?? "82"} min={0} max={100} onCommit={value => setValue("battery", value)} />
           <label>{t("Test preset")}<select aria-label={t("Simulation preset")} value="" onChange={event => onChange(simulationPreset(event.target.value, simulation))}><option value="" disabled>{t("Choose a scenario…")}</option><option value="normal">{t("Normal / reset values")}</option><option value="lowBattery">{t("Low battery · 5%")}</option><option value="fullBattery">{t("Full battery · 100%")}</option><option value="midnight">{t("Midnight rollover")}</option><option value="yearEnd">{t("New year rollover")}</option><option value="leapDay">{t("Leap day rollover · 2028")}</option><option value="wide">{t("Wide numbers")}</option></select></label>
         </div>
-        <details><summary>{t("Activity & weather")}</summary><p>{t("Only fields present on the face are drawn. Press Enter or leave a value to apply.")}</p><div className="wf-simulation-grid">
-          {common.map(([key, label, fallback]) => <SampleValue key={key} label={t(label)} value={simulation.values[key] ?? fallback} time={key === "exercise" || key === "sunrise" || key === "sunset"} onCommit={value => setValue(key, value)} />)}
+        <p>{t("Only fields present on the face are drawn. Press Enter or leave a value to apply.")}</p>
+        <details open><summary>{t("Date & time")}</summary>
+          <SimulationCalendar dateTime={simulation.dateTime} onChange={dateTime => patch({ dateTime, playing: false })} />
+          <p>{formatDate(parseSimulationDateTime(simulation.dateTime), { weekday: "long" })}{" "}{t("· Local time · Weekday follows the date")}</p>
+          <div className="wf-simulation-actions">
+            <button type="button" onClick={() => patch({ playing: !simulation.playing })}>{simulation.playing ? <Pause size={14} /> : <Play size={14} />}{simulation.playing ? t("Pause") : t("Play")}</button>
+            <select aria-label={t("Simulation speed")} value={simulation.speed} onChange={event => patch({ speed: Number(event.target.value) })}>{SIMULATION_SPEEDS.map(speed => <option key={speed} value={speed}>{speed === 1 ? t("Real time") : speed === 60 ? t("1 minute / second") : speed === 3600 ? t("1 hour / second") : t("1 day / second")}</option>)}</select>
+            <button type="button" onClick={() => patch({ dateTime: simulationDateTime(new Date()), playing: false })}>{t("Now")}</button>
+          </div>
+          <div className="wf-simulation-actions">{[[1, "+1 second"], [60, "+1 minute"], [86400, "+1 day"]].map(([seconds, label]) => <button key={seconds} type="button" onClick={() => patch({ dateTime: advanceSimulationDateTime(simulation.dateTime, Number(seconds)), playing: false })}>{t(String(label))}</button>)}</div>
+        </details>
+        <details><summary>{t("Weather")}</summary><div className="wf-simulation-grid">
+          {renderCommon("weather")}
+          {design.weatherIndicator?.enabled && <><label>{t("Weather artwork")}<select aria-label={t("Simulated weather condition")} value={simulation.weather?.condition ?? 0} onChange={event => patch({ weather: { night: simulation.weather?.night ?? false, condition: Number(event.target.value) } })}>{Array.from({ length: 41 }, (_, index) => <option key={index} value={index}>{t("State")}{" "}{String(index).padStart(2, "0")}</option>)}</select></label><label>{t("Weather set")}<select aria-label={t("Simulated weather day or night")} value={simulation.weather?.night ? "night" : "day"} onChange={event => patch({ weather: { condition: simulation.weather?.condition ?? 0, night: event.target.value === "night" } })}><option value="day">{t("Day")}</option><option value="night">{t("Night")}</option></select></label></>}
+          {renderNative("weather")}
+        </div></details>
+        <details><summary>{t("Training metrics")}</summary><div className="wf-simulation-grid">
+          {renderCommon("training")}
           <SampleValue label={t("Calorie progress (%)")} value={simulation.values.kcalProgress ?? String(design.kcalProgress?.previewPercent ?? 63)} min={0} max={100} onCommit={value => setValue("kcalProgress", value)} />
           <SampleValue label={t("Exercise progress (%)")} value={simulation.values.exerciseProgress ?? String(design.exerciseProgress?.previewPercent ?? 63)} min={0} max={100} onCommit={value => setValue("exerciseProgress", value)} />
-          {design.weatherIndicator?.enabled && <><label>{t("Weather artwork")}<select aria-label={t("Simulated weather condition")} value={simulation.weather?.condition ?? 0} onChange={event => patch({ weather: { night: simulation.weather?.night ?? false, condition: Number(event.target.value) } })}>{Array.from({ length: 41 }, (_, index) => <option key={index} value={index}>{t("State")}{" "}{String(index).padStart(2, "0")}</option>)}</select></label><label>{t("Weather set")}<select aria-label={t("Simulated weather day or night")} value={simulation.weather?.night ? "night" : "day"} onChange={event => patch({ weather: { condition: simulation.weather?.condition ?? 0, night: event.target.value === "night" } })}><option value="day">{t("Day")}</option><option value="night">{t("Night")}</option></select></label></>}
+          {renderNative("training")}
         </div></details>
-        {Object.entries(design.nativeData ?? {}).some(([id, style]) => id !== "weather_temp" && id !== "date_year" && !isLunarField(id) && style.enabled) && <details><summary>{t("Health, training & astronomy")}</summary><p>{t("Sample values and asset states for the native fields on this face.")}</p><div className="wf-simulation-grid">
-          {/* The lunar date follows the simulated date and time, like the year. */NATIVE_DATA_FIELDS.filter(field => field.id !== "weather_temp" && field.id !== "date_year" && !isLunarField(field.id) && design.nativeData?.[field.id]?.enabled).map(field => {
-            const style = design.nativeData![field.id];
-            const key = field.id === "chart" ? style.chartSource ?? "chart_stress" : field.id;
-            const fallback = nativeDataPreviewValue(field.id, style);
-            // Only pure state fields take an index; numeric fields with level artwork keep their value.
-            const stateCount = field.kind === "state" ? style.stateCount ?? field.stateCount : key === "chart_moon" ? 30 : undefined;
-            return <SampleValue key={key} label={t(field.label) + (stateCount ? t(" state") : "")} value={simulation.values[key] ?? fallback} min={stateCount ? 0 : undefined} max={stateCount ? stateCount - 1 : undefined} time={fallback.includes(":")} onCommit={value => setValue(key, value)} />;
-          })}
-          {design.nativeData?.chart?.enabled && <label>{t("Chart history")}<select aria-label={t("Simulated chart history")} value={!simulation.chartHistory ? "sample" : simulation.chartHistory.every(value => value === 0) ? "empty" : simulation.chartHistory[0] < simulation.chartHistory.at(-1)! ? "rising" : "falling"} onChange={event => patch({ chartHistory: event.target.value === "sample" ? undefined : event.target.value === "empty" ? [0, 0, 0, 0] : event.target.value === "rising" ? [0.1, 0.25, 0.2, 0.5, 0.7, 0.9] : [0.9, 0.7, 0.5, 0.6, 0.25, 0.1] })}><option value="sample">{t("Default sample")}</option><option value="rising">{t("Rising")}</option><option value="falling">{t("Falling")}</option><option value="empty">{t("Zero values")}</option></select></label>}
-        </div></details>}
+        <details><summary>{t("Device")}</summary><div className="wf-simulation-grid">
+          <SampleValue label={t("Battery (%)")} value={simulation.values.battery ?? "82"} min={0} max={100} onCommit={value => setValue("battery", value)} />
+        </div></details>
       </fieldset>
       <button type="button" onClick={() => onChange(createWatchfaceSimulation())}>{t("Reset simulation")}</button>
     </section>}
