@@ -105,6 +105,8 @@ const SWIM_REST = 0x14;
 const SWIM_INTERVALS: readonly number[] = [0x10, 0x44];
 /** Time the timer ran between two lengths, shorter than this, is turning at the wall, not an idle stretch. */
 const MIN_IDLE_SECONDS = 5;
+/** The watch writes a pool swim's closing interval when the swim is saved, 5–22 s after the stop on real swims. */
+const MAX_SAVE_SECONDS = 60;
 /**
  * The watch's stroke codes → FIT swim_stroke, as COROS's export maps them
  * (checked by probing each code). 0 and 5 have no FIT stroke.
@@ -744,16 +746,17 @@ function swimLap(part: SwimPartDraft, index: number): CorosLap {
 }
 
 function lengthOf(part: SwimPartDraft, start: number, end: number): CorosLength {
-  const timerSec = part.timerCs / 100;
+  const watchTimer = part.timerCs / 100;
+  const elapsedSec = centiseconds(end - start);
   return {
     startTs: Math.floor(start),
     endTs: Math.floor(end),
-    // Where the watch's stamps leave a length less room than its timer, it still lasted that long.
-    elapsedSec: centiseconds(Math.max(end - start, timerSec)),
-    timerSec,
+    elapsedSec,
+    // Its full timer, unless records the interval can't hold squeezed it (placeLengths).
+    timerSec: Math.min(watchTimer, elapsedSec),
     calories: Math.round(part.calories / 1000),
     active: true,
-    avgSpeed: timerSec > 0 ? part.distanceCm / 100 / timerSec : undefined,
+    avgSpeed: watchTimer > 0 ? part.distanceCm / 100 / watchTimer : undefined,
     avgHr: optional(part.avgHr),
     maxHr: optional(part.maxHr),
     stroke: SWIM_STROKES[part.stroke],
@@ -767,21 +770,26 @@ function lengthOf(part: SwimPartDraft, start: number, end: number): CorosLength 
  * A lap's lengths on its timeline, each ending where the next one starts at
  * the latest: the watch can stamp a length after its interval closed, two
  * lengths with one end time, or a length starting before the rest ahead of
- * it ended. One pushed against the lap's start moves into the room after it.
+ * it ended. One pushed against the lap's start moves into the room after it,
+ * as far as the lengths before it need. Each lasts its timer; only lengths
+ * whose timers add up to more than the lap are shortened, in proportion.
  */
 function placeLengths(parts: SwimPartDraft[], lapStart: number, lapEnd: number): Array<{ part: SwimPartDraft; start: number; end: number }> {
+  const sorted = [...parts].sort(byIndex);
+  const timers = sorted.map((part) => part.timerCs / 100);
+  const total = sum(timers);
+  const scale = total > 0 && total > lapEnd - lapStart ? Math.max(lapEnd - lapStart, 0) / total : 1;
+  const widths = timers.map((timer) => timer * scale);
+  // Where each length can start at the earliest: after the lengths before it.
+  const earliest: number[] = [];
+  widths.reduce((at, width) => (earliest.push(at), at + width), lapStart);
   const placed: Array<{ part: SwimPartDraft; start: number; end: number }> = [];
   let next = lapEnd;
-  for (const part of [...parts].sort(byIndex).reverse()) {
-    const end = Math.max(Math.min(part.endExact, next), lapStart);
-    const start = Math.max(end - part.timerCs / 100, lapStart);
-    placed.unshift({ part, start, end });
-    next = start;
+  for (let index = sorted.length - 1; index >= 0; index -= 1) {
+    const end = Math.max(Math.min(sorted[index]!.endExact, next), earliest[index]! + widths[index]!);
+    placed.unshift({ part: sorted[index]!, start: end - widths[index]!, end });
+    next = end - widths[index]!;
   }
-  placed.forEach((length, index) => {
-    const room = placed[index + 1]?.start ?? lapEnd;
-    length.end = Math.max(length.end, Math.min(length.start + length.part.timerCs / 100, room));
-  });
   return placed;
 }
 
@@ -829,10 +837,17 @@ function intervalLengths(parts: SwimPartDraft[], lapStart: number, lapEnd: numbe
   return lengths;
 }
 
-/** A lap for lengths no interval record closed (a swim stopped mid-interval): what they add up to, until the stop. */
-function lapFromLengths(parts: SwimPartDraft[], lengths: CorosLength[], index: number, start: number, stop: number): CorosLap {
+/**
+ * A lap for lengths no interval record closed (a swim stopped mid-interval): what they add up to, until the stop.
+ * Its timer is the time the timer ran, wall time included, as a closed interval's is; its pace is over the lengths alone.
+ */
+function lapFromLengths(
+  parts: SwimPartDraft[], lengths: CorosLength[], index: number, start: number, stop: number, windows: Array<[number, number]>
+): CorosLap {
+  // Paused: the gaps between timer windows, as far as they fall inside the lap.
+  const paused = sum(windows.slice(1).map(([resumed], at) => Math.max(0, Math.min(resumed, stop) - Math.max(windows[at]![1], start))));
   const active = lengths.filter((length) => length.active);
-  const timerSec = centiseconds(sum(active.map((length) => length.timerSec)));
+  const swimSec = sum(active.map((length) => length.timerSec));
   const distanceM = sum(parts.map((part) => part.distanceCm)) / 100;
   const strokes = new Set(active.map((length) => length.stroke));
   return {
@@ -840,10 +855,10 @@ function lapFromLengths(parts: SwimPartDraft[], lengths: CorosLength[], index: n
     startTs: Math.floor(start),
     endTs: Math.floor(stop),
     elapsedSec: centiseconds(stop - start),
-    timerSec,
+    timerSec: centiseconds(Math.max(0, stop - start - paused)),
     distanceM,
     calories: sum(active.map((length) => length.calories)),
-    avgSpeed: timerSec > 0 ? distanceM / timerSec : undefined,
+    avgSpeed: swimSec > 0 ? distanceM / swimSec : undefined,
     maxHr: optional(Math.max(0, ...active.map((length) => length.maxHr ?? 0))),
     dynamics: {},
     swim: { rest: false, stroke: strokes.size === 1 ? [...strokes][0] : FIT_STROKE_MIXED, strokes: sum(active.map((length) => length.strokes ?? 0)) }
@@ -910,7 +925,7 @@ function swimLapsAndLengths(
   if (unclosed.length) {
     const end = Math.max(stop, lapEnd);
     const own = intervalLengths(unclosed, lapEnd, end, clock);
-    const lap = lapFromLengths(unclosed, own, laps.length + 1, lapEnd, end);
+    const lap = lapFromLengths(unclosed, own, laps.length + 1, lapEnd, end, windows);
     lap.swim = { ...lap.swim!, firstLength: lengths.length, lengths: own.length, activeLengths: own.filter((length) => length.active).length };
     lengths.push(...own);
     laps.push(lap);
@@ -1102,7 +1117,9 @@ function buildSession(draft: SessionDraft): CorosSession | undefined {
     // The watch's laps cover a pool swim end to end, the last one until the swim was saved: COROS reports their sum as its elapsed time.
     const lapsElapsed = centiseconds(sum(laps.map((lap) => lap.elapsedSec)));
     const lastLapEnd = Math.max(stop.ts, ...laps.map((lap) => lap.endTs ?? 0));
-    const lapsCover = swim.closed && laps.length > 0 && lapsElapsed >= common.elapsedSec && lapsElapsed <= MAX_SESSION_SECONDS;
+    // A closing stamp further past the stop than a save takes is damaged: the swim then ends at the stop, and can't swallow the activities after it.
+    const lapsCover = swim.closed && laps.length > 0 && lapsElapsed >= common.elapsedSec && lapsElapsed <= MAX_SESSION_SECONDS &&
+      lastLapEnd - stop.ts <= MAX_SAVE_SECONDS;
     const avgPace = summary.readUInt16LE(14);
     return {
       ...common,

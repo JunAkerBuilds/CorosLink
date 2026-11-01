@@ -28,7 +28,11 @@ import {
   formatElevationValue,
   formatPaceValue,
   formatSpeedValue,
-  formatWeightValue
+  formatWeightValue,
+  METERS_PER_YARD,
+  poolUnitSystem,
+  swimPaceClock,
+  swimPaceUnit
 } from "./unitSystem.js";
 
 export const CHAT_ACTIVITY_TOOL_NAMES = [
@@ -458,8 +462,7 @@ export function formatActivityDetailForChat(
   const swim = isSwimActivity(detail.sportType, detail.sportName);
   const cycling = isCyclingActivity(detail.sportType, detail.sportName);
   // A pool's distances and paces read in the pool's own unit, as the activity page shows them.
-  const poolUnit = detail.swim?.poolLengthUnit;
-  const swimUnits: UnitSystem = poolUnit === "yd" ? "imperial" : poolUnit === "m" ? "metric" : unitSystem;
+  const swimUnits = poolUnitSystem(detail.swim?.poolLengthUnit, unitSystem);
   // detail.duration is elapsed time including pauses. Like the COROS app,
   // report moving time and derive pace/speed from it (laps are moving too).
   const moving = detail.movingTime ?? detail.duration;
@@ -558,14 +561,14 @@ const SWIM_STROKE_NAMES: Record<TrainingHubSwimStroke, string> = {
 
 /** m:ss per 100 m, or per 100 yd. */
 function formatSwimPace(secondsPer100m: number, unitSystem: UnitSystem): string {
-  const seconds = Math.round(unitSystem === "imperial" ? secondsPer100m * 0.9144 : secondsPer100m);
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}/${unitSystem === "imperial" ? "100yd" : "100m"}`;
+  const clock = swimPaceClock(secondsPer100m, unitSystem);
+  return clock ? `${clock}/${swimPaceUnit(unitSystem)}` : "—";
 }
 
 /** The swim's totals as the watch recorded them; SWOLF is a length's seconds plus its strokes (lower is more efficient). */
 function formatSwimSummary(swim: TrainingHubSwimSummary, swimUnits: UnitSystem, unitSystem: UnitSystem): string {
   const lengthUnit = swimUnits === "imperial" ? "yd" : "m";
-  const inPoolUnit = (meters: number) => Math.round((swimUnits === "imperial" ? meters / 0.9144 : meters) * 100) / 100;
+  const inPoolUnit = (meters: number) => Math.round((swimUnits === "imperial" ? meters / METERS_PER_YARD : meters) * 100) / 100;
   const lines = [
     "Swim (as the watch recorded it):",
     swim.poolLength !== undefined ? `Pool length: ${inPoolUnit(swim.poolLength)} ${lengthUnit}` : undefined,

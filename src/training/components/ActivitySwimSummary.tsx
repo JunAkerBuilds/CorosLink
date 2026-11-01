@@ -2,7 +2,7 @@ import { Waves } from "lucide-react";
 import { formatNumber, t, useLanguage } from "../../i18n/training";
 import type { TrainingHubSwimStroke, TrainingHubSwimSummary, UnitSystem } from "../../../electron/types";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
-import { METERS_PER_YARD } from "../../units/units";
+import { METERS_PER_YARD, poolUnitSystem, swimPaceClock, swimPaceUnit } from "../../units/units";
 import { Items, type Item } from "./ActivityTrainingEffect";
 
 /** A stroke's name as the watch's display gives it. */
@@ -21,9 +21,8 @@ export function swimStrokeLabel(stroke: TrainingHubSwimStroke | undefined): stri
 
 /** m:ss per 100 m, or per 100 yd in imperial units. */
 export function formatSwimPace(secondsPer100m: number | undefined, unitSystem: UnitSystem): string {
-  if (secondsPer100m === undefined || !Number.isFinite(secondsPer100m) || secondsPer100m <= 0) return "-";
-  const seconds = Math.round(unitSystem === "imperial" ? secondsPer100m * METERS_PER_YARD : secondsPer100m);
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")} ${unitSystem === "imperial" ? "/100yd" : "/100m"}`;
+  const clock = swimPaceClock(secondsPer100m, unitSystem);
+  return clock ? `${clock} /${swimPaceUnit(unitSystem)}` : "-";
 }
 
 /** A swim's totals as the watch recorded them: lengths, strokes, SWOLF, stroke rate. */
@@ -31,7 +30,7 @@ export function ActivitySwimSummary({ swim }: { swim: TrainingHubSwimSummary }) 
   useLanguage();
   const { unitSystem } = useUnitSystem();
   // A pool's lengths read in its own unit; open water follows the app's units.
-  const yards = swim.poolLengthUnit ? swim.poolLengthUnit === "yd" : unitSystem === "imperial";
+  const yards = poolUnitSystem(swim.poolLengthUnit, unitSystem) === "imperial";
   const items: Item[] = [];
   const whole = (value: number) => formatNumber(Math.round(value));
   const pace = (secondsPer100m: number) => {

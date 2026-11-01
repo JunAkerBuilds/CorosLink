@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { encodeDeltaPack, marker, pages, pauseRecord, record, resumeRecord, seriesRecord, startRecord, summaryRecord, syntheticOpenWaterSwim, syntheticPoolSwim, syntheticPoolSwimAtTheWall, syntheticRun } from "./fixtures/coros-sport-record-fixture.mjs";
+import { encodeDeltaPack, marker, pages, pauseRecord, record, resumeRecord, seriesRecord, startRecord, summaryRecord, swimPartRecord, swimSummaryRecord, syntheticOpenWaterSwim, syntheticPoolSwim, syntheticPoolSwimAtTheWall, syntheticRun } from "./fixtures/coros-sport-record-fixture.mjs";
 
 // Decoder for the PACE 4 sport-record file (SyncData file 14) and the FIT
 // writer that stores decoded activities. Runs against the compiled
@@ -364,7 +364,12 @@ function assertSwimFitConsistent(fit, label) {
   parsed.lengths.forEach((length, index) => {
     assert.ok(length.timerSec <= length.elapsedSec + 0.01, `${label}: length ${index} timer ${length.timerSec} > elapsed ${length.elapsedSec}`);
     assert.ok(length.startTs <= length.endTs, `${label}: length ${index} ends before it starts`);
-    if (index) assert.ok(length.startTs >= parsed.lengths[index - 1].endTs, `${label}: length ${index} overlaps the one before`);
+    const before = parsed.lengths[index - 1];
+    if (before) {
+      assert.ok(length.startTs >= before.endTs, `${label}: length ${index} overlaps the one before`);
+      // Whole-second stamps hide an overlap; the elapsed time doesn't.
+      assert.ok(before.startTs + before.elapsedSec <= length.startTs + 1, `${label}: length ${index - 1} lasts into the next one`);
+    }
   });
   parsed.laps.forEach((lap, index) => {
     assert.ok(lap.timerSec <= lap.elapsedSec + 0.01, `${label}: lap ${index} timer > elapsed`);
@@ -496,6 +501,56 @@ test("synthetic pool swim: lengths no interval closed get a lap of their own, en
   assert.deepEqual([session.lengths.length, session.lengths[3].startTs - expected.t0, session.lengths[3].endTs - expected.t0], [4, 110, 150]);
   assert.equal(session.elapsedSec, 150, "start to stop when the watch didn't close every lap");
   assertSwimFitConsistent(corosSessionToFit(session), "unclosed pool swim");
+});
+
+/** A pool swim from its lengths and interval closers ([end s, timer s, interval count]), the timer running from 0 to `stop`. */
+function poolSwim(t0, { lengths, closers = [], stop }) {
+  const part = (kind, index, [end, timer, interval]) => swimPartRecord({
+    kind, index, endUnix: t0 + end, endMs: 0, timerCs: timer * 100, distanceCm: kind === 0 ? 2500 : 2500 * lengths.filter((length) => length[2] === interval - 1).length,
+    smallCalories: 5000, avgPace: 120, bestPace: 120, avgHr: 110, maxHr: 115, stroke: 1, strokes: 15, strokeRate: 30, swolf: 45, interval
+  });
+  return [
+    startRecord(t0, 0, 3, { poolCm: 2500 }),
+    ...lengths.map((length, index) => part(0x00, index + 1, length)),
+    ...closers.map((closer, index) => part(0x10, index + 1, closer)),
+    pauseRecord(t0 + stop, 0),
+    swimSummaryRecord({ distanceCm: 2500 * lengths.length, timerCs: stop * 100, activeLengths: lengths.length, smallCalories: 5000 * lengths.length, avgPace: 120, bestPace: 120, avgHr: 110, maxHr: 115, minHr: 100, temperature: 29, strokes: 15 * lengths.length, bestSwolf: 45, avgSwolf: 45, maxStrokeRate: 30, avgStrokeRate: 30 })
+  ];
+}
+
+test("a damaged closing-interval stamp doesn't stretch the swim over the activities after it", () => {
+  const swim = (t0, closedAfter) => poolSwim(t0, { lengths: [[30, 30, 0], [60, 30, 0]], closers: [[closedAfter, 60, 1]], stop: 60 });
+  const ok = decodeCorosSportRecordFile(pages([...swim(T0, 70), ...swim(T0 + 3600, 70)]));
+  assert.deepEqual([ok.sessions.map((session) => session.endTs - T0), ok.rejected], [[70, 3670], 0], "closed when saved, 10 s after the stop");
+  const damaged = decodeCorosSportRecordFile(pages([...swim(T0, 3 * 86_400), ...swim(T0 + 3600, 70)]));
+  assert.deepEqual([damaged.sessions.map((session) => session.endTs - T0), damaged.rejected], [[60, 3670], 0], "ends at the stop; the next swim is kept");
+});
+
+test("a swim stopped mid-interval: the lap's timer is the time the timer ran, wall time included", () => {
+  // Two 30 s lengths with 20 s at the wall after each, stopped at 100 s with no interval closed.
+  const [session] = decodeCorosSportRecordFile(pages(poolSwim(T0, { lengths: [[30, 30, 0], [80, 30, 0]], stop: 100 }))).sessions;
+  const [lap] = session.laps;
+  assert.deepEqual([lap.elapsedSec, lap.timerSec, lap.avgSpeed], [100, 100, 50 / 60], "timer as a closed interval's; pace over the lengths");
+  assert.deepEqual(session.lengths.map((length) => [length.startTs - T0, length.endTs - T0, length.timerSec, length.active]), [
+    [0, 30, 30, true], [30, 50, 20, false], [50, 80, 30, true], [80, 100, 20, false]
+  ]);
+  assert.equal(lap.timerSec, session.lengths.reduce((total, length) => total + length.timerSec, 0), "the lap's timer covers its lengths");
+  assertSwimFitConsistent(corosSessionToFit(session), "stopped mid-interval");
+});
+
+test("lengths stamped where they can't fit are placed one after the other, never overlapping", () => {
+  // Stamped early: the first can't end at +10, so both move into the room after them.
+  const [early] = decodeCorosSportRecordFile(pages(poolSwim(T0, { lengths: [[10, 30, 0], [20, 30, 0]], closers: [[100, 100, 1]], stop: 100 }))).sessions;
+  assert.deepEqual(early.lengths.map((length) => [length.startTs - T0, length.endTs - T0, length.elapsedSec, length.timerSec, length.active]), [
+    [0, 30, 30, 30, true], [30, 60, 30, 30, true], [60, 100, 40, 40, false]
+  ]);
+  assertSwimFitConsistent(corosSessionToFit(early), "lengths stamped early");
+  // Three 30 s lengths closed by a 60 s interval: more timer than the interval lasted, shared out in proportion.
+  const [over] = decodeCorosSportRecordFile(pages(poolSwim(T0, { lengths: [[60, 30, 0], [60, 30, 0], [60, 30, 0]], closers: [[60, 60, 1]], stop: 60 }))).sessions;
+  assert.deepEqual(over.lengths.map((length) => [length.startTs - T0, length.endTs - T0, length.elapsedSec, length.timerSec, length.avgSpeed]), [
+    [0, 20, 20, 20, 25 / 30], [20, 40, 20, 20, 25 / 30], [40, 60, 20, 20, 25 / 30]
+  ], "each length's speed stays the watch's");
+  assertSwimFitConsistent(corosSessionToFit(over), "lengths overflowing their interval");
 });
 
 test("synthetic open-water swim: laps carry strokes and SWOLF; speeds per 100 m; no lengths or climb", () => {

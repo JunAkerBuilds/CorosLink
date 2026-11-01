@@ -266,7 +266,6 @@ export class ActivityRepository {
     return this.db.prepare("UPDATE local_activity_files SET name = ? WHERE activity_id = ?").run(name, activityId).changes > 0;
   }
 
-  /** Points an activity at a re-decoded file (same activity, another decoder version's output). */
   /**
    * Points an activity at another file of the same recording. With `headline`
    * the list's values follow the new file too: they come from it.

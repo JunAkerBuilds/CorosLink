@@ -44,7 +44,7 @@ import {
 } from "../formatters";
 import { isCyclingSportType, isSwimSportType, resolveSportName } from "../sportTypes";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
-import { formatSpeedValue } from "../../units/units";
+import { formatSpeedValue, poolUnitSystem } from "../../units/units";
 import { parseActivityStreams, parseActivityZones } from "../activityStreams";
 import { deriveActivityInsight, lastKnownZoneModel, rememberActivityInsight, useActivityInsights } from "../activityInsights";
 import { trainingLabel } from "../trainingBenefit";
@@ -308,8 +308,7 @@ export function ActivityDetailPanel({
   const speed = cycling ? activitySpeedKmh(times) : undefined;
   const pace = !cycling && !swim ? activityPaceSecondsPerKm(times) : undefined;
   // A pool's distances and paces read in the pool's own unit, whatever the app's units.
-  const poolUnit = detail.swim?.poolLengthUnit;
-  const swimUnits: UnitSystem = poolUnit === "yd" ? "imperial" : poolUnit === "m" ? "metric" : unitSystem;
+  const swimUnits = poolUnitSystem(detail.swim?.poolLengthUnit, unitSystem);
   // The watch's swim pace leaves out rests; without it, moving time over distance.
   const swimPace = swim
     ? detail.swim?.avgPace ?? (moving && times.distance ? moving / (times.distance / 100) : undefined)

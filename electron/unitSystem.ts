@@ -166,6 +166,22 @@ export function formatPaceValue(
   return `${clock}${compact ? "" : ` /${distanceUnit(unitSystem)}`}`;
 }
 
+/** A pool's distances and paces read in its own unit, whatever the app's units; open water follows the app's. */
+export function poolUnitSystem(poolLengthUnit: "m" | "yd" | undefined, unitSystem: UnitSystem): UnitSystem {
+  return poolLengthUnit === "yd" ? "imperial" : poolLengthUnit === "m" ? "metric" : unitSystem;
+}
+
+/** Seconds per 100 m as an m:ss clock per 100 m, or per 100 yd in imperial units (see `swimPaceUnit`); undefined without a pace. */
+export function swimPaceClock(secondsPer100m: number | undefined, unitSystem: UnitSystem): string | undefined {
+  if (secondsPer100m === undefined || !Number.isFinite(secondsPer100m) || secondsPer100m <= 0) return undefined;
+  const seconds = Math.round(unitSystem === "imperial" ? secondsPer100m * METERS_PER_YARD : secondsPer100m);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+export function swimPaceUnit(unitSystem: UnitSystem): "100m" | "100yd" {
+  return `100${swimDistanceUnit(unitSystem)}`;
+}
+
 export function formatSpeedValue(
   kilometresPerHour: number | undefined,
   unitSystem: UnitSystem,
