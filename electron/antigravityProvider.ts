@@ -839,8 +839,14 @@ async function launchAgent(
     close: async () => {
       await agent.stop(5_000);
       for (const sessionId of sessions) await removeSessionFiles(dirs.acp, sessionId);
-      // Windows keeps a live process's files locked, so this runs after exit.
-      await rm(temp, { recursive: true, force: true }).catch(() => undefined);
+      // Windows keeps a live process's files locked, so this runs after exit,
+      // and may hold DLL handles briefly after taskkill returns.
+      await rm(temp, {
+        recursive: true,
+        force: true,
+        maxRetries: process.platform === "win32" ? 10 : 0,
+        retryDelay: 100
+      }).catch(() => undefined);
     }
   };
 }
