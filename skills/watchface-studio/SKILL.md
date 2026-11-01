@@ -139,6 +139,14 @@ keeps the required origin and converts editor coordinates automatically, even
 with the selectable metric hidden. Do not enable or move that metric or manually
 offset the year to compensate. Archive checks still require on-watch verification.
 
+Chart pages (sun, moon, daily data A/B) can exist without a chart layer: some
+templates declare readouts with no graph, and the watch still pages through
+them. To hide or remove a page, `merge` `{ "<page id>": "hidden" | "removed" }`
+into `/design/chartPageModes`; never delete `chart_*` lines through
+`configTextEdits`. Minimum/maximum temperature draw only on a daily page, so
+before removing every daily page, tell the user min/max will disappear from the
+watch, or keep one daily page `hidden`.
+
 Use the listed indices, dimensions and edit paths. For a new native field,
 fetch `get_schema` with `section: "nativeData"` and its `ids`; chart sources can
 change the required roles and counts. Active template/configured counts take

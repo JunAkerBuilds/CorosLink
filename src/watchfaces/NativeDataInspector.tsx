@@ -32,16 +32,24 @@ const listLabels = (labels: string[]) => labels.join(getLocale().startsWith("zh"
  * (nativeLayerChartPages). No face setting changes that, so the panel says
  * where it shows and, for weather the sun page skips, offers the way around.
  */
-function FieldPagesPanel({ id, pages }: { id: string; pages: string[] }) {
+function FieldPagesPanel({ id, pages, onAddDailyPage }: { id: string; pages: string[]; onAddDailyPage?: () => void }) {
   useLanguage();
   const label = nativeFieldLabel(id);
+  // A face without a daily page (min/max) never draws the field at all.
+  if (!pages.length) return <div className="wf-field-pages is-warning">
+    <p><strong>{t("Not shown on the watch.")}</strong> {t("The watch draws {{label}} only on a daily data page, and this face has none.", { label })}</p>
+    {onAddDailyPage ? <>
+      <p>{t("A hidden daily page shows nothing of its own but keeps {{label}} on screen. Watch pages in the layers list shows it.", { label })}</p>
+      <button type="button" className="secondary-button" onClick={onAddDailyPage}><Plus size={13} aria-hidden="true" />{t("Add a hidden daily page")}</button>
+    </> : null}
+  </div>;
   return <div className="wf-field-pages">
     <p><strong>{t("Shows on:")}</strong> {listLabels(pages.map(chartPageLabel))}</p>
     <p>{t("The watch hides {{label}} on the other chart pages wherever it sits. No face setting changes that.", { label })}</p>
     {id !== "chart_sun_angle" && !pages.includes("sun") ? <p>{t("To keep it on screen with sunrise and sunset times, use the Sunrise / sunset field instead of the chart's Sun page.")}</p> : null}
   </div>;
 }
-const chartPageLabel = (id: string) => id === "daily-a" ? t("Daily data · A") : id === "daily-b" ? t("Daily data · B") : id === "sun" ? t("Sun") : id === "moon" ? t("Moon") : id === "barometer" ? t("Barometer") : t("Tide");
+export const chartPageLabel = (id: string) => id === "daily-a" ? t("Daily data · A") : id === "daily-b" ? t("Daily data · B") : id === "sun" ? t("Sun") : id === "moon" ? t("Moon") : id === "barometer" ? t("Barometer") : t("Tide");
 
 type ChartPage = typeof NATIVE_CHART_PAGES[number];
 type ChartSlotState = "shown" | "hidden" | "missing" | "fixed";
@@ -54,8 +62,10 @@ type ChartSlotState = "shown" | "hidden" | "missing" | "fixed";
  * tide come and go together with the bars. Clicking a readout edits it.
  */
 function ChartPageStrip({ current, readouts, editable, template, removed, hidden, taken = [], barsOn, disabled, pageFields = {}, onSelectField,
-  onEdit, onAdd, onRemove, onShown, onAddPage, onRemovePage, onBars, onMakeFixed, onRestore }: {
+  removedPages = [], onEdit, onAdd, onRemove, onShown, onAddPage, onRemovePage, onBars, onMakeFixed, onRestore }: {
   current: string; readouts: string[]; editable: string[]; removed: string[]; disabled: boolean;
+  /** Pages the design takes off the watch although the template declares them. */
+  removedPages?: string[];
   /** Readouts the template declares; the others were added in Studio. */
   template: string[];
   /** Readouts the design keeps on their page but hides. */
@@ -77,8 +87,10 @@ function ChartPageStrip({ current, readouts, editable, template, removed, hidden
   const live = [...present].filter(source => !removed.includes(source));
   const isBarPage = (id: string) => (NATIVE_CHART_BAR_PAGES as readonly string[]).includes(id);
   const pageOf = (source: string) => NATIVE_CHART_PAGES.find(page => page.sources.includes(source));
-  // A page is on while it shows something; export adds its hidden required readouts.
-  const pageOn = (page: ChartPage) => isBarPage(page.id) ? barsOn : page.sources.some(source => live.includes(source) && !hidden.includes(source));
+  // A page is on while it has readouts, shown or hidden (export adds its
+  // missing required ones invisibly), until it is removed.
+  const pageOn = (page: ChartPage) => isBarPage(page.id) ? barsOn : !removedPages.includes(page.id) && page.sources.some(source => live.includes(source));
+  const pageEmpty = (page: ChartPage) => !isBarPage(page.id) && pageOn(page) && !page.sources.some(source => live.includes(source) && !hidden.includes(source));
   const pages = NATIVE_CHART_PAGES.filter(page => pageOn(page) || page.sources.some(source => present.has(source)));
   const addablePages = [...(barsOn ? [] : ["bars"]), ...NATIVE_CHART_PAGES.filter(page => !isBarPage(page.id) && !pageOn(page)).map(page => page.id)];
   const state = (source: string): ChartSlotState => removed.includes(source) ? "fixed" : !present.has(source) ? "missing" : hidden.includes(source) ? "hidden" : "shown";
@@ -91,10 +103,10 @@ function ChartPageStrip({ current, readouts, editable, template, removed, hidden
   const equivalent = NATIVE_CHART_FIXED_EQUIVALENTS[focus];
   // The chart layer edits one readout, so the last one can't leave.
   const lastReadout = live.length <= 1 && (focusState === "shown" || focusState === "hidden");
-  const lastShownOnPage = focusState === "shown" && !!focusPage && focusPage.sources.filter(source => state(source) === "shown").length <= 1;
+  const lastShownOnPage = focusState === "shown" && !!focusPage && !isBarPage(focusPage.id) && focusPage.sources.filter(source => state(source) === "shown").length <= 1;
   const studioAdded = (source: string) => !template.includes(source);
   const pagesInUse = NATIVE_CHART_PAGES.filter(page => !isBarPage(page.id) && pageOn(page));
-  const canRemovePage = (page: ChartPage) => !!onRemovePage && !page.sources.some(source => template.includes(source) && present.has(source)) && pagesInUse.length > 1;
+  const canRemovePage = (page: ChartPage) => !!onRemovePage && pagesInUse.length > 1;
   let pageNumber = 0;
   return <div className="wf-chart-pages">
     <div className="wf-chart-pages-head"><span>{t("Watch pages")}</span></div>
@@ -110,7 +122,7 @@ function ChartPageStrip({ current, readouts, editable, template, removed, hidden
           <div className="wf-chart-page-body">
             <div className="wf-chart-page-title">
               <span>{chartPageLabel(page.id)}</span>
-              {isCurrent ? <small>{t("Shown in the preview")}</small> : graphOnly ? <small>{t("Graph only")}</small> : null}
+              {isCurrent ? <small>{t("Shown in the preview")}</small> : graphOnly ? <small>{t("Graph only")}</small> : pageEmpty(page) ? <small>{t("Nothing visible")}</small> : null}
               {removable ? <button type="button" className="wf-chart-page-remove" disabled={disabled}
                 aria-label={isBarPage(page.id) ? t("Turn bars off") : t("Remove page")}
                 title={isBarPage(page.id) ? t("Turn bars off. This removes both the barometer and tide pages.") : t("Remove page")}
@@ -135,11 +147,15 @@ function ChartPageStrip({ current, readouts, editable, template, removed, hidden
                 </button>;
               })}
             </div>
-            {!on && !isBarPage(page.id) && page.sources.some(source => state(source) === "hidden") ? <p className="wf-chart-page-note">{t("The watch skips this page while all its readouts are hidden.")}</p> : null}
+            {pageEmpty(page) ? <p className="wf-chart-page-note">{t("Nothing on this page is visible, but the watch still stops here when you press Back. Remove the page to skip it.")}</p> : null}
+            {!on && removedPages.includes(page.id) ? <div className="wf-chart-page-off">
+              <p className="wf-chart-page-note">{t("Removed: the watch skips this page.")}</p>
+              {onAddPage ? <button type="button" className="secondary-button" disabled={disabled} onClick={() => onAddPage(page.id)}>{t("Put the page back")}</button> : null}
+            </div> : null}
             {!on && isBarPage(page.id) ? <div className="wf-chart-page-off">
               <p className="wf-chart-page-note">{t("The watch skips this page while the bar width is 0.")}</p>
               <button type="button" className="secondary-button" disabled={disabled} onClick={() => onBars(true)}>{t("Turn bars on")}</button>
-            </div> : someHidden && page.id.startsWith("daily-") ? <p className="wf-chart-page-note">{t("The watch shows this page only with all three readouts. Hide the ones you don't want.")}</p> : null}
+            </div> : someHidden && !pageEmpty(page) && page.id.startsWith("daily-") ? <p className="wf-chart-page-note">{t("The watch shows this page only with all three readouts. Hide the ones you don't want.")}</p> : null}
             {on && pageFields[page.id]?.length ? <div className="wf-chart-page-also"><span>{t("Hidden on this page:")}</span>
               {pageFields[page.id]!.map(field => <button key={field} type="button" className="wf-chart-page-field" onClick={() => onSelectField?.(field)}>{nativeFieldLabel(field)}</button>)}
             </div> : null}
@@ -158,12 +174,12 @@ function ChartPageStrip({ current, readouts, editable, template, removed, hidden
           {!required && onRemove && studioAdded(focus) ? <button type="button" className="secondary-button" disabled={disabled || lastReadout} onClick={() => onRemove(focus)}>{t("Remove {{label}}", { label })}</button> : null}
         </div>
       </> : <>
-        <p>{lastShownOnPage ? t("{{label}} is the last readout this page shows. Remove the page instead.", { label })
+        <p>{lastShownOnPage ? t("{{label}} is the last readout this page shows. Hiding it keeps the page on the watch with nothing visible; remove the page to skip it.", { label })
           : equivalent && onMakeFixed ? ("metric" in equivalent ? t("Make fixed moves {{label}} off its page into a field that always shows, using the same digits. Its icon becomes an image layer.", { label })
             : t("Make fixed moves {{label}} off its page into a field that always shows, with the same artwork.", { label }))
           : t("{{label}} has no always-shown version on the watch, so it stays on its page.", { label })}</p>
         <div className="wf-chart-slot-buttons">
-          {onShown ? <button type="button" className="secondary-button" disabled={disabled || lastShownOnPage} onClick={() => onShown(focus, false)}>{t("Hide {{label}}", { label })}</button> : null}
+          {onShown ? <button type="button" className="secondary-button" disabled={disabled} onClick={() => onShown(focus, false)}>{t("Hide {{label}}", { label })}</button> : null}
           {equivalent && onMakeFixed ? <button type="button" className="secondary-button" disabled={disabled || lastReadout} onClick={() => onMakeFixed(focus)}>{t("Make {{label}} fixed", { label })}</button> : null}
           {!required && onRemove && studioAdded(focus) ? <button type="button" className="secondary-button" disabled={disabled || lastReadout} onClick={() => onRemove(focus)}>{t("Remove {{label}}", { label })}</button> : null}
         </div>
@@ -228,7 +244,7 @@ type RenderSection = (
  * selected part, and Advanced for preview-only settings. The editor renders
  * the Transform section itself so it matches every other layer.
  */
-export function NativeDataInspector({ id, style, coordinateScale, api, disabled, renderSection, renderFontSizeField, onPatch, onError, onImportStart, onImportFinish, isImportCurrent, chartGroups = [], chartReadouts = chartGroups, onChartGroup, onAddReadout, onRemoveReadout, takenReadouts, onShowReadout, onAddPage, onRemovePage, onMakeFixed, pageFields, onSelectField, fieldPages }: {
+export function NativeDataInspector({ id, style, coordinateScale, api, disabled, renderSection, renderFontSizeField, onPatch, onError, onImportStart, onImportFinish, isImportCurrent, chartGroups = [], chartReadouts = chartGroups, onChartGroup, onAddReadout, onRemoveReadout, takenReadouts, onShowReadout, onAddPage, onRemovePage, onMakeFixed, pageFields, onSelectField, fieldPages, onAddDailyPage, removedPages }: {
   id: string; style: Style; api: CorosLinkApi; disabled: boolean; coordinateScale: number;
   renderSection: RenderSection;
   /** The editor's shared Font size field, in master pixels. */
@@ -245,6 +261,10 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   /** Chart: layers the watch hides on each page. Other fields: the pages this one shows on. */
   pageFields?: Record<string, string[]>; onSelectField?: (id: string) => void;
   fieldPages?: { pages: string[] } | null;
+  /** Chart: pages the design removes although the template declares them. */
+  removedPages?: string[];
+  /** Adds a hidden daily page, for min/max on a face without one. */
+  onAddDailyPage?: () => void;
   onPatch: (patch: Partial<Style>) => void; onError: (message: string) => void;
   onImportStart: (target: string) => number | null; onImportFinish: (token: number) => void; isImportCurrent: (token: number) => boolean;
 }) {
@@ -393,8 +413,8 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
         template={chartReadouts} hidden={hiddenReadouts} taken={takenReadouts} removed={style.removedReadouts ?? []} disabled={locked}
         barsOn={(style.chartStyle?.barWidth ?? 8) > 0} onBars={on => patchChart(on ? { barWidth: 8, barGap: style.chartStyle?.barGap || 4 } : { barWidth: 0 })}
         onEdit={onChartGroup} onAdd={onAddReadout} onRemove={onRemoveReadout} onShown={onShowReadout} onAddPage={onAddPage} onRemovePage={onRemovePage} onMakeFixed={onMakeFixed}
-        onRestore={source=>onPatch({removedReadouts:(style.removedReadouts ?? []).filter(item=>item!==source)})} pageFields={pageFields} onSelectField={onSelectField} />}
-      {definition.kind !== "chart" && fieldPages ? <FieldPagesPanel id={id} pages={fieldPages.pages} /> : null}
+        onRestore={source=>onPatch({removedReadouts:(style.removedReadouts ?? []).filter(item=>item!==source)})} pageFields={pageFields} onSelectField={onSelectField} removedPages={removedPages} />}
+      {definition.kind !== "chart" && fieldPages ? <FieldPagesPanel id={id} pages={fieldPages.pages} onAddDailyPage={onAddDailyPage} /> : null}
       <p className="watchface-studio-summary">{t("Every component uses this color and font unless it sets its own below.")}</p>
     </div>, { disabled: locked })}
 

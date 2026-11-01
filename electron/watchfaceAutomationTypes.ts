@@ -208,7 +208,7 @@ export const WATCHFACE_AUTOMATION_SCENE_SCHEMA = {
   },
   design: {
     archiveWide: [
-      "version", "archiveWatchFaceVersion", "stripBlankConfigKeys", "watchLanguages", "configTextEdits"
+      "version", "archiveWatchFaceVersion", "stripBlankConfigKeys", "watchLanguages", "configTextEdits", "chartPageModes"
     ],
     appearance: [
       "backgroundColor", "accentColor", "artwork", "artworkVisible", "zoom",

@@ -135,3 +135,70 @@ const removed = removeChartPage(daily, "daily-b");
 assert.deepEqual([removed.chartSource, ...Object.keys(removed.readouts ?? {})], ["chart_stress"]);
 assert.equal(removeChartPage(layer, "daily-a"), null, "The chart keeps at least one page");
 console.log("watchface chart readouts: ok");
+
+// A page whose readouts are all hidden stays on: export fills its missing
+// required readouts instead of dropping the page.
+{
+  assert.deepEqual(chartPageFillers([], ["chart_stress"]), ["chart_stress", "chart_stamina", "chart_elevation"], "Hidden stress keeps daily page A");
+  assert.deepEqual(chartPageFillers(["chart_stress"], ["chart_stamina"]), ["chart_stamina", "chart_elevation"]);
+  assert.deepEqual(chartPageFillers([]), [], "A face with no readouts adds no page");
+}
+
+// Template pages without a chart layer (SIMPLE 2607304: daily and sun
+// readouts, no chart_rect), as the editor lists them and export writes them.
+{
+  const { templateChartPages, templateChartPageOverrides, onChartPageIds, removedChartPageKeys } = await import("../src/watchfaces/templateChartPages.ts");
+  const { COROS_CONFIG_DELETE_VALUE: DELETE } = await import("../src/watchfaces/watchfaceStudio.ts");
+  const digits = { folder: "recovered/group-13", kind: "digits", aod: false, files: Array.from({ length: 10 }, (_, i) => ({ path: `w/recovered/group-13/0${i}.png`, width: 20, height: 34 })) };
+  const config = { chart_item3_bg: "item3.png", chart_item3_bg_pos: "{0,0}" };
+  for (const source of ["chart_tide", "chart_baro", "chart_stress", "chart_stamina", "chart_elevation", "chart_kcal", "chart_step"]) {
+    Object.assign(config, { [`${source}_font`]: "recovered\\group-13", [`${source}_rect`]: "{121,293,187,329,hcenter|vcenter}", [`${source}_icon_pos`]: "{77,293}" });
+  }
+  Object.assign(config, { chart_sunrise_font: "recovered\\group-13", chart_sunrise_hour_rect: "{172,346,218,380,hcenter|vcenter}", chart_sunrise_minute_rect: "{231,346,276,380,hcenter|vcenter}", chart_sunrise_icon_pos: "{129,346}" });
+  const resolution = { config, directory: "w", icons: [], spriteFolders: [digits] };
+  const pages = templateChartPages(resolution);
+  assert.deepEqual(onChartPageIds(pages), ["sun", "daily-a"], "Sun and daily A are on; daily B lacks heart rate; no bars");
+  assert.deepEqual(pages.map(page => page.id), ["barometer", "tide", "sun", "daily-a", "daily-b"], "Pages with readouts list even when off");
+  assert.equal(pages.find(page => page.id === "daily-a").empty, false);
+
+  const hidden = templateChartPages(resolution, { "daily-a": "hidden", sun: "removed" });
+  assert.deepEqual(onChartPageIds(hidden), ["daily-a"]);
+  assert.equal(hidden.find(page => page.id === "daily-a").empty, true, "A hidden page is on with nothing visible");
+
+  // Codex's raw edit deleted every chart line: no page is left, so min/max can't draw.
+  const bare = { ...resolution, config: {} };
+  assert.deepEqual(templateChartPages(bare), []);
+  assert.deepEqual(onChartPageIds(templateChartPages(bare, { "daily-a": "hidden" })), ["daily-a"], "A hidden daily page can be added from nothing");
+
+  const blank = { icon: () => "cl_nd_blank_icon\\00.png", frames: folder => folder };
+  const added = templateChartPageOverrides({}, { "daily-a": "hidden" }, blank);
+  for (const source of ["chart_stress", "chart_stamina", "chart_elevation"]) {
+    assert.equal(added[`${source}_font`], "cl_nd_chart_blank_digits");
+    assert.equal(added[`${source}_rect`], "{0,0,8,4,left|vcenter}");
+    assert.equal(added[`${source}_icon_pos`], "{0,0}", "The 4.9.9 parser needs the icon position");
+  }
+  const kept = templateChartPageOverrides(config, { "daily-a": "hidden" }, blank);
+  assert.equal(kept.chart_stress_rect, undefined, "A template readout keeps its own rect");
+  assert.equal(kept.chart_stress_font, "cl_nd_chart_blank_digits");
+  assert.equal(kept.chart_item3_bg, "cl_nd_blank_icon\\00.png", "The daily divider hides with the only daily page");
+  const removed = templateChartPageOverrides(config, { "daily-a": "removed" }, blank);
+  assert.equal(removed.chart_stress_font, DELETE);
+  assert.equal(removed.chart_item3_bg, DELETE, "The divider leaves with the last daily page");
+  assert.equal(removed.chart_kcal_font, undefined, "Other pages' readouts stay");
+  assert.equal(templateChartPages({ ...resolution, config: { ...config, chart_stress_font: "cl_nd_chart_blank_digits" } }).find(page => page.id === "daily-a").readouts[0].visible, false,
+    "Studio's blank digits read back as an invisible readout");
+  assert.ok(removedChartPageKeys({ sun: "removed" }).includes("chart_sunrise_font"));
+}
+
+// A turned-off chart layer clears only its own keys: the template's other
+// readouts keep their pages (2LoT_v4test, chart off on chart_sun_angle).
+{
+  const { templateChartPages, onChartPageIds, withoutTurnedOffChart, turnedOffChartKeys } = await import("../src/watchfaces/templateChartPages.ts");
+  const config = { chart_rect: "{83,256,303,305,hcenter|vcenter}", chart_bar_width: "7", chart_sun_angle_font: "a", chart_sunrise_font: "b",
+    chart_stress_font: "c", chart_stamina_font: "c", chart_elevation_font: "c", chart_tide_font: "c" };
+  const resolution = { config, directory: "w", icons: [], spriteFolders: [] };
+  assert.deepEqual(turnedOffChartKeys({ enabled: true, chartSource: "chart_sun_angle" }), []);
+  const off = withoutTurnedOffChart(resolution, { enabled: false, chartSource: "chart_sun_angle" });
+  assert.equal(off.config.chart_bar_width, undefined, "Turning the chart off clears the bars");
+  assert.deepEqual(onChartPageIds(templateChartPages(off)), ["sun", "daily-a"], "Sun and daily A stay on the watch");
+}

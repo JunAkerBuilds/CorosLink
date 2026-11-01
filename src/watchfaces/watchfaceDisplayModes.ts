@@ -269,6 +269,7 @@ export function resolveWatchfaceModeDesign(
     stripBlankConfigKeys: design.stripBlankConfigKeys,
     watchLanguages: design.watchLanguages,
     configTextEdits: design.configTextEdits,
+    chartPageModes: design.chartPageModes,
     modeDesigns: design.modeDesigns
   };
 }
@@ -286,7 +287,8 @@ export function writeWatchfaceModeDesign(
     archiveWatchFaceVersion: active.archiveWatchFaceVersion,
     stripBlankConfigKeys: active.stripBlankConfigKeys,
     watchLanguages: active.watchLanguages,
-    configTextEdits: active.configTextEdits
+    configTextEdits: active.configTextEdits,
+    chartPageModes: active.chartPageModes
   };
   if (mode === "current") {
     const previousDimmedKcalProgress = dimKcalProgress(root.kcalProgress);

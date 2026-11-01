@@ -3,6 +3,7 @@ import type { ChartPageCompanions } from "./recoveredWatchfaceDesign";
 import { NATIVE_CHART_PAGES, NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartDailyPage, nativeChartRepresentation, nativeChartSourceKeys, nativeFieldKeys, nativeConfigPrefix, nativeHasIcon, nativeStatePositionKey, nativeTraditionalKey } from "../../electron/watchfaceNativeCatalog";
 import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, offsetConfigValue, parseConfigPos, parseConfigRect, pickPreviewResolution, resizeAndTintSprite } from "./watchfaceStudio";
 import { isNativeTime, nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRolePart, nativeRoleIndices, nativeStateCount, nativeTextFontSize } from "./nativeDataParts";
+import { type ChartPageModes, removedChartPageKeys, templateChartPageOverrides } from "./templateChartPages";
 import { chartGraphBounds, chartPageFillers, chartReadoutBounds, chartReadoutFolder, chartReadoutPage, chartSourceOf, storedChartReadouts } from "./chartReadouts";
 import { parseSimulationDateTime, type WatchfacePreviewScenario } from "./watchfaceSimulation";
 import { LUNAR_SPAN, isLunarField, lunarDateOf, lunarFrames } from "./lunarDate";
@@ -214,7 +215,8 @@ const WEATHER_CONDITION_FRAMES = 41;
  * @param weatherIconEnabled The design's weather-indicator state; undefined
  * when the design leaves the template's own weather keys untouched.
  */
-export async function composeNativeData(details: CorosWatchfaceTemplateDetails, data: NativeData = {}, weatherIconEnabled?: boolean) {
+export async function composeNativeData(details: CorosWatchfaceTemplateDetails, data: NativeData = {}, weatherIconEnabled?: boolean,
+  chartPageModes: ChartPageModes = {}) {
   const base = pickPreviewResolution(details);
   const assetReplacements: CorosWatchfaceAssetReplacement[] = [];
   const configOverrides: CorosWatchfaceConfigOverride[] = [];
@@ -462,7 +464,10 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
       const time = (source: string) => source === "chart_sunrise" || source === "chart_moonrise";
       const shown = (source: string) => source === "chart_moon" ? set("chart_moon_icon")
         : set(`${source}_${time(source) ? "hour_rect" : "rect"}`) && set(`${source}_font`);
-      const missing = chartPageFillers(NATIVE_CHART_PAGES.flatMap(page => page.sources).filter(shown));
+      // A page whose readouts are all hidden stays on (nothing visible) until it is removed.
+      const removed = new Set(NATIVE_CHART_PAGES.filter(page => chartPageModes[page.id] === "removed").flatMap(page => page.sources));
+      const kept = [chartSourceOf(chart), ...Object.keys(chart.readouts ?? {})].filter(source => !chart.removedReadouts?.includes(source) && !data[source]?.enabled);
+      const missing = chartPageFillers(NATIVE_CHART_PAGES.flatMap(page => page.sources).filter(shown), kept).filter(source => !removed.has(source));
       if (missing.length) {
         const plot = nativePart("chart", chart, "plot");
         const x = Math.round((chart.x + plot.x * chart.scale) * ratio), y = Math.round((chart.y + plot.y * chart.scale) * ratio);
@@ -477,6 +482,14 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
           } else values[`${source}_rect`] = tiny();
         }
       }
+    }
+    if (chart?.enabled) for (const key of removedChartPageKeys(chartPageModes)) values[key] = COROS_CONFIG_DELETE_VALUE;
+    // Without a chart layer (or with it turned off) the template's own pages
+    // stay, as the design keeps or removes them. Keys the turned-off chart
+    // cleared above no longer count as the template's.
+    else if (Object.keys(chartPageModes).length) {
+      const config = Object.fromEntries(Object.entries(resolution.config).filter(([key]) => values[key] !== COROS_CONFIG_DELETE_VALUE));
+      Object.assign(values, templateChartPageOverrides(config, chartPageModes, { icon: blankIcon, frames: blankFrames }));
     }
     addWeatherConditionCompanion(resolution, weatherIconEnabled, values, assetReplacements, existing);
     await addMinMaxCompanions(resolution, data, run, ratio, values, assetReplacements, existing);
@@ -607,16 +620,32 @@ const PAGE_DEPENDENT_FIELDS: Record<string, (page: string) => boolean> = {
   weather_direction: page => !page.startsWith("daily-")
 };
 
-/** The chart pages a field shows on; null when the face has no chart or the field shows on every page. */
-export function nativeLayerChartPages(id: string, data: NativeData): { pages: string[] } | null {
+/** Minimum and maximum draw only on a daily page, so a face without one never shows them. */
+const DAILY_ONLY_FIELDS = new Set(["weather_temp_min", "weather_temp_max"]);
+
+/**
+ * The chart pages a field shows on; null when the field shows on every page
+ * of this face. `facePages` are the pages a face without a chart layer keeps
+ * from its template (templateChartPages): min/max with no daily page among
+ * them gets an empty list, as the watch never draws them (PACE Pro, 2026-11-01:
+ * removing a template's chart readouts took min/max off the watch).
+ */
+export function nativeLayerChartPages(id: string, data: NativeData, facePages?: string[]): { pages: string[] } | null {
   const shows = PAGE_DEPENDENT_FIELDS[id];
-  if (!data.chart?.enabled || !shows) return null;
-  return { pages: NATIVE_CHART_PAGES.map(page => page.id).filter(shows) };
+  if (!shows) return null;
+  if (data.chart?.enabled) return { pages: NATIVE_CHART_PAGES.map(page => page.id).filter(shows) };
+  if (!facePages || (!facePages.length && !DAILY_ONLY_FIELDS.has(id))) return null;
+  return { pages: facePages.filter(shows) };
 }
 
-/** Layers the watch hides on the chart page the preview shows (the edited readout's page). */
-export function nativeLayerHiddenByChartGroup(id: string, data: NativeData): boolean {
+/**
+ * Layers the watch hides on the chart page the preview shows (the edited
+ * readout's page). Without a chart layer the preview has no page, so only
+ * min/max on a face with no daily page hide.
+ */
+export function nativeLayerHiddenByChartGroup(id: string, data: NativeData, facePages?: string[]): boolean {
   const chart = data.chart?.enabled ? data.chart : undefined, shows = PAGE_DEPENDENT_FIELDS[id];
+  if (!chart && facePages && DAILY_ONLY_FIELDS.has(id)) return !facePages.some(page => page.startsWith("daily-"));
   const page = chart ? chartReadoutPage(chartSourceOf(chart)) : undefined;
   return Boolean(page && shows && !shows(page));
 }
@@ -657,14 +686,14 @@ async function drawChartPageCompanions(canvas: HTMLCanvasElement, width: number,
 const SAMPLE_HISTORY = [0.42, 0.51, 0.37, 0.63, 0.58, 0.75, 0.54, 0.68, 0.61, 0.46, 0.52, 0.35];
 /** Sample-only renderer; firmware supplies the live values and chart representation. */
 export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: number, data: NativeData = {}, scenario?: WatchfacePreviewScenario,
-  chartPage?: ChartPageCompanions | null) {
+  chartPage?: ChartPageCompanions | null, facePages?: string[]) {
   const ctx = canvas.getContext("2d"); if (!ctx) return;
   await drawChartPageCompanions(canvas, width, data, scenario, chartPage);
   const ratio = canvas.width / width;
   const history = scenario?.chartHistory ?? SAMPLE_HISTORY;
   const run = minMaxTemperatureRun(data, scenario);
   for (const [id, authored] of Object.entries(data)) {
-    const field = NATIVE_DATA_BY_ID.get(id); if (!authored.enabled || !field || nativeLayerHiddenByChartGroup(id, data)) continue;
+    const field = NATIVE_DATA_BY_ID.get(id); if (!authored.enabled || !field || nativeLayerHiddenByChartGroup(id, data, facePages)) continue;
     const style = id === "weather_temp_max" && run ? run.max : authored;
     const scale = style.scale * ratio, x = style.x * ratio, y = style.y * ratio;
     const part = (key: Part) => nativePart(id, style, key);

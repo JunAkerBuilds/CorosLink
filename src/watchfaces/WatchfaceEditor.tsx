@@ -9,10 +9,11 @@ import { useWatchfaceSimulation } from "./useWatchfaceSimulation";
 import { WATCHFACE_SIMULATION_CAPABILITIES, activeSimulationScenario, createWatchfaceSimulation, parseWatchfacePreviewScenario, patchWatchfaceSimulation, simulationStudioOptions, type WatchfacePreviewScenario } from "./watchfaceSimulation";
 import { WatchfaceColorInput, flushWatchfaceColorInputs } from "./WatchfaceColorInput";
 import { WatchfaceNumberAlignControl } from "./WatchfaceNumberAlignControl";
-import { NativeDataInspector } from "./NativeDataInspector";
+import { NativeDataInspector, chartPageLabel as templatePageLabel } from "./NativeDataInspector";
 import { MetricKindNote, watchfaceMetricKind } from "./watchfaceMetricKinds";
 import { NATIVE_CHART_FIXED_EQUIVALENTS, NATIVE_CHART_PAGES, nativeChartReadoutLabel } from "../../electron/watchfaceNativeCatalog";
 import { nativePart, nativeParts } from "./nativeDataParts";
+import { onChartPageIds, templateChartPages, withoutTurnedOffChart, type ChartPageMode } from "./templateChartPages";
 import { addChartPage, chartDragSplit, chartGraphBounds, chartReadoutBounds, chartReadoutHidden, chartReadoutPage, chartSourceOf, chartStoredReadout, dropChartReadout, hiddenChartReadout, moveChartGraph, moveChartReadout, newChartReadout, removeChartPage, setChartReadoutShown, storedChartReadouts, swapChartReadout } from "./chartReadouts";
 import { describeNativeDataComponents } from "./nativeDataAutomation";
 import { watchfaceAutomationAssetContracts } from "./watchfaceAutomationAssetContracts";
@@ -884,6 +885,8 @@ interface WatchfacePreviewRenderRequest {
   weather: CorosWatchfaceDesignState["weatherIndicator"];
   nativeData: CorosWatchfaceDesignState["nativeData"];
   chartPage: ChartPageCompanions | null;
+  /** Pages a face without a chart layer keeps (templateChartPages). */
+  facePages?: string[];
   scenario?: WatchfacePreviewScenario;
   previewWidth: number;
   loadAssets: WatchfaceAssetLoader;
@@ -2159,6 +2162,97 @@ export function WatchfaceEditor({
     if (modeSourceDetails) void recoverChartPageCompanions(modeSourceDetails, loadAssets).then(page => { if (!cancelled) setChartPage(page); }, () => undefined);
     return () => { cancelled = true; };
   }, [modeSourceDetails, loadAssets]);
+  // Chart pages the template leaves on the watch when the face has no chart
+  // layer (SIMPLE declares daily and sun readouts with no graph). Listed in
+  // the layers panel so a page with nothing visible is still seen and removable.
+  const templatePages = useMemo(() => {
+    // A turned-off chart layer counts as none: export clears only its own keys.
+    const master = modeSourceDetails && !design.nativeData?.chart?.enabled ? pickPreviewResolution(modeSourceDetails) : null;
+    return master ? templateChartPages(withoutTurnedOffChart(master, design.nativeData?.chart), design.chartPageModes) : null;
+  }, [modeSourceDetails, design.nativeData?.chart, design.chartPageModes]);
+  const facePageIds = useMemo(() => templatePages ? onChartPageIds(templatePages) : undefined, [templatePages]);
+  const minMaxNeedsDailyPage = Boolean(facePageIds && !facePageIds.some(page => page.startsWith("daily-"))
+    && (design.nativeData?.weather_temp_min?.enabled || design.nativeData?.weather_temp_max?.enabled));
+  /**
+   * The template's chart pages as chart rows. Under a turned-off Chart layer
+   * they replace its own page rows (`withParent` false): its readouts no
+   * longer reach the watch, but the template's other pages do.
+   */
+  function renderTemplateChartRows(withParent = true) {
+    if (!templatePages) return null;
+    return <>
+      {withParent ? <li className="wf-layer-item">
+        <div className="watchface-layer-row wf-watch-page-row" title={t("Chart pages from the template's config. Back on the watch steps through the ones that are on, even pages with nothing visible.")}>
+          <span className="wf-layer-icon" aria-hidden="true"><Layers size={14} /></span>
+          <span className="watchface-layer-name">{t("Chart")}</span>
+          <span className="wf-layer-subrow-page">{t("Template")}</span>
+        </div>
+        <span className="wf-layer-row-actions wf-watch-page-actions" />
+      </li> : null}
+      {templatePages.map(page => {
+        const bars = page.id === "barometer" || page.id === "tide";
+        const declared = page.mode !== "hidden" || page.readouts.length > 0;
+        const label = page.id === "daily-a" ? t("Daily A") : page.id === "daily-b" ? t("Daily B") : templatePageLabel(page.id);
+        const dailyOn = page.on && page.id.startsWith("daily-");
+        return (
+          <Fragment key={`template-page:${page.id}`}>
+            <li className="wf-layer-item wf-layer-subitem">
+              <div className={`watchface-layer-row wf-layer-subrow wf-layer-subpage wf-watch-page-row${page.on ? "" : " is-off"}`}
+                title={!page.on ? t("The watch skips this page.") : page.empty ? t("The watch still stops on this page, with nothing visible.")
+                  : dailyOn ? t("Minimum and maximum temperature show only on this page.") : undefined}>
+                <span className="watchface-layer-name">{label}</span>
+                <span className="wf-layer-subrow-page">{!page.on ? t("Off") : page.empty ? t("Hidden") : dailyOn ? t("Min/max") : ""}</span>
+              </div>
+              <span className="wf-layer-row-actions wf-watch-page-actions">
+                {bars ? null : page.mode === "removed" ? (
+                  <button type="button" className="watchface-layer-visibility" aria-label={t("Put back {{value1}}", { value1: label })} title={t("Put the page back")}
+                    onClick={() => setChartPageMode(page.id, undefined)}><RotateCcw size={14} /></button>
+                ) : <>
+                  {page.readouts.some(readout => readout.visible) || page.mode === "hidden" && page.readouts.length ? (
+                    <button type="button" className="watchface-layer-visibility" aria-pressed={page.mode === "hidden"}
+                      aria-label={page.mode === "hidden" ? t("Show {{value1}}", { value1: label }) : t("Hide {{value1}}", { value1: label })}
+                      title={page.mode === "hidden" ? t("Show its readouts again") : t("Hide its readouts. The page stays on the watch.")}
+                      onClick={() => setChartPageMode(page.id, page.mode === "hidden" ? undefined : "hidden")}>
+                      {page.mode === "hidden" ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  ) : null}
+                  {page.on || page.mode === "hidden" ? (
+                    <button type="button" className="watchface-layer-visibility" aria-label={t("Remove {{value1}}", { value1: label })} title={t("Remove the page from the watch")}
+                      onClick={() => setChartPageMode(page.id, declared ? "removed" : undefined)}><Trash2 size={14} /></button>
+                  ) : null}
+                </>}
+              </span>
+            </li>
+            {page.readouts.map(readout => (
+              <li key={`template-page:${page.id}:${readout.source}`} className="wf-layer-item wf-layer-subitem">
+                <div className="watchface-layer-row wf-layer-subrow wf-layer-subreadout wf-watch-page-row">
+                  <span className={`watchface-layer-name${page.on && readout.visible && page.mode !== "hidden" ? "" : " is-hidden"}`}>{t(nativeChartReadoutLabel(readout.source))}</span>
+                  <span className="wf-layer-subrow-page">{page.on && (!readout.visible || page.mode === "hidden") ? t("Hidden") : ""}</span>
+                </div>
+                <span className="wf-layer-row-actions wf-watch-page-actions" />
+              </li>
+            ))}
+          </Fragment>
+        );
+      })}
+      {minMaxNeedsDailyPage ? (
+        <li className="wf-layer-item wf-watch-pages-add">
+          <p>{t("Minimum and maximum temperature show only on a daily data page, and this face has none.")}</p>
+          <button type="button" className="secondary-button" onClick={() => setChartPageMode("daily-a", "hidden")}>
+            <Plus size={13} aria-hidden="true" />{t("Add a hidden daily page")}
+          </button>
+        </li>
+      ) : null}
+    </>;
+  }
+  /** Keeps, hides or removes one of the template's chart pages (design.chartPageModes). */
+  function setChartPageMode(pageId: string, mode: ChartPageMode | undefined) {
+    setDesign(prev => {
+      const modes = { ...prev.chartPageModes };
+      if (mode) modes[pageId] = mode; else delete modes[pageId];
+      return { ...prev, chartPageModes: Object.keys(modes).length ? modes : undefined };
+    });
+  }
   const designDetails = useMemo(
     () =>
       modeSourceDetails
@@ -3507,7 +3601,7 @@ export function WatchfaceEditor({
       ),
       loadAssets
     );
-    await drawNativeDataPreview(frame, previewWidth, frameDesign.nativeData, simulationScenario, chartPage);
+    await drawNativeDataPreview(frame, previewWidth, frameDesign.nativeData, simulationScenario, chartPage, facePageIds);
     if (frameDesign.weatherIndicator?.enabled) {
       if (!frameDesign.nativeData?.weather_temp) await drawWeatherTemperaturePreview(frame, previewWidth, frameDesign.weatherIndicator, simulationScenario?.values?.weather_temp);
       const url = await weatherPreviewDataUrl(
@@ -4168,7 +4262,7 @@ export function WatchfaceEditor({
               studioOptionsForResolution(next.options, next.details),
               next.loadAssets
             );
-            await drawNativeDataPreview(frame, next.previewWidth, next.nativeData, next.scenario, next.chartPage);
+            await drawNativeDataPreview(frame, next.previewWidth, next.nativeData, next.scenario, next.chartPage, next.facePages);
             if (next.weather?.enabled) {
               if (!next.nativeData?.weather_temp) await drawWeatherTemperaturePreview(frame, next.previewWidth, next.weather, next.scenario?.values?.weather_temp);
               const url = await weatherPreviewDataUrl(
@@ -4259,6 +4353,7 @@ export function WatchfaceEditor({
       weather: previewMode === "current" ? design.weatherIndicator : undefined,
       nativeData: design.nativeData,
       chartPage,
+      facePages: facePageIds,
       previewWidth,
       loadAssets,
       dragCommitId: dragVisualRef.current?.awaitingCommitId ?? null
@@ -4271,6 +4366,7 @@ export function WatchfaceEditor({
     design.weatherIndicator,
     design.nativeData,
     chartPage,
+    facePageIds,
     previewMode,
     previewWidth,
     loadAssets,
@@ -6350,17 +6446,35 @@ export function WatchfaceEditor({
     if (isPositionLocked("native:chart")) return;
     setDesign(prev => {
       const current = prev.nativeData?.chart;
-      return current ? { ...prev, nativeData: { ...prev.nativeData, chart: addChartPage(current, pageId, { width: previewWidth, height: previewHeight }) } } : prev;
+      if (!current) return prev;
+      const modes = { ...prev.chartPageModes };
+      // A removed template page comes back with the template's own readouts.
+      const restore = modes[pageId] === "removed" && chartReadouts.some(source => chartReadoutPage(source) === pageId);
+      delete modes[pageId];
+      return { ...prev, chartPageModes: Object.keys(modes).length ? modes : undefined,
+        nativeData: restore ? prev.nativeData : { ...prev.nativeData, chart: addChartPage(current, pageId, { width: previewWidth, height: previewHeight }) } };
     });
   }
-  function removeChartPageFromFace(pageId: string) {
-    const chart = design.nativeData?.chart;
+  /**
+   * Takes a page off the watch, hidden or not. Studio readouts on it leave the
+   * layer; the template's own are deleted on export (design.chartPageModes).
+   */
+  async function removeChartPageFromFace(pageId: string) {
+    let chart = design.nativeData?.chart;
     if (!chart || isPositionLocked("native:chart")) return;
-    if (!removeChartPage(chart, pageId)) { onError(t("The chart needs at least one page. Delete the chart layer to remove it.")); return; }
-    setDesign(prev => {
-      const current = prev.nativeData?.chart, next = current && removeChartPage(current, pageId);
-      return next ? { ...prev, nativeData: { ...prev.nativeData, chart: next } } : prev;
-    });
+    if (!removeChartPage(chart, pageId)) {
+      // The layer edits this page's last readout: edit one of the template's other pages first.
+      const other = chartReadouts.find(source => chartReadoutPage(source) !== pageId && !chart!.removedReadouts?.includes(source)
+        && design.chartPageModes?.[chartReadoutPage(source) ?? ""] !== "removed");
+      const recovered = other && modeSourceDetails ? await recoverChartGroup(modeSourceDetails, loadAssets, other).catch(() => null) : null;
+      if (!recovered) { onError(t("The chart needs at least one page. Delete the chart layer to remove it.")); return; }
+      chart = swapChartReadout(chart, recovered);
+    }
+    const next = removeChartPage(chart, pageId);
+    if (!next) return;
+    const fromTemplate = chartReadouts.some(source => chartReadoutPage(source) === pageId);
+    setDesign(prev => ({ ...prev, nativeData: { ...prev.nativeData, chart: next },
+      ...(fromTemplate ? { chartPageModes: { ...prev.chartPageModes, [pageId]: "removed" as const } } : {}) }));
   }
   /** Takes a readout Studio added off the chart; the template's own readouts stay. */
   async function removeChartReadout(source: string) {
@@ -6496,11 +6610,13 @@ export function WatchfaceEditor({
         source, editing: source === current, hidden: !present.has(source) || hiddenOf(source), missing: !present.has(source)
       }));
       const bars = page.id === "barometer" || page.id === "tide";
-      const on = bars ? barsOn : rows.some(row => !row.hidden);
-      if (!on && !rows.some(row => !row.missing)) return [];
+      const removed = design.chartPageModes?.[page.id] === "removed";
+      // A page whose readouts are all hidden stays on the watch until it is removed.
+      const on = bars ? barsOn : !removed && rows.some(row => !row.missing);
+      if (removed || !on && !rows.some(row => !row.missing)) return [];
       return [{ page: page.id, on, rows: on || bars ? rows.filter(row => !row.missing || on) : rows.filter(row => !row.missing) }];
     });
-  }, [design.nativeData, chartReadouts]);
+  }, [design.nativeData, design.chartPageModes, chartReadouts]);
   // Fields the watch hides on some chart pages (weather on the sun and moon pages), by page.
   const chartPageFields = useMemo(() => {
     const byPage: Record<string, string[]> = {};
@@ -7628,7 +7744,7 @@ export function WatchfaceEditor({
       exportOptions,
       loadAssets
     );
-    await drawNativeDataPreview(archivePreview, snapshotBaseResolution?.width ?? previewWidth, designSnapshot.nativeData, scenario, chartPage);
+    await drawNativeDataPreview(archivePreview, snapshotBaseResolution?.width ?? previewWidth, designSnapshot.nativeData, scenario, chartPage, facePageIds);
     if (designSnapshot.weatherIndicator?.enabled) {
       if (!designSnapshot.nativeData?.weather_temp) await drawWeatherTemperaturePreview(archivePreview, snapshotBaseResolution?.width ?? previewWidth, designSnapshot.weatherIndicator, scenario?.values?.weather_temp);
       const url = await weatherPreviewDataUrl(
@@ -9469,6 +9585,19 @@ export function WatchfaceEditor({
         layerMatchesSearch(layer.label)
     )
   ).filter((section) => section.layers.length > 0);
+  // The template's chart pages show like a chart layer's: a Chart row under
+  // Chart pages with its pages and readouts nested in Back order.
+  // A turned-off Chart layer lists them under its own row instead.
+  const showTemplateChart = Boolean(templatePages && !design.nativeData?.chart && !layerSearch && (templatePages.length || minMaxNeedsDailyPage));
+  const layerSectionsWithTemplateChart = !showTemplateChart || searchedLayerSections.some(section => section.label === "Chart pages")
+    ? searchedLayerSections
+    : (() => {
+      const later = ["Indicators", "Artwork", "Template assets", "Always-on assets"];
+      const at = searchedLayerSections.findIndex(section => later.includes(section.label));
+      const sections = [...searchedLayerSections];
+      sections.splice(at < 0 ? sections.length : at, 0, { ...sections[0], label: "Chart pages", layers: [] });
+      return sections;
+    })();
   const layerSearchIsEmpty =
     Boolean(layerSearch) &&
     searchedEditorGroups.length === 0 &&
@@ -9815,8 +9944,9 @@ export function WatchfaceEditor({
                 );
                 })
                 : null}
-              {searchedLayerSections.map(({ label: group, layers: groupedLayers }) => {
+              {layerSectionsWithTemplateChart.map(({ label: group, layers: groupedLayers }) => {
                 const collapsed = !layerSearch && collapsedLayerSections.has(group);
+                const templateChartHere = group === "Chart pages" && showTemplateChart;
                 return (
                   <Fragment key={group}>
                     <li className="wf-layer-group">
@@ -9833,10 +9963,11 @@ export function WatchfaceEditor({
                         />
                         <span>{t(group)}</span>
                         <span className="wf-layer-section-count">
-                          {groupedLayers.length}
+                          {groupedLayers.length + (templateChartHere ? 1 : 0)}
                         </span>
                       </button>
                     </li>
+                    {!collapsed && templateChartHere ? renderTemplateChartRows() : null}
                     {collapsed ? null : groupedLayers.map((layer) => {
                     const authoredLayer =
                       layer.kind === "customSprite" ||
@@ -9957,7 +10088,8 @@ export function WatchfaceEditor({
                         ) : null}
                       </span>
                     </li>
-                    {layer.nativeDataId === "chart" ? chartLayerPages.map(({ page, on, rows }) => {
+                    {layer.nativeDataId === "chart" && !design.nativeData?.chart?.enabled ? renderTemplateChartRows(false) : null}
+                    {layer.nativeDataId === "chart" && design.nativeData?.chart?.enabled ? chartLayerPages.map(({ page, on, rows }) => {
                       const first = rows.find(row => !row.missing && !row.hidden) ?? rows.find(row => !row.missing);
                       const showsPage = rows.some(row => row.editing);
                       return (
@@ -9974,7 +10106,7 @@ export function WatchfaceEditor({
                             }}
                           >
                             <span className="watchface-layer-name">{page === "daily-a" ? t("Daily A") : page === "daily-b" ? t("Daily B") : page === "sun" ? t("Sun") : page === "moon" ? t("Moon") : page === "barometer" ? t("Barometer") : t("Tide")}</span>
-                            <span className="wf-layer-subrow-page">{!on ? t("Off") : rows.length ? "" : t("Graph only")}</span>
+                            <span className="wf-layer-subrow-page">{!on ? t("Off") : !rows.length ? t("Graph only") : rows.every(row => row.hidden) && !(page === "barometer" || page === "tide") ? t("Nothing visible") : ""}</span>
                           </button>
                         </li>
                         {rows.map((row) => (
@@ -12590,13 +12722,15 @@ export function WatchfaceEditor({
             chartReadouts={layer.nativeDataId === "chart" ? chartReadouts : undefined}
             pageFields={layer.nativeDataId === "chart" ? chartPageFields : undefined}
             onSelectField={id => { selectEditorItem(`native:${id}`); }}
-            fieldPages={layer.nativeDataId !== "chart" ? nativeLayerChartPages(layer.nativeDataId, design.nativeData) : undefined}
+            fieldPages={layer.nativeDataId !== "chart" ? nativeLayerChartPages(layer.nativeDataId, design.nativeData, facePageIds) : undefined}
+            onAddDailyPage={facePageIds ? () => setChartPageMode("daily-a", "hidden") : undefined}
             onChartGroup={layer.nativeDataId === "chart" ? source => { void selectChartGroup(source); } : undefined}
             onAddReadout={layer.nativeDataId === "chart" ? addChartReadout : undefined}
             onRemoveReadout={layer.nativeDataId === "chart" ? source => { void removeChartReadout(source); } : undefined}
             onShowReadout={layer.nativeDataId === "chart" ? (source, shown) => { void showChartReadout(source, shown); } : undefined}
             onAddPage={layer.nativeDataId === "chart" ? addChartPageToFace : undefined}
-            onRemovePage={layer.nativeDataId === "chart" ? removeChartPageFromFace : undefined}
+            onRemovePage={layer.nativeDataId === "chart" ? pageId => { void removeChartPageFromFace(pageId); } : undefined}
+            removedPages={layer.nativeDataId === "chart" ? NATIVE_CHART_PAGES.filter(page => design.chartPageModes?.[page.id] === "removed").map(page => page.id) : undefined}
             takenReadouts={layer.nativeDataId === "chart" ? NATIVE_CHART_SOURCES.filter(source => design.nativeData?.[source.id]?.enabled).map(source => source.id) : undefined}
             onMakeFixed={layer.nativeDataId === "chart" && previewMode === "current" ? source => { void makeChartReadoutFixed(source); } : undefined}
             onError={onError}

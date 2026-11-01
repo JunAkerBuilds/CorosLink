@@ -388,3 +388,60 @@
   font-size: 10.5px;
   font-weight: 600;
 }
+
+/* Watch pages: chart pages a template keeps without a chart layer (templateChartPages). */
+.watchface-shell .wf-layer-list > li.wf-watch-pages-hint,
+.watchface-shell .wf-layer-list > li.wf-watch-pages-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding: 2px 10px 8px 12px;
+}
+
+.watchface-shell .wf-layer-list > li.wf-watch-pages-hint.is-page {
+  padding-left: 54px;
+}
+
+.watchface-shell :is(.wf-watch-pages-hint, .wf-watch-pages-add) p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--wf-text-xs);
+  line-height: 1.45;
+}
+
+.watchface-shell .wf-watch-pages-add .secondary-button {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.watchface-shell .watchface-layer-row.wf-watch-page-row,
+.watchface-shell .watchface-layer-row.wf-watch-page-readout {
+  cursor: default;
+}
+
+.watchface-shell .watchface-layer-row.wf-watch-page-row {
+  font-weight: 600;
+}
+
+.watchface-shell .watchface-layer-row.wf-watch-page-row .wf-layer-state {
+  margin-left: auto;
+  color: var(--text-secondary);
+}
+
+.watchface-shell .wf-field-pages.is-warning strong {
+  color: var(--warning-text);
+}
+
+.watchface-shell .wf-field-pages.is-warning .secondary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Every template page row keeps the same action column, so states line up. */
+.watchface-shell .wf-layer-row-actions.wf-watch-page-actions {
+  min-width: 53px;
+  justify-content: flex-end;
+}
