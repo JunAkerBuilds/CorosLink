@@ -4,7 +4,7 @@ from unittest import mock
 from pathlib import Path
 from types import SimpleNamespace
 from coros_ble_protocol import ProtocolError
-from coros_ble_music import MusicPageReceiver, music_frames, valid_music_delete_file, decode_usb_access, decode_watch_interaction
+from coros_ble_music import MusicPageReceiver, music_frames, valid_music_delete_file, valid_netease_delete_block, decode_usb_access, decode_watch_interaction
 from coros_ble_route import send_file_block, validate_file_block, WATCHFACE_FILE, MUSIC_DELETE_FILE
 
 sys.modules.setdefault('bleak', SimpleNamespace(BleakClient=object, BleakScanner=object))
@@ -108,6 +108,17 @@ class TransferTests(unittest.IsolatedAsyncioTestCase):
         validate_file_block(DELETE_HEADER, DELETE_FILE, MUSIC_DELETE_FILE)
         session, watch = session_with()
         self.assertEqual(await session.file_block(DELETE_HEADER, DELETE_FILE, MUSIC_DELETE_FILE), bytes([1, 1, 0, 9]))
+
+    def test_netease_delete_is_its_own_strict_shape(self):
+        # One song from a playlist read on a PACE Pro, with the 21-byte header (category 3 at +16) the watch accepted.
+        file = bytes.fromhex('4846005d000000003f000000af993273485300030000000082492c000000230000002300000001000000c01a1f0000000a1d120833363346353830311a08443133334437304520c0e78fc1012a0100')
+        header = bytes.fromhex('78005d000000004f004f00000020a10d03000003cf')
+        self.assertTrue(valid_netease_delete_block(header, file))
+        validate_file_block(header, file, MUSIC_DELETE_FILE)
+        self.assertFalse(valid_music_delete_file(file))
+        self.assertFalse(valid_netease_delete_block(header[:16] + b'\x00' + header[17:], file))
+        self.assertFalse(valid_netease_delete_block(header, file[:-1] + bytes([file[-1] ^ 1])))
+        with self.assertRaises(ProtocolError): validate_file_block(header, file[:-1] + bytes([file[-1] ^ 1]), MUSIC_DELETE_FILE)
 
     async def test_music_inventory_reads_every_block(self):
         music = bytes((i * 7) & 255 for i in range(620))

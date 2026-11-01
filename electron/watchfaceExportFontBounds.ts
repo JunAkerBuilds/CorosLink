@@ -1,6 +1,46 @@
+import { decodePng, encodePng } from "./watchfaceCompiler/png";
+
 export interface WatchfaceExportEntry {
   name: string;
   data: Buffer;
+}
+
+const GENERATED_FONT_FRAME = /^watchface_\d+x\d+\/(?:studio\/[^/]+|cl_[^/]+)\/\d{2}\.png$/i;
+const PNG_SIGNATURE = "89504e470d0a1a0a";
+
+/**
+ * A COROS frame list stores one width and height for all its frames, taken
+ * from the first, so a narrower frame is read at the wrong row stride and
+ * drawn as a slanted smear. Generated fonts (per-glyph tracking trims each
+ * digit to its own width) are padded, centered, to their folder's largest
+ * frame. Uniform folders are returned byte for byte.
+ */
+export function padGeneratedWatchfaceFontFrames(
+  entries: WatchfaceExportEntry[]
+): WatchfaceExportEntry[] {
+  const folders = new Map<string, { width: number; height: number; sizes: Set<string> }>();
+  for (const entry of entries) {
+    if (!GENERATED_FONT_FRAME.test(entry.name)) continue;
+    if (entry.data.length < 24 || entry.data.subarray(0, 8).toString("hex") !== PNG_SIGNATURE) continue;
+    const folder = entry.name.slice(0, entry.name.lastIndexOf("/"));
+    const width = entry.data.readUInt32BE(16), height = entry.data.readUInt32BE(20);
+    const previous = folders.get(folder) ?? { width: 0, height: 0, sizes: new Set<string>() };
+    previous.sizes.add(`${width}x${height}`);
+    folders.set(folder, { width: Math.max(previous.width, width), height: Math.max(previous.height, height), sizes: previous.sizes });
+  }
+  return entries.map((entry) => {
+    const folder = folders.get(entry.name.slice(0, entry.name.lastIndexOf("/")));
+    if (!folder || folder.sizes.size < 2 || !GENERATED_FONT_FRAME.test(entry.name)) return entry;
+    if (entry.data.readUInt32BE(16) === folder.width && entry.data.readUInt32BE(20) === folder.height) return entry;
+    const image = decodePng(entry.data);
+    const data = new Uint8Array(folder.width * folder.height * 4);
+    const left = Math.floor((folder.width - image.width) / 2);
+    const top = Math.floor((folder.height - image.height) / 2);
+    for (let y = 0; y < image.height; y++) {
+      data.set(image.data.subarray(y * image.width * 4, (y + 1) * image.width * 4), ((top + y) * folder.width + left) * 4);
+    }
+    return { ...entry, data: encodePng({ width: folder.width, height: folder.height, data }) };
+  });
 }
 
 /**
@@ -9,12 +49,13 @@ export interface WatchfaceExportEntry {
  * Stock template fonts and unrelated rectangles are deliberately untouched.
  */
 export function fitGeneratedWatchfaceFontRects(
-  entries: WatchfaceExportEntry[]
+  input: WatchfaceExportEntry[]
 ): WatchfaceExportEntry[] {
+  const entries = padGeneratedWatchfaceFontFrames(input);
   const fonts = new Map<string, { width: number; height: number }>();
   for (const entry of entries) {
-    if (!/^watchface_\d+x\d+\/(?:studio\/[^/]+|cl_[^/]+)\/\d{2}\.png$/i.test(entry.name)) continue;
-    if (entry.data.length < 24 || entry.data.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a") continue;
+    if (!GENERATED_FONT_FRAME.test(entry.name)) continue;
+    if (entry.data.length < 24 || entry.data.subarray(0, 8).toString("hex") !== PNG_SIGNATURE) continue;
     const folder = entry.name.slice(0, entry.name.lastIndexOf("/"));
     const previous = fonts.get(folder);
     fonts.set(folder, {

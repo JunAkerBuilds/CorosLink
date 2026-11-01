@@ -3867,7 +3867,8 @@ function MediaLibraryTab({
               wifiSyncPanel={bluetoothMusic && nativeBleStatus?.connected && api && typeof api.sendCorosLibraryMusicOverWifi === "function" ?
                 <CorosWifiMusicPanel key={nativeBleStatus.deviceId ?? nativeBleStatus.watchAddress ?? nativeBleStatus.deviceName}
                   api={api} otherBusy={Boolean(busy) || bleMusicBusy} onBusyChange={setWifiSyncBusy}
-                  library={{ allIds: downloads.map(track => track.id), selectedIds: downloads.filter(track => selectedIds.has(track.id)).map(track => track.id) }} /> : null}
+                  library={{ allIds: downloads.map(track => track.id), selectedIds: downloads.filter(track => selectedIds.has(track.id)).map(track => track.id),
+                    filePaths: Object.fromEntries(downloads.map(track => [track.id, track.filePath])) }} /> : null}
             />
           }
           watchPanel={

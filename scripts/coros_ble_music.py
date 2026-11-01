@@ -38,8 +38,9 @@ class MusicPageResult:
 
 
 class MusicPageReceiver:
-    def __init__(self, page, now=None, utc_offset=None):
+    def __init__(self, page, now=None, utc_offset=None, category=0):
         self.page = page
+        self.category = category
         self.now = now
         self.utc_offset = utc_offset
         self.file = bytearray()
@@ -57,7 +58,7 @@ class MusicPageReceiver:
             int(datetime.datetime.now().astimezone().utcoffset().total_seconds())
         zone = int(offset / 900)  # Fifteen-minute units, truncated like Swift's Int division.
         payload = (bytes([MUSIC_FILE]) + integer(len(self.file), 4) + b'\0' + integer(seconds, 4) +
-                   bytes([zone & 255, 3]) + integer(0, 4) + integer(self.page, 4))
+                   bytes([zone & 255, 3]) + integer(self.category, 4) + integer(self.page, 4))
         return music_frames(0x7c, payload)
 
     def accept(self, data, control):
@@ -87,6 +88,7 @@ class MusicPageReceiver:
                     return MusicPageResult(payload=bytes(self.file))
                 self.stage = 'header'
                 return MusicPageResult(frames=self.request_frames())
+            # +12 is 0 for every category (checked on a W332 for 0 and 3); the category travels in the request.
             if not (self.stage == 'header' and len(payload) >= 19 and payload[12] == 0 and
                     payload[15] == MUSIC_FILE and payload[16] == 3):
                 raise ProtocolError('Invalid music inventory header.')
@@ -115,7 +117,7 @@ class MusicPageReceiver:
         if len(self.block) == little(self.header, 4, 2):
             if crc16(self.block) != little(self.header, 10, 2):
                 raise ProtocolError('Invalid music inventory checksum.')
-            # The success bit acknowledges metadata; category 0 at +12 releases its temporary
+            # The success bit acknowledges metadata and releases the watch's temporary
             # listing cache. It does not delete stored music.
             ack = integer(len(self.file), 4) + bytes([1, MUSIC_FILE]) + bytes(10)
             self.file.extend(self.block)
@@ -150,10 +152,74 @@ class MusicDeleteReceiver:
         if len(self.bytes) > 5:
             raise ProtocolError('The watch returned an invalid music delete response.')
         if frame[1] == 0:
-            if not (len(self.bytes) == 5 and self.bytes[0] == 1 and self.bytes[1] == 1 and self.bytes[2] == 0 and
+            # [2] echoes the storage category: 0 local music, 3 NetEase (seen on a W332).
+            if not (len(self.bytes) == 5 and self.bytes[0] == 1 and self.bytes[1] == 1 and self.bytes[2] in (0, 3) and
                     sum(self.bytes[:-1]) & 255 == self.bytes[-1]):
                 raise ProtocolError('The watch returned an invalid music delete response.')
             self.storage = bytes(self.bytes[:-1])
+
+
+def valid_netease_delete_block(header, file):
+    """Removes songs from exactly one NetEase playlist: the 21-byte header with category 3 at +16,
+    HS category 3 and one Music163StorageInfo holding one playlist ID and at least one song ID."""
+    header, file = bytes(header), bytes(file)
+    if not (len(header) == 21 and header[:3] == bytes([0x78, 0, MUSIC_FILE]) and little(header, 3, 4) == 0 and
+            little(header, 7, 2) == len(file) and little(header, 9, 4) == len(file) and
+            little(header, 13, 2) == crc16(file) and sum(file) & 255 == header[15] and
+            header[16:20] == bytes([3, 0, 0, 3]) and sum(header[2:20]) & 255 == header[20] and 48 <= len(file) <= 4096):
+        return False
+    proto = file[48:]
+    if not (file[0:4] == bytes([0x48, 0x46, 0, MUSIC_FILE]) and little(file, 8, 4) == len(file) - 16 and
+            crc16(file[0:14]) == little(file, 14, 2) and crc16(file[16:]) == little(file, 12, 2) and
+            file[16:24] == bytes([0x48, 0x53, 0, 3, 0, 0, 0, 0]) and little(file, 26, 2) == 44 and
+            little(file, 30, 4) == len(file) - 44 and little(file, 34, 4) == len(file) - 44 and
+            little(file, 38, 4) == 1 and crc16(file[16:42]) == little(file, 42, 2) and
+            little(file, 44, 4) == len(proto) and crc16(proto) == little(file, 24, 2)):
+        return False
+    offset = 0
+
+    def varint():
+        nonlocal offset
+        value = 0
+        for index in range(5):
+            if offset >= len(proto):
+                return None
+            byte = proto[offset]
+            offset += 1
+            value |= (byte & 127) << (index * 7)
+            if byte & 128 == 0:
+                return value if value <= 0xffffffff else None
+        return None
+
+    if varint() != 10:
+        return False
+    size = varint()
+    if size is None or size != len(proto) - offset:
+        return False
+    playlists = songs = 0
+    allowed = set(b'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_')
+    while offset < len(proto):
+        key = varint()
+        if key in (8, 32):
+            if varint() is None:
+                return False
+        elif key in (18, 26):
+            count = varint()
+            if count is None or not 0 < count <= 32 or count > len(proto) - offset or not set(proto[offset:offset + count]) <= allowed:
+                return False
+            offset += count
+            if key == 18:
+                playlists += 1
+            else:
+                songs += 1
+        elif key == 42:
+            count = varint()
+            if count is None or count > 64 or count > len(proto) - offset:
+                return False
+            offset += count
+        else:
+            return False
+    return playlists == 1 and 0 < songs <= 500
 
 
 def valid_music_delete_file(file):

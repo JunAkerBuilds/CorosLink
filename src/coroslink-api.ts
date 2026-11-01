@@ -303,12 +303,18 @@ export interface CorosLinkApi {
   exportCorosActivityScreenBackup?: (input: { backupId: string }) => Promise<{ saved: boolean }>;
   getCorosMusicInventory: () => Promise<import("../electron/corosBleMusicTypes").CorosBleMusicInventory>;
   getCorosWifiMusicStatus: () => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
-  sendCorosMusicOverWifi: () => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
-  sendCorosLibraryMusicOverWifi: (ids: string[]) => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
+  sendCorosMusicOverWifi: (options?: import("../electron/corosWifiMusicTypes").CorosWifiMusicOptions) => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
+  sendCorosLibraryMusicOverWifi: (ids: string[], options?: import("../electron/corosWifiMusicTypes").CorosWifiMusicOptions) => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
   importCorosWifiMusicBackup: () => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
   cancelCorosWifiMusicSync: () => Promise<void>;
   restoreCorosWifiMusicSettings: () => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
+  getCorosNeteasePlaylists: () => Promise<import("../electron/corosWifiMusicTypes").CorosNeteasePlaylistLabel[]>;
+  /** Names a NetEase playlist on the connected watch. Local only: the watch stores playlist IDs, not names. */
+  renameCorosNeteasePlaylist: (id: string, name: string) => Promise<import("../electron/corosWifiMusicTypes").CorosNeteasePlaylistLabel[]>;
+  getCorosNeteaseToolbox: () => Promise<import("../electron/corosWatchToolbox").NeteaseToolboxState>;
+  showCorosNeteaseInToolbox: () => Promise<import("../electron/corosWatchToolbox").NeteaseToolboxState>;
   deleteCorosMusicTrack: (target: import("../electron/corosBleMusicTypes").CorosBleMusicDeleteTarget) => Promise<import("../electron/corosBleMusicTypes").CorosBleMusicDeleteResult>;
+  deleteAllCorosMusic?: (inventoryId: string) => Promise<import("../electron/corosBleMusicTypes").CorosBleMusicDeleteAllResult>;
   disconnectCorosNativeBle: () => Promise<CorosNativeBleSnapshot>;
   createCorosPhonePairingCode?: () => Promise<import("../electron/corosNativeBleTypes").CorosPhonePairingCode>;
   startCorosWatchfacePhoneSend?: (input: import("../electron/watchfacePhoneSendTypes").WatchfacePhoneSendInput) => Promise<import("../electron/watchfacePhoneSendTypes").WatchfacePhoneSend>;

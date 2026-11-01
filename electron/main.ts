@@ -33,6 +33,7 @@ import { corosNativeBle } from "./corosNativeBleService";
 import { registerCorosActivityScreenIpc } from "./corosActivityScreenIpc";
 import { registerCorosWatchKeyBackupIpc } from "./corosWatchKeyBackupIpc";
 import { resolveWifiMusicLibraryFiles } from "./corosWifiMusicLibrary";
+import { validateWifiMusicOptions } from "./corosWifiMusicTypes";
 import { getCorosWatchfaceCompiler } from "./corosWatchfaceCompiler";
 import { getWatchfaceTarget } from "./watchfaceTargets";
 import { isWebUrl } from "./externalLinks";
@@ -1309,17 +1310,19 @@ function registerIpcHandlers(): void {
   };
   registerCorosActivityScreenIpc({ ipc: ipcMain, isPackaged: () => app.isPackaged, api: corosNativeBle,
     owner: event => mainWindowSender(event, "activity-screen sync"), saveDialog: (owner, options) => dialog.showSaveDialog(owner, localizeDialogOptions(options)) });
-  ipcMain.handle("corosBle:wifiMusicSend", event => {
+  ipcMain.handle("corosBle:wifiMusicSend", (event, input: unknown) => {
     const owner = audioOwner(event);
+    const options = validateWifiMusicOptions(input);
     return corosNativeBle.sendMusicOverWifi(async () => {
-      const result = await dialog.showOpenDialog(owner, localizeDialogOptions({ title: "Send MP3s to watch podcasts over Wi-Fi", properties: ["openFile", "multiSelections"],
+      const result = await dialog.showOpenDialog(owner, localizeDialogOptions({ title: options.destination === "netease" ? "Send MP3s to a watch NetEase playlist over Wi-Fi" : "Send MP3s to watch podcasts over Wi-Fi", properties: ["openFile", "multiSelections"],
         filters: [{ name: "MP3 audio", extensions: ["mp3"] }] }));
       return result.canceled ? null : result.filePaths;
-    });
+    }, options);
   });
-  ipcMain.handle("corosBle:wifiMusicLibrarySend", (event, ids: unknown) => {
+  ipcMain.handle("corosBle:wifiMusicLibrarySend", (event, ids: unknown, input: unknown) => {
     audioOwner(event);
-    return corosNativeBle.sendMusicOverWifi(async () => resolveWifiMusicLibraryFiles(ids, getDownloadById));
+    const options = validateWifiMusicOptions(input);
+    return corosNativeBle.sendMusicOverWifi(async () => resolveWifiMusicLibraryFiles(ids, getDownloadById), options);
   });
   ipcMain.handle("corosBle:wifiMusicBackup", event => {
     const owner = audioOwner(event);
@@ -1331,6 +1334,10 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle("corosBle:wifiMusicCancel", event => { audioOwner(event); corosNativeBle.cancelWifiMusicSync(); });
   ipcMain.handle("corosBle:wifiMusicRestore", event => { audioOwner(event); return corosNativeBle.restoreWifiMusicSettings(); });
+  ipcMain.handle("corosBle:neteaseToolbox", () => { requireBleMusic(); return corosNativeBle.neteaseToolbox(); });
+  ipcMain.handle("corosBle:neteasePlaylists", () => { requireBleMusic(); return corosNativeBle.neteasePlaylists(); });
+  ipcMain.handle("corosBle:neteasePlaylistRename", (event, id: unknown, name: unknown) => { audioOwner(event); return corosNativeBle.renameNeteasePlaylist(id, name); });
+  ipcMain.handle("corosBle:neteaseToolboxShow", event => { audioOwner(event); return corosNativeBle.showNeteaseInToolbox(); });
   ipcMain.handle("corosBle:deleteMusic", (event, target: import("./corosBleMusicTypes").CorosBleMusicDeleteTarget) => {
     requireBleMusic();
     return corosNativeBle.deleteMusic(target, async track => {
@@ -1338,8 +1345,22 @@ function registerIpcHandlers(): void {
       if (!owner || owner.isDestroyed()) return false;
       const result = await dialog.showMessageBox(owner, localizeDialogOptions({
         type: "warning", buttons: ["Cancel", "Delete from watch"], defaultId: 0, cancelId: 0,
-        message: `Delete “${track.name}” from the watch?`,
-        detail: "This removes the MP3 from your watch over Bluetooth. It cannot be undone. Your local library is kept.",
+        message: track.message ?? `Delete “${track.name}” from the watch?`,
+        detail: "This removes the audio from your watch over Bluetooth. It cannot be undone. Your local library is kept.",
+        noLink: true,
+      }));
+      return result.response === 1;
+    });
+  });
+  ipcMain.handle("corosBle:deleteAllMusic", (event, inventoryId: string) => {
+    requireBleMusic();
+    return corosNativeBle.deleteAllMusic(inventoryId, async count => {
+      const owner = BrowserWindow.fromWebContents(event.sender);
+      if (!owner || owner.isDestroyed()) return false;
+      const result = await dialog.showMessageBox(owner, localizeDialogOptions({
+        type: "warning", buttons: ["Cancel", "Delete from watch"], defaultId: 0, cancelId: 0,
+        message: `Delete ${count} tracks from the watch?`,
+        detail: "This deletes all local MP3s, podcasts and NetEase playlists in the watch library, including those hidden by search. It cannot be undone. Your local library is kept.",
         noLink: true,
       }));
       return result.response === 1;

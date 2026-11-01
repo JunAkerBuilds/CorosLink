@@ -7,9 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.72] - 2026-11-01
+
 ### Added
 
+- **Your own MP3s in the watch's NetEase player, over Wi-Fi.** In Media → Library, choose NetEase playlist as the Wi-Fi destination, then open or create a playlist under On watch and add songs from your library; they play from that playlist in the watch's NetEase player. CorosLink transfers only your files and doesn't connect to NetEase or its catalogue. The watch looks up each song's address over HTTPS through the CorosLink relay, then downloads the MP3 straight from the computer, with settings backup, cancellation and restoration as for Podcasts. Verified on a PACE Pro (3.2008.0): a song downloaded into a NetEase playlist and played.
+- **Show NetEase in the watch's Toolbox.** NetEase playlists are only reachable from the watch's Toolbox, which hides NetEase outside its region. Choosing the NetEase destination checks the Toolbox (read-only), and Show NetEase on watch turns on the watch's NetEase feature switch so the watch adds it. The COROS app may remove it again when it syncs.
 - **Add upcoming races yourself.** Races → Add race now has a Past race / Upcoming race switch. An upcoming race needs only a name, date and distance; goal time, priority (A/B/C), location and notes are optional. It joins Up next and the Coach plans around it, as with races the Coach adds. Before, only the Coach could add one, and the form asked for a finish time.
+
+### Changed
+
+- **Automatic Wi-Fi audio batches.** Send all or selected tracks with one click, up to 500 tracks and 1 GB per queue. CorosLink sends downloads of up to 100 songs and 256 MB, so 32 songs go in one download and the watch's finished screen needs one button press. Between downloads it asks you to press a button on the watch and waits up to 5 minutes. NetEase batches stay in one playlist, progress covers the whole queue, and settings are restored between batches. Cancellation or failure stops the rest of the queue.
+- **Reuse Wi-Fi audio settings backups.** The saved backup for the same watch and COROS account no longer expires after 24 hours. Refresh it after changing account, region or watch download settings; encrypted storage, identity checks and settings restoration remain in place.
+
+### Fixed
+
+- **Bluetooth Read music lists NetEase songs.** They are read from the watch's NetEase storage (category 3), which the podcast query never covered. The watch stores no titles there, so songs show the names saved when CorosLink sent them, or their file IDs. If the NetEase list can't be read, the panel says so instead of showing none.
+- **NetEase playlists like a music app.** Under On watch, NetEase playlists are a compact list; open one to see its songs, rename or delete it, and add songs from your library right there (Add selected, Add all). New playlist creates one. CorosLink remembers playlist names, since the watch keeps only IDs.
+- **Songs sent over Wi-Fi show as Synced.** After each NetEase send CorosLink reads the watch over Bluetooth, so the playlist lists the new songs and library tracks found in a NetEase playlist or in Podcasts show Synced. Adding to a playlist skips songs it already has, so retrying a stopped queue doesn't duplicate them.
+- **Delete NetEase songs and playlists.** Each NetEase song and playlist in the watch library has a delete button, and Delete all now includes NetEase. Like the COROS app, CorosLink removes songs from a playlist; the watch deletes a song's file once no playlist uses it and drops a playlist once it's empty. Each delete is confirmed first and checked with a fresh read.
+- **Watch library grouped by where audio plays.** Read music shows Music, Podcasts and one group per NetEase playlist, named when CorosLink created it.
+- **A more compact Wi-Fi audio panel.** Podcasts and NetEase are a two-way switch, the Toolbox status sits beside it, and the setup note and backup link share one line, so the track list keeps room to scroll. Transfer progress stays inside the open playlist for the whole send.
+- **Failed and cancelled Wi-Fi audio sends no longer stay paused on the watch.** CorosLink now removes an unfinished download from the watch's queue when it restores settings, instead of pausing it. If the watch refuses (its USB cable is in), a running download is paused as before.
+- **Wi-Fi audio no longer stops on a screen transition.** CorosLink waits up to 30 seconds for the watch's busy-screen flag to clear before a send, and up to 5 minutes between batches, where the watch keeps its download-finished screen up until a button press. Both waits can be cancelled. Other download blockers are still enforced. Failed transfers show their completed file count.
+- **Read downloaded podcasts over Bluetooth.** Read/Refresh music now queries the watch's separate podcast inventory alongside its local MP3 list. A watch with podcasts and an empty Music folder shows those podcasts instead of zero tracks. Older uploads show file IDs when titles are unavailable; new transfers retain local display names. Verified with 20 podcast records read from the connected W332.
+- **Delete podcasts over Bluetooth.** Podcast rows have a confirmation-protected delete action and refresh the watch inventory to verify removal. The recovered command has not yet been verified on physical hardware.
+- **Delete all watch audio.** Delete all removes the listed local MP3s and podcasts after one confirmation, stopping on the first failure and reporting the number verified. NetEase tracks are excluded.
 
 ## [0.1.71] - 2026-10-31
 

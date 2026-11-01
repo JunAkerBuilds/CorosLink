@@ -1,10 +1,11 @@
 import path from "node:path";
+import { WIFI_MUSIC_MAX_FILES } from "./corosWifiMusicTypes";
 
 /** Resolve library IDs in the main process. Renderer-supplied paths are never used. */
 export function resolveWifiMusicLibraryFiles(input: unknown, lookup: (id: string) => { filePath: string } | undefined): string[] {
-  if (!Array.isArray(input) || input.length < 1 || input.length > 20 ||
+  if (!Array.isArray(input) || input.length < 1 || input.length > WIFI_MUSIC_MAX_FILES ||
       input.some(id => typeof id !== "string" || !/^[\w-]{1,128}$/.test(id)) || new Set(input).size !== input.length) {
-    throw new Error("Select between 1 and 20 different library tracks to send over Wi-Fi.");
+    throw new Error(`Select between 1 and ${WIFI_MUSIC_MAX_FILES} different library tracks to send over Wi-Fi.`);
   }
   const files = input.map(id => {
     const track = lookup(id);

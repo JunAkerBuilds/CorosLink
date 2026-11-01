@@ -476,12 +476,12 @@ class SystemSession:
             await self.write_control(frame)
             await asyncio.sleep(0.003)
 
-    async def music_inventory_page(self, page):
-        """Read-only music metadata (storage category 0, SFT file 93), one page."""
-        if not isinstance(page, int) or not 0 <= page < 256:
+    async def music_inventory_page(self, page, category=0):
+        """Read-only storage metadata (SFT file 93): category 0 local music by page, 3 NetEase whole (page -1)."""
+        if not isinstance(page, int) or not ((category == 0 and 0 <= page < 256) or (category == 3 and page == -1)):
             raise ProtocolError('The music inventory request is invalid or the watch is disconnected.')
         bulk = self.connected_channels()
-        receiver = MusicPageReceiver(page)
+        receiver = MusicPageReceiver(page, category=category)
         self.music_queue = asyncio.Queue(maxsize=512)
         try:
             for frame in receiver.request_frames():
@@ -634,7 +634,7 @@ async def main():
                     await session.send_notification(request.get('frames'))
                     result = session.state
                 elif operation == 'musicInventoryPage':
-                    payload = await session.music_inventory_page(request.get('page'))
+                    payload = await session.music_inventory_page(request.get('page'), request.get('category', 0))
                     result = session.state
                     extra['payload'] = base64.b64encode(payload).decode()
                 elif operation == 'syncFileBlock':

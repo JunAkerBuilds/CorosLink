@@ -1,0 +1,304 @@
+/* NetEase playlists in the On-watch panel (WatchNeteasePlaylists): a compact list that opens one playlist.
+   The Wi-Fi panel's add-songs controls render inside the open playlist (.wnp-add) through a portal. */
+.wnp {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.wnp-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  padding: 0 16px;
+}
+
+.wnp-head > .wnp-new { grid-column: 2; grid-row: 1; }
+
+.wnp-head > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.wnp-head > small {
+  grid-column: 1 / -1;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wnp-new.text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wnp-create { padding: 0 16px; }
+
+.wnp-list {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0 8px;
+  list-style: none;
+}
+
+.wnp-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.wnp-row:hover:not(:disabled) { background: rgba(255, 255, 255, 0.05); }
+.wnp-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.wnp-row:disabled { cursor: default; opacity: 0.6; }
+.wnp-row:hover:not(:disabled) .wnp-chevron { color: var(--text-primary, inherit); }
+
+.wnp-art.track-avatar { box-shadow: none; }
+.wnp-art--row.track-avatar { width: 32px; height: 32px; border-radius: 7px; font-size: 13px; }
+.wnp-art--hero.track-avatar { width: 40px; height: 40px; border-radius: 9px; font-size: 16px; }
+
+.wnp-row-text { display: grid; min-width: 0; }
+
+.wnp-row-text strong,
+.wnp-row-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wnp-row-text strong { font-size: 13px; font-weight: 600; line-height: 1.35; }
+.wnp-row-text small { color: var(--text-secondary); font-size: 11px; line-height: 1.35; }
+.wnp-row.is-absent .wnp-art,
+.wnp-row.is-absent strong { opacity: 0.6; }
+.wnp-chevron { color: var(--text-muted); transition: color 0.12s ease; }
+
+.wnp-empty,
+.ble-music-groups p.wnp-empty {
+  margin: 0;
+  padding: 0 16px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* An open playlist. */
+.wnp-detail { gap: 8px; }
+
+.wnp-detail-head {
+  display: grid;
+  grid-template-columns: 28px 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 0 10px;
+}
+
+.wnp-detail-head .netease-playlist-name-form { grid-column: 3 / -1; }
+
+.wnp-detail-title { display: grid; min-width: 0; }
+
+.wnp-detail-title h4 {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.wnp-detail-title h4 span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.wnp-detail-title small {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wnp-back.icon-button,
+.wnp-icon.icon-button {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.wnp-back.icon-button { width: 28px; height: 28px; color: var(--text-secondary); }
+.wnp-back.icon-button:hover:not(:disabled),
+.wnp-icon.icon-button:hover:not(:disabled) { color: var(--text-primary, inherit); }
+.wnp-delete.icon-button:hover:not(:disabled),
+.wnp-song-delete.icon-button:hover:not(:disabled) { color: var(--danger, #d9534f); }
+
+.wnp-add { padding: 0 16px; }
+.wnp-add:empty { display: none; }
+
+.wnp-songs {
+  margin: 0;
+  padding: 0 16px;
+  list-style: none;
+}
+
+.wnp-songs li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 26px;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.wnp-song-index {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.wnp-song-name {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wnp-song-delete.icon-button { opacity: 0; transition: opacity 0.12s ease, color 0.12s ease; }
+.wnp-songs li:hover .wnp-song-delete,
+.wnp-song-delete:focus-visible,
+.wnp-song-delete:has(.spin) { opacity: 1; }
+
+/* The Wi-Fi panel's add-songs controls, shown inside the open playlist. */
+.netease-send {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  font-size: 12px;
+}
+
+.netease-send > .ble-wifi-music-actions { display: contents; }
+.netease-send .ble-wifi-music-actions button { max-width: 100%; white-space: normal; text-align: left; }
+.netease-send .compact-button { min-height: 30px; padding: 0 10px; font-size: 12px; }
+
+.netease-send > p,
+.netease-send > .ble-wifi-music-progress {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.netease-send > .ble-wifi-music-progress { margin-top: 2px; }
+.netease-send > p[role="alert"] { color: var(--danger, #d9534f); }
+.netease-send > p.netease-reading { display: flex; align-items: center; gap: 6px; }
+
+.netease-send .ble-wifi-music-success {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+}
+
+.netease-send .netease-add-primary.secondary-button {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
+  color: var(--accent);
+}
+
+.netease-send .netease-add-primary.secondary-button:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+
+.netease-send .netease-add-primary.secondary-button:disabled {
+  border-color: var(--glass-border);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+/* The Wi-Fi panel's one-line pointer to the open playlist. */
+.ble-wifi-music p.netease-target {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  margin: 8px 0 0;
+  color: var(--text-muted);
+}
+
+.netease-target strong {
+  overflow: hidden;
+  color: var(--text-primary, inherit);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.netease-target svg { flex-shrink: 0; color: var(--accent); }
+
+/* Shared name editor: creating and renaming NetEase playlists. */
+.netease-playlist-name-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.netease-playlist-name-form .compact-button { min-height: 30px; height: 30px; padding: 0 10px; font-size: 12px; }
+
+.netease-playlist-name-form input {
+  min-width: 0;
+  height: 30px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-primary, inherit);
+  font: inherit;
+  font-size: 12px;
+}
+
+.netease-playlist-name-form input:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+.netease-playlist-name-form input[aria-invalid="true"] { border-color: var(--danger, #d9534f); }
+.netease-playlist-name-form .icon-button { width: 30px; height: 30px; }
+
+.netease-playlist-name-form p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--danger, #d9534f);
+  font-size: 11px;
+}
+
+/* On-watch header: the description sits beside Refresh instead of on its own row. */
+.library-panel--watch .ble-music-toolbar { padding: 8px 16px; }
+.ble-music-toolbar > .ble-music-note { flex: 1 1 220px; min-width: 0; padding: 0; line-height: 1.4; }
+.ble-music-toolbar > .ble-music-note svg { flex-shrink: 0; }
+
+:root[data-theme="paper"] .wnp-row:hover:not(:disabled) { background: rgba(38, 34, 28, 0.05); }
+:root[data-theme="paper"] .wnp-songs li { border-top-color: color-mix(in srgb, var(--text-muted) 28%, transparent); }

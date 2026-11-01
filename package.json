@@ -156,7 +156,7 @@
     "test:coros-ble-python": "cd scripts && python3 test-coros-ble-route.py && python3 test-coros-system-ble-transfers.py && python3 test-coros-system-ble.py",
     "test:coros-ble-auth-needs-bumble": "cd scripts && python3 test-coros-ble-auth.py",
     "test:coros-ble-music": "npm run build:electron && node scripts/test-coros-ble-music.mjs && electron scripts/test-coros-music-ui.cjs",
-    "test:coros-wifi-music": "npm run build:electron && node scripts/test-coros-wifi-music.mjs && electron scripts/test-coros-wifi-music-ui.cjs",
+    "test:coros-wifi-music": "npm run build:electron && node scripts/test-coros-wifi-music.mjs && node scripts/test-coros-netease-wifi.mjs && node scripts/test-coros-wireless-audio.mjs && node scripts/test-coros-watch-toolbox.mjs && electron scripts/test-coros-wifi-music-ui.cjs",
     "test:coros-ble-routes": "npm run build:electron && node scripts/test-coros-ble-routes.mjs && node scripts/test-coros-system-ble.mjs",
     "legacy614a:patch": "npm run build:electron && node scripts/patch-legacy614a.mjs",
     "legacy614a:slender": "npm run build:electron && node scripts/build-slender-multidata-legacy.mjs",

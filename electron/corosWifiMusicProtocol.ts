@@ -1,4 +1,5 @@
 import { decodeWifiMapTasks } from "./corosBleWifiProtocol";
+import type { CorosWifiMusicOptions } from "./corosWifiMusicTypes";
 
 const bad = (): never => { throw new Error("Choose a complete COROS download-settings backup for this watch."); };
 
@@ -28,18 +29,29 @@ export function validateNormalDownloadSettings(payload: Buffer): void {
   if (settings.entries.some(e => !/^[a-zA-Z0-9.-]{1,31}$/.test(e.prefix))) bad();
 }
 
-export function encodeLocalDownloadSettings(original: Buffer, prefix: string): Buffer {
+export function encodeLocalDownloadSettings(original: Buffer, prefix: string, destination: CorosWifiMusicOptions["destination"] = "podcasts", lookup?: { prefix: string; token: string }): Buffer {
   if (!/^[0-9.]+:[0-9]+\/[a-f0-9]{6}\/$/.test(prefix) || Buffer.byteLength(prefix) > 31) throw new Error("The local Wi-Fi address is unsupported.");
   validateNormalDownloadSettings(original);
   const s = parseDownloadSettings(original);
-  const hosts = Buffer.from(s.entries.map(e => `${e.type}=${[1, 3].includes(e.type) ? prefix : e.prefix}`).join("&"));
+  if (destination !== "podcasts" && destination !== "netease") throw new Error("Choose an audio destination.");
+  if (destination === "netease" && (!lookup || !/^relay\.coroslink\.com\/[A-Za-z0-9_-]{10}\/$/.test(lookup.prefix) || Buffer.byteLength(lookup.prefix) > 31 || !/^[a-f0-9]{32}$/.test(lookup.token))) {
+    throw new Error("The secure NetEase lookup is unavailable.");
+  }
+  const entries = [...s.entries];
+  // The watch hardcodes HTTPS for service 4. Only that lookup uses the relay.
+  if (destination === "netease" && !entries.some(e => e.type === 4)) entries.push({ type: 4, prefix: lookup!.prefix });
+  const hosts = Buffer.from(entries.map(e => `${e.type}=${e.type === 1 || e.type === 3 ? prefix : destination === "netease" && e.type === 4 ? lookup!.prefix : e.prefix}`).join("&"));
+  if (hosts.length > 255) throw new Error("The watch's download host settings are too long.");
   const field = (b: Buffer) => Buffer.concat([Buffer.from([b.length]), b]);
-  return Buffer.concat([Buffer.from([2, s.serverType]), ...[s.token, s.language, s.mac, hosts, s.country].map(field)]);
+  // Firmware sends accessToken to service 4; use an unrelated ephemeral value
+  // so the watch's original COROS credential never leaves through the relay.
+  return Buffer.concat([Buffer.from([2, s.serverType]), ...[destination === "netease" ? Buffer.from(lookup!.token) : s.token, s.language, s.mac, hosts, s.country].map(field)]);
 }
 
-export function encodePodcastStart(id: string): Buffer {
+export function encodePodcastStart(id: string, destination: CorosWifiMusicOptions["destination"] = "podcasts"): Buffer {
   if (!/^[A-F0-9]{8}$/.test(id)) throw new Error("Invalid audio download identifier.");
-  return Buffer.concat([Buffer.from([10]), Buffer.from(id), Buffer.from([2, 0, 0])]);
+  if (destination !== "podcasts" && destination !== "netease") throw new Error("Choose an audio destination.");
+  return Buffer.concat([Buffer.from([10]), Buffer.from(id), Buffer.from([2, destination === "netease" ? 1 : 0, 0])]);
 }
 
 export function encodePodcastPause(id: string): Buffer {

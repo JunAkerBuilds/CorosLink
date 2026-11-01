@@ -30,6 +30,7 @@ import {
   isLocalTrackOnWatchByIndex,
   sumBytes,
 } from "./libraryUtils";
+import { useWatchMusicInventory } from "./watchMusicInventoryStore";
 import { trackAvatarColor, trackInitial } from "./trackAvatar";
 import "./libraryPanels.css";
 import {
@@ -399,9 +400,12 @@ export function LocalLibraryPanel({
     () => getSearchTerms(deferredSearchQuery),
     [deferredSearchQuery, language],
   );
+  // Songs sent over Wi-Fi (NetEase playlists, Podcasts) count as synced once a Bluetooth read lists them.
+  const wirelessInventory = useWatchMusicInventory();
   const watchIndex = useMemo(
-    () => createWatchTrackNameIndex(watchTracks),
-    [watchTracks, language],
+    () => createWatchTrackNameIndex([...watchTracks, ...(wirelessInventory?.wirelessTracks ?? [])
+      .flatMap((track) => (track.name ? [{ name: track.name }] : []))]),
+    [watchTracks, wirelessInventory, language],
   );
   const localTrackItems = useMemo<LocalTrackSearchItem[]>(
     () =>

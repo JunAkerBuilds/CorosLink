@@ -6,10 +6,15 @@ const {app,BrowserWindow}=require('electron');
 const temp=path.join(os.tmpdir(),`coros-wifi-music-ui-${process.pid}`);
 app.setPath('userData',path.join(temp,'user-data'));app.on('window-all-closed',()=>{});
 app.whenReady().then(async()=>{
+ // Vite treats port 0 as its default dev port. Reserve a random port so an open
+ // CorosLink dev window cannot reconnect to this test's isolated React runtime.
+ const reservation=require('node:net').createServer();
+ await new Promise(resolve=>reservation.listen(0,'127.0.0.1',resolve));
+ const port=reservation.address().port;await new Promise(resolve=>reservation.close(resolve));
  const {createServer}=await import('vite');const react=(await import('@vitejs/plugin-react')).default;
  const vite=await createServer({root:path.resolve(__dirname,'..'),configFile:false,plugins:[react()],cacheDir:path.join(temp,'vite'),
   optimizeDeps:{noDiscovery:true,include:['react','react-dom/client','react/jsx-dev-runtime','lucide-react']},
-  server:{host:'127.0.0.1',port:0,hmr:false},logLevel:'error'});
+  server:{host:'127.0.0.1',port,strictPort:true,hmr:false},logLevel:'error'});
  await vite.listen();const win=new BrowserWindow({show:false,width:500,height:720});const errors=[];
  win.webContents.on('console-message',event=>{if(event.level==='error')errors.push(event.message);});
  const js=async expression=>{try{return await win.webContents.executeJavaScript(expression,true);}catch(error){console.error('Failed UI expression:',expression);throw error;}};
@@ -30,9 +35,17 @@ app.whenReady().then(async()=>{
   assert.equal(await js("document.querySelector('.ble-wifi-music')"),null,'Wi-Fi is opt-in');
   await bluetooth();assert.deepEqual(await js('window.wifiCalls'),[],'opening view sends no commands');
   assert.ok(await js("document.querySelector('.ble-wifi-music').textContent.includes('Podcasts')"));
+  assert.ok(await js("document.querySelector('.ble-music-note').textContent.includes('downloaded podcasts')"),'the reader includes the Wi-Fi audio library');
   await click('Read music');await until('window.completeMusicRead');
   assert.equal(await js("[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Send MP3s').disabled"),true,'reading serializes against Wi-Fi sending');
   await js('window.completeMusicRead();void 0');await until("document.querySelector('.ble-music-delete')");
+  await click('Send MP3s');await until('window.completeWifiSend');
+  await status({phase:'waiting',totalFiles:32,completedFiles:20,batchIndex:2,batchCount:2});
+  await until("document.querySelector('.ble-wifi-music-progress')?.textContent.includes('Waiting for the watch')");
+  assert.ok(await js("[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='Cancel sync' && !b.disabled)"),'waiting for a screen transition is cancellable');
+  assert.equal(await js("document.querySelector('.ble-music-delete').disabled"),true,'reading/deletion stays locked while waiting');
+  await status({phase:'failed',completedFiles:20,totalFiles:32,error:'The watch is reporting a busy screen.'});await finish();
+  assert.ok(await js("document.querySelector('.ble-wifi-music').textContent.includes('20 of 32 files were downloaded')"),'partial success remains visible after an error');
   await click('Send MP3s');await until('window.completeWifiSend');
   await status({phase:'downloading',restorePending:true,fileName:'One.mp3',totalFiles:1,totalBytes:100,downloadedBytes:25});
   await until("document.querySelector('progress')");
@@ -54,9 +67,30 @@ app.whenReady().then(async()=>{
   assert.ok(await js("document.querySelector('.ble-wifi-music [role=alert]').textContent.includes('Reconnect')"));
   await status({});await click('Restore watch settings');await until("document.querySelector('.ble-wifi-music-heading button')");
   assert.equal((await js('window.wifiCalls')).at(-1),'restore');
-  await status({ready:false});await until("document.querySelector('.ble-wifi-music-setup')");
-  await status({});await click('Import settings backup');await until("document.querySelector('.ble-wifi-music-heading button')");
+  await status({backupSavedAt:Date.now()-21*24*60*60_000});await until("document.querySelector('.ble-wifi-music-backup')?.textContent.includes('reused')");
+  assert.equal(await js("document.querySelector('.ble-wifi-music-setup')"),null,'saved backups do not require daily import');
+  assert.equal(await js("document.querySelector('.ble-wifi-music-heading button').disabled"),false,'sending remains available with an older saved backup');
+  assert.ok(await js("document.querySelector('.ble-wifi-music-destination input[value=netease]')"),'NetEase remains discoverable with a saved backup');
+  const callsBeforeSetup=await js('window.wifiCalls.length');
+  await js("document.querySelector('.ble-wifi-music-destination input[value=netease]').click()");
+  await until("document.querySelector('.wnp-new')");
+  assert.equal(await js("[...document.querySelectorAll('.ble-wifi-music button')].some(b=>b.textContent.trim()==='Send MP3s')"),false,'NetEase sends start from a playlist');
+  assert.equal(await js('window.wifiCalls.length'),callsBeforeSetup,'choosing a destination never writes to the watch');
+  await until("document.querySelector('.ble-wifi-music-toolbox')?.textContent.includes('isn’t in the watch’s Toolbox')");
+  assert.equal(await js('window.wifiCalls.length'),callsBeforeSetup,'checking the Toolbox is read-only');
+  await click('Show NetEase on watch');
+  await until("document.querySelector('.ble-wifi-music-toolbox.is-ready')?.textContent.includes('NetEase is in the watch’s Toolbox')");
+  assert.equal((await js('window.wifiCalls')).at(-1),'netease-toolbox','showing NetEase is an explicit action');
+  await js("window.wifiCalls.pop();void 0");
+  await status({ready:false,backupSavedAt:undefined});
+  await until("document.querySelector('.ble-wifi-music-setup')?.textContent.includes('Import a settings backup once')");
+  assert.equal(await js("document.querySelector('.ble-wifi-music-heading button')"),null,'a missing backup still prevents sending');
+  assert.equal(await js("document.querySelector('.ble-wifi-music-destination input:checked').value"),'netease','destination survives backup status updates');
+  await status({});await click('Import settings backup');await until("!document.querySelector('.ble-wifi-music-setup')");
   assert.equal((await js('window.wifiCalls')).at(-1),'backup');
+  assert.equal(await js("document.querySelector('.ble-wifi-music-destination input:checked').value"),'netease','importing a backup preserves the chosen destination');
+  await js("document.querySelector('.ble-wifi-music-destination input[value=podcasts]').click()");
+  await until("!document.querySelector('.wnp-new')");
   await click('Send MP3s');await until('window.completeWifiSend');
   await js('window.wifiError="Error invoking remote method \'corosBle:wifiMusicSend\': Error: Watch disconnected";void 0');
   await finish();assert.equal(await js("document.querySelector('.ble-wifi-music [role=alert]').textContent"),'Watch disconnected');
@@ -103,11 +137,18 @@ app.whenReady().then(async()=>{
   await js('window.completeMusicRead();void 0');await until(`${selectedButton}.disabled===false`);
   await js('window.setLibraryTracks(window.libraryTracks.filter(t=>t.id!=="library-one"));void 0');
   await until(`${selectedButton}.textContent.includes('(0)')`);
-  await js('window.setLibraryTracks(Array.from({length:21},(_,i)=>({id:`track-${i}`,title:`Track ${i}`,filePath:`/private/library/${i}.mp3`,url:`test:${i}`,sizeBytes:100,createdAt:"2026-10-10T12:00:00Z"})));void 0');
-  await until(`${allButton}.textContent.includes('(21)')`);
-  assert.equal(await js(`${allButton}.disabled`),true,'over-limit batches require selecting up to 20 tracks');
+  await js('window.setLibraryTracks(Array.from({length:32},(_,i)=>({id:`track-${i}`,title:`Track ${i}`,filePath:`/private/library/${i}.mp3`,url:`test:${i}`,sizeBytes:100,createdAt:"2026-10-10T12:00:00Z"})));void 0');
+  await until(`${allButton}.textContent.includes('(32)')`);
+  assert.equal(await js(`${allButton}.disabled`),false,'Send all accepts a library larger than one batch');
   await js("document.querySelector('[aria-label=\"Select visible local tracks\"]').click();void 0");
-  await until(`${selectedButton}.textContent.includes('(21)')`);assert.equal(await js(`${selectedButton}.disabled`),true);
+  await until(`${selectedButton}.textContent.includes('(32)')`);assert.equal(await js(`${selectedButton}.disabled`),false);
+  await click('Send all over Wi-Fi (32)');await until('window.completeWifiSend');
+  assert.deepEqual((await js('window.wifiCalls')).at(-1),{operation:'library',ids:Array.from({length:32},(_,i)=>`track-${i}`)},'renderer submits one complete selection for automatic main-process batching');
+  await status({phase:'downloading',restorePending:true,totalFiles:32,completedFiles:20,totalBytes:3200,downloadedBytes:2000,batchIndex:2,batchCount:2});
+  await until("document.querySelector('.ble-wifi-music-progress')?.textContent.includes('Batch 2 of 2')");
+  assert.equal(await js("document.querySelector('progress').value"),63,'progress represents all batches');
+  await status({phase:'complete',totalFiles:32,completedFiles:32,totalBytes:3200,downloadedBytes:3200,batchIndex:2,batchCount:2});
+  await js('window.completeWifiSend();window.completeWifiSend=null;void 0');await until(`${allButton}.disabled===false`);
   await js('window.setLibraryTracks(window.libraryTracks.slice(0,1));void 0');
   await until(`${selectedButton}.textContent.includes('(1)')`);
   win.setSize(320,900);await new Promise(r=>setTimeout(r,100));
@@ -117,6 +158,136 @@ app.whenReady().then(async()=>{
   await js('window.completeWifiSend();window.completeWifiSend=null;void 0');
   await connection({...connected,deviceId:'watch-two'});await until("document.querySelector('.ble-wifi-music')");
   assert.equal(await js(`${selectedButton}.disabled`),false,'late completion cannot retain a busy state after disconnect/watch change');
+  // NetEase works like a music app in the On-watch panel: open (or create) a playlist, then add library songs inside it.
+  await js("document.querySelector('.ble-wifi-music-destination input[value=netease]').click()");
+  await until("document.querySelector('.wnp-new')");
+  assert.equal(await js("document.querySelector('[aria-label=\"Watch music connection\"] button:last-child').getAttribute('aria-pressed')"),'true','choosing NetEase opens the Bluetooth view, where playlists live');
+  assert.ok(await js("document.querySelector('.netease-target.is-empty').textContent.includes('Open a playlist under On watch')"),'a new watch starts without the previous watch’s playlists');
+  assert.equal(await js("document.querySelector('.netease-send')"),null,'songs are added from inside a playlist');
+  const rowNames="[...document.querySelectorAll('.wnp-row strong')].map(s=>s.textContent)";
+  const openRow=async name=>js(`[...document.querySelectorAll('.wnp-row')].find(b=>b.querySelector('strong').textContent===${JSON.stringify(name)}).click();void 0`);
+  const detailName="document.querySelector('.wnp-detail h4 span')?.textContent";
+  const detailMeta="document.querySelector('.wnp-detail-title small')?.textContent??''";
+  const addSelected="[...document.querySelectorAll('.netease-send button')].find(b=>b.textContent.trim().startsWith('Add ')&&b.textContent.includes('selected'))";
+  await js("document.querySelector('.wnp-new').click();void 0");
+  await until("document.querySelector('.wnp-create .netease-playlist-name-form input')");
+  const setName=async value=>js(`(()=>{const i=document.querySelector('.netease-playlist-name-form input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,${JSON.stringify(value)});i.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  const createButton="document.querySelector('.netease-playlist-name-form button[type=submit]')";
+  await setName(' ');await until(`${createButton}.disabled`);
+  await setName('界'.repeat(22));await until("document.querySelector('.netease-playlist-name-form input').getAttribute('aria-invalid')==='true'");
+  assert.equal(await js(`${createButton}.disabled`),true,'names over 63 UTF-8 bytes are refused');
+  await setName('Trail 音乐');await until(`!${createButton}.disabled`);
+  await js(`${createButton}.click();void 0`);
+  await until(`${detailName}==='Trail 音乐'`);
+  assert.ok(await js(`(${detailMeta}).includes('Not on the watch yet')`),'a new playlist is a draft until its first songs arrive');
+  assert.equal(await js("document.querySelector('.netease-target strong').textContent"),'Trail 音乐','the Wi-Fi panel points at the open playlist');
+  assert.ok(await js('document.documentElement.scrollWidth<=window.innerWidth'),'NetEase playlist page fits at 320px');
+  await until(`${addSelected}&&!${addSelected}.disabled`);assert.ok(await js(`${addSelected}.textContent.includes('Add 1 selected')`));
+  assert.ok(await js("document.querySelector('.wnp-detail .wnp-add .netease-send')"),'add controls sit inside the open playlist');
+  await js(`${addSelected}.click();void 0`);await until('window.completeWifiSend');
+  assert.deepEqual((await js('window.wifiCalls')).at(-1),{operation:'library',ids:['track-0'],options:{destination:'netease',playlistName:'Trail 音乐'}});
+  assert.equal(await js("document.querySelector('.ble-wifi-music-destination input[value=podcasts]').disabled"),true);
+  assert.equal(await js("document.querySelector('.wnp-detail-title .wnp-icon').disabled"),true,'the playlist is locked while sending');
+  // The watch reports not-ready while its download settings are swapped; progress stays in the playlist.
+  await status({ready:false,phase:'downloading',restorePending:true,destination:'netease',playlistName:'Trail 音乐',playlistId:'ABCD0001',totalFiles:1,totalBytes:100,downloadedBytes:40});
+  await until("document.querySelector('.wnp-detail .netease-send .ble-wifi-music-progress progress')?.value===40");
+  assert.equal(await js("document.querySelectorAll('.ble-wifi-music-progress').length"),1,'one progress block, inside the open playlist');
+  // The saved list lags behind; the new ID still opens the playlist that was just created.
+  await js("window.neteasePlaylists=[{id:'1234ABCD',name:'Morning run',updatedAt:Date.now()-3*86400000}];void 0");
+  await status({phase:'complete',destination:'netease',playlistName:'Trail 音乐',playlistId:'ABCD0001',completedFiles:1,totalFiles:1});
+  // Each NetEase send ends with a Bluetooth read, so the playlist lists its songs and the library marks them synced.
+  const autoRead=async()=>{await until("window.wifiCalls.at(-1)==='read'&&window.completeMusicRead");await js('window.completeMusicRead();window.completeMusicRead=null;void 0');};
+  const allButton2="[...document.querySelectorAll('.netease-send button')].find(b=>b.textContent.trim().startsWith('Add all'))";
+  await js("window.wirelessAudioTracks=[{id:'0000F00D',destination:'netease',sizeBytes:0,name:'0.mp3',playlistId:'ABCD0001'}];window.completeMusicRead=null;window.completeWifiSend();window.completeWifiSend=null;void 0");
+  await until("document.querySelector('.netease-send .ble-wifi-music-success')?.textContent.includes('Trail 音乐')");
+  await autoRead();
+  await until(`(${detailMeta}).includes('1 song · ID ABCD0001')&&document.querySelector('.wnp-song-name')?.textContent==='0.mp3'`);
+  await until("document.querySelectorAll('.library-status.is-synced').length===1");
+  assert.ok(await js("document.querySelector('.library-status.is-synced').closest('.library-track-row').textContent.includes('Track 0')"),'a song in a NetEase playlist shows as synced');
+  // Songs the playlist already has are skipped, so a retry never duplicates them.
+  await until(`${addSelected}.disabled&&[...document.querySelectorAll('.netease-send p')].some(p=>p.textContent.includes('1 song is already in this playlist'))`);
+  await js(`window.setLibraryTracks([...window.libraryTracks,{id:'track-1',title:'Track 1',filePath:'/private/library/1.mp3',url:'test:1',sizeBytes:100,createdAt:"2026-10-10T12:00:00Z"}]);void 0`);
+  await until(`${allButton2}?.textContent.includes('Add all 1')&&!${allButton2}.disabled`);
+  await js(`${allButton2}.click();void 0`);await until('window.completeWifiSend');
+  assert.deepEqual((await js('window.wifiCalls')).at(-1),{operation:'library',ids:['track-1'],options:{destination:'netease',playlistName:'Trail 音乐',playlistId:'ABCD0001'}},'later songs go to the created playlist by ID, without the ones already there');
+  await js("window.wirelessAudioTracks.push({id:'0000F00E',destination:'netease',sizeBytes:0,name:'1.mp3',playlistId:'ABCD0001'});window.completeMusicRead=null;window.completeWifiSend();window.completeWifiSend=null;void 0");
+  await autoRead();
+  await until("document.querySelectorAll('.wnp-song-name').length===2&&document.querySelectorAll('.library-status.is-synced').length===2");
+  await js("document.querySelector('.wnp-back').click();void 0");
+  await until(`${rowNames}.length===2`);
+  assert.deepEqual(await js(rowNames),['Trail 音乐','Morning run'],'playlists on the watch first');
+  assert.ok(await js("document.querySelector('.netease-target.is-empty')"),'closing the playlist leaves nothing to add to');
+  await openRow('Morning run');await until(`${detailName}==='Morning run'`);
+  await until("document.querySelector('.wnp-empty')?.textContent.includes('Adding songs creates it again')");
+  await until(`${allButton2}&&!${allButton2}.disabled`);
+  await js(`${allButton2}.click();void 0`);await until('window.completeWifiSend');
+  assert.deepEqual((await js('window.wifiCalls')).at(-1),{operation:'library',ids:['track-0','track-1'],options:{destination:'netease',playlistName:'Morning run',playlistId:'1234ABCD'}});
+  await js('window.completeMusicRead=null;window.completeWifiSend();window.completeWifiSend=null;void 0');await autoRead();await until(`!${allButton2}.disabled`);
+  // Podcasts: the On-watch panel lists only what the watch has.
+  await js("document.querySelector('.ble-wifi-music-destination input[value=podcasts]').click()");
+  await until("!document.querySelector('.wnp-new')");
+  await js("window.localMusicTracks=[];window.wirelessAudioTracks=Array.from({length:20},(_,i)=>({id:(i+1).toString(16).toUpperCase().padStart(8,'0'),destination:'podcasts',sizeBytes:100}));window.completeMusicRead=null;void 0");
+  await click('Bluetooth');await until("document.querySelector('.ble-music-toolbar')");
+  // The NetEase sends' reads carry over, so this is a refresh.
+  await click('Refresh music');await until('window.completeMusicRead');await js('window.completeMusicRead();void 0');
+  await until("document.querySelectorAll('.ble-music-list li').length===20");
+  assert.ok(await js("document.querySelector('.library-panel--watch header em').textContent.includes('20 tracks')"),'podcasts count even with zero local MP3s');
+  assert.equal(await js("document.querySelectorAll('.ble-music-delete').length"),20,'podcast records expose deletion');
+  await js("document.querySelector('.ble-music-delete').click();void 0");
+  await until("document.querySelectorAll('.ble-music-list li').length===19");
+  assert.deepEqual((await js('window.wifiCalls')).at(-1),{operation:'delete',target:{inventoryId:'inventory',destination:'podcasts',id:'00000001'}});
+  assert.ok(await js("document.querySelector('.library-panel--watch header em').textContent.includes('19 tracks')"));
+  assert.ok(await js("document.querySelector('.library-panel--watch').textContent.includes('watch file IDs')"));
+  await click('Delete all');
+  await until("document.querySelector('.library-panel--watch header em').textContent.includes('0 tracks')");
+  assert.deepEqual((await js('window.wifiCalls')).at(-1),{operation:'deleteAll',inventoryId:'after-delete'});
+  assert.ok(await js("[...document.querySelectorAll('.ble-music-note[role=status]')].some(el=>el.textContent.includes('Deleted 19 tracks'))"));
+  // NetEase playlists the watch has, named when CorosLink created them; Morning run is still open.
+  await js("window.wirelessAudioTracks=[{id:'0000BEEF',destination:'netease',sizeBytes:0,name:'Trail.mp3',playlistId:'1234ABCD',playlistName:'Morning run'},{id:'0000CAFE',destination:'netease',sizeBytes:0,playlistId:'C5EC7F80'}];window.completeMusicRead=null;void 0");
+  await click('Refresh music');await until('window.completeMusicRead');await js('window.completeMusicRead();void 0');
+  await until(`${detailName}==='Morning run'&&document.querySelector('.wnp-song-name')?.textContent==='Trail.mp3'`);
+  assert.equal(await js("document.querySelector('.ble-music-group')"),null,'an open playlist replaces the other groups');
+  assert.equal(await js("document.querySelector('.wnp-add')"),null,'podcast sends add nothing to NetEase playlists');
+  await js("document.querySelector('.wnp-back').click();void 0");
+  await until(`${rowNames}.length===2`);
+  assert.deepEqual(await js(rowNames),['Morning run','Playlist C5EC7F80']);
+  await openRow('Morning run');await until("document.querySelector('.wnp-delete')");
+  await js("document.querySelector('.wnp-delete').click();void 0");
+  await until("(window.wifiCalls.at(-1)||{}).target?.destination==='netease'");
+  assert.deepEqual((await js('window.wifiCalls')).at(-1).target,{inventoryId:'inventory',destination:'netease',playlistId:'1234ABCD',songIds:['0000BEEF']},'deleting a playlist lists every song in it');
+  await until(`${rowNames}.length===1`);
+  // Back on NetEase, saved playlists the watch no longer has stay listed, and say so.
+  await js("document.querySelector('.ble-wifi-music-destination input[value=netease]').click()");
+  await until(`${rowNames}.includes('Morning run')`);
+  assert.ok(await js("[...document.querySelectorAll('.wnp-row')].find(b=>b.textContent.includes('Morning run')).textContent.includes('Not found in the last read')"),'a playlist the watch no longer has says so');
+  assert.ok(await js("document.querySelector('.wnp-head small').textContent.includes('1 of 10 on the watch · 1 of 500 songs')"));
+  await openRow('Morning run');await until("document.querySelector('.wnp-empty')?.textContent.includes('Adding songs creates it again')");
+  await js("document.querySelector('.wnp-back').click();void 0");await until("document.querySelector('.wnp-new')");
+  await openRow('Playlist C5EC7F80');await until("document.querySelector('.wnp-song-name')");
+  assert.ok(await js("document.querySelector('.wnp-song-name').textContent.includes('0000CAFE')"),'untitled songs show their watch ID');
+  await js("document.querySelector('.wnp-detail-title .wnp-icon').click();void 0");await until("document.querySelector('.wnp-detail-head input')");
+  await setName('Found on watch');await js("document.querySelector('.wnp-detail-head button[type=submit]').click();void 0");
+  await until(`${detailName}==='Found on watch'`);
+  assert.deepEqual((await js('window.wifiCalls')).at(-1),{operation:'rename',id:'C5EC7F80',name:'Found on watch'},'naming a watch playlist is local');
+  await js("document.querySelector('.wnp-song-delete').click();void 0");
+  await until("(window.wifiCalls.at(-1)||{}).target?.playlistId==='C5EC7F80'");
+  assert.deepEqual((await js('window.wifiCalls')).at(-1).target,{inventoryId:'after-delete',destination:'netease',playlistId:'C5EC7F80',songIds:['0000CAFE']},'deleting the last song deletes the playlist');
+  await until("!document.querySelector('.wnp-detail')");
+  await until("document.querySelector('.library-panel--watch header em').textContent.includes('0 tracks')");
+  // A later read fills in songs for playlists CorosLink made.
+  await js("window.wirelessAudioTracks=[{id:'0000F00D',destination:'netease',sizeBytes:0,name:'Hill.mp3',playlistId:'ABCD0001'}];window.completeMusicRead=null;void 0");
+  await click('Refresh music');await until('window.completeMusicRead');await js('window.completeMusicRead();void 0');
+  await until("document.querySelector('.library-panel--watch header em').textContent.includes('1 track')");
+  await until("[...document.querySelectorAll('.wnp-row')].some(b=>b.textContent.includes('Trail 音乐')&&b.textContent.includes('1 song'))");
+  if(process.env.NETEASE_SHOTS){
+   const shot=async name=>{await new Promise(r=>setTimeout(r,150));const image=await win.webContents.capturePage();await fs.writeFile(path.join(process.env.NETEASE_SHOTS,`${name}.png`),image.toPNG());};
+   win.setSize(760,900);await js("document.querySelector('.library-panel--watch').scrollIntoView();void 0");await shot('watch-list');
+   await openRow('Trail 音乐');await until("document.querySelector('.wnp-detail .netease-send')");await js("document.querySelector('.library-panel--watch').scrollIntoView();void 0");await shot('watch-detail');
+   await js("document.querySelector('.ble-wifi-music').scrollIntoView();void 0");await shot('wifi-row');
+   await js("document.querySelector('.wnp-back').click();void 0");await until("document.querySelector('.wnp-new')");
+   await js("document.querySelector('.wnp-new').click();void 0");await until("document.querySelector('.wnp-create input')");
+   await setName('Long run');await js("document.querySelector('.library-panel--watch').scrollIntoView();void 0");await shot('watch-create');
+  }
   assert.deepEqual(errors,[]);
   console.log('Wi-Fi music UI: direct selected/all library sends without paths/pickers, batch limits, separate USB sync status, serialized read/delete/source actions, BLE-only controls, progress, cancellation, restoration, backup import, disconnect cleanup and narrow layout passed.');
  }finally{if(errors.length)console.error(errors.join('\n'));win.destroy();await vite.close();await fs.rm(temp,{recursive:true,force:true});}

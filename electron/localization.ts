@@ -20,6 +20,8 @@ const french: Record<string, string> = {
   "Let your watch share its files over USB?": "Autoriser votre montre à partager ses fichiers par USB ?",
   "Your watch is plugged into a computer. Allow only if you trust that computer.": "Votre montre est branchée à un ordinateur. N’autorisez que si vous faites confiance à cet ordinateur.",
   "Remove the COROS watch key from this computer?": "Supprimer la clé de la montre COROS de cet ordinateur ?",
+  "This deletes all local MP3s, podcasts and NetEase playlists in the watch library, including those hidden by search. It cannot be undone. Your local library is kept.": "Tous les MP3 locaux, podcasts et playlists NetEase de la montre seront supprimés, y compris ceux masqués par la recherche. Cette action est irréversible. Votre bibliothèque locale est conservée.",
+  "This removes the audio from your watch over Bluetooth. It cannot be undone. Your local library is kept.": "Cet audio sera supprimé de votre montre par Bluetooth. Cette action est irréversible. Votre bibliothèque locale est conservée.",
   "This removes the MP3 from your watch over Bluetooth. It cannot be undone. Your local library is kept.": "Le MP3 sera supprimé de votre montre par Bluetooth. Cette action est irréversible. Votre bibliothèque locale est conservée.",
   "CorosLink won't authenticate with your watch again until you sign in to COROS. A watch that's connected now stays connected until you disconnect it. C-LINK keeps its own copy on your iPhone.": "CorosLink ne pourra plus s’authentifier auprès de votre montre avant une nouvelle connexion à COROS. Une montre déjà connectée le reste jusqu’à sa déconnexion. C-LINK conserve sa propre copie sur votre iPhone.",
   "Send MP3s to watch podcasts over Wi-Fi": "Envoyer des MP3 vers les podcasts de la montre par Wi-Fi",
@@ -74,6 +76,8 @@ export function nativeText(source: string): string {
   if (Object.hasOwn(messages, source)) return messages[source];
   const removal = /^Delete “([\s\S]*)” from the watch\?$/.exec(source);
   if (removal) return { es: `¿Eliminar «${removal[1]}» del reloj?`, fr: `Supprimer « ${removal[1]} » de la montre ?`, pt: `Eliminar «${removal[1]}» do relógio?`, "zh-CN": `要从手表中删除“${removal[1]}”吗？` }[language];
+  const bulkRemoval = /^Delete (\d+) tracks from the watch\?$/.exec(source);
+  if (bulkRemoval) return { es: `¿Eliminar ${bulkRemoval[1]} pistas del reloj?`, fr: `Supprimer ${bulkRemoval[1]} pistes de la montre ?`, pt: `Eliminar ${bulkRemoval[1]} faixas do relógio?`, "zh-CN": `要从手表中删除 ${bulkRemoval[1]} 首音频吗？` }[language];
   const fileType = /^([A-Z0-9]+) file$/.exec(source);
   return fileType ? { es: `Archivo ${fileType[1]}`, fr: `Fichier ${fileType[1]}`, pt: `Ficheiro ${fileType[1]}`, "zh-CN": `${fileType[1]} 文件` }[language] : source;
 }

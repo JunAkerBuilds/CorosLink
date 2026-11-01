@@ -1,4 +1,4 @@
-import { inflateSync } from "node:zlib";
+import { deflateSync, inflateSync } from "node:zlib";
 
 /** Straight (non-premultiplied) RGBA, 8 bits per channel, row-major. */
 export interface RgbaImage { width: number; height: number; data: Uint8Array }
@@ -109,4 +109,27 @@ export function decodePng(file: Uint8Array): RgbaImage {
   if (interlace) for (const [x0, y0, dx, dy] of ADAM7) pass(x0, y0, dx, dy);
   else pass(0, 0, 1, 1);
   return { width, height, data: out };
+}
+
+/** Straight RGBA8 as an 8-bit RGBA PNG (one IDAT, no filtering). */
+export function encodePng(image: RgbaImage): Buffer {
+  const { width, height } = image;
+  const rgba = Buffer.from(image.data.buffer, image.data.byteOffset, image.data.byteLength);
+  if (rgba.length !== width * height * 4) throw new Error("Invalid RGBA dimensions.");
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    let crc = 0xffffffff;
+    for (const byte of body) {
+      crc ^= byte;
+      for (let bit = 0; bit < 8; bit++) crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+    }
+    const result = Buffer.alloc(data.length + 12);
+    result.writeUInt32BE(data.length); body.copy(result, 4); result.writeUInt32BE((crc ^ 0xffffffff) >>> 0, result.length - 4);
+    return result;
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 6;
+  const rows = Buffer.alloc((width * 4 + 1) * height);
+  for (let y = 0; y < height; y++) rgba.copy(rows, y * (width * 4 + 1) + 1, y * width * 4, (y + 1) * width * 4);
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", header), chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
 }

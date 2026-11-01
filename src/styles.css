@@ -29721,12 +29721,46 @@ body.is-backgrounded .training-backup-progress-track.is-indeterminate span {
 .ble-music-list li > svg { flex-shrink: 0; color: var(--text-muted); }
 .ble-music-list li > span { min-width: 0; flex: 1; overflow-wrap: anywhere; font-size: 13px; }
 .ble-music-list li > em { flex-shrink: 0; font-size: 12px; font-style: normal; color: var(--text-muted); }
+.ble-music-source { display: block; font-size: 11px; color: var(--text-muted); }
 .ble-music-empty, .ble-music-note, .ble-music-error { padding: 12px 16px; margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-muted); }
 .ble-music-error { color: var(--danger, #d9534f); }
 .ble-music-delete { flex-shrink: 0; }
 .ble-wifi-music { border-top: 1px solid var(--glass-border); padding: 14px 16px; font-size: 12px; line-height: 1.6; }
-.ble-wifi-music-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.ble-wifi-music-heading { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
 .ble-wifi-music-heading > span { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.ble-wifi-music-heading > button { margin-left: auto; }
+.ble-wifi-music-destination { min-width: 0; }
+.ble-wifi-music-choices { display: inline-flex; padding: 2px; gap: 2px; border: 1px solid var(--glass-border); border-radius: 999px; background: rgba(255, 255, 255, 0.03); }
+.ble-wifi-music-choice { position: relative; display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; border-radius: 999px; color: var(--text-muted); font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color 120ms ease, color 120ms ease; }
+.ble-wifi-music-choice input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: inherit; }
+.ble-wifi-music-choice:hover { color: inherit; }
+.ble-wifi-music-choice.is-selected { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.ble-wifi-music-choice:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ble-wifi-music-choice:has(input:disabled) { cursor: default; opacity: 0.55; }
+.ble-wifi-music-netease { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin-top: 10px; }
+.ble-wifi-music-playlist { display: flex; align-items: center; gap: 8px; flex: 1 1 220px; min-width: 0; color: var(--text-muted); white-space: nowrap; }
+.ble-wifi-music-playlist input,
+.ble-wifi-music-playlist select { flex: 1; min-width: 0; box-sizing: border-box; padding: 5px 9px; border: 1px solid var(--glass-border); border-radius: 6px; background: var(--surface); color: var(--text, inherit); font: inherit; }
+.ble-wifi-music-playlist select { flex: 0 1 auto; max-width: 50%; }
+.ble-wifi-music-toolbox { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--text-muted); }
+.ble-wifi-music-toolbox > span { display: inline-flex; align-items: center; gap: 5px; }
+.ble-wifi-music-toolbox.is-ready { color: var(--accent); }
+.ble-wifi-music-library { margin-top: 10px; }
+.ble-wifi-music .ble-wifi-music-hint { margin: 0; font-size: 11px; }
+.ble-wifi-music-heading > .ble-wifi-music-toolbox { margin-left: auto; font-size: 11px; }
+.ble-wifi-music-footer { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 12px; margin-top: 10px; }
+.ble-wifi-music-footer .ble-wifi-music-hint { flex: 1 1 260px; }
+.ble-wifi-music-footer .ble-wifi-music-backup { margin-top: 0; font-size: 11px; }
+.ble-wifi-music-footer .ble-wifi-music-backup[open] { flex-basis: 100%; }
+.ble-music-groups { display: grid; align-content: start; gap: 14px; flex: 1; min-height: 0; overflow-y: auto; }
+.ble-music-groups .ble-music-list { overflow: visible; }
+.ble-music-group h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 2px; padding: 0 16px; color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.ble-music-group h4 span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ble-music-group h4 .ble-music-group-delete { margin-left: auto; width: 26px; height: 26px; }
+.ble-music-group h4 small { padding: 0 7px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); font-size: 11px; letter-spacing: 0; }
+/* With the Wi-Fi controls above it, the track list keeps room for a few rows; a short window scrolls the panel instead. */
+.library-panel--local:has(.ble-wifi-music) { overflow-y: auto; }
+.library-panel--local:has(.ble-wifi-music) .library-track-stack { flex-shrink: 0; min-height: calc(var(--library-track-row-height) * 4 + 34px); }
 .ble-wifi-music p { color: var(--text-muted); margin: 8px 0; overflow-wrap: anywhere; }
 .ble-wifi-music .ble-music-error { color: var(--danger, #d9534f); padding: 0; }
 .ble-wifi-music-progress { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 12px; }
@@ -29735,5 +29769,5 @@ body.is-backgrounded .training-backup-progress-track.is-indeterminate span {
 .ble-wifi-music-backup { margin-top: 10px; color: var(--text-muted); }
 .ble-wifi-music-backup summary { cursor: pointer; }
 .ble-wifi-music .ble-wifi-music-success { color: var(--accent); }
-.ble-wifi-music-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ble-wifi-music-actions { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
 .ble-wifi-music-actions button { max-width: 100%; white-space: normal; text-align: left; }

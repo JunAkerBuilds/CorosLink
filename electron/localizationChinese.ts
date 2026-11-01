@@ -35,6 +35,8 @@ export const nativeChinese: Readonly<Record<string, string>> = {
   "Let your watch share its files over USB?": "允许手表通过 USB 共享文件吗？",
   "Your watch is plugged into a computer. Allow only if you trust that computer.": "手表已插入电脑。请仅在您信任这台电脑时允许。",
   "Remove the COROS watch key from this computer?": "要从本机移除 COROS 手表密钥吗？",
+  "This deletes all local MP3s, podcasts and NetEase playlists in the watch library, including those hidden by search. It cannot be undone. Your local library is kept.": "这将删除手表媒体库中的所有本地 MP3、播客和网易云歌单，包括搜索隐藏的项目。此操作无法撤销。本地媒体库将保留。",
+  "This removes the audio from your watch over Bluetooth. It cannot be undone. Your local library is kept.": "此操作会通过蓝牙从手表中删除音频，且无法撤销。本地媒体库将保留。",
   "This removes the MP3 from your watch over Bluetooth. It cannot be undone. Your local library is kept.": "此操作会通过蓝牙从手表中删除 MP3，且无法撤销。本地媒体库将保留。",
   "CorosLink won't authenticate with your watch again until you sign in to COROS. A watch that's connected now stays connected until you disconnect it. C-LINK keeps its own copy on your iPhone.": "重新登录 COROS 前，CorosLink 将无法再次通过手表身份验证。当前已连接的手表会保持连接，直到您主动断开。iPhone 上的 C-LINK 会保留自己的密钥副本。",
   "Send MP3s to watch podcasts over Wi-Fi": "通过 Wi-Fi 将 MP3 发送到手表播客",

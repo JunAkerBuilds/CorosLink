@@ -3,8 +3,26 @@ import http from "node:http";
 import os from "node:os";
 import { randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
+import { validateWifiMusicOptions, WIFI_MUSIC_BATCH_FILES, type CorosWifiMusicOptions } from "./corosWifiMusicTypes";
 
 export interface WifiMusicFile { id: string; path: string; name: string; size: number }
+
+/** The firmware stores each getMapDetail page and parses at most its first 4096 bytes; stay clear of that. */
+export const WIFI_MUSIC_PAGE_BYTES = 3584;
+
+/** Split d_list entries into pages whose whole response body stays within WIFI_MUSIC_PAGE_BYTES. */
+export function paginateWifiMusicList<T>(entries: T[], limit = WIFI_MUSIC_PAGE_BYTES): T[][] {
+  const body = (list: T[]) => Buffer.byteLength(JSON.stringify({ code: 0, data: { d_list: list } }));
+  const pages: T[][] = [];
+  let page: T[] = [];
+  for (const entry of entries) {
+    if (page.length && body([...page, entry]) > limit) { pages.push(page); page = []; }
+    if (body([entry]) > limit) throw new Error("Invalid audio files.");
+    page.push(entry);
+  }
+  if (page.length) pages.push(page);
+  return pages;
+}
 
 export function wifiMusicAddress(): string {
   const candidates = Object.entries(os.networkInterfaces()).flatMap(([name, list]) => (list ?? [])
@@ -17,11 +35,28 @@ export function wifiMusicAddress(): string {
 }
 
 /** Only explicitly staged MP3s are served, behind per-transfer and per-file random paths. */
-export async function serveWifiMusic(files: WifiMusicFile[], taskId: string, host = wifiMusicAddress()) {
-  if (!files.length || files.length > 20 || !/^[A-F0-9]{8}$/.test(taskId)) throw new Error("Invalid audio transfer.");
+export async function serveWifiMusic(files: WifiMusicFile[], taskId: string, host = wifiMusicAddress(), input?: CorosWifiMusicOptions, playlistId = taskId) {
+  const options = validateWifiMusicOptions(input);
+  if (!files.length || files.length > WIFI_MUSIC_BATCH_FILES || !/^[A-F0-9]{8}$/.test(taskId) || !/^[A-F0-9]{8}$/.test(playlistId)) throw new Error("Invalid audio transfer.");
+  if (files.some(f => !/^[A-F0-9]{8}$/.test(f.id) || !Number.isSafeInteger(f.size) || f.size <= 0) || new Set(files.map(f => f.id)).size !== files.length)
+    throw new Error("Invalid audio files.");
   const nonce = randomBytes(3).toString("hex"), audioNonce = randomBytes(16).toString("hex");
   const root = `/${nonce}/.coros.com`, manifestPath = `${root}/openapi/map/getMapDetail/${taskId}`;
   const audio = new Map(files.map(file => [`/audio/${audioNonce}/${file.id}/${file.id}.mp3`, file]));
+  const audioUrls = new Map(files.map(file => [file.id, `/audio/${audioNonce}/${file.id}/${file.id}.mp3`]));
+  // Firmware's info_prefix buffer is 32 bytes. The existing per-transfer nonce bounds access.
+  const infoPrefix = `${root}/info`;
+  const metadata = new Map<string, Buffer>(files.map(file => {
+    let title = file.name.replace(/\.mp3$/i, "").replace(/[\x00-\x1f\x7f]/g, " ");
+    while (Buffer.byteLength(title) > 240) title = title.slice(0, -1);
+    return [`${infoPrefix}/${file.id}.json`, Buffer.from(JSON.stringify({ name: title || file.id, artists: "CorosLink", album_name: options.playlistName ?? "CorosLink" }))] as const;
+  }));
+  const entries = files.map(file => options.destination === "netease"
+    ? { type: 4, subtype: 1, id: file.id, name: `${file.id}.fm`, size: file.size, vip_flag: false,
+      info_size: metadata.get(`${infoPrefix}/${file.id}.json`)!.length }
+    : { type: 4, subtype: 0, id: file.id, name: `${file.id}.mp3`, url: `/audio/${audioNonce}/${file.id}`, size: file.size });
+  // The firmware fetches d_total_page pages (1..N) and accumulates them into one d_count-sized list.
+  const pages = paginateWifiMusicList<object>(entries);
   const streams = new Set<fs.ReadStream>();
   const total = files.reduce((sum, f) => sum + f.size, 0);
   let port = 0;
@@ -33,12 +68,24 @@ export async function serveWifiMusic(files: WifiMusicFile[], taskId: string, hos
     };
     let url: URL;
     try { url = new URL(request.url ?? "", "http://localhost"); } catch { json({ code: 404 }, 404); return; }
-    if (url.pathname === `${root}/openapi/device/file/download/record` && request.method === "POST") {
+    const record = url.pathname === `${root}/openapi/device/file/download/record`;
+    const renew = options.destination === "netease" && url.pathname === `${root}/openapi/music163/song/download/renew`;
+    if ((record || renew) && request.method === "POST") {
       const length = Number(request.headers["content-length"]);
       if (!Number.isSafeInteger(length) || length < 0 || length > 4096 || request.headers["transfer-encoding"]) { json({ code: 413 }, 413); return; }
       let bytes = 0;
-      request.on("data", (b: Buffer) => { bytes += b.length; if (bytes > 4096) request.destroy(); });
-      request.on("end", () => json({ code: 0, data: {} }));
+      const chunks: Buffer[] = [];
+      request.on("data", (b: Buffer) => { bytes += b.length; if (bytes > 4096) request.destroy(); else if (renew) chunks.push(b); });
+      request.on("end", () => {
+        if (bytes > 4096) return;
+        if (record) { json({ code: 0, data: {} }); return; }
+        let body: unknown;
+        try { body = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { json({ code: 400 }, 400); return; }
+        const fields = body && typeof body === "object" ? body as Record<string, unknown> : {};
+        const audioPath = typeof fields.file_id === "string" ? audioUrls.get(fields.file_id) : undefined;
+        if (fields.task_id !== taskId || !audioPath) { json({ code: 404 }, 404); return; }
+        json({ code: 0, data: { sub_code: 200, url: `http://${host}:${port}${audioPath}` } });
+      });
       return;
     }
     if (!["GET", "HEAD"].includes(request.method ?? "")) { json({ code: 404 }, 404); return; }
@@ -46,13 +93,17 @@ export async function serveWifiMusic(files: WifiMusicFile[], taskId: string, hos
       const page = url.searchParams.getAll("page");
       if (!page.length || (page.length === 1 && page[0] === "0")) {
         json({ code: 0, data: { host: `http://${host}:${port}`, count: 0, files_size: 0, page: 0, total_page: 0,
-          d_count: files.length, d_size: total, d_total_page: 1 } }); return;
+          d_count: files.length, d_size: total, d_total_page: pages.length,
+          ...(options.destination === "netease" ? { info_prefix: infoPrefix, playlist: { id: playlistId, title: options.playlistName } } : {}) } }); return;
       }
-      if (page.length === 1 && page[0] === "1") {
-        json({ code: 0, data: { d_list: files.map(file => ({ type: 4, subtype: 0, id: file.id,
-          name: `${file.id}.mp3`, url: `/audio/${audioNonce}/${file.id}`, size: file.size })) } }); return;
-      }
+      const index = page.length === 1 && /^[1-9][0-9]{0,2}$/.test(page[0]!) ? Number(page[0]) : 0;
+      if (index >= 1 && index <= pages.length) { json({ code: 0, data: { d_list: pages[index - 1] } }); return; }
       json({ code: 404 }, 404); return;
+    }
+    const info = options.destination === "netease" ? metadata.get(url.pathname) : undefined;
+    if (info) {
+      response.writeHead(200, { "Content-Type": "application/json", "Content-Length": info.length, "Connection": "close" });
+      response.end(request.method === "HEAD" ? undefined : info); return;
     }
     const file = audio.get(url.pathname);
     let unchanged = false;
@@ -81,7 +132,7 @@ export async function serveWifiMusic(files: WifiMusicFile[], taskId: string, hos
   port = (server.address() as AddressInfo).port;
   const prefix = `${host}:${port}/${nonce}/`;
   if (Buffer.byteLength(prefix) > 31) { server.close(); throw new Error("The local Wi-Fi address is too long."); }
-  return { prefix, totalBytes: total, close: async () => {
+  return { prefix, totalBytes: total, lookup: { host, port, audioNonce, fileIds: files.map(file => file.id) }, close: async () => {
     for (const stream of streams) stream.destroy(); server.closeAllConnections();
     await new Promise<void>(resolve => server.close(() => resolve()));
   } };
