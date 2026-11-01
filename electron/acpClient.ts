@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import crypto from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import http from "node:http";
@@ -123,6 +123,17 @@ export class AcpAgent {
   close(): void {
     if (this.exited) return;
     this.child.stdin.end();
+    const pid = this.child.pid;
+    if (process.platform === "win32" && pid) {
+      // kill() ends only the agent itself on Windows; its helpers (Antigravity's
+      // localharness, the tool relay) outlive it, keep its database locked and
+      // stall the next launch's session/new. Once the agent is gone /T can no
+      // longer find them, so the whole tree goes while it is still running.
+      execFile("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true }, (error) => {
+        if (error && !this.exited) this.child.kill();
+      });
+      return;
+    }
     this.child.kill();
   }
 
