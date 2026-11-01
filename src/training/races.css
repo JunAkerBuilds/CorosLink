@@ -1535,6 +1535,67 @@ button.race-plaque:focus-visible {
   letter-spacing: -0.015em;
 }
 
+.race-kind-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.race-kind-switch button {
+  display: grid;
+  gap: 2px;
+  min-height: 44px;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.race-kind-switch button strong {
+  color: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.race-kind-switch button span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.race-kind-switch button:hover {
+  color: var(--text-primary);
+}
+
+.race-kind-switch button[aria-pressed="true"] {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.race-kind-switch button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+:root[data-theme="paper"] .race-kind-switch {
+  border-color: rgba(38, 34, 28, 0.12);
+  background: rgba(38, 34, 28, 0.05);
+}
+
+:root[data-theme="paper"] .race-kind-switch button[aria-pressed="true"] {
+  border-color: rgba(38, 34, 28, 0.14);
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(38, 34, 28, 0.08);
+}
+
 .race-editor-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

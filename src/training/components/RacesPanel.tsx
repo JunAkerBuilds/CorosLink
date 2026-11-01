@@ -11,6 +11,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Target,
   X
 } from "lucide-react";
 import type { RaceEntry, RaceSuggestion } from "../../../electron/raceTypes";
@@ -29,7 +30,7 @@ import { formatRaceDate, formatRaceDelta, formatRaceDistance, formatRaceSuggesti
 import type { RaceJournal } from "../useRaceJournal";
 import { RacePlaque, type PlaqueGroup } from "./RacePlaques";
 import { RaceComparison } from "./RaceComparison";
-import { RaceEditorDialog, type RaceEditorTarget } from "./RaceEditorDialog";
+import { RaceEditorDialog, type RaceAddKind, type RaceEditorTarget } from "./RaceEditorDialog";
 import { RaceProgressChart, type RaceChartPoint } from "./RaceProgressChart";
 import { RaceTargets } from "./RaceTargets";
 import "../races.css";
@@ -235,7 +236,7 @@ export function RacesPanel({
         <RacesEmpty
           hasSuggestions={suggestions.length > 0}
           readOnly={journal.readOnly}
-          onAdd={() => setEditor({ mode: "add" })}
+          onAdd={(kind) => setEditor({ mode: "add", kind })}
           onOpenActivities={onOpenActivities}
         />
       ) : (
@@ -333,6 +334,7 @@ export function RacesPanel({
         onClose={() => setEditor(null)}
         onSave={journal.updateRace}
         onAdd={journal.addManualRace}
+        onAddTarget={journal.addTarget}
         onRemove={async (raceId) => {
           const removed = await journal.removeRace(raceId);
           if (removed) setExpanded(null);
@@ -351,7 +353,7 @@ function RacesEmpty({
 }: {
   hasSuggestions: boolean;
   readOnly: boolean;
-  onAdd: () => void;
+  onAdd: (kind: RaceAddKind) => void;
   onOpenActivities: () => void;
 }) {
   useLanguage();
@@ -378,7 +380,10 @@ function RacesEmpty({
         </p>
         <div className="races-empty-actions">
           <button type="button" className="race-action" onClick={onOpenActivities}>{t("Open Activities")}</button>
-          <button type="button" className="race-action is-primary" disabled={readOnly} onClick={onAdd}>
+          <button type="button" className="race-action" disabled={readOnly} onClick={() => onAdd("upcoming")}>
+            <Target size={15} aria-hidden="true" />
+            {t("Plan an upcoming race")}</button>
+          <button type="button" className="race-action is-primary" disabled={readOnly} onClick={() => onAdd("result")}>
             <Plus size={15} aria-hidden="true" />
             {t("Add a past race")}</button>
         </div>

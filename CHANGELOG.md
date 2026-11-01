@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Add upcoming races yourself.** Races → Add race now has a Past race / Upcoming race switch. An upcoming race needs only a name, date and distance; goal time, priority (A/B/C), location and notes are optional. It joins Up next and the Coach plans around it, as with races the Coach adds. Before, only the Coach could add one, and the form asked for a finish time.
+
 ## [0.1.71] - 2026-10-31
 
 ### Added

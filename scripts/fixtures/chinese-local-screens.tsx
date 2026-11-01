@@ -45,7 +45,7 @@ function Fixture() {
   const [surface, setSurface] = useState<RouteSurfacePreference>('mixed');
   Object.assign(window, { localScreenState: state, showLocalScreen: setScreen, switchLocalLanguage: setLanguage });
   return <ThemeProvider><UnitSystemProvider>
-    {screen === 'race' ? <RaceEditorDialog target={target} busy={false} error={null} onClose={() => {}} onSave={async () => true} onAdd={async input => { state.saves.push(input); return true; }} onRemove={async () => true} /> : null}
+    {screen === 'race' ? <RaceEditorDialog target={target} busy={false} error={null} onClose={() => {}} onSave={async () => true} onAdd={async input => { state.saves.push(input); return true; }} onAddTarget={async input => { state.saves.push(input); return true; }} onRemove={async () => true} /> : null}
     {screen === 'tour' ? <OnboardingTour trainingConnected={false} watchConnected={false} onClose={() => {}} /> : null}
     {screen === 'route' ? <><SurfacePicker activityType="running" value={surface} onChange={setSurface} /><RouteMakeup insights={insights} activityType="running" /></> : null}
     {screen === 'phone' ? <WatchfacePhoneSendCard api={phoneApi} archive={archive} name="Back 我的表盘" disabled={false} /> : null}

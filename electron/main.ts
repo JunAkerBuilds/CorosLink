@@ -162,6 +162,7 @@ import {
 } from "./stravaService";
 import {
   addManualRace,
+  addManualRaceTarget,
   clearStravaRaceData,
   dismissRaceSuggestion,
   getRaceOverview,
@@ -188,7 +189,7 @@ import {
   setCoachLocalSyncReader,
   undoAthleteMemoryNotice
 } from "./chatAthleteToolsRuntime";
-import type { ManualRaceInput, RaceEditInput } from "./raceTypes";
+import type { ManualRaceInput, RaceEditInput, RaceTargetInput } from "./raceTypes";
 import type {
   HevySettingsInput,
   StravaConfigInput,
@@ -2956,6 +2957,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle("races:update", (_event, input: RaceEditInput) => updateRace(input));
   ipcMain.handle("races:remove", (_event, raceId: string) => removeRace(raceId));
   ipcMain.handle("races:addManual", (_event, input: ManualRaceInput) => addManualRace(input));
+  ipcMain.handle("races:addTarget", (_event, input: RaceTargetInput) => addManualRaceTarget(input));
   ipcMain.handle("races:removeTarget", (_event, targetId: string) => removeRaceTarget(targetId));
   onRaceTargetsChanged(() => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("races:changed");

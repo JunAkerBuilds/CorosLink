@@ -300,6 +300,17 @@ overview = races.removeRaceTarget(trail.targetId);
 assert.deepEqual(overview.targets.map((target) => target.targetId), [marathon.targetId]);
 assert.throws(() => races.removeRaceTarget(trail.targetId), /no longer in your list/);
 assert.equal(targetEvents, 3);
+// The Races tab's Upcoming form sends blank optional fields and wants the overview back.
+overview = races.addManualRaceTarget({ name: "Parkrun", raceDay: dayKey(0), distanceKey: "5k", distance: undefined, goalTime: undefined, priority: undefined, location: "", notes: "" });
+const parkrun = overview.targets.find((target) => target.name === "Parkrun");
+assert.ok(parkrun, "a race today counts as upcoming");
+assert.equal(parkrun.distance, 5000);
+assert.equal(parkrun.goalTime, undefined);
+assert.equal(parkrun.location, undefined);
+assert.equal(parkrun.priority, undefined);
+assert.throws(() => races.addManualRaceTarget({ name: "Yesterday", raceDay: dayKey(-1), distanceKey: "5k" }), /in the future/);
+races.removeRaceTarget(parkrun.targetId);
+assert.equal(targetEvents, 5);
 stopTargets();
 
 // --- Past races: a typed-in result finds its recording -------------------------

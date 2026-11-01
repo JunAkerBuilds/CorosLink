@@ -683,6 +683,12 @@ export function addRaceTarget(input: RaceTargetInput): RaceTarget {
   return target;
 }
 
+/** The athlete adds an upcoming race from the Races tab. */
+export function addManualRaceTarget(input: RaceTargetInput): RaceOverview {
+  addRaceTarget(input);
+  return getRaceOverview();
+}
+
 export function removeRaceTarget(targetId: string): RaceOverview {
   if (typeof targetId !== "string" || !deleteStoredRaceTarget(targetId)) {
     throw new Error("That target race is no longer in your list.");

@@ -28,8 +28,8 @@ function localDayKey(now = new Date()): string {
 }
 
 /**
- * Races the athlete is training for, soonest first. The Coach adds them from a
- * conversation (after the athlete approves its card); the athlete removes them here.
+ * Races the athlete is training for, soonest first. The athlete adds them from
+ * Add race → Upcoming, or the Coach adds one after the athlete approves its card.
  */
 export function RaceTargets({
   targets,

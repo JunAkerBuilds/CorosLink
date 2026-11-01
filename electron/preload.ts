@@ -9,7 +9,7 @@ import type { DiagnosticsSnapshot, RendererDiagnosticError } from "./diagnostics
 import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "./watchfaceAutomationTypes";
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "./calendarSyncTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "./googleCalendarTypes";
-import type { ManualRaceInput, RaceEditInput, RaceOverview, StravaRaceImportResult } from "./raceTypes";
+import type { ManualRaceInput, RaceEditInput, RaceOverview, RaceTargetInput, StravaRaceImportResult } from "./raceTypes";
 import type { AthleteFact, AthleteFactCategory, AthleteMemoryChange } from "./athleteMemoryModel";
 import type { WorkoutJournalEntry, WorkoutJournalSaveInput } from "./workoutJournalTypes";
 import type { CoachConfirmInput, CoachConfirmResult, CoachEventFrame, CoachSendInput, CoachSessionsChange, CoachSnapshot, CoachSubscribeResult } from "./coachHub/coachContract";
@@ -1093,6 +1093,8 @@ const api = {
     ipcRenderer.invoke("races:remove", raceId),
   addManualRace: (input: ManualRaceInput): Promise<RaceOverview> =>
     ipcRenderer.invoke("races:addManual", input),
+  addRaceTarget: (input: RaceTargetInput): Promise<RaceOverview> =>
+    ipcRenderer.invoke("races:addTarget", input),
   removeRaceTarget: (targetId: string): Promise<RaceOverview> =>
     ipcRenderer.invoke("races:removeTarget", targetId),
   onRacesChanged: (callback: () => void): (() => void) => {

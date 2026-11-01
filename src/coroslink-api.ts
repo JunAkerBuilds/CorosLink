@@ -9,7 +9,7 @@ import type { DiagnosticsSnapshot, RendererDiagnosticError } from "../electron/d
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "../electron/calendarSyncTypes";
 import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "../electron/watchfaceAutomationTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "../electron/googleCalendarTypes";
-import type { ManualRaceInput, RaceEditInput, RaceOverview, StravaRaceImportResult } from "../electron/raceTypes";
+import type { ManualRaceInput, RaceEditInput, RaceOverview, RaceTargetInput, StravaRaceImportResult } from "../electron/raceTypes";
 import type { AthleteFact, AthleteFactCategory, AthleteMemoryChange } from "../electron/athleteMemoryModel";
 import type { WorkoutJournalEntry, WorkoutJournalSaveInput } from "../electron/workoutJournalTypes";
 import type { CoachConfirmInput, CoachConfirmResult, CoachEventFrame, CoachSendInput, CoachSessionsChange, CoachSnapshot, CoachSubscribeResult } from "../electron/coachHub/coachContract";
@@ -757,6 +757,7 @@ export interface CorosLinkApi {
   updateRace: (input: RaceEditInput) => Promise<RaceOverview>;
   removeRace: (raceId: string) => Promise<RaceOverview>;
   addManualRace: (input: ManualRaceInput) => Promise<RaceOverview>;
+  addRaceTarget: (input: RaceTargetInput) => Promise<RaceOverview>;
   removeRaceTarget: (targetId: string) => Promise<RaceOverview>;
   /** Target races changed outside the Races tab (the Coach added one). */
   onRacesChanged?: (callback: () => void) => () => void;
