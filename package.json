@@ -106,6 +106,7 @@
     "test:strength-detail": "node --experimental-strip-types scripts/test-strength-detail.mjs",
     "test:strength-analytics": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-strength-analytics.mjs",
     "test:hevy-strength": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-hevy-strength.mjs",
+    "test:coach-hevy-tools": "npm run build:electron && node scripts/test-coach-hevy-tools.mjs",
     "test:hevy-service": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-hevy-service.mjs",
     "test:strava-strength": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-strava-strength.mjs",
     "test:strava-service": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-strava-service.mjs",

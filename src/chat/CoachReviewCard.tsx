@@ -1,21 +1,25 @@
 import { t, useLanguage } from "../i18n/tools";
 import { useEffect, useState } from "react";
-import { ArrowRight, Check, CircleCheck, Flag, HeartPulse, Info, Loader2, X } from "lucide-react";
+import { ArrowRight, Check, CircleCheck, Dumbbell, Flag, HeartPulse, Info, ListPlus, Loader2, X } from "lucide-react";
 import type { CoachReviewAction, CoachReviewPreview } from "../../electron/coachReviewTypes";
 import "./coachReviewCard.css";
 
 const ACTION_ICONS: Record<CoachReviewAction, typeof Flag> = {
   addTargetRace: Flag,
-  updateZones: HeartPulse
+  updateZones: HeartPulse,
+  saveHevyRoutine: Dumbbell,
+  createHevyExercise: ListPlus
 };
 
 function confirmLabel(preview: CoachReviewPreview): string {
   if (preview.action === "addTargetRace") return t("Add race");
+  if (preview.action === "saveHevyRoutine" || preview.action === "createHevyExercise") return t("Save to Hevy");
   return t("Update watch");
 }
 
 // Labels the Coach's tools write; anything else (a workout's name) is shown as written.
-const ITEM_LABELS = new Set(["Race", "Date", "Distance", "Goal", "Priority", "Location", "Max heart rate", "Threshold heart rate", "Resting heart rate", "Heart-rate zones", "Threshold pace"]);
+const ITEM_LABELS = new Set(["Race", "Date", "Distance", "Goal", "Priority", "Location", "Max heart rate", "Threshold heart rate", "Resting heart rate", "Heart-rate zones", "Threshold pace",
+  "Routine", "Folder", "Notes", "Exercise", "Logs", "Equipment", "Muscles"]);
 
 function errorText(caught: unknown): string {
   const message = caught instanceof Error ? caught.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : "";
@@ -24,7 +28,7 @@ function errorText(caught: unknown): string {
 
 /**
  * A Coach write waiting for the athlete: moving calendar workouts, adding a
- * target race, or changing the watch's thresholds. Nothing changes until the
+ * target race, changing the watch's thresholds, or saving to Hevy. Nothing changes until the
  * athlete clicks the card's button; the hub's entry is the truth afterwards.
  */
 export function CoachReviewCard({

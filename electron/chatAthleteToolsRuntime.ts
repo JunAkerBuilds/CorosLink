@@ -14,7 +14,25 @@ import { corosNativeBle } from "./corosNativeBleService";
 import { fetchWatchForecast, type WatchForecast } from "./corosWatchWeather";
 import { getSetting, listStoredStrengthSessions, setSetting } from "./database";
 import { recentSyncErrors } from "./diagnosticsService";
-import { getStoredHevyStrengthSessions } from "./hevyService";
+import type { HevyExerciseReviewPayload, HevyRoutineReviewPayload, HevyToolDependencies } from "./chatHevyTools";
+import {
+  createHevyCustomExercise,
+  createHevyRoutine,
+  createHevyRoutineFolder,
+  getHevyExerciseHistory,
+  getHevyExerciseTemplate,
+  getHevyExerciseTemplates,
+  getHevyRoutine,
+  getHevyStatus,
+  getHevyWorkout,
+  getStoredHevyStrengthSessions,
+  hevyTemplateUsage,
+  listHevyBodyMeasurements,
+  listHevyRoutineFolders,
+  listHevyRoutines,
+  listHevyWorkouts,
+  updateHevyRoutine
+} from "./hevyService";
 import { currentActivitySource, usingLocalSources } from "./localSync/activitySource";
 import { watchSupports } from "./localSync/watchSyncModels";
 import { corosMcpServerId, getMcpServerStatus } from "./mcpClientManager";
@@ -66,6 +84,7 @@ export function setCoachReviewPermissions(read: () => ClaudeCodePermissions): vo
 function claudeAllows(action: CoachReviewAction, claude: ClaudeCodePermissions | undefined): boolean {
   if (!claude) return true;
   if (action === "addTargetRace") return claude.recentActivities;
+  if (action === "saveHevyRoutine" || action === "createHevyExercise") return claude.upcomingWorkouts;
   return claude.trainingMetrics;
 }
 
@@ -90,8 +109,35 @@ async function executeReview(action: CoachReviewAction, payload: unknown, previe
     const saved = addRaceTarget(payload as Omit<RaceTarget, "targetId" | "createdAt">);
     return { results: preview.items.map(() => ({ ok: true })), message: `${saved.name} is in your Races list.` };
   }
+  if (action === "saveHevyRoutine") return executeHevyRoutine(payload as HevyRoutineReviewPayload, preview);
+  if (action === "createHevyExercise") {
+    if (!getHevyStatus().connected) throw new CoachReviewNotSentError("Connect Hevy in Strength, then click Save to Hevy again.");
+    const { exercise } = payload as HevyExerciseReviewPayload;
+    await createHevyCustomExercise(exercise);
+    return { results: preview.items.map(() => ({ ok: true })), message: `${String(exercise.title)} is in your Hevy exercises.` };
+  }
   const outcome = await executeZoneUpdate(payload as { edits: ZoneEdits; expected: NonNullable<AthleteZonesSnapshot["current"]> });
   return { ...outcome, results: preview.items.map(() => ({ ok: true })) };
+}
+
+async function executeHevyRoutine(payload: HevyRoutineReviewPayload, preview: CoachReviewPreview): Promise<CoachReviewOutcome> {
+  if (!getHevyStatus().connected) throw new CoachReviewNotSentError("Connect Hevy in Strength, then click Save to Hevy again.");
+  const routine = { ...payload.routine };
+  if (payload.mode === "update" && payload.routineId) {
+    const current = await getHevyRoutine(payload.routineId);
+    if (!current) throw new Error("This routine is no longer in Hevy. Ask the coach to prepare it again.");
+    if (payload.expectedUpdatedAt && current.updated_at !== payload.expectedUpdatedAt) {
+      throw new Error("The routine changed in Hevy since the coach read it. Ask the coach to prepare the update again.");
+    }
+    await updateHevyRoutine(payload.routineId, routine);
+  } else {
+    if (payload.newFolderTitle) {
+      const folder = await createHevyRoutineFolder(payload.newFolderTitle);
+      if (typeof folder.id === "number") routine.folder_id = folder.id;
+    }
+    await createHevyRoutine(routine);
+  }
+  return { results: preview.items.map(() => ({ ok: true })), message: `${String(routine.title)} is saved in Hevy.` };
 }
 
 async function executeZoneUpdate(payload: { edits: ZoneEdits; expected: NonNullable<AthleteZonesSnapshot["current"]> }): Promise<CoachReviewOutcome> {
@@ -327,6 +373,24 @@ export function createAthleteToolDependencies(options: AthleteToolRuntimeOptions
     weather: (day, place) => readWeather(day, place, unitSystem),
     strength: (days, exercise, limit) => readStrength(days, exercise, limit, unitSystem),
     stageReview: (draft) => reviews.stage(draft, Boolean(claude)),
+    onReview: options.onReview
+  };
+}
+
+export function createHevyToolDependencies(options: Pick<AthleteToolRuntimeOptions, "unitSystem" | "claudePermissions" | "onReview">): HevyToolDependencies {
+  return {
+    unitSystem: options.unitSystem,
+    templates: getHevyExerciseTemplates,
+    template: getHevyExerciseTemplate,
+    usage: hevyTemplateUsage,
+    routines: listHevyRoutines,
+    folders: listHevyRoutineFolders,
+    routine: getHevyRoutine,
+    exerciseHistory: (templateId, startDate) => getHevyExerciseHistory(templateId, startDate),
+    workouts: listHevyWorkouts,
+    workout: getHevyWorkout,
+    bodyMeasurements: listHevyBodyMeasurements,
+    stageReview: (draft) => reviews.stage(draft, Boolean(options.claudePermissions)),
     onReview: options.onReview
   };
 }

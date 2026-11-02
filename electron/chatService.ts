@@ -71,9 +71,19 @@ import {
 } from "./chatAthleteTools";
 import {
   createAthleteToolDependencies,
+  createHevyToolDependencies,
   readCoachDataStatus,
   setCoachReviewPermissions
 } from "./chatAthleteToolsRuntime";
+import {
+  buildHevyToolGuide,
+  claudeCanUseHevyTool,
+  getChatHevyTools,
+  handleChatHevyTool,
+  isChatHevyTool,
+  type ChatHevyToolName
+} from "./chatHevyTools";
+import { getHevyStatus } from "./hevyService";
 import { listAthleteFacts } from "./athleteMemoryStore";
 import { formatAthleteMemoryForCoach } from "./athleteMemoryModel";
 import { formatDataStatusForContext } from "./coachDataStatus";
@@ -1720,8 +1730,18 @@ function getAllChatTools(): CorosMcpTool[] {
     ...getChatWorkoutTools(),
     ...getChatJournalTools(),
     ...getChatAthleteTools({ trainingData: trainingDataAvailable() }),
+    ...hevyChatTools(),
     ...getChatInteractionTools()
   ];
+}
+
+function hevyChatTools(): CorosMcpTool[] {
+  try {
+    return getChatHevyTools({ connected: getHevyStatus().connected });
+  } catch {
+    // An unreadable Hevy connection must not take the other tools down.
+    return [];
+  }
 }
 
 export function getClaudeCodeTools(
@@ -1767,6 +1787,8 @@ export function getClaudeCodeTools(
     claudeCanUseAthleteTool(tool.name, permissions)
   );
 
+  const hevyTools = hevyChatTools().filter((tool) => claudeCanUseHevyTool(tool.name, permissions));
+
   return [
     ...coachMcpTools(remoteTools),
     ...activityTools,
@@ -1775,6 +1797,7 @@ export function getClaudeCodeTools(
     ...workoutTools,
     ...journalTools,
     ...athleteTools,
+    ...hevyTools,
     ...getChatInteractionTools()
   ];
 }
@@ -1879,6 +1902,16 @@ async function executeChatTool(
       unitSystem,
       claudePermissions,
       onMemoryNotice: (notice) => send("chat:streamInfo", { requestId, kind: "athleteMemory", notice }),
+      onReview: (preview) => send("chat:streamInfo", { requestId, kind: "coachReview", preview })
+    }));
+  }
+  if (isChatHevyTool(name)) {
+    if (claudePermissions && !claudeCanUseHevyTool(name, claudePermissions)) {
+      throw new Error("This Hevy tool is disabled in Coach settings.");
+    }
+    return handleChatHevyTool(name as ChatHevyToolName, args, createHevyToolDependencies({
+      unitSystem,
+      claudePermissions,
       onReview: (preview) => send("chat:streamInfo", { requestId, kind: "coachReview", preview })
     }));
   }
@@ -2515,6 +2548,7 @@ function buildToolGuide(tools: CorosMcpTool[]): string {
   const fitTools = tools.filter((tool) => isChatFitTool(tool.name));
   const journalTools = tools.filter((tool) => isChatJournalTool(tool.name));
   const athleteTools = tools.filter((tool) => isChatAthleteTool(tool.name));
+  const hevyTools = tools.filter((tool) => isChatHevyTool(tool.name));
   const interactionTools = tools.filter((tool) =>
     isChatInteractionTool(tool.name)
   );
@@ -2526,6 +2560,7 @@ function buildToolGuide(tools: CorosMcpTool[]): string {
       !isChatFitTool(tool.name) &&
       !isChatJournalTool(tool.name) &&
       !isChatAthleteTool(tool.name) &&
+      !isChatHevyTool(tool.name) &&
       !isChatInteractionTool(tool.name)
   );
   const corosMcpTools = mcpTools.filter((tool) =>
@@ -2606,6 +2641,9 @@ function buildToolGuide(tools: CorosMcpTool[]): string {
   }
   if (otherMcpTools.some((tool) => tool.name.startsWith("hevy__"))) {
     sections.push(
+      (hevyTools.length > 0
+        ? "Prefer the built-in hevy_ tools (one underscore) for Hevy; the hevy__ server's tools are a fallback. "
+        : "") +
       "Hevy tools (hevy__ prefix) manage the connected Hevy account. " +
         "For requests targeting Hevy, use these tools rather than COROS authoring or calendar tools. " +
         "Use routines for future reusable workout prescriptions; create completed workouts only from actual athlete-provided results, never invented sets or times. " +
@@ -2648,6 +2686,9 @@ function buildToolGuide(tools: CorosMcpTool[]): string {
   }
   if (athleteTools.length > 0) {
     sections.push("", buildAthleteToolGuide(athleteTools.map((tool) => tool.name)));
+  }
+  if (hevyTools.length > 0) {
+    sections.push("", buildHevyToolGuide(hevyTools.map((tool) => tool.name)));
   }
   if (interactionTools.some((tool) => tool.name === "request_coach_input")) {
     sections.push("", buildAthleteQuestionGuide());
