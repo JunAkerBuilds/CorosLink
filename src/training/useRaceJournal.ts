@@ -1,6 +1,6 @@
 import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage } from "../i18n/training";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ManualRaceInput, RaceEditInput, RaceOverview, RaceTargetInput } from "../../electron/raceTypes";
+import type { ManualRaceInput, RaceEditInput, RaceOverview, RaceTargetEditInput, RaceTargetInput } from "../../electron/raceTypes";
 import type { TrainingHubActivity } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { createSampleRaceOverview } from "./raceSamples";
@@ -25,6 +25,8 @@ export interface RaceJournal {
   addManualRace: (input: ManualRaceInput) => Promise<boolean>;
   /** Adds a race the athlete is training for. */
   addTarget: (input: RaceTargetInput) => Promise<boolean>;
+  /** Saves changes to an upcoming race (registration, bib, pickup…). */
+  updateTarget: (input: RaceTargetEditInput) => Promise<boolean>;
   /** Removes a race the athlete was training for. */
   removeTarget: (targetId: string) => Promise<boolean>;
   importStrava: () => Promise<void>;
@@ -146,6 +148,7 @@ export function useRaceJournal(
     removeRace: (raceId) => run(`remove:${raceId}`, () => api.removeRace(raceId)),
     addManualRace: (input) => run("add", () => api.addManualRace(input)),
     addTarget: (input) => run("add-target", () => api.addRaceTarget(input)),
+    updateTarget: (input) => run(`target:${input.targetId}`, () => api.updateRaceTarget(input)),
     removeTarget: (targetId) => run(`target:${targetId}`, () => api.removeRaceTarget(targetId)),
     importStrava: async () => {
       if (sampleMode) return;

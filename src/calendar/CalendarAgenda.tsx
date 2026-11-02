@@ -29,6 +29,8 @@ import { journalEntryForActivity, journalEntryForPair } from "./journalRefs";
 import { activitySportFamily, WEEK_SPORT_FAMILY_META, type WeekSportFamily } from "./weekSportBreakdown";
 import { WEEK_SPORT_ICONS } from "./WeekStatsCell";
 import "./calendarAgenda.css";
+import type { RaceTarget } from "../../electron/raceTypes";
+import { CalendarRaceAgendaEntry } from "./CalendarRaceChip";
 import "./calendarExternal.css";
 
 interface CalendarAgendaProps {
@@ -44,6 +46,7 @@ interface CalendarAgendaProps {
   onSelectScheduled: (day: CalendarDay, entry: TrainingHubScheduledWorkoutEntry) => void;
   onSelectActivity: (day: CalendarDay, activity: TrainingHubActivity) => void;
   onSelectExternal: (session: StrengthSession) => void;
+  onOpenRace: (race: RaceTarget) => void;
   onToggleScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
   onAdd: (dateKey: string) => void;
   onContextMenu: (target: CalendarContextTarget) => void;
@@ -188,6 +191,7 @@ export function CalendarAgenda({
   onSelectScheduled,
   onSelectActivity,
   onSelectExternal,
+  onOpenRace,
   onToggleScheduled,
   onAdd,
   onContextMenu
@@ -199,7 +203,7 @@ export function CalendarAgenda({
     .map((week) => ({
       week,
       days: week.days.filter(
-        (day) => day.inMonth && (day.isToday || day.pairs.length > 0 || day.unplannedActivities.length > 0 || day.externalWorkouts.length > 0)
+        (day) => day.inMonth && (day.isToday || day.pairs.length > 0 || day.unplannedActivities.length > 0 || day.externalWorkouts.length > 0 || day.raceEvents.length > 0)
       )
     }))
     .filter(({ days }) => days.length > 0);
@@ -363,7 +367,7 @@ export function CalendarAgenda({
   };
 
   const listedCount = listedWeeks.reduce(
-    (total, { days }) => total + days.reduce((sum, day) => sum + day.pairs.length + day.unplannedActivities.length + day.externalWorkouts.length, 0),
+    (total, { days }) => total + days.reduce((sum, day) => sum + day.pairs.length + day.unplannedActivities.length + day.externalWorkouts.length + day.raceEvents.length, 0),
     0
   );
 
@@ -449,6 +453,11 @@ export function CalendarAgenda({
                         </span>
                       </h4>
                       <ul className="calendar-agenda-entries">
+                        {day.raceEvents.map((event) => (
+                          <li key={`race-${event.kind}-${event.race.targetId}`}>
+                            <CalendarRaceAgendaEntry event={event} disabled={selectionMode} onOpen={onOpenRace} />
+                          </li>
+                        ))}
                         {entries.map((entry) => (
                           <li key={entry.kind === "pair" ? `pair-${scheduledWorkoutKey(entry.pair.scheduled)}` : entry.kind === "activity" ? `activity-${entry.activity.activityId}` : `external-${entry.session.activityId}`}>
                             {entry.kind === "pair"
@@ -458,7 +467,7 @@ export function CalendarAgenda({
                                 : renderExternal(entry.session, entry.minutes)}
                           </li>
                         ))}
-                        {entries.length === 0 ? (
+                        {entries.length === 0 && day.raceEvents.length === 0 ? (
                           <li className="calendar-agenda-rest">
                             <Moon size={15} aria-hidden="true" />
                             <span>{day.scheduled.length > 0 || day.activities.length > 0 ? t("Nothing shown today with these filters") : t("Nothing planned today")}</span>

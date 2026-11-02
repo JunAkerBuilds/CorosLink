@@ -37,6 +37,8 @@ import { journalEntryForActivity, journalEntryForPair } from "./journalRefs";
 import { externalWorkoutName, externalWorkoutSource, externalWorkoutStatsLine } from "./externalWorkouts";
 import "./workoutJournal.css";
 import "./calendarExternal.css";
+import { CalendarRaceChip } from "./CalendarRaceChip";
+import type { RaceTarget } from "../../electron/raceTypes";
 
 interface DayCellProps {
   day: CalendarDay;
@@ -44,6 +46,7 @@ interface DayCellProps {
   onSelectScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
   onSelectActivity: (activity: TrainingHubActivity) => void;
   onSelectExternal: (session: StrengthSession) => void;
+  onOpenRace: (race: RaceTarget) => void;
   onToggleScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
   isScheduledSelected: (entry: TrainingHubScheduledWorkoutEntry) => boolean;
   isScheduledCopied: (entry: TrainingHubScheduledWorkoutEntry) => boolean;
@@ -327,6 +330,7 @@ export function DayCell({
   onSelectScheduled,
   onSelectActivity,
   onSelectExternal,
+  onOpenRace,
   onToggleScheduled,
   isScheduledSelected,
   isScheduledCopied,
@@ -446,6 +450,14 @@ export function DayCell({
       </div>
 
       <div className="calendar-day-items">
+        {day.raceEvents.map((event) => (
+          <CalendarRaceChip
+            key={`race-${event.kind}-${event.race.targetId}`}
+            event={event}
+            disabled={selectionMode}
+            onOpen={onOpenRace}
+          />
+        ))}
         {day.pairs.map((pair) => (
           <PairChip
             key={`pair-${pair.scheduled.planId}-${pair.scheduled.idInPlan}`}

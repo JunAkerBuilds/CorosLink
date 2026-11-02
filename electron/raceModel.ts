@@ -1,4 +1,4 @@
-import type { RaceBuildUp, RaceDistanceKey, RaceSuggestion } from "./raceTypes";
+import type { RaceBuildUp, RaceDistanceKey, RaceRegistration, RaceSuggestion } from "./raceTypes";
 import type { TrainingHubActivity } from "./types";
 
 // Pure race logic shared by the main process and the renderer. Type-only
@@ -30,6 +30,18 @@ export const RACE_DISTANCE_KEYS: readonly RaceDistanceKey[] = [
 
 export function isRaceDistanceKey(value: unknown): value is RaceDistanceKey {
   return typeof value === "string" && (RACE_DISTANCE_KEYS as readonly string[]).includes(value);
+}
+
+/** Entry states in the order an athlete moves through them. */
+export const RACE_REGISTRATIONS: readonly { key: RaceRegistration; label: string }[] = [
+  { key: "considering", label: "Considering" },
+  { key: "registered", label: "Registered" },
+  { key: "waitlisted", label: "Waitlisted" },
+  { key: "deferred", label: "Deferred" }
+];
+
+export function isRaceRegistration(value: unknown): value is RaceRegistration {
+  return typeof value === "string" && RACE_REGISTRATIONS.some((registration) => registration.key === value);
 }
 
 export function raceDistanceLabel(key: RaceDistanceKey): string {

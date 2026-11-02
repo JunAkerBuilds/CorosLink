@@ -1,5 +1,5 @@
 import { requireDatabase } from "./database";
-import { isRaceDistanceKey } from "./raceModel";
+import { isRaceDistanceKey, isRaceRegistration } from "./raceModel";
 import type { RaceBuildUp, RaceDistanceKey, RacePriority, RaceSource, RaceTarget } from "./raceTypes";
 
 // Race tags live in their own tables, created on first use. Strava-derived
@@ -96,6 +96,7 @@ function database() {
         priority TEXT,
         location TEXT,
         notes TEXT,
+        details_json TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -115,6 +116,11 @@ function database() {
         synced_at TEXT NOT NULL
       );
     `);
+    // Registration and race-day logistics arrived after the table did.
+    const targetColumns = db.prepare("PRAGMA table_info(race_targets)").all() as { name: string }[];
+    if (!targetColumns.some((column) => column.name === "details_json")) {
+      db.exec("ALTER TABLE race_targets ADD COLUMN details_json TEXT");
+    }
     preparedFor = db;
   }
   return db;
@@ -310,7 +316,42 @@ interface TargetRow {
   priority: string | null;
   location: string | null;
   notes: string | null;
+  details_json: string | null;
   created_at: string;
+}
+
+/** Registration and race-day logistics, kept together in `details_json`. */
+const TARGET_DETAIL_KEYS = [
+  "registration",
+  "registrationDeadline",
+  "bibNumber",
+  "startTime",
+  "wave",
+  "bibPickupLocation",
+  "bibPickupDay",
+  "bibPickupHours",
+  "website"
+] as const satisfies readonly (keyof RaceTarget)[];
+
+type RaceTargetDetails = Pick<RaceTarget, (typeof TARGET_DETAIL_KEYS)[number]>;
+
+function readTargetDetails(value: string | null): RaceTargetDetails {
+  const parsed = parseJson<Record<string, unknown>>(value);
+  const details: Record<string, string> = {};
+  if (!parsed || typeof parsed !== "object") return details;
+  for (const key of TARGET_DETAIL_KEYS) {
+    if (typeof parsed[key] === "string" && parsed[key]) details[key] = parsed[key] as string;
+  }
+  if (details.registration && !isRaceRegistration(details.registration)) delete details.registration;
+  return details as RaceTargetDetails;
+}
+
+function writeTargetDetails(target: RaceTarget): string | null {
+  const details: Record<string, string> = {};
+  for (const key of TARGET_DETAIL_KEYS) {
+    if (target[key]) details[key] = target[key]!;
+  }
+  return Object.keys(details).length ? JSON.stringify(details) : null;
 }
 
 function toRaceTarget(row: TargetRow): RaceTarget {
@@ -325,6 +366,7 @@ function toRaceTarget(row: TargetRow): RaceTarget {
     priority,
     location: optional(row.location),
     notes: optional(row.notes),
+    ...readTargetDetails(row.details_json),
     createdAt: row.created_at
   };
 }
@@ -334,7 +376,7 @@ export function listStoredRaceTargets(): RaceTarget[] {
   const rows = database()
     .prepare(
       `SELECT target_id, event_name, race_day, distance_key, distance_m, goal_time_sec,
-              priority, location, notes, created_at
+              priority, location, notes, details_json, created_at
        FROM race_targets ORDER BY race_day, created_at`
     )
     .all() as TargetRow[];
@@ -347,11 +389,11 @@ export function saveStoredRaceTarget(target: RaceTarget): void {
     .prepare(
       `INSERT INTO race_targets (
          target_id, event_name, race_day, distance_key, distance_m, goal_time_sec,
-         priority, location, notes, created_at, updated_at
+         priority, location, notes, details_json, created_at, updated_at
        )
        VALUES (
          @targetId, @name, @raceDay, @distanceKey, @distance, @goalTime,
-         @priority, @location, @notes, @createdAt, @now
+         @priority, @location, @notes, @details, @createdAt, @now
        )
        ON CONFLICT(target_id) DO UPDATE SET
          event_name = excluded.event_name,
@@ -362,6 +404,7 @@ export function saveStoredRaceTarget(target: RaceTarget): void {
          priority = excluded.priority,
          location = excluded.location,
          notes = excluded.notes,
+         details_json = excluded.details_json,
          updated_at = excluded.updated_at`
     )
     .run({
@@ -374,9 +417,14 @@ export function saveStoredRaceTarget(target: RaceTarget): void {
       priority: target.priority ?? null,
       location: target.location ?? null,
       notes: target.notes ?? null,
+      details: writeTargetDetails(target),
       createdAt: target.createdAt,
       now
     });
+}
+
+export function getStoredRaceTarget(targetId: string): RaceTarget | undefined {
+  return listStoredRaceTargets().find((target) => target.targetId === targetId);
 }
 
 export function deleteStoredRaceTarget(targetId: string): boolean {

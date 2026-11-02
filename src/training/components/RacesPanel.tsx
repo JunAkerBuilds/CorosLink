@@ -221,7 +221,12 @@ export function RacesPanel({
       ) : null}
 
       {journal.overview?.targets?.length ? (
-        <RaceTargets targets={journal.overview.targets} journal={journal} unitSystem={unitSystem} />
+        <RaceTargets
+          targets={journal.overview.targets}
+          journal={journal}
+          unitSystem={unitSystem}
+          onEdit={(upcoming) => setEditor({ mode: "editTarget", upcoming })}
+        />
       ) : null}
 
       {suggestions.length > 0 ? (
@@ -335,6 +340,8 @@ export function RacesPanel({
         onSave={journal.updateRace}
         onAdd={journal.addManualRace}
         onAddTarget={journal.addTarget}
+        onUpdateTarget={journal.updateTarget}
+        onRemoveTarget={journal.removeTarget}
         onRemove={async (raceId) => {
           const removed = await journal.removeRace(raceId);
           if (removed) setExpanded(null);

@@ -1,15 +1,28 @@
 import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage } from "../../i18n/training";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Loader2, Trash2, X } from "lucide-react";
-import type { ManualRaceInput, RaceDistanceKey, RaceEditInput, RaceEntry, RacePriority, RaceTargetInput } from "../../../electron/raceTypes";
-import { RACE_DISTANCES } from "../../../electron/raceModel";
+import type {
+  ManualRaceInput,
+  RaceDistanceKey,
+  RaceEditInput,
+  RaceEntry,
+  RacePriority,
+  RaceRegistration,
+  RaceTarget,
+  RaceTargetEditInput,
+  RaceTargetInput
+} from "../../../electron/raceTypes";
+import { RACE_DISTANCES, RACE_REGISTRATIONS } from "../../../electron/raceModel";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import { displayDistanceToMeters, distanceUnit, metersToDisplayDistance } from "../../units/units";
 import { formatRaceTime, fromDateInputValue, parseRaceTime, toDateInputValue } from "../raceFormat";
 
 /** "result" adds a race already run; "upcoming" adds one the athlete is training for. */
 export type RaceAddKind = "result" | "upcoming";
-export type RaceEditorTarget = { mode: "edit"; race: RaceEntry } | { mode: "add"; kind?: RaceAddKind };
+export type RaceEditorTarget =
+  | { mode: "edit"; race: RaceEntry }
+  | { mode: "add"; kind?: RaceAddKind }
+  | { mode: "editTarget"; upcoming: RaceTarget };
 
 interface RaceEditorDialogProps {
   target: RaceEditorTarget | null;
@@ -19,7 +32,9 @@ interface RaceEditorDialogProps {
   onSave: (input: RaceEditInput) => Promise<boolean>;
   onAdd: (input: ManualRaceInput) => Promise<boolean>;
   onAddTarget: (input: RaceTargetInput) => Promise<boolean>;
+  onUpdateTarget: (input: RaceTargetEditInput) => Promise<boolean>;
   onRemove: (raceId: string) => Promise<boolean>;
+  onRemoveTarget: (targetId: string) => Promise<boolean>;
 }
 
 interface Draft {
@@ -33,6 +48,32 @@ interface Draft {
   priority: RacePriority | "";
   location: string;
   notes: string;
+  registration: RaceRegistration | "";
+  registrationDeadline: string;
+  bibNumber: string;
+  startTime: string;
+  wave: string;
+  bibPickupLocation: string;
+  bibPickupDay: string;
+  bibPickupHours: string;
+  website: string;
+}
+
+const NO_LOGISTICS = {
+  registration: "",
+  registrationDeadline: "",
+  bibNumber: "",
+  startTime: "",
+  wave: "",
+  bibPickupLocation: "",
+  bibPickupDay: "",
+  bibPickupHours: "",
+  website: ""
+} as const satisfies Partial<Draft>;
+
+/** YYYYMMDD → the date input's YYYY-MM-DD. */
+function dayInputValue(day: string | undefined): string {
+  return day ? `${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6, 8)}` : "";
 }
 
 const PRIORITY_OPTIONS: { value: RacePriority; label: string }[] = [
@@ -57,7 +98,35 @@ function draftFor(target: RaceEditorTarget, unitSystem: "metric" | "imperial"): 
       placing: "",
       priority: "",
       location: "",
-      notes: ""
+      notes: "",
+      ...NO_LOGISTICS
+    };
+  }
+  if (target.mode === "editTarget") {
+    const { upcoming } = target;
+    return {
+      kind: "upcoming",
+      name: upcoming.name,
+      date: dayInputValue(upcoming.raceDay),
+      distanceKey: upcoming.distanceKey,
+      otherDistance:
+        upcoming.distanceKey === "other"
+          ? String(Math.round(metersToDisplayDistance(upcoming.distance, unitSystem) * 100) / 100)
+          : "",
+      time: upcoming.goalTime ? formatRaceTime(upcoming.goalTime) : "",
+      placing: "",
+      priority: upcoming.priority ?? "",
+      location: upcoming.location ?? "",
+      notes: upcoming.notes ?? "",
+      registration: upcoming.registration ?? "",
+      registrationDeadline: dayInputValue(upcoming.registrationDeadline),
+      bibNumber: upcoming.bibNumber ?? "",
+      startTime: upcoming.startTime ?? "",
+      wave: upcoming.wave ?? "",
+      bibPickupLocation: upcoming.bibPickupLocation ?? "",
+      bibPickupDay: dayInputValue(upcoming.bibPickupDay),
+      bibPickupHours: upcoming.bibPickupHours ?? "",
+      website: upcoming.website ?? ""
     };
   }
   const { race } = target;
@@ -74,11 +143,23 @@ function draftFor(target: RaceEditorTarget, unitSystem: "metric" | "imperial"): 
     placing: race.placing ?? "",
     priority: "",
     location: "",
-    notes: race.notes ?? ""
+    notes: race.notes ?? "",
+    ...NO_LOGISTICS
   };
 }
 
-export function RaceEditorDialog({ target, busy, error, onClose, onSave, onAdd, onAddTarget, onRemove }: RaceEditorDialogProps) {
+export function RaceEditorDialog({
+  target,
+  busy,
+  error,
+  onClose,
+  onSave,
+  onAdd,
+  onAddTarget,
+  onUpdateTarget,
+  onRemove,
+  onRemoveTarget
+}: RaceEditorDialogProps) {
   useLanguage();
   const { unitSystem } = useUnitSystem();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -105,7 +186,8 @@ export function RaceEditorDialog({ target, busy, error, onClose, onSave, onAdd, 
   const race = target?.mode === "edit" ? target.race : null;
   const recorded = race !== null && race.source !== "manual";
   const update = (patch: Partial<Draft>) => setDraft((current) => (current ? { ...current, ...patch } : current));
-  const upcoming = target?.mode === "add" && draft?.kind === "upcoming";
+  const editingUpcoming = target?.mode === "editTarget" ? target.upcoming : null;
+  const upcoming = editingUpcoming !== null || (target?.mode === "add" && draft?.kind === "upcoming");
   const today = todayInputValue();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -127,7 +209,7 @@ export function RaceEditorDialog({ target, busy, error, onClose, onSave, onAdd, 
       otherDistance = draft.otherDistance.trim() ? displayDistanceToMeters(value, unitSystem) : undefined;
     }
 
-    if (target.mode === "add" && draft.kind === "upcoming") {
+    if (target.mode === "editTarget" || (target.mode === "add" && draft.kind === "upcoming")) {
       if (!draft.name.trim()) return setLocalError(localizedText(() => t("Enter the race name.")));
       if (!draft.date) return setLocalError(localizedText(() => t("Enter the race date.")));
       if (draft.date < todayInputValue()) {
@@ -136,7 +218,13 @@ export function RaceEditorDialog({ target, busy, error, onClose, onSave, onAdd, 
       if (draft.distanceKey === "other" && otherDistance === undefined) {
         return setLocalError(localizedText(() => t("Enter the race distance in {{p0}}.", { p0: String(distanceUnit(unitSystem)) })));
       }
-      if (await onAddTarget({
+      if (draft.registrationDeadline && draft.registrationDeadline > draft.date) {
+        return setLocalError(localizedText(() => t("The registration deadline is after race day.")));
+      }
+      if (draft.bibPickupDay && draft.bibPickupDay > draft.date) {
+        return setLocalError(localizedText(() => t("Bib pickup is after race day.")));
+      }
+      const input: RaceTargetInput = {
         name: draft.name,
         raceDay: draft.date,
         distanceKey: draft.distanceKey,
@@ -144,8 +232,21 @@ export function RaceEditorDialog({ target, busy, error, onClose, onSave, onAdd, 
         goalTime: time,
         priority: draft.priority || undefined,
         location: draft.location,
-        notes: draft.notes
-      })) onClose();
+        notes: draft.notes,
+        registration: draft.registration || undefined,
+        registrationDeadline: draft.registrationDeadline,
+        bibNumber: draft.bibNumber,
+        startTime: draft.startTime,
+        wave: draft.wave,
+        bibPickupLocation: draft.bibPickupLocation,
+        bibPickupDay: draft.bibPickupDay,
+        bibPickupHours: draft.bibPickupHours,
+        website: draft.website
+      };
+      const saved = target.mode === "editTarget"
+        ? await onUpdateTarget({ ...input, targetId: target.upcoming.targetId })
+        : await onAddTarget(input);
+      if (saved) onClose();
       return;
     }
 
@@ -173,6 +274,7 @@ export function RaceEditorDialog({ target, busy, error, onClose, onSave, onAdd, 
       return;
     }
 
+    if (target.mode !== "edit") return;
     const input: RaceEditInput = {
       raceId: target.race.raceId,
       name: draft.name.trim() ? draft.name : null,
@@ -207,7 +309,11 @@ export function RaceEditorDialog({ target, busy, error, onClose, onSave, onAdd, 
           <header className="race-editor-head">
             <div>
               <p className="race-eyebrow">{upcoming ? t("Up next") : target.mode === "add" ? t("Race journal") : t("Race result")}</p>
-              <h2 id={headingId}>{upcoming ? t("Add an upcoming race") : target.mode === "add" ? t("Add a race") : t("Edit race")}</h2>
+              <h2 id={headingId}>
+                {editingUpcoming
+                  ? t("Edit upcoming race")
+                  : upcoming ? t("Add an upcoming race") : target.mode === "add" ? t("Add a race") : t("Edit race")}
+              </h2>
             </div>
             <button type="button" className="race-icon-button" aria-label={t("Close")} onClick={onClose}>
               <X size={17} aria-hidden="true" />
@@ -253,7 +359,7 @@ export function RaceEditorDialog({ target, busy, error, onClose, onSave, onAdd, 
                 autoFocus
               />
             </label>
-            {target.mode === "add" ? (
+            {target.mode !== "edit" ? (
               <label className="race-field">
                 <span>{t("Date")}</span>
                 <input
@@ -355,6 +461,101 @@ export function RaceEditorDialog({ target, busy, error, onClose, onSave, onAdd, 
                 />
               </label>
             )}
+            {upcoming ? (
+              <>
+                <p className="race-field-section is-wide">{t("Registration")}</p>
+                <label className="race-field">
+                  <span>{t("Status")}<em>{t("optional")}</em></span>
+                  <select
+                    value={draft.registration}
+                    onChange={(event) => update({ registration: event.target.value as Draft["registration"] })}
+                  >
+                    <option value="">{t("Not set")}</option>
+                    {RACE_REGISTRATIONS.map((option) => (
+                      <option key={option.key} value={option.key}>{t(option.label)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="race-field">
+                  <span>{t("Registration closes")}<em>{t("optional")}</em></span>
+                  <input
+                    type="date"
+                    value={draft.registrationDeadline}
+                    max={draft.date || undefined}
+                    onChange={(event) => update({ registrationDeadline: event.target.value })}
+                  />
+                </label>
+                <label className="race-field is-wide">
+                  <span>{t("Race website")}<em>{t("optional")}</em></span>
+                  <input
+                    type="url"
+                    value={draft.website}
+                    maxLength={500}
+                    placeholder="valenciaciudaddelrunning.com"
+                    onChange={(event) => update({ website: event.target.value })}
+                  />
+                </label>
+
+                <p className="race-field-section is-wide">{t("Race day")}</p>
+                <label className="race-field">
+                  <span>{t("Start time")}<em>{t("optional")}</em></span>
+                  <input
+                    type="time"
+                    value={draft.startTime}
+                    onChange={(event) => update({ startTime: event.target.value })}
+                  />
+                </label>
+                <label className="race-field">
+                  <span>{t("Wave or corral")}<em>{t("optional")}</em></span>
+                  <input
+                    type="text"
+                    value={draft.wave}
+                    maxLength={40}
+                    placeholder={t("Wave 2 · Corral C")}
+                    onChange={(event) => update({ wave: event.target.value })}
+                  />
+                </label>
+                <label className="race-field">
+                  <span>{t("Bib number")}<em>{t("optional")}</em></span>
+                  <input
+                    type="text"
+                    value={draft.bibNumber}
+                    maxLength={20}
+                    placeholder="4127"
+                    onChange={(event) => update({ bibNumber: event.target.value })}
+                  />
+                </label>
+                <label className="race-field">
+                  <span>{t("Bib pickup day")}<em>{t("optional")}</em></span>
+                  <input
+                    type="date"
+                    value={draft.bibPickupDay}
+                    max={draft.date || undefined}
+                    onChange={(event) => update({ bibPickupDay: event.target.value })}
+                  />
+                </label>
+                <label className="race-field">
+                  <span>{t("Bib pickup location")}<em>{t("optional")}</em></span>
+                  <input
+                    type="text"
+                    value={draft.bibPickupLocation}
+                    maxLength={160}
+                    placeholder={t("Expo, City of Arts and Sciences")}
+                    onChange={(event) => update({ bibPickupLocation: event.target.value })}
+                  />
+                </label>
+                <label className="race-field">
+                  <span>{t("Pickup hours")}<em>{t("optional")}</em></span>
+                  <input
+                    type="text"
+                    value={draft.bibPickupHours}
+                    maxLength={60}
+                    placeholder="10:00–20:00"
+                    onChange={(event) => update({ bibPickupHours: event.target.value })}
+                  />
+                </label>
+              </>
+            ) : null}
             <label className="race-field is-wide">
               <span>{t("Notes")}<em>{t("optional")}</em></span>
               <textarea
@@ -374,6 +575,23 @@ export function RaceEditorDialog({ target, busy, error, onClose, onSave, onAdd, 
           ) : null}
 
           <footer className="race-editor-foot">
+            {editingUpcoming ? (
+              <button
+                type="button"
+                className={`race-text-button is-danger${confirmRemove ? " is-confirming" : ""}`}
+                disabled={busy}
+                onClick={async () => {
+                  if (!confirmRemove) {
+                    setConfirmRemove(true);
+                    return;
+                  }
+                  if (await onRemoveTarget(editingUpcoming.targetId)) onClose();
+                }}
+              >
+                <Trash2 size={15} aria-hidden="true" />
+                {confirmRemove ? t("Remove from Up next?") : t("Remove race")}
+              </button>
+            ) : null}
             {race ? (
               <button
                 type="button"

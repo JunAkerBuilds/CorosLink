@@ -6,6 +6,7 @@ import type {
 } from "../../electron/types";
 import type { ActivityLinkSource } from "../../electron/activityLinks";
 import type { WorkoutJournalEntry } from "../../electron/workoutJournalTypes";
+import type { RaceTarget } from "../../electron/raceTypes";
 import type { WeekSportTotals } from "./weekSportBreakdown";
 
 /** A scheduled workout and the activity COROS or the user linked to it, if any. */
@@ -33,6 +34,14 @@ export interface CalendarDay {
   journal?: WorkoutJournalEntry[];
   /** Hevy and Strava gym sessions COROS did not record. */
   externalWorkouts: StrengthSession[];
+  /** Upcoming races landing on this day: the race, bib pickup, the entry deadline. */
+  raceEvents: CalendarRaceEvent[];
+}
+
+/** One race date on the calendar; a deadline shows only while the athlete hasn't entered. */
+export interface CalendarRaceEvent {
+  kind: "race" | "pickup" | "deadline";
+  race: RaceTarget;
 }
 
 export interface WeeklyStats {

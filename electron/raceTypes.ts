@@ -81,6 +81,9 @@ export interface RaceStravaState {
 export type RacePriority = "A" | "B" | "C";
 
 /** A race the athlete is training for, kept until they remove it. */
+/** considering → registered (or waitlisted); deferred = entry moved to a later edition. */
+export type RaceRegistration = "considering" | "registered" | "waitlisted" | "deferred";
+
 export interface RaceTarget {
   targetId: string;
   name: string;
@@ -94,6 +97,22 @@ export interface RaceTarget {
   priority?: RacePriority;
   location?: string;
   notes?: string;
+  /** Where the athlete's entry stands; unset when they haven't said. */
+  registration?: RaceRegistration;
+  /** YYYYMMDD, the last day to enter. */
+  registrationDeadline?: string;
+  bibNumber?: string;
+  /** HH:MM, local start time (the athlete's wave when they have one). */
+  startTime?: string;
+  /** Wave, corral or start group. */
+  wave?: string;
+  bibPickupLocation?: string;
+  /** YYYYMMDD, the day the athlete plans to collect their bib (on or before race day). */
+  bibPickupDay?: string;
+  /** Free text, for example "10:00–19:00". */
+  bibPickupHours?: string;
+  /** http(s) link to the race's site or the athlete's entry. */
+  website?: string;
   /** ISO 8601. */
   createdAt: string;
 }
@@ -109,6 +128,27 @@ export interface RaceTargetInput {
   priority?: RacePriority;
   location?: string;
   notes?: string;
+  /** Where the athlete's entry stands; unset when they haven't said. */
+  registration?: RaceRegistration;
+  /** YYYYMMDD or YYYY-MM-DD, the last day to enter. */
+  registrationDeadline?: string;
+  bibNumber?: string;
+  /** HH:MM, local start time (the athlete's wave when they have one). */
+  startTime?: string;
+  /** Wave, corral or start group. */
+  wave?: string;
+  bibPickupLocation?: string;
+  /** YYYYMMDD or YYYY-MM-DD, the day the athlete plans to collect their bib (on or before race day). */
+  bibPickupDay?: string;
+  /** Free text, for example "10:00–19:00". */
+  bibPickupHours?: string;
+  /** http(s) link to the race's site or the athlete's entry. */
+  website?: string;
+}
+
+/** An upcoming race the athlete edits; every field is replaced, blanks clear. */
+export interface RaceTargetEditInput extends RaceTargetInput {
+  targetId: string;
 }
 
 export interface RaceOverview {

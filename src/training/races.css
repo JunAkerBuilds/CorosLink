@@ -1666,6 +1666,26 @@ button.race-plaque:focus-visible {
   background: #ffffff;
 }
 
+.race-field-section {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 -4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.race-field-section::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--text-muted) 28%, transparent);
+}
+
 .race-field-hint {
   margin: -6px 0 0;
   color: var(--text-muted);
@@ -1942,6 +1962,80 @@ button.race-plaque:focus-visible {
 .race-target-goal span {
   color: var(--text-muted);
   font-weight: 500;
+}
+
+.race-target-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid var(--race-card-border);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.race-target-entry.is-registered {
+  border-color: color-mix(in srgb, #3fb68b 45%, transparent);
+  color: #5cc9a0;
+}
+
+:root[data-theme="paper"] .race-target-entry.is-registered {
+  color: #1d7a56;
+}
+
+.race-target-entry.is-considering,
+.race-target-entry.is-deferred {
+  border-style: dashed;
+}
+
+.race-target-logistics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.race-target-logistics > span,
+.race-target-logistics > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.race-target-logistics svg {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.race-target-logistics a {
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--text-muted) 50%, transparent);
+  text-underline-offset: 2px;
+}
+
+.race-target-logistics a:hover {
+  color: var(--text-primary);
+}
+
+.race-target-alert {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.race-target-alert.is-urgent {
+  color: #e8b04a;
+}
+
+:root[data-theme="paper"] .race-target-alert.is-urgent {
+  color: #9a6408;
 }
 
 .race-target-actions {

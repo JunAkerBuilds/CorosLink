@@ -184,7 +184,7 @@ export function getChatAthleteTools(options: { trainingData: boolean }): CorosMc
     {
       name: "list_races",
       description:
-        "List the athlete's races: target races they are training for (date, distance, goal time and pace, priority, days to go) " +
+        "List the athlete's races: target races they are training for (date, distance, goal time and pace, priority, days to go, registration status, start time, bib and bib pickup) " +
         "and finished results (official time, pace, average HR, placing, and the build-up runs and distance in the 8 weeks before), " +
         "with the best time per distance. Use it for race-specific plans, tapers, goal paces and progress between races.",
       inputSchema: {
@@ -471,6 +471,18 @@ function raceSummary(
       ...(target.goalTime ? { goal_time: formatClock(target.goalTime), goal_pace: pace(target.distance, target.goalTime) } : {}),
       ...(target.priority ? { priority: target.priority } : {}),
       ...(target.location ? { location: target.location } : {}),
+      ...(target.registration ? { registration: target.registration } : {}),
+      ...(target.registrationDeadline ? { registration_closes: isoDay(target.registrationDeadline) } : {}),
+      ...(target.startTime ? { start_time: target.startTime } : {}),
+      ...(target.wave ? { wave: target.wave } : {}),
+      ...(target.bibNumber ? { bib: target.bibNumber } : {}),
+      ...(target.bibPickupDay || target.bibPickupLocation || target.bibPickupHours
+        ? {
+            bib_pickup: [target.bibPickupDay ? isoDay(target.bibPickupDay) : undefined, target.bibPickupHours, target.bibPickupLocation]
+              .filter(Boolean)
+              .join(", ")
+          }
+        : {}),
       ...(target.notes ? { notes: target.notes } : {})
     }));
   const results = overview.races.filter((race) => !options.distance || race.distanceKey === options.distance);

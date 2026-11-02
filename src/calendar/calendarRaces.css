@@ -1,0 +1,68 @@
+/* Upcoming races on the calendar: race day, bib pickup, registration deadline.
+   Neutral chips with a gold rail for the race itself; the dates leading up to
+   it get a dashed muted rail so they read as errands, not workouts. */
+
+.calendar-chip-race,
+.calendar-agenda-race {
+  --race-rail: #e6bb62;
+}
+
+:root[data-theme="paper"] .calendar-chip-race,
+:root[data-theme="paper"] .calendar-agenda-race {
+  --race-rail: #a8740f;
+}
+
+.calendar-chip.calendar-chip-race {
+  border-left-color: var(--race-rail);
+}
+
+.calendar-chip-race .calendar-chip-title {
+  align-items: center;
+  gap: 5px;
+}
+
+.calendar-chip-race .calendar-chip-title svg {
+  flex: none;
+  color: var(--race-rail);
+}
+
+.calendar-chip.calendar-chip-race.is-pickup,
+.calendar-chip.calendar-chip-race.is-deadline {
+  border-left-style: dashed;
+  border-left-color: color-mix(in srgb, var(--text-muted) 80%, transparent);
+  background: transparent;
+}
+
+.calendar-chip-race.is-pickup .calendar-chip-title svg,
+.calendar-chip-race.is-deadline .calendar-chip-title svg {
+  color: var(--text-secondary);
+}
+
+.calendar-agenda-entry.calendar-agenda-race {
+  --entry-accent: var(--race-rail);
+}
+
+.calendar-agenda-entry.calendar-agenda-race.is-pickup,
+.calendar-agenda-entry.calendar-agenda-race.is-deadline {
+  --entry-accent: var(--text-secondary);
+  border-left-style: dashed;
+}
+
+.calendar-agenda-race.is-pickup .calendar-agenda-glyph,
+.calendar-agenda-race.is-deadline .calendar-agenda-glyph {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--text-muted) 60%, transparent);
+}
+
+.calendar-agenda-status.calendar-agenda-race-status {
+  border: 1px solid color-mix(in srgb, var(--entry-accent) 45%, transparent);
+  color: var(--text-secondary);
+}
+
+/* Names and pickup venues run long; the chip's title holds the full text. */
+.calendar-chip-race .calendar-chip-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

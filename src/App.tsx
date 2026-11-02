@@ -1143,6 +1143,12 @@ export default function App() {
     setActiveView("training");
   }, []);
 
+  const openTrainingHubRaces = useCallback(() => {
+    trainingHubNavigationSequence.current += 1;
+    setTrainingHubNavigation({ tab: "races", requestId: trainingHubNavigationSequence.current });
+    setActiveView("training");
+  }, []);
+
   const openCalendarWorkout = useCallback((workout: TrainingHubUpcomingWorkout) => {
     calendarNavigationSequence.current += 1;
     setCalendarNavigation({
@@ -3038,6 +3044,7 @@ export default function App() {
                   onMessage={setMessage}
                   onError={setError}
                   onOpenTraining={() => setActiveView("training")}
+                  onOpenRaces={openTrainingHubRaces}
                   onOpenCoach={(prompt) => {
                     setCoachPrefill({ text: prompt });
                     setActiveView("coach");

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Registration and race-day details for upcoming races.** An upcoming race now keeps its registration status (Considering, Registered, Waitlisted, Deferred), the registration deadline, the race website, start time, wave or corral, bib number, and bib pickup day, hours and location. Up next shows them on each race, with a reminder while registration is still open and you haven't entered. Upcoming races can now be edited (the pencil on each card), so you can mark a race Registered or add your bib once you have it. The Coach sees these details when it lists your races.
+- **Races on the Calendar.** Race day, bib pickup and the registration deadline (until you're registered) appear on their days in Month, Week and List. Click one to open Races.
+
 ## [0.1.72] - 2026-11-01
 
 ### Added
