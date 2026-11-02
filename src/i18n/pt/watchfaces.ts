@@ -2032,8 +2032,6 @@ export const watchfacesPortuguese: Record<string, string> = {
   "Minimum and maximum temperature show only on a daily data page, and this face has none.": "As temperaturas mínima e máxima só aparecem numa página de dados diários, e este mostrador não tem nenhuma.",
   "Add a hidden daily page": "Adicionar uma página diária oculta",
   "Not shown on the watch.": "Não aparece no relógio.",
-  "The watch draws {{label}} only on a daily data page, and this face has none.": "O relógio só desenha {{label}} numa página de dados diários, e este mostrador não tem nenhuma.",
-  "A hidden daily page shows nothing of its own but keeps {{label}} on screen. Watch pages in the layers list shows it.": "Uma página diária oculta não mostra nada próprio, mas mantém {{label}} no ecrã. Aparece em Páginas do relógio, na lista de camadas.",
   "Nothing on this page is visible, but the watch still stops here when you press Back. Remove the page to skip it.": "Nada nesta página está visível, mas o relógio continua a parar aqui quando prime Voltar. Remova a página para a saltar.",
   "Removed: the watch skips this page.": "Removida: o relógio salta esta página.",
   "{{label}} is the last readout this page shows. Hiding it keeps the page on the watch with nothing visible; remove the page to skip it.": "{{label}} é a última leitura que esta página mostra. Ocultá-la mantém a página no relógio sem nada visível; remova a página para a saltar.",
@@ -2058,4 +2056,6 @@ export const watchfacesPortuguese: Record<string, string> = {
   "Show this icon on the watch": "Mostrar este ícone no relógio",
   "This face has no icon for this state, so the watch shows nothing for it.": "Este mostrador não tem ícone para este estado, por isso o relógio não mostra nada.",
   "Add icon": "Adicionar ícone",
+  "A hidden daily page shows nothing of its own, and {{label}} shows while the watch is on it. It's listed under Chart pages.": "Uma página diária oculta não mostra nada próprio, e {{label}} aparece enquanto o relógio está nela. Aparece em Páginas de gráfico.",
+  "This face has chart pages but no daily data page, and the watch draws {{label}} only on that one.": "Este mostrador tem páginas de gráfico mas nenhuma de dados diários, e o relógio só desenha {{label}} nessa.",
 };

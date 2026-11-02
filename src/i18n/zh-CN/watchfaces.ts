@@ -2033,8 +2033,6 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Minimum and maximum temperature show only on a daily data page, and this face has none.": "最低和最高气温只在每日数据页面显示，而此表盘没有这类页面。",
   "Add a hidden daily page": "添加隐藏的每日数据页面",
   "Not shown on the watch.": "手表上不显示。",
-  "The watch draws {{label}} only on a daily data page, and this face has none.": "手表只在每日数据页面绘制{{label}}，而此表盘没有这类页面。",
-  "A hidden daily page shows nothing of its own but keeps {{label}} on screen. Watch pages in the layers list shows it.": "隐藏的每日数据页面本身不显示内容，但能让{{label}}保留在屏幕上。它会显示在图层列表的“手表页面”中。",
   "Nothing on this page is visible, but the watch still stops here when you press Back. Remove the page to skip it.": "此页面没有可见内容，但按返回键时手表仍会停在这里。移除此页面即可跳过它。",
   "Removed: the watch skips this page.": "已移除：手表会跳过此页面。",
   "{{label}} is the last readout this page shows. Hiding it keeps the page on the watch with nothing visible; remove the page to skip it.": "{{label}}是此页面显示的最后一个数值。隐藏后此页面仍保留在手表上但不显示内容；移除此页面即可跳过它。",
@@ -2059,4 +2057,6 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Show this icon on the watch": "在手表上显示此图标",
   "This face has no icon for this state, so the watch shows nothing for it.": "此表盘没有该状态的图标，因此手表不会显示内容。",
   "Add icon": "添加图标",
+  "A hidden daily page shows nothing of its own, and {{label}} shows while the watch is on it. It's listed under Chart pages.": "隐藏的每日数据页面本身不显示内容，手表停在该页面时会显示{{label}}。它列在“图表页面”下。",
+  "This face has chart pages but no daily data page, and the watch draws {{label}} only on that one.": "此表盘有图表页面但没有每日数据页面，而手表只在每日数据页面绘制{{label}}。",
 };

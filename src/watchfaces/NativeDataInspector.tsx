@@ -35,11 +35,11 @@ const listLabels = (labels: string[]) => labels.join(getLocale().startsWith("zh"
 function FieldPagesPanel({ id, pages, onAddDailyPage }: { id: string; pages: string[]; onAddDailyPage?: () => void }) {
   useLanguage();
   const label = nativeFieldLabel(id);
-  // A face without a daily page (min/max) never draws the field at all.
+  // A face with chart pages but no daily one (min/max) never draws the field.
   if (!pages.length) return <div className="wf-field-pages is-warning">
-    <p><strong>{t("Not shown on the watch.")}</strong> {t("The watch draws {{label}} only on a daily data page, and this face has none.", { label })}</p>
+    <p><strong>{t("Not shown on the watch.")}</strong> {t("This face has chart pages but no daily data page, and the watch draws {{label}} only on that one.", { label })}</p>
     {onAddDailyPage ? <>
-      <p>{t("A hidden daily page shows nothing of its own but keeps {{label}} on screen. Watch pages in the layers list shows it.", { label })}</p>
+      <p>{t("A hidden daily page shows nothing of its own, and {{label}} shows while the watch is on it. It's listed under Chart pages.", { label })}</p>
       <button type="button" className="secondary-button" onClick={onAddDailyPage}><Plus size={13} aria-hidden="true" />{t("Add a hidden daily page")}</button>
     </> : null}
   </div>;

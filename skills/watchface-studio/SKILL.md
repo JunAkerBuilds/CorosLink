@@ -143,9 +143,11 @@ Chart pages (sun, moon, daily data A/B) can exist without a chart layer: some
 templates declare readouts with no graph, and the watch still pages through
 them. To hide or remove a page, `merge` `{ "<page id>": "hidden" | "removed" }`
 into `/design/chartPageModes`; never delete `chart_*` lines through
-`configTextEdits`. Minimum/maximum temperature draw only on a daily page, so
-before removing every daily page, tell the user min/max will disappear from the
-watch, or keep one daily page `hidden`.
+`configTextEdits`. With no chart page at all the watch draws minimum/maximum
+temperature and wind together. Once any page exists, min/max draw only on a
+daily page, so removing the daily pages while a sun, moon, barometer or tide
+page stays takes min/max off the watch: tell the user, or keep a daily page
+`hidden`. Min/max also need both fonts, which export handles for one alone.
 
 Use the listed indices, dimensions and edit paths. For a new native field,
 fetch `get_schema` with `section: "nativeData"` and its `ids`; chart sources can

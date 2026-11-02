@@ -640,32 +640,29 @@ const PAGE_DEPENDENT_FIELDS: Record<string, (page: string) => boolean> = {
   weather_direction: page => !page.startsWith("daily-")
 };
 
-/** Minimum and maximum draw only on a daily page, so a face without one never shows them. */
-const DAILY_ONLY_FIELDS = new Set(["weather_temp_min", "weather_temp_max"]);
-
 /**
- * The chart pages a field shows on; null when the field shows on every page
- * of this face. `facePages` are the pages a face without a chart layer keeps
- * from its template (templateChartPages): min/max with no daily page among
- * them gets an empty list, as the watch never draws them (PACE Pro, 2026-11-01:
- * removing a template's chart readouts took min/max off the watch).
+ * The chart pages a field shows on; null when the field shows whatever the
+ * face does. `facePages` are the pages a face without a chart layer keeps from
+ * its template (templateChartPages). With no page at all the firmware draws
+ * minimum, maximum and wind together (0x454f9c), so only a face that has pages
+ * but no daily one keeps min/max off the screen.
  */
 export function nativeLayerChartPages(id: string, data: NativeData, facePages?: string[]): { pages: string[] } | null {
   const shows = PAGE_DEPENDENT_FIELDS[id];
   if (!shows) return null;
   if (data.chart?.enabled) return { pages: NATIVE_CHART_PAGES.map(page => page.id).filter(shows) };
-  if (!facePages || (!facePages.length && !DAILY_ONLY_FIELDS.has(id))) return null;
+  if (!facePages?.length) return null;
   return { pages: facePages.filter(shows) };
 }
 
 /**
  * Layers the watch hides on the chart page the preview shows (the edited
  * readout's page). Without a chart layer the preview has no page, so only
- * min/max on a face with no daily page hide.
+ * min/max on a face whose pages include no daily one hide.
  */
 export function nativeLayerHiddenByChartGroup(id: string, data: NativeData, facePages?: string[]): boolean {
   const chart = data.chart?.enabled ? data.chart : undefined, shows = PAGE_DEPENDENT_FIELDS[id];
-  if (!chart && facePages && DAILY_ONLY_FIELDS.has(id)) return !facePages.some(page => page.startsWith("daily-"));
+  if (!chart && facePages?.length && (id === "weather_temp_min" || id === "weather_temp_max")) return !facePages.some(page => page.startsWith("daily-"));
   const page = chart ? chartReadoutPage(chartSourceOf(chart)) : undefined;
   return Boolean(page && shows && !shows(page));
 }

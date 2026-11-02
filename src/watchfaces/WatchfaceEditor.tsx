@@ -2185,7 +2185,8 @@ export function WatchfaceEditor({
     return master ? templateChartPages(withoutTurnedOffChart(master, design.nativeData?.chart), design.chartPageModes) : null;
   }, [modeSourceDetails, design.nativeData?.chart, design.chartPageModes]);
   const facePageIds = useMemo(() => templatePages ? onChartPageIds(templatePages) : undefined, [templatePages]);
-  const minMaxNeedsDailyPage = Boolean(facePageIds && !facePageIds.some(page => page.startsWith("daily-"))
+  // With no chart page at all the watch still draws min/max (firmware 0x454f9c).
+  const minMaxNeedsDailyPage = Boolean(facePageIds?.length && !facePageIds.some(page => page.startsWith("daily-"))
     && (design.nativeData?.weather_temp_min?.enabled || design.nativeData?.weather_temp_max?.enabled));
   /**
    * The template's chart pages as chart rows. Under a turned-off Chart layer

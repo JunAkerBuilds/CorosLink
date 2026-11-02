@@ -124,7 +124,7 @@ export const WATCHFACE_AUTOMATION_DOCUMENT_JSON_SCHEMA = {
         stripBlankConfigKeys: { type: "boolean" },
         watchLanguages: { anyOf: [{ enum: ["all", "english"] }, { type: "array", uniqueItems: true, items: { type: "string", pattern: "^[a-z_]+$" } }], description: "Watch languages that get the custom weekday labels. Month/day digits always reach every language." },
         configTextEdits: stringMap,
-        chartPageModes: { type: "object", additionalProperties: false, properties: Object.fromEntries(["sun", "moon", "daily-a", "daily-b"].map(id => [id, { enum: ["hidden", "removed"] }])), description: "Chart pages kept on the watch with nothing visible (hidden) or taken off (removed), by page id. Minimum/maximum temperature draw only on a daily page, so removing every daily page removes them from the watch too. Prefer this over configTextEdits for chart pages." },
+        chartPageModes: { type: "object", additionalProperties: false, properties: Object.fromEntries(["sun", "moon", "daily-a", "daily-b"].map(id => [id, { enum: ["hidden", "removed"] }])), description: "Chart pages kept on the watch with nothing visible (hidden) or taken off (removed), by page id. With no page at all the watch draws minimum/maximum temperature; once any page exists they draw only on a daily page. Prefer this over configTextEdits for chart pages." },
         backgroundColor: { $ref: "#/$defs/color", description: "Solid base painted first. Opaque artwork may cover it; set artworkVisible false to show only this color." },
         accentColor: { type: "string" },
         artwork: { anyOf: [{ $ref: "#/$defs/artwork" }, { type: "null" }] },
