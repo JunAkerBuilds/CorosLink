@@ -2003,4 +2003,7 @@ export const watchfacesFrench: Record<string, string> = {
   "{{label}} is the last readout this page shows. Hiding it keeps the page on the watch with nothing visible; remove the page to skip it.": "{{label}} est la dernière valeur affichée sur cette page. La masquer garde la page sur la montre sans rien d'affiché ; retirez la page pour la sauter.",
   "Chart pages from the template's config. Back on the watch steps through the ones that are on, even pages with nothing visible.": "Pages de graphique issues de la configuration du modèle. Le bouton Retour de la montre parcourt celles qui sont actives, même les pages où rien n'est visible.",
   "Min/max": "Min/max",
+  "The watch shows minimum and maximum as one reading.": "La montre affiche le minimum et le maximum comme une seule valeur.",
+  "With {{label}} alone, the export adds an invisible {{other}}, which leaves a small gap before the unit on the watch.": "Avec {{label}} seul, l'export ajoute {{other}} de façon invisible, ce qui laisse un petit espace avant l'unité sur la montre.",
+  "Add {{other}}": "Ajouter {{other}}",
 };

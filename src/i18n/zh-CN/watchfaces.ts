@@ -2040,4 +2040,7 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "{{label}} is the last readout this page shows. Hiding it keeps the page on the watch with nothing visible; remove the page to skip it.": "{{label}}是此页面显示的最后一个数值。隐藏后此页面仍保留在手表上但不显示内容；移除此页面即可跳过它。",
   "Chart pages from the template's config. Back on the watch steps through the ones that are on, even pages with nothing visible.": "来自模板配置的图表页面。手表上按返回键会依次切换已开启的页面，包括没有可见内容的页面。",
   "Min/max": "最低/最高",
+  "The watch shows minimum and maximum as one reading.": "手表将最低和最高气温显示为同一个读数。",
+  "With {{label}} alone, the export adds an invisible {{other}}, which leaves a small gap before the unit on the watch.": "只有{{label}}时，导出会添加不可见的{{other}}，因此手表上单位前会留有小间隙。",
+  "Add {{other}}": "添加{{other}}",
 };

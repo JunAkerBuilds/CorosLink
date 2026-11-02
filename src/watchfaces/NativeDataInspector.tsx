@@ -49,6 +49,20 @@ function FieldPagesPanel({ id, pages, onAddDailyPage }: { id: string; pages: str
     {id !== "chart_sun_angle" && !pages.includes("sun") ? <p>{t("To keep it on screen with sunrise and sunset times, use the Sunrise / sunset field instead of the chart's Sun page.")}</p> : null}
   </div>;
 }
+/**
+ * PACE Pro firmware draws minimum and maximum only together, as one reading
+ * (min, separator, max, unit). With one alone, export adds the other
+ * invisibly, which leaves a small gap before the unit; adding it back is the
+ * clean way.
+ */
+function MinMaxPartnerPanel({ id, onAdd }: { id: string; onAdd: () => void }) {
+  useLanguage();
+  const label = nativeFieldLabel(id), other = nativeFieldLabel(id === "weather_temp_min" ? "weather_temp_max" : "weather_temp_min");
+  return <div className="wf-field-pages">
+    <p><strong>{t("The watch shows minimum and maximum as one reading.")}</strong> {t("With {{label}} alone, the export adds an invisible {{other}}, which leaves a small gap before the unit on the watch.", { label, other })}</p>
+    <button type="button" className="secondary-button" onClick={onAdd}><Plus size={13} aria-hidden="true" />{t("Add {{other}}", { other })}</button>
+  </div>;
+}
 export const chartPageLabel = (id: string) => id === "daily-a" ? t("Daily data · A") : id === "daily-b" ? t("Daily data · B") : id === "sun" ? t("Sun") : id === "moon" ? t("Moon") : id === "barometer" ? t("Barometer") : t("Tide");
 
 type ChartPage = typeof NATIVE_CHART_PAGES[number];
@@ -244,7 +258,7 @@ type RenderSection = (
  * selected part, and Advanced for preview-only settings. The editor renders
  * the Transform section itself so it matches every other layer.
  */
-export function NativeDataInspector({ id, style, coordinateScale, api, disabled, renderSection, renderFontSizeField, onPatch, onError, onImportStart, onImportFinish, isImportCurrent, chartGroups = [], chartReadouts = chartGroups, onChartGroup, onAddReadout, onRemoveReadout, takenReadouts, onShowReadout, onAddPage, onRemovePage, onMakeFixed, pageFields, onSelectField, fieldPages, onAddDailyPage, removedPages }: {
+export function NativeDataInspector({ id, style, coordinateScale, api, disabled, renderSection, renderFontSizeField, onPatch, onError, onImportStart, onImportFinish, isImportCurrent, chartGroups = [], chartReadouts = chartGroups, onChartGroup, onAddReadout, onRemoveReadout, takenReadouts, onShowReadout, onAddPage, onRemovePage, onMakeFixed, pageFields, onSelectField, fieldPages, onAddDailyPage, removedPages, onAddMinMaxPartner }: {
   id: string; style: Style; api: CorosLinkApi; disabled: boolean; coordinateScale: number;
   renderSection: RenderSection;
   /** The editor's shared Font size field, in master pixels. */
@@ -263,6 +277,8 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   fieldPages?: { pages: string[] } | null;
   /** Chart: pages the design removes although the template declares them. */
   removedPages?: string[];
+  /** Min or max alone: adds the other, since the watch draws them as one reading. */
+  onAddMinMaxPartner?: () => void;
   /** Adds a hidden daily page, for min/max on a face without one. */
   onAddDailyPage?: () => void;
   onPatch: (patch: Partial<Style>) => void; onError: (message: string) => void;
@@ -414,6 +430,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
         barsOn={(style.chartStyle?.barWidth ?? 8) > 0} onBars={on => patchChart(on ? { barWidth: 8, barGap: style.chartStyle?.barGap || 4 } : { barWidth: 0 })}
         onEdit={onChartGroup} onAdd={onAddReadout} onRemove={onRemoveReadout} onShown={onShowReadout} onAddPage={onAddPage} onRemovePage={onRemovePage} onMakeFixed={onMakeFixed}
         onRestore={source=>onPatch({removedReadouts:(style.removedReadouts ?? []).filter(item=>item!==source)})} pageFields={pageFields} onSelectField={onSelectField} removedPages={removedPages} />}
+      {onAddMinMaxPartner ? <MinMaxPartnerPanel id={id} onAdd={onAddMinMaxPartner} /> : null}
       {definition.kind !== "chart" && fieldPages ? <FieldPagesPanel id={id} pages={fieldPages.pages} onAddDailyPage={onAddDailyPage} /> : null}
       <p className="watchface-studio-summary">{t("Every component uses this color and font unless it sets its own below.")}</p>
     </div>, { disabled: locked })}

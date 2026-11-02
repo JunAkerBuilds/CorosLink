@@ -412,7 +412,8 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
         // configs) declares chart_bg, so a hidden backdrop becomes an invisible
         // one at the plot, like hidden icons. Adding it did not by itself make
         // a Studio chart page with Back on a PACE Pro (2026-10-20).
-        if (!folderPrefix && !part("background").enabled) { values.chart_bg = blankIcon(); values.chart_pos = point("plot"); }
+        // A face with no graph at all (SIMPLE) gets no backdrop either.
+        if (!folderPrefix && part("plot").enabled && !part("background").enabled) { values.chart_bg = blankIcon(); values.chart_pos = point("plot"); }
         // The watch draws the graph only when the face declares a chart readout.
         // A graph-only face sent through C-LINK showed no graph until its number
         // was turned on (2026-10-13), although COROS's compiler and ours write the
@@ -557,13 +558,32 @@ async function addMinMaxCompanions(
     }
     return;
   }
-  const blank = async (folder: string, count: number) => {
-    const dataUrl = canvasImage(1, 1, () => undefined);
+  const blank = async (folder: string, count: number, height = 1) => {
+    const dataUrl = canvasImage(1, height, () => undefined);
     for (let i = 0; i < count; i++) {
       const path = `${resolution.directory}/${folder}/${String(i).padStart(2, "0")}.png`;
       assetReplacements.push({ path, dataUrl, create: !existing.has(path), allowDimensionOverride: true });
     }
   };
+  // PACE Pro firmware 3.2008.0 draws min/max (0x4cab94) only when the
+  // minimum font, maximum font, separator and min/max minus all exist. A face
+  // with one of them alone (2026-11-01: minimum only) drew nothing, so the
+  // other becomes an invisible reading right after it, with a blank separator.
+  const minShown = Boolean(shown("weather_temp_min")), maxShown = Boolean(shown("weather_temp_max"));
+  if (minShown !== maxShown) {
+    const id = minShown ? "weather_temp_min" : "weather_temp_max", other = minShown ? "weather_temp_max" : "weather_temp_min";
+    // As tall as the shown digits: the watch places the unit by the last
+    // glyphs it drew, and 1x1 frames dropped "°C" to the middle of "12".
+    const style = data[id]!, height = Math.max(1, Math.round(nativePart(id, style, "value").height * style.scale * ratio));
+    const folder = `cl_nd_${other}_blank`;
+    await blank(folder, 10, height);
+    values[`${other}_font`] = folder;
+    values[`${other}_rect`] = minShown ? `{${anchor.x1},${anchor.y0},${anchor.x1 + 8},${anchor.y1},left|vcenter}` : `{${anchor.x0},${anchor.y0},${anchor.x0 + 8},${anchor.y1},left|vcenter}`;
+    await blank("cl_nd_temp_separator", 1, height);
+    values.weather_temp_separator_icon_pos = `{${minShown ? anchor.x1 : anchor.x0},${anchor.y0}}`;
+    values.weather_temp_separator_icon = "cl_nd_temp_separator\\00.png";
+    return;
+  }
   if (run) {
     const min = data.weather_temp_min!, path = `${resolution.directory}/cl_nd_temp_separator/00.png`;
     const dataUrl = run.separator.visible

@@ -2,7 +2,7 @@ import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { createCollapsedWatchfaceLayerSections, watchfaceLayerMatchesSearch } from "./watchfaceLayerSearch";
 import { batteryStateMeaning, batteryReplacementStateCount, COROS_BATTERY_STATE_ORDER } from "./watchfaceBatteryStates";
 import { WatchfaceAddMenu, type WatchfaceAddCategory, type WatchfaceAddFaceOption } from "./WatchfaceAddMenu";
-import { recoverChartGroup, recoverChartPageCompanions, recoveredChartReadouts, recoveredChartSources, recoverWatchfaceDesign, type ChartPageCompanions } from "./recoveredWatchfaceDesign";
+import { recoverChartGroup, recoverChartPageCompanions, recoverGraphlessChart, recoveredChartReadouts, recoveredChartSources, recoverWatchfaceDesign, type ChartPageCompanions } from "./recoveredWatchfaceDesign";
 import { WATCHFACE_TARGETS } from "../../electron/watchfaceTargets";
 import { WatchfaceSimulationPanel } from "./WatchfaceSimulationPanel";
 import { useWatchfaceSimulation } from "./useWatchfaceSimulation";
@@ -1867,6 +1867,10 @@ export function WatchfaceEditor({
         const recoveredCurrent = recoverAssets ? hydratedCurrent : undefined;
         const recoveredAod = recoverAssets && hasWatchfaceAod(described)
           ? await recoverWatchfaceDesign(detailsForCompositionMode(described, "aod"), loadAssets, carriedPreferences?.chartSource?.aod) : undefined;
+        // Projects saved before graph-less chart pages recovered (SIMPLE) get
+        // their Chart layer now, so its pages list like any other chart's.
+        const graphlessChart = initialDesign && !initialDesign.nativeData?.chart
+          ? await recoverGraphlessChart(applyConfigTextEditsToDetails(described, initialDesign.configTextEdits), loadAssets).catch(() => null) : null;
         if (cancelled) return;
 
         const baselines: Record<string, string> = {};
@@ -1904,6 +1908,7 @@ export function WatchfaceEditor({
             staticSeparators: inferStaticSeparators(described, nextDesign.digitColor)
           };
         }
+        if (graphlessChart) nextDesign = { ...nextDesign, nativeData: { ...nextDesign.nativeData, chart: graphlessChart } };
         if (!initialDesign?.ampmIndicator) {
           const capability = getAmPmCapability(described);
           if (capability) {
@@ -12726,6 +12731,9 @@ export function WatchfaceEditor({
             onSelectField={id => { selectEditorItem(`native:${id}`); }}
             fieldPages={layer.nativeDataId !== "chart" ? nativeLayerChartPages(layer.nativeDataId, design.nativeData, facePageIds) : undefined}
             onAddDailyPage={facePageIds ? () => setChartPageMode("daily-a", "hidden") : undefined}
+            onAddMinMaxPartner={(layer.nativeDataId === "weather_temp_min" || layer.nativeDataId === "weather_temp_max")
+              && !design.nativeData?.[layer.nativeDataId === "weather_temp_min" ? "weather_temp_max" : "weather_temp_min"]?.enabled
+              ? () => addNativeData(layer.nativeDataId === "weather_temp_min" ? "weather_temp_max" : "weather_temp_min") : undefined}
             onChartGroup={layer.nativeDataId === "chart" ? source => { void selectChartGroup(source); } : undefined}
             onAddReadout={layer.nativeDataId === "chart" ? addChartReadout : undefined}
             onRemoveReadout={layer.nativeDataId === "chart" ? source => { void removeChartReadout(source); } : undefined}
