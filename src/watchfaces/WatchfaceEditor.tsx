@@ -13,6 +13,7 @@ import { NativeDataInspector, chartPageLabel as templatePageLabel } from "./Nati
 import { MetricKindNote, watchfaceMetricKind } from "./watchfaceMetricKinds";
 import { NATIVE_CHART_FIXED_EQUIVALENTS, NATIVE_CHART_PAGES, nativeChartReadoutLabel } from "../../electron/watchfaceNativeCatalog";
 import { nativePart, nativeParts } from "./nativeDataParts";
+import { WATCHFACE_STATUS_GROUPS, watchfaceHiddenStatusKeys, watchfaceStatusActiveKey, watchfaceStatusGroupOf } from "./watchfaceStatusPairs";
 import { onChartPageIds, templateChartPages, withoutTurnedOffChart, type ChartPageMode } from "./templateChartPages";
 import { addChartPage, chartDragSplit, chartGraphBounds, chartReadoutBounds, chartReadoutHidden, chartReadoutPage, chartSourceOf, chartStoredReadout, dropChartReadout, hiddenChartReadout, moveChartGraph, moveChartReadout, newChartReadout, removeChartPage, setChartReadoutShown, storedChartReadouts, swapChartReadout } from "./chartReadouts";
 import { describeNativeDataComponents } from "./nativeDataAutomation";
@@ -2133,6 +2134,13 @@ export function WatchfaceEditor({
       design.layerStrokes
     ]
   );
+  // Which state of each Bluetooth / Do Not Disturb indicator the panel edits
+  // and the preview draws, by group id. The watch picks the state live.
+  const [chosenStatusStates, setChosenStatusStates] = useState<Record<string, string>>({});
+  const hiddenStatusKeys = useMemo(() => {
+    const master = details ? pickPreviewResolution(applyConfigTextEditsToDetails(details, design.configTextEdits)) : null;
+    return watchfaceHiddenStatusKeys(key => Boolean(master?.config[key]?.trim() || design.configAssetOverrides?.[`config:${key}`]?.replacement), chosenStatusStates);
+  }, [details, design.configTextEdits, design.configAssetOverrides, chosenStatusStates]);
   const previewStudioOptions = useMemo(
     () => ({
       ...studioOptions,
@@ -2140,11 +2148,12 @@ export function WatchfaceEditor({
       previewMode: supportsAod ? previewMode : ("current" as const),
       deferProgressArcs: true,
       transparentBackground: true,
+      hiddenStatusKeys,
       ...(automationPreviewComplication
         ? { previewComplication: automationPreviewComplication }
         : {})
     }),
-    [automationPreviewComplication, studioOptions, previewMode, supportsAod, simulationScenario]
+    [automationPreviewComplication, studioOptions, previewMode, supportsAod, simulationScenario, hiddenStatusKeys]
   );
   const detailsWithConfigEdits = useMemo(
     () =>
@@ -3600,6 +3609,7 @@ export function WatchfaceEditor({
           ...toStudioOptions(frameDesign),
           ...simulationStudioOptions(simulationScenario),
           previewMode: supportsAod ? previewMode : "current",
+          hiddenStatusKeys,
           previewComplicationContent
         },
         frameDetails
@@ -7722,6 +7732,7 @@ export function WatchfaceEditor({
         : 1;
     const exportOptions: WatchfaceStudioOptions = {
       ...snapshotOptions,
+      hiddenStatusKeys,
       ...(previewComplication ? { previewComplication } : {}),
       previewMode: hasWatchfaceAod(details) ? mode : "current",
       ...simulationStudioOptions(scenario),
@@ -8292,8 +8303,9 @@ export function WatchfaceEditor({
     }
   }
 
-  function removeFirmwareLayers(removed: EditorLayer[]) {
-    if (removed.length === 0) return;
+  function removeFirmwareLayers(selected: EditorLayer[]) {
+    if (selected.length === 0) return;
+    const removed = [...new Set(selected.flatMap(layer => statusGroupMembers(layer) ?? [layer]))];
     for (const layer of removed) {
       if (!layer.nativeDataId) setLayerOn(layer, false);
     }
@@ -8323,12 +8335,13 @@ export function WatchfaceEditor({
 
   /** Turns a deleted firmware layer back on and lists it again. */
   function restoreFirmwareLayer(layer: EditorLayer) {
+    const restored = new Set((statusGroupMembers(layer) ?? [layer]).map(item => item.id));
     beginDesignTransaction();
     try {
       if (!layer.visible) setLayerOn(layer, true);
       setDesign((current) => ({
         ...current,
-        removedLayerIds: (current.removedLayerIds ?? []).filter((id) => id !== layer.id)
+        removedLayerIds: (current.removedLayerIds ?? []).filter((id) => !restored.has(id))
       }));
     } finally {
       endDesignTransaction();
@@ -9514,9 +9527,19 @@ export function WatchfaceEditor({
   // Deleted firmware layers stay derivable (the Add menu restores them) but
   // leave the Layers list while they are off.
   const removedLayerIds = new Set(design.removedLayerIds ?? []);
-  const listedLayers = layers.filter(
-    (layer) => layer.visible || !removedLayerIds.has(layer.id)
-  );
+  // One row per status indicator, on the state the preview draws.
+  const statusRowKeys = new Set(WATCHFACE_STATUS_GROUPS.map(group => watchfaceStatusActiveKey(group,
+    key => layers.some(item => item.present && item.configAssetId === `config:${key}`), chosenStatusStates[group.id])));
+  const listedLayers = layers.flatMap((layer) => {
+    if (!layer.visible && removedLayerIds.has(layer.id)) return [];
+    const group = layerStatusGroup(layer);
+    if (!group) return [layer];
+    if (!statusRowKeys.has(configAssetsById.get(layer.configAssetId!)!.configKey)) return [];
+    const members = statusGroupMembers(layer)!;
+    // Studio's Add menu offers an indicator the face doesn't have.
+    if (!members.some(item => item.present) || members.every(item => !item.visible && removedLayerIds.has(item.id))) return [];
+    return [{ ...layer, label: group.label, visible: members.some(item => item.visible) }];
+  });
   const faceAddOptions: WatchfaceAddFaceOption[] = [
     ...(canAddSeconds ? [{ id: "seconds", label: t("Seconds"), category: "Time" as const, added: Boolean(design.addSeconds), onAdd: addSeconds }] : []),
     { id: "analog", label: t("Analog hands"), category: "Time", added: analogHandsOnFace, onAdd: addAnalogHands },
@@ -9537,13 +9560,15 @@ export function WatchfaceEditor({
         !addableDateParts.has(layer.id) &&
         !ANALOG_HAND_CONFIG_ASSET_IDS.has(layer.configAssetId ?? "") &&
         // A template image the face never drew has nothing to restore.
-        (layer.kind !== "configAsset" || layer.present)
+        (layer.kind !== "configAsset" || layer.present) &&
+        // One entry per status indicator.
+        (!layerStatusGroup(layer) || statusGroupMembers(layer)![0] === layer)
       )
       .map((layer) => ({
         id: layer.id,
-        label: layer.label,
+        label: layerDisplayLabel(layer),
         category: addCategoryForLayer(layer),
-        added: layer.visible,
+        added: statusGroupMembers(layer)?.some(item => item.visible) ?? layer.visible,
         onAdd: () => layer.visible
           ? selectQuickStartItem(layer.id)
           // A template without a fixed battery icon has nothing to restore.
@@ -9559,10 +9584,13 @@ export function WatchfaceEditor({
     ...layers
       .filter((layer) => layer.kind === "configAsset" && !layer.present && layer.configAssetId &&
         configAssetsById.get(layer.configAssetId)?.scope === "config" &&
-        isVirtualStandaloneStatusIconKey(configAssetsById.get(layer.configAssetId)!.configKey))
+        isVirtualStandaloneStatusIconKey(configAssetsById.get(layer.configAssetId)!.configKey) &&
+        // An indicator the face lacks starts on its primary state; the panel adds the others.
+        !layers.some((item) => item.present && layerStatusGroup(item)?.id === layerStatusGroup(layer)?.id) &&
+        layerStatusGroup(layer)?.primary === configAssetsById.get(layer.configAssetId)!.configKey)
       .map((layer) => ({
         id: layer.id,
-        label: layer.label,
+        label: layerDisplayLabel(layer),
         category: "Device" as const,
         added: false,
         onAdd: () => void addStatusIndicator(configAssetsById.get(layer.configAssetId!)!, layer.id)
@@ -10055,8 +10083,8 @@ export function WatchfaceEditor({
                     >
                       <button
                         type="button"
-                        aria-selected={selectedIds.includes(layer.id)}
-                        className={`watchface-layer-row${selectedIds.includes(layer.id) ? " is-selected" : ""}`}
+                        aria-selected={layerRowSelected(layer)}
+                        className={`watchface-layer-row${layerRowSelected(layer) ? " is-selected" : ""}`}
                         onMouseEnter={() => setHoveredId(layer.id)}
                         onMouseLeave={() => setHoveredId(null)}
                         onClick={(event) => {
@@ -10661,7 +10689,7 @@ export function WatchfaceEditor({
           ) : null}
           <div className="wf-stage-status" role="status">
             <span ref={snapStatusElementRef}>
-              {selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer?.label ?? t("No selection")}
+              {selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer ? t(layerDisplayLabel(selectedLayer)) : t("No selection")}
             </span>
             <span>{watchCoordinateWidth} × {watchCoordinateHeight}{" "}{t("preview")}</span>
             <span>
@@ -11159,6 +11187,31 @@ export function WatchfaceEditor({
     );
   }
 
+  /** The Bluetooth or Do Not Disturb group a current-display layer belongs to. */
+  function layerStatusGroup(layer: EditorLayer) {
+    const reference = layer.configAssetId ? configAssetsById.get(layer.configAssetId) : undefined;
+    return reference?.scope === "config" ? watchfaceStatusGroupOf(reference.configKey) : null;
+  }
+  /** The states this layer's indicator has on the face; null for other layers. */
+  function statusGroupMembers(layer: EditorLayer): EditorLayer[] | null {
+    const group = layerStatusGroup(layer);
+    if (!group) return null;
+    const members = layers.filter(item => item.present && layerStatusGroup(item)?.id === group.id);
+    return members.length ? members : [layer];
+  }
+  function layerDisplayLabel(layer: EditorLayer): string {
+    return layerStatusGroup(layer)?.label ?? layer.label;
+  }
+  /** A status row stands for all its states, whichever the canvas selected. */
+  function layerRowSelected(layer: EditorLayer): boolean {
+    if (selectedIds.includes(layer.id)) return true;
+    const group = layerStatusGroup(layer);
+    return Boolean(group && selectedIds.some(id => {
+      const selected = layers.find(item => item.id === id);
+      return selected && layerStatusGroup(selected)?.id === group.id;
+    }));
+  }
+
   function addCategoryForLayer(layer: EditorLayer): WatchfaceAddCategory {
     const group = layerGroupLabel(layer);
     if (group === "Time") return "Time";
@@ -11178,6 +11231,7 @@ export function WatchfaceEditor({
     // Analog hands are config images, but they show the time, so they sit
     // with the other time parts (the Add menu files them under Time too).
     if (layer.layoutGroupId === "analogCenter") return "Time";
+    if (layerStatusGroup(layer)) return "Indicators";
     if (layer.kind === "configAsset") {
       return previewMode === "aod" ? "Always-on assets" : "Template assets";
     }
@@ -11620,8 +11674,8 @@ export function WatchfaceEditor({
                 />
               </label>
             ) : (
-              <strong className="wf-layer-title" title={t(layer.label)}>
-                {t(layer.label)}
+              <strong className="wf-layer-title" title={t(layerDisplayLabel(layer))}>
+                {t(layerDisplayLabel(layer))}
               </strong>
             )}
             {editorLayerTypeLabel(layer).toLowerCase() !== layer.label.toLowerCase() ? <span className="wf-layer-type-badge">
@@ -12352,6 +12406,15 @@ export function WatchfaceEditor({
   /** Turns a layer on or off through the design setting that owns it. */
   function setLayerOn(layer: EditorLayer, on: boolean) {
     if (layer.nativeDataId) { updateNativeData(layer.nativeDataId, {enabled: on}); return; }
+    // A status indicator's row switches every state the face has.
+    const statusMembers = statusGroupMembers(layer);
+    if (statusMembers) {
+      for (const member of statusMembers) {
+        const reference = configAssetsById.get(member.configAssetId!);
+        if (reference) updateConfigAsset(reference, { enabled: on });
+      }
+      return;
+    }
     if (layer.configAssetId) {
       const reference = configAssetsById.get(layer.configAssetId);
       if (reference) updateConfigAsset(reference, { enabled: on });
@@ -12445,10 +12508,46 @@ export function WatchfaceEditor({
     );
   }
 
+  /** A status indicator's states: pick one to preview and edit, show or add it. */
+  function renderStatusStateSwitch(group: NonNullable<ReturnType<typeof watchfaceStatusGroupOf>>, activeKey: string, active: WatchfaceConfigAssetReference, present: boolean) {
+    const state = group.states.find(item => item.key === activeKey)!;
+    const hasState = (key: string) => layers.some(item => item.present && item.configAssetId === `config:${key}`);
+    const enabled = design.configAssetOverrides?.[active.id]?.enabled !== false;
+    const stateLayer = layers.find(item => item.configAssetId === active.id);
+    return (
+      <div className="wf-status-states">
+        <div className="wf-status-state-tabs" role="tablist" aria-label={t("{{value1}} states", { value1: t(group.label) })}>
+          {group.states.map(item => (
+            <button key={item.key} type="button" role="tab" aria-selected={item.key === activeKey}
+              className={`${item.key === activeKey ? "is-active" : ""}${hasState(item.key) ? "" : " is-missing"}`}
+              onClick={() => setChosenStatusStates(prev => ({ ...prev, [group.id]: item.key }))}>{t(item.label)}</button>
+          ))}
+        </div>
+        <p className="watchface-studio-summary">{t(state.hint)}</p>
+        {present ? (
+          <label className="watchface-studio-toggle"><input type="checkbox" checked={enabled} onChange={(event) => updateConfigAsset(active, { enabled: event.target.checked })} />{t("Show this icon on the watch")}</label>
+        ) : (
+          <>
+            <p className="watchface-studio-summary">{t("This face has no icon for this state, so the watch shows nothing for it.")}</p>
+            {stateLayer ? <button type="button" className="secondary-button" onClick={() => void addStatusIndicator(active, stateLayer.id)}><Plus size={15} /> {t("Add icon")}</button> : null}
+          </>
+        )}
+      </div>
+    );
+  }
+
   function renderConfigAssetInspector(
-    reference: WatchfaceConfigAssetReference,
-    layer: EditorLayer
+    selectedReference: WatchfaceConfigAssetReference,
+    selectedLayerItem: EditorLayer
   ) {
+    // A status indicator edits the state picked in its panel; all states share its position.
+    const statusGroup = selectedReference.scope === "config" ? watchfaceStatusGroupOf(selectedReference.configKey) : null;
+    const chosenKey = statusGroup ? chosenStatusStates[statusGroup.id] : undefined;
+    const statusKey = statusGroup ? (chosenKey && statusGroup.states.some(item => item.key === chosenKey) ? chosenKey
+      : watchfaceStatusActiveKey(statusGroup, key => layers.some(item => item.present && item.configAssetId === `config:${key}`))) : null;
+    const reference = (statusKey && configAssetsById.get(`config:${statusKey}`)) || selectedReference;
+    const layer = (statusKey && layers.find(item => item.configAssetId === reference.id)) || selectedLayerItem;
+    const statePresent = !statusGroup || layer.present;
     const dimensions = configAssetDimensions(reference);
     const deviceResolution = watchPreviewResolution ?? previewResolution;
     const center = parseConfigPos(deviceResolution?.config.time_center_pos);
@@ -12486,11 +12585,14 @@ export function WatchfaceEditor({
     })();
     return (
       <>
-        {renderPositionReadout(layer)}
+        {renderPositionReadout(selectedLayerItem)}
         {renderPropertySection(
           "specific",
-          "Asset",
-          renderConfigAssetControls(reference),
+          statusGroup ? "States" : "Asset",
+          <>
+            {statusGroup ? renderStatusStateSwitch(statusGroup, statusKey!, reference, layer.present) : null}
+            {statePresent ? renderConfigAssetControls(reference) : null}
+          </>,
           { disabled: isPositionLocked(layer.id) }
         )}
         {renderStrokeInspector(layer.id)}

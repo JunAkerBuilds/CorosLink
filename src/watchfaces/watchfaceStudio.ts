@@ -78,6 +78,8 @@ export interface WatchfaceStudioOptions extends WatchfaceTypography {
    * control icon. Normal previews render both the icon and its value.
    */
   previewComplicationContent?: "all" | "icon";
+  /** Status images the preview leaves out, so a pair shows one state at a time. */
+  hiddenStatusKeys?: readonly string[];
   /** Per-fixed-metric bitmap styles, isolated into their own sprite folders. */
   metricStyles?: WatchfaceMetricStyles;
   /** Representative goal completion shown for native calorie progress layers. */
@@ -10765,6 +10767,7 @@ export async function drawStudioPreview(
   }
 
   for (const layer of controlStatusLayers) {
+    if (options.hiddenStatusKeys?.includes(layer.configKey)) continue;
     if (
       options.previewComplicationContent === "icon" &&
       layer.controlRelative
@@ -10793,6 +10796,7 @@ export async function drawStudioPreview(
     );
   }
   for (const definition of CONTROL_STATUS_PREVIEW_DEFINITIONS) {
+    if (options.hiddenStatusKeys?.includes(definition.configKey)) continue;
     if (
       controlStatusLayers.some(
         (layer) => layer.configKey === definition.configKey

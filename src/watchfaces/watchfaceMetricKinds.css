@@ -445,3 +445,52 @@
   min-width: 53px;
   justify-content: flex-end;
 }
+
+/* A status indicator's states: On, Off, Airplane or Sleep mode. */
+.watchface-shell .wf-status-states {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.watchface-shell .wf-status-states .secondary-button {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.watchface-shell .wf-status-state-tabs {
+  display: flex;
+  gap: 2px;
+  border: 1px solid var(--wf-border);
+  border-radius: var(--wf-control-radius);
+  padding: 2px;
+}
+
+.watchface-shell .wf-status-state-tabs button {
+  flex: 1 1 auto;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 5px 8px;
+  font: inherit;
+  font-size: var(--wf-text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.watchface-shell .wf-status-state-tabs button:hover {
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-status-state-tabs button.is-active {
+  background: var(--wf-surface-hover);
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-status-state-tabs button.is-missing:not(.is-active) {
+  font-style: italic;
+  font-weight: 500;
+}

@@ -1,3 +1,4 @@
+import { watchfaceHiddenStatusKeys } from "./watchfaceStatusPairs";
 import type { CorosWatchfaceResolutionDetails, CorosWatchfaceTemplateAsset, CorosWatchfaceTemplateDetails } from "../../electron/types";
 import { drawStudioPreview, loadStudioImage, parseConfigPos, type WatchfaceAssetLoader, type WatchfaceComplicationId, type WatchfacePreviewMode } from "./watchfaceStudio";
 import { drawNativeDataPreview } from "./nativeData";
@@ -104,6 +105,8 @@ export async function renderCompiledWatchfacePreview(
     fontFamily: "", digitColor: "#ffffff", accentColor: "#ffffff",
     tintLabels: false, tintIcons: false, previewMode: usesAod ? "aod" : "current",
     ...(ampmPos && config.am_icon && config.pm_icon ? { ampmStyle: { enabled: true, ...ampmPos, scale: 1 } } : {}),
+    // The watch draws one status state at a time; stacking them would read as an overlap.
+    hiddenStatusKeys: watchfaceHiddenStatusKeys((key) => Boolean(config[key]?.trim())),
     compiledPixels: true, previewDate: scenario.date ?? new Date(2026, 8, 13, 10, 8, 36),
     previewComplication: scenario.complication, previewValues: scenario.values,
     onCompiledSprite: checks.sprite
