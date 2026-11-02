@@ -9587,8 +9587,10 @@ export function WatchfaceEditor({
   ).filter((section) => section.layers.length > 0);
   // The template's chart pages show like a chart layer's: a Chart row under
   // Chart pages with its pages and readouts nested in Back order.
-  // A turned-off Chart layer lists them under its own row instead.
-  const showTemplateChart = Boolean(templatePages && !design.nativeData?.chart && !layerSearch && (templatePages.length || minMaxNeedsDailyPage));
+  // A listed (turned-off) Chart layer shows them under its own row instead;
+  // a deleted one has no row, so they get their own.
+  const chartLayerListed = searchedLayerSections.some(section => section.layers.some(layer => layer.nativeDataId === "chart"));
+  const showTemplateChart = Boolean(templatePages && !chartLayerListed && !layerSearch && (templatePages.length || minMaxNeedsDailyPage));
   const layerSectionsWithTemplateChart = !showTemplateChart || searchedLayerSections.some(section => section.label === "Chart pages")
     ? searchedLayerSections
     : (() => {
