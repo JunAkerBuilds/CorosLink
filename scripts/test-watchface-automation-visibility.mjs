@@ -212,7 +212,7 @@ function jsonValue(value) {
 
 assert.equal(
   deriveEditorLayers(details, baseDesign).find(layer => layer.id === "temperature")?.label,
-  "Sensor temperature",
+  "Temperature (watch sensor)",
   "sensor temperature stays available independently of weather temperature"
 );
 const legacyTemperatureDetails = structuredClone(details);
@@ -222,7 +222,7 @@ Object.assign(legacyTemperatureDetails.resolutions[0].config, {
 });
 assert.equal(
   deriveEditorLayers(legacyTemperatureDetails, baseDesign).find(layer => layer.id === "temperature")?.label,
-  "Sensor temperature",
+  "Temperature (watch sensor)",
   "imported fixed temperature stays editable with a distinct label"
 );
 for (const enabled of [true, false]) {

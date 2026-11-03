@@ -1,4 +1,5 @@
 import { t, useLanguage } from "../i18n/watchfaces";
+import { useWatchfaceStudioSimple } from "./watchfaceStudioMode";
 import {
   ChevronRight,
   Clock,
@@ -47,6 +48,7 @@ export function WatchfaceQuickStart({
   photoDisabled
 }: WatchfaceQuickStartProps) {
   useLanguage();
+  const simple = useWatchfaceStudioSimple();
   type QuickAction = {
     label: string;
     hint: string;
@@ -124,7 +126,9 @@ export function WatchfaceQuickStart({
 
       <p className="wf-welcome-footnote">
         <MousePointerClick size={13} aria-hidden="true" />
-        <span>{t("Added text stays fixed on the watch. Style the existing time and data layers for values that update live. Template-wide settings are on the Project tab.")}</span>
+        <span>{simple
+          ? t("Added text stays fixed on the watch. Style the existing time and data layers for values that update live.")
+          : t("Added text stays fixed on the watch. Style the existing time and data layers for values that update live. Template-wide settings are on the Project tab.")}</span>
       </p>
     </section>
   );

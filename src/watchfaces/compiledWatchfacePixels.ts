@@ -4,9 +4,18 @@ import { drawStudioPreview, loadStudioImage, parseConfigPos, type WatchfaceAsset
 import { drawNativeDataPreview } from "./nativeData";
 import { recoverWatchfaceDesign } from "./recoveredWatchfaceDesign";
 
+/** Something on the compiled face worth a look before it goes to the watch. */
+export interface CompiledWatchfaceCheck {
+  kind: "edge" | "overlap" | "missing" | "unloaded";
+  /** Editor layer ids (an overlap within one layer lists it once). */
+  layers: string[];
+  /** The PNG a missing or unloaded check names, relative to the resolution folder. */
+  file?: string;
+}
+
 export interface CompiledWatchfacePreview {
   dataUrl: string;
-  checks: string[];
+  checks: CompiledWatchfaceCheck[];
   width: number;
   height: number;
 }
@@ -16,9 +25,14 @@ export interface CompiledWatchfacePreview {
 export function createCompiledPixelChecks(width: number, height: number) {
   const owners = new Int32Array(width * height);
   const labels: string[] = [""];
-  const checks = new Set<string>();
+  const found = new Map<string, CompiledWatchfaceCheck>();
+  const add = (check: CompiledWatchfaceCheck) => {
+    const key = JSON.stringify(check);
+    if (!found.has(key)) found.set(key, check);
+  };
   return {
-    checks,
+    add,
+    list: () => [...found.values()],
     sprite(label: string, image: CanvasImageSource, x: number, y: number, w: number, h: number) {
       const source = document.createElement("canvas");
       source.width = Math.max(1, Math.round(w)); source.height = Math.max(1, Math.round(h));
@@ -31,12 +45,12 @@ export function createCompiledPixelChecks(width: number, height: number) {
         const px = Math.round(x) + sx, py = Math.round(y) + sy;
         if (px < 0 || py < 0 || px >= width || py >= height ||
             ((px + 0.5 - width / 2) / (width / 2)) ** 2 + ((py + 0.5 - height / 2) / (height / 2)) ** 2 > 1) {
-          checks.add(`${label}: visible pixels cross the display edge.`);
+          add({ kind: "edge", layers: [label] });
           continue;
         }
         const index = py * width + px;
         const previous = owners[index]!;
-        if (previous) checks.add(`${[labels[previous]!, label].sort().join(" / ")}: visible pixels overlap.`);
+        if (previous) add({ kind: "overlap", layers: [...new Set([labels[previous]!, label])].sort() });
         owners[index] = owner;
       }
     }
@@ -91,13 +105,12 @@ export async function renderCompiledWatchfacePreview(
   }
   const checks = createCompiledPixelChecks(canvas.width, canvas.height);
   if (usesAod && backgroundPath && !background) {
-    checks.checks.add(`background_icon: ${backgroundPath.slice(resolution.directory.length + 1)} could not be loaded.`);
+    checks.add({ kind: "unloaded", layers: ["background"], file: backgroundPath.slice(resolution.directory.length + 1) });
   }
   // Stock templates can name PNGs they never shipped (AROUND's icon\point.png
   // and icon\cen.png). Nothing can draw them, so list them for review.
   for (const path of missing.filter((path) => !icons.has(path))) {
-    const keys = Object.entries(config).filter(([, value]) => configPath(value) === path).map(([key]) => key);
-    checks.checks.add(`${keys.join(" / ")}: ${path.slice(resolution.directory.length + 1)} isn't in the archive.`);
+    checks.add({ kind: "missing", layers: [], file: path.slice(resolution.directory.length + 1) });
   }
   const ampmPos = parseConfigPos(config.am_pm_icon_pos);
   const compiledDetails = { ...details, resolutions: [{ ...resolution, config, icons: [...icons.values()] }] };
@@ -123,12 +136,12 @@ export async function renderCompiledWatchfacePreview(
       const x = weatherIndicator.x, y = weatherIndicator.y;
       const width = image.naturalWidth;
       const height = image.naturalHeight;
-      checks.sprite("Weather icon", image, x, y, width, height);
+      checks.sprite("weather", image, x, y, width, height);
       canvas.getContext("2d")!.drawImage(image, x, y, width, height);
     }
   }
   const context = canvas.getContext("2d")!;
   context.globalCompositeOperation = "destination-in";
   context.beginPath(); context.ellipse(canvas.width / 2, canvas.height / 2, canvas.width / 2, canvas.height / 2, 0, 0, Math.PI * 2); context.fill();
-  return { dataUrl: canvas.toDataURL("image/png"), checks: [...checks.checks], width: canvas.width, height: canvas.height };
+  return { dataUrl: canvas.toDataURL("image/png"), checks: checks.list(), width: canvas.width, height: canvas.height };
 }

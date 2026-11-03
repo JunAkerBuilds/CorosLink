@@ -1,4 +1,5 @@
 import { t, useLanguage } from "../i18n/watchfaces";
+import { useWatchfaceStudioSimple } from "./watchfaceStudioMode";
 import { Loader2 } from "lucide-react";
 import { type CSSProperties, useEffect, useState } from "react";
 import {
@@ -335,6 +336,8 @@ export function WatchfaceFontPreview({
   sampleText = "0123456789"
 }: WatchfaceFontPreviewProps) {
   useLanguage();
+  // Simple names the digits; sheet and folder details are Advanced.
+  const simple = useWatchfaceStudioSimple();
   const rasterActive = Boolean(
     rasterFont &&
       (!rasterFontRequiredText ||
@@ -345,7 +348,7 @@ export function WatchfaceFontPreview({
       <WatchfaceSpriteStrip
         label={t("PNG set glyphs")}
         cells={rasterFontStripCells(rasterFont)}
-        summary={`${rasterFont.label} · ${describeRasterFontSource(rasterFont)}`}
+        summary={simple ? rasterFont.label : `${rasterFont.label} · ${describeRasterFontSource(rasterFont)}`}
       />
     );
   }
@@ -353,7 +356,7 @@ export function WatchfaceFontPreview({
     const installed = isWatchfaceFontInstalled(fontFamily);
     const embedded = !installed && hasWatchfaceFontSnapshot(fontFamily);
     const summary = installed
-      ? t("{{fontFamily}} · rasterized to PNG digits on export", { fontFamily })
+      ? simple ? fontFamily : t("{{fontFamily}} · rasterized to PNG digits on export", { fontFamily })
       : embedded
         ? t("{{fontFamily}} isn’t installed · sample drawn from the embedded glyphs", { fontFamily })
         : t("{{fontFamily}} is missing · sample shown in a substitute font", { fontFamily: fontFamily });
@@ -380,7 +383,7 @@ export function WatchfaceFontPreview({
         label={t("Template glyphs")}
         glyphs={templateGlyphs.glyphs}
         loadAssets={loadAssets}
-        summary={describeTemplateGlyphSet(templateGlyphs.folder, templateGlyphs.glyphs)}
+        summary={simple ? t("The template's own digits") : describeTemplateGlyphSet(templateGlyphs.folder, templateGlyphs.glyphs)}
       />
     );
   }

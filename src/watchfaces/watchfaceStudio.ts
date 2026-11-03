@@ -4732,7 +4732,7 @@ export const WATCHFACE_FIXED_METRICS: WatchfaceFixedMetricDefinition[] = [
   },
   {
     id: "temperature",
-    label: "Sensor temperature",
+    label: "Temperature (watch sensor)",
     rectKey: "temperature_rect",
     fontKey: "temperature_font",
     fontColorKey: "temperature_font_color",
@@ -5207,7 +5207,7 @@ export const WATCHFACE_COMPLICATIONS: WatchfaceComplicationDefinition[] = [
     ]
   },
   { id: "battery", label: "Battery", controlPrefix: "battery", sampleValue: "82" },
-  { id: "temperature", label: "Sensor temperature", controlPrefix: "temperature", sampleValue: "18" }
+  { id: "temperature", label: "Temperature (watch sensor)", controlPrefix: "temperature", sampleValue: "18" }
 ];
 
 export type WatchfaceMetricChanges = Partial<Record<WatchfaceMetricId, boolean>>;
@@ -8499,7 +8499,7 @@ export const WATCHFACE_LAYOUT_GROUPS: WatchfaceLayoutGroup[] = [
   },
   {
     id: "complication",
-    label: "Selectable metric",
+    label: "Data chosen on watch",
     // Child control positions are relative to this origin. Moving both the
     // origin and every child would apply the offset twice on the watch.
     patterns: [/^rect_control\d+_pos$/]
@@ -8543,7 +8543,7 @@ export const WATCHFACE_LAYOUT_GROUPS: WatchfaceLayoutGroup[] = [
   },
   {
     id: "temperature",
-    label: "Sensor temperature",
+    label: "Temperature (watch sensor)",
     patterns: [/^temperature_rect$/]
   }
 ];

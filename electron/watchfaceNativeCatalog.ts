@@ -40,7 +40,7 @@ const DISTANCE_NOTE = "The watch rounds to whole kilometres or miles. Turn on th
 export const NATIVE_DATA_FIELDS: readonly NativeDataDefinition[] = [
   number("date_year", "Year", "Calendar", "2026", 3, { configPrefix: "control_number_date_year", valueOnly: true,
     note: "Live calendar year binding recovered from COROS 4.9.9. Independently positioned and visible in the editor; it does not require a visible selectable metric. Unlike month/day, COROS stores it in the shared control container. Export preserves the required origin and converts editor coordinates automatically; do not enable or move the selectable metric to place the year. Preview follows the simulation date; device support requires on-watch verification." }),
-  number("weather_temp", "Current weather", "Weather", "18", 0, { unit: "°" }),
+  number("weather_temp", "Temperature (weather)", "Weather", "18", 0, { unit: "°" }),
   // A PACE-series watch drew min/max as one run from the minimum's position
   // (issue #131, 2026-09-27): "1327°C", with the maximum's own rectangle ignored.
   number("weather_temp_min", "Minimum temperature", "Weather", "12", 0, { unit: "°",
@@ -104,7 +104,7 @@ export const NATIVE_DATA_FIELDS: readonly NativeDataDefinition[] = [
   { id: "sunriseset", label: "Sunrise / sunset progress", category: "Astronomy", kind: "solar", sample: "06:24", version: 5 },
   // WFChartInfo.sun_angle: a readout of the native chart block that the watch
   // shows in its sun chart group (official NOMAD draws it in the temperature slot).
-  number("chart_sun_angle", "Solar angle (chart sun group)", "Astronomy", "36", 2, { unit: "°", percentKey: "chart_dgree_icon",
+  number("chart_sun_angle", "Sun angle (Sun page)", "Astronomy", "36", 2, { unit: "°", percentKey: "chart_dgree_icon",
     note: "Part of the native chart block. The watch shows this readout only while its chart is on the sun group, sharing the chart's degree artwork." }),
   { id: "chart", label: "Native chart", category: "Charts", kind: "chart", sample: "28", version: 2 }
 ];

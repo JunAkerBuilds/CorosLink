@@ -90,7 +90,7 @@ export function WatchfaceSimulationPanel({ simulation, onChange, design }: { sim
   const setValue = (key: string, value: string) => patch({ values: { ...simulation.values, [key]: value } });
   const common: Record<SimulationGroup, string[][]> = {
     weather: [
-      ["weather_temp", t("Current weather"), design.nativeData?.weather_temp?.previewValue ?? "18"], ["temperature", t("Sensor temperature"), "18"],
+      ["weather_temp", t("Temperature (weather)"), design.nativeData?.weather_temp?.previewValue ?? "18"], ["temperature", t("Temperature (watch sensor)"), "18"],
       ["barometer", "Barometer", "1013.2"], ["sunrise", "Sunrise (h:mm)", "6:30"], ["sunset", "Sunset (h:mm)", "19:45"]
     ],
     training: [

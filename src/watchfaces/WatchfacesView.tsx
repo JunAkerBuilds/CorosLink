@@ -4123,12 +4123,7 @@ function TemplateCard({
           <strong title={theme.name}>{theme.name}</strong>
           <span>{theme.category ?? watchfaceCatalogLabel(catalog)}</span>
         </span>
-        <span className="wf-hub-card-footer">
-          <span>{theme.id ? t("#{{value1}}", { value1: theme.id }) : t("COROS")}</span>
-          {theme.watchFaceVersion !== undefined ? (
-            <span className="wf-hub-card-template">v{theme.watchFaceVersion}</span>
-          ) : null}
-        </span>
+        {/* Template IDs and format versions mean nothing to most people; search still finds an ID. */}
         {primary ? (
           <span className="wf-hub-card-arrow" aria-hidden="true">
             <ArrowUpRight size={16} />

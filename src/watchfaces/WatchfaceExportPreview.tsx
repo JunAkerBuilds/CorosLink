@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Bluetooth, Check, CircleCheck, Download, Info, Languages, Loader2, Send, TriangleAlert, Watch, X } from "lucide-react";
 import type { CorosWatchfaceArchive, CorosWatchfaceTemplateAsset, CorosWatchfaceTemplateDetails } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
-import { renderCompiledWatchfacePreview, type CompiledWatchfacePreview } from "./compiledWatchfacePixels";
+import { renderCompiledWatchfacePreview, type CompiledWatchfaceCheck, type CompiledWatchfacePreview } from "./compiledWatchfacePixels";
 import { pickWatchPreviewResolution, type WatchfaceComplicationId, type WatchfacePreviewMode } from "./watchfaceStudio";
 import { WATCH_LANGUAGE_NAMES, type WatchfaceWatchLanguages } from "./watchfaceLanguages";
 import type { CorosDirectWatchfacePreview } from "../../electron/corosBleWatchfaceTypes";
@@ -23,7 +23,7 @@ const BIN_REUSE_MS = 10 * 60_000;
  * the editor to rebuild, which swaps in a new archive.
  */
 export function WatchfaceExportPreview({ api, archive, details, name, complication, chartSources, languages, customWeekday, rebuilding,
-  onLanguagesChange, onClose, onPublish }: {
+  layerLabel, onShowLayers, onLanguagesChange, onClose, onPublish }: {
   api: CorosLinkApi;
   archive: CorosWatchfaceArchive;
   details: CorosWatchfaceTemplateDetails;
@@ -35,6 +35,10 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
   /** Whether the design replaces the weekday labels; otherwise every language keeps its own. */
   customWeekday: boolean;
   rebuilding: boolean;
+  /** The editor's name for a layer id the checks report; undefined when the editor has no such layer. */
+  layerLabel?: (id: string) => string | undefined;
+  /** Closes the dialog and selects these layers in the editor. */
+  onShowLayers?: (ids: string[], mode: WatchfacePreviewMode) => void;
   onLanguagesChange: (languages: WatchfaceWatchLanguages) => void;
   onClose: () => void;
   onPublish: (archive: CorosWatchfaceArchive, name: string) => void;
@@ -266,7 +270,17 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
             </p>
           </div>
           {checks.length > 0 ? <div className="wf-send-checks">
-            <ul>{checks.map((check) => <li key={check}>{check}</li>)}</ul>
+            <ul>{checks.map((check) => {
+              const shown = check.layers.filter((id) => layerLabel?.(id));
+              return (
+                <li key={JSON.stringify(check)}>
+                  <span>{checkSentence(check, layerLabel)}</span>
+                  {onShowLayers && shown.length ? (
+                    <button type="button" className="text-button wf-send-check-show" onClick={() => onShowLayers(shown, mode)}>{t("Show me")}</button>
+                  ) : null}
+                </li>
+              );
+            })}</ul>
             <small>{t(checkScope)}</small>
           </div> : null}
           {hasFirmwareChart ? <p className="wf-send-note" role="note"><Info size={14} aria-hidden="true" />
@@ -380,4 +394,26 @@ function Segmented({ label, value, options, onChange }: {
       disabled={disabled} title={disabled ? t("{{text}} isn't available for this resolution", { text: t(text) }) : undefined}
       onClick={() => onChange(option)}>{t(text)}</button>)}
   </div>;
+}
+
+/** A layer id the editor doesn't know, read as words: "arcCut" → "Arc cut". */
+function fallbackLayerName(id: string): string {
+  const words = id.replace(/^configAsset:(config|aod):/, "").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_:]+/g, " ").trim().toLowerCase();
+  return words ? words[0]!.toUpperCase() + words.slice(1) : id;
+}
+
+/** One check as a sentence that names layers the way the Layers list does. */
+function checkSentence(check: CompiledWatchfaceCheck, layerLabel?: (id: string) => string | undefined): string {
+  const [first, second] = check.layers.map((id) => {
+    const label = layerLabel?.(id);
+    return label ? t(label) : t(fallbackLayerName(id));
+  });
+  if (check.kind === "overlap") {
+    return second
+      ? t("{{first}} and {{second}} overlap on the watch.", { first, second })
+      : t("Parts of {{first}} overlap each other on the watch.", { first });
+  }
+  if (check.kind === "edge") return t("{{first}} runs past the edge of the screen.", { first });
+  if (check.kind === "unloaded") return t("The always-on background image couldn't be loaded ({{file}}).", { file: check.file ?? "" });
+  return t("The template names an image it doesn't include ({{file}}). The watch skips it.", { file: check.file ?? "" });
 }

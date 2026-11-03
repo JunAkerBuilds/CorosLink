@@ -122,7 +122,7 @@ export function getNativeDataAutomationCatalog() {
       "The watch draws minimum and maximum temperature as one reading: minimum, separator, maximum, then one unit. With both enabled the maximum follows the minimum and its own x/y are ignored, so place the reading with weather_temp_min. Minimum supplies the separator, unit and minus artwork.",
       "AQI availability depends on region and synced weather data. A blank weather_aqi layer does not by itself establish an export bug; check whether the watch's built-in Weather widget has an AQI reading. Preview and simulation values are samples, not supplied live data.",
       "weather_temp owns the weather companion temperature slot when configured. Remove it to restore companion control.",
-      "weather_temp is labeled Current weather and displays weather temperature. The separate temperature metric and selectable control use the watch's temperature sensor, which is affected by body heat. Preserve both when requested; their simulation values are independent.",
+      "weather_temp is labeled Temperature (weather) and displays weather temperature. The separate temperature metric and selectable control use the watch's temperature sensor, which is affected by body heat. Preserve both when requested; their simulation values are independent.",
       "Format versions are raised automatically. Device support, units and state ordering still require on-watch verification."
     ],
     fields: NATIVE_DATA_FIELDS.map(field => {

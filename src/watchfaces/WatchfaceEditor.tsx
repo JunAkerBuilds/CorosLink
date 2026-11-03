@@ -27,6 +27,7 @@ import {
   renderDefaultStatusIndicator
 } from "./watchfaceDefaultIndicators.ts";
 import { WatchfaceExportPreview } from "./WatchfaceExportPreview";
+import { WatchfaceStudioModeContext, loadWatchfaceStudioMode, saveWatchfaceStudioMode, type WatchfaceStudioMode } from "./watchfaceStudioMode";
 import {
   effectiveWatchLanguages,
   loadWatchLanguagesPreference,
@@ -1298,6 +1299,14 @@ export function WatchfaceEditor({
   const [propertiesTab, setPropertiesTab] = useState<"selection" | "project" | "ai">(
     "selection"
   );
+  const [studioMode, setStudioModeState] = useState<WatchfaceStudioMode>(loadWatchfaceStudioMode);
+  const simpleMode = studioMode === "simple";
+  function setStudioMode(mode: WatchfaceStudioMode) {
+    setStudioModeState(mode);
+    saveWatchfaceStudioMode(mode);
+    // Simple has no Project tab.
+    if (mode === "simple") setPropertiesTab((tab) => (tab === "project" ? "selection" : tab));
+  }
   const [collapsedInspectorSections, setCollapsedInspectorSections] = useState(
     () => new Set<WatchfaceInspectorSectionId>(["effects", "advanced", "archive"])
   );
@@ -9618,7 +9627,9 @@ export function WatchfaceEditor({
         !layerIsSelectableSlotAsset(layer) &&
         layerMatchesSearch(layer.label)
     )
-  ).filter((section) => section.layers.length > 0);
+  ).filter((section) => section.layers.length > 0 &&
+    // Template images are Advanced; a search still finds them.
+    !(simpleMode && !layerSearch && isTemplateAssetSection(section.label)));
   // The template's chart pages show like a chart layer's: a Chart row under
   // Chart pages with its pages and readouts nested in Back order.
   // A listed (turned-off) Chart layer shows them under its own row instead;
@@ -9628,7 +9639,7 @@ export function WatchfaceEditor({
   const layerSectionsWithTemplateChart = !showTemplateChart || searchedLayerSections.some(section => section.label === "Chart pages")
     ? searchedLayerSections
     : (() => {
-      const later = ["Indicators", "Artwork", "Template assets", "Always-on assets"];
+      const later = ["Indicators", "Artwork", "Template assets", "Always-on assets", "Not on the face"];
       const at = searchedLayerSections.findIndex(section => later.includes(section.label));
       const sections = [...searchedLayerSections];
       sections.splice(at < 0 ? sections.length : at, 0, { ...sections[0], label: "Chart pages", layers: [] });
@@ -9661,13 +9672,16 @@ export function WatchfaceEditor({
     (layer) => layer.visible && (layer.kind === "customSprite" || isBlankRemovableLayer(layer))
   );
   // Selectable-slot icons are edited inside their metric, not listed.
+  // Simple counts what the face shows.
   const paneLayerCount = listedLayers.filter(
-    (layer) => !layerIsSelectableSlotAsset(layer)
+    (layer) => !layerIsSelectableSlotAsset(layer) &&
+      (!simpleMode || (layer.visible && !isTemplateAssetSection(layerGroupLabel(layer))))
   ).length;
   const heightMatch = heightMatchSelection();
 
   return (
-    <section ref={editorRef} className={`watchface-editor wf-studio${stageFullscreen ? " is-editor-fullscreen" : ""}`} aria-label={t("Watch face studio")} inert={conversionBusy}>
+    <WatchfaceStudioModeContext.Provider value={studioMode}>
+    <section ref={editorRef} className={`watchface-editor wf-studio${stageFullscreen ? " is-editor-fullscreen" : ""}${simpleMode ? " is-simple" : ""}`} aria-label={t("Watch face studio")} inert={conversionBusy}>
       <header className="watchface-editor-topbar wf-command-bar">
         <button className="wf-icon-button wf-back-button" type="button" onClick={requestBack}>
           <ArrowLeft size={18} aria-hidden="true" />
@@ -9709,6 +9723,20 @@ export function WatchfaceEditor({
             <PanelRight size={17} />
           </button>
           <span className="wf-command-separator" aria-hidden="true" />
+          <div className="wf-studio-mode-switch" role="group" aria-label={t("Editor mode")}>
+            <button
+              type="button"
+              aria-pressed={simpleMode}
+              title={t("What's on the face, with its color, font, size and position")}
+              onClick={() => setStudioMode("simple")}
+            >{t("Simple")}</button>
+            <button
+              type="button"
+              aria-pressed={!simpleMode}
+              title={t("Also template slots, template images, PNG digit sets, config files and watch sizes")}
+              onClick={() => setStudioMode("advanced")}
+            >{t("Advanced")}</button>
+          </div>
           <div className="wf-history-controls" role="group" aria-label={t("Edit history")}>
             <button className="wf-icon-button" type="button" disabled={!canUndo} aria-label={t("Undo")} title={t("Undo")} onClick={undo}>
               <Undo2 size={17} />
@@ -10100,7 +10128,7 @@ export function WatchfaceEditor({
                           ) : null}
                           {layerIcon(layer)}
                         </span>
-                        <span className={`watchface-layer-name${layer.visible ? "" : " is-hidden"}`}>{t(layer.label)}</span>
+                        <span className={`watchface-layer-name${layer.visible ? "" : " is-hidden"}`} title={t(layer.label)}>{t(layer.label)}</span>
                         {(design.linkedLayerGroups ?? []).some((group) => group.includes(layer.id)) ? (
                           <span className="wf-layer-link-state" title={t("Linked component")} aria-label={t("Linked component")}>
                             <Link2 size={12} aria-hidden="true" />
@@ -10109,7 +10137,8 @@ export function WatchfaceEditor({
                         {layer.configAssetReplaced ? <span className="wf-layer-state">{t("Custom")}</span> : null}
                       </button>
                       <span className="wf-layer-row-actions">
-                        {renderLayerPositionLockButton(layer.id, layer.label)}
+                        {/* A layer that's off has nothing to drag; Simple leaves just its eye. */}
+                        {simpleMode && !layer.visible && !isPositionLocked(layer.id) ? null : renderLayerPositionLockButton(layer.id, layer.label)}
                         {layer.canHide ? (
                           <button
                             type="button"
@@ -10220,7 +10249,8 @@ export function WatchfaceEditor({
                 <MoonStar size={14} aria-hidden="true" />{" "}{t("Always-on")}</button>
             </div>
             <span className="wf-toolbar-divider" aria-hidden="true" />
-            {previewDetails && previewDetails.resolutions.length > 1 ? (
+            {/* Per-watch layout sizes are Advanced; Simple edits the size Studio opened. */}
+            {!simpleMode && previewDetails && previewDetails.resolutions.length > 1 ? (
               <label className="wf-preview-resolution" title={t("Watch preview")}>
                 <Watch size={14} aria-hidden="true" />
                 <span className="sr-only">{t("Watch preview")}</span>
@@ -10692,7 +10722,7 @@ export function WatchfaceEditor({
             <span ref={snapStatusElementRef}>
               {selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer ? t(layerDisplayLabel(selectedLayer)) : t("No selection")}
             </span>
-            <span>{watchCoordinateWidth} × {watchCoordinateHeight}{" "}{t("preview")}</span>
+            {simpleMode ? null : <span>{watchCoordinateWidth} × {watchCoordinateHeight}{" "}{t("preview")}</span>}
             <span>
               {previewMode === "aod"
                 ? supportsAod ? t("Always-on display") : t("Always-on uses Current")
@@ -10710,7 +10740,7 @@ export function WatchfaceEditor({
                 </button>
               </span>
             ) : null}
-            <span>{starterArchive.fileName}</span>
+            {simpleMode ? null : <span>{starterArchive.fileName}</span>}
           </div>
         </main>
 
@@ -10758,14 +10788,15 @@ export function WatchfaceEditor({
               aria-selected={propertiesTab === "selection"}
               onClick={() => setPropertiesTab("selection")}
             >{t("Selection")}</button>
-            <button
+            {/* Raw config files and archive settings are Advanced only. */}
+            {simpleMode ? null : <button
               type="button"
               role="tab"
               id={`wf-properties-tab-project-${sessionId}`}
               aria-controls={`wf-properties-panel-${sessionId}`}
               aria-selected={propertiesTab === "project"}
               onClick={() => setPropertiesTab("project")}
-            >{t("Project")}</button>
+            >{t("Project")}</button>}
             <button
               type="button"
               role="tab"
@@ -10838,7 +10869,7 @@ export function WatchfaceEditor({
             <div className="wf-properties-empty">
               <MousePointerSquareDashed size={22} aria-hidden="true" />
               <strong>{t("Nothing selected")}</strong>
-              <p className="watchface-studio-summary">{t("Pick a layer on the canvas or in the Layers panel to edit it. Template-wide settings live on the Project tab.")}</p>
+              <p className="watchface-studio-summary">{simpleMode ? t("Pick a layer on the canvas or in the Layers panel to edit it.") : t("Pick a layer on the canvas or in the Layers panel to edit it. Template-wide settings live on the Project tab.")}</p>
             </div>
             )
           )
@@ -11123,6 +11154,20 @@ export function WatchfaceEditor({
           languages={effectiveWatchLanguages(historyRef.current.present.value.design, watchLanguagesPreferenceRef.current)}
           customWeekday={Boolean(historyRef.current.present.value.design.dateStyles?.weekday)}
           rebuilding={previewingExport}
+          layerLabel={(id) => {
+            const layer = checkLayer(id);
+            return layer ? layerDisplayLabel(layer) : undefined;
+          }}
+          onShowLayers={(ids, mode) => {
+            const found = ids.flatMap((id) => checkLayer(id)?.id ?? []);
+            if (!found.length) return;
+            closeExportPreview();
+            if (mode !== previewMode) setPreviewMode(mode);
+            setSelectedIds(found);
+            setSelectedId(found.at(-1)!);
+            setPropertiesTab("selection");
+            setPropertiesOpen(true);
+          }}
           onLanguagesChange={(watchLanguages) => {
             // The remembered default describes custom weekday labels only.
             if (historyRef.current.present.value.design.dateStyles?.weekday) {
@@ -11170,6 +11215,7 @@ export function WatchfaceEditor({
         </div>
       ) : null}
     </section>
+    </WatchfaceStudioModeContext.Provider>
   );
 
   /**
@@ -11202,6 +11248,11 @@ export function WatchfaceEditor({
   }
   function layerDisplayLabel(layer: EditorLayer): string {
     return layerStatusGroup(layer)?.label ?? layer.label;
+  }
+  /** The layer a Send check names: compiled sprites report a layer or its layout group. */
+  function checkLayer(id: string): EditorLayer | undefined {
+    return layers.find((layer) => layer.id === id) ??
+      layers.find((layer) => layer.layoutGroupId === id);
   }
   /** A status row stands for all its states, whichever the canvas selected. */
   function layerRowSelected(layer: EditorLayer): boolean {
@@ -11265,12 +11316,30 @@ export function WatchfaceEditor({
     return kind === "selectable" ? "Selectable" : kind === "pages" ? "Chart pages" : "Fixed metrics";
   }
 
+  function isTemplateAssetSection(label: string): boolean {
+    return label === "Template assets" || label === "Always-on assets";
+  }
+
+  /**
+   * Simple gathers the template parts the face doesn't show at the end of
+   * the list, collapsed; the Add menu brings them back too. Artwork the
+   * designer added keeps its place so it can still be reordered.
+   */
+  function layerListSectionLabel(layer: EditorLayer): string {
+    const label = layerGroupLabel(layer);
+    if (
+      !simpleMode || layer.visible || layerQuery.trim() ||
+      label === "Artwork" || isTemplateAssetSection(label)
+    ) return label;
+    return "Not on the face";
+  }
+
   function groupLayersForDisplay(
     sourceLayers: EditorLayer[]
   ): Array<{ label: string; layers: EditorLayer[] }> {
     const groups = new Map<string, EditorLayer[]>();
     for (const layer of sourceLayers) {
-      const label = layerGroupLabel(layer);
+      const label = layerListSectionLabel(layer);
       const group = groups.get(label);
       if (group) {
         group.push(layer);
@@ -11398,7 +11467,8 @@ export function WatchfaceEditor({
       "Indicators",
       "Artwork",
       "Template assets",
-      "Always-on assets"
+      "Always-on assets",
+      "Not on the face"
     ];
     return sections.sort(
       (left, right) =>
@@ -11473,6 +11543,9 @@ export function WatchfaceEditor({
       className?: string;
     }
   ) {
+    // Skew, crop, config keys and the like are Advanced. Goal progress
+    // shares the section id but is everyday styling, so it stays.
+    if (simpleMode && sectionId === "advanced" && title === "Advanced") return null;
     return (
       <WatchfaceInspectorSection
         sectionId={sectionId}
@@ -12794,7 +12867,7 @@ export function WatchfaceEditor({
         {renderPropertySection(
           "advanced",
           "Advanced",
-          <p className="watchface-studio-summary">{t("This sprite is used only for the Battery choice in the selectable data slot. Its source, scale, and position are independent from the Selectable metric layer.")}</p>,
+          <p className="watchface-studio-summary">{t("This sprite is used only for the Battery choice in the selectable data slot. Its source, scale, and position are independent from the Data chosen on watch layer.")}</p>,
           { disabled: isPositionLocked(layer.id) }
         )}
       </>
@@ -12977,7 +13050,7 @@ export function WatchfaceEditor({
           {renderPropertySection(
             "appearance",
             "Appearance",
-            <label className="field">{t("Tint color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setMetricStyle("battery", { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Remove tint")} title={t("Remove tint")} onClick={() => clearMetricColor("battery")}><XCircle size={14} /></button></span></label>,
+            <label className="field">{t("Color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setMetricStyle("battery", { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Use default color")} title={t("Use default color")} onClick={() => clearMetricColor("battery")}><XCircle size={14} /></button></span></label>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderStrokeInspector(layer.id)}
@@ -13012,7 +13085,7 @@ export function WatchfaceEditor({
           {renderPropertySection(
             "appearance",
             "Appearance",
-            <label className="field">{t("Tint color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setTimeStyle(layer.timePartId!, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Remove tint")} title={t("Remove tint")} onClick={() => clearTimeColor(layer.timePartId!)}><XCircle size={14} /></button></span></label>,
+            <label className="field">{t("Color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setTimeStyle(layer.timePartId!, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Use default color")} title={t("Use default color")} onClick={() => clearTimeColor(layer.timePartId!)}><XCircle size={14} /></button></span></label>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderStrokeInspector(layer.id)}
@@ -13079,12 +13152,12 @@ export function WatchfaceEditor({
       return (
         <>
           {renderPositionReadout(layer)}
-          {layer.metricId === "temperature" && <p className="watchface-studio-summary">{t("The watch's thermometer supplies this value and can be affected by body heat. Add Current weather under Weather for weather data.")}</p>}
+          {layer.metricId === "temperature" && <p className="watchface-studio-summary">{t("The watch's thermometer supplies this value and can be affected by body heat. Add Temperature (weather) under Weather for weather data.")}</p>}
           {renderPropertySection(
             "appearance",
             "Appearance",
             <div className="wf-property-stack">
-              <label className="field">{t("Tint color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setMetricStyle(layer.metricId!, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Remove tint")} title={t("Remove tint")} onClick={() => clearMetricColor(layer.metricId!)}><XCircle size={14} /></button></span></label>
+              <label className="field">{t("Color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setMetricStyle(layer.metricId!, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Use default color")} title={t("Use default color")} onClick={() => clearMetricColor(layer.metricId!)}><XCircle size={14} /></button></span></label>
               {exerciseSeparator ? (
                 <details className="wf-nested-disclosure" open>
                   <summary>{t("Exercise separator")}</summary>
@@ -13425,7 +13498,7 @@ export function WatchfaceEditor({
           {renderPropertySection(
             "appearance",
             "Appearance",
-            <label className="field">{t("Tint color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setDateStyle(partId, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Remove tint")} title={t("Remove tint")} onClick={() => clearDateColor(partId)}><XCircle size={14} /></button></span></label>,
+            <label className="field">{t("Color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setDateStyle(partId, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Use default color")} title={t("Use default color")} onClick={() => clearDateColor(partId)}><XCircle size={14} /></button></span></label>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderStrokeInspector(layer.id)}
@@ -13609,7 +13682,7 @@ export function WatchfaceEditor({
             "Appearance",
             <div className="wf-property-stack">
               <label className="watchface-studio-toggle"><input type="checkbox" checked={Boolean(sprite.tintColor)} onChange={(event) => updateSprite(sprite.id, { tintColor: event.target.checked ? design.accentColor : null })} />{t("Tint image")}</label>
-              {sprite.tintColor ? <label className="field">{t("Tint color")}<span className="watchface-color-control"><WatchfaceColorInput value={sprite.tintColor} onValueChange={(color) => updateSprite(sprite.id, { tintColor: color })} /><code>{sprite.tintColor}</code><button type="button" className="watchface-color-none" aria-label={t("Remove tint")} title={t("Remove tint")} onClick={() => updateSprite(sprite.id, { tintColor: null })}><XCircle size={14} /></button></span></label> : null}
+              {sprite.tintColor ? <label className="field">{t("Color")}<span className="watchface-color-control"><WatchfaceColorInput value={sprite.tintColor} onValueChange={(color) => updateSprite(sprite.id, { tintColor: color })} /><code>{sprite.tintColor}</code><button type="button" className="watchface-color-none" aria-label={t("Use default color")} title={t("Use default color")} onClick={() => updateSprite(sprite.id, { tintColor: null })}><XCircle size={14} /></button></span></label> : null}
             </div>,
             { disabled: locked }
           )}
@@ -13669,7 +13742,7 @@ export function WatchfaceEditor({
           ? renderPropertySection(
               "appearance",
               "Appearance",
-              <label className="field">{t("Tint color")}<span className="watchface-color-control">
+              <label className="field">{t("Color")}<span className="watchface-color-control">
                   <WatchfaceColorInput
                     value={
                       design.layerColors?.[layer.layoutGroupId] ??
@@ -13693,8 +13766,8 @@ export function WatchfaceEditor({
                     type="button"
                     className="watchface-color-none"
                     disabled={!design.layerColors?.[layer.layoutGroupId]}
-                    aria-label={t("Remove tint")}
-                    title={t("Remove tint")}
+                    aria-label={t("Use default color")}
+                    title={t("Use default color")}
                     onClick={() => clearLayerColor(layer.layoutGroupId!)}
                   >
                     <XCircle size={14} />
@@ -13952,7 +14025,7 @@ export function WatchfaceEditor({
                   <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy + fromWatchCoordinate(1))} aria-label={t("Nudge selector icon down")}><ArrowDown size={13} aria-hidden="true" /></button>
                   <button type="button" className="watchface-nudge-reset" onClick={() => setIconOffset(0, 0)}>{t("Reset")}</button>
                 </div>
-                <p className="watchface-studio-summary">{t("This moves only the")}{" "}{selectedComplication.label.toLowerCase()}{" "}{t("icon. Move the Selectable metric layer to reposition its icon and value together.")}</p>
+                <p className="watchface-studio-summary">{t("This moves only the")}{" "}{selectedComplication.label.toLowerCase()}{" "}{t("icon. Move the Data chosen on watch layer to reposition its icon and value together.")}</p>
               </div>
             )
             : null
@@ -14002,7 +14075,7 @@ export function WatchfaceEditor({
           rasterFont={design.rasterFont}
           componentRasterFont={design.selectableMetricStyle?.rasterFont}
           previewedFont={design.selectableMetricStyle?.rasterFont ?? design.rasterFont}
-          componentLabel="Selectable metric"
+          componentLabel="Data chosen on watch"
           onActivate={() =>
             setSelectableMetricStyle({ fontFamily: "" })
           }
@@ -14024,8 +14097,8 @@ export function WatchfaceEditor({
               type="button"
               className="watchface-color-none"
               disabled={!design.selectableMetricStyle?.color}
-              aria-label={t("Remove tint")}
-              title={t("Remove tint")}
+              aria-label={t("Use default color")}
+              title={t("Use default color")}
               onClick={clearSelectableMetricColor}
             >
               <XCircle size={14} />
@@ -14058,7 +14131,7 @@ export function WatchfaceEditor({
           (rotation) => setSelectableMetricStyle({ rotation })
         )}
         {renderGlyphEdgesField(design.selectableMetricStyle?.solidAlpha, (solidAlpha) => setSelectableMetricStyle({ solidAlpha }))}
-        <p className="watchface-studio-summary">{t("Move this Selectable metric layer to position its icon and value together. Sensor temperature uses the watch's thermometer and can be affected by body heat. Add Current weather under Weather for weather data.")}</p>
+        <p className="watchface-studio-summary">{t("Move this layer to position its icon and value together. Temperature (watch sensor) uses the watch's thermometer and can be affected by body heat. Add Temperature (weather) under Weather for weather data.")}</p>
           </>
         ) : (
           <p className="watchface-studio-summary">{t("Turn on a selectable component to add its configuration and edit its value, icon, and position settings.")}</p>
@@ -14272,6 +14345,7 @@ export function WatchfaceEditor({
    * (`solidAlpha`), which only suits tiny digits; on AMOLED it looks jagged.
    */
   function renderGlyphEdgesField(solid: boolean | undefined, onChange: (solidAlpha: boolean | undefined) => void) {
+    if (simpleMode) return null;
     return (
       <div className="field wf-number-align-field">
         <span>{t("Edges")}</span>
@@ -14723,7 +14797,7 @@ export function WatchfaceEditor({
         {renderPropertySection(
           "appearance",
           "Appearance",
-          <label className="field">{t("Tint color")}<span className="watchface-color-control">
+          <label className="field">{t("Color")}<span className="watchface-color-control">
               <WatchfaceColorInput
                 value={separator.color}
                 onValueChange={(color) => updateStaticSeparator(separatorId, { color })}
@@ -14733,8 +14807,8 @@ export function WatchfaceEditor({
                 type="button"
                 className="watchface-color-none"
                 disabled={separator.color === design.digitColor}
-                aria-label={t("Remove tint")}
-                title={t("Remove tint")}
+                aria-label={t("Use default color")}
+                title={t("Use default color")}
                 onClick={() => updateStaticSeparator(separatorId, { color: design.digitColor })}
               >
                 <XCircle size={14} />
@@ -14872,7 +14946,7 @@ export function WatchfaceEditor({
         {renderPropertySection(
           "appearance",
           "Appearance",
-          <label className="field">{t("Tint color")}<span className="watchface-color-control">
+          <label className="field">{t("Color")}<span className="watchface-color-control">
               <WatchfaceColorInput
                 value={indicator.color ?? design.digitColor}
                 onValueChange={(color) => updateAmPmIndicator({ color })}
@@ -14882,8 +14956,8 @@ export function WatchfaceEditor({
                 type="button"
                 className="watchface-color-none"
                 disabled={!indicator.color}
-                aria-label={t("Remove tint")}
-                title={t("Remove tint")}
+                aria-label={t("Use default color")}
+                title={t("Use default color")}
                 onClick={() => updateAmPmIndicator({ color: undefined })}
               >
                 <XCircle size={14} />
@@ -15054,7 +15128,7 @@ export function WatchfaceEditor({
         {renderPropertySection(
           "appearance",
           "Appearance",
-          <label className="field">{t("Tint color")}<span className="watchface-color-control">
+          <label className="field">{t("Color")}<span className="watchface-color-control">
               <WatchfaceColorInput
                 value={indicator.color ?? design.accentColor}
                 onValueChange={(color) => updateWeatherIndicator({ color })}
@@ -15064,8 +15138,8 @@ export function WatchfaceEditor({
                 type="button"
                 className="watchface-color-none"
                 disabled={!indicator.color}
-                aria-label={t("Remove tint")}
-                title={t("Remove tint")}
+                aria-label={t("Use default color")}
+                title={t("Use default color")}
                 onClick={() => updateWeatherIndicator({ color: undefined })}
               >
                 <XCircle size={14} />
