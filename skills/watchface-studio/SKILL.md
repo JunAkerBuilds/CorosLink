@@ -147,7 +147,9 @@ Weekday, month and day can be added to a face that lacks them: `set`
 weekday has no label artwork, so it is drawn with a font (the design font unless
 `dateStyles.weekday.fontFamily` names one); keep that font set. Lay dates out
 month first: watches set to a day-first region swap the month and day slots, so a
-day-first layout shows month first on those watches.
+day-first layout shows month first on those watches. Month and day have no
+leading zero on the watch (the 2nd shows `2`), so size and align their boxes for
+one and two digits, and preview a single-digit date with `scenario.dateTime`.
 
 Chart pages (sun, moon, daily data A/B) can exist without a chart layer: some
 templates declare readouts with no graph, and the watch still pages through

@@ -10119,17 +10119,19 @@ export async function drawStudioPreview(
       ...(percentFile ? { suffix: { configKey: "battery_level_percent_icon", file: percentFile } } : {})
     });
   }
+  // The watch draws month and day like any other number, without a leading
+  // zero: the 2nd shows "2", not "02".
   const dateFields: [string, string, string, WatchfaceDatePartId][] = [
     [
       "english_date_month_rect",
       "english_date_month_font",
-      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getMonth() + 1),
       "dateMonth"
     ],
     [
       "english_date_day_rect",
       "english_date_day_font",
-      String(now.getDate()).padStart(2, "0"),
+      String(now.getDate()),
       "dateDay"
     ]
   ];
