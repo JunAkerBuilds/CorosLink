@@ -1,4 +1,4 @@
-import { getLocale, getDateTimeFormat, useLanguage, t } from "../../i18n/training";
+import { getLocale, getDateTimeFormat, useLanguage, t, midSentence } from "../../i18n/training";
 import { Bike, Footprints, PersonStanding, Trophy, Waves, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import type {
@@ -666,7 +666,7 @@ export function PersonalRecordsPanel({
                 ) : (
                   <p className="pr-wing-note">
                     {t("No {{sport}} records yet.", {
-                      sport: t(HALL_SPORT_LABELS[wing.sport]).toLowerCase()
+                      sport: midSentence(t(HALL_SPORT_LABELS[wing.sport]))
                     })}
                   </p>
                 )}

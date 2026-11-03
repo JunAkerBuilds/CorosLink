@@ -2111,4 +2111,5 @@ export const watchfacesSpanish: Record<string, string> = {
   "Take the tour": "Hacer el tour",
   "You can take the tour any time with the ? button at the top of Studio.": "Puedes hacer el tour cuando quieras con el botón ? en la parte superior del Estudio.",
   "See this tour again any time with the ? button at the top of Studio.": "Vuelve a ver este tour cuando quieras con el botón ? en la parte superior del Estudio.",
+  "Reset {{value1}}": "Restablecer {{value1}}",
 };

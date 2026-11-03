@@ -27,7 +27,7 @@ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { la
 // Spanish has one neutral catalog: every Spanish locale, Spain and Latin America alike, gets "es".
 for (const locale of ['es', 'ES', 'es-ES', 'es_ES', 'es-MX', 'es_419', 'es-419', 'es-AR', 'es-US']) assert.equal(resolveLanguage(locale), 'es', locale);
 for (const locale of ['esx', 'spa', 'eu-ES', 'ca-ES', 'gl-ES']) assert.equal(resolveLanguage(locale), 'en', locale);
-assert.equal(preferredLanguage(['de-DE', 'es-ES', 'zh-CN']), 'es');
+assert.equal(preferredLanguage(['it-IT', 'es-ES', 'zh-CN']), 'es');
 assert.equal(preferredLanguage(['es-MX', 'fr-FR']), 'es');
 assert.deepEqual(LANGUAGES.filter(entry => entry.value.startsWith('es')).map(entry => [entry.value, entry.label]), [['es', 'Español']]);
 

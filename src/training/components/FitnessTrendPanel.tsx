@@ -1,4 +1,4 @@
-import { getLocale, useLanguage, t } from "../../i18n/training";
+import { getLocale, useLanguage, t, midSentence } from "../../i18n/training";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import type { TrainingHubActivity } from "../../../electron/types";
@@ -288,7 +288,7 @@ export function FitnessTrendPanel({
           className="training-fitness-chart"
           role="img"
           aria-label={t("Weekly activity chart for {{value1}}.", { value1: String(seriesByMetric
-            .map(({ series }) => series.metricLabel.toLowerCase())
+            .map(({ series }) => midSentence(series.metricLabel))
             .join(", ")) })}
         >
           <div className="training-fitness-y-axis" aria-hidden="true">

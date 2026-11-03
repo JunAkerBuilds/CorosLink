@@ -4,6 +4,7 @@ export type { Language };
 export const LANGUAGE_STORAGE_KEY = "coroslink.language";
 export const LANGUAGES = [
   { value: "en", label: "English" },
+  { value: "de", label: "Deutsch" },
   { value: "es", label: "Español" },
   { value: "fr", label: "Français" },
   { value: "pt", label: "Português" },
@@ -17,6 +18,7 @@ type LoadedCatalogs = LanguageCatalogs & { readonly merged: Readonly<Record<stri
 
 // Only the selected language's catalogs are loaded; each language is its own chunk.
 const catalogLoaders: Record<TranslatedLanguage, () => Promise<{ default: LanguageCatalogs }>> = {
+  de: () => import("./de/catalogs"),
   es: () => import("./es/catalogs"),
   fr: () => import("./fr/catalogs"),
   pt: () => import("./pt/catalogs"),
@@ -53,8 +55,9 @@ let language: Language = "en";
 const listeners = new Set<() => void>();
 
 export function getLanguage(): Language { return language; }
-// pt-PT even for Brazilian systems, so dates and numbers match the European Portuguese catalog.
-export function getLocale(): string { return { en: "en-US", es: "es-ES", fr: "fr-FR", pt: "pt-PT", "zh-CN": "zh-CN" }[language]; }
+// pt-PT even for Brazilian systems, so dates and numbers match the European Portuguese catalog;
+// de-DE for every German region, so Swiss systems get the decimal comma the catalog text uses.
+export function getLocale(): string { return { en: "en-US", de: "de-DE", es: "es-ES", fr: "fr-FR", pt: "pt-PT", "zh-CN": "zh-CN" }[language]; }
 export function subscribeLanguage(listener: () => void): () => void {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
@@ -148,6 +151,11 @@ export function getNumberFormat(options?: Intl.NumberFormatOptions): Intl.Number
 
 export function getDateTimeFormat(options?: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
   return cachedFormatter(dateFormatters, options, locale => new Intl.DateTimeFormat(locale, options));
+}
+
+/** A translated label placed inside a sentence: lowercase, except in German, which capitalises nouns. */
+export function midSentence(label: string): string {
+  return language === "de" ? label : label.toLocaleLowerCase(getLocale());
 }
 
 export function formatNumber(value: number, options?: Intl.NumberFormatOptions): string {

@@ -42,8 +42,13 @@ async function main() {
   assert.ok(Menu.getApplicationMenu().items.some(item => item.label === 'Edición'));
   assert.equal(native.localizeDialogOptions({ buttons: ['Cancel', 'Delete from watch'], message: 'Delete “Élodie” from the watch?' }).message, '¿Eliminar «Élodie» del reloj?');
   assert.equal(native.nativeText('FIT file'), 'Archivo FIT');
+  native.setNativeLanguage('de');
+  assert.ok(Menu.getApplicationMenu().items.some(item => item.label === 'Bearbeiten'));
+  assert.equal(native.localizeDialogOptions({ buttons: ['Cancel', 'Delete from watch'], message: 'Delete “Élodie” from the watch?' }).message, '„Élodie“ von der Uhr löschen?');
+  assert.equal(native.nativeText('Delete 3 tracks from the watch?'), '3 Titel von der Uhr löschen?');
+  assert.equal(native.nativeText('FIT file'), 'FIT-Datei');
   native.setNativeLanguage('zh-CN');
-  assert.throws(() => native.setNativeLanguage('de'), /Unsupported/);
+  assert.throws(() => native.setNativeLanguage('it'), /Unsupported/);
   native.setNativeLanguage('en');
   assert.ok(Menu.getApplicationMenu().items.some(item => item.label === 'Edit'));
   ipcMain.handle('app:setLanguage', (_event, value) => native.setNativeLanguage(value));
@@ -160,12 +165,22 @@ async function main() {
     assert.equal(await js('document.querySelector("#fixture-values span").textContent'), '1234,5');
     assert.equal(await js('document.querySelectorAll("#fixture-values span")[1].textContent'), 'octubre');
     assert.equal(database.getSetting('app.language'), 'es');
+    await click('.settings-language-panel button[lang="de"]');
+    await until(`document.querySelector('.settings-language-panel h2').textContent === 'App-Sprache'`);
+    assert.equal(await js('document.documentElement.lang'), 'de');
+    assert.equal(await js('document.querySelector("#fixture-values span").textContent'), '1.234,5');
+    assert.equal(await js('document.querySelectorAll("#fixture-values span")[1].textContent'), 'Oktober');
+    assert.equal(database.getSetting('app.language'), 'de');
+    await new Promise(resolve => setTimeout(resolve, 500)); // Let the switched language paint before capture.
+    const germanScreenshot = path.join(app.getPath('userData'), 'german-desktop.png');
+    await fs.writeFile(germanScreenshot, (await win.webContents.capturePage()).toPNG());
+    console.log(`German desktop screenshot: ${germanScreenshot}`);
     await click('.settings-language-panel button[lang=en]');
     await until(`document.querySelector('.settings-language-panel h2').textContent === 'App language'`);
     assert.equal(await js('document.querySelector(".app-select-value-label").textContent'), 'Overview');
     assert.equal(database.getSetting('app.language'), 'en');
     assert.equal(errors.length, 0, errors.join('\n'));
-    console.log('Desktop localization UI passed: native Chinese/French menu/dialog persistence, live Chinese/French/Portuguese/Spanish/English switching, sidebar, training tabs, translated and literal dropdown labels/typeahead, locale formatting, reload and unchanged form payloads.');
+    console.log('Desktop localization UI passed: native Chinese/French/Spanish/German menu/dialog persistence, live Chinese/French/Portuguese/Spanish/German/English switching, sidebar, training tabs, translated and literal dropdown labels/typeahead, locale formatting, reload and unchanged form payloads.');
   } finally {
     clearTimeout(watchdog);
     win?.destroy();

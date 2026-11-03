@@ -2598,4 +2598,5 @@ export const trainingSpanish: Record<string, string> = {
   "Edit registration, bib and race-day details": "Editar inscripción, dorsal y detalles del día de la carrera",
   "Pickup": "Recogida",
   "Deadline": "Cierre",
+  "Loading {{value1}}…": "Cargando {{value1}}…",
 };

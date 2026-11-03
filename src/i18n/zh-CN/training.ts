@@ -2623,4 +2623,5 @@ export const trainingChinese: Readonly<Record<string, string>> = {
   "Edit registration, bib and race-day details": "编辑报名、号码布和比赛日信息",
   "Pickup": "领物",
   "Deadline": "截止",
+  "Loading {{value1}}…": "正在加载{{value1}}…",
 };

@@ -1,4 +1,4 @@
-import { t, useLanguage } from "../i18n/watchfaces";
+import { t, useLanguage, midSentence } from "../i18n/watchfaces";
 import {
   type ComponentType,
   type ReactNode,
@@ -52,7 +52,7 @@ export function HubSearchField({
         <button
           className="wf-hub-control-clear"
           type="button"
-          aria-label={t("Clear {{value1}}", { value1: label.toLowerCase() })}
+          aria-label={t("Clear {{value1}}", { value1: midSentence(t(label)) })}
           onClick={() => onChange("")}
         >
           <X size={14} aria-hidden="true" />

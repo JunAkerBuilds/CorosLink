@@ -2112,4 +2112,5 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Take the tour": "开始导览",
   "You can take the tour any time with the ? button at the top of Studio.": "你可以随时点击工作室顶部的 ? 按钮开始导览。",
   "See this tour again any time with the ? button at the top of Studio.": "随时点击工作室顶部的 ? 按钮即可再次查看此导览。",
+  "Reset {{value1}}": "重置{{value1}}",
 };

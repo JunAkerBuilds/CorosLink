@@ -617,15 +617,15 @@
 
 .onb-languages {
   display: grid;
-  gap: 7px;
-  margin-top: 26px;
+  gap: 5px;
+  margin-top: 18px;
 }
 
 .onb-choice.is-row {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  padding: 7px 12px 7px 7px;
+  padding: 6px 12px 6px 6px;
 }
 
 .onb-choice.is-row .onb-choice-label {
@@ -640,7 +640,7 @@
 .onb-greeting {
   display: grid;
   width: 88px;
-  height: 36px;
+  height: 32px;
   place-items: center;
   border-radius: 9px;
   background: var(--onb-well);
@@ -2236,6 +2236,18 @@ span.onb-track-state.is-copying {
 
 /* ------------------------------------------------------------- Responsive */
 
+/* Six languages, under a title that wraps in most of them. */
+@media (max-height: 800px) {
+  .onb-languages .onb-choice.is-row {
+    padding-top: 5px;
+    padding-bottom: 5px;
+  }
+
+  .onb-greeting {
+    height: 30px;
+  }
+}
+
 @media (max-height: 740px) {
   .onb-chapter {
     padding-top: 24px;
@@ -2265,7 +2277,12 @@ span.onb-track-state.is-copying {
   }
 
   .onb-languages {
-    margin-top: 18px;
+    gap: 5px;
+    margin-top: 16px;
+  }
+
+  .onb-greeting {
+    height: 30px;
   }
 }
 

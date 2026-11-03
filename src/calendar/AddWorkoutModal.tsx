@@ -1,5 +1,5 @@
 import { formatIntensityType, formatWorkoutSport } from "./workoutLabels";
-import { t, getLocale, useLanguage, formatNumber } from "../i18n/training";
+import { t, getLocale, useLanguage, formatNumber, midSentence } from "../i18n/training";
 import { useLocalOnlyView } from "../privacy/localOnlyView";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
@@ -505,7 +505,7 @@ function builderRowValidationMessage(
   const stepKind = row.kind;
   const targetValue = row.targetType === "time" ? row.timeMin : row.distanceKm;
   if (row.targetType !== "open" && !(Number(targetValue) > 0)) {
-    return t("Enter a valid {{value1}}.", { value1: String(builderTargetLabel(row.targetType, sport, unitSystem).toLocaleLowerCase()) });
+    return t("Enter a valid {{value1}}.", { value1: midSentence(builderTargetLabel(row.targetType, sport, unitSystem)) });
   }
   if (sport === "strength" && stepKind === "training") {
     if (exercisesLoading) return t("Wait for the COROS exercise catalog to finish loading.");

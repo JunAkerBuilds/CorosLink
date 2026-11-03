@@ -3,6 +3,7 @@ import { getSetting, setSetting } from "./database";
 
 import { preferredLanguage, supportedLanguage, type Language } from "./appLanguage";
 import { nativeChinese } from "./localizationChinese";
+import { nativeGerman } from "./localizationGerman";
 import { nativePortuguese } from "./localizationPortuguese";
 import { nativeSpanish } from "./localizationSpanish";
 let language: Language = "en";
@@ -73,14 +74,14 @@ const french: Record<string, string> = {
 
 export function nativeText(source: string): string {
   if (language === "en") return source;
-  const messages = language === "zh-CN" ? nativeChinese : language === "pt" ? nativePortuguese : language === "es" ? nativeSpanish : french;
+  const messages = language === "zh-CN" ? nativeChinese : language === "pt" ? nativePortuguese : language === "es" ? nativeSpanish : language === "de" ? nativeGerman : french;
   if (Object.hasOwn(messages, source)) return messages[source];
   const removal = /^Delete “([\s\S]*)” from the watch\?$/.exec(source);
-  if (removal) return { es: `¿Eliminar «${removal[1]}» del reloj?`, fr: `Supprimer « ${removal[1]} » de la montre ?`, pt: `Eliminar «${removal[1]}» do relógio?`, "zh-CN": `要从手表中删除“${removal[1]}”吗？` }[language];
+  if (removal) return { de: `„${removal[1]}“ von der Uhr löschen?`, es: `¿Eliminar «${removal[1]}» del reloj?`, fr: `Supprimer « ${removal[1]} » de la montre ?`, pt: `Eliminar «${removal[1]}» do relógio?`, "zh-CN": `要从手表中删除“${removal[1]}”吗？` }[language];
   const bulkRemoval = /^Delete (\d+) tracks from the watch\?$/.exec(source);
-  if (bulkRemoval) return { es: `¿Eliminar ${bulkRemoval[1]} pistas del reloj?`, fr: `Supprimer ${bulkRemoval[1]} pistes de la montre ?`, pt: `Eliminar ${bulkRemoval[1]} faixas do relógio?`, "zh-CN": `要从手表中删除 ${bulkRemoval[1]} 首音频吗？` }[language];
+  if (bulkRemoval) return { de: `${bulkRemoval[1]} Titel von der Uhr löschen?`, es: `¿Eliminar ${bulkRemoval[1]} pistas del reloj?`, fr: `Supprimer ${bulkRemoval[1]} pistes de la montre ?`, pt: `Eliminar ${bulkRemoval[1]} faixas do relógio?`, "zh-CN": `要从手表中删除 ${bulkRemoval[1]} 首音频吗？` }[language];
   const fileType = /^([A-Z0-9]+) file$/.exec(source);
-  return fileType ? { es: `Archivo ${fileType[1]}`, fr: `Fichier ${fileType[1]}`, pt: `Ficheiro ${fileType[1]}`, "zh-CN": `${fileType[1]} 文件` }[language] : source;
+  return fileType ? { de: `${fileType[1]}-Datei`, es: `Archivo ${fileType[1]}`, fr: `Fichier ${fileType[1]}`, pt: `Ficheiro ${fileType[1]}`, "zh-CN": `${fileType[1]} 文件` }[language] : source;
 }
 
 /** Localize presentation only; paths, file extensions and response indexes stay stable. */
@@ -120,7 +121,7 @@ export function initializeNativeLanguage(): void {
 }
 
 export function setNativeLanguage(value: unknown): void {
-  if (value !== "en" && value !== "es" && value !== "fr" && value !== "pt" && value !== "zh-CN") throw new Error("Unsupported app language.");
+  if (value !== "en" && value !== "de" && value !== "es" && value !== "fr" && value !== "pt" && value !== "zh-CN") throw new Error("Unsupported app language.");
   language = value;
   setSetting("app.language", language);
   updateApplicationMenu();

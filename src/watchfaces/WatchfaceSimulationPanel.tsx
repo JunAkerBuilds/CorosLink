@@ -1,4 +1,4 @@
-import { t, useLanguage, formatDate } from "../i18n/watchfaces";
+import { t, useLanguage, formatDate, midSentence } from "../i18n/watchfaces";
 import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { FlaskConical, GripHorizontal, Pause, Play, X } from "lucide-react";
 import type { CorosWatchfaceDesignState } from "../../electron/types";
@@ -35,7 +35,7 @@ function SampleValue({ label, value, onCommit, min, max, time = false }: { label
   useLanguage();
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
-  return <label>{t(label)}<input aria-label={t("Simulated {{value1}}", { value1: label.toLowerCase() })} type={time ? "text" : "number"} step="any" min={min} max={max} value={draft}
+  return <label>{t(label)}<input aria-label={t("Simulated {{value1}}", { value1: midSentence(t(label)) })} type={time ? "text" : "number"} step="any" min={min} max={max} value={draft}
     onChange={event => setDraft(event.target.value)}
     onBlur={event => {
       if (draft.trim() && (time ? /^\d{1,2}:\d{2}$/.test(draft) : event.target.validity.valid && Number.isFinite(Number(draft)))) onCommit(draft);

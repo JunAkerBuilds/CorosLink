@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { t, useLanguage, getLocale, midSentence } from "../i18n/watchfaces";
 import { createCollapsedWatchfaceLayerSections, watchfaceLayerMatchesSearch } from "./watchfaceLayerSearch";
 import { batteryStateMeaning, batteryReplacementStateCount, COROS_BATTERY_STATE_ORDER } from "./watchfaceBatteryStates";
 import { WatchfaceAddMenu, type WatchfaceAddCategory, type WatchfaceAddFaceOption } from "./WatchfaceAddMenu";
@@ -14100,7 +14100,7 @@ export function WatchfaceEditor({
                   <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy + fromWatchCoordinate(1))} aria-label={t("Nudge selector icon down")}><ArrowDown size={13} aria-hidden="true" /></button>
                   <button type="button" className="watchface-nudge-reset" onClick={() => setIconOffset(0, 0)}>{t("Reset")}</button>
                 </div>
-                <p className="watchface-studio-summary">{t("This moves only the")}{" "}{selectedComplication.label.toLowerCase()}{" "}{t("icon. Move the Data chosen on watch layer to reposition its icon and value together.")}</p>
+                <p className="watchface-studio-summary">{t("This moves only the")}{" "}{midSentence(t(selectedComplication.label))}{" "}{t("icon. Move the Data chosen on watch layer to reposition its icon and value together.")}</p>
               </div>
             )
             : null
@@ -14272,7 +14272,7 @@ export function WatchfaceEditor({
         {reference ? renderConfigAssetControls(reference) : null}
         <p className="watchface-studio-summary">
           {!reference
-            ? t("No {{value1}} icon is defined for this display mode.", { value1: complication.label.toLowerCase() })
+            ? t("No {{value1}} icon is defined for this display mode.", { value1: midSentence(t(complication.label)) })
             : available
               ? t("{{value1}} · [{{value2}}]. Shown when {{value3}} is active in the selectable slot.", { value1: configAssetDimensions(reference), value2: reference.configKey, value3: complication.label.toLowerCase() })
               : t("This template has no {{value1}} icon. Import a PNG to draw one beside the value; export adds [{{value2}}] to config.txt.", { value1: complication.label.toLowerCase(), value2: reference.configKey })}
@@ -14294,7 +14294,7 @@ export function WatchfaceEditor({
         reference: configAssetsById.get("config:control_colon_icon"),
         title: t("Value colon"),
         detail: complication.valueParts
-          ? t("Between the {{value1}} values", { value1: complication.label.toLowerCase() })
+          ? t("Between the {{value1}} values", { value1: midSentence(t(complication.label)) })
           : t("Only data types with two values use it")
       },
       {
@@ -15255,7 +15255,7 @@ export function WatchfaceEditor({
                     <button
                       type="button"
                       className="wf-property-icon-button"
-                      aria-label={t("Restore SIMPLE default {{value1}}", { value1: label.toLowerCase() })}
+                      aria-label={t("Restore SIMPLE default {{value1}}", { value1: midSentence(t(label)) })}
                       title={t("Restore SIMPLE default")}
                       disabled={spriteImportPending}
                       onClick={() => restoreSet(set)}

@@ -1,4 +1,4 @@
-import { t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { t, useLanguage, getLocale, midSentence } from "../i18n/watchfaces";
 import { WatchfaceColorInput } from "./WatchfaceColorInput";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { FolderInput, ImagePlus, Plus, RotateCcw, Trash2 } from "lucide-react";
@@ -506,7 +506,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
           </div>
         </div>}
 
-        <button type="button" className="wf-native-part-reset" disabled={!customized} onClick={restoreComponent}><RotateCcw size={13} />{" "}{t("Reset")}{" "}{t(partLabel).toLocaleLowerCase(getLocale())}</button>
+        <button type="button" className="wf-native-part-reset" disabled={!customized} onClick={restoreComponent}><RotateCcw size={13} />{" "}{t("Reset {{value1}}", { value1: midSentence(t(partLabel)) })}</button>
       </section>
       {id.startsWith("weather_temp_") && <p className="watchface-studio-summary">{t("Minimum and maximum temperature share the separator, unit and minus artwork. When both are enabled, the minimum-temperature settings supply these shared assets.")}</p>}
     </div>, { disabled: locked, status: t("{{shown}} of {{total}} shown", { shown: available.filter(part => nativePart(id, style, part).enabled).length, total: available.length }) })}
