@@ -302,7 +302,7 @@ function WatchMenuPanel({
         <KeyRound size={16} aria-hidden="true" />
         <div>
           <strong>{connected && snapshot?.systemBind === "failed" ? t("The watch didn’t accept this account") : t("Sign in to COROS")}</strong>
-          <p id={`${id}-sign-in`}>{connected && snapshot?.systemBind === "failed" && snapshot.authenticationError ? snapshot.authenticationError
+          <p id={`${id}-sign-in`}>{connected && snapshot?.systemBind === "failed" && snapshot.authenticationError ? t(snapshot.authenticationError)
             : t("Your watch only trusts CorosLink after you sign in with the COROS account it’s paired to.")}</p>
         </div>
         <button className="secondary-button watch-link-button" type="button" onClick={signIn}>{t("Sign in")}</button>
