@@ -339,6 +339,68 @@
   opacity: 1;
 }
 
+/* The bar measures itself (the app sidebar may be open or collapsed). When
+   it runs short, Save, Download, Convert and then Projects drop to icons;
+   their names stay as tooltips and for screen readers. Send keeps its label. */
+:root .watchface-shell.watchface-shell--studio .wf-command-bar {
+  container: wf-command / inline-size;
+}
+
+@container wf-command (max-width: 1000px) {
+  :root .watchface-shell.watchface-shell--studio .wf-command-actions :is(.wf-save-button, .wf-download-button, .wf-convert-button) .wf-command-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  :root .watchface-shell.watchface-shell--studio .wf-command-actions :is(.wf-save-button, .wf-convert-button) {
+    width: 32px;
+    min-width: 32px;
+    padding: 0;
+  }
+
+  :root .watchface-shell.watchface-shell--studio .wf-command-actions :is(.wf-save-button, .wf-download-button, .wf-convert-button) svg {
+    flex: none;
+  }
+
+  :root .watchface-shell.watchface-shell--studio .wf-command-actions .wf-download-button {
+    gap: 3px;
+    padding: 0 7px 0 9px;
+  }
+}
+
+@container wf-command (max-width: 820px) {
+  :root .watchface-shell.watchface-shell--studio .wf-command-actions {
+    gap: 4px;
+  }
+
+  /* A long name shrinks to an ellipsis instead of being cut mid-letter. */
+  :root .watchface-shell.watchface-shell--studio .watchface-editor-name {
+    min-width: 72px;
+    text-overflow: ellipsis;
+  }
+
+  :root .watchface-shell.watchface-shell--studio .wf-command-actions .wf-studio-mode-switch button {
+    padding: 0 8px;
+  }
+
+  :root .watchface-shell.watchface-shell--studio .wf-back-button .wf-command-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-tour-button svg {
+  color: currentColor;
+}
+
 /* Send to COROS is the one lit control in the bar. */
 :root .watchface-shell.watchface-shell--studio .wf-command-actions .wf-send-button {
   height: 32px;

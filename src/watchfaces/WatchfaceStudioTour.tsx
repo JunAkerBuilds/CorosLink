@@ -1,7 +1,7 @@
 import { t, useLanguage } from "../i18n/watchfaces";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, CircleHelp } from "lucide-react";
 import { useWatchfaceStudioSimple } from "./watchfaceStudioMode";
 import {
   placeWatchfaceTourCard,
@@ -57,7 +57,8 @@ export function WatchfaceStudioTour({ root, hasTimeLayer, onStep, onClose }: {
   /** The properties step selects the time to show its controls. */
   hasTimeLayer: boolean;
   onStep: (step: WatchfaceTourStepId) => void;
-  onClose: () => void;
+  /** `finished` when the last step's button closed it, not Skip or Esc. */
+  onClose: (finished: boolean) => void;
 }) {
   useLanguage();
   const simple = useWatchfaceStudioSimple();
@@ -134,13 +135,13 @@ export function WatchfaceStudioTour({ root, hasTimeLayer, onStep, onClose }: {
   const titleId = useId();
   const bodyId = useId();
 
-  const finish = useCallback(() => {
+  const finish = useCallback((finished = false) => {
     markWatchfaceStudioTourSeen();
-    onClose();
+    onClose(finished);
   }, [onClose]);
   const go = useCallback((next: number) => {
     if (next < 0) return;
-    if (next >= steps.length) finish();
+    if (next >= steps.length) finish(true);
     else setIndex(next);
   }, [finish, steps.length]);
 
@@ -195,7 +196,7 @@ export function WatchfaceStudioTour({ root, hasTimeLayer, onStep, onClose }: {
     // the focused card button keep their default action.
     const keydown = (event: KeyboardEvent) => {
       event.stopPropagation();
-      if (event.key === "Escape") finish();
+      if (event.key === "Escape") finish(false);
       else if (event.key === "ArrowRight") go(index + 1);
       else if (event.key === "ArrowLeft") go(index - 1);
       else if (event.key === "Tab") {
@@ -239,8 +240,14 @@ export function WatchfaceStudioTour({ root, hasTimeLayer, onStep, onClose }: {
         </div>
         <h2 id={titleId}>{step.title}</h2>
         <p id={bodyId}>{step.body}</p>
+        {last ? (
+          <p className="wf-tour-replay">
+            <CircleHelp size={13} aria-hidden="true" />
+            <span>{t("See this tour again any time with the ? button at the top of Studio.")}</span>
+          </p>
+        ) : null}
         <footer>
-          {last ? <span /> : <button type="button" className="wf-tour-skip" onClick={finish}>{t("Skip tour")}</button>}
+          {last ? <span /> : <button type="button" className="wf-tour-skip" onClick={() => finish(false)}>{t("Skip tour")}</button>}
           <span className="wf-tour-nav">
             {index > 0 ? (
               <button type="button" className="wf-tour-back" onClick={() => go(index - 1)}>

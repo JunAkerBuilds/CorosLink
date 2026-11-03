@@ -155,6 +155,24 @@
   line-height: 1.55;
 }
 
+/* The last step says where the tour lives afterwards. */
+.wf-tour-card p.wf-tour-replay {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 9px;
+  background: var(--tour-control);
+  color: var(--tour-text);
+  padding: 7px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.wf-tour-replay svg {
+  flex: none;
+  color: var(--accent);
+}
+
 .wf-tour-card footer {
   display: flex;
   align-items: center;

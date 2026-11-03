@@ -2108,4 +2108,7 @@ export const watchfacesPortuguese: Record<string, string> = {
   "Show me around": "Fazer a visita",
   "Start designing": "Começar a criar",
   "Take the 1-minute tour": "Fazer a visita de um minuto",
+  "Take the tour": "Fazer a visita",
+  "You can take the tour any time with the ? button at the top of Studio.": "Pode fazer a visita a qualquer momento com o botão ? no topo do Estúdio.",
+  "See this tour again any time with the ? button at the top of Studio.": "Veja esta visita novamente a qualquer momento com o botão ? no topo do Estúdio.",
 };

@@ -250,6 +250,7 @@ import {
   Battery,
   CalendarDays,
   ChevronDown,
+  CircleHelp,
   Circle,
   Copy,
   Crop,
@@ -1302,12 +1303,18 @@ export function WatchfaceEditor({
   );
   const [studioMode, setStudioModeState] = useState<WatchfaceStudioMode>(loadWatchfaceStudioMode);
   const [tourOpen, setTourOpen] = useState(false);
+  // Opened by itself on first use, rather than from the ? button or Quick edits.
+  const tourAutoRef = useRef(false);
   // The tour's step and close handlers read this render's layers and selection.
   const tourStepRef = useRef<(step: WatchfaceTourStepId) => void>(() => {});
-  const tourCloseRef = useRef<() => void>(() => {});
+  const tourCloseRef = useRef<(finished: boolean) => void>(() => {});
   const onTourStep = useCallback((step: WatchfaceTourStepId) => tourStepRef.current(step), []);
-  const onTourClose = useCallback(() => tourCloseRef.current(), []);
+  const onTourClose = useCallback((finished: boolean) => tourCloseRef.current(finished), []);
   const simpleMode = studioMode === "simple";
+  function openTour() {
+    tourAutoRef.current = false;
+    setTourOpen(true);
+  }
   function setStudioMode(mode: WatchfaceStudioMode) {
     setStudioModeState(mode);
     saveWatchfaceStudioMode(mode);
@@ -9544,7 +9551,10 @@ export function WatchfaceEditor({
   // First time anyone opens Studio, walk them through it once the face has drawn.
   useEffect(() => {
     if (!active || !automationEditorReady || watchfaceStudioTourSeen()) return;
-    const timer = window.setTimeout(() => setTourOpen(true), 700);
+    const timer = window.setTimeout(() => {
+      tourAutoRef.current = true;
+      setTourOpen(true);
+    }, 700);
     return () => window.clearTimeout(timer);
   }, [active, automationEditorReady]);
 
@@ -9706,8 +9716,12 @@ export function WatchfaceEditor({
       setSelectedId("");
     }
   };
-  tourCloseRef.current = () => {
+  tourCloseRef.current = (finished) => {
     setTourOpen(false);
+    // Someone who skipped the first-run tour should know it can come back;
+    // its last step says so to those who finish it.
+    if (tourAutoRef.current && !finished) onNotice(t("You can take the tour any time with the ? button at the top of Studio."));
+    tourAutoRef.current = false;
     // Land on Quick edits, the friendliest first screen.
     setSelectedIds([]);
     setSelectedId("");
@@ -9719,9 +9733,9 @@ export function WatchfaceEditor({
     <WatchfaceStudioModeContext.Provider value={studioMode}>
     <section ref={editorRef} className={`watchface-editor wf-studio${stageFullscreen ? " is-editor-fullscreen" : ""}${simpleMode ? " is-simple" : ""}`} aria-label={t("Watch face studio")} inert={conversionBusy}>
       <header className="watchface-editor-topbar wf-command-bar">
-        <button className="wf-icon-button wf-back-button" type="button" onClick={requestBack}>
+        <button className="wf-icon-button wf-back-button" type="button" title={t("Projects")} onClick={requestBack}>
           <ArrowLeft size={18} aria-hidden="true" />
-          <span>{t("Projects")}</span>
+          <span className="wf-command-label">{t("Projects")}</span>
         </button>
         <div className="watchface-editor-title wf-project-title">
           <label className="sr-only" htmlFor={`watchface-name-${sessionId}`}>{t("Project name")}</label>
@@ -9759,6 +9773,15 @@ export function WatchfaceEditor({
             <PanelRight size={17} />
           </button>
           <span className="wf-command-separator" aria-hidden="true" />
+          <button
+            className="wf-icon-button wf-tour-button"
+            type="button"
+            aria-label={t("Take the tour")}
+            title={t("Take the tour")}
+            onClick={openTour}
+          >
+            <CircleHelp size={17} aria-hidden="true" />
+          </button>
           <div className="wf-studio-mode-switch" role="group" aria-label={t("Editor mode")}>
             <button
               type="button"
@@ -9781,8 +9804,8 @@ export function WatchfaceEditor({
               <Redo2 size={17} />
             </button>
           </div>
-          <button className="secondary-button wf-save-button" type="button" disabled={saving || spriteImportPending || !isDirty} onClick={() => void saveProject()}>
-            {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />}{t("Save")}</button>
+          <button className="secondary-button wf-save-button" type="button" title={t("Save")} disabled={saving || spriteImportPending || !isDirty} onClick={() => void saveProject()}>
+            {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />}<span className="wf-command-label">{t("Save")}</span></button>
           {showDevelopmentTools || bakeForWatch ? (
             <div className="wf-export-menu" ref={downloadMenuRef}>
               <button
@@ -9790,11 +9813,12 @@ export function WatchfaceEditor({
                 type="button"
                 aria-haspopup="menu"
                 aria-expanded={downloadMenuOpen}
+                title={t("Download")}
                 disabled={spriteImportPending || creating || exporting || Boolean(allWatchesExport) || !backgroundDataUrl}
                 onClick={() => setDownloadMenuOpen((open) => !open)}
               >
                 {exporting || creating || allWatchesExport ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
-                {allWatchesExport ? t("{{value1}} · {{value2}}/{{value3}}", { value1: t(allWatchesExport.label), value2: allWatchesExport.done + 1, value3: allWatchesExport.total }) : t("Download")}
+                <span className="wf-command-label">{allWatchesExport ? t("{{value1}} · {{value2}}/{{value3}}", { value1: t(allWatchesExport.label), value2: allWatchesExport.done + 1, value3: allWatchesExport.total }) : t("Download")}</span>
                 <ChevronDown size={14} aria-hidden="true" />
               </button>
               {downloadMenuOpen ? (
@@ -9852,7 +9876,7 @@ export function WatchfaceEditor({
               disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
               onClick={() => void exportEditableProject()}
             >
-              {exporting ? <Loader2 className="spin" size={15} /> : <Download size={15} />}{t("Download")}</button>
+              {exporting ? <Loader2 className="spin" size={15} /> : <Download size={15} />}<span className="wf-command-label">{t("Download")}</span></button>
           )}
           <button
             className="secondary-button wf-convert-button"
@@ -9861,7 +9885,7 @@ export function WatchfaceEditor({
             disabled={saving || spriteImportPending || creating || exporting || previewingExport || !backgroundDataUrl}
             onClick={convertToAnotherWatch}
           >
-            <Repeat2 size={15} />{t("Convert")}</button>
+            <Repeat2 size={15} /><span className="wf-command-label">{t("Convert")}</span></button>
           <button
             className="primary-button wf-send-button"
             type="button"
@@ -10898,7 +10922,7 @@ export function WatchfaceEditor({
                   // hands, which every DIY template can show (its own, or Studio's).
                   : analogHandsOnFace ? undefined : addAnalogHands}
                 addTimeHint={templateHasDigitalClock ? undefined : "Analog hands that keep time"}
-                onTour={() => setTourOpen(true)}
+                onTour={openTour}
                 onText={() => addElement("text")}
                 onShape={() => addElement("rect")}
               />
