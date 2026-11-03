@@ -139,6 +139,16 @@ keeps the required origin and converts editor coordinates automatically, even
 with the selectable metric hidden. Do not enable or move that metric or manually
 offset the year to compensate. Archive checks still require on-watch verification.
 
+Weekday, month and day can be added to a face that lacks them: `set`
+`/design/addWeekday`, `/design/addDateMonth` or `/design/addDateDay` to `true`
+(layers `weekday`, `dateMonth`, `dateDay`), then style them under
+`/design/dateStyles` and position them with `place_layers`. They are not
+`add_native_field` entries. Month and day reuse the face's date digits. An added
+weekday has no label artwork, so it is drawn with a font (the design font unless
+`dateStyles.weekday.fontFamily` names one); keep that font set. Lay dates out
+month first: watches set to a day-first region swap the month and day slots, so a
+day-first layout shows month first on those watches.
+
 Chart pages (sun, moon, daily data A/B) can exist without a chart layer: some
 templates declare readouts with no graph, and the watch still pages through
 them. To hide or remove a page, `merge` `{ "<page id>": "hidden" | "removed" }`
@@ -324,7 +334,9 @@ way to put art over an arc; say so rather than faking it with a sprite.
 - Inspect small text at the smallest supported resolution with
   `render_preview` `resolution` and `size` set to that native width. For
   416 px displays, keep small digits around 12×17 visible pixels with 1–2 px
-  strokes. Consider `solidAlpha: true` on small time, metric and date styles.
+  strokes. Leave `solidAlpha` unset: digits keep smooth edges like COROS's own.
+  Set it only when the user asks for hard or pixel-art edges (Studio's
+  Edges: Hard); it looks jagged on AMOLED and can erase thin strokes.
 - Native data colors must be `#RRGGBB`.
 - AOD: keep it sparse, mostly black, with thin and dim elements. Never put a
   full photo background in AOD.
