@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Races on the Calendar.** Race day, bib pickup and the registration deadline (until you're registered) appear on their days in Month, Week and List. Click one to open Races.
 - **The Coach works with Hevy.** With Hevy connected in Strength (your Hevy Pro API key), the Coach reads your Hevy exercise library, routines and folders, recent workouts with every set and RPE, each lift's logged history with estimated one-rep max, and your body measurements, all live from Hevy. It can build a new routine or progress an existing one from the loads you actually lifted, and add a custom exercise the library lacks; each change appears as a card showing what changes and is saved only when you click Save to Hevy. A routine edited in Hevy after the Coach read it isn't overwritten. Hevy's API can't log or delete workouts, delete routines or move a routine between folders, so the Coach doesn't. Hevy's own MCP server only accepts apps Hevy has approved (ChatGPT for now), so CorosLink uses the public API.
 
+### Fixed
+
+- **Faces shared from the COROS app keep their photo.** A face with a background photo picked in the COROS app opened in Studio with an empty background, because COROS stores that photo in its own file and leaves the face's usual background blank. Studio now opens it with the photo, sending or downloading the face puts the photo on the watch, and Convert to another watch works and keeps the photo (it used to stop with "contains compiled device data").
+
 ## [0.1.72] - 2026-11-01
 
 ### Added

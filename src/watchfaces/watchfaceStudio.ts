@@ -9207,6 +9207,11 @@ export function getTemplateBackgroundAssetPaths(
 ): string[] {
   const resolution = pickPreviewResolution(details);
   return [
+    // COROS's custom-background picker keeps the chosen photo here (pointed
+    // to by custom/custom.pb) and leaves each layout's background.png blank,
+    // so faces shared from the COROS app opened without their picture. It is
+    // also the image the watch shows.
+    "custom/custom_bg.png",
     ...(resolution
       ? [
           `${resolution.directory}/background.png`,

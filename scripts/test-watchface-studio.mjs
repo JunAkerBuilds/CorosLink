@@ -562,11 +562,12 @@ assert.deepEqual(
     resolutions: [resolution(416, 12, 20), resolution(800, 24, 38)]
   }),
   [
+    "custom/custom_bg.png",
     "watchface_800x800/background.png",
     "watchface_800x800/watchface_customize.png",
     "watchface_customize.png"
   ],
-  "Studio should initialize imported artwork from the largest on-watch background"
+  "Studio should initialize imported artwork from the COROS custom background, then the largest on-watch background"
 );
 
 const details = {

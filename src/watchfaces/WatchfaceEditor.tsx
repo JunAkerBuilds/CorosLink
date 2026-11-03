@@ -1840,13 +1840,19 @@ export function WatchfaceEditor({
         if (!initialDesign) {
           for (const assetPath of getTemplateBackgroundAssetPaths(described)) {
             try {
-              const [asset] = await loadAssets([assetPath]);
+              // Most templates have no COROS custom background, and older
+              // ones only one of the preview variants.
+              const [asset] = await api.loadCorosWatchfaceTemplateAssets(
+                starterArchive.archiveId,
+                [assetPath],
+                { skipMissing: true }
+              );
               if (asset) {
                 templateArtwork = asset;
                 break;
               }
             } catch {
-              // Older templates may only include one of the preview variants.
+              // An undecodable candidate falls through to the next one.
             }
           }
         }

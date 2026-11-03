@@ -55,6 +55,18 @@ async function main(){
  const rebuilt=convertWatchfaceEntries(cachedBuildSource,source,getWatchfaceTarget('pace-pro'));
  assert(!rebuilt.entries.some(e=>e.name.endsWith('.bin')), 'discard stale native binaries when editable configs exist');
  assert.throws(()=>convertWatchfaceEntries([...source,{name:'custom/custom.pb',data:Buffer.from('unknown compiled state')}],source,getWatchfaceTarget('pace-pro')),/editable source/);
+ // A COROS-app photo face: the photo lives in custom/, every layout background is blank.
+ const photo=png(896,896,240);
+ const photoFace=[...source.map(e=>/\/background\.png$/.test(e.name)?{...e,data:png(e.name.includes('800')?800:416,e.name.includes('800')?800:416,0)}:e),
+  {name:'custom/custom.pb',data:Buffer.from('0a080a06637573746f6d1a0d637573746f6d5f62672e706e67','hex')},{name:'custom/custom_bg.png',data:photo}];
+ const photoConverted=convertWatchfaceEntries(photoFace,fixture([416,800],true,'90071992547409933'),getWatchfaceTarget('pace-pro'));
+ assert(!photoConverted.entries.some(e=>e.name.startsWith('custom/')),'the COROS custom-background pointer is not carried to another watch');
+ for(const size of [416,800]){
+  const bg=nativeImage.createFromBuffer(map(photoConverted.entries).get(`watchface_${size}x${size}/background.png`));
+  assert.deepEqual(bg.getSize(),{width:size,height:size});
+  const px=bg.toBitmap(),at=Math.floor(size/2)*size*4+Math.floor(size/2)*4;
+  assert([px[at],px[at+2]].includes(240),`the COROS photo becomes the ${size}px background`);
+ }
 
  const recovered=fixture([416]).map(e=>e.name==='info.json'?{...e,data:Buffer.from('{"m_name":"Recovered $ face","o_template_id":"478450947264200704","o_diy_version":1,"o_wf_ver":4,"coroslinkRecovery":{"partial":true}}')}:e)
   .filter(e=>!e.name.endsWith('/thmb.png'));
