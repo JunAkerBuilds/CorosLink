@@ -911,6 +911,9 @@ export function isCombinedDownloadAtPath(filePath: string): boolean {
   return Boolean(row);
 }
 
+/** Source of MP3s the user imported or copied into the download folder. */
+export const LOCAL_FILE_URL = "local:file";
+
 export function addDownloads(filePaths: string[], url: string): LocalTrack[] {
   const database = requireDatabase();
   const now = new Date().toISOString();
@@ -920,18 +923,25 @@ export function addDownloads(filePaths: string[], url: string): LocalTrack[] {
     VALUES
       (@id, @url, @title, @filePath, @sizeBytes, @createdAt)
   `);
+  // A download's MP3 may have been listed as a local file before it finished.
+  const claimLocalFile = database.prepare(`
+    UPDATE downloads SET url = @url, size_bytes = @sizeBytes
+    WHERE file_path = @filePath AND url = '${LOCAL_FILE_URL}'
+  `);
 
   const transaction = database.transaction((paths: string[]) => {
     for (const filePath of paths) {
       const stats = fs.statSync(filePath);
-      insert.run({
+      const row = {
         id: crypto.randomUUID(),
         url,
         title: path.basename(filePath, path.extname(filePath)),
         filePath,
         sizeBytes: stats.size,
         createdAt: now
-      });
+      };
+      insert.run(row);
+      claimLocalFile.run(row);
     }
   });
 

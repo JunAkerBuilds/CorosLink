@@ -1,5 +1,6 @@
 /** Spanish native menus and dialogs. Keep source keys stable. */
 export const nativeSpanish: Readonly<Record<string, string>> = {
+  "Import MP3s": "Importar MP3",
   "File": "Archivo",
   "Edit": "Edición",
   "View": "Ver",

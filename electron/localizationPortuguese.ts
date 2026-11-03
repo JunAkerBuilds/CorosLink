@@ -1,5 +1,6 @@
 /** European Portuguese native menus and dialogs. Keep source keys stable. */
 export const nativePortuguese: Readonly<Record<string, string>> = {
+  "Import MP3s": "Importar MP3",
   "File": "Ficheiro",
   "Edit": "Editar",
   "View": "Ver",

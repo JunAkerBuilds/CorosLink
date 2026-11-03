@@ -2377,6 +2377,31 @@ export default function App() {
     }
   }
 
+  async function handleImportDownloads(files?: File[]) {
+    if (!api) {
+      return;
+    }
+
+    setBusy("import-local");
+    setError(null);
+    setMessage(null);
+
+    try {
+      const result = await api.importDownloads(files);
+      if (!result) {
+        return;
+      }
+      setDownloads(result.tracks);
+      setMessage(localizedText(() => result.imported === 0
+        ? t("No MP3s to import.")
+        : t("{{value0}} MP3(s) added to the library.", { value0: result.imported })));
+    } catch (caught) {
+      setError(localizedText(() => toErrorMessage(caught)));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function handleDeleteDownload(track: LocalTrack) {
     if (!api || !window.confirm(t("Delete \"{{value0}}\" locally?", { value0: track.title }))) {
       return;
@@ -2799,6 +2824,7 @@ export default function App() {
                     onTransferDownloads={handleTransferDownloads}
                     onDeleteDownload={handleDeleteDownload}
                     onDeleteDownloads={handleDeleteDownloads}
+                    onImportDownloads={handleImportDownloads}
                     onDeleteWatchTrack={handleDeleteWatchTrack}
                     onDeleteWatchTracks={handleDeleteWatchTracks}
                     bluetoothMusic={IS_DEVELOPMENT_BUILD && showDevelopmentTools}
@@ -3698,6 +3724,7 @@ interface MediaLibraryTabProps {
   onTransferDownloads: (tracks: LocalTrack[]) => void;
   onDeleteDownload: (track: LocalTrack) => void;
   onDeleteDownloads: (tracks: LocalTrack[]) => void;
+  onImportDownloads: (files?: File[]) => void;
   onDeleteWatchTrack: (track: WatchTrack) => void;
   onDeleteWatchTracks: (tracks: WatchTrack[]) => void;
   /** Bluetooth library and Wi-Fi send; development builds only for now. */
@@ -3717,6 +3744,7 @@ function MediaLibraryTab({
   onTransferDownloads,
   onDeleteDownload,
   onDeleteDownloads,
+  onImportDownloads,
   onDeleteWatchTrack,
   onDeleteWatchTracks,
   bluetoothMusic,
@@ -3871,6 +3899,7 @@ function MediaLibraryTab({
               onTransferDownloads={handleLocalBulkTransfer}
               onDeleteDownload={onDeleteDownload}
               onDeleteDownloads={handleLocalBulkDelete}
+              onImportDownloads={onImportDownloads}
               wifiSyncPanel={bluetoothMusic && nativeBleStatus?.connected && api && typeof api.sendCorosLibraryMusicOverWifi === "function" ?
                 <CorosWifiMusicPanel key={nativeBleStatus.deviceId ?? nativeBleStatus.watchAddress ?? nativeBleStatus.deviceName}
                   api={api} otherBusy={Boolean(busy) || bleMusicBusy} onBusyChange={setWifiSyncBusy}

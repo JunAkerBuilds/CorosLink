@@ -72,9 +72,11 @@ import { RemoteAccess } from "./remote/remoteAccess";
 import { isAuthCallbackUrl } from "./remote/cloud/websiteAccount";
 import { completeOnboarding, isOnboardingPending } from "./onboardingState";
 import {
+  adoptDroppedDownloads,
   downloadAudio,
   downloadCombinedTrack,
-  getBinaryStatus
+  getBinaryStatus,
+  importAudioFiles
 } from "./downloadService";
 import {
   cancelJob,
@@ -1985,7 +1987,26 @@ function registerIpcHandlers(): void {
 
   registerAudiobookIpcHandlers();
 
-  ipcMain.handle("downloads:list", () => listDownloads());
+  ipcMain.handle("downloads:list", () => {
+    adoptDroppedDownloads();
+    return listDownloads();
+  });
+
+  ipcMain.handle("downloads:import", async (_event, filePaths?: unknown) => {
+    let paths = Array.isArray(filePaths)
+      ? filePaths.filter((value): value is string => typeof value === "string")
+      : [];
+    if (!Array.isArray(filePaths)) {
+      const options: OpenDialogOptions = { title: "Import MP3s", properties: ["openFile", "multiSelections"],
+        filters: [{ name: "MP3 file", extensions: ["mp3"] }] };
+      const result = mainWindow && !mainWindow.isDestroyed()
+        ? await dialog.showOpenDialog(mainWindow, localizeDialogOptions(options)) : await dialog.showOpenDialog(localizeDialogOptions(options));
+      if (result.canceled) return null;
+      paths = result.filePaths;
+    }
+    const imported = await importAudioFiles(paths);
+    return { imported: imported.length, tracks: listDownloads() };
+  });
 
   ipcMain.handle("downloads:downloadAudio", (_event, url: string) =>
     downloadAudio(url)

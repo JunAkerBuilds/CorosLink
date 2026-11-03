@@ -1,5 +1,6 @@
 /** Simplified Chinese UI messages. Keep source keys and interpolation names stable. */
 export const nativeChinese: Readonly<Record<string, string>> = {
+  "Import MP3s": "导入 MP3",
   "File": "文件",
   "Edit": "编辑",
   "View": "视图",

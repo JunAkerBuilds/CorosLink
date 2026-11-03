@@ -1,7 +1,7 @@
 import type { CalendarEventTiming, CalendarWorkoutEventRef, CalendarWorkoutEventSaveResult } from "./calendarSyncTypes";
 import type { ChatGptModelInfo, ChatModelOption } from "./chatModels";
 import type { HealthInsightKind, HealthInsightResult } from "./healthInsightsTypes";
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { DataModeStatus, LocalOnlyActivationOptions, NetworkAccessReport } from "./privacy/dataModeTypes";
 import type { LocalBackupResult, LocalDataOverview, LocalImportResult, LocalRestoreResult, WatchSyncProbe, WatchSyncProgress } from "./localSync/localDataTypes";
 import type { CorosNativeBleSnapshot } from "./corosNativeBleTypes";
@@ -607,6 +607,11 @@ const api = {
   },
   listDownloads: (): Promise<LocalTrack[]> =>
     ipcRenderer.invoke("downloads:list"),
+  importDownloads: (files?: File[]): Promise<{ imported: number; tracks: LocalTrack[] } | null> =>
+    ipcRenderer.invoke(
+      "downloads:import",
+      files?.map((file) => webUtils.getPathForFile(file))
+    ),
   downloadAudio: (url: string): Promise<DownloadAudioResult> =>
     ipcRenderer.invoke("downloads:downloadAudio", url),
   deleteDownload: (id: string, removeFile: boolean): Promise<LocalTrack[]> =>

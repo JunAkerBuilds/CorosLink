@@ -50,6 +50,8 @@ export const corePortuguese: Record<string, string> = {
   "{{value0}} tracks deleted from the watch.": "{{value0}} faixas eliminadas do relógio.",
   "Delete \"{{value0}}\" locally?": "Eliminar «{{value0}}» deste computador?",
   "Local track deleted.": "Faixa local eliminada.",
+  "No MP3s to import.": "Não há MP3 para importar.",
+  "{{value0}} MP3(s) added to the library.": "{{value0}} MP3 adicionado(s) à biblioteca.",
   "{{value0}} tracks deleted.": "{{value0}} faixas eliminadas.",
   "Startup view set to {{value0}}. It will open on next launch.": "Vista inicial definida como {{value0}}. Será aberta no próximo arranque.",
   "Close navigation": "Fechar navegação",

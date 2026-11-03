@@ -481,6 +481,8 @@ export interface CorosLinkApi {
   ) => () => void;
   onAudiobookUpdated: (callback: (book: Audiobook) => void) => () => void;
   listDownloads: () => Promise<LocalTrack[]>;
+  /** Copies MP3s into the library; with no files, asks the user to pick some. */
+  importDownloads: (files?: File[]) => Promise<{ imported: number; tracks: LocalTrack[] } | null>;
   downloadAudio: (url: string) => Promise<DownloadAudioResult>;
   deleteDownload: (id: string, removeFile: boolean) => Promise<LocalTrack[]>;
   getBinaryStatus: () => Promise<BinaryStatus>;

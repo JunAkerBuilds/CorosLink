@@ -7,6 +7,7 @@ import { nativePortuguese } from "./localizationPortuguese";
 import { nativeSpanish } from "./localizationSpanish";
 let language: Language = "en";
 const french: Record<string, string> = {
+  "Import MP3s": "Importer des MP3",
   "File": "Fichier", "Edit": "Édition", "View": "Affichage", "Window": "Fenêtre", "Help": "Aide",
   "About CorosLink": "À propos de CorosLink", "Quit CorosLink": "Quitter CorosLink",
   "Hide CorosLink": "Masquer CorosLink", "Hide Others": "Masquer les autres", "Show All": "Tout afficher",

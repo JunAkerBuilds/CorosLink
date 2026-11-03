@@ -50,6 +50,8 @@ export const coreChinese: Readonly<Record<string, string>> = {
   "{{value0}} tracks deleted from the watch.": "已从手表中删除 {{value0}} 首曲目。",
   "Delete \"{{value0}}\" locally?": "要从本机删除“{{value0}}”吗？",
   "Local track deleted.": "本地曲目已删除。",
+  "No MP3s to import.": "没有可导入的 MP3。",
+  "{{value0}} MP3(s) added to the library.": "已将 {{value0}} 个 MP3 添加到资料库。",
   "{{value0}} tracks deleted.": "已删除 {{value0}} 首曲目。",
   "Startup view set to {{value0}}. It will open on next launch.": "启动页面已设为 {{value0}}，下次启动时生效。",
   "Close navigation": "关闭导航",

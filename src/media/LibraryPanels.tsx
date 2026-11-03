@@ -4,6 +4,7 @@ import {
   useMemo,
   useState,
   type CSSProperties,
+  type DragEvent,
   type ReactNode,
 } from "react";
 import {
@@ -12,6 +13,7 @@ import {
   ArrowUpDown,
   Cable,
   CheckCircle2,
+  FilePlus2,
   HardDrive,
   Loader2,
   Music,
@@ -366,7 +368,13 @@ interface LocalLibraryPanelProps {
   onTransferDownloads: (tracks: LocalTrack[]) => void;
   onDeleteDownload: (track: LocalTrack) => void;
   onDeleteDownloads: (tracks: LocalTrack[]) => void;
+  /** Copies the user's own MP3s in; with no files, opens a file picker. */
+  onImportDownloads?: (files?: File[]) => void;
   wifiSyncPanel?: ReactNode;
+}
+
+function draggedFiles(event: DragEvent<HTMLElement>): boolean {
+  return Array.from(event.dataTransfer.types).includes("Files");
 }
 
 export function LocalLibraryPanel({
@@ -385,9 +393,11 @@ export function LocalLibraryPanel({
   onTransferDownloads,
   onDeleteDownload,
   onDeleteDownloads,
+  onImportDownloads,
   wifiSyncPanel,
 }: LocalLibraryPanelProps) {
   const { language } = useLanguage();
+  const [dropActive, setDropActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [trackFilter, setTrackFilter] = useSelectionPreference(
     LOCAL_TRACK_FILTER_PREFERENCE,
@@ -536,16 +546,69 @@ export function LocalLibraryPanel({
   }
 
   return (
-    <section className="library-panel library-panel--local" aria-label={t("Local cache")}>
+    <section
+      className={dropActive ? "library-panel library-panel--local is-drop-target" : "library-panel library-panel--local"}
+      aria-label={t("Local cache")}
+      onDragOver={(event) => {
+        if (!onImportDownloads || !draggedFiles(event)) {
+          return;
+        }
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        setDropActive(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setDropActive(false);
+        }
+      }}
+      onDrop={(event) => {
+        if (!onImportDownloads || !draggedFiles(event)) {
+          return;
+        }
+        event.preventDefault();
+        setDropActive(false);
+        const files = Array.from(event.dataTransfer.files).filter((file) =>
+          file.name.toLowerCase().endsWith(".mp3"),
+        );
+        if (files.length > 0) {
+          onImportDownloads(files);
+        }
+      }}
+    >
       <header className="library-panel-header">
         <div>
           <p className="eyebrow">CorosLink</p>
           <h3>{t("Local cache")}</h3>
         </div>
-        <em>
-          {countLabel} · {formatBytes(totalSize)}
-        </em>
+        <div className="library-panel-header-actions">
+          {onImportDownloads ? (
+            <button
+              className="secondary-button compact-button"
+              type="button"
+              title={t("Add your own MP3s, or drop them here")}
+              disabled={busy === "import-local"}
+              onClick={() => onImportDownloads()}
+            >
+              {busy === "import-local" ? (
+                <Loader2 className="spin" size={15} aria-hidden="true" />
+              ) : (
+                <FilePlus2 size={15} aria-hidden="true" />
+              )}
+              {t("Import MP3s")}
+            </button>
+          ) : null}
+          <em>
+            {countLabel} · {formatBytes(totalSize)}
+          </em>
+        </div>
       </header>
+      {dropActive ? (
+        <div className="library-drop-overlay" aria-hidden="true">
+          <FilePlus2 size={28} />
+          <span>{t("Drop MP3s to add them")}</span>
+        </div>
+      ) : null}
 
       {wifiSyncPanel}
       {transferProgress ? (
@@ -716,7 +779,7 @@ export function LocalLibraryPanel({
             title={emptyTitle()}
             subtitle={
               downloads.length === 0
-                ? t("Download tracks from YouTube or Spotify to get started")
+                ? t("Download tracks from YouTube or Spotify, or drop your own MP3s here")
                 : undefined
             }
           />
