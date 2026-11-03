@@ -1,0 +1,242 @@
+/*
+ * Watch Face Studio walkthrough. It renders into <body>, outside the studio
+ * shell, so it carries its own copy of the atelier tray colors. The dim is a
+ * single box-shadow around the spotlight, which leaves the explained part of
+ * the editor lit; the overlay itself takes the clicks so nothing underneath
+ * changes while the tour talks about it.
+ */
+
+.wf-tour {
+  --tour-card: #1f2327;
+  --tour-card-edge: rgb(255 255 255 / 9%);
+  --tour-highlight: rgb(255 255 255 / 6%);
+  /* Measured on the card: ink 14:1, text 9.6:1, dim 6.3:1. */
+  --tour-ink: #eef1f3;
+  --tour-text: #c4cbd1;
+  --tour-dim: #9aa3ab;
+  --tour-control: rgb(255 255 255 / 6%);
+  --tour-control-hover: rgb(255 255 255 / 10%);
+  --tour-scrim: rgb(5 7 9 / 64%);
+  --tour-shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 28px 60px -18px rgb(0 0 0 / 80%);
+  --tour-primary-ink: #03140d;
+  --tour-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  position: fixed;
+  z-index: 9000;
+  inset: 0;
+  font-family: inherit;
+}
+
+:root[data-theme="paper"] .wf-tour {
+  --tour-card: #ffffff;
+  --tour-card-edge: rgb(30 45 35 / 10%);
+  --tour-highlight: rgb(255 255 255 / 0%);
+  --tour-ink: #1f2925;
+  --tour-text: #47524b;
+  --tour-dim: #5f6a63;
+  --tour-control: rgb(24 40 32 / 5%);
+  --tour-control-hover: rgb(24 40 32 / 9%);
+  --tour-scrim: rgb(20 28 24 / 44%);
+  --tour-shadow: 0 1px 2px rgb(30 45 35 / 12%), 0 26px 56px -18px rgb(30 45 35 / 42%);
+  --tour-primary-ink: #ffffff;
+}
+
+/* --- Spotlight ------------------------------------------------------------- */
+
+.wf-tour-spot {
+  position: fixed;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 0 7px color-mix(in srgb, var(--accent) 22%, transparent),
+    0 0 0 200vmax var(--tour-scrim);
+  pointer-events: none;
+  transition:
+    top 320ms var(--tour-ease),
+    left 320ms var(--tour-ease),
+    width 320ms var(--tour-ease),
+    height 320ms var(--tour-ease),
+    border-radius 320ms var(--tour-ease),
+    box-shadow 200ms ease;
+}
+
+.wf-tour-spot.is-round {
+  border-radius: 50%;
+}
+
+/* No target (the welcome card): the dim covers everything. */
+.wf-tour-spot.is-empty {
+  box-shadow: 0 0 0 200vmax var(--tour-scrim);
+}
+
+/* --- Card ------------------------------------------------------------------ */
+
+.wf-tour-card {
+  position: fixed;
+  display: grid;
+  width: min(340px, calc(100vw - 32px));
+  gap: 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--tour-card-edge);
+  border-radius: 16px;
+  background: var(--tour-card);
+  box-shadow: inset 0 1px 0 var(--tour-highlight), var(--tour-shadow);
+  color: var(--tour-text);
+  padding: 16px 18px 14px;
+  transition: top 320ms var(--tour-ease), left 320ms var(--tour-ease);
+  animation: wf-tour-card-in 220ms var(--tour-ease);
+}
+
+/* The welcome card, with nothing to point at, is a little roomier. */
+.wf-tour-card.is-intro {
+  width: min(380px, calc(100vw - 32px));
+  padding: 20px 22px 16px;
+}
+
+@keyframes wf-tour-card-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+.wf-tour-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wf-tour-count {
+  color: var(--tour-dim);
+  font-family: "Archivo", var(--font-display, inherit);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.wf-tour-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wf-tour-dots > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tour-dim) 45%, transparent);
+  transition: width 220ms var(--tour-ease), background-color 220ms ease;
+}
+
+.wf-tour-dots > span.is-done {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.wf-tour-dots > span.is-current {
+  width: 16px;
+  background: var(--accent);
+}
+
+.wf-tour-card h2 {
+  margin: 2px 0 0;
+  color: var(--tour-ink);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.wf-tour-card.is-intro h2 {
+  font-size: 19px;
+}
+
+.wf-tour-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.wf-tour-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.wf-tour-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wf-tour-card button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  min-height: 32px;
+  gap: 6px;
+  border: 0;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, filter 140ms ease;
+}
+
+.wf-tour-card button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 80%, #ffffff);
+  outline-offset: 2px;
+}
+
+.wf-tour-skip {
+  background: transparent;
+  color: var(--tour-dim);
+  padding: 0 4px;
+}
+
+.wf-tour-skip:hover {
+  color: var(--tour-ink);
+}
+
+.wf-tour-back {
+  background: var(--tour-control);
+  color: var(--tour-ink);
+  padding: 0 12px 0 10px;
+}
+
+.wf-tour-back:hover {
+  background: var(--tour-control-hover);
+}
+
+/* The one lit action, like Send to COROS in the editor. */
+.wf-tour-next {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 18%), rgb(255 255 255 / 0%) 60%),
+    var(--accent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 30%),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 70%, #000000);
+  color: var(--tour-primary-ink);
+  padding: 0 12px 0 14px;
+}
+
+.wf-tour-next:hover {
+  filter: brightness(1.06);
+}
+
+.wf-tour-next svg,
+.wf-tour-back svg {
+  color: currentColor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wf-tour-spot,
+  .wf-tour-card,
+  .wf-tour-dots > span {
+    transition: none;
+    animation: none;
+  }
+}

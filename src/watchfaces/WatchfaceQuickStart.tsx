@@ -3,6 +3,7 @@ import { useWatchfaceStudioSimple } from "./watchfaceStudioMode";
 import {
   ChevronRight,
   Clock,
+  Compass,
   ImagePlus,
   MousePointerClick,
   Palette,
@@ -24,6 +25,8 @@ interface WatchfaceQuickStartProps {
   onText: () => void;
   onShape: () => void;
   photoDisabled: boolean;
+  /** Replays the Studio walkthrough. */
+  onTour?: () => void;
 }
 
 const SHORTCUTS: Array<{ keys: string[]; action: string }> = [
@@ -45,7 +48,8 @@ export function WatchfaceQuickStart({
   addTimeHint = "Hours and minutes that update live",
   onText,
   onShape,
-  photoDisabled
+  photoDisabled,
+  onTour
 }: WatchfaceQuickStartProps) {
   useLanguage();
   const simple = useWatchfaceStudioSimple();
@@ -88,6 +92,11 @@ export function WatchfaceQuickStart({
             <p>{t("Start with a quick edit below, or click anything on the face to change it.")}</p>
           </>
         )}
+        {onTour ? (
+          <button type="button" className="wf-welcome-tour" onClick={onTour}>
+            <Compass size={14} aria-hidden="true" />{t("Take the 1-minute tour")}
+          </button>
+        ) : null}
       </div>
 
       <div className="wf-welcome-section">

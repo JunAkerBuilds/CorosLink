@@ -28,6 +28,7 @@ import {
 } from "./watchfaceDefaultIndicators.ts";
 import { WatchfaceExportPreview } from "./WatchfaceExportPreview";
 import { WatchfaceStudioModeContext, loadWatchfaceStudioMode, saveWatchfaceStudioMode, type WatchfaceStudioMode } from "./watchfaceStudioMode";
+import { WatchfaceStudioTour, watchfaceStudioTourSeen, type WatchfaceTourStepId } from "./WatchfaceStudioTour";
 import {
   effectiveWatchLanguages,
   loadWatchLanguagesPreference,
@@ -1300,6 +1301,12 @@ export function WatchfaceEditor({
     "selection"
   );
   const [studioMode, setStudioModeState] = useState<WatchfaceStudioMode>(loadWatchfaceStudioMode);
+  const [tourOpen, setTourOpen] = useState(false);
+  // The tour's step and close handlers read this render's layers and selection.
+  const tourStepRef = useRef<(step: WatchfaceTourStepId) => void>(() => {});
+  const tourCloseRef = useRef<() => void>(() => {});
+  const onTourStep = useCallback((step: WatchfaceTourStepId) => tourStepRef.current(step), []);
+  const onTourClose = useCallback(() => tourCloseRef.current(), []);
   const simpleMode = studioMode === "simple";
   function setStudioMode(mode: WatchfaceStudioMode) {
     setStudioModeState(mode);
@@ -9534,6 +9541,13 @@ export function WatchfaceEditor({
     };
   }, [api, automationEditorReady, sessionId]);
 
+  // First time anyone opens Studio, walk them through it once the face has drawn.
+  useEffect(() => {
+    if (!active || !automationEditorReady || watchfaceStudioTourSeen()) return;
+    const timer = window.setTimeout(() => setTourOpen(true), 700);
+    return () => window.clearTimeout(timer);
+  }, [active, automationEditorReady]);
+
   // Deleted firmware layers stay derivable (the Add menu restores them) but
   // leave the Layers list while they are off.
   const removedLayerIds = new Set(design.removedLayerIds ?? []);
@@ -9678,6 +9692,28 @@ export function WatchfaceEditor({
       (!simpleMode || (layer.visible && !isTemplateAssetSection(layerGroupLabel(layer))))
   ).length;
   const heightMatch = heightMatchSelection();
+
+  tourStepRef.current = (step) => {
+    setContextMenu(null);
+    setPropertiesTab("selection");
+    // Narrow windows show one pane at a time; open the one being explained.
+    setLayersOpen(step === "layers" || step === "add");
+    setPropertiesOpen(step === "properties");
+    if (step === "properties" && quickStartTimeLayer) {
+      selectEditorItem(quickStartTimeLayer.id);
+    } else if (step === "welcome" || step === "face") {
+      setSelectedIds([]);
+      setSelectedId("");
+    }
+  };
+  tourCloseRef.current = () => {
+    setTourOpen(false);
+    // Land on Quick edits, the friendliest first screen.
+    setSelectedIds([]);
+    setSelectedId("");
+    setLayersOpen(false);
+    setPropertiesOpen(false);
+  };
 
   return (
     <WatchfaceStudioModeContext.Provider value={studioMode}>
@@ -10862,6 +10898,7 @@ export function WatchfaceEditor({
                   // hands, which every DIY template can show (its own, or Studio's).
                   : analogHandsOnFace ? undefined : addAnalogHands}
                 addTimeHint={templateHasDigitalClock ? undefined : "Analog hands that keep time"}
+                onTour={() => setTourOpen(true)}
                 onText={() => addElement("text")}
                 onShape={() => addElement("rect")}
               />
@@ -11213,6 +11250,14 @@ export function WatchfaceEditor({
             </div>
           </section>
         </div>
+      ) : null}
+      {tourOpen ? (
+        <WatchfaceStudioTour
+          root={editorRef.current}
+          hasTimeLayer={Boolean(quickStartTimeLayer)}
+          onStep={onTourStep}
+          onClose={onTourClose}
+        />
       ) : null}
     </section>
     </WatchfaceStudioModeContext.Provider>

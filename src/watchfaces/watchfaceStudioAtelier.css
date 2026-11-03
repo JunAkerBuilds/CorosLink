@@ -1419,6 +1419,40 @@
   font-size: 12.5px;
 }
 
+/* Replays the walkthrough: a quiet lume pill under the welcome line. */
+:root .watchface-shell.watchface-shell--studio .wf-welcome-tour {
+  display: inline-flex;
+  align-items: center;
+  justify-self: center;
+  height: 28px;
+  min-height: 28px;
+  gap: 6px;
+  margin-top: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--atl-lume-wash);
+  color: var(--atl-lume-strong);
+  padding: 0 12px 0 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-welcome-tour:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-welcome-tour svg {
+  color: currentColor;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-welcome-tour:focus-visible {
+  outline: 2px solid var(--wf-focus);
+  outline-offset: 2px;
+}
+
 :root .watchface-shell.watchface-shell--studio .wf-welcome-section h3 {
   color: var(--atl-titanium);
   font-family: var(--atl-engrave);
