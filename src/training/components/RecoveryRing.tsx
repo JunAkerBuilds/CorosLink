@@ -2,7 +2,6 @@ import { useLanguage, t } from "../../i18n/training";
 import { useEffect, useState } from "react";
 import { recoveryHoursLeft, recoveryTone } from "../parsers";
 import type { TrainingSummaryMetrics } from "../types";
-import "../overviewCards.css";
 
 interface RecoveryRingProps {
   summary: TrainingSummaryMetrics;

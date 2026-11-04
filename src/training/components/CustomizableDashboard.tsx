@@ -1,43 +1,14 @@
 import { useLanguage, t } from "../../i18n/training";
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Activity, BedDouble, CalendarDays, Check, Flame, Footprints, Gauge, Grid3x3, HeartPulse, Moon, Plus, RotateCcw, Scale, Settings2, Sparkles, Trophy, Undo2, Waves, X, Zap, type LucideIcon } from 'lucide-react';
+import { Check, Plus, RotateCcw, Settings2, Undo2, X } from 'lucide-react';
 import { availableWidgetCatalog, dashboardStorageKey, defaultLayout, defaultWidget, localDashboardStorageKey, localDefaultLayout, moveWidget, parseLayout, parseLocalLayout, widgetCatalog, widgetPreset, widgetPresets, type DashboardWidget, type WidgetId } from '../dashboardLayout';
 import '../dashboardLayout.css';
-import '../dashboardEditing.css';
 import { usePackedDashboard } from '../usePackedDashboard';
 import { WidgetResizeHandle } from './WidgetResizeHandle';
 import { WidgetDropPreview } from './WidgetDropPreview';
 import type { WidgetSizePreset } from '../widgetSizing';
 import { useDashboardDrag } from '../useDashboardDrag';
-
-type WidgetCategory = 'Today' | 'Sleep & recovery' | 'Training' | 'Racing';
-const LIBRARY_CATEGORIES: readonly ('All' | WidgetCategory)[] = ['All', 'Today', 'Sleep & recovery', 'Training', 'Racing'];
-/** Library grouping and preview tint; anything unlisted is filed under Training. */
-const WIDGET_LOOK: Partial<Record<WidgetId, { category: WidgetCategory; hue: string; Icon: LucideIcon }>> = {
-  recovery: { category: 'Sleep & recovery', hue: '#34d399', Icon: BedDouble },
-  sleep: { category: 'Sleep & recovery', hue: '#818cf8', Icon: Moon },
-  sleepHrv: { category: 'Sleep & recovery', hue: '#a78bfa', Icon: Waves },
-  stress: { category: 'Sleep & recovery', hue: '#fbbf24', Icon: Activity },
-  healthCheck: { category: 'Sleep & recovery', hue: '#f472b6', Icon: HeartPulse },
-  cycle: { category: 'Sleep & recovery', hue: '#f472b6', Icon: CalendarDays },
-  'trend-sleep': { category: 'Sleep & recovery', hue: '#818cf8', Icon: Moon },
-  'trend-hrv': { category: 'Sleep & recovery', hue: '#a78bfa', Icon: Waves },
-  'daily-load': { category: 'Today', hue: '#fb923c', Icon: Flame },
-  'daily-heart': { category: 'Today', hue: '#f472b6', Icon: HeartPulse },
-  'daily-steps': { category: 'Today', hue: '#38bdf8', Icon: Footprints },
-  'daily-calories': { category: 'Today', hue: '#a78bfa', Icon: Zap },
-  upcoming: { category: 'Today', hue: '#34d399', Icon: CalendarDays },
-  coach: { category: 'Today', hue: '#2dd4bf', Icon: Sparkles },
-  vo2: { category: 'Training', hue: '#60a5fa', Icon: Gauge },
-  heatmap: { category: 'Training', hue: '#34d399', Icon: Grid3x3 },
-  'load-balance': { category: 'Training', hue: '#34d399', Icon: Scale },
-  race: { category: 'Racing', hue: '#facc15', Icon: Trophy },
-  scores: { category: 'Racing', hue: '#2dd4bf', Icon: Trophy }
-};
-function widgetLook(id: WidgetId) {
-  return WIDGET_LOOK[id] ?? { category: 'Training' as WidgetCategory, hue: '#34d399', Icon: Activity };
-}
 
 export function CustomizableDashboard({ renderWidget, sampleMode = false, localOnly = false, toolbarTarget }: {
   renderWidget: (widget: DashboardWidget) => ReactNode; sampleMode?: boolean;
@@ -60,7 +31,6 @@ export function CustomizableDashboard({ renderWidget, sampleMode = false, localO
   const [editing, setEditing] = useState(false);
   const [library, setLibrary] = useState(false);
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<'All' | WidgetCategory>('All');
   const [resizing, setResizing] = useState<{ id: WidgetId; preset: WidgetSizePreset } | null>(null);
   const [history, setHistory] = useState<DashboardWidget[][]>([]);
   const [saveError, setSaveError] = useState(false);
@@ -100,7 +70,7 @@ export function CustomizableDashboard({ renderWidget, sampleMode = false, localO
   );
   return <section className={`hub-dashboard ${editing ? 'is-editing' : ''} ${resizing ? 'is-resizing' : ''}`} aria-label={t("Customizable training dashboard")}>
     {toolbarTarget ? createPortal(controls, toolbarTarget) : <div className="hub-dashboard-toolbar">{controls}</div>}
-    {(saveError || editing) && <p className="hub-dashboard-hint">{saveError ? t("Changes could not be saved on this device. Keep this view open to retain them.") : t("Drag to arrange. Drag a corner or click the size label to resize. Changes save automatically.")}</p>}
+    {(saveError || editing) && <p className="hub-dashboard-hint">{saveError ? t("Changes could not be saved on this device. Keep this view open to retain them.") : t("Drag to arrange. Drag a corner to resize. Changes save automatically.")}</p>}
     <span className="hub-dashboard-sr" role="status">{t(announcement)}</span>
     {!layout.length && <div className="panel hub-dashboard-empty"><h2>{t("Make room for what matters")}</h2><p>{t("Add widgets to build your training dashboard.")}</p><button type="button" onClick={() => { setEditing(true); setLibrary(true); }}><Plus size={16} />{t("Add widget")}</button></div>}
     <div className="hub-dashboard-grid" ref={gridRef}>
@@ -118,14 +88,6 @@ export function CustomizableDashboard({ renderWidget, sampleMode = false, localO
             if (next !== layout) update(next, t("{{title}} moved", { title }));
           }} data-widget={widget.id} data-start-row={widget.startRow || undefined} data-at-bottom={widget.atBottom || undefined} data-preset={preset.id} data-shape={preset.aspectRatio === 1 ? "square" : undefined} data-compact={Boolean(preset.contentWidth) || undefined} data-expanded={preset.expanded} className={`hub-dashboard-widget ${target?.anchor === widget.id ? 'is-drop-target' : ''} ${resizing?.id === widget.id ? 'is-resizing' : ''} ${dragged === widget.id ? 'is-dragging' : ''}`} style={{ '--widget-span': widget.size, '--widget-proportional-height': preset.aspectRatio ? `${100 / preset.aspectRatio}cqw` : '0px', '--widget-min-height': `${preset.minHeight}px`, '--widget-chart-height': preset.expanded ? '300px' : '180px' } as CSSProperties}>
           {editing && <button type="button" className="hub-widget-remove" disabled={Boolean(resizing)} aria-label={t("Remove {{value1}}", { value1: String(title) })} title={t("Remove {{value1}}", { value1: String(title) })} onPointerDown={event => event.stopPropagation()} onClick={() => update(layout.filter(item => item.id !== widget.id), t("{{value1}} removed. Use Undo to restore it.", { value1: String(title) }))}><X size={14} aria-hidden="true" /></button>}
-          {editing && (() => {
-            const presets = widgetPresets(widget.id);
-            if (presets.length < 2) return null;
-            const next = presets[(presets.findIndex(item => item.id === preset.id) + 1) % presets.length]!;
-            return <button type="button" className="hub-widget-size-chip" disabled={Boolean(resizing)}
-              aria-label={t("{{value1}} size: {{value2}}. Select to change", { value1: String(title), value2: String(t(preset.label)) })}
-              onPointerDown={event => event.stopPropagation()} onClick={() => resize(widget.id, next)}>{t(preset.label)}</button>;
-          })()}
           {!editing && widget.title && <h2 className="hub-widget-label">{widget.title}</h2>}
           <div className="hub-widget-content" inert={editing}>{renderWidget(widget)}</div>
           {editing && <span className="hub-resize-ghost" aria-hidden={resizing?.id !== widget.id}>
@@ -145,23 +107,11 @@ export function CustomizableDashboard({ renderWidget, sampleMode = false, localO
     <dialog ref={dialog} className="hub-widget-library" aria-labelledby={libraryTitle} onCancel={() => setLibrary(false)} onClose={() => setLibrary(false)} onClick={event => { if (event.target === event.currentTarget) setLibrary(false); }}>
       <div className="hub-library-inner"><div className="hub-dashboard-toolbar"><div><p className="eyebrow">{t("Make it yours")}</p><h2 id={libraryTitle}>{t("Widget library")}</h2></div><button type="button" aria-label={t("Close widget library")} onClick={() => setLibrary(false)}><X size={18} /></button></div>
         <input autoFocus type="search" aria-label={t("Search widgets")} placeholder={t("Search widgets…")} value={query} onChange={event => setQuery(event.target.value)} />
-        <div className="hub-library-categories" role="group" aria-label={t("Widget categories")}>
-          {LIBRARY_CATEGORIES.map(item => <button key={item} type="button" aria-pressed={category === item} onClick={() => setCategory(item)}>{t(item)}</button>)}
-        </div>
-        {(() => {
-          const shown = availableWidgetCatalog.filter(item => (category === 'All' || widgetLook(item.id).category === category)
-            && `${t(item.title)} ${t(item.description)}`.toLowerCase().includes(query.toLowerCase()));
-          if (!shown.length) return <p>{t("No widgets match your search.")}</p>;
-          return <div className="hub-library-list">{shown.map(item => {
-            const added = layout.some(widget => widget.id === item.id);
-            const { hue, Icon } = widgetLook(item.id);
-            return <div key={item.id} className="hub-library-item" style={{ '--widget-hue': hue } as CSSProperties}>
-              <span className="hub-library-preview" aria-hidden="true"><Icon size={20} /><span>{[5, 8, 6, 10, 7, 9].map((height, index) => <i key={index} style={{ height: `${height * 2.4}px` }} />)}</span></span>
-              <div><strong>{t(item.title)}</strong><p>{t(item.description)}</p></div>
-              <button type="button" disabled={added} aria-label={`${added ? t("Added") : t("Add")} ${t(item.title)}`} onClick={() => update([...layout, defaultWidget(item.id)], t("{{title}} added", { title: t(item.title) }))}>{added ? <Check size={16} /> : <Plus size={16} />}{added ? t("Added") : t("Add")}</button>
-            </div>;
-          })}</div>;
-        })()}
+        <div className="hub-library-list">{availableWidgetCatalog.filter(item => `${t(item.title)} ${t(item.description)}`.toLowerCase().includes(query.toLowerCase())).map(item => {
+          const added = layout.some(widget => widget.id === item.id);
+          return <div key={item.id}><div><strong>{t(item.title)}</strong><p>{t(item.description)}</p></div><button type="button" disabled={added} aria-label={`${added ? t("Added") : t("Add")} ${t(item.title)}`} onClick={() => update([...layout, defaultWidget(item.id)], t("{{title}} added", { title: t(item.title) }))}>{added ? <Check size={16} /> : <Plus size={16} />}{added ? t("Added") : t("Add")}</button></div>;
+        })}</div>
+        {!availableWidgetCatalog.some(item => `${t(item.title)} ${t(item.description)}`.toLowerCase().includes(query.toLowerCase())) && <p>{t("No widgets match your search.")}</p>}
       </div>
     </dialog>
   </section>;

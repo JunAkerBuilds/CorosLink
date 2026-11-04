@@ -14,10 +14,8 @@ import type { TrainingHubActivity } from "../../../electron/types";
 import {
   formatDistanceMeters,
   formatDurationSeconds,
-  formatOptionalNumber,
-  getLocalHappenDayKey
+  formatOptionalNumber
 } from "../formatters";
-import "../overviewCards.css";
 import { TRAINING_HEATMAP_DAYS } from "../chartConfig";
 import {
   buildHeatmapCells,
@@ -185,8 +183,6 @@ function TrainingHeatmapPanelComponent({
     rpeBackfill !== null && (rpeBackfill.pending > 0 || rpeBackfill.running);
   const grid = useMemo(() => buildHeatmapGrid(cells), [cells, getLocale()]);
   const summary = useMemo(() => buildHeatmapSummary(cells), [cells, getLocale()]);
-  // Today's cell gets a ring so the year reads from "now".
-  const todayKey = getLocalHappenDayKey();
   // Monday-first narrow weekday names in the app language (2024-01-01 was a Monday).
   const weekdayLabels = useMemo(() => {
     const format = getDateTimeFormat({ weekday: "narrow" });
@@ -627,7 +623,7 @@ function TrainingHeatmapPanelComponent({
                       key={cell.happenDay}
                       className={`training-heatmap-cell${
                         cell.level === 4 ? " is-peak" : ""
-                      }${cell.happenDay === todayKey ? " is-today" : ""}`}
+                      }`}
                       data-level={cell.level}
                       data-wave-sports={
                         daySports.length >= 2 ? daySports.join(",") : undefined
@@ -697,7 +693,7 @@ function TrainingHeatmapPanelComponent({
                   : t(isRpe ? "{{count}} rated days" : "{{count}} active days", { count: summary.activeDays })}
               </span>
               <span aria-hidden="true">·</span>
-              <span className={summary.currentStreak > 0 ? "is-streak" : undefined}>
+              <span>
                 {summary.currentStreak === 1
                   ? t("1-day streak")
                   : t("{{count}}-day streak", { count: summary.currentStreak })}

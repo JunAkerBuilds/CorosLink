@@ -11,15 +11,6 @@ import { formatSleepClockRange, formatSleepNightLabel } from "../formatters";
 import { formatSleepDuration, sleepScoreLabel, sleepScoreTone } from "../sleepWeek";
 import type { TrainingHubSleepRecord, TrainingHubSleepSummary } from "../../../electron/types";
 import "../sleepPanel.css";
-import "../overviewCards.css";
-
-/** A fixed scatter of stars over the night sky (percent positions, size in px, twinkle delay in s). */
-const SKY_STARS = Array.from({ length: 18 }, (_unused, index) => ({
-  left: (index * 41 + 7) % 100,
-  top: (index * 29 + 5) % 62,
-  size: 1 + (index % 3) * 0.6,
-  delay: (index % 8) * 0.45
-}));
 
 interface SleepSummaryPanelProps {
   sleep?: TrainingHubSleepSummary | null;
@@ -260,14 +251,6 @@ export function SleepSummaryPanel({
 
   return (
     <section className={`panel sleep-panel tone-${tone}${canOpenWeek ? " is-openable" : ""}`} onClick={canOpenWeek ? openWeekFromCard : undefined}>
-      <span className="sleep-panel-stars" aria-hidden="true">
-        {SKY_STARS.map((star, index) => (
-          <span
-            key={index}
-            style={{ left: `${star.left}%`, top: `${star.top}%`, width: star.size, height: star.size, animationDelay: `${star.delay}s` }}
-          />
-        ))}
-      </span>
       <div className="sleep-panel-header">
         <div>
           <p className="sleep-panel-label">
