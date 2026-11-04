@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.73] - 2026-11-03
+
 ### Added
 
 - **German.** Choose Deutsch in Settings → App language. Every German system locale, Austria and Switzerland included, picks it on first launch; menus, file dialogs and macOS permission prompts are translated too.
@@ -14,9 +16,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Choose which services appear in Media** ([#164](https://github.com/JunAkerBuilds/CorosLink/issues/164)). Right-click the Media tabs to hide a service you don't use, or turn services on and off in Settings → Sidebar → Media services. Library always stays. Nothing is removed, and a hidden service still opens from Settings → Accounts.
 - **Races on the Calendar.** Race day, bib pickup and the registration deadline (until you're registered) appear on their days in Month, Week and List. Click one to open Races.
 - **The Coach works with Hevy.** With Hevy connected in Strength (your Hevy Pro API key), the Coach reads your Hevy exercise library, routines and folders, recent workouts with every set and RPE, each lift's logged history with estimated one-rep max, and your body measurements, all live from Hevy. It can build a new routine or progress an existing one from the loads you actually lifted, and add a custom exercise the library lacks; each change appears as a card showing what changes and is saved only when you click Save to Hevy. A routine edited in Hevy after the Coach read it isn't overwritten. Hevy's API can't log or delete workouts, delete routines or move a routine between folders, so the Coach doesn't. Hevy's own MCP server only accepts apps Hevy has approved (ChatGPT for now), so CorosLink uses the public API.
+- **Studio opens in Simple mode.** A Simple | Advanced switch in Studio's top bar (remembered) keeps the editor to what is on the face: color, font, size and position. Template parts that are switched off collect in a collapsed "Not on the face" section, and PNG digit fitting, the PNG font importer, Edges, the Project tab and the preview-size picker move to Advanced. Labels use plain names in both modes (Color, Spacing, Colon, Date slash, Data chosen on watch, Temperature (weather)…), and Send's checks name layers in sentences with a Show me button that selects the layer.
+- **A walkthrough of Studio.** The first time you open Studio, an eight-step tour points out the face, Layers, Add, Properties, the preview controls, Simple and Advanced, and Save and Send to COROS. Arrow keys move between steps, and the editor can't be changed by accident while it's open. Replay it any time from the ? button in Studio's top bar.
+- **Import your own MP3s into the Library.** Media → Library's Local cache has an Import MP3s button and accepts files dragged onto it. MP3s you copy into the download folder by hand are listed on the next refresh too.
+- **Template chart pages in Studio.** Pages a template keeps on the watch without a graph (such as SIMPLE's Sun and daily pages) now appear as Chart rows under Chart pages, even when the Chart layer was deleted, and can be hidden, removed or put back. Before, the watch kept paging through pages Studio never showed.
+- **Bluetooth and Do Not Disturb as one layer each.** Each indicator is one row under Indicators, with On, Off and Airplane or Sleep tabs to preview, edit, show or add each state. The preview draws one state at a time instead of stacking them, and the row's eye, Delete and restore apply to every state.
+
+### Changed
+
+- **Plainer Simulation sections in Studio** ([#161](https://github.com/JunAkerBuilds/CorosLink/issues/161)). Sample values are grouped as Date & time, Weather, Training metrics and Device, so sun, moon, tide and barometer read as weather.
+- **Send to COROS says phone** ([#160](https://github.com/JunAkerBuilds/CorosLink/issues/160)). The QR dialog works with Android too, so it no longer says iPhone.
+- **Studio's top bar fits narrow windows.** Below 1000 px wide Save, Download and Convert become icons, and below 820 px Projects does too; their names stay as tooltips.
+- **Watchmaker keeps digit edges smooth.** It no longer turns on hard edges for small digits unless you ask, and it knows how to add a weekday, month and day.
 
 ### Fixed
 
+- **Min or max alone shows on the watch.** PACE Pro firmware draws minimum and maximum only when both exist, so a face with just one drew nothing; Studio now adds the missing one invisibly when it sends the face. Faces with no chart pages keep their min/max in the preview, as on the watch.
+- **Graph-less chart layers.** Templates whose chart readouts have no graph (such as SIMPLE) open with a normal Chart layer, graph off, so the preview keeps their weather block.
+- **Dates without a leading zero.** Studio's preview shows the 2nd as "2", as the watch does, instead of "02".
+- **Watch sign-in errors are translated** ([#162](https://github.com/JunAkerBuilds/CorosLink/issues/162)). When the watch refuses CorosLink's key, the reason now appears in your app language, not just the heading.
 - **Faces shared from the COROS app keep their photo.** A face with a background photo picked in the COROS app opened in Studio with an empty background, because COROS stores that photo in its own file and leaves the face's usual background blank. Studio now opens it with the photo, sending or downloading the face puts the photo on the watch, and Convert to another watch works and keeps the photo (it used to stop with "contains compiled device data").
 
 ## [0.1.72] - 2026-11-01
