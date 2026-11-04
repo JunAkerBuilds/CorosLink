@@ -1,24 +1,40 @@
 import { t, useLanguage } from "../i18n";
 import { Eye, EyeSlash, SlidersHorizontal } from "@phosphor-icons/react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ComponentType,
+} from "react";
 import { createPortal } from "react-dom";
-import type { PrimaryNavItem } from "../navigation/primaryNav";
 import "./sidebarNavMenu.css";
 
-export interface SidebarNavMenuProps {
+/** Anything the menu can hide or show: sidebar features, Media services. */
+export interface HideableMenuItem {
+  id: string;
+  label: string;
+  icon: ComponentType<{ size?: number; "aria-hidden"?: boolean | "true" | "false" }>;
+}
+
+export interface SidebarNavMenuProps<T extends HideableMenuItem> {
   x: number;
   y: number;
   /** The item that was right-clicked, if any. */
-  target: PrimaryNavItem | null;
+  target: T | null;
   targetHideable: boolean;
-  hiddenItems: PrimaryNavItem[];
-  onHide: (item: PrimaryNavItem) => void;
-  onShow: (item: PrimaryNavItem) => void;
+  hiddenItems: T[];
+  onHide: (item: T) => void;
+  onShow: (item: T) => void;
   onCustomize: () => void;
   onClose: () => void;
+  /** Defaults to the sidebar's wording. */
+  menuLabel?: string;
+  customizeLabel?: string;
+  lockedTitle?: string;
 }
 
-export function SidebarNavMenu({
+export function SidebarNavMenu<T extends HideableMenuItem>({
   x,
   y,
   target,
@@ -28,7 +44,10 @@ export function SidebarNavMenu({
   onShow,
   onCustomize,
   onClose,
-}: SidebarNavMenuProps) {
+  menuLabel,
+  customizeLabel,
+  lockedTitle,
+}: SidebarNavMenuProps<T>) {
   useLanguage();
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: x, top: y });
@@ -95,7 +114,7 @@ export function SidebarNavMenu({
       ref={menuRef}
       className="sidebar-nav-menu"
       role="menu"
-      aria-label={t("Sidebar")}
+      aria-label={menuLabel ?? t("Sidebar")}
       style={position}
       onContextMenu={(event) => event.preventDefault()}
     >
@@ -105,7 +124,7 @@ export function SidebarNavMenu({
           role="menuitem"
           className="sidebar-nav-menu-item"
           disabled={!targetHideable}
-          title={targetHideable ? undefined : t("Overview and Settings always stay in the sidebar.")}
+          title={targetHideable ? undefined : (lockedTitle ?? t("Overview and Settings always stay in the sidebar."))}
           onClick={() => select(() => onHide(target))}
         >
           <EyeSlash size={15} aria-hidden="true" />
@@ -152,7 +171,7 @@ export function SidebarNavMenu({
         onClick={() => select(onCustomize)}
       >
         <SlidersHorizontal size={15} aria-hidden="true" />
-        <span className="sidebar-nav-menu-label">{t("Customize sidebar…")}</span>
+        <span className="sidebar-nav-menu-label">{customizeLabel ?? t("Customize sidebar…")}</span>
       </button>
     </div>,
     document.body,

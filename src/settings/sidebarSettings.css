@@ -17,6 +17,41 @@
   white-space: nowrap;
 }
 
+/* Media services: a second list in the same panel. */
+.settings-sidebar-subheading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 18px 0 10px;
+  padding-top: 16px;
+  border-top: 1px solid color-mix(in srgb, var(--text-muted) 22%, transparent);
+  scroll-margin-top: 24px;
+}
+
+.settings-sidebar-subheading:focus {
+  outline: none;
+}
+
+.settings-sidebar-subheading h3 {
+  margin: 0 0 4px;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.settings-sidebar-subheading p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.settings-sidebar-subheading .secondary-button {
+  min-height: 36px;
+  padding-inline: 12px;
+  white-space: nowrap;
+}
+
 /* Columns, not a grid, so the list reads top to bottom in sidebar order. */
 .settings-sidebar-list {
   margin: 0;
@@ -157,8 +192,10 @@
     padding: 18px 18px 12px;
   }
 
-  .settings-sidebar-heading {
+  .settings-sidebar-heading,
+  .settings-sidebar-subheading {
     flex-direction: column;
+    align-items: flex-start;
   }
 
   .settings-sidebar-list {
