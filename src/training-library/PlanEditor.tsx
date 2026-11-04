@@ -51,6 +51,7 @@ import {
   activeTrainingPlanCalendarInstall,
   insertRecoveryWeek,
   planEntryFromWorkout,
+  removeTrainingPlanWeek,
   reorderTrainingPlanWeek,
   shiftTrainingPlan,
   summarizeTrainingPlan,
@@ -114,18 +115,7 @@ function withDerivedSportMix(plan: TrainingPlanDocument): TrainingPlanDocument {
 }
 
 function removeWeek(plan: TrainingPlanDocument, weekIndex: number): TrainingPlanDocument {
-  return withDerivedSportMix({
-    ...plan,
-    weekCount: Math.max(1, plan.weekCount - 1),
-    entries: plan.entries
-      .filter((entry) => entry.weekIndex !== weekIndex)
-      .map((entry) => ({
-        ...entry,
-        weekIndex: entry.weekIndex > weekIndex ? entry.weekIndex - 1 : entry.weekIndex
-      })),
-    phases: plan.phases.filter((phase) => phase.startWeek <= Math.max(1, plan.weekCount - 1)),
-    syncState: plan.source === "coros" ? "pending" : "local"
-  });
+  return withDerivedSportMix(removeTrainingPlanWeek(plan, weekIndex));
 }
 
 /* ------------------------------------------------------------------ dates */
@@ -565,8 +555,11 @@ export function PlanEditor({ api, initialPlan, neverSaved, workouts, calendarEna
 
   const unscheduled = plan.entries.filter((entry) => entry.dayIndex === undefined);
   const sortedPhases = [...plan.phases].sort((a, b) => a.startWeek - b.startWeek);
+  /* The narrowest match, so a recovery week inside a longer phase reads as recovery. */
   const phaseForWeek = (weekIndex: number) =>
-    sortedPhases.find((phase) => weekIndex + 1 >= phase.startWeek && weekIndex + 1 <= phase.endWeek);
+    sortedPhases
+      .filter((phase) => weekIndex + 1 >= phase.startWeek && weekIndex + 1 <= phase.endWeek)
+      .sort((a, b) => a.endWeek - a.startWeek - (b.endWeek - b.startWeek))[0];
   /* Per-week figures count scheduled items only: the holding area belongs to no week. */
   const weekly = Array.from({ length: plan.weekCount }, () => ({ workouts: 0, durationSeconds: 0, trainingLoad: 0 }));
   for (const entry of plan.entries) {
