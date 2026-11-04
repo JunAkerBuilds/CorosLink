@@ -535,6 +535,18 @@ export function validateTrainingPlan(
   return issues;
 }
 
+/** One entry's figures: its own steps first, then what the plan recorded for it. */
+export function trainingPlanEntryMetrics(entry: TrainingPlanEntry): ReturnType<typeof workoutMetrics> {
+  const calculated = workoutMetrics(entry.workout);
+  return {
+    ...calculated,
+    durationSeconds: calculated.durationSeconds || entry.plannedDurationSeconds || 0,
+    distanceMeters: calculated.distanceMeters || entry.plannedDistanceMeters || 0,
+    trainingLoad: calculated.trainingLoad || entry.plannedTrainingLoad || 0,
+    strengthSets: calculated.strengthSets || entry.plannedStrengthSets || 0
+  };
+}
+
 export function summarizeTrainingPlan(plan: TrainingPlanDocument): TrainingPlanSummary {
   const weekly: TrainingPlanWeekSummary[] = Array.from({ length: plan.weekCount }, (_, weekIndex) => ({
     weekIndex,
@@ -558,14 +570,7 @@ export function summarizeTrainingPlan(plan: TrainingPlanDocument): TrainingPlanS
   for (const entry of plan.entries) {
     if (entry.kind !== "workout") continue;
     workouts += 1;
-    const calculated = workoutMetrics(entry.workout);
-    const metrics = {
-      ...calculated,
-      durationSeconds: calculated.durationSeconds || entry.plannedDurationSeconds || 0,
-      distanceMeters: calculated.distanceMeters || entry.plannedDistanceMeters || 0,
-      trainingLoad: calculated.trainingLoad || entry.plannedTrainingLoad || 0,
-      strengthSets: calculated.strengthSets || entry.plannedStrengthSets || 0
-    };
+    const metrics = trainingPlanEntryMetrics(entry);
     durationSeconds += metrics.durationSeconds;
     distanceMeters += metrics.distanceMeters;
     trainingLoad += metrics.trainingLoad;

@@ -751,8 +751,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tl-skyline-bar,
-  .tl-skyline-playhead {
+  .tl-skyline-bar {
     animation: none;
   }
 
@@ -1892,7 +1891,7 @@
   grid-row: 2;
 }
 
-/* "This week from the library": the library share, with what is already done laid over it. */
+/* "This week": workouts done out of planned. */
 .tl-brief-progress {
   position: relative;
 }

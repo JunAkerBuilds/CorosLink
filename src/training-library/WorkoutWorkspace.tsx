@@ -1170,7 +1170,6 @@ export function WorkoutWorkspace({
                   <SessionProfileBars
                     profile={profile}
                     size="reader"
-                    playhead
                     label={t("Intensity profile for {{value1}}: {{value2}}", { value1: active.name, value2: profileSummary(profile, readerSeconds || undefined) })}
                   />
                   {readerAxis.length ? (

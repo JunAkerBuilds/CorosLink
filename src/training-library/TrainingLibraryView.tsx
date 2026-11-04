@@ -376,9 +376,10 @@ export function TrainingLibraryView({
   };
 
   // Saving keeps the editor open on the saved copy, so Add to calendar is one click away.
-  const savePlanAndKeepEditing = async (plan: TrainingPlanDocument) => {
+  const savePlanAndKeepEditing = async (plan: TrainingPlanDocument): Promise<boolean> => {
     const saved = await savePlan(plan);
     if (saved) setEditingPlan(saved);
+    return Boolean(saved);
   };
 
   const createPlan = (source: "local" | "template") =>
@@ -606,6 +607,7 @@ export function TrainingLibraryView({
           key={`${editingPlan.id}:${editingPlan.updatedAt}`}
           api={api}
           initialPlan={editingPlan}
+          neverSaved={!current.plans.some((plan) => plan.id === editingPlan.id)}
           workouts={current.workouts}
           calendarEnabled={current.plans.some((plan) => plan.id === editingPlan.id) && editingPlan.source !== "coros"}
           offline={current.offline}
@@ -810,6 +812,24 @@ interface LibraryBriefProps {
 
 type TrainingSnapshotWorkout = TrainingLibrarySnapshot["workouts"][number];
 
+/** "78 runs", "1 pool swim": a sport count in words, for the library mix. */
+const SPORT_COUNT_WORDS: Record<WorkoutSport, [string, string]> = {
+  run: ["1 run", "{{value1}} runs"],
+  trailRun: ["1 trail run", "{{value1}} trail runs"],
+  bike: ["1 ride", "{{value1}} rides"],
+  swim: ["1 pool swim", "{{value1}} pool swims"],
+  strength: ["1 strength workout", "{{value1}} strength workouts"],
+  indoorClimb: ["1 climb", "{{value1}} climbs"],
+  bouldering: ["1 bouldering session", "{{value1}} bouldering sessions"],
+  xcSki: ["1 ski", "{{value1}} skis"],
+  hyrox: ["1 HYROX workout", "{{value1}} HYROX workouts"]
+};
+
+function sportCount(sport: WorkoutSport, count: number): string {
+  const [one, many] = SPORT_COUNT_WORDS[sport] ?? ["1 workout", "{{value1}} workouts"];
+  return count === 1 ? t(one) : t(many, { value1: String(count) });
+}
+
 /** "2 min ago" for the sync line under the tabs. */
 function syncedAgo(iso: string): string {
   const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).valueOf()) / 60_000));
@@ -836,14 +856,15 @@ function LibraryBrief({ workouts, schedule, matches, onOpenWorkout }: LibraryBri
   const nextWorkout = next ? libraryWorkoutFor(next) : undefined;
   const nextSport = resolveWorkoutSport(next?.sportType ?? nextWorkout?.sportType);
   const NextIcon = sportTheme(nextSport).icon;
-  const nextDay = next ? formatDate(happenDayToDate(next.happenDay), { weekday: "short", month: "short", day: "numeric" }) : "";
-  const nextFacts = next
-    ? [readableVolume(next.volume), next.trainingLoad ? t("{{value1}} load", { value1: String(Math.round(next.trainingLoad)) }) : undefined].filter(Boolean).join(" · ")
-    : "";
+  const tomorrowKey = dayKey(new Date(happenDayToDate(todayKey).valueOf() + 86_400_000));
+  const nextDay = !next ? ""
+    : next.happenDay === todayKey ? t("Today")
+      : next.happenDay === tomorrowKey ? t("Tomorrow")
+        : formatDate(happenDayToDate(next.happenDay), { weekday: "short", month: "short", day: "numeric" });
+  const nextFacts = next ? readableVolume(next.volume) ?? "" : "";
 
   const thisWeek = schedule.filter((entry) => entry.happenDay >= week[0]!.key && entry.happenDay <= week[6]!.key);
-  /* Done means COROS (or a confirmed link) credited an activity to the session, in full or in part. */
-  const fromLibraryThisWeek = thisWeek.filter((entry) => libraryWorkoutFor(entry)).length;
+  /* Done means COROS (or a confirmed link) credited an activity to the workout, in full or in part. */
   const doneThisWeek = Math.min(thisWeek.length, matches.filter((match) =>
     match.happenDay >= week[0]!.key && match.happenDay <= week[6]!.key &&
     (match.status === "completed" || match.status === "partial")).length);
@@ -877,21 +898,17 @@ function LibraryBrief({ workouts, schedule, matches, onOpenWorkout }: LibraryBri
         </div>
       ) : null}
       {thisWeek.length ? (
-        <div
-          className="tl-brief-chip"
-          title={t("{{value1}} of {{value2}} sessions done this week", { value1: String(doneThisWeek), value2: String(thisWeek.length) })}
-        >
+        <div className="tl-brief-chip">
           <span>
-            <small>{t("This week from the library")}</small>
-            <b>{t("{{value1}} of {{value2}} sessions", { value1: String(fromLibraryThisWeek), value2: String(thisWeek.length) })} <em>{t("scheduled")}</em></b>
+            <small>{t("This week")}</small>
+            <b>{t("{{value1}} of {{value2}} workouts", { value1: String(doneThisWeek), value2: String(thisWeek.length) })} <em>{t("done")}</em></b>
           </span>
           <span
             className="tl-brief-progress"
             role="img"
-            aria-label={t("{{value1}} of {{value2}} sessions this week came from the library, {{value3}} done", { value1: String(fromLibraryThisWeek), value2: String(thisWeek.length), value3: String(doneThisWeek) })}
+            aria-label={t("{{value1}} of {{value2}} workouts done this week", { value1: String(doneThisWeek), value2: String(thisWeek.length) })}
           >
-            <i style={{ width: `${Math.max(fromLibraryThisWeek ? 6 : 0, Math.round((fromLibraryThisWeek / thisWeek.length) * 100))}%` }} />
-            <i className="is-done" style={{ width: `${Math.round((doneThisWeek / thisWeek.length) * 100)}%` }} />
+            <i className="is-done" style={{ width: `${Math.max(doneThisWeek ? 6 : 0, Math.round((doneThisWeek / thisWeek.length) * 100))}%` }} />
           </span>
         </div>
       ) : null}
@@ -899,15 +916,15 @@ function LibraryBrief({ workouts, schedule, matches, onOpenWorkout }: LibraryBri
         <div className="tl-brief-chip is-favourite">
           <span className="tl-brief-flame" aria-hidden="true"><Flame size={22} fill="currentColor" strokeWidth={0} /></span>
           <span>
-            <small>{t("Crowd favourite")}</small>
-            <b>{favourite.name} <em>· {t("used {{value1}}×", { value1: String(favouriteUses) })}</em></b>
+            <small>{t("Most used")}</small>
+            <b>{favourite.name} <em>· {favouriteUses === 1 ? t("used once") : t("used {{value1}} times", { value1: String(favouriteUses) })}</em></b>
           </span>
         </div>
       ) : null}
       {mixEntries.length ? (
         <div className="tl-brief-chip">
           <span>
-            <small>{t("Mix")}</small>
+            <small>{t("Your library")}</small>
             <span className="tl-brief-mix" aria-hidden="true">
               {mixEntries.map(([sport, count]) => (
                 <i key={sport} title={`${count} ${formatWorkoutSport(sport)}`} style={{ ...sportChipStyle(sport), flexGrow: count }} />
@@ -915,7 +932,7 @@ function LibraryBrief({ workouts, schedule, matches, onOpenWorkout }: LibraryBri
             </span>
           </span>
           <em className="tl-brief-mix-label">
-            {mixEntries.slice(0, 3).map(([sport, count]) => `${count} ${formatWorkoutSport(sport).toLowerCase()}`).join(" · ")}
+            {mixEntries.slice(0, 3).map(([sport, count]) => sportCount(sport, count)).join(" · ")}
           </em>
         </div>
       ) : null}

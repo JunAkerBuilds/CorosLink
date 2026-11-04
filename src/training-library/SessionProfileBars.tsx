@@ -20,12 +20,10 @@ interface SessionProfileBarsProps {
   label: string;
   /** "tile" is the compact skyline on a card; "reader" is the tall chart. */
   size?: "tile" | "reader";
-  /** Draws a slow playhead across the session (reader only, motion permitting). */
-  playhead?: boolean;
 }
 
 /** The skyline: width = time, height = effort, colour = zone. */
-export function SessionProfileBars({ profile, label, size = "tile", playhead }: SessionProfileBarsProps) {
+export function SessionProfileBars({ profile, label, size = "tile" }: SessionProfileBarsProps) {
   useLanguage();
   const widths = grow(profile.segments);
   return (
@@ -43,7 +41,6 @@ export function SessionProfileBars({ profile, label, size = "tile", playhead }: 
           title={`${t(PROFILE_ZONE_LABELS[segment.zone])} · ${segment.label}`}
         />
       ))}
-      {playhead ? <i className="tl-skyline-playhead" aria-hidden="true" /> : null}
     </div>
   );
 }

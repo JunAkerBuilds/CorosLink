@@ -92,35 +92,16 @@
 .tl-skyline-bar.is-rest { background: var(--tlz-rest); }
 .tl-skyline-bar.is-cooldown { background: var(--tlz-cooldown); }
 
-.tl-skyline-playhead {
-  position: absolute;
-  top: -4px;
-  bottom: 0;
-  left: 0;
-  width: 2px;
-  margin-left: -1px;
-  background: linear-gradient(180deg, var(--text-primary), transparent);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--text-primary) 55%, transparent);
-  opacity: 0;
-  pointer-events: none;
-  animation: tl-profile-scan 5.5s cubic-bezier(0.45, 0, 0.55, 1) 700ms infinite;
-}
 
 @keyframes tl-profile-rise {
   from { transform: scaleY(0); }
   to { transform: scaleY(1); }
 }
 
-@keyframes tl-profile-scan {
-  0% { left: 0%; opacity: 0; }
-  6%, 94% { opacity: 1; }
-  100% { left: 100%; opacity: 0; }
-}
 
 
 @media (prefers-reduced-motion: reduce) {
-  .tl-skyline-bar,
-  .tl-skyline-playhead {
+  .tl-skyline-bar {
     animation: none;
   }
 }
