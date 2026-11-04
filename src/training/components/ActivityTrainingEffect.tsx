@@ -67,17 +67,46 @@ function Items({ items }: { items: Item[] }) {
 
 const oneDecimal = { minimumFractionDigits: 1, maximumFractionDigits: 1 } as const;
 
+interface Ring {
+  label: string;
+  value: number;
+  tone: string;
+}
+
+/** Aerobic and anaerobic effect as rings filled to their share of COROS's 0–5 scale. */
+function EffectRings({ rings }: { rings: Ring[] }) {
+  return (
+    <ul className="activity-effect-rings">
+      {rings.map((ring) => (
+        <li key={ring.label} style={{ "--item-color": ring.tone, "--ring-fill": `${Math.min(1, Math.max(0, ring.value / 5)) * 360}deg` } as CSSProperties}>
+          <span className="activity-effect-ring" aria-hidden="true">
+            <strong>{formatNumber(ring.value, oneDecimal)}</strong>
+          </span>
+          <span className="activity-effect-ring-copy">
+            <span>{ring.label}</span>
+            <strong>
+              <span className="sr-only">{formatNumber(ring.value, oneDecimal)} · </span>
+              {effectLabel(ring.value)}
+            </strong>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** The watch's own analysis of the workout: training effect, focus and load. */
 export function ActivityTrainingEffect({ effect }: { effect: TrainingHubTrainingEffect }) {
   useLanguage();
   const { theme } = useTheme();
   const ramp = getIntensityZoneColors(theme);
   const items: Item[] = [];
+  const rings: Ring[] = [];
   if (effect.aerobic !== undefined) {
-    items.push({ label: t("Aerobic effect"), value: formatNumber(effect.aerobic, oneDecimal), note: effectLabel(effect.aerobic), tone: ramp[effectBand(effect.aerobic)] });
+    rings.push({ label: t("Aerobic effect"), value: effect.aerobic, tone: ramp[effectBand(effect.aerobic)]! });
   }
   if (effect.anaerobic !== undefined) {
-    items.push({ label: t("Anaerobic effect"), value: formatNumber(effect.anaerobic, oneDecimal), note: effectLabel(effect.anaerobic), tone: ramp[effectBand(effect.anaerobic)] });
+    rings.push({ label: t("Anaerobic effect"), value: effect.anaerobic, tone: ramp[effectBand(effect.anaerobic)]! });
   }
   const focus = effect.focus !== undefined ? focusLabel(effect.focus) : undefined;
   if (focus) items.push({ label: t("Training focus"), value: focus, tone: ramp[effect.focus! - 1] });
@@ -94,7 +123,7 @@ export function ActivityTrainingEffect({ effect }: { effect: TrainingHubTraining
         : undefined
     });
   }
-  if (!items.length) return null;
+  if (!items.length && !rings.length) return null;
   return (
     <section className="activity-detail-visual-panel activity-effect">
       <div className="activity-detail-visual-heading">
@@ -102,7 +131,8 @@ export function ActivityTrainingEffect({ effect }: { effect: TrainingHubTraining
           <Activity size={17} aria-hidden="true" />
           {t("Training effect")}</h3>
       </div>
-      <Items items={items} />
+      {rings.length ? <EffectRings rings={rings} /> : null}
+      {items.length ? <Items items={items} /> : null}
     </section>
   );
 }

@@ -160,3 +160,46 @@
 .activity-hr-recovery-axis { display: flex; justify-content: space-between; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
 .activity-hr-recovery-caption { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-secondary); }
 .activities-detail-sidebar .activity-hr-recovery-caption, .activities-detail-sidebar .activity-hr-recovery-axis { font-size: 10px; }
+
+/* ── One row: time in zones, training effect, heart-rate recovery ─────
+   Equal columns that wrap as the panel narrows; zones read as a list here
+   instead of six columns. */
+.activity-detail-insights.activity-detail-effect-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); align-items: stretch; gap: 14px; }
+.activity-detail-effect-row > .activity-detail-visual-panel { min-width: 0; min-height: 0; grid-template-rows: none; align-content: start; }
+.activities-detail-dialog .activity-detail-effect-row > .activity-detail-visual-panel.activity-zones { gap: 12px; }
+.activity-detail-effect-row .activity-zones .activity-detail-visual-heading { flex-wrap: wrap; row-gap: 6px; }
+.activity-detail-effect-row .activity-zones-legend { grid-template-columns: minmax(0, 1fr); gap: 1px; }
+.activity-detail-effect-row .activity-zones-legend li { grid-row: auto; grid-template-rows: none; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name time" "range time"; row-gap: 1px; column-gap: 10px; padding: 5px 8px; }
+.activity-detail-effect-row .activity-zones-name { grid-area: name; }
+.activity-detail-effect-row .activity-zones-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-detail-effect-row .activity-zones-time { grid-area: time; align-self: center; justify-content: flex-end; }
+.activity-detail-effect-row .activity-zones-time strong { font-size: 14px; }
+.activity-detail-effect-row .activity-zones-range { grid-area: range; padding-left: 14px; font-size: 11px; }
+.activities-detail-sidebar .activity-detail-insights.activity-detail-effect-row { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+
+/* Training effect rings: filled to the value's share of COROS's 0–5 scale. */
+@property --ring-sweep { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.activity-effect-rings { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.activity-effect-rings li { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.activity-effect-ring { position: relative; display: grid; place-items: center; width: 54px; height: 54px; flex-shrink: 0; border-radius: 50%; }
+.activity-effect-ring::before { --ring-sweep: var(--ring-fill, 0deg); content: ""; position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(var(--item-color) 0 var(--ring-sweep), color-mix(in srgb, var(--text-muted) 22%, transparent) var(--ring-sweep) 360deg); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5.5px)); mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5.5px)); }
+.activity-effect-ring strong { position: relative; font-size: 15px; font-weight: 750; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.activity-effect-ring-copy { display: grid; gap: 2px; min-width: 0; }
+.activity-effect-ring-copy > span { font-size: 12px; color: var(--text-secondary); }
+.activity-effect-ring-copy > strong { font-size: 14px; font-weight: 650; color: var(--item-color); }
+:root[data-theme="paper"] .activity-effect-ring-copy > strong { color: color-mix(in srgb, var(--item-color) 62%, #000); }
+.activity-effect .activity-effect-rings + .activity-effect-items { padding-top: 12px; border-top: 1px solid var(--channels-rule); }
+@media (prefers-reduced-motion: no-preference) {
+  .activity-effect-ring::before { animation: activity-ring-fill 900ms cubic-bezier(.2, .8, .2, 1) both; }
+}
+@keyframes activity-ring-fill { from { --ring-sweep: 0deg; } }
+
+/* Heart-rate recovery: the two drops as figures above the curve. */
+.activity-hr-recovery-drops { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; }
+.activity-hr-recovery-drops > div { display: grid; gap: 2px; }
+.activity-hr-recovery-drops dt { font-size: 11.5px; color: var(--text-secondary); }
+.activity-hr-recovery-drops dd { display: flex; align-items: baseline; gap: 4px; margin: 0; }
+.activity-hr-recovery-drops strong { font-size: 21px; line-height: 1.1; font-weight: 750; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.activity-hr-recovery-drops small { font-size: 11.5px; color: var(--text-secondary); }
+.activity-detail-effect-row .activity-hr-recovery-curve { height: 72px; }
+.activities-detail-sidebar .activity-hr-recovery-drops strong { font-size: 17px; }

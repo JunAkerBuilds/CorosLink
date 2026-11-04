@@ -1,19 +1,12 @@
 import { formatNumber, getLocale, useLanguage, t } from "../../i18n/training";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   Braces,
-  Flame,
-  Gauge,
-  Heart,
-  HeartPulse,
   Loader2,
-  MapPin,
   Maximize2,
   Mountain,
   Route,
-  Timer,
-  Zap,
-  type LucideIcon
+  Timer
 } from "lucide-react";
 import { ActivityHeartRateRecovery } from "./ActivityHeartRateRecovery";
 import { ActivityRunningDynamics, ActivityTrainingEffect } from "./ActivityTrainingEffect";
@@ -42,7 +35,8 @@ import {
 import { isCyclingSportType, isSwimSportType, resolveSportName } from "../sportTypes";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import { formatSpeedValue } from "../../units/units";
-import { parseActivityStreams, parseActivityZones } from "../activityStreams";
+import { lowerBound, parseActivityStreams, parseActivityZones, type StreamLapKind } from "../activityStreams";
+import { routePaceColoring } from "../routePace";
 import { deriveActivityInsight, lastKnownZoneModel, rememberActivityInsight, useActivityInsights } from "../activityInsights";
 import { trainingLabel } from "../trainingBenefit";
 import { createRouteCursor } from "../routeCursor";
@@ -81,7 +75,7 @@ interface ActivityDetailPanelProps {
 interface DetailStatProps {
   label: string;
   value: string;
-  icon?: LucideIcon;
+  /** Showcase: the tile's coloured dot. */
   tone?: string;
   /** Showcase: render the unit after the number in a lighter weight. */
   splitUnit?: boolean;
@@ -93,20 +87,18 @@ function splitValueUnit(value: string): [string, string] {
   return space === -1 ? [value, ""] : [value.slice(0, space), value.slice(space + 1)];
 }
 
-function DetailStat({ label, value, icon: Icon, tone, splitUnit = false }: DetailStatProps) {
+function DetailStat({ label, value, tone, splitUnit = false }: DetailStatProps) {
   useLanguage();
   const [number, unit] = splitUnit ? splitValueUnit(value) : [value, ""];
   return (
     <div
-      className="activity-detail-stat"
+      className={`activity-detail-stat${tone ? " has-dot" : ""}`}
       style={tone ? ({ "--stat-color": tone } as CSSProperties) : undefined}
     >
-      {Icon ? (
-        <span className="activity-detail-stat-icon">
-          <Icon size={15} aria-hidden="true" />
-        </span>
-      ) : null}
-      <span>{t(label)}</span>
+      <span>
+        {tone ? <i className="activity-detail-stat-dot" aria-hidden="true" /> : null}
+        {t(label)}
+      </span>
       <strong>
         {number}
         {unit ? <small>{unit}</small> : null}
@@ -162,6 +154,21 @@ function defaultLapGroup(groups: TrainingHubActivityLapGroup[]): TrainingHubActi
   return groups.find((group) => group.kind === "laps") ?? groups.find((group) => group.kind === "split") ?? groups[0];
 }
 
+const LAP_KIND_LABELS: Record<StreamLapKind, string> = {
+  lap: "Lap",
+  warmup: "Warm-up",
+  work: "Work",
+  recovery: "Recovery",
+  cooldown: "Cool-down"
+};
+
+interface LapSpan {
+  /** Metres from the start, when every lap carries a distance. */
+  meters: [number, number] | null;
+  /** Sample range in the per-second streams, inclusive. */
+  samples: [number, number] | null;
+}
+
 function elevationRange(
   detail: TrainingHubActivityDetail
 ): { min: number; max: number } | undefined {
@@ -190,6 +197,11 @@ export function ActivityDetailPanel({
   // Sticks across activities while this panel lives; an activity without
   // the picked grouping falls back to its default.
   const [lapGroupKeyPicked, setLapGroupKeyPicked] = useState<string | null>(null);
+  // Lap highlight. With samples the channel chart owns the selection (and
+  // mirrors it on the map); without, a picked lap is drawn from the track.
+  const [chartSelection, setChartSelection] = useState<[number, number] | null>(null);
+  const [selectRequest, setSelectRequest] = useState<{ range: [number, number] | null; nonce: number } | null>(null);
+  const [trackLap, setTrackLap] = useState<number | null>(null);
   const showcase = variant === "showcase";
   const sportName = useMemo(() => {
     if (detail) {
@@ -217,6 +229,26 @@ export function ActivityDetailPanel({
     () => (streams?.hasGps ? streams : showcase ? trackRouteProbe(detail?.track) : null),
     [streams, showcase, detail]
   );
+  const routePace = useMemo(() => routePaceColoring(streams), [streams]);
+  const activityKey = detail?.activityId ?? listActivity?.activityId;
+  useEffect(() => {
+    setChartSelection(null);
+    setSelectRequest(null);
+    setTrackLap(null);
+    routeCursor.set({ segment: null });
+  }, [activityKey, routeCursor]);
+  // Another grouping lists other rows: drop the picked lap (the chart's own
+  // drag selection clears too, through a null request).
+  const regroupedRef = useRef(lapGroupKeyPicked);
+  useEffect(() => {
+    if (regroupedRef.current === lapGroupKeyPicked) return;
+    regroupedRef.current = lapGroupKeyPicked;
+    setTrackLap((current) => {
+      if (current !== null) routeCursor.set({ segment: null });
+      return null;
+    });
+    setSelectRequest((current) => (current ? { range: null, nonce: current.nonce + 1 } : current));
+  }, [lapGroupKeyPicked, routeCursor]);
   // COROS's own time-in-zone totals, on every layout. A strength session is
   // scored on heart rate alone.
   const zones = useMemo(() => {
@@ -321,19 +353,94 @@ export function ActivityDetailPanel({
   const elevation = showcase ? elevationRange(detail) : undefined;
 
   const stats: DetailStatProps[] = [
-    { label: elapsed === undefined ? t("Duration") : t("Moving Time"), value: formatDurationSeconds(moving), icon: Timer, tone: "#5ce5a2" },
+    { label: elapsed === undefined ? t("Duration") : t("Moving Time"), value: formatDurationSeconds(moving), tone: "#5ce5a2" },
     // The dialog header carries elapsed as a chip, like training load: an
     // eighth tile would wrap onto a row of its own.
     ...(elapsed === undefined || showcase ? [] : [{ label: t("Elapsed"), value: formatDurationSeconds(elapsed) }]),
-    { label: t("Distance"), value: formatDistanceMeters(detail.distance, unitSystem, swim), icon: MapPin, tone: "#65dcec" },
-    ...(performance ? [{ label: paceLabel, value: performance, icon: Gauge, tone: "#58ddd4" }] : []),
-    { label: t("Avg HR"), value: showcase ? withUnit(detail.avgHr, "bpm") : formatOptionalNumber(detail.avgHr), icon: Heart, tone: "#ff7288" },
-    { label: t("Max HR"), value: showcase ? withUnit(detail.maxHr, "bpm") : formatOptionalNumber(detail.maxHr), icon: HeartPulse, tone: "#c995f5" },
-    { label: t("Calories"), value: showcase ? withUnit(detail.calories, "kcal") : formatOptionalNumber(detail.calories), icon: Flame, tone: "#ffb649" },
-    { label: showcase ? t("Elevation Gain") : t("Elevation"), value: formatElevationMeters(detail.elevationGain, unitSystem), icon: Mountain, tone: "#5ce5a2" },
+    { label: t("Distance"), value: formatDistanceMeters(detail.distance, unitSystem, swim), tone: "#38bdf8" },
+    ...(performance ? [{ label: paceLabel, value: performance, tone: "#2dd4bf" }] : []),
+    { label: t("Avg HR"), value: showcase ? withUnit(detail.avgHr, "bpm") : formatOptionalNumber(detail.avgHr), tone: "#fb7185" },
+    { label: t("Max HR"), value: showcase ? withUnit(detail.maxHr, "bpm") : formatOptionalNumber(detail.maxHr), tone: "#f472b6" },
+    { label: t("Calories"), value: showcase ? withUnit(detail.calories, "kcal") : formatOptionalNumber(detail.calories), tone: "#fb923c" },
+    { label: showcase ? t("Elevation Gain") : t("Elevation"), value: formatElevationMeters(detail.elevationGain, unitSystem), tone: "#a3e635" },
     // The dialog header already carries training load as a chip.
-    ...(showcase ? [] : [{ label: t("Training Load"), value: formatOptionalNumber(detail.trainingLoad), icon: Zap }])
+    ...(showcase ? [] : [{ label: t("Training Load"), value: formatOptionalNumber(detail.trainingLoad) }])
   ];
+
+  // --- Laps: kind, pace bar and the stretch each one covers -----------------
+  const streamLapsMatch = Boolean(streams && lapGroup?.kind === "laps" && streams.laps.length === lapRows.length);
+  const lapKinds = streams?.structured && streamLapsMatch ? streams.laps.map((lap) => lap.kind) : null;
+  const allDistances = lapRows.every((lap) => lap.distance !== undefined && lap.distance > 0);
+  const allDurations = lapRows.every((lap) => lap.duration !== undefined && lap.duration > 0);
+  const lapSpans: LapSpan[] = [];
+  {
+    let meters = 0;
+    let seconds = 0;
+    lapRows.forEach((lap, position) => {
+      const startMeters = meters;
+      const startSeconds = seconds;
+      meters += lap.distance ?? 0;
+      seconds += lap.duration ?? 0;
+      let samples: [number, number] | null = null;
+      if (streams) {
+        if (streamLapsMatch) {
+          samples = [streams.laps[position]!.from, streams.laps[position]!.to];
+        } else if (streams.hasDistance && allDistances) {
+          samples = [lowerBound(streams.d, startMeters), lowerBound(streams.d, meters)];
+        } else if (allDurations && Number.isFinite(streams.t[0])) {
+          samples = [lowerBound(streams.t, startSeconds), lowerBound(streams.t, seconds)];
+        }
+        if (samples && samples[1] <= samples[0]) samples = null;
+      }
+      lapSpans.push({ meters: allDistances ? [startMeters, meters] : null, samples });
+    });
+  }
+  const trackHasDistance = Boolean(
+    detail.track?.points.some((point) => point.lat !== undefined && point.lon !== undefined && (point.distance ?? 0) > 0)
+  );
+  const lapsSelectable =
+    showcase && lapRows.length > 1 && (streams ? lapSpans.some((span) => span.samples) : trackHasDistance && allDistances);
+  const selectedLap = !lapsSelectable
+    ? null
+    : streams
+      ? (() => {
+          const found = chartSelection
+            ? lapSpans.findIndex((span) => span.samples?.[0] === chartSelection[0] && span.samples?.[1] === chartSelection[1])
+            : -1;
+          return found === -1 ? null : found;
+        })()
+      : trackLap;
+  const trackSegment = (from: number, to: number): [number, number][] =>
+    (detail.track?.points ?? [])
+      .filter((point) => point.lat !== undefined && point.lon !== undefined && point.distance !== undefined &&
+        point.distance >= from && point.distance <= to)
+      .map((point) => [point.lat!, point.lon!]);
+  const pickLap = (position: number) => {
+    const span = lapSpans[position];
+    if (!span) return;
+    const on = selectedLap === position;
+    if (streams) {
+      if (span.samples) setSelectRequest((current) => ({ range: on ? null : span.samples, nonce: (current?.nonce ?? 0) + 1 }));
+      return;
+    }
+    if (!span.meters) return;
+    setTrackLap(on ? null : position);
+    const segment = on ? [] : trackSegment(span.meters[0], span.meters[1]);
+    routeCursor.set({ segment: segment.length > 1 ? segment : null });
+  };
+  // The elevation profile shades the same stretch: the chart's selection, or the picked lap.
+  const elevationHighlight: [number, number] | null = streams
+    ? chartSelection && streams.hasDistance ? [streams.d[chartSelection[0]]!, streams.d[chartSelection[1]]!] : null
+    : trackLap !== null ? lapSpans[trackLap]?.meters ?? null : null;
+  const lapSpeeds = lapRows.map((lap) => (lap.distance && lap.duration ? lap.distance / lap.duration : undefined));
+  const knownSpeeds = lapSpeeds.filter((speed): speed is number => speed !== undefined);
+  const slowestLap = Math.min(...knownSpeeds);
+  const fastestLap = Math.max(...knownSpeeds);
+  const lapBarWidth = (speed: number | undefined): number | undefined => {
+    if (speed === undefined || !knownSpeeds.length) return undefined;
+    if (fastestLap - slowestLap < 1e-6) return 100;
+    return 14 + 86 * ((speed - slowestLap) / (fastestLap - slowestLap));
+  };
 
   return (
     <div className={panelClassName}>
@@ -376,7 +483,6 @@ export function ActivityDetailPanel({
                 key={stat.label}
                 label={t(stat.label)}
                 value={stat.value}
-                icon={showcase ? stat.icon : undefined}
                 tone={showcase ? stat.tone : undefined}
                 splitUnit={showcase}
               />
@@ -389,13 +495,19 @@ export function ActivityDetailPanel({
                 <h3>
                   {showcase ? <Route size={17} aria-hidden="true" /> : null}
                   {t("Route")} </h3>
+                {routePace ? (
+                  <span className="activity-detail-visual-note">
+                    {routePace.speedKind === "speed" ? t("Coloured by speed") : t("Coloured by pace")}
+                  </span>
+                ) : null}
               </div>
               <ActivityRouteMap
                 track={detail.track}
                 expanded={showcase ? mapExpanded : undefined}
                 onExpandedChange={showcase ? setMapExpanded : undefined}
-                cursor={routeProbe ? routeCursor : undefined}
+                cursor={routeProbe || lapsSelectable ? routeCursor : undefined}
                 probe={routeProbe ?? undefined}
+                pace={routePace}
               />
             </section>
 
@@ -418,7 +530,7 @@ export function ActivityDetailPanel({
                   </span>
                 ) : null}
               </div>
-              <ActivityElevationChart track={detail.track} />
+              <ActivityElevationChart track={detail.track} highlight={elevationHighlight} />
             </section>
           </div>
 
@@ -431,19 +543,20 @@ export function ActivityDetailPanel({
               <TrainingLabelReason reading={labelReading} />
             </div>
           ) : null}
-          {zones.hr || zones.pace || zones.gap ? (
-            <ActivityTimeInZones
-              key={`zones-${detail.activityId ?? "activity"}`}
-              zones={zones}
-              // On a trail the ground sets the pace; effort pace is the fair scale.
-              initialKind={streamSportType === 102 ? "gap" : undefined}
-            />
-          ) : null}
-          {detail.trainingEffect || detail.runningDynamics || detail.heartRateRecovery ? (
-            <div className="activity-detail-insights">
+          {/* What the session did to the body, side by side: zones, effect, recovery. */}
+          {zones.hr || zones.pace || zones.gap || detail.trainingEffect || detail.runningDynamics || detail.heartRateRecovery ? (
+            <div className="activity-detail-insights activity-detail-effect-row">
+              {zones.hr || zones.pace || zones.gap ? (
+                <ActivityTimeInZones
+                  key={`zones-${detail.activityId ?? "activity"}`}
+                  zones={zones}
+                  // On a trail the ground sets the pace; effort pace is the fair scale.
+                  initialKind={streamSportType === 102 ? "gap" : undefined}
+                />
+              ) : null}
               {detail.trainingEffect ? <ActivityTrainingEffect effect={detail.trainingEffect} /> : null}
-              {detail.runningDynamics ? <ActivityRunningDynamics dynamics={detail.runningDynamics} /> : null}
               {detail.heartRateRecovery ? <ActivityHeartRateRecovery recovery={detail.heartRateRecovery} /> : null}
+              {detail.runningDynamics ? <ActivityRunningDynamics dynamics={detail.runningDynamics} /> : null}
             </div>
           ) : null}
           {/* Running efficiency is still being tried out: development builds only. */}
@@ -455,6 +568,8 @@ export function ActivityDetailPanel({
               cycling={cycling}
               elevationGain={detail.elevationGain}
               cursor={routeCursor}
+              selectRequest={selectRequest}
+              onSelectionChange={setChartSelection}
             />
           ) : null}
 
@@ -467,6 +582,11 @@ export function ActivityDetailPanel({
                     <span className="activity-detail-visual-note">{lapRows.length}</span>
                   ) : null}
                 </h3>
+                {lapsSelectable ? (
+                  <span className="training-laps-hint">
+                    {streams ? t("Click a lap to highlight it on the chart and map") : t("Click a lap to highlight it on the map")}
+                  </span>
+                ) : null}
                 {lapGroup && lapGroups.length > 1 ? (
                   <div className="library-filter-group training-laps-groups" role="group" aria-label={t("Group laps by")}>
                     {lapGroups.map((group) => {
@@ -488,10 +608,11 @@ export function ActivityDetailPanel({
                 ) : null}
               </div>
               <div className="table-shell">
-                <table>
+                <table className={showcase ? "training-laps-table" : undefined}>
                   <thead>
                     <tr>
                       <th>#</th>
+                      {lapKinds ? <th>{t("Type")}</th> : null}
                       {showcase ? (
                         <>
                           <th>{t("Distance")}</th>
@@ -514,14 +635,44 @@ export function ActivityDetailPanel({
                       const fastest = fastestLaps.has(position) ? (
                         <span className="training-lap-fastest">{t("Fastest")}</span>
                       ) : null;
+                      const kind = lapKinds?.[position];
+                      const selected = selectedLap === position;
+                      const barWidth = showcase && !swim ? lapBarWidth(lapSpeeds[position]) : undefined;
+                      const rowClass = [fastest ? "is-fastest" : "", kind ? `is-${kind}` : "", selected ? "is-selected" : "", lapsSelectable ? "is-selectable" : ""]
+                        .filter(Boolean).join(" ");
                       return (
-                        <tr key={lap.index} className={fastest ? "is-fastest" : undefined}>
-                          <td>{lap.index}</td>
+                        <tr key={lap.index} className={rowClass || undefined} onClick={lapsSelectable ? () => pickLap(position) : undefined}>
+                          <td>
+                            {lapsSelectable ? (
+                              <button
+                                type="button"
+                                className="training-lap-pick"
+                                aria-pressed={selected}
+                                aria-label={t("Highlight lap {{value1}}", { value1: String(lap.index) })}
+                              >
+                                {lap.index}
+                              </button>
+                            ) : lap.index}
+                          </td>
+                          {lapKinds ? (
+                            <td><span className={`training-lap-kind is-${kind ?? "lap"}`}>{t(LAP_KIND_LABELS[kind ?? "lap"])}</span></td>
+                          ) : null}
                           {showcase ? (
                             <>
                               <td>{formatDistanceMeters(lap.distance, unitSystem, swim)}</td>
                               <td>{formatDurationSeconds(lap.duration)}{swim ? fastest : null}</td>
-                              {!swim ? <td className="training-lap-performance">{lapPerformance(lap)}{fastest}</td> : null}
+                              {!swim ? (
+                                <td className="training-lap-performance">
+                                  <span className="training-lap-pace">
+                                    <span>{lapPerformance(lap)}{fastest}</span>
+                                    {barWidth !== undefined ? (
+                                      <span className="training-lap-bar" aria-hidden="true">
+                                        <i style={{ width: `${barWidth}%` }} />
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                </td>
+                              ) : null}
                             </>
                           ) : (
                             <>

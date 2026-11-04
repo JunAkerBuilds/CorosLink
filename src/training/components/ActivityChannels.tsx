@@ -353,6 +353,10 @@ interface ActivityChannelsProps {
   /** Watch-reported ascent, shown for the whole-activity readout instead of our estimate. */
   elevationGain?: number;
   cursor?: RouteCursor;
+  /** A stretch picked outside the chart (a lap row): selected here, so the map follows. */
+  selectRequest?: { range: [number, number] | null; nonce: number } | null;
+  /** Fires whenever the selected stretch changes, from either side. */
+  onSelectionChange?: (range: [number, number] | null) => void;
 }
 
 interface DragState {
@@ -362,7 +366,7 @@ interface DragState {
   moved: boolean;
 }
 
-export function ActivityChannels({ streams, cycling, elevationGain, cursor }: ActivityChannelsProps) {
+export function ActivityChannels({ streams, cycling, elevationGain, cursor, selectRequest, onSelectionChange }: ActivityChannelsProps) {
   useLanguage();
   const { theme } = useTheme();
   const { unitSystem } = useUnitSystem();
@@ -414,6 +418,19 @@ export function ActivityChannels({ streams, cycling, elevationGain, cursor }: Ac
   const [selection, setSelection] = useState<[number, number] | null>(null);
   const [hover, setHover] = useState<number | null>(null);
   const zoomed = view[0] > 0 || view[1] < last;
+
+  // A lap picked in the table: select it, and widen the view if it sits outside.
+  useEffect(() => {
+    if (!selectRequest) return;
+    const range = selectRequest.range;
+    setSelection(range);
+    if (range) setView((current) => (range[0] >= current[0] && range[1] <= current[1] ? current : [0, last]));
+  }, [selectRequest, last]);
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
+  useEffect(() => {
+    onSelectionChangeRef.current?.(selection);
+  }, [selection]);
 
   const stageRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);

@@ -1,5 +1,5 @@
 import { useLanguage, t } from "../../i18n/training";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, FlaskConical, Loader2, LogOut, RefreshCw, Trophy } from "lucide-react";
 import type { TrainingHubStatus } from "../../../electron/types";
 
@@ -29,11 +29,13 @@ interface TrainingHubHeaderProps {
   onToggleSample?: () => void;
   /** Dev builds only: plays the new-PR celebration on demand. */
   onTestPrCelebration?: () => void;
+  /** The Overview's today strip, shown under the heading on that tab only. */
+  brief?: ReactNode;
 }
 
 export function TrainingHubHeader({
   connected, localOnly = false, status, busy, sampleMode, activeTab, tabIdPrefix, activityCount,
-  onTabChange, onRefresh, onLogout, onToggleSample, onTestPrCelebration, dashboardToolbarRef
+  onTabChange, onRefresh, onLogout, onToggleSample, onTestPrCelebration, dashboardToolbarRef, brief
 }: TrainingHubHeaderProps) {
   useLanguage();
   const [accountOpen, setAccountOpen] = useState(false);
@@ -149,6 +151,7 @@ export function TrainingHubHeader({
           ) : null}
         </div>
       </div>
+      {connected && brief && activeTab === "overview" ? brief : null}
       {connected ? (
         <div className="training-hub-navigation-row">
         <div className="training-hub-tabs" role="tablist" aria-label={t("Training Hub sections")}>

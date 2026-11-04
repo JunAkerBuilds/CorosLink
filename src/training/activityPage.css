@@ -204,3 +204,26 @@
     opacity: 0;
   }
 }
+
+/* The pace scale floats with the other map chips. */
+.activities-detail-dialog.activity-page .activity-route-footer .activity-route-pace-legend {
+  height: 34px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid #ffffff1f;
+  border-radius: 10px;
+  background: #0a0f14d9;
+  box-shadow: 0 6px 20px #00000059;
+  color: #c7ced5;
+  font-size: 12px;
+}
+
+.activities-detail-dialog.activity-page .activity-route-footer .activity-route-pace-legend small {
+  color: #eef1f3;
+}
+
+.activities-detail-dialog.activity-page .activity-route-footer.has-pace {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: calc(100% - 80px);
+}

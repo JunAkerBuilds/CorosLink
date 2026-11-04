@@ -2,6 +2,12 @@ import type { RaceEntry, RaceOverview } from "../../electron/raceTypes";
 
 const DAY = 86_400;
 
+/** Local `YYYYMMDD`, `days` from `now`, as target race days are stored. */
+function dayKey(now: number, days: number): string {
+  const date = new Date(now + days * DAY * 1000);
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+}
+
 /**
  * A believable two-and-a-half-year race history for sample mode, dated
  * relative to today like the rest of the Training Hub sample data.
@@ -92,6 +98,38 @@ export function createSampleRaceOverview(now = Date.now()): RaceOverview {
         reasons: ["Named like a race", "38% quicker than your usual pace"]
       }
     ],
-    strava: { connected: true, lastImportedAt: new Date(now - 2 * DAY * 1000).toISOString(), hiddenRaces: 0 }
+    strava: { connected: true, lastImportedAt: new Date(now - 2 * DAY * 1000).toISOString(), hiddenRaces: 0 },
+    targets: [
+      {
+        targetId: "sample:target-half",
+        name: "City Lights Half Marathon",
+        raceDay: dayKey(now, 33),
+        distanceKey: "half",
+        distance: 21097.5,
+        goalTime: 5700,
+        priority: "A",
+        location: "Harbourfront",
+        registration: "registered",
+        bibNumber: "2148",
+        startTime: "08:15",
+        wave: "Corral B",
+        bibPickupDay: dayKey(now, 31),
+        bibPickupHours: "10:00–19:00",
+        bibPickupLocation: "Expo Hall",
+        createdAt: new Date(now - 60 * DAY * 1000).toISOString()
+      },
+      {
+        targetId: "sample:target-10k",
+        name: "Turkey Trot 10K",
+        raceDay: dayKey(now, 12),
+        distanceKey: "10k",
+        distance: 10000,
+        goalTime: 2700,
+        priority: "C",
+        registration: "considering",
+        registrationDeadline: dayKey(now, 6),
+        createdAt: new Date(now - 20 * DAY * 1000).toISOString()
+      }
+    ]
   };
 }

@@ -2323,3 +2323,796 @@ button.pr-latest-chip:focus-visible {
   }
 }
 
+
+/* =========================================================================
+   Arena revamp (2026-11): tally chips and the "Next PR in reach" spotlight
+   in the banner, fresh rungs that glow, an in-reach bar per rung, a story
+   for the picked distance, gold cards for the other sports, shining medals
+   and icon tiles on the milestones.
+   ========================================================================= */
+
+/* --- Banner ----------------------------------------------------------------- */
+
+/* A warm halo behind the medal, under the turning rays. */
+.pr-emblem::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 50%;
+  width: 190px;
+  height: 190px;
+  margin: -95px 0 0 -95px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 214, 120, 0.36) 0%, rgba(240, 170, 70, 0.16) 38%, transparent 68%);
+  pointer-events: none;
+}
+
+.pr-emblem::before {
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(245, 208, 120, 0.2) 0deg 4deg,
+    transparent 4deg 13deg
+  );
+}
+
+.pr-tally-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pr-tally-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  background: rgba(20, 17, 12, 0.62);
+  box-shadow: inset 0 0 0 1px rgba(240, 200, 112, 0.3);
+  color: #f6e2b0;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pr-tally-chip svg {
+  color: var(--pr-gold-bright);
+}
+
+.pr-head-side {
+  display: grid;
+  justify-items: end;
+  gap: 12px;
+}
+
+.pr-spotlight {
+  display: grid;
+  gap: 4px;
+  width: 260px;
+  max-width: 100%;
+  padding: 12px 14px 11px;
+  border: 0;
+  border-radius: 14px;
+  background:
+    linear-gradient(150deg, rgba(240, 200, 112, 0.12), transparent 60%),
+    rgba(20, 17, 12, 0.72);
+  box-shadow:
+    inset 0 0 0 1px rgba(240, 200, 112, 0.3),
+    0 12px 28px -16px rgba(0, 0, 0, 0.7);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease;
+}
+
+.pr-spotlight:hover {
+  box-shadow:
+    inset 0 0 0 1px rgba(240, 200, 112, 0.55),
+    0 0 24px -6px rgba(240, 190, 90, 0.35),
+    0 12px 28px -16px rgba(0, 0, 0, 0.7);
+}
+
+.pr-spotlight:focus-visible {
+  outline: 2px solid var(--pr-gold);
+  outline-offset: 2px;
+}
+
+.pr-spotlight-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--pr-gold-bright);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.pr-spotlight-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pr-spotlight-row strong {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.pr-spotlight-gap {
+  color: var(--pr-gold-bright);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pr-spotlight-note {
+  color: #d9ccae;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- In-reach bars ---------------------------------------------------------- */
+
+.pr-reach {
+  display: block;
+  width: 100%;
+  height: 4px;
+  margin-top: 9px;
+  border-radius: 4px;
+  background: rgba(226, 234, 242, 0.08);
+  overflow: hidden;
+}
+
+.pr-reach i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--pr-gold-deep), var(--pr-gold-bright));
+  transform-origin: left center;
+}
+
+.pr-reach.is-full i {
+  background: var(--pr-gold);
+}
+
+.pr-reach.is-spotlight {
+  height: 6px;
+  margin: 6px 0 2px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+/* --- Ladder rungs: selectable, fresh ones glow ------------------------------ */
+
+.pr-rung {
+  isolation: isolate;
+}
+
+/* The selection plate sits behind the rung, a little outside it. */
+.pr-rung::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -10px -12px -12px;
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+  pointer-events: none;
+}
+
+.pr-rung:hover::before {
+  background: rgba(240, 200, 112, 0.035);
+}
+
+.pr-rung.is-selected::before {
+  background: linear-gradient(180deg, rgba(240, 200, 112, 0.09), rgba(240, 200, 112, 0.025));
+  box-shadow: inset 0 0 0 1px rgba(240, 200, 112, 0.4);
+}
+
+.pr-rung-select {
+  position: absolute;
+  z-index: 2;
+  inset: -10px -12px -12px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.pr-rung-select:focus-visible {
+  outline: 2px solid var(--pr-gold);
+  outline-offset: 0;
+}
+
+.pr-rung-head > button {
+  position: relative;
+  z-index: 3;
+}
+
+.pr-rung.is-selected .pr-label {
+  color: var(--text-primary);
+}
+
+.pr-new-tag {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(240, 200, 112, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(240, 200, 112, 0.3);
+  color: #fbe3a6;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.pr-rung.is-fresh .pr-rung-post {
+  width: 16px;
+  height: 16px;
+  margin-left: -2px;
+  background: radial-gradient(circle at 35% 30%, #fff3c4, var(--pr-gold) 58%, var(--pr-gold-deep));
+  box-shadow:
+    0 0 0 4px rgba(240, 200, 112, 0.18),
+    0 0 14px rgba(240, 200, 112, 0.6);
+}
+
+.pr-rung.is-fresh .pr-value {
+  color: var(--pr-gold-bright);
+  text-shadow: 0 0 22px rgba(240, 200, 112, 0.32);
+}
+
+@container pr-panel (max-width: 900px) {
+  .pr-rung.is-fresh > .pr-rung-post {
+    margin: 2px 0 0;
+  }
+
+  .pr-rung::before,
+  .pr-rung-select {
+    inset: 0 -12px;
+  }
+}
+
+/* --- The story of the picked distance --------------------------------------- */
+
+.pr-story {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(0, 2fr);
+  gap: 18px 32px;
+  margin-top: 4px;
+  padding: 18px 20px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(240, 200, 112, 0.085), rgba(255, 255, 255, 0.015) 60%);
+  box-shadow: inset 0 0 0 1px rgba(240, 200, 112, 0.2);
+}
+
+.pr-story-copy {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pr-story-eyebrow {
+  margin: 0;
+  color: var(--pr-gold-bright);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.pr-story-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.pr-story-title span {
+  color: var(--pr-gold-text);
+}
+
+.pr-story-text {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pr-story-open {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  margin-top: 10px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--pr-gold);
+  color: #2a1b04;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pr-story-open:hover {
+  background: var(--pr-gold-bright);
+  box-shadow: 0 0 16px rgba(230, 187, 98, 0.45);
+}
+
+.pr-story-open:focus-visible {
+  outline: 2px solid var(--pr-gold-bright);
+  outline-offset: 2px;
+}
+
+.pr-story-chart {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pr-story-chart.is-empty {
+  align-content: center;
+  padding: 14px 16px;
+  border: 1px dashed color-mix(in srgb, var(--pr-gold) 30%, transparent);
+  border-radius: 12px;
+}
+
+.pr-story-chart.is-empty p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.pr-story-chart-head,
+.pr-story-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.pr-story-chart-head span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.pr-story-axis {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.pr-story-plot {
+  position: relative;
+  height: 110px;
+}
+
+.pr-story-plot svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pr-story-line {
+  fill: none;
+  stroke: var(--pr-gold);
+  stroke-width: 2.4;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.pr-story-dots i {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--pr-gold);
+  box-shadow: 0 0 0 2px var(--pr-slab-solid);
+}
+
+.pr-story-dots i.is-current {
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  background: var(--pr-gold-bright);
+  box-shadow: 0 0 0 2px var(--pr-slab-solid), 0 0 12px rgba(240, 200, 112, 0.7);
+}
+
+@container pr-panel (max-width: 760px) {
+  .pr-story {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --- Other sports: gold cards with a faint sparkline ------------------------ */
+
+.pr-figure.is-card {
+  padding: 15px 18px 16px;
+  border-radius: 16px;
+  background:
+    linear-gradient(155deg, rgba(240, 200, 112, 0.1), rgba(255, 255, 255, 0.015) 62%),
+    rgba(255, 255, 255, 0.012);
+  box-shadow: inset 0 0 0 1px rgba(240, 200, 112, 0.17);
+  overflow: hidden;
+}
+
+.pr-figure.is-card > :not(.pr-sparkline) {
+  position: relative;
+}
+
+.pr-sparkline {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 48%;
+  height: 40px;
+  opacity: 0.55;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 45%);
+  mask-image: linear-gradient(90deg, transparent, #000 45%);
+}
+
+.pr-sparkline-area {
+  fill: rgba(240, 200, 112, 0.1);
+}
+
+.pr-sparkline-line {
+  fill: none;
+  stroke: rgba(240, 200, 112, 0.32);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.pr-figures:has(> .pr-figure.is-card) {
+  gap: 16px;
+}
+
+/* --- Medals with a shine ---------------------------------------------------- */
+
+.pr-work-medal-stop.is-light {
+  stop-color: #fff3c4;
+}
+
+.pr-work-medal-stop.is-mid {
+  stop-color: #efc464;
+}
+
+.pr-work-medal-stop.is-deep {
+  stop-color: #a8721f;
+}
+
+.pr-work-medal circle.pr-work-medal-halo {
+  fill: rgba(240, 200, 112, 0.35);
+  stroke: none;
+  filter: none;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.pr-work-medal-glint {
+  fill: rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+}
+
+/* --- Milestone tiles -------------------------------------------------------- */
+
+.pr-milestone {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+}
+
+.pr-milestone-tile {
+  --tile: #6ee7a8;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--tile) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tile) 24%, transparent);
+  color: var(--tile);
+}
+
+.pr-milestone[data-kind="streak"] .pr-milestone-tile {
+  --tile: #fdba74;
+}
+
+.pr-milestone[data-kind="hardest"] .pr-milestone-tile {
+  --tile: #fda4af;
+}
+
+.pr-milestone[data-kind="longest"] .pr-milestone-tile {
+  --tile: #93c5fd;
+}
+
+/* --- Motion ------------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: no-preference) {
+  .pr-emblem::after {
+    animation: pr-halo-breathe 4.2s ease-in-out infinite;
+  }
+
+  .pr-emblem::before {
+    animation-duration: 70s;
+  }
+
+  .pr-rung.is-fresh .pr-rung-post {
+    animation:
+      pr-post-in 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.3) both,
+      pr-fresh-pulse 2.2s ease-in-out infinite;
+    animation-delay: calc(var(--i, 0) * 110ms + 60ms), calc(var(--i, 0) * 110ms + 700ms);
+  }
+
+  .pr-reach i {
+    animation: pr-reach-fill 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: calc(var(--i, 0) * 90ms + 400ms);
+  }
+
+  .pr-spotlight .pr-reach i {
+    animation-delay: 500ms;
+  }
+
+  .pr-story {
+    animation: pr-story-in 0.35s ease-out both;
+  }
+
+  .pr-story-line {
+    stroke-dasharray: 1400;
+    animation: pr-story-draw 1.2s cubic-bezier(0.3, 0.6, 0.2, 1) both;
+  }
+
+  .pr-work-medal circle.pr-work-medal-halo {
+    animation: pr-medal-halo 2.8s ease-in-out infinite;
+  }
+
+  .pr-work-medal-glint {
+    animation: pr-medal-glint 3.6s ease-in-out infinite;
+  }
+}
+
+@keyframes pr-halo-breathe {
+  0%,
+  100% {
+    opacity: 0.75;
+    transform: scale(0.94);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes pr-fresh-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 4px rgba(240, 200, 112, 0.2),
+      0 0 12px rgba(240, 200, 112, 0.6);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 9px rgba(240, 200, 112, 0.06),
+      0 0 24px rgba(240, 200, 112, 0.95);
+  }
+}
+
+@keyframes pr-reach-fill {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes pr-story-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes pr-story-draw {
+  from {
+    stroke-dashoffset: 1400;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes pr-medal-halo {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.55);
+  }
+}
+
+@keyframes pr-medal-glint {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  50% {
+    opacity: 0.85;
+  }
+}
+
+/* --- Paper ------------------------------------------------------------------ */
+
+:root[data-theme="paper"] .pr-emblem::after {
+  background: radial-gradient(circle, rgba(240, 190, 90, 0.3) 0%, rgba(230, 170, 70, 0.1) 40%, transparent 68%);
+}
+
+:root[data-theme="paper"] .pr-emblem::before {
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(185, 121, 26, 0.13) 0deg 4deg,
+    transparent 4deg 13deg
+  );
+}
+
+:root[data-theme="paper"] .pr-tally-chip {
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: inset 0 0 0 1px rgba(154, 107, 18, 0.3);
+  color: #5e3e06;
+}
+
+:root[data-theme="paper"] .pr-tally-chip svg {
+  color: #9a6b12;
+}
+
+:root[data-theme="paper"] .pr-spotlight {
+  background:
+    linear-gradient(150deg, rgba(230, 170, 70, 0.14), transparent 60%),
+    rgba(255, 255, 255, 0.9);
+  box-shadow:
+    inset 0 0 0 1px rgba(154, 107, 18, 0.3),
+    0 12px 28px -18px rgba(30, 45, 35, 0.35);
+}
+
+:root[data-theme="paper"] .pr-spotlight:hover {
+  box-shadow:
+    inset 0 0 0 1px rgba(154, 107, 18, 0.5),
+    0 12px 28px -18px rgba(30, 45, 35, 0.35);
+}
+
+:root[data-theme="paper"] .pr-spotlight-eyebrow,
+:root[data-theme="paper"] .pr-spotlight-gap,
+:root[data-theme="paper"] .pr-story-eyebrow {
+  color: #8a5e0f;
+}
+
+:root[data-theme="paper"] .pr-spotlight-note {
+  color: #5c5240;
+}
+
+:root[data-theme="paper"] .pr-reach,
+:root[data-theme="paper"] .pr-reach.is-spotlight {
+  background: rgba(38, 52, 41, 0.1);
+}
+
+:root[data-theme="paper"] .pr-rung:hover::before {
+  background: rgba(201, 150, 46, 0.05);
+}
+
+:root[data-theme="paper"] .pr-rung.is-selected::before {
+  background: linear-gradient(180deg, rgba(201, 150, 46, 0.12), rgba(201, 150, 46, 0.04));
+  box-shadow: inset 0 0 0 1px rgba(154, 107, 18, 0.35);
+}
+
+:root[data-theme="paper"] .pr-new-tag {
+  background: rgba(201, 150, 46, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(154, 107, 18, 0.3);
+  color: #6e4a08;
+}
+
+:root[data-theme="paper"] .pr-rung.is-fresh .pr-rung-post {
+  box-shadow: 0 0 0 4px rgba(201, 150, 46, 0.18);
+  animation-name: pr-post-in-open;
+}
+
+:root[data-theme="paper"] .pr-rung.is-fresh .pr-value {
+  color: var(--pr-gold-text);
+  text-shadow: none;
+}
+
+:root[data-theme="paper"] .pr-story {
+  background: linear-gradient(135deg, rgba(230, 170, 70, 0.11), rgba(255, 255, 255, 0.4) 60%);
+  box-shadow: inset 0 0 0 1px rgba(154, 107, 18, 0.24);
+}
+
+:root[data-theme="paper"] .pr-story-open {
+  background: #c9962e;
+  color: #241703;
+}
+
+:root[data-theme="paper"] .pr-story-open:hover {
+  background: #d8a84a;
+  box-shadow: none;
+}
+
+:root[data-theme="paper"] .pr-story-dots i.is-current {
+  background: #b07d1c;
+  box-shadow: 0 0 0 2px var(--pr-slab-solid);
+}
+
+:root[data-theme="paper"] .pr-figure.is-card {
+  background:
+    linear-gradient(155deg, rgba(230, 170, 70, 0.13), rgba(255, 255, 255, 0.5) 62%),
+    #fffdf8;
+  box-shadow: inset 0 0 0 1px rgba(154, 107, 18, 0.2);
+}
+
+:root[data-theme="paper"] .pr-sparkline-area {
+  fill: rgba(201, 150, 46, 0.14);
+}
+
+:root[data-theme="paper"] .pr-sparkline-line {
+  stroke: rgba(154, 107, 18, 0.35);
+}
+
+:root[data-theme="paper"] .pr-work-medal-stop.is-light {
+  stop-color: #fbe7b0;
+}
+
+:root[data-theme="paper"] .pr-work-medal-stop.is-mid {
+  stop-color: #d9a73e;
+}
+
+:root[data-theme="paper"] .pr-work-medal-stop.is-deep {
+  stop-color: #946414;
+}
+
+:root[data-theme="paper"] .pr-work-medal circle.pr-work-medal-halo {
+  fill: rgba(201, 150, 46, 0.3);
+}
+
+:root[data-theme="paper"] .pr-milestone-tile {
+  --tile: #0f7a52;
+}
+
+:root[data-theme="paper"] .pr-milestone[data-kind="streak"] .pr-milestone-tile {
+  --tile: #b4470c;
+}
+
+:root[data-theme="paper"] .pr-milestone[data-kind="hardest"] .pr-milestone-tile {
+  --tile: #b4233f;
+}
+
+:root[data-theme="paper"] .pr-milestone[data-kind="longest"] .pr-milestone-tile {
+  --tile: #1d4fbf;
+}

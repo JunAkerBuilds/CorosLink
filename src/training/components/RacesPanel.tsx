@@ -12,6 +12,8 @@ import {
   Plus,
   RefreshCw,
   Target,
+  Timer,
+  Trophy,
   X
 } from "lucide-react";
 import type { RaceEntry, RaceSuggestion } from "../../../electron/raceTypes";
@@ -23,12 +25,12 @@ import {
   raceGroupKey,
   type RaceResultProgress
 } from "../../../electron/raceModel";
-import type { UnitSystem } from "../../../electron/types";
+import type { TrainingHubActivity, TrainingHubRacePredictor, UnitSystem } from "../../../electron/types";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import { formatDistanceValue, formatElevationValue, formatPaceValue } from "../../units/units";
 import { formatRaceDate, formatRaceDelta, formatRaceDistance, formatRaceSuggestionReason, formatRaceTime } from "../raceFormat";
 import type { RaceJournal } from "../useRaceJournal";
-import { RacePlaque, type PlaqueGroup } from "./RacePlaques";
+import { RaceResultPlaque, type PlaqueGroup, type RaceBadge } from "./RacePlaques";
 import { RaceComparison } from "./RaceComparison";
 import { RaceEditorDialog, type RaceAddKind, type RaceEditorTarget } from "./RaceEditorDialog";
 import { RaceProgressChart, type RaceChartPoint } from "./RaceProgressChart";
@@ -49,16 +51,31 @@ function paceOf(race: RaceEntry): number {
   return race.officialTime / (race.officialDistance / 1000);
 }
 
+/** How a result ranked on the day, for its plaque. */
+function badgeFor(race: RaceEntry, progress: Map<string, RaceResultProgress>, groupSize: Map<string, number>): RaceBadge | undefined {
+  const entry = progress.get(race.raceId);
+  if (!entry) return undefined;
+  if (entry.previousRaceId !== undefined) return entry.wasPersonalBest ? "new-best" : undefined;
+  if ((groupSize.get(entry.groupKey) ?? 1) < 2) return undefined;
+  return entry.isCurrentBest ? "first-fastest" : "first";
+}
+
 function yearOf(epochSeconds: number): number {
   return new Date(epochSeconds * 1000).getFullYear();
 }
 
 export function RacesPanel({
   journal,
-  onOpenActivities
+  onOpenActivities,
+  racePredictor,
+  activities = []
 }: {
   journal: RaceJournal;
   onOpenActivities: () => void;
+  /** COROS's predicted times, for the upcoming race's goal check. */
+  racePredictor?: TrainingHubRacePredictor | null;
+  /** Synced activities, for the upcoming race's build-up so far. */
+  activities?: readonly TrainingHubActivity[];
 }) {
   useLanguage();
   const { unitSystem } = useUnitSystem();
@@ -142,6 +159,24 @@ export function RacesPanel({
           .sort((a, b) => a.startTime - b.startTime)
       : [];
   const firstYear = races.length ? yearOf(races[races.length - 1].startTime) : undefined;
+  const groupSize = useMemo(() => {
+    const sizes = new Map<string, number>();
+    for (const entry of progress.values()) sizes.set(entry.groupKey, (sizes.get(entry.groupKey) ?? 0) + 1);
+    return sizes;
+  }, [progress]);
+  // A is the earlier race, B the later, as the comparison reads them.
+  const picked = compareIds
+    .map((id) => raceById.get(id))
+    .filter((race): race is RaceEntry => Boolean(race))
+    .sort((a, b) => a.startTime - b.startTime);
+  const pickLabel = (raceId: string): "A" | "B" | null =>
+    picked.length === 2
+      ? picked[0].raceId === raceId ? "A" : picked[1].raceId === raceId ? "B" : null
+      : compareIds[0] === raceId ? "A" : null;
+  const toggleCompare = (raceId: string) =>
+    setCompareIds((current) =>
+      current.includes(raceId) ? current.filter((id) => id !== raceId) : [...current, raceId].slice(-2)
+    );
 
   return (
     <section className="panel training-races-panel" aria-labelledby="races-title">
@@ -225,6 +260,9 @@ export function RacesPanel({
           targets={journal.overview.targets}
           journal={journal}
           unitSystem={unitSystem}
+          races={races}
+          activities={activities}
+          racePredictor={racePredictor}
           onEdit={(upcoming) => setEditor({ mode: "editTarget", upcoming })}
         />
       ) : null}
@@ -246,44 +284,90 @@ export function RacesPanel({
         />
       ) : (
         <>
-          <div className="races-plaques" role="group" aria-label={t("Personal bests by distance")}>
-            {groups.map((group) => (
-              <RacePlaque
-                key={group.key}
-                group={group}
-                active={group.key === activeKey}
-                onSelect={() => setFilter(group.key)}
+          <section className="races-board" aria-labelledby="races-board-title">
+            <div className="races-board-head">
+              <div>
+                <h3 id="races-board-title">{t("Every race")}</h3>
+                <p>{races.length > 1 ? t("Pick two plaques to compare them.") : t("Your first result. The next one gets compared with it.")}</p>
+              </div>
+              {groups.length > 1 ? (
+                <div className="races-filter" role="group" aria-label={t("Distance")}>
+                  {groups.map((group) => (
+                    <button
+                      key={group.key}
+                      type="button"
+                      className="races-filter-chip"
+                      data-distance={group.distanceKey}
+                      aria-pressed={group.key === activeKey}
+                      onClick={() => setFilter(group.key)}
+                    >
+                      {group.key === ALL ? null : <i aria-hidden="true" />}
+                      {group.key === ALL ? t("All") : group.distanceKey === "half" ? t("Half") : group.label}
+                      <span>{formatNumber(group.races.length)}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <div className="races-results">
+              {[...shown].sort((a, b) => b.startTime - a.startTime).map((race) => (
+                <RaceResultPlaque
+                  key={race.raceId}
+                  race={race}
+                  distance={shortDistance(race, formatRaceDistance(race, unitSystem))}
+                  badge={badgeFor(race, progress, groupSize)}
+                  isBest={Boolean(progress.get(race.raceId)?.isCurrentBest)}
+                  pace={formatPaceValue(paceOf(race), unitSystem)}
+                  selection={pickLabel(race.raceId)}
+                  onToggle={() => toggleCompare(race.raceId)}
+                />
+              ))}
+            </div>
+          </section>
+
+          <div className={`races-insights${races.length > 1 ? "" : " is-single"}`}>
+            {races.length > 1 ? (
+              <section className="races-card races-compare" aria-labelledby="races-compare-title">
+                <div className="races-card-head">
+                  <h3 id="races-compare-title">{t("Compare")}</h3>
+                  {comparing.length === 2 ? null : compareIds.length === 1 ? (
+                    <p role="status">
+                      {t("Choose a second race to compare with")} <strong>{raceById.get(compareIds[0])?.name}</strong>
+                      <button type="button" className="race-text-button" onClick={() => setCompareIds([])}>{t("Cancel")}</button>
+                    </p>
+                  ) : (
+                    <p>{t("Pick two plaques to compare them.")}</p>
+                  )}
+                </div>
+                {comparing.length === 2 ? (
+                  <RaceComparison
+                    older={comparing[0]}
+                    newer={comparing[1]}
+                    fiveK={fiveK}
+                    unitSystem={unitSystem}
+                    onClear={() => setCompareIds([])}
+                  />
+                ) : (
+                  <div className="races-compare-empty" aria-hidden="true">
+                    <span className="is-a"><b>A</b><em>{compareIds.length === 1 ? raceById.get(compareIds[0])?.name : null}</em></span>
+                    <span className="races-compare-vs">vs</span>
+                    <span className="is-b"><b>B</b><em /></span>
+                  </div>
+                )}
+              </section>
+            ) : null}
+
+            {activeGroup ? (
+              <RaceProgress
+                group={activeGroup}
+                progress={progress}
+                selectedId={expanded}
+                onSelect={(raceId) => setExpanded(raceId)}
               />
-            ))}
+            ) : null}
           </div>
 
-          {activeGroup ? (
-            <RaceProgress
-              group={activeGroup}
-              progress={progress}
-              selectedId={expanded}
-              onSelect={(raceId) => setExpanded(raceId)}
-            />
-          ) : null}
-
-          {comparing.length === 2 ? (
-            <RaceComparison
-              older={comparing[0]}
-              newer={comparing[1]}
-              fiveK={fiveK}
-              unitSystem={unitSystem}
-              onClear={() => setCompareIds([])}
-            />
-          ) : null}
-
-          {compareIds.length === 1 ? (
-            <p className="races-compare-hint" role="status">
-              <GitCompareArrows size={15} aria-hidden="true" />
-              {t("Choose a second race to compare with")}{raceById.get(compareIds[0])?.name}.
-              <button type="button" className="race-text-button" onClick={() => setCompareIds([])}>{t("Cancel")}</button>
-            </p>
-          ) : null}
-
+          <h3 className="races-log-title">{t("Race log")}</h3>
           <div className="races-timeline" aria-label={activeKey === ALL ? t("Every race") : t("{{p0}} races", { p0: String(activeGroup?.label) })}>
             {years.map(([year, members]) => (
               <section className="races-year" key={year} aria-label={String(year)}>
@@ -310,13 +394,7 @@ export function RacesPanel({
                         journal.clearMessages();
                         setEditor({ mode: "edit", race });
                       }}
-                      onCompare={() =>
-                        setCompareIds((current) =>
-                          current.includes(race.raceId)
-                            ? current.filter((id) => id !== race.raceId)
-                            : [...current, race.raceId].slice(-2)
-                        )
-                      }
+                      onCompare={() => toggleCompare(race.raceId)}
                     />
                   ))}
                 </ol>
@@ -366,17 +444,19 @@ function RacesEmpty({
   useLanguage();
   return (
     <div className="races-empty">
-      <div className="race-plaque is-empty" aria-hidden="true">
-        <span className="race-plaque-mark">5K</span>
-        <span className="race-plaque-top">
-          <span className="race-plaque-label">
-            <span>{t("First race")}</span>
+      <div className="races-empty-stack" aria-hidden="true">
+        {(["half", "10k", "5k"] as const).map((distanceKey, index) => (
+          <span key={distanceKey} className={`race-result is-ghost is-ghost-${index}`} data-distance={distanceKey}>
+            <span className="race-result-ribbon" />
+            <span className="race-result-sheen" />
+            <span className="race-result-top">
+              <span className="race-result-chip">{distanceKey === "half" ? t("Half") : distanceKey === "10k" ? "10K" : "5K"}</span>
+              {index === 2 ? <span className="race-result-badge is-first">{t("First race")}</span> : null}
+            </span>
+            <span className="race-result-name">{index === 2 ? t("Your first result lands here") : "\u00a0"}</span>
+            <span className="race-result-time is-empty">{index === 2 ? t("Not yet set") : "–:––"}</span>
           </span>
-        </span>
-        <span className="race-plaque-hero is-empty">{t("Not yet set")}</span>
-        <span className="race-plaque-foot">
-          <span>{t("Your first result lands here")}</span>
-        </span>
+        ))}
       </div>
       <div className="races-empty-copy">
         <h3>{hasSuggestions ? t("Confirm your first race") : t("Start your race journal")}</h3>
@@ -385,14 +465,19 @@ function RacesEmpty({
             ? t("Confirm the runs above that were races. Each distance gets a card with your best time, and every race joins the timeline.")
             : t("Open a run in Activities and choose Mark as race, or add a race you ran before you had this watch.")}
         </p>
+        <ul className="races-empty-perks">
+          <li data-distance="5k"><Trophy size={14} aria-hidden="true" />{t("A plaque for every finish, gold for your bests")}</li>
+          <li data-distance="10k"><GitCompareArrows size={14} aria-hidden="true" />{t("Any two races side by side")}</li>
+          <li data-distance="half"><Timer size={14} aria-hidden="true" />{t("A live countdown to your next start")}</li>
+        </ul>
         <div className="races-empty-actions">
-          <button type="button" className="race-action" onClick={onOpenActivities}>{t("Open Activities")}</button>
-          <button type="button" className="race-action" disabled={readOnly} onClick={() => onAdd("upcoming")}>
-            <Target size={15} aria-hidden="true" />
-            {t("Plan an upcoming race")}</button>
           <button type="button" className="race-action is-primary" disabled={readOnly} onClick={() => onAdd("result")}>
             <Plus size={15} aria-hidden="true" />
             {t("Add a past race")}</button>
+          <button type="button" className="race-action" disabled={readOnly} onClick={() => onAdd("upcoming")}>
+            <Target size={15} aria-hidden="true" />
+            {t("Plan an upcoming race")}</button>
+          <button type="button" className="race-action" onClick={onOpenActivities}>{t("Open Activities")}</button>
         </div>
       </div>
     </div>
@@ -492,23 +577,52 @@ function RaceProgress({
         ? t("{{p0}} in {{p1}}", { p0: String(formatRaceDistance(race, unitSystem)), p1: String(formatRaceTime(race.officialTime)) })
         : formatPaceValue(paceOf(race), unitSystem),
       isBest: race === best,
-      isPb: all ? isPb : Boolean(progress.get(race.raceId)?.wasPersonalBest && index > 0)
+      isPb: all ? isPb : Boolean(progress.get(race.raceId)?.wasPersonalBest && index > 0),
+      distanceKey: all ? race.distanceKey : undefined
     };
   });
+  const latest = races[races.length - 1];
+  // One legend entry per distance on the all-distances chart, in distance order.
+  const legendDistances = [...new Map(races.map((race) => [race.distanceKey, race])).values()].sort(
+    (a, b) => a.officialDistance - b.officialDistance
+  );
+  const bestValue = formatRaceTime(group.valueOf(best));
+  // One line read off the chart, from the same numbers it plots.
+  const insight =
+    races.length < 2
+      ? null
+      : all
+        ? best === latest
+          ? t("{{p0}} was your strongest race yet: {{p1}} as a 5K.", { p0: best.name, p1: bestValue })
+          : t("Strongest so far: {{p0}}, {{p1}} as a 5K.", { p0: best.name, p1: bestValue })
+        : best === latest
+          ? t("{{p0}} is your fastest {{p1}} yet: {{p2}}.", { p0: best.name, p1: group.label, p2: bestValue })
+          : t("Your fastest {{p0}}: {{p1}} at {{p2}}.", { p0: group.label, p1: bestValue, p2: best.name });
 
   return (
-    <div className="races-chart-frame" data-distance={group.distanceKey}>
+    <section className="races-card races-chart-frame" data-distance={group.distanceKey} aria-labelledby="races-chart-title">
       <div className="races-chart-head">
-        <p className="races-chart-title">
-          {all ? t("Every race as a 5K") : t("{{p0}} finish times", { p0: String(group.label) })}
-          {all ? <>{" "}<span>{t("scaled with Riegel's formula, so distances share one line")}</span></> : null}
-        </p>
+        <div className="races-card-head">
+          <h3 className="races-chart-title" id="races-chart-title">
+            {all ? t("Every race as a 5K") : t("{{p0}} finish times", { p0: String(group.label) })}
+          </h3>
+          <p>{all ? t("scaled with Riegel's formula, so distances share one line") : t("Faster results sit higher.")}</p>
+        </div>
         <ul className="races-chart-legend" aria-label={t("Legend")}>
+          {all ? (
+            legendDistances.map((race) => (
+              <li key={race.distanceKey} data-distance={race.distanceKey}>
+                <i aria-hidden="true" />
+                {shortDistance(race, formatRaceDistance(race, unitSystem))}
+              </li>
+            ))
+          ) : (
+            <li>
+              <i className="is-race" aria-hidden="true" />
+              {t("Race")}</li>
+          )}
           <li>
-            <i className="is-race" aria-hidden="true" />
-            {t("Race")}</li>
-          <li>
-            <i className="is-pb" aria-hidden="true" />
+            <i className={all ? "is-ring" : "is-pb"} aria-hidden="true" />
             {t("New best")}</li>
         </ul>
       </div>
@@ -519,7 +633,8 @@ function RaceProgress({
         onSelect={onSelect}
         color={all ? "var(--accent)" : `var(--race-dot-${group.distanceKey})`}
       />
-    </div>
+      {insight ? <p className="races-chart-insight">{insight}</p> : null}
+    </section>
   );
 }
 

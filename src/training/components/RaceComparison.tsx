@@ -1,23 +1,25 @@
-import { t, useLanguage } from "../../i18n/training";
-import type { CSSProperties } from "react";
+import { t, useLanguage, formatDate } from "../../i18n/training";
 import { X } from "lucide-react";
 import type { RaceEntry } from "../../../electron/raceTypes";
 import { BUILD_UP_WEEKS, raceGroupKey } from "../../../electron/raceModel";
 import type { UnitSystem } from "../../../electron/types";
-import { formatDistanceValue, formatPaceValue } from "../../units/units";
-import { formatRaceDelta, formatRaceDistance } from "../raceFormat";
-import { MiniPlaque } from "./RacePlaques";
+import { formatDistanceValue, formatElevationValue, formatPaceValue } from "../../units/units";
+import { formatRaceDistance, formatRaceTime } from "../raceFormat";
 
 interface Row {
   label: string;
   a?: number;
   b?: number;
   format: (value: number) => string;
-  delta: (difference: number) => string;
-  /** Times and paces: lower is better. Training volume has no better direction. */
+  delta?: (difference: number) => string;
+  /** Times and paces: lower is better. Training volume and heart rate have no better direction. */
   lowerIsBetter?: boolean;
-  /** Draw mirrored bars: only for amounts, where length means "more". */
-  bars?: boolean;
+}
+
+interface TextRow {
+  label: string;
+  a?: string;
+  b?: string;
 }
 
 function buildUpValue(race: RaceEntry, pick: (buildUp: NonNullable<RaceEntry["buildUp"]>) => number | undefined) {
@@ -25,7 +27,20 @@ function buildUpValue(race: RaceEntry, pick: (buildUp: NonNullable<RaceEntry["bu
   return buildUp && (buildUp.complete || buildUp.runs > 0) ? pick(buildUp) : undefined;
 }
 
-/** Two races face to face: the gap in the middle, then what led into each. */
+function Head({ race, side, unitSystem }: { race: RaceEntry; side: "A" | "B"; unitSystem: UnitSystem }) {
+  useLanguage();
+  return (
+    <th scope="col" className={`races-duel-side is-${side.toLowerCase()}`} data-distance={race.distanceKey}>
+      <span className="races-duel-letter" aria-hidden="true">{side}</span>
+      <strong>{race.name}</strong>
+      <span>
+        {formatRaceDistance(race, unitSystem)} · {formatDate(new Date(race.startTime * 1000), { month: "short", day: "numeric", year: "numeric" })}
+      </span>
+    </th>
+  );
+}
+
+/** Two races side by side, A the earlier, B the later; B's cell carries the change. */
 export function RaceComparison({
   older,
   newer,
@@ -42,12 +57,23 @@ export function RaceComparison({
 }) {
   useLanguage();
   const sameDistance = raceGroupKey(older) === raceGroupKey(newer);
-  const value = (race: RaceEntry) => (sameDistance ? race.officialTime : fiveK(race));
-  const gap = value(newer) - value(older);
   const signed = (difference: number, text: string) => `${difference < 0 ? "−" : "+"}${text}`;
   const pace = (race: RaceEntry) => race.officialTime / (race.officialDistance / 1000);
+  const time = (difference: number) => signed(difference, formatRaceTime(Math.round(Math.abs(difference))));
+  const recorded = (race: RaceEntry) => (race.source === "manual" ? undefined : race.elevationGain);
 
-  const rows: Row[] = [
+  const allRows: Row[] = [
+    {
+      label: t("Finish time"),
+      a: older.officialTime,
+      b: newer.officialTime,
+      format: formatRaceTime,
+      delta: sameDistance ? time : undefined,
+      lowerIsBetter: true
+    },
+    ...(sameDistance
+      ? []
+      : [{ label: t("As a 5K"), a: fiveK(older), b: fiveK(newer), format: formatRaceTime, delta: time, lowerIsBetter: true } as Row]),
     {
       label: t("Pace"),
       a: pace(older),
@@ -61,100 +87,88 @@ export function RaceComparison({
       a: older.avgHr,
       b: newer.avgHr,
       format: (bpm) => `${Math.round(bpm)} bpm`,
-      delta: (difference) => signed(difference, `${Math.abs(Math.round(difference))} bpm`)
+      delta: (difference) => signed(difference, `${Math.abs(Math.round(difference))}`)
+    },
+    {
+      label: t("Elevation gain"),
+      a: recorded(older),
+      b: recorded(newer),
+      format: (meters) => formatElevationValue(meters, unitSystem)
     },
     {
       label: t("Runs in the {{p0}} weeks before", { p0: String(BUILD_UP_WEEKS) }),
       a: buildUpValue(older, (buildUp) => buildUp.runs),
       b: buildUpValue(newer, (buildUp) => buildUp.runs),
       format: String,
-      delta: (difference) => signed(difference, String(Math.abs(difference))),
-      bars: true
+      delta: (difference) => signed(difference, String(Math.abs(difference)))
     },
     {
       label: t("Distance in the {{p0}} weeks before", { p0: String(BUILD_UP_WEEKS) }),
       a: buildUpValue(older, (buildUp) => buildUp.distance),
       b: buildUpValue(newer, (buildUp) => buildUp.distance),
       format: (meters) => formatDistanceValue(meters, unitSystem, { digits: 0 }),
-      delta: (difference) => signed(difference, formatDistanceValue(Math.abs(difference), unitSystem, { digits: 0 })),
-      bars: true
+      delta: (difference) => signed(difference, formatDistanceValue(Math.abs(difference), unitSystem, { digits: 0 }))
     },
     {
       label: t("Longest run before"),
       a: buildUpValue(older, (buildUp) => buildUp.longestRun),
       b: buildUpValue(newer, (buildUp) => buildUp.longestRun),
       format: (meters) => formatDistanceValue(meters, unitSystem, { digits: 1 }),
-      delta: (difference) => signed(difference, formatDistanceValue(Math.abs(difference), unitSystem, { digits: 1 })),
-      bars: true
+      delta: (difference) => signed(difference, formatDistanceValue(Math.abs(difference), unitSystem, { digits: 1 }))
     }
   ];
+  const rows = allRows.filter((row) => row.a !== undefined || row.b !== undefined);
+  const textRows: TextRow[] = older.placing || newer.placing ? [{ label: t("Placing"), a: older.placing, b: newer.placing }] : [];
 
   return (
-    <section className="races-duel" aria-label={t("Comparing {{p0}} with {{p1}}", { p0: String(older.name), p1: String(newer.name) })}>
+    <div className="races-duel" aria-label={t("Comparing {{p0}} with {{p1}}", { p0: String(older.name), p1: String(newer.name) })} role="group">
       <button type="button" className="race-icon-button races-duel-close" aria-label={t("Stop comparing")} onClick={onClear}>
         <X size={16} aria-hidden="true" />
       </button>
-      <div className="races-duel-head">
-        <MiniPlaque race={older} label={formatRaceDistance(older, unitSystem)} value={value(older)} />
-        <div className={`races-duel-gap${gap < 0 ? " is-faster" : gap > 0 ? " is-slower" : ""}`}>
-          <strong>{Math.abs(gap) < 0.5 ? t("Same") : formatRaceDelta(gap)}</strong>
-          <span>
-            {Math.abs(gap) < 0.5
-              ? sameDistance ? t("time") : t("as a 5K")
-              : `${t(gap < 0 ? "faster" : "slower")}${sameDistance ? "" : t(" as a 5K")}`}
-          </span>
-        </div>
-        <MiniPlaque race={newer} label={formatRaceDistance(newer, unitSystem)} value={value(newer)} />
-      </div>
-
       <table className="races-duel-table">
         <caption className="sr-only">{t("{{p0}} compared with {{p1}}", { p0: String(older.name), p1: String(newer.name) })}</caption>
-        <thead className="sr-only">
+        <thead>
           <tr>
-            <th scope="col">{older.name}</th>
-            <th scope="col">{t("Measure")}</th>
-            <th scope="col">{newer.name}</th>
-            <th scope="col">{t("Change", undefined, "delta")}</th>
+            <td className="races-duel-corner" />
+            <Head race={older} side="A" unitSystem={unitSystem} />
+            <Head race={newer} side="B" unitSystem={unitSystem} />
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => {
             const difference = row.a !== undefined && row.b !== undefined ? row.b - row.a : undefined;
+            const same = difference !== undefined && Math.abs(difference) < 0.5;
             const better =
-              difference === undefined || row.lowerIsBetter === undefined || Math.abs(difference) < 0.5
-                ? undefined
-                : row.lowerIsBetter === difference < 0;
-            const max = Math.max(row.a ?? 0, row.b ?? 0, 1);
-            const bar = (amount: number | undefined) =>
-              row.bars && amount !== undefined ? (
-                <span className="races-duel-bar" style={{ "--bar": `${(amount / max) * 100}%` } as CSSProperties} />
-              ) : null;
+              difference === undefined || row.lowerIsBetter === undefined || same ? undefined : row.lowerIsBetter === difference < 0;
             return (
               <tr key={row.label}>
-                <td className="is-left">
-                  <div className="races-duel-cell">
-                    <span>{row.a !== undefined ? row.format(row.a) : "—"}</span>
-                    {bar(row.a)}
-                  </div>
-                </td>
                 <th scope="row">{row.label}</th>
-                <td className="is-right">
-                  <div className="races-duel-cell">
-                    {bar(row.b)}
+                <td>{row.a !== undefined ? row.format(row.a) : "—"}</td>
+                <td>
+                  <span className="races-duel-b">
                     <span>{row.b !== undefined ? row.format(row.b) : "—"}</span>
-                  </div>
-                </td>
-                <td className={`races-duel-change${better === undefined ? "" : better ? " is-faster" : " is-slower"}`}>
-                  {difference === undefined ? "—" : Math.abs(difference) < 0.5 ? t("Same") : row.delta(difference)}
+                    {row.delta && difference !== undefined ? (
+                      <span className={`races-duel-delta${better === undefined ? "" : better ? " is-faster" : " is-slower"}`}>
+                        {same ? t("Same") : row.delta(difference)}
+                      </span>
+                    ) : null}
+                  </span>
                 </td>
               </tr>
             );
           })}
+          {textRows.map((row) => (
+            <tr key={row.label}>
+              <th scope="row">{row.label}</th>
+              <td className="is-text">{row.a ?? "—"}</td>
+              <td className="is-text">{row.b ?? "—"}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
       {!sameDistance ? (
         <p className="races-duel-note">{t("Different distances meet as 5K equivalents, scaled with Riegel's formula.")}</p>
       ) : null}
-    </section>
+    </div>
   );
 }

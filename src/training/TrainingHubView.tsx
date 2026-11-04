@@ -53,6 +53,7 @@ import { Vo2MaxWidget } from "./components/Vo2MaxWidget";
 import { RunningEfficiencyWidget } from "./components/RunEfficiency";
 import { rememberEfficiencyProfile, setEfficiencySource } from "./activityInsights";
 import { TrainingHubHeader, type TrainingHubTab } from "./components/TrainingHubHeader";
+import { TrainingHubTodayBrief } from "./components/TrainingHubTodayBrief";
 import "./trainingHub.css";
 import "./activityPage.css";
 import { CustomizableDashboard } from "./components/CustomizableDashboard";
@@ -370,6 +371,15 @@ function TrainingHubContent({
           onLogout={onLogout}
           onToggleSample={onToggleSample}
           onTestPrCelebration={import.meta.env.DEV ? prCelebration.test : undefined}
+          brief={connected ? (
+            <TrainingHubTodayBrief
+              summary={summary}
+              snapshot={snapshot}
+              activities={activities}
+              workouts={upcomingWorkouts}
+              onOpenWorkout={sampleMode ? undefined : onOpenCalendarWorkout}
+            />
+          ) : undefined}
         />
       ) : null}
       {!connected ? (
@@ -664,7 +674,7 @@ function TrainingHubContent({
                     healthRecords={snapshot?.dailyHealth?.records} layout="stack"
                     metrics={[widget.id.slice(6) as MetricKind]} className="hub-daily-stat" local={local}
                     onOpen={openMetricPage} morphOrigin={metricOrigin} />;
-                case "fitness": return <FitnessTrendPanel snapshot={snapshot} activities={activities} local={local} />;
+                case "fitness": return <FitnessTrendPanel snapshot={snapshot} activities={activities} local={local} upcomingWorkouts={upcomingWorkouts} />;
                 case "sleep": return <SleepSummaryPanel sleep={snapshot?.sleep} connecting={sleepConnecting} refreshing={busy === "training-refresh"} local={status?.dataSource === "local"} onConnect={sampleMode || status?.dataSource === "local" ? undefined : () => api.connectCorosMcp()} onOpenWeek={openSleepPage} />;
                 case "vo2": return <Vo2MaxWidget snapshot={snapshot} local={local} />;
                 case "efficiency": return <RunningEfficiencyWidget size={widgetPreset(widget).chartSize} snapshot={snapshot} activities={activities} loadDetail={loadActivityPreview} sampleMode={sampleMode} />;
@@ -730,6 +740,7 @@ function TrainingHubContent({
                 activities={activities}
                 celebration={prCelebration.cardCelebration}
                 onCelebrate={prCelebration.replay}
+                onOpenActivity={openActivityPage}
               />
             ) : null}
           </div>
@@ -743,7 +754,7 @@ function TrainingHubContent({
             hidden={activeTab !== "races"}
           >
             {visitedTabs.includes("races") ? (
-              <RacesPanel journal={raceJournal} onOpenActivities={() => changeTab("activities")} />
+              <RacesPanel journal={raceJournal} onOpenActivities={() => changeTab("activities")} racePredictor={snapshot?.racePredictor ?? null} activities={activities} />
             ) : null}
           </div>
         </>

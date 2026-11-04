@@ -43,11 +43,17 @@ export function ActivityHeartRateRecovery({ recovery }: ActivityHeartRateRecover
         <h3>
           <HeartPulse size={17} aria-hidden="true" />
           {t("Heart-rate recovery")}</h3>
-        <span className="activity-detail-visual-note">
-          <span>{t("1 min")} <strong>{signedDrop(recovery.dropOneMinute)}</strong></span>
-          <span>{t("2 min")} <strong>{signedDrop(recovery.dropTwoMinutes)}</strong></span>
-        </span>
       </div>
+      <dl className="activity-hr-recovery-drops">
+        <div>
+          <dt>{t("1 min")}</dt>
+          <dd><strong>{signedDrop(recovery.dropOneMinute).replace(" bpm", "")}</strong><small>bpm</small></dd>
+        </div>
+        <div>
+          <dt>{t("2 min")}</dt>
+          <dd><strong>{signedDrop(recovery.dropTwoMinutes).replace(" bpm", "")}</strong><small>bpm</small></dd>
+        </div>
+      </dl>
       {readings.length > 1 ? (
         // The caption below states the same numbers, so the curve is decorative for screen readers.
         <div className="activity-hr-recovery-chart" aria-hidden="true">

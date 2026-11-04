@@ -5,6 +5,7 @@ import type { TrainingHubDailyMetric } from "../../../electron/types";
 import { formatHappenDayLabel, formatSignedDelta } from "../formatters";
 import { mergeTrainingDayLists } from "../parsers";
 import type { TrainingHubSnapshot } from "../types";
+import "../overviewCards.css";
 
 type Vo2Sport = "run" | "ride";
 

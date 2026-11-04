@@ -1,6 +1,20 @@
 import { getLocale, getDateTimeFormat, useLanguage, t, midSentence } from "../../i18n/training";
-import { Bike, Footprints, PersonStanding, Trophy, Waves, type LucideIcon } from "lucide-react";
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  Activity,
+  ArrowUp,
+  ArrowUpRight,
+  Bike,
+  ChartColumn,
+  Flame,
+  Footprints,
+  PersonStanding,
+  Target,
+  Timer,
+  Trophy,
+  Waves,
+  type LucideIcon
+} from "lucide-react";
+import { useEffect, useId, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import type {
   TrainingHubActivity,
   TrainingHubDashboard,
@@ -28,6 +42,7 @@ import {
   PR_ASSET_BASE,
   RecordBurst,
   RollingText,
+  readSeenRecordSignatures,
   recordLabel,
   recordSignature,
   splitHero,
@@ -37,15 +52,21 @@ import {
   HALL_SPORT_LABELS,
   activitiesSince,
   activityRecords,
+  activitySeries,
+  bestAsOf,
+  findRecordActivity,
   milestones as findMilestones,
   periodStart,
+  reachShare,
+  recordHistory,
   sessionNoun,
   sportTally,
   workBuckets,
   workTotals,
   type ActivityRecord,
   type HallSport,
-  type Milestones
+  type Milestones,
+  type RecordHistoryPoint
 } from "../hallOfBests";
 import { RecordWorkChart, formatHours } from "./RecordWorkChart";
 import "../personalRecords.css";
@@ -66,12 +87,16 @@ interface PersonalRecordsPanelProps {
   celebration?: RecordCelebration | null;
   /** Replays the full-screen celebration for a record. */
   onCelebrate?: (record: TrainingHubPersonalRecord) => void;
+  /** Opens an activity's page; the record story links to the run a record was set in. */
+  onOpenActivity?: (activity: TrainingHubActivity) => void;
 }
 
 const RECORD_TYPE_LONGEST_RUN = 101;
 const RECORD_TYPE_ELEVATION_GAIN = 103;
 const RECORD_GROUP_ALL_TIME = 4;
 const RECENT_RECORD_DAYS = 30;
+/** A record this fresh glows on the ladder and wears a NEW tag. */
+const FRESH_RECORD_DAYS = 10;
 const DAY_MS = 86_400_000;
 
 /** Race-distance record types and their exact distances (COROS type ids). */
@@ -377,7 +402,8 @@ export function PersonalRecordsPanel({
   dashboard,
   activities = [],
   celebration = null,
-  onCelebrate
+  onCelebrate,
+  onOpenActivity
 }: PersonalRecordsPanelProps) {
   useLanguage();
   const localOnly = useLocalOnlyView();
@@ -517,6 +543,58 @@ export function PersonalRecordsPanel({
     };
   };
 
+  // Every record the app has seen, for each distance's best-time story.
+  const seenSignatures = useMemo(() => readSeenRecordSignatures(), [dashboard]);
+  const now = Date.now();
+  const rungInfo = (record: TrainingHubPersonalRecord): RungInfo => {
+    const prediction = predictionFor(record, predictions);
+    const populated = isPersonalRecordPopulated(record);
+    const time = happenDayTime(record.happenDay);
+    const duration = record.duration ?? 0;
+    const predicted = prediction?.predictSeconds ?? 0;
+    const comparison = compareRecord(record, allTimeRecords, prediction);
+    return {
+      populated,
+      time,
+      // Recent, and a best on the board it is shown against.
+      fresh:
+        populated &&
+        time !== null &&
+        Math.floor((now - time) / DAY_MS) <= FRESH_RECORD_DAYS &&
+        (isAllTime || allTimeRecords === null || comparison?.kind === "all-time-best"),
+      predicted: populated && predicted > 0 ? predicted : null,
+      gap: populated && predicted > 0 ? duration - predicted : null,
+      reach: populated && predicted > 0 ? reachShare(duration, predicted) : null
+    };
+  };
+  const rungs = raceRecords.map((record) => ({ record, info: rungInfo(record) }));
+  // The distance whose predicted time beats its record by the smallest share.
+  const spotlight = rungs.reduce<(typeof rungs)[number] | null>((best, rung) => {
+    const { gap } = rung.info;
+    if (gap === null || gap < 1 || !rung.record.duration) return best;
+    const share = gap / rung.record.duration;
+    return !best || share < best.info.gap! / best.record.duration! ? rung : best;
+  }, null);
+
+  // One distance tells its story under the ladder: the picked one, else the newest.
+  const [storyType, setStoryType] = useState<number | null>(null);
+  const storyRung =
+    rungs.find((rung) => rung.record.type === storyType) ??
+    rungs.reduce<(typeof rungs)[number] | null>(
+      (best, rung) =>
+        rung.info.time !== null && (best?.info.time == null || rung.info.time > best.info.time)
+          ? rung
+          : best,
+      null
+    ) ??
+    rungs[0] ??
+    null;
+  const storyId = useId();
+  const tallyChips = [
+    { sport: "run" as const, tally: runTally },
+    ...wings.filter((wing) => wing.sport === "ride").map((wing) => ({ sport: wing.sport, tally: wing.tally }))
+  ].filter((chip) => chip.tally.count > 0);
+
   const hasAnything = records.length > 0 || activities.length > 0;
   const count = entries.length;
   const countText = count === 1 ? t("1 record") : t("{{count}} records", { count });
@@ -565,23 +643,55 @@ export function PersonalRecordsPanel({
                 )}
               </p>
             )}
+            {tallyChips.length > 0 ? (
+              <ul className="pr-tally-chips">
+                {tallyChips.map(({ sport, tally }) => {
+                  const Icon = SPORT_ICONS[sport];
+                  return (
+                    <li className="pr-tally-chip" key={sport}>
+                      <Icon size={13} strokeWidth={2} aria-hidden="true" />
+                      {[
+                        t(HALL_SPORT_LABELS[sport]),
+                        `${tally.count} ${t(sessionNoun(sport, tally.count))}`,
+                        tally.distance > 0 ? formatDistanceValue(tally.distance, unitSystem) : null
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
           </div>
         </div>
 
-        {groups.length > 0 ? (
-          <div className="pr-periods" role="tablist" aria-label={t("Record period")}>
-            {groups.map((group) => (
-              <button
-                key={group.type}
-                type="button"
-                role="tab"
-                aria-selected={group.type === activeGroup?.type}
-                className={group.type === activeGroup?.type ? "pr-period active" : "pr-period"}
-                onClick={() => setActiveGroupType(group.type)}
-              >
-                {periodLabel(group)}
-              </button>
-            ))}
+        {groups.length > 0 || spotlight ? (
+          <div className="pr-head-side">
+            {groups.length > 0 ? (
+              <div className="pr-periods" role="tablist" aria-label={t("Record period")}>
+                {groups.map((group) => (
+                  <button
+                    key={group.type}
+                    type="button"
+                    role="tab"
+                    aria-selected={group.type === activeGroup?.type}
+                    className={group.type === activeGroup?.type ? "pr-period active" : "pr-period"}
+                    onClick={() => setActiveGroupType(group.type)}
+                  >
+                    {periodLabel(group)}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {spotlight ? (
+              <NextPrSpotlight
+                label={boardLabel(spotlight.record, unitSystem)}
+                best={spotlight.record.duration!}
+                predicted={spotlight.info.predicted!}
+                reach={spotlight.info.reach ?? 0}
+                onShow={() => setStoryType(spotlight.record.type)}
+              />
+            ) : null}
           </div>
         ) : null}
       </header>
@@ -593,26 +703,57 @@ export function PersonalRecordsPanel({
             {records.length > 0 ? (
               <>
                 {raceRecords.length > 0 ? (
-                  <ol
-                    className="pr-ladder"
-                    style={{ "--pr-rungs": raceRecords.length } as CSSProperties}
-                  >
-                    {raceRecords.map((record, index) => (
-                      <LadderRung
-                        key={record.type}
-                        index={index}
-                        segment={
-                          index === raceRecords.length - 1
-                            ? "none"
-                            : isPersonalRecordPopulated(record) &&
-                                isPersonalRecordPopulated(raceRecords[index + 1]!)
-                              ? "solid"
-                              : "open"
+                  <>
+                    <ol
+                      className="pr-ladder"
+                      style={{ "--pr-rungs": raceRecords.length } as CSSProperties}
+                    >
+                      {rungs.map(({ record, info }, index) => (
+                        <LadderRung
+                          key={record.type}
+                          index={index}
+                          segment={
+                            index === raceRecords.length - 1
+                              ? "none"
+                              : isPersonalRecordPopulated(record) &&
+                                  isPersonalRecordPopulated(raceRecords[index + 1]!)
+                                ? "solid"
+                                : "open"
+                          }
+                          info={info}
+                          selected={storyRung?.record.type === record.type}
+                          storyId={storyId}
+                          onSelect={() => setStoryType(record.type)}
+                          {...recordProps(record)}
+                        />
+                      ))}
+                    </ol>
+                    {storyRung ? (
+                      <RecordStory
+                        id={storyId}
+                        record={storyRung.record}
+                        info={storyRung.info}
+                        activity={
+                          storyRung.info.populated
+                            ? findRecordActivity(activities, {
+                                activityId: storyRung.record.activityId,
+                                day: storyRung.info.time,
+                                meters: RECORD_DISTANCE_METERS[storyRung.record.type]
+                              })
+                            : null
                         }
-                        {...recordProps(record)}
+                        history={
+                          storyRung.info.populated && storyRung.record.duration
+                            ? recordHistory(seenSignatures, storyRung.record.type, {
+                                time: storyRung.info.time ?? now,
+                                seconds: storyRung.record.duration
+                              })
+                            : []
+                        }
+                        onOpenActivity={onOpenActivity}
                       />
-                    ))}
-                  </ol>
+                    ) : null}
+                  </>
                 ) : null}
                 {enduranceRecords.length > 0 ? (
                   <div className="pr-figures">
@@ -660,6 +801,7 @@ export function PersonalRecordsPanel({
                         isAllTime={isAllTime}
                         index={index}
                         isRecent={recentKeys.has(record.key)}
+                        series={activitySeries(periodActivities, wing.sport, record.kind)}
                       />
                     ))}
                   </div>
@@ -965,8 +1107,18 @@ function LadderRung({
   prediction,
   celebrationNonce,
   onCelebrate,
-  segment
-}: RecordEntryProps & { segment: "solid" | "open" | "none" }) {
+  segment,
+  info,
+  selected,
+  storyId,
+  onSelect
+}: RecordEntryProps & {
+  segment: "solid" | "open" | "none";
+  info: RungInfo;
+  selected: boolean;
+  storyId: string;
+  onSelect: () => void;
+}) {
   useLanguage();
   const { unitSystem } = useUnitSystem();
   const populated = isPersonalRecordPopulated(record);
@@ -986,17 +1138,41 @@ function LadderRung({
     best: comparison?.kind === "all-time-best",
     celebrating
   });
+  const hero = populated
+    ? formatPersonalRecordHero(record, unitSystem)
+    : prediction?.predictSeconds
+      ? t("Not raced yet")
+      : "—";
 
   return (
     <li
       key={celebrationNonce === null ? "rung" : `rung-${celebrationNonce}`}
-      className={className}
+      className={[
+        className,
+        info.fresh ? "is-fresh" : null,
+        selected ? "is-selected" : null
+      ]
+        .filter(Boolean)
+        .join(" ")}
       style={style}
       data-segment={segment}
     >
+      {/* The whole rung picks its story; the chips inside stay their own buttons. */}
+      <button
+        type="button"
+        className="pr-rung-select"
+        aria-pressed={selected}
+        aria-controls={storyId}
+        aria-label={`${label}, ${hero}`}
+        onClick={onSelect}
+      />
       <div className="pr-rung-head">
         <span className="pr-label">{label}</span>
-        {isLatest ? <LatestChip onCelebrate={onCelebrate} /> : null}
+        {isLatest ? (
+          <LatestChip onCelebrate={onCelebrate} />
+        ) : info.fresh ? (
+          <span className="pr-new-tag">{t("New")}</span>
+        ) : null}
       </div>
       <span className="pr-rung-post" aria-hidden="true" />
       <div className="pr-rung-body">
@@ -1014,6 +1190,14 @@ function LadderRung({
                 {formatRecordDay(record.happenDay)}
               </p>
               <Foot content={comparisonFoot(record, comparison, unitSystem)} />
+              {info.reach !== null ? (
+                <span
+                  className={info.reach >= 1 ? "pr-reach is-full" : "pr-reach"}
+                  aria-hidden="true"
+                >
+                  <i style={{ width: `${Math.max(4, Math.round(info.reach * 100))}%` }} />
+                </span>
+              ) : null}
             </div>
           </>
         ) : prediction?.predictSeconds ? (
@@ -1117,13 +1301,16 @@ function ActivityFigure({
   allTime,
   isAllTime,
   index,
-  isRecent
+  isRecent,
+  series = []
 }: {
   record: ActivityRecord;
   allTime: ActivityRecord | null;
   isAllTime: boolean;
   index: number;
   isRecent: boolean;
+  /** The metric across the period's sessions, oldest first: a faint sparkline. */
+  series?: number[];
 }) {
   useLanguage();
   const { unitSystem } = useUnitSystem();
@@ -1150,7 +1337,8 @@ function ActivityFigure({
   });
 
   return (
-    <article className={className} style={style}>
+    <article className={`${className} is-card`} style={style}>
+      {series.length >= 3 ? <Sparkline values={series} /> : null}
       <div className="pr-figure-head">
         <span className="pr-label">{t(record.label)}</span>
         {isLatest ? <LatestChip /> : null}
@@ -1226,8 +1414,13 @@ function MilestoneList({ milestones }: { milestones: Milestones }) {
 
   return (
     <ul className="pr-milestones">
-      {items.map(({ key, label, value, unit, detail }) => (
-        <li className="pr-milestone" key={key}>
+      {items.map(({ key, label, value, unit, detail }) => {
+        const Icon = MILESTONE_ICONS[key] ?? Trophy;
+        return (
+        <li className="pr-milestone" key={key} data-kind={key}>
+          <span className="pr-milestone-tile" aria-hidden="true">
+            <Icon size={16} strokeWidth={2} />
+          </span>
           <div className="pr-milestone-copy">
             <span className="pr-milestone-label">{label}</span>
             <span className="pr-milestone-detail">{detail}</span>
@@ -1237,8 +1430,261 @@ function MilestoneList({ milestones }: { milestones: Milestones }) {
             {unit ? <small>{unit}</small> : null}
           </p>
         </li>
-      ))}
+        );
+      })}
     </ul>
+  );
+}
+
+const MILESTONE_ICONS: Record<string, LucideIcon> = {
+  week: ChartColumn,
+  streak: Flame,
+  hardest: Activity,
+  longest: Timer
+};
+
+/** What the ladder knows about one distance beyond COROS's own record. */
+interface RungInfo {
+  populated: boolean;
+  /** Epoch ms of the day the record was set. */
+  time: number | null;
+  /** Set within the last FRESH_RECORD_DAYS days. */
+  fresh: boolean;
+  /** COROS's predicted time, when it has one for this distance. */
+  predicted: number | null;
+  /** Record minus predicted, in seconds: positive is time in reach. */
+  gap: number | null;
+  /** 0–1, how close the record sits to the predicted time. */
+  reach: number | null;
+}
+
+/** A faint area sparkline behind a figure; decoration only. */
+function Sparkline({ values }: { values: number[] }) {
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const step = 120 / (values.length - 1);
+  const line = values
+    .map((value, index) => `${index ? "L" : "M"}${(index * step).toFixed(1)},${(46 - ((value - min) / span) * 34).toFixed(1)}`)
+    .join(" ");
+  return (
+    <svg className="pr-sparkline" viewBox="0 0 120 50" preserveAspectRatio="none" aria-hidden="true">
+      <path className="pr-sparkline-area" d={`${line} L120,50 L0,50 Z`} />
+      <path className="pr-sparkline-line" d={line} />
+    </svg>
+  );
+}
+
+/** The banner's "Next PR in reach": the distance COROS says is closest to falling. */
+function NextPrSpotlight({
+  label,
+  best,
+  predicted,
+  reach,
+  onShow
+}: {
+  label: string;
+  best: number;
+  predicted: number;
+  reach: number;
+  onShow: () => void;
+}) {
+  useLanguage();
+  return (
+    <button type="button" className="pr-spotlight" onClick={onShow}>
+      <span className="pr-spotlight-eyebrow">
+        <Target size={12} strokeWidth={2.4} aria-hidden="true" />
+        {t("Next PR in reach")}
+      </span>
+      <span className="pr-spotlight-row">
+        <strong>{label}</strong>
+        <span className="pr-spotlight-gap">
+          {t("{{gap}} to find", { gap: formatDurationSeconds(best - predicted) })}
+        </span>
+      </span>
+      <span className="pr-reach is-spotlight" aria-hidden="true">
+        <i style={{ width: `${Math.max(4, Math.round(reach * 100))}%` }} />
+      </span>
+      <span className="pr-spotlight-note">
+        {t("Predicted {{predicted}} vs best {{best}}", {
+          predicted: formatDurationSeconds(predicted),
+          best: formatDurationSeconds(best)
+        })}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * The picked distance's story: where it was set, how it has come down over
+ * the records the app has seen, and what COROS says is still in it.
+ */
+function RecordStory({
+  id,
+  record,
+  info,
+  activity,
+  history,
+  onOpenActivity
+}: {
+  id: string;
+  record: TrainingHubPersonalRecord;
+  info: RungInfo;
+  activity: TrainingHubActivity | null;
+  history: RecordHistoryPoint[];
+  onOpenActivity?: (activity: TrainingHubActivity) => void;
+}) {
+  useLanguage();
+  const { unitSystem } = useUnitSystem();
+  const label = boardLabel(record, unitSystem);
+  const seconds = record.duration ?? 0;
+  // History only speaks for a record that is the best the app has seen.
+  const last = history.at(-1);
+  const isNewestBest =
+    info.populated && last !== undefined && last.seconds === seconds && last.time === (info.time ?? last.time);
+  const steps = isNewestBest ? history : [];
+  const yearAgo = steps.length > 1 ? bestAsOf(steps, Date.now() - 365 * DAY_MS) : null;
+  const previous = steps.length > 1 ? steps[steps.length - 2]! : null;
+  const date = info.time !== null ? formatRecordTime(info.time, true) : null;
+
+  const sentences: string[] = [];
+  if (!info.populated) {
+    sentences.push(t("You have not raced this distance yet."));
+  } else if (activity?.name && date) {
+    sentences.push(t("Set in “{{name}}” on {{date}}.", { name: activity.name, date }));
+  } else if (date) {
+    sentences.push(t("Set on {{date}}.", { date }));
+  }
+  if (yearAgo && yearAgo.seconds > seconds) {
+    sentences.push(
+      t("{{gap}} faster than a year ago.", { gap: formatDurationSeconds(yearAgo.seconds - seconds) })
+    );
+  } else if (previous && previous.seconds > seconds) {
+    sentences.push(
+      t("{{gap}} faster than your previous best from {{date}}.", {
+        gap: formatDurationSeconds(previous.seconds - seconds),
+        date: formatRecordTime(previous.time, true)
+      })
+    );
+  }
+  if (info.gap !== null && info.predicted !== null) {
+    sentences.push(
+      info.gap >= 1
+        ? t("COROS predicts {{time}}, so {{gap}} is in reach.", {
+            time: formatDurationSeconds(info.predicted),
+            gap: formatDurationSeconds(info.gap)
+          })
+        : t("Faster than COROS predicts.")
+    );
+  }
+
+  return (
+    <section
+      id={id}
+      className={info.fresh ? "pr-story is-fresh" : "pr-story"}
+      aria-live="polite"
+      aria-label={t("{{distance}} story", { distance: label })}
+    >
+      <div className="pr-story-copy">
+        <p className="pr-story-eyebrow">
+          {!info.populated
+            ? t("Not raced yet")
+            : date === null
+              ? t("Standing record")
+              : info.fresh
+                ? t("Fresh record · {{date}}", { date })
+                : t("Standing record · {{date}}", { date })}
+        </p>
+        <h4 className="pr-story-title">
+          {label}
+          {info.populated ? <span> · {formatPersonalRecordHero(record, unitSystem)}</span> : null}
+        </h4>
+        {sentences.length ? <p className="pr-story-text">{sentences.join(" ")}</p> : null}
+        {activity && onOpenActivity ? (
+          <button type="button" className="pr-story-open" onClick={() => onOpenActivity(activity)}>
+            {t("Open the activity")}
+            <ArrowUpRight size={14} strokeWidth={2.2} aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
+      <StoryChart label={label} steps={steps} />
+    </section>
+  );
+}
+
+/** Best time over the records the app has seen: a staircase, faster upward. */
+function StoryChart({ label, steps }: { label: string; steps: RecordHistoryPoint[] }) {
+  useLanguage();
+  const gradient = `pr-story-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  if (steps.length < 2) {
+    return (
+      <div className="pr-story-chart is-empty">
+        <p>
+          {t("Your best-time history fills in here as CorosLink sees new records for this distance.")}
+        </p>
+      </div>
+    );
+  }
+  const now = Date.now();
+  const first = steps[0]!;
+  const last = steps.at(-1)!;
+  const from = first.time;
+  const to = Math.max(now, last.time + DAY_MS);
+  const slow = first.seconds;
+  const fast = last.seconds;
+  const x = (time: number) => 12 + ((time - from) / (to - from || 1)) * 476;
+  const y = (seconds: number) => 14 + ((seconds - fast) / (slow - fast || 1)) * 88;
+  let line = `M${x(first.time).toFixed(1)},${y(first.seconds).toFixed(1)}`;
+  for (const point of steps.slice(1)) {
+    line += ` H${x(point.time).toFixed(1)} V${y(point.seconds).toFixed(1)}`;
+  }
+  line += ` H${x(to).toFixed(1)}`;
+  const axis = (time: number) =>
+    getDateTimeFormat({ month: "short", year: "numeric" }).format(new Date(time));
+  return (
+    <div className="pr-story-chart">
+      <div className="pr-story-chart-head">
+        <span>{t("Best time over time")}</span>
+        <span>
+          {t("Faster")}
+          <ArrowUp size={11} strokeWidth={2.4} aria-hidden="true" />
+        </span>
+      </div>
+      <div className="pr-story-plot">
+      <svg
+        viewBox="0 0 500 120"
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={t("{{distance}} best time went from {{from}} to {{to}}", {
+          distance: label,
+          from: formatDurationSeconds(first.seconds),
+          to: formatDurationSeconds(last.seconds)
+        })}
+      >
+        <defs>
+          <linearGradient id={gradient} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor="var(--pr-gold)" stopOpacity="0.28" />
+            <stop offset="1" stopColor="var(--pr-gold)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={`${line} V120 H${x(first.time).toFixed(1)} Z`} fill={`url(#${gradient})`} />
+        <path className="pr-story-line" d={line} />
+      </svg>
+      <div className="pr-story-dots" aria-hidden="true">
+        {steps.map((point, index) => (
+          <i
+            key={point.time}
+            className={index === steps.length - 1 ? "is-current" : undefined}
+            style={{ left: `${(x(point.time) / 500) * 100}%`, top: `${(y(point.seconds) / 120) * 100}%` }}
+          />
+        ))}
+      </div>
+      </div>
+      <div className="pr-story-axis">
+        <span>{axis(from)}</span>
+        <span>{axis(now)}</span>
+      </div>
+    </div>
   );
 }
 

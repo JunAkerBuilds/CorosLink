@@ -1,0 +1,364 @@
+/*
+ * Training Hub Overview cards: planned bars on Weekly activity, the Fitness
+ * and fatigue bars, the sleep sky and stage bar, and the glow and motion on the
+ * recovery, VO2 max, daily metric and heatmap cards. Loaded after styles.css,
+ * so equal-specificity rules here win. Motion lives in
+ * prefers-reduced-motion: no-preference blocks and animates only opacity,
+ * filter, clip-path or transforms on elements without backdrop-filter.
+ */
+
+/* ── Weekly activity: planned days ─────────────────────────────────── */
+.training-fitness-bar--distance { --planned-color: #74c08f; }
+.training-fitness-bar--duration { --planned-color: #6398f2; }
+.training-fitness-bar--trainingLoad { --planned-color: #f4b740; }
+
+.training-fitness-bar.is-planned {
+  border: 1.5px dashed color-mix(in srgb, var(--planned-color) 78%, transparent);
+  background: color-mix(in srgb, var(--planned-color) 9%, transparent);
+  box-shadow: none;
+}
+
+.training-fitness-day:hover .training-fitness-bar.is-planned,
+.training-fitness-day:focus-visible .training-fitness-bar.is-planned {
+  background: color-mix(in srgb, var(--planned-color) 16%, transparent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--planned-color) 22%, transparent);
+}
+
+/* Today's done bar gets a soft halo so the week reads from "now". */
+.training-fitness-day.is-today .training-fitness-bar:not(.is-planned, .is-empty) {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 0 22px color-mix(in srgb, var(--planned-color, #2d9a74) 42%, transparent);
+}
+
+.training-fitness-legend-planned {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.training-fitness-legend-keys {
+  display: inline-flex;
+  gap: 14px;
+  margin-left: auto;
+}
+
+.training-fitness-legend-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.training-fitness-swatch.is-planned {
+  box-sizing: border-box;
+  border: 1.5px dashed #7ee2b8;
+  background: transparent;
+}
+
+.training-fitness-swatch.is-planned.training-fitness-swatch--duration { border-color: #8db4ff; }
+.training-fitness-swatch.is-planned.training-fitness-swatch--trainingLoad { border-color: #f4b740; }
+
+:root[data-theme="paper"] .training-fitness-bar.is-planned {
+  border-color: color-mix(in srgb, var(--planned-color) 70%, #1d2420 30%);
+  background: color-mix(in srgb, var(--planned-color) 12%, transparent);
+}
+
+:root[data-theme="paper"] .training-fitness-swatch.is-planned { border-color: #2d8a63; }
+:root[data-theme="paper"] .training-fitness-swatch.is-planned.training-fitness-swatch--duration { border-color: #3b6fd4; }
+:root[data-theme="paper"] .training-fitness-swatch.is-planned.training-fitness-swatch--trainingLoad { border-color: #a8700f; }
+
+/* ── Fitness and fatigue ───────────────────────────────────────────── */
+.fitness-balance-panel {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-content: stretch;
+  gap: 16px;
+}
+
+.fitness-balance-bars {
+  display: grid;
+  align-content: space-evenly;
+  gap: 14px;
+  margin: 0;
+}
+
+.fitness-balance-row {
+  --balance-color: #34d399;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 6px 10px;
+}
+
+.fitness-balance-row.is-load { --balance-color: #fb923c; }
+.fitness-balance-row.is-fatigue { --balance-color: #a78bfa; }
+
+.fitness-balance-row dt {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fitness-balance-row dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.fitness-balance-track {
+  grid-column: 1 / -1;
+  position: relative;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.fitness-balance-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--balance-fill, 0%);
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--balance-color) 62%, transparent), var(--balance-color));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--balance-color) 45%, transparent);
+}
+
+.fitness-balance-panel.is-empty .fitness-balance-row dd {
+  color: var(--text-muted);
+}
+
+.fitness-balance-updated,
+.fitness-balance-empty {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(52, 211, 153, 0.07);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.fitness-balance-updated strong {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.fitness-balance-empty {
+  background: rgba(255, 255, 255, 0.035);
+  text-align: center;
+}
+
+:root[data-theme="paper"] .fitness-balance-track { background: rgba(38, 34, 28, 0.08); }
+:root[data-theme="paper"] .fitness-balance-row { --balance-color: #12946e; }
+:root[data-theme="paper"] .fitness-balance-row.is-load { --balance-color: #e0761f; }
+:root[data-theme="paper"] .fitness-balance-row.is-fatigue { --balance-color: #8061e0; }
+:root[data-theme="paper"] .fitness-balance-fill { box-shadow: none; }
+:root[data-theme="paper"] .fitness-balance-updated { background: rgba(18, 148, 110, 0.08); }
+:root[data-theme="paper"] .fitness-balance-empty { background: rgba(38, 34, 28, 0.04); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .fitness-balance-fill {
+    transition: width 0.9s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+
+/* ── Sleep: twinkling sky and the stage bar ────────────────────────── */
+.sleep-panel-stars {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.sleep-panel-stars span {
+  position: absolute;
+  border-radius: 50%;
+  background: #e4e7ff;
+  box-shadow: 0 0 4px rgba(214, 220, 255, 0.8);
+  opacity: 0.45;
+}
+
+:root[data-theme="paper"] .sleep-panel-stars { display: none; }
+
+.sleep-stage-bar {
+  gap: 3px;
+  height: 14px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.sleep-stage-bar::before {
+  background: transparent;
+  box-shadow: none;
+}
+
+.sleep-stage-segment,
+.sleep-stage-segment:first-child,
+.sleep-stage-segment:last-child {
+  border-radius: 999px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--sleep-stage-color) 70%, white 30%), var(--sleep-stage-color) 70%);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--sleep-stage-color) 30%, transparent);
+}
+
+.sleep-stage-segment.is-awake { --sleep-stage-color: #fdba74; }
+.sleep-stage-legend-dot.is-awake { background: #fdba74; }
+
+.sleep-stage-legend-dot {
+  box-shadow: 0 0 6px currentColor;
+}
+
+.sleep-stage-legend-dot.is-deep { color: rgba(74, 99, 255, 0.6); }
+.sleep-stage-legend-dot.is-light { color: rgba(111, 137, 255, 0.6); }
+.sleep-stage-legend-dot.is-rem { color: rgba(155, 123, 255, 0.6); }
+.sleep-stage-legend-dot.is-awake { color: rgba(253, 186, 116, 0.55); }
+
+:root[data-theme="paper"] .sleep-stage-bar,
+:root[data-theme="paper"] .sleep-stage-bar::before {
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-theme="paper"] .sleep-stage-segment.is-awake { --sleep-stage-color: #f59e4b; }
+:root[data-theme="paper"] .sleep-stage-legend-dot.is-awake { background: #f59e4b; }
+:root[data-theme="paper"] .sleep-stage-segment { box-shadow: none; }
+:root[data-theme="paper"] .sleep-stage-legend-dot { box-shadow: none; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .sleep-panel-stars span {
+    animation: overview-star-twinkle 3.6s ease-in-out infinite;
+  }
+
+  .sleep-stage-bar {
+    animation: overview-stage-reveal 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s both;
+  }
+}
+
+@keyframes overview-star-twinkle {
+  0%, 100% { opacity: 0.12; }
+  50% { opacity: 0.85; }
+}
+
+@keyframes overview-stage-reveal {
+  from { clip-path: inset(-12px 100% -12px 0 round 999px); }
+  to { clip-path: inset(-12px -12px -12px 0 round 999px); }
+}
+
+/* ── Recovery: a slow breathing halo ───────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .training-recovery-ring.is-ready::before {
+    animation: overview-ring-breathe 4.2s ease-in-out 1.1s infinite;
+  }
+}
+
+@keyframes overview-ring-breathe {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+}
+
+.training-recovery-ring-progress {
+  filter: drop-shadow(0 0 5px var(--ring-glow));
+}
+
+:root[data-theme="paper"] .training-recovery-ring-progress { filter: none; }
+
+/* ── VO2 max: the reading's band glows, the halo breathes ──────────── */
+.vo2-widget-panel.is-ready .vo2-gauge-band.is-focused {
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--vo2-tone) 60%, transparent));
+}
+
+.vo2-gauge-value.has-value strong {
+  text-shadow: 0 0 22px color-mix(in srgb, var(--vo2-tone) 35%, transparent);
+}
+
+:root[data-theme="paper"] .vo2-widget-panel.is-ready .vo2-gauge-band.is-focused { filter: none; }
+:root[data-theme="paper"] .vo2-gauge-value.has-value strong { text-shadow: none; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .vo2-widget-panel.is-ready .vo2-gauge::before {
+    animation: overview-gauge-breathe 4.8s ease-in-out 1.2s infinite;
+  }
+}
+
+@keyframes overview-gauge-breathe {
+  0%, 100% { opacity: 0.62; }
+  50% { opacity: 0.95; }
+}
+
+/* ── Daily metric tiles ────────────────────────────────────────────── */
+/* A compact tile hides its chart; given room (a wide tile), the sparkline comes back beside the reading. */
+.hub-widget-content > .hub-daily-stat {
+  container: daily-stat / inline-size;
+}
+
+@container daily-stat (min-width: 250px) {
+  .hub-dashboard-widget[data-compact="true"] .training-stat-card.is-widget .training-stat-card__summary {
+    grid-template-columns: minmax(max-content, 0.85fr) minmax(0, 1.15fr);
+    grid-template-areas: "header header" "reading chart";
+  }
+
+  .hub-dashboard-widget[data-compact="true"] .training-stat-card.is-widget .training-stat-card__chart {
+    display: grid;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .training-stat-card.is-widget .training-stat-card__chart svg {
+    animation: overview-spark-reveal 1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.2s both;
+  }
+
+  .training-stat-card.is-widget.tone-heart .training-stat-card__icon svg {
+    animation: overview-heart-beat 2.4s ease-in-out infinite;
+    transform-origin: center;
+  }
+}
+
+@keyframes overview-spark-reveal {
+  from { clip-path: inset(-6px 100% -6px -6px); }
+  to { clip-path: inset(-6px -6px -6px -6px); }
+}
+
+@keyframes overview-heart-beat {
+  0%, 40%, 100% { transform: scale(1); }
+  10% { transform: scale(1.16); }
+  20% { transform: scale(1); }
+  30% { transform: scale(1.09); }
+}
+
+/* ── Load heatmap ──────────────────────────────────────────────────── */
+.training-heatmap-cell.is-today {
+  outline: 1.5px solid color-mix(in srgb, var(--cell-color, #34d399) 80%, white 20%);
+  outline-offset: 1.5px;
+}
+
+.training-heatmap-summary > span.is-streak {
+  border-color: rgba(251, 146, 60, 0.36);
+  background: rgba(251, 146, 60, 0.08);
+  color: #fdba74;
+}
+
+:root[data-theme="paper"] .training-heatmap-summary > span.is-streak:not([aria-hidden="true"]) {
+  border-color: rgba(194, 65, 12, 0.3);
+  background: rgba(251, 146, 60, 0.1);
+  color: #9a3412;
+}
+:root[data-theme="paper"] .training-heatmap-cell.is-today { outline-color: #12946e; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .training-heatmap-cell.is-today {
+    animation: overview-today-pulse 2.8s ease-in-out infinite;
+  }
+}
+
+@keyframes overview-today-pulse {
+  0%, 100% { outline-color: color-mix(in srgb, var(--cell-color, #34d399) 85%, white 15%); }
+  50% { outline-color: color-mix(in srgb, var(--cell-color, #34d399) 30%, transparent); }
+}

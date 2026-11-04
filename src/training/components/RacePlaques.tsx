@@ -146,3 +146,62 @@ export function MiniPlaque({ race, label, value }: { race: RaceEntry; label: str
     </div>
   );
 }
+
+export type RaceBadge = "new-best" | "first-fastest" | "first";
+
+/**
+ * One race as a plaque: a ribbon in the distance colour, the finish time large
+ * (gold while it is the distance's best), and a badge for how it ranked on
+ * the day. Pressing it picks the race for the A/B comparison.
+ */
+export function RaceResultPlaque({
+  race,
+  distance,
+  badge,
+  isBest,
+  pace,
+  selection,
+  onToggle
+}: {
+  race: RaceEntry;
+  /** Short distance name for the chip: "5K", "Half". */
+  distance: string;
+  badge?: RaceBadge;
+  /** The fastest result over this distance today. */
+  isBest: boolean;
+  pace: string;
+  selection: "A" | "B" | null;
+  onToggle: () => void;
+}) {
+  useLanguage();
+  const badgeText =
+    badge === "new-best" ? t("New best") : badge === "first-fastest" ? t("First still fastest") : badge === "first" ? t("First {{p0}}", { p0: distance }) : null;
+  return (
+    <button
+      type="button"
+      className={`race-result${isBest ? " is-best" : ""}${selection ? ` is-picked is-${selection.toLowerCase()}` : ""}`}
+      data-distance={race.distanceKey}
+      aria-pressed={selection !== null}
+      onClick={onToggle}
+    >
+      <span className="race-result-ribbon" aria-hidden="true" />
+      <span className="race-result-sheen" aria-hidden="true" />
+      <span className="race-result-top">
+        <span className="race-result-chip">{distance}</span>
+        {badgeText ? <span className={`race-result-badge is-${badge}`}>{badgeText}</span> : null}
+      </span>
+      <span className="race-result-name">{race.name}</span>
+      <span className="race-result-date">
+        {formatDate(new Date(race.startTime * 1000), { month: "short", day: "numeric", year: "numeric" })}
+      </span>
+      <span className="race-result-time">{formatRaceTime(race.officialTime)}</span>
+      <span className="race-result-foot">
+        <span>{pace}</span>
+        {race.placing ? <span className="race-result-placing">{race.placing}</span> : null}
+      </span>
+      {selection ? (
+        <span className="race-result-pick" aria-hidden="true">{selection}</span>
+      ) : null}
+    </button>
+  );
+}

@@ -47,3 +47,44 @@
 .activity-detail-note { margin: 0 0 14px; padding: 10px 14px; border-left: 2px solid var(--activity-color, var(--accent)); border-radius: 0 10px 10px 0; background: color-mix(in srgb, var(--text-muted) 8%, transparent); }
 .activity-detail-note figcaption { margin-bottom: 4px; color: var(--text-muted); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 .activity-detail-note blockquote { margin: 0; color: var(--text-primary); font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* ── Lap kind, pace bar and highlight ────────────────────────────────
+   Workout steps get a typed chip; every lap a bar for its pace between the
+   slowest and fastest lap. Picking a lap shades it on the chart, the
+   elevation profile and the map. */
+.training-laps-hint { margin-right: auto; font-size: 12px; color: var(--text-secondary); }
+.training-laps-section tr.is-selectable { cursor: pointer; }
+.training-laps-section tr.is-selected td { background: color-mix(in srgb, var(--activity-color, var(--accent)) 10%, transparent); }
+.training-laps-section tr.is-selected td:first-child { box-shadow: inset 3px 0 var(--activity-color, var(--accent)); }
+.training-lap-pick { display: inline-grid; place-items: center; min-width: 34px; height: 30px; margin: -6px 0 -6px -8px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: var(--text-primary); font: inherit; font-weight: 700; font-variant-numeric: tabular-nums; cursor: pointer; transition: background 140ms ease, color 140ms ease; }
+.training-lap-pick:hover { background: color-mix(in srgb, var(--text-muted) 16%, transparent); }
+.training-lap-pick[aria-pressed="true"] { background: var(--activity-color, var(--accent)); color: #062016; }
+.training-lap-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+:root[data-theme="paper"] .training-lap-pick[aria-pressed="true"] { color: #ffffff; }
+
+.training-laps-section tr { --lap-kind: var(--activity-color, var(--accent)); }
+.training-laps-section tr.is-work { --lap-kind: #fb7185; }
+.training-laps-section tr.is-recovery { --lap-kind: #34d399; }
+.training-laps-section tr:is(.is-warmup, .is-cooldown) { --lap-kind: #60a5fa; }
+.training-lap-kind { display: inline-block; padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--lap-kind) 14%, transparent); color: var(--lap-kind); font-size: 11px; font-weight: 650; line-height: 1.4; }
+.training-lap-kind.is-lap { color: var(--text-secondary); background: color-mix(in srgb, var(--text-muted) 14%, transparent); }
+:root[data-theme="paper"] .training-laps-section tr.is-work { --lap-kind: #be123c; }
+:root[data-theme="paper"] .training-laps-section tr.is-recovery { --lap-kind: #047857; }
+:root[data-theme="paper"] .training-laps-section tr:is(.is-warmup, .is-cooldown) { --lap-kind: #1d4ed8; }
+
+.training-laps-table .training-lap-performance { width: 34%; }
+.training-lap-pace { display: flex; align-items: center; gap: 12px; }
+/* The global `td span` rule mutes and shrinks every span in a cell. */
+.training-lap-pace > span:first-child { min-width: 70px; max-width: none; overflow: visible; color: var(--text-primary); font-size: inherit; }
+.training-laps-section tr.is-fastest .training-lap-pace > span:first-child { color: var(--activity-color, var(--accent)); }
+.training-lap-bar { flex: 1; min-width: 56px; height: 6px; overflow: hidden; border-radius: 6px; background: color-mix(in srgb, var(--text-muted) 16%, transparent); }
+.training-lap-bar i { display: block; height: 100%; border-radius: inherit; background: var(--lap-kind); }
+@media (prefers-reduced-motion: no-preference) {
+  .training-lap-bar i { animation: training-lap-bar-in 700ms cubic-bezier(.2, .8, .2, 1) both; transform-origin: left; }
+}
+@keyframes training-lap-bar-in { from { transform: scaleX(0); } }
+.activities-detail-sidebar .training-lap-pace { gap: 8px; }
+.activities-detail-sidebar .training-lap-pace > span:first-child { min-width: 60px; }
+
+/* The profile's highlighted stretch takes the sport colour. */
+.activity-elevation-chart-shell { color: var(--activity-color, var(--accent)); }

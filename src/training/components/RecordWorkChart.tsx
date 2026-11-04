@@ -1,5 +1,5 @@
 import { t, useLanguage, getDateTimeFormat } from "../../i18n/training";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { WorkBucket } from "../hallOfBests";
 import {
   SPORT_COLOR_CATEGORIES,
@@ -44,6 +44,7 @@ export function RecordWorkChart({ unit, buckets, medals }: RecordWorkChartProps)
   // The plot fills its frame when the column beside it is taller.
   const [height, setHeight] = useState(MIN_HEIGHT);
   const [hovered, setHovered] = useState<number | null>(null);
+  const medalFill = `pr-medal-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   useEffect(() => {
     const element = wrapRef.current;
@@ -111,6 +112,13 @@ export function RecordWorkChart({ unit, buckets, medals }: RecordWorkChartProps)
             ? t("Training time per week, with record-setting weeks marked")
             : t("Training time per month, with record-setting months marked")}
         >
+          <defs>
+            <radialGradient id={medalFill} cx="0.36" cy="0.3" r="0.75">
+              <stop offset="0" className="pr-work-medal-stop is-light" />
+              <stop offset="0.55" className="pr-work-medal-stop is-mid" />
+              <stop offset="1" className="pr-work-medal-stop is-deep" />
+            </radialGradient>
+          </defs>
           {ticks.map((tick) => (
             <g key={tick}>
               <line
@@ -188,7 +196,9 @@ export function RecordWorkChart({ unit, buckets, medals }: RecordWorkChartProps)
                     className="pr-work-medal"
                     transform={`translate(${centre(index)}, ${Math.min(topY, floor) - 16})`}
                   >
-                    <circle r={10} />
+                    <circle className="pr-work-medal-halo" r={10} />
+                    <circle className="pr-work-medal-disc" r={10} style={{ fill: `url(#${medalFill})` }} />
+                    <ellipse className="pr-work-medal-glint" cx={-3.2} cy={-4.2} rx={3.6} ry={2} />
                     <text dy="0.35em" textAnchor="middle">
                       {records.length}
                     </text>

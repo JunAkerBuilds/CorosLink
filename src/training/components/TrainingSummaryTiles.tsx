@@ -8,6 +8,7 @@ import {
   formatSignedDelta
 } from "../formatters";
 import type { TrainingSummaryMetrics, TrainingTrendPoint } from "../types";
+import "../overviewCards.css";
 
 interface TrainingSummaryTilesProps {
   summary: TrainingSummaryMetrics;

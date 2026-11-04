@@ -1,4 +1,4 @@
-import { getLocale, useLanguage, t } from "../../i18n/training";
+import { formatNumber, getLocale, useLanguage, t } from "../../i18n/training";
 import { useCartoApiKey } from "../../maps/routes/useCartoApiKey";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -19,6 +19,8 @@ import type { RouteCursor } from "../routeCursor";
 import type { ActivityStreams } from "../activityStreams";
 import { ActivityRouteReadout } from "./ActivityRouteReadout";
 import { routeDistanceMarkers, type RouteDistanceMarker } from "../routeDistanceMarkers";
+import { ROUTE_PACE_RAMP, type RoutePaceColoring } from "../routePace";
+import { distanceUnit, kmhToDisplaySpeed, secondsPerKmToDisplayPace, speedUnit } from "../../units/units";
 import "../activityRouteMarkers.css";
 import {
   defineSelectionPreference,
@@ -36,6 +38,8 @@ interface ActivityRouteMapProps {
   cursor?: RouteCursor;
   /** Per-second samples with GPS: hovering the route reads them out at that spot. */
   probe?: ActivityStreams;
+  /** The route in pace-coloured runs (see routePace.ts); the plain line without. */
+  pace?: RoutePaceColoring | null;
 }
 
 /** How close (px) the pointer must come to the line before the readout snaps to it. */
@@ -63,6 +67,8 @@ const MARKER_RING = "#ffffff";
 // Gold reads on street, satellite and dark tiles alike, and is not a route colour.
 const CURSOR_SEGMENT_COLOR = "#ffc857";
 const CURSOR_DOT_RING = "#0b1015";
+// Pace-coloured lines sit on a dark casing so every hue reads on light and dark tiles.
+const PACE_CASING = "#0b1015";
 const ROUTE_ANIMATION_MS = 2200;
 // Above the distance chips in the marker pane (600), so the chart cursor
 // never hides under one.
@@ -177,6 +183,7 @@ interface MapStyle {
   tile: { url: string; maxZoom: number; subdomains?: string; attribution: string };
   routeColor: string;
   ghostOpacity: number;
+  casingOpacity: number;
 }
 
 function resolveMapStyle(theme: string, baseLayer?: RouteBaseLayer, cartoApiKey = ""): MapStyle {
@@ -185,7 +192,8 @@ function resolveMapStyle(theme: string, baseLayer?: RouteBaseLayer, cartoApiKey 
   return {
     tile: resolveBaseLayer(layer, cartoApiKey),
     routeColor: isDarkGround ? ROUTE_COLOR : ROUTE_COLOR_PAPER,
-    ghostOpacity: isDarkGround ? 0.18 : 0.28
+    ghostOpacity: isDarkGround ? 0.18 : 0.28,
+    casingOpacity: isDarkGround ? 0.85 : 0.5
   };
 }
 
@@ -206,9 +214,11 @@ function RouteMapCanvas({
   overlays,
   ariaLabel,
   cursor,
-  probe
+  probe,
+  pace
 }: {
   route: RouteGeometry;
+  pace?: RoutePaceColoring | null;
   distanceMarkers: RouteDistanceMarker[];
   scrollWheelZoom?: boolean;
   baseLayer?: RouteBaseLayer;
@@ -223,6 +233,7 @@ function RouteMapCanvas({
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const ghostLineRef = useRef<L.Polyline | null>(null);
   const routeLineRef = useRef<L.Polyline | null>(null);
+  const pacedRef = useRef(false);
   const overlayLayersRef = useRef(new Map<RouteOverlayId, L.TileLayer>());
   // Read by the init effect without retriggering it: layer switches swap
   // tiles in place instead of rebuilding the map.
@@ -241,7 +252,7 @@ function RouteMapCanvas({
     }
 
     const initialLayer = baseLayerPropRef.current;
-    const { tile, routeColor, ghostOpacity } = resolveMapStyle(
+    const { tile, routeColor, ghostOpacity, casingOpacity } = resolveMapStyle(
       theme,
       initialLayer, cartoApiKey
     );
@@ -268,13 +279,49 @@ function RouteMapCanvas({
       lineJoin: "round"
     }).addTo(map);
 
-    const routeLine = L.polyline([route.latLngs[0]!], {
-      color: routeColor,
-      weight: 4,
-      opacity: 0.95,
+    // With pace samples the drawn line is a dark casing and the coloured runs
+    // ride on it; both advance through the samples together.
+    const paceFlat: [number, number][] = [];
+    const paceRuns = (pace?.runs ?? []).map((run) => {
+      const start = paceFlat.length === 0 ? 0 : paceFlat.length - 1;
+      paceFlat.push(...(paceFlat.length === 0 ? run.latLngs : run.latLngs.slice(1)));
+      return { run, start, shown: 0, line: null as L.Polyline | null };
+    });
+    const paced = paceRuns.length > 0 && paceFlat.length > 1;
+    const routeLine = L.polyline([(paced ? paceFlat : route.latLngs)[0]!], {
+      color: paced ? PACE_CASING : routeColor,
+      weight: paced ? 8 : 4,
+      opacity: paced ? casingOpacity : 0.95,
       lineCap: "round",
       lineJoin: "round"
     }).addTo(map);
+    const paceLayer = L.layerGroup().addTo(map);
+    for (const entry of paceRuns) {
+      entry.line = L.polyline([], {
+        color: entry.run.color,
+        weight: 4.5,
+        opacity: 1,
+        lineCap: "round",
+        lineJoin: "round",
+        interactive: false
+      }).addTo(paceLayer);
+    }
+    let paceShown = 0;
+    const drawPace = (progress: number) => {
+      const last = Math.max(1, Math.round(progress * (paceFlat.length - 1)));
+      routeLine.setLatLngs(paceFlat.slice(0, last + 1));
+      for (const entry of paceRuns) {
+        const length = entry.run.latLngs.length;
+        // Only runs the head passed since the last frame change.
+        if (entry.start > last || entry.start + length - 1 < paceShown) continue;
+        const count = Math.min(length, last - entry.start + 1);
+        if (count !== entry.shown) {
+          entry.line!.setLatLngs(entry.run.latLngs.slice(0, count));
+          entry.shown = count;
+        }
+      }
+      paceShown = last;
+    };
 
     const start = route.latLngs[0]!;
     const end = route.latLngs[route.latLngs.length - 1]!;
@@ -301,6 +348,7 @@ function RouteMapCanvas({
     tileLayerRef.current = tileLayer;
     ghostLineRef.current = ghostLine;
     routeLineRef.current = routeLine;
+    pacedRef.current = paced;
     appliedBaseLayerRef.current = initialLayer;
 
     let animationFrame = 0;
@@ -324,9 +372,13 @@ function RouteMapCanvas({
 
       const elapsed = timestamp - animationStart;
       const progress = Math.min(elapsed / ROUTE_ANIMATION_MS, 1);
-      routeLine.setLatLngs(
-        getPartialRoute(route.latLngs, easeOutCubic(progress))
-      );
+      if (paced) {
+        drawPace(easeOutCubic(progress));
+      } else {
+        routeLine.setLatLngs(
+          getPartialRoute(route.latLngs, easeOutCubic(progress))
+        );
+      }
 
       if (progress < 1) {
         animationFrame = window.requestAnimationFrame(animateRoute);
@@ -349,16 +401,36 @@ function RouteMapCanvas({
 
     let cursorDot: L.CircleMarker | undefined;
     let cursorSegment: L.Polyline | undefined;
+    let cursorCasing: L.Polyline | undefined;
     const applyCursor = () => {
       const { point, segment } = cursor?.get() ?? { point: null, segment: null };
       if (segment && segment.length > 1) {
+        // On a pace-coloured line gold would read as one more pace step: the
+        // selection is white on a dark casing instead, and the rest dims.
+        if (paced) {
+          if (cursorCasing) {
+            cursorCasing.setLatLngs(segment);
+          } else {
+            cursorCasing = L.polyline(segment, {
+              pane: CURSOR_PANE,
+              color: PACE_CASING,
+              weight: 11,
+              opacity: 0.9,
+              lineCap: "round",
+              lineJoin: "round",
+              interactive: false
+            }).addTo(map);
+          }
+          cursorCasing.bringToFront();
+          for (const entry of paceRuns) entry.line?.setStyle({ opacity: 0.4 });
+        }
         if (cursorSegment) {
           cursorSegment.setLatLngs(segment);
         } else {
           cursorSegment = L.polyline(segment, {
             pane: CURSOR_PANE,
-            color: CURSOR_SEGMENT_COLOR,
-            weight: 6,
+            color: paced ? MARKER_RING : CURSOR_SEGMENT_COLOR,
+            weight: paced ? 5 : 6,
             opacity: 0.95,
             lineCap: "round",
             lineJoin: "round",
@@ -366,9 +438,16 @@ function RouteMapCanvas({
           }).addTo(map);
         }
         cursorSegment.bringToFront();
-      } else if (cursorSegment) {
-        cursorSegment.remove();
-        cursorSegment = undefined;
+      } else {
+        if (cursorSegment) {
+          cursorSegment.remove();
+          cursorSegment = undefined;
+        }
+        if (cursorCasing) {
+          cursorCasing.remove();
+          cursorCasing = undefined;
+          for (const entry of paceRuns) entry.line?.setStyle({ opacity: 1 });
+        }
       }
       if (point) {
         if (cursorDot) {
@@ -475,7 +554,7 @@ function RouteMapCanvas({
       routeLineRef.current = null;
       overlayLayersRef.current.clear();
     };
-  }, [route, distanceMarkers, theme, scrollWheelZoom, cartoApiKey, cursor, probe]);
+  }, [route, distanceMarkers, theme, scrollWheelZoom, cartoApiKey, cursor, probe, pace]);
 
   // Swap the base tile layer in place so zoom/pan and the route animation
   // survive a layer change.
@@ -485,7 +564,7 @@ function RouteMapCanvas({
       return;
     }
 
-    const { tile, routeColor, ghostOpacity } = resolveMapStyle(
+    const { tile, routeColor, ghostOpacity, casingOpacity } = resolveMapStyle(
       theme,
       baseLayer, cartoApiKey
     );
@@ -503,7 +582,7 @@ function RouteMapCanvas({
     tileLayerRef.current = next;
     map.setMaxZoom(tile.maxZoom);
     ghostLineRef.current?.setStyle({ color: routeColor, opacity: ghostOpacity });
-    routeLineRef.current?.setStyle({ color: routeColor });
+    routeLineRef.current?.setStyle(pacedRef.current ? { opacity: casingOpacity } : { color: routeColor });
     appliedBaseLayerRef.current = baseLayer;
   }, [baseLayer, theme, cartoApiKey]);
 
@@ -566,12 +645,61 @@ function RouteLegend() {
   );
 }
 
+function paceClock(seconds: number): string {
+  const rounded = Math.round(seconds);
+  return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, "0")}`;
+}
+
+/** The colour scale's two ends, as the athlete reads them (pace or speed, in their units). */
+function RoutePaceLegend({ pace }: { pace: RoutePaceColoring }) {
+  useLanguage();
+  const { unitSystem } = useUnitSystem();
+  const format = (value: number) => {
+    if (pace.speedKind === "speed") {
+      return formatNumber(kmhToDisplaySpeed(value, unitSystem), { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+    }
+    if (pace.speedKind === "swimPace") {
+      return paceClock(unitSystem === "imperial" ? value * 0.9144 : value);
+    }
+    return paceClock(secondsPerKmToDisplayPace(value, unitSystem));
+  };
+  const unit = pace.speedKind === "speed"
+    ? speedUnit(unitSystem)
+    : pace.speedKind === "swimPace"
+      ? unitSystem === "imperial" ? "/100yd" : "/100m"
+      : `/${distanceUnit(unitSystem)}`;
+  const slow = `${format(pace.slowest)} ${unit}`;
+  const fast = `${format(pace.fastest)} ${unit}`;
+  return (
+    <span
+      className="activity-route-pace-legend"
+      role="img"
+      aria-label={t("Route colour scale: slower {{slow}} to faster {{fast}}", { slow, fast })}
+    >
+      <span aria-hidden="true" className="activity-route-pace-end">
+        {t("Slower")}
+        <small>{format(pace.slowest)}</small>
+      </span>
+      <span
+        aria-hidden="true"
+        className="activity-route-pace-ramp"
+        style={{ background: `linear-gradient(90deg, ${ROUTE_PACE_RAMP.join(", ")})` }}
+      />
+      <span aria-hidden="true" className="activity-route-pace-end">
+        {t("Faster")}
+        <small>{format(pace.fastest)}</small>
+      </span>
+    </span>
+  );
+}
+
 export function ActivityRouteMap({
   track,
   expanded: expandedProp,
   onExpandedChange,
   cursor,
-  probe
+  probe,
+  pace
 }: ActivityRouteMapProps) {
   useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -626,9 +754,10 @@ export function ActivityRouteMap({
 
   return (
     <div className="activity-route-map" ref={containerRef}>
-      <RouteMapCanvas route={route} distanceMarkers={distanceMarkers} baseLayer={baseLayer} ariaLabel="Activity route map" cursor={cursor} probe={probe} />
-      <div className="activity-route-footer">
+      <RouteMapCanvas route={route} distanceMarkers={distanceMarkers} baseLayer={baseLayer} ariaLabel={t("Activity route map")} cursor={cursor} probe={probe} pace={pace} />
+      <div className={`activity-route-footer${pace ? " has-pace" : ""}`}>
         <RouteLegend />
+        {pace ? <RoutePaceLegend pace={pace} /> : null}
         <button
           type="button"
           className="activity-route-expand"
@@ -672,8 +801,9 @@ export function ActivityRouteMap({
                     scrollWheelZoom
                     baseLayer={baseLayer}
                     overlays={overlays}
-                    ariaLabel="Expanded activity route map"
+                    ariaLabel={t("Expanded activity route map")}
                     probe={probe}
+                    pace={pace}
                   />
                   <MapLayerControl
                     layers={availableLayers}
@@ -691,6 +821,7 @@ export function ActivityRouteMap({
                 </div>
                 <div className="activity-route-footer">
                   <RouteLegend />
+                  {pace ? <RoutePaceLegend pace={pace} /> : null}
                 </div>
               </div>
             </section>
