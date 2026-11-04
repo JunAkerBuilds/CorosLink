@@ -1,0 +1,159 @@
+/*
+ * The intensity skyline (SessionProfileBars): shared by the library tiles,
+ * the reader and the workout editor, which renders outside the library view,
+ * so the zone colours live on :root.
+ */
+:root {
+  /* Lightness rises with effort so the bars read without hue. */
+  --tlz-warmup: #fcd34d;
+  --tlz-z1: #5eead4;
+  --tlz-z2: #34d399;
+  --tlz-z3: #a3e635;
+  --tlz-z4: #fb923c;
+  --tlz-z5: #f472b6;
+  --tlz-rest: color-mix(in srgb, var(--text-muted) 55%, transparent);
+  --tlz-cooldown: #60a5fa;
+}
+
+:root[data-theme="paper"] {
+  --tlz-warmup: #e0a800;
+  --tlz-z1: #14b8a6;
+  --tlz-z2: #10b981;
+  --tlz-z3: #65a30d;
+  --tlz-z4: #ea580c;
+  --tlz-z5: #db2777;
+  --tlz-cooldown: #3b82f6;
+}
+
+/* "Work" (no effort target) takes the sport's hue where one is set. */
+.tl-skyline {
+  --tlz-work: color-mix(in srgb, var(--tl-sport-accent, var(--accent)) 82%, white);
+}
+
+:root[data-theme="paper"] .tl-skyline {
+  --tlz-work: var(--tl-sport-accent, var(--accent));
+}
+
+
+.tl-skyline {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  margin-top: auto;
+  border-bottom: 1px solid var(--tl-rule-soft);
+}
+
+.tl-skyline.is-tile {
+  height: 46px;
+}
+
+.tl-skyline.is-reader {
+  height: 150px;
+  gap: 3px;
+  background:
+    linear-gradient(var(--tl-rule-soft) 1px, transparent 1px) 0 0 / 100% 25%;
+}
+
+.tl-skyline[data-dense="true"] {
+  gap: 1px;
+}
+
+.tl-skyline.is-pending {
+  align-items: center;
+  border-bottom: 0;
+}
+
+.tl-skyline.is-pending .tl-wk-track {
+  width: 100%;
+}
+
+.tl-skyline-bar {
+  min-width: 1px;
+  height: var(--tl-bar-height);
+  flex-basis: 0;
+  border-radius: 3px 3px 1px 1px;
+  background: var(--tlz-work);
+  transform-origin: bottom;
+  animation: tl-profile-rise 640ms var(--tl-ease-out) both;
+  animation-delay: calc(min(var(--tl-bar-index), 40) * 12ms);
+}
+
+.tl-skyline.is-reader .tl-skyline-bar {
+  border-radius: 5px 5px 2px 2px;
+}
+
+.tl-skyline-bar.is-warmup { background: var(--tlz-warmup); }
+.tl-skyline-bar.is-z1 { background: var(--tlz-z1); }
+.tl-skyline-bar.is-z2 { background: var(--tlz-z2); }
+.tl-skyline-bar.is-z3 { background: var(--tlz-z3); }
+.tl-skyline-bar.is-z4 { background: var(--tlz-z4); }
+.tl-skyline-bar.is-z5 { background: var(--tlz-z5); }
+.tl-skyline-bar.is-rest { background: var(--tlz-rest); }
+.tl-skyline-bar.is-cooldown { background: var(--tlz-cooldown); }
+
+.tl-skyline-playhead {
+  position: absolute;
+  top: -4px;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: linear-gradient(180deg, var(--text-primary), transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--text-primary) 55%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  animation: tl-profile-scan 5.5s cubic-bezier(0.45, 0, 0.55, 1) 700ms infinite;
+}
+
+@keyframes tl-profile-rise {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+@keyframes tl-profile-scan {
+  0% { left: 0%; opacity: 0; }
+  6%, 94% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .tl-skyline-bar,
+  .tl-skyline-playhead {
+    animation: none;
+  }
+}
+
+.tl-zone-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 8px 0 0;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  list-style: none;
+}
+
+.tl-zone-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.tl-zone-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--tlz-work);
+}
+
+.tl-zone-legend .is-warmup { background: var(--tlz-warmup); }
+.tl-zone-legend .is-z1 { background: var(--tlz-z1); }
+.tl-zone-legend .is-z2 { background: var(--tlz-z2); }
+.tl-zone-legend .is-z3 { background: var(--tlz-z3); }
+.tl-zone-legend .is-z4 { background: var(--tlz-z4); }
+.tl-zone-legend .is-z5 { background: var(--tlz-z5); }
+.tl-zone-legend .is-rest { background: var(--tlz-rest); }
+.tl-zone-legend .is-cooldown { background: var(--tlz-cooldown); }

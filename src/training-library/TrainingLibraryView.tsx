@@ -10,6 +10,7 @@ import {
   CalendarRange,
   CalendarX,
   CloudOff,
+  Flame,
   Copy,
   FolderPlus,
   Heart,
@@ -33,10 +34,12 @@ import type {
   TrainingActivityMatch,
   TrainingCollection,
   TrainingHubActivity,
+  TrainingHubScheduledWorkoutEntry,
   TrainingHubStatus,
   TrainingLibrarySnapshot,
   TrainingPlanDocument,
-  TrainingPlanMetadataPatch
+  TrainingPlanMetadataPatch,
+  WorkoutSport
 } from "../../electron/types";
 import {
   createTrainingPlan,
@@ -55,8 +58,12 @@ import {
   SportGlyph,
   dominantSport,
   planSourceLabel,
-  sportAccentStyle
+  sportAccentStyle,
+  sportChipStyle,
+  sportTheme
 } from "./sportTheme";
+import { readableVolume, resolveWorkoutSport } from "./sessionProfile";
+import { dayKey, libraryWeek, scheduleWindow } from "./libraryWeek";
 import { SelectDropdown } from "../components/SelectDropdown";
 import { BulletRidge, WeekProfile, type BulletWeek } from "./Ridge";
 import { PlanCompare } from "./PlanCompare";
@@ -72,6 +79,7 @@ import {
   useSelectionPreference
 } from "../preferences/selectionPreferences";
 import "./trainingLibrary.css";
+import "./trainingLibraryRevamp.css";
 
 interface TrainingLibraryViewProps {
   api: CorosLinkApi;
@@ -95,11 +103,18 @@ const SECTIONS: Array<{ id: LibrarySection; label: string; icon: typeof Zap }> =
 
 /** One quiet line under the title: what the open section holds. */
 const SECTION_LEDES: Record<LibrarySection, string> = {
-  workouts: "Single sessions to schedule, build plans from, or send to your watch.",
+  workouts: "Sessions to schedule, build plans from, or send to your watch.",
   plans: "Blocks of weeks you can put on your calendar and train through.",
   templates: "Starting points to build new plans from.",
   adherence: "What was planned, against what got done."
 };
+
+/** The masthead's backdrop: a track session and a progression run, drawn as one faint skyline. */
+const MASTHEAD_SKYLINE: Array<[string, number]> = [
+  ["warmup", 34], ["z5", 100], ["rest", 16], ["z5", 100], ["rest", 16], ["z5", 100], ["rest", 16], ["z5", 100],
+  ["rest", 16], ["z5", 100], ["rest", 16], ["z5", 100], ["cooldown", 28], ["z2", 46], ["z2", 46], ["z3", 62],
+  ["z3", 62], ["z4", 80], ["z4", 80]
+];
 
 const LIBRARY_SECTION_PREFERENCE =
   defineSelectionPreference<LibrarySection>({
@@ -239,6 +254,20 @@ export function TrainingLibraryView({
   const [pendingPlanDelete, setPendingPlanDelete] = useState<TrainingPlanDocument[]>([]);
   const [deletingPlan, setDeletingPlan] = useState(false);
   const [generatorOpen, setGeneratorOpen] = useState(false);
+  /** Each bump asks the workout workspace to open the builder. */
+  const [createSignal, setCreateSignal] = useState(0);
+  /** "Up next" asks the workspace to open one workout. */
+  const [focusRequest, setFocusRequest] = useState<{ id: string; n: number } | null>(null);
+  /** This week's calendar and the week after: the masthead brief and the reader's day strip. */
+  const [schedule, setSchedule] = useState<TrainingHubScheduledWorkoutEntry[]>([]);
+  const loadSchedule = useCallback(async () => {
+    const { start, end } = scheduleWindow();
+    try {
+      setSchedule((await api.listScheduledWorkouts(start, end)) ?? []);
+    } catch {
+      /* The brief and the strip simply go without calendar facts. */
+    }
+  }, [api]);
   const [calendarTarget, setCalendarTarget] = useState<{ plan: TrainingPlanDocument; operation?: "install" | "remove" } | null>(null);
 
   const load = useCallback(async () => {
@@ -254,8 +283,11 @@ export function TrainingLibraryView({
   }, [api]);
 
   useEffect(() => {
-    if (status?.authenticated) void load();
-  }, [load, status?.authenticated]);
+    if (status?.authenticated) {
+      void load();
+      void loadSchedule();
+    }
+  }, [load, loadSchedule, status?.authenticated]);
 
   useEffect(() => api.onWorkoutEditsChanged(() => { if (status?.authenticated) void load(); }), [api, load, status?.authenticated]);
 
@@ -314,6 +346,15 @@ export function TrainingLibraryView({
     templates: templates.length,
     adherence: current.matches.length
   };
+  /* Adherence reads as a rate: done (in full or in part) out of what has come due. */
+  const dueMatches = current.matches.filter((match) => match.status !== "upcoming" && match.status !== "rescheduled");
+  const adherenceRate = dueMatches.length
+    ? Math.round((dueMatches.filter((match) => match.status === "completed" || match.status === "partial").length / dueMatches.length) * 100)
+    : undefined;
+
+  /* Plans are matched by local id and by COROS id, whichever the workout's references carry. */
+  const planNames = new Map<string, string>(current.plans.flatMap((plan) =>
+    plan.remoteId ? [[plan.id, plan.name], [plan.remoteId, plan.name]] as Array<[string, string]> : [[plan.id, plan.name]] as Array<[string, string]>));
 
   const savePlan = async (plan: TrainingPlanDocument): Promise<TrainingPlanDocument | undefined> => {
     try {
@@ -448,15 +489,36 @@ export function TrainingLibraryView({
   return (
     <section className="training-library-view">
       <header className="tl-masthead">
+        <div className="tl-masthead-skyline" aria-hidden="true">
+          {MASTHEAD_SKYLINE.map(([zone, height], index) => (
+            <i key={index} className={`is-${zone}`} style={{ height: `${height}%`, "--tl-bar-index": index } as React.CSSProperties} />
+          ))}
+        </div>
         <div className="tl-masthead-title">
           <h1>{t("Training Library")}</h1>
           <p>{t(SECTION_LEDES[section])}</p>
         </div>
+        <p className="tl-masthead-tagline" aria-hidden="true">
+          {t("build it once,")}<br /><span>{t("run it often")}</span>
+        </p>
         <div className="tl-masthead-actions">
-          {current.stale || current.offline ? <span className="tl-state is-stale">
-            {current.offline ? <CloudOff size={13} /> : null}
-            {t(stateLabel)}
-          </span> : null}
+          {!editingPlan ? (
+            <>
+              <button type="button" className="ghost-button tl-masthead-button" onClick={() => setGeneratorOpen(true)}>
+                <Sparkles size={15} aria-hidden="true" /> {t("Generate plan")}
+              </button>
+              <button
+                type="button"
+                className="primary-button tl-masthead-button"
+                onClick={() => {
+                  setSection("workouts");
+                  setCreateSignal((value) => value + 1);
+                }}
+              >
+                <Plus size={15} aria-hidden="true" /> {t("New workout")}
+              </button>
+            </>
+          ) : null}
           <button
             type="button"
             className="tl-round-button"
@@ -470,6 +532,18 @@ export function TrainingLibraryView({
         </div>
       </header>
 
+      {!editingPlan ? (
+        <LibraryBrief
+          workouts={current.workouts}
+          schedule={schedule}
+          matches={current.matches}
+          onOpenWorkout={(id) => {
+            setSection("workouts");
+            setFocusRequest((current) => ({ id, n: (current?.n ?? 0) + 1 }));
+          }}
+        />
+      ) : null}
+
       {current.partialFailures.length ? (
         <details className="tl-notice">
           <summary>
@@ -481,6 +555,7 @@ export function TrainingLibraryView({
         </details>
       ) : null}
 
+      <div className="tl-sections-row">
       <nav className="tl-sections" aria-label={t("Library sections")}>
         {SECTIONS.map(({ id, label, icon: Icon }) => (
           <button
@@ -491,11 +566,20 @@ export function TrainingLibraryView({
             onClick={() => setSection(id)}
           >
             <Icon aria-hidden="true" />
-            {t(label)}
-            <span>{counts[id]}</span>
+            {id === "plans" ? t("Plans", undefined, "trainingPlans") : t(label)}
+            {id === "adherence" && adherenceRate !== undefined
+              ? <span className="is-rate">{adherenceRate}%</span>
+              : counts[id] ? <span>{counts[id]}</span> : null}
           </button>
         ))}
       </nav>
+        <span className={`tl-sync-state${current.stale || current.offline ? " is-stale" : ""}`} role="status">
+          {current.offline ? <CloudOff size={13} aria-hidden="true" /> : <i aria-hidden="true" />}
+          {current.offline || current.stale
+            ? t(stateLabel)
+            : t("Synced with COROS · {{value1}}", { value1: syncedAgo(current.cachedAt) })}
+        </span>
+      </div>
 
       {editingPlan ? (
         <PlanEditor
@@ -519,6 +603,11 @@ export function TrainingLibraryView({
               onRefresh={load}
               onMessage={onMessage}
               onError={onError}
+              createSignal={createSignal}
+              focusRequest={focusRequest}
+              schedule={schedule}
+              onScheduleChanged={loadSchedule}
+              planNames={planNames}
             />
           ) : null}
 
@@ -683,6 +772,128 @@ export function TrainingLibraryView({
         </div>
       ) : null}
     </section>
+  );
+}
+
+interface LibraryBriefProps {
+  workouts: TrainingSnapshotWorkout[];
+  schedule: TrainingHubScheduledWorkoutEntry[];
+  matches: TrainingActivityMatch[];
+  onOpenWorkout: (id: string) => void;
+}
+
+type TrainingSnapshotWorkout = TrainingLibrarySnapshot["workouts"][number];
+
+/** "2 min ago" for the sync line under the tabs. */
+function syncedAgo(iso: string): string {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).valueOf()) / 60_000));
+  if (!Number.isFinite(minutes) || minutes < 1) return t("just now");
+  if (minutes < 60) return t("{{value1}} min ago", { value1: String(minutes) });
+  const hours = Math.round(minutes / 60);
+  return hours < 24 ? t("{{value1}} h ago", { value1: String(hours) }) : shortDate(new Date(iso));
+}
+
+/** The masthead brief: what is next, how much of the week came from here, the favourite, the mix. */
+function LibraryBrief({ workouts, schedule, matches, onOpenWorkout }: LibraryBriefProps) {
+  useLanguage();
+  const week = libraryWeek();
+  const todayKey = week.find((day) => day.isToday)?.key ?? dayKey(new Date());
+  const byId = new Map(workouts.map((workout) => [workout.id, workout]));
+  const byName = new Map(workouts.map((workout) => [workout.name.trim().toLowerCase(), workout]));
+  const libraryWorkoutFor = (entry: TrainingHubScheduledWorkoutEntry) =>
+    (entry.programId ? byId.get(entry.programId) : undefined) ?? byName.get(entry.name.trim().toLowerCase());
+
+  const upcoming = schedule
+    .filter((entry) => entry.happenDay >= todayKey)
+    .sort((left, right) => left.happenDay.localeCompare(right.happenDay) || (left.sortNo ?? 0) - (right.sortNo ?? 0));
+  const next = upcoming[0];
+  const nextWorkout = next ? libraryWorkoutFor(next) : undefined;
+  const nextSport = resolveWorkoutSport(next?.sportType ?? nextWorkout?.sportType);
+  const NextIcon = sportTheme(nextSport).icon;
+  const nextDay = next ? formatDate(happenDayToDate(next.happenDay), { weekday: "short", month: "short", day: "numeric" }) : "";
+  const nextFacts = next
+    ? [readableVolume(next.volume), next.trainingLoad ? t("{{value1}} load", { value1: String(Math.round(next.trainingLoad)) }) : undefined].filter(Boolean).join(" · ")
+    : "";
+
+  const thisWeek = schedule.filter((entry) => entry.happenDay >= week[0]!.key && entry.happenDay <= week[6]!.key);
+  /* Done means COROS (or a confirmed link) credited an activity to the session, in full or in part. */
+  const fromLibraryThisWeek = thisWeek.filter((entry) => libraryWorkoutFor(entry)).length;
+  const doneThisWeek = Math.min(thisWeek.length, matches.filter((match) =>
+    match.happenDay >= week[0]!.key && match.happenDay <= week[6]!.key &&
+    (match.status === "completed" || match.status === "partial")).length);
+
+  const favourite = workouts.reduce<TrainingSnapshotWorkout | undefined>((best, workout) => {
+    const uses = workout.usedByPlanIds.length + workout.scheduledCount;
+    const bestUses = best ? best.usedByPlanIds.length + best.scheduledCount : 0;
+    return uses > bestUses ? workout : best;
+  }, undefined);
+  const favouriteUses = favourite ? favourite.usedByPlanIds.length + favourite.scheduledCount : 0;
+
+  const mix = new Map<WorkoutSport, number>();
+  for (const workout of workouts) {
+    const sport = resolveWorkoutSport(workout.sportType);
+    if (sport) mix.set(sport, (mix.get(sport) ?? 0) + 1);
+  }
+  const mixEntries = [...mix].sort((left, right) => right[1] - left[1]);
+
+  return (
+    <div className="tl-brief" aria-label={t("Library at a glance")}>
+      {next ? (
+        <div className="tl-brief-chip is-next" style={sportAccentStyle(nextSport)}>
+          <span className="tl-brief-badge" aria-hidden="true"><NextIcon size={17} strokeWidth={2} /></span>
+          <span>
+            <small>{t("Up next · {{value1}}", { value1: nextDay })}</small>
+            <b>{next.name}{nextFacts ? <em> · {nextFacts}</em> : null}</b>
+          </span>
+          {nextWorkout ? (
+            <button type="button" className="tl-brief-open" onClick={() => onOpenWorkout(nextWorkout.id)}>{t("Open")}</button>
+          ) : null}
+        </div>
+      ) : null}
+      {thisWeek.length ? (
+        <div
+          className="tl-brief-chip"
+          title={t("{{value1}} of {{value2}} sessions done this week", { value1: String(doneThisWeek), value2: String(thisWeek.length) })}
+        >
+          <span>
+            <small>{t("This week from the library")}</small>
+            <b>{t("{{value1}} of {{value2}} sessions", { value1: String(fromLibraryThisWeek), value2: String(thisWeek.length) })} <em>{t("scheduled")}</em></b>
+          </span>
+          <span
+            className="tl-brief-progress"
+            role="img"
+            aria-label={t("{{value1}} of {{value2}} sessions this week came from the library, {{value3}} done", { value1: String(fromLibraryThisWeek), value2: String(thisWeek.length), value3: String(doneThisWeek) })}
+          >
+            <i style={{ width: `${Math.max(fromLibraryThisWeek ? 6 : 0, Math.round((fromLibraryThisWeek / thisWeek.length) * 100))}%` }} />
+            <i className="is-done" style={{ width: `${Math.round((doneThisWeek / thisWeek.length) * 100)}%` }} />
+          </span>
+        </div>
+      ) : null}
+      {favourite && favouriteUses ? (
+        <div className="tl-brief-chip is-favourite">
+          <Flame className="tl-brief-flame" size={22} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+          <span>
+            <small>{t("Crowd favourite")}</small>
+            <b>{favourite.name} <em>· {t("used {{value1}}×", { value1: String(favouriteUses) })}</em></b>
+          </span>
+        </div>
+      ) : null}
+      {mixEntries.length ? (
+        <div className="tl-brief-chip">
+          <span>
+            <small>{t("Mix")}</small>
+            <span className="tl-brief-mix" aria-hidden="true">
+              {mixEntries.map(([sport, count]) => (
+                <i key={sport} title={`${count} ${formatWorkoutSport(sport)}`} style={{ ...sportChipStyle(sport), flexGrow: count }} />
+              ))}
+            </span>
+          </span>
+          <em className="tl-brief-mix-label">
+            {mixEntries.slice(0, 3).map(([sport, count]) => `${count} ${formatWorkoutSport(sport).toLowerCase()}`).join(" · ")}
+          </em>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1089,7 +1300,21 @@ function PlanIndex({
               <span>{view.ridge.variant === "load" ? t("Weekly load") : t("Sessions per week")}</span>
               {view.profileNote ? <span>{view.profileNote}</span> : null}
             </span>
-            <WeekProfile {...view.ridge} currentWeek={calendarRun ? planCalendarWeek(plan, calendarRun.startDay) : undefined} />
+            <WeekProfile {...view.ridge} phases={plan.phases} currentWeek={calendarRun ? planCalendarWeek(plan, calendarRun.startDay) : undefined} />
+            {plan.phases.length ? (
+              <span className="tl-phase-ribbon" aria-label={t("Phases: {{value1}}", { value1: plan.phases.map((phase) => `${phase.name} ${phase.endWeek - phase.startWeek + 1}w`).join(", ") })}>
+                {plan.phases.map((phase) => (
+                  <span
+                    key={phase.id}
+                    data-phase={phase.kind ?? "custom"}
+                    style={{ flexGrow: Math.max(1, phase.endWeek - phase.startWeek + 1) }}
+                  >
+                    <i aria-hidden="true" />
+                    <small>{phase.name} <b>{phase.endWeek - phase.startWeek + 1}w</b></small>
+                  </span>
+                ))}
+              </span>
+            ) : null}
           </span>
           <span className="tl-plan-figs">
             <span>
@@ -1258,6 +1483,24 @@ function PlanIndex({
         <div className="tl-plan-board">
           <ul className={`tl-plan-grid${selected.length ? " is-selecting" : ""}`} role="list">
             {visible.map(renderTile)}
+            {noun === "plan" && onGenerate && scope === "all" && !query ? (
+              <li className="tl-plan-generate">
+                <button type="button" onClick={onGenerate}>
+                  <span className="tl-plan-generate-sparkles" aria-hidden="true"><i /><i /><i /></span>
+                  <span className="tl-plan-generate-head">
+                    <span className="tl-plan-generate-badge" aria-hidden="true"><Sparkles size={20} /></span>
+                    <span>
+                      <b>{t("Build me a plan")}</b>
+                      <small>{t("From your library, your fitness and a race date")}</small>
+                    </span>
+                  </span>
+                  <span className="tl-plan-generate-goals" aria-hidden="true">
+                    {["5K", "10K", t("Half"), t("Marathon"), t("Trail ultra")].map((goal) => <em key={goal}>{goal}</em>)}
+                  </span>
+                  <span className="tl-plan-generate-cta">{t("Generate plan")}</span>
+                </button>
+              </li>
+            ) : null}
           </ul>
         </div>
       ) : (

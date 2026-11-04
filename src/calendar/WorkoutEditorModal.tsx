@@ -60,6 +60,9 @@ import {
 } from "../units/units";
 import { ExerciseCombobox } from "./ExerciseCombobox";
 import { ExercisePreview } from "./ExercisePreview";
+import "./workoutBuilder.css";
+import { stepZone } from "../training-library/sessionProfile";
+import { sportAccentStyle } from "../training-library/sportTheme";
 import { resolveExerciseName } from "../training/exerciseNames";
 import { CLIMB_GRADES, CLIMB_SYSTEM_IDS, FTP_PRESETS, HEART_RATE_PRESETS, PACE_PRESETS, RUNNING_POWER_PRESETS, SWIM_STROKE_IDS, WORKOUT_SPORT_CAPABILITIES, validateWorkoutDraftShared, workoutIntensitiesForStep, workoutTargetsForStep } from "../../electron/workoutCapabilities";
 
@@ -374,6 +377,8 @@ export function WorkoutEditorModal({
   const [openStepId, setOpenStepId] = useState<string | null>(null);
   const previewSequence = useRef(0);
   const planMode = Boolean(planEntry);
+  /** The step the watch preview shows: whichever one was last touched. */
+  const [focusStepId, setFocusStepId] = useState<string | null>(null);
   const planWorkout = useMemo<PlanWorkoutEntryInput | undefined>(() => {
     if (!planEntry) return undefined;
     return planEntry.workout ?? {
@@ -745,6 +750,8 @@ export function WorkoutEditorModal({
             <>
               <div className="workout-editor-scroll">
                 {!document.canEdit ? <div className="workout-editor-notice"><AlertTriangle size={16} aria-hidden="true" />{document.unsupportedReason}</div> : null}
+                <div className="workout-editor-layout">
+                <aside className="workout-editor-side" aria-label={t("Workout settings")}>
                 <div className="workout-editor-basics">
                   <label className="calendar-field">
                     <span>{t("Sport")}</span>
@@ -804,11 +811,13 @@ export function WorkoutEditorModal({
                   </label>
                   <label className="calendar-field">
                     <span>{t("Description")}</span>
-                    <textarea maxLength={300} rows={2} value={draft.overview} disabled={!document.canEdit || saving} onChange={(event) => setDraft({ ...draft, overview: event.target.value })} />
+                    <textarea maxLength={300} rows={4} value={draft.overview} disabled={!document.canEdit || saving} onChange={(event) => setDraft({ ...draft, overview: event.target.value })} />
                     <small>{draft.overview.length}/300</small>
                     {validation.errors.overview ? <em>{validation.errors.overview}</em> : null}
                   </label>
                 </div>
+                </aside>
+                <div className="workout-editor-main">
 
                 <div className="workout-editor-structure-header">
                   <div>
@@ -847,7 +856,11 @@ export function WorkoutEditorModal({
                 ) : (
                   <div className="workout-editor-nodes">
                     {draft.nodes.map((node, index) => (
-                      <div key={node.id}>
+                      <div
+                        key={node.id}
+                        onFocusCapture={(event) => setFocusStepId(focusTarget(node, event.target))}
+                        onPointerDownCapture={(event) => setFocusStepId(focusTarget(node, event.target))}
+                      >
                         <div className="workout-drop-zone" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); reorderTop(event.dataTransfer.getData("text/workout-node"), index); }} />
                         {node.nodeType === "step" ? (
                           <StepCard
@@ -895,6 +908,15 @@ export function WorkoutEditorModal({
                     <div className="workout-drop-zone" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); reorderTop(event.dataTransfer.getData("text/workout-node"), draft.nodes.length); }} />
                   </div>
                 )}
+                </div>
+                <WorkoutRail
+                  draft={draft}
+                  context={document.context}
+                  focusId={focusStepId ?? openStepId}
+                  trainingLoad={preview?.trainingLoad}
+                  errors={validation.errors}
+                />
+                </div>
               </div>
 
               <footer className="workout-editor-footer">
@@ -925,6 +947,138 @@ export function WorkoutEditorModal({
       </motion.div>
     </AnimatePresence>,
     window.document.body
+  );
+}
+
+/** Which step a click or focus inside a node lands on: a repeat's child when it carries one. */
+function focusTarget(node: RunWorkoutEditorNode, target: EventTarget): string {
+  if (node.nodeType === "step") return node.id;
+  const element = target instanceof Element ? target.closest("[data-step-id]") : null;
+  return element?.getAttribute("data-step-id") ?? node.steps[0]?.id ?? node.id;
+}
+
+function flattenSteps(nodes: RunWorkoutEditorNode[]): Array<{ step: RunWorkoutEditorStep; round?: number; rounds?: number }> {
+  return nodes.flatMap((node) => node.nodeType === "step"
+    ? [{ step: node }]
+    : node.steps.map((step) => ({ step, round: 1, rounds: node.repeat })));
+}
+
+function railTarget(step: RunWorkoutEditorStep, context: WorkoutEditorContext): string {
+  const target = step.target;
+  if (target.type === "time") return clockFromSeconds(target.seconds).replace(/^00:/, "");
+  if (target.type === "distance") {
+    return context.distanceUnit === "imperial"
+      ? `${(target.meters / 1609.344).toFixed(2)} mi`
+      : target.meters < 1000 ? `${Math.round(target.meters)} m` : `${(target.meters / 1000).toFixed(2)} km`;
+  }
+  if (target.type === "reps") return step.sets && step.sets > 1 ? `${step.sets} × ${target.count}` : t("{{value1}} reps", { value1: String(target.count) });
+  if (target.type === "load") return t("{{value1}} load", { value1: String(target.load) });
+  return t("Open");
+}
+
+function paceClock(secondsPerKm: number, unit: "km" | "mi"): string {
+  const perUnit = unit === "mi" ? secondsPerKm * 1.609344 : secondsPerKm;
+  return `${Math.floor(perUnit / 60)}:${String(Math.round(perUnit % 60)).padStart(2, "0")}`;
+}
+
+function railIntensity(step: RunWorkoutEditorStep): string {
+  const intensity = step.intensity;
+  if (intensity.type === "pace" || intensity.type === "effortPace") {
+    return `${paceClock(intensity.lowSecondsPerKm, intensity.displayUnit)}–${paceClock(intensity.highSecondsPerKm, intensity.displayUnit)} /${intensity.displayUnit}`;
+  }
+  if (intensity.type === "heartRate") return `${intensity.lowBpm}–${intensity.highBpm} bpm`;
+  if (intensity.type === "power" && "lowWatts" in intensity && intensity.lowWatts !== undefined) return `${intensity.lowWatts}–${intensity.highWatts} W`;
+  if (intensity.type === "none") return step.exerciseName?.trim() || t("Open effort");
+  return formatIntensityType(intensity.type === "lthrPercent" ? "heartRatePercent" : intensity.type);
+}
+
+const RAIL_KIND_LABELS: Record<RunWorkoutEditorStepKind, string> = {
+  warmup: "Warm-up",
+  training: "Work",
+  rest: "Recovery",
+  cooldown: "Cool-down",
+  sendOff: "Send-off"
+};
+
+/**
+ * The builder's right rail: the touched step as the watch shows it, how
+ * hard the session lands, and what still stands between it and a save.
+ */
+function WorkoutRail({ draft, context, focusId, trainingLoad, errors }: {
+  draft: RunWorkoutEditorDraft;
+  context: WorkoutEditorContext;
+  focusId: string | null;
+  trainingLoad?: number;
+  errors: Record<string, string>;
+}) {
+  useLanguage();
+  const steps = flattenSteps(draft.nodes);
+  const index = Math.max(0, steps.findIndex((entry) => entry.step.id === focusId));
+  const current = steps[index];
+  const next = steps[index + 1];
+  const zone = current ? stepZone(current.step, context) : "work";
+  const strength = draft.sport === "strength";
+  const checks: Array<{ ok: boolean; text: string }> = [];
+  if (!strength) {
+    checks.push(draft.nodes[0]?.nodeType === "step" && draft.nodes[0].kind === "warmup"
+      ? { ok: true, text: t("Starts with a warm-up") }
+      : { ok: false, text: t("Add a warm-up before the hard work") });
+    const last = draft.nodes[draft.nodes.length - 1];
+    checks.push(last?.nodeType === "step" && last.kind === "cooldown"
+      ? { ok: true, text: t("Ends with a cool-down") }
+      : { ok: false, text: t("Add a cool-down at the end") });
+  }
+  const problems = Object.values(errors);
+  checks.push(problems.length
+    ? { ok: false, text: problems.length === 1 ? t(problems[0]!) : t("{{value1}} fields need a value", { value1: String(problems.length) }) }
+    : { ok: true, text: t("Every step is ready for the watch") });
+  const loadShare = trainingLoad ? Math.min(98, Math.max(2, (trainingLoad / 220) * 100)) : undefined;
+  const loadWord = trainingLoad === undefined ? undefined
+    : trainingLoad < 50 ? t("An easy day. Good between hard sessions.")
+      : trainingLoad < 100 ? t("A solid session. Plan an easy day after.")
+        : trainingLoad < 150 ? t("A hard session. Two like this a week is plenty.")
+          : t("Very hard. Treat it like a race and recover.");
+
+  return (
+    <aside className="workout-editor-rail" aria-label={t("Watch preview and checks")} style={sportAccentStyle(draft.sport)}>
+      <p className="workout-editor-rail-label">{t("On your wrist")}</p>
+      {current ? (
+        <div className={`workout-watch is-${zone}`} role="img" aria-label={t("Watch preview: {{value1}}", { value1: `${current.step.name || t(RAIL_KIND_LABELS[current.step.kind])}, ${railTarget(current.step, context)}, ${railIntensity(current.step)}` })}>
+          <span className="workout-watch-ring" aria-hidden="true" />
+          <span className="workout-watch-face">
+            <small>
+              {current.rounds
+                ? t("Round 1 / {{value1}}", { value1: String(current.rounds) })
+                : t("Step {{value1}} / {{value2}}", { value1: String(index + 1), value2: String(steps.length) })}
+              {" · "}{t(RAIL_KIND_LABELS[current.step.kind])}
+            </small>
+            <b>{railTarget(current.step, context)}</b>
+            <em>{railIntensity(current.step)}</em>
+            <span>{next ? t("Next: {{value1}}", { value1: `${next.step.name || t(RAIL_KIND_LABELS[next.step.kind])} ${railTarget(next.step, context)}` }) : t("Then finish")}</span>
+          </span>
+        </div>
+      ) : null}
+      <p className="workout-editor-rail-hint">{t("Click a step to see it here.")}</p>
+
+      {loadShare !== undefined ? (
+        <div className="workout-load-feel">
+          <p className="workout-editor-rail-label">{t("Load feel")}</p>
+          <span className="workout-load-track" aria-hidden="true"><i style={{ left: `${loadShare}%` }} /></span>
+          <span className="workout-load-scale" aria-hidden="true"><small>{t("Easy")}</small><small>{t("Solid")}</small><small>{t("Hard")}</small><small>{t("Very hard")}</small></span>
+          <p>{loadWord}</p>
+        </div>
+      ) : null}
+
+      <p className="workout-editor-rail-label">{t("Checks")}</p>
+      <ul className="workout-checks">
+        {checks.map((check) => (
+          <li key={check.text} className={check.ok ? "is-ok" : "is-todo"}>
+            <i aria-hidden="true">{check.ok ? "✓" : "!"}</i>
+            {check.text}
+          </li>
+        ))}
+      </ul>
+    </aside>
   );
 }
 

@@ -80,13 +80,15 @@ interface WeekProfileProps {
   unit: string;
   /** Full sentence for assistive technology. */
   label: string;
+  /** Plan phases; each bar takes its phase's colour (base, build, peak, taper…). */
+  phases?: Array<{ startWeek: number; endWeek: number; kind?: string }>;
 }
 
 /**
  * The ridge at tile size, inside a well: one bar per week, and once a plan is
  * on the calendar, the week being trained lit.
  */
-export function WeekProfile({ values, variant, peakWeek, currentWeek, unit, label }: WeekProfileProps) {
+export function WeekProfile({ values, variant, peakWeek, currentWeek, unit, label, phases }: WeekProfileProps) {
   useLanguage();
   if (values.length === 0) {
     return <span className="tl-profile is-blank" aria-label={t("No weeks")}>&mdash;</span>;
@@ -108,6 +110,7 @@ export function WeekProfile({ values, variant, peakWeek, currentWeek, unit, labe
           <span
             key={index}
             className={`tl-profile-week${state}`}
+            data-phase={phases?.find((phase) => week >= phase.startWeek && week <= phase.endWeek)?.kind}
             title={t("Week {{value1}}: {{value2}} {{value3}}", { value1: String(week), value2: String(Math.round(value)), value3: String(unit) })}
             style={{
               "--tl-bar-height": value > 0 ? `${Math.max(peak > 0 ? value / peak : 0, MINIMUM_SHARE) * 100}%` : "2px",

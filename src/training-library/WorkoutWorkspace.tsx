@@ -1,12 +1,14 @@
-import { formatWorkoutSport } from "../calendar/workoutLabels";
-import { getLocale, t, useLanguage } from "../i18n/training";
+import { formatIntensityType, formatWorkoutSport } from "../calendar/workoutLabels";
+import { formatDate, getLocale, t, useLanguage } from "../i18n/training";
+import { keyToIso, libraryWeek } from "./libraryWeek";
 import { useLocalOnlyView } from "../privacy/localOnlyView";
 import {
   CalendarPlus,
+  Clock,
   Copy,
   Download,
+  Flame,
   Heart,
-  History,
   Layers,
   LayoutGrid,
   Link2,
@@ -26,17 +28,22 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   RunWorkoutEditorNode,
+  RunWorkoutEditorStep,
   TrainingCollection,
+  TrainingHubScheduledWorkoutEntry,
   TrainingLibraryWorkout,
   UnitSystem,
   WorkoutEditPreview,
-  WorkoutEditorDocument
+  WorkoutEditorDocument,
+  WorkoutSport
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { formatHappenDayLabel } from "../training/formatters";
 
 import { workoutSportFromType } from "../../electron/trainingPlanDomain";
 import { SportBadge, sportAccentStyle, sportChipStyle, sportTheme } from "./sportTheme";
+import { PROFILE_ZONE_LABELS, readableVolume, resolveWorkoutSport, sessionKind, sessionProfile, stepZone, type SessionProfile } from "./sessionProfile";
+import { SessionProfileBars, profileSummary } from "./SessionProfileBars";
 import { SelectDropdown } from "../components/SelectDropdown";
 import { WorkoutEditorModal } from "../calendar/WorkoutEditorModal";
 import { AddWorkoutModal } from "../calendar/AddWorkoutModal";
@@ -55,9 +62,18 @@ interface WorkoutWorkspaceProps {
   onRefresh: () => Promise<void>;
   onMessage: (message: string) => void;
   onError: (message: string) => void;
+  /** Bumped by the masthead's New workout button; each change opens the builder. */
+  createSignal?: number;
+  /** "Up next" in the masthead opens this workout; n changes on every click. */
+  focusRequest?: { id: string; n: number } | null;
+  /** Calendar entries for this week and the next: dots on the day strip. */
+  schedule?: TrainingHubScheduledWorkoutEntry[];
+  onScheduleChanged?: () => Promise<void> | void;
+  /** Plan names by id, so the reader can say which plan uses a workout. */
+  planNames?: ReadonlyMap<string, string>;
 }
 
-type WorkoutColumn = "name" | "total" | "load" | "used";
+type WorkoutColumn = "name" | "total" | "load" | "used" | "recent";
 
 interface WorkoutSort {
   column: WorkoutColumn;
@@ -72,6 +88,7 @@ const WORKOUT_COLUMNS: Array<{ id: WorkoutColumn; label: string }> = [
 
 /** Tiles have no column headings to click, so sorting gets its own control. */
 const WORKOUT_SORT_OPTIONS: Array<{ value: WorkoutColumn; label: string }> = [
+  { value: "recent", label: "Recently used" },
   { value: "name", label: "Name" },
   { value: "total", label: "Duration" },
   { value: "load", label: "Training load" },
@@ -83,17 +100,17 @@ const WORKOUT_SCOPE_PREFERENCE = defineSelectionPreference<string>({
   defaultValue: "all",
   validate: (value): value is string =>
     typeof value === "string" &&
-    (["all", "favorite", "unsettled"].includes(value) || /^sport:\d+$/.test(value))
+    (["all", "favorite", "unsettled"].includes(value) || /^sport:[a-zA-Z]+$/.test(value))
 });
 
 const WORKOUT_SORT_PREFERENCE = defineSelectionPreference<WorkoutSort>({
   key: "trainingLibrary.workouts.sort",
-  defaultValue: { column: "name", descending: false },
+  defaultValue: { column: "recent", descending: true },
   validate: (value): value is WorkoutSort => {
     if (typeof value !== "object" || value === null) return false;
     const candidate = value as Record<string, unknown>;
     return (
-      ["name", "total", "load", "used"].includes(String(candidate.column)) &&
+      ["name", "total", "load", "used", "recent"].includes(String(candidate.column)) &&
       typeof candidate.descending === "boolean"
     );
   }
@@ -107,8 +124,6 @@ const WORKOUT_LAYOUT_PREFERENCE =
   });
 
 const UNSETTLED_SYNC = new Set(["pending", "conflicted", "failed", "stale"]);
-/** Enough segments to read an interval comb without drawing thousands of them. */
-const SHAPE_SEGMENT_LIMIT = 96;
 /*
  * A tile's shape needs the step list, and COROS only ships that on
  * /training/program/detail — one request per workout. So tiles ask for it only
@@ -119,16 +134,6 @@ const SHAPE_BATCH = 3;
 /** Draws the comb a beat before the tile lands, so it is never seen filling in. */
 const SHAPE_PREFETCH_MARGIN = "160px";
 const DISTANCE_VOLUME_PATTERN = /([\d.]+)\s*(km|mi|yd|m)\b/i;
-
-/** Legend wording for the step kinds the shape bar can draw, in session order. */
-const STEP_KIND_LABELS: Record<string, string> = {
-  warmup: "Warm-up",
-  training: "Work",
-  rest: "Rest",
-  cooldown: "Cool-down",
-  sendOff: "Send-off"
-};
-const STEP_KIND_ORDER = Object.keys(STEP_KIND_LABELS);
 
 function metricFromVolume(volume: string | undefined, kind: "duration" | "distance"): number {
   const value = volume?.toLowerCase() ?? "";
@@ -149,7 +154,7 @@ function formatWorkoutVolume(
   unitSystem: UnitSystem,
   swim = false
 ): string | undefined {
-  if (!volume || !DISTANCE_VOLUME_PATTERN.test(volume)) return volume;
+  if (!volume || !DISTANCE_VOLUME_PATTERN.test(volume)) return readableVolume(volume);
   const meters = metricFromVolume(volume, "distance");
   if (unitSystem === "metric" && !swim && meters < 1000) {
     return `${Math.round(meters)} m`;
@@ -158,6 +163,64 @@ function formatWorkoutVolume(
     swim,
     ...(swim ? { digits: 0 } : {})
   });
+}
+
+const STEP_KIND_NAMES: Record<string, string> = {
+  warmup: "Warm-up",
+  training: "Work",
+  rest: "Recovery",
+  cooldown: "Cool-down",
+  sendOff: "Send-off"
+};
+
+/** COROS leaves many steps unnamed; the kind is a fair title for those. */
+function stepName(step: RunWorkoutEditorStep): string {
+  return step.name.trim() || t(STEP_KIND_NAMES[step.kind] ?? "Step");
+}
+
+function paceText(secondsPerKm: number, unit: "km" | "mi"): string {
+  const perUnit = unit === "mi" ? secondsPerKm * 1.609344 : secondsPerKm;
+  return `${Math.floor(perUnit / 60)}:${String(Math.round(perUnit % 60)).padStart(2, "0")}`;
+}
+
+/** The line under a step's name: its effort target, and sets and rest for an exercise. */
+function stepDetail(step: RunWorkoutEditorStep): string {
+  const intensity = step.intensity;
+  const parts: string[] = [];
+  if (intensity.type === "pace" || intensity.type === "effortPace") {
+    parts.push(`${paceText(intensity.lowSecondsPerKm, intensity.displayUnit)}–${paceText(intensity.highSecondsPerKm, intensity.displayUnit)} /${intensity.displayUnit}`);
+  } else if (intensity.type === "heartRate") {
+    parts.push(`${intensity.lowBpm}–${intensity.highBpm} bpm`);
+  } else if (intensity.type === "power" && "lowWatts" in intensity && intensity.lowWatts !== undefined) {
+    parts.push(`${intensity.lowWatts}–${intensity.highWatts} W`);
+  } else if ((intensity.type === "ftpPercent" || intensity.type === "heartRatePercent" || intensity.type === "thresholdPacePercent") && !intensity.preset && intensity.lowPercent !== undefined) {
+    const basis = intensity.type === "ftpPercent" ? "FTP" : intensity.type === "heartRatePercent" ? t("HR") : t("threshold pace");
+    parts.push(`${intensity.lowPercent}–${intensity.highPercent}% ${basis}`);
+  } else if (intensity.type === "rpe") {
+    parts.push(`RPE ${intensity.value}`);
+  } else if (intensity.type === "weight" && intensity.mode === "weight") {
+    parts.push(`${intensity.value} ${intensity.unit}`);
+  } else if (intensity.type !== "none" && intensity.type !== "weight") {
+    parts.push(formatIntensityType(intensity.type === "lthrPercent" ? "heartRatePercent" : intensity.type));
+  }
+  if (step.sets && step.sets > 1) parts.push(t("{{value1}} sets", { value1: String(step.sets) }));
+  if (step.restValue) parts.push(t("{{value1}} rest", { value1: step.restValue >= 60 ? `${Math.round(step.restValue / 60 * 10) / 10} min` : `${step.restValue} s` }));
+  return parts.join(" · ");
+}
+
+/** "Repeat block · 6 min each" when every step in it is timed. */
+function repeatDetail(node: Extract<RunWorkoutEditorNode, { nodeType: "repeat" }>): string {
+  const seconds = node.steps.reduce((sum, step) => sum + (step.target.type === "time" ? step.target.seconds : Number.NaN), 0);
+  return Number.isFinite(seconds) && seconds > 0
+    ? t("Repeat block · {{value1}} each", { value1: formatMinutes(seconds / 60) })
+    : t("Repeat block");
+}
+
+/** "58 min", "1 h 05". */
+function formatMinutes(minutes: number): string {
+  const rounded = Math.round(minutes);
+  if (rounded < 60) return `${rounded} min`;
+  return `${Math.floor(rounded / 60)} h ${String(rounded % 60).padStart(2, "0")}`;
 }
 
 function tomorrow(): string {
@@ -210,79 +273,41 @@ function targetLabel(
   return t("Open");
 }
 
-/** Repeat groups carry no kind of their own; they borrow their first child's. */
-function nodeKind(node: RunWorkoutEditorNode): string | undefined {
-  return node.nodeType === "step" ? node.kind : node.steps[0]?.kind;
+
+const EMPTY_PROFILE: SessionProfile = { segments: [], zones: [], totalWeight: 0, timed: false };
+
+function profileOf(document: WorkoutEditorDocument, unitSystem: UnitSystem): SessionProfile {
+  const swim = document.draft.sport === "swim";
+  return sessionProfile(document.draft.nodes, document.context, (step) => `${step.name} · ${targetLabel(step, unitSystem, swim)}`);
 }
 
-interface ShapeSegment {
-  kind: string;
-  share: number;
-  label: string;
+/** "11.2 km" with the unit set smaller, so four figures fit one row. */
+function Figure({ value }: { value: string }) {
+  const match = value.match(/^([\d.,:]+(?:\s*h\s*\d+)?)\s*(\D.*)?$/);
+  if (!match || !match[2]) return <>{value}</>;
+  return <>{match[1]}<small className="tl-kpi-unit">{match[2]}</small></>;
 }
 
-/**
- * The reader's counterpart to the plan ridge: one segment per step, width
- * proportional to how long the step runs, shaded by the step's declared kind.
- * Repeats expand, so an interval set reads as a comb.
- */
-function workoutShape(
-  nodes: RunWorkoutEditorNode[],
-  unitSystem: UnitSystem,
-  swim = false
-): ShapeSegment[] {
-  const segments: ShapeSegment[] = [];
-
-  const push = (node: RunWorkoutEditorNode) => {
-    if (segments.length >= SHAPE_SEGMENT_LIMIT || node.nodeType === "repeat") return;
-    const target = node.target;
-    const weight =
-      target.type === "time"
-        ? target.seconds
-        : target.type === "distance"
-          ? target.meters / 3
-          : target.type === "reps"
-            ? target.count * 4
-            : 120;
-    segments.push({
-      kind: node.kind,
-      share: Math.max(weight, 1),
-      label: `${node.name} · ${targetLabel(node, unitSystem, swim)}`
-    });
-  };
-
-  for (const node of nodes) {
-    if (node.nodeType === "repeat") {
-      for (let round = 0; round < node.repeat; round += 1) {
-        for (const step of node.steps) push(step);
-      }
-    } else {
-      push(node);
-    }
-  }
-
-  const total = segments.reduce((sum, segment) => sum + segment.share, 0) || 1;
-  return segments.map((segment) => ({ ...segment, share: (segment.share / total) * 100 }));
+/** Training load as five rising pips, scaled to the heaviest workout in the library. */
+function LoadPips({ load, heaviest }: { load: number | null; heaviest: number }) {
+  const filled = load && heaviest ? Math.max(1, Math.ceil((load / heaviest) * 5)) : 0;
+  return (
+    <span className="tl-pips" aria-hidden="true">
+      {[0, 1, 2, 3, 4].map((index) => (
+        <i key={index} className={index < filled ? "is-on" : ""} />
+      ))}
+    </span>
+  );
 }
 
-/*
- * The calendar's structure bar sizes its segments by flex-grow and floors the
- * tiny ones, so a 20-second recovery between reps never collapses to nothing.
- * The tile borrows the rule outright — the two bars should read as one idea.
- */
-function combGrow(segments: ShapeSegment[]): number[] {
-  const largest = Math.max(0, ...segments.map((segment) => segment.share));
-  if (largest <= 0) return segments.map(() => 1);
-  const floor = largest * 0.035;
-  return segments.map((segment) => Math.max(segment.share, floor));
+/** The next seven days, tomorrow first: the reader's quick-schedule strip. */
+/** Tomorrow when it falls this week, otherwise today (on a Sunday the week has no tomorrow). */
+function defaultScheduleDate(): string {
+  const week = libraryWeek();
+  const today = week.findIndex((day) => day.isToday);
+  return (week[today + 1] ?? week[today] ?? week[6]!).iso;
 }
 
-/*
- * Past this many steps the gapped pills stop fitting a tile's width, so the
- * comb closes up into a striped band instead of overflowing. A 20 × 30s set
- * genuinely looks like that.
- */
-const COMB_DENSE_AT = 30;
 
 function downloadSelection(workouts: TrainingLibraryWorkout[]) {
   const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), workouts }, null, 2)], {
@@ -302,7 +327,12 @@ export function WorkoutWorkspace({
   collections,
   onRefresh,
   onMessage,
-  onError
+  onError,
+  createSignal = 0,
+  focusRequest,
+  schedule: scheduledEntries = [],
+  onScheduleChanged,
+  planNames
 }: WorkoutWorkspaceProps) {
   useLanguage();
   const localOnly = useLocalOnlyView();
@@ -322,39 +352,75 @@ export function WorkoutWorkspace({
   const [previewMetrics, setPreviewMetrics] = useState<WorkoutEditPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [scheduleDate, setScheduleDate] = useState(tomorrow);
+  const [scheduleDate, setScheduleDate] = useState(defaultScheduleDate);
   const [busy, setBusy] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string[]>([]);
   const [duplicateSport, setDuplicateSport] = useState<number | undefined>();
+  /** The reader's copy button opens a small "Duplicate as" sport menu. */
+  const [duplicateMenuOpen, setDuplicateMenuOpen] = useState(false);
+  const duplicateMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!duplicateMenuOpen) return;
+    const close = (event: Event) => {
+      if (event instanceof KeyboardEvent ? event.key === "Escape" : !duplicateMenuRef.current?.contains(event.target as Node)) {
+        setDuplicateMenuOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", close);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", close);
+    };
+  }, [duplicateMenuOpen]);
   const [creating, setCreating] = useState(false);
+  const otherDateInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (createSignal) setCreating(true);
+  }, [createSignal]);
+  useEffect(() => {
+    if (focusRequest) setActiveId(focusRequest.id);
+  }, [focusRequest]);
+  /** Sports already planned on each day, for the reader's day strip. */
+  const plannedDays = useMemo(() => {
+    const next: Record<string, WorkoutSport[]> = {};
+    for (const entry of scheduledEntries) {
+      (next[keyToIso(entry.happenDay)] ??= []).push(resolveWorkoutSport(entry.sportType) ?? "run");
+    }
+    return next;
+  }, [scheduledEntries]);
   /** Step structure per workout id; an empty array means "asked, none to draw". */
-  const [shapes, setShapes] = useState<Record<string, ShapeSegment[]>>({});
+  const [shapes, setShapes] = useState<Record<string, SessionProfile>>({});
   const [shapeQueue, setShapeQueue] = useState<string[]>([]);
   const requestedShapes = useRef(new Set<string>());
   const shapeBusy = useRef(false);
   const shapeObserver = useRef<IntersectionObserver | null>(null);
 
   const scopes = useMemo(() => {
-    const options = [{ id: "all", label: "All" }];
-    if (workouts.some((workout) => workout.favorite)) {
-      options.push({ id: "favorite", label: "Favorites" });
+    const options: Array<{ id: string; label: string; count: number; sport?: WorkoutSport }> = [
+      { id: "all", label: "All", count: workouts.length }
+    ];
+    const bySport = new Map<WorkoutSport, number>();
+    for (const workout of workouts) {
+      const sport = resolveWorkoutSport(workout.sportType);
+      if (sport) bySport.set(sport, (bySport.get(sport) ?? 0) + 1);
     }
-    const sports = [...new Set(workouts.map((workout) => workout.sportType))]
-      .filter((value): value is number => value !== undefined)
-      .sort((left, right) => left - right);
-    for (const sportType of sports) {
-      options.push({
-        id: `sport:${sportType}`,
-        label: formatWorkoutSport(workoutSportFromType(sportType) ?? "run")
-      });
+    /* Busiest sport first, so the pills read as the library's mix. */
+    for (const [sport, count] of [...bySport].sort((left, right) => right[1] - left[1])) {
+      options.push({ id: `sport:${sport}`, label: formatWorkoutSport(sport), count, sport });
     }
     if (workouts.some((workout) => UNSETTLED_SYNC.has(workout.syncState))) {
-      options.push({ id: "unsettled", label: "Needs attention" });
+      options.push({
+        id: "unsettled",
+        label: "Needs attention",
+        count: workouts.filter((workout) => UNSETTLED_SYNC.has(workout.syncState)).length
+      });
     }
     return options;
   }, [workouts, getLocale()]);
+  const favoriteCount = workouts.filter((workout) => workout.favorite).length;
 
-  const scopeAvailable = scopes.some((option) => option.id === scope);
+  const scopeAvailable = scope === "favorite" ? favoriteCount > 0 : scopes.some((option) => option.id === scope);
   useEffect(() => {
     if (!scopeAvailable) setScope("all");
   }, [scopeAvailable, setScope]);
@@ -367,7 +433,7 @@ export function WorkoutWorkspace({
       }
       if (scope === "favorite") return workout.favorite;
       if (scope === "unsettled") return UNSETTLED_SYNC.has(workout.syncState);
-      if (scope.startsWith("sport:")) return String(workout.sportType) === scope.slice(6);
+      if (scope.startsWith("sport:")) return resolveWorkoutSport(workout.sportType) === scope.slice(6);
       return true;
     });
 
@@ -376,6 +442,12 @@ export function WorkoutWorkspace({
       if (sort.column === "name") return left.name.localeCompare(right.name) * direction;
       if (sort.column === "load") {
         return ((left.trainingLoad ?? 0) - (right.trainingLoad ?? 0)) * direction;
+      }
+      if (sort.column === "recent") {
+        /* Never-used workouts sink to the end, then read alphabetically. */
+        const leftTime = left.lastUsedAt ? Date.parse(left.lastUsedAt) : 0;
+        const rightTime = right.lastUsedAt ? Date.parse(right.lastUsedAt) : 0;
+        return (rightTime - leftTime) || left.name.localeCompare(right.name);
       }
       if (sort.column === "used") {
         return (
@@ -442,14 +514,14 @@ export function WorkoutWorkspace({
 
     void Promise.all(
       batch.map(async (id) => {
-        let segments: ShapeSegment[] = [];
+        let profile: SessionProfile = EMPTY_PROFILE;
         try {
           const document = await api.getWorkoutForEdit({ kind: "library", programId: id }, unitSystem);
-          segments = workoutShape(document.draft.nodes, unitSystem, document.draft.sport === "swim");
+          profile = profileOf(document, unitSystem);
         } catch {
           /* A tile that cannot draw its shape falls back to its load bar. */
         }
-        if (!cancelled) setShapes((current) => ({ ...current, [id]: segments }));
+        if (!cancelled) setShapes((current) => ({ ...current, [id]: profile }));
       })
     ).finally(() => {
       shapeBusy.current = false;
@@ -477,16 +549,9 @@ export function WorkoutWorkspace({
   }, []);
 
   const active = workouts.find((workout) => workout.id === activeId);
-  const shape = useMemo(
-    () => previewDocument
-      ? workoutShape(previewDocument.draft.nodes, unitSystem, previewDocument.draft.sport === "swim")
-      : [],
+  const profile = useMemo(
+    () => (previewDocument ? profileOf(previewDocument, unitSystem) : EMPTY_PROFILE),
     [previewDocument, unitSystem, getLocale()]
-  );
-  /** Kinds actually drawn, in session order, so the legend never lists a ghost. */
-  const shapeKinds = useMemo(
-    () => STEP_KIND_ORDER.filter((kind) => shape.some((segment) => segment.kind === kind)),
-    [shape, getLocale()]
   );
 
   useEffect(() => {
@@ -508,7 +573,7 @@ export function WorkoutWorkspace({
         requestedShapes.current.add(activeId);
         setShapes((current) => ({
           ...current,
-          [activeId]: workoutShape(document.draft.nodes, unitSystem, document.draft.sport === "swim")
+          [activeId]: profileOf(document, unitSystem)
         }));
         try {
           const metrics = await api.previewWorkoutEdit(
@@ -554,6 +619,7 @@ export function WorkoutWorkspace({
       await api.updateWorkoutMetadata([active.id], { lastUsedAt: new Date().toISOString() });
       onMessage(`Scheduled "${active.name}" on ${formatHappenDayLabel(happenDay)}.`);
       await onRefresh();
+      void onScheduleChanged?.();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -575,8 +641,9 @@ export function WorkoutWorkspace({
     }
   };
 
-  const duplicate = async () => {
+  const duplicate = async (sport = duplicateSport) => {
     if (!active) return;
+    setDuplicateMenuOpen(false);
     const name = window.prompt("Name for the duplicate", `${active.name} Copy`);
     if (!name?.trim()) return;
     setBusy("duplicate");
@@ -584,7 +651,7 @@ export function WorkoutWorkspace({
       const result = await api.duplicateLibraryWorkout(
         active.id,
         name.trim(),
-        duplicateSport ?? active.sportType
+        sport ?? active.sportType
       );
       onMessage(t("Created \"{{value1}}\" in the workout library.", { value1: String(result.name) }));
       await onRefresh();
@@ -661,10 +728,9 @@ export function WorkoutWorkspace({
    * Reader figures resolve once, so a cell the strip has to ellipsize can
    * still carry its full string on the title attribute.
    */
-  const readerTime = previewMetrics?.durationSeconds
-    ? `${Math.round(previewMetrics.durationSeconds / 60)}m`
-    : null;
-  const activeSport = workoutSportFromType(active?.sportType);
+  const readerSeconds = previewMetrics?.durationSeconds || (profile.timed ? profile.totalWeight : 0);
+  const readerTime = readerSeconds ? formatMinutes(readerSeconds / 60) : null;
+  const activeSport = resolveWorkoutSport(active?.sportType);
   const readerDistance = previewMetrics?.distanceMeters
     ? formatDistanceValue(previewMetrics.distanceMeters, unitSystem, {
         swim: activeSport === "swim",
@@ -675,10 +741,17 @@ export function WorkoutWorkspace({
   const readerLoad = readerLoadSource ? Math.round(readerLoadSource) : null;
   const readerSteps = previewDocument?.draft.nodes.length ?? null;
   const ActiveSportIcon = sportTheme(activeSport).icon;
+  const readerKind = sessionKind(profile);
+  const days = libraryWeek();
+  const scheduleDay = days.find((day) => day.iso === scheduleDate);
+  const readerAxis = readerSeconds
+    ? [0, 0.25, 0.5, 0.75, 1].map((fraction) => (fraction ? formatMinutes((readerSeconds * fraction) / 60) : "0"))
+    : [];
+  const swimReader = previewDocument?.draft.sport === "swim";
+  const readerIsSets = !previewMetrics?.distanceMeters && isSetVolume(active?.volume);
 
   return (
     <div className="tl-panel tl-split">
-      <section className="tl-catalog" aria-label={t("{{value1}} workouts", { value1: String(filtered.length) })}>
         <div className="tl-filters">
           <label className="tl-search">
             <Search size={15} />
@@ -694,14 +767,31 @@ export function WorkoutWorkspace({
               <button
                 type="button"
                 key={option.id}
+                className="tl-pill"
                 aria-pressed={scope === option.id}
+                style={option.sport ? sportChipStyle(option.sport) : undefined}
                 onClick={() => setScope(option.id)}
               >
+                {option.sport ? <i className="tl-pill-dot" aria-hidden="true" /> : null}
                 {t(option.label)}
+                <span className="tl-pill-count">{option.count}</span>
               </button>
             ))}
+            {favoriteCount ? (
+              <button
+                type="button"
+                className="tl-pill is-favorite"
+                aria-pressed={scope === "favorite"}
+                onClick={() => setScope(scope === "favorite" ? "all" : "favorite")}
+              >
+                <Heart size={13} fill={scope === "favorite" ? "currentColor" : "none"} aria-hidden="true" />
+                {t("Favorites")}
+                <span className="tl-pill-count">{favoriteCount}</span>
+              </button>
+            ) : null}
           </div>
           <div className="tl-filters-tail">
+            <span className="tl-sort-label" aria-hidden="true">{t("Sort")}</span>
             <SelectDropdown translateLabel={t}
               className="tl-quiet-select"
               label={t("Sort workouts")}
@@ -727,11 +817,11 @@ export function WorkoutWorkspace({
                 <List size={14} />
               </button>
             </div>
-            <button type="button" className="primary-button" onClick={() => setCreating(true)}>
-              <Plus size={14} /> {t("New workout")} </button>
+
           </div>
         </div>
 
+      <section className="tl-catalog" aria-label={t("{{value1}} workouts", { value1: String(filtered.length) })}>
         {selected.length ? (
           <div className="tl-bulk" role="toolbar" aria-label={t("Actions for selected workouts")}>
             <strong>{selected.length} {t("selected")}</strong>
@@ -772,24 +862,36 @@ export function WorkoutWorkspace({
             <p>{t("Clear the search or choose another filter.")}</p>
           </div>
         ) : layout === "grid" ? (
-          <ul className="tl-grid" role="list">
+          <>
+          <p className="tl-list-label">
+            <span>
+              {filtered.length === workouts.length
+                ? t("All {{value1}} workouts", { value1: String(filtered.length) })
+                : t("{{value1}} of {{value2}} workouts", { value1: String(filtered.length), value2: String(workouts.length) })}
+            </span>
+            <span>{t("Shape = intensity over time")}</span>
+          </p>
+          <ul className={`tl-grid${selected.length ? " is-selecting" : ""}`} role="list">
             {filtered.slice(0, visibleCount).map((workout) => {
               const isSelected = selected.includes(workout.id);
               const references = workout.usedByPlanIds.length + workout.scheduledCount;
-              const sport = workoutSportFromType(workout.sportType);
-              const SportGlyph = sportTheme(sport).icon;
-              const VolumeIcon = isSetVolume(workout.volume) ? Layers : Route;
+              const sport = resolveWorkoutSport(workout.sportType);
+              const SportIcon = sportTheme(sport).icon;
               const load = workout.trainingLoad ? Math.round(workout.trainingLoad) : null;
               /* A sliver of fill so the lightest session still draws something. */
               const loadShare = load && heaviestLoad ? Math.max(3, (load / heaviestLoad) * 100) : 0;
               const lastUsed = sinceLabel(workout.lastUsedAt);
               const tags = workout.tags.slice(0, 3);
-              const tileShape = shapes[workout.id];
-              const hasShape = Boolean(tileShape?.length);
+              const tileProfile = shapes[workout.id];
+              const hasShape = Boolean(tileProfile?.segments.length);
+              /* Timed steps add up to a duration; a volume that is itself a time says so already. */
+              const tileDuration = tileProfile?.timed && !/\b(h|min)\b/.test(workout.volume ?? "")
+                ? formatMinutes(tileProfile.totalWeight / 60)
+                : null;
 
               return (
                 <li
-                  className={`tl-card${activeId === workout.id ? " is-active" : ""}${
+                  className={`tl-card tl-tile${activeId === workout.id ? " is-active" : ""}${
                     isSelected ? " is-selected" : ""
                   }`}
                   key={workout.id}
@@ -801,15 +903,31 @@ export function WorkoutWorkspace({
                   {workoutMark(workout.id, workout.name, isSelected)}
                   <button
                     type="button"
-                    className="tl-card-open"
+                    className={`tl-tile-heart${workout.favorite ? " is-active" : ""}`}
+                    aria-pressed={workout.favorite}
+                    aria-label={workout.favorite
+                      ? t("Remove {{value1}} from favorites", { value1: workout.name })
+                      : t("Add {{value1}} to favorites", { value1: workout.name })}
+                    onClick={() => void updateMetadata([workout.id], { favorite: !workout.favorite })}
+                  >
+                    <Heart size={15} fill={workout.favorite ? "currentColor" : "none"} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="tl-card-open tl-tile-open"
+                    aria-pressed={activeId === workout.id}
                     onClick={() => setActiveId(workout.id)}
                   >
-                    <SportGlyph className="tl-wk-glyph" size={132} strokeWidth={1} aria-hidden="true" />
-                    <span className="tl-card-top">
-                      {workout.favorite ? (
-                        <Heart size={11} fill="currentColor" strokeWidth={0} aria-label={t("Favorite")} />
-                      ) : null}
-                      <SportBadge sport={sport ?? "run"} />
+                    <span className="tl-tile-head">
+                      <span className="tl-tile-badge" aria-hidden="true">
+                        <SportIcon size={17} strokeWidth={2} />
+                      </span>
+                      <span className="tl-tile-sport">
+                        <b>{formatWorkoutSport(sport ?? "run")}</b>
+                        <small>
+                          {lastUsed ? t("Last used {{value1}}", { value1: lastUsed }) : t("Not used yet")}
+                        </small>
+                      </span>
                       {UNSETTLED_SYNC.has(workout.syncState) ? (
                         <i className="tl-flag">{workout.syncState}</i>
                       ) : null}
@@ -825,36 +943,15 @@ export function WorkoutWorkspace({
                         ) : null}
                       </span>
                     ) : null}
-                    <span className="tl-wk-meter">
-                      <span className="tl-wk-meter-head">
-                        <small>{hasShape ? t("Session shape") : t("Training load")}</small>
-                        <span className="tl-wk-load">
-                          <b className={load ? "" : "is-nil"}>{load ?? "—"}</b>
-                          <em>{t("load")}</em>
-                        </span>
-                      </span>
-                      {hasShape ? (
-                        <span
-                          className="tl-wk-shape"
-                          data-dense={tileShape.length > COMB_DENSE_AT ? "true" : undefined}
-                          role="img"
-                          aria-label={t("Workout structure: {{value1}}", { value1: String(tileShape
-                            .map((segment) => segment.label)
-                            .join(", ")) })}
-                        >
-                          {combGrow(tileShape).map((grow, index) => (
-                            <i
-                              key={index}
-                              className={`is-${tileShape[index].kind}`}
-                              style={{ flexGrow: grow }}
-                              title={t(tileShape[index].label)}
-                            />
-                          ))}
-                        </span>
-                      ) : (
+                    {hasShape ? (
+                      <SessionProfileBars
+                        profile={tileProfile}
+                        label={t("{{value1}} intensity profile: {{value2}}", { value1: workout.name, value2: profileSummary(tileProfile) })}
+                      />
+                    ) : (
+                      <span className="tl-skyline is-tile is-pending" aria-hidden="true">
                         <span
                           className={`tl-wk-track${load ? "" : " is-nil"}`}
-                          aria-hidden="true"
                           title={
                             load
                               ? t("{{value1}} training load — {{value2}}% of the heaviest workout in your library", { value1: String(load), value2: String(Math.round((load / heaviestLoad) * 100)) })
@@ -863,29 +960,33 @@ export function WorkoutWorkspace({
                         >
                           {load ? <i style={{ width: `${loadShare}%` }} /> : null}
                         </span>
-                      )}
-                    </span>
-                    <span className="tl-wk-foot">
-                      <span>
-                        <VolumeIcon size={11} aria-hidden="true" />
-                        <b>{formatWorkoutVolume(workout.volume, unitSystem, workoutSportFromType(workout.sportType) === "swim") ?? t("No volume")}</b>
                       </span>
-                      <span>
-                        <Link2 size={11} aria-hidden="true" />
-                        {references ? (
-                          <>
-                            <b>{references}</b> {references === 1 ? t("use") : t("uses")}
-                          </>
-                        ) : (
-                          t("Unused")
-                        )}
-                      </span>
-                      {lastUsed ? (
+                    )}
+                    <span className="tl-tile-foot">
+                      <span className="tl-tile-facts">
+                        {tileDuration ? (
+                          <span>
+                            <b>{tileDuration}</b>
+                          </span>
+                        ) : null}
                         <span>
-                          <History size={11} aria-hidden="true" />
-                          {lastUsed}
+                          <b>{formatWorkoutVolume(workout.volume, unitSystem, sport === "swim") ?? t("No volume")}</b>
                         </span>
-                      ) : null}
+                        <span>
+                          {references ? (
+                            <>
+                              <b>{references}</b> {references === 1 ? t("use") : t("uses")}
+                            </>
+                          ) : (
+                            t("Unused")
+                          )}
+                        </span>
+                      </span>
+                      <span className="tl-tile-load" title={t("Training load")}>
+                        <LoadPips load={load} heaviest={heaviestLoad} />
+                        <b className={load ? "" : "is-nil"}>{load ?? "—"}</b>
+                        <span className="sr-only">{t("load")}</span>
+                      </span>
                     </span>
                   </button>
                 </li>
@@ -903,6 +1004,7 @@ export function WorkoutWorkspace({
               </li>
             ) : null}
           </ul>
+          </>
         ) : (
           <div className="tl-index">
             <div className="tl-index-head tl-workout-row">
@@ -933,7 +1035,7 @@ export function WorkoutWorkspace({
               {filtered.slice(0, visibleCount).map((workout) => {
                 const isSelected = selected.includes(workout.id);
                 const references = workout.usedByPlanIds.length + workout.scheduledCount;
-                const sport = workoutSportFromType(workout.sportType);
+                const sport = resolveWorkoutSport(workout.sportType);
                 const details = workout.tags.slice(0, 2);
 
                 return (
@@ -964,7 +1066,7 @@ export function WorkoutWorkspace({
                       </span>
                     </button>
                     <span className={`tl-fig${workout.volume ? "" : " is-nil"}`}>
-                      {formatWorkoutVolume(workout.volume, unitSystem, workoutSportFromType(workout.sportType) === "swim") ?? "—"}
+                      {formatWorkoutVolume(workout.volume, unitSystem, resolveWorkoutSport(workout.sportType) === "swim") ?? "—"}
                     </span>
                     <span className={`tl-fig${workout.trainingLoad ? "" : " is-nil"}`}>
                       {workout.trainingLoad ? Math.round(workout.trainingLoad) : "—"}
@@ -988,7 +1090,7 @@ export function WorkoutWorkspace({
         )}
       </section>
 
-      <aside className="tl-reader" aria-live="polite">
+      <aside className="tl-reader tl-reader-revamp" aria-live="polite" style={sportAccentStyle(activeSport)}>
         {!active ? (
           <div className="tl-empty">
             <h3>{t("Pick a workout")}</h3>
@@ -997,142 +1099,187 @@ export function WorkoutWorkspace({
         ) : (
           <>
             <div className="tl-reader-scroll">
-              <header>
-                <p className="tl-eyebrow tl-reader-sport has-icon" style={sportChipStyle(activeSport)}>
-                  <ActiveSportIcon size={12} strokeWidth={2.2} aria-hidden="true" />
-                  {formatWorkoutSport(activeSport ?? "run")}
-                </p>
-                <h2>{active.name}</h2>
-                {active.tags.length ? (
-                  <ul className="tl-reader-tags" aria-label={t("Workout tags")}>
-                    {active.tags.slice(0, 8).map((tag) => (
-                      <li key={tag}>{tag}</li>
-                    ))}
-                    {active.tags.length > 8 ? <li>+{active.tags.length - 8} {t("more")}</li> : null}
-                  </ul>
-                ) : null}
+              <header className="tl-reader-head">
+                <span className="tl-reader-badge" aria-hidden="true">
+                  <ActiveSportIcon size={22} strokeWidth={2} />
+                </span>
+                <span className="tl-reader-title">
+                  <p className="tl-reader-eyebrow">
+                    {formatWorkoutSport(activeSport ?? "run")}
+                    {readerKind ? <> · {t(readerKind)}</> : null}
+                  </p>
+                  <h2>{active.name}</h2>
+                </span>
                 <button
                   type="button"
                   className={`tl-reader-favorite${active.favorite ? " is-active" : ""}`}
+                  aria-pressed={active.favorite}
                   aria-label={active.favorite ? t("Remove from favorites") : t("Add to favorites")}
                   onClick={() => void updateMetadata([active.id], { favorite: !active.favorite })}
                 >
-                  <Heart size={16} fill={active.favorite ? "currentColor" : "none"} />
+                  <Heart size={17} fill={active.favorite ? "currentColor" : "none"} />
                 </button>
               </header>
+              <ul className="tl-reader-tags" aria-label={t("Workout tags")}>
+                {active.tags.slice(0, 8).map((tag) => (
+                  <li key={tag}>{tag}</li>
+                ))}
+                {active.tags.length > 8 ? <li>+{active.tags.length - 8} {t("more")}</li> : null}
+                <li className="is-action">
+                  <button type="button" onClick={applyTags}>
+                    <Plus size={11} aria-hidden="true" /> {active.tags.length ? t("Edit tags") : t("Tag")}
+                  </button>
+                </li>
+              </ul>
 
-              <dl className="tl-reader-metrics">
-              <div>
-                <dt>{t("Time")}</dt>
-                <dd className={readerTime ? "" : "is-nil"} title={readerTime ?? undefined}>
-                  {readerTime ?? "—"}
-                </dd>
-              </div>
-              <div>
-                <dt>{t("Distance")}</dt>
-                <dd className={readerDistance ? "" : "is-nil"} title={readerDistance ?? undefined}>
-                  {readerDistance ?? "—"}
-                </dd>
-              </div>
-              <div>
-                <dt>{t("Load")}</dt>
-                <dd className={readerLoad ? "" : "is-nil"} title={readerLoad ? String(readerLoad) : undefined}>
-                  {readerLoad ?? "—"}
-                </dd>
-              </div>
-              <div>
-                <dt>{t("Steps")}</dt>
-                <dd className={readerSteps ? "" : "is-nil"}>{readerSteps ?? "—"}</dd>
-              </div>
-            </dl>
-
-            {shape.length ? (
-              <figure className="tl-shape" style={sportAccentStyle(activeSport)}>
-                <div
-                  role="img"
-                  data-dense={shape.length > COMB_DENSE_AT ? "true" : undefined}
-                  aria-label={t("Step structure of {{value1}}, {{value2}} steps", { value1: String(active.name), value2: String(shape.length) })}
-                >
-                  {combGrow(shape).map((grow, index) => (
-                    <span
-                      key={index}
-                      className={`is-${shape[index].kind}`}
-                      style={{ flexGrow: grow }}
-                      title={t(shape[index].label)}
-                    />
-                  ))}
+              <dl className="tl-kpis">
+                <div className="is-time">
+                  <dt><i aria-hidden="true"><Clock size={11} strokeWidth={2.6} /></i>{t("Time")}</dt>
+                  <dd className={readerTime ? "" : "is-nil"} title={readerTime ?? undefined}>{readerTime ? <Figure value={readerTime} /> : "—"}</dd>
                 </div>
-                <figcaption>
-                  <span>{t("Step structure, by share of the session")}</span>
-                  {shapeKinds.length ? (
-                    <span className="tl-shape-legend" aria-hidden="true">
-                      {shapeKinds.map((kind) => (
-                        <span key={kind}>
-                          <em className={`is-${kind}`} />
-                          {t(STEP_KIND_LABELS[kind])}
-                        </span>
-                      ))}
-                    </span>
+                <div className="is-distance">
+                  <dt>
+                    <i aria-hidden="true">{readerIsSets ? <Layers size={11} strokeWidth={2.6} /> : <Route size={11} strokeWidth={2.6} />}</i>
+                    {readerIsSets ? t("Sets") : t("Distance")}
+                  </dt>
+                  <dd className={readerDistance ? "" : "is-nil"} title={readerDistance ?? undefined}>{readerDistance ? <Figure value={readerDistance} /> : "—"}</dd>
+                </div>
+                <div className="is-load">
+                  <dt><i aria-hidden="true"><Flame size={11} strokeWidth={2.6} /></i>{t("Load")}</dt>
+                  <dd className={readerLoad ? "" : "is-nil"}>{readerLoad ?? "—"}</dd>
+                </div>
+                <div className="is-steps">
+                  <dt><i aria-hidden="true"><Layers size={11} strokeWidth={2.6} /></i>{t("Steps")}</dt>
+                  <dd className={readerSteps ? "" : "is-nil"}>{readerSteps ?? "—"}</dd>
+                </div>
+              </dl>
+
+              {profile.segments.length ? (
+                <figure className="tl-reader-profile">
+                  <figcaption>
+                    <span>{t("Session profile")}</span>
+                    {readerTime ? <span>{readerTime}</span> : null}
+                  </figcaption>
+                  <SessionProfileBars
+                    profile={profile}
+                    size="reader"
+                    playhead
+                    label={t("Intensity profile for {{value1}}: {{value2}}", { value1: active.name, value2: profileSummary(profile, readerSeconds || undefined) })}
+                  />
+                  {readerAxis.length ? (
+                    <div className="tl-reader-axis" aria-hidden="true">
+                      {readerAxis.map((tick, index) => <span key={index}>{tick}</span>)}
+                    </div>
                   ) : null}
-                </figcaption>
-              </figure>
-            ) : null}
+                  <div className="tl-zone-split" aria-hidden="true">
+                    {profile.zones.map(({ zone, share }) => (
+                      <i key={zone} className={`is-${zone}`} style={{ flexGrow: share }} />
+                    ))}
+                  </div>
+                  <ul className="tl-zone-legend" aria-label={t("Time by intensity")}>
+                    {profile.zones.map(({ zone, share }) => (
+                      <li key={zone}>
+                        <i className={`is-${zone}`} aria-hidden="true" />
+                        {t(PROFILE_ZONE_LABELS[zone])}{" "}
+                        <b>{readerSeconds ? formatMinutes((share * readerSeconds) / 60) : `${Math.round(share * 100)}%`}</b>
+                      </li>
+                    ))}
+                  </ul>
+                </figure>
+              ) : null}
 
-            {previewLoading ? (
-              <p className="tl-reader-loading">
-                <LoaderCircle className="is-spinning" size={16} /> {t("Loading the full structure")} </p>
-            ) : previewDocument ? (
-              <div className="tl-steps-block">
-                <p className="tl-steps-label">
-                  {t("Session steps")} <span>{previewDocument.draft.nodes.length}</span>
-                </p>
-                <ol className="tl-steps">
-                  {previewDocument.draft.nodes.map((node) => (
-                    <li key={node.id} data-kind={nodeKind(node)}>
-                      <span className="tl-step-head">
-                        <b>{node.name}</b>
-                        <small className={node.nodeType === "repeat" ? "is-rounds" : ""}>
-                          {targetLabel(node, unitSystem, previewDocument?.draft.sport === "swim")}
-                        </small>
-                      </span>
-                      {node.nodeType === "repeat" ? (
-                        <span className="tl-step-children">
-                          {node.steps.map((step) => (
-                            <em key={step.id}>
-                              {step.name} <small>{targetLabel(step, unitSystem, previewDocument?.draft.sport === "swim")}</small>
-                            </em>
-                          ))}
+              {previewLoading ? (
+                <p className="tl-reader-loading">
+                  <LoaderCircle className="is-spinning" size={16} /> {t("Loading the full structure")} </p>
+              ) : previewDocument ? (
+                <div className="tl-steps-block">
+                  <p className="tl-steps-label">
+                    {t("Steps")} <span>{previewDocument.draft.nodes.length === 1
+                    ? t("1 step")
+                    : t("{{value1}} steps", { value1: String(previewDocument.draft.nodes.length) })}</span>
+                  </p>
+                  <ol className="tl-steps tl-steps-revamp">
+                    {previewDocument.draft.nodes.map((node, index) => (
+                      <li
+                        key={node.id}
+                        className={node.nodeType === "repeat" ? "is-repeat" : ""}
+                        data-zone={node.nodeType === "step" ? stepZone(node, previewDocument.context) : node.steps[0] ? stepZone(node.steps[0], previewDocument.context) : "work"}
+                      >
+                        <span className="tl-step-row">
+                          <span className="tl-step-number">{String(index + 1).padStart(2, "0")}</span>
+                          <span className="tl-step-text">
+                            <b>
+                              {node.nodeType === "repeat"
+                                ? `${node.repeat} × ${node.steps.map(stepName).join(" + ")}`
+                                : stepName(node)}
+                            </b>
+                            {node.nodeType === "step"
+                              ? (stepDetail(node) || node.overview ? <small>{stepDetail(node) || node.overview}</small> : null)
+                              : <small>{repeatDetail(node)}</small>}
+                          </span>
+                          <small className={`tl-step-amount${node.nodeType === "repeat" ? " is-rounds" : ""}`}>
+                            {targetLabel(node, unitSystem, swimReader)}
+                          </small>
                         </span>
-                      ) : null}
-                      {!node.editable ? (
-                        <i className="tl-flag" title={node.unsupportedReason}>
-                          {t("read only")} </i>
-                      ) : null}
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            ) : null}
+                        {node.nodeType === "repeat" ? (
+                          <ol className="tl-step-children">
+                            {node.steps.map((step) => (
+                              <li key={step.id} data-zone={stepZone(step, previewDocument.context)}>
+                                <i aria-hidden="true" />
+                                <span>
+                                  {stepName(step)}
+                                  {stepDetail(step) ? <em>{stepDetail(step)}</em> : null}
+                                </span>
+                                <small>{targetLabel(step, unitSystem, swimReader)}</small>
+                              </li>
+                            ))}
+                          </ol>
+                        ) : null}
+                        {!node.editable ? (
+                          <i className="tl-flag" title={node.unsupportedReason}>
+                            {t("read only")} </i>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              ) : null}
 
-            <p
-              className={`tl-reader-references${
-                active.usedByPlanIds.length || active.scheduledCount ? " is-linked" : ""
-              }`}
-            >
-              {active.usedByPlanIds.length || active.scheduledCount ? (
-                <>
-                  <Link2 size={13} />
-                  {t("Used by {{value1}} plan{{value2}} and scheduled {{value3}} time{{value4}}.", { value1: String(active.usedByPlanIds.length), value2: String(active.usedByPlanIds.length === 1 ? "" : "s"), value3: String(active.scheduledCount), value4: String(active.scheduledCount === 1 ? "" : "s") })}
-                </>
-              ) : (
-                <>
-                  <Unlink size={13} />
-                  {t("Not referenced by a plan or a calendar day.")} </>
-              )}
-            </p>
+              <p
+                className={`tl-reader-references${
+                  active.usedByPlanIds.length || active.scheduledCount ? " is-linked" : ""
+                }`}
+              >
+                {active.usedByPlanIds.length || active.scheduledCount ? (
+                  <>
+                    <Link2 size={13} />
+                    {(() => {
+                      /* "In Half Marathon — Sub 1:30 · scheduled 3× · last today", falling back to counts when no name is known. */
+                      const named = active.usedByPlanIds.map((id) => planNames?.get(id)).filter((name): name is string => Boolean(name));
+                      const lastUsed = sinceLabel(active.lastUsedAt);
+                      const parts = [
+                        named.length
+                          ? named.length > 1
+                            ? t("In {{value1}} +{{value2}} more", { value1: named[0]!, value2: String(active.usedByPlanIds.length - 1) })
+                            : t("In {{value1}}", { value1: named[0]! })
+                          : active.usedByPlanIds.length
+                            ? t("Used by {{value1}} plan{{value2}}", { value1: String(active.usedByPlanIds.length), value2: active.usedByPlanIds.length === 1 ? "" : "s" })
+                            : undefined,
+                        active.scheduledCount ? t("scheduled {{value1}}×", { value1: String(active.scheduledCount) }) : undefined,
+                        lastUsed ? t("last {{value1}}", { value1: lastUsed }) : undefined
+                      ].filter(Boolean);
+                      return <span>{parts.join(" · ")}</span>;
+                    })()}
+                  </>
+                ) : (
+                  <>
+                    <Unlink size={13} />
+                    {t("Not referenced by a plan or a calendar day.")} </>
+                )}
+              </p>
             </div>
 
-            <footer className="tl-reader-dock">
+            <footer className="tl-reader-dock tl-reader-dock-revamp">
               <form
                 className="tl-reader-schedule"
                 onSubmit={(event) => {
@@ -1141,79 +1288,130 @@ export function WorkoutWorkspace({
                 }}
               >
                 <div className="tl-reader-schedule-heading">
-                  <span className="tl-reader-schedule-icon" aria-hidden="true">
-                    <CalendarPlus size={15} />
-                  </span>
-                  <span>
-                    <strong>{t("Schedule workout")}</strong>
-                    <small>{localOnly ? t("Add it to your calendar") : t("Add it to your COROS calendar")}</small>
-                  </span>
-                </div>
-                <div className="tl-reader-schedule-controls">
-                  <label>
-                    <span className="sr-only">{t("Schedule date")}</span>
+                  <span className="tl-dock-label">{t("Put it on this week")}</span>
+                  <label className="tl-other-date">
+                    <span>{t("Pick another date")} ›</span>
                     <input
+                      ref={otherDateInput}
                       type="date"
                       value={scheduleDate}
-                      min={tomorrow()}
+                      min={days.find((day) => day.isToday)?.iso ?? tomorrow()}
+                      aria-label={t("Schedule date")}
                       onChange={(event) => setScheduleDate(event.target.value)}
+                      onClick={() => {
+                        try { otherDateInput.current?.showPicker(); } catch { /* the field still takes typing */ }
+                      }}
                     />
                   </label>
-                  <button
-                    type="submit"
-                    className="primary-button"
-                    disabled={!scheduleDate || busy === "schedule"}
-                  >
-                    {busy === "schedule" ? t("Scheduling") : t("Schedule")}
-                  </button>
                 </div>
+                <div className="tl-day-strip" role="group" aria-label={t("Choose a day this week")}>
+                  {days.map((day) => {
+                    const planned = plannedDays[day.iso] ?? [];
+                    return (
+                      <button
+                        type="button"
+                        key={day.iso}
+                        aria-pressed={scheduleDate === day.iso}
+                        disabled={day.past}
+                        className={day.isToday ? "is-today" : undefined}
+                        aria-label={planned.length
+                          ? t("{{value1}}, {{value2}} planned", { value1: day.long, value2: String(planned.length) })
+                          : t("{{value1}}, free", { value1: day.long })}
+                        onClick={() => setScheduleDate(day.iso)}
+                      >
+                        <small>{day.isToday ? t("Today") : day.weekday}</small>
+                        <b>{day.day}</b>
+                        <span className="tl-day-dots" aria-hidden="true">
+                          {planned.slice(0, 3).map((sport, index) => (
+                            <i key={index} style={sportChipStyle(sport)} />
+                          ))}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="submit"
+                  className="tl-schedule-button"
+                  disabled={!scheduleDate || busy === "schedule"}
+                >
+                  <CalendarPlus size={15} aria-hidden="true" />
+                  {busy === "schedule"
+                    ? t("Scheduling")
+                    : scheduleDay
+                      ? t("Schedule for {{value1}}", { value1: formatDate(new Date(`${scheduleDay.iso}T12:00:00`), { weekday: "short", month: "short", day: "numeric" }) })
+                      : scheduleDate
+                        ? t("Schedule for {{value1}}", { value1: formatHappenDayLabel(scheduleDate.replace(/-/g, "")) })
+                        : t("Schedule")}
+                </button>
               </form>
 
               <div className="tl-reader-actions">
                 <div className="tl-reader-actions-main">
                   <button
                     type="button"
-                    className="primary-button"
+                    className="primary-button tl-send-button"
+                    disabled={busy === "watch"}
+                    onClick={() => void sendToWatch()}
+                  >
+                    <Watch size={15} /> {busy === "watch" ? t("Sending to watch…") : t("Send to watch")} </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
                     disabled={!previewDocument?.canEdit}
                     onClick={() => setEditId(active.id)}
                   >
                     <Pencil size={14} /> {t("Edit")} </button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    disabled={busy === "watch"}
-                    onClick={() => void sendToWatch()}
-                  >
-                    <Watch size={14} /> {busy === "watch" ? t("Sending to watch…") : t("Send to watch")} </button>
-                  <div className="tl-reader-duplicate">
+                  <div className="tl-reader-duplicate-menu" ref={duplicateMenuRef}>
                     <button
                       type="button"
-                      className="ghost-button"
+                      className="ghost-button tl-reader-icon-button"
+                      aria-label={t("Duplicate as")}
+                      title={t("Duplicate as")}
+                      aria-haspopup="menu"
+                      aria-expanded={duplicateMenuOpen}
                       disabled={busy === "duplicate"}
-                      onClick={() => void duplicate()}
+                      onClick={() => setDuplicateMenuOpen((open) => !open)}
                     >
-                      <Copy size={14} /> {t("Duplicate as")} </button>
-                    <SelectDropdown translateLabel={t}
-                      className="tl-quiet-select"
-                      label={t("Sport for the duplicate")}
-                      value={String(duplicateSport ?? active.sportType ?? 1)}
-                      options={Array.from({ length: 9 }, (_, index) => ({
-                        value: String(index + 1),
-                        label: formatWorkoutSport(workoutSportFromType(index + 1) ?? "run")
-                      }))}
-                      onChange={(value) => setDuplicateSport(Number(value))}
-                    />
+                      <Copy size={14} />
+                    </button>
+                    {duplicateMenuOpen ? (
+                      <div className="tl-duplicate-popover" role="menu" aria-label={t("Sport for the duplicate")}>
+                        <p>{t("Duplicate as")}</p>
+                        {Array.from({ length: 9 }, (_, index) => index + 1).map((sportType) => {
+                          const sport = workoutSportFromType(sportType) ?? "run";
+                          const current = sportType === (duplicateSport ?? active.sportType ?? 1);
+                          return (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              key={sportType}
+                              className={current ? "is-current" : undefined}
+                              style={sportChipStyle(sport)}
+                              onClick={() => {
+                                setDuplicateSport(sportType);
+                                void duplicate(sportType);
+                              }}
+                            >
+                              <i aria-hidden="true" />
+                              {formatWorkoutSport(sport)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 <div className="tl-reader-actions-meta">
-                  <button type="button" className="ghost-button" onClick={applyTags}>
-                    <Tag size={14} /> {t("Tags")} </button>
                   <button
                     type="button"
-                    className="ghost-button danger"
+                    className="ghost-button danger tl-reader-icon-button"
+                    aria-label={t("Delete")}
+                    title={t("Delete")}
                     onClick={() => setPendingDelete([active.id])}
                   >
-                    <Trash2 size={14} /> {t("Delete")} </button>
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
             </footer>
