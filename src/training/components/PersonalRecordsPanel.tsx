@@ -1510,14 +1510,14 @@ function NextPrSpotlight({
       <span className="pr-spotlight-row">
         <strong>{label}</strong>
         <span className="pr-spotlight-gap">
-          {t("{{gap}} to find", { gap: formatDurationSeconds(best - predicted) })}
+          {t("Up to {{gap}} faster", { gap: formatDurationSeconds(best - predicted) })}
         </span>
       </span>
       <span className="pr-reach is-spotlight" aria-hidden="true">
         <i style={{ width: `${Math.max(4, Math.round(reach * 100))}%` }} />
       </span>
       <span className="pr-spotlight-note">
-        {t("Predicted {{predicted}} vs best {{best}}", {
+        {t("COROS predicts {{predicted}} · your best {{best}}", {
           predicted: formatDurationSeconds(predicted),
           best: formatDurationSeconds(best)
         })}

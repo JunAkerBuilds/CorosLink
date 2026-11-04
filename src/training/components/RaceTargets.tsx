@@ -331,7 +331,7 @@ function RaceHero({
         : Math.abs(gap) < 1
           ? t("Right on goal")
           : gap > 0
-            ? t("{{p0}} to find", { p0: formatRaceTime(gap) })
+            ? t("{{p0}} over goal", { p0: formatRaceTime(gap) })
             : t("{{p0}} under goal", { p0: formatRaceTime(-gap) }),
       tone: gap === undefined ? undefined : gap > 0 ? "is-behind" : "is-ahead"
     });
