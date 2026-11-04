@@ -26,11 +26,25 @@
   margin: 18px 0 10px;
   padding-top: 16px;
   border-top: 1px solid color-mix(in srgb, var(--text-muted) 22%, transparent);
-  scroll-margin-top: 24px;
 }
 
-.settings-sidebar-subheading:focus {
+.settings-media-tabs {
+  border-radius: var(--radius-md);
+  scroll-margin-top: 24px;
   outline: none;
+}
+
+/* Reached from Customize Media…: flash like other deep-linked sections. */
+.settings-media-tabs.is-targeted {
+  animation: settings-section-flash 1.6s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-media-tabs.is-targeted {
+    animation: none;
+    outline: 2px solid color-mix(in srgb, var(--accent) 75%, transparent);
+    outline-offset: 3px;
+  }
 }
 
 .settings-sidebar-subheading h3 {

@@ -3186,7 +3186,12 @@ function MediaView({ activeTab, onTabChange, onCustomize, children }: MediaViewP
             setMenu({
               x: event.clientX,
               y: event.clientY,
-              target: MEDIA_TAB_ITEMS.find((tab) => tab.id === id) ?? null,
+              // A hidden service shown only because it's open is offered
+              // under Hidden (Show), not Hide.
+              target:
+                MEDIA_TAB_ITEMS.find(
+                  (tab) => tab.id === id && !hiddenTabs.has(tab.id),
+                ) ?? null,
             });
           }}
         >
@@ -3212,10 +3217,8 @@ function MediaView({ activeTab, onTabChange, onCustomize, children }: MediaViewP
           target={menu.target}
           targetHideable={menu.target ? canHideMediaTab(menu.target.id) : false}
           hiddenItems={hiddenItems}
-          onHide={(item) => {
-            setMediaTabHidden(item.id, true);
-            if (item.id === activeTab) onTabChange("library");
-          }}
+          // App falls back to Library when the open service is hidden.
+          onHide={(item) => setMediaTabHidden(item.id, true)}
           onShow={(item) => setMediaTabHidden(item.id, false)}
           onCustomize={onCustomize}
           onClose={closeMenu}
