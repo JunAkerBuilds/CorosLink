@@ -414,6 +414,7 @@ export function RacesPanel({
         target={editor}
         busy={busy}
         error={journal.error}
+        lookup={journal.lookup}
         onClose={() => setEditor(null)}
         onSave={journal.updateRace}
         onAdd={journal.addManualRace}

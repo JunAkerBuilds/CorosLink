@@ -194,7 +194,8 @@ import {
   setCoachLocalSyncReader,
   undoAthleteMemoryNotice
 } from "./chatAthleteToolsRuntime";
-import type { ManualRaceInput, RaceEditInput, RaceTargetEditInput, RaceTargetInput } from "./raceTypes";
+import type { ManualRaceInput, RaceEditInput, RaceLookupRequest, RaceTargetEditInput, RaceTargetInput } from "./raceTypes";
+import { cancelRaceLookup, getRaceLookupStatus, lookupRace } from "./raceLookupService";
 import type {
   HevySettingsInput,
   StravaConfigInput,
@@ -3005,6 +3006,13 @@ function registerIpcHandlers(): void {
   ipcMain.handle("races:listTargets", () => listRaceTargets());
   ipcMain.handle("races:updateTarget", (_event, input: RaceTargetEditInput) => updateRaceTarget(input));
   ipcMain.handle("races:removeTarget", (_event, targetId: string) => removeRaceTarget(targetId));
+  ipcMain.handle("races:lookupStatus", () => getRaceLookupStatus());
+  ipcMain.handle("races:lookup", (event, request: RaceLookupRequest) =>
+    lookupRace(request, (progress) => {
+      if (!event.sender.isDestroyed()) event.sender.send("races:lookupProgress", progress);
+    })
+  );
+  ipcMain.handle("races:lookupCancel", (_event, requestId: string) => cancelRaceLookup(requestId));
   onRaceTargetsChanged(() => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("races:changed");
   });

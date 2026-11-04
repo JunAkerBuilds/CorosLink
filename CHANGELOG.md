@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Find a race with AI.** When you add or edit an upcoming race, type its name or paste its website and choose
+  Find with AI. Your Coach's AI provider searches the web for the date, distance, start time, bib pickup and
+  registration deadline, then fills them in with a mark on each and links to its sources. Your goal, bib, wave and
+  entry status are never touched, Undo takes it all back, and nothing is saved until you add the race. Local models
+  can't search the web.
+
+### Changed
+
+- **A clearer race form.** Upcoming races now open with a live preview of the countdown, goal pace and calendar
+  dates. Distance, priority and status are one click, the details most people add later fold away, and Add race
+  stays in view. An upcoming race starts with no date or distance, so it can't be saved on today's 5K by accident,
+  and clicking outside the form no longer discards what you typed.
+
 ## [0.1.73] - 2026-11-03
 
 ### Added

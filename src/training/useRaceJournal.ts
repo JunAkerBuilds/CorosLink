@@ -30,9 +30,11 @@ export interface RaceJournal {
   /** Removes a race the athlete was training for. */
   removeTarget: (targetId: string) => Promise<boolean>;
   importStrava: () => Promise<void>;
+  /** Looking a race up on the web with the Coach's AI provider. */
+  lookup: Pick<CorosLinkApi, "getRaceLookupStatus" | "lookupRace" | "cancelRaceLookup" | "onRaceLookupProgress">;
 }
 
-function toErrorMessage(error: unknown): string {
+export function toErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "");
 }
@@ -127,9 +129,17 @@ export function useRaceJournal(
     [api, markActivity, raceActivityIds, run]
   );
 
+  const lookup = useMemo<RaceJournal["lookup"]>(() => ({
+    getRaceLookupStatus: api.getRaceLookupStatus && (() => api.getRaceLookupStatus!()),
+    lookupRace: api.lookupRace && ((request) => api.lookupRace!(request)),
+    cancelRaceLookup: api.cancelRaceLookup && ((requestId) => api.cancelRaceLookup!(requestId)),
+    onRaceLookupProgress: api.onRaceLookupProgress && ((callback) => api.onRaceLookupProgress!(callback))
+  }), [api]);
+
   return {
     overview: current,
     raceActivityIds,
+    lookup,
     loading: !sample && loading,
     pending,
     error: error ? renderLocalizedText(error) : null,

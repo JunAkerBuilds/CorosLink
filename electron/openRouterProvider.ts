@@ -178,6 +178,8 @@ export interface StreamOpenRouterChatOptions
     "model" | "toolsEnabled" | "onToolsDisabled"
   > {
   config: Pick<OpenRouterConfig, "model"> & { apiKey: string };
+  /** Lets OpenRouter search the web for the model. It bills this to the athlete's credit. */
+  webSearch?: boolean;
 }
 
 export function streamOpenRouterChatCompletion(
@@ -204,7 +206,8 @@ export function streamOpenRouterChatCompletion(
       apiKey: options.config.apiKey,
       requestLabel: "OpenRouter",
       headers: { "X-Title": "CorosLink" },
-      allowToolsFallback: false
+      allowToolsFallback: false,
+      ...(options.webSearch ? { requestExtras: { plugins: [{ id: "web", max_results: 6 }] } } : {})
     }
   );
 }

@@ -100,6 +100,13 @@ export interface StreamGeminiCliOptions extends GeminiCliToolCallbacks {
   timeoutMs?: number;
   /** Model alias (pro/flash/flash-lite) or full id. Omit for the CLI default. */
   model?: string;
+  /**
+   * Gemini CLI's own tools to allow, such as "google_web_search". Coach turns
+   * leave this out. Keep a workspace per set of tools: the settings live there.
+   */
+  builtinTools?: string[];
+  /** Called as Gemini starts a tool, with the title the CLI gives it. */
+  onBuiltinToolUse?: (title: string) => void;
 }
 
 // ----- Detection and sign-in state -----
@@ -658,7 +665,7 @@ export async function streamGeminiCliCompletion(
     if (options.model && !/^[A-Za-z0-9._:-]{1,100}$/.test(options.model)) {
       throw new GeminiCliProviderError(`Unsupported Gemini model name: ${options.model}`, "connection");
     }
-    await prepareWorkspace(options.workspaceDir);
+    await prepareWorkspace(options.workspaceDir, options.builtinTools);
     promptFile = await writeSystemPrompt(options.workspaceDir, options.instructions);
     if (options.tools.length > 0) {
       bridge = await startToolBridge(MCP_SERVER_NAME, options.tools, {
@@ -691,6 +698,7 @@ export async function streamGeminiCliCompletion(
         options.onThinking?.(text);
       } else if (kind === "tool_call") {
         toolCalls += 1;
+        if (typeof update?.title === "string") options.onBuiltinToolUse?.(update.title);
         if (toolCalls > MAX_TOOL_CALLS && sessionId) {
           agent?.notify("session/cancel", { sessionId });
         }
@@ -856,11 +864,12 @@ export function geminiPrompt(messages: ChatMessage[]): Array<Record<string, unkn
 
 // ----- Workspace -----
 
-async function prepareWorkspace(workspaceDir: string): Promise<void> {
+async function prepareWorkspace(workspaceDir: string, builtinTools: string[] = []): Promise<void> {
   const settingsDir = path.join(workspaceDir, ".gemini");
   await mkdir(settingsDir, { recursive: true, mode: 0o700 });
   const target = path.join(settingsDir, "settings.json");
-  const content = `${JSON.stringify(WORKSPACE_SETTINGS, null, 2)}\n`;
+  const settings = { ...WORKSPACE_SETTINGS, tools: { core: builtinTools } };
+  const content = `${JSON.stringify(settings, null, 2)}\n`;
   try {
     if ((await readFile(target, "utf8")) === content) return;
   } catch {

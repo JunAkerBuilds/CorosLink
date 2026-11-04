@@ -1,4 +1,4 @@
-import type { TrainingHubActivity } from "./types";
+import type { ChatProvider, TrainingHubActivity } from "./types";
 
 /** Standard race distances a result is filed under; "other" carries its own length. */
 export type RaceDistanceKey =
@@ -180,6 +180,83 @@ export interface ManualRaceInput {
   officialTime: number;
   placing?: string;
   notes?: string;
+}
+
+/** Whether the Coach's AI provider can look a race up on the web right now. */
+export interface RaceLookupStatus {
+  provider: ChatProvider;
+  /** The provider's name, for example "Claude Code". */
+  label: string;
+  /** False for providers with no web access, such as a local model. */
+  webSearch: boolean;
+  /** False until the athlete has connected the provider in Coach settings. */
+  ready: boolean;
+}
+
+export interface RaceLookupRequest {
+  requestId: string;
+  /** What the athlete typed: a race name, a place and year, or a link. */
+  query: string;
+  /** YYYY-MM-DD, already chosen in the form; narrows the search. */
+  raceDay?: string;
+  /** Already chosen in the form; the athlete's own race among the event's distances. */
+  distanceLabel?: string;
+  location?: string;
+  /** English name of the app language, for the sentences the AI writes. */
+  language?: string;
+}
+
+/** One distance on offer at a race event. */
+export interface RaceLookupEvent {
+  /** As the race names it, for example "Half Marathon". */
+  label: string;
+  distanceKey: RaceDistanceKey;
+  /** Meters: the official course length. */
+  distance: number;
+  /** HH:MM, local start time. */
+  startTime?: string;
+}
+
+export interface RaceLookupSource {
+  url: string;
+  title?: string;
+}
+
+/** Public facts about one race. Personal fields (goal, bib, entry status) are never looked up. */
+export interface RaceLookupCandidate {
+  name: string;
+  /** YYYY-MM-DD, on or after today; absent when the next edition has no date yet. */
+  raceDay?: string;
+  location?: string;
+  website?: string;
+  /** YYYY-MM-DD, the last day to enter. */
+  registrationDeadline?: string;
+  /** YYYY-MM-DD, the first day bibs can be collected. */
+  bibPickupDay?: string;
+  bibPickupHours?: string;
+  bibPickupLocation?: string;
+  /** Best match for what the athlete typed first. */
+  events: RaceLookupEvent[];
+  /** A sentence about the course, for the athlete's notes. */
+  courseNotes?: string;
+  /** Something the athlete should know, such as "Sold out; the waitlist opens in January." */
+  note?: string;
+  sources: RaceLookupSource[];
+}
+
+export interface RaceLookupResult {
+  /** Best match first. Empty when nothing matched. */
+  candidates: RaceLookupCandidate[];
+  /** The AI's short explanation when nothing matched. */
+  message?: string;
+}
+
+/** What the AI is doing during a lookup. */
+export interface RaceLookupProgress {
+  requestId: string;
+  stage: "search" | "read" | "write";
+  /** The search words, or the host of the page being read. */
+  detail?: string;
 }
 
 export interface StravaRaceImportResult {

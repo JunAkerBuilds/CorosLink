@@ -9,7 +9,7 @@ import type { DiagnosticsSnapshot, RendererDiagnosticError } from "./diagnostics
 import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "./watchfaceAutomationTypes";
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "./calendarSyncTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "./googleCalendarTypes";
-import type { ManualRaceInput, RaceEditInput, RaceOverview, RaceTarget, RaceTargetEditInput, RaceTargetInput, StravaRaceImportResult } from "./raceTypes";
+import type { ManualRaceInput, RaceEditInput, RaceLookupProgress, RaceLookupRequest, RaceLookupResult, RaceLookupStatus, RaceOverview, RaceTarget, RaceTargetEditInput, RaceTargetInput, StravaRaceImportResult } from "./raceTypes";
 import type { AthleteFact, AthleteFactCategory, AthleteMemoryChange } from "./athleteMemoryModel";
 import type { WorkoutJournalEntry, WorkoutJournalSaveInput } from "./workoutJournalTypes";
 import type { CoachConfirmInput, CoachConfirmResult, CoachEventFrame, CoachSendInput, CoachSessionsChange, CoachSnapshot, CoachSubscribeResult } from "./coachHub/coachContract";
@@ -1111,6 +1111,14 @@ const api = {
     ipcRenderer.invoke("races:listTargets"),
   removeRaceTarget: (targetId: string): Promise<RaceOverview> =>
     ipcRenderer.invoke("races:removeTarget", targetId),
+  getRaceLookupStatus: (): Promise<RaceLookupStatus> => ipcRenderer.invoke("races:lookupStatus"),
+  lookupRace: (request: RaceLookupRequest): Promise<RaceLookupResult> => ipcRenderer.invoke("races:lookup", request),
+  cancelRaceLookup: (requestId: string): Promise<void> => ipcRenderer.invoke("races:lookupCancel", requestId),
+  onRaceLookupProgress: (callback: (progress: RaceLookupProgress) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: RaceLookupProgress) => callback(progress);
+    ipcRenderer.on("races:lookupProgress", listener);
+    return () => ipcRenderer.removeListener("races:lookupProgress", listener);
+  },
   onRacesChanged: (callback: () => void): (() => void) => {
     const listener = () => callback();
     ipcRenderer.on("races:changed", listener);

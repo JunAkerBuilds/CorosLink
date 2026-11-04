@@ -2262,6 +2262,240 @@ async function completeOnce(
   return text;
 }
 
+/** What the provider is doing while it searches. */
+export type WebSearchProgress =
+  | { stage: "search"; detail?: string }
+  | { stage: "read"; detail?: string }
+  | { stage: "write" };
+
+/** A search stays alive between tool steps; a page can take a while to read. */
+const WEB_SEARCH_IDLE_TIMEOUT_MS = 120_000;
+const WEB_SEARCH_MAX_TURNS = 16;
+const CLAUDE_WEB_TOOLS = ["WebSearch", "WebFetch"];
+const GEMINI_WEB_TOOLS = ["google_web_search"];
+const ANTIGRAVITY_WEB_TOOLS = ["search_web", "read_url_content"];
+
+/** Providers that can read the web for a one-off lookup. A local model can't. */
+const WEB_SEARCH_PROVIDERS: ReadonlySet<ChatProvider> = new Set<ChatProvider>([
+  "chatgpt",
+  "claude-code",
+  "gemini-cli",
+  "antigravity",
+  "openrouter"
+]);
+
+function chatProviderLabel(provider: ChatProvider): string {
+  const labels: Record<ChatProvider, string> = {
+    chatgpt: "ChatGPT",
+    "claude-code": "Claude Code",
+    "gemini-cli": "Gemini CLI",
+    antigravity: "Antigravity",
+    openrouter: "OpenRouter",
+    local: "Local model"
+  };
+  return labels[provider];
+}
+
+/** Whether the Coach's provider can search the web right now. Spends no usage. */
+export async function getWebSearchStatus(): Promise<{
+  provider: ChatProvider;
+  label: string;
+  webSearch: boolean;
+  ready: boolean;
+}> {
+  const { provider } = getChatSettings();
+  const label = chatProviderLabel(provider);
+  const webSearch = WEB_SEARCH_PROVIDERS.has(provider);
+  if (!webSearch) return { provider, label, webSearch, ready: false };
+  let ready = false;
+  try {
+    if (provider === "chatgpt") ready = getChatAuthStatus().signedIn;
+    else if (provider === "claude-code") ready = (await claudeCodeStatusForTurn()).authenticated;
+    else if (provider === "gemini-cli") ready = (await geminiCliStatusForTurn()).authenticated;
+    else if (provider === "antigravity") ready = (await getAntigravityConnectionStatus()).authenticated;
+    else if (provider === "openrouter") ready = Boolean(readStoredOpenRouterApiKey());
+  } catch (error) {
+    console.warn("[web search] could not check the provider:", error instanceof Error ? error.message : String(error));
+  }
+  return { provider, label, webSearch, ready };
+}
+
+/** "Searching the web for: "marathon"" → the quoted words; a CLI's title otherwise says little. */
+function searchWordsFromTitle(title: string): string | undefined {
+  return /["“']([^"”']{2,})["”']/.exec(title)?.[1];
+}
+
+/**
+ * One answer from the Coach's provider with web access and nothing else: none
+ * of the Coach's tools, no athlete data and no chat history. The answer draws
+ * on web pages, so the caller must treat it as untrusted.
+ */
+export async function completeWithWebSearch(
+  instructions: string,
+  prompt: string,
+  signal: AbortSignal,
+  onProgress: (progress: WebSearchProgress) => void
+): Promise<string> {
+  const settings = getChatSettings();
+  const { provider } = settings;
+  if (!WEB_SEARCH_PROVIDERS.has(provider)) {
+    throw new Error(`${chatProviderLabel(provider)} can't search the web.`);
+  }
+
+  const messages: ChatMessage[] = [{ role: "user", content: prompt }];
+  let text = "";
+  let writing = false;
+  const onToken = (delta: string) => {
+    text += delta;
+    if (!writing && delta.trim()) {
+      writing = true;
+      onProgress({ stage: "write" });
+    }
+  };
+  // A model can narrate between searches, so going back to a tool ends "write".
+  const tool = (progress: WebSearchProgress) => {
+    writing = false;
+    onProgress(progress);
+  };
+  const fromTitle = (title: string) => tool({ stage: "search", detail: searchWordsFromTitle(title) });
+
+  if (provider === "claude-code") {
+    const status = await claudeCodeStatusForTurn();
+    if (!status.authenticated || !status.executablePath) throw new Error(status.message);
+    const result = await streamClaudeCodeCompletion({
+      executablePath: status.executablePath,
+      workspaceDir: claudeWorkspaceDir(),
+      instructions,
+      messages,
+      tools: [],
+      builtinTools: CLAUDE_WEB_TOOLS,
+      maxTurns: WEB_SEARCH_MAX_TURNS,
+      signal,
+      timeoutMs: WEB_SEARCH_IDLE_TIMEOUT_MS,
+      ...(settings.claudeCode.model ? { model: settings.claudeCode.model } : {}),
+      onToken,
+      onToolCall: async () => "",
+      onBuiltinToolUse: (name, input) => {
+        if (name === "WebFetch") tool({ stage: "read", detail: typeof input.url === "string" ? input.url : undefined });
+        else tool({ stage: "search", detail: typeof input.query === "string" ? input.query : undefined });
+      }
+    });
+    return result.fullText || text;
+  }
+
+  if (provider === "gemini-cli") {
+    const status = await geminiCliStatusForTurn();
+    if (!status.authenticated || !status.executablePath) throw new Error(status.message);
+    const result = await streamGeminiCliCompletion({
+      executablePath: status.executablePath,
+      // Not the Coach's workspace: the allowed tools are its settings file.
+      workspaceDir: path.join(app.getPath("userData"), "gemini-web-search", "workspace"),
+      instructions,
+      messages,
+      tools: [],
+      builtinTools: GEMINI_WEB_TOOLS,
+      signal,
+      timeoutMs: WEB_SEARCH_IDLE_TIMEOUT_MS,
+      ...(settings.geminiCli.model ? { model: settings.geminiCli.model } : {}),
+      onToken,
+      onToolCall: async () => "",
+      onBuiltinToolUse: fromTitle
+    });
+    return result.fullText || text;
+  }
+
+  if (provider === "antigravity") {
+    const status = await inspectAntigravityStatus(antigravityRoot());
+    if (!status.authenticated) throw new Error(status.message);
+    const result = await streamAntigravityCompletion({
+      root: antigravityRoot(),
+      instructions,
+      messages,
+      tools: [],
+      builtinTools: ANTIGRAVITY_WEB_TOOLS,
+      signal,
+      timeoutMs: WEB_SEARCH_IDLE_TIMEOUT_MS,
+      ...(settings.antigravity.model ? { model: settings.antigravity.model } : {}),
+      onToken,
+      onToolCall: async () => "",
+      onBuiltinToolUse: fromTitle
+    });
+    return result.fullText || text;
+  }
+
+  if (provider === "openrouter") {
+    const apiKey = readStoredOpenRouterApiKey();
+    if (!apiKey) throw new Error("Add your OpenRouter API key in Coach settings.");
+    onProgress({ stage: "search" });
+    const result = await streamOpenRouterChatCompletion({
+      tools: [],
+      maxToolRounds: 1,
+      signal,
+      onToken,
+      onToolCall: async () => "",
+      onToolCallStart: () => undefined,
+      onToolCallError: () => undefined,
+      config: { model: settings.openRouter.model, apiKey },
+      webSearch: true,
+      instructions,
+      messages
+    });
+    return result.fullText || text;
+  }
+
+  // ChatGPT: the Responses API runs the search on its side.
+  const token = await getValidToken();
+  const opened = await resolveModelAndOpenStream(
+    token,
+    crypto.randomUUID(),
+    instructions,
+    messages.map(toInputMessageItem),
+    // As the Codex CLI asks for live search on this same endpoint.
+    [{ type: "web_search", external_web_access: true }],
+    signal,
+    settings.chatgpt.model
+  );
+  if ("error" in opened) throw new Error(opened.error);
+  const reader = opened.response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const frames = buffer.split("\n\n");
+    buffer = frames.pop() ?? "";
+    for (const frame of frames) {
+      const data = extractSseData(frame);
+      if (data === null || data === "[DONE]") continue;
+      let event: {
+        type?: string;
+        item?: { type?: string; action?: { type?: string; query?: unknown; url?: unknown } };
+        response?: { error?: { message?: unknown } };
+      };
+      try {
+        event = JSON.parse(data);
+      } catch {
+        continue;
+      }
+      onToken(extractResponseTextDelta(event));
+      if (event.type === "response.failed") {
+        const reason = event.response?.error?.message;
+        throw new Error(typeof reason === "string" ? reason : "ChatGPT couldn't finish the search.");
+      }
+      if (event.item?.type === "web_search_call") {
+        if (event.type === "response.output_item.added") tool({ stage: "search" });
+        const action = event.item.action;
+        if (event.type === "response.output_item.done" && action) {
+          if (typeof action.query === "string") tool({ stage: "search", detail: action.query });
+          else if (typeof action.url === "string") tool({ stage: "read", detail: action.url });
+        }
+      }
+    }
+  }
+  return text;
+}
+
 /**
  * Opens one ChatGPT (Codex backend) Responses stream for callers outside the
  * Coach, such as the Watch Face Studio AI panel. Always uses the signed-in

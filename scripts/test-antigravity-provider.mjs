@@ -19,6 +19,7 @@ const {
   antigravityModelOptions,
   antigravityReleaseFor,
   answerAntigravityPermission,
+  answerAntigravityWebPermission,
   cancelAntigravitySignIn,
   getAntigravitySessionModels,
   getAntigravityStatus,
@@ -125,6 +126,26 @@ try {
   ]) {
     assert.deepEqual(answerAntigravityPermission({ toolCall, options }), { outcome: { outcome: "cancelled" } });
   }
+
+  // A web-only session may read the web, and still can't reach an MCP server or run anything.
+  for (const kind of ["execute", "edit", "delete", "move"]) {
+    assert.deepEqual(
+      answerAntigravityWebPermission({ toolCall: { title: "run_command", kind }, options }),
+      { outcome: { outcome: "cancelled" } }
+    );
+  }
+  assert.deepEqual(
+    answerAntigravityWebPermission({ toolCall: { title: "read_url_content" }, options }),
+    { outcome: { outcome: "selected", optionId: "allow" } }
+  );
+  assert.deepEqual(
+    answerAntigravityWebPermission({ toolCall: { _meta: { is_mcp_tool_call: true, mcp: { server: "coroslink" } } }, options }),
+    { outcome: { outcome: "cancelled" } }
+  );
+  assert.deepEqual(
+    answerAntigravityWebPermission({ toolCall: { title: "search_web" }, options: [{ optionId: "deny", kind: "reject_once" }] }),
+    { outcome: { outcome: "cancelled" } }
+  );
 
   assert.equal(normalizeAntigravityError(new Error("SUBSCRIPTION_REQUIRED for this user")).kind, "auth");
   assert.equal(normalizeAntigravityError(Object.assign(new Error("Authentication required"), { code: -32000 })).kind, "auth");
