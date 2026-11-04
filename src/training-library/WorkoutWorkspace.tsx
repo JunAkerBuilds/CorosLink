@@ -66,6 +66,8 @@ interface WorkoutWorkspaceProps {
   createSignal?: number;
   /** "Up next" in the masthead opens this workout; n changes on every click. */
   focusRequest?: { id: string; n: number } | null;
+  /** Called once a create or focus request has been acted on, so a remount does not replay it. */
+  onRequestHandled?: () => void;
   /** Calendar entries for this week and the next: dots on the day strip. */
   schedule?: TrainingHubScheduledWorkoutEntry[];
   onScheduleChanged?: () => Promise<void> | void;
@@ -330,6 +332,7 @@ export function WorkoutWorkspace({
   onError,
   createSignal = 0,
   focusRequest,
+  onRequestHandled,
   schedule: scheduledEntries = [],
   onScheduleChanged,
   planNames
@@ -376,10 +379,14 @@ export function WorkoutWorkspace({
   const [creating, setCreating] = useState(false);
   const otherDateInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    if (createSignal) setCreating(true);
+    if (!createSignal) return;
+    setCreating(true);
+    onRequestHandled?.();
   }, [createSignal]);
   useEffect(() => {
-    if (focusRequest) setActiveId(focusRequest.id);
+    if (!focusRequest) return;
+    setActiveId(focusRequest.id);
+    onRequestHandled?.();
   }, [focusRequest]);
   /** Sports already planned on each day, for the reader's day strip. */
   const plannedDays = useMemo(() => {

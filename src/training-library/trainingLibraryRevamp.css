@@ -1035,7 +1035,7 @@
   min-width: 0;
 }
 
-.tl-plan-generate > button {
+.tl-plan-generate-card {
   --tl-gen: #a78bfa;
   position: relative;
   display: flex;
@@ -1056,11 +1056,11 @@
   transition: border-color 180ms ease, transform 180ms var(--tl-ease-out);
 }
 
-:root[data-theme="paper"] .tl-plan-generate > button {
+:root[data-theme="paper"] .tl-plan-generate-card {
   --tl-gen: #7c3aed;
 }
 
-.tl-plan-generate > button:hover {
+.tl-plan-generate-card:hover {
   border-color: color-mix(in srgb, var(--tl-gen) 75%, transparent);
   transform: translateY(-2px);
 }
@@ -1971,4 +1971,281 @@
   height: 8px;
   border-radius: 50%;
   background: var(--tl-sport, var(--accent));
+}
+
+/* ------------------------------------------------------- Plans: tile restyle */
+
+/* A plan running on the calendar wears the accent ring. */
+.tl-plan-tile.is-on-calendar {
+  box-shadow:
+    var(--tl-raised-rim),
+    inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 70%, transparent),
+    0 18px 40px -24px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.tl-plan-tile-open {
+  gap: 16px;
+  padding: 20px 20px 8px;
+}
+
+.tl-plan-tile-head {
+  align-items: center;
+}
+
+.tl-plan-tile-head > .tl-glyph {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--tl-sport, var(--accent)) 40%, transparent);
+  border-radius: 50%;
+  color: var(--tl-sport, var(--accent));
+  background: color-mix(in srgb, var(--tl-sport, var(--accent)) 14%, transparent);
+}
+
+.tl-plan-tile-title {
+  flex: 1;
+}
+
+.tl-plan-tile-name {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+/* The goal ("HALF · 1:29:59") as a quiet tracked badge in the corner. */
+.tl-plan-goal {
+  flex: 0 1 auto;
+  max-width: 46%;
+  overflow: hidden;
+  padding: 4px 9px;
+  border: 1px solid var(--tl-rule-soft);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-base, #000) 35%, transparent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* The weeks stand on the tile itself, not in a well. */
+.tl-plan-tile .tl-plan-well {
+  gap: 8px;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.tl-plan-tile .tl-plan-caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.tl-plan-tile .tl-profile {
+  height: 72px;
+}
+
+.tl-plan-tile .tl-profile-week {
+  max-width: none;
+}
+
+.tl-plan-tile .tl-phase-ribbon {
+  margin-top: 0;
+}
+
+.tl-phase-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.tl-phase-legend small {
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.tl-phase-legend b {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.tl-plan-tile .tl-plan-figs {
+  padding-top: 14px;
+  border-top: 1px solid var(--tl-divider);
+}
+
+.tl-plan-tile .tl-plan-figs > span {
+  padding: 0 12px 0 0;
+  border-left: 0;
+}
+
+.tl-plan-tile .tl-plan-figs small {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tl-plan-tile .tl-plan-figs .is-load small {
+  color: var(--tl-phase-peak);
+}
+
+.tl-plan-tile .tl-plan-figs b {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.tl-plan-tile .tl-plan-tile-foot {
+  min-height: 42px;
+  padding: 0 12px 10px 20px;
+  border-top: 0;
+}
+
+/* Every status leads with a dot: grey unscheduled, amber ready to start, accent on the calendar. */
+.tl-plan-status > i {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.tl-plan-status.is-ready > i {
+  background: #f5c044;
+}
+
+/* ------------------------------------------------------- Plans: generator card */
+
+.tl-plan-generate-card .tl-plan-generate-head small {
+  margin-top: 2px;
+}
+
+.tl-plan-generate-label {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tl-plan-generate-goals > button {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid var(--tl-rule-soft);
+  border-radius: var(--radius-pill);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--surface) 50%, transparent);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.tl-plan-generate-goals > button:hover {
+  border-color: color-mix(in srgb, var(--tl-gen) 55%, transparent);
+}
+
+.tl-plan-generate-goals > button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--tl-gen) 70%, transparent);
+  background: color-mix(in srgb, var(--tl-gen) 24%, transparent);
+}
+
+.tl-plan-generate-facts {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.tl-plan-generate-facts b {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.tl-plan-generate-facts i {
+  margin: 0 8px;
+  font-style: normal;
+}
+
+.tl-plan-generate-card {
+  cursor: default;
+}
+
+.tl-plan-generate-card:hover {
+  transform: none;
+}
+
+button.tl-plan-generate-cta {
+  width: 100%;
+  border: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: filter 140ms ease, transform 140ms ease;
+}
+
+button.tl-plan-generate-cta:hover {
+  filter: brightness(1.08);
+}
+
+button.tl-plan-generate-cta:active {
+  transform: translateY(1px);
+}
+
+.tl-plan-tile .tl-plan-tile-head {
+  align-items: flex-start;
+}
+
+.tl-plan-tile .tl-plan-goal {
+  max-width: 40%;
+  margin-top: 4px;
+}
+
+/* Source, sports and level read as one line of text that wraps under the name. */
+.tl-plan-tile .tl-plan-meta {
+  display: block;
+  white-space: normal;
+  line-height: 1.45;
+}
+
+.tl-plan-tile .tl-plan-meta > * {
+  display: inline;
+  overflow: visible;
+}
+
+.tl-plan-tile .tl-plan-meta > svg {
+  display: inline-block;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+
+.tl-plan-tile .tl-plan-meta > :is(em, .tl-source) + em::before {
+  margin: 0 6px;
+}
+
+.tl-plan-tile-name-row {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tl-plan-tile .tl-plan-tile-name-row > .tl-plan-goal {
+  flex: none;
+  max-width: 48%;
+  margin-top: 2px;
+}
+
+.tl-plan-tile .tl-plan-meta {
+  overflow: visible;
 }

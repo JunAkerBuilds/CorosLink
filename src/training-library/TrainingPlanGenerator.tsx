@@ -34,6 +34,14 @@ interface TrainingPlanGeneratorProps {
   onClose: () => void;
   onGenerated: (plan: TrainingPlanDocument) => void;
   onOpenCoach: (prompt?: string) => void;
+  /** A goal picked on the library's "Build me a plan" tile: prefills goal, length and sessions. */
+  preset?: TrainingPlanPreset;
+}
+
+export interface TrainingPlanPreset {
+  goal: string;
+  weeks: number;
+  sessionsPerWeek: number;
 }
 interface ProviderAvailability {
   provider: ChatProvider;
@@ -129,15 +137,15 @@ function Stepper({ value, min, max, disabled, decreaseLabel, increaseLabel, onCh
     </span>
   );
 }
-export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }: TrainingPlanGeneratorProps) {
+export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach, preset }: TrainingPlanGeneratorProps) {
   useLanguage();
   const localOnly = useLocalOnlyView();
   const { unitSystem } = useUnitSystem();
-  const [goal, setGoal] = useState("");
+  const [goal, setGoal] = useState(preset?.goal ?? "");
   const [sports, setSports] = useState<WorkoutSport[]>(["run"]);
   const [difficulty, setDifficulty] = useState<TrainingPlanGenerationRequest["difficulty"]>("intermediate");
-  const [weeks, setWeeks] = useState(8);
-  const [sessionsPerWeek, setSessionsPerWeek] = useState(4);
+  const [weeks, setWeeks] = useState(preset?.weeks ?? 8);
+  const [sessionsPerWeek, setSessionsPerWeek] = useState(preset?.sessionsPerWeek ?? 4);
   const [startDate, setStartDate] = useState(calendarDay);
   const [availableDays, setAvailableDays] = useState([0, 1, 2, 3, 4, 5, 6]);
   const [maxSessionMinutes, setMaxSessionMinutes] = useState("");

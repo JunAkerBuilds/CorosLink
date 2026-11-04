@@ -67,6 +67,7 @@ import { dayKey, libraryWeek, scheduleWindow } from "./libraryWeek";
 import { SelectDropdown } from "../components/SelectDropdown";
 import { BulletRidge, WeekProfile, type BulletWeek } from "./Ridge";
 import { PlanCompare } from "./PlanCompare";
+import type { TrainingPlanPreset } from "./TrainingPlanGenerator";
 import { PlanEditor } from "./PlanEditor";
 import { WorkoutWorkspace } from "./WorkoutWorkspace";
 import { TrainingPlanCalendarDialog } from "./TrainingPlanCalendarDialog";
@@ -254,6 +255,12 @@ export function TrainingLibraryView({
   const [pendingPlanDelete, setPendingPlanDelete] = useState<TrainingPlanDocument[]>([]);
   const [deletingPlan, setDeletingPlan] = useState(false);
   const [generatorOpen, setGeneratorOpen] = useState(false);
+  /** Goal picked on the "Build me a plan" tile, handed to the generator as its starting values. */
+  const [generatorPreset, setGeneratorPreset] = useState<TrainingPlanPreset | undefined>();
+  const openGenerator = (preset?: TrainingPlanPreset) => {
+    setGeneratorPreset(preset);
+    setGeneratorOpen(true);
+  };
   /** Each bump asks the workout workspace to open the builder. */
   const [createSignal, setCreateSignal] = useState(0);
   /** "Up next" asks the workspace to open one workout. */
@@ -504,7 +511,18 @@ export function TrainingLibraryView({
         <div className="tl-masthead-actions">
           {!editingPlan ? (
             <>
-              <button type="button" className="ghost-button tl-masthead-button" onClick={() => setGeneratorOpen(true)}>
+              {section === "plans" ? (
+                <>
+                  <button type="button" className="ghost-button tl-masthead-button" onClick={() => void createPlan("local")}>
+                    <Plus size={15} aria-hidden="true" /> {t("Blank plan")}
+                  </button>
+                  <button type="button" className="primary-button tl-masthead-button" onClick={() => openGenerator()}>
+                    <Sparkles size={15} aria-hidden="true" /> {t("Generate plan")}
+                  </button>
+                </>
+              ) : (
+              <>
+              <button type="button" className="ghost-button tl-masthead-button" onClick={() => openGenerator()}>
                 <Sparkles size={15} aria-hidden="true" /> {t("Generate plan")}
               </button>
               <button
@@ -517,6 +535,8 @@ export function TrainingLibraryView({
               >
                 <Plus size={15} aria-hidden="true" /> {t("New workout")}
               </button>
+              </>
+              )}
             </>
           ) : null}
           <button
@@ -532,7 +552,7 @@ export function TrainingLibraryView({
         </div>
       </header>
 
-      {!editingPlan ? (
+      {!editingPlan && section !== "plans" ? (
         <LibraryBrief
           workouts={current.workouts}
           schedule={schedule}
@@ -605,6 +625,11 @@ export function TrainingLibraryView({
               onError={onError}
               createSignal={createSignal}
               focusRequest={focusRequest}
+              onRequestHandled={() => {
+                /* Consumed: coming back to Workouts later must not reopen the builder or refocus. */
+                setCreateSignal(0);
+                setFocusRequest(null);
+              }}
               schedule={schedule}
               onScheduleChanged={loadSchedule}
               planNames={planNames}
@@ -619,7 +644,8 @@ export function TrainingLibraryView({
               nativeOnCalendar={current.nativePlansOnCalendar}
               collections={current.collections}
               onCreate={() => createPlan("local")}
-              onGenerate={() => setGeneratorOpen(true)}
+              onGenerate={openGenerator}
+              createInMasthead
               onCalendar={(plan, operation) => setCalendarTarget({ plan, operation })}
               offline={current.offline}
               onOpen={(plan) => void openPlan(plan)}
@@ -670,7 +696,7 @@ export function TrainingLibraryView({
         />
       ) : null}
 
-      {generatorOpen ? <TrainingPlanGenerator api={api} onClose={() => setGeneratorOpen(false)} onOpenCoach={onOpenCoach} onGenerated={(plan) => { setGeneratorOpen(false); setEditingPlan(plan); }} /> : null}
+      {generatorOpen ? <TrainingPlanGenerator api={api} preset={generatorPreset} onClose={() => setGeneratorOpen(false)} onOpenCoach={onOpenCoach} onGenerated={(plan) => { setGeneratorOpen(false); setEditingPlan(plan); }} /> : null}
 
       {calendarTarget ? <TrainingPlanCalendarDialog api={api} plan={calendarTarget.plan} requestedOperation={calendarTarget.operation} offline={current.offline} onClose={() => setCalendarTarget(null)} onComplete={(result) => {
         setCalendarTarget(null);
@@ -975,6 +1001,23 @@ const PLAN_LAYOUT_PREFERENCES = {
   })
 } satisfies Record<PlanIndexNoun, unknown>;
 
+/** Goals on the "Build me a plan" tile, each a starting point for the generator. */
+const PLAN_GOAL_PRESETS = [
+  { id: "5k", label: "5K", goal: "Run a faster 5K", weeks: 8, sessionsPerWeek: 4 },
+  { id: "10k", label: "10K", goal: "Run a faster 10K", weeks: 10, sessionsPerWeek: 4 },
+  { id: "half", label: "Half", goal: "Race a half marathon", weeks: 12, sessionsPerWeek: 5 },
+  { id: "marathon", label: "Marathon", goal: "Race a marathon", weeks: 16, sessionsPerWeek: 5 },
+  { id: "trail", label: "Trail ultra", goal: "Finish a trail ultra strong", weeks: 16, sessionsPerWeek: 5 }
+] as const;
+
+type PlanGoalPresetId = (typeof PLAN_GOAL_PRESETS)[number]["id"];
+
+const DIFFICULTY_LABELS: Record<string, string> = {
+  beginner: "Beginner",
+  intermediate: "Intermediate",
+  advanced: "Advanced"
+};
+
 /**
  * Everything a tile, the hero and a row need, derived once so the layouts can
  * never drift apart on what a plan says.
@@ -1008,6 +1051,8 @@ function planView(
     sports,
     sessions: summary?.workouts ?? 0,
     load: summary?.trainingLoad ? Math.round(summary.trainingLoad) : 0,
+    /** The heaviest week's load: what the tile leads with. */
+    peakLoad: hasLoad ? Math.round(Math.max(...loads)) : 0,
     profileNote: peakWeek ? t("Peak in week {{value1}}", { value1: String(peakWeek) }) : rhythm,
     dominant: dominantSport(summary?.sportDistribution, plan.sportMix),
     ridge: {
@@ -1028,7 +1073,9 @@ interface PlanIndexProps {
   nativeOnCalendar?: NativePlansOnCalendar;
   collections: TrainingCollection[];
   onCreate: () => void;
-  onGenerate?: () => void;
+  onGenerate?: (preset?: TrainingPlanPreset) => void;
+  /** Plans: Blank plan and Generate plan live in the masthead, so the toolbar leaves them out. */
+  createInMasthead?: boolean;
   onCalendar?: (plan: TrainingPlanDocument, operation?: "install" | "remove") => void;
   offline?: boolean;
   onOpen: (plan: TrainingPlanDocument) => void;
@@ -1047,6 +1094,7 @@ function PlanIndex({
   collections,
   onCreate,
   onGenerate,
+  createInMasthead = false,
   onCalendar,
   offline = false,
   onOpen,
@@ -1067,6 +1115,8 @@ function PlanIndex({
     PLAN_LAYOUT_PREFERENCES[noun]
   );
   const [selected, setSelected] = useState<string[]>([]);
+  /** The goal picked on the "Build me a plan" tile. */
+  const [goalPreset, setGoalPreset] = useState<PlanGoalPresetId | null>(null);
 
   // A deleted plan leaves the selection.
   useEffect(() => {
@@ -1282,38 +1332,47 @@ function PlanIndex({
         style={sportAccentStyle(view.dominant)}
       >
         {selectMark(plan, isSelected)}
-        <button type="button" className="tl-plan-tile-open" onClick={() => onOpen(plan)}>
+        <button type="button" className="tl-plan-tile-open" title={plan.description || undefined} onClick={() => onOpen(plan)}>
           <span className="tl-plan-tile-head">
             <SportGlyph sport={view.dominant} />
             <span className="tl-plan-tile-title">
-              <span className="tl-plan-tile-name" title={plan.name}>{plan.name}</span>
+              <span className="tl-plan-tile-name-row">
+                <span className="tl-plan-tile-name" title={plan.name}>{plan.name}</span>
+                {plan.goal ? <span className="tl-plan-goal" title={plan.goal}>{plan.goal}</span> : null}
+              </span>
               <span className="tl-plan-meta">
                 {plan.favorite ? <Heart size={11} fill="currentColor" strokeWidth={0} aria-label={t("Favorite")} /> : null}
                 <PlanSourceBadge source={plan.source} />
                 {view.sports ? <em title={view.sports}>{view.sports}</em> : null}
+                {plan.difficulty && plan.difficulty !== "custom" ? <em>{t(DIFFICULTY_LABELS[plan.difficulty] ?? plan.difficulty)}</em> : null}
               </span>
             </span>
           </span>
-          {view.note ? <span className="tl-plan-tile-note" title={view.note}>{view.note}</span> : null}
-          <span className="tl-plan-well">
+          <span className="tl-plan-well" title={[view.ridge.variant === "load" ? t("Weekly load") : t("Sessions per week"), view.profileNote].filter(Boolean).join(" · ")}>
             <span className="tl-plan-caption">
               <span>{view.ridge.variant === "load" ? t("Weekly load") : t("Sessions per week")}</span>
               {view.profileNote ? <span>{view.profileNote}</span> : null}
             </span>
             <WeekProfile {...view.ridge} phases={plan.phases} currentWeek={calendarRun ? planCalendarWeek(plan, calendarRun.startDay) : undefined} />
             {plan.phases.length ? (
-              <span className="tl-phase-ribbon" aria-label={t("Phases: {{value1}}", { value1: plan.phases.map((phase) => `${phase.name} ${phase.endWeek - phase.startWeek + 1}w`).join(", ") })}>
-                {plan.phases.map((phase) => (
-                  <span
-                    key={phase.id}
-                    data-phase={phase.kind ?? "custom"}
-                    style={{ flexGrow: Math.max(1, phase.endWeek - phase.startWeek + 1) }}
-                  >
-                    <i aria-hidden="true" />
-                    <small>{phase.name} <b>{phase.endWeek - phase.startWeek + 1}w</b></small>
-                  </span>
-                ))}
-              </span>
+              <>
+                <span className="tl-phase-ribbon" aria-hidden="true">
+                  {plan.phases.map((phase) => (
+                    <span
+                      key={phase.id}
+                      data-phase={phase.kind ?? "custom"}
+                      style={{ flexGrow: Math.max(1, phase.endWeek - phase.startWeek + 1) }}
+                    >
+                      <i />
+                    </span>
+                  ))}
+                </span>
+                <span className="tl-phase-legend" aria-label={t("Phases: {{value1}}", { value1: plan.phases.map((phase) => `${phase.name} ${phase.endWeek - phase.startWeek + 1}w`).join(", ") })}>
+                  {plan.phases.map((phase) => (
+                    <small key={phase.id} data-phase={phase.kind ?? "custom"}>{phase.name} <b>{phase.endWeek - phase.startWeek + 1}w</b></small>
+                  ))}
+                </span>
+              </>
             ) : null}
           </span>
           <span className="tl-plan-figs">
@@ -1325,17 +1384,23 @@ function PlanIndex({
               <small>{t("Sessions")}</small>
               <b className={view.sessions ? "" : "is-nil"}>{view.sessions || "—"}</b>
             </span>
-            <span>
-              <small>{t("Load")}</small>
-              <b className={view.load ? "" : "is-nil"}>{view.load ? formatNumber(view.load) : "—"}</b>
+            <span className="is-load" title={view.load ? t("Total load {{value1}}", { value1: formatNumber(view.load) }) : undefined}>
+              <small>{view.peakLoad ? t("Peak load") : t("Load")}</small>
+              <b className={view.peakLoad ? "" : "is-nil"}>{view.peakLoad ? formatNumber(view.peakLoad) : "—"}</b>
             </span>
           </span>
         </button>
         <div className="tl-plan-tile-foot">
-          <span className={`tl-plan-status${calendarRun ? " is-live" : ""}`}>
-            {calendarRun ? <i aria-hidden="true" /> : <CalendarClock size={13} aria-hidden="true" />}
-            {planStatus(plan)}
-          </span>
+          {(() => {
+            /* Ready: a start date is set but the plan is not on the calendar yet. */
+            const ready = !calendarRun && planStartLabel(plan) !== t("Unscheduled");
+            return (
+              <span className={`tl-plan-status${calendarRun ? " is-live" : ready ? " is-ready" : ""}`}>
+                <i aria-hidden="true" />
+                {ready ? t("Ready · {{value1}}", { value1: planStatus(plan) }) : planStatus(plan)}
+              </span>
+            );
+          })()}
           {planFlags(plan)}
           <div className="tl-plan-actions">{planActions(plan)}</div>
         </div>
@@ -1393,12 +1458,12 @@ function PlanIndex({
               <List size={14} />
             </button>
           </div>
-          <div className="tl-plan-create">
+          {!createInMasthead ? <div className="tl-plan-create">
             <button type="button" className={noun === "plan" && onGenerate ? "ghost-button" : "primary-button"} onClick={onCreate}>
               <Plus size={15} /> {t("New")} {noun}
             </button>
-            {noun === "plan" && onGenerate ? <button type="button" className="primary-button tl-generate-button" onClick={onGenerate}><Sparkles size={15} /> {t("Generate plan")}</button> : null}
-          </div>
+            {noun === "plan" && onGenerate ? <button type="button" className="primary-button tl-generate-button" onClick={() => onGenerate()}><Sparkles size={15} /> {t("Generate plan")}</button> : null}
+          </div> : null}
         </div>
       </div>
 
@@ -1485,20 +1550,55 @@ function PlanIndex({
             {visible.map(renderTile)}
             {noun === "plan" && onGenerate && scope === "all" && !query ? (
               <li className="tl-plan-generate">
-                <button type="button" onClick={onGenerate}>
+                <div className="tl-plan-generate-card">
                   <span className="tl-plan-generate-sparkles" aria-hidden="true"><i /><i /><i /></span>
                   <span className="tl-plan-generate-head">
                     <span className="tl-plan-generate-badge" aria-hidden="true"><Sparkles size={20} /></span>
                     <span>
                       <b>{t("Build me a plan")}</b>
-                      <small>{t("From your library, your fitness and a race date")}</small>
+                      <small>{t("From your library, fitness and race date")}</small>
                     </span>
                   </span>
-                  <span className="tl-plan-generate-goals" aria-hidden="true">
-                    {["5K", "10K", t("Half"), t("Marathon"), t("Trail ultra")].map((goal) => <em key={goal}>{goal}</em>)}
+                  <span className="tl-plan-generate-label" id="tl-plan-goal-label">{t("Goal")}</span>
+                  <span className="tl-plan-generate-goals" role="group" aria-labelledby="tl-plan-goal-label">
+                    {PLAN_GOAL_PRESETS.map((goal) => (
+                      <button
+                        type="button"
+                        key={goal.id}
+                        aria-pressed={goalPreset === goal.id}
+                        onClick={() => setGoalPreset(goalPreset === goal.id ? null : goal.id)}
+                      >
+                        {t(goal.label)}
+                      </button>
+                    ))}
                   </span>
-                  <span className="tl-plan-generate-cta">{t("Generate plan")}</span>
-                </button>
+                  {(() => {
+                    const preset = PLAN_GOAL_PRESETS.find((goal) => goal.id === goalPreset);
+                    if (!preset) return <span className="tl-plan-generate-facts">{t("Pick a goal, or start from scratch.")}</span>;
+                    const raceDay = new Date();
+                    raceDay.setDate(raceDay.getDate() + preset.weeks * 7 - 1);
+                    return (
+                      <span className="tl-plan-generate-facts">
+                        {t("Race day")} <b>{formatDate(raceDay, { weekday: "short", month: "short", day: "numeric" })}</b>
+                        <i aria-hidden="true">·</i>
+                        <b>{preset.sessionsPerWeek}</b> {t("sessions a week")}
+                      </span>
+                    );
+                  })()}
+                  <button
+                    type="button"
+                    className="tl-plan-generate-cta"
+                    onClick={() => {
+                      const preset = PLAN_GOAL_PRESETS.find((goal) => goal.id === goalPreset);
+                      onGenerate?.(preset ? { goal: t(preset.goal), weeks: preset.weeks, sessionsPerWeek: preset.sessionsPerWeek } : undefined);
+                    }}
+                  >
+                    {(() => {
+                      const preset = PLAN_GOAL_PRESETS.find((goal) => goal.id === goalPreset);
+                      return preset ? t("Generate {{value1}}-week plan", { value1: String(preset.weeks) }) : t("Generate plan");
+                    })()}
+                  </button>
+                </div>
               </li>
             ) : null}
           </ul>
