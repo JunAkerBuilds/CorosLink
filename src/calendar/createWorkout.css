@@ -6,7 +6,7 @@
  */
 
 .calendar-modal.is-library-create {
-  width: min(1320px, calc(100vw - 48px));
+  width: min(1600px, calc(100vw - 48px));
   height: min(900px, calc(100dvh - 48px));
   padding: 0;
   overflow: hidden;
@@ -528,3 +528,18 @@
 :root[data-theme="paper"] .is-library-create .create-workout-stats .is-distance { --stat-color: #1f63b8; }
 :root[data-theme="paper"] .is-library-create .create-workout-stats .is-steps { --stat-color: #a4600c; }
 :root[data-theme="paper"] .is-library-create .create-workout-stats .is-sport { --stat-color: var(--text-secondary); }
+
+/* Strength steps: the movement preview sits beside the prescription as soon
+   as the steps column can hold both, instead of stacking under it. */
+@container strength-step (min-width: 540px) {
+  .is-library-create .calendar-builder-row-content.strength-step:has(.strength-step-aside) {
+    grid-template-columns: minmax(0, 1fr) clamp(180px, 27%, 260px);
+    column-gap: 20px;
+  }
+
+  .is-library-create .strength-step-aside {
+    position: sticky;
+    top: 0;
+    max-width: none;
+  }
+}
