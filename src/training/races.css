@@ -2077,6 +2077,21 @@ button.race-plaque:focus-visible {
   color: var(--race-mint-ink);
 }
 
+/* The tick's ring, faded on its own layer: a box-shadow animation repaints every frame. */
+.race-hero-unit.is-seconds {
+  position: relative;
+}
+
+.race-hero-unit.is-seconds::after {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+}
+
 .race-hero-countdown-note {
   align-self: center;
   max-width: 220px;
@@ -2990,8 +3005,8 @@ button.race-result:focus-visible {
 }
 
 @keyframes race-hero-tick {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 30%, transparent); }
-  70%, 100% { box-shadow: 0 0 0 6px transparent; }
+  0% { opacity: 1; transform: scale(0.97); }
+  70%, 100% { opacity: 0; transform: none; }
 }
 
 @keyframes race-ghost-float {
@@ -3007,7 +3022,7 @@ button.race-result:focus-visible {
   .races-results > .race-result:nth-child(3n + 2) .race-result-sheen { animation-delay: 1.4s; }
   .races-results > .race-result:nth-child(3n + 3) .race-result-sheen { animation-delay: 2.8s; }
 
-  .race-hero-unit.is-seconds {
+  .race-hero-unit.is-seconds::after {
     animation: race-hero-tick 1s ease-out infinite;
   }
 

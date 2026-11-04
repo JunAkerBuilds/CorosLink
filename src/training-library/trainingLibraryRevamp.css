@@ -851,12 +851,24 @@
   border-radius: 50%;
   color: var(--tl-sport-accent);
   background: color-mix(in srgb, var(--tl-sport-accent) 16%, transparent);
+  position: relative;
+}
+
+/* The glow's peak, faded on its own layer: a box-shadow animation repaints every frame. */
+.tl-brief-badge::after {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 20px 1px color-mix(in srgb, var(--tl-sport-accent) 32%, transparent);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
   animation: tl-brief-glow 3.2s ease-in-out infinite;
 }
 
 @keyframes tl-brief-glow {
-  0%, 100% { box-shadow: 0 0 0 0 transparent; }
-  50% { box-shadow: 0 0 20px 1px color-mix(in srgb, var(--tl-sport-accent) 32%, transparent); }
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
 }
 
 .tl-brief-mix {
@@ -1472,10 +1484,16 @@
   border-color: color-mix(in srgb, var(--tlz-z4) 28%, transparent);
 }
 
+/* Beats on a wrapper: a transform animation on the <svg> itself stays on the main thread. */
 .tl-brief-flame {
+  display: block;
   flex: none;
   color: var(--tlz-z4);
   animation: tl-flame-beat 1.5s ease-in-out infinite;
+}
+
+.tl-brief-flame svg {
+  display: block;
 }
 
 @keyframes tl-flame-beat {
@@ -1647,7 +1665,8 @@
 @media (prefers-reduced-motion: reduce) {
   .tl-masthead-skyline i,
   .tl-masthead-tagline,
-  .tl-brief-flame {
+  .tl-brief-flame,
+  .tl-brief-badge::after {
     animation: none;
   }
 }

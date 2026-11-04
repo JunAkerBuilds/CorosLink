@@ -897,7 +897,7 @@ function LibraryBrief({ workouts, schedule, matches, onOpenWorkout }: LibraryBri
       ) : null}
       {favourite && favouriteUses ? (
         <div className="tl-brief-chip is-favourite">
-          <Flame className="tl-brief-flame" size={22} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+          <span className="tl-brief-flame" aria-hidden="true"><Flame size={22} fill="currentColor" strokeWidth={0} /></span>
           <span>
             <small>{t("Crowd favourite")}</small>
             <b>{favourite.name} <em>· {t("used {{value1}}×", { value1: String(favouriteUses) })}</em></b>

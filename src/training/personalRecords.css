@@ -116,6 +116,13 @@
   pointer-events: none;
 }
 
+/* 124 fire particles cost 16% of the main thread even scrolled out of view. */
+.pr-stage.is-offscreen *,
+.pr-stage.is-offscreen *::before,
+.pr-stage.is-offscreen *::after {
+  animation-play-state: paused;
+}
+
 /* The heat: a bed of deep orange light along the stage edge, breathing. */
 .pr-stage-heat {
   position: absolute;
@@ -652,24 +659,33 @@
   height: 14px;
   margin-left: -1px;
   background: radial-gradient(circle, #fff6dc 0 2.25px, var(--pr-gold) 2.75px);
-  animation:
-    pr-post-in 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.3) both,
-    pr-best-pulse 3.2s ease-in-out infinite;
-  animation-delay: calc(var(--i, 0) * 110ms + 60ms), calc(var(--i, 0) * 110ms + 900ms);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 0 10px 2px rgba(230, 187, 98, 0.32);
+  /* pr-post-in must not hold its last frame, or it would cover this resting glow. */
+  animation-fill-mode: backwards;
+}
+
+/* The pulse's peak, faded in on its own layer: a box-shadow animation repaints every frame. */
+.pr-rung.is-best .pr-rung-post::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 18px 6px rgba(230, 187, 98, 0.5);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  animation: pr-best-pulse 3.2s ease-in-out calc(var(--i, 0) * 110ms + 900ms) infinite;
 }
 
 @keyframes pr-best-pulse {
   0%,
   100% {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.45),
-      0 0 10px 2px rgba(230, 187, 98, 0.32);
+    opacity: 0;
   }
 
   50% {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.45),
-      0 0 18px 6px rgba(230, 187, 98, 0.5);
+    opacity: 1;
   }
 }
 
@@ -1424,6 +1440,14 @@ button.pr-latest-chip:focus-visible {
   animation-name: pr-post-in-open;
 }
 
+:root[data-theme="paper"] .pr-rung.is-best .pr-rung-post {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+:root[data-theme="paper"] .pr-rung.is-best .pr-rung-post::after {
+  display: none;
+}
+
 :root[data-theme="paper"] .pr-rung.is-best .pr-value,
 :root[data-theme="paper"] .pr-figure.is-best .pr-value {
   text-shadow: none;
@@ -1757,6 +1781,7 @@ button.pr-latest-chip:focus-visible {
   .pr-emblem::before,
   .pr-rung::after,
   .pr-rung-post,
+  .pr-rung-post::after,
   .pr-rung-body,
   .pr-figure > :not(.pr-figure-head),
   .pr-emblem-medal::after,
@@ -1767,6 +1792,10 @@ button.pr-latest-chip:focus-visible {
   .pr-announce::after,
   .pr-announce-spark {
     animation: none !important;
+  }
+
+  .pr-rung.is-best .pr-rung-post {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
   }
 
   .pr-stage-embers,
@@ -2570,6 +2599,19 @@ button.pr-latest-chip:focus-visible {
     0 0 14px rgba(240, 200, 112, 0.6);
 }
 
+/* The pulse's peak, faded in on its own layer: a box-shadow animation repaints every frame. */
+.pr-rung.is-fresh .pr-rung-post::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    0 0 0 9px rgba(240, 200, 112, 0.06),
+    0 0 24px rgba(240, 200, 112, 0.95);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+}
+
 .pr-rung.is-fresh .pr-value {
   color: var(--pr-gold-bright);
   text-shadow: 0 0 22px rgba(240, 200, 112, 0.32);
@@ -2811,8 +2853,8 @@ button.pr-latest-chip:focus-visible {
   stroke: none;
   filter: none;
   opacity: 0;
-  transform-box: fill-box;
-  transform-origin: center;
+  /* Sized once and only faded: animating a transform on an SVG child forces layout every frame. */
+  r: 15.5px;
 }
 
 .pr-work-medal-glint {
@@ -2863,10 +2905,12 @@ button.pr-latest-chip:focus-visible {
   }
 
   .pr-rung.is-fresh .pr-rung-post {
-    animation:
-      pr-post-in 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.3) both,
-      pr-fresh-pulse 2.2s ease-in-out infinite;
-    animation-delay: calc(var(--i, 0) * 110ms + 60ms), calc(var(--i, 0) * 110ms + 700ms);
+    animation: pr-post-in 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.3) backwards;
+    animation-delay: calc(var(--i, 0) * 110ms + 60ms);
+  }
+
+  .pr-rung.is-fresh .pr-rung-post::after {
+    animation: pr-fresh-pulse 2.2s ease-in-out calc(var(--i, 0) * 110ms + 700ms) infinite;
   }
 
   .pr-reach i {
@@ -2912,15 +2956,11 @@ button.pr-latest-chip:focus-visible {
 @keyframes pr-fresh-pulse {
   0%,
   100% {
-    box-shadow:
-      0 0 0 4px rgba(240, 200, 112, 0.2),
-      0 0 12px rgba(240, 200, 112, 0.6);
+    opacity: 0;
   }
 
   50% {
-    box-shadow:
-      0 0 0 9px rgba(240, 200, 112, 0.06),
-      0 0 24px rgba(240, 200, 112, 0.95);
+    opacity: 1;
   }
 }
 
@@ -2951,12 +2991,10 @@ button.pr-latest-chip:focus-visible {
   0%,
   100% {
     opacity: 0;
-    transform: scale(1);
   }
 
   50% {
     opacity: 1;
-    transform: scale(1.55);
   }
 }
 
@@ -3043,6 +3081,10 @@ button.pr-latest-chip:focus-visible {
 :root[data-theme="paper"] .pr-rung.is-fresh .pr-rung-post {
   box-shadow: 0 0 0 4px rgba(201, 150, 46, 0.18);
   animation-name: pr-post-in-open;
+}
+
+:root[data-theme="paper"] .pr-rung.is-fresh .pr-rung-post::after {
+  display: none;
 }
 
 :root[data-theme="paper"] .pr-rung.is-fresh .pr-value {

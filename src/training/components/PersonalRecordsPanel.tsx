@@ -14,7 +14,7 @@ import {
   Waves,
   type LucideIcon
 } from "lucide-react";
-import { useEffect, useId, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type {
   TrainingHubActivity,
   TrainingHubDashboard,
@@ -319,8 +319,19 @@ const FLAMES = Array.from({ length: 32 }, (_, index) => {
 
 function Stage() {
   useLanguage();
+  const stage = useRef<HTMLDivElement>(null);
+  /* Pause the fire once it scrolls away. Set directly so scrolling never re-renders anything. */
+  useEffect(() => {
+    const element = stage.current;
+    if (!element) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      element.classList.toggle("is-offscreen", !entry!.isIntersecting);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   return (
-    <div className="pr-stage" aria-hidden="true">
+    <div ref={stage} className="pr-stage" aria-hidden="true">
       <span className="pr-stage-heat" />
       <span className="pr-stage-fire">
         {FLAMES.map((flame, index) => (
