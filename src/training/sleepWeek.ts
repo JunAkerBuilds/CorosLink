@@ -19,8 +19,10 @@ export function formatSleepDuration(minutes?: number): string {
     return "0m";
   }
 
-  const hours = Math.floor(minutes / 60);
-  const remainder = Math.round(minutes % 60);
+  // Round before splitting, or 7h 59.6m would read 7h 60m instead of 8h 00m.
+  const totalMinutes = Math.round(minutes);
+  const hours = Math.floor(totalMinutes / 60);
+  const remainder = totalMinutes % 60;
 
   if (hours <= 0) {
     return `${remainder}m`;

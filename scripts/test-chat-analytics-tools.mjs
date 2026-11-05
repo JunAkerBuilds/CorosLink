@@ -69,6 +69,11 @@ assert.match(lines[1], /night that ended that morning \(before the training\)/);
 // A date's overnight readings precede its training, so they are labelled as the night before.
 assert.equal(lines[3], "- 07/01 · load 120 · night before: RHR 48 bpm · HRV 62 · baseline 58");
 assert.equal(lines[5], "- 07/03 · load 0 · night before: sleep 88 · slept 7h35");
+assert.match(
+  formatFitnessTrendLines([{ date: "20260704", label: "07/04", sleepMinutes: 479.6 }], 7)[3],
+  /slept 8h00$/,
+  "minutes round up into the next hour"
+);
 assert.equal(
   formatFitnessTrendLines([{ date: "20260704", label: "07/04", trainingLoad: 35 }], 7)[3],
   "- 07/04 · load 35",
