@@ -303,8 +303,7 @@ import {
   Maximize2,
   Minimize2,
   TriangleAlert,
-  ArrowUpRight,
-  MoreHorizontal
+  ArrowUpRight
 } from "lucide-react";
 import {
   resizeWatchfaceDimensions,
@@ -9889,14 +9888,7 @@ export function WatchfaceEditor({
           >
             <PanelRight size={17} />
           </button>
-          <div className="wf-history-controls" role="group" aria-label={t("Edit history")}>
-            <button className="wf-icon-button" type="button" disabled={!canUndo} aria-label={t("Undo")} title={t("Undo")} onClick={undo}>
-              <Undo2 size={17} />
-            </button>
-            <button className="wf-icon-button" type="button" disabled={!canRedo} aria-label={t("Redo")} title={t("Redo")} onClick={redo}>
-              <Redo2 size={17} />
-            </button>
-          </div>
+          <span className="wf-command-separator" aria-hidden="true" />
           <button
             className="wf-icon-button wf-tour-button"
             type="button"
@@ -9906,89 +9898,110 @@ export function WatchfaceEditor({
           >
             <CircleHelp size={17} aria-hidden="true" />
           </button>
-          <span className="wf-command-separator" aria-hidden="true" />
+          <div className="wf-studio-mode-switch" role="group" aria-label={t("Editor mode")}>
+            <button
+              type="button"
+              aria-pressed={simpleMode}
+              title={t("What's on the face, with its color, font, size and position")}
+              onClick={() => setStudioMode("simple")}
+            >{t("Simple")}</button>
+            <button
+              type="button"
+              aria-pressed={!simpleMode}
+              title={t("Also template slots, template images, PNG digit sets, config files and watch sizes")}
+              onClick={() => setStudioMode("advanced")}
+            >{t("Advanced")}</button>
+          </div>
+          <div className="wf-history-controls" role="group" aria-label={t("Edit history")}>
+            <button className="wf-icon-button" type="button" disabled={!canUndo} aria-label={t("Undo")} title={t("Undo")} onClick={undo}>
+              <Undo2 size={17} />
+            </button>
+            <button className="wf-icon-button" type="button" disabled={!canRedo} aria-label={t("Redo")} title={t("Redo")} onClick={redo}>
+              <Redo2 size={17} />
+            </button>
+          </div>
           <button className="secondary-button wf-save-button" type="button" title={t("Save")} disabled={saving || spriteImportPending || !isDirty} onClick={() => void saveProject()}>
             {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />}<span className="wf-command-label">{t("Save")}</span></button>
-          <div className="wf-export-menu wf-more-menu" ref={downloadMenuRef}>
+          {showDevelopmentTools || bakeForWatch ? (
+            <div className="wf-export-menu" ref={downloadMenuRef}>
+              <button
+                className="secondary-button wf-download-button"
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={downloadMenuOpen}
+                title={t("Download")}
+                disabled={spriteImportPending || creating || exporting || Boolean(allWatchesExport) || !backgroundDataUrl}
+                onClick={() => setDownloadMenuOpen((open) => !open)}
+              >
+                {exporting || creating || allWatchesExport ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
+                <span className="wf-command-label">{allWatchesExport ? t("{{value1}} · {{value2}}/{{value3}}", { value1: t(allWatchesExport.label), value2: allWatchesExport.done + 1, value3: allWatchesExport.total }) : t("Download")}</span>
+                <ChevronDown size={14} aria-hidden="true" />
+              </button>
+              {downloadMenuOpen ? (
+                <div className="wf-export-popover" role="menu" aria-label={t("Download options")}>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
+                    onClick={() => { setDownloadMenuOpen(false); void exportEditableProject(); }}
+                  >
+                    <span className="wf-export-option-icon" aria-hidden="true">
+                      <Download size={16} />
+                    </span>
+                    <span className="wf-export-option-copy">
+                      <strong>{t("Editable project ZIP")}</strong>
+                      <small>{t("Save an editable backup")}</small>
+                    </span>
+                  </button>
+                  {showDevelopmentTools ? <button
+                    type="button"
+                    role="menuitem"
+                    disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
+                    onClick={() => { setDownloadMenuOpen(false); void createArchive("export"); }}
+                  >
+                    <span className="wf-export-option-icon" aria-hidden="true">
+                      <Package size={16} />
+                    </span>
+                    <span className="wf-export-option-copy">
+                      <strong>{t("Final watch ZIP")}</strong>
+                      <small>{t("Development export")}</small>
+                    </span>
+                  </button> : null}
+                  {bakeForWatch ? <button
+                    type="button"
+                    role="menuitem"
+                    disabled={spriteImportPending || creating || exporting || Boolean(allWatchesExport) || !backgroundDataUrl}
+                    onClick={() => { setDownloadMenuOpen(false); void exportForAllWatches(); }}
+                  >
+                    <span className="wf-export-option-icon" aria-hidden="true">
+                      <FolderDown size={16} />
+                    </span>
+                    <span className="wf-export-option-copy">
+                      <strong>{t("All watches")}</strong>
+                      <small>{WATCHFACE_TARGETS.length}{" "}{t("final ZIPs in one folder")}</small>
+                    </span>
+                  </button> : null}
+                </div>
+              ) : null}
+            </div>
+          ) : (
             <button
-              className="wf-icon-button wf-more-button"
+              className="secondary-button wf-download-button"
               type="button"
-              aria-haspopup="menu"
-              aria-expanded={downloadMenuOpen}
-              aria-label={t("More")}
-              title={t("Download, convert and view options")}
-              onClick={() => setDownloadMenuOpen((open) => !open)}
+              title={t("Download an editable project ZIP")}
+              disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
+              onClick={() => void exportEditableProject()}
             >
-              {exporting || creating || allWatchesExport ? <Loader2 className="spin" size={16} /> : <MoreHorizontal size={17} />}
-            </button>
-            {downloadMenuOpen ? (
-              <div className="wf-export-popover wf-more-popover" role="menu" aria-label={t("More")}>
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
-                  onClick={() => { setDownloadMenuOpen(false); void exportEditableProject(); }}
-                >
-                  <span className="wf-export-option-icon" aria-hidden="true"><Download size={16} /></span>
-                  <span className="wf-export-option-copy">
-                    <strong>{t("Editable project ZIP")}</strong>
-                    <small>{t("Save an editable backup")}</small>
-                  </span>
-                </button>
-                {showDevelopmentTools ? <button
-                  type="button"
-                  role="menuitem"
-                  disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
-                  onClick={() => { setDownloadMenuOpen(false); void createArchive("export"); }}
-                >
-                  <span className="wf-export-option-icon" aria-hidden="true"><Package size={16} /></span>
-                  <span className="wf-export-option-copy">
-                    <strong>{t("Final watch ZIP")}</strong>
-                    <small>{t("Development export")}</small>
-                  </span>
-                </button> : null}
-                {bakeForWatch ? <button
-                  type="button"
-                  role="menuitem"
-                  disabled={spriteImportPending || creating || exporting || Boolean(allWatchesExport) || !backgroundDataUrl}
-                  onClick={() => { setDownloadMenuOpen(false); void exportForAllWatches(); }}
-                >
-                  <span className="wf-export-option-icon" aria-hidden="true"><FolderDown size={16} /></span>
-                  <span className="wf-export-option-copy">
-                    <strong>{allWatchesExport ? t("{{value1}} · {{value2}}/{{value3}}", { value1: t(allWatchesExport.label), value2: allWatchesExport.done + 1, value3: allWatchesExport.total }) : t("All watches")}</strong>
-                    <small>{WATCHFACE_TARGETS.length}{" "}{t("final ZIPs in one folder")}</small>
-                  </span>
-                </button> : null}
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={saving || spriteImportPending || creating || exporting || previewingExport || !backgroundDataUrl}
-                  onClick={() => { setDownloadMenuOpen(false); convertToAnotherWatch(); }}
-                >
-                  <span className="wf-export-option-icon" aria-hidden="true"><Repeat2 size={16} /></span>
-                  <span className="wf-export-option-copy">
-                    <strong>{t("Convert")}</strong>
-                    <small>{t("Adapt the design for another watch model")}</small>
-                  </span>
-                </button>
-                <span className="wf-more-divider" role="separator" />
-                <button
-                  type="button"
-                  className="wf-more-toggle"
-                  role="menuitemcheckbox"
-                  aria-checked={!simpleMode}
-                  onClick={() => setStudioMode(simpleMode ? "advanced" : "simple")}
-                >
-                  <span className="wf-export-option-icon" aria-hidden="true"><SlidersHorizontal size={16} /></span>
-                  <span className="wf-export-option-copy">
-                    <strong>{t("Show advanced controls")}</strong>
-                    <small>{t("Also template slots, template images, PNG digit sets, config files and watch sizes")}</small>
-                  </span>
-                  <span className={`wf-more-check${simpleMode ? "" : " is-on"}`} aria-hidden="true" />
-                </button>
-              </div>
-            ) : null}
-          </div>
+              {exporting ? <Loader2 className="spin" size={15} /> : <Download size={15} />}<span className="wf-command-label">{t("Download")}</span></button>
+          )}
+          <button
+            className="secondary-button wf-convert-button"
+            type="button"
+            title={t("Adapt the design for another watch model")}
+            disabled={saving || spriteImportPending || creating || exporting || previewingExport || !backgroundDataUrl}
+            onClick={convertToAnotherWatch}
+          >
+            <Repeat2 size={15} /><span className="wf-command-label">{t("Convert")}</span></button>
           <button
             className="primary-button wf-send-button"
             type="button"

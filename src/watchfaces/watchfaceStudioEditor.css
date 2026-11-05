@@ -812,3 +812,13 @@ body .watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-ac
   border-radius: 10px;
   gap: 7px;
 }
+
+/* The corner sits at the top of the stage, so its Placement menu opens
+   downward (the floating-pill rule opened it upward, off the canvas). */
+:root .watchface-shell.watchface-shell--studio .wf-stage-toolbar--floating.wf-stage-corner .wf-placement-popover {
+  top: calc(100% + 10px);
+  bottom: auto;
+  right: 0;
+  left: auto;
+  z-index: 20;
+}
