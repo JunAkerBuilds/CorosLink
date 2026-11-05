@@ -9900,17 +9900,6 @@ export function WatchfaceEditor({
             <CircleHelp size={17} aria-hidden="true" />
           </button>
           <span className="wf-command-separator" aria-hidden="true" />
-          <button
-            className={`secondary-button wf-watchmaker-button${propertiesTab === "ai" ? " is-active" : ""}`}
-            type="button"
-            aria-pressed={propertiesTab === "ai"}
-            title={t("Design with Watchmaker")}
-            onClick={() => {
-              setPropertiesTab((tab) => (tab === "ai" ? "selection" : "ai"));
-              setPropertiesOpen(true);
-            }}
-          >
-            <Sparkles size={15} aria-hidden="true" /><span className="wf-command-label">{t("Watchmaker")}</span></button>
           <button className="secondary-button wf-save-button" type="button" title={t("Save")} disabled={saving || spriteImportPending || !isDirty} onClick={() => void saveProject()}>
             {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />}<span className="wf-command-label">{t("Save")}</span></button>
           <div className="wf-export-menu wf-more-menu" ref={downloadMenuRef}>
@@ -10618,7 +10607,7 @@ export function WatchfaceEditor({
                 height="1"
               />
             </svg>
-            {canEditActiveMode && selectionToolbarBox && !dragVisualActive && selectedMovableIds.some((id) => !isPositionLocked(id)) ? (
+            {canEditActiveMode && selectionToolbarBox && !dragVisualActive && selectedMovableIds.length > 1 && selectedMovableIds.some((id) => !isPositionLocked(id)) ? (
               <div
                 className={`wf-contextual-align-bar wf-on-face-toolbar${selectionToolbarBox.below ? " is-below" : ""}`}
                 role="toolbar"
@@ -10629,12 +10618,6 @@ export function WatchfaceEditor({
                 }}
                 onPointerDown={(event) => event.stopPropagation()}
               >
-                {selectedLayer && selectedMovableIds.length === 1 ? (
-                  <>
-                    <strong className="wf-on-face-toolbar-name">{t(layerDisplayLabel(selectedLayer))}</strong>
-                    <span aria-hidden="true" />
-                  </>
-                ) : null}
                 <button type="button" title={t("Align left")} aria-label={t("Align left")} disabled={aligningGlyphs} onClick={() => alignSelection("left")}><AlignHorizontalJustifyStart size={15} /></button>
                 <button type="button" title={t("Align horizontal centers")} aria-label={t("Align horizontal centers")} disabled={aligningGlyphs} onClick={() => alignSelection("center-x")}><AlignHorizontalJustifyCenter size={15} /></button>
                 <button type="button" title={t("Align right")} aria-label={t("Align right")} disabled={aligningGlyphs} onClick={() => alignSelection("right")}><AlignHorizontalJustifyEnd size={15} /></button>
@@ -10650,22 +10633,6 @@ export function WatchfaceEditor({
                 <span aria-hidden="true" />
                 <button type="button" title={t("Group selection")} aria-label={t("Group selection")} disabled={selectedLayoutItems().length < 2} onClick={linkSelectedLayers}><Group size={15} /></button>
                 <button type="button" title={t("Ungroup selection")} aria-label={t("Ungroup selection")} disabled={!selectionCanUnlink} onClick={unlinkSelectedLayers}><Ungroup size={15} /></button>
-                {selectedLayer && selectedMovableIds.length === 1 ? (
-                  <>
-                    <span aria-hidden="true" />
-                    {renderLayerPositionLockButton(selectedLayer.id, selectedLayer.label)}
-                    {selectedLayer.canHide ? (
-                      <button
-                        type="button"
-                        title={t("Hide layer")}
-                        aria-label={t("Hide {{value1}}", { value1: t(selectedLayer.label) })}
-                        onClick={() => toggleLayerVisibility(selectedLayer)}
-                      >
-                        <EyeOff size={15} />
-                      </button>
-                    ) : null}
-                  </>
-                ) : null}
               </div>
             ) : null}
             {spriteTransform && selectedSpriteCanTransform && canEditActiveMode ? (

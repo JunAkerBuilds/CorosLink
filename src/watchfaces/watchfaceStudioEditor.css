@@ -74,9 +74,7 @@
 
 :root .watchface-shell.watchface-shell--studio .wf-add-rail-button > span {
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 :root .watchface-shell.watchface-shell--studio .wf-add-rail-button:hover:not(:disabled) {
@@ -433,4 +431,15 @@
 :root .watchface-shell.watchface-shell--studio .wf-more-menu > .wf-more-button[aria-expanded="true"] {
   background: var(--atl-control-hover);
   color: var(--text-primary);
+}
+
+/* The strip keeps only what helps while designing: the snap hint while
+   dragging, the font warning, and (Advanced) size and file name. The
+   selection's name is already in the Properties header. */
+:root .watchface-shell.watchface-shell--studio .wf-screens-status > span:first-child:not(.is-snap-status) {
+  display: none;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-screens-status > span:nth-child(2)::before {
+  display: none;
 }
