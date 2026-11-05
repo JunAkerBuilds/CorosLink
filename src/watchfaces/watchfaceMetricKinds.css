@@ -494,3 +494,194 @@
   font-style: italic;
   font-weight: 500;
 }
+
+/* Chart pages under the Chart row (ChartPageRows): the pages Back stops on,
+   numbered in watch order, each with its readouts as chips. */
+.watchface-shell .wf-layer-list > li.wf-chart-page-item {
+  position: relative;
+  display: block;
+  margin-left: 14px;
+}
+
+.watchface-shell .wf-chart-page-card {
+  display: grid;
+  gap: 5px;
+  padding: 6px 8px 7px;
+  border-radius: 9px;
+  color: var(--atl-ink, var(--text-secondary));
+}
+
+.watchface-shell .wf-layer-list > li.wf-chart-page-item:hover .wf-chart-page-card {
+  background: var(--atl-control, var(--wf-hover));
+}
+
+.watchface-shell .wf-chart-page-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: default;
+}
+
+.watchface-shell button.wf-chart-page-head {
+  cursor: pointer;
+}
+
+/* Name and note give way to the row's actions while they show. */
+.watchface-shell .wf-layer-list > li.wf-chart-page-item:is(:hover, :focus-within):has(.wf-chart-page-actions > *) .wf-chart-page-head {
+  padding-right: 26px;
+}
+
+.watchface-shell .wf-layer-list > li.wf-chart-page-item:is(:hover, :focus-within):has(.wf-chart-page-actions > :nth-child(2)) .wf-chart-page-head {
+  padding-right: 54px;
+}
+
+.watchface-shell .wf-chart-page-index {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--wf-border-strong, var(--wf-border));
+  color: var(--atl-titanium, var(--text-secondary));
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.watchface-shell .wf-chart-page-name {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-shell .wf-chart-page-meta {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* The page the preview shows: its number lights like the selection. */
+.watchface-shell .wf-chart-page-card.is-current {
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-chart-page-card.is-current .wf-chart-page-index {
+  background: var(--atl-lume-wash, var(--wf-hover));
+  box-shadow: inset 0 0 0 1px var(--atl-lume-ring, var(--wf-border-strong, var(--wf-border)));
+  color: var(--atl-lume, var(--text-primary));
+}
+
+.watchface-shell .wf-chart-page-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding-left: 25px;
+  padding-right: 2px;
+}
+
+.watchface-shell .wf-chart-page-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  margin: 0;
+  padding: 0 6px;
+  border: 1px solid var(--wf-border-strong, var(--wf-border));
+  border-radius: 999px;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.watchface-shell button.wf-chart-page-chip {
+  cursor: pointer;
+}
+
+.watchface-shell button.wf-chart-page-chip:hover {
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+/* Hidden on the watch: the page keeps it invisibly. */
+.watchface-shell .wf-chart-page-chip.is-hidden {
+  border-style: dashed;
+  color: var(--atl-titanium-dim, var(--text-muted));
+}
+
+.watchface-shell .wf-chart-page-chip.is-editing {
+  border-color: var(--atl-lume-ring, var(--text-secondary));
+  background: var(--atl-lume-wash, var(--wf-hover));
+  color: var(--text-primary);
+}
+
+/* Actions centre on the page's name line (card padding 6px + half its 20px). */
+:root .watchface-shell.watchface-shell--studio .wf-layer-list > li.wf-layer-item.wf-chart-page-item > .wf-layer-row-actions {
+  top: 16px;
+  transform: translateY(-50%);
+}
+
+/* Add page: a quiet row with the native menu laid over it. */
+.watchface-shell .wf-layer-list > li.wf-chart-page-add {
+  position: relative;
+  display: block;
+  margin-left: 14px;
+}
+
+.watchface-shell .wf-chart-page-add-face {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 8px 0 10px;
+  border-radius: 9px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.watchface-shell .wf-chart-page-add select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.watchface-shell .wf-chart-page-add:hover .wf-chart-page-add-face {
+  background: var(--atl-control, var(--wf-hover));
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-chart-page-add:focus-within .wf-chart-page-add-face {
+  box-shadow: inset 0 0 0 1px var(--atl-lume-ring, var(--wf-border-strong, var(--wf-border)));
+}
+
+/* The Chart row's page count: plain metadata, not a state badge. */
+:root .watchface-shell .watchface-layer-row .wf-layer-state.wf-chart-page-count {
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}

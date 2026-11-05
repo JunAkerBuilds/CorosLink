@@ -65,7 +65,7 @@ function MinMaxPartnerPanel({ id, onAdd }: { id: string; onAdd: () => void }) {
     <button type="button" className="secondary-button" onClick={onAdd}><Plus size={13} aria-hidden="true" />{t("Add {{other}}", { other })}</button>
   </div>;
 }
-export const chartPageLabel = (id: string) => id === "daily-a" ? t("Daily data · A") : id === "daily-b" ? t("Daily data · B") : id === "sun" ? t("Sun") : id === "moon" ? t("Moon") : id === "barometer" ? t("Barometer") : t("Tide");
+export const chartPageLabel = (id: string) => id === "daily-a" ? t("Daily stats") : id === "daily-b" ? t("Daily activity") : id === "sun" ? t("Sun") : id === "moon" ? t("Moon") : id === "barometer" ? t("Barometer") : t("Tide");
 
 type ChartPage = typeof NATIVE_CHART_PAGES[number];
 type ChartSlotState = "shown" | "hidden" | "missing" | "fixed";
