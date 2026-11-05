@@ -2190,4 +2190,12 @@ export const watchfacesSpanish: Record<string, string> = {
   "Your image": "Tu imagen",
   "Drawn in your font": "Dibujado con tu fuente",
   "Drawn from text": "Dibujado a partir de texto",
+  "Official font": "Fuente oficial",
+  "This set": "Este conjunto",
+  "Remove this set": "Quitar este conjunto",
+  "Use for": "Usar para",
+  "Recolor with layer color": "Recolorear con el color de la capa",
+  "Sheet layout": "Disposición de la hoja",
+  "{{value1}} columns · {{value2}}": "{{value1}} columnas · {{value2}}",
+  "Add from": "Añadir desde",
 };

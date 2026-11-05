@@ -2154,4 +2154,12 @@ export const watchfacesFrench: Record<string, string> = {
   "Your image": "Votre image",
   "Drawn in your font": "Dessiné avec votre police",
   "Drawn from text": "Dessiné à partir du texte",
+  "Official font": "Police officielle",
+  "This set": "Ce jeu",
+  "Remove this set": "Retirer ce jeu",
+  "Use for": "Utiliser pour",
+  "Recolor with layer color": "Recolorer avec la couleur du calque",
+  "Sheet layout": "Disposition de la planche",
+  "{{value1}} columns · {{value2}}": "{{value1}} colonnes · {{value2}}",
+  "Add from": "Ajouter depuis",
 };

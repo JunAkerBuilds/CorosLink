@@ -1,6 +1,7 @@
 import { t, useLanguage } from "../i18n/watchfaces";
 import { useWatchfaceStudioSimple } from "./watchfaceStudioMode";
 import { CircleAlert, Files, FolderOpen, LayoutGrid, Sparkles, Trash2 } from "lucide-react";
+import { WatchfaceHint } from "./WatchfaceHint";
 import { OfficialAssetBrowser, officialAssetToSpriteFolder } from "./OfficialAssetBrowser";
 import { useEffect, useRef, useState } from "react";
 import type {
@@ -429,7 +430,7 @@ function CustomPngFontPanelBody({
       >
         <span className="wf-png-font-source-icon" aria-hidden="true"><Sparkles size={16} /></span>
         <span className="wf-png-font-source-copy">
-          <strong>{compact ? t("Official…") : t("Official COROS font")}</strong>
+          <strong>{compact ? t("Official font") : t("Official COROS font")}</strong>
           {!compact ? <span>{t("Digit sets unpacked from the official face catalog.")}</span> : null}
         </span>
       </button>
@@ -441,14 +442,14 @@ function CustomPngFontPanelBody({
       >
         <span className="wf-png-font-source-icon" aria-hidden="true"><FolderOpen size={16} /></span>
         <span className="wf-png-font-source-copy">
-          <strong>{compact ? t("Folder…") : t("Folder of PNGs")}{!compact ? <em>{t("Recommended")}</em> : null}</strong>
+          <strong>{t("Folder of PNGs")}{!compact ? <em>{t("Recommended")}</em> : null}</strong>
           {!compact ? <span>{t("One file per glyph.")}{" "}{t(namingHint)}.</span> : null}
         </span>
       </button>
       <label className={`wf-png-font-source${controlsDisabled ? " is-disabled" : ""}`}>
         <span className="wf-png-font-source-icon" aria-hidden="true"><LayoutGrid size={16} /></span>
         <span className="wf-png-font-source-copy">
-          <strong>{compact ? t("Sheet…") : t("Sprite sheet")}</strong>
+          <strong>{t("Sprite sheet")}</strong>
           {!compact ? <span>{t("All glyphs in one PNG grid. You set the column count and glyph order next.")}</span> : null}
         </span>
         <input
@@ -461,7 +462,7 @@ function CustomPngFontPanelBody({
       <label className={`wf-png-font-source${controlsDisabled ? " is-disabled" : ""}`}>
         <span className="wf-png-font-source-icon" aria-hidden="true"><Files size={16} /></span>
         <span className="wf-png-font-source-copy">
-          <strong>{compact ? t("Files…") : t("Individual files")}</strong>
+          <strong>{t("Individual files")}</strong>
           {!compact ? <span>{t("Pick a few PNGs to add or replace single glyphs. Same names as a folder.")}</span> : null}
         </span>
         <input
@@ -475,135 +476,120 @@ function CustomPngFontPanelBody({
     </div>
   );
 
+  const scopeExplanation = scope === "component"
+    ? t("Only {{value1}} uses this set. Other layers keep their fonts.", { value1: componentLabel ? t(componentLabel) : t("this layer") })
+      + (rasterFont ? t(" A whole-face set is also installed.") : "")
+    : t("Every text layer on the face shares this one set.")
+      + (componentRasterFont ? t(" {{value1}} has its own set that takes priority.", { value1: componentLabel ?? t("This layer") }) : "");
+
   return (
-    <section className="wf-png-font" aria-label={t("Custom PNG font")}>
-      <div className="wf-png-font-head">
-        <strong>{t("Custom PNG font")}</strong>
-        {activeRasterFont
-          ? null
-          : <span>{t("Draw the digits yourself and use the PNGs instead of a font.")}</span>}
-      </div>
-
-      {supportsComponentScope ? (
-        <div className="wf-png-font-scope">
-          <div className="wf-png-font-segmented" role="group" aria-label={t("Where this PNG set applies")}>
-            <button
-              type="button"
-              aria-pressed={scope === "component"}
-              disabled={controlsDisabled}
-              onClick={() => setScope("component")}
-            >
-              {componentLabel ?? t("This layer")}{" "}{t("only")}</button>
-            <button
-              type="button"
-              aria-pressed={scope === "all"}
-              disabled={controlsDisabled}
-              onClick={() => setScope("all")}
-            >{t("Whole face")}</button>
-          </div>
-          <span>
-            {scope === "component"
-              ? t("Only {{value1}} uses this set. Other layers keep their fonts.", { value1: componentLabel ? t(componentLabel) : t("this layer") })
-              : t("Every text layer on the face shares this one set.")}
-            {scope === "component" && rasterFont ? t(" A whole-face set is also installed.") : ""}
-            {scope === "all" && componentRasterFont ? t(" {{value1}} has its own set that takes priority.", { value1: componentLabel ?? t("This layer") }) : ""}
-          </span>
-        </div>
-      ) : null}
-
-      {!activeRasterFont ? (
-        sourceButtons(false)
-      ) : (
-        <>
-          {activeRasterFont === previewedFont ? null : (
-            <WatchfaceSpriteStrip
-              label={t("Imported glyphs")}
-              cells={previewCells}
-              summary={describeRasterFontSource(activeRasterFont)}
-            />
-          )}
-
-          {missingDigits > 0 && !isMonthComponent && !isWeekdayComponent ? (
-            <p className="wf-png-font-note is-warning">
-              <CircleAlert size={13} aria-hidden="true" />
-              {missingDigits === 10
-                ? t("No digits yet. Add PNGs for 0–9 before this set can replace the live digits.")
-                : t("{{missingDigits}} digit{{value2}} missing. Add the dashed ones with “Files…” below.", { missingDigits: missingDigits, value2: missingDigits === 1 ? "" : "s" })}
-            </p>
-          ) : null}
-
-          <div className="wf-png-font-fields">
-            <label className="wf-png-font-row">
-              <span>{t("Name")}</span>
+    <section className="wf-png-font wf-png-set" aria-label={t("Custom PNG font")}>
+      {activeRasterFont ? (
+        <div className="wf-png-set-card">
+          <WatchfaceSpriteStrip
+            label={t("This set")}
+            cells={previewCells}
+            summary={describeRasterFontSource(activeRasterFont)}
+          />
+          <div className="wf-png-set-name-row">
+            <label className="wf-png-set-name">
+              <span className="sr-only">{t("Name")}</span>
               <input
                 disabled={controlsDisabled}
                 value={activeRasterFont.label}
                 onChange={(event) => updateRasterFont({ label: event.target.value })}
                 placeholder={t("My pixel font")}
+                aria-label={t("Name")}
               />
             </label>
-            {hasAtlasLayout ? (
-              <>
-                <label className="wf-png-font-row">
-                  <span>{t("Columns")}</span>
-                  <input
-                    className="wf-png-font-number"
-                    disabled={controlsDisabled}
-                    type="number"
-                    min="1"
-                    max="64"
-                    value={activeRasterFont.columns}
-                    onChange={(event) =>
-                      updateRasterFont({
-                        columns: Math.max(1, Math.min(64, Number(event.target.value) || 1))
-                      })
-                    }
-                  />
-                </label>
-                <label className="wf-png-font-row">
-                  <span title={t("One character per cell, left to right, then top to bottom")}>{t("Glyph order")}</span>
-                  <input
-                    className="wf-png-font-mono"
-                    disabled={controlsDisabled}
-                    value={activeRasterFont.glyphs}
-                    onChange={(event) =>
-                      updateRasterFont({ glyphs: normalizeRasterFontGlyphs(event.target.value) })
-                    }
-                    placeholder="0123456789"
-                  />
-                </label>
-                <p className="wf-png-font-note">{t("Order matches the sheet: left to right, then the next row.")}</p>
-              </>
-            ) : null}
-            <label className="wf-png-font-row wf-png-font-row--toggle">
-              <span>{t("Use layer color")}</span>
-              <input
-                type="checkbox"
-                disabled={controlsDisabled}
-                checked={activeRasterFont.tint}
-                onChange={(event) => updateRasterFont({ tint: event.target.checked })}
-              />
-            </label>
-            <p className="wf-png-font-note">
-              {activeRasterFont.tint
-                ? t("The PNGs are recolored to match the digit color.")
-                : t("The PNGs keep their own colors unless the layer sets a Color. Turn on to recolor them with the digit color everywhere.")}
-            </p>
-          </div>
-
-          <div className="wf-png-font-replace">
-            <span>{t("Replace with")}</span>
-            {sourceButtons(true)}
             <button
-              className="wf-png-font-remove"
+              className="wf-png-set-remove"
               type="button"
               disabled={controlsDisabled}
+              aria-label={t("Remove this set")}
+              title={t("Remove this set")}
               onClick={() => setActiveRasterFont(undefined)}
             >
-              <Trash2 size={13} aria-hidden="true" />{" "}{t("Remove")}</button>
+              <Trash2 size={15} aria-hidden="true" />
+            </button>
           </div>
-        </>
+        </div>
+      ) : (
+        <p className="wf-png-set-lead">{t("Draw the digits yourself and use the PNGs instead of a font.")}</p>
       )}
+
+      {activeRasterFont && missingDigits > 0 && !isMonthComponent && !isWeekdayComponent ? (
+        <p className="wf-png-font-note is-warning">
+          <CircleAlert size={13} aria-hidden="true" />
+          {missingDigits === 10
+            ? t("No digits yet. Add PNGs for 0–9 before this set can replace the live digits.")
+            : t("{{missingDigits}} digit{{value2}} missing. Add the dashed ones with “Files…” below.", { missingDigits: missingDigits, value2: missingDigits === 1 ? "" : "s" })}
+        </p>
+      ) : null}
+
+      {supportsComponentScope ? (
+        <div className="wf-png-set-row">
+          <span className="wf-png-set-label">{t("Use for")}<WatchfaceHint>{scopeExplanation}</WatchfaceHint></span>
+          <div className="wf-png-font-segmented" role="group" aria-label={t("Where this PNG set applies")}>
+            <button type="button" aria-pressed={scope === "component"} disabled={controlsDisabled} onClick={() => setScope("component")}>
+              {componentLabel ? t(componentLabel) : t("This layer")}
+            </button>
+            <button type="button" aria-pressed={scope === "all"} disabled={controlsDisabled} onClick={() => setScope("all")}>{t("Whole face")}</button>
+          </div>
+        </div>
+      ) : null}
+
+      {activeRasterFont ? (
+        <label className="wf-png-set-row wf-png-set-switch">
+          <span className="wf-png-set-label">{t("Recolor with layer color")}<WatchfaceHint>{activeRasterFont.tint
+            ? t("The PNGs are recolored to match the digit color.")
+            : t("The PNGs keep their own colors unless the layer sets a Color. Turn on to recolor them with the digit color everywhere.")}</WatchfaceHint></span>
+          <input
+            type="checkbox"
+            role="switch"
+            disabled={controlsDisabled}
+            checked={activeRasterFont.tint}
+            onChange={(event) => updateRasterFont({ tint: event.target.checked })}
+          />
+        </label>
+      ) : null}
+
+      {activeRasterFont && hasAtlasLayout ? (
+        <details className="wf-png-set-layout">
+          <summary>{t("Sheet layout")}<span>{t("{{value1}} columns · {{value2}}", { value1: activeRasterFont.columns, value2: activeRasterFont.glyphs })}</span></summary>
+          <div className="wf-png-set-layout-fields">
+            <label>
+              <span>{t("Columns")}</span>
+              <input
+                className="wf-png-font-number"
+                disabled={controlsDisabled}
+                type="number"
+                min="1"
+                max="64"
+                value={activeRasterFont.columns}
+                onChange={(event) =>
+                  updateRasterFont({ columns: Math.max(1, Math.min(64, Number(event.target.value) || 1)) })
+                }
+              />
+            </label>
+            <label>
+              <span>{t("Glyph order")}<WatchfaceHint>{t("Order matches the sheet: left to right, then the next row.")}</WatchfaceHint></span>
+              <input
+                className="wf-png-font-mono"
+                disabled={controlsDisabled}
+                value={activeRasterFont.glyphs}
+                onChange={(event) => updateRasterFont({ glyphs: normalizeRasterFontGlyphs(event.target.value) })}
+                placeholder="0123456789"
+              />
+            </label>
+          </div>
+        </details>
+      ) : null}
+
+      <div className="wf-png-set-sources">
+        <span className="wf-png-set-label">{activeRasterFont ? t("Replace with") : t("Add from")}</span>
+        {sourceButtons(Boolean(activeRasterFont))}
+      </div>
 
       {activeRasterFont && rasterFontHasDigits && isMonthComponent ? (
         <p className="wf-png-font-note">{t("This set has 0–9, so the month shows as a number (1–12).")}</p>

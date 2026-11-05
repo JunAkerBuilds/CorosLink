@@ -1367,3 +1367,255 @@ body .watchface-font-picker-panel.wf-font-picker-panel .wf-font-source button {
   white-space: nowrap;
   font-size: 12px;
 }
+
+/* --- PNG set source of the Change digits sheet ----------------------------- */
+
+body .wf-font-picker-panel .wf-png-set {
+  display: grid;
+  gap: 14px;
+}
+
+body .wf-font-picker-panel .wf-png-set-lead {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+body .wf-font-picker-panel .wf-png-set-card {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--wf-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--wf-surface) 70%, transparent);
+}
+
+body .wf-font-picker-panel .wf-png-set-card .wf-sprite-strip,
+body .wf-font-picker-panel .wf-png-set-card > :first-child {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+body .wf-font-picker-panel .wf-png-set-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid var(--wf-border);
+  padding: 6px 6px 6px 10px;
+}
+
+body .wf-font-picker-panel .wf-png-set-name {
+  flex: 1;
+  min-width: 0;
+}
+
+body .wf-font-picker-panel .wf-png-set-name input {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0 6px;
+  font: 600 13px var(--font-display);
+}
+
+body .wf-font-picker-panel .wf-png-set-name input:hover {
+  border-color: var(--wf-border);
+}
+
+body .wf-font-picker-panel .wf-png-set-name input:focus-visible {
+  border-color: var(--wf-accent-border);
+  outline: none;
+  background: var(--wf-surface);
+}
+
+body .wf-font-picker-panel .wf-png-set-remove {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+body .wf-font-picker-panel .wf-png-set-remove:hover:not(:disabled) {
+  background: color-mix(in srgb, #e5484d 16%, transparent);
+  color: #ff8a8d;
+}
+
+body .wf-font-picker-panel .wf-png-set-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+body .wf-font-picker-panel .wf-png-set-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+body .wf-font-picker-panel .wf-png-set-row .wf-png-font-segmented {
+  min-width: 210px;
+}
+
+body .wf-font-picker-panel .wf-png-set-switch {
+  cursor: pointer;
+}
+
+body .wf-font-picker-panel .wf-png-set-switch input {
+  appearance: none;
+  position: relative;
+  width: 34px;
+  height: 20px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--wf-surface-hover);
+  cursor: pointer;
+}
+
+body .wf-font-picker-panel .wf-png-set-switch input::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  content: "";
+  transition: left 140ms ease;
+}
+
+body .wf-font-picker-panel .wf-png-set-switch input:checked {
+  background: var(--accent);
+}
+
+body .wf-font-picker-panel .wf-png-set-switch input:checked::after {
+  left: 17px;
+  background: #03140d;
+}
+
+body .wf-font-picker-panel .wf-png-set-switch input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout {
+  border: 1px solid var(--wf-border);
+  border-radius: 10px;
+  padding: 0 10px;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout > summary::-webkit-details-marker {
+  display: none;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout > summary::before {
+  color: var(--text-secondary);
+  content: "›";
+  transition: transform 140ms ease;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+body .wf-font-picker-panel .wf-png-set-layout > summary span {
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout-fields {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+  padding: 0 0 10px;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout-fields label {
+  display: grid;
+  gap: 5px;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout-fields label > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout-fields input {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid var(--wf-border);
+  border-radius: 8px;
+  background: var(--wf-surface);
+  color: var(--text-primary);
+  padding: 0 8px;
+  box-sizing: border-box;
+}
+
+body .wf-font-picker-panel .wf-png-set-sources {
+  display: grid;
+  gap: 8px;
+}
+
+/* Replacing: four full-name tiles in a 2 × 2 grid instead of truncated chips. */
+body .wf-font-picker-panel .wf-png-set .wf-png-font-sources.is-compact {
+  display: grid;
+  grid-auto-flow: row;
+  grid-auto-columns: auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+body .wf-font-picker-panel .wf-png-set .wf-png-font-sources.is-compact > * {
+  width: auto;
+  min-width: 0;
+}
+
+body .wf-font-picker-panel .wf-png-set .wf-png-font-sources.is-compact .wf-png-font-source {
+  justify-content: flex-start;
+  min-height: 42px;
+  border-radius: 10px;
+  padding: 0 10px;
+}
+
+body .wf-font-picker-panel .wf-png-set .wf-png-font-sources.is-compact .wf-png-font-source-copy strong {
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body .wf-font-picker-panel .wf-png-set .wf-png-font-rules {
+  border-top: 1px solid var(--wf-border);
+  padding-top: 10px;
+}

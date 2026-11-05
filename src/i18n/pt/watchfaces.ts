@@ -2190,4 +2190,12 @@ export const watchfacesPortuguese: Record<string, string> = {
   "Your image": "Sua imagem",
   "Drawn in your font": "Desenhado com sua fonte",
   "Drawn from text": "Desenhado a partir do texto",
+  "Official font": "Fonte oficial",
+  "This set": "Este conjunto",
+  "Remove this set": "Remover este conjunto",
+  "Use for": "Usar para",
+  "Recolor with layer color": "Recolorir com a cor da camada",
+  "Sheet layout": "Layout da folha",
+  "{{value1}} columns · {{value2}}": "{{value1}} colunas · {{value2}}",
+  "Add from": "Adicionar de",
 };

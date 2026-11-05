@@ -2191,4 +2191,12 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Your image": "你的图片",
   "Drawn in your font": "使用你的字体绘制",
   "Drawn from text": "由文字绘制",
+  "Official font": "官方字体",
+  "This set": "此套图",
+  "Remove this set": "移除此套图",
+  "Use for": "用于",
+  "Recolor with layer color": "使用图层颜色重新着色",
+  "Sheet layout": "图集布局",
+  "{{value1}} columns · {{value2}}": "{{value1}} 列 · {{value2}}",
+  "Add from": "添加来源",
 };
