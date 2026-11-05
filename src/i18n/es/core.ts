@@ -1187,4 +1187,12 @@ export const coreSpanish: Record<string, string> = {
   "{{value0}} activities restored": "{{value0}} actividades restauradas",
   "Backup saved.": "Copia de seguridad guardada.",
   "At least 8 characters": "Al menos 8 caracteres",
+  "General": "General",
+  "Connections": "Conexiones",
+  "Your data": "Tus datos",
+  "Language & units": "Idioma y unidades",
+  "About CorosLink": "Acerca de CorosLink",
+  "Search settings": "Buscar ajustes",
+  "No setting matches that search.": "Ningún ajuste coincide con esa búsqueda.",
+  "Watch faces · External AI": "Esferas · IA externa",
 };

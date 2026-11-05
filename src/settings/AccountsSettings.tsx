@@ -26,8 +26,6 @@ import type { CorosLinkApi } from "../coroslink-api";
 import { CalendarConnections } from "../calendar/CalendarConnections";
 import { ApiAccountSettings, type ApiAccount } from "./ApiAccountSettings";
 import { McpServersPanel } from "../chat/McpServersPanel";
-import { WatchfaceAutomationSettings } from "./WatchfaceAutomationSettings";
-import { WorkoutAutomationSettings } from "./WorkoutAutomationSettings";
 import { StravaConnection } from "../strength/StravaConnection";
 import "./accountsSettings.css";
 
@@ -49,7 +47,6 @@ const groups = [
   { id: "strength", label: "Strength", icon: Dumbbell },
   { id: "coach", label: "Coach / AI", icon: Sparkles },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
-  { id: "api", label: "App APIs", icon: Route },
 ] as const;
 type AccountCategory = (typeof groups)[number]["id"];
 const services = [
@@ -135,23 +132,20 @@ const services = [
   { id: "openRouter", name: "OpenRouter", description: "Coach API key & model", group: "coach", icon: Sparkles },
   { id: "local", name: "Local / compatible API", description: "Coach endpoint, model & optional API key", group: "coach", icon: Sparkles },
   { id: "mcp", name: "MCP servers", description: "Coach tools, OAuth & API keys", group: "coach", icon: Route },
-  { id: "automation", name: "CorosLink APIs", description: "Watch face & workout automation access", group: "api", icon: Route },
 ] as const;
 
 export function AccountsSettings({
   api,
   onOpenAccount,
-  onBack,
 }: {
   api: CorosLinkApi;
-  onBack: () => void;
   onOpenAccount: (destination: AccountDestination) => void;
 }) {
   useLanguage();
   const [connections, setConnections] = useState<
     Record<string, Connection | "unavailable">
   >({});
-  const [detail, setDetail] = useState<"google" | "apple" | "maps" | "carto" | "mcp" | "automation" | "strava" | ApiAccount | null>(
+  const [detail, setDetail] = useState<"google" | "apple" | "maps" | "carto" | "mcp" | "strava" | ApiAccount | null>(
     null,
   );
   const [revision, setRevision] = useState(0);
@@ -238,9 +232,6 @@ export function AccountsSettings({
   ).length;
   return (
     <section className="accounts-screen" aria-labelledby="accounts-heading">
-      <button className="settings-subpage-back" type="button" onClick={onBack}>
-        <ArrowLeft size={16} aria-hidden="true" />
-        {t("Settings")} </button>
       <header className="accounts-heading">
         <div className="accounts-heading-icon">
           <UserRound size={25} aria-hidden="true" />
@@ -293,7 +284,6 @@ export function AccountsSettings({
               {detail === "maps" ? (
                 <RoutingAccount api={api} />
               ) : detail === "carto" ? <CartoAccountSettings api={api} /> : detail === "mcp" ? <McpServersPanel api={api} />
-                : detail === "automation" ? <><WatchfaceAutomationSettings api={api} /><WorkoutAutomationSettings api={api} /></>
                 : detail === "strava" ? <StravaAccount api={api} />
                 : detail !== "google" && detail !== "apple" ? <ApiAccountSettings key={detail} api={api} service={detail} /> : (
                 <CalendarConnections
@@ -313,7 +303,7 @@ export function AccountsSettings({
                 {visibleServices.map(
                   ({ id, name, description, group, icon: Icon }) => {
                     const state = connections[id];
-                    const hasStatus = !["youtube", "coach", "mcp", "automation"].includes(id);
+                    const hasStatus = !["youtube", "coach", "mcp"].includes(id);
                     const connected =
                       state && state !== "unavailable" && state.connected;
                     const status = !hasStatus
@@ -337,7 +327,7 @@ export function AccountsSettings({
                             id === "google" ||
                             id === "apple" ||
                             id === "maps" || id === "carto" || id === "spotify" || id === "strength" || id === "strava" || id === "intervals" ||
-                            id === "openRouter" || id === "local" || id === "mcp" || id === "automation"
+                            id === "openRouter" || id === "local" || id === "mcp"
                           )
                             setDetail(id);
                           else onOpenAccount(id);

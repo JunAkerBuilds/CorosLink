@@ -12,8 +12,7 @@
   padding: 28px 0 30px;
   border-bottom: 1px solid var(--glass-border);
 }
-.accounts-heading-icon,
-.settings-account-entry-icon {
+.accounts-heading-icon {
   display: grid;
   place-items: center;
   width: 54px;
@@ -277,44 +276,7 @@
   margin-bottom: 12px;
   flex-shrink: 0;
 }
-.settings-account-entry {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  width: 100%;
-  padding: 24px;
-  border: 1px solid var(--glass-border);
-  border-radius: 14px;
-  background: var(--glass-bg);
-  color: var(--text-primary);
-  text-align: left;
-  cursor: pointer;
-}
-.settings-account-entry:hover {
-  background: var(--glass-bg-hover);
-  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
-}
-.settings-account-entry-copy {
-  display: grid;
-  gap: 7px;
-  flex: 1;
-}
-.settings-account-entry-copy strong {
-  font-size: 17px;
-  font-weight: 600;
-}
-.settings-account-entry-copy > span {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-.settings-account-entry-services {
-  display: flex;
-  gap: 14px;
-  color: var(--text-muted);
-  margin-right: 14px;
-}
-.accounts-screen button:focus-visible,
-.settings-account-entry:focus-visible {
+.accounts-screen button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
@@ -358,13 +320,6 @@
   }
   .account-detail-panel {
     padding: 16px;
-  }
-  .settings-account-entry {
-    padding: 18px;
-    gap: 12px;
-  }
-  .settings-account-entry-services {
-    display: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {

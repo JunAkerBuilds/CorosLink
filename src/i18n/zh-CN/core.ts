@@ -1191,4 +1191,12 @@ export const coreChinese: Readonly<Record<string, string>> = {
   "{{value0}} activities restored": "已恢复 {{value0}} 项活动",
   "Backup saved.": "备份已保存。",
   "At least 8 characters": "至少 8 个字符",
+  "General": "通用",
+  "Connections": "连接",
+  "Your data": "你的数据",
+  "Language & units": "语言和单位",
+  "About CorosLink": "关于 CorosLink",
+  "Search settings": "搜索设置",
+  "No setting matches that search.": "没有符合该搜索的设置。",
+  "Watch faces · External AI": "表盘·外部AI",
 };

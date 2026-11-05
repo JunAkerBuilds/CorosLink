@@ -89,6 +89,9 @@ const HINTS: Partial<Record<Key, string>> = {
   barometerRange: "How far the barometer chart zooms in."
 };
 
+/** Every setting's name, so Settings search can find the pane that holds it. */
+export const WATCH_SETTING_LABELS: readonly string[] = Object.values(LABELS);
+
 const GROUPS: Array<{ title: string; keys: Key[] }> = [
   { title: "Display", keys: ["brightness", "alwaysOnDaily", "alwaysOnActivity", "backlight", "nightMode", "touchscreen", "screenRotation"] },
   { title: "Raise to wake & controls", keys: ["raiseToWake", "wristGesture", "raiseToWakeActivity", "wrist", "dialRotation"] },
