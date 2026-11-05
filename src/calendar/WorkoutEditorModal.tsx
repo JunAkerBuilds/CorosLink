@@ -47,6 +47,7 @@ import type {
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { SelectDropdown } from "../components/SelectDropdown";
+import { formatPaceClock } from "../training/formatters";
 import {
   editorDraftToPlanWorkoutInput,
   planWorkoutInputToEditorDraft
@@ -976,15 +977,10 @@ function railTarget(step: RunWorkoutEditorStep, context: WorkoutEditorContext): 
   return t("Open");
 }
 
-function paceClock(secondsPerKm: number, unit: "km" | "mi"): string {
-  const perUnit = unit === "mi" ? secondsPerKm * 1.609344 : secondsPerKm;
-  return `${Math.floor(perUnit / 60)}:${String(Math.round(perUnit % 60)).padStart(2, "0")}`;
-}
-
 function railIntensity(step: RunWorkoutEditorStep): string {
   const intensity = step.intensity;
   if (intensity.type === "pace" || intensity.type === "effortPace") {
-    return `${paceClock(intensity.lowSecondsPerKm, intensity.displayUnit)}–${paceClock(intensity.highSecondsPerKm, intensity.displayUnit)} /${intensity.displayUnit}`;
+    return `${formatPaceClock(intensity.lowSecondsPerKm, intensity.displayUnit)}–${formatPaceClock(intensity.highSecondsPerKm, intensity.displayUnit)} /${intensity.displayUnit}`;
   }
   if (intensity.type === "heartRate") return `${intensity.lowBpm}–${intensity.highBpm} bpm`;
   if (intensity.type === "power" && "lowWatts" in intensity && intensity.lowWatts !== undefined) return `${intensity.lowWatts}–${intensity.highWatts} W`;

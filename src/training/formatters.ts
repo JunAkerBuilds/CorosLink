@@ -112,6 +112,13 @@ export function formatPaceSecondsPerKm(
   return formatPaceValue(value, unitSystem);
 }
 
+/** A workout target's pace as m:ss in its own unit, with no unit label. */
+export function formatPaceClock(secondsPerKm: number, unit: "km" | "mi"): string {
+  // Round before splitting, or 539.7 s would read 8:60 instead of 9:00.
+  const seconds = Math.round(unit === "mi" ? secondsPerKm * 1.609344 : secondsPerKm);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
 export function formatCorosCompactPace(
   value: number | undefined,
   unitSystem: UnitSystem

@@ -54,8 +54,8 @@ async function main() {
       `http://127.0.0.1:${vite.httpServer.address().port}/scripts/fixtures/accounts-settings.html`,
     );
     await until(
-      `Boolean(document.querySelector('.settings-account-entry'))`,
-      "Settings entry",
+      `Boolean(document.querySelector('.settings-rail'))`,
+      "Settings rail",
     );
     assert.equal(
       await js(`Boolean(document.querySelector('.accounts-screen'))`),
@@ -78,7 +78,6 @@ async function main() {
         "Strength",
         "Coach / AI",
         "Calendar",
-        "App APIs",
       ],
     );
     assert.match(
@@ -190,13 +189,6 @@ async function main() {
     await fs.writeFile(
       path.join(temporaryRoot, "accounts-narrow.png"),
       (await window.webContents.capturePage()).toPNG(),
-    );
-    await js(
-      `document.querySelector('.accounts-screen > button').click(); void 0;`,
-    );
-    await until(
-      `Boolean(document.querySelector('.settings-account-entry'))`,
-      "Back to Settings",
     );
     console.log(
       `Account setup UI passed: destinations, partial failure, email reuse, polling, calendar selection, route validation, narrow layout. Screenshots: ${temporaryRoot}`,

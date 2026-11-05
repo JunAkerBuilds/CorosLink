@@ -492,6 +492,14 @@ async function main() {
     // Exercise the visible Add menu, inspector and native-data export at physical watch resolution.
     await tool("set_view", { sessionId: document.sessionId, resolution: 416 });
     const nativeIdentity = () => ({ sessionId: document.sessionId, baseRevision: document.revision });
+    const negativeSignLayer = "configAsset:config:negative_sign_icon";
+    await window.webContents.executeJavaScript("document.querySelector('.watchface-add-sprite').click()");
+    await until(() => window.webContents.executeJavaScript("Boolean(document.querySelector('.wf-layer-picker:popover-open'))"), Boolean, "Negative sign menu");
+    await setSimulationInput("Search data fields", "nega");
+    await window.webContents.executeJavaScript(`document.querySelector('[data-face-option="${negativeSignLayer}"]').click()`);
+    document = await tool("get_document");
+    assert.equal(document.view.selectedId, negativeSignLayer);
+    assert.equal(document.capabilities.layers.find(layer => layer.id === negativeSignLayer)?.visible, true);
     for (const value of ["weather_temp", "sleep_score", "week_tl", "sunriseset", "chart:chart_stress"]) {
       await window.webContents.executeJavaScript("document.querySelector('.watchface-add-sprite').click()");
       await until(() => window.webContents.executeJavaScript("Boolean(document.querySelector('.wf-layer-picker:popover-open'))"), Boolean, "native data menu");
@@ -600,7 +608,17 @@ async function main() {
     document=await tool("get_document");
     assert.ok(document.design.nativeData.chart.chartStyle.barWidth>6,'Bar width converts displayed watch pixels to master pixels');
     const nativeOutput=await tool("build_archive",nativeIdentity());
-    assert.equal((nativeOutput.archive??nativeOutput).watchFaceVersion,6);
+    const nativeArchive = nativeOutput.archive ?? nativeOutput;
+    assert.equal(nativeArchive.watchFaceVersion, 6);
+    const nativeExportPath = path.join(temporaryRoot, "native.zip");
+    await tool("export_archive", { archiveId: nativeArchive.archiveId, destinationPath: nativeExportPath });
+    const nativeZip = await require("unzipper").Open.file(nativeExportPath);
+    const current416 = nativeZip.files.find(entry => entry.path === "watchface_416x416/config.txt");
+    const config416 = (await current416.buffer()).toString();
+    const negativePath = config416.match(/^\[negative_sign_icon\]=(.+)$/m)?.[1];
+    assert.ok(negativePath, "The shared fallback glyph is configured for PACE Pro");
+    const negativePng = nativeZip.files.find(entry => entry.path === `watchface_416x416/${negativePath.replaceAll("\\", "/")}`);
+    assert.deepEqual(nativeImage.createFromBuffer(await negativePng.buffer()).getSize(), { width: 7, height: 3 });
     await window.webContents.executeJavaScript("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
     await fs.writeFile('/tmp/coroslink-native-data-editor.png',(await window.webContents.capturePage()).toPNG());
     // Exercise the actual external MCP mutation path for all new controls.

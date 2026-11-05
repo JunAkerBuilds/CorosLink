@@ -6586,10 +6586,9 @@ function formatScheduledExerciseTarget(
     return `${(corosWorkoutDistanceToMeters(targetValue) / 1000).toFixed(2)} km`;
   }
   if (targetType === 2 && targetValue) {
-    const seconds = normalizeActivityDuration(targetValue) ?? targetValue;
+    const seconds = Math.round(normalizeActivityDuration(targetValue) ?? targetValue);
     const minutes = Math.floor(seconds / 60);
-    const secs = Math.round(seconds % 60);
-    return `${minutes}:${String(secs).padStart(2, "0")}`;
+    return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
   }
   if (targetType === 1 && targetValue) {
     return `${Math.round(targetValue)} reps`;

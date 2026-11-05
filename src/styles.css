@@ -28481,28 +28481,6 @@ tr.data-intervals-row-missing {
   opacity: 0;
   cursor: pointer;
 }
-.settings-sport-tip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  background: var(--glass-bg);
-  padding: 10px 13px;
-  color: var(--text-muted);
-}
-.settings-sport-tip svg {
-  flex: 0 0 auto;
-  color: var(--accent);
-}
-.settings-sport-tip p {
-  margin: 0;
-  font-size: 13px;
-}
-.settings-sport-tip strong {
-  color: var(--text-secondary);
-}
 
 .settings-about-panel {
   display: flex;
@@ -28599,74 +28577,6 @@ tr.data-intervals-row-missing {
 .settings-about-link:hover {
   border-color: var(--accent);
   color: var(--accent);
-}
-
-.settings-storage-panel {
-  padding: 20px;
-}
-
-.settings-storage-panel > .eyebrow {
-  margin: 0 0 10px;
-}
-
-.settings-storage-link {
-  display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 13px;
-  width: 100%;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  background: var(--glass-bg);
-  padding: 12px 14px;
-  color: var(--text-primary);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background 0.18s ease,
-    border-color 0.18s ease,
-    transform 0.18s ease;
-}
-
-.settings-storage-link:hover {
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--glass-border));
-  background: var(--glass-bg-hover);
-  transform: translateY(-1px);
-}
-
-.settings-storage-link:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.settings-storage-link-icon {
-  display: grid;
-  width: 46px;
-  height: 46px;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--glass-border));
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
-}
-
-.settings-storage-link-copy {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.settings-storage-link-copy strong {
-  font-size: 15px;
-}
-
-.settings-storage-link-copy > span {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.settings-storage-link-chevron {
-  color: var(--text-muted);
 }
 
 .settings-subpage {
@@ -28833,23 +28743,17 @@ tr.data-intervals-row-missing {
     align-items: stretch;
   }
 
-  .settings-storage-panel {
-    padding: 18px;
-  }
-
   .settings-storage-detail-panel {
     padding: 18px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .settings-sport-row,
-  .settings-storage-link {
+  .settings-sport-row {
     transition: none;
   }
 
-  .settings-sport-row:hover,
-  .settings-storage-link:hover {
+  .settings-sport-row:hover {
     transform: none;
   }
 }

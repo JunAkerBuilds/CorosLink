@@ -1312,6 +1312,7 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Placed automatically between the hour and minute digits.": "自动放置在小时和分钟数字之间。",
   "Shown automatically between split values in the selected data slot.": "自动显示在所选数据槽中的分割值之间。",
   "Archive thumbnail only; this image is not drawn on the watch face.": "仅存档缩略图；该图像未绘制在 表盘上。",
+  "The watch uses this glyph to display -- when Sleep Score or Stress is unavailable.": "当睡眠评分或压力不可用时，手表使用此字形显示 --。",
   "Shown only when the watch renders a negative value.": "仅当 手表呈现负值时显示。",
   "Shown when this data type is active in the selectable watch slot.": "当此数据类型在手表的可选槽位中启用时显示。",
   "Watch screen position": "手表屏幕位置",

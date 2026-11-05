@@ -9,23 +9,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Separate °C and °F labels for the current temperature.** Give the temperature a second unit image in Studio and the watch shows the one that matches its setting. Faces with a plain ° stay as they are.
+- **Watchmaker checks below-zero and Fahrenheit readings.** It now keeps a minus sign on temperatures and uses a plain ° or both °C and °F, and Studio's validation warns when a minus or unit is missing or a single label would be wrong in the other unit.
+- **Strokes, SWOLF and lengths for your swims.** Swims synced from your watch now show the stroke, stroke count, SWOLF and stroke rate of every interval, with your rests in between and your fastest marked. **Lengths**, next to **Intervals**, lists each length of a pool swim. A **Swim** card adds pool length, strokes, average and best SWOLF, best pace, stroke rate, distance per stroke and water temperature. Pace is per 100 m, **Swim time** leaves out your rests, and the chart can show your stroke rate and the water temperature. A pool's distances read in its own unit, metres or yards. Coach reads all of it too, interval by interval and length by length. Exported FIT files include the lengths, strokes, stroke types, SWOLF and pool length.
+
+### Fixed
+
+- **Update checks cope with GitHub being busy.** When GitHub is overloaded, CorosLink now shows a short message instead of a raw server response, and tries an automatic check again after a minute and after five minutes.
+- **Swims no longer show strokes as climb.** A swim's stroke count was listed as elevation gain, and its laps could mix up lengths, intervals and rests. Swims you already synced are corrected the next time CorosLink starts.
+
+## [0.1.74] - 2026-11-05
+
+### Added
+
 - **Find a race with AI.** When you add or edit an upcoming race, type its name or paste its website and choose
   Find with AI. Your Coach's AI provider searches the web for the date, distance, start time, bib pickup and
   registration deadline, then fills them in with a mark on each and links to its sources. Your goal, bib, wave and
   entry status are never touched, Undo takes it all back, and nothing is saved until you add the race. Local models
   can't search the web.
-- **Strokes, SWOLF and lengths for your swims.** Swims synced from your watch now show the stroke, stroke count, SWOLF and stroke rate of every interval, with your rests in between and your fastest marked. **Lengths**, next to **Intervals**, lists each length of a pool swim. A **Swim** card adds pool length, strokes, average and best SWOLF, best pace, stroke rate, distance per stroke and water temperature. Pace is per 100 m, **Swim time** leaves out your rests, and the chart can show your stroke rate and the water temperature. A pool's distances read in its own unit, metres or yards. Coach reads all of it too, interval by interval and length by length. Exported FIT files include the lengths, strokes, stroke types, SWOLF and pool length.
+- **Negative sign in Studio.** The watch uses this image to draw -- when Sleep Score or Stress is unavailable, so a face without one shows nothing for them. On such a face, Add now offers Negative sign, drawn as a dash in your digit color and sized for the face.
 
 ### Changed
 
+- **Settings is easier to find your way around.** Instead of one long page, Settings has a rail of panes grouped as General, Watch, Connections and Your data, with About at the bottom. Search settings finds a pane by its name, the settings on it (watch settings included) or its translation. External AI has its own pane instead of sitting inside Accounts, and Storage opens beside the rail instead of on a separate page.
 - **A clearer race form.** Upcoming races now open with a live preview of the countdown, goal pace and calendar
   dates. Distance, priority and status are one click, the details most people add later fold away, and Add race
   stays in view. An upcoming race starts with no date or distance, so it can't be saved on today's 5K by accident,
   and clicking outside the form no longer discards what you typed.
+- **Activities show more of each workout.** The list adds sport filter counts and summary bars. In an activity, the route is colored by pace when pace and GPS data exist, zones, training effect and heart-rate recovery share one row, and laps get their type and pace bars. Selecting a lap highlights it on the chart, map and elevation profile.
+- **Records point at your next PR.** Records shows the next PR in reach, marks new and in-reach distances on the ladder, and tells each distance's story with its best-time history.
+- **Races opens on your next race.** A hero shows a live countdown, goal against predicted time and readiness from your recent runs. Past races become plaques with a distance filter, and two races compare side by side in a table.
+- **A redesigned Training Library.** Workouts open under a new header with up next, this week, a crowd favourite and your sport mix. Each tile draws the session's intensity, and the reader adds a session profile, which plan uses the workout and a this-week day strip for scheduling.
+- **Plans are easier to read at a glance.** Plan tiles show the goal, phase-colored weekly bars, weeks, sessions, peak load and whether the plan is on your calendar. Build me a plan starts from a goal and opens the generator already filled in.
+- **Create workout is a full page.** The library's builder has sport tiles and a side rail with duration, distance, steps and live checks such as a missing warm-up. On wide windows, a strength step shows its movement preview beside the prescription. The calendar's Add to calendar builder keeps its layout.
+- **A new plan editor.** Plans are edited on a week board with a library rail, a phase ribbon and a status bar. Errors that block saving are listed ahead of warnings, and generated and Coach plans can be saved without an edit first and ask before being discarded.
+- **Clearer wording** for gaps and predictions in Records and Races.
 
 ### Fixed
 
-- **Swims no longer show strokes as climb.** A swim's stroke count was listed as elevation gain, and its laps could mix up lengths, intervals and rests. Swims you already synced are corrected the next time CorosLink starts.
+- **Week actions no longer lose workouts in training plans.** Insert recovery week deleted the workouts in the week it followed; it now adds an empty week labelled Recovery, even inside a longer phase. Delete week removed items in the holding area and left later phases out of range, which blocked saving. Duplicate week no longer copies the holding area.
+- **A failed plan save stays marked unsaved**, so it no longer looks saved when it wasn't.
+- **Workout paces no longer read 8:60.** A pace target that rounds up to the next minute now shows 9:00 in the Training Library and the workout editor. Sleep durations get the same fix, so a night can't read 7h 60m.
+- **Workouts no longer reopens Create workout.** Coming back to the tab after New workout or Up next leaves you on your workouts.
+- **Smoother idle Training Hub and Library.** Their new looping animations no longer add work on every frame, and the Records fire pauses once it scrolls off-screen.
 
 ## [0.1.73] - 2026-11-03
 

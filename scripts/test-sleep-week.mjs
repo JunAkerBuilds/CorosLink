@@ -2,13 +2,19 @@ import assert from "node:assert/strict";
 import {
   buildSleepWeek,
   formatNoonClock,
+  formatSleepDuration,
   minutesAfterNoon,
   sleepClockVerdict,
   sleepStageMinutes
 } from "../src/training/sleepWeek.ts";
 
+assert.equal(formatSleepDuration(455), "7h 35m");
+assert.equal(formatSleepDuration(479.6), "8h 00m", "minutes round up into the next hour");
+assert.equal(formatSleepDuration(59.6), "1h 00m");
+assert.equal(formatSleepDuration(42.4), "42m");
+
 const now = new Date(2026, 9, 22, 9, 30);
-const key = (day) => `202610${String(day).padStart(2, "0")}`;
+const key =(day) => `202610${String(day).padStart(2, "0")}`;
 const night = (day, extra = {}) => ({
   happenDay: key(day), kind: "main", completeness: "complete", totalMinutes: 450, score: 80,
   sleepStart: "23:00", sleepEnd: "07:00", windowMinutes: 480, deepMinutes: 90, lightMinutes: 240,

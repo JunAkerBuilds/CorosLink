@@ -310,15 +310,15 @@ export function formatFitnessTrendLines(
     ""
   ];
   for (const point of points) {
+    // Rounded before splitting, so 7h59.6 can't read 7h60.
+    const sleptMinutes = point.sleepMinutes != null ? Math.round(point.sleepMinutes) : undefined;
     const night = [
       point.rhr != null ? `RHR ${Math.round(point.rhr)} bpm` : undefined,
       point.avgSleepHrv != null ? `HRV ${Math.round(point.avgSleepHrv)}` : undefined,
       point.sleepHrvBase != null ? `baseline ${Math.round(point.sleepHrvBase)}` : undefined,
       point.sleepScore != null ? `sleep ${Math.round(point.sleepScore)}` : undefined,
-      point.sleepMinutes != null
-        ? `slept ${Math.floor(point.sleepMinutes / 60)}h${String(
-            Math.round(point.sleepMinutes % 60)
-          ).padStart(2, "0")}`
+      sleptMinutes !== undefined
+        ? `slept ${Math.floor(sleptMinutes / 60)}h${String(sleptMinutes % 60).padStart(2, "0")}`
         : undefined
     ].filter(Boolean);
     const parts = [

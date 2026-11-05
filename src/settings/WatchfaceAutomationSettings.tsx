@@ -60,7 +60,7 @@ export function WatchfaceAutomationSettings({ api }: { api: CorosLinkApi }) {
       <div className="wf-automation-heading">
         <PlugZap size={22} aria-hidden="true" />
         <div>
-          <h2 id="wf-automation-title">{t("External AI")}</h2>
+          <h2 id="wf-automation-title">{t("Watch faces · External AI")}</h2>
           <p>{t("Let Codex and other AI apps design watch faces in your editor.")}</p>
         </div>
         <button type="button" className={status?.enabled ? "secondary-button" : "primary-button"} onClick={() => void toggle()} disabled={busy || !status}>

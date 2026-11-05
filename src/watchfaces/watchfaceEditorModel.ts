@@ -747,7 +747,7 @@ export function deriveEditorLayers(
         : override?.enabled !== false),
       canHide: true,
       present:
-        statusLayoutGroupId || analogLayoutGroupId
+        statusLayoutGroupId || analogLayoutGroupId || reference.configKey === "negative_sign_icon"
           ? assetAvailable
           : true,
       bounds: statusBounds ?? analogBounds,

@@ -684,7 +684,7 @@ export function listWatchfaceConfigAssets(
   details: CorosWatchfaceTemplateDetails,
   resolutionDirectory?: string,
   virtualControlIcons: ReadonlyArray<WatchfaceComplicationId> = [],
-  includeVirtualStandaloneStatusIcons = false
+  includeVirtualStandaloneIcons = false
 ): WatchfaceConfigAssetReference[] {
   const selectedResolution = resolutionDirectory
     ? details.resolutions.find((candidate) => candidate.directory === resolutionDirectory)
@@ -744,8 +744,8 @@ export function listWatchfaceConfigAssets(
       source: null
     });
   }
-  if (includeVirtualStandaloneStatusIcons) {
-    for (const configKey of VIRTUAL_STANDALONE_STATUS_ICON_KEYS) {
+  if (includeVirtualStandaloneIcons) {
+    for (const configKey of VIRTUAL_STANDALONE_ICON_KEYS) {
       const id = watchfaceConfigAssetId("config", configKey);
       if (byId.has(id)) continue;
       const relativePath = configAssetCreatedRelativePath(id);
@@ -969,6 +969,11 @@ const VIRTUAL_STANDALONE_STATUS_ICON_KEYS = [
   "no_disturb_off_icon",
   "airplane_icon",
   "sleep_mode_icon"
+] as const;
+
+const VIRTUAL_STANDALONE_ICON_KEYS = [
+  ...VIRTUAL_STANDALONE_STATUS_ICON_KEYS,
+  "negative_sign_icon"
 ] as const;
 
 /** Whether a config key is a standalone status image Studio can add to a face that lacks it. */
@@ -1577,7 +1582,7 @@ export function buildWatchfaceConfigAssetOverrides(
             entries.push([configKey, configAssetCreatedRelativePath(id)]);
           }
         }
-        for (const configKey of VIRTUAL_STANDALONE_STATUS_ICON_KEYS) {
+        for (const configKey of VIRTUAL_STANDALONE_ICON_KEYS) {
           const id = watchfaceConfigAssetId(scope, configKey);
           if (
             overrides[id]?.replacement &&
@@ -1839,7 +1844,7 @@ export async function buildWatchfaceConfigAssetReplacements(
             entries.push([configKey, configAssetCreatedRelativePath(id)]);
           }
         }
-        for (const configKey of VIRTUAL_STANDALONE_STATUS_ICON_KEYS) {
+        for (const configKey of VIRTUAL_STANDALONE_ICON_KEYS) {
           const id = watchfaceConfigAssetId(scope, configKey);
           if (
             overrides[id]?.replacement &&

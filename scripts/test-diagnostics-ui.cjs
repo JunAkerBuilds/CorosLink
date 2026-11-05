@@ -53,11 +53,19 @@ async function main() {
     const js = (code) => window.webContents.executeJavaScript(code, true);
     const report = () => js('document.querySelector(".diagnostics-preview textarea")?.value');
     const click = (label) => js(`Array.from(document.querySelectorAll('.diagnostics-settings button')).find(b => b.textContent.trim() === ${JSON.stringify(label)}).click(); void 0;`);
-    const loaded = () => until(() => js('Boolean(document.querySelector(".diagnostics-settings button:not(:disabled)"))'), Boolean, "diagnostics ready");
+    // Error logs has its own pane on the Settings rail; open it the way a person would.
+    const openLogsPane = async () => {
+      await until(() => js('Boolean(document.querySelector(".settings-rail-item"))'), Boolean, "Settings rail");
+      await js(`Array.from(document.querySelectorAll('.settings-rail-item')).find(b => b.textContent.trim() === "Error logs").click(); void 0;`);
+    };
+    const loaded = async () => {
+      await openLogsPane();
+      await until(() => js('Boolean(document.querySelector(".diagnostics-settings button:not(:disabled)"))'), Boolean, "diagnostics ready");
+    };
     await window.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/scripts/fixtures/diagnostics.html`);
     await loaded();
     assert.match(await report(), /No errors recorded/);
-    assert.equal(await js('document.querySelector(".settings-view").lastElementChild.classList.contains("diagnostics-settings")'), true, "diagnostics is at the bottom of Settings");
+    assert.equal(await js('document.querySelector(".settings-pane").lastElementChild.classList.contains("diagnostics-settings")'), true, "diagnostics fills the Error logs pane");
 
     globalThis.fetch = async () => {
       throw new TypeError("fetch failed", { cause: Object.assign(new Error("getaddrinfo ENOTFOUND apieu.coros.com"), { code: "ENOTFOUND", hostname: "apieu.coros.com" }) });

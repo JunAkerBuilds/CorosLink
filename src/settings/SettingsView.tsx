@@ -1,10 +1,8 @@
 import { t, useLanguage } from "../i18n";
 import {
-  ArrowLeft,
   Bike,
   Bug,
   ChevronDown,
-  ChevronRight,
   Code2,
   Coffee,
   Dumbbell,
@@ -14,17 +12,23 @@ import {
   Footprints,
   Globe2,
   HardDrive,
+  HeartPulse,
+  Info,
+  Languages,
   Loader2,
+  CloudSun,
   Mountain,
+  Palette,
+  PanelLeft,
+  PlugZap,
   RefreshCw,
-  Ruler,
-  Sparkles,
+  Search,
+  ShieldCheck,
+  SlidersHorizontal,
   UserRound,
-  Music,
-  CalendarDays,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import type { AppInfo, AppUpdateSnapshot } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { formatBytes } from "../media/libraryUtils";
@@ -44,9 +48,55 @@ import { DiagnosticsSettings } from "./DiagnosticsSettings";
 import { PrivacySettings } from "./PrivacySettings";
 import { WatchProfileSettings } from "./WatchProfileSettings";
 import { WeatherLocationSettings } from "./WeatherLocationSettings";
-import { WatchSystemSettings } from "./WatchSystemSettings";
+import { WATCH_SETTING_LABELS, WatchSystemSettings } from "./WatchSystemSettings";
 import { LanguageSettings } from "./LanguageSettings";
 import { SidebarSettings } from "./SidebarSettings";
+import { WatchfaceAutomationSettings } from "./WatchfaceAutomationSettings";
+import { WorkoutAutomationSettings } from "./WorkoutAutomationSettings";
+import {
+  ABOUT_PANE,
+  SETTINGS_GROUPS,
+  groupTitleForPane,
+  paneForSection,
+  paneMatches,
+  type SettingsPane,
+  type SettingsPaneEntry,
+  type SettingsSection,
+} from "./settingsNav";
+import "./settingsView.css";
+
+export type { SettingsSection } from "./settingsNav";
+
+const PANE_ICONS: Record<SettingsPane, LucideIcon> = {
+  language: Languages,
+  colors: Palette,
+  sidebar: PanelLeft,
+  profile: HeartPulse,
+  watch: SlidersHorizontal,
+  weather: CloudSun,
+  accounts: UserRound,
+  ai: PlugZap,
+  privacy: ShieldCheck,
+  storage: HardDrive,
+  logs: Bug,
+  about: Info,
+};
+
+/** Panes holding more than one panel keep each panel's own title. */
+const MULTI_PANEL_PANES: ReadonlySet<SettingsPane> = new Set(["language", "ai"]);
+
+/** Two weeks of made-up days for the Activity colors preview: none, one sport, or several. */
+const COLOR_PREVIEW_DAYS: readonly (readonly SportColorCategory[])[] = [
+  ["run"], [], ["strength"], ["run", "strength"], [], ["bike"], ["trail"],
+  ["run"], ["other"], [], ["strength", "bike", "run"], ["run"], [], ["trail", "other"],
+];
+
+function previewDayBackground(day: readonly SportColorCategory[], colors: Record<SportColorCategory, string>): string | undefined {
+  if (!day.length) return undefined;
+  if (day.length === 1) return colors[day[0]!];
+  const share = 100 / day.length;
+  return `conic-gradient(${day.map((sport, index) => `${colors[sport]} ${index * share}% ${(index + 1) * share}%`).join(", ")})`;
+}
 
 const ABOUT_LINKS = [
   {
@@ -108,9 +158,6 @@ function platformLabel(info: AppInfo): string {
   return `${name} (${info.arch})`;
 }
 
-/** Settings sections other screens link straight to. */
-export type SettingsSection = "watch" | "weather" | "privacy" | "sidebar" | "media-tabs";
-
 interface SettingsViewProps {
   api: CorosLinkApi;
   /** Scrolls to this section; `key` changes on every request, so asking twice works. */
@@ -143,21 +190,34 @@ export function SettingsView({
   const [openingLocationId, setOpeningLocationId] = useState<string | null>(
     null,
   );
-  const [settingsPage, setSettingsPage] = useState<"accounts" | "main" | "storage">(
-    initialAccountScreen && onOpenAccount ? "accounts" : "main",
+  const [pane, setPane] = useState<SettingsPane>(
+    initialAccountScreen && onOpenAccount ? "accounts" : "language",
   );
+  const [query, setQuery] = useState("");
+  const paneRef = useRef<HTMLDivElement>(null);
 
-  // A link from elsewhere (watch menu, weather card, Local-Only button) opens the main page at its section.
+  function openPane(next: SettingsPane) {
+    setPane(next);
+    const element = paneRef.current;
+    if (!element) return;
+    // Each pane starts at its top. In a narrow window the rail sits above the pane, so bring the pane up to it.
+    const rail = element.previousElementSibling;
+    const railAbove = rail ? rail.getBoundingClientRect().bottom <= element.getBoundingClientRect().top : false;
+    if (railAbove) element.scrollIntoView({ block: "start" });
+    else scrollParent(element)?.scrollTo({ top: 0 });
+  }
+
+  // A link from elsewhere (watch menu, weather card, Local-Only button) opens the pane holding its section.
   const [pendingSection, setPendingSection] = useState<SettingsSection | null>(null);
   useEffect(() => {
     if (!focusSection) return;
-    setSettingsPage("main");
+    setPane(paneForSection(focusSection.section));
     setPendingSection(focusSection.section);
     onSectionFocused?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusSection?.key]);
   useEffect(() => {
-    if (!pendingSection || settingsPage !== "main") return;
+    if (!pendingSection) return;
     setPendingSection(null);
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     requestAnimationFrame(() => {
@@ -172,7 +232,7 @@ export function SettingsView({
         if (Math.abs(element.getBoundingClientRect().top - scrollParentTop(element)) > 40) element.scrollIntoView({ block: "start" });
       }, 700);
     });
-  }, [pendingSection, settingsPage]);
+  }, [pendingSection]);
   const [sportColors, setSportColors] = useState(() => readStoredSportColors());
   const { unitSystem, setUnitSystem } = useUnitSystem();
 
@@ -232,33 +292,91 @@ export function SettingsView({
           ? t("You're on the latest version.")
           : null;
 
-  if (settingsPage === "accounts" && onOpenAccount) {
+  const visibleGroups = SETTINGS_GROUPS.map((group) => ({
+    title: group.title,
+    panes: group.panes.filter((entry) => paneIsAvailable(entry.id) && matchesSearch(entry)),
+  })).filter((group) => group.panes.length);
+  const aboutVisible = matchesSearch(ABOUT_PANE);
+  const firstMatch = visibleGroups[0]?.panes[0] ?? (aboutVisible ? ABOUT_PANE : undefined);
+  const updateWaiting = updateSnapshot.status === "available" || updateSnapshot.status === "downloading" || updateSnapshot.status === "downloaded";
+
+  function paneIsAvailable(id: SettingsPane): boolean {
+    return id !== "accounts" || Boolean(onOpenAccount);
+  }
+
+  function matchesSearch(entry: SettingsPaneEntry): boolean {
+    return paneMatches(entry, query, (text) => t(text), entry.id === "watch" ? WATCH_SETTING_LABELS : []);
+  }
+
+  function handleSearchKey(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape" && query) {
+      event.stopPropagation();
+      setQuery("");
+    } else if (event.key === "Enter" && firstMatch) {
+      openPane(firstMatch.id);
+    }
+  }
+
+  function railItem(entry: SettingsPaneEntry, badge = false) {
+    const Icon = PANE_ICONS[entry.id];
     return (
-      <section className="settings-view">
-        <AccountsSettings api={api} onOpenAccount={onOpenAccount} onBack={() => setSettingsPage("main")} />
-      </section>
+      <button
+        key={entry.id}
+        className="settings-rail-item"
+        type="button"
+        aria-current={pane === entry.id ? "page" : undefined}
+        onClick={() => openPane(entry.id)}
+      >
+        <Icon size={17} strokeWidth={1.9} aria-hidden="true" />
+        <span>{t(entry.label)}</span>
+        {badge ? <span className="settings-rail-badge" title={updateStatusText ?? undefined} /> : null}
+      </button>
     );
   }
 
-  if (settingsPage === "storage") {
-    return (
-      <section className="settings-view settings-subpage">
-        <button
-          className="settings-subpage-back"
-          type="button"
-          onClick={() => setSettingsPage("main")}
-        >
-          <ArrowLeft size={16} strokeWidth={2} aria-hidden="true" />
-          {t("Settings")} </button>
+  const activeEntry = pane === "about"
+    ? ABOUT_PANE
+    : SETTINGS_GROUPS.flatMap((group) => group.panes).find((entry) => entry.id === pane)!;
+  const activeGroup = groupTitleForPane(pane);
 
-        <div className="panel settings-storage-detail-panel">
-          <div className="section-heading settings-storage-detail-heading">
-            <div>
-              <p className="eyebrow">{t("Storage")}</p>
-              <h2>{t("On this computer")}</h2>
-              <p className="settings-subpage-description">
-                {t("Review storage use or open an app location on your computer.")} </p>
-            </div>
+  return (
+    <section className="settings-view settings-workspace">
+      <aside className="settings-rail" aria-label={t("Settings")}>
+        <h1>{t("Settings")}</h1>
+        <label className="settings-rail-search">
+          <Search size={16} aria-hidden="true" />
+          <input
+            id="settings-search"
+            type="search"
+            value={query}
+            placeholder={t("Search settings")}
+            aria-label={t("Search settings")}
+            autoComplete="off"
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={handleSearchKey}
+          />
+        </label>
+        {visibleGroups.map((group) => (
+          <div className="settings-rail-group" key={group.title}>
+            <p>{t(group.title)}</p>
+            <div>{group.panes.map((entry) => railItem(entry))}</div>
+          </div>
+        ))}
+        {aboutVisible ? <div className="settings-rail-group"><div>{railItem(ABOUT_PANE, updateWaiting)}</div></div> : null}
+        {!firstMatch ? <p className="settings-rail-empty" role="status">{t("No setting matches that search.")}</p> : null}
+      </aside>
+
+      <div
+        ref={paneRef}
+        className={`settings-pane${MULTI_PANEL_PANES.has(pane) ? "" : " is-single-panel"}`}
+        key={pane}
+      >
+        <header className="settings-pane-head">
+          <div>
+            {activeGroup ? <p>{t(activeGroup)}</p> : null}
+            <h2>{t(activeEntry.label)}</h2>
+          </div>
+          {pane === "storage" ? (
             <button
               className="icon-button"
               type="button"
@@ -267,290 +385,249 @@ export function SettingsView({
               onClick={() => void loadAppInfo()}
               disabled={loading}
             >
-              <RefreshCw
-                size={16}
-                aria-hidden="true"
-                className={loading ? "spin" : ""}
-              />
+              <RefreshCw size={16} aria-hidden="true" className={loading ? "spin" : ""} />
             </button>
-          </div>
+          ) : null}
+        </header>
 
-          {appInfo ? (
-            <ul className="settings-storage-list">
-              {appInfo.storageLocations.map((location) => (
-                <li className="settings-storage-row" key={location.id}>
-                  <div className="settings-storage-info">
-                    <div className="settings-storage-title">
-                      <strong>{t(location.label)}</strong>
-                      <span className="settings-storage-size">
-                        {location.exists
-                          ? location.sizeBytes !== null
-                            ? formatBytes(location.sizeBytes)
-                            : t("Size unavailable")
-                          : t("Not created yet")}
-                      </span>
-                    </div>
-                    <p>{t(location.description)}</p>
-                    <code className="settings-storage-path">
-                      {location.path}
-                    </code>
-                  </div>
+        {pane === "language" ? (
+          <>
+            <LanguageSettings />
+            <div className="panel settings-units-panel">
+              <div className="settings-units-heading">
+                <div>
+                  <h2>{t("Units")}</h2>
+                  <p>
+                    {t("Choose how distance, pace, elevation, swimming, and strength values appear throughout CorosLink.")} </p>
+                </div>
+              </div>
+              <div className="settings-unit-options" role="radiogroup" aria-label={t("Unit system")}>
+                {([
+                  {
+                    value: "metric" as const,
+                    label: t("Metric"),
+                    detail: t("Kilometres, metres, min/km, kilograms")
+                  },
+                  {
+                    value: "imperial" as const,
+                    label: t("Imperial"),
+                    detail: t("Miles, feet, min/mi, pounds, yards")
+                  }
+                ]).map((option) => (
                   <button
-                    className="secondary-button"
+                    key={option.value}
                     type="button"
-                    onClick={() => void handleOpenLocation(location.id)}
-                    disabled={
-                      openingLocationId === location.id ||
-                      (location.kind === "file" && !location.exists)
-                    }
+                    role="radio"
+                    aria-checked={unitSystem === option.value}
+                    className={unitSystem === option.value ? "is-active" : ""}
+                    onClick={() => setUnitSystem(option.value)}
                   >
-                    {openingLocationId === location.id ? (
-                      <Loader2 size={15} aria-hidden="true" className="spin" />
-                    ) : (
-                      <FolderOpen size={15} aria-hidden="true" />
-                    )}
-                    {t("Open in Folder")} </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="settings-storage-loading">
-              <Loader2 size={16} aria-hidden="true" className="spin" />
-              {t("Loading storage locations…")} </p>
-          )}
-        </div>
-      </section>
-    );
-  }
+                    <span className="settings-unit-radio" aria-hidden="true" />
+                    <span>
+                      <strong>{t(option.label)}</strong>
+                      <small>{option.detail}</small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        ) : null}
 
-  return (
-    <section className="settings-view">
-      <div className="panel settings-about-panel">
-        <div className="settings-about-header">
-          <img
-            className="settings-about-logo"
-            src={appLogo}
-            alt=""
-            aria-hidden="true"
-          />
-          <div className="settings-about-copy">
-            <h3>CorosLink</h3>
-            <p>
-              {t("Unofficial COROS companion for media, watch sync, and training analytics.")} </p>
-            {updateStatusText ? (
-              <p className="settings-update-status">{updateStatusText}</p>
-            ) : null}
-          </div>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={onCheckForUpdates}
-            disabled={updateBusy}
-          >
-            <RefreshCw
-              size={15}
-              aria-hidden="true"
-              className={updateBusy ? "spin" : ""}
-            />
-            {t("Check for updates")} </button>
-        </div>
-
-        <dl className="settings-version-grid">
-          <div>
-            <dt>{t("App version")}</dt>
-            <dd>{appInfo?.version ?? updateSnapshot.currentVersion}</dd>
-          </div>
-          <div>
-            <dt>{t("Platform")}</dt>
-            <dd>{appInfo ? platformLabel(appInfo) : t("Not available")}</dd>
-          </div>
-          <div>
-            <dt>Electron</dt>
-            <dd>{appInfo?.electronVersion ?? t("Not available")}</dd>
-          </div>
-          <div>
-            <dt>Chromium</dt>
-            <dd>{appInfo?.chromeVersion ?? t("Not available")}</dd>
-          </div>
-          <div>
-            <dt>Node.js</dt>
-            <dd>{appInfo?.nodeVersion ?? t("Not available")}</dd>
-          </div>
-        </dl>
-
-        <div className="settings-about-links">
-          {ABOUT_LINKS.map(({ label, href, icon: Icon }) => (
-            <a
-              key={href}
-              className="settings-about-link"
-              href={href}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <Icon size={15} aria-hidden="true" />
-              <span>{t(label)}</span>
-              <ExternalLink size={12} aria-hidden="true" />
-            </a>
-          ))}
-        </div>
-      </div>
-
-      {onOpenAccount ? (
-        <button className="settings-account-entry" type="button" onClick={() => setSettingsPage("accounts")}>
-          <span className="settings-account-entry-icon"><UserRound size={26} aria-hidden="true" /></span>
-          <span className="settings-account-entry-copy"><strong>{t("Accounts & API")}</strong><span>{t("Manage accounts, API keys, and connected services")}</span></span>
-          <span className="settings-account-entry-services" aria-hidden="true"><Music size={18} /><CalendarDays size={18} /><Sparkles size={18} /></span>
-          <ChevronRight size={20} aria-hidden="true" />
-        </button>
-      ) : null}
-
-
-      <LanguageSettings />
-
-      <div className="panel settings-units-panel">
-        <div className="settings-units-heading">
-          <span className="settings-units-icon" aria-hidden="true">
-            <Ruler size={22} strokeWidth={1.9} />
-          </span>
-          <div>
-            <p className="eyebrow">{t("Measurements")}</p>
-            <h2>{t("Units")}</h2>
-            <p>
-              {t("Choose how distance, pace, elevation, swimming, and strength values appear throughout CorosLink.")} </p>
-          </div>
-        </div>
-        <div className="settings-unit-options" role="radiogroup" aria-label={t("Unit system")}>
-          {([
-            {
-              value: "metric" as const,
-              label: t("Metric"),
-              detail: t("Kilometres, metres, min/km, kilograms")
-            },
-            {
-              value: "imperial" as const,
-              label: t("Imperial"),
-              detail: t("Miles, feet, min/mi, pounds, yards")
-            }
-          ]).map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={unitSystem === option.value}
-              className={unitSystem === option.value ? "is-active" : ""}
-              onClick={() => setUnitSystem(option.value)}
-            >
-              <span className="settings-unit-radio" aria-hidden="true" />
-              <span>
-                <strong>{t(option.label)}</strong>
-                <small>{option.detail}</small>
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <SettingsAnchor section="sidebar"><SidebarSettings showDevelopmentItems={showDevelopmentItems} /></SettingsAnchor>
-
-      <div className="panel settings-sport-panel">
-        <div className="section-heading settings-sport-heading">
-          <div>
-            <p className="eyebrow">{t("Appearance")}</p>
-            <h2>{t("Activity colors")}</h2>
-          </div>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={resetSportColors}
-          >
-            <RefreshCw size={15} aria-hidden="true" />
-            {t("Reset to defaults")} </button>
-        </div>
-        <p className="settings-sport-hint">
-          {t("Color activities by sport across the training load heatmap and calendar. A day with one sport uses a solid color; days with several sports are split into a color wheel.")} </p>
-        <ul className="settings-sport-list">
-          {SPORT_COLOR_CATEGORIES.map((cat) => {
-            const { description, icon: SportIcon } = SPORT_COLOR_DETAILS[cat];
-            const colorStyle = {
-              "--sport-color": sportColors[cat],
-            } as CSSProperties;
-
-            return (
-              <li
-                className="settings-sport-row"
-                key={cat}
-                style={colorStyle}
+        {pane === "colors" ? (
+          <div className="panel settings-sport-panel">
+            <div className="section-heading settings-sport-heading">
+              <p className="settings-sport-hint">
+                {t("Color activities by sport across the training load heatmap and calendar. A day with one sport uses a solid color; days with several sports are split into a color wheel.")} </p>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={resetSportColors}
               >
-                <span className="settings-sport-icon" aria-hidden="true">
-                  <SportIcon size={21} strokeWidth={2.1} />
-                </span>
-                <span className="settings-sport-copy">
-                  <strong>{t(SPORT_COLOR_LABELS[cat])}</strong>
-                  <span>{t(description)}</span>
-                </span>
-                <label className="settings-sport-picker">
-                  <input
-                    type="color"
-                    className="settings-sport-input"
-                    value={sportColors[cat]}
-                    onChange={(event) =>
-                      updateSportColor(cat, event.target.value)
-                    }
-                    aria-label={t("{{value0}} color", { value0: t(SPORT_COLOR_LABELS[cat]) })}
-                  />
-                  <span className="settings-sport-swatch" aria-hidden="true" />
-                  <span className="settings-sport-hex">
-                    {sportColors[cat].toUpperCase()}
-                  </span>
-                  <ChevronDown size={18} strokeWidth={2} aria-hidden="true" />
-                </label>
-              </li>
-            );
-          })}
-        </ul>
-        <div className="settings-sport-tip">
-          <Sparkles size={18} strokeWidth={1.8} aria-hidden="true" />
-          <p>
-            <strong>{t("Tip:")}</strong> {t("These colors are used in your training load heatmap and calendar.")} </p>
-        </div>
+                <RefreshCw size={15} aria-hidden="true" />
+                {t("Reset to defaults")} </button>
+            </div>
+            <div className="settings-color-preview" role="img" aria-label={t("Preview")}>
+              {COLOR_PREVIEW_DAYS.map((day, index) => {
+                const background = previewDayBackground(day, sportColors);
+                return <span key={index} className={background ? "has-sport" : undefined} style={background ? { background } : undefined} />;
+              })}
+            </div>
+            <ul className="settings-sport-list">
+              {SPORT_COLOR_CATEGORIES.map((cat) => {
+                const { description, icon: SportIcon } = SPORT_COLOR_DETAILS[cat];
+                const colorStyle = {
+                  "--sport-color": sportColors[cat],
+                } as CSSProperties;
+
+                return (
+                  <li
+                    className="settings-sport-row"
+                    key={cat}
+                    style={colorStyle}
+                  >
+                    <span className="settings-sport-icon" aria-hidden="true">
+                      <SportIcon size={21} strokeWidth={2.1} />
+                    </span>
+                    <span className="settings-sport-copy">
+                      <strong>{t(SPORT_COLOR_LABELS[cat])}</strong>
+                      <span>{t(description)}</span>
+                    </span>
+                    <label className="settings-sport-picker">
+                      <input
+                        type="color"
+                        className="settings-sport-input"
+                        value={sportColors[cat]}
+                        onChange={(event) =>
+                          updateSportColor(cat, event.target.value)
+                        }
+                        aria-label={t("{{value0}} color", { value0: t(SPORT_COLOR_LABELS[cat]) })}
+                      />
+                      <span className="settings-sport-swatch" aria-hidden="true" />
+                      <span className="settings-sport-hex">
+                        {sportColors[cat].toUpperCase()}
+                      </span>
+                      <ChevronDown size={18} strokeWidth={2} aria-hidden="true" />
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
+
+        {pane === "sidebar" ? <SettingsAnchor section="sidebar"><SidebarSettings showDevelopmentItems={showDevelopmentItems} /></SettingsAnchor> : null}
+        {pane === "profile" ? <WatchProfileSettings api={api} /> : null}
+        {pane === "watch" ? <SettingsAnchor section="watch"><WatchSystemSettings api={api} /></SettingsAnchor> : null}
+        {pane === "weather" ? <SettingsAnchor section="weather"><WeatherLocationSettings api={api} /></SettingsAnchor> : null}
+        {pane === "accounts" && onOpenAccount ? <AccountsSettings api={api} onOpenAccount={onOpenAccount} /> : null}
+        {pane === "ai" ? <><WatchfaceAutomationSettings api={api} /><WorkoutAutomationSettings api={api} /></> : null}
+        {pane === "privacy" ? <SettingsAnchor section="privacy"><PrivacySettings api={api} /></SettingsAnchor> : null}
+
+        {pane === "storage" ? (
+          <div className="panel settings-storage-detail-panel">
+            <p className="settings-subpage-description">
+              {t("Review storage use or open an app location on your computer.")} </p>
+            {appInfo ? (
+              <ul className="settings-storage-list">
+                {appInfo.storageLocations.map((location) => (
+                  <li className="settings-storage-row" key={location.id}>
+                    <div className="settings-storage-info">
+                      <div className="settings-storage-title">
+                        <strong>{t(location.label)}</strong>
+                        <span className="settings-storage-size">
+                          {location.exists
+                            ? location.sizeBytes !== null
+                              ? formatBytes(location.sizeBytes)
+                              : t("Size unavailable")
+                            : t("Not created yet")}
+                        </span>
+                      </div>
+                      <p>{t(location.description)}</p>
+                      <code className="settings-storage-path">
+                        {location.path}
+                      </code>
+                    </div>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void handleOpenLocation(location.id)}
+                      disabled={
+                        openingLocationId === location.id ||
+                        (location.kind === "file" && !location.exists)
+                      }
+                    >
+                      {openingLocationId === location.id ? (
+                        <Loader2 size={15} aria-hidden="true" className="spin" />
+                      ) : (
+                        <FolderOpen size={15} aria-hidden="true" />
+                      )}
+                      {t("Open in Folder")} </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="settings-storage-loading">
+                <Loader2 size={16} aria-hidden="true" className="spin" />
+                {t("Loading storage locations…")} </p>
+            )}
+          </div>
+        ) : null}
+
+        {pane === "logs" ? <DiagnosticsSettings api={api} /> : null}
+
+        {pane === "about" ? (
+          <div className="panel settings-about-panel">
+            <div className="settings-about-header">
+              <img
+                className="settings-about-logo"
+                src={appLogo}
+                alt=""
+                aria-hidden="true"
+              />
+              <div className="settings-about-copy">
+                <h3>CorosLink</h3>
+                <p>
+                  {t("Unofficial COROS companion for media, watch sync, and training analytics.")} </p>
+                {updateStatusText ? (
+                  <p className="settings-update-status">{updateStatusText}</p>
+                ) : null}
+              </div>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={onCheckForUpdates}
+                disabled={updateBusy}
+              >
+                <RefreshCw
+                  size={15}
+                  aria-hidden="true"
+                  className={updateBusy ? "spin" : ""}
+                />
+                {t("Check for updates")} </button>
+            </div>
+
+            <dl className="settings-version-grid">
+              <div>
+                <dt>{t("App version")}</dt>
+                <dd>{appInfo?.version ?? updateSnapshot.currentVersion}</dd>
+              </div>
+              <div>
+                <dt>{t("Platform")}</dt>
+                <dd>{appInfo ? platformLabel(appInfo) : t("Not available")}</dd>
+              </div>
+              <div>
+                <dt>Electron</dt>
+                <dd>{appInfo?.electronVersion ?? t("Not available")}</dd>
+              </div>
+              <div>
+                <dt>Chromium</dt>
+                <dd>{appInfo?.chromeVersion ?? t("Not available")}</dd>
+              </div>
+              <div>
+                <dt>Node.js</dt>
+                <dd>{appInfo?.nodeVersion ?? t("Not available")}</dd>
+              </div>
+            </dl>
+
+            <div className="settings-about-links">
+              {ABOUT_LINKS.map(({ label, href, icon: Icon }) => (
+                <a
+                  key={href}
+                  className="settings-about-link"
+                  href={href}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Icon size={15} aria-hidden="true" />
+                  <span>{t(label)}</span>
+                  <ExternalLink size={12} aria-hidden="true" />
+                </a>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
-
-      <WatchProfileSettings api={api} />
-
-      <SettingsAnchor section="weather"><WeatherLocationSettings api={api} /></SettingsAnchor>
-
-      <SettingsAnchor section="watch"><WatchSystemSettings api={api} /></SettingsAnchor>
-
-      <SettingsAnchor section="privacy"><PrivacySettings api={api} /></SettingsAnchor>
-
-      <div className="panel settings-storage-panel">
-        <p className="eyebrow">{t("Storage")}</p>
-        <button
-          className="settings-storage-link"
-          type="button"
-          onClick={() => setSettingsPage("storage")}
-        >
-          <span className="settings-storage-link-icon" aria-hidden="true">
-            <HardDrive size={22} strokeWidth={1.9} />
-          </span>
-          <span className="settings-storage-link-copy">
-            <strong>{t("On this computer")}</strong>
-            <span>
-              {appInfo
-                ? t("{{value0}} storage locations", { value0: appInfo.storageLocations.length })
-                : t("Downloads, projects, caches, and app data")}
-            </span>
-          </span>
-          <ChevronRight
-            className="settings-storage-link-chevron"
-            size={20}
-            strokeWidth={2}
-            aria-hidden="true"
-          />
-        </button>
-      </div>
-
-      <DiagnosticsSettings api={api} />
     </section>
   );
 }
@@ -559,10 +636,15 @@ function SettingsAnchor({ section, children }: { section: SettingsSection; child
   return <div id={`settings-section-${section}`} className="settings-section-anchor" tabIndex={-1}>{children}</div>;
 }
 
+/** The nearest ancestor that scrolls `element`, if any. */
+function scrollParent(element: HTMLElement): HTMLElement | null {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    if (/(auto|scroll)/.test(getComputedStyle(node).overflowY) && node.scrollHeight > node.clientHeight) return node;
+  }
+  return null;
+}
+
 /** The top edge of the area that scrolls `element`: its nearest scrolling ancestor, or the window. */
 function scrollParentTop(element: HTMLElement): number {
-  for (let node = element.parentElement; node; node = node.parentElement) {
-    if (/(auto|scroll)/.test(getComputedStyle(node).overflowY) && node.scrollHeight > node.clientHeight) return node.getBoundingClientRect().top;
-  }
-  return 0;
+  return scrollParent(element)?.getBoundingClientRect().top ?? 0;
 }
