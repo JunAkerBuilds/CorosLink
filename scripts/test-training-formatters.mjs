@@ -13,6 +13,7 @@ const {
   formatDistanceMeters,
   formatElevationMeters,
   formatHappenDayLabel,
+  formatPaceClock,
   formatPaceSecondsPerKm,
   formatPersonalRecordHero,
   formatPersonalRecordMeta,
@@ -38,6 +39,11 @@ assert.equal(formatDistanceMeters(1_000, "imperial"), "0.62 mi");
 assert.equal(formatDistanceMeters(100, "imperial", true), "109 yd");
 assert.equal(formatElevationMeters(100, "imperial"), "328 ft");
 assert.equal(formatPaceSecondsPerKm(300, "imperial"), "8:03 /mi");
+assert.equal(formatPaceClock(300, "km"), "5:00");
+assert.equal(formatPaceClock(300, "mi"), "8:03");
+assert.equal(formatPaceClock(359.6, "km"), "6:00", "seconds round up into the next minute");
+assert.equal(formatPaceClock(335.35, "mi"), "9:00", "a converted pace never reads 8:60");
+assert.equal(formatPaceClock(359.4, "km"), "5:59");
 assert.equal(formatUpcomingWorkoutVolumeDisplay("5 km", "imperial"), "3.11 mi");
 assert.equal(
   formatUpcomingWorkoutVolumeDisplay("custom aerobic volume", "imperial"),

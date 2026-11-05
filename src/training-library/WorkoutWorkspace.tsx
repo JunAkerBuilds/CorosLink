@@ -38,7 +38,7 @@ import type {
   WorkoutSport
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
-import { formatHappenDayLabel } from "../training/formatters";
+import { formatHappenDayLabel, formatPaceClock } from "../training/formatters";
 
 import { workoutSportFromType } from "../../electron/trainingPlanDomain";
 import { SportBadge, sportAccentStyle, sportChipStyle, sportTheme } from "./sportTheme";
@@ -180,17 +180,12 @@ function stepName(step: RunWorkoutEditorStep): string {
   return step.name.trim() || t(STEP_KIND_NAMES[step.kind] ?? "Step");
 }
 
-function paceText(secondsPerKm: number, unit: "km" | "mi"): string {
-  const perUnit = unit === "mi" ? secondsPerKm * 1.609344 : secondsPerKm;
-  return `${Math.floor(perUnit / 60)}:${String(Math.round(perUnit % 60)).padStart(2, "0")}`;
-}
-
 /** The line under a step's name: its effort target, and sets and rest for an exercise. */
 function stepDetail(step: RunWorkoutEditorStep): string {
   const intensity = step.intensity;
   const parts: string[] = [];
   if (intensity.type === "pace" || intensity.type === "effortPace") {
-    parts.push(`${paceText(intensity.lowSecondsPerKm, intensity.displayUnit)}–${paceText(intensity.highSecondsPerKm, intensity.displayUnit)} /${intensity.displayUnit}`);
+    parts.push(`${formatPaceClock(intensity.lowSecondsPerKm, intensity.displayUnit)}–${formatPaceClock(intensity.highSecondsPerKm, intensity.displayUnit)} /${intensity.displayUnit}`);
   } else if (intensity.type === "heartRate") {
     parts.push(`${intensity.lowBpm}–${intensity.highBpm} bpm`);
   } else if (intensity.type === "power" && "lowWatts" in intensity && intensity.lowWatts !== undefined) {
