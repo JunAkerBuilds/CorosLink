@@ -197,6 +197,15 @@ assets and previews. Neither those tests nor editor renders verify firmware stat
 meanings, on-watch timing or physical-screen legibility.
 
 
+## Temperature minus and unit
+
+`validate` warns (`weather.minus_missing`, `weather.unit_missing`,
+`weather.unit_one_letter`, `weather.unit_check_art`) when a current temperature would
+lose its minus below zero or show the wrong unit. On PACE Pro 3.2008.0 firmware the
+`weather_dgree_icon` element draws its only frame in both units; with two frames it
+draws frame 0 in Celsius and frame 1 in Fahrenheit. Studio writes the second frame only
+when `unit` index `1` is installed, so faces with a plain `°` export as before.
+
 ## Regional visual and dynamic evidence
 
 Requirements now retain `visualTargets`: named full-face regions, display mode,

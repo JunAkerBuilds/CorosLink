@@ -161,6 +161,21 @@ daily page, so removing the daily pages while a sun, moon, barometer or tide
 page stays takes min/max off the watch: tell the user, or keep a daily page
 `hidden`. Min/max also need both fonts, which export handles for one alone.
 
+Current temperature (`weather_temp`) has states a normal preview never shows, so
+check them whenever the face shows a temperature:
+
+- **Minus sign.** The watch draws `symbols` index `0` before the digits below zero.
+  Always install one in the digit style, keep the part on, and leave room for it plus
+  two digits and the unit. Never hide the template's minus to tidy Layers.
+- **Unit.** One image at `unit` index `0` shows in both Celsius and Fahrenheit, so a
+  single image must be a plain `°`. For letters, install both `°C` at index `0` and
+  `°F` at index `1`; the watch picks by its own setting and converts the digits. The
+  °C/°F reading needs `assets.unit` on `weather_temp` itself: the `weatherIndicator`
+  unit set and `weather_temp_max_min_dgree_icon` only serve minimum/maximum.
+- **Verify.** Preview a negative value and the widest one (`-21` and `100`) and check
+  for clipping. Fix every `weather.*` warning from `validate`. The preview cannot
+  switch the watch's unit, so tell the user that °F is not visually checked.
+
 Use the listed indices, dimensions and edit paths. For a new native field,
 fetch `get_schema` with `section: "nativeData"` and its `ids`; chart sources can
 change the required roles and counts. Active template/configured counts take

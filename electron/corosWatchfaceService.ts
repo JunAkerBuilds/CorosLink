@@ -3251,7 +3251,7 @@ async function discoverSpriteAssets(
     configs.flatMap((config) => Object.entries(config))
       // Level tables (stamina, sleep HRV, UV, AQI, training load, stress) and
       // the moon phase set are state folders of arbitrary length.
-      .filter(([key, value]) => (/_icon_dir$/.test(key) || /_level_icon$/.test(key) || /^(today|week)_\w+_unit_icon$/.test(key) || key === "chart_moon_icon" || key === "weather_temp_max_min_dgree_icon") && Boolean(value))
+      .filter(([key, value]) => (/_icon_dir$/.test(key) || /_level_icon$/.test(key) || /^(today|week)_\w+_unit_icon$/.test(key) || key === "chart_moon_icon" || key === "weather_temp_max_min_dgree_icon" || key === "weather_dgree_icon") && Boolean(value))
       .map(([, value]) => value.replace(/\\/g, "/").replace(/^\.\//, ""))
   );
   for (const [folder, numbered] of folderFiles) {

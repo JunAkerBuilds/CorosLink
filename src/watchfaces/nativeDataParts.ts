@@ -173,6 +173,6 @@ export function nativeRoleIndices(id: string, style: Style, role: Role): number[
   if (role === "states") return Array.from({ length: id === "chart" ? 30 : nativeStateCount(id, style) }, (_, i) => i);
   if (role === "symbols") return id.startsWith("weather_temp") ? [0] : id === "sunriseset" ? [3] : [0, 1, 2, 3];
   if (role === "icon") return isNativeTime(id, style) ? [0, 1] : [0];
-  if (role === "progress" || (role === "unit" && (id.startsWith("weather_temp_") || NATIVE_DATA_BY_ID.get(id)?.unitKey))) return [0, 1];
+  if (role === "progress" || (role === "unit" && (id.startsWith("weather_temp") || NATIVE_DATA_BY_ID.get(id)?.unitKey))) return [0, 1];
   return [0];
 }

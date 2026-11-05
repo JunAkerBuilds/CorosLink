@@ -14,6 +14,8 @@ function nativeSpriteMeaning(id: string, style: CorosWatchfaceNativeDataStyle, r
   if (role === "separator") return known("Separator between minimum and maximum temperature");
   if (role === "progress") return known(index === 0 ? "Sunrise progress artwork" : "Sunset progress artwork");
   if (role === "unit") {
+    // Plain degree by default; a second image makes the label follow the watch's unit.
+    if (id === "weather_temp") return known(index === 0 ? "Unit when the watch is in Celsius: °C, or a plain ° that also suits Fahrenheit" : "Unit when the watch is in Fahrenheit: °F. Without this image index 0 shows in Fahrenheit too");
     const text = nativeAssetText(id, { ...style, assetTexts: undefined }, role, index);
     return known(`Unit ${text}${count === 2 ? index === 0 ? " (metric)" : " (imperial)" : ""}`);
   }

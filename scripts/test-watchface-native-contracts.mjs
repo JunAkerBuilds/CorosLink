@@ -39,6 +39,8 @@ assert.equal(role("sunriseset", "symbols").states[0].meaning, "Time colon");
 assert.deepEqual(role("chart", "icon", { chartSource: "chart_moonrise" }).states.map(state => state.meaning), ["Moonrise", "Moonset"]);
 assert.equal(role("chart", "icon", { chartSource: "chart_step" }).spriteCount, 1);
 assert.deepEqual(role("weather_temp_min", "unit").states.map(state => state.meaning), ["Unit °C (metric)", "Unit °F (imperial)"]);
+assert.deepEqual(role("weather_temp", "unit").stateIndices, ["0", "1"]);
+assert.match(role("weather_temp", "unit").states[1].meaning, /Fahrenheit/);
 // PACE Pro 3.2008.0 counts metric swims in kilometres, like runs (issue #153).
 assert.deepEqual(role("today_swim", "unit").states.map(state => state.meaning), ["Unit km (metric)", "Unit yd (imperial)"]);
 assert.deepEqual(role("week_run", "unit").states.map(state => state.meaning), ["Unit km (metric)", "Unit mi (imperial)"]);
@@ -52,7 +54,7 @@ assert.equal(role("week_swim", "decimal").states[0].meaning, "Decimal point");
 assert.ok(catalog.nativeFieldKeys(catalog.NATIVE_DATA_BY_ID.get("week_swim")).includes("week_swim_point_icon"), "export clears a stale decimal point");
 assert.equal(catalog.NATIVE_DATA_BY_ID.get("week_elev").decimalKey, undefined);
 assert.deepEqual(role("today_elev", "unit").states.map(state => state.meaning), ["Unit m (metric)", "Unit ft (imperial)"]);
-assert.equal(role("weather_temp", "unit").spriteCount, 1);
+assert.equal(role("weather_temp", "unit").spriteCount, 2);
 assert.equal(role("weather_uv", "states").states[5].meaning, "Extreme UV (11+)");
 assert.equal(role("stamina", "states").states[10].meaning, "Stamina 100%");
 assert.deepEqual(role("stress", "states").states.map(state => state.meaning), ["No stress data", "Relaxed stress (0–25)", "Low stress (26–50)", "Medium stress (51–75)", "High stress (76–100)"]);

@@ -628,9 +628,40 @@ export function validateWatchfaceAutomationDocument(
     }
   } else if (design.modeDesigns !== undefined) issue(diagnostics, "mode.invalid", "modeDesigns must be an object.", "/design/modeDesigns");
   validateCollections(design, diagnostics);
+  validateWeatherTemperature(design, diagnostics);
   if (context?.mode === "aod" && !design.modeDesigns?.aod) diagnostics.push({ severity: "warning", code: "mode.aod_unmaterialized", message: "AOD has not been materialized; edits will create independent AOD state.", path: "/design/modeDesigns/aod" });
   if (context?.details && context.details.resolutions.length === 0) diagnostics.push({ severity: "warning", code: "template.no_resolutions", message: "The starter template has no editable resolution trees." });
   return diagnostics;
+}
+
+/** Faults that only show on a watch below zero or set to Fahrenheit, where a normal preview looks right. */
+function validateWeatherTemperature(design: Record<string, unknown>, diagnostics: WatchfaceAutomationDiagnostic[]): void {
+  const warn = (code: string, message: string, path: string) => diagnostics.push({ severity: "warning", code, message, path });
+  const native = objectOf(design.nativeData) ? design.nativeData.weather_temp : undefined;
+  if (objectOf(native) && native.enabled === true) {
+    const path = "/design/nativeData/weather_temp";
+    const parts = objectOf(native.parts) ? native.parts : {};
+    const off = (part: string) => objectOf(parts[part]) && parts[part].enabled === false;
+    if (off("value")) return;
+    if (off("symbols")) warn("weather.minus_missing", "Current temperature has its minus sign turned off, so -5 shows as 5 on the watch. Enable the symbols part.", `${path}/parts/symbols`);
+    if (off("unit")) { warn("weather.unit_missing", "Current temperature has no unit. Enable the unit part with a plain ° or with °C and °F images.", `${path}/parts/unit`); return; }
+    const of = (group: unknown, index: string) => objectOf(group) && objectOf(group.unit) ? group.unit[index] : undefined;
+    const label = of(native.assetTexts, "0");
+    if (!of(native.assets, "1") && of(native.assetTexts, "1") === undefined) {
+      if (typeof label === "string" && /[CF]/i.test(label)) {
+        warn("weather.unit_one_letter", `The only temperature unit image says "${label}", which also shows when the watch is in the other unit. Add the other unit at index 1, or use a plain °.`, `${path}/assets/unit`);
+      } else if (of(native.assets, "0") && label === undefined) {
+        warn("weather.unit_check_art", "The custom temperature unit shows in both Celsius and Fahrenheit. Keep it a plain °, or add °C at index 0 and °F at index 1.", `${path}/assets/unit`);
+      }
+    }
+    return;
+  }
+  const indicator = design.weatherIndicator;
+  if (!objectOf(indicator) || indicator.enabled !== true || indicator.temperatureEnabled === false) return;
+  const overrides = objectOf(design.configAssetOverrides) ? design.configAssetOverrides : {};
+  const hidden = (key: string) => objectOf(overrides[`config:${key}`]) && (overrides[`config:${key}`] as Record<string, unknown>).enabled === false;
+  if (hidden("weather_negasign_icon")) warn("weather.minus_missing", "The weather minus sign image is hidden, so -5 shows as 5 on the watch. Show it again.", "/design/configAssetOverrides/config:weather_negasign_icon");
+  if (hidden("weather_dgree_icon")) warn("weather.unit_missing", "The weather degree image is hidden, so the temperature has no unit on the watch. Show it again.", "/design/configAssetOverrides/config:weather_dgree_icon");
 }
 
 function validateCollections(design: Record<string, unknown>, diagnostics: WatchfaceAutomationDiagnostic[]): void {
