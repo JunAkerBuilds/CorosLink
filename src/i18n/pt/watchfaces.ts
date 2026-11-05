@@ -2164,4 +2164,11 @@ export const watchfacesPortuguese: Record<string, string> = {
   "Loaded by name": "Carregada pelo nome",
   "Couldn’t load “{{family}}” from Google Fonts. Check the name and your connection.": "Não foi possível carregar “{{family}}” do Google Fonts. Confira o nome e sua conexão.",
   "Loading font…": "Carregando fonte…",
+  "AM and PM pictures": "Imagens AM e PM",
+  "Pictures": "Imagens",
+  "Your picture · replace": "Sua imagem · substituir",
+  "Template · replace": "Modelo · substituir",
+  "Use the template pictures": "Usar as imagens do modelo",
+  "Pick a PNG for each. The watch shows AM before noon and PM after, in 12-hour mode.": "Escolha um PNG para cada. No modo de 12 horas o relógio mostra AM antes do meio-dia e PM depois.",
+  "Could not load the picture.": "Não foi possível carregar a imagem.",
 };

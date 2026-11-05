@@ -15032,12 +15032,48 @@ export function WatchfaceEditor({
     );
   }
 
+  async function replaceAmPmPicture(label: "AM" | "PM") {
+    try {
+      const picked = await api.chooseCorosWatchfaceArtwork();
+      if (!picked) return;
+      setDesign((prev) => {
+        const current = prev.ampmIndicator;
+        if (!current) return prev;
+        const font: CorosWatchfaceRasterFont = current.rasterFont ?? { label: "Custom AM/PM pictures", dataUrl: "", glyphs: "", columns: 1, tint: false };
+        return {
+          ...prev,
+          ampmIndicator: {
+            ...current,
+            // Pictures win over lettering; the font picker brings lettering back.
+            fontFamily: undefined,
+            rasterFont: {
+              ...font,
+              // A valid image keeps the saved design valid; no glyphs point into it.
+              dataUrl: font.dataUrl || picked.dataUrl,
+              sprites: { ...font.sprites, [label]: picked.dataUrl },
+              spriteSizes: { ...font.spriteSizes, [label]: { width: picked.width, height: picked.height } }
+            }
+          }
+        };
+      });
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : t("Could not load the picture."));
+    }
+  }
+
+  function resetAmPmPictures() {
+    setDesign((prev) => prev.ampmIndicator
+      ? { ...prev, ampmIndicator: { ...prev.ampmIndicator, rasterFont: undefined } }
+      : prev);
+  }
+
   function renderAmPmInspector() {
     const capability = details ? getAmPmCapability(details) : null;
     const indicator = design.ampmIndicator;
     if (!capability || !indicator) {
       return null;
     }
+    const pictures = indicator.rasterFont?.sprites ?? {};
     const faceWidth = previewResolution?.width ?? previewWidth;
     const faceHeight = previewResolution?.height ?? previewWidth;
     const boundsForScale = (scale: number) => ({
@@ -15148,6 +15184,28 @@ export function WatchfaceEditor({
           "specific",
           "Indicator",
           <div className="wf-property-stack">
+            <div className="wf-ampm-pictures" role="group" aria-label={t("AM and PM pictures")}>
+              <span className="wf-ampm-pictures-label">{t("Pictures")}</span>
+              <div className="wf-ampm-picture-row">
+                {(["AM", "PM"] as const).map((label) => (
+                  <button key={label} type="button" className="wf-ampm-picture" disabled={isPositionLocked("ampm")} onClick={() => void replaceAmPmPicture(label)}>
+                    <span className="wf-ampm-picture-preview" aria-hidden="true">
+                      {pictures[label] ? <img src={pictures[label]} alt="" /> : <span>{label}</span>}
+                    </span>
+                    <span className="wf-ampm-picture-copy">
+                      <strong>{label}</strong>
+                      <small>{pictures[label] ? t("Your picture · replace") : t("Template · replace")}</small>
+                    </span>
+                    <ImagePlus size={15} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+              {pictures.AM || pictures.PM ? (
+                <button type="button" className="text-button wf-ampm-pictures-reset" onClick={resetAmPmPictures}>{t("Use the template pictures")}</button>
+              ) : (
+                <small className="wf-ampm-pictures-hint">{t("Pick a PNG for each. The watch shows AM before noon and PM after, in 12-hour mode.")}</small>
+              )}
+            </div>
             <LocalFontPicker
               api={api}
               label={t("Font")}

@@ -822,3 +822,85 @@ body .watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-ac
   left: auto;
   z-index: 20;
 }
+
+/* --- AM/PM pictures ---------------------------------------------------------- */
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-pictures {
+  display: grid;
+  gap: 8px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-pictures-label {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-picture-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-picture {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 52px;
+  border: 1px solid var(--atl-line);
+  border-radius: 11px;
+  background: var(--atl-control);
+  color: var(--atl-titanium);
+  padding: 6px 10px 6px 6px;
+  text-align: left;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-picture:hover:not(:disabled) {
+  border-color: var(--atl-line-strong);
+  background: var(--atl-control-hover);
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-picture-preview {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #000;
+  color: var(--atl-titanium);
+  font: 700 12px var(--font-display);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-picture-preview img {
+  max-width: 34px;
+  max-height: 34px;
+  object-fit: contain;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-picture-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-picture-copy strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-picture-copy small,
+:root .watchface-shell.watchface-shell--studio .wf-ampm-pictures-hint {
+  overflow: hidden;
+  color: var(--atl-titanium-dim);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-pictures-reset {
+  justify-self: start;
+  font-size: 12px;
+}

@@ -2165,4 +2165,11 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Loaded by name": "按名称加载",
   "Couldn’t load “{{family}}” from Google Fonts. Check the name and your connection.": "无法从 Google Fonts 加载“{{family}}”。请检查名称和网络连接。",
   "Loading font…": "正在加载字体…",
+  "AM and PM pictures": "AM 和 PM 图片",
+  "Pictures": "图片",
+  "Your picture · replace": "你的图片 · 替换",
+  "Template · replace": "模板 · 替换",
+  "Use the template pictures": "使用模板图片",
+  "Pick a PNG for each. The watch shows AM before noon and PM after, in 12-hour mode.": "为每个选择一张 PNG。12 小时制下，手表中午前显示 AM，之后显示 PM。",
+  "Could not load the picture.": "无法加载图片。",
 };
