@@ -2145,4 +2145,6 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "{{value1}} · {{value2}} parts": "{{value1}} · {{value2}} 个部分",
   "Sun & moon": "日月",
   "Shape": "形状",
+  "Search {{value1}}": "搜索{{value1}}",
+  "Shapes and artwork": "形状和图片",
 };

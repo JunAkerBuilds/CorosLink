@@ -443,3 +443,209 @@
 :root .watchface-shell.watchface-shell--studio .wf-screens-status > span:nth-child(2)::before {
   display: none;
 }
+
+/* --- Sidebar polish (2026-11-05): rail and Layers read as one panel -------- */
+
+@media (min-width: 1180px) {
+  /* The rail tucks into the Layers tray: one panel with a tool strip. */
+  :root .watchface-shell.watchface-shell--studio .watchface-editor-grid.has-add-rail > .wf-add-rail {
+    position: relative;
+    z-index: 1;
+    margin-right: calc(var(--atl-gutter) * -1);
+    border-right: 0;
+    border-radius: var(--atl-radius) 0 0 var(--atl-radius);
+    background: color-mix(in srgb, var(--atl-bench) 55%, var(--atl-tray));
+    padding: 12px 0;
+    gap: 4px;
+  }
+
+  :root .watchface-shell.watchface-shell--studio .watchface-editor-grid.has-add-rail > .wf-layers-pane {
+    border-left-color: var(--atl-rule);
+    border-radius: 0 var(--atl-radius) var(--atl-radius) 0;
+  }
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-heading {
+  padding-bottom: 4px;
+  font-family: var(--font-display);
+  letter-spacing: 0.1em;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button {
+  gap: 5px;
+  width: 58px;
+  min-height: 60px;
+  border-radius: 12px;
+  color: var(--atl-titanium-dim);
+  padding: 4px 2px 6px;
+  font-size: 10.5px;
+  font-weight: 550;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button > svg {
+  box-sizing: content-box;
+  width: 18px;
+  height: 18px;
+  border-radius: 10px;
+  background: var(--atl-control);
+  box-shadow: inset 0 0 0 1px var(--atl-line);
+  color: var(--atl-ink);
+  padding: 8px;
+  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button:hover:not(:disabled),
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button.is-active {
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button:hover:not(:disabled) > svg {
+  background: var(--atl-tray-hover);
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button.is-active > svg {
+  background: var(--atl-lume-wash);
+  box-shadow: inset 0 0 0 1px var(--atl-lume-ring);
+  color: var(--atl-lume-strong);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-divider {
+  width: 32px;
+  margin: 8px 0;
+}
+
+/* Section headings: quiet small caps instead of wide engraved type. */
+:root .watchface-shell.watchface-shell--studio .wf-layer-group {
+  margin-top: 18px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-section-toggle {
+  min-height: 28px;
+  color: var(--atl-titanium-dim);
+  padding: 0 8px 0 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-stretch: 100%;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-section-toggle:hover {
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-section-count {
+  min-width: 20px;
+  border-radius: 999px;
+  background: var(--atl-control);
+  padding: 1px 6px;
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+/* Rows: a little taller, with the kind glyph on a small tile. */
+:root .watchface-shell.watchface-shell--studio .watchface-layer-row {
+  min-height: 36px;
+  gap: 10px;
+  border-radius: 10px;
+  padding: 0 8px 0 6px;
+  font-size: 13px;
+  grid-template-columns: 24px minmax(0, 1fr);
+}
+
+:root .watchface-shell.watchface-shell--studio .watchface-layer-row .wf-layer-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--atl-control);
+}
+
+:root .watchface-shell.watchface-shell--studio .watchface-layer-row .wf-layer-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+:root .watchface-shell.watchface-shell--studio .watchface-layer-row.is-selected .wf-layer-icon {
+  background: color-mix(in srgb, var(--atl-lume) 18%, transparent);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-value {
+  min-width: 18px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--atl-line);
+  color: var(--atl-titanium);
+  padding: 2px 7px;
+  font-size: 11.5px;
+  text-align: center;
+}
+
+/* Parts that are off: dim the row and keep only the eye; the lock comes back
+   on hover, or stays when it is actually locked. */
+:root .watchface-shell.watchface-shell--studio .watchface-layer-row:has(.is-hidden) {
+  opacity: 0.62;
+}
+
+:root .watchface-shell.watchface-shell--studio .watchface-layer-row:has(.is-hidden) .wf-layer-icon {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--atl-line);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-list > li.wf-layer-item:has(.watchface-layer-name.is-hidden):not(:hover, :focus-within) .watchface-layer-lock:not(.is-locked) {
+  display: none;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-list > li.wf-layer-item:has(.watchface-layer-name.is-hidden):not(:hover, :focus-within, :has(.is-selected), :has(.is-locked)) > .watchface-layer-row {
+  padding-right: 34px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-list > li.wf-layer-item:has(.watchface-layer-name.is-hidden):not(:hover, :focus-within) .watchface-layer-visibility {
+  opacity: 0.7;
+}
+
+/* --- Add picker opened from the rail ---------------------------------------- */
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-picker-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-picker-title-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--atl-lume-wash);
+  color: var(--atl-lume-strong);
+}
+
+/* The title already names the category. */
+:root .watchface-shell.watchface-shell--studio .wf-layer-picker.is-rail-data .wf-layer-picker-results section > h3 {
+  display: none;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-picker.is-rail-data .wf-layer-picker-search {
+  margin-top: 2px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-picker.is-rail-data .wf-layer-picker-results [data-add-option] {
+  min-height: 38px;
+  border-radius: 9px;
+  padding-inline: 10px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-picker.is-rail-artwork .wf-layer-picker-artwork {
+  padding-bottom: 12px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-picker.is-rail-data .wf-layer-picker-filters {
+  display: none;
+}

@@ -2108,4 +2108,6 @@ export const watchfacesFrench: Record<string, string> = {
   "{{value1}} · {{value2}} parts": "{{value1}} · {{value2}} parties",
   "Sun & moon": "Soleil et lune",
   "Shape": "Forme",
+  "Search {{value1}}": "Rechercher dans {{value1}}",
+  "Shapes and artwork": "Formes et images",
 };

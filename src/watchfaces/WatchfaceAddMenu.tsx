@@ -26,6 +26,12 @@ export interface WatchfaceAddFaceOption {
   onAdd: () => void;
 }
 
+/** "Training" → "training" for "Search training"; other scripts unchanged. */
+function midSentenceLabel(label: string) {
+  if (!getLocale().startsWith("en")) return label;
+  return label.length > 1 && label[1] === label[1].toLocaleLowerCase() ? label[0].toLocaleLowerCase() + label.slice(1) : label;
+}
+
 /** The rail's category buttons, top to bottom; each opens the picker on its tab. */
 const railCategories: Array<{ category: WatchfaceAddCategory; label: string }> = [
   { category: "Time", label: "Time" },
@@ -163,6 +169,11 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
     const index = options.indexOf(document.activeElement as HTMLButtonElement);
     options[(index + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length]?.focus();
   };
+  // From the rail, a category button shows just that category's data and
+  // Shape shows just shapes and artwork; the rail itself is the tab bar.
+  const railData = rail && category !== "All";
+  const railArtwork = rail && category === "All";
+  const railItem = railCategories.find(item => item.category === category);
   const normalized = query.trim().toLocaleLowerCase();
   const matches = (label: string, group: string, keywords: string) => (category === "All" || category === group) && `${label} ${t(label)} ${group} ${t(group)} ${keywords}`.toLocaleLowerCase(getLocale()).includes(normalized);
   const visible = dataOptions.filter(option => matches(option.label, option.category, option.keywords));
@@ -183,7 +194,7 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
       {railButton("Image", Image, () => onAddImage(), { disabled: imageDisabled })}
     </> : <button ref={trigger} type="button" className="watchface-add-sprite" aria-haspopup="dialog" aria-expanded={open} aria-controls={id}
       popoverTarget={id} onClick={place}><Plus size={15} aria-hidden="true" /><span>{t("Add")}</span><ChevronDown size={12} aria-hidden="true" /></button>}
-    <div ref={panel} id={id} className="wf-add-popover wf-layer-picker" popover="auto" role="dialog" aria-label={t("Add a layer")} style={position}
+    <div ref={panel} id={id} className={`wf-add-popover wf-layer-picker${railData ? " is-rail-data" : ""}${railArtwork ? " is-rail-artwork" : ""}`} popover="auto" role="dialog" aria-label={t("Add a layer")} style={position}
       onKeyDown={onKeyDown}
       onToggle={event => {
         const isOpen = event.newState === "open";
@@ -191,18 +202,19 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
         if (isOpen) reopening.current = false;
         else if (!reopening.current) { setQuery(""); setCategory("All"); }
       }}>
-      <div className="wf-layer-picker-heading"><strong>{t("Add a layer")}</strong><button type="button" aria-label={t("Close add menu")} onClick={close}><X size={15} /></button></div>
-      <div className="wf-layer-picker-artwork" role="group" aria-label={t("Artwork")}>
+      <div className="wf-layer-picker-heading">{railData && railItem ? <strong className="wf-layer-picker-title">{(() => { const Icon = categoryIcons[railItem.category]; return <span className="wf-layer-picker-title-icon" aria-hidden="true"><Icon size={15} /></span>; })()}{t(railItem.label)}</strong> : <strong>{t(railArtwork ? "Shapes and artwork" : "Add a layer")}</strong>}<button type="button" aria-label={t("Close add menu")} onClick={close}><X size={15} /></button></div>
+      {railData ? null : <div className="wf-layer-picker-artwork" role="group" aria-label={t("Artwork")}>
         <button type="button" data-add-option className="wf-add-image" disabled={imageDisabled} onClick={() => choose(onAddImage)}><Image size={18} /><span>{t("Image")}</span></button>
         {onAddOfficialImage ? <button type="button" data-add-option className="wf-add-official" disabled={imageDisabled} onClick={() => choose(onAddOfficialImage)}><Sparkles size={17} /><span>{t("Official")}</span></button> : null}
         <button type="button" data-add-option onClick={() => choose(() => onAddElement("text"))}><Type size={18} /><span>{t("Text")}</span></button>
         <button type="button" data-add-option onClick={() => choose(() => onAddElement("rect"))}><Square size={17} /><span>{t("Rectangle")}</span></button>
         <button type="button" data-add-option onClick={() => choose(() => onAddElement("ellipse"))}><Circle size={17} /><span>{t("Ellipse")}</span></button>
         <button type="button" data-add-option onClick={() => choose(() => onAddElement("line"))}><Minus size={18} /><span>{t("Line")}</span></button>
-      </div>
-      <div className="wf-layer-picker-data-heading"><strong>{t("Live data")}</strong><span>{t("Updates on your watch")}</span></div>
-      <label className="wf-layer-picker-search"><Search size={15} aria-hidden="true" /><input ref={search} type="search" aria-label={t("Search data fields")} placeholder={t("Search weather, health, charts…")} value={query} onChange={event => setQuery(event.target.value)} spellCheck={false} />{query && <button type="button" aria-label={t("Clear data search")} onClick={() => { setQuery(""); search.current?.focus(); }}><X size={13} /></button>}</label>
-      <div ref={tabs} className="wf-layer-picker-filters" role="tablist" aria-label={t("Data categories")}>{categories.map(item => <button key={item} id={`${id}-tab-${item}`} type="button" role="tab" aria-selected={category === item} aria-controls={`${id}-data-panel`} tabIndex={category === item ? 0 : -1} onClick={() => setCategory(item)} onKeyDown={event => onTabKeyDown(event, item)}>{t(item)}</button>)}</div>
+      </div>}
+      {railArtwork ? null : <>
+      {railData ? null : <div className="wf-layer-picker-data-heading"><strong>{t("Live data")}</strong><span>{t("Updates on your watch")}</span></div>}
+      <label className="wf-layer-picker-search"><Search size={15} aria-hidden="true" /><input ref={search} type="search" aria-label={t("Search data fields")} placeholder={railData && railItem ? t("Search {{value1}}", { value1: midSentenceLabel(t(railItem.label)) }) : t("Search weather, health, charts…")} value={query} onChange={event => setQuery(event.target.value)} spellCheck={false} />{query && <button type="button" aria-label={t("Clear data search")} onClick={() => { setQuery(""); search.current?.focus(); }}><X size={13} /></button>}</label>
+      <div ref={tabs} className="wf-layer-picker-filters" hidden={railData} role="tablist" aria-label={t("Data categories")}>{categories.map(item => <button key={item} id={`${id}-tab-${item}`} type="button" role="tab" aria-selected={category === item} aria-controls={`${id}-data-panel`} tabIndex={category === item ? 0 : -1} onClick={() => setCategory(item)} onKeyDown={event => onTabKeyDown(event, item)}>{t(item)}</button>)}</div>
       <div id={`${id}-data-panel`} className="wf-layer-picker-results" ref={results} role="tabpanel" aria-labelledby={`${id}-tab-${category}`} tabIndex={0}>
         {categories.filter(item => item !== "All").map(group => {
           const options = visible.filter(option => option.category === group);
@@ -227,6 +239,7 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
         {!visible.length && !visibleFace.length && <div className="wf-layer-picker-empty"><Search size={22} aria-hidden="true" /><strong>{t("No matching data fields")}</strong><span>{t("Try another name or category.")}</span><button type="button" onClick={() => { setQuery(""); setCategory("All"); search.current?.focus(); }}>{t("Clear filters")}</button></div>}
       </div>
       <div className="wf-layer-picker-footer">{design.nativeData?.chart?.enabled && (category === "Charts" || normalized.includes("chart")) ? t("More chart data joins the current chart. The watch's Back button pages through it.") : t("Add a layer, then customize it in the inspector.")}</div>
+      </>}
     </div>
   </div>;
 }
