@@ -1,6 +1,6 @@
 import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import { Activity, CalendarDays, ChartNoAxesCombined, Check, ChevronDown, Circle, Clock3, CloudSun, Image, Minus, MoonStar, Plus, Search, Smartphone, Sparkles, Square, TrendingUp, Type, X } from "lucide-react";
+import { Activity, CalendarDays, ChartNoAxesCombined, Check, ChevronDown, Circle, Clock3, CloudSun, Image, Minus, MoonStar, Plus, Search, Smartphone, Sparkles, Square, Shapes, TrendingUp, Type, X } from "lucide-react";
 import type { CorosWatchfaceBackgroundElement, CorosWatchfaceDesignState } from "../../electron/types";
 import { NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS } from "../../electron/watchfaceNativeCatalog";
 
@@ -26,7 +26,19 @@ export interface WatchfaceAddFaceOption {
   onAdd: () => void;
 }
 
-export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOfficialImage, onAddElement, onAddData, faceOptions = [] }: {
+/** The rail's category buttons, top to bottom; each opens the picker on its tab. */
+const railCategories: Array<{ category: WatchfaceAddCategory; label: string }> = [
+  { category: "Time", label: "Time" },
+  { category: "Calendar", label: "Date" },
+  { category: "Health", label: "Health" },
+  { category: "Training", label: "Training" },
+  { category: "Weather", label: "Weather" },
+  { category: "Device", label: "Device" },
+  { category: "Astronomy", label: "Sun & moon" },
+  { category: "Charts", label: "Chart" }
+];
+
+export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOfficialImage, onAddElement, onAddData, faceOptions = [], variant = "button" }: {
   design: CorosWatchfaceDesignState;
   imageDisabled: boolean;
   onAddImage: () => void;
@@ -35,6 +47,8 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
   onAddElement: (kind: CorosWatchfaceBackgroundElement["kind"]) => void;
   onAddData: (id: string) => void;
   faceOptions?: WatchfaceAddFaceOption[];
+  /** "rail": a vertical strip of category buttons beside the layer list. */
+  variant?: "button" | "rail";
 }) {
   useLanguage();
   const id = useId();
@@ -47,7 +61,25 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<Category>("All");
   const [position, setPosition] = useState({ top: 0, left: 0, width: 320, maxHeight: 580 });
+  // The rail button that opened the picker; the picker sits to its right.
+  const railAnchor = useRef<HTMLElement | null>(null);
+  // Set while one rail button reopens the picker another one had open.
+  const reopening = useRef(false);
+  const rail = variant === "rail";
   const place = useCallback(() => {
+    if (rail) {
+      const anchor = railAnchor.current?.getBoundingClientRect();
+      if (!anchor) return;
+      const width = Math.min(320, window.innerWidth - anchor.right - 22);
+      const maxHeight = Math.min(580, window.innerHeight - 24);
+      const next = {
+        width, maxHeight,
+        top: Math.max(12, Math.min(anchor.top - 12, window.innerHeight - maxHeight - 12)),
+        left: anchor.right + 10
+      };
+      setPosition(current => Object.keys(next).every(key => current[key as keyof typeof next] === next[key as keyof typeof next]) ? current : next);
+      return;
+    }
     const button = trigger.current;
     if (!button) return;
     const anchor = button.getBoundingClientRect();
@@ -64,7 +96,7 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
       left: Math.max(12, Math.min(pane ? pane.left + 10 : anchor.left, window.innerWidth - width - 12))
     };
     setPosition(current => Object.keys(next).every(key => current[key as keyof typeof next] === next[key as keyof typeof next]) ? current : next);
-  }, [category]);
+  }, [category, rail]);
   useEffect(() => { if (open) search.current?.focus(); }, [open]);
   useEffect(() => {
     if (!open) return;
@@ -85,7 +117,22 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
     if (tab.left < viewport.left) strip.scrollLeft += tab.left - viewport.left;
     else if (tab.right > viewport.right) strip.scrollLeft += tab.right - viewport.right;
   }, [category, open]);
-  const close = () => { panel.current?.hidePopover(); trigger.current?.focus(); };
+  const close = () => { panel.current?.hidePopover(); (rail ? railAnchor.current : trigger.current)?.focus(); };
+  // Pressing a rail button light-dismisses the picker before its click, so
+  // remember on pointerdown whether this button's tab was the one showing.
+  const shownFor = useRef<HTMLElement | null>(null);
+  const noteShown = (button: HTMLElement, next: Category) => {
+    shownFor.current = panel.current?.matches(":popover-open") && railAnchor.current === button && category === next ? button : null;
+  };
+  const openAt = (button: HTMLElement, next: Category) => {
+    const toggleOff = shownFor.current === button || (open && railAnchor.current === button && category === next);
+    shownFor.current = null;
+    railAnchor.current = button;
+    if (toggleOff) { if (panel.current?.matches(":popover-open")) panel.current.hidePopover(); return; }
+    reopening.current = true;
+    setCategory(next);
+    if (!panel.current?.matches(":popover-open")) panel.current?.showPopover();
+  };
   const choose = (action: () => void) => { close(); action(); };
   const onTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, item: Category) => {
     const index = categories.indexOf(item);
@@ -120,15 +167,29 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
   const matches = (label: string, group: string, keywords: string) => (category === "All" || category === group) && `${label} ${t(label)} ${group} ${t(group)} ${keywords}`.toLocaleLowerCase(getLocale()).includes(normalized);
   const visible = dataOptions.filter(option => matches(option.label, option.category, option.keywords));
   const visibleFace = faceOptions.filter(option => matches(option.label, option.category, `${option.category === "Time" ? t("time clock ") : ""}${option.id}`));
-  return <div className="wf-add-menu">
-    <button ref={trigger} type="button" className="watchface-add-sprite" aria-haspopup="dialog" aria-expanded={open} aria-controls={id}
-      popoverTarget={id} onClick={place}><Plus size={15} aria-hidden="true" /><span>{t("Add")}</span><ChevronDown size={12} aria-hidden="true" /></button>
+  const railButton = (label: string, Icon: typeof Clock3, onClick: (button: HTMLButtonElement) => void, options: { active?: boolean; disabled?: boolean; dialog?: Category } = {}) =>
+    <button key={label} type="button" className={`wf-add-rail-button${options.active ? " is-active" : ""}`} disabled={options.disabled}
+      aria-haspopup={options.dialog ? "dialog" : undefined} aria-expanded={options.dialog ? Boolean(options.active) : undefined} aria-controls={options.dialog ? id : undefined}
+      title={t(label)} onPointerDown={event => { if (options.dialog) noteShown(event.currentTarget, options.dialog); }} onClick={event => onClick(event.currentTarget)}>
+      <Icon size={18} aria-hidden="true" /><span>{t(label)}</span>
+    </button>;
+  return <div className={rail ? "wf-add-rail" : "wf-add-menu"} role={rail ? "toolbar" : undefined} aria-orientation={rail ? "vertical" : undefined} aria-label={rail ? t("Add to the face") : undefined}>
+    {rail ? <>
+      <span className="wf-add-rail-heading" aria-hidden="true">{t("Add")}</span>
+      {railCategories.map(item => railButton(item.label, categoryIcons[item.category], button => openAt(button, item.category), { active: open && category === item.category && railAnchor.current?.title === t(item.label), dialog: item.category }))}
+      <span className="wf-add-rail-divider" aria-hidden="true" />
+      {railButton("Text", Type, () => onAddElement("text"))}
+      {railButton("Shape", Shapes, button => openAt(button, "All"), { active: open && category === "All", dialog: "All" })}
+      {railButton("Image", Image, () => onAddImage(), { disabled: imageDisabled })}
+    </> : <button ref={trigger} type="button" className="watchface-add-sprite" aria-haspopup="dialog" aria-expanded={open} aria-controls={id}
+      popoverTarget={id} onClick={place}><Plus size={15} aria-hidden="true" /><span>{t("Add")}</span><ChevronDown size={12} aria-hidden="true" /></button>}
     <div ref={panel} id={id} className="wf-add-popover wf-layer-picker" popover="auto" role="dialog" aria-label={t("Add a layer")} style={position}
       onKeyDown={onKeyDown}
       onToggle={event => {
         const isOpen = event.newState === "open";
         setOpen(isOpen);
-        if (!isOpen) { setQuery(""); setCategory("All"); }
+        if (isOpen) reopening.current = false;
+        else if (!reopening.current) { setQuery(""); setCategory("All"); }
       }}>
       <div className="wf-layer-picker-heading"><strong>{t("Add a layer")}</strong><button type="button" aria-label={t("Close add menu")} onClick={close}><X size={15} /></button></div>
       <div className="wf-layer-picker-artwork" role="group" aria-label={t("Artwork")}>

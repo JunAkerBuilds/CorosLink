@@ -153,6 +153,7 @@ import {
 import "./watchfaces.css";
 import "./watchfaceStudioAtelier.css";
 import "./watchfaceHub.css";
+import "./watchfaceStudioEditor.css";
 
 const AUTH_WATCH_FACE_PREVIEWS = [
   preClassicFace,

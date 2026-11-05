@@ -1,6 +1,9 @@
 import { t, useLanguage, getLocale, midSentence } from "../i18n/watchfaces";
 import { createCollapsedWatchfaceLayerSections, watchfaceLayerMatchesSearch } from "./watchfaceLayerSearch";
 import { batteryStateMeaning, batteryReplacementStateCount, COROS_BATTERY_STATE_ORDER } from "./watchfaceBatteryStates";
+import { announceStudioEditor } from "./studioEditorPresence";
+import { watchfaceLayerSampleValue } from "./watchfaceLayerValues";
+import { collectWatchfaceFaceColors, recolorWatchfaceFace } from "./watchfaceFaceColors";
 import { WatchfaceAddMenu, type WatchfaceAddCategory, type WatchfaceAddFaceOption } from "./WatchfaceAddMenu";
 import { recoverChartGroup, recoverChartPageCompanions, recoverGraphlessChart, recoveredChartReadouts, recoveredChartSources, recoverWatchfaceDesign, type ChartPageCompanions } from "./recoveredWatchfaceDesign";
 import { WATCHFACE_TARGETS } from "../../electron/watchfaceTargets";
@@ -299,7 +302,8 @@ import {
   Maximize2,
   Minimize2,
   TriangleAlert,
-  ArrowUpRight
+  ArrowUpRight,
+  MoreHorizontal
 } from "lucide-react";
 import {
   resizeWatchfaceDimensions,
@@ -1093,6 +1097,8 @@ export function WatchfaceEditor({
   onClearMessages
 }: WatchfaceEditorProps) {
   useLanguage();
+  // The app folds its sidebar to icons while an editor is on screen.
+  useEffect(() => announceStudioEditor(), []);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const dragPreviewCanvasRef = useRef<HTMLCanvasElement>(null);
   const arcOverlayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -1646,7 +1652,7 @@ export function WatchfaceEditor({
   useEffect(() => {
     const stage = previewStackRef.current?.parentElement;
     const toolbar = stage?.querySelector<HTMLElement>(".wf-stage-toolbar");
-    const status = stage?.querySelector<HTMLElement>(".wf-stage-status");
+    const status = stage?.querySelector<HTMLElement>(".wf-stage-corner");
     if (!stage || !toolbar || !status || typeof ResizeObserver === "undefined") return;
     const resize = () => {
       const toolbarHeight = toolbar.getBoundingClientRect().height;
@@ -9817,6 +9823,22 @@ export function WatchfaceEditor({
     setPropertiesOpen(false);
   };
 
+  const faceColors = collectWatchfaceFaceColors(design);
+  // The align bar floats over the selection: above it, or below when the
+  // selection sits at the top of the face.
+  const selectionToolbarBox = (() => {
+    const boxes = componentBoundsOutlines.filter((outline) => outline.active && !outline.selector).map((outline) => outline.bounds);
+    if (!boxes.length) return null;
+    const x0 = Math.min(...boxes.map((box) => box.x0));
+    const x1 = Math.max(...boxes.map((box) => box.x1));
+    const y0 = Math.min(...boxes.map((box) => box.y0));
+    const y1 = Math.max(...boxes.map((box) => box.y1));
+    // Above the selection when there is room, else below it; a part that
+    // fills the face gets the bar inside its top edge.
+    const place = y0 >= previewHeight * 0.14 ? "above" : y1 <= previewHeight * 0.84 ? "below" : "inside";
+    return { x: (x0 + x1) / 2, y: place === "below" ? y1 : y0, below: place !== "above" };
+  })();
+
   return (
     <WatchfaceStudioModeContext.Provider value={studioMode}>
     <section ref={editorRef} className={`watchface-editor wf-studio${stageFullscreen ? " is-editor-fullscreen" : ""}${simpleMode ? " is-simple" : ""}`} aria-label={t("Watch face studio")} inert={conversionBusy}>
@@ -9860,7 +9882,14 @@ export function WatchfaceEditor({
           >
             <PanelRight size={17} />
           </button>
-          <span className="wf-command-separator" aria-hidden="true" />
+          <div className="wf-history-controls" role="group" aria-label={t("Edit history")}>
+            <button className="wf-icon-button" type="button" disabled={!canUndo} aria-label={t("Undo")} title={t("Undo")} onClick={undo}>
+              <Undo2 size={17} />
+            </button>
+            <button className="wf-icon-button" type="button" disabled={!canRedo} aria-label={t("Redo")} title={t("Redo")} onClick={redo}>
+              <Redo2 size={17} />
+            </button>
+          </div>
           <button
             className="wf-icon-button wf-tour-button"
             type="button"
@@ -9870,110 +9899,100 @@ export function WatchfaceEditor({
           >
             <CircleHelp size={17} aria-hidden="true" />
           </button>
-          <div className="wf-studio-mode-switch" role="group" aria-label={t("Editor mode")}>
-            <button
-              type="button"
-              aria-pressed={simpleMode}
-              title={t("What's on the face, with its color, font, size and position")}
-              onClick={() => setStudioMode("simple")}
-            >{t("Simple")}</button>
-            <button
-              type="button"
-              aria-pressed={!simpleMode}
-              title={t("Also template slots, template images, PNG digit sets, config files and watch sizes")}
-              onClick={() => setStudioMode("advanced")}
-            >{t("Advanced")}</button>
-          </div>
-          <div className="wf-history-controls" role="group" aria-label={t("Edit history")}>
-            <button className="wf-icon-button" type="button" disabled={!canUndo} aria-label={t("Undo")} title={t("Undo")} onClick={undo}>
-              <Undo2 size={17} />
-            </button>
-            <button className="wf-icon-button" type="button" disabled={!canRedo} aria-label={t("Redo")} title={t("Redo")} onClick={redo}>
-              <Redo2 size={17} />
-            </button>
-          </div>
+          <span className="wf-command-separator" aria-hidden="true" />
+          <button
+            className={`secondary-button wf-watchmaker-button${propertiesTab === "ai" ? " is-active" : ""}`}
+            type="button"
+            aria-pressed={propertiesTab === "ai"}
+            title={t("Design with Watchmaker")}
+            onClick={() => {
+              setPropertiesTab((tab) => (tab === "ai" ? "selection" : "ai"));
+              setPropertiesOpen(true);
+            }}
+          >
+            <Sparkles size={15} aria-hidden="true" /><span className="wf-command-label">{t("Watchmaker")}</span></button>
           <button className="secondary-button wf-save-button" type="button" title={t("Save")} disabled={saving || spriteImportPending || !isDirty} onClick={() => void saveProject()}>
             {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />}<span className="wf-command-label">{t("Save")}</span></button>
-          {showDevelopmentTools || bakeForWatch ? (
-            <div className="wf-export-menu" ref={downloadMenuRef}>
-              <button
-                className="secondary-button wf-download-button"
-                type="button"
-                aria-haspopup="menu"
-                aria-expanded={downloadMenuOpen}
-                title={t("Download")}
-                disabled={spriteImportPending || creating || exporting || Boolean(allWatchesExport) || !backgroundDataUrl}
-                onClick={() => setDownloadMenuOpen((open) => !open)}
-              >
-                {exporting || creating || allWatchesExport ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
-                <span className="wf-command-label">{allWatchesExport ? t("{{value1}} · {{value2}}/{{value3}}", { value1: t(allWatchesExport.label), value2: allWatchesExport.done + 1, value3: allWatchesExport.total }) : t("Download")}</span>
-                <ChevronDown size={14} aria-hidden="true" />
-              </button>
-              {downloadMenuOpen ? (
-                <div className="wf-export-popover" role="menu" aria-label={t("Download options")}>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
-                    onClick={() => { setDownloadMenuOpen(false); void exportEditableProject(); }}
-                  >
-                    <span className="wf-export-option-icon" aria-hidden="true">
-                      <Download size={16} />
-                    </span>
-                    <span className="wf-export-option-copy">
-                      <strong>{t("Editable project ZIP")}</strong>
-                      <small>{t("Save an editable backup")}</small>
-                    </span>
-                  </button>
-                  {showDevelopmentTools ? <button
-                    type="button"
-                    role="menuitem"
-                    disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
-                    onClick={() => { setDownloadMenuOpen(false); void createArchive("export"); }}
-                  >
-                    <span className="wf-export-option-icon" aria-hidden="true">
-                      <Package size={16} />
-                    </span>
-                    <span className="wf-export-option-copy">
-                      <strong>{t("Final watch ZIP")}</strong>
-                      <small>{t("Development export")}</small>
-                    </span>
-                  </button> : null}
-                  {bakeForWatch ? <button
-                    type="button"
-                    role="menuitem"
-                    disabled={spriteImportPending || creating || exporting || Boolean(allWatchesExport) || !backgroundDataUrl}
-                    onClick={() => { setDownloadMenuOpen(false); void exportForAllWatches(); }}
-                  >
-                    <span className="wf-export-option-icon" aria-hidden="true">
-                      <FolderDown size={16} />
-                    </span>
-                    <span className="wf-export-option-copy">
-                      <strong>{t("All watches")}</strong>
-                      <small>{WATCHFACE_TARGETS.length}{" "}{t("final ZIPs in one folder")}</small>
-                    </span>
-                  </button> : null}
-                </div>
-              ) : null}
-            </div>
-          ) : (
+          <div className="wf-export-menu wf-more-menu" ref={downloadMenuRef}>
             <button
-              className="secondary-button wf-download-button"
+              className="wf-icon-button wf-more-button"
               type="button"
-              title={t("Download an editable project ZIP")}
-              disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
-              onClick={() => void exportEditableProject()}
+              aria-haspopup="menu"
+              aria-expanded={downloadMenuOpen}
+              aria-label={t("More")}
+              title={t("Download, convert and view options")}
+              onClick={() => setDownloadMenuOpen((open) => !open)}
             >
-              {exporting ? <Loader2 className="spin" size={15} /> : <Download size={15} />}<span className="wf-command-label">{t("Download")}</span></button>
-          )}
-          <button
-            className="secondary-button wf-convert-button"
-            type="button"
-            title={t("Adapt the design for another watch model")}
-            disabled={saving || spriteImportPending || creating || exporting || previewingExport || !backgroundDataUrl}
-            onClick={convertToAnotherWatch}
-          >
-            <Repeat2 size={15} /><span className="wf-command-label">{t("Convert")}</span></button>
+              {exporting || creating || allWatchesExport ? <Loader2 className="spin" size={16} /> : <MoreHorizontal size={17} />}
+            </button>
+            {downloadMenuOpen ? (
+              <div className="wf-export-popover wf-more-popover" role="menu" aria-label={t("More")}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
+                  onClick={() => { setDownloadMenuOpen(false); void exportEditableProject(); }}
+                >
+                  <span className="wf-export-option-icon" aria-hidden="true"><Download size={16} /></span>
+                  <span className="wf-export-option-copy">
+                    <strong>{t("Editable project ZIP")}</strong>
+                    <small>{t("Save an editable backup")}</small>
+                  </span>
+                </button>
+                {showDevelopmentTools ? <button
+                  type="button"
+                  role="menuitem"
+                  disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
+                  onClick={() => { setDownloadMenuOpen(false); void createArchive("export"); }}
+                >
+                  <span className="wf-export-option-icon" aria-hidden="true"><Package size={16} /></span>
+                  <span className="wf-export-option-copy">
+                    <strong>{t("Final watch ZIP")}</strong>
+                    <small>{t("Development export")}</small>
+                  </span>
+                </button> : null}
+                {bakeForWatch ? <button
+                  type="button"
+                  role="menuitem"
+                  disabled={spriteImportPending || creating || exporting || Boolean(allWatchesExport) || !backgroundDataUrl}
+                  onClick={() => { setDownloadMenuOpen(false); void exportForAllWatches(); }}
+                >
+                  <span className="wf-export-option-icon" aria-hidden="true"><FolderDown size={16} /></span>
+                  <span className="wf-export-option-copy">
+                    <strong>{allWatchesExport ? t("{{value1}} · {{value2}}/{{value3}}", { value1: t(allWatchesExport.label), value2: allWatchesExport.done + 1, value3: allWatchesExport.total }) : t("All watches")}</strong>
+                    <small>{WATCHFACE_TARGETS.length}{" "}{t("final ZIPs in one folder")}</small>
+                  </span>
+                </button> : null}
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={saving || spriteImportPending || creating || exporting || previewingExport || !backgroundDataUrl}
+                  onClick={() => { setDownloadMenuOpen(false); convertToAnotherWatch(); }}
+                >
+                  <span className="wf-export-option-icon" aria-hidden="true"><Repeat2 size={16} /></span>
+                  <span className="wf-export-option-copy">
+                    <strong>{t("Convert")}</strong>
+                    <small>{t("Adapt the design for another watch model")}</small>
+                  </span>
+                </button>
+                <span className="wf-more-divider" role="separator" />
+                <button
+                  type="button"
+                  className="wf-more-toggle"
+                  role="menuitemcheckbox"
+                  aria-checked={!simpleMode}
+                  onClick={() => setStudioMode(simpleMode ? "advanced" : "simple")}
+                >
+                  <span className="wf-export-option-icon" aria-hidden="true"><SlidersHorizontal size={16} /></span>
+                  <span className="wf-export-option-copy">
+                    <strong>{t("Show advanced controls")}</strong>
+                    <small>{t("Also template slots, template images, PNG digit sets, config files and watch sizes")}</small>
+                  </span>
+                  <span className={`wf-more-check${simpleMode ? "" : " is-on"}`} aria-hidden="true" />
+                </button>
+              </div>
+            ) : null}
+          </div>
           <button
             className="primary-button wf-send-button"
             type="button"
@@ -9984,7 +10003,18 @@ export function WatchfaceEditor({
         </div>
       </header>
 
-      <div className="watchface-editor-grid wf-studio-grid">
+      <div className={`watchface-editor-grid wf-studio-grid${canEditActiveMode ? " has-add-rail" : ""}`}>
+        {canEditActiveMode ? <WatchfaceAddMenu
+          key={`rail:${sessionId}:${previewMode}`}
+          variant="rail"
+          design={design}
+          imageDisabled={loadingSprite || (design.designSprites ?? []).length >= MAX_DESIGN_SPRITES}
+          onAddImage={() => void chooseSprite()}
+          onAddOfficialImage={browseOfficialImage}
+          onAddElement={addElement}
+          onAddData={addNativeData}
+          faceOptions={faceAddOptions}
+        /> : null}
         <aside className={`watchface-editor-layers wf-pane wf-layers-pane${layersOpen ? " is-open" : ""}`} aria-label={t("Layers")}>
           <div className="watchface-editor-pane-heading wf-pane-heading">
             <div className="wf-pane-heading-main">
@@ -10277,6 +10307,10 @@ export function WatchfaceEditor({
                           {layerIcon(layer)}
                         </span>
                         <span className={`watchface-layer-name${layer.visible ? "" : " is-hidden"}`} title={t(layer.label)}>{t(layer.label)}</span>
+                        {layer.visible ? (() => {
+                          const value = watchfaceLayerSampleValue(layer, simulationScenario ?? { dateTime: simulation.dateTime, values: simulation.values }, new Date());
+                          return value ? <span className="wf-layer-value" aria-label={t("Shows {{value1}}", { value1: value })}>{value}</span> : null;
+                        })() : null}
                         {(design.linkedLayerGroups ?? []).some((group) => group.includes(layer.id)) ? (
                           <span className="wf-layer-link-state" title={t("Linked component")} aria-label={t("Linked component")}>
                             <Link2 size={12} aria-hidden="true" />
@@ -10328,69 +10362,7 @@ export function WatchfaceEditor({
         </aside>
 
         <main className="watchface-editor-stage wf-stage">
-          <div className="wf-stage-toolbar wf-stage-toolbar--floating" role="toolbar" aria-label={t("Preview controls")}>
-            <div className="wf-zoom-control">
-              <button type="button" aria-pressed={stageZoom === "fit"} onClick={() => setStageZoom("fit")}>{t("Fit")}</button>
-              <button type="button" aria-label={t("Zoom out")} onClick={() => setStageZoom((zoom) => Math.max(0.6, (zoom === "fit" ? 1 : zoom) - 0.1))}><Minus size={15} aria-hidden="true" /></button>
-              <button
-                type="button"
-                className="wf-zoom-value"
-                aria-pressed={stageZoom === 1}
-                title={t("Reset zoom to 100%")}
-                onClick={() => setStageZoom(1)}
-              >
-                {stageZoom === "fit" ? "100%" : t("{{value1}}%", { value1: Math.round(stageZoom * 100) })}
-              </button>
-              <button type="button" aria-label={t("Zoom in")} onClick={() => setStageZoom((zoom) => Math.min(1.4, (zoom === "fit" ? 1 : zoom) + 0.1))}><Plus size={15} aria-hidden="true" /></button>
-            </div>
-            <span className="wf-toolbar-divider" aria-hidden="true" />
-            <div className="wf-preview-mode-switch" role="group" aria-label={t("Watch display preview")}>
-              <button
-                type="button"
-                aria-pressed={previewMode === "current"}
-                onClick={() => setPreviewMode("current")}
-              >
-                <SunMedium size={14} aria-hidden="true" />{" "}{t("Current")}</button>
-              <button
-                type="button"
-                aria-pressed={previewMode === "aod"}
-                title={supportsAod
-                  ? t("Preview and edit always-on assets")
-                  : t("This MIP template uses the current face when always on")}
-                onClick={() => setPreviewMode("aod")}
-              >
-                <MoonStar size={14} aria-hidden="true" />{" "}{t("Always-on")}</button>
-            </div>
-            <span className="wf-toolbar-divider" aria-hidden="true" />
-            {/* Per-watch layout sizes are Advanced; Simple edits the size Studio opened. */}
-            {!simpleMode && previewDetails && previewDetails.resolutions.length > 1 ? (
-              <label className="wf-preview-resolution" title={t("Watch preview")}>
-                <Watch size={14} aria-hidden="true" />
-                <span className="sr-only">{t("Watch preview")}</span>
-                <select
-                  value={watchPreviewResolution?.directory ?? ""}
-                  onChange={(event) => setWatchPreviewDirectory(event.target.value)}
-                >
-                  {[...previewDetails.resolutions]
-                    .sort((left, right) => left.width - right.width)
-                    .map((resolution) => (
-                      <option key={resolution.directory} value={resolution.directory}>
-                        {resolution.width === 240 &&
-                        (targetWatchModel === "apex-4" || targetFirmwareType?.toUpperCase() === "COROS W541")
-                          ? t("APEX 4 42 mm · 240×240")
-                          : resolution.width === 260 &&
-                              (targetWatchModel === "apex-4" || targetFirmwareType?.toUpperCase() === "COROS W541")
-                            ? t("APEX 4 46 mm · 260×260")
-                            : resolution.width === 800
-                              ? t("Master · 800×800")
-                              : t("{{value1}}×{{value2}}", { value1: resolution.width, value2: resolution.height })}
-                      </option>
-                    ))}
-                </select>
-              </label>
-            ) : null}
-            <WatchfaceSimulationPanel simulation={simulation} onChange={updateSimulation} design={design} />
-            <span className="wf-toolbar-divider" aria-hidden="true" />
+          <div className="wf-stage-toolbar--floating wf-stage-corner" role="toolbar" aria-label={t("Canvas controls")}>
             {canEditActiveMode ? <div className="wf-placement-menu" ref={placementMenuRef}>
               <button
                 className={`wf-placement-trigger${
@@ -10485,7 +10457,20 @@ export function WatchfaceEditor({
                 {supportsAod ? t("AODconfig.txt") : t("Current face stays on")}
               </span>
             )}
-            <span className="wf-toolbar-divider" aria-hidden="true" />
+            <div className="wf-zoom-control">
+              <button type="button" aria-pressed={stageZoom === "fit"} onClick={() => setStageZoom("fit")}>{t("Fit")}</button>
+              <button type="button" aria-label={t("Zoom out")} onClick={() => setStageZoom((zoom) => Math.max(0.6, (zoom === "fit" ? 1 : zoom) - 0.1))}><Minus size={15} aria-hidden="true" /></button>
+              <button
+                type="button"
+                className="wf-zoom-value"
+                aria-pressed={stageZoom === 1}
+                title={t("Reset zoom to 100%")}
+                onClick={() => setStageZoom(1)}
+              >
+                {stageZoom === "fit" ? "100%" : t("{{value1}}%", { value1: Math.round(stageZoom * 100) })}
+              </button>
+              <button type="button" aria-label={t("Zoom in")} onClick={() => setStageZoom((zoom) => Math.min(1.4, (zoom === "fit" ? 1 : zoom) + 0.1))}><Plus size={15} aria-hidden="true" /></button>
+            </div>
             <button
               type="button"
               className="wf-stage-fullscreen"
@@ -10499,25 +10484,6 @@ export function WatchfaceEditor({
           </div>
           {previewMode === "aod" && supportsAod ? (
             <p className="watchface-studio-summary">{t("Always-on uses a black screen. Background images are omitted; custom captions need a separate AOD overlay. Use light colors for digits.")}</p>
-          ) : null}
-          {canEditActiveMode && selectedMovableIds.some((id) => !isPositionLocked(id)) ? (
-            <div className="wf-contextual-align-bar" role="toolbar" aria-label={t("Align and distribute selection")}>
-              <button type="button" title={t("Align left")} aria-label={t("Align left")} disabled={aligningGlyphs} onClick={() => alignSelection("left")}><AlignHorizontalJustifyStart size={15} /></button>
-              <button type="button" title={t("Align horizontal centers")} aria-label={t("Align horizontal centers")} disabled={aligningGlyphs} onClick={() => alignSelection("center-x")}><AlignHorizontalJustifyCenter size={15} /></button>
-              <button type="button" title={t("Align right")} aria-label={t("Align right")} disabled={aligningGlyphs} onClick={() => alignSelection("right")}><AlignHorizontalJustifyEnd size={15} /></button>
-              <span aria-hidden="true" />
-              <button type="button" title={t("Align top")} aria-label={t("Align top")} disabled={aligningGlyphs} onClick={() => alignSelection("top")}><AlignVerticalJustifyStart size={15} /></button>
-              <button type="button" title={t("Align vertical centers")} aria-label={t("Align vertical centers")} disabled={aligningGlyphs} onClick={() => alignSelection("center-y")}><AlignVerticalJustifyCenter size={15} /></button>
-              <button type="button" title={t("Align bottom")} aria-label={t("Align bottom")} disabled={aligningGlyphs} onClick={() => alignSelection("bottom")}><AlignVerticalJustifyEnd size={15} /></button>
-              <button type="button" title={t("Align visible glyph baselines; center colons beside the tallest glyphs")} aria-label={t("Align glyph baselines")} disabled={aligningGlyphs || selectedLayoutItems().length < 2} onClick={() => void alignGlyphBaselines()}>{t("Baseline", undefined, "alignToolbar")}</button>
-              {heightMatch.icons.length > 0 ? <button type="button" title={t("Resize the selected Bluetooth and Do Not Disturb icons to the visible height of the other selected layers")} aria-label={t("Match icon height to the selected text")} disabled={aligningGlyphs || heightMatch.others.length === 0} onClick={() => void matchStatusIconHeights()}>{t("Match height")}</button> : null}
-              <span aria-hidden="true" />
-              <button type="button" title={t("Distribute horizontal spacing")} aria-label={t("Distribute horizontal spacing")} disabled={aligningGlyphs || selectedLayoutItems().length < 3} onClick={() => distributeSelection("horizontal")}><AlignHorizontalSpaceBetween size={15} /></button>
-              <button type="button" title={t("Distribute vertical spacing")} aria-label={t("Distribute vertical spacing")} disabled={aligningGlyphs || selectedLayoutItems().length < 3} onClick={() => distributeSelection("vertical")}><AlignVerticalSpaceBetween size={15} /></button>
-              <span aria-hidden="true" />
-              <button type="button" title={t("Group selection")} aria-label={t("Group selection")} disabled={selectedLayoutItems().length < 2} onClick={linkSelectedLayers}><Group size={15} /></button>
-              <button type="button" title={t("Ungroup selection")} aria-label={t("Ungroup selection")} disabled={!selectionCanUnlink} onClick={unlinkSelectedLayers}><Ungroup size={15} /></button>
-            </div>
           ) : null}
           <div
             ref={previewStackRef}
@@ -10652,6 +10618,56 @@ export function WatchfaceEditor({
                 height="1"
               />
             </svg>
+            {canEditActiveMode && selectionToolbarBox && !dragVisualActive && selectedMovableIds.some((id) => !isPositionLocked(id)) ? (
+              <div
+                className={`wf-contextual-align-bar wf-on-face-toolbar${selectionToolbarBox.below ? " is-below" : ""}`}
+                role="toolbar"
+                aria-label={t("Align and distribute selection")}
+                style={{
+                  left: `${(selectionToolbarBox.x / previewWidth) * 100}%`,
+                  top: `${(selectionToolbarBox.y / previewHeight) * 100}%`
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                {selectedLayer && selectedMovableIds.length === 1 ? (
+                  <>
+                    <strong className="wf-on-face-toolbar-name">{t(layerDisplayLabel(selectedLayer))}</strong>
+                    <span aria-hidden="true" />
+                  </>
+                ) : null}
+                <button type="button" title={t("Align left")} aria-label={t("Align left")} disabled={aligningGlyphs} onClick={() => alignSelection("left")}><AlignHorizontalJustifyStart size={15} /></button>
+                <button type="button" title={t("Align horizontal centers")} aria-label={t("Align horizontal centers")} disabled={aligningGlyphs} onClick={() => alignSelection("center-x")}><AlignHorizontalJustifyCenter size={15} /></button>
+                <button type="button" title={t("Align right")} aria-label={t("Align right")} disabled={aligningGlyphs} onClick={() => alignSelection("right")}><AlignHorizontalJustifyEnd size={15} /></button>
+                <span aria-hidden="true" />
+                <button type="button" title={t("Align top")} aria-label={t("Align top")} disabled={aligningGlyphs} onClick={() => alignSelection("top")}><AlignVerticalJustifyStart size={15} /></button>
+                <button type="button" title={t("Align vertical centers")} aria-label={t("Align vertical centers")} disabled={aligningGlyphs} onClick={() => alignSelection("center-y")}><AlignVerticalJustifyCenter size={15} /></button>
+                <button type="button" title={t("Align bottom")} aria-label={t("Align bottom")} disabled={aligningGlyphs} onClick={() => alignSelection("bottom")}><AlignVerticalJustifyEnd size={15} /></button>
+                <button type="button" title={t("Align visible glyph baselines; center colons beside the tallest glyphs")} aria-label={t("Align glyph baselines")} disabled={aligningGlyphs || selectedLayoutItems().length < 2} onClick={() => void alignGlyphBaselines()}>{t("Baseline", undefined, "alignToolbar")}</button>
+                {heightMatch.icons.length > 0 ? <button type="button" title={t("Resize the selected Bluetooth and Do Not Disturb icons to the visible height of the other selected layers")} aria-label={t("Match icon height to the selected text")} disabled={aligningGlyphs || heightMatch.others.length === 0} onClick={() => void matchStatusIconHeights()}>{t("Match height")}</button> : null}
+                <span aria-hidden="true" />
+                <button type="button" title={t("Distribute horizontal spacing")} aria-label={t("Distribute horizontal spacing")} disabled={aligningGlyphs || selectedLayoutItems().length < 3} onClick={() => distributeSelection("horizontal")}><AlignHorizontalSpaceBetween size={15} /></button>
+                <button type="button" title={t("Distribute vertical spacing")} aria-label={t("Distribute vertical spacing")} disabled={aligningGlyphs || selectedLayoutItems().length < 3} onClick={() => distributeSelection("vertical")}><AlignVerticalSpaceBetween size={15} /></button>
+                <span aria-hidden="true" />
+                <button type="button" title={t("Group selection")} aria-label={t("Group selection")} disabled={selectedLayoutItems().length < 2} onClick={linkSelectedLayers}><Group size={15} /></button>
+                <button type="button" title={t("Ungroup selection")} aria-label={t("Ungroup selection")} disabled={!selectionCanUnlink} onClick={unlinkSelectedLayers}><Ungroup size={15} /></button>
+                {selectedLayer && selectedMovableIds.length === 1 ? (
+                  <>
+                    <span aria-hidden="true" />
+                    {renderLayerPositionLockButton(selectedLayer.id, selectedLayer.label)}
+                    {selectedLayer.canHide ? (
+                      <button
+                        type="button"
+                        title={t("Hide layer")}
+                        aria-label={t("Hide {{value1}}", { value1: t(selectedLayer.label) })}
+                        onClick={() => toggleLayerVisibility(selectedLayer)}
+                      >
+                        <EyeOff size={15} />
+                      </button>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
             {spriteTransform && selectedSpriteCanTransform && canEditActiveMode ? (
               <svg
                 className={`wf-sprite-transform${selectedSpriteCanTransform ? "" : " is-locked"}`}
@@ -10831,16 +10847,36 @@ export function WatchfaceEditor({
               </button>
             </div>
           ) : null}
-          <div className="wf-stage-status" role="status">
+          <div className="wf-stage-toolbar wf-stage-toolbar--floating wf-screens-strip" role="toolbar" aria-label={t("Preview controls")}>
+            <span className="wf-screens-label" aria-hidden="true">{t("Screens")}</span>
+            <div className="wf-screens-tiles" role="group" aria-label={t("Watch display preview")}>
+              <button
+                type="button"
+                className="wf-screen-tile"
+                aria-pressed={previewMode === "current"}
+                onClick={() => setPreviewMode("current")}
+              >
+                <span className="wf-screen-tile-icon" aria-hidden="true"><SunMedium size={16} /></span>
+                <span className="wf-screen-tile-copy"><strong>{t("Current")}</strong><small>{t("Wrist raised")}</small></span>
+              </button>
+              <button
+                type="button"
+                className="wf-screen-tile"
+                aria-pressed={previewMode === "aod"}
+                title={supportsAod
+                  ? t("Preview and edit always-on assets")
+                  : t("This MIP template uses the current face when always on")}
+                onClick={() => setPreviewMode("aod")}
+              >
+                <span className="wf-screen-tile-icon" aria-hidden="true"><MoonStar size={16} /></span>
+                <span className="wf-screen-tile-copy"><strong>{t("Always-on")}</strong><small>{supportsAod ? t("Own layout") : t("Same as Current")}</small></span>
+              </button>
+            </div>
+            <div className="wf-stage-status wf-screens-status" role="status">
             <span ref={snapStatusElementRef}>
               {selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer ? t(layerDisplayLabel(selectedLayer)) : t("No selection")}
             </span>
             {simpleMode ? null : <span>{watchCoordinateWidth} × {watchCoordinateHeight}{" "}{t("preview")}</span>}
-            <span>
-              {previewMode === "aod"
-                ? supportsAod ? t("Always-on display") : t("Always-on uses Current")
-                : t("Current display")}
-            </span>
             {missingFonts.length > 0 && fontNoticeDismissed ? (
               <span>
                 <button
@@ -10854,6 +10890,35 @@ export function WatchfaceEditor({
               </span>
             ) : null}
             {simpleMode ? null : <span>{starterArchive.fileName}</span>}
+            </div>
+            {/* Per-watch layout sizes are Advanced; Simple edits the size Studio opened. */}
+            {!simpleMode && previewDetails && previewDetails.resolutions.length > 1 ? (
+              <label className="wf-preview-resolution" title={t("Watch preview")}>
+                <Watch size={14} aria-hidden="true" />
+                <span className="sr-only">{t("Watch preview")}</span>
+                <select
+                  value={watchPreviewResolution?.directory ?? ""}
+                  onChange={(event) => setWatchPreviewDirectory(event.target.value)}
+                >
+                  {[...previewDetails.resolutions]
+                    .sort((left, right) => left.width - right.width)
+                    .map((resolution) => (
+                      <option key={resolution.directory} value={resolution.directory}>
+                        {resolution.width === 240 &&
+                        (targetWatchModel === "apex-4" || targetFirmwareType?.toUpperCase() === "COROS W541")
+                          ? t("APEX 4 42 mm · 240×240")
+                          : resolution.width === 260 &&
+                              (targetWatchModel === "apex-4" || targetFirmwareType?.toUpperCase() === "COROS W541")
+                            ? t("APEX 4 46 mm · 260×260")
+                            : resolution.width === 800
+                              ? t("Master · 800×800")
+                              : t("{{value1}}×{{value2}}", { value1: resolution.width, value2: resolution.height })}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            ) : null}
+            <WatchfaceSimulationPanel simulation={simulation} onChange={updateSimulation} design={design} />
           </div>
         </main>
 
@@ -10978,6 +11043,8 @@ export function WatchfaceEditor({
                 onTour={openTour}
                 onText={() => addElement("text")}
                 onShape={() => addElement("rect")}
+                faceColors={faceColors}
+                onRecolor={(from, to) => setDesign((prev) => recolorWatchfaceFace(prev, from, to))}
               />
             ) : (
             <div className="wf-properties-empty">

@@ -176,6 +176,7 @@
     "test:watchface-editor": "node --experimental-strip-types scripts/test-watchface-editor.mjs",
     "test:watchface-blank-start": "node --experimental-strip-types scripts/test-watchface-blank-start.mjs",
     "test:watchface-studio-tour": "node --experimental-strip-types scripts/test-watchface-studio-tour.mjs",
+    "test:watchface-studio-editor": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-watchface-studio-editor.mjs",
     "test:watchface-automation-pixels": "node --experimental-strip-types scripts/test-watchface-automation-pixels.mjs",
     "test:watchface-ai-image": "npm run build:electron && node scripts/test-watchface-ai-image.mjs && electron scripts/test-watchface-ai-image-electron.cjs",
     "test:watchface-codex-cli": "npm run build:electron && node scripts/test-watchface-codex-cli.mjs",

@@ -1,5 +1,8 @@
+import type { CSSProperties } from "react";
 import { t, useLanguage } from "../i18n/watchfaces";
 import { useWatchfaceStudioSimple } from "./watchfaceStudioMode";
+import { WatchfaceColorInput } from "./WatchfaceColorInput";
+import type { WatchfaceFaceColor } from "./watchfaceFaceColors";
 import {
   ChevronRight,
   Clock,
@@ -27,6 +30,9 @@ interface WatchfaceQuickStartProps {
   photoDisabled: boolean;
   /** Replays the Studio walkthrough. */
   onTour?: () => void;
+  /** Colors set on this face's parts; picking a new one recolors them all. */
+  faceColors?: WatchfaceFaceColor[];
+  onRecolor?: (from: string, to: string) => void;
 }
 
 const SHORTCUTS: Array<{ keys: string[]; action: string }> = [
@@ -49,7 +55,9 @@ export function WatchfaceQuickStart({
   onText,
   onShape,
   photoDisabled,
-  onTour
+  onTour,
+  faceColors = [],
+  onRecolor
 }: WatchfaceQuickStartProps) {
   useLanguage();
   const simple = useWatchfaceStudioSimple();
@@ -77,19 +85,19 @@ export function WatchfaceQuickStart({
 
   return (
     <section className="wf-welcome" aria-labelledby="wf-welcome-title">
-      <div className="wf-welcome-hero">
+      <div className="wf-welcome-hero wf-face-panel-head">
         <span className="wf-welcome-mark" aria-hidden="true">
-          <Watch size={22} strokeWidth={1.75} />
+          <Watch size={18} strokeWidth={1.75} />
         </span>
         {blank ? (
           <>
             <h2 id="wf-welcome-title">{t("Start from scratch")}</h2>
-            <p>{t("Add the time first, then the date, data and artwork from Add in the Layers panel.")}</p>
+            <p>{t("Add the time first, then the date, data and artwork from the Add column.")}</p>
           </>
         ) : (
           <>
-            <h2 id="wf-welcome-title">{t("Make this face yours")}</h2>
-            <p>{t("Start with a quick edit below, or click anything on the face to change it.")}</p>
+            <h2 id="wf-welcome-title">{t("This face")}</h2>
+            <p>{t("Changes here apply to the whole face. Click a part on the face to edit just that part.")}</p>
           </>
         )}
         {onTour ? (
@@ -98,6 +106,26 @@ export function WatchfaceQuickStart({
           </button>
         ) : null}
       </div>
+
+      {faceColors.length > 0 && onRecolor ? (
+        <div className="wf-welcome-section wf-face-colors">
+          <h3>{t("Face colors")}<span>{faceColors.length}</span></h3>
+          <div className="wf-face-color-swatches">
+            {faceColors.map(({ color, uses }, index) => (
+              <label
+                key={index}
+                className="wf-face-color"
+                style={{ "--wf-face-color": color } as CSSProperties}
+                title={uses === 1 ? t("{{value1}} · 1 part", { value1: color }) : t("{{value1}} · {{value2}} parts", { value1: color, value2: uses })}
+              >
+                <span className="sr-only">{uses === 1 ? t("Recolor the part using {{value1}}", { value1: color }) : t("Recolor the {{value2}} parts using {{value1}}", { value1: color, value2: uses })}</span>
+                <WatchfaceColorInput value={color} onValueChange={(next) => onRecolor(color, next)} />
+              </label>
+            ))}
+          </div>
+          <p className="wf-face-colors-hint">{t("Pick one to recolor every part that uses it.")}</p>
+        </div>
+      ) : null}
 
       <div className="wf-welcome-section">
         <h3>{t("Quick edits")}</h3>
@@ -117,8 +145,8 @@ export function WatchfaceQuickStart({
         </div>
       </div>
 
-      <div className="wf-welcome-section">
-        <h3>{t("Shortcuts")}</h3>
+      <details className="wf-welcome-section wf-welcome-shortcuts-disclosure">
+        <summary><h3>{t("Shortcuts")}</h3></summary>
         <dl className="wf-welcome-shortcuts">
           {SHORTCUTS.map(({ keys, action }) => (
             <div key={action}>
@@ -131,7 +159,7 @@ export function WatchfaceQuickStart({
             </div>
           ))}
         </dl>
-      </div>
+      </details>
 
       <p className="wf-welcome-footnote">
         <MousePointerClick size={13} aria-hidden="true" />
