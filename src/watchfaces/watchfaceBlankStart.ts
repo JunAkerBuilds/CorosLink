@@ -27,8 +27,8 @@ import {
 
 /**
  * Template images that never draw on their own: the archive thumbnail, and
- * the minus sign the watch adds only to negative values. A blank face keeps
- * them so a value added later still shows its sign.
+ * the minus sign the watch uses for negative and missing values. A blank
+ * face keeps them for metrics added later.
  */
 const KEPT_CONFIG_ASSET_IDS = new Set([
   "config:watchface_thmb_icon",

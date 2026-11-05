@@ -1313,6 +1313,7 @@ export const watchfacesGerman: Record<string, string> = {
   "Placed automatically between the hour and minute digits.": "Wird automatisch zwischen den Stunden- und Minutenziffern platziert.",
   "Shown automatically between split values in the selected data slot.": "Wird im gewählten Datenfeld automatisch zwischen den Teilwerten angezeigt.",
   "Archive thumbnail only; this image is not drawn on the watch face.": "Nur als Archivvorschaubild; dieses Bild erscheint nicht auf dem Zifferblatt.",
+  "The watch uses this glyph to display -- when Sleep Score or Stress is unavailable.": "Die Uhr nutzt diese Glyphe, um -- anzuzeigen, wenn Schlafbewertung oder Stress nicht verfügbar sind.",
   "Shown only when the watch renders a negative value.": "Wird nur angezeigt, wenn die Uhr einen negativen Wert darstellt.",
   "Shown when this data type is active in the selectable watch slot.": "Wird angezeigt, wenn dieser Datentyp im wählbaren Datenfeld der Uhr aktiv ist.",
   "Watch screen position": "Position auf dem Uhrendisplay",

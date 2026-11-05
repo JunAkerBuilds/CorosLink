@@ -2817,6 +2817,7 @@ export function applyCorosWatchfaceConfigOverrides(
     "time_minute_low_pos",
     "time_minute_low_font",
     "colon_icon",
+    "negative_sign_icon",
     // Weekday/month/day Studio adds to a template that lays out no date.
     // Such templates declare no date table in any language, so only the
     // English one is written (mirrorEnglishDateOverrides finds nothing).

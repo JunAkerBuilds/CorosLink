@@ -982,6 +982,8 @@ function faceAddOptionRank(id: string): number {
   return index < 0 ? FACE_ADD_OPTION_ORDER.length : index;
 }
 const PROJECT_THUMBNAIL_SIZE = 416;
+const NEGATIVE_SIGN_ASSET_ID = "config:negative_sign_icon";
+const NEGATIVE_SIGN_LAYER_ID = `configAsset:${NEGATIVE_SIGN_ASSET_ID}`;
 
 function parseBackgroundColor(colorValue: string | undefined): {
   hex: string;
@@ -8379,6 +8381,28 @@ export function WatchfaceEditor({
     selectQuickStartItem(layer.id);
   }
 
+  function addNegativeSign() {
+    const master = modeSourceDetails && pickPreviewResolution(modeSourceDetails);
+    if (!master) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(master.width * 14 / 800));
+    canvas.height = Math.max(1, Math.round(master.width * 6 / 800));
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.fillStyle = design.digitColor;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    const replacement = { dataUrl: canvas.toDataURL("image/png"), width: canvas.width, height: canvas.height };
+    setDesign((prev) => ({
+      ...prev,
+      configAssetOverrides: {
+        ...prev.configAssetOverrides,
+        [NEGATIVE_SIGN_ASSET_ID]: { enabled: true, replacement }
+      },
+      removedLayerIds: (prev.removedLayerIds ?? []).filter((id) => id !== NEGATIVE_SIGN_LAYER_ID)
+    }));
+    selectQuickStartItem(NEGATIVE_SIGN_LAYER_ID);
+  }
+
   /**
    * The blank-face quick start: brings back the template's hours, minutes and
    * colon in Current and, like analog hands, in Always-on as well. Digits the
@@ -9572,6 +9596,7 @@ export function WatchfaceEditor({
     key => layers.some(item => item.present && item.configAssetId === `config:${key}`), chosenStatusStates[group.id])));
   const listedLayers = layers.flatMap((layer) => {
     if (!layer.visible && removedLayerIds.has(layer.id)) return [];
+    if (layer.id === NEGATIVE_SIGN_LAYER_ID && !layer.present) return [];
     const group = layerStatusGroup(layer);
     if (!group) return [layer];
     if (!statusRowKeys.has(configAssetsById.get(layer.configAssetId!)!.configKey)) return [];
@@ -9583,6 +9608,9 @@ export function WatchfaceEditor({
   const faceAddOptions: WatchfaceAddFaceOption[] = [
     ...(canAddSeconds ? [{ id: "seconds", label: t("Seconds"), category: "Time" as const, added: Boolean(design.addSeconds), onAdd: addSeconds }] : []),
     { id: "analog", label: t("Analog hands"), category: "Time", added: analogHandsOnFace, onAdd: addAnalogHands },
+    ...(!layers.some((layer) => layer.id === NEGATIVE_SIGN_LAYER_ID && layer.present)
+      ? [{ id: NEGATIVE_SIGN_LAYER_ID, label: t("Negative sign"), category: "Device" as const, added: false, onAdd: addNegativeSign }]
+      : []),
     ...WATCHFACE_DATE_PARTS
       .filter((part) => addableDateParts.has(part.id))
       .map((part) => ({
@@ -12724,6 +12752,7 @@ export function WatchfaceEditor({
         case "watchface_thmb_icon":
           return t("Archive thumbnail only; this image is not drawn on the watch face.");
         case "negative_sign_icon":
+          return t("The watch uses this glyph to display -- when Sleep Score or Stress is unavailable.");
         case "control_negative_sign_icon":
           return t("Shown only when the watch renders a negative value.");
         default:

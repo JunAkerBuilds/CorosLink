@@ -674,9 +674,10 @@ assert.deepEqual(
     "config:bluetooth_on_icon",
     "config:no_disturb_on_icon",
     "config:no_disturb_off_icon",
+    "config:negative_sign_icon",
     "config:sleep_mode_icon"
   ],
-  "hidden config assets and addable standalone status states, airplane and sleep mode included, must remain in the layer panel"
+  "the editor retains hidden config assets and references for addable standalone icons"
 );
 assert.equal(
   listWatchfaceEditorConfigAssets(
