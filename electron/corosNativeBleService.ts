@@ -24,9 +24,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { CorosActivityScreenService } from "./corosActivityScreenService";
 import { decodeWatchfaceInventory, selectWatchfaceSlot, encodeWatchfaceFile, encodeWatchfaceBlockHeader, WATCHFACE_BLOCK_BYTES, WATCHFACE_MAX_BYTES } from "./corosBleWatchfaceProtocol";
 import type { CorosDirectWatchfaceInventory, CorosDirectWatchfacePreview, CorosDirectWatchfaceStatus, CorosDirectWatchfaceTarget } from "./corosBleWatchfaceTypes";
-import { decodeMusicInventoryPage, encodeMusicDeleteFile, encodeMusicDeleteHeader, requireMusicDeleteAcknowledgement } from "./corosBleMusicProtocol";
+import { decodeMusicInventoryPage, decodeNeteaseInventory, encodeMusicDeleteFile, encodeNeteaseDeleteFile, neteasePlaylistRecords, encodeMusicDeleteHeader, requireMusicDeleteAcknowledgement } from "./corosBleMusicProtocol";
+import { decodeWirelessAudioInventory, encodeWirelessAudioInventoryQuery, encodeWirelessAudioDelete } from "./corosWirelessAudioProtocol";
 import type { CorosBleMusicInventory, CorosBleMusicDeleteTarget, CorosBleMusicDeleteResult, CorosBleMusicTrack } from "./corosBleMusicTypes";
 import { CorosWifiMusicService } from "./corosWifiMusicService";
+import { decodeToolboxMenu, neteaseThirdPartySwitch, neteaseToolboxState, SETTING_THIRD_PARTY, SETTING_TOOLBOX, type NeteaseToolboxState } from "./corosWatchToolbox";
 import { encodePhonePairingCode, PHONE_PAIRING_DISPLAY_MS } from "./corosBlePhonePairing";
 import type { CorosPhonePairingCode } from "./corosNativeBleTypes";
 import { assertReadableSyncFile, PEDOMETER_OPCODE } from "./localSync/activityProtocol";
@@ -187,7 +189,7 @@ export class CorosNativeBleService {
       localSync: () => this.localSyncTask,
       push: () => this.pushTask,
       musicInventory: () => this.musicInventoryTask,
-      musicDelete: () => this.musicDeleteTask,
+      musicDelete: () => this.musicDeleteTask || this.musicDeleteBatchActive,
       route: () => this.routeTask,
       watchface: () => this.watchfaceTask,
       watchfaceInventory: () => this.watchfaceInventoryTask,
@@ -200,6 +202,7 @@ export class CorosNativeBleService {
     return (Object.keys(running) as LinkTask[]).find(task => !except.includes(task) && Boolean(running[task]()));
   }
   private musicInventory?: { inventory: CorosBleMusicInventory; session: string; expires: number };
+  private musicDeleteBatchActive = false;
   private watchfaceInventory?: { id: string; ids: number[]; device: string; expires: number };
   private watchfaceCancelled = false;
   /**
@@ -1032,13 +1035,13 @@ export class CorosNativeBleService {
 
   wifiMusicStatus(): CorosWifiMusicStatus { return this.wifiMusic.status(); }
 
-  sendMusicOverWifi(pickFiles: () => Promise<string[] | null>): Promise<CorosWifiMusicStatus> {
+  sendMusicOverWifi(pickFiles: () => Promise<string[] | null>, options?: import("./corosWifiMusicTypes").CorosWifiMusicOptions): Promise<CorosWifiMusicStatus> {
     this.requireWifiMusicIdle();
     this.wifiMusicTask = (async () => {
       await this.polling; await this.mapPolling;
       this.wifiMusic.choosing();
       const files = await pickFiles();
-      return files?.length ? this.wifiMusic.send(files) : this.wifiMusic.selectionCancelled();
+      return files?.length ? this.wifiMusic.send(files, options) : this.wifiMusic.selectionCancelled();
     })().catch(error => { if (!this.wifiMusic.hasPendingRestore()) this.wifiMusic.selectionCancelled(); throw error; })
       .finally(() => { this.wifiMusicTask = undefined; });
     return this.wifiMusicTask;
@@ -1064,6 +1067,43 @@ export class CorosNativeBleService {
     this.wifiMusicTask = (async () => { await this.polling; await this.mapPolling; return this.wifiMusic.restore(); })()
       .finally(() => { this.wifiMusicTask = undefined; });
     return this.wifiMusicTask;
+  }
+
+  private async readToolbox() {
+    const value = decodeSettings(await this.controlCommand(SETTINGS_GET_OPCODE, encodeSettingsRequest([SETTING_TOOLBOX]))).get(SETTING_TOOLBOX);
+    if (!value) throw new Error("This watch doesn't report its Toolbox.");
+    return decodeToolboxMenu(value);
+  }
+
+  /** Whether NetEase is in the watch's Toolbox. Read-only. */
+  async neteaseToolbox(): Promise<NeteaseToolboxState> {
+    this.requireWifiMusicIdle();
+    await this.polling; await this.mapPolling;
+    return neteaseToolboxState(await this.readToolbox());
+  }
+
+  /** Unlocks NetEase with the third-party switch; the firmware then adds it to the Toolbox. */
+  async showNeteaseInToolbox(): Promise<NeteaseToolboxState> {
+    this.requireWifiMusicIdle();
+    await this.polling; await this.mapPolling;
+    const menu = await this.readToolbox();
+    if (neteaseToolboxState(menu) !== "missing") return neteaseToolboxState(menu);
+    requireWatchAcknowledgement(await this.controlCommand(SETTINGS_SET_OPCODE,
+      encodeSettings([[SETTING_THIRD_PARTY, Buffer.from([neteaseThirdPartySwitch(menu)])]])), "NetEase Toolbox setting");
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    return neteaseToolboxState(await this.readToolbox());
+  }
+
+  /** NetEase playlists CorosLink created on the connected watch. Local data only; nothing is sent. */
+  neteasePlaylists(): import("./corosWifiMusicTypes").CorosNeteasePlaylistLabel[] {
+    if (!this.state.connected) return [];
+    return this.wifiMusic.neteasePlaylists();
+  }
+
+  /** Name a NetEase playlist on the connected watch. Local data only; nothing is sent. */
+  renameNeteasePlaylist(id: unknown, name: unknown): import("./corosWifiMusicTypes").CorosNeteasePlaylistLabel[] {
+    if (!this.state.connected) throw new Error("Connect your watch to name its playlists.");
+    return this.wifiMusic.renameNeteasePlaylist(id, name);
   }
 
   cancelWifiMusicSync(): void { this.wifiMusic.cancel(); }
@@ -1098,7 +1138,33 @@ export class CorosNativeBleService {
           ids.add(key); tracks.push(row);
         }
         if (rows.length < 20) {
-          const inventory = { id: randomUUID(), deviceName: this.state.deviceName, tracks, checkedAt: Date.now() };
+          const inventory: CorosBleMusicInventory = { id: randomUUID(), deviceName: this.state.deviceName, tracks, checkedAt: Date.now() };
+          try {
+            const payload = await this.controlCommand(0xb6, encodeWirelessAudioInventoryQuery());
+            inventory.wirelessTracks = this.wifiMusic.labelWirelessAudio(decodeWirelessAudioInventory(payload));
+          } catch (error) {
+            // Preserve a valid local MP3 list, but never present an unread Wi-Fi
+            // library as an empty one. A changed/disconnected session still fails below.
+            inventory.wirelessError = error instanceof Error ? error.message : "Could not read the watch's podcast inventory.";
+          }
+          if (inventory.wirelessTracks) {
+            // NetEase songs live in storage category 3, listed by playlist with IDs only.
+            try {
+              const response = await this.send("musicInventoryPage", { page: -1, category: 3 });
+              if (typeof response.payload !== "string") throw new Error("The watch did not return its NetEase library.");
+              const listed = new Set(inventory.wirelessTracks.filter(track => track.destination === "netease").map(track => track.id));
+              const names = new Map(this.wifiMusic.neteasePlaylists().map(row => [row.id, row.name]));
+              const songs = decodeNeteaseInventory(Buffer.from(response.payload, "base64")).flatMap(list => list.songIds
+                .filter(id => !listed.has(id) && (listed.add(id), true))
+                .map(id => ({ id, destination: "netease" as const, sizeBytes: 0, playlistId: list.id, ...(names.has(list.id) ? { playlistName: names.get(list.id) } : {}) })));
+              inventory.wirelessTracks = [...inventory.wirelessTracks, ...this.wifiMusic.labelWirelessAudio(songs)];
+            } catch (error) {
+              inventory.neteaseError = error instanceof Error ? error.message : "Could not read the watch's NetEase library.";
+            }
+          }
+          this.requireMusicSession();
+          if (session !== this.musicSession()) throw new Error("The connected watch changed. Read its music again.");
+          inventory.checkedAt = Date.now();
           this.musicInventory = { inventory: { ...inventory, tracks: tracks.map(track => ({ ...track })) }, session, expires: inventory.checkedAt + 15 * 60_000 };
           return inventory;
         }
@@ -1111,9 +1177,11 @@ export class CorosNativeBleService {
     }
   }
 
-  deleteMusic(target: CorosBleMusicDeleteTarget, confirm: (track: CorosBleMusicTrack) => Promise<boolean>): Promise<CorosBleMusicDeleteResult> {
+  deleteMusic(target: CorosBleMusicDeleteTarget, confirm: (track: { name: string; message?: string }) => Promise<boolean>, batch = false): Promise<CorosBleMusicDeleteResult> {
+    if (target && "destination" in target && target.destination === "netease") return this.deleteNetease(target, confirm, batch);
+    if (target && "destination" in target) return this.deletePodcast(target, confirm, batch);
     if (this.wifiMusicBusy) return Promise.reject(new Error("Wait for Wi-Fi audio sync and settings restoration before deleting music."));
-    if (this.busyWith()) {
+    if (this.busyWith(...(batch ? ["musicDelete" as const] : []))) {
       return Promise.reject(new Error("Wait for the current Bluetooth operation to finish before deleting music."));
     }
     const cached = this.musicInventory;
@@ -1164,6 +1232,168 @@ export class CorosNativeBleService {
       }
     })().finally(() => { this.musicDeleteTask = undefined; });
     return this.musicDeleteTask;
+  }
+
+  private deleteNetease(target: Extract<CorosBleMusicDeleteTarget, { destination: "netease" }>, confirm: (track: { name: string; message?: string }) => Promise<boolean>, batch = false): Promise<CorosBleMusicDeleteResult> {
+    if (this.wifiMusicBusy || this.busyWith(...(batch ? ["musicDelete" as const] : []))) return Promise.reject(new Error("Wait for the current Bluetooth operation to finish before deleting audio."));
+    const cached = this.musicInventory;
+    const songIds = Array.isArray(target?.songIds) ? [...new Set(target.songIds.filter(id => typeof id === "string"))] : [];
+    const listed = cached?.inventory.wirelessTracks?.filter(row => row.destination === "netease" && row.playlistId === target?.playlistId) ?? [];
+    const selected = songIds.map(id => listed.find(row => row.id === id));
+    if (!cached || cached.inventory.id !== target?.inventoryId || cached.expires < Date.now() || cached.session !== this.musicSession() ||
+        !songIds.length || songIds.length !== target.songIds.length || selected.some(row => !row)) {
+      return Promise.reject(new Error("Read the watch's music again before deleting NetEase songs."));
+    }
+    const playlistName = listed[0]?.playlistName ?? `playlist ${target.playlistId}`;
+    const name = songIds.length === 1 ? selected[0]!.name ?? songIds[0]! : `${songIds.length} songs`;
+    const message = songIds.length === listed.length
+      ? `Delete the NetEase playlist “${playlistName}” and its ${listed.length} song${listed.length === 1 ? "" : "s"} from the watch?`
+      : songIds.length === 1 ? `Remove “${name}” from the NetEase playlist “${playlistName}”?` : `Remove ${name} from the NetEase playlist “${playlistName}”?`;
+    this.musicDeleteTask = (async () => {
+      let started = false, transportFinished = false;
+      const check = () => {
+        this.requireMusicSession();
+        if (cached.session !== this.musicSession()) throw new Error("The connected watch changed. Read its music again.");
+      };
+      try {
+        await this.polling; await this.mapPolling; check();
+        let confirmed: boolean;
+        this.musicConfirming = true;
+        try { confirmed = await confirm({ name, message }); } finally { this.musicConfirming = false; }
+        await this.polling;
+        if (!confirmed) return { deleted: false, inventory: cached.inventory };
+        check();
+        if (cached.expires < Date.now()) throw new Error("The music list expired. Refresh it and choose the songs again.");
+        // Delete from the record the watch holds now, as the COROS app does.
+        const response = await this.send("musicInventoryPage", { page: -1, category: 3 }); check();
+        if (typeof response.payload !== "string") throw new Error("The watch did not return its NetEase library.");
+        const current = Buffer.from(response.payload, "base64");
+        const playlist = decodeNeteaseInventory(current).find(row => row.id === target.playlistId);
+        const record = neteasePlaylistRecords(current).get(target.playlistId);
+        if (!playlist || !record || songIds.some(id => !playlist.songIds.includes(id))) throw new Error("This NetEase playlist changed on the watch. Refresh its music and choose again.");
+        const file = encodeNeteaseDeleteFile(record, songIds);
+        this.musicInventory = undefined;
+        started = true;
+        const sent = await this.send("musicDelete", { header: encodeMusicDeleteHeader(file, 3).toString("base64"), block: file.toString("base64") });
+        check();
+        if (typeof sent.payload !== "string") throw new Error("The watch did not confirm NetEase deletion.");
+        const reply = Buffer.from(sent.payload, "base64");
+        transportFinished = reply.length === 4 && reply[0] === 1 && reply[1] === 1 && reply[2] === 3;
+        requireMusicDeleteAcknowledgement(reply, 3);
+        for (let attempt = 0; attempt < 6; attempt++) {
+          if (attempt) await new Promise(resolve => setTimeout(resolve, 500));
+          check();
+          const after = await this.readMusicInventory(); check();
+          if (after.neteaseError) throw new Error("Could not verify NetEase deletion. Refresh the watch library.");
+          if (!after.wirelessTracks?.some(row => row.destination === "netease" && row.playlistId === target.playlistId && songIds.includes(row.id))) return { deleted: true, inventory: after };
+        }
+        throw new Error("The watch still lists these NetEase songs. Refresh its library before trying again.");
+      } catch (error) {
+        this.musicInventory = undefined;
+        if (started && !transportFinished && this.state.connected && cached.session === this.musicSession()) await this.closeLink().catch(() => undefined);
+        throw error;
+      }
+    })().finally(() => { this.musicDeleteTask = undefined; });
+    return this.musicDeleteTask;
+  }
+
+  private deletePodcast(target: Extract<CorosBleMusicDeleteTarget, { destination: "podcasts" }>, confirm: (track: { name: string }) => Promise<boolean>, batch = false): Promise<CorosBleMusicDeleteResult> {
+    if (this.wifiMusicBusy || this.busyWith(...(batch ? ["musicDelete" as const] : []))) return Promise.reject(new Error("Wait for the current Bluetooth operation to finish before deleting audio."));
+    const cached = this.musicInventory;
+    const selected = cached?.inventory.wirelessTracks?.find(row => row.destination === "podcasts" && row.id === target.id);
+    if (target.destination !== "podcasts" || !cached || cached.inventory.id !== target.inventoryId || cached.expires < Date.now() || cached.session !== this.musicSession() || !selected) {
+      return Promise.reject(new Error("Read the watch's music again before deleting a track."));
+    }
+    this.musicDeleteTask = (async () => {
+      const check = () => {
+        this.requireMusicSession();
+        if (cached.session !== this.musicSession()) throw new Error("The connected watch changed. Read its music again.");
+      };
+      try {
+        await this.polling; await this.mapPolling; check();
+        let confirmed: boolean;
+        this.musicConfirming = true;
+        try { confirmed = await confirm({ name: selected.name ?? selected.id }); }
+        finally { this.musicConfirming = false; }
+        await this.polling;
+        if (!confirmed) return { deleted: false, inventory: cached.inventory };
+        check();
+        if (cached.expires < Date.now()) throw new Error("The music list expired. Refresh it and choose the track again.");
+        const before = await this.readMusicInventory(); check();
+        if (!before.wirelessTracks?.some(row => row.destination === "podcasts" && row.id === selected.id && row.sizeBytes === selected.sizeBytes)) {
+          throw new Error("This podcast changed on the watch. Refresh its music and choose it again.");
+        }
+        this.musicInventory = undefined;
+        const reply = await this.controlCommand(0xb6, encodeWirelessAudioDelete(selected)); check();
+        if (reply.length !== 1 || reply[0] !== 1) throw new Error("The watch did not accept podcast deletion. Refresh and try again.");
+        // Firmware queues storage deletion, so wait for a fresh inventory to confirm it.
+        for (let attempt = 0; attempt < 10; attempt++) {
+          if (attempt) await new Promise(resolve => setTimeout(resolve, 500));
+          check();
+          const after = await this.readMusicInventory(); check();
+          if (!after.wirelessTracks) throw new Error("Could not verify podcast deletion. Refresh the watch library.");
+          if (!after.wirelessTracks.some(row => row.destination === "podcasts" && row.id === selected.id)) return { deleted: true, inventory: after };
+        }
+        throw new Error("The watch still lists this podcast. Refresh its library before trying again.");
+      } catch (error) { this.musicInventory = undefined; throw error; }
+    })().finally(() => { this.musicDeleteTask = undefined; });
+    return this.musicDeleteTask;
+  }
+
+  async deleteAllMusic(inventoryId: string, confirm: (count: number) => Promise<boolean>): Promise<import("./corosBleMusicTypes").CorosBleMusicDeleteAllResult> {
+    if (this.wifiMusicBusy || this.busyWith()) throw new Error("Wait for the current Bluetooth operation to finish before deleting audio.");
+    const cached = this.musicInventory;
+    if (!cached || cached.inventory.id !== inventoryId || cached.expires < Date.now() || cached.session !== this.musicSession()) throw new Error("Read the watch's music again before deleting tracks.");
+    if (!cached.inventory.wirelessTracks || cached.inventory.wirelessError) throw new Error("Read the complete watch library before deleting all tracks.");
+    const initial = cached.inventory;
+    if (initial.neteaseError) throw new Error("Read the complete watch library before deleting all tracks.");
+    const playlists = [...new Set(cached.inventory.wirelessTracks.filter(track => track.destination === "netease" && track.playlistId).map(track => track.playlistId!))];
+    const targets = [
+      ...initial.tracks.map(track => ({ kind: "music" as const, track })),
+      ...cached.inventory.wirelessTracks.filter(track => track.destination === "podcasts").map(track => ({ kind: "podcast" as const, track })),
+      ...playlists.map(playlistId => ({ kind: "netease" as const, playlistId })),
+    ];
+    const total = targets.reduce((sum, item) => sum + (item.kind === "netease"
+      ? cached.inventory.wirelessTracks!.filter(track => track.destination === "netease" && track.playlistId === item.playlistId).length : 1), 0);
+    if (!targets.length) return { deletedCount: 0, inventory: initial };
+    this.musicDeleteBatchActive = true;
+    let deletedCount = 0;
+    let current = initial;
+    try {
+      await this.polling; await this.mapPolling; this.requireMusicSession();
+      this.musicConfirming = true;
+      let confirmed: boolean;
+      try { confirmed = await confirm(total); } finally { this.musicConfirming = false; }
+      if (!confirmed) return { deletedCount, inventory: current };
+      if (cached.session !== this.musicSession() || cached.expires < Date.now()) throw new Error("The watch or library changed. Read it again before deleting tracks.");
+      for (const item of targets) {
+        if (item.kind === "netease") {
+          // One request per playlist, listing every song still in it; the watch then drops the playlist.
+          const songIds = current.wirelessTracks?.filter(track => track.destination === "netease" && track.playlistId === item.playlistId).map(track => track.id) ?? [];
+          if (!songIds.length) continue;
+          const result = await this.deleteMusic({ inventoryId: current.id, destination: "netease", playlistId: item.playlistId, songIds }, async () => true, true);
+          current = result.inventory;
+          if (!result.deleted) throw new Error("The watch did not confirm deletion.");
+          deletedCount += songIds.length;
+          continue;
+        }
+        const match = item.kind === "music"
+          ? current.tracks.find(track => track.watchId === item.track.watchId && track.watchPath === item.track.watchPath && track.sizeBytes === item.track.sizeBytes)
+          : current.wirelessTracks?.find(track => track.destination === "podcasts" && track.id === item.track.id && track.sizeBytes === item.track.sizeBytes);
+        if (!match) throw new Error("The watch library changed. Refresh it before trying again.");
+        const target: CorosBleMusicDeleteTarget = item.kind === "music"
+          ? { inventoryId: current.id, watchId: item.track.watchId, watchPath: item.track.watchPath }
+          : { inventoryId: current.id, destination: "podcasts", id: item.track.id };
+        const result = await this.deleteMusic(target, async () => true, true);
+        current = result.inventory;
+        if (!result.deleted) throw new Error("The watch did not confirm deletion.");
+        deletedCount++;
+      }
+      return { deletedCount, inventory: current };
+    } catch (error) {
+      this.musicInventory = undefined;
+      return { deletedCount, error: error instanceof Error ? error.message : "Could not finish deleting watch audio." };
+    } finally { this.musicDeleteBatchActive = false; }
   }
 
   async sendNotification(input: CorosNotificationInput): Promise<{ sent: true; fragments: number }> {

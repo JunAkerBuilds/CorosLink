@@ -16,6 +16,8 @@ import {
 import {
   addDownloads,
   isCombinedDownloadAtPath,
+  listDownloads,
+  LOCAL_FILE_URL,
   replaceDownload
 } from "./database";
 import {
@@ -37,7 +39,8 @@ import type {
   CombinedDownloadResult,
   DownloadAudioResult,
   DownloadProgressUpdate,
-  DownloadQueueItem
+  DownloadQueueItem,
+  LocalTrack
 } from "./types";
 import {
   isPlaylistDownloadUrl,
@@ -72,6 +75,17 @@ interface DownloadRuntimeOptions {
 
 const runningProcesses = new Map<string, ChildProcess>();
 const activeCombinedDownloadCaches = new Set<string>();
+/** Downloads writing MP3s into the folder before registering them. */
+let activeDownloadWriters = 0;
+
+async function whileWritingDownloads<T>(work: () => Promise<T>): Promise<T> {
+  activeDownloadWriters += 1;
+  try {
+    return await work();
+  } finally {
+    activeDownloadWriters -= 1;
+  }
+}
 
 export function cancelDownloadProcess(jobId: string): boolean {
   const child = runningProcesses.get(jobId);
@@ -87,6 +101,65 @@ export function getDownloadDirectory(): string {
   const directory = path.join(app.getPath("userData"), "downloads");
   fs.mkdirSync(directory, { recursive: true });
   return directory;
+}
+
+/**
+ * Lists MP3s copied into the download folder from outside the app. Skipped
+ * while a download runs, since yt-dlp and ffmpeg write there first.
+ */
+export function adoptDroppedDownloads(): void {
+  if (activeDownloadWriters > 0) {
+    return;
+  }
+
+  const known = new Set(listDownloads().map((track) => track.filePath));
+  const dropped = listMp3Files(getDownloadDirectory()).filter(
+    (filePath) => !known.has(filePath)
+  );
+  if (dropped.length > 0) {
+    addDownloads(dropped, LOCAL_FILE_URL);
+  }
+}
+
+/** Copies the user's own MP3s into the download folder and lists them. */
+export async function importAudioFiles(filePaths: string[]): Promise<LocalTrack[]> {
+  const directory = getDownloadDirectory();
+  const imported: string[] = [];
+
+  for (const filePath of filePaths) {
+    if (path.extname(filePath).toLowerCase() !== ".mp3") {
+      continue;
+    }
+
+    const source = path.resolve(filePath);
+    const stats = await fs.promises.stat(source);
+    if (!stats.isFile()) {
+      continue;
+    }
+    if (path.dirname(source) === directory) {
+      imported.push(source);
+      continue;
+    }
+
+    const requestedBaseName = sanitizeFileBaseName(
+      path.basename(source, path.extname(source))
+    );
+    const samePath = path.join(directory, `${requestedBaseName}.mp3`);
+    // Importing the same file again reuses the copy instead of adding "Name (1)".
+    if (fs.existsSync(samePath) && fs.statSync(samePath).size === stats.size) {
+      imported.push(samePath);
+      continue;
+    }
+
+    const target = path.join(
+      directory,
+      `${nextAvailableBaseName(directory, requestedBaseName)}.mp3`
+    );
+    await fs.promises.copyFile(source, target, fs.constants.COPYFILE_EXCL);
+    imported.push(target);
+  }
+
+  return addDownloads(imported, LOCAL_FILE_URL);
 }
 
 export async function getBinaryStatus(): Promise<BinaryStatus> {
@@ -199,7 +272,19 @@ interface ResolvedCombinedItem {
  * other download). Individual track failures are skipped and reported as
  * warnings rather than aborting the whole combine.
  */
-export async function downloadCombinedTrack(
+export function downloadCombinedTrack(
+  id: string,
+  name: string,
+  items: DownloadQueueItem[],
+  onProgress?: (update: CombinedDownloadProgress) => void,
+  runtime?: DownloadRuntimeOptions
+): Promise<CombinedDownloadResult> {
+  return whileWritingDownloads(() =>
+    combineTracks(id, name, items, onProgress, runtime)
+  );
+}
+
+async function combineTracks(
   id: string,
   name: string,
   items: DownloadQueueItem[],
@@ -594,15 +679,28 @@ async function mergeMp3Files(
   }
 }
 
-async function runAudioDownload(
+type AudioDownloadOptions = {
+  allowPlaylist: boolean;
+  onProgress?: (update: DownloadProgressUpdate) => void;
+  runtime?: DownloadRuntimeOptions;
+};
+
+function runAudioDownload(
   input: string,
   outputTemplate: string,
   sourceUrl: string,
-  options: {
-    allowPlaylist: boolean;
-    onProgress?: (update: DownloadProgressUpdate) => void;
-    runtime?: DownloadRuntimeOptions;
-  }
+  options: AudioDownloadOptions
+): Promise<DownloadAudioResult> {
+  return whileWritingDownloads(() =>
+    runAudioDownloadNow(input, outputTemplate, sourceUrl, options)
+  );
+}
+
+async function runAudioDownloadNow(
+  input: string,
+  outputTemplate: string,
+  sourceUrl: string,
+  options: AudioDownloadOptions
 ): Promise<DownloadAudioResult> {
   if (options.runtime?.isCancelled?.()) {
     throw new DownloadCancelledError();

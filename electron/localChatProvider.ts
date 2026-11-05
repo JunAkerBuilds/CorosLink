@@ -77,6 +77,8 @@ export interface OpenAiCompatibleChatTransport {
   headers?: Record<string, string>;
   /** Local runtimes can retry without tools; cloud coaching providers cannot. */
   allowToolsFallback: boolean;
+  /** Provider-specific fields added to every request body. */
+  requestExtras?: Record<string, unknown>;
 }
 
 export type StreamOpenAiCompatibleChatOptions = Omit<
@@ -631,6 +633,7 @@ async function openLocalChatStream(
   signal: AbortSignal
 ): Promise<{ response: Response } | { toolsUnsupported: true }> {
   const request: Record<string, unknown> = {
+    ...transport.requestExtras,
     model,
     messages,
     stream: true

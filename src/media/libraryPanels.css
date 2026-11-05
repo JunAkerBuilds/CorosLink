@@ -5,3 +5,31 @@
   justify-content: center;
   grid-column: 1 / -1;
 }
+
+.library-panel-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.library-panel--local.is-drop-target {
+  outline: 2px dashed var(--success-border);
+  outline-offset: -2px;
+}
+
+.library-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--success-bg) 85%, transparent);
+  color: var(--success-text);
+  font-weight: 600;
+  pointer-events: none;
+}

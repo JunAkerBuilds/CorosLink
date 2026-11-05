@@ -57,18 +57,18 @@ function ActivitySummary({ activities }: { activities: TrainingHubActivity[] }) 
   const totals = useMemo(() => activityTotals(activities), [activities, getLocale()]);
   const timeline = useMemo(() => activityTimeline(activities), [activities, getLocale()]);
   const metrics = [
-    { key: "count", label: t("Total Activities"), value: formatNumber(totals.count), icon: PersonSimpleRun, color: "#52dfab", bars: true, note: "In this selection" },
-    { key: "distance", label: t("Total Distance"), value: totals.distance === undefined ? "—" : formatDistanceMeters(totals.distance, unitSystem), icon: MapPin, color: "#65dcec", bars: false, note: "Distance covered" },
-    { key: "duration", label: t("Total Time"), value: totals.duration === undefined ? "—" : formatDurationSeconds(totals.duration), icon: Timer, color: "#c995f5", bars: true, note: "Time in motion" },
-    { key: "pace", label: t("Avg Pace"), value: formatPaceSecondsPerKm(totals.pace, unitSystem), icon: Gauge, color: "#58ddd4", bars: false, note: "Running & walking" },
-    { key: "calories", label: t("Calories"), value: totals.calories === undefined ? "—" : `${formatNumber(Math.round(totals.calories))} kcal`, icon: Flame, color: "#f7aa54", bars: true, note: "Energy burned" }
+    { key: "count", label: t("Total Activities"), value: formatNumber(totals.count), icon: PersonSimpleRun, color: "#52dfab", note: "In this selection" },
+    { key: "distance", label: t("Total Distance"), value: totals.distance === undefined ? "—" : formatDistanceMeters(totals.distance, unitSystem), icon: MapPin, color: "#65dcec", note: "Distance covered" },
+    { key: "duration", label: t("Total Time"), value: totals.duration === undefined ? "—" : formatDurationSeconds(totals.duration), icon: Timer, color: "#c995f5", note: "Time in motion" },
+    { key: "pace", label: t("Avg Pace"), value: formatPaceSecondsPerKm(totals.pace, unitSystem), icon: Gauge, color: "#58ddd4", note: "Running & walking" },
+    { key: "calories", label: t("Calories"), value: totals.calories === undefined ? "—" : `${formatNumber(Math.round(totals.calories))} kcal`, icon: Flame, color: "#f7aa54", note: "Energy burned" }
   ] as const;
   return <div className="activities-summary" aria-label={t("Activity totals")}>
-    {metrics.map(({ key, label, value, icon: Icon, color, bars, note }) =>
+    {metrics.map(({ key, label, value, icon: Icon, color, note }) =>
       <div className="activities-stat" key={key} style={{ "--stat-color": color } as CSSProperties}>
         <span className="activities-stat-icon"><Icon size={23} aria-hidden="true" /></span>
         <div className="activities-stat-copy"><span>{t(label)}</span><strong>{value}</strong><small>{t(note)}</small></div>
-        <MetricSpark values={timeline.map(bucket => bucket[key])} bars={bars} />
+        <MetricSpark values={timeline.map(bucket => bucket[key])} bars />
       </div>)}
   </div>;
 }
@@ -108,7 +108,7 @@ function ActivityCard({ activity, sportTypes, busy, sampleMode, onLoadDetail, on
   const indoor = [101, 201, 300, 400, 402, 701, 800, 801].includes(activity.sportType);
   return <article className={`activity-card activity-sport-${category}${isMorphOrigin ? " is-morph-origin" : ""}`}>
     <header className="activity-card-heading">
-      <span className="activity-card-sport-icon"><Icon size={29} aria-hidden="true" /></span>
+      <span className="activity-card-sport-icon"><Icon size={22} aria-hidden="true" /></span>
       <div className="activity-card-title"><h3><button type="button" onClick={() => onLoadDetail(activity)} title={name}>{name}</button></h3>
         <time dateTime={activityTimestamp(activity.startTime) ? new Date(activityTimestamp(activity.startTime)).toISOString() : undefined}>{formatTrainingTimestamp(activity.startTime)}</time>
         <span className="activity-card-label"><ActivityLabelChips activityId={activity.activityId} sportType={activity.sportType} /></span></div>
@@ -124,9 +124,9 @@ function ActivityCard({ activity, sportTypes, busy, sampleMode, onLoadDetail, on
         <span><strong>{paceValue}</strong><small>{category === "ride" ? t("Avg Speed") : t("Avg Pace")}</small></span>
       </span>
       <span className="activity-card-secondary">
-        <span><Heart size={18} className="activity-metric-heart" /><span><strong>{activity.avgHr === undefined ? "—" : t("{{p0}} bpm", { p0: String(Math.round(activity.avgHr)) })}</strong><small>{t("Avg HR")}</small></span></span>
-        <span><Flame size={18} className="activity-metric-calories" /><span><strong>{activity.calories === undefined ? "—" : t("{{p0}} kcal", { p0: String(Math.round(activity.calories)) })}</strong><small>{t("Calories")}</small></span></span>
-        <span><Mountain size={18} className="activity-metric-elevation" /><span><strong>{formatElevationMeters(activity.elevationGain, unitSystem)}</strong><small>{t("Elev Gain")}</small></span></span>
+        <span title={t("Avg HR")}><Heart size={14} className="activity-metric-heart" aria-hidden="true" /><strong>{activity.avgHr === undefined ? "—" : t("{{p0}} bpm", { p0: String(Math.round(activity.avgHr)) })}</strong></span>
+        <span title={t("Calories")}><Flame size={14} className="activity-metric-calories" aria-hidden="true" /><strong>{activity.calories === undefined ? "—" : t("{{p0}} kcal", { p0: String(Math.round(activity.calories)) })}</strong></span>
+        <span title={t("Elev Gain")}><Mountain size={14} className="activity-metric-elevation" aria-hidden="true" /><strong>{formatElevationMeters(activity.elevationGain, unitSystem)}</strong></span>
       </span>
     </button>
   </article>;
@@ -183,6 +183,16 @@ export function TrainingActivities({ activities, sportTypes, selectedActivity, a
   const loader = useMemo(() => createActivityPreviewLoader(loadPreview), [loadPreview, getLocale()]);
   const names = useMemo(() => new Map(sportTypes.map(sport => [sport.sportType, sport.sportName])), [sportTypes, getLocale()]);
   const filtered = useMemo(() => selectActivities(activities, category, query, sort, names), [activities, category, query, sort, names, getLocale()]);
+  // How many activities each sport button holds, under the current search.
+  const sportCounts = useMemo(() => {
+    const matching = selectActivities(activities, "all", query, sort, names);
+    const counts = new Map<string, number>([["all", matching.length]]);
+    for (const activity of matching) {
+      const key = activityCategory(activity.sportType);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [activities, query, sort, names]);
   useEffect(() => { setLimit(24); }, [category, query, sort]);
   // The list keeps its inline detail; elsewhere a host page, when there is one, replaces the dialog.
   function openActivity(activity: TrainingHubActivity) {
@@ -205,8 +215,13 @@ export function TrainingActivities({ activities, sportTypes, selectedActivity, a
       <label className="activities-search"><Search size={17} aria-hidden="true" /><input type="search" aria-label={t("Search activities")}
         placeholder={t("Search activities…")} value={query} onChange={event => setQuery(event.target.value)} /></label>
       <div className="activities-sport-filters" role="group" aria-label={t("Filter by sport")}>
-        {sports.map(({ id, label, icon: Icon }) => <button key={id} type="button" aria-pressed={category === id}
-          className={`activity-sport-${id}`} onClick={() => setCategory(id)}><Icon size={17} aria-hidden="true" />{t(label)}</button>)}
+        {sports.map(({ id, label, icon: Icon }) => {
+          const count = sportCounts.get(id) ?? 0;
+          return <button key={id} type="button" aria-pressed={category === id}
+            className={`activity-sport-${id}${count === 0 ? " is-empty" : ""}`} onClick={() => setCategory(id)}>
+            <Icon size={17} aria-hidden="true" />{t(label)}
+            <span className="activities-sport-count"><span className="sr-only">, </span>{formatNumber(count)}</span></button>;
+        })}
       </div>
       <div className="activities-display-controls"><select aria-label={t("Sort activities")} value={sort} onChange={event => setSort(event.target.value as ActivitySort)}>
         <option value="newest">{t("Newest first")}</option><option value="oldest">{t("Oldest first")}</option><option value="distance">{t("Longest distance")}</option><option value="duration">{t("Longest time")}</option>
@@ -334,7 +349,7 @@ export function ActivityDetailDialog({ inline = false, page = false, className, 
               {trainingLoad !== undefined ? <span className="activity-dialog-chip">{t("Training Load")} <strong>{Math.round(trainingLoad)}</strong></span> : null}
               {raceTags && isRaceSportType(opened.sportType) ? <RaceToggle activity={opened} raceTags={raceTags} /> : null}</div>
           </div>
-          {detail && !inline ? <aside className="activity-dialog-insight"><span><Sparkles size={18} aria-hidden="true" /></span>
+          {detail ? <aside className="activity-dialog-insight"><span><Sparkles size={18} aria-hidden="true" /></span>
             <p><strong>{t(praise)} {pacing ? t(pacingCopy[pacing]) : ""}</strong><small>{t(encouragementNote)}</small></p></aside> : null}
         </div>
       </header>

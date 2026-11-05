@@ -29,7 +29,7 @@ globalThis.document = { documentElement: { lang: '' } };
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { languages: ['zh-Hans-CN', 'en-US'], language: 'zh-CN' } });
 for (const locale of ['zh', 'zh-CN', 'ZH_cn', 'zh-SG', 'zh-Hans', 'zh-Hans-HK']) assert.equal(resolveLanguage(locale), 'zh-CN');
 for (const locale of ['zh-TW', 'zh-Hant', 'zh-Hant-CN', 'zh-HK', 'zh-CNot', null, {}]) assert.equal(resolveLanguage(locale), 'en');
-assert.equal(preferredLanguage(['de-DE', 'zh-CN']), 'zh-CN');
+assert.equal(preferredLanguage(['it-IT', 'zh-CN']), 'zh-CN');
 assert.equal(preferredLanguage(['en-CA', 'zh-CN']), 'en');
 assert.equal(preferredLanguage(['fr-CA', 'zh-CN']), 'fr');
 initializeLanguage();

@@ -46,11 +46,12 @@ export function chartReadoutPage(source: string): string | undefined {
  * readouts (NATIVE_CHART_PAGES `required`): all three on a daily page, sunrise
  * on the sun page, moonrise on the moon page. Confirmed on the watch: stress,
  * stamina and steps never paged; with invisible elevation, calories and heart
- * rate added, Back paged (2026-10-20). A page that shows nothing stays off.
+ * rate added, Back paged (2026-10-20). `kept` are readouts the design keeps
+ * hidden: their page stays on with nothing visible, as the strip shows it.
  */
-export function chartPageFillers(shown: Iterable<string>): string[] {
-  const present = new Set(shown);
-  return NATIVE_CHART_PAGES.flatMap(page => page.required.length && page.sources.some(source => present.has(source))
+export function chartPageFillers(shown: Iterable<string>, kept: Iterable<string> = []): string[] {
+  const present = new Set(shown), onPage = new Set([...present, ...kept]);
+  return NATIVE_CHART_PAGES.flatMap(page => page.required.length && page.sources.some(source => onPage.has(source))
     ? page.required.filter(source => !present.has(source)) : []);
 }
 

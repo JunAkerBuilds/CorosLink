@@ -269,7 +269,7 @@ export function CorosWifiMapsPanel({ api, onOpenWatchMenu, watchStatus, onWatchS
       const connected = await api.connectCorosNativeBle({ backend: "system" });
       setStatus(await api.getCorosWifiMapStatus());
       if (connected.systemBind !== "authenticated") {
-        setNotice({ tone: "error", text: connected.authenticationError ?? t("Sign in to your COROS account in Watch Faces, then reconnect before downloading maps.") });
+        setNotice({ tone: "error", text: connected.authenticationError ? t(connected.authenticationError) : t("Sign in to your COROS account in Watch Faces, then reconnect before downloading maps.") });
       }
     } catch (error) { setNotice({ tone: "error", text: apiErrorMessage(error, t("Could not connect the watch.")) }); }
     finally { setConnecting(false); }

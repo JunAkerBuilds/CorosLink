@@ -14,6 +14,8 @@ export interface RaceChartPoint {
   isBest: boolean;
   /** Set a personal best on the day: drawn gold, so the chart shows each step down. */
   isPb?: boolean;
+  /** Colours the dot by distance, for the all-distances chart. */
+  distanceKey?: string;
 }
 
 interface RaceProgressChartProps {
@@ -226,6 +228,7 @@ export function RaceProgressChart({ points, valueLabel, selectedId, onSelect, co
           return (
             <g
               key={point.raceId}
+              data-distance={point.distanceKey}
               className={`race-chart-point${point.isBest ? " is-best" : point.isPb ? " is-pb" : ""}${selected ? " is-selected" : ""}${
                 point.raceId === hovered ? " is-hovered" : ""
               }`}

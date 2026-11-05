@@ -1,4 +1,4 @@
-import { formatNumber, t, useLanguage } from "../i18n/training";
+import { formatNumber, t, useLanguage, midSentence } from "../i18n/training";
 import type { CSSProperties } from "react";
 import type { UnitSystem } from "../../electron/types";
 import { ChevronLeft, Minus, TrendingDown, TrendingUp } from "lucide-react";
@@ -81,7 +81,7 @@ function MuscleRanking({
         const accessibleValue =
           value > 0
             ? `${formatted.value}${formatted.unit ? ` ${formatted.unit}` : ""}`
-            : emptyLabel.toLowerCase();
+            : midSentence(emptyLabel);
         return (
           <li key={stat.muscle}>
             <button

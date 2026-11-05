@@ -1,18 +1,20 @@
-import { t, useLanguage, getLocale } from "../i18n/watchfaces";
+import { t, useLanguage, getLocale, midSentence } from "../i18n/watchfaces";
 import { createCollapsedWatchfaceLayerSections, watchfaceLayerMatchesSearch } from "./watchfaceLayerSearch";
 import { batteryStateMeaning, batteryReplacementStateCount, COROS_BATTERY_STATE_ORDER } from "./watchfaceBatteryStates";
 import { WatchfaceAddMenu, type WatchfaceAddCategory, type WatchfaceAddFaceOption } from "./WatchfaceAddMenu";
-import { recoverChartGroup, recoverChartPageCompanions, recoveredChartReadouts, recoveredChartSources, recoverWatchfaceDesign, type ChartPageCompanions } from "./recoveredWatchfaceDesign";
+import { recoverChartGroup, recoverChartPageCompanions, recoverGraphlessChart, recoveredChartReadouts, recoveredChartSources, recoverWatchfaceDesign, type ChartPageCompanions } from "./recoveredWatchfaceDesign";
 import { WATCHFACE_TARGETS } from "../../electron/watchfaceTargets";
 import { WatchfaceSimulationPanel } from "./WatchfaceSimulationPanel";
 import { useWatchfaceSimulation } from "./useWatchfaceSimulation";
 import { WATCHFACE_SIMULATION_CAPABILITIES, activeSimulationScenario, createWatchfaceSimulation, parseWatchfacePreviewScenario, patchWatchfaceSimulation, simulationStudioOptions, type WatchfacePreviewScenario } from "./watchfaceSimulation";
 import { WatchfaceColorInput, flushWatchfaceColorInputs } from "./WatchfaceColorInput";
 import { WatchfaceNumberAlignControl } from "./WatchfaceNumberAlignControl";
-import { NativeDataInspector } from "./NativeDataInspector";
+import { NativeDataInspector, chartPageLabel as templatePageLabel } from "./NativeDataInspector";
 import { MetricKindNote, watchfaceMetricKind } from "./watchfaceMetricKinds";
 import { NATIVE_CHART_FIXED_EQUIVALENTS, NATIVE_CHART_PAGES, nativeChartReadoutLabel } from "../../electron/watchfaceNativeCatalog";
 import { nativePart, nativeParts } from "./nativeDataParts";
+import { WATCHFACE_STATUS_GROUPS, watchfaceHiddenStatusKeys, watchfaceStatusActiveKey, watchfaceStatusGroupOf } from "./watchfaceStatusPairs";
+import { onChartPageIds, templateChartPages, withoutTurnedOffChart, type ChartPageMode } from "./templateChartPages";
 import { addChartPage, chartDragSplit, chartGraphBounds, chartReadoutBounds, chartReadoutHidden, chartReadoutPage, chartSourceOf, chartStoredReadout, dropChartReadout, hiddenChartReadout, moveChartGraph, moveChartReadout, newChartReadout, removeChartPage, setChartReadoutShown, storedChartReadouts, swapChartReadout } from "./chartReadouts";
 import { describeNativeDataComponents } from "./nativeDataAutomation";
 import { watchfaceAutomationAssetContracts } from "./watchfaceAutomationAssetContracts";
@@ -25,6 +27,8 @@ import {
   renderDefaultStatusIndicator
 } from "./watchfaceDefaultIndicators.ts";
 import { WatchfaceExportPreview } from "./WatchfaceExportPreview";
+import { WatchfaceStudioModeContext, loadWatchfaceStudioMode, saveWatchfaceStudioMode, type WatchfaceStudioMode } from "./watchfaceStudioMode";
+import { WatchfaceStudioTour, watchfaceStudioTourSeen, type WatchfaceTourStepId } from "./WatchfaceStudioTour";
 import {
   effectiveWatchLanguages,
   loadWatchLanguagesPreference,
@@ -246,6 +250,7 @@ import {
   Battery,
   CalendarDays,
   ChevronDown,
+  CircleHelp,
   Circle,
   Copy,
   Crop,
@@ -884,6 +889,8 @@ interface WatchfacePreviewRenderRequest {
   weather: CorosWatchfaceDesignState["weatherIndicator"];
   nativeData: CorosWatchfaceDesignState["nativeData"];
   chartPage: ChartPageCompanions | null;
+  /** Pages a face without a chart layer keeps (templateChartPages). */
+  facePages?: string[];
   scenario?: WatchfacePreviewScenario;
   previewWidth: number;
   loadAssets: WatchfaceAssetLoader;
@@ -1294,6 +1301,26 @@ export function WatchfaceEditor({
   const [propertiesTab, setPropertiesTab] = useState<"selection" | "project" | "ai">(
     "selection"
   );
+  const [studioMode, setStudioModeState] = useState<WatchfaceStudioMode>(loadWatchfaceStudioMode);
+  const [tourOpen, setTourOpen] = useState(false);
+  // Opened by itself on first use, rather than from the ? button or Quick edits.
+  const tourAutoRef = useRef(false);
+  // The tour's step and close handlers read this render's layers and selection.
+  const tourStepRef = useRef<(step: WatchfaceTourStepId) => void>(() => {});
+  const tourCloseRef = useRef<(finished: boolean) => void>(() => {});
+  const onTourStep = useCallback((step: WatchfaceTourStepId) => tourStepRef.current(step), []);
+  const onTourClose = useCallback((finished: boolean) => tourCloseRef.current(finished), []);
+  const simpleMode = studioMode === "simple";
+  function openTour() {
+    tourAutoRef.current = false;
+    setTourOpen(true);
+  }
+  function setStudioMode(mode: WatchfaceStudioMode) {
+    setStudioModeState(mode);
+    saveWatchfaceStudioMode(mode);
+    // Simple has no Project tab.
+    if (mode === "simple") setPropertiesTab((tab) => (tab === "project" ? "selection" : tab));
+  }
   const [collapsedInspectorSections, setCollapsedInspectorSections] = useState(
     () => new Set<WatchfaceInspectorSectionId>(["effects", "advanced", "archive"])
   );
@@ -1813,13 +1840,19 @@ export function WatchfaceEditor({
         if (!initialDesign) {
           for (const assetPath of getTemplateBackgroundAssetPaths(described)) {
             try {
-              const [asset] = await loadAssets([assetPath]);
+              // Most templates have no COROS custom background, and older
+              // ones only one of the preview variants.
+              const [asset] = await api.loadCorosWatchfaceTemplateAssets(
+                starterArchive.archiveId,
+                [assetPath],
+                { skipMissing: true }
+              );
               if (asset) {
                 templateArtwork = asset;
                 break;
               }
             } catch {
-              // Older templates may only include one of the preview variants.
+              // An undecodable candidate falls through to the next one.
             }
           }
         }
@@ -1864,6 +1897,10 @@ export function WatchfaceEditor({
         const recoveredCurrent = recoverAssets ? hydratedCurrent : undefined;
         const recoveredAod = recoverAssets && hasWatchfaceAod(described)
           ? await recoverWatchfaceDesign(detailsForCompositionMode(described, "aod"), loadAssets, carriedPreferences?.chartSource?.aod) : undefined;
+        // Projects saved before graph-less chart pages recovered (SIMPLE) get
+        // their Chart layer now, so its pages list like any other chart's.
+        const graphlessChart = initialDesign && !initialDesign.nativeData?.chart
+          ? await recoverGraphlessChart(applyConfigTextEditsToDetails(described, initialDesign.configTextEdits), loadAssets).catch(() => null) : null;
         if (cancelled) return;
 
         const baselines: Record<string, string> = {};
@@ -1901,6 +1938,7 @@ export function WatchfaceEditor({
             staticSeparators: inferStaticSeparators(described, nextDesign.digitColor)
           };
         }
+        if (graphlessChart) nextDesign = { ...nextDesign, nativeData: { ...nextDesign.nativeData, chart: graphlessChart } };
         if (!initialDesign?.ampmIndicator) {
           const capability = getAmPmCapability(described);
           if (capability) {
@@ -2125,6 +2163,13 @@ export function WatchfaceEditor({
       design.layerStrokes
     ]
   );
+  // Which state of each Bluetooth / Do Not Disturb indicator the panel edits
+  // and the preview draws, by group id. The watch picks the state live.
+  const [chosenStatusStates, setChosenStatusStates] = useState<Record<string, string>>({});
+  const hiddenStatusKeys = useMemo(() => {
+    const master = details ? pickPreviewResolution(applyConfigTextEditsToDetails(details, design.configTextEdits)) : null;
+    return watchfaceHiddenStatusKeys(key => Boolean(master?.config[key]?.trim() || design.configAssetOverrides?.[`config:${key}`]?.replacement), chosenStatusStates);
+  }, [details, design.configTextEdits, design.configAssetOverrides, chosenStatusStates]);
   const previewStudioOptions = useMemo(
     () => ({
       ...studioOptions,
@@ -2132,11 +2177,12 @@ export function WatchfaceEditor({
       previewMode: supportsAod ? previewMode : ("current" as const),
       deferProgressArcs: true,
       transparentBackground: true,
+      hiddenStatusKeys,
       ...(automationPreviewComplication
         ? { previewComplication: automationPreviewComplication }
         : {})
     }),
-    [automationPreviewComplication, studioOptions, previewMode, supportsAod, simulationScenario]
+    [automationPreviewComplication, studioOptions, previewMode, supportsAod, simulationScenario, hiddenStatusKeys]
   );
   const detailsWithConfigEdits = useMemo(
     () =>
@@ -2159,6 +2205,98 @@ export function WatchfaceEditor({
     if (modeSourceDetails) void recoverChartPageCompanions(modeSourceDetails, loadAssets).then(page => { if (!cancelled) setChartPage(page); }, () => undefined);
     return () => { cancelled = true; };
   }, [modeSourceDetails, loadAssets]);
+  // Chart pages the template leaves on the watch when the face has no chart
+  // layer (SIMPLE declares daily and sun readouts with no graph). Listed in
+  // the layers panel so a page with nothing visible is still seen and removable.
+  const templatePages = useMemo(() => {
+    // A turned-off chart layer counts as none: export clears only its own keys.
+    const master = modeSourceDetails && !design.nativeData?.chart?.enabled ? pickPreviewResolution(modeSourceDetails) : null;
+    return master ? templateChartPages(withoutTurnedOffChart(master, design.nativeData?.chart), design.chartPageModes) : null;
+  }, [modeSourceDetails, design.nativeData?.chart, design.chartPageModes]);
+  const facePageIds = useMemo(() => templatePages ? onChartPageIds(templatePages) : undefined, [templatePages]);
+  // With no chart page at all the watch still draws min/max (firmware 0x454f9c).
+  const minMaxNeedsDailyPage = Boolean(facePageIds?.length && !facePageIds.some(page => page.startsWith("daily-"))
+    && (design.nativeData?.weather_temp_min?.enabled || design.nativeData?.weather_temp_max?.enabled));
+  /**
+   * The template's chart pages as chart rows. Under a turned-off Chart layer
+   * they replace its own page rows (`withParent` false): its readouts no
+   * longer reach the watch, but the template's other pages do.
+   */
+  function renderTemplateChartRows(withParent = true) {
+    if (!templatePages) return null;
+    return <>
+      {withParent ? <li className="wf-layer-item">
+        <div className="watchface-layer-row wf-watch-page-row" title={t("Chart pages from the template's config. Back on the watch steps through the ones that are on, even pages with nothing visible.")}>
+          <span className="wf-layer-icon" aria-hidden="true"><Layers size={14} /></span>
+          <span className="watchface-layer-name">{t("Chart")}</span>
+          <span className="wf-layer-subrow-page">{t("Template")}</span>
+        </div>
+        <span className="wf-layer-row-actions wf-watch-page-actions" />
+      </li> : null}
+      {templatePages.map(page => {
+        const bars = page.id === "barometer" || page.id === "tide";
+        const declared = page.mode !== "hidden" || page.readouts.length > 0;
+        const label = page.id === "daily-a" ? t("Daily A") : page.id === "daily-b" ? t("Daily B") : templatePageLabel(page.id);
+        const dailyOn = page.on && page.id.startsWith("daily-");
+        return (
+          <Fragment key={`template-page:${page.id}`}>
+            <li className="wf-layer-item wf-layer-subitem">
+              <div className={`watchface-layer-row wf-layer-subrow wf-layer-subpage wf-watch-page-row${page.on ? "" : " is-off"}`}
+                title={!page.on ? t("The watch skips this page.") : page.empty ? t("The watch still stops on this page, with nothing visible.")
+                  : dailyOn ? t("Minimum and maximum temperature show only on this page.") : undefined}>
+                <span className="watchface-layer-name">{label}</span>
+                <span className="wf-layer-subrow-page">{!page.on ? t("Off") : page.empty ? t("Hidden") : dailyOn ? t("Min/max") : ""}</span>
+              </div>
+              <span className="wf-layer-row-actions wf-watch-page-actions">
+                {bars ? null : page.mode === "removed" ? (
+                  <button type="button" className="watchface-layer-visibility" aria-label={t("Put back {{value1}}", { value1: label })} title={t("Put the page back")}
+                    onClick={() => setChartPageMode(page.id, undefined)}><RotateCcw size={14} /></button>
+                ) : <>
+                  {page.readouts.some(readout => readout.visible) || page.mode === "hidden" && page.readouts.length ? (
+                    <button type="button" className="watchface-layer-visibility" aria-pressed={page.mode === "hidden"}
+                      aria-label={page.mode === "hidden" ? t("Show {{value1}}", { value1: label }) : t("Hide {{value1}}", { value1: label })}
+                      title={page.mode === "hidden" ? t("Show its readouts again") : t("Hide its readouts. The page stays on the watch.")}
+                      onClick={() => setChartPageMode(page.id, page.mode === "hidden" ? undefined : "hidden")}>
+                      {page.mode === "hidden" ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  ) : null}
+                  {page.on || page.mode === "hidden" ? (
+                    <button type="button" className="watchface-layer-visibility" aria-label={t("Remove {{value1}}", { value1: label })} title={t("Remove the page from the watch")}
+                      onClick={() => setChartPageMode(page.id, declared ? "removed" : undefined)}><Trash2 size={14} /></button>
+                  ) : null}
+                </>}
+              </span>
+            </li>
+            {page.readouts.map(readout => (
+              <li key={`template-page:${page.id}:${readout.source}`} className="wf-layer-item wf-layer-subitem">
+                <div className="watchface-layer-row wf-layer-subrow wf-layer-subreadout wf-watch-page-row">
+                  <span className={`watchface-layer-name${page.on && readout.visible && page.mode !== "hidden" ? "" : " is-hidden"}`}>{t(nativeChartReadoutLabel(readout.source))}</span>
+                  <span className="wf-layer-subrow-page">{page.on && (!readout.visible || page.mode === "hidden") ? t("Hidden") : ""}</span>
+                </div>
+                <span className="wf-layer-row-actions wf-watch-page-actions" />
+              </li>
+            ))}
+          </Fragment>
+        );
+      })}
+      {minMaxNeedsDailyPage ? (
+        <li className="wf-layer-item wf-watch-pages-add">
+          <p>{t("Minimum and maximum temperature show only on a daily data page, and this face has none.")}</p>
+          <button type="button" className="secondary-button" onClick={() => setChartPageMode("daily-a", "hidden")}>
+            <Plus size={13} aria-hidden="true" />{t("Add a hidden daily page")}
+          </button>
+        </li>
+      ) : null}
+    </>;
+  }
+  /** Keeps, hides or removes one of the template's chart pages (design.chartPageModes). */
+  function setChartPageMode(pageId: string, mode: ChartPageMode | undefined) {
+    setDesign(prev => {
+      const modes = { ...prev.chartPageModes };
+      if (mode) modes[pageId] = mode; else delete modes[pageId];
+      return { ...prev, chartPageModes: Object.keys(modes).length ? modes : undefined };
+    });
+  }
   const designDetails = useMemo(
     () =>
       modeSourceDetails
@@ -3501,13 +3639,14 @@ export function WatchfaceEditor({
           ...toStudioOptions(frameDesign),
           ...simulationStudioOptions(simulationScenario),
           previewMode: supportsAod ? previewMode : "current",
+          hiddenStatusKeys,
           previewComplicationContent
         },
         frameDetails
       ),
       loadAssets
     );
-    await drawNativeDataPreview(frame, previewWidth, frameDesign.nativeData, simulationScenario, chartPage);
+    await drawNativeDataPreview(frame, previewWidth, frameDesign.nativeData, simulationScenario, chartPage, facePageIds);
     if (frameDesign.weatherIndicator?.enabled) {
       if (!frameDesign.nativeData?.weather_temp) await drawWeatherTemperaturePreview(frame, previewWidth, frameDesign.weatherIndicator, simulationScenario?.values?.weather_temp);
       const url = await weatherPreviewDataUrl(
@@ -4168,7 +4307,7 @@ export function WatchfaceEditor({
               studioOptionsForResolution(next.options, next.details),
               next.loadAssets
             );
-            await drawNativeDataPreview(frame, next.previewWidth, next.nativeData, next.scenario, next.chartPage);
+            await drawNativeDataPreview(frame, next.previewWidth, next.nativeData, next.scenario, next.chartPage, next.facePages);
             if (next.weather?.enabled) {
               if (!next.nativeData?.weather_temp) await drawWeatherTemperaturePreview(frame, next.previewWidth, next.weather, next.scenario?.values?.weather_temp);
               const url = await weatherPreviewDataUrl(
@@ -4259,6 +4398,7 @@ export function WatchfaceEditor({
       weather: previewMode === "current" ? design.weatherIndicator : undefined,
       nativeData: design.nativeData,
       chartPage,
+      facePages: facePageIds,
       previewWidth,
       loadAssets,
       dragCommitId: dragVisualRef.current?.awaitingCommitId ?? null
@@ -4271,6 +4411,7 @@ export function WatchfaceEditor({
     design.weatherIndicator,
     design.nativeData,
     chartPage,
+    facePageIds,
     previewMode,
     previewWidth,
     loadAssets,
@@ -6350,17 +6491,35 @@ export function WatchfaceEditor({
     if (isPositionLocked("native:chart")) return;
     setDesign(prev => {
       const current = prev.nativeData?.chart;
-      return current ? { ...prev, nativeData: { ...prev.nativeData, chart: addChartPage(current, pageId, { width: previewWidth, height: previewHeight }) } } : prev;
+      if (!current) return prev;
+      const modes = { ...prev.chartPageModes };
+      // A removed template page comes back with the template's own readouts.
+      const restore = modes[pageId] === "removed" && chartReadouts.some(source => chartReadoutPage(source) === pageId);
+      delete modes[pageId];
+      return { ...prev, chartPageModes: Object.keys(modes).length ? modes : undefined,
+        nativeData: restore ? prev.nativeData : { ...prev.nativeData, chart: addChartPage(current, pageId, { width: previewWidth, height: previewHeight }) } };
     });
   }
-  function removeChartPageFromFace(pageId: string) {
-    const chart = design.nativeData?.chart;
+  /**
+   * Takes a page off the watch, hidden or not. Studio readouts on it leave the
+   * layer; the template's own are deleted on export (design.chartPageModes).
+   */
+  async function removeChartPageFromFace(pageId: string) {
+    let chart = design.nativeData?.chart;
     if (!chart || isPositionLocked("native:chart")) return;
-    if (!removeChartPage(chart, pageId)) { onError(t("The chart needs at least one page. Delete the chart layer to remove it.")); return; }
-    setDesign(prev => {
-      const current = prev.nativeData?.chart, next = current && removeChartPage(current, pageId);
-      return next ? { ...prev, nativeData: { ...prev.nativeData, chart: next } } : prev;
-    });
+    if (!removeChartPage(chart, pageId)) {
+      // The layer edits this page's last readout: edit one of the template's other pages first.
+      const other = chartReadouts.find(source => chartReadoutPage(source) !== pageId && !chart!.removedReadouts?.includes(source)
+        && design.chartPageModes?.[chartReadoutPage(source) ?? ""] !== "removed");
+      const recovered = other && modeSourceDetails ? await recoverChartGroup(modeSourceDetails, loadAssets, other).catch(() => null) : null;
+      if (!recovered) { onError(t("The chart needs at least one page. Delete the chart layer to remove it.")); return; }
+      chart = swapChartReadout(chart, recovered);
+    }
+    const next = removeChartPage(chart, pageId);
+    if (!next) return;
+    const fromTemplate = chartReadouts.some(source => chartReadoutPage(source) === pageId);
+    setDesign(prev => ({ ...prev, nativeData: { ...prev.nativeData, chart: next },
+      ...(fromTemplate ? { chartPageModes: { ...prev.chartPageModes, [pageId]: "removed" as const } } : {}) }));
   }
   /** Takes a readout Studio added off the chart; the template's own readouts stay. */
   async function removeChartReadout(source: string) {
@@ -6496,11 +6655,13 @@ export function WatchfaceEditor({
         source, editing: source === current, hidden: !present.has(source) || hiddenOf(source), missing: !present.has(source)
       }));
       const bars = page.id === "barometer" || page.id === "tide";
-      const on = bars ? barsOn : rows.some(row => !row.hidden);
-      if (!on && !rows.some(row => !row.missing)) return [];
+      const removed = design.chartPageModes?.[page.id] === "removed";
+      // A page whose readouts are all hidden stays on the watch until it is removed.
+      const on = bars ? barsOn : !removed && rows.some(row => !row.missing);
+      if (removed || !on && !rows.some(row => !row.missing)) return [];
       return [{ page: page.id, on, rows: on || bars ? rows.filter(row => !row.missing || on) : rows.filter(row => !row.missing) }];
     });
-  }, [design.nativeData, chartReadouts]);
+  }, [design.nativeData, design.chartPageModes, chartReadouts]);
   // Fields the watch hides on some chart pages (weather on the sun and moon pages), by page.
   const chartPageFields = useMemo(() => {
     const byPage: Record<string, string[]> = {};
@@ -7601,6 +7762,7 @@ export function WatchfaceEditor({
         : 1;
     const exportOptions: WatchfaceStudioOptions = {
       ...snapshotOptions,
+      hiddenStatusKeys,
       ...(previewComplication ? { previewComplication } : {}),
       previewMode: hasWatchfaceAod(details) ? mode : "current",
       ...simulationStudioOptions(scenario),
@@ -7628,7 +7790,7 @@ export function WatchfaceEditor({
       exportOptions,
       loadAssets
     );
-    await drawNativeDataPreview(archivePreview, snapshotBaseResolution?.width ?? previewWidth, designSnapshot.nativeData, scenario, chartPage);
+    await drawNativeDataPreview(archivePreview, snapshotBaseResolution?.width ?? previewWidth, designSnapshot.nativeData, scenario, chartPage, facePageIds);
     if (designSnapshot.weatherIndicator?.enabled) {
       if (!designSnapshot.nativeData?.weather_temp) await drawWeatherTemperaturePreview(archivePreview, snapshotBaseResolution?.width ?? previewWidth, designSnapshot.weatherIndicator, scenario?.values?.weather_temp);
       const url = await weatherPreviewDataUrl(
@@ -8171,8 +8333,9 @@ export function WatchfaceEditor({
     }
   }
 
-  function removeFirmwareLayers(removed: EditorLayer[]) {
-    if (removed.length === 0) return;
+  function removeFirmwareLayers(selected: EditorLayer[]) {
+    if (selected.length === 0) return;
+    const removed = [...new Set(selected.flatMap(layer => statusGroupMembers(layer) ?? [layer]))];
     for (const layer of removed) {
       if (!layer.nativeDataId) setLayerOn(layer, false);
     }
@@ -8202,12 +8365,13 @@ export function WatchfaceEditor({
 
   /** Turns a deleted firmware layer back on and lists it again. */
   function restoreFirmwareLayer(layer: EditorLayer) {
+    const restored = new Set((statusGroupMembers(layer) ?? [layer]).map(item => item.id));
     beginDesignTransaction();
     try {
       if (!layer.visible) setLayerOn(layer, true);
       setDesign((current) => ({
         ...current,
-        removedLayerIds: (current.removedLayerIds ?? []).filter((id) => id !== layer.id)
+        removedLayerIds: (current.removedLayerIds ?? []).filter((id) => !restored.has(id))
       }));
     } finally {
       endDesignTransaction();
@@ -9390,12 +9554,32 @@ export function WatchfaceEditor({
     };
   }, [api, automationEditorReady, sessionId]);
 
+  // First time anyone opens Studio, walk them through it once the face has drawn.
+  useEffect(() => {
+    if (!active || !automationEditorReady || watchfaceStudioTourSeen()) return;
+    const timer = window.setTimeout(() => {
+      tourAutoRef.current = true;
+      setTourOpen(true);
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [active, automationEditorReady]);
+
   // Deleted firmware layers stay derivable (the Add menu restores them) but
   // leave the Layers list while they are off.
   const removedLayerIds = new Set(design.removedLayerIds ?? []);
-  const listedLayers = layers.filter(
-    (layer) => layer.visible || !removedLayerIds.has(layer.id)
-  );
+  // One row per status indicator, on the state the preview draws.
+  const statusRowKeys = new Set(WATCHFACE_STATUS_GROUPS.map(group => watchfaceStatusActiveKey(group,
+    key => layers.some(item => item.present && item.configAssetId === `config:${key}`), chosenStatusStates[group.id])));
+  const listedLayers = layers.flatMap((layer) => {
+    if (!layer.visible && removedLayerIds.has(layer.id)) return [];
+    const group = layerStatusGroup(layer);
+    if (!group) return [layer];
+    if (!statusRowKeys.has(configAssetsById.get(layer.configAssetId!)!.configKey)) return [];
+    const members = statusGroupMembers(layer)!;
+    // Studio's Add menu offers an indicator the face doesn't have.
+    if (!members.some(item => item.present) || members.every(item => !item.visible && removedLayerIds.has(item.id))) return [];
+    return [{ ...layer, label: group.label, visible: members.some(item => item.visible) }];
+  });
   const faceAddOptions: WatchfaceAddFaceOption[] = [
     ...(canAddSeconds ? [{ id: "seconds", label: t("Seconds"), category: "Time" as const, added: Boolean(design.addSeconds), onAdd: addSeconds }] : []),
     { id: "analog", label: t("Analog hands"), category: "Time", added: analogHandsOnFace, onAdd: addAnalogHands },
@@ -9416,13 +9600,15 @@ export function WatchfaceEditor({
         !addableDateParts.has(layer.id) &&
         !ANALOG_HAND_CONFIG_ASSET_IDS.has(layer.configAssetId ?? "") &&
         // A template image the face never drew has nothing to restore.
-        (layer.kind !== "configAsset" || layer.present)
+        (layer.kind !== "configAsset" || layer.present) &&
+        // One entry per status indicator.
+        (!layerStatusGroup(layer) || statusGroupMembers(layer)![0] === layer)
       )
       .map((layer) => ({
         id: layer.id,
-        label: layer.label,
+        label: layerDisplayLabel(layer),
         category: addCategoryForLayer(layer),
-        added: layer.visible,
+        added: statusGroupMembers(layer)?.some(item => item.visible) ?? layer.visible,
         onAdd: () => layer.visible
           ? selectQuickStartItem(layer.id)
           // A template without a fixed battery icon has nothing to restore.
@@ -9438,10 +9624,13 @@ export function WatchfaceEditor({
     ...layers
       .filter((layer) => layer.kind === "configAsset" && !layer.present && layer.configAssetId &&
         configAssetsById.get(layer.configAssetId)?.scope === "config" &&
-        isVirtualStandaloneStatusIconKey(configAssetsById.get(layer.configAssetId)!.configKey))
+        isVirtualStandaloneStatusIconKey(configAssetsById.get(layer.configAssetId)!.configKey) &&
+        // An indicator the face lacks starts on its primary state; the panel adds the others.
+        !layers.some((item) => item.present && layerStatusGroup(item)?.id === layerStatusGroup(layer)?.id) &&
+        layerStatusGroup(layer)?.primary === configAssetsById.get(layer.configAssetId)!.configKey)
       .map((layer) => ({
         id: layer.id,
-        label: layer.label,
+        label: layerDisplayLabel(layer),
         category: "Device" as const,
         added: false,
         onAdd: () => void addStatusIndicator(configAssetsById.get(layer.configAssetId!)!, layer.id)
@@ -9468,7 +9657,24 @@ export function WatchfaceEditor({
         !layerIsSelectableSlotAsset(layer) &&
         layerMatchesSearch(layer.label)
     )
-  ).filter((section) => section.layers.length > 0);
+  ).filter((section) => section.layers.length > 0 &&
+    // Template images are Advanced; a search still finds them.
+    !(simpleMode && !layerSearch && isTemplateAssetSection(section.label)));
+  // The template's chart pages show like a chart layer's: a Chart row under
+  // Chart pages with its pages and readouts nested in Back order.
+  // A listed (turned-off) Chart layer shows them under its own row instead;
+  // a deleted one has no row, so they get their own.
+  const chartLayerListed = searchedLayerSections.some(section => section.layers.some(layer => layer.nativeDataId === "chart"));
+  const showTemplateChart = Boolean(templatePages && !chartLayerListed && !layerSearch && (templatePages.length || minMaxNeedsDailyPage));
+  const layerSectionsWithTemplateChart = !showTemplateChart || searchedLayerSections.some(section => section.label === "Chart pages")
+    ? searchedLayerSections
+    : (() => {
+      const later = ["Indicators", "Artwork", "Template assets", "Always-on assets", "Not on the face"];
+      const at = searchedLayerSections.findIndex(section => later.includes(section.label));
+      const sections = [...searchedLayerSections];
+      sections.splice(at < 0 ? sections.length : at, 0, { ...sections[0], label: "Chart pages", layers: [] });
+      return sections;
+    })();
   const layerSearchIsEmpty =
     Boolean(layerSearch) &&
     searchedEditorGroups.length === 0 &&
@@ -9496,17 +9702,46 @@ export function WatchfaceEditor({
     (layer) => layer.visible && (layer.kind === "customSprite" || isBlankRemovableLayer(layer))
   );
   // Selectable-slot icons are edited inside their metric, not listed.
+  // Simple counts what the face shows.
   const paneLayerCount = listedLayers.filter(
-    (layer) => !layerIsSelectableSlotAsset(layer)
+    (layer) => !layerIsSelectableSlotAsset(layer) &&
+      (!simpleMode || (layer.visible && !isTemplateAssetSection(layerGroupLabel(layer))))
   ).length;
   const heightMatch = heightMatchSelection();
 
+  tourStepRef.current = (step) => {
+    setContextMenu(null);
+    setPropertiesTab("selection");
+    // Narrow windows show one pane at a time; open the one being explained.
+    setLayersOpen(step === "layers" || step === "add");
+    setPropertiesOpen(step === "properties");
+    if (step === "properties" && quickStartTimeLayer) {
+      selectEditorItem(quickStartTimeLayer.id);
+    } else if (step === "welcome" || step === "face") {
+      setSelectedIds([]);
+      setSelectedId("");
+    }
+  };
+  tourCloseRef.current = (finished) => {
+    setTourOpen(false);
+    // Someone who skipped the first-run tour should know it can come back;
+    // its last step says so to those who finish it.
+    if (tourAutoRef.current && !finished) onNotice(t("You can take the tour any time with the ? button at the top of Studio."));
+    tourAutoRef.current = false;
+    // Land on Quick edits, the friendliest first screen.
+    setSelectedIds([]);
+    setSelectedId("");
+    setLayersOpen(false);
+    setPropertiesOpen(false);
+  };
+
   return (
-    <section ref={editorRef} className={`watchface-editor wf-studio${stageFullscreen ? " is-editor-fullscreen" : ""}`} aria-label={t("Watch face studio")} inert={conversionBusy}>
+    <WatchfaceStudioModeContext.Provider value={studioMode}>
+    <section ref={editorRef} className={`watchface-editor wf-studio${stageFullscreen ? " is-editor-fullscreen" : ""}${simpleMode ? " is-simple" : ""}`} aria-label={t("Watch face studio")} inert={conversionBusy}>
       <header className="watchface-editor-topbar wf-command-bar">
-        <button className="wf-icon-button wf-back-button" type="button" onClick={requestBack}>
+        <button className="wf-icon-button wf-back-button" type="button" title={t("Projects")} onClick={requestBack}>
           <ArrowLeft size={18} aria-hidden="true" />
-          <span>{t("Projects")}</span>
+          <span className="wf-command-label">{t("Projects")}</span>
         </button>
         <div className="watchface-editor-title wf-project-title">
           <label className="sr-only" htmlFor={`watchface-name-${sessionId}`}>{t("Project name")}</label>
@@ -9544,6 +9779,29 @@ export function WatchfaceEditor({
             <PanelRight size={17} />
           </button>
           <span className="wf-command-separator" aria-hidden="true" />
+          <button
+            className="wf-icon-button wf-tour-button"
+            type="button"
+            aria-label={t("Take the tour")}
+            title={t("Take the tour")}
+            onClick={openTour}
+          >
+            <CircleHelp size={17} aria-hidden="true" />
+          </button>
+          <div className="wf-studio-mode-switch" role="group" aria-label={t("Editor mode")}>
+            <button
+              type="button"
+              aria-pressed={simpleMode}
+              title={t("What's on the face, with its color, font, size and position")}
+              onClick={() => setStudioMode("simple")}
+            >{t("Simple")}</button>
+            <button
+              type="button"
+              aria-pressed={!simpleMode}
+              title={t("Also template slots, template images, PNG digit sets, config files and watch sizes")}
+              onClick={() => setStudioMode("advanced")}
+            >{t("Advanced")}</button>
+          </div>
           <div className="wf-history-controls" role="group" aria-label={t("Edit history")}>
             <button className="wf-icon-button" type="button" disabled={!canUndo} aria-label={t("Undo")} title={t("Undo")} onClick={undo}>
               <Undo2 size={17} />
@@ -9552,8 +9810,8 @@ export function WatchfaceEditor({
               <Redo2 size={17} />
             </button>
           </div>
-          <button className="secondary-button wf-save-button" type="button" disabled={saving || spriteImportPending || !isDirty} onClick={() => void saveProject()}>
-            {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />}{t("Save")}</button>
+          <button className="secondary-button wf-save-button" type="button" title={t("Save")} disabled={saving || spriteImportPending || !isDirty} onClick={() => void saveProject()}>
+            {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />}<span className="wf-command-label">{t("Save")}</span></button>
           {showDevelopmentTools || bakeForWatch ? (
             <div className="wf-export-menu" ref={downloadMenuRef}>
               <button
@@ -9561,11 +9819,12 @@ export function WatchfaceEditor({
                 type="button"
                 aria-haspopup="menu"
                 aria-expanded={downloadMenuOpen}
+                title={t("Download")}
                 disabled={spriteImportPending || creating || exporting || Boolean(allWatchesExport) || !backgroundDataUrl}
                 onClick={() => setDownloadMenuOpen((open) => !open)}
               >
                 {exporting || creating || allWatchesExport ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
-                {allWatchesExport ? t("{{value1}} · {{value2}}/{{value3}}", { value1: t(allWatchesExport.label), value2: allWatchesExport.done + 1, value3: allWatchesExport.total }) : t("Download")}
+                <span className="wf-command-label">{allWatchesExport ? t("{{value1}} · {{value2}}/{{value3}}", { value1: t(allWatchesExport.label), value2: allWatchesExport.done + 1, value3: allWatchesExport.total }) : t("Download")}</span>
                 <ChevronDown size={14} aria-hidden="true" />
               </button>
               {downloadMenuOpen ? (
@@ -9623,7 +9882,7 @@ export function WatchfaceEditor({
               disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
               onClick={() => void exportEditableProject()}
             >
-              {exporting ? <Loader2 className="spin" size={15} /> : <Download size={15} />}{t("Download")}</button>
+              {exporting ? <Loader2 className="spin" size={15} /> : <Download size={15} />}<span className="wf-command-label">{t("Download")}</span></button>
           )}
           <button
             className="secondary-button wf-convert-button"
@@ -9632,7 +9891,7 @@ export function WatchfaceEditor({
             disabled={saving || spriteImportPending || creating || exporting || previewingExport || !backgroundDataUrl}
             onClick={convertToAnotherWatch}
           >
-            <Repeat2 size={15} />{t("Convert")}</button>
+            <Repeat2 size={15} /><span className="wf-command-label">{t("Convert")}</span></button>
           <button
             className="primary-button wf-send-button"
             type="button"
@@ -9815,8 +10074,9 @@ export function WatchfaceEditor({
                 );
                 })
                 : null}
-              {searchedLayerSections.map(({ label: group, layers: groupedLayers }) => {
+              {layerSectionsWithTemplateChart.map(({ label: group, layers: groupedLayers }) => {
                 const collapsed = !layerSearch && collapsedLayerSections.has(group);
+                const templateChartHere = group === "Chart pages" && showTemplateChart;
                 return (
                   <Fragment key={group}>
                     <li className="wf-layer-group">
@@ -9833,10 +10093,11 @@ export function WatchfaceEditor({
                         />
                         <span>{t(group)}</span>
                         <span className="wf-layer-section-count">
-                          {groupedLayers.length}
+                          {groupedLayers.length + (templateChartHere ? 1 : 0)}
                         </span>
                       </button>
                     </li>
+                    {!collapsed && templateChartHere ? renderTemplateChartRows() : null}
                     {collapsed ? null : groupedLayers.map((layer) => {
                     const authoredLayer =
                       layer.kind === "customSprite" ||
@@ -9917,8 +10178,8 @@ export function WatchfaceEditor({
                     >
                       <button
                         type="button"
-                        aria-selected={selectedIds.includes(layer.id)}
-                        className={`watchface-layer-row${selectedIds.includes(layer.id) ? " is-selected" : ""}`}
+                        aria-selected={layerRowSelected(layer)}
+                        className={`watchface-layer-row${layerRowSelected(layer) ? " is-selected" : ""}`}
                         onMouseEnter={() => setHoveredId(layer.id)}
                         onMouseLeave={() => setHoveredId(null)}
                         onClick={(event) => {
@@ -9933,7 +10194,7 @@ export function WatchfaceEditor({
                           ) : null}
                           {layerIcon(layer)}
                         </span>
-                        <span className={`watchface-layer-name${layer.visible ? "" : " is-hidden"}`}>{t(layer.label)}</span>
+                        <span className={`watchface-layer-name${layer.visible ? "" : " is-hidden"}`} title={t(layer.label)}>{t(layer.label)}</span>
                         {(design.linkedLayerGroups ?? []).some((group) => group.includes(layer.id)) ? (
                           <span className="wf-layer-link-state" title={t("Linked component")} aria-label={t("Linked component")}>
                             <Link2 size={12} aria-hidden="true" />
@@ -9942,7 +10203,8 @@ export function WatchfaceEditor({
                         {layer.configAssetReplaced ? <span className="wf-layer-state">{t("Custom")}</span> : null}
                       </button>
                       <span className="wf-layer-row-actions">
-                        {renderLayerPositionLockButton(layer.id, layer.label)}
+                        {/* A layer that's off has nothing to drag; Simple leaves just its eye. */}
+                        {simpleMode && !layer.visible && !isPositionLocked(layer.id) ? null : renderLayerPositionLockButton(layer.id, layer.label)}
                         {layer.canHide ? (
                           <button
                             type="button"
@@ -9957,7 +10219,8 @@ export function WatchfaceEditor({
                         ) : null}
                       </span>
                     </li>
-                    {layer.nativeDataId === "chart" ? chartLayerPages.map(({ page, on, rows }) => {
+                    {layer.nativeDataId === "chart" && !design.nativeData?.chart?.enabled ? renderTemplateChartRows(false) : null}
+                    {layer.nativeDataId === "chart" && design.nativeData?.chart?.enabled ? chartLayerPages.map(({ page, on, rows }) => {
                       const first = rows.find(row => !row.missing && !row.hidden) ?? rows.find(row => !row.missing);
                       const showsPage = rows.some(row => row.editing);
                       return (
@@ -9974,7 +10237,7 @@ export function WatchfaceEditor({
                             }}
                           >
                             <span className="watchface-layer-name">{page === "daily-a" ? t("Daily A") : page === "daily-b" ? t("Daily B") : page === "sun" ? t("Sun") : page === "moon" ? t("Moon") : page === "barometer" ? t("Barometer") : t("Tide")}</span>
-                            <span className="wf-layer-subrow-page">{!on ? t("Off") : rows.length ? "" : t("Graph only")}</span>
+                            <span className="wf-layer-subrow-page">{!on ? t("Off") : !rows.length ? t("Graph only") : rows.every(row => row.hidden) && !(page === "barometer" || page === "tide") ? t("Nothing visible") : ""}</span>
                           </button>
                         </li>
                         {rows.map((row) => (
@@ -10052,7 +10315,8 @@ export function WatchfaceEditor({
                 <MoonStar size={14} aria-hidden="true" />{" "}{t("Always-on")}</button>
             </div>
             <span className="wf-toolbar-divider" aria-hidden="true" />
-            {previewDetails && previewDetails.resolutions.length > 1 ? (
+            {/* Per-watch layout sizes are Advanced; Simple edits the size Studio opened. */}
+            {!simpleMode && previewDetails && previewDetails.resolutions.length > 1 ? (
               <label className="wf-preview-resolution" title={t("Watch preview")}>
                 <Watch size={14} aria-hidden="true" />
                 <span className="sr-only">{t("Watch preview")}</span>
@@ -10522,9 +10786,9 @@ export function WatchfaceEditor({
           ) : null}
           <div className="wf-stage-status" role="status">
             <span ref={snapStatusElementRef}>
-              {selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer?.label ?? t("No selection")}
+              {selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer ? t(layerDisplayLabel(selectedLayer)) : t("No selection")}
             </span>
-            <span>{watchCoordinateWidth} × {watchCoordinateHeight}{" "}{t("preview")}</span>
+            {simpleMode ? null : <span>{watchCoordinateWidth} × {watchCoordinateHeight}{" "}{t("preview")}</span>}
             <span>
               {previewMode === "aod"
                 ? supportsAod ? t("Always-on display") : t("Always-on uses Current")
@@ -10542,7 +10806,7 @@ export function WatchfaceEditor({
                 </button>
               </span>
             ) : null}
-            <span>{starterArchive.fileName}</span>
+            {simpleMode ? null : <span>{starterArchive.fileName}</span>}
           </div>
         </main>
 
@@ -10590,14 +10854,15 @@ export function WatchfaceEditor({
               aria-selected={propertiesTab === "selection"}
               onClick={() => setPropertiesTab("selection")}
             >{t("Selection")}</button>
-            <button
+            {/* Raw config files and archive settings are Advanced only. */}
+            {simpleMode ? null : <button
               type="button"
               role="tab"
               id={`wf-properties-tab-project-${sessionId}`}
               aria-controls={`wf-properties-panel-${sessionId}`}
               aria-selected={propertiesTab === "project"}
               onClick={() => setPropertiesTab("project")}
-            >{t("Project")}</button>
+            >{t("Project")}</button>}
             <button
               type="button"
               role="tab"
@@ -10663,6 +10928,7 @@ export function WatchfaceEditor({
                   // hands, which every DIY template can show (its own, or Studio's).
                   : analogHandsOnFace ? undefined : addAnalogHands}
                 addTimeHint={templateHasDigitalClock ? undefined : "Analog hands that keep time"}
+                onTour={openTour}
                 onText={() => addElement("text")}
                 onShape={() => addElement("rect")}
               />
@@ -10670,7 +10936,7 @@ export function WatchfaceEditor({
             <div className="wf-properties-empty">
               <MousePointerSquareDashed size={22} aria-hidden="true" />
               <strong>{t("Nothing selected")}</strong>
-              <p className="watchface-studio-summary">{t("Pick a layer on the canvas or in the Layers panel to edit it. Template-wide settings live on the Project tab.")}</p>
+              <p className="watchface-studio-summary">{simpleMode ? t("Pick a layer on the canvas or in the Layers panel to edit it.") : t("Pick a layer on the canvas or in the Layers panel to edit it. Template-wide settings live on the Project tab.")}</p>
             </div>
             )
           )
@@ -10955,6 +11221,20 @@ export function WatchfaceEditor({
           languages={effectiveWatchLanguages(historyRef.current.present.value.design, watchLanguagesPreferenceRef.current)}
           customWeekday={Boolean(historyRef.current.present.value.design.dateStyles?.weekday)}
           rebuilding={previewingExport}
+          layerLabel={(id) => {
+            const layer = checkLayer(id);
+            return layer ? layerDisplayLabel(layer) : undefined;
+          }}
+          onShowLayers={(ids, mode) => {
+            const found = ids.flatMap((id) => checkLayer(id)?.id ?? []);
+            if (!found.length) return;
+            closeExportPreview();
+            if (mode !== previewMode) setPreviewMode(mode);
+            setSelectedIds(found);
+            setSelectedId(found.at(-1)!);
+            setPropertiesTab("selection");
+            setPropertiesOpen(true);
+          }}
           onLanguagesChange={(watchLanguages) => {
             // The remembered default describes custom weekday labels only.
             if (historyRef.current.present.value.design.dateStyles?.weekday) {
@@ -11001,7 +11281,16 @@ export function WatchfaceEditor({
           </section>
         </div>
       ) : null}
+      {tourOpen ? (
+        <WatchfaceStudioTour
+          root={editorRef.current}
+          hasTimeLayer={Boolean(quickStartTimeLayer)}
+          onStep={onTourStep}
+          onClose={onTourClose}
+        />
+      ) : null}
     </section>
+    </WatchfaceStudioModeContext.Provider>
   );
 
   /**
@@ -11018,6 +11307,36 @@ export function WatchfaceEditor({
         reference.scope === "config" &&
         isSelectableSlotConfigAssetKey(reference.configKey)
     );
+  }
+
+  /** The Bluetooth or Do Not Disturb group a current-display layer belongs to. */
+  function layerStatusGroup(layer: EditorLayer) {
+    const reference = layer.configAssetId ? configAssetsById.get(layer.configAssetId) : undefined;
+    return reference?.scope === "config" ? watchfaceStatusGroupOf(reference.configKey) : null;
+  }
+  /** The states this layer's indicator has on the face; null for other layers. */
+  function statusGroupMembers(layer: EditorLayer): EditorLayer[] | null {
+    const group = layerStatusGroup(layer);
+    if (!group) return null;
+    const members = layers.filter(item => item.present && layerStatusGroup(item)?.id === group.id);
+    return members.length ? members : [layer];
+  }
+  function layerDisplayLabel(layer: EditorLayer): string {
+    return layerStatusGroup(layer)?.label ?? layer.label;
+  }
+  /** The layer a Send check names: compiled sprites report a layer or its layout group. */
+  function checkLayer(id: string): EditorLayer | undefined {
+    return layers.find((layer) => layer.id === id) ??
+      layers.find((layer) => layer.layoutGroupId === id);
+  }
+  /** A status row stands for all its states, whichever the canvas selected. */
+  function layerRowSelected(layer: EditorLayer): boolean {
+    if (selectedIds.includes(layer.id)) return true;
+    const group = layerStatusGroup(layer);
+    return Boolean(group && selectedIds.some(id => {
+      const selected = layers.find(item => item.id === id);
+      return selected && layerStatusGroup(selected)?.id === group.id;
+    }));
   }
 
   function addCategoryForLayer(layer: EditorLayer): WatchfaceAddCategory {
@@ -11039,6 +11358,7 @@ export function WatchfaceEditor({
     // Analog hands are config images, but they show the time, so they sit
     // with the other time parts (the Add menu files them under Time too).
     if (layer.layoutGroupId === "analogCenter") return "Time";
+    if (layerStatusGroup(layer)) return "Indicators";
     if (layer.kind === "configAsset") {
       return previewMode === "aod" ? "Always-on assets" : "Template assets";
     }
@@ -11071,12 +11391,30 @@ export function WatchfaceEditor({
     return kind === "selectable" ? "Selectable" : kind === "pages" ? "Chart pages" : "Fixed metrics";
   }
 
+  function isTemplateAssetSection(label: string): boolean {
+    return label === "Template assets" || label === "Always-on assets";
+  }
+
+  /**
+   * Simple gathers the template parts the face doesn't show at the end of
+   * the list, collapsed; the Add menu brings them back too. Artwork the
+   * designer added keeps its place so it can still be reordered.
+   */
+  function layerListSectionLabel(layer: EditorLayer): string {
+    const label = layerGroupLabel(layer);
+    if (
+      !simpleMode || layer.visible || layerQuery.trim() ||
+      label === "Artwork" || isTemplateAssetSection(label)
+    ) return label;
+    return "Not on the face";
+  }
+
   function groupLayersForDisplay(
     sourceLayers: EditorLayer[]
   ): Array<{ label: string; layers: EditorLayer[] }> {
     const groups = new Map<string, EditorLayer[]>();
     for (const layer of sourceLayers) {
-      const label = layerGroupLabel(layer);
+      const label = layerListSectionLabel(layer);
       const group = groups.get(label);
       if (group) {
         group.push(layer);
@@ -11204,7 +11542,8 @@ export function WatchfaceEditor({
       "Indicators",
       "Artwork",
       "Template assets",
-      "Always-on assets"
+      "Always-on assets",
+      "Not on the face"
     ];
     return sections.sort(
       (left, right) =>
@@ -11279,6 +11618,9 @@ export function WatchfaceEditor({
       className?: string;
     }
   ) {
+    // Skew, crop, config keys and the like are Advanced. Goal progress
+    // shares the section id but is everyday styling, so it stays.
+    if (simpleMode && sectionId === "advanced" && title === "Advanced") return null;
     return (
       <WatchfaceInspectorSection
         sectionId={sectionId}
@@ -11481,8 +11823,8 @@ export function WatchfaceEditor({
                 />
               </label>
             ) : (
-              <strong className="wf-layer-title" title={t(layer.label)}>
-                {t(layer.label)}
+              <strong className="wf-layer-title" title={t(layerDisplayLabel(layer))}>
+                {t(layerDisplayLabel(layer))}
               </strong>
             )}
             {editorLayerTypeLabel(layer).toLowerCase() !== layer.label.toLowerCase() ? <span className="wf-layer-type-badge">
@@ -12213,6 +12555,15 @@ export function WatchfaceEditor({
   /** Turns a layer on or off through the design setting that owns it. */
   function setLayerOn(layer: EditorLayer, on: boolean) {
     if (layer.nativeDataId) { updateNativeData(layer.nativeDataId, {enabled: on}); return; }
+    // A status indicator's row switches every state the face has.
+    const statusMembers = statusGroupMembers(layer);
+    if (statusMembers) {
+      for (const member of statusMembers) {
+        const reference = configAssetsById.get(member.configAssetId!);
+        if (reference) updateConfigAsset(reference, { enabled: on });
+      }
+      return;
+    }
     if (layer.configAssetId) {
       const reference = configAssetsById.get(layer.configAssetId);
       if (reference) updateConfigAsset(reference, { enabled: on });
@@ -12306,10 +12657,46 @@ export function WatchfaceEditor({
     );
   }
 
+  /** A status indicator's states: pick one to preview and edit, show or add it. */
+  function renderStatusStateSwitch(group: NonNullable<ReturnType<typeof watchfaceStatusGroupOf>>, activeKey: string, active: WatchfaceConfigAssetReference, present: boolean) {
+    const state = group.states.find(item => item.key === activeKey)!;
+    const hasState = (key: string) => layers.some(item => item.present && item.configAssetId === `config:${key}`);
+    const enabled = design.configAssetOverrides?.[active.id]?.enabled !== false;
+    const stateLayer = layers.find(item => item.configAssetId === active.id);
+    return (
+      <div className="wf-status-states">
+        <div className="wf-status-state-tabs" role="tablist" aria-label={t("{{value1}} states", { value1: t(group.label) })}>
+          {group.states.map(item => (
+            <button key={item.key} type="button" role="tab" aria-selected={item.key === activeKey}
+              className={`${item.key === activeKey ? "is-active" : ""}${hasState(item.key) ? "" : " is-missing"}`}
+              onClick={() => setChosenStatusStates(prev => ({ ...prev, [group.id]: item.key }))}>{t(item.label)}</button>
+          ))}
+        </div>
+        <p className="watchface-studio-summary">{t(state.hint)}</p>
+        {present ? (
+          <label className="watchface-studio-toggle"><input type="checkbox" checked={enabled} onChange={(event) => updateConfigAsset(active, { enabled: event.target.checked })} />{t("Show this icon on the watch")}</label>
+        ) : (
+          <>
+            <p className="watchface-studio-summary">{t("This face has no icon for this state, so the watch shows nothing for it.")}</p>
+            {stateLayer ? <button type="button" className="secondary-button" onClick={() => void addStatusIndicator(active, stateLayer.id)}><Plus size={15} /> {t("Add icon")}</button> : null}
+          </>
+        )}
+      </div>
+    );
+  }
+
   function renderConfigAssetInspector(
-    reference: WatchfaceConfigAssetReference,
-    layer: EditorLayer
+    selectedReference: WatchfaceConfigAssetReference,
+    selectedLayerItem: EditorLayer
   ) {
+    // A status indicator edits the state picked in its panel; all states share its position.
+    const statusGroup = selectedReference.scope === "config" ? watchfaceStatusGroupOf(selectedReference.configKey) : null;
+    const chosenKey = statusGroup ? chosenStatusStates[statusGroup.id] : undefined;
+    const statusKey = statusGroup ? (chosenKey && statusGroup.states.some(item => item.key === chosenKey) ? chosenKey
+      : watchfaceStatusActiveKey(statusGroup, key => layers.some(item => item.present && item.configAssetId === `config:${key}`))) : null;
+    const reference = (statusKey && configAssetsById.get(`config:${statusKey}`)) || selectedReference;
+    const layer = (statusKey && layers.find(item => item.configAssetId === reference.id)) || selectedLayerItem;
+    const statePresent = !statusGroup || layer.present;
     const dimensions = configAssetDimensions(reference);
     const deviceResolution = watchPreviewResolution ?? previewResolution;
     const center = parseConfigPos(deviceResolution?.config.time_center_pos);
@@ -12347,11 +12734,14 @@ export function WatchfaceEditor({
     })();
     return (
       <>
-        {renderPositionReadout(layer)}
+        {renderPositionReadout(selectedLayerItem)}
         {renderPropertySection(
           "specific",
-          "Asset",
-          renderConfigAssetControls(reference),
+          statusGroup ? "States" : "Asset",
+          <>
+            {statusGroup ? renderStatusStateSwitch(statusGroup, statusKey!, reference, layer.present) : null}
+            {statePresent ? renderConfigAssetControls(reference) : null}
+          </>,
           { disabled: isPositionLocked(layer.id) }
         )}
         {renderStrokeInspector(layer.id)}
@@ -12552,7 +12942,7 @@ export function WatchfaceEditor({
         {renderPropertySection(
           "advanced",
           "Advanced",
-          <p className="watchface-studio-summary">{t("This sprite is used only for the Battery choice in the selectable data slot. Its source, scale, and position are independent from the Selectable metric layer.")}</p>,
+          <p className="watchface-studio-summary">{t("This sprite is used only for the Battery choice in the selectable data slot. Its source, scale, and position are independent from the Data chosen on watch layer.")}</p>,
           { disabled: isPositionLocked(layer.id) }
         )}
       </>
@@ -12590,13 +12980,18 @@ export function WatchfaceEditor({
             chartReadouts={layer.nativeDataId === "chart" ? chartReadouts : undefined}
             pageFields={layer.nativeDataId === "chart" ? chartPageFields : undefined}
             onSelectField={id => { selectEditorItem(`native:${id}`); }}
-            fieldPages={layer.nativeDataId !== "chart" ? nativeLayerChartPages(layer.nativeDataId, design.nativeData) : undefined}
+            fieldPages={layer.nativeDataId !== "chart" ? nativeLayerChartPages(layer.nativeDataId, design.nativeData, facePageIds) : undefined}
+            onAddDailyPage={facePageIds ? () => setChartPageMode("daily-a", "hidden") : undefined}
+            onAddMinMaxPartner={(layer.nativeDataId === "weather_temp_min" || layer.nativeDataId === "weather_temp_max")
+              && !design.nativeData?.[layer.nativeDataId === "weather_temp_min" ? "weather_temp_max" : "weather_temp_min"]?.enabled
+              ? () => addNativeData(layer.nativeDataId === "weather_temp_min" ? "weather_temp_max" : "weather_temp_min") : undefined}
             onChartGroup={layer.nativeDataId === "chart" ? source => { void selectChartGroup(source); } : undefined}
             onAddReadout={layer.nativeDataId === "chart" ? addChartReadout : undefined}
             onRemoveReadout={layer.nativeDataId === "chart" ? source => { void removeChartReadout(source); } : undefined}
             onShowReadout={layer.nativeDataId === "chart" ? (source, shown) => { void showChartReadout(source, shown); } : undefined}
             onAddPage={layer.nativeDataId === "chart" ? addChartPageToFace : undefined}
-            onRemovePage={layer.nativeDataId === "chart" ? removeChartPageFromFace : undefined}
+            onRemovePage={layer.nativeDataId === "chart" ? pageId => { void removeChartPageFromFace(pageId); } : undefined}
+            removedPages={layer.nativeDataId === "chart" ? NATIVE_CHART_PAGES.filter(page => design.chartPageModes?.[page.id] === "removed").map(page => page.id) : undefined}
             takenReadouts={layer.nativeDataId === "chart" ? NATIVE_CHART_SOURCES.filter(source => design.nativeData?.[source.id]?.enabled).map(source => source.id) : undefined}
             onMakeFixed={layer.nativeDataId === "chart" && previewMode === "current" ? source => { void makeChartReadoutFixed(source); } : undefined}
             onError={onError}
@@ -12730,7 +13125,7 @@ export function WatchfaceEditor({
           {renderPropertySection(
             "appearance",
             "Appearance",
-            <label className="field">{t("Tint color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setMetricStyle("battery", { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Remove tint")} title={t("Remove tint")} onClick={() => clearMetricColor("battery")}><XCircle size={14} /></button></span></label>,
+            <label className="field">{t("Color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setMetricStyle("battery", { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Use default color")} title={t("Use default color")} onClick={() => clearMetricColor("battery")}><XCircle size={14} /></button></span></label>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderStrokeInspector(layer.id)}
@@ -12765,7 +13160,7 @@ export function WatchfaceEditor({
           {renderPropertySection(
             "appearance",
             "Appearance",
-            <label className="field">{t("Tint color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setTimeStyle(layer.timePartId!, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Remove tint")} title={t("Remove tint")} onClick={() => clearTimeColor(layer.timePartId!)}><XCircle size={14} /></button></span></label>,
+            <label className="field">{t("Color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setTimeStyle(layer.timePartId!, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Use default color")} title={t("Use default color")} onClick={() => clearTimeColor(layer.timePartId!)}><XCircle size={14} /></button></span></label>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderStrokeInspector(layer.id)}
@@ -12832,12 +13227,12 @@ export function WatchfaceEditor({
       return (
         <>
           {renderPositionReadout(layer)}
-          {layer.metricId === "temperature" && <p className="watchface-studio-summary">{t("The watch's thermometer supplies this value and can be affected by body heat. Add Current weather under Weather for weather data.")}</p>}
+          {layer.metricId === "temperature" && <p className="watchface-studio-summary">{t("The watch's thermometer supplies this value and can be affected by body heat. Add Temperature (weather) under Weather for weather data.")}</p>}
           {renderPropertySection(
             "appearance",
             "Appearance",
             <div className="wf-property-stack">
-              <label className="field">{t("Tint color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setMetricStyle(layer.metricId!, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Remove tint")} title={t("Remove tint")} onClick={() => clearMetricColor(layer.metricId!)}><XCircle size={14} /></button></span></label>
+              <label className="field">{t("Color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setMetricStyle(layer.metricId!, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Use default color")} title={t("Use default color")} onClick={() => clearMetricColor(layer.metricId!)}><XCircle size={14} /></button></span></label>
               {exerciseSeparator ? (
                 <details className="wf-nested-disclosure" open>
                   <summary>{t("Exercise separator")}</summary>
@@ -13178,7 +13573,7 @@ export function WatchfaceEditor({
           {renderPropertySection(
             "appearance",
             "Appearance",
-            <label className="field">{t("Tint color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setDateStyle(partId, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Remove tint")} title={t("Remove tint")} onClick={() => clearDateColor(partId)}><XCircle size={14} /></button></span></label>,
+            <label className="field">{t("Color")}<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setDateStyle(partId, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label={t("Use default color")} title={t("Use default color")} onClick={() => clearDateColor(partId)}><XCircle size={14} /></button></span></label>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderStrokeInspector(layer.id)}
@@ -13362,7 +13757,7 @@ export function WatchfaceEditor({
             "Appearance",
             <div className="wf-property-stack">
               <label className="watchface-studio-toggle"><input type="checkbox" checked={Boolean(sprite.tintColor)} onChange={(event) => updateSprite(sprite.id, { tintColor: event.target.checked ? design.accentColor : null })} />{t("Tint image")}</label>
-              {sprite.tintColor ? <label className="field">{t("Tint color")}<span className="watchface-color-control"><WatchfaceColorInput value={sprite.tintColor} onValueChange={(color) => updateSprite(sprite.id, { tintColor: color })} /><code>{sprite.tintColor}</code><button type="button" className="watchface-color-none" aria-label={t("Remove tint")} title={t("Remove tint")} onClick={() => updateSprite(sprite.id, { tintColor: null })}><XCircle size={14} /></button></span></label> : null}
+              {sprite.tintColor ? <label className="field">{t("Color")}<span className="watchface-color-control"><WatchfaceColorInput value={sprite.tintColor} onValueChange={(color) => updateSprite(sprite.id, { tintColor: color })} /><code>{sprite.tintColor}</code><button type="button" className="watchface-color-none" aria-label={t("Use default color")} title={t("Use default color")} onClick={() => updateSprite(sprite.id, { tintColor: null })}><XCircle size={14} /></button></span></label> : null}
             </div>,
             { disabled: locked }
           )}
@@ -13422,7 +13817,7 @@ export function WatchfaceEditor({
           ? renderPropertySection(
               "appearance",
               "Appearance",
-              <label className="field">{t("Tint color")}<span className="watchface-color-control">
+              <label className="field">{t("Color")}<span className="watchface-color-control">
                   <WatchfaceColorInput
                     value={
                       design.layerColors?.[layer.layoutGroupId] ??
@@ -13446,8 +13841,8 @@ export function WatchfaceEditor({
                     type="button"
                     className="watchface-color-none"
                     disabled={!design.layerColors?.[layer.layoutGroupId]}
-                    aria-label={t("Remove tint")}
-                    title={t("Remove tint")}
+                    aria-label={t("Use default color")}
+                    title={t("Use default color")}
                     onClick={() => clearLayerColor(layer.layoutGroupId!)}
                   >
                     <XCircle size={14} />
@@ -13705,7 +14100,7 @@ export function WatchfaceEditor({
                   <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy + fromWatchCoordinate(1))} aria-label={t("Nudge selector icon down")}><ArrowDown size={13} aria-hidden="true" /></button>
                   <button type="button" className="watchface-nudge-reset" onClick={() => setIconOffset(0, 0)}>{t("Reset")}</button>
                 </div>
-                <p className="watchface-studio-summary">{t("This moves only the")}{" "}{selectedComplication.label.toLowerCase()}{" "}{t("icon. Move the Selectable metric layer to reposition its icon and value together.")}</p>
+                <p className="watchface-studio-summary">{t("This moves only the")}{" "}{midSentence(t(selectedComplication.label))}{" "}{t("icon. Move the Data chosen on watch layer to reposition its icon and value together.")}</p>
               </div>
             )
             : null
@@ -13755,7 +14150,7 @@ export function WatchfaceEditor({
           rasterFont={design.rasterFont}
           componentRasterFont={design.selectableMetricStyle?.rasterFont}
           previewedFont={design.selectableMetricStyle?.rasterFont ?? design.rasterFont}
-          componentLabel="Selectable metric"
+          componentLabel="Data chosen on watch"
           onActivate={() =>
             setSelectableMetricStyle({ fontFamily: "" })
           }
@@ -13777,8 +14172,8 @@ export function WatchfaceEditor({
               type="button"
               className="watchface-color-none"
               disabled={!design.selectableMetricStyle?.color}
-              aria-label={t("Remove tint")}
-              title={t("Remove tint")}
+              aria-label={t("Use default color")}
+              title={t("Use default color")}
               onClick={clearSelectableMetricColor}
             >
               <XCircle size={14} />
@@ -13811,7 +14206,7 @@ export function WatchfaceEditor({
           (rotation) => setSelectableMetricStyle({ rotation })
         )}
         {renderGlyphEdgesField(design.selectableMetricStyle?.solidAlpha, (solidAlpha) => setSelectableMetricStyle({ solidAlpha }))}
-        <p className="watchface-studio-summary">{t("Move this Selectable metric layer to position its icon and value together. Sensor temperature uses the watch's thermometer and can be affected by body heat. Add Current weather under Weather for weather data.")}</p>
+        <p className="watchface-studio-summary">{t("Move this layer to position its icon and value together. Temperature (watch sensor) uses the watch's thermometer and can be affected by body heat. Add Temperature (weather) under Weather for weather data.")}</p>
           </>
         ) : (
           <p className="watchface-studio-summary">{t("Turn on a selectable component to add its configuration and edit its value, icon, and position settings.")}</p>
@@ -13877,7 +14272,7 @@ export function WatchfaceEditor({
         {reference ? renderConfigAssetControls(reference) : null}
         <p className="watchface-studio-summary">
           {!reference
-            ? t("No {{value1}} icon is defined for this display mode.", { value1: complication.label.toLowerCase() })
+            ? t("No {{value1}} icon is defined for this display mode.", { value1: midSentence(t(complication.label)) })
             : available
               ? t("{{value1}} · [{{value2}}]. Shown when {{value3}} is active in the selectable slot.", { value1: configAssetDimensions(reference), value2: reference.configKey, value3: complication.label.toLowerCase() })
               : t("This template has no {{value1}} icon. Import a PNG to draw one beside the value; export adds [{{value2}}] to config.txt.", { value1: complication.label.toLowerCase(), value2: reference.configKey })}
@@ -13899,7 +14294,7 @@ export function WatchfaceEditor({
         reference: configAssetsById.get("config:control_colon_icon"),
         title: t("Value colon"),
         detail: complication.valueParts
-          ? t("Between the {{value1}} values", { value1: complication.label.toLowerCase() })
+          ? t("Between the {{value1}} values", { value1: midSentence(t(complication.label)) })
           : t("Only data types with two values use it")
       },
       {
@@ -14025,6 +14420,7 @@ export function WatchfaceEditor({
    * (`solidAlpha`), which only suits tiny digits; on AMOLED it looks jagged.
    */
   function renderGlyphEdgesField(solid: boolean | undefined, onChange: (solidAlpha: boolean | undefined) => void) {
+    if (simpleMode) return null;
     return (
       <div className="field wf-number-align-field">
         <span>{t("Edges")}</span>
@@ -14476,7 +14872,7 @@ export function WatchfaceEditor({
         {renderPropertySection(
           "appearance",
           "Appearance",
-          <label className="field">{t("Tint color")}<span className="watchface-color-control">
+          <label className="field">{t("Color")}<span className="watchface-color-control">
               <WatchfaceColorInput
                 value={separator.color}
                 onValueChange={(color) => updateStaticSeparator(separatorId, { color })}
@@ -14486,8 +14882,8 @@ export function WatchfaceEditor({
                 type="button"
                 className="watchface-color-none"
                 disabled={separator.color === design.digitColor}
-                aria-label={t("Remove tint")}
-                title={t("Remove tint")}
+                aria-label={t("Use default color")}
+                title={t("Use default color")}
                 onClick={() => updateStaticSeparator(separatorId, { color: design.digitColor })}
               >
                 <XCircle size={14} />
@@ -14625,7 +15021,7 @@ export function WatchfaceEditor({
         {renderPropertySection(
           "appearance",
           "Appearance",
-          <label className="field">{t("Tint color")}<span className="watchface-color-control">
+          <label className="field">{t("Color")}<span className="watchface-color-control">
               <WatchfaceColorInput
                 value={indicator.color ?? design.digitColor}
                 onValueChange={(color) => updateAmPmIndicator({ color })}
@@ -14635,8 +15031,8 @@ export function WatchfaceEditor({
                 type="button"
                 className="watchface-color-none"
                 disabled={!indicator.color}
-                aria-label={t("Remove tint")}
-                title={t("Remove tint")}
+                aria-label={t("Use default color")}
+                title={t("Use default color")}
                 onClick={() => updateAmPmIndicator({ color: undefined })}
               >
                 <XCircle size={14} />
@@ -14807,7 +15203,7 @@ export function WatchfaceEditor({
         {renderPropertySection(
           "appearance",
           "Appearance",
-          <label className="field">{t("Tint color")}<span className="watchface-color-control">
+          <label className="field">{t("Color")}<span className="watchface-color-control">
               <WatchfaceColorInput
                 value={indicator.color ?? design.accentColor}
                 onValueChange={(color) => updateWeatherIndicator({ color })}
@@ -14817,8 +15213,8 @@ export function WatchfaceEditor({
                 type="button"
                 className="watchface-color-none"
                 disabled={!indicator.color}
-                aria-label={t("Remove tint")}
-                title={t("Remove tint")}
+                aria-label={t("Use default color")}
+                title={t("Use default color")}
                 onClick={() => updateWeatherIndicator({ color: undefined })}
               >
                 <XCircle size={14} />
@@ -14859,7 +15255,7 @@ export function WatchfaceEditor({
                     <button
                       type="button"
                       className="wf-property-icon-button"
-                      aria-label={t("Restore SIMPLE default {{value1}}", { value1: label.toLowerCase() })}
+                      aria-label={t("Restore SIMPLE default {{value1}}", { value1: midSentence(t(label)) })}
                       title={t("Restore SIMPLE default")}
                       disabled={spriteImportPending}
                       onClick={() => restoreSet(set)}

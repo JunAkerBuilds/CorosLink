@@ -148,3 +148,15 @@
   font-size: 13px;
   font-weight: 700;
 }
+
+/* Numbered km markers read as round beads on the line. */
+.activity-route-distance-marker span {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-color: #ffffffd9;
+  border-radius: 999px;
+  background: #0d0e10;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 40%);
+  font-size: 10.5px;
+}

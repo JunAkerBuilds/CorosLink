@@ -140,6 +140,13 @@ export interface StreamAntigravityOptions extends GeminiCliToolCallbacks {
   timeoutMs?: number;
   /** A model id from the session's model list. Omit for the account default. */
   model?: string;
+  /**
+   * Antigravity built-ins to allow, such as "search_web". Coach turns leave
+   * this out. When set, the only built-ins it can ask to use are these.
+   */
+  builtinTools?: string[];
+  /** Called as Antigravity starts a tool, with the title it gives it. */
+  onBuiltinToolUse?: (title: string) => void;
 }
 
 // ----- Folders -----
@@ -839,8 +846,14 @@ async function launchAgent(
     close: async () => {
       await agent.stop(5_000);
       for (const sessionId of sessions) await removeSessionFiles(dirs.acp, sessionId);
-      // Windows keeps a live process's files locked, so this runs after exit.
-      await rm(temp, { recursive: true, force: true }).catch(() => undefined);
+      // Windows keeps a live process's files locked, so this runs after exit,
+      // and may hold DLL handles briefly after taskkill returns.
+      await rm(temp, {
+        recursive: true,
+        force: true,
+        maxRetries: process.platform === "win32" ? 10 : 0,
+        retryDelay: 100
+      }).catch(() => undefined);
     }
   };
 }
@@ -860,11 +873,17 @@ async function removeSessionFiles(acpDir: string, sessionId: string): Promise<vo
 /**
  * Coach sessions use only CorosLink's tools: every Antigravity built-in (files,
  * terminal, web, subagents) is switched off, and the tool bridge's tools are
- * declared up front instead of being looked up through file reads.
+ * declared up front instead of being looked up through file reads. A lookup
+ * outside the Coach may turn specific built-ins back on.
  */
-function sessionParams(root: string, toolServer: Record<string, unknown> | undefined, instructions: string) {
+function sessionParams(
+  root: string,
+  toolServer: Record<string, unknown> | undefined,
+  instructions: string,
+  builtinTools: string[] = []
+) {
   const antigravity: Record<string, unknown> = {
-    enabledTools: [],
+    enabledTools: builtinTools,
     eagerMcpServers: [MCP_SERVER_NAME]
   };
   if (instructions) antigravity.systemPrompt = { append: instructions };
@@ -894,6 +913,26 @@ export function answerAntigravityPermission(params: unknown): unknown {
   const ours = meta?.is_mcp_tool_call === true && meta.mcp?.server === MCP_SERVER_NAME;
   const allowOnce = request?.options?.find((option) => option?.kind === "allow_once");
   if (!ours || typeof allowOnce?.optionId !== "string") {
+    return { outcome: { outcome: "cancelled" } };
+  }
+  return { outcome: { outcome: "selected", optionId: allowOnce.optionId } };
+}
+
+/**
+ * For a session whose only built-ins are web tools: reading the web is the one
+ * thing it can ask for. No tool server is attached, so an MCP call is declined.
+ */
+export function answerAntigravityWebPermission(params: unknown): unknown {
+  const request = params as {
+    toolCall?: { kind?: unknown; _meta?: { is_mcp_tool_call?: unknown } };
+    options?: Array<{ optionId?: unknown; kind?: unknown }>;
+  };
+  const allowOnce = request?.options?.find((option) => option?.kind === "allow_once");
+  // These pages are untrusted: anything that could run or change something is
+  // declined here too, in case enabledTools ever lets it through.
+  const kind = request?.toolCall?.kind;
+  const changesSomething = kind === "execute" || kind === "edit" || kind === "delete" || kind === "move";
+  if (request?.toolCall?._meta?.is_mcp_tool_call === true || changesSomething || typeof allowOnce?.optionId !== "string") {
     return { outcome: { outcome: "cancelled" } };
   }
   return { outcome: { outcome: "selected", optionId: allowOnce.optionId } };
@@ -937,7 +976,9 @@ export async function streamAntigravityCompletion(
       });
     }
     if (options.signal.aborted) throw new Error("cancelled");
-    launch = await launchAgent(options.root, { onPermission: answerAntigravityPermission });
+    launch = await launchAgent(options.root, {
+      onPermission: options.builtinTools?.length ? answerAntigravityWebPermission : answerAntigravityPermission
+    });
     const agent = launch.agent;
     if (options.signal.aborted) agent.close();
 
@@ -956,6 +997,7 @@ export async function streamAntigravityCompletion(
         options.onThinking?.(text);
       } else if (kind === "tool_call") {
         toolCalls += 1;
+        if (typeof update?.title === "string") options.onBuiltinToolUse?.(update.title);
         if (toolCalls > MAX_TOOL_CALLS && sessionId) {
           agent.notify("session/cancel", { sessionId });
         }
@@ -970,7 +1012,7 @@ export async function streamAntigravityCompletion(
       : undefined;
     const session = (await agent.request(
       "session/new",
-      sessionParams(options.root, toolServer, options.instructions)
+      sessionParams(options.root, toolServer, options.instructions, options.builtinTools)
     )) as { sessionId?: string; configOptions?: unknown };
     if (!session.sessionId) throw new Error("Antigravity did not start a session.");
     sessionId = session.sessionId;

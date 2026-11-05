@@ -9,7 +9,7 @@ import type { DiagnosticsSnapshot, RendererDiagnosticError } from "../electron/d
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "../electron/calendarSyncTypes";
 import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "../electron/watchfaceAutomationTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "../electron/googleCalendarTypes";
-import type { ManualRaceInput, RaceEditInput, RaceOverview, StravaRaceImportResult } from "../electron/raceTypes";
+import type { ManualRaceInput, RaceEditInput, RaceLookupProgress, RaceLookupRequest, RaceLookupResult, RaceLookupStatus, RaceOverview, RaceTarget, RaceTargetEditInput, RaceTargetInput, StravaRaceImportResult } from "../electron/raceTypes";
 import type { AthleteFact, AthleteFactCategory, AthleteMemoryChange } from "../electron/athleteMemoryModel";
 import type { WorkoutJournalEntry, WorkoutJournalSaveInput } from "../electron/workoutJournalTypes";
 import type { CoachConfirmInput, CoachConfirmResult, CoachEventFrame, CoachSendInput, CoachSessionsChange, CoachSnapshot, CoachSubscribeResult } from "../electron/coachHub/coachContract";
@@ -215,7 +215,7 @@ import type {
 } from "../electron/types";
 
 export interface CorosLinkApi {
-  setLanguage: (language: "en" | "es" | "fr" | "pt" | "zh-CN") => Promise<void>;
+  setLanguage: (language: "en" | "de" | "es" | "fr" | "pt" | "zh-CN") => Promise<void>;
   getWorkoutAutomationStatus: () => Promise<WatchfaceAutomationStatus>;
   configureWorkoutAutomation: (input: { enabled: boolean; port?: number }) => Promise<WatchfaceAutomationStatus>;
   onWorkoutEditsChanged: (callback: () => void) => () => void;
@@ -303,12 +303,18 @@ export interface CorosLinkApi {
   exportCorosActivityScreenBackup?: (input: { backupId: string }) => Promise<{ saved: boolean }>;
   getCorosMusicInventory: () => Promise<import("../electron/corosBleMusicTypes").CorosBleMusicInventory>;
   getCorosWifiMusicStatus: () => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
-  sendCorosMusicOverWifi: () => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
-  sendCorosLibraryMusicOverWifi: (ids: string[]) => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
+  sendCorosMusicOverWifi: (options?: import("../electron/corosWifiMusicTypes").CorosWifiMusicOptions) => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
+  sendCorosLibraryMusicOverWifi: (ids: string[], options?: import("../electron/corosWifiMusicTypes").CorosWifiMusicOptions) => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
   importCorosWifiMusicBackup: () => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
   cancelCorosWifiMusicSync: () => Promise<void>;
   restoreCorosWifiMusicSettings: () => Promise<import("../electron/corosWifiMusicTypes").CorosWifiMusicStatus>;
+  getCorosNeteasePlaylists: () => Promise<import("../electron/corosWifiMusicTypes").CorosNeteasePlaylistLabel[]>;
+  /** Names a NetEase playlist on the connected watch. Local only: the watch stores playlist IDs, not names. */
+  renameCorosNeteasePlaylist: (id: string, name: string) => Promise<import("../electron/corosWifiMusicTypes").CorosNeteasePlaylistLabel[]>;
+  getCorosNeteaseToolbox: () => Promise<import("../electron/corosWatchToolbox").NeteaseToolboxState>;
+  showCorosNeteaseInToolbox: () => Promise<import("../electron/corosWatchToolbox").NeteaseToolboxState>;
   deleteCorosMusicTrack: (target: import("../electron/corosBleMusicTypes").CorosBleMusicDeleteTarget) => Promise<import("../electron/corosBleMusicTypes").CorosBleMusicDeleteResult>;
+  deleteAllCorosMusic?: (inventoryId: string) => Promise<import("../electron/corosBleMusicTypes").CorosBleMusicDeleteAllResult>;
   disconnectCorosNativeBle: () => Promise<CorosNativeBleSnapshot>;
   createCorosPhonePairingCode?: () => Promise<import("../electron/corosNativeBleTypes").CorosPhonePairingCode>;
   startCorosWatchfacePhoneSend?: (input: import("../electron/watchfacePhoneSendTypes").WatchfacePhoneSendInput) => Promise<import("../electron/watchfacePhoneSendTypes").WatchfacePhoneSend>;
@@ -475,6 +481,8 @@ export interface CorosLinkApi {
   ) => () => void;
   onAudiobookUpdated: (callback: (book: Audiobook) => void) => () => void;
   listDownloads: () => Promise<LocalTrack[]>;
+  /** Copies MP3s into the library; with no files, asks the user to pick some. */
+  importDownloads: (files?: File[]) => Promise<{ imported: number; tracks: LocalTrack[] } | null>;
   downloadAudio: (url: string) => Promise<DownloadAudioResult>;
   deleteDownload: (id: string, removeFile: boolean) => Promise<LocalTrack[]>;
   getBinaryStatus: () => Promise<BinaryStatus>;
@@ -757,9 +765,18 @@ export interface CorosLinkApi {
   updateRace: (input: RaceEditInput) => Promise<RaceOverview>;
   removeRace: (raceId: string) => Promise<RaceOverview>;
   addManualRace: (input: ManualRaceInput) => Promise<RaceOverview>;
+  addRaceTarget: (input: RaceTargetInput) => Promise<RaceOverview>;
+  updateRaceTarget: (input: RaceTargetEditInput) => Promise<RaceOverview>;
+  /** Upcoming and past target races, without the race journal (for the calendar). */
+  listRaceTargets: () => Promise<RaceTarget[]>;
   removeRaceTarget: (targetId: string) => Promise<RaceOverview>;
   /** Target races changed outside the Races tab (the Coach added one). */
   onRacesChanged?: (callback: () => void) => () => void;
+  /** Absent in test fixtures: the race editor then simply offers no AI search. */
+  getRaceLookupStatus?: () => Promise<RaceLookupStatus>;
+  lookupRace?: (request: RaceLookupRequest) => Promise<RaceLookupResult>;
+  cancelRaceLookup?: (requestId: string) => Promise<void>;
+  onRaceLookupProgress?: (callback: (progress: RaceLookupProgress) => void) => () => void;
   importStravaRaces: (full?: boolean) => Promise<StravaRaceImportResult>;
   startRpeBackfill: () => Promise<void>;
   getRpeBackfillStatus: () => Promise<{ pending: number; running: boolean }>;

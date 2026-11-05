@@ -115,6 +115,8 @@ interface CalendarViewProps {
   onMessage: (message: string | null) => void;
   onError: (message: string | null) => void;
   onOpenTraining: () => void;
+  /** Opens the Races tab, where the race's details are edited. */
+  onOpenRaces?: () => void;
   onOpenCoach: (prompt: string) => void;
   /** A day (and workout) another view asked to open; consumed once. */
   navigationRequest?: CalendarNavigationRequest | null;
@@ -272,6 +274,7 @@ export function CalendarView({
   onMessage,
   onError,
   onOpenTraining,
+  onOpenRaces,
   onOpenCoach,
   navigationRequest,
   onNavigationRequestHandled
@@ -1331,6 +1334,7 @@ export function CalendarView({
           onSelectScheduled={(day, entry) => setSelection({ kind: "scheduled", day, entry })}
           onSelectActivity={(day, activity) => setSelection({ kind: "activity", day, activity })}
           onSelectExternal={setExternalSelection}
+          onOpenRace={() => (onOpenRaces ?? onOpenTraining)()}
           onToggleScheduled={toggleScheduledSelection}
           onAdd={setAddTarget}
           onContextMenu={(target) => {
@@ -1348,6 +1352,7 @@ export function CalendarView({
           highlightedWorkoutKey={highlightedWorkoutKey}
           onSelectScheduled={(day, entry) => setSelection({ kind: "scheduled", day, entry })}
           onSelectExternal={setExternalSelection}
+          onOpenRace={() => (onOpenRaces ?? onOpenTraining)()}
           onSelectActivity={(day, activity: TrainingHubActivity) =>
             setSelection({ kind: "activity", day, activity })
           }

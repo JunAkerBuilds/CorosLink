@@ -4,6 +4,7 @@ import { allocationKeyOf, listPendingTeardowns, pruneLiveActivities, pruneTunnel
 import { defaultDeps, loadConfig, type Deps, type Env } from "./env";
 import { errorResponse, RelayError } from "./http";
 import { log } from "./log";
+import { purgeWifiAudioLookups, registerWifiAudioLookup, renewWifiAudioUrl, revokeWifiAudioLookup } from "./wifiAudioLookup";
 import { sweepIdleTunnels, type SweepResult } from "./reaper";
 import {
   handleActivity,
@@ -27,6 +28,10 @@ type Handler = (request: Request, ctx: RelayContext, params: string[]) => Promis
 
 const ROUTES: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
   { method: "GET", pattern: /^\/health$/u, handler: (_request, ctx) => handleHealth(ctx) },
+  { method: "POST", pattern: /^\/v1\/wifi-audio\/lookups$/u, handler: registerWifiAudioLookup },
+  { method: "POST", pattern: /^\/v1\/wifi-audio\/lookups\/revoke$/u, handler: revokeWifiAudioLookup },
+  { method: "POST", pattern: /^\/([A-Za-z0-9_-]{10})\/\.coros\.com\/openapi\/music163\/song\/download\/renew$/u,
+    handler: (request, ctx, params) => renewWifiAudioUrl(request, ctx, params[0]!) },
   { method: "GET", pattern: /^\/\.well-known\/jwks\.json$/u, handler: (_request, ctx) => handleJwks(ctx) },
   { method: "POST", pattern: /^\/v1\/environments\/link$/u, handler: handleLink },
   { method: "POST", pattern: /^\/v1\/environments\/recovery$/u, handler: handleRecovery },
@@ -75,7 +80,7 @@ export async function handleRequest(
       return errorResponse(error);
     }
     log("error", "unhandled_error", {
-      path: url.pathname,
+      path: url.pathname.includes("/openapi/music163/") ? "[wifi-audio-lookup]" : url.pathname,
       reason: error instanceof Error ? error.message : "unknown",
     });
     return errorResponse(new RelayError("internal_error", "The relay hit an unexpected error."));
@@ -102,6 +107,7 @@ export async function runMaintenance(env: Env, deps: Deps = defaultDeps()): Prom
   };
   const now = deps.now();
   const noncesPurged = await purgeExpiredNonces(env.DB, now);
+  await purgeWifiAudioLookups(ctx);
   await pruneTunnelStatusCache(env.DB, now - 24 * 60 * 60 * 1000);
   const liveActivitiesPurged = await pruneLiveActivities(env.DB, now);
 

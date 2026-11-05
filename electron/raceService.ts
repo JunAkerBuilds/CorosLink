@@ -10,6 +10,7 @@ import {
   computeBuildUp,
   detectRaceDistance,
   isRaceDistanceKey,
+  isRaceRegistration,
   isRaceSportType,
   localRaceDay,
   matchPastRaces,
@@ -24,6 +25,7 @@ import {
   clearStravaRaceActivities,
   deleteStoredRace,
   deleteStoredRaceTarget,
+  getStoredRaceTarget,
   listStoredRaceTargets,
   saveStoredRaceTarget,
   getStoredRace,
@@ -44,6 +46,7 @@ import type {
   RaceOverview,
   RaceSuggestion,
   RaceTarget,
+  RaceTargetEditInput,
   RaceTargetInput,
   StravaRaceImportResult
 } from "./raceTypes";
@@ -610,6 +613,11 @@ export async function getRaceRoute(
 }
 
 const MAX_LOCATION_LENGTH = 120;
+const MAX_BIB_LENGTH = 20;
+const MAX_WAVE_LENGTH = 40;
+const MAX_PICKUP_LOCATION_LENGTH = 160;
+const MAX_PICKUP_HOURS_LENGTH = 60;
+const MAX_WEBSITE_LENGTH = 500;
 const MAX_TARGET_DAYS_AHEAD = 3 * 365;
 
 function localDayKey(date: Date): string {
@@ -646,8 +654,64 @@ export function normalizeRaceTarget(input: RaceTargetInput, today = new Date()):
     ...(goalTime !== undefined ? { goalTime } : {}),
     ...(priority ? { priority } : {}),
     ...(cleanText(input.location, MAX_LOCATION_LENGTH) ? { location: cleanText(input.location, MAX_LOCATION_LENGTH) } : {}),
-    ...(cleanText(input.notes, MAX_NOTES_LENGTH) ? { notes: cleanText(input.notes, MAX_NOTES_LENGTH) } : {})
+    ...(cleanText(input.notes, MAX_NOTES_LENGTH) ? { notes: cleanText(input.notes, MAX_NOTES_LENGTH) } : {}),
+    ...normalizeRaceTargetDetails(input, raceDay)
   };
+}
+
+/** A calendar day as YYYYMMDD; undefined when blank. */
+function readOptionalDay(value: unknown, message: string): string | undefined {
+  const compact = typeof value === "string" ? value.trim().replace(/-/g, "") : "";
+  if (!compact) return undefined;
+  const match = /^(\d{4})(\d{2})(\d{2})$/.exec(compact);
+  const date = match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : undefined;
+  if (!date || localDayKey(date) !== compact) throw new Error(message);
+  return compact;
+}
+
+/** "7:05", "07:05" or "19:30" → "HH:MM". */
+function readStartTime(value: unknown): string | undefined {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text) return undefined;
+  const match = /^([01]?\d|2[0-3])[:.h]([0-5]\d)$/.exec(text);
+  if (!match) throw new Error("Enter the start time as HH:MM, for example 07:30.");
+  return `${match[1]!.padStart(2, "0")}:${match[2]}`;
+}
+
+/** An http(s) link; a bare domain gets https://. */
+function readWebsite(value: unknown): string | undefined {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text) return undefined;
+  let url: URL;
+  try {
+    url = new URL(/^[a-z][a-z\d+.-]*:/i.test(text) ? text : `https://${text}`);
+  } catch {
+    throw new Error("Enter the race website as a web address.");
+  }
+  if ((url.protocol !== "https:" && url.protocol !== "http:") || !url.hostname.includes(".") || url.href.length > MAX_WEBSITE_LENGTH) {
+    throw new Error("Enter the race website as a web address.");
+  }
+  return url.href;
+}
+
+/** Registration and race-day logistics; dates must fall on or before race day. */
+function normalizeRaceTargetDetails(input: RaceTargetInput, raceDay: string): Partial<RaceTarget> {
+  const registrationDeadline = readOptionalDay(input.registrationDeadline, "Enter the registration deadline as YYYY-MM-DD.");
+  if (registrationDeadline && registrationDeadline > raceDay) throw new Error("The registration deadline is after race day.");
+  const bibPickupDay = readOptionalDay(input.bibPickupDay, "Enter the bib pickup day as YYYY-MM-DD.");
+  if (bibPickupDay && bibPickupDay > raceDay) throw new Error("Bib pickup is after race day.");
+  const details: Partial<RaceTarget> = {
+    registration: isRaceRegistration(input.registration) ? input.registration : undefined,
+    registrationDeadline,
+    bibNumber: cleanText(input.bibNumber, MAX_BIB_LENGTH),
+    startTime: readStartTime(input.startTime),
+    wave: cleanText(input.wave, MAX_WAVE_LENGTH),
+    bibPickupLocation: cleanText(input.bibPickupLocation, MAX_PICKUP_LOCATION_LENGTH),
+    bibPickupDay,
+    bibPickupHours: cleanText(input.bibPickupHours, MAX_PICKUP_HOURS_LENGTH),
+    website: readWebsite(input.website)
+  };
+  return Object.fromEntries(Object.entries(details).filter(([, value]) => value !== undefined));
 }
 
 const targetListeners = new Set<() => void>();
@@ -681,6 +745,21 @@ export function addRaceTarget(input: RaceTargetInput): RaceTarget {
   saveStoredRaceTarget(target);
   targetsChanged();
   return target;
+}
+
+/** The athlete adds an upcoming race from the Races tab. */
+export function addManualRaceTarget(input: RaceTargetInput): RaceOverview {
+  addRaceTarget(input);
+  return getRaceOverview();
+}
+
+/** The athlete edits an upcoming race (registered, got their bib, …); blanks clear. */
+export function updateRaceTarget(input: RaceTargetEditInput): RaceOverview {
+  const existing = typeof input?.targetId === "string" ? getStoredRaceTarget(input.targetId) : undefined;
+  if (!existing) throw new Error("That target race is no longer in your list.");
+  saveStoredRaceTarget({ ...normalizeRaceTarget(input), targetId: existing.targetId, createdAt: existing.createdAt });
+  targetsChanged();
+  return getRaceOverview();
 }
 
 export function removeRaceTarget(targetId: string): RaceOverview {

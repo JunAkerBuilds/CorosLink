@@ -1,9 +1,10 @@
 import { t, useLanguage } from "../i18n/tools";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Bluetooth, Usb } from "lucide-react";
 import type { CorosLinkApi } from "../coroslink-api";
 import type { CorosNativeBleSnapshot } from "../../electron/corosNativeBleTypes";
 import { CorosBluetoothMusicPanel } from "./CorosBluetoothMusicPanel";
+import { publishWatchMusicInventory, useNeteaseSend } from "./watchMusicInventoryStore";
 
 interface WatchMusicSourcePanelProps {
   api: CorosLinkApi | undefined;
@@ -29,6 +30,11 @@ function ConnectedWatchMusicSource({ api, connection, usbPanel, showWifiMusic, w
   useLanguage();
   const [useBluetooth, setUseBluetooth] = useState(false);
   const [wifiBusy, setWifiBusy] = useState(false);
+  // A Bluetooth read belongs to this watch: drop it on disconnect or a watch change, not on a USB/Bluetooth view switch.
+  useEffect(() => () => publishWatchMusicInventory(null), []);
+  // NetEase playlists are picked and created in the Bluetooth view: open it when Wi-Fi sends switch to NetEase.
+  const { destination } = useNeteaseSend();
+  useEffect(() => { if (destination === "netease") setUseBluetooth(true); }, [destination]);
 
   return <div className="watch-music-source">
     <div className="watch-music-source-options">

@@ -75,7 +75,7 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         guard current == nil, !requests.isEmpty else { return }
         current = requests.removeFirst()
         operationStarted = Date()
-        capture = current?["capture"] as? Bool == true && ["syncFileBlock", "exchange"].contains(operation) ? [] : nil
+        capture = current?["capture"] as? Bool == true && ["syncFileBlock", "exchange", "musicInventoryPage", "musicDelete"].contains(operation) ? [] : nil
         captureChars = 0
         switch operation {
         case "scan", "connect":
@@ -126,13 +126,16 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             deadline(15, "The watch did not answer the COROS control request.")
             flushWrites()
         case "musicInventoryPage":
+            // Storage category 0 is local music (pages 0–255); 3 is NetEase, read whole (page -1).
+            let category = current?["category"] as? Int ?? 0
             guard let p = peripheral, p.state == .connected,
-                  let page = current?["page"] as? Int, (0..<256).contains(page),
+                  let page = current?["page"] as? Int,
+                  (category == 0 && (0..<256).contains(page)) || (category == 3 && page == -1),
                   controlWrite() != nil,
                   characteristics[channels[1].1.replacingOccurrences(of: "0001", with: "0002")] != nil else {
                 fail("The music inventory request is invalid or the watch is disconnected."); return
             }
-            musicReceiver = CorosMusicPageReceiver(page: page)
+            musicReceiver = CorosMusicPageReceiver(page: page, category: category)
             responseBytes = Data(); responseRemaining = nil
             writeTarget = controlWrite()
             writeFrames = musicReceiver!.requestFrames()
@@ -193,7 +196,7 @@ final class BluetoothWorker: NSObject, CBCentralManagerDelegate, CBPeripheralDel
                   bulk.properties.contains(.writeWithoutResponse) else {
                 fail("The COROS file request is invalid or its transfer channel is unavailable."); return
             }
-            guard peripheral!.maximumWriteValueLength(for: .withoutResponse) >= 21 else {
+            guard peripheral!.maximumWriteValueLength(for: .withoutResponse) >= header.count else {
                 fail("Bluetooth packet size is too small for file sync. Reconnect the watch."); return
             }
             routeBlock = block; routeStage = "ready"; writeTarget = control; writeFrames = [header]
@@ -736,6 +739,8 @@ func fileLimit(_ fileIndex: UInt8) -> Int {
 }
 
 func validFileBlock(_ header: Data, _ block: Data, _ fileIndex: UInt8) -> Bool {
+    // A NetEase delete has storage category 3 at +16 (local music 0), in the same 21-byte header.
+    if fileIndex == 93 && header.count == 21 && header[16] == 3 { return validNeteaseDeleteBlock(header, block) }
     guard header.count == 21, block.count > 0, block.count <= 4096,
           (fileIndex == 8 || fileIndex == 0x14 || fileIndex == 93 || fileIndex == 9 || fileIndex == 50 || pushedDataFiles.contains(fileIndex)), Array(header.prefix(3)) == [0x78, 0, fileIndex],
           (fileIndex != 8 || header[16] < 10),
@@ -786,6 +791,7 @@ struct CorosMusicReadResult {
 }
 final class CorosMusicPageReceiver {
     let page: Int
+    let category: Int
     var file = Data()
     var block = Data()
     var header = Data()
@@ -794,7 +800,7 @@ final class CorosMusicPageReceiver {
     var sequence = 0
     var stage = "header"
     var total: Int?
-    init(page: Int) { self.page = page }
+    init(page: Int, category: Int = 0) { self.page = page; self.category = category }
 
     func little(_ data: Data, _ offset: Int, _ size: Int) -> Int {
         (0..<size).reduce(0) { $0 | Int(data[offset + $1]) << ($1 * 8) }
@@ -815,7 +821,7 @@ final class CorosMusicPageReceiver {
         let time = Int(Date().timeIntervalSince1970) - 1_388_534_400
         let zone = TimeZone.current.secondsFromGMT() / 900
         let payload = Data([93]) + integer(file.count, 4) + Data([0]) + integer(time, 4)
-            + Data([UInt8(truncatingIfNeeded: zone), 3]) + integer(0, 4) + integer(page, 4)
+            + Data([UInt8(truncatingIfNeeded: zone), 3]) + integer(category, 4) + integer(page, 4)
         return frames(0x7c, payload)
     }
     func accept(_ data: Data, control: Bool) throws -> CorosMusicReadResult {
@@ -835,6 +841,7 @@ final class CorosMusicPageReceiver {
                 stage = "header"
                 return CorosMusicReadResult(frames: requestFrames())
             }
+            // +12 is 0 for every category (checked on a W332 for 0 and 3); the category travels in the request.
             guard stage == "header", payload.count >= 19, payload[12] == 0,
                   payload[15] == 93, payload[16] == 3 else { throw CorosMusicReadError.invalid }
             let size = little(payload, 4, 2), remaining = little(payload, 6, 4)
@@ -858,8 +865,8 @@ final class CorosMusicPageReceiver {
                 for _ in 0..<8 { crc = (crc &<< 1) ^ (crc & 0x8000 == 0 ? 0 : 0x1021) }
             }
             guard Int(crc) == little(header, 10, 2) else { throw CorosMusicReadError.invalid }
-            // The success bit acknowledges metadata; category 0 at +12 releases
-            // its temporary listing cache. It does not delete stored music.
+            // The success bit acknowledges metadata and releases the watch's
+            // temporary listing cache. It does not delete stored music.
             let ack = integer(file.count, 4) + Data([1, 93]) + Data(repeating: 0, count: 10)
             file.append(block); stage = "ack"
             return CorosMusicReadResult(frames: frames(0x7d, ack))
@@ -997,7 +1004,8 @@ final class CorosMusicDeleteReceiver {
         remaining = frame[1]; bytes.append(frame.dropFirst(2))
         guard bytes.count <= 5 else { throw CorosMusicReadError.invalid }
         if frame[1] == 0 {
-            guard bytes.count == 5, bytes[0] == 1, bytes[1] == 1, bytes[2] == 0,
+            // [2] echoes the storage category: 0 local music, 3 NetEase (seen on a W332).
+            guard bytes.count == 5, bytes[0] == 1, bytes[1] == 1, bytes[2] == 0 || bytes[2] == 3,
                   bytes.dropLast().reduce(UInt8(0), { $0 &+ $1 }) == bytes.last else { throw CorosMusicReadError.invalid }
             storagePayload = Data(bytes.dropLast())
         }
@@ -1005,6 +1013,56 @@ final class CorosMusicDeleteReceiver {
 }
 
 // Private worker boundary: exactly one local MP3 row, category 0, <=512 bytes.
+/// Removes songs from exactly one NetEase playlist: HS category 3 and one Music163StorageInfo
+/// whose play_list_info has one playlist ID and at least one song ID, nothing else that matters.
+func validNeteaseDeleteBlock(_ header: Data, _ block: Data) -> Bool {
+    func little(_ data: Data, _ offset: Int, _ count: Int) -> Int { (0..<count).reduce(0) { $0 | Int(data[offset + $1]) << ($1 * 8) } }
+    func crc(_ value: Data) -> Int {
+        var c: UInt16 = 0xffff
+        for byte in value { c ^= UInt16(byte) << 8; for _ in 0..<8 { c = (c &<< 1) ^ (c & 0x8000 == 0 ? 0 : 0x1021) } }
+        return Int(c)
+    }
+    let file = block
+    guard header.count == 21, Array(header.prefix(3)) == [0x78, 0, 93], little(header, 3, 4) == 0,
+          little(header, 7, 2) == file.count, little(header, 9, 4) == file.count, little(header, 13, 2) == crc(file),
+          file.reduce(UInt8(0), { $0 &+ $1 }) == header[15],
+          Array(header[16..<20]) == [3, 0, 0, 3], header[2..<20].reduce(UInt8(0), { $0 &+ $1 }) == header[20],
+          file.count >= 48, file.count <= 4096 else { return false }
+    let proto = file.subdata(in: 48..<file.count)
+    guard Array(file[0..<4]) == [0x48, 0x46, 0, 93], little(file, 8, 4) == file.count - 16,
+          crc(file.subdata(in: 0..<14)) == little(file, 14, 2), crc(file.subdata(in: 16..<file.count)) == little(file, 12, 2),
+          Array(file[16..<24]) == [0x48, 0x53, 0, 3, 0, 0, 0, 0], little(file, 26, 2) == 44,
+          little(file, 30, 4) == file.count - 44, little(file, 34, 4) == file.count - 44, little(file, 38, 4) == 1,
+          crc(file.subdata(in: 16..<42)) == little(file, 42, 2), little(file, 44, 4) == proto.count,
+          crc(proto) == little(file, 24, 2) else { return false }
+    var offset = 0
+    func varint() -> Int? {
+        var value = 0
+        for index in 0..<5 {
+            guard offset < proto.count else { return nil }
+            let byte = proto[offset]; offset += 1; value |= Int(byte & 127) << (index * 7)
+            if byte & 128 == 0 { return value <= 0xffffffff ? value : nil }
+        }
+        return nil
+    }
+    guard varint() == 10, let size = varint(), size == proto.count - offset else { return false }
+    var playlists = 0, songs = 0
+    while offset < proto.count {
+        guard let key = varint() else { return false }
+        switch key {
+        case 8, 32: guard varint() != nil else { return false }
+        case 18, 26:
+            guard let count = varint(), count > 0, count <= 32, count <= proto.count - offset,
+                  proto.subdata(in: offset..<offset + count).allSatisfy({ ($0 >= 48 && $0 <= 57) || ($0 >= 65 && $0 <= 90) || ($0 >= 97 && $0 <= 122) || $0 == 45 || $0 == 95 }) else { return false }
+            offset += count
+            if key == 18 { playlists += 1 } else { songs += 1 }
+        case 42: guard let count = varint(), count <= 64, count <= proto.count - offset else { return false }; offset += count
+        default: return false
+        }
+    }
+    return playlists == 1 && songs > 0 && songs <= 500
+}
+
 func validMusicDeleteFile(_ file: Data) -> Bool {
     guard file.count >= 48, file.count <= 512 else { return false }
     let reader = CorosMusicPageReceiver(page: 0)

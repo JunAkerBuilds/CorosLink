@@ -9,11 +9,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Find a race with AI.** When you add or edit an upcoming race, type its name or paste its website and choose
+  Find with AI. Your Coach's AI provider searches the web for the date, distance, start time, bib pickup and
+  registration deadline, then fills them in with a mark on each and links to its sources. Your goal, bib, wave and
+  entry status are never touched, Undo takes it all back, and nothing is saved until you add the race. Local models
+  can't search the web.
 - **Strokes, SWOLF and lengths for your swims.** Swims synced from your watch now show the stroke, stroke count, SWOLF and stroke rate of every interval, with your rests in between and your fastest marked. **Lengths**, next to **Intervals**, lists each length of a pool swim. A **Swim** card adds pool length, strokes, average and best SWOLF, best pace, stroke rate, distance per stroke and water temperature. Pace is per 100 m, **Swim time** leaves out your rests, and the chart can show your stroke rate and the water temperature. A pool's distances read in its own unit, metres or yards. Coach reads all of it too, interval by interval and length by length. Exported FIT files include the lengths, strokes, stroke types, SWOLF and pool length.
+
+### Changed
+
+- **A clearer race form.** Upcoming races now open with a live preview of the countdown, goal pace and calendar
+  dates. Distance, priority and status are one click, the details most people add later fold away, and Add race
+  stays in view. An upcoming race starts with no date or distance, so it can't be saved on today's 5K by accident,
+  and clicking outside the form no longer discards what you typed.
 
 ### Fixed
 
 - **Swims no longer show strokes as climb.** A swim's stroke count was listed as elevation gain, and its laps could mix up lengths, intervals and rests. Swims you already synced are corrected the next time CorosLink starts.
+
+## [0.1.73] - 2026-11-03
+
+### Added
+
+- **German.** Choose Deutsch in Settings → App language. Every German system locale, Austria and Switzerland included, picks it on first launch; menus, file dialogs and macOS permission prompts are translated too.
+- **Registration and race-day details for upcoming races.** An upcoming race now keeps its registration status (Considering, Registered, Waitlisted, Deferred), the registration deadline, the race website, start time, wave or corral, bib number, and bib pickup day, hours and location. Up next shows them on each race, with a reminder while registration is still open and you haven't entered. Upcoming races can now be edited (the pencil on each card), so you can mark a race Registered or add your bib once you have it. The Coach sees these details when it lists your races.
+- **Choose which services appear in Media** ([#164](https://github.com/JunAkerBuilds/CorosLink/issues/164)). Right-click the Media tabs to hide a service you don't use, or turn services on and off in Settings → Sidebar → Media services. Library always stays. Nothing is removed, and a hidden service still opens from Settings → Accounts.
+- **Races on the Calendar.** Race day, bib pickup and the registration deadline (until you're registered) appear on their days in Month, Week and List. Click one to open Races.
+- **The Coach works with Hevy.** With Hevy connected in Strength (your Hevy Pro API key), the Coach reads your Hevy exercise library, routines and folders, recent workouts with every set and RPE, each lift's logged history with estimated one-rep max, and your body measurements, all live from Hevy. It can build a new routine or progress an existing one from the loads you actually lifted, and add a custom exercise the library lacks; each change appears as a card showing what changes and is saved only when you click Save to Hevy. A routine edited in Hevy after the Coach read it isn't overwritten. Hevy's API can't log or delete workouts, delete routines or move a routine between folders, so the Coach doesn't. Hevy's own MCP server only accepts apps Hevy has approved (ChatGPT for now), so CorosLink uses the public API.
+- **Studio opens in Simple mode.** A Simple | Advanced switch in Studio's top bar (remembered) keeps the editor to what is on the face: color, font, size and position. Template parts that are switched off collect in a collapsed "Not on the face" section, and PNG digit fitting, the PNG font importer, Edges, the Project tab and the preview-size picker move to Advanced. Labels use plain names in both modes (Color, Spacing, Colon, Date slash, Data chosen on watch, Temperature (weather)…), and Send's checks name layers in sentences with a Show me button that selects the layer.
+- **A walkthrough of Studio.** The first time you open Studio, an eight-step tour points out the face, Layers, Add, Properties, the preview controls, Simple and Advanced, and Save and Send to COROS. Arrow keys move between steps, and the editor can't be changed by accident while it's open. Replay it any time from the ? button in Studio's top bar.
+- **Import your own MP3s into the Library.** Media → Library's Local cache has an Import MP3s button and accepts files dragged onto it. MP3s you copy into the download folder by hand are listed on the next refresh too.
+- **Template chart pages in Studio.** Pages a template keeps on the watch without a graph (such as SIMPLE's Sun and daily pages) now appear as Chart rows under Chart pages, even when the Chart layer was deleted, and can be hidden, removed or put back. Before, the watch kept paging through pages Studio never showed.
+- **Bluetooth and Do Not Disturb as one layer each.** Each indicator is one row under Indicators, with On, Off and Airplane or Sleep tabs to preview, edit, show or add each state. The preview draws one state at a time instead of stacking them, and the row's eye, Delete and restore apply to every state.
+
+### Changed
+
+- **Plainer Simulation sections in Studio** ([#161](https://github.com/JunAkerBuilds/CorosLink/issues/161)). Sample values are grouped as Date & time, Weather, Training metrics and Device, so sun, moon, tide and barometer read as weather.
+- **Send to COROS says phone** ([#160](https://github.com/JunAkerBuilds/CorosLink/issues/160)). The QR dialog works with Android too, so it no longer says iPhone.
+- **Studio's top bar fits narrow windows.** Below 1000 px wide Save, Download and Convert become icons, and below 820 px Projects does too; their names stay as tooltips.
+- **Watchmaker keeps digit edges smooth.** It no longer turns on hard edges for small digits unless you ask, and it knows how to add a weekday, month and day.
+
+### Fixed
+
+- **Min or max alone shows on the watch.** PACE Pro firmware draws minimum and maximum only when both exist, so a face with just one drew nothing; Studio now adds the missing one invisibly when it sends the face. Faces with no chart pages keep their min/max in the preview, as on the watch.
+- **Graph-less chart layers.** Templates whose chart readouts have no graph (such as SIMPLE) open with a normal Chart layer, graph off, so the preview keeps their weather block.
+- **Dates without a leading zero.** Studio's preview shows the 2nd as "2", as the watch does, instead of "02".
+- **Watch sign-in errors are translated** ([#162](https://github.com/JunAkerBuilds/CorosLink/issues/162)). When the watch refuses CorosLink's key, the reason now appears in your app language, not just the heading.
+- **Faces shared from the COROS app keep their photo.** A face with a background photo picked in the COROS app opened in Studio with an empty background, because COROS stores that photo in its own file and leaves the face's usual background blank. Studio now opens it with the photo, sending or downloading the face puts the photo on the watch, and Convert to another watch works and keeps the photo (it used to stop with "contains compiled device data").
+
+## [0.1.72] - 2026-11-01
+
+### Added
+
+- **Your own MP3s in the watch's NetEase player, over Wi-Fi.** In Media → Library, choose NetEase playlist as the Wi-Fi destination, then open or create a playlist under On watch and add songs from your library; they play from that playlist in the watch's NetEase player. CorosLink transfers only your files and doesn't connect to NetEase or its catalogue. The watch looks up each song's address over HTTPS through the CorosLink relay, then downloads the MP3 straight from the computer, with settings backup, cancellation and restoration as for Podcasts. Verified on a PACE Pro (3.2008.0): a song downloaded into a NetEase playlist and played.
+- **Show NetEase in the watch's Toolbox.** NetEase playlists are only reachable from the watch's Toolbox, which hides NetEase outside its region. Choosing the NetEase destination checks the Toolbox (read-only), and Show NetEase on watch turns on the watch's NetEase feature switch so the watch adds it. The COROS app may remove it again when it syncs.
+- **Add upcoming races yourself.** Races → Add race now has a Past race / Upcoming race switch. An upcoming race needs only a name, date and distance; goal time, priority (A/B/C), location and notes are optional. It joins Up next and the Coach plans around it, as with races the Coach adds. Before, only the Coach could add one, and the form asked for a finish time.
+
+### Changed
+
+- **Automatic Wi-Fi audio batches.** Send all or selected tracks with one click, up to 500 tracks and 1 GB per queue. CorosLink sends downloads of up to 100 songs and 256 MB, so 32 songs go in one download and the watch's finished screen needs one button press. Between downloads it asks you to press a button on the watch and waits up to 5 minutes. NetEase batches stay in one playlist, progress covers the whole queue, and settings are restored between batches. Cancellation or failure stops the rest of the queue.
+- **Reuse Wi-Fi audio settings backups.** The saved backup for the same watch and COROS account no longer expires after 24 hours. Refresh it after changing account, region or watch download settings; encrypted storage, identity checks and settings restoration remain in place.
+
+### Fixed
+
+- **Bluetooth Read music lists NetEase songs.** They are read from the watch's NetEase storage (category 3), which the podcast query never covered. The watch stores no titles there, so songs show the names saved when CorosLink sent them, or their file IDs. If the NetEase list can't be read, the panel says so instead of showing none.
+- **NetEase playlists like a music app.** Under On watch, NetEase playlists are a compact list; open one to see its songs, rename or delete it, and add songs from your library right there (Add selected, Add all). New playlist creates one. CorosLink remembers playlist names, since the watch keeps only IDs.
+- **Songs sent over Wi-Fi show as Synced.** After each NetEase send CorosLink reads the watch over Bluetooth, so the playlist lists the new songs and library tracks found in a NetEase playlist or in Podcasts show Synced. Adding to a playlist skips songs it already has, so retrying a stopped queue doesn't duplicate them.
+- **Delete NetEase songs and playlists.** Each NetEase song and playlist in the watch library has a delete button, and Delete all now includes NetEase. Like the COROS app, CorosLink removes songs from a playlist; the watch deletes a song's file once no playlist uses it and drops a playlist once it's empty. Each delete is confirmed first and checked with a fresh read.
+- **Watch library grouped by where audio plays.** Read music shows Music, Podcasts and one group per NetEase playlist, named when CorosLink created it.
+- **A more compact Wi-Fi audio panel.** Podcasts and NetEase are a two-way switch, the Toolbox status sits beside it, and the setup note and backup link share one line, so the track list keeps room to scroll. Transfer progress stays inside the open playlist for the whole send.
+- **Failed and cancelled Wi-Fi audio sends no longer stay paused on the watch.** CorosLink now removes an unfinished download from the watch's queue when it restores settings, instead of pausing it. If the watch refuses (its USB cable is in), a running download is paused as before.
+- **Wi-Fi audio no longer stops on a screen transition.** CorosLink waits up to 30 seconds for the watch's busy-screen flag to clear before a send, and up to 5 minutes between batches, where the watch keeps its download-finished screen up until a button press. Both waits can be cancelled. Other download blockers are still enforced. Failed transfers show their completed file count.
+- **Read downloaded podcasts over Bluetooth.** Read/Refresh music now queries the watch's separate podcast inventory alongside its local MP3 list. A watch with podcasts and an empty Music folder shows those podcasts instead of zero tracks. Older uploads show file IDs when titles are unavailable; new transfers retain local display names. Verified with 20 podcast records read from the connected W332.
+- **Delete podcasts over Bluetooth.** Podcast rows have a confirmation-protected delete action and refresh the watch inventory to verify removal. The recovered command has not yet been verified on physical hardware.
+- **Delete all watch audio.** Delete all removes the listed local MP3s and podcasts after one confirmation, stopping on the first failure and reporting the number verified. NetEase tracks are excluded.
 
 ## [0.1.71] - 2026-10-31
 

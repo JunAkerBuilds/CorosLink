@@ -12,7 +12,7 @@ export interface WatchTrackNameIndex {
 }
 
 export function createWatchTrackNameIndex(
-  watchTracks: WatchTrack[],
+  watchTracks: Pick<WatchTrack, "name">[],
 ): WatchTrackNameIndex {
   const exactNames = new Set<string>();
   const stems = new Set<string>();

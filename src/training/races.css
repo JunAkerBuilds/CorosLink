@@ -910,153 +910,7 @@ button.race-plaque:focus-visible {
 
 /* --- Head to head -------------------------------------------------------------- */
 
-.races-duel {
-  position: relative;
-  display: grid;
-  gap: 18px;
-  padding: 22px 24px 18px;
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  border-radius: 16px;
-  background: var(--race-card);
-}
-
-.races-duel-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-}
-
-.races-duel-head {
-  display: grid;
-  grid-template-columns: minmax(0, 260px) auto minmax(0, 260px);
-  justify-content: center;
-  align-items: center;
-  gap: 28px;
-  padding: 6px 0 2px;
-}
-
-.races-duel-gap {
-  display: grid;
-  justify-items: center;
-  gap: 2px;
-  min-width: 120px;
-  text-align: center;
-}
-
-.races-duel-gap strong {
-  color: var(--text-primary);
-  font-family: var(--font-display);
-  font-size: 34px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.015em;
-  line-height: 1;
-}
-
-.races-duel-gap span {
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
-.races-duel-gap.is-faster strong {
-  color: var(--accent);
-}
-
-.races-duel-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.races-duel-table th,
-.races-duel-table td {
-  padding: 9px 0;
-  border-top: 1px solid var(--race-rule);
-  letter-spacing: normal;
-  text-transform: none;
-}
-
-.races-duel-table th[scope="row"] {
-  width: 210px;
-  padding: 9px 16px;
-  color: var(--text-secondary);
-  font-weight: 500;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.races-duel-table td.is-left,
-.races-duel-table td.is-right {
-  width: calc((100% - 300px) / 2);
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.races-duel-cell {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.races-duel-table td.is-left .races-duel-cell {
-  justify-content: flex-end;
-}
-
-/* Mirrored bars grow outward from the labels, so "more" reads the same both sides. */
-.races-duel-bar {
-  flex: 0 0 auto;
-  width: calc(var(--bar) * 0.6);
-  height: 8px;
-  border-radius: 2px 4px 4px 2px;
-  background: var(--accent);
-}
-
-.races-duel-table td.is-left .races-duel-bar {
-  border-radius: 4px 2px 2px 4px;
-  background: color-mix(in srgb, var(--text-muted) 55%, transparent);
-}
-
-.races-duel-change {
-  width: 90px;
-  color: var(--text-secondary);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.races-duel-change.is-faster {
-  color: var(--accent);
-}
-
-.races-duel-note {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  text-align: center;
-}
-
-.races-compare-hint {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  padding: 10px 14px;
-  border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.races-compare-hint svg {
-  color: var(--accent);
-}
-
-.races-compare-hint .race-text-button {
-  margin-left: auto;
-}
+/* The comparison and its empty frame live in the redesign block at the end of this file. */
 
 /* --- Timeline -------------------------------------------------------------------- */
 
@@ -1481,7 +1335,7 @@ button.race-plaque:focus-visible {
 /* --- Editor dialog ------------------------------------------------------------------ */
 
 .race-editor {
-  width: min(560px, calc(100vw - 32px));
+  width: min(580px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
   padding: 0;
   border: 0;
@@ -1489,6 +1343,10 @@ button.race-plaque:focus-visible {
   background: transparent;
   color: var(--text-primary);
   overflow: visible;
+}
+
+.race-editor.is-upcoming {
+  width: min(960px, calc(100vw - 32px));
 }
 
 .race-editor::backdrop {
@@ -1501,12 +1359,12 @@ button.race-plaque:focus-visible {
   background: rgba(38, 34, 28, 0.28);
 }
 
+/* Head and foot stay put; only the fields scroll, so Save is always in view. */
 .race-editor-surface {
   display: grid;
-  gap: 18px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   max-height: calc(100vh - 48px);
-  padding: 22px 24px 20px;
-  overflow-y: auto;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 18px;
   background: #1f2327;
@@ -1521,9 +1379,15 @@ button.race-plaque:focus-visible {
 
 .race-editor-head {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 18px 16px 24px;
+  border-bottom: 1px solid var(--race-rule);
+}
+
+.race-editor-heading {
+  flex: 1;
+  min-width: 0;
 }
 
 .race-editor-head h2 {
@@ -1535,30 +1399,111 @@ button.race-plaque:focus-visible {
   letter-spacing: -0.015em;
 }
 
-.race-editor-fields {
+.race-kind-switch {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.race-kind-switch button {
+  min-height: 30px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.race-kind-switch button:hover {
+  color: var(--text-primary);
+}
+
+.race-kind-switch button[aria-pressed="true"] {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text-primary);
+}
+
+.race-kind-switch button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+:root[data-theme="paper"] .race-kind-switch {
+  border-color: rgba(38, 34, 28, 0.12);
+  background: rgba(38, 34, 28, 0.05);
+}
+
+:root[data-theme="paper"] .race-kind-switch button[aria-pressed="true"] {
+  border-color: rgba(38, 34, 28, 0.14);
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(38, 34, 28, 0.08);
+}
+
+.race-editor-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.race-editor.is-upcoming .race-editor-body {
+  grid-template-columns: minmax(0, 1fr) 304px;
+}
+
+.race-editor-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
+  padding: 18px 24px 22px;
+  overflow-y: auto;
+}
+
+.race-editor-fields,
+.race-section-body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
+.race-editor-goal {
+  grid-template-columns: minmax(150px, 190px) minmax(0, 1fr);
+}
+
 .race-field {
   display: grid;
+  align-content: start;
   gap: 6px;
   min-width: 0;
 }
 
 .race-field.is-wide,
-.race-field-hint.is-wide {
+.race-field-hint.is-wide,
+.race-choices.is-wide {
   grid-column: 1 / -1;
 }
 
-.race-field > span {
+.race-field > span:first-child,
+.race-choices > legend {
   color: var(--text-secondary);
   font-size: 12.5px;
   font-weight: 600;
 }
 
-.race-field > span em {
+.race-field > span:first-child em,
+.race-choices > legend em {
   margin-left: 4px;
   color: var(--text-muted);
   font-style: normal;
@@ -1580,13 +1525,24 @@ button.race-plaque:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+.race-field input,
+.race-field select {
+  height: 38px;
+}
+
 .race-field textarea {
+  display: block;
   resize: vertical;
   line-height: 1.5;
 }
 
 .race-field input::placeholder,
 .race-field textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* An empty date or time field shows its mask, which should read as a placeholder. */
+.race-field input.is-blank {
   color: var(--text-muted);
 }
 
@@ -1605,6 +1561,55 @@ button.race-plaque:focus-visible {
   background: #ffffff;
 }
 
+/* The pace a time works out to, inside the time field. */
+.race-time-input {
+  position: relative;
+  display: block;
+}
+
+.race-time-input input:has(+ small) {
+  padding-right: 92px;
+}
+
+.race-time-input small {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.race-field-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 -4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.race-field-section em {
+  margin-left: -4px;
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.race-field-section::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--text-muted) 28%, transparent);
+}
+
 .race-field-hint {
   margin: -6px 0 0;
   color: var(--text-muted);
@@ -1612,8 +1617,673 @@ button.race-plaque:focus-visible {
   line-height: 1.5;
 }
 
-.race-editor-error {
+/* Short lists of choices, all in view. Chosen reads pressed, not tinted. */
+.race-choices {
+  min-width: 0;
   margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.race-choices > legend {
+  margin-bottom: 6px;
+  padding: 0;
+}
+
+.race-choices-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.race-choice {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.race-choice input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.race-choice > i {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--race-dot);
+}
+
+.race-choice > small {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.race-choice:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  color: var(--text-primary);
+}
+
+.race-choice.is-on {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.11);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.race-choice.is-on > small {
+  color: var(--text-secondary);
+}
+
+.race-choice:has(input:focus-visible),
+.race-choice:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+:root[data-theme="paper"] .race-choice {
+  border-color: rgba(38, 34, 28, 0.16);
+  background: #ffffff;
+}
+
+:root[data-theme="paper"] .race-choice:hover {
+  border-color: rgba(38, 34, 28, 0.32);
+}
+
+:root[data-theme="paper"] .race-choice.is-on {
+  border-color: rgba(38, 34, 28, 0.55);
+  background: rgba(38, 34, 28, 0.07);
+}
+
+/* The race name and the AI search: one input for both. */
+.race-finder {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--race-card-border);
+  border-radius: 14px;
+  background: var(--race-card);
+}
+
+.race-finder-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 128px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.race-finder-button svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.race-finder-button:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.race-finder-button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.race-finder-button:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.race-finder-button:disabled svg {
+  color: var(--text-muted);
+}
+
+:root[data-theme="paper"] .race-finder-button {
+  border-color: rgba(38, 34, 28, 0.2);
+  background: #ffffff;
+}
+
+:root[data-theme="paper"] .race-finder-button:hover:not(:disabled) {
+  border-color: rgba(38, 34, 28, 0.36);
+  background: #ffffff;
+}
+
+.race-finder-status {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.race-finder-status:empty {
+  display: none;
+}
+
+.race-finder-hint,
+.race-finder-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.race-finder-note {
+  color: var(--text-primary);
+}
+
+.race-finder-progress,
+.race-finder-problem {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.race-finder-progress > svg,
+.race-finder-found-head > svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--accent);
+}
+
+.race-finder-problem > svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: #e5737a;
+}
+
+:root[data-theme="paper"] .race-finder-problem > svg {
+  color: #b3262d;
+}
+
+.race-finder-progress > div,
+.race-finder-problem > div {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.race-finder-progress strong,
+.race-finder-problem strong,
+.race-finder-found-head strong,
+.race-finder-choices-head strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.race-finder-progress strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.race-finder-progress span,
+.race-finder-problem span {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.race-finder-found {
+  display: grid;
+  gap: 8px;
+}
+
+.race-finder-found-head,
+.race-finder-choices-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.race-finder-found-head .race-text-button,
+.race-finder-choices-head .race-text-button {
+  margin-left: auto;
+}
+
+.race-finder-events {
+  display: grid;
+  gap: 6px;
+}
+
+.race-finder-events > span {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.race-finder-caution {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.race-finder-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: -4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.race-finder-sources a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--text-muted) 50%, transparent);
+  text-underline-offset: 2px;
+}
+
+.race-finder-sources a:hover {
+  color: var(--text-primary);
+}
+
+.race-finder-choices ul {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.race-finder-choices li button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.race-finder-choices li button:hover {
+  border-color: rgba(255, 255, 255, 0.26);
+  color: var(--text-primary);
+}
+
+.race-finder-choices li button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+:root[data-theme="paper"] .race-finder-choices li button {
+  border-color: rgba(38, 34, 28, 0.16);
+  background: #ffffff;
+}
+
+:root[data-theme="paper"] .race-finder-choices li button:hover {
+  border-color: rgba(38, 34, 28, 0.36);
+}
+
+.race-finder-choice-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.race-finder-choice-copy strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.race-finder-choice-copy span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* A field holding the AI's value: a small mark, and one brief glow as it lands. */
+.race-filled-mark {
+  display: inline-flex;
+  margin-left: 5px;
+  color: var(--accent);
+  vertical-align: -1px;
+}
+
+.race-field.is-filled input,
+.race-field.is-filled textarea {
+  animation: race-field-filled 1.3s ease-out;
+}
+
+@keyframes race-field-filled {
+  from {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+}
+
+/* Details most people add later, folded down to one line that shows what's in them. */
+.race-sections {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border: 1px solid var(--race-card-border);
+  border-radius: 12px;
+}
+
+.race-section + .race-section {
+  border-top: 1px solid var(--race-rule);
+}
+
+.race-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 14px 0 12px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.race-section-toggle > svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+.race-section.is-open .race-section-toggle > svg {
+  transform: rotate(90deg);
+}
+
+.race-section-toggle:hover {
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+}
+
+.race-section-toggle:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.race-section-toggle > strong {
+  flex-shrink: 0;
+  min-width: 92px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.race-section-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.race-section-summary.is-empty {
+  color: var(--text-muted);
+}
+
+.race-section-body {
+  padding: 4px 14px 16px;
+}
+
+/* The live preview beside the form. */
+.race-preview {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  min-height: 0;
+  padding: 20px 22px 22px;
+  overflow-y: auto;
+  border-left: 1px solid var(--race-rule);
+  background: rgba(0, 0, 0, 0.14);
+}
+
+:root[data-theme="paper"] .race-preview {
+  background: rgba(38, 34, 28, 0.03);
+}
+
+.race-preview .race-eyebrow {
+  margin: 0;
+}
+
+.race-preview-count {
+  display: grid;
+  gap: 4px;
+  padding-left: 12px;
+  border-left: 3px solid var(--race-dot);
+}
+
+.race-preview-count strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 50px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.race-preview-count .is-prompt {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.race-preview-count strong.is-word {
+  font-size: 32px;
+}
+
+.race-preview-count span {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.race-preview-title {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.race-preview-title > strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.race-preview-title > strong.is-empty {
+  color: var(--text-secondary);
+}
+
+.race-preview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.race-preview-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.race-preview-meta svg {
+  flex-shrink: 0;
+}
+
+.race-preview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.race-preview-goal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 26px;
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--race-rule);
+}
+
+.race-preview-goal dt {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.race-preview-goal dd {
+  margin: 2px 0 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.race-preview-dates {
+  padding-top: 14px;
+  border-top: 1px solid var(--race-rule);
+}
+
+.race-preview-heading {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.race-preview-dates > p:not(.race-preview-heading) {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.race-preview-dates ol {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.race-preview-dates li {
+  position: relative;
+  display: grid;
+  gap: 1px;
+  padding-left: 17px;
+}
+
+.race-preview-dates li::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--text-muted);
+  border-radius: 50%;
+}
+
+.race-preview-dates li.is-race::before {
+  border-color: var(--race-dot);
+  background: var(--race-dot);
+}
+
+.race-preview-dates li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 16px;
+  bottom: -11px;
+  left: 3.5px;
+  width: 1px;
+  background: var(--race-rule);
+}
+
+.race-preview-dates li > span:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.race-preview-dates strong {
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.race-preview-dates small {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.race-preview-day {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.race-editor-error {
+  flex: 1 1 100%;
+  margin: 0 0 4px;
   padding: 9px 12px;
   border: 1px solid rgba(229, 72, 77, 0.35);
   border-radius: 10px;
@@ -1624,12 +2294,76 @@ button.race-plaque:focus-visible {
 
 .race-editor-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  padding: 12px 18px 14px 24px;
+  border-top: 1px solid var(--race-rule);
+}
+
+.race-editor-required {
+  color: var(--text-muted);
+  font-size: 12.5px;
 }
 
 .race-editor-spacer {
   flex: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .race-field.is-filled input,
+  .race-field.is-filled textarea {
+    animation: none;
+  }
+}
+
+/* No room for the preview beside the form; the form is what matters. */
+@media (max-width: 900px) {
+  .race-editor.is-upcoming {
+    width: min(620px, calc(100vw - 32px));
+  }
+
+  .race-editor.is-upcoming .race-editor-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .race-preview {
+    display: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .race-editor-head {
+    flex-wrap: wrap;
+    padding-left: 18px;
+  }
+
+  .race-editor-heading {
+    flex-basis: calc(100% - 60px);
+  }
+
+  .race-kind-switch {
+    order: 3;
+    width: 100%;
+  }
+
+  .race-editor-main {
+    padding: 16px 18px 20px;
+  }
+
+  .race-editor-fields,
+  .race-section-body,
+  .race-editor-goal {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .race-finder {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .race-editor-required {
+    display: none;
+  }
 }
 
 /* --- Motion and narrow windows ---------------------------------------------------------- */
@@ -1682,33 +2416,6 @@ button.race-plaque:focus-visible {
   }
 
   .race-detail-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .races-duel {
-    padding: 18px 14px 14px;
-  }
-
-  .races-duel-head {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-
-  .races-duel-gap {
-    grid-column: 1 / -1;
-    grid-row: 1;
-  }
-
-  .races-duel-table th[scope="row"] {
-    width: auto;
-    padding: 9px 8px;
-    white-space: normal;
-  }
-
-  .races-duel-change {
-    width: 64px;
-  }
-
-  .race-editor-fields {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -1883,6 +2590,80 @@ button.race-plaque:focus-visible {
   font-weight: 500;
 }
 
+.race-target-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid var(--race-card-border);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.race-target-entry.is-registered {
+  border-color: color-mix(in srgb, #3fb68b 45%, transparent);
+  color: #5cc9a0;
+}
+
+:root[data-theme="paper"] .race-target-entry.is-registered {
+  color: #1d7a56;
+}
+
+.race-target-entry.is-considering,
+.race-target-entry.is-deferred {
+  border-style: dashed;
+}
+
+.race-target-logistics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.race-target-logistics > span,
+.race-target-logistics > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.race-target-logistics svg {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.race-target-logistics a {
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--text-muted) 50%, transparent);
+  text-underline-offset: 2px;
+}
+
+.race-target-logistics a:hover {
+  color: var(--text-primary);
+}
+
+.race-target-alert {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.race-target-alert.is-urgent {
+  color: #e8b04a;
+}
+
+:root[data-theme="paper"] .race-target-alert.is-urgent {
+  color: #9a6408;
+}
+
 .race-target-actions {
   display: flex;
   align-items: center;
@@ -1910,4 +2691,1164 @@ button.race-plaque:focus-visible {
   justify-self: end;
   align-self: auto;
   gap: 6px;
+}
+
+/* ===========================================================================
+   Races tab redesign: next-race hero, race plaques, A/B comparison, the
+   5K-equivalent card and a warmer empty state. Distance colours stay
+   identity (ribbon, chip, dot); gold stays for bests; mint and sky mark
+   the A and B sides of a comparison.
+   =========================================================================== */
+
+.training-races-panel {
+  --race-sky: #5cc4f5;
+  --race-sky-ink: #8fd6f8;
+  --race-mint-ink: #7ee2b8;
+  --race-good-bg: rgba(52, 211, 153, 0.14);
+  --race-good-ink: #7ee2b8;
+  --race-bad-bg: rgba(251, 113, 133, 0.14);
+  --race-bad-ink: #fda4af;
+  --race-amber-ink: #f5c451;
+  --race-tile: rgba(10, 12, 14, 0.55);
+}
+
+:root[data-theme="paper"] .training-races-panel {
+  --race-sky: #0b78b8;
+  --race-sky-ink: #075985;
+  --race-mint-ink: #0f6b4a;
+  --race-good-bg: rgba(16, 122, 84, 0.1);
+  --race-good-ink: #0f6b4a;
+  --race-bad-bg: rgba(190, 18, 60, 0.08);
+  --race-bad-ink: #a4132f;
+  --race-amber-ink: #8a5300;
+  --race-tile: rgba(255, 255, 255, 0.8);
+}
+
+/* --- Next race hero --------------------------------------------------------- */
+
+.race-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 28px 36px;
+  padding: 26px 28px;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  border-radius: 20px;
+  background:
+    radial-gradient(80% 140% at 100% 0%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 55%),
+    radial-gradient(60% 100% at 0% 100%, color-mix(in srgb, var(--race-sky) 10%, transparent), transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
+    var(--race-ground);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), var(--race-shadow);
+}
+
+.race-hero-mark {
+  position: absolute;
+  right: -8px;
+  bottom: -40px;
+  z-index: -1;
+  color: transparent;
+  font-family: var(--font-display);
+  font-size: 180px;
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  line-height: 1;
+  -webkit-text-stroke: 1px color-mix(in srgb, var(--race-dot) 16%, transparent);
+  pointer-events: none;
+  user-select: none;
+}
+
+.race-hero-main,
+.race-hero-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.race-hero-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.race-hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--race-mint-ink);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.race-hero-when {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.race-hero-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: clamp(26px, 2.6vw, 34px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.race-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin: -4px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.race-hero-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.race-hero-meta svg {
+  color: var(--text-muted);
+}
+
+.race-hero-distance svg {
+  color: var(--race-dot);
+}
+
+.race-hero-countdown {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.race-hero-unit {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  min-width: 74px;
+  padding: 11px 10px 9px;
+  border: 1px solid var(--race-card-border);
+  border-radius: 14px;
+  background: var(--race-tile);
+  text-align: center;
+}
+
+.race-hero-unit strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.race-hero-unit span {
+  margin-top: 5px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.race-hero-unit.is-seconds strong {
+  color: var(--race-mint-ink);
+}
+
+/* The tick's ring, faded on its own layer: a box-shadow animation repaints every frame. */
+.race-hero-unit.is-seconds {
+  position: relative;
+}
+
+.race-hero-unit.is-seconds::after {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+}
+
+.race-hero-countdown-note {
+  align-self: center;
+  max-width: 220px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.race-hero-countdown.is-today {
+  align-items: baseline;
+  gap: 12px;
+}
+
+.race-hero-countdown.is-today strong {
+  color: var(--race-gold);
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.race-hero-countdown.is-today span {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.race-hero-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.race-hero-tile {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  min-width: 0;
+  padding: 11px 14px;
+  border: 1px solid var(--race-card-border);
+  border-radius: 12px;
+  background: var(--race-card);
+}
+
+.race-hero-tile dt {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.race-hero-tile dd {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  min-width: 0;
+}
+
+.race-hero-tile strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.race-hero-tile.is-pickup strong,
+.race-hero-tile.is-bib strong {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.race-hero-tile dd span {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+.race-hero-tile dd span.is-behind {
+  color: var(--race-amber-ink);
+  font-weight: 600;
+}
+
+.race-hero-tile dd span.is-ahead {
+  color: var(--race-mint-ink);
+  font-weight: 600;
+}
+
+.race-hero-main > .race-target-alert {
+  margin: 0;
+}
+
+.race-hero-ready-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.race-hero-ready {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.race-hero-ready li {
+  --tone: var(--accent);
+  display: grid;
+  gap: 6px;
+}
+
+.race-hero-ready li.is-sky { --tone: var(--race-sky); }
+.race-hero-ready li.is-gold { --tone: var(--race-gold); }
+
+.race-hero-ready-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 12.5px;
+}
+
+.race-hero-ready-row > span {
+  color: var(--text-secondary);
+}
+
+.race-hero-ready-row strong {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.race-hero-ready-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.race-hero-ready-track span {
+  display: block;
+  width: var(--fill);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--tone) 55%, transparent), var(--tone));
+}
+
+.race-hero-ready-note,
+.race-hero-ready-empty {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.race-hero-notes {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 2px solid var(--race-dot);
+  border-radius: 0 10px 10px 0;
+  background: var(--race-well);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  white-space: pre-wrap;
+}
+
+.race-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+a.race-action {
+  text-decoration: none;
+}
+
+:root[data-theme="paper"] .race-hero {
+  background:
+    radial-gradient(80% 140% at 100% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 55%),
+    radial-gradient(60% 100% at 0% 100%, color-mix(in srgb, var(--race-sky) 8%, transparent), transparent 60%),
+    #fbfbf8;
+  border-color: color-mix(in srgb, var(--accent) 30%, rgba(38, 34, 28, 0.1));
+}
+
+:root[data-theme="paper"] .race-hero-ready-track {
+  background: rgba(38, 34, 28, 0.08);
+}
+
+/* --- Every race: plaques ------------------------------------------------------ */
+
+.races-board {
+  display: grid;
+  gap: 14px;
+}
+
+.races-board-head,
+.races-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.races-board-head h3,
+.races-card-head h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.races-board-head p,
+.races-card-head p {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.races-card-head {
+  align-items: baseline;
+}
+
+.races-card-head p {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+}
+
+.races-card-head p strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.races-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.races-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--race-card-border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.races-filter-chip i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--race-dot);
+}
+
+.races-filter-chip span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.races-filter-chip:hover {
+  border-color: color-mix(in srgb, var(--text-muted) 50%, transparent);
+  color: var(--text-primary);
+}
+
+.races-filter-chip[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--text-primary);
+  color: #0d0e10;
+  font-weight: 600;
+}
+
+.races-filter-chip[aria-pressed="true"] span {
+  color: rgba(13, 14, 16, 0.7);
+}
+
+:root[data-theme="paper"] .races-filter-chip[aria-pressed="true"] {
+  color: #ffffff;
+}
+
+:root[data-theme="paper"] .races-filter-chip[aria-pressed="true"] span {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.races-filter-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.races-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  gap: 14px;
+}
+
+.race-result {
+  --chip-ink: color-mix(in srgb, var(--race-dot) 62%, #ffffff);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  padding: 22px 18px 16px;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid color-mix(in srgb, var(--race-dot) 26%, transparent);
+  border-radius: 18px;
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--race-dot) 13%, transparent), rgba(255, 255, 255, 0.02) 55%),
+    var(--race-ground);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+button.race-result {
+  cursor: pointer;
+}
+
+button.race-result:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--race-dot) 48%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 18px 34px -22px rgba(0, 0, 0, 0.85);
+}
+
+button.race-result:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.race-result-ribbon {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 5px;
+  background: linear-gradient(90deg, var(--race-dot), color-mix(in srgb, var(--race-dot) 30%, transparent));
+}
+
+.race-result-sheen {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: -1;
+  width: 32%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.07), transparent);
+  transform: translateX(-130%) skewX(-20deg);
+  pointer-events: none;
+}
+
+.race-result-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.race-result-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--race-dot) 18%, transparent);
+  color: var(--chip-ink);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.race-result-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.race-result-badge.is-new-best {
+  background: color-mix(in srgb, var(--race-gold) 18%, transparent);
+  color: color-mix(in srgb, var(--race-gold) 70%, #fff3c4);
+}
+
+.race-result-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 15.5px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.race-result-date {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.race-result-time {
+  margin-top: 8px;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+
+.race-result.is-best .race-result-time {
+  color: color-mix(in srgb, var(--race-gold) 72%, #fff3c4);
+  text-shadow: 0 0 22px color-mix(in srgb, var(--race-gold) 28%, transparent);
+}
+
+.race-result-foot {
+  display: grid;
+  gap: 2px;
+  max-width: calc(100% - 30px);
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.race-result-placing {
+  overflow-wrap: anywhere;
+}
+
+.race-result-pick {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #0d0e10;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.race-result.is-picked.is-a {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.race-result.is-picked.is-b {
+  border-color: var(--race-sky);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--race-sky) 16%, transparent);
+}
+
+.race-result.is-b .race-result-pick {
+  background: var(--race-sky);
+}
+
+:root[data-theme="paper"] .race-result {
+  --chip-ink: color-mix(in srgb, var(--race-dot) 88%, #000000);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--race-dot) 9%, transparent), rgba(255, 255, 255, 0) 55%),
+    #ffffff;
+  box-shadow: 0 1px 0 rgba(38, 34, 28, 0.04), 0 10px 24px -20px rgba(38, 34, 28, 0.45);
+}
+
+:root[data-theme="paper"] .race-result-badge {
+  background: rgba(38, 34, 28, 0.06);
+}
+
+:root[data-theme="paper"] .race-result-badge.is-new-best {
+  color: var(--race-gold);
+}
+
+:root[data-theme="paper"] .race-result.is-best .race-result-time {
+  color: var(--race-gold);
+  text-shadow: none;
+}
+
+:root[data-theme="paper"] .race-result-sheen {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.85), transparent);
+}
+
+:root[data-theme="paper"] .race-result-pick {
+  color: #ffffff;
+}
+
+/* --- Compare and the 5K card ------------------------------------------------------ */
+
+.races-insights {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.races-insights.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.races-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 20px 22px;
+  border: 1px solid var(--race-card-border);
+  border-radius: 18px;
+  background: var(--race-card);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+:root[data-theme="paper"] .races-card {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.races-compare-empty {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.races-compare-empty > span:not(.races-compare-vs) {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  min-height: 150px;
+  padding: 12px;
+  border: 1px dashed color-mix(in srgb, var(--text-muted) 40%, transparent);
+  border-radius: 14px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.races-compare-empty b {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  font-size: 13px;
+}
+
+.races-compare-empty em {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.races-compare-empty .is-a b { color: var(--race-mint-ink); }
+.races-compare-empty .is-b b { color: var(--race-sky-ink); }
+
+.races-compare-vs {
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.races-duel {
+  position: relative;
+  display: grid;
+  gap: 10px;
+}
+
+.races-duel-close {
+  position: absolute;
+  top: -46px;
+  right: -6px;
+}
+
+.races-duel-table {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--race-card-border);
+  border-radius: 14px;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+.races-duel-table th,
+.races-duel-table td {
+  padding: 10px 14px;
+  border-top: 1px solid var(--race-rule);
+  border-bottom: 0;
+  font-size: 13px;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  vertical-align: middle;
+}
+
+.races-duel-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+:root[data-theme="paper"] .races-duel-table tbody tr:hover {
+  background: rgba(38, 34, 28, 0.025);
+}
+
+.races-duel-table thead th,
+.races-duel-table thead td {
+  border-top: 0;
+}
+
+.races-duel-table td + td,
+.races-duel-table th + td,
+.races-duel-table thead td + th,
+.races-duel-table thead th + th {
+  border-left: 1px solid var(--race-rule);
+}
+
+.races-duel-corner {
+  width: 34%;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.races-duel-side {
+  vertical-align: top;
+}
+
+.races-duel-side strong,
+.races-duel-side > span:last-child {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.races-duel-side strong {
+  color: var(--text-primary);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.races-duel-side > span:last-child {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.races-duel-letter {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.races-duel-side.is-a {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.races-duel-side.is-a .races-duel-letter {
+  color: var(--race-mint-ink);
+}
+
+.races-duel-side.is-b {
+  background: color-mix(in srgb, var(--race-sky) 9%, transparent);
+}
+
+.races-duel-side.is-b .races-duel-letter {
+  color: var(--race-sky-ink);
+}
+
+.races-duel-table tbody th[scope="row"] {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.races-duel-table tbody td {
+  color: var(--text-primary);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.races-duel-table tbody td.is-text {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.races-duel-b {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+
+.races-duel-b > span:first-child {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.races-duel-delta {
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.races-duel-delta.is-faster {
+  background: var(--race-good-bg);
+  color: var(--race-good-ink);
+}
+
+.races-duel-delta.is-slower {
+  background: var(--race-bad-bg);
+  color: var(--race-bad-ink);
+}
+
+:root[data-theme="paper"] .races-duel-delta {
+  background: rgba(38, 34, 28, 0.06);
+}
+
+:root[data-theme="paper"] .races-duel-delta.is-faster {
+  background: var(--race-good-bg);
+}
+
+:root[data-theme="paper"] .races-duel-delta.is-slower {
+  background: var(--race-bad-bg);
+}
+
+.races-duel-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* The chart card: the existing chart, in the card vocabulary above. */
+.races-insights .races-chart-frame {
+  gap: 8px;
+  padding: 20px 14px 16px;
+}
+
+.races-insights .races-chart-head {
+  align-items: flex-start;
+  padding: 0 8px;
+}
+
+.races-insights .races-chart-title {
+  font-size: 17px;
+}
+
+.race-chart-point[data-distance] .race-chart-dot {
+  fill: var(--race-dot);
+}
+
+/* On the all-distances chart the dot keeps its distance; a best on the day wears a gold ring. */
+.race-chart-point[data-distance].is-pb .race-chart-dot {
+  stroke: var(--race-gold);
+  stroke-width: 2.5;
+}
+
+.race-chart-point[data-distance].is-best .race-chart-dot {
+  fill: var(--race-gold);
+}
+
+.races-chart-legend i.is-ring {
+  box-sizing: border-box;
+  border: 2px solid var(--race-gold);
+  background: transparent;
+}
+
+.races-chart-insight {
+  margin: 0 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.races-log-title {
+  margin: 6px 0 -8px;
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+/* --- Empty state ------------------------------------------------------------------ */
+
+.races-empty {
+  position: relative;
+  gap: 32px 64px;
+  padding: 40px 28px 36px;
+  overflow: hidden;
+  border: 1px dashed color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: 20px;
+  background:
+    radial-gradient(60% 120% at 100% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%),
+    radial-gradient(50% 90% at 0% 100%, color-mix(in srgb, var(--race-sky) 8%, transparent), transparent 60%);
+}
+
+.races-empty-stack {
+  position: relative;
+  flex: none;
+  width: 320px;
+  height: 250px;
+}
+
+.races-empty-stack .race-result {
+  position: absolute;
+  width: 240px;
+  height: 172px;
+  box-shadow: var(--race-shadow);
+}
+
+/* Fanned so each ribbon and chip peeks out; the back two are dimmed, not see-through. */
+.race-result.is-ghost-0 { left: 6px; top: 4px; transform: rotate(-10deg); filter: brightness(0.7) saturate(0.8); }
+.race-result.is-ghost-1 { left: 74px; top: 10px; transform: rotate(7deg); filter: brightness(0.85) saturate(0.9); }
+.race-result.is-ghost-2 { left: 36px; top: 62px; transform: rotate(-2deg); }
+
+.race-result.is-ghost-2 .race-result-name {
+  white-space: normal;
+}
+
+.race-result-time.is-empty {
+  color: var(--text-secondary);
+  font-size: 22px;
+  letter-spacing: -0.01em;
+}
+
+.races-empty-copy {
+  gap: 12px;
+  max-width: 460px;
+}
+
+.races-empty-copy h3 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.races-empty-perks {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 4px;
+  padding: 0;
+  list-style: none;
+}
+
+.races-empty-perks li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.races-empty-perks svg {
+  flex: none;
+  box-sizing: content-box;
+  padding: 6px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--race-dot) 16%, transparent);
+  color: color-mix(in srgb, var(--race-dot) 62%, #ffffff);
+}
+
+:root[data-theme="paper"] .races-empty-perks svg {
+  color: color-mix(in srgb, var(--race-dot) 88%, #000000);
+}
+
+:root[data-theme="paper"] .races-empty {
+  border-color: color-mix(in srgb, var(--accent) 35%, rgba(38, 34, 28, 0.12));
+}
+
+/* --- Motion ----------------------------------------------------------------------- */
+
+@keyframes race-result-sheen {
+  0% { transform: translateX(-130%) skewX(-20deg); }
+  55%, 100% { transform: translateX(380%) skewX(-20deg); }
+}
+
+@keyframes race-hero-tick {
+  0% { opacity: 1; transform: scale(0.97); }
+  70%, 100% { opacity: 0; transform: none; }
+}
+
+@keyframes race-ghost-float {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -5px; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .race-result-sheen {
+    animation: race-result-sheen 5.5s ease-in-out infinite;
+  }
+
+  .races-results > .race-result:nth-child(3n + 2) .race-result-sheen { animation-delay: 1.4s; }
+  .races-results > .race-result:nth-child(3n + 3) .race-result-sheen { animation-delay: 2.8s; }
+
+  .race-hero-unit.is-seconds::after {
+    animation: race-hero-tick 1s ease-out infinite;
+  }
+
+  .races-empty-stack .race-result {
+    animation: race-ghost-float 6s ease-in-out infinite;
+  }
+
+  .races-empty-stack .is-ghost-1 { animation-delay: -2s; }
+  .races-empty-stack .is-ghost-2 { animation-delay: -4s; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .race-result,
+  .races-filter-chip {
+    transition: none;
+  }
+}
+
+@media (max-width: 1240px) {
+  .races-insights {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 960px) {
+  .race-hero {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 22px 18px;
+  }
+
+  .race-hero-mark {
+    font-size: 150px;
+  }
 }

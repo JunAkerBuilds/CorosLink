@@ -8,6 +8,13 @@ import {
   useHiddenNavItems,
 } from "../navigation/hiddenNav";
 import { visiblePrimaryNavItems } from "../navigation/primaryNav";
+import {
+  MEDIA_TAB_ITEMS,
+  canHideMediaTab,
+  setMediaTabHidden,
+  showAllMediaTabs,
+  useHiddenMediaTabs,
+} from "../media/mediaTabs";
 import "./sidebarSettings.css";
 
 interface SidebarSettingsProps {
@@ -20,6 +27,7 @@ export const SidebarSettings = forwardRef<HTMLDivElement, SidebarSettingsProps>(
     const hiddenNavItems = useHiddenNavItems();
     const items = visiblePrimaryNavItems(showDevelopmentItems);
     const hiddenCount = items.filter((item) => hiddenNavItems.has(item.id)).length;
+    const hiddenMediaTabs = useHiddenMediaTabs();
 
     return (
       <div className="panel settings-sidebar-panel" id="settings-sidebar" ref={ref}>
@@ -87,6 +95,60 @@ export const SidebarSettings = forwardRef<HTMLDivElement, SidebarSettingsProps>(
             );
           })}
         </ul>
+
+        {/* Customize Media… scrolls here (SettingsSection "media-tabs"). */}
+        <div className="settings-media-tabs" id="settings-section-media-tabs" tabIndex={-1}>
+          <div className="settings-sidebar-subheading">
+            <div>
+              <h3>{t("Media services")}</h3>
+              <p>{t("Choose which services appear as tabs in Media. You can also right-click the Media tabs.")}</p>
+            </div>
+            {hiddenMediaTabs.size > 0 ? (
+              <button className="secondary-button" type="button" onClick={showAllMediaTabs}>
+                <RotateCcw size={15} aria-hidden="true" />
+                {t("Show all")}
+              </button>
+            ) : null}
+          </div>
+          <ul className="settings-sidebar-list">
+            {MEDIA_TAB_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const hideable = canHideMediaTab(item.id);
+              const visible = !hiddenMediaTabs.has(item.id);
+              const label = t(item.label);
+
+              return (
+                <li key={item.id}>
+                  <label
+                    className={[
+                      "settings-sidebar-row",
+                      visible ? "" : "is-hidden",
+                      hideable ? "" : "is-locked",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    <span className="settings-sidebar-icon" aria-hidden="true">
+                      <Icon size={18} aria-hidden="true" />
+                    </span>
+                    <span className="settings-sidebar-label">{label}</span>
+                    {hideable ? null : (
+                      <span className="settings-sidebar-note">{t("Always shown")}</span>
+                    )}
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={visible}
+                      disabled={!hideable}
+                      aria-label={t("Show {{value0}} in Media", { value0: label })}
+                      onChange={(event) => setMediaTabHidden(item.id, !event.target.checked)}
+                    />
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       </div>
     );
   },

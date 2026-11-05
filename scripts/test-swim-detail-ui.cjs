@@ -97,6 +97,7 @@ async function main() {
     ]);
     assert.deepEqual(await text('.swim-showcase .training-laps-section h3'), ['Intervals 2'], 'a pool swim\'s laps are its intervals; rests are not counted');
     assert.deepEqual(await text('.swim-showcase .training-laps-groups button'), ['Intervals', 'Lengths']);
+    assert.equal(await js(`document.querySelectorAll('.swim-showcase .training-laps-hint').length`), 0, 'the swim table has no lap picking, so no hint offers it');
     assert.ok((await text('.swim-showcase .activity-channels-chip')).includes('Water temperature'), 'water temperature can be charted');
     assert.deepEqual(await text('.swim-showcase .training-laps-section thead th'), ['#', 'Stroke', 'Lengths', 'Distance', 'Duration', 'Pace /100m', 'Strokes', 'SWOLF', 'Stroke rate', 'Avg HR', 'Max HR']);
     assert.deepEqual(await text('.swim-showcase .training-laps-section tbody tr'), [
@@ -144,6 +145,10 @@ async function main() {
     assert.ok((await text('.swim-showcase .activity-detail-stat')).includes('Distance125yd'));
     assert.deepEqual(errors, []);
     console.log(`Swim detail UI passed: swim card, pace per 100 m and swim time, no empty route, intervals with stroke, strokes, SWOLF and stroke rate, unnumbered rests, the fastest marked, lengths view, water temperature chart, compact aside, narrow table, pool units, French. Screenshot: ${shot}`);
+  } catch (error) {
+    // app.exit in `finally` ends the process before main()'s rejection can be handled.
+    console.error(error);
+    process.exitCode = 1;
   } finally {
     clearTimeout(watchdog);
     window?.destroy();

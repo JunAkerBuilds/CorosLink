@@ -109,7 +109,7 @@ function platformLabel(info: AppInfo): string {
 }
 
 /** Settings sections other screens link straight to. */
-export type SettingsSection = "watch" | "weather" | "privacy" | "sidebar";
+export type SettingsSection = "watch" | "weather" | "privacy" | "sidebar" | "media-tabs";
 
 interface SettingsViewProps {
   api: CorosLinkApi;

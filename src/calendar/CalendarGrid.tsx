@@ -14,6 +14,7 @@ import {
 import type { CalendarDragPayload } from "./calendarDrag";
 import { DayCell } from "./DayCell";
 import { WEEKDAY_LABELS } from "./dateUtils";
+import type { RaceTarget } from "../../electron/raceTypes";
 import { WeekStatsCell } from "./WeekStatsCell";
 
 /** What a right-click in the grid or the list points at. */
@@ -59,6 +60,7 @@ interface CalendarGridProps {
   onSelectScheduled: (day: CalendarDay, entry: TrainingHubScheduledWorkoutEntry) => void;
   onSelectActivity: (day: CalendarDay, activity: TrainingHubActivity) => void;
   onSelectExternal: (session: StrengthSession) => void;
+  onOpenRace: (race: RaceTarget) => void;
   onToggleScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
   onAdd: (dateKey: string) => void;
   onCopyDay: (day: CalendarDay) => void;
@@ -85,6 +87,7 @@ export function CalendarGrid({
   onSelectScheduled,
   onSelectActivity,
   onSelectExternal,
+  onOpenRace,
   onToggleScheduled,
   onAdd,
   onCopyDay,
@@ -176,6 +179,7 @@ export function CalendarGrid({
                   onSelectScheduled={(entry) => onSelectScheduled(day, entry)}
                   onSelectActivity={(activity) => onSelectActivity(day, activity)}
                   onSelectExternal={onSelectExternal}
+                  onOpenRace={onOpenRace}
                   onToggleScheduled={onToggleScheduled}
                   onAdd={onAdd}
                   onCopyDay={onCopyDay}

@@ -58,6 +58,34 @@ const recovery = domain.insertRecoveryWeek(first, 0);
 assert.equal(recovery.weekCount, 3);
 assert.equal(recovery.entries.filter((entry) => entry.weekIndex === 1).length, 0);
 assert.equal(recovery.phases.some((phase) => phase.kind === "recovery"), true);
+// Nothing is lost: the week it follows keeps its workouts, and later weeks move down.
+assert.equal(recovery.entries.length, first.entries.length);
+for (const entry of first.entries) {
+  const kept = recovery.entries.find((candidate) => candidate.id === entry.id);
+  assert.equal(kept.weekIndex, entry.weekIndex > 0 ? entry.weekIndex + 1 : entry.weekIndex);
+}
+assert.deepEqual(domain.validateTrainingPlan(recovery).filter((issue) => issue.severity === "error"), []);
+
+const entryIn = (id, weekIndex, dayIndex) => ({ ...first.entries[0], id, weekIndex, dayIndex });
+const threeWeeks = {
+  ...first,
+  weekCount: 3,
+  entries: [entryIn("a", 0, 1), entryIn("held", 0, undefined), entryIn("b", 1, 1), entryIn("c", 2, 1)],
+  phases: [
+    { id: "base", name: "Base", kind: "base", startWeek: 1, endWeek: 1 },
+    { id: "build", name: "Build", kind: "build", startWeek: 2, endWeek: 3 }
+  ]
+};
+const dropped = domain.removeTrainingPlanWeek(threeWeeks, 0);
+assert.equal(dropped.weekCount, 2);
+assert.deepEqual(dropped.entries.map((entry) => [entry.id, entry.weekIndex]), [["held", 0], ["b", 0], ["c", 1]]);
+assert.deepEqual(dropped.phases.map((phase) => [phase.id, phase.startWeek, phase.endWeek]), [["build", 1, 2]]);
+assert.deepEqual(domain.validateTrainingPlan(dropped).filter((issue) => issue.path.startsWith("phases")), []);
+const droppedMiddle = domain.removeTrainingPlanWeek(threeWeeks, 1);
+assert.deepEqual(droppedMiddle.phases.map((phase) => [phase.id, phase.startWeek, phase.endWeek]), [["base", 1, 1], ["build", 2, 2]]);
+assert.throws(() => domain.removeTrainingPlanWeek({ ...threeWeeks, weekCount: 1 }, 0));
+const copiedWeek = domain.duplicateTrainingPlanWeek(threeWeeks, 0);
+assert.equal(copiedWeek.entries.filter((entry) => entry.dayIndex === undefined).length, 1, "held items are not copied");
 
 const reordered = domain.reorderTrainingPlanWeek(first, 0, 1);
 assert.equal(reordered.entries[0].weekIndex, 1);

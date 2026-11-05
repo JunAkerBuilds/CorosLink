@@ -1183,6 +1183,12 @@ export interface CorosWatchfaceDesignState {
   tintIcons: boolean;
   previewComplication: string;
   nativeData?: Record<string, CorosWatchfaceNativeDataStyle>;
+  /**
+   * Chart pages the design keeps on the watch with nothing visible ("hidden")
+   * or takes off ("removed"), by NATIVE_CHART_PAGES id. Covers pages a
+   * template declares without a Studio chart layer (templateChartPages.ts).
+   */
+  chartPageModes?: Partial<Record<string, "hidden" | "removed">>;
   metricChanges: Record<string, boolean>;
   metricStyles: Record<string, { solidAlpha?: boolean; align?: "left" | "center" | "right"; color?: string; scale: number; fontSize?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Optional native calorie goal arc/bar configuration. */

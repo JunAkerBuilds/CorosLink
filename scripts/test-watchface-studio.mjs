@@ -562,11 +562,12 @@ assert.deepEqual(
     resolutions: [resolution(416, 12, 20), resolution(800, 24, 38)]
   }),
   [
+    "custom/custom_bg.png",
     "watchface_800x800/background.png",
     "watchface_800x800/watchface_customize.png",
     "watchface_customize.png"
   ],
-  "Studio should initialize imported artwork from the largest on-watch background"
+  "Studio should initialize imported artwork from the COROS custom background, then the largest on-watch background"
 );
 
 const details = {
@@ -3073,7 +3074,7 @@ assert.deepEqual(
     { id: "calories", label: "Calories", active: false },
     { id: "exercise", label: "Exercise", active: false },
     { id: "elevation", label: "Elevation", active: false },
-    { id: "temperature", label: "Sensor temperature", active: false }
+    { id: "temperature", label: "Temperature (watch sensor)", active: false }
   ]
 );
 const sparseMetricDetails = {
@@ -3110,7 +3111,7 @@ assert.deepEqual(
     { id: "calories", label: "Calories", active: false },
     { id: "exercise", label: "Exercise", active: false },
     { id: "elevation", label: "Elevation", active: false },
-    { id: "temperature", label: "Sensor temperature", active: false }
+    { id: "temperature", label: "Temperature (watch sensor)", active: false }
   ],
   "every fixed metric should remain available when a template omits its config keys"
 );
@@ -4496,7 +4497,7 @@ assert.deepEqual(
   fullBounds.find((entry) => entry.id === "complication"),
   {
     id: "complication",
-    label: "Selectable metric",
+    label: "Data chosen on watch",
     x0: 180,
     y0: 200,
     x1: 404,

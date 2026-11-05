@@ -38,7 +38,7 @@
 
 ## Features
 
-The desktop interface supports English, Spanish, French, Portuguese and Simplified Chinese. Choose a language in **Settings → App language** to switch immediately. Dates and numbers follow the selected language. See the [localization guide](src/i18n/README.md) to contribute another language.
+The desktop interface supports English, German, Spanish, French, Portuguese and Simplified Chinese. Choose a language in **Settings → App language** to switch immediately. Dates and numbers follow the selected language. See the [localization guide](src/i18n/README.md) to contribute another language.
 
 ### Training Hub & Coach
 
@@ -120,6 +120,14 @@ Design custom COROS watch faces in a layer-based editor — fonts, colors, artwo
 ### Music & Podcasts
 
 Get MP3s onto your watch over USB from **YouTube**, **Spotify**, **YouTube Music**, **Apple Music**, **YouTube playlists**, or public **Apple Podcasts** episodes. Streaming-service tracks are matched on YouTube and downloaded with yt-dlp + ffmpeg. See [music integrations setup](docs/music-integrations.md).
+
+With Bluetooth connected, **Media → Library → Send audio over Wi-Fi** can send local MP3s to the watch's Podcasts library. The **NetEase playlist** destination puts your own MP3s into a named playlist in the watch's NetEase player, so they play there like any other playlist. Its playlists open from NetEase Music in the watch's Toolbox; if NetEase isn't there, **Show NetEase on watch** turns on the watch's NetEase feature switch (the COROS app may turn it off again when it syncs). **Send all** and **Send selected** automatically split larger selections into batches of up to 20, keeping all NetEase batches in one playlist and showing overall progress. A queue accepts up to 500 tracks and 1 GB total; cancelling or a failure stops the remaining batches. Both devices must share a Wi-Fi network. Import a download-settings backup once; CorosLink reuses it for that watch and account without a daily expiry. Update it after changing your COROS account, region or watch download settings, because each batch restores the saved settings packet. NetEase transfer and playback were verified on a PACE Pro (W332, 3.2008.0).
+
+CorosLink only moves audio files you already have from your computer to your watch. It doesn't connect to NetEase, download anything from its catalogue, or unlock NetEase membership features. Only send audio you have the right to use.
+
+For NetEase, the watch uses the CorosLink HTTPS relay to look up each local download address. The relay receives the computer's private network address and temporary transfer identifiers; the watch also sends its device identifier in the lookup request. The original COROS access token is replaced temporarily and is not sent to the relay. The relay does not receive audio, and the watch downloads the MP3 directly from the computer over local Wi-Fi. Lookup records expire after 35 minutes and are removed when the transfer ends when possible.
+
+The Bluetooth reader queries both local MP3s and the watch's separate podcast inventory, so downloaded podcasts count even when the Music folder is empty. Older uploads may display watch file IDs when titles are unavailable; CorosLink saves original filenames locally for new transfers. Presence and counts always come from a fresh watch query. Local MP3s and podcasts can be deleted individually or with Delete all after confirmation; bulk deletion stops on the first failure and reports the number removed. Podcast deletion checks the inventory afterward and has not yet been verified on physical hardware. CorosLink waits up to 30 seconds for a busy-screen flag to clear before starting an audio download; keep the watch awake during the transfer.
 
 **Audiobooks** — import a DRM-free `.m4b`, `.m4a`, `.mp3`, or similar file (or several files to join them) and CorosLink splits it into mono MP3 parts named in play order: every N minutes (10 by default), or at the book's chapter marks, using each file as a chapter when joining files that have no chapter marks. COROS watches play MP3 only and don't remember your place inside a track, so short parts limit how much you lose and turn the skip button into a jump to the next part. Parts are copied one at a time, first to last, because the watch plays files in the order they were transferred. No audiobook handy? **Free classics** browses and downloads public-domain [LibriVox](https://librivox.org) recordings from the Internet Archive, each file checked against its published SHA-1 before conversion.
 

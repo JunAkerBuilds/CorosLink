@@ -2,7 +2,7 @@ import { getLocale, t } from "../i18n/watchfacesLocale";
 
 /** Section identities stay in the source language, independent of their labels. */
 export function createCollapsedWatchfaceLayerSections(): Set<string> {
-  return new Set(["Template assets", "Always-on assets"]);
+  return new Set(["Template assets", "Always-on assets", "Not on the face"]);
 }
 
 function normalizeSearchText(value: string): string {

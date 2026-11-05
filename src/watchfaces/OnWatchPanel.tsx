@@ -51,7 +51,7 @@ export function OnWatchPanel({ api, snapshot, onOpenWatchMenu, showDevelopmentTo
         </div>
       </header>
 
-      {snapshot?.authenticationError && connected ? <p className="watch-link-note is-error" role="alert">{snapshot.authenticationError}</p> : null}
+      {snapshot?.authenticationError && connected ? <p className="watch-link-note is-error" role="alert">{t(snapshot.authenticationError)}</p> : null}
 
       <CorosDirectWatchfacePanel api={api} ready={watchFaceSyncReady(snapshot)} connected={connected}
         watch={connectedWatch(snapshot)} betaNote={watchBetaNote(snapshot)} disabled={busy || linking} onBusy={setBusy} />

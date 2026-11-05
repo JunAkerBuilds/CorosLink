@@ -1,6 +1,6 @@
 import { localizedText, renderLocalizedText, type LocalizableText, t, useLanguage } from "../i18n/training";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ManualRaceInput, RaceEditInput, RaceOverview } from "../../electron/raceTypes";
+import type { ManualRaceInput, RaceEditInput, RaceOverview, RaceTargetEditInput, RaceTargetInput } from "../../electron/raceTypes";
 import type { TrainingHubActivity } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { createSampleRaceOverview } from "./raceSamples";
@@ -23,12 +23,18 @@ export interface RaceJournal {
   updateRace: (input: RaceEditInput) => Promise<boolean>;
   removeRace: (raceId: string) => Promise<boolean>;
   addManualRace: (input: ManualRaceInput) => Promise<boolean>;
+  /** Adds a race the athlete is training for. */
+  addTarget: (input: RaceTargetInput) => Promise<boolean>;
+  /** Saves changes to an upcoming race (registration, bib, pickup…). */
+  updateTarget: (input: RaceTargetEditInput) => Promise<boolean>;
   /** Removes a race the athlete was training for. */
   removeTarget: (targetId: string) => Promise<boolean>;
   importStrava: () => Promise<void>;
+  /** Looking a race up on the web with the Coach's AI provider. */
+  lookup: Pick<CorosLinkApi, "getRaceLookupStatus" | "lookupRace" | "cancelRaceLookup" | "onRaceLookupProgress">;
 }
 
-function toErrorMessage(error: unknown): string {
+export function toErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "");
 }
@@ -123,9 +129,17 @@ export function useRaceJournal(
     [api, markActivity, raceActivityIds, run]
   );
 
+  const lookup = useMemo<RaceJournal["lookup"]>(() => ({
+    getRaceLookupStatus: api.getRaceLookupStatus && (() => api.getRaceLookupStatus!()),
+    lookupRace: api.lookupRace && ((request) => api.lookupRace!(request)),
+    cancelRaceLookup: api.cancelRaceLookup && ((requestId) => api.cancelRaceLookup!(requestId)),
+    onRaceLookupProgress: api.onRaceLookupProgress && ((callback) => api.onRaceLookupProgress!(callback))
+  }), [api]);
+
   return {
     overview: current,
     raceActivityIds,
+    lookup,
     loading: !sample && loading,
     pending,
     error: error ? renderLocalizedText(error) : null,
@@ -143,6 +157,8 @@ export function useRaceJournal(
     updateRace: (input) => run(`update:${input.raceId}`, () => api.updateRace(input)),
     removeRace: (raceId) => run(`remove:${raceId}`, () => api.removeRace(raceId)),
     addManualRace: (input) => run("add", () => api.addManualRace(input)),
+    addTarget: (input) => run("add-target", () => api.addRaceTarget(input)),
+    updateTarget: (input) => run(`target:${input.targetId}`, () => api.updateRaceTarget(input)),
     removeTarget: (targetId) => run(`target:${targetId}`, () => api.removeRaceTarget(targetId)),
     importStrava: async () => {
       if (sampleMode) return;

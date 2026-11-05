@@ -4123,12 +4123,7 @@ function TemplateCard({
           <strong title={theme.name}>{theme.name}</strong>
           <span>{theme.category ?? watchfaceCatalogLabel(catalog)}</span>
         </span>
-        <span className="wf-hub-card-footer">
-          <span>{theme.id ? t("#{{value1}}", { value1: theme.id }) : t("COROS")}</span>
-          {theme.watchFaceVersion !== undefined ? (
-            <span className="wf-hub-card-template">v{theme.watchFaceVersion}</span>
-          ) : null}
-        </span>
+        {/* Template IDs and format versions mean nothing to most people; search still finds an ID. */}
         {primary ? (
           <span className="wf-hub-card-arrow" aria-hidden="true">
             <ArrowUpRight size={16} />
@@ -4377,7 +4372,7 @@ function PublishDialog(props: PublishDialogProps) {
                 <Check size={20} />
               </span>
               <h2 id="watchface-publish-title">{props.name}</h2>
-              <p>{t("Scan with the iPhone that has your COROS app.")}</p>
+              <p>{t("Scan with the phone that has your COROS app.")}</p>
             </div>
             <div className="watchface-share-result">
               <img
@@ -4388,7 +4383,7 @@ function PublishDialog(props: PublishDialogProps) {
                 height={260}
               />
               <div className="watchface-share-details">
-                <p>{t("In COROS, save this face and send it to the watch paired with your iPhone.")}</p>
+                <p>{t("In COROS, save this face and send it to the watch paired with your phone.")}</p>
                 <p className="watchface-share-expiry">{t("Link expires")}{" "}{formatExpiry(props.shareLink.expiresAt)}.
                 </p>
                 <div className="watchface-share-actions">

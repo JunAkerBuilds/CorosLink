@@ -1,4 +1,5 @@
 import { t, useLanguage } from "../i18n/watchfaces";
+import { useWatchfaceStudioSimple } from "./watchfaceStudioMode";
 import { CircleAlert, Files, FolderOpen, LayoutGrid, Sparkles, Trash2 } from "lucide-react";
 import { OfficialAssetBrowser, officialAssetToSpriteFolder } from "./OfficialAssetBrowser";
 import { useEffect, useRef, useState } from "react";
@@ -157,7 +158,12 @@ async function readRasterSpriteFolder(
   });
 }
 
-export function CustomPngFontPanel({
+/** Importing PNG digit sets is Advanced; the Font picker still lists them. */
+export function CustomPngFontPanel(props: CustomPngFontPanelProps) {
+  return useWatchfaceStudioSimple() ? null : <CustomPngFontPanelBody {...props} />;
+}
+
+function CustomPngFontPanelBody({
   api,
   firmwareType,
   rasterFont,
@@ -581,7 +587,7 @@ export function CustomPngFontPanel({
             <p className="wf-png-font-note">
               {activeRasterFont.tint
                 ? t("The PNGs are recolored to match the digit color.")
-                : t("The PNGs keep their own colors unless a layer sets a Tint color. Turn on to recolor them with the digit color everywhere.")}
+                : t("The PNGs keep their own colors unless the layer sets a Color. Turn on to recolor them with the digit color everywhere.")}
             </p>
           </div>
 

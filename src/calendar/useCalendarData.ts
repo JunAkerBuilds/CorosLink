@@ -16,7 +16,8 @@ import {
   moveScheduledWorkoutEntries,
   type CalendarDragPayload
 } from "./calendarDrag";
-import type { CalendarDay, CalendarWeek } from "./calendarTypes";
+import type { CalendarDay, CalendarRaceEvent, CalendarWeek } from "./calendarTypes";
+import type { RaceTarget } from "../../electron/raceTypes";
 import { computeWeeklyStats, pairPlannedWithActual } from "./pairing";
 
 interface CalendarRangeData {
@@ -74,6 +75,7 @@ export function useCalendarData({
   const [journalVersion, setJournalVersion] = useState(0);
   const [manualLinks, setManualLinks] = useState<ManualActivityLink[]>([]);
   const [externalWorkouts, setExternalWorkouts] = useState<StrengthSession[]>([]);
+  const [raceTargets, setRaceTargets] = useState<RaceTarget[]>([]);
   const manualLinksRef = useRef(manualLinks);
   manualLinksRef.current = manualLinks;
   const cacheRef = useRef(new Map<string, CalendarRangeData>());
@@ -129,6 +131,27 @@ export function useCalendarData({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, authenticated, rangeKey, refreshToken, version]);
+
+  // Races are local; they reload when the Races tab or the Coach changes one.
+  useEffect(() => {
+    if (!api?.listRaceTargets) return;
+    let cancelled = false;
+    const load = () => {
+      void api.listRaceTargets()
+        .then((targets) => {
+          if (!cancelled) setRaceTargets(targets);
+        })
+        .catch(() => {
+          if (!cancelled) setRaceTargets([]);
+        });
+    };
+    load();
+    const stop = api.onRacesChanged?.(load);
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [api, refreshToken]);
 
   // Notes are local, so they load on their own and never wait on COROS.
   useEffect(() => {
@@ -298,6 +321,18 @@ export function useCalendarData({
     const metricByDay = new Map<string, TrainingHubDailyMetric>();
     const journalByDay = new Map<string, WorkoutJournalEntry[]>();
     const externalByDay = new Map<string, StrengthSession[]>();
+    const racesByDay = new Map<string, CalendarRaceEvent[]>();
+    const addRaceEvent = (day: string | undefined, event: CalendarRaceEvent) => {
+      if (!day) return;
+      racesByDay.set(day, [...(racesByDay.get(day) ?? []), event]);
+    };
+    for (const race of raceTargets) {
+      addRaceEvent(race.raceDay, { kind: "race", race });
+      addRaceEvent(race.bibPickupDay, { kind: "pickup", race });
+      if (race.registration !== "registered" && race.registration !== "deferred") {
+        addRaceEvent(race.registrationDeadline, { kind: "deadline", race });
+      }
+    }
 
     for (const entry of data?.scheduled ?? []) {
       const list = scheduledByDay.get(entry.happenDay) ?? [];
@@ -354,7 +389,8 @@ export function useCalendarData({
           pairs,
           unplannedActivities: unplanned,
           journal: journalByDay.get(dateKey),
-          externalWorkouts: externalByDay.get(dateKey) ?? []
+          externalWorkouts: externalByDay.get(dateKey) ?? [],
+          raceEvents: racesByDay.get(dateKey) ?? []
         };
       });
 
@@ -379,7 +415,7 @@ export function useCalendarData({
         }
       };
     });
-  }, [data, journal, manualLinks, externalWorkouts, weekKeys, isInMonth, getLocale()]);
+  }, [data, journal, manualLinks, externalWorkouts, raceTargets, weekKeys, isInMonth, getLocale()]);
 
   /** True once the weeks hold the visible range's own data (cached or fetched). */
   const ready = loadedRangeKey === rangeKey;

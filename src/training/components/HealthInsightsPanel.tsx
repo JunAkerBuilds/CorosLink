@@ -1,4 +1,4 @@
-import { getLocale, useLanguage, t } from "../../i18n/training";
+import { getLocale, useLanguage, t, midSentence } from "../../i18n/training";
 import type { ChartCardSize } from "../widgetSizing";
 import "../chartSizing.css";
 import { useEffect, useId, useMemo, useState } from "react";
@@ -222,7 +222,7 @@ function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sam
     </div>
     {kind === "cycle" && <button type="button" className="secondary-button health-cycle-toggle" aria-expanded={showCycle} aria-controls={`${id}-content`} onClick={() => setShowCycle(value => !value)}>{showCycle ? t("Hide cycle details") : t("Show cycle details")}</button>}
     <div id={`${id}-content`} className="health-insight-body" hidden={!enabled}>
-      {loading && <div className="health-insight-state" role="status"><Loader2 size={18} className="spin" aria-hidden="true" /><p>{t("Loading")} {t(title).toLocaleLowerCase(getLocale())}…</p></div>}
+      {loading && <div className="health-insight-state" role="status"><Loader2 size={18} className="spin" aria-hidden="true" /><p>{t("Loading {{value1}}…", { value1: midSentence(t(title)) })}</p></div>}
       {!loading && (message == null ? message : t(String(message))) && <div className="health-insight-state" role="status">
         <Inbox size={18} aria-hidden="true" /><p>{(message == null ? message : t(String(message)))}</p>
         {result?.status === "disconnected" && <button type="button" className="secondary-button" onClick={onConnect} disabled={connecting}>{connecting ? t("Connecting…") : t("Connect COROS data access")}</button>}

@@ -60,7 +60,7 @@ export function ActivitySwimSummary({ swim }: { swim: TrainingHubSwimSummary }) 
   }
   if (!items.length) return null;
   return (
-    <section className="activity-detail-visual-panel activity-effect">
+    <section className="activity-detail-visual-panel activity-effect activity-swim-summary">
       <div className="activity-detail-visual-heading">
         <h3>
           <Waves size={17} aria-hidden="true" />

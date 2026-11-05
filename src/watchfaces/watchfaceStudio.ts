@@ -78,6 +78,8 @@ export interface WatchfaceStudioOptions extends WatchfaceTypography {
    * control icon. Normal previews render both the icon and its value.
    */
   previewComplicationContent?: "all" | "icon";
+  /** Status images the preview leaves out, so a pair shows one state at a time. */
+  hiddenStatusKeys?: readonly string[];
   /** Per-fixed-metric bitmap styles, isolated into their own sprite folders. */
   metricStyles?: WatchfaceMetricStyles;
   /** Representative goal completion shown for native calorie progress layers. */
@@ -3552,6 +3554,55 @@ export async function fitWholeSpriteToCanvas(
   return canvas.toDataURL("image/png");
 }
 
+interface SpriteInkBounds {
+  frameWidth: number;
+  frameHeight: number;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+const spriteInkBoundsCache = new Map<string, Promise<SpriteInkBounds | null>>();
+
+/** Visible (alpha ≥ 8) bounds of a sprite, or null when it is blank. */
+function spriteInkBounds(dataUrl: string): Promise<SpriteInkBounds | null> {
+  const cached = spriteInkBoundsCache.get(dataUrl);
+  if (cached) return cached;
+  const pending = loadStudioImage(dataUrl).then((image) => {
+    const source = document.createElement("canvas");
+    source.width = image.naturalWidth;
+    source.height = image.naturalHeight;
+    const sourceContext = source.getContext("2d", { willReadFrequently: true });
+    if (!sourceContext) {
+      throw new Error("Sprite fitting is unavailable in this window.");
+    }
+    sourceContext.drawImage(image, 0, 0);
+    const pixels = sourceContext.getImageData(0, 0, source.width, source.height).data;
+    let left = source.width;
+    let top = source.height;
+    let right = -1;
+    let bottom = -1;
+    for (let y = 0; y < source.height; y += 1) {
+      for (let x = 0; x < source.width; x += 1) {
+        if (pixels[(y * source.width + x) * 4 + 3]! < 8) continue;
+        left = Math.min(left, x);
+        top = Math.min(top, y);
+        right = Math.max(right, x);
+        bottom = Math.max(bottom, y);
+      }
+    }
+    return right < left || bottom < top
+      ? null
+      : { frameWidth: source.width, frameHeight: source.height, left, top, right, bottom };
+  });
+  if (dataUrl.length > STUDIO_IMAGE_CACHE_MAX_SOURCE_LENGTH) return pending;
+  pending.catch(() => spriteInkBoundsCache.delete(dataUrl));
+  if (spriteInkBoundsCache.size >= 256) spriteInkBoundsCache.clear();
+  spriteInkBoundsCache.set(dataUrl, pending);
+  return pending;
+}
+
 /**
  * Removes transparent source padding and fits the visible artwork into a
  * firmware-sized canvas without distorting its aspect ratio. Zoom may enlarge
@@ -3563,43 +3614,44 @@ export async function fitVisibleSpriteToCanvas(
   width: number,
   height: number,
   zoom = 1,
-  align?: WatchfaceHorizontalAlign
+  align?: WatchfaceHorizontalAlign,
+  glyphSet?: readonly string[]
 ): Promise<string> {
   const image = await loadStudioImage(dataUrl);
-  const source = document.createElement("canvas");
-  source.width = image.naturalWidth;
-  source.height = image.naturalHeight;
-  const sourceContext = source.getContext("2d", { willReadFrequently: true });
-  if (!sourceContext) {
-    throw new Error("Sprite fitting is unavailable in this window.");
-  }
-  sourceContext.drawImage(image, 0, 0);
-  const pixels = sourceContext.getImageData(
-    0,
-    0,
-    source.width,
-    source.height
-  ).data;
-  let left = source.width;
-  let top = source.height;
-  let right = -1;
-  let bottom = -1;
-  for (let y = 0; y < source.height; y += 1) {
-    for (let x = 0; x < source.width; x += 1) {
-      if (pixels[(y * source.width + x) * 4 + 3]! < 8) continue;
-      left = Math.min(left, x);
-      top = Math.min(top, y);
-      right = Math.max(right, x);
-      bottom = Math.max(bottom, y);
-    }
-  }
-  if (right < left || bottom < top) {
+  const ink = await spriteInkBounds(dataUrl);
+  if (!ink) {
     return resizeAndTintSprite(dataUrl, width, height);
   }
-  const contentWidth = right - left + 1;
-  const contentHeight = bottom - top + 1;
+  const { left, top } = ink;
+  const contentWidth = ink.right - left + 1;
+  const contentHeight = ink.bottom - top + 1;
   const safeZoom = normalizePositiveScale(zoom);
-  const fit = Math.min(width / contentWidth, height / contentHeight) * safeZoom;
+  let fit = Math.min(width / contentWidth, height / contentHeight) * safeZoom;
+  let outputY: number | undefined;
+  // Fitting each digit alone blows a narrow "1" up past a wide "0". A set
+  // takes the smallest fit any glyph allows in its own frame, scaled to this
+  // canvas, and keeps the set's baseline when the frames share a height.
+  const setInks = glyphSet
+    ? (await Promise.all(glyphSet.map(spriteInkBounds))).filter(
+        (entry): entry is SpriteInkBounds => entry !== null
+      )
+    : [];
+  if (setInks.length > 0) {
+    const sameFrame = setInks.every((entry) => entry.frameHeight === ink.frameHeight);
+    const setTop = Math.min(top, ...setInks.map((entry) => entry.top));
+    const setHeight = Math.max(ink.bottom, ...setInks.map((entry) => entry.bottom)) - setTop + 1;
+    const frameScale = height / ink.frameHeight;
+    fit = Math.min(
+      fit,
+      ...[ink, ...setInks].map((entry) => Math.min(
+        (entry.frameWidth * frameScale) / (entry.right - entry.left + 1),
+        (entry.frameHeight * frameScale) / (entry.bottom - entry.top + 1)
+      ) * safeZoom)
+    );
+    if (sameFrame) {
+      outputY = Math.round((height - setHeight * fit) / 2 + (top - setTop) * fit);
+    }
+  }
   const outputWidth = Math.max(1, Math.round(contentWidth * fit));
   const outputHeight = Math.max(1, Math.round(contentHeight * fit));
   const canvas = document.createElement("canvas");
@@ -3618,7 +3670,7 @@ export async function fitVisibleSpriteToCanvas(
     contentWidth,
     contentHeight,
     Math.round(horizontalAlignOffset(width, outputWidth, align)),
-    Math.round((height - outputHeight) / 2),
+    outputY ?? Math.round((height - outputHeight) / 2),
     outputWidth,
     outputHeight
   );
@@ -4680,7 +4732,7 @@ export const WATCHFACE_FIXED_METRICS: WatchfaceFixedMetricDefinition[] = [
   },
   {
     id: "temperature",
-    label: "Sensor temperature",
+    label: "Temperature (watch sensor)",
     rectKey: "temperature_rect",
     fontKey: "temperature_font",
     fontColorKey: "temperature_font_color",
@@ -5155,7 +5207,7 @@ export const WATCHFACE_COMPLICATIONS: WatchfaceComplicationDefinition[] = [
     ]
   },
   { id: "battery", label: "Battery", controlPrefix: "battery", sampleValue: "82" },
-  { id: "temperature", label: "Sensor temperature", controlPrefix: "temperature", sampleValue: "18" }
+  { id: "temperature", label: "Temperature (watch sensor)", controlPrefix: "temperature", sampleValue: "18" }
 ];
 
 export type WatchfaceMetricChanges = Partial<Record<WatchfaceMetricId, boolean>>;
@@ -8035,6 +8087,16 @@ export async function buildDateSpriteComposition(
     )
   ]);
   const assetsByPath = new Map(assets.map((asset) => [asset.path, asset]));
+  // Template digit art is fitted as a set, like the preview.
+  const digitSets = new Map<string, string[]>();
+  for (const job of jobs) {
+    if (job.kind !== "digits" || job.rasterized) continue;
+    const dataUrl = assetsByPath.get(job.source.path)?.dataUrl;
+    if (!dataUrl) continue;
+    const set = digitSets.get(job.groupKey) ?? [];
+    set.push(dataUrl);
+    digitSets.set(job.groupKey, set);
+  }
   const replacements: CorosWatchfaceAssetReplacement[] = [];
   const nativeGroups = new Map<
     string,
@@ -8134,6 +8196,20 @@ export async function buildDateSpriteComposition(
             job.typography.letterSpacing,
             job.text.length
           )
+        : job.kind === "digits" && !job.exactCanvas
+          ? await resizeAndTintSprite(
+              await fitVisibleSpriteToCanvas(
+                asset!.dataUrl,
+                job.width,
+                job.height,
+                job.zoom,
+                job.align,
+                digitSets.get(job.groupKey)
+              ),
+              job.width,
+              job.height,
+              job.color
+            )
         : await resizeAndTintSprite(
             asset!.dataUrl,
             job.width,
@@ -8143,7 +8219,9 @@ export async function buildDateSpriteComposition(
                 ? options.digitColor
                 : undefined)
           );
-    const fittedDataUrl = job.exactCanvas
+    const fittedDataUrl = job.kind === "digits" && !job.rasterized && !job.exactCanvas
+      ? baseDataUrl
+      : job.exactCanvas
       ? job.kind === "week" &&
           Math.abs(job.typography.letterSpacing ?? 0) >= 0.001
         ? await fitVisibleSpriteToCanvas(
@@ -8421,7 +8499,7 @@ export const WATCHFACE_LAYOUT_GROUPS: WatchfaceLayoutGroup[] = [
   },
   {
     id: "complication",
-    label: "Selectable metric",
+    label: "Data chosen on watch",
     // Child control positions are relative to this origin. Moving both the
     // origin and every child would apply the offset twice on the watch.
     patterns: [/^rect_control\d+_pos$/]
@@ -8465,7 +8543,7 @@ export const WATCHFACE_LAYOUT_GROUPS: WatchfaceLayoutGroup[] = [
   },
   {
     id: "temperature",
-    label: "Sensor temperature",
+    label: "Temperature (watch sensor)",
     patterns: [/^temperature_rect$/]
   }
 ];
@@ -9129,6 +9207,11 @@ export function getTemplateBackgroundAssetPaths(
 ): string[] {
   const resolution = pickPreviewResolution(details);
   return [
+    // COROS's custom-background picker keeps the chosen photo here (pointed
+    // to by custom/custom.pb) and leaves each layout's background.png blank,
+    // so faces shared from the COROS app opened without their picture. It is
+    // also the image the watch shows.
+    "custom/custom_bg.png",
     ...(resolution
       ? [
           `${resolution.directory}/background.png`,
@@ -10041,17 +10124,19 @@ export async function drawStudioPreview(
       ...(percentFile ? { suffix: { configKey: "battery_level_percent_icon", file: percentFile } } : {})
     });
   }
+  // The watch draws month and day like any other number, without a leading
+  // zero: the 2nd shows "2", not "02".
   const dateFields: [string, string, string, WatchfaceDatePartId][] = [
     [
       "english_date_month_rect",
       "english_date_month_font",
-      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getMonth() + 1),
       "dateMonth"
     ],
     [
       "english_date_day_rect",
       "english_date_day_font",
-      String(now.getDate()).padStart(2, "0"),
+      String(now.getDate()),
       "dateDay"
     ]
   ];
@@ -10113,6 +10198,12 @@ export async function drawStudioPreview(
       const file = plan.source.files[Number(digit)];
       if (file) {
         wantedSprites.set(file.path, { color: null });
+      }
+    }
+    // Styled date digits are sized as a set; see dateDigitSet below.
+    if (plan.datePartId && options.dateStyles?.[plan.datePartId]) {
+      for (const file of plan.source.files.slice(0, 10)) {
+        if (!wantedSprites.has(file.path)) wantedSprites.set(file.path, { color: null });
       }
     }
   }
@@ -10683,6 +10774,7 @@ export async function drawStudioPreview(
   }
 
   for (const layer of controlStatusLayers) {
+    if (options.hiddenStatusKeys?.includes(layer.configKey)) continue;
     if (
       options.previewComplicationContent === "icon" &&
       layer.controlRelative
@@ -10711,6 +10803,7 @@ export async function drawStudioPreview(
     );
   }
   for (const definition of CONTROL_STATUS_PREVIEW_DEFINITIONS) {
+    if (options.hiddenStatusKeys?.includes(definition.configKey)) continue;
     if (
       controlStatusLayers.some(
         (layer) => layer.configKey === definition.configKey
@@ -11053,6 +11146,12 @@ export async function drawStudioPreview(
         complicationStyle?.color ??
         componentColor ??
         options.digitColor;
+      const dateDigitSet = dateStyle
+        ? plan.source.files
+            .slice(0, 10)
+            .map((candidate) => loadedAssets.get(candidate.path)?.dataUrl)
+            .filter((candidate): candidate is string => Boolean(candidate))
+        : undefined;
       const cacheKey = `${file.path}|${glyphFontFamily}|${glyphColor}|${styledFile.width}x${styledFile.height}|${glyphTypography.fontWeight ?? 400}|${glyphTypography.fontStyle ?? "normal"}|${glyphTypography.letterSpacing ?? 0}|${dateCanvas?.native ?? false}|${nativeGlyph ? "native" : "bounded"}|${metricCanvas?.fontSize ?? timeCanvas?.fontSize ?? dateStyle?.fontSize ?? ""}`;
       let image = styledMetricGlyphs.get(cacheKey);
       if (!image) {
@@ -11120,21 +11219,23 @@ export async function drawStudioPreview(
               : rendered
           );
         } else if (timeStyle?.color || metricStyle?.color || dateStyle?.color || complicationStyle?.color || componentColor) {
-          const rendered = await resizeAndTintSprite(
-              loadedAssets.get(file.path)?.dataUrl ?? "",
+          const sourceDataUrl = loadedAssets.get(file.path)?.dataUrl ?? "";
+          image = await loadStudioImage(
+            await resizeAndTintSprite(
+              dateStyle && !dateCanvas?.native
+                ? await fitVisibleSpriteToCanvas(
+                    sourceDataUrl,
+                    styledFile.width,
+                    styledFile.height,
+                    dateStyle.scale,
+                    undefined,
+                    dateDigitSet
+                  )
+                : sourceDataUrl,
               styledFile.width,
               styledFile.height,
               glyphColor
-            );
-          image = await loadStudioImage(
-            dateStyle && !dateCanvas?.native
-              ? await fitVisibleSpriteToCanvas(
-                  rendered,
-                  styledFile.width,
-                  styledFile.height,
-                  dateStyle.scale
-                )
-              : rendered
+            )
           );
         } else if (dateStyle && loadedAssets.get(file.path)?.dataUrl) {
           const sourceDataUrl = loadedAssets.get(file.path)!.dataUrl;
@@ -11149,7 +11250,9 @@ export async function drawStudioPreview(
                   sourceDataUrl,
                   styledFile.width,
                   styledFile.height,
-                  dateStyle.scale
+                  dateStyle.scale,
+                  undefined,
+                  dateDigitSet
                 )
           );
         } else {

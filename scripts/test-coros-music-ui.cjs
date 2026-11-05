@@ -58,7 +58,8 @@ app.whenReady().then(async()=>{
   assert.equal(await js("document.querySelector('[role=alert]').textContent"),'Watch disconnected');
   assert.equal(await js("document.querySelectorAll('.ble-music-list li').length"),0,'failed refresh does not retain stale tracks');
   await js("window.musicError='';window.musicResponse.tracks=[];void 0");await click();await complete();
-  assert.ok(await js("document.body.textContent.includes('No MP3 files on the watch')"));
+  assert.ok(await js("document.body.textContent.includes('No local MP3 files in the watch’s Music folder')"));
+  assert.ok(await js("document.body.textContent.includes('Reads music, downloaded podcasts and NetEase playlists')"));
   await click();
   await setConnection({connected:false});await until("!document.querySelector('[aria-label=\"Watch music connection\"]')");
   assert.equal(await js("document.querySelector('.ble-music-toolbar')"),null,'disconnect removes Bluetooth view immediately');

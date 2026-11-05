@@ -37,6 +37,11 @@ const CARD_CELEBRATION_MS = 4200;
 const OVERLAY_AUTO_DISMISS_MS = 7000;
 const OVERLAY_EXIT_MS = 420;
 
+/** Every record signature the app has seen, oldest first: the board's record history. */
+export function readSeenRecordSignatures(): string[] {
+  return readSelectionPreference(CELEBRATED_RECORDS_PREFERENCE).value;
+}
+
 export function recordSignature(record: TrainingHubPersonalRecord): string {
   return `${record.type}:${record.happenDay ?? ""}:${record.duration ?? record.distance ?? ""}`;
 }

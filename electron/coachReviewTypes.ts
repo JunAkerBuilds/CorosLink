@@ -1,9 +1,9 @@
 // Review cards for the Coach's writes outside COROS MCP and the strength
 // editor: moving calendar workouts, adding a target race, updating the watch's
-// zones. The Coach prepares one; nothing changes until the athlete approves it.
+// zones, saving Hevy routines and custom exercises. The Coach prepares one; nothing changes until the athlete approves it.
 // Type-only, so the renderer and Node's strip-types tests can import it.
 
-export type CoachReviewAction = "addTargetRace" | "updateZones";
+export type CoachReviewAction = "addTargetRace" | "updateZones" | "saveHevyRoutine" | "createHevyExercise";
 
 /** One line of the change: what it is, and what it becomes. */
 export interface CoachReviewItem {

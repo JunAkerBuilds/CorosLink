@@ -8,14 +8,14 @@ window.wifiCalls=[];
 window.wifiStatus={supported:true,ready:true,phase:'idle',completedFiles:0,totalFiles:0,downloadedBytes:0,totalBytes:0,restorePending:false,backupSavedAt:Date.now()};
 const api={
  getCorosWifiMusicStatus:async()=>({...window.wifiStatus}),
- sendCorosMusicOverWifi:async()=>{
-  window.wifiCalls.push('send');
+ sendCorosMusicOverWifi:async options=>{
+  window.wifiCalls.push(options?{operation:'send',options}:'send');
   await new Promise(resolve=>{window.completeWifiSend=resolve;});
   if(window.wifiError)throw Error(window.wifiError);
   return {...window.wifiStatus};
  },
- sendCorosLibraryMusicOverWifi:async ids=>{
-  window.wifiCalls.push({operation:'library',ids});
+ sendCorosLibraryMusicOverWifi:async (ids,options)=>{
+  window.wifiCalls.push({operation:'library',ids,...(options?{options}:{})});
   await new Promise(resolve=>{window.completeWifiSend=resolve;});
   if(window.wifiError)throw Error(window.wifiError);
   return {...window.wifiStatus};
@@ -23,11 +23,29 @@ const api={
  cancelCorosWifiMusicSync:async()=>{window.wifiCalls.push('cancel');},
  importCorosWifiMusicBackup:async()=>{window.wifiCalls.push('backup');return {...window.wifiStatus};},
  restoreCorosWifiMusicSettings:async()=>{window.wifiCalls.push('restore');return {...window.wifiStatus};},
+ getCorosNeteasePlaylists:async()=>window.neteasePlaylists??[],
+ renameCorosNeteasePlaylist:async(id,name)=>{
+  window.wifiCalls.push({operation:'rename',id,name});const rows=window.neteasePlaylists??[];
+  window.neteasePlaylists=rows.some(row=>row.id===id)?rows.map(row=>row.id===id?{...row,name}:row):[...rows,{id,name}];return window.neteasePlaylists;
+ },
+ getCorosNeteaseToolbox:async()=>window.neteaseToolbox??'missing',
+ showCorosNeteaseInToolbox:async()=>{window.wifiCalls.push('netease-toolbox');window.neteaseToolbox='shown';return 'shown';},
  getCorosMusicInventory:async()=>{
   window.wifiCalls.push('read');await new Promise(resolve=>{window.completeMusicRead=resolve;});
-  return {id:'inventory',checkedAt:Date.now(),tracks:[{name:'Existing.mp3',watchId:1,watchPath:'/emmc2:/Music/Existing.mp3',sizeBytes:10}]};
+  return {id:'inventory',checkedAt:Date.now(),tracks:window.localMusicTracks??[{name:'Existing.mp3',watchId:1,watchPath:'/emmc2:/Music/Existing.mp3',sizeBytes:10}],
+   wirelessTracks:window.wirelessAudioTracks??[],wirelessError:window.wirelessAudioError};
  },
- deleteCorosMusicTrack:async()=>{window.wifiCalls.push('delete');return {deleted:false,inventory:{id:'inventory',checkedAt:Date.now(),tracks:[]}};}
+ deleteCorosMusicTrack:async target=>{
+  window.wifiCalls.push({operation:'delete',target});
+  window.wirelessAudioTracks=window.wirelessAudioTracks.filter(track=>target.songIds?!(track.playlistId===target.playlistId&&target.songIds.includes(track.id)):track.id!==target.id);
+  return {deleted:true,inventory:{id:'after-delete',checkedAt:Date.now(),tracks:[],wirelessTracks:window.wirelessAudioTracks}};
+ },
+ deleteAllCorosMusic:async inventoryId=>{
+  window.wifiCalls.push({operation:'deleteAll',inventoryId});
+  const deletedCount=window.wirelessAudioTracks.filter(track=>track.destination==='podcasts').length;
+  window.wirelessAudioTracks=window.wirelessAudioTracks.filter(track=>track.destination!=='podcasts');
+  return {deletedCount,inventory:{id:'after-delete-all',checkedAt:Date.now(),tracks:[],wirelessTracks:window.wirelessAudioTracks}};
+ }
 };
 function Fixture(){
  const [connection,setConnection]=useState({connected:false});window.setMusicConnection=setConnection;
@@ -53,7 +71,7 @@ function LibraryFixture(){
    onClearSelection={()=>setSelected(new Set())} onTransfer={()=>window.wifiCalls.push('usb')} onTransferAll={noop}
    onTransferDownloads={()=>window.wifiCalls.push('usb')} onDeleteDownload={()=>window.wifiCalls.push('delete-local')} onDeleteDownloads={noop}
    wifiSyncPanel={connection.connected?<CorosWifiMusicPanel key={connection.deviceId} api={api} otherBusy={bleBusy} onBusyChange={setWifiBusy}
-    library={{allIds:tracks.map(t=>t.id),selectedIds:tracks.filter(t=>selected.has(t.id)).map(t=>t.id)}}/>:null}/>
+    library={{allIds:tracks.map(t=>t.id),selectedIds:tracks.filter(t=>selected.has(t.id)).map(t=>t.id),filePaths:Object.fromEntries(tracks.map(t=>[t.id,t.filePath]))}}/>:null}/>
   <WatchMusicSourcePanel api={api} connection={connection} showWifiMusic={false} wifiSyncBusy={wifiBusy}
    onBluetoothBusyChange={setBleBusy} usbPanel={usbPanel}/>
  </main>;

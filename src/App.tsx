@@ -11,13 +11,11 @@ import {
   LifeBuoy,
   Copy,
   Download,
-  BookOpen,
   ExternalLink,
   Feather,
   FolderOpen,
   HardDrive,
   Home,
-  Link,
   ListMusic,
   LogIn,
   LogOut,
@@ -131,6 +129,18 @@ import {
   type TrackTransferProgress,
 } from "./media/LibraryPanels";
 import { AudiobooksView } from "./media/AudiobooksView";
+import { AppleBrandIcon, YouTubeMusicBrandIcon } from "./media/brandIcons";
+import {
+  MEDIA_TAB_IDS,
+  MEDIA_TAB_ITEMS,
+  canHideMediaTab,
+  getHiddenMediaTabs,
+  setMediaTabHidden,
+  useHiddenMediaTabs,
+  type MediaTab,
+  type MediaTabItem,
+} from "./media/mediaTabs";
+import { SidebarNavMenu } from "./components/SidebarNavMenu";
 import { WatchMusicSourcePanel } from "./media/WatchMusicSourcePanel";
 import { WatchConnectionMenu } from "./watch/WatchConnectionMenu";
 import { useWatchSync } from "./watch/watchSyncState";
@@ -166,27 +176,10 @@ import changelogMarkdown from "../CHANGELOG.md?raw";
 import { sameJson } from "./sameJson";
 
 type View = PrimaryView;
-type MediaTab =
-  | "library"
-  | "youtube"
-  | "youtube-music"
-  | "spotify"
-  | "apple-music"
-  | "apple-podcasts"
-  | "audiobooks";
-
 const MEDIA_TAB_PREFERENCE = defineSelectionPreference<MediaTab>({
   key: "media.activeTab",
   defaultValue: "library",
-  validate: selectionIsOneOf([
-    "library",
-    "youtube",
-    "youtube-music",
-    "spotify",
-    "apple-music",
-    "apple-podcasts",
-    "audiobooks",
-  ]),
+  validate: selectionIsOneOf(MEDIA_TAB_IDS),
 });
 
 const YOUTUBE_HOME_URL = "https://www.youtube.com/";
@@ -417,6 +410,14 @@ export default function App() {
   const [activeMediaTab, setActiveMediaTab] = useSelectionPreference(
     MEDIA_TAB_PREFERENCE,
   );
+  const hiddenMediaTabs = useHiddenMediaTabs();
+  // Hiding the open service (here or in Settings) falls back to Library. Only
+  // reacts to the hidden set, so opening a hidden service on purpose still works.
+  useEffect(() => {
+    setActiveMediaTab((current) =>
+      getHiddenMediaTabs().has(current) ? "library" : current,
+    );
+  }, [hiddenMediaTabs, setActiveMediaTab]);
   const [watchStatus, setWatchStatus] = useState<WatchStatus | null>(null);
   const [nativeBleStatus, setNativeBleStatus] = useState<CorosNativeBleSnapshot | null>(null);
   useEffect(() => {
@@ -1140,6 +1141,12 @@ export default function App() {
       activity,
       requestId: trainingHubNavigationSequence.current,
     });
+    setActiveView("training");
+  }, []);
+
+  const openTrainingHubRaces = useCallback(() => {
+    trainingHubNavigationSequence.current += 1;
+    setTrainingHubNavigation({ tab: "races", requestId: trainingHubNavigationSequence.current });
     setActiveView("training");
   }, []);
 
@@ -2371,6 +2378,31 @@ export default function App() {
     }
   }
 
+  async function handleImportDownloads(files?: File[]) {
+    if (!api) {
+      return;
+    }
+
+    setBusy("import-local");
+    setError(null);
+    setMessage(null);
+
+    try {
+      const result = await api.importDownloads(files);
+      if (!result) {
+        return;
+      }
+      setDownloads(result.tracks);
+      setMessage(localizedText(() => result.imported === 0
+        ? t("No MP3s to import.")
+        : t("{{value0}} MP3(s) added to the library.", { value0: result.imported })));
+    } catch (caught) {
+      setError(localizedText(() => toErrorMessage(caught)));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function handleDeleteDownload(track: LocalTrack) {
     if (!api || !window.confirm(t("Delete \"{{value0}}\" locally?", { value0: track.title }))) {
       return;
@@ -2778,6 +2810,7 @@ export default function App() {
               <MediaView
                 activeTab={activeMediaTab}
                 onTabChange={setActiveMediaTab}
+                onCustomize={() => openSettingsSection("media-tabs")}
               >
                 {activeMediaTab === "library" ? (
                   <MediaLibraryTab
@@ -2793,6 +2826,7 @@ export default function App() {
                     onTransferDownloads={handleTransferDownloads}
                     onDeleteDownload={handleDeleteDownload}
                     onDeleteDownloads={handleDeleteDownloads}
+                    onImportDownloads={handleImportDownloads}
                     onDeleteWatchTrack={handleDeleteWatchTrack}
                     onDeleteWatchTracks={handleDeleteWatchTracks}
                     bluetoothMusic={IS_DEVELOPMENT_BUILD && showDevelopmentTools}
@@ -3038,6 +3072,7 @@ export default function App() {
                   onMessage={setMessage}
                   onError={setError}
                   onOpenTraining={() => setActiveView("training")}
+                  onOpenRaces={openTrainingHubRaces}
                   onOpenCoach={(prompt) => {
                     setCoachPrefill({ text: prompt });
                     setActiveView("coach");
@@ -3118,69 +3153,80 @@ export default function App() {
 interface MediaViewProps {
   activeTab: MediaTab;
   onTabChange: (tab: MediaTab) => void;
+  onCustomize: () => void;
   children: ReactNode;
 }
 
-function MediaView({ activeTab, onTabChange, children }: MediaViewProps) {
+function MediaView({ activeTab, onTabChange, onCustomize, children }: MediaViewProps) {
   useLanguage();
-  const tabs: Array<{ id: MediaTab; label: string; icon: ReactNode }> = [
-    {
-      id: "library",
-      label: t("Library"),
-      icon: <Music size={16} aria-hidden="true" />,
-    },
-    {
-      id: "youtube",
-      label: t("YouTube Browser"),
-      icon: <Link size={16} aria-hidden="true" />,
-    },
-    {
-      id: "youtube-music",
-      label: "YouTube Music",
-      icon: <YouTubeMusicBrandIcon size={16} />,
-    },
-    {
-      id: "spotify",
-      label: "Spotify",
-      icon: <ListMusic size={16} aria-hidden="true" />,
-    },
-    {
-      id: "apple-music",
-      label: "Apple Music",
-      icon: <AppleBrandIcon size={16} />,
-    },
-    {
-      id: "apple-podcasts",
-      label: "Apple Podcasts",
-      icon: <Podcast size={16} aria-hidden="true" />,
-    },
-    {
-      id: "audiobooks",
-      label: t("Audiobooks"),
-      icon: <BookOpen size={16} aria-hidden="true" />,
-    },
-  ];
+  const hiddenTabs = useHiddenMediaTabs();
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    target: MediaTabItem | null;
+  } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  // A hidden service still shows while it is open (e.g. reached from Settings → Accounts).
+  const tabs = MEDIA_TAB_ITEMS.filter(
+    (tab) => !hiddenTabs.has(tab.id) || tab.id === activeTab,
+  );
+  const hiddenItems = MEDIA_TAB_ITEMS.filter((tab) => hiddenTabs.has(tab.id));
 
   return (
     <>
       <div className="media-tabs-shell">
-        <nav className="media-tabs" aria-label={t("Media sections")}>
-          {tabs.map((tab) => (
+        <nav
+          className="media-tabs"
+          aria-label={t("Media sections")}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            const id = (event.target as HTMLElement)
+              .closest<HTMLElement>("[data-media-tab]")
+              ?.dataset.mediaTab;
+            setMenu({
+              x: event.clientX,
+              y: event.clientY,
+              // A hidden service shown only because it's open is offered
+              // under Hidden (Show), not Hide.
+              target:
+                MEDIA_TAB_ITEMS.find(
+                  (tab) => tab.id === id && !hiddenTabs.has(tab.id),
+                ) ?? null,
+            });
+          }}
+        >
+          {tabs.map(({ id, label, icon: Icon }) => (
             <button
-              key={tab.id}
+              key={id}
               type="button"
-              className={
-                activeTab === tab.id ? "media-tab active" : "media-tab"
-              }
-              onClick={() => onTabChange(tab.id)}
-              aria-current={activeTab === tab.id ? "page" : undefined}
+              data-media-tab={id}
+              className={activeTab === id ? "media-tab active" : "media-tab"}
+              onClick={() => onTabChange(id)}
+              aria-current={activeTab === id ? "page" : undefined}
             >
-              {tab.icon}
-              {t(tab.label)}
+              <Icon size={16} aria-hidden="true" />
+              {t(label)}
             </button>
           ))}
         </nav>
       </div>
+      {menu ? (
+        <SidebarNavMenu
+          x={menu.x}
+          y={menu.y}
+          target={menu.target}
+          targetHideable={menu.target ? canHideMediaTab(menu.target.id) : false}
+          hiddenItems={hiddenItems}
+          // App falls back to Library when the open service is hidden.
+          onHide={(item) => setMediaTabHidden(item.id, true)}
+          onShow={(item) => setMediaTabHidden(item.id, false)}
+          onCustomize={onCustomize}
+          onClose={closeMenu}
+          menuLabel={t("Media sections")}
+          customizeLabel={t("Customize Media…")}
+          lockedTitle={t("Library always stays in Media.")}
+        />
+      ) : null}
       {children}
     </>
   );
@@ -3691,6 +3737,7 @@ interface MediaLibraryTabProps {
   onTransferDownloads: (tracks: LocalTrack[]) => void;
   onDeleteDownload: (track: LocalTrack) => void;
   onDeleteDownloads: (tracks: LocalTrack[]) => void;
+  onImportDownloads: (files?: File[]) => void;
   onDeleteWatchTrack: (track: WatchTrack) => void;
   onDeleteWatchTracks: (tracks: WatchTrack[]) => void;
   /** Bluetooth library and Wi-Fi send; development builds only for now. */
@@ -3710,6 +3757,7 @@ function MediaLibraryTab({
   onTransferDownloads,
   onDeleteDownload,
   onDeleteDownloads,
+  onImportDownloads,
   onDeleteWatchTrack,
   onDeleteWatchTracks,
   bluetoothMusic,
@@ -3864,10 +3912,12 @@ function MediaLibraryTab({
               onTransferDownloads={handleLocalBulkTransfer}
               onDeleteDownload={onDeleteDownload}
               onDeleteDownloads={handleLocalBulkDelete}
+              onImportDownloads={onImportDownloads}
               wifiSyncPanel={bluetoothMusic && nativeBleStatus?.connected && api && typeof api.sendCorosLibraryMusicOverWifi === "function" ?
                 <CorosWifiMusicPanel key={nativeBleStatus.deviceId ?? nativeBleStatus.watchAddress ?? nativeBleStatus.deviceName}
                   api={api} otherBusy={Boolean(busy) || bleMusicBusy} onBusyChange={setWifiSyncBusy}
-                  library={{ allIds: downloads.map(track => track.id), selectedIds: downloads.filter(track => selectedIds.has(track.id)).map(track => track.id) }} /> : null}
+                  library={{ allIds: downloads.map(track => track.id), selectedIds: downloads.filter(track => selectedIds.has(track.id)).map(track => track.id),
+                    filePaths: Object.fromEntries(downloads.map(track => [track.id, track.filePath])) }} /> : null}
             />
           }
           watchPanel={
@@ -5309,29 +5359,6 @@ function YouTubeMusicPlaylistDetail({
         onOpenSong={onOpenSong}
       />
     </>
-  );
-}
-
-function YouTubeMusicBrandIcon({
-  size = 24,
-  className,
-}: {
-  size?: number;
-  className?: string;
-}) {
-  useLanguage();
-  return (
-    <svg
-      className={className}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M12 0C5.376 0 0 5.376 0 12s5.376 12 12 12 12-5.376 12-12S18.624 0 12 0zm0 19.104c-3.924 0-7.104-3.18-7.104-7.104S8.076 4.896 12 4.896s7.104 3.18 7.104 7.104-3.18 7.104-7.104 7.104zm0-13.332c-3.432 0-6.228 2.796-6.228 6.228S8.568 18.228 12 18.228s6.228-2.796 6.228-6.228S15.432 5.772 12 5.772zM9.684 15.54V8.46L15.816 12l-6.132 3.54z" />
-    </svg>
   );
 }
 
@@ -7710,30 +7737,6 @@ function AppleMusicArtwork({
     <span className={`${className} apple-music-art-fallback`} aria-hidden="true">
       <AppleBrandIcon size={24} />
     </span>
-  );
-}
-
-function AppleBrandIcon({
-  size = 24,
-  className,
-}: {
-  size?: number;
-  className?: string;
-}) {
-  useLanguage();
-  return (
-    <svg
-      className={className}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35-4.88-5.03-4.16-12.69 1.38-12.97 1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01z" />
-      <path d="M12.03 7.25C11.88 5.02 13.69 3.18 15.77 3c.29 2.58-2.34 4.5-3.74 4.25z" />
-    </svg>
   );
 }
 

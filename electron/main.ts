@@ -33,6 +33,7 @@ import { corosNativeBle } from "./corosNativeBleService";
 import { registerCorosActivityScreenIpc } from "./corosActivityScreenIpc";
 import { registerCorosWatchKeyBackupIpc } from "./corosWatchKeyBackupIpc";
 import { resolveWifiMusicLibraryFiles } from "./corosWifiMusicLibrary";
+import { validateWifiMusicOptions } from "./corosWifiMusicTypes";
 import { getCorosWatchfaceCompiler } from "./corosWatchfaceCompiler";
 import { getWatchfaceTarget } from "./watchfaceTargets";
 import { isWebUrl } from "./externalLinks";
@@ -71,9 +72,11 @@ import { RemoteAccess } from "./remote/remoteAccess";
 import { isAuthCallbackUrl } from "./remote/cloud/websiteAccount";
 import { completeOnboarding, isOnboardingPending } from "./onboardingState";
 import {
+  adoptDroppedDownloads,
   downloadAudio,
   downloadCombinedTrack,
-  getBinaryStatus
+  getBinaryStatus,
+  importAudioFiles
 } from "./downloadService";
 import {
   cancelJob,
@@ -162,16 +165,19 @@ import {
 } from "./stravaService";
 import {
   addManualRace,
+  addManualRaceTarget,
   clearStravaRaceData,
   dismissRaceSuggestion,
   getRaceOverview,
   getRaceRoute,
   importStravaRaces,
+  listRaceTargets,
   listRaceActivityIds,
   markActivityAsRace,
   onRaceTargetsChanged,
   removeRace,
   removeRaceTarget,
+  updateRaceTarget,
   unmarkActivityAsRace,
   updateRace
 } from "./raceService";
@@ -188,7 +194,8 @@ import {
   setCoachLocalSyncReader,
   undoAthleteMemoryNotice
 } from "./chatAthleteToolsRuntime";
-import type { ManualRaceInput, RaceEditInput } from "./raceTypes";
+import type { ManualRaceInput, RaceEditInput, RaceLookupRequest, RaceTargetEditInput, RaceTargetInput } from "./raceTypes";
+import { cancelRaceLookup, getRaceLookupStatus, lookupRace } from "./raceLookupService";
 import type {
   HevySettingsInput,
   StravaConfigInput,
@@ -1308,17 +1315,19 @@ function registerIpcHandlers(): void {
   };
   registerCorosActivityScreenIpc({ ipc: ipcMain, isPackaged: () => app.isPackaged, api: corosNativeBle,
     owner: event => mainWindowSender(event, "activity-screen sync"), saveDialog: (owner, options) => dialog.showSaveDialog(owner, localizeDialogOptions(options)) });
-  ipcMain.handle("corosBle:wifiMusicSend", event => {
+  ipcMain.handle("corosBle:wifiMusicSend", (event, input: unknown) => {
     const owner = audioOwner(event);
+    const options = validateWifiMusicOptions(input);
     return corosNativeBle.sendMusicOverWifi(async () => {
-      const result = await dialog.showOpenDialog(owner, localizeDialogOptions({ title: "Send MP3s to watch podcasts over Wi-Fi", properties: ["openFile", "multiSelections"],
+      const result = await dialog.showOpenDialog(owner, localizeDialogOptions({ title: options.destination === "netease" ? "Send MP3s to a watch NetEase playlist over Wi-Fi" : "Send MP3s to watch podcasts over Wi-Fi", properties: ["openFile", "multiSelections"],
         filters: [{ name: "MP3 audio", extensions: ["mp3"] }] }));
       return result.canceled ? null : result.filePaths;
-    });
+    }, options);
   });
-  ipcMain.handle("corosBle:wifiMusicLibrarySend", (event, ids: unknown) => {
+  ipcMain.handle("corosBle:wifiMusicLibrarySend", (event, ids: unknown, input: unknown) => {
     audioOwner(event);
-    return corosNativeBle.sendMusicOverWifi(async () => resolveWifiMusicLibraryFiles(ids, getDownloadById));
+    const options = validateWifiMusicOptions(input);
+    return corosNativeBle.sendMusicOverWifi(async () => resolveWifiMusicLibraryFiles(ids, getDownloadById), options);
   });
   ipcMain.handle("corosBle:wifiMusicBackup", event => {
     const owner = audioOwner(event);
@@ -1330,6 +1339,10 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle("corosBle:wifiMusicCancel", event => { audioOwner(event); corosNativeBle.cancelWifiMusicSync(); });
   ipcMain.handle("corosBle:wifiMusicRestore", event => { audioOwner(event); return corosNativeBle.restoreWifiMusicSettings(); });
+  ipcMain.handle("corosBle:neteaseToolbox", () => { requireBleMusic(); return corosNativeBle.neteaseToolbox(); });
+  ipcMain.handle("corosBle:neteasePlaylists", () => { requireBleMusic(); return corosNativeBle.neteasePlaylists(); });
+  ipcMain.handle("corosBle:neteasePlaylistRename", (event, id: unknown, name: unknown) => { audioOwner(event); return corosNativeBle.renameNeteasePlaylist(id, name); });
+  ipcMain.handle("corosBle:neteaseToolboxShow", event => { audioOwner(event); return corosNativeBle.showNeteaseInToolbox(); });
   ipcMain.handle("corosBle:deleteMusic", (event, target: import("./corosBleMusicTypes").CorosBleMusicDeleteTarget) => {
     requireBleMusic();
     return corosNativeBle.deleteMusic(target, async track => {
@@ -1337,8 +1350,22 @@ function registerIpcHandlers(): void {
       if (!owner || owner.isDestroyed()) return false;
       const result = await dialog.showMessageBox(owner, localizeDialogOptions({
         type: "warning", buttons: ["Cancel", "Delete from watch"], defaultId: 0, cancelId: 0,
-        message: `Delete “${track.name}” from the watch?`,
-        detail: "This removes the MP3 from your watch over Bluetooth. It cannot be undone. Your local library is kept.",
+        message: track.message ?? `Delete “${track.name}” from the watch?`,
+        detail: "This removes the audio from your watch over Bluetooth. It cannot be undone. Your local library is kept.",
+        noLink: true,
+      }));
+      return result.response === 1;
+    });
+  });
+  ipcMain.handle("corosBle:deleteAllMusic", (event, inventoryId: string) => {
+    requireBleMusic();
+    return corosNativeBle.deleteAllMusic(inventoryId, async count => {
+      const owner = BrowserWindow.fromWebContents(event.sender);
+      if (!owner || owner.isDestroyed()) return false;
+      const result = await dialog.showMessageBox(owner, localizeDialogOptions({
+        type: "warning", buttons: ["Cancel", "Delete from watch"], defaultId: 0, cancelId: 0,
+        message: `Delete ${count} tracks from the watch?`,
+        detail: "This deletes all local MP3s, podcasts and NetEase playlists in the watch library, including those hidden by search. It cannot be undone. Your local library is kept.",
         noLink: true,
       }));
       return result.response === 1;
@@ -1961,7 +1988,26 @@ function registerIpcHandlers(): void {
 
   registerAudiobookIpcHandlers();
 
-  ipcMain.handle("downloads:list", () => listDownloads());
+  ipcMain.handle("downloads:list", () => {
+    adoptDroppedDownloads();
+    return listDownloads();
+  });
+
+  ipcMain.handle("downloads:import", async (_event, filePaths?: unknown) => {
+    let paths = Array.isArray(filePaths)
+      ? filePaths.filter((value): value is string => typeof value === "string")
+      : [];
+    if (!Array.isArray(filePaths)) {
+      const options: OpenDialogOptions = { title: "Import MP3s", properties: ["openFile", "multiSelections"],
+        filters: [{ name: "MP3 file", extensions: ["mp3"] }] };
+      const result = mainWindow && !mainWindow.isDestroyed()
+        ? await dialog.showOpenDialog(mainWindow, localizeDialogOptions(options)) : await dialog.showOpenDialog(localizeDialogOptions(options));
+      if (result.canceled) return null;
+      paths = result.filePaths;
+    }
+    const imported = await importAudioFiles(paths);
+    return { imported: imported.length, tracks: listDownloads() };
+  });
 
   ipcMain.handle("downloads:downloadAudio", (_event, url: string) =>
     downloadAudio(url)
@@ -2956,7 +3002,17 @@ function registerIpcHandlers(): void {
   ipcMain.handle("races:update", (_event, input: RaceEditInput) => updateRace(input));
   ipcMain.handle("races:remove", (_event, raceId: string) => removeRace(raceId));
   ipcMain.handle("races:addManual", (_event, input: ManualRaceInput) => addManualRace(input));
+  ipcMain.handle("races:addTarget", (_event, input: RaceTargetInput) => addManualRaceTarget(input));
+  ipcMain.handle("races:listTargets", () => listRaceTargets());
+  ipcMain.handle("races:updateTarget", (_event, input: RaceTargetEditInput) => updateRaceTarget(input));
   ipcMain.handle("races:removeTarget", (_event, targetId: string) => removeRaceTarget(targetId));
+  ipcMain.handle("races:lookupStatus", () => getRaceLookupStatus());
+  ipcMain.handle("races:lookup", (event, request: RaceLookupRequest) =>
+    lookupRace(request, (progress) => {
+      if (!event.sender.isDestroyed()) event.sender.send("races:lookupProgress", progress);
+    })
+  );
+  ipcMain.handle("races:lookupCancel", (_event, requestId: string) => cancelRaceLookup(requestId));
   onRaceTargetsChanged(() => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("races:changed");
   });

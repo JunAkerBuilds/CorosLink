@@ -730,6 +730,7 @@ function TrainingHubContent({
                 activities={activities}
                 celebration={prCelebration.cardCelebration}
                 onCelebrate={prCelebration.replay}
+                onOpenActivity={openActivityPage}
               />
             ) : null}
           </div>
@@ -743,7 +744,7 @@ function TrainingHubContent({
             hidden={activeTab !== "races"}
           >
             {visitedTabs.includes("races") ? (
-              <RacesPanel journal={raceJournal} onOpenActivities={() => changeTab("activities")} />
+              <RacesPanel journal={raceJournal} onOpenActivities={() => changeTab("activities")} racePredictor={snapshot?.racePredictor ?? null} activities={activities} />
             ) : null}
           </div>
         </>

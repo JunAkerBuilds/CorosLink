@@ -1,6 +1,6 @@
 {
   "name": "coroslink",
-  "version": "0.1.71",
+  "version": "0.1.73",
   "private": true,
   "description": "Unofficial COROS Pace Pro companion — media, watch sync, and training analytics.",
   "author": "CorosLink Contributors",
@@ -33,6 +33,7 @@
     "test:combined-download-cache": "npm run build:electron && node scripts/test-combined-download-cache.mjs",
     "test:download-progress": "npm run build:electron && node scripts/test-download-progress.mjs",
     "test:download-availability": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-download-availability.cjs",
+    "test:local-mp3-import": "npm run build:electron && electron scripts/test-local-mp3-import.cjs",
     "test:route-location": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-route-location.mjs",
     "test:overview-weather": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-overview-weather.mjs",
     "test:overview-briefing": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-overview-briefing.mjs",
@@ -107,10 +108,11 @@
     "test:strength-detail": "node --experimental-strip-types scripts/test-strength-detail.mjs",
     "test:strength-analytics": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-strength-analytics.mjs",
     "test:hevy-strength": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-hevy-strength.mjs",
+    "test:coach-hevy-tools": "npm run build:electron && node scripts/test-coach-hevy-tools.mjs",
     "test:hevy-service": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-hevy-service.mjs",
     "test:strava-strength": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-strava-strength.mjs",
     "test:strava-service": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-strava-service.mjs",
-    "test:race-model": "node --experimental-strip-types scripts/test-race-model.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-race-format.mjs",
+    "test:race-model": "node --experimental-strip-types scripts/test-race-model.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-race-lookup.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-race-format.mjs",
     "test:workout-journal": "node --experimental-strip-types scripts/test-workout-journal.mjs",
     "test:race-service": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-race-service.mjs",
     "test:exercise-explorer": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-exercise-explorer.mjs",
@@ -157,7 +159,7 @@
     "test:coros-ble-python": "cd scripts && python3 test-coros-ble-route.py && python3 test-coros-system-ble-transfers.py && python3 test-coros-system-ble.py",
     "test:coros-ble-auth-needs-bumble": "cd scripts && python3 test-coros-ble-auth.py",
     "test:coros-ble-music": "npm run build:electron && node scripts/test-coros-ble-music.mjs && electron scripts/test-coros-music-ui.cjs",
-    "test:coros-wifi-music": "npm run build:electron && node scripts/test-coros-wifi-music.mjs && electron scripts/test-coros-wifi-music-ui.cjs",
+    "test:coros-wifi-music": "npm run build:electron && node scripts/test-coros-wifi-music.mjs && node scripts/test-coros-netease-wifi.mjs && node scripts/test-coros-wireless-audio.mjs && node scripts/test-coros-watch-toolbox.mjs && electron scripts/test-coros-wifi-music-ui.cjs",
     "test:coros-ble-routes": "npm run build:electron && node scripts/test-coros-ble-routes.mjs && node scripts/test-coros-system-ble.mjs",
     "legacy614a:patch": "npm run build:electron && node scripts/patch-legacy614a.mjs",
     "legacy614a:slender": "npm run build:electron && node scripts/build-slender-multidata-legacy.mjs",
@@ -174,6 +176,7 @@
     "test:official-watchface-editor": "npm run build:electron && electron scripts/test-official-watchface-editor.cjs",
     "test:watchface-editor": "node --experimental-strip-types scripts/test-watchface-editor.mjs",
     "test:watchface-blank-start": "node --experimental-strip-types scripts/test-watchface-blank-start.mjs",
+    "test:watchface-studio-tour": "node --experimental-strip-types scripts/test-watchface-studio-tour.mjs",
     "test:watchface-automation-pixels": "node --experimental-strip-types scripts/test-watchface-automation-pixels.mjs",
     "test:watchface-ai-image": "npm run build:electron && node scripts/test-watchface-ai-image.mjs && electron scripts/test-watchface-ai-image-electron.cjs",
     "test:watchface-codex-cli": "npm run build:electron && node scripts/test-watchface-codex-cli.mjs",
@@ -208,7 +211,7 @@
     "website:build": "npm run build --prefix website",
     "test:strength-workout-edits": "npm run build:electron && node --test scripts/test-strength-workout-edits.mjs && node scripts/test-workout-automation.mjs && electron scripts/test-strength-training-hub.cjs",
     "test:strength-review-ui": "npm run build:electron && electron scripts/test-strength-review-ui.cjs",
-    "test:localization": "npm run build:electron && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-localization.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-chinese-localization.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-portuguese-localization.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-spanish-localization.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-watchface-layer-search.mjs && electron scripts/test-localization-ui.cjs && electron scripts/test-calendar-language-drafts.cjs && electron scripts/test-chinese-local-screens.cjs"
+    "test:localization": "npm run build:electron && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-localization.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-chinese-localization.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-portuguese-localization.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-spanish-localization.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-german-localization.mjs && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-watchface-layer-search.mjs && electron scripts/test-localization-ui.cjs && electron scripts/test-calendar-language-drafts.cjs && electron scripts/test-chinese-local-screens.cjs"
   },
   "build": {
     "appId": "app.coroslink",
@@ -340,6 +343,10 @@
         {
           "from": "build/es.lproj",
           "to": "es.lproj"
+        },
+        {
+          "from": "build/de.lproj",
+          "to": "de.lproj"
         }
       ]
     },

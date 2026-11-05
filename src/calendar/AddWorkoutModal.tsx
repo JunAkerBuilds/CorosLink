@@ -1,10 +1,12 @@
 import { formatIntensityType, formatWorkoutSport } from "./workoutLabels";
-import { t, getLocale, useLanguage, formatNumber } from "../i18n/training";
+import { t, getLocale, useLanguage, formatNumber, midSentence } from "../i18n/training";
 import { useLocalOnlyView } from "../privacy/localOnlyView";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   Activity,
   AlertCircle,
+  ArrowLeft,
+  Check,
   Bike,
   BookmarkPlus,
   BookOpen,
@@ -37,7 +39,7 @@ import {
   Zap,
   type LucideIcon
 } from "lucide-react";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type {
   ManualActivityInput,
@@ -68,6 +70,8 @@ import { formatHappenDayLabel, getLocalHappenDayKey } from "../training/formatte
 import { dateFromKey } from "./dateUtils";
 import { ExerciseCombobox, type ExerciseComboboxSelection } from "./ExerciseCombobox";
 import { ExercisePreview } from "./ExercisePreview";
+import "./workoutBuilder.css";
+import "./createWorkout.css";
 import { CLIMB_GRADES, CLIMB_SYSTEM_IDS, FTP_PRESETS, HEART_RATE_PRESETS, PACE_PRESETS, RUNNING_POWER_PRESETS, SWIM_STROKE_IDS, WORKOUT_SPORT_CAPABILITIES, WORKOUT_SPORTS, validateWorkoutIntensity, workoutIntensitiesForStep, workoutTargetsForStep } from "../../electron/workoutCapabilities";
 
 type AddTab = "quick" | "library" | "builder" | "activity";
@@ -505,7 +509,7 @@ function builderRowValidationMessage(
   const stepKind = row.kind;
   const targetValue = row.targetType === "time" ? row.timeMin : row.distanceKm;
   if (row.targetType !== "open" && !(Number(targetValue) > 0)) {
-    return t("Enter a valid {{value1}}.", { value1: String(builderTargetLabel(row.targetType, sport, unitSystem).toLocaleLowerCase()) });
+    return t("Enter a valid {{value1}}.", { value1: midSentence(builderTargetLabel(row.targetType, sport, unitSystem)) });
   }
   if (sport === "strength" && stepKind === "training") {
     if (exercisesLoading) return t("Wait for the COROS exercise catalog to finish loading.");
@@ -2085,6 +2089,28 @@ export function AddWorkoutModal({
   const builderSportMeta = BUILDER_SPORT_META[builderSport];
   const builderTotals = useMemo(() => builderWorkoutTotals(rows, builderSport), [rows, builderSport, getLocale()]);
   const builderStructure = useMemo(() => builderStructureCounts(rows), [rows, getLocale()]);
+  /* Create-workout page: "Unsaved changes" once anything differs from how it opened. */
+  const builderSnapshot = JSON.stringify([builderSport, builderName, builderDescription, builderPoolLength, builderGradeSystem, rows]);
+  const builderBaseline = useRef<string | null>(null);
+  if (builderBaseline.current === null) builderBaseline.current = builderSnapshot;
+  const builderDirty = builderSnapshot !== builderBaseline.current;
+  const libraryCreate = libraryOnly && tab === "builder";
+  const builderChecks = useMemo(() => {
+    const checks: Array<{ ok: boolean; text: string }> = [];
+    if (builderSport !== "strength") {
+      checks.push(rows[0]?.kind === "warmup"
+        ? { ok: true, text: t("Starts with a warm-up") }
+        : { ok: false, text: t("Add a warm-up before the hard work") });
+      checks.push(rows[rows.length - 1]?.kind === "cooldown"
+        ? { ok: true, text: t("Ends with a cool-down") }
+        : { ok: false, text: t("Add a cool-down at the end") });
+    }
+    const pending = rows.filter((row) => !rowIsValid(row, builderSport, builderExercises, builderExercisesLoading, unitSystem)).length;
+    checks.push(pending
+      ? { ok: false, text: pending === 1 ? t("1 block needs a value") : t("{{value1}} blocks need a value", { value1: String(pending) }) }
+      : { ok: true, text: t("Every step is ready for the watch") });
+    return checks;
+  }, [rows, builderSport, builderExercises, builderExercisesLoading, unitSystem, getLocale()]);
   const builderStepKinds = useMemo<BuilderKind[]>(() => {
     const supported = WORKOUT_SPORT_CAPABILITIES[builderSport].stepKinds;
     return BUILDER_ADD_KIND_ORDER.filter((kind) =>
@@ -2150,7 +2176,7 @@ export function AddWorkoutModal({
         onClick={onClose}
       >
         <motion.div
-          className={`calendar-modal calendar-modal-workspace calendar-modal-${tab} panel`}
+          className={`calendar-modal calendar-modal-workspace calendar-modal-${tab} panel${libraryCreate ? " is-library-create" : ""}`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="add-calendar-title"
@@ -2163,6 +2189,30 @@ export function AddWorkoutModal({
           transition={reducedMotion ? { duration: 0 } : { type: "spring", stiffness: 360, damping: 30 }}
           onClick={(event) => event.stopPropagation()}
         >
+          {libraryCreate ? (
+            <header className="calendar-modal-header create-workout-header">
+              <button type="button" className="ghost-button create-workout-back" onClick={onClose} aria-label={t("Close")} title={t("Close")}>
+                <ArrowLeft size={16} aria-hidden="true" />
+              </button>
+              <div className="create-workout-title">
+                <p className="eyebrow">{t("Training library · New workout")}</p>
+                <h3 id="add-calendar-title">{builderName.trim() || t("Create library workout")}</h3>
+              </div>
+              <div className="create-workout-header-actions">
+                {builderDirty ? <span className="create-workout-unsaved" role="status"><i aria-hidden="true" />{t("Unsaved changes")}</span> : null}
+                <button type="button" className="ghost-button" onClick={onClose} disabled={submitting}>{t("Cancel")}</button>
+                <button
+                  type="button"
+                  className="primary-button create-workout-save"
+                  disabled={!builderValid || submitting}
+                  onClick={() => void submitBuilder()}
+                >
+                  {submitting ? <BookmarkPlus size={16} aria-hidden="true" /> : <Check size={16} aria-hidden="true" />}
+                  {submitting ? t("Saving…") : t("Save workout")}
+                </button>
+              </div>
+            </header>
+          ) : (
           <header className="calendar-modal-header">
             <div>
               <p className="calendar-modal-date">
@@ -2180,8 +2230,9 @@ export function AddWorkoutModal({
               <X size={16} aria-hidden="true" />
             </button>
           </header>
+          )}
 
-          <div className="calendar-modal-tabs" role="tablist" aria-label={libraryOnly ? t("Workout creation method") : t("Add to calendar method")}>
+          {availableTabs.length > 1 ? <div className="calendar-modal-tabs" role="tablist" aria-label={libraryOnly ? t("Workout creation method") : t("Add to calendar method")}>
             {availableTabs.map((id) => {
               const { label, Icon } = ADD_TAB_ITEMS[id];
               return (
@@ -2198,7 +2249,7 @@ export function AddWorkoutModal({
                 </button>
               );
             })}
-          </div>
+          </div> : null}
 
           {tab === "quick" ? (
             <form
@@ -2431,10 +2482,10 @@ export function AddWorkoutModal({
             <div className="calendar-modal-body calendar-builder-body">
               <div className="calendar-builder-workspace">
                 <aside className="calendar-builder-settings" aria-label={t("Workout settings")}>
-                  <div className="calendar-builder-settings-copy">
+                  {!libraryCreate ? <div className="calendar-builder-settings-copy">
                     <h4>{t("Workout settings")}</h4>
                     <p>{t("Set the basics for your workout.")}</p>
-                  </div>
+                  </div> : null}
                   <div className="calendar-builder-sport-field">
                     <span className="calendar-builder-field-label" id="calendar-builder-sport-label">{t("Sport")}</span>
                     <div
@@ -2465,7 +2516,7 @@ export function AddWorkoutModal({
                   {(builderSport === "indoorClimb" || builderSport === "bouldering") ? <label className="calendar-field"><span>{t("Grading system")}</span><SelectDropdown translateLabel={t} label={t("Grading system")} value={builderGradeSystem} options={(Object.keys(CLIMB_SYSTEM_IDS) as Array<keyof typeof CLIMB_SYSTEM_IDS>).map((system) => ({ value: system, label: formatBuilderToken(system) }))} portal onChange={setBuilderGradeSystem} /></label> : null}
                   <label className="calendar-field">
                     <span className="calendar-field-label">
-                      <span>{t("Workout name")}</span>
+                      <span>{libraryCreate ? t("Name") : t("Workout name")}</span>
                       <small>{t("Optional")}</small>
                     </span>
                     <input
@@ -2477,7 +2528,7 @@ export function AddWorkoutModal({
                   </label>
                   <label className="calendar-field calendar-builder-description">
                     <span className="calendar-field-label">
-                      <span>{t("Description")}</span>
+                      <span>{libraryCreate ? t("Coach note") : t("Description")}</span>
                       <small id="calendar-builder-description-count">{builderDescription.length} / 300</small>
                     </span>
                     <textarea
@@ -2512,16 +2563,21 @@ export function AddWorkoutModal({
 
                 <section className="calendar-builder-canvas" aria-labelledby="calendar-builder-steps-title">
                   <header className="calendar-builder-canvas-header">
-                    <div>
+                    {libraryCreate ? (
+                      <div className="create-workout-steps-title">
+                        <h4 id="calendar-builder-steps-title">{t("Steps")}</h4>
+                        <span>· {t("{{value1}} on the watch", { value1: String(builderStructure.steps) })}</span>
+                      </div>
+                    ) : <div>
                       <h4 id="calendar-builder-steps-title">{t("Workout steps")}</h4>
                       <p>{t("Repeat groups contain their own ordered sub-steps.")}</p>
-                    </div>
-                    <span className="calendar-builder-step-count">
+                    </div>}
+                    {libraryCreate ? <span className="create-workout-steps-hint">{t("Use the arrows to reorder · open a block to set its target")}</span> : <span className="calendar-builder-step-count">
                       {builderStructure.steps} {builderStructure.steps === 1 ? t("step") : t("steps")}
                       {builderStructure.repeatGroups > 0
                         ? `, ${builderStructure.repeatGroups} ${builderStructure.repeatGroups === 1 ? t("repeat") : t("repeats")}`
                         : ""}
-                    </span>
+                    </span>}
                   </header>
                   <span className="sr-only" role="status" aria-live="polite">{builderReorderMessage}</span>
                   <div className="calendar-builder-rows">
@@ -2777,8 +2833,45 @@ export function AddWorkoutModal({
                   </div>
                   </div>
                 </section>
+                {libraryCreate ? (
+                  <aside className="create-workout-rail" aria-label={t("Workout totals and checks")}>
+                    <dl className="create-workout-stats">
+                      <div className="is-duration">
+                        <dt>{t("Duration")}</dt>
+                        <dd>{builderTotals.minutes >= 1 ? `≈${formatBuilderMinutes(builderTotals.minutes)}` : "—"}</dd>
+                        <small>{t("Estimated moving time")}</small>
+                      </div>
+                      <div className="is-distance">
+                        <dt>{t("Distance")}</dt>
+                        <dd>{builderTotals.distance > 0 ? formatBuilderDistance(builderTotals.distance, builderTotals.distanceUnit, unitSystem) : "—"}</dd>
+                        <small>{t("Distance steps only")}</small>
+                      </div>
+                      <div className="is-steps">
+                        <dt>{t("Steps")}</dt>
+                        <dd>{builderStructure.steps}</dd>
+                        <small>{builderStructure.repeatGroups
+                          ? `${builderStructure.repeatGroups} ${builderStructure.repeatGroups === 1 ? t("repeat") : t("repeats")}`
+                          : t("No repeats")}</small>
+                      </div>
+                      <div className="is-sport">
+                        <dt>{t("Sport")}</dt>
+                        <dd><builderSportMeta.Icon size={16} aria-hidden="true" /> {formatWorkoutSport(builderSport)}</dd>
+                        <small>{t("COROS sport type")}</small>
+                      </div>
+                    </dl>
+                    <p className="create-workout-rail-label">{t("Checks")}</p>
+                    <ul className="workout-checks">
+                      {builderChecks.map((check) => (
+                        <li key={check.text} className={check.ok ? "is-ok" : "is-todo"}>
+                          <i aria-hidden="true">{check.ok ? "✓" : "!"}</i>
+                          {check.text}
+                        </li>
+                      ))}
+                    </ul>
+                  </aside>
+                ) : null}
               </div>
-              <footer className="calendar-modal-footer calendar-builder-footer">
+              {!libraryCreate ? <footer className="calendar-modal-footer calendar-builder-footer">
                 {!libraryOnly ? <label className="calendar-check calendar-builder-footer-save">
                   <input
                     type="checkbox"
@@ -2824,7 +2917,7 @@ export function AddWorkoutModal({
                   {libraryOnly ? <BookmarkPlus size={16} aria-hidden="true" /> : <CalendarPlus size={16} aria-hidden="true" />}
                   {submitting ? (libraryOnly ? t("Saving…") : t("Scheduling…")) : (libraryOnly ? t("Save workout") : t("Schedule workout"))}
                 </button>
-              </footer>
+              </footer> : null}
             </div>
           ) : null}
 

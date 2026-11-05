@@ -1,4 +1,5 @@
 import { t, useLanguage } from "../i18n/watchfaces";
+import { useWatchfaceStudioSimple } from "./watchfaceStudioMode";
 import { ArrowUpRight, Check, ChevronDown, Info, Loader2, Search, TriangleAlert, Type, X } from "lucide-react";
 import { type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -79,6 +80,7 @@ export function LocalFontPicker({
   showSpacing = true
 }: LocalFontPickerProps) {
   useLanguage();
+  const simple = useWatchfaceStudioSimple();
   const [open, setOpen] = useState(false);
   const [families, setFamilies] = useState<string[] | null>(null);
   const [query, setQuery] = useState("");
@@ -480,7 +482,7 @@ export function LocalFontPicker({
               onChange={updateTypography}
             />
           )}
-          {showSpacing ? <label className="watchface-typography-tracking">{t("Sprite spacing")}{" "}<span>{Math.round(letterSpacing * 100)}%</span>
+          {showSpacing ? <label className="watchface-typography-tracking">{t("Spacing")}{" "}<span>{Math.round(letterSpacing * 100)}%</span>
             <input
               type="range"
               min="-0.35"
@@ -497,7 +499,8 @@ export function LocalFontPicker({
         <p className="watchface-typography-hint">
           <Info size={13} aria-hidden="true" />{t("Font shape inherited from template")}</p>
       ) : null}
-      {rasterFontIsActive && rasterFont && onRasterFontChange ? (
+      {/* Fitting PNG digits into their cells is Advanced. */}
+      {!simple && rasterFontIsActive && rasterFont && onRasterFontChange ? (
         <div className="watchface-typography-controls">
           {(["height", "baseline"] as const).map((key) => (
             <label key={key} className="watchface-typography-tracking">
@@ -528,7 +531,7 @@ export function LocalFontPicker({
           ) : null}
         </div>
       ) : null}
-      {typography && rasterFontIsActive ? (
+      {!simple && typography && rasterFontIsActive ? (
         <p className="watchface-typography-hint">{t("Spacing changes transparent digit cells. Time spacing keeps the digits beside the colon anchored.")}</p>
       ) : null}
 

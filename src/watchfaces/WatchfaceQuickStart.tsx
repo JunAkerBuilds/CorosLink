@@ -1,7 +1,9 @@
 import { t, useLanguage } from "../i18n/watchfaces";
+import { useWatchfaceStudioSimple } from "./watchfaceStudioMode";
 import {
   ChevronRight,
   Clock,
+  Compass,
   ImagePlus,
   MousePointerClick,
   Palette,
@@ -23,6 +25,8 @@ interface WatchfaceQuickStartProps {
   onText: () => void;
   onShape: () => void;
   photoDisabled: boolean;
+  /** Replays the Studio walkthrough. */
+  onTour?: () => void;
 }
 
 const SHORTCUTS: Array<{ keys: string[]; action: string }> = [
@@ -44,9 +48,11 @@ export function WatchfaceQuickStart({
   addTimeHint = "Hours and minutes that update live",
   onText,
   onShape,
-  photoDisabled
+  photoDisabled,
+  onTour
 }: WatchfaceQuickStartProps) {
   useLanguage();
+  const simple = useWatchfaceStudioSimple();
   type QuickAction = {
     label: string;
     hint: string;
@@ -86,6 +92,11 @@ export function WatchfaceQuickStart({
             <p>{t("Start with a quick edit below, or click anything on the face to change it.")}</p>
           </>
         )}
+        {onTour ? (
+          <button type="button" className="wf-welcome-tour" onClick={onTour}>
+            <Compass size={14} aria-hidden="true" />{t("Take the 1-minute tour")}
+          </button>
+        ) : null}
       </div>
 
       <div className="wf-welcome-section">
@@ -124,7 +135,9 @@ export function WatchfaceQuickStart({
 
       <p className="wf-welcome-footnote">
         <MousePointerClick size={13} aria-hidden="true" />
-        <span>{t("Added text stays fixed on the watch. Style the existing time and data layers for values that update live. Template-wide settings are on the Project tab.")}</span>
+        <span>{simple
+          ? t("Added text stays fixed on the watch. Style the existing time and data layers for values that update live.")
+          : t("Added text stays fixed on the watch. Style the existing time and data layers for values that update live. Template-wide settings are on the Project tab.")}</span>
       </p>
     </section>
   );

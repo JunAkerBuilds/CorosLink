@@ -114,6 +114,15 @@ function convertEntries(
     source.set(name, /\/config\.txt$/i.test(name)
       ? Buffer.from(restoreWatchfaceDateLayout(entry.data.toString("utf8")), "utf8") : entry.data);
   }
+  // Faces given a photo in the COROS app keep it in custom/custom_bg.png,
+  // pointed to by custom/custom.pb, and leave every layout background blank.
+  // That pointer is the app's state, not firmware data: fold the photo into
+  // the master background below so it survives on the destination watch.
+  const customBackground = source.has("custom/custom.pb") ? source.get("custom/custom_bg.png") : undefined;
+  if (customBackground) {
+    source.delete("custom/custom.pb");
+    source.delete("custom/custom_bg.png");
+  }
   if (recoveredExport && JSON.parse(source.get("info.json")?.toString("utf8") ?? "{}").coroslinkRecovery?.partial !== true) {
     throw new Error("Only a recovered official face can use native-resolution export.");
   }
@@ -168,6 +177,12 @@ function convertEntries(
     if (name.startsWith(`${dir(masterSize)}/`) && !CONFIG_FILE.test(name.slice(dir(masterSize).length + 1))) {
       masterAssets.set(name.slice(dir(masterSize).length + 1), data);
     }
+  }
+  if (customBackground) {
+    const backgroundName = (readConfig(current).background_icon?.trim().replace(/\\/g, "/").replace(/^\.\//, "")) || "background.png";
+    const { width } = nativeImage.createFromBuffer(customBackground).getSize();
+    if (!width) throw new Error("Cannot read the face's COROS background photo.");
+    masterAssets.set(backgroundName, resizePng(customBackground, masterSize / width, "custom/custom_bg.png"));
   }
   // Some official AMOLED templates only supply AOD at the physical size.
   const aodSize = resolutions.find(size => textAt(size, "AODconfig.txt") || textAt(size, RETAINED_AOD_CONFIG));

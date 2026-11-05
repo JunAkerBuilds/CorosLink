@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { fitGeneratedWatchfaceFontRects } from "../electron/watchfaceExportFontBounds.ts";
+import { decodePng, encodePng } from "../electron/watchfaceCompiler/png.ts";
 
 function pngHeader(width, height) {
   const b = Buffer.alloc(24);
@@ -48,4 +49,17 @@ for (const line of [
 assert.deepEqual(fitGeneratedWatchfaceFontRects(result), result, "repair must be idempotent");
 assert.equal(result[1], entries[1], "glyph bytes must remain untouched");
 assert.equal(text.split("\r\n").length, config.split("\r\n").length);
+// Tracking trims each glyph to its own width, but a COROS frame list has one
+// size for every frame: narrower frames are padded, centered, to the widest.
+const solid = (width, height) => encodePng({ width, height, data: new Uint8Array(width * height * 4).fill(255) });
+const uneven = [[28, 54], [27, 54], [30, 54]].map(([w, h], i) => ({ name: `${root}/studio/uneven/0${i}.png`, data: solid(w, h) }));
+const padded = fitGeneratedWatchfaceFontRects([{ name: `${root}/config.txt`, data: Buffer.from(config) }, ...uneven]).slice(1);
+for (const entry of padded) {
+  const image = decodePng(entry.data);
+  assert.deepEqual([image.width, image.height], [30, 54], `${entry.name} must match its folder`);
+}
+const one = decodePng(padded[1].data);
+const alphaAt = (x, y) => one.data[(y * one.width + x) * 4 + 3];
+assert.deepEqual([alphaAt(0, 0), alphaAt(1, 0), alphaAt(27, 0), alphaAt(28, 0), alphaAt(29, 0)], [0, 255, 255, 0, 0], "a 27px glyph is centered in 30px");
+assert.equal(padded[2].data, uneven[2].data, "the widest frame stays byte for byte");
 console.log("Watchface export font bounds tests passed");

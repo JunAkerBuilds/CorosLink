@@ -300,7 +300,75 @@ overview = races.removeRaceTarget(trail.targetId);
 assert.deepEqual(overview.targets.map((target) => target.targetId), [marathon.targetId]);
 assert.throws(() => races.removeRaceTarget(trail.targetId), /no longer in your list/);
 assert.equal(targetEvents, 3);
+// The Races tab's Upcoming form sends blank optional fields and wants the overview back.
+overview = races.addManualRaceTarget({ name: "Parkrun", raceDay: dayKey(0), distanceKey: "5k", distance: undefined, goalTime: undefined, priority: undefined, location: "", notes: "" });
+const parkrun = overview.targets.find((target) => target.name === "Parkrun");
+assert.ok(parkrun, "a race today counts as upcoming");
+assert.equal(parkrun.distance, 5000);
+assert.equal(parkrun.goalTime, undefined);
+assert.equal(parkrun.location, undefined);
+assert.equal(parkrun.priority, undefined);
+assert.throws(() => races.addManualRaceTarget({ name: "Yesterday", raceDay: dayKey(-1), distanceKey: "5k" }), /in the future/);
+races.removeRaceTarget(parkrun.targetId);
+assert.equal(targetEvents, 5);
+// Registration and race-day logistics: added, edited, cleared.
+overview = races.addManualRaceTarget({
+  name: "City Half",
+  raceDay: dayKey(30),
+  distanceKey: "half",
+  registration: "considering",
+  registrationDeadline: dayKey(10),
+  website: "cityhalf.example.com/en",
+  startTime: "7:05"
+});
+let cityHalf = overview.targets.find((target) => target.name === "City Half");
+assert.equal(cityHalf.registration, "considering");
+assert.equal(cityHalf.registrationDeadline, dayKey(10));
+assert.equal(cityHalf.website, "https://cityhalf.example.com/en");
+assert.equal(cityHalf.startTime, "07:05");
+assert.equal(targetEvents, 6);
+overview = races.updateRaceTarget({
+  targetId: cityHalf.targetId,
+  name: "City Half Marathon",
+  raceDay: dayKey(30),
+  distanceKey: "half",
+  goalTime: 5400,
+  registration: "registered",
+  registrationDeadline: dayKey(10),
+  bibNumber: " 4127 ",
+  wave: "Wave 2",
+  bibPickupLocation: "Expo hall",
+  bibPickupDay: dayKey(29),
+  bibPickupHours: "10:00–20:00",
+  startTime: "07:30",
+  website: ""
+});
+cityHalf = overview.targets.find((target) => target.targetId === cityHalf.targetId);
+assert.equal(cityHalf.name, "City Half Marathon");
+assert.equal(cityHalf.registration, "registered");
+assert.equal(cityHalf.bibNumber, "4127");
+assert.equal(cityHalf.wave, "Wave 2");
+assert.equal(cityHalf.bibPickupDay, dayKey(29));
+assert.equal(cityHalf.bibPickupLocation, "Expo hall");
+assert.equal(cityHalf.bibPickupHours, "10:00–20:00");
+assert.equal(cityHalf.startTime, "07:30");
+assert.equal(cityHalf.goalTime, 5400);
+assert.equal(cityHalf.website, undefined, "a blank website clears it");
+assert.equal(targetEvents, 7);
+assert.deepEqual(races.listRaceTargets().find((target) => target.targetId === cityHalf.targetId), cityHalf, "details survive a reload");
+const halfInput = { targetId: cityHalf.targetId, name: cityHalf.name, raceDay: cityHalf.raceDay, distanceKey: "half" };
+assert.throws(() => races.updateRaceTarget({ ...halfInput, bibPickupDay: dayKey(31) }), /after race day/);
+assert.throws(() => races.updateRaceTarget({ ...halfInput, registrationDeadline: dayKey(40) }), /after race day/);
+assert.throws(() => races.updateRaceTarget({ ...halfInput, startTime: "25:00" }), /HH:MM/);
+assert.throws(() => races.updateRaceTarget({ ...halfInput, website: "javascript:alert(1)" }), /web address/);
+assert.throws(() => races.updateRaceTarget({ ...halfInput, targetId: "target:gone" }), /no longer in your list/);
+overview = races.updateRaceTarget({ ...halfInput, registration: "bogus" });
+cityHalf = overview.targets.find((target) => target.targetId === cityHalf.targetId);
+assert.equal(cityHalf.registration, undefined);
+assert.equal(cityHalf.bibNumber, undefined, "an edit replaces every detail");
+races.removeRaceTarget(cityHalf.targetId);
 stopTargets();
+
 
 // --- Past races: a typed-in result finds its recording -------------------------
 const oldHalfStart = new Date(2025, 3, 6, 8, 5).getTime() / 1000;

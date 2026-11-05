@@ -495,8 +495,8 @@ export function deriveEditorLayers(
 
   const staticSeparatorLayers: EditorLayer[] = [];
   for (const [staticSeparatorId, id, label] of [
-    ["colon", "staticColon", "Custom time colon"],
-    ["dateSlash", "staticDateSlash", "Custom date slash"]
+    ["colon", "staticColon", "Colon"],
+    ["dateSlash", "staticDateSlash", "Date slash"]
   ] as const) {
     const separator = design.staticSeparators?.[staticSeparatorId];
     const visible = Boolean(separator?.enabled);

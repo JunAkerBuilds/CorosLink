@@ -14,7 +14,7 @@ globalThis.document = { documentElement: { lang: '' } };
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { language: 'fr-CA', languages: ['fr-CA', 'en-US'] } });
 assert.equal(resolveLanguage('fr-CA'), 'fr');
 assert.equal(resolveLanguage('FR_fr'), 'fr');
-assert.equal(resolveLanguage('de-DE'), 'en');
+assert.equal(resolveLanguage('it-IT'), 'en');
 assert.equal(resolveLanguage(null), 'en');
 initializeLanguage();
 assert.equal(getLanguage(), 'fr');

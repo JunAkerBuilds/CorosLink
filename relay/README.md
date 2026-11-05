@@ -1,6 +1,6 @@
 # CorosLink relay
 
-A Cloudflare Worker at `relay.coroslink.com` that sets up the remote Coach. The phone (C-LINK) talks to the desktop (CorosLink) directly on the LAN, or through a Cloudflare Tunnel that belongs to that desktop. The relay never carries chat traffic and never sees a desktop session token. It handles only the setup:
+A Cloudflare Worker at `relay.coroslink.com` that sets up the remote Coach and supports temporary HTTPS address lookups for NetEase Wi-Fi audio transfers. The phone (C-LINK) talks to the desktop (CorosLink) directly on the LAN, or through a Cloudflare Tunnel that belongs to that desktop. The relay never carries chat traffic and never sees a desktop session token. Coach setup works as follows:
 
 - **Linking:** connects a desktop to a website account (watchfaces.coroslink.com).
 - **Tunnels:** gives each linked desktop a Cloudflare Tunnel and a DNS name, re-provisions it when it disappears, and deletes idle ones.
@@ -8,6 +8,8 @@ A Cloudflare Worker at `relay.coroslink.com` that sets up the remote Coach. The 
 - **Push:** sends text-free APNs alerts ("Coach replied", "Coach needs your approval") and keeps C-LINK's Coach Live Activity current (phase and word count only).
 
 The wire contract, including what the website, the desktop and the phone must implement, is in [PROTOCOL.md](PROTOCOL.md), with the types in [`src/protocol.ts`](src/protocol.ts). The design follows T3 Code's T3 Connect relay (MIT), reimplemented without Effect and Alchemy.
+
+For NetEase transfers, the relay stores a short-lived private LAN address, random audio capability, and file IDs so the watch can request an audio URL over HTTPS. The watch's request contains a device identifier; the handler ignores it and does not store it. The app substitutes a temporary token for the COROS access token during this operation. Audio is downloaded directly over LAN and does not pass through the relay. Records expire after 35 minutes and are revoked when possible. Registration is limited per client network (an IPv4 address or an IPv6 /64): 40 an hour and 10 active at once. Cloudflare invocation logs are off for this Worker because they would record the capability in the request path. A lookup lists up to 100 file IDs (one desktop download task); desktops fall back to 20-file tasks when a relay refuses more. Apply the D1 migration before deploying the Worker that uses it.
 
 ## Layout
 

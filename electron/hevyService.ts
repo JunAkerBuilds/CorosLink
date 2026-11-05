@@ -32,8 +32,10 @@ const SETTINGS = {
   includeWarmups: "hevy.includeWarmups",
   eventCursor: "hevy.eventCursor",
   coverageSince: "hevy.coverageSince",
-  lastSyncedAt: "hevy.lastSyncedAt"
+  lastSyncedAt: "hevy.lastSyncedAt",
+  templatesSyncedAt: "hevy.templatesSyncedAt"
 };
+const TEMPLATE_REFRESH_MS = 7 * 86_400_000;
 
 interface CredentialStorage {
   isEncryptionAvailable(): boolean;
@@ -123,23 +125,38 @@ function windowStartEpochSeconds(days: number): number {
   return Math.floor(start.getTime() / 1000);
 }
 
+/** A Hevy API failure, with the HTTP status the Coach's tools report. */
+export class HevyApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
 async function hevyRequest(
   path: string,
   apiKey: string,
-  search?: Record<string, string | number>
+  search?: Record<string, string | number>,
+  write?: { method: "POST" | "PUT"; body: unknown }
 ): Promise<JsonRecord> {
   const url = new URL(`${BASE_URL}${path}`);
   for (const [key, value] of Object.entries(search ?? {})) {
     url.searchParams.set(key, String(value));
   }
-  const response = await fetch(url, { headers: { "api-key": apiKey } });
+  const response = await fetch(url, write
+    ? {
+        method: write.method,
+        headers: { "api-key": apiKey, "content-type": "application/json" },
+        body: JSON.stringify(write.body)
+      }
+    : { headers: { "api-key": apiKey } });
   const payload = await response.json().catch(() => undefined);
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      throw new Error("Hevy rejected the API key. Reconnect Hevy with a current Pro API key.");
-    }
     const message = stringValue(record(payload)?.error);
-    throw new Error(message ?? `Hevy API request failed (${response.status}).`);
+    // A write's 403 is a plan limit (routines, custom exercises), not the key.
+    if (response.status === 401 || (response.status === 403 && !write)) {
+      throw new HevyApiError("Hevy rejected the API key. Reconnect Hevy with a current Pro API key.", response.status);
+    }
+    throw new HevyApiError(message ?? `Hevy API request failed (${response.status}).`, response.status);
   }
   const parsed = record(payload);
   if (!parsed) throw new Error("Hevy returned an invalid response.");
@@ -220,6 +237,7 @@ async function syncExerciseTemplates(apiKey: string): Promise<void> {
     const pageCount = Math.max(1, numberValue(response.page_count) ?? page);
     if (page >= pageCount) break;
   }
+  setSetting(SETTINGS.templatesSyncedAt, new Date().toISOString());
 }
 
 async function ensureExerciseTemplates(
@@ -347,4 +365,175 @@ export async function syncHevyStrengthHistory(
     ? await fullSync(apiKey)
     : await incrementalSync(apiKey, cursor);
   return { sessions: getStoredHevyStrengthSessions(days), fetched };
+}
+
+// ----- The Coach's Hevy tools: live reads and approved writes -----
+
+function requireApiKey(): string {
+  const apiKey = readApiKey();
+  if (!apiKey || !parseIdentity()) {
+    throw new Error("Hevy isn't connected. Connect it in Strength or Settings → Accounts & API with a Hevy Pro API key.");
+  }
+  return apiKey;
+}
+
+function records(value: unknown): JsonRecord[] {
+  return Array.isArray(value)
+    ? value.map(record).filter((item): item is JsonRecord => Boolean(item))
+    : [];
+}
+
+/** Every page of a 10-per-page Hevy list, up to maxPages. */
+async function listAllPages(path: string, key: string, maxPages = 30): Promise<JsonRecord[]> {
+  const apiKey = requireApiKey();
+  const items: JsonRecord[] = [];
+  for (let page = 1; page <= maxPages; page += 1) {
+    const response = await hevyRequest(path, apiKey, { page, pageSize: 10 });
+    const batch = records(response[key]);
+    items.push(...batch);
+    const pageCount = Math.max(1, numberValue(response.page_count) ?? page);
+    if (page >= pageCount || batch.length === 0) break;
+  }
+  return items;
+}
+
+/**
+ * The account's exercise library (built-in and custom), from the local cache.
+ * Fetched on first use and refreshed weekly, or at once with refresh.
+ */
+export async function getHevyExerciseTemplates(refresh = false): Promise<Map<string, JsonRecord>> {
+  const apiKey = requireApiKey();
+  const syncedAt = Date.parse(getSetting(SETTINGS.templatesSyncedAt) ?? "");
+  const stale = !Number.isFinite(syncedAt) || Date.now() - syncedAt > TEMPLATE_REFRESH_MS;
+  let templates = listStoredHevyExerciseTemplates();
+  if (refresh || stale || templates.size === 0) {
+    try {
+      await syncExerciseTemplates(apiKey);
+    } catch (error) {
+      // A stale library still answers searches; an empty one can't.
+      if (templates.size === 0) throw error;
+    }
+    templates = listStoredHevyExerciseTemplates();
+  }
+  return templates;
+}
+
+/** One template by id, fetched (and cached) when the library doesn't have it yet. */
+export async function getHevyExerciseTemplate(id: string): Promise<JsonRecord | undefined> {
+  const cached = listStoredHevyExerciseTemplates().get(id);
+  if (cached) return cached;
+  try {
+    const template = await hevyRequest(`/exercise_templates/${encodeURIComponent(id)}`, requireApiKey());
+    upsertHevyExerciseTemplate(id, template);
+    return template;
+  } catch (error) {
+    if (error instanceof HevyApiError && error.status === 404) return undefined;
+    throw error;
+  }
+}
+
+/** How often each template appears in the cached workout history (Strength sync), last year. */
+export function hevyTemplateUsage(): Map<string, { count: number; lastStart: number }> {
+  const usage = new Map<string, { count: number; lastStart: number }>();
+  for (const workout of listStoredHevyWorkouts(windowStartEpochSeconds(INITIAL_HISTORY_DAYS))) {
+    const seen = new Set<string>();
+    for (const exercise of records(workout.payload.exercises)) {
+      const id = stringValue(exercise.exercise_template_id);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      const entry = usage.get(id) ?? { count: 0, lastStart: 0 };
+      entry.count += 1;
+      entry.lastStart = Math.max(entry.lastStart, workout.startTime);
+      usage.set(id, entry);
+    }
+  }
+  return usage;
+}
+
+export function listHevyRoutines(): Promise<JsonRecord[]> {
+  return listAllPages("/routines", "routines");
+}
+
+export function listHevyRoutineFolders(): Promise<JsonRecord[]> {
+  return listAllPages("/routine_folders", "routine_folders", 10);
+}
+
+export async function getHevyRoutine(id: string): Promise<JsonRecord | undefined> {
+  try {
+    const response = await hevyRequest(`/routines/${encodeURIComponent(id)}`, requireApiKey());
+    return record(response.routine) ?? response;
+  } catch (error) {
+    if (error instanceof HevyApiError && error.status === 404) return undefined;
+    throw error;
+  }
+}
+
+export async function createHevyRoutine(routine: JsonRecord): Promise<JsonRecord> {
+  const response = await hevyRequest("/routines", requireApiKey(), undefined, { method: "POST", body: { routine } });
+  // Hevy has answered both { routine } and [routine].
+  return record(response.routine) ?? record(records(response.routine)[0]) ?? response;
+}
+
+export async function updateHevyRoutine(id: string, routine: JsonRecord): Promise<JsonRecord> {
+  const response = await hevyRequest(`/routines/${encodeURIComponent(id)}`, requireApiKey(), undefined, { method: "PUT", body: { routine } });
+  return record(response.routine) ?? record(records(response.routine)[0]) ?? response;
+}
+
+export async function createHevyRoutineFolder(title: string): Promise<JsonRecord> {
+  const response = await hevyRequest("/routine_folders", requireApiKey(), undefined, {
+    method: "POST",
+    body: { routine_folder: { title } }
+  });
+  return record(response.routine_folder) ?? response;
+}
+
+/** Creates a custom exercise and caches its template; returns the new template id. */
+export async function createHevyCustomExercise(exercise: JsonRecord): Promise<string> {
+  const apiKey = requireApiKey();
+  const response = await hevyRequest("/exercise_templates", apiKey, undefined, { method: "POST", body: { exercise } });
+  const raw = response.id ?? record(response.exercise_template)?.id;
+  const id = typeof raw === "number" ? String(raw) : stringValue(raw);
+  if (!id) throw new Error("Hevy created the exercise but didn't return its id. Search for it before using it.");
+  await getHevyExerciseTemplate(id).catch(() => undefined);
+  return id;
+}
+
+export async function getHevyExerciseHistory(
+  templateId: string,
+  startDate?: string,
+  endDate?: string
+): Promise<JsonRecord[]> {
+  const search: Record<string, string> = {};
+  if (startDate) search.start_date = startDate;
+  if (endDate) search.end_date = endDate;
+  const response = await hevyRequest(`/exercise_history/${encodeURIComponent(templateId)}`, requireApiKey(), search);
+  return records(response.exercise_history);
+}
+
+export async function listHevyWorkouts(page: number, pageSize: number): Promise<{ workouts: JsonRecord[]; pageCount: number }> {
+  const response = await hevyRequest("/workouts", requireApiKey(), { page, pageSize });
+  return { workouts: records(response.workouts), pageCount: Math.max(1, numberValue(response.page_count) ?? 1) };
+}
+
+export async function getHevyWorkout(id: string): Promise<JsonRecord | undefined> {
+  try {
+    const response = await hevyRequest(`/workouts/${encodeURIComponent(id)}`, requireApiKey());
+    return record(response.workout) ?? response;
+  } catch (error) {
+    if (error instanceof HevyApiError && error.status === 404) return undefined;
+    throw error;
+  }
+}
+
+export async function listHevyBodyMeasurements(limit: number): Promise<JsonRecord[]> {
+  const apiKey = requireApiKey();
+  const items: JsonRecord[] = [];
+  for (let page = 1; items.length < limit; page += 1) {
+    const response = await hevyRequest("/body_measurements", apiKey, { page, pageSize: 10 });
+    const batch = records(response.body_measurements);
+    items.push(...batch);
+    const pageCount = Math.max(1, numberValue(response.page_count) ?? page);
+    if (page >= pageCount || batch.length === 0) break;
+  }
+  return items.slice(0, limit);
 }

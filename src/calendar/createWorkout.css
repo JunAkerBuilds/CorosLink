@@ -1,0 +1,545 @@
+/*
+ * Create workout (Training Library → New workout): the builder as one page.
+ * Header with the save actions, then three columns: settings, steps, and a
+ * rail with totals and checks. Scoped to .is-library-create so the
+ * calendar's "Add to calendar" builder keeps its own layout.
+ */
+
+.calendar-modal.is-library-create {
+  width: min(1600px, calc(100vw - 48px));
+  height: min(900px, calc(100dvh - 48px));
+  padding: 0;
+  overflow: hidden;
+  border-radius: 24px;
+}
+
+/* ------------------------------------------------------------- Header */
+
+.is-library-create .create-workout-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  padding: 18px 24px;
+  border-bottom: 1px solid color-mix(in srgb, var(--text-muted) 16%, transparent);
+}
+
+.is-library-create .create-workout-back {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  padding: 0;
+  place-items: center;
+  border-radius: 12px;
+}
+
+.is-library-create .create-workout-title {
+  min-width: 0;
+  flex: 1;
+}
+
+.is-library-create .create-workout-title .eyebrow {
+  margin: 0 0 3px;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.is-library-create .create-workout-title h3 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.is-library-create .create-workout-header-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.is-library-create .create-workout-header-actions > button {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 12px;
+  font-weight: 650;
+}
+
+.is-library-create .create-workout-save {
+  box-shadow: 0 10px 26px -12px color-mix(in srgb, var(--accent) 85%, transparent);
+}
+
+.is-library-create .create-workout-unsaved {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-right: 4px;
+  padding: 6px 11px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 18%, transparent);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.is-library-create .create-workout-unsaved i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f0a72e;
+}
+
+/* ------------------------------------------------------------ Columns */
+
+.is-library-create .calendar-builder-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  padding: 0;
+  overflow: hidden;
+}
+
+.is-library-create .calendar-builder-workspace {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(230px, 252px) minmax(0, 1fr) minmax(236px, 262px);
+  gap: 0;
+  overflow: hidden;
+}
+
+.is-library-create .calendar-builder-settings,
+.is-library-create .calendar-builder-canvas,
+.is-library-create .create-workout-rail {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px 22px 28px;
+  scrollbar-width: thin;
+}
+
+.is-library-create .calendar-builder-settings {
+  gap: 18px;
+  border-right: 1px solid color-mix(in srgb, var(--text-muted) 14%, transparent);
+}
+
+.is-library-create .calendar-builder-canvas {
+  gap: 12px;
+  padding-inline: 24px;
+}
+
+.is-library-create .create-workout-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-left: 1px solid color-mix(in srgb, var(--text-muted) 14%, transparent);
+}
+
+/* Section labels read as small tracked capitals, as in the library. */
+.is-library-create .calendar-builder-field-label,
+.is-library-create .calendar-builder-settings .calendar-field-label > span:first-child,
+.is-library-create .create-workout-rail-label {
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.is-library-create .create-workout-rail-label {
+  margin: 8px 0 0;
+}
+
+/* --------------------------------------------------------- Sport tiles */
+
+.is-library-create .calendar-builder-sport-field {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.is-library-create .calendar-builder-sport-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.is-library-create .calendar-builder-sport-chip {
+  display: flex;
+  min-height: 70px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 4px;
+  border-radius: 14px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.is-library-create .calendar-builder-sport-chip > svg {
+  box-sizing: content-box;
+  padding: 6px;
+  border-radius: 50%;
+  color: var(--chip-sport, var(--accent));
+  background: color-mix(in srgb, var(--chip-sport, var(--accent)) 16%, transparent);
+}
+
+.is-library-create .calendar-builder-sport-chip.is-active {
+  border-color: color-mix(in srgb, var(--chip-sport, var(--accent)) 60%, transparent);
+  background: color-mix(in srgb, var(--chip-sport, var(--accent)) 12%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--chip-sport, var(--accent)) 30%, transparent);
+}
+
+.is-library-create .calendar-builder-settings input,
+.is-library-create .calendar-builder-settings textarea {
+  border-radius: 12px;
+}
+
+.is-library-create .calendar-builder-settings input[type="text"] {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+/* --------------------------------------------------------------- Steps */
+
+.is-library-create .calendar-builder-canvas-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.is-library-create .create-workout-steps-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.is-library-create .create-workout-steps-title h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+.is-library-create .create-workout-steps-title span {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.is-library-create .calendar-builder-step-count {
+  color: var(--text-secondary);
+  background: none;
+  border: 0;
+  font-size: 12px;
+}
+
+.is-library-create .calendar-builder-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.is-library-create .calendar-builder-row {
+  padding: 12px 14px;
+  border-radius: 16px;
+  border-left-width: 3px;
+  border-left-color: var(--step-color);
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+}
+
+.is-library-create .calendar-builder-row.is-active {
+  border-color: color-mix(in srgb, var(--step-color) 45%, var(--glass-border));
+  border-left-color: var(--step-color);
+  background: color-mix(in srgb, var(--step-color) 6%, color-mix(in srgb, var(--surface) 62%, transparent));
+  box-shadow: 0 16px 36px -26px color-mix(in srgb, var(--step-color) 70%, transparent);
+}
+
+.is-library-create .calendar-builder-row-header {
+  gap: 10px;
+}
+
+/* Order arrows sit with the row actions on the right, as in the design; the grip stays on the left. */
+.is-library-create .calendar-builder-reorder-controls {
+  display: contents;
+}
+
+.is-library-create .calendar-builder-drag-handle {
+  order: 0;
+  width: 18px;
+  height: 32px;
+  color: var(--text-muted);
+}
+
+.is-library-create .calendar-builder-row-toggle {
+  order: 1;
+  align-items: center;
+  gap: 12px;
+}
+
+.is-library-create .calendar-builder-order-buttons {
+  display: flex;
+  order: 2;
+  gap: 2px;
+}
+
+.is-library-create .calendar-builder-order-buttons button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  color: var(--text-secondary);
+  background: none;
+  cursor: pointer;
+}
+
+.is-library-create .calendar-builder-order-buttons button:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+}
+
+.is-library-create .calendar-builder-order-buttons button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.is-library-create .calendar-builder-order-buttons svg {
+  width: 15px;
+  height: 15px;
+}
+
+.is-library-create .calendar-builder-row-actions {
+  order: 3;
+}
+
+/* Duplicate and Delete as icons; their labels stay for screen readers and the tooltip. */
+.is-library-create .calendar-builder-row-action > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.is-library-create .calendar-builder-row-action {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+
+.is-library-create .calendar-builder-delete:not(:disabled) {
+  color: #f07a7a;
+}
+
+.is-library-create .calendar-builder-step-icon {
+  width: 36px;
+  height: 36px;
+  flex-basis: 36px;
+  border-radius: 50%;
+}
+
+.is-library-create .calendar-builder-step-label {
+  display: none;
+}
+
+.is-library-create .calendar-builder-row-toggle > strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.is-library-create .calendar-builder-row-summary {
+  margin-left: 8px;
+}
+
+.is-library-create .calendar-builder-row-summary-item {
+  padding: 5px 10px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 18%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-base, #000) 40%, transparent);
+}
+
+.is-library-create .calendar-builder-row-reveal > div {
+  padding-top: 12px;
+}
+
+/* Add bar: a dashed tray of kind chips with their colour dots. */
+.is-library-create .calendar-builder-add-bar {
+  margin-top: 2px;
+  padding: 12px 14px;
+  border: 1px dashed color-mix(in srgb, var(--text-muted) 26%, transparent);
+  border-radius: 16px;
+  background: none;
+}
+
+.is-library-create .calendar-builder-add-label {
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.is-library-create .calendar-builder-add-chip {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-weight: 650;
+}
+
+/* ---------------------------------------------------------------- Rail */
+
+.is-library-create .create-workout-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.is-library-create .create-workout-stats > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 17%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+}
+
+.is-library-create .create-workout-stats dt {
+  color: var(--stat-color, var(--text-secondary));
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.is-library-create .create-workout-stats dd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.is-library-create .create-workout-stats .is-sport dd {
+  font-size: 15px;
+}
+
+.is-library-create .create-workout-stats small {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.is-library-create .create-workout-stats .is-duration { --stat-color: #5fdcb4; }
+.is-library-create .create-workout-stats .is-distance { --stat-color: #6db8ff; }
+.is-library-create .create-workout-stats .is-steps { --stat-color: #f0a72e; }
+.is-library-create .create-workout-stats .is-sport { --stat-color: var(--builder-sport, var(--accent)); }
+
+.is-library-create .create-workout-rail .workout-checks {
+  margin: 0;
+}
+
+:root[data-theme="paper"] .is-library-create .calendar-builder-row-summary-item {
+  background: color-mix(in srgb, #fff 60%, transparent);
+}
+
+@media (max-width: 1100px) {
+  .is-library-create .calendar-builder-workspace {
+    grid-template-columns: minmax(210px, 230px) minmax(0, 1fr);
+  }
+
+  /* Narrow windows: totals and checks move under the steps instead of disappearing. */
+  .is-library-create .calendar-builder-workspace {
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .is-library-create .create-workout-rail {
+    grid-column: 1 / -1;
+    max-height: 210px;
+    border-top: 1px solid color-mix(in srgb, var(--text-muted) 14%, transparent);
+    border-left: 0;
+  }
+
+  .is-library-create .create-workout-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* No numbered timeline down the side: each row carries its own colour and icon. */
+.is-library-create .calendar-builder-rows {
+  padding: 2px 2px 8px;
+}
+
+.is-library-create .calendar-builder-row::before,
+.is-library-create .calendar-builder-row::after {
+  display: none;
+}
+
+.is-library-create .calendar-builder-row.has-error {
+  border-color: var(--error-border);
+  border-left-color: var(--step-color);
+}
+
+/* Sport names wrap rather than cut off ("Pool Swim", "Indoor Climb"). */
+.is-library-create .calendar-builder-sport-chip > span {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+}
+
+.is-library-create .create-workout-steps-hint {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.is-library-create .calendar-builder-canvas-header > .create-workout-steps-hint {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  font-weight: 500;
+}
+
+/* Paper: the tile captions need darker hues to stay readable on white. */
+:root[data-theme="paper"] .is-library-create .create-workout-stats .is-duration { --stat-color: #0f7a5a; }
+:root[data-theme="paper"] .is-library-create .create-workout-stats .is-distance { --stat-color: #1f63b8; }
+:root[data-theme="paper"] .is-library-create .create-workout-stats .is-steps { --stat-color: #a4600c; }
+:root[data-theme="paper"] .is-library-create .create-workout-stats .is-sport { --stat-color: var(--text-secondary); }
+
+/* Strength steps: the movement preview sits beside the prescription as soon
+   as the steps column can hold both, instead of stacking under it. */
+@container strength-step (min-width: 540px) {
+  .is-library-create .calendar-builder-row-content.strength-step:has(.strength-step-aside) {
+    grid-template-columns: minmax(0, 1fr) clamp(180px, 27%, 260px);
+    column-gap: 20px;
+  }
+
+  .is-library-create .strength-step-aside {
+    position: sticky;
+    top: 0;
+    max-width: none;
+  }
+}

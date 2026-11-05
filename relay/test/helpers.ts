@@ -624,6 +624,8 @@ export async function resetDatabase(db: D1Database): Promise<void> {
     db.prepare("DELETE FROM nonces"),
     db.prepare("DELETE FROM tunnel_status_cache"),
     db.prepare("DELETE FROM apns_provider_tokens"),
+    db.prepare("DELETE FROM wifi_audio_lookups"),
+    db.prepare("DELETE FROM wifi_audio_lookup_rate"),
   ]);
 }
 

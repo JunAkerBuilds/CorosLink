@@ -71,6 +71,15 @@ export interface StreamClaudeCodeOptions extends ClaudeCodeToolCallbacks {
   timeoutMs?: number;
   /** Model alias (opus/fable/sonnet/haiku) or full id. Omit for the account default. */
   model?: string;
+  /**
+   * Claude Code's own tools to allow, such as "WebSearch". Coach turns leave
+   * this out: they use only CorosLink's tools.
+   */
+  builtinTools?: string[];
+  /** Agent turns before Claude Code stops. Defaults to 10. */
+  maxTurns?: number;
+  /** Called as Claude starts one of `builtinTools`, with the tool's input. */
+  onBuiltinToolUse?: (name: string, input: Record<string, unknown>) => void;
 }
 
 interface ClaudeAuthStatusPayload {
@@ -563,9 +572,11 @@ export async function streamClaudeCodeCompletion(
       tools: definitions,
       alwaysLoad: true
     });
-    const allowedTools = options.tools.map(
-      (sourceTool) => `mcp__coroslink__${sourceTool.name}`
-    );
+    const builtinTools = options.builtinTools ?? [];
+    const allowedTools = [
+      ...builtinTools,
+      ...options.tools.map((sourceTool) => `mcp__coroslink__${sourceTool.name}`)
+    ];
 
     await prepareWorkspace(options.workspaceDir);
     // An abort that came before the listener existed never fires it.
@@ -578,14 +589,14 @@ export async function streamClaudeCodeCompletion(
         ...(options.workspaceDir ? { cwd: options.workspaceDir } : {}),
         systemPrompt: options.instructions,
         ...(options.model ? { model: options.model } : {}),
-        tools: [],
+        tools: builtinTools,
         allowedTools,
         permissionMode: "dontAsk",
         mcpServers: { coroslink: mcpServer },
         strictMcpConfig: true,
         settingSources: [],
         includePartialMessages: true,
-        maxTurns: 10,
+        maxTurns: options.maxTurns ?? 10,
         persistSession: false,
         env: createClaudeSubscriptionEnvironment()
       }
@@ -621,6 +632,13 @@ export async function streamClaudeCodeCompletion(
       }
       if (message.type === "assistant" && message.error) {
         throw new Error(message.error);
+      }
+      if (message.type === "assistant" && options.onBuiltinToolUse) {
+        for (const block of message.message.content) {
+          if (block.type === "tool_use" && builtinTools.includes(block.name)) {
+            options.onBuiltinToolUse(block.name, block.input as Record<string, unknown>);
+          }
+        }
       }
       if (message.type === "result") {
         if (message.subtype === "success") {

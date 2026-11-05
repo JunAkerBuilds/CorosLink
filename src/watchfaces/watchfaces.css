@@ -8281,6 +8281,21 @@ body.wf-value-scrubbing * {
   font-size: 12px;
   line-height: 1.4;
 }
+.watchface-shell .wf-send-checks li::marker { color: var(--warning-text); }
+.watchface-shell .wf-send-checks li > span { margin-right: 8px; }
+/* Show me: selects the layers in the editor and closes the dialog. */
+.watchface-shell .wf-send-checks .wf-send-check-show {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-strong, var(--accent));
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.watchface-shell .wf-send-checks .wf-send-check-show:hover { text-decoration: underline; }
 .watchface-shell .wf-send-checks small {
   color: var(--text-secondary);
   font-size: 11.5px;

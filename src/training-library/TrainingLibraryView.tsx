@@ -10,6 +10,7 @@ import {
   CalendarRange,
   CalendarX,
   CloudOff,
+  Flame,
   Copy,
   FolderPlus,
   Heart,
@@ -33,10 +34,12 @@ import type {
   TrainingActivityMatch,
   TrainingCollection,
   TrainingHubActivity,
+  TrainingHubScheduledWorkoutEntry,
   TrainingHubStatus,
   TrainingLibrarySnapshot,
   TrainingPlanDocument,
-  TrainingPlanMetadataPatch
+  TrainingPlanMetadataPatch,
+  WorkoutSport
 } from "../../electron/types";
 import {
   createTrainingPlan,
@@ -55,11 +58,16 @@ import {
   SportGlyph,
   dominantSport,
   planSourceLabel,
-  sportAccentStyle
+  sportAccentStyle,
+  sportChipStyle,
+  sportTheme
 } from "./sportTheme";
+import { readableVolume, resolveWorkoutSport } from "./sessionProfile";
+import { dayKey, libraryWeek, scheduleWindow } from "./libraryWeek";
 import { SelectDropdown } from "../components/SelectDropdown";
 import { BulletRidge, WeekProfile, type BulletWeek } from "./Ridge";
 import { PlanCompare } from "./PlanCompare";
+import type { TrainingPlanPreset } from "./TrainingPlanGenerator";
 import { PlanEditor } from "./PlanEditor";
 import { WorkoutWorkspace } from "./WorkoutWorkspace";
 import { TrainingPlanCalendarDialog } from "./TrainingPlanCalendarDialog";
@@ -72,6 +80,7 @@ import {
   useSelectionPreference
 } from "../preferences/selectionPreferences";
 import "./trainingLibrary.css";
+import "./trainingLibraryRevamp.css";
 
 interface TrainingLibraryViewProps {
   api: CorosLinkApi;
@@ -95,11 +104,18 @@ const SECTIONS: Array<{ id: LibrarySection; label: string; icon: typeof Zap }> =
 
 /** One quiet line under the title: what the open section holds. */
 const SECTION_LEDES: Record<LibrarySection, string> = {
-  workouts: "Single sessions to schedule, build plans from, or send to your watch.",
+  workouts: "Sessions to schedule, build plans from, or send to your watch.",
   plans: "Blocks of weeks you can put on your calendar and train through.",
   templates: "Starting points to build new plans from.",
   adherence: "What was planned, against what got done."
 };
+
+/** The masthead's backdrop: a track session and a progression run, drawn as one faint skyline. */
+const MASTHEAD_SKYLINE: Array<[string, number]> = [
+  ["warmup", 34], ["z5", 100], ["rest", 16], ["z5", 100], ["rest", 16], ["z5", 100], ["rest", 16], ["z5", 100],
+  ["rest", 16], ["z5", 100], ["rest", 16], ["z5", 100], ["cooldown", 28], ["z2", 46], ["z2", 46], ["z3", 62],
+  ["z3", 62], ["z4", 80], ["z4", 80]
+];
 
 const LIBRARY_SECTION_PREFERENCE =
   defineSelectionPreference<LibrarySection>({
@@ -239,6 +255,26 @@ export function TrainingLibraryView({
   const [pendingPlanDelete, setPendingPlanDelete] = useState<TrainingPlanDocument[]>([]);
   const [deletingPlan, setDeletingPlan] = useState(false);
   const [generatorOpen, setGeneratorOpen] = useState(false);
+  /** Goal picked on the "Build me a plan" tile, handed to the generator as its starting values. */
+  const [generatorPreset, setGeneratorPreset] = useState<TrainingPlanPreset | undefined>();
+  const openGenerator = (preset?: TrainingPlanPreset) => {
+    setGeneratorPreset(preset);
+    setGeneratorOpen(true);
+  };
+  /** Each bump asks the workout workspace to open the builder. */
+  const [createSignal, setCreateSignal] = useState(0);
+  /** "Up next" asks the workspace to open one workout. */
+  const [focusRequest, setFocusRequest] = useState<{ id: string; n: number } | null>(null);
+  /** This week's calendar and the week after: the masthead brief and the reader's day strip. */
+  const [schedule, setSchedule] = useState<TrainingHubScheduledWorkoutEntry[]>([]);
+  const loadSchedule = useCallback(async () => {
+    const { start, end } = scheduleWindow();
+    try {
+      setSchedule((await api.listScheduledWorkouts(start, end)) ?? []);
+    } catch {
+      /* The brief and the strip simply go without calendar facts. */
+    }
+  }, [api]);
   const [calendarTarget, setCalendarTarget] = useState<{ plan: TrainingPlanDocument; operation?: "install" | "remove" } | null>(null);
 
   const load = useCallback(async () => {
@@ -254,8 +290,11 @@ export function TrainingLibraryView({
   }, [api]);
 
   useEffect(() => {
-    if (status?.authenticated) void load();
-  }, [load, status?.authenticated]);
+    if (status?.authenticated) {
+      void load();
+      void loadSchedule();
+    }
+  }, [load, loadSchedule, status?.authenticated]);
 
   useEffect(() => api.onWorkoutEditsChanged(() => { if (status?.authenticated) void load(); }), [api, load, status?.authenticated]);
 
@@ -314,6 +353,15 @@ export function TrainingLibraryView({
     templates: templates.length,
     adherence: current.matches.length
   };
+  /* Adherence reads as a rate: done (in full or in part) out of what has come due. */
+  const dueMatches = current.matches.filter((match) => match.status !== "upcoming" && match.status !== "rescheduled");
+  const adherenceRate = dueMatches.length
+    ? Math.round((dueMatches.filter((match) => match.status === "completed" || match.status === "partial").length / dueMatches.length) * 100)
+    : undefined;
+
+  /* Plans are matched by local id and by COROS id, whichever the workout's references carry. */
+  const planNames = new Map<string, string>(current.plans.flatMap((plan) =>
+    plan.remoteId ? [[plan.id, plan.name], [plan.remoteId, plan.name]] as Array<[string, string]> : [[plan.id, plan.name]] as Array<[string, string]>));
 
   const savePlan = async (plan: TrainingPlanDocument): Promise<TrainingPlanDocument | undefined> => {
     try {
@@ -328,9 +376,10 @@ export function TrainingLibraryView({
   };
 
   // Saving keeps the editor open on the saved copy, so Add to calendar is one click away.
-  const savePlanAndKeepEditing = async (plan: TrainingPlanDocument) => {
+  const savePlanAndKeepEditing = async (plan: TrainingPlanDocument): Promise<boolean> => {
     const saved = await savePlan(plan);
     if (saved) setEditingPlan(saved);
+    return Boolean(saved);
   };
 
   const createPlan = (source: "local" | "template") =>
@@ -448,15 +497,49 @@ export function TrainingLibraryView({
   return (
     <section className="training-library-view">
       <header className="tl-masthead">
+        <div className="tl-masthead-skyline" aria-hidden="true">
+          {MASTHEAD_SKYLINE.map(([zone, height], index) => (
+            <i key={index} className={`is-${zone}`} style={{ height: `${height}%`, "--tl-bar-index": index } as React.CSSProperties} />
+          ))}
+        </div>
         <div className="tl-masthead-title">
           <h1>{t("Training Library")}</h1>
           <p>{t(SECTION_LEDES[section])}</p>
         </div>
+        <p className="tl-masthead-tagline" aria-hidden="true">
+          {t("build it once,")}<br /><span>{t("run it often")}</span>
+        </p>
         <div className="tl-masthead-actions">
-          {current.stale || current.offline ? <span className="tl-state is-stale">
-            {current.offline ? <CloudOff size={13} /> : null}
-            {t(stateLabel)}
-          </span> : null}
+          {!editingPlan ? (
+            <>
+              {section === "plans" ? (
+                <>
+                  <button type="button" className="ghost-button tl-masthead-button" onClick={() => void createPlan("local")}>
+                    <Plus size={15} aria-hidden="true" /> {t("Blank plan")}
+                  </button>
+                  <button type="button" className="primary-button tl-masthead-button" onClick={() => openGenerator()}>
+                    <Sparkles size={15} aria-hidden="true" /> {t("Generate plan")}
+                  </button>
+                </>
+              ) : (
+              <>
+              <button type="button" className="ghost-button tl-masthead-button" onClick={() => openGenerator()}>
+                <Sparkles size={15} aria-hidden="true" /> {t("Generate plan")}
+              </button>
+              <button
+                type="button"
+                className="primary-button tl-masthead-button"
+                onClick={() => {
+                  setSection("workouts");
+                  setCreateSignal((value) => value + 1);
+                }}
+              >
+                <Plus size={15} aria-hidden="true" /> {t("New workout")}
+              </button>
+              </>
+              )}
+            </>
+          ) : null}
           <button
             type="button"
             className="tl-round-button"
@@ -470,6 +553,18 @@ export function TrainingLibraryView({
         </div>
       </header>
 
+      {!editingPlan && section !== "plans" ? (
+        <LibraryBrief
+          workouts={current.workouts}
+          schedule={schedule}
+          matches={current.matches}
+          onOpenWorkout={(id) => {
+            setSection("workouts");
+            setFocusRequest((current) => ({ id, n: (current?.n ?? 0) + 1 }));
+          }}
+        />
+      ) : null}
+
       {current.partialFailures.length ? (
         <details className="tl-notice">
           <summary>
@@ -481,6 +576,7 @@ export function TrainingLibraryView({
         </details>
       ) : null}
 
+      <div className="tl-sections-row">
       <nav className="tl-sections" aria-label={t("Library sections")}>
         {SECTIONS.map(({ id, label, icon: Icon }) => (
           <button
@@ -491,17 +587,27 @@ export function TrainingLibraryView({
             onClick={() => setSection(id)}
           >
             <Icon aria-hidden="true" />
-            {t(label)}
-            <span>{counts[id]}</span>
+            {id === "plans" ? t("Plans", undefined, "trainingPlans") : t(label)}
+            {id === "adherence" && adherenceRate !== undefined
+              ? <span className="is-rate">{adherenceRate}%</span>
+              : counts[id] ? <span>{counts[id]}</span> : null}
           </button>
         ))}
       </nav>
+        <span className={`tl-sync-state${current.stale || current.offline ? " is-stale" : ""}`} role="status">
+          {current.offline ? <CloudOff size={13} aria-hidden="true" /> : <i aria-hidden="true" />}
+          {current.offline || current.stale
+            ? t(stateLabel)
+            : t("Synced with COROS · {{value1}}", { value1: syncedAgo(current.cachedAt) })}
+        </span>
+      </div>
 
       {editingPlan ? (
         <PlanEditor
           key={`${editingPlan.id}:${editingPlan.updatedAt}`}
           api={api}
           initialPlan={editingPlan}
+          neverSaved={!current.plans.some((plan) => plan.id === editingPlan.id)}
           workouts={current.workouts}
           calendarEnabled={current.plans.some((plan) => plan.id === editingPlan.id) && editingPlan.source !== "coros"}
           offline={current.offline}
@@ -519,6 +625,16 @@ export function TrainingLibraryView({
               onRefresh={load}
               onMessage={onMessage}
               onError={onError}
+              createSignal={createSignal}
+              focusRequest={focusRequest}
+              onRequestHandled={() => {
+                /* Consumed: coming back to Workouts later must not reopen the builder or refocus. */
+                setCreateSignal(0);
+                setFocusRequest(null);
+              }}
+              schedule={schedule}
+              onScheduleChanged={loadSchedule}
+              planNames={planNames}
             />
           ) : null}
 
@@ -530,7 +646,8 @@ export function TrainingLibraryView({
               nativeOnCalendar={current.nativePlansOnCalendar}
               collections={current.collections}
               onCreate={() => createPlan("local")}
-              onGenerate={() => setGeneratorOpen(true)}
+              onGenerate={openGenerator}
+              createInMasthead
               onCalendar={(plan, operation) => setCalendarTarget({ plan, operation })}
               offline={current.offline}
               onOpen={(plan) => void openPlan(plan)}
@@ -581,7 +698,7 @@ export function TrainingLibraryView({
         />
       ) : null}
 
-      {generatorOpen ? <TrainingPlanGenerator api={api} onClose={() => setGeneratorOpen(false)} onOpenCoach={onOpenCoach} onGenerated={(plan) => { setGeneratorOpen(false); setEditingPlan(plan); }} /> : null}
+      {generatorOpen ? <TrainingPlanGenerator api={api} preset={generatorPreset} onClose={() => setGeneratorOpen(false)} onOpenCoach={onOpenCoach} onGenerated={(plan) => { setGeneratorOpen(false); setEditingPlan(plan); }} /> : null}
 
       {calendarTarget ? <TrainingPlanCalendarDialog api={api} plan={calendarTarget.plan} requestedOperation={calendarTarget.operation} offline={current.offline} onClose={() => setCalendarTarget(null)} onComplete={(result) => {
         setCalendarTarget(null);
@@ -686,6 +803,143 @@ export function TrainingLibraryView({
   );
 }
 
+interface LibraryBriefProps {
+  workouts: TrainingSnapshotWorkout[];
+  schedule: TrainingHubScheduledWorkoutEntry[];
+  matches: TrainingActivityMatch[];
+  onOpenWorkout: (id: string) => void;
+}
+
+type TrainingSnapshotWorkout = TrainingLibrarySnapshot["workouts"][number];
+
+/** "78 runs", "1 pool swim": a sport count in words, for the library mix. */
+const SPORT_COUNT_WORDS: Record<WorkoutSport, [string, string]> = {
+  run: ["1 run", "{{value1}} runs"],
+  trailRun: ["1 trail run", "{{value1}} trail runs"],
+  bike: ["1 ride", "{{value1}} rides"],
+  swim: ["1 pool swim", "{{value1}} pool swims"],
+  strength: ["1 strength workout", "{{value1}} strength workouts"],
+  indoorClimb: ["1 climb", "{{value1}} climbs"],
+  bouldering: ["1 bouldering session", "{{value1}} bouldering sessions"],
+  xcSki: ["1 ski", "{{value1}} skis"],
+  hyrox: ["1 HYROX workout", "{{value1}} HYROX workouts"]
+};
+
+function sportCount(sport: WorkoutSport, count: number): string {
+  const [one, many] = SPORT_COUNT_WORDS[sport] ?? ["1 workout", "{{value1}} workouts"];
+  return count === 1 ? t(one) : t(many, { value1: String(count) });
+}
+
+/** "2 min ago" for the sync line under the tabs. */
+function syncedAgo(iso: string): string {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).valueOf()) / 60_000));
+  if (!Number.isFinite(minutes) || minutes < 1) return t("just now");
+  if (minutes < 60) return t("{{value1}} min ago", { value1: String(minutes) });
+  const hours = Math.round(minutes / 60);
+  return hours < 24 ? t("{{value1}} h ago", { value1: String(hours) }) : shortDate(new Date(iso));
+}
+
+/** The masthead brief: what is next, how much of the week came from here, the favourite, the mix. */
+function LibraryBrief({ workouts, schedule, matches, onOpenWorkout }: LibraryBriefProps) {
+  useLanguage();
+  const week = libraryWeek();
+  const todayKey = week.find((day) => day.isToday)?.key ?? dayKey(new Date());
+  const byId = new Map(workouts.map((workout) => [workout.id, workout]));
+  const byName = new Map(workouts.map((workout) => [workout.name.trim().toLowerCase(), workout]));
+  const libraryWorkoutFor = (entry: TrainingHubScheduledWorkoutEntry) =>
+    (entry.programId ? byId.get(entry.programId) : undefined) ?? byName.get(entry.name.trim().toLowerCase());
+
+  const upcoming = schedule
+    .filter((entry) => entry.happenDay >= todayKey)
+    .sort((left, right) => left.happenDay.localeCompare(right.happenDay) || (left.sortNo ?? 0) - (right.sortNo ?? 0));
+  const next = upcoming[0];
+  const nextWorkout = next ? libraryWorkoutFor(next) : undefined;
+  const nextSport = resolveWorkoutSport(next?.sportType ?? nextWorkout?.sportType);
+  const NextIcon = sportTheme(nextSport).icon;
+  const tomorrowKey = dayKey(new Date(happenDayToDate(todayKey).valueOf() + 86_400_000));
+  const nextDay = !next ? ""
+    : next.happenDay === todayKey ? t("Today")
+      : next.happenDay === tomorrowKey ? t("Tomorrow")
+        : formatDate(happenDayToDate(next.happenDay), { weekday: "short", month: "short", day: "numeric" });
+  const nextFacts = next ? readableVolume(next.volume) ?? "" : "";
+
+  const thisWeek = schedule.filter((entry) => entry.happenDay >= week[0]!.key && entry.happenDay <= week[6]!.key);
+  /* Done means COROS (or a confirmed link) credited an activity to the workout, in full or in part. */
+  const doneThisWeek = Math.min(thisWeek.length, matches.filter((match) =>
+    match.happenDay >= week[0]!.key && match.happenDay <= week[6]!.key &&
+    (match.status === "completed" || match.status === "partial")).length);
+
+  const favourite = workouts.reduce<TrainingSnapshotWorkout | undefined>((best, workout) => {
+    const uses = workout.usedByPlanIds.length + workout.scheduledCount;
+    const bestUses = best ? best.usedByPlanIds.length + best.scheduledCount : 0;
+    return uses > bestUses ? workout : best;
+  }, undefined);
+  const favouriteUses = favourite ? favourite.usedByPlanIds.length + favourite.scheduledCount : 0;
+
+  const mix = new Map<WorkoutSport, number>();
+  for (const workout of workouts) {
+    const sport = resolveWorkoutSport(workout.sportType);
+    if (sport) mix.set(sport, (mix.get(sport) ?? 0) + 1);
+  }
+  const mixEntries = [...mix].sort((left, right) => right[1] - left[1]);
+
+  return (
+    <div className="tl-brief" aria-label={t("Library at a glance")}>
+      {next ? (
+        <div className="tl-brief-chip is-next" style={sportAccentStyle(nextSport)}>
+          <span className="tl-brief-badge" aria-hidden="true"><NextIcon size={17} strokeWidth={2} /></span>
+          <span>
+            <small>{t("Up next · {{value1}}", { value1: nextDay })}</small>
+            <b>{next.name}{nextFacts ? <em> · {nextFacts}</em> : null}</b>
+          </span>
+          {nextWorkout ? (
+            <button type="button" className="tl-brief-open" onClick={() => onOpenWorkout(nextWorkout.id)}>{t("Open")}</button>
+          ) : null}
+        </div>
+      ) : null}
+      {thisWeek.length ? (
+        <div className="tl-brief-chip">
+          <span>
+            <small>{t("This week")}</small>
+            <b>{t("{{value1}} of {{value2}} workouts", { value1: String(doneThisWeek), value2: String(thisWeek.length) })} <em>{t("done")}</em></b>
+          </span>
+          <span
+            className="tl-brief-progress"
+            role="img"
+            aria-label={t("{{value1}} of {{value2}} workouts done this week", { value1: String(doneThisWeek), value2: String(thisWeek.length) })}
+          >
+            <i className="is-done" style={{ width: `${Math.max(doneThisWeek ? 6 : 0, Math.round((doneThisWeek / thisWeek.length) * 100))}%` }} />
+          </span>
+        </div>
+      ) : null}
+      {favourite && favouriteUses ? (
+        <div className="tl-brief-chip is-favourite">
+          <span className="tl-brief-flame" aria-hidden="true"><Flame size={22} fill="currentColor" strokeWidth={0} /></span>
+          <span>
+            <small>{t("Most used")}</small>
+            <b>{favourite.name} <em>· {favouriteUses === 1 ? t("used once") : t("used {{value1}} times", { value1: String(favouriteUses) })}</em></b>
+          </span>
+        </div>
+      ) : null}
+      {mixEntries.length ? (
+        <div className="tl-brief-chip">
+          <span>
+            <small>{t("Your library")}</small>
+            <span className="tl-brief-mix" aria-hidden="true">
+              {mixEntries.map(([sport, count]) => (
+                <i key={sport} title={`${count} ${formatWorkoutSport(sport)}`} style={{ ...sportChipStyle(sport), flexGrow: count }} />
+              ))}
+            </span>
+          </span>
+          <em className="tl-brief-mix-label">
+            {mixEntries.slice(0, 3).map(([sport, count]) => sportCount(sport, count)).join(" · ")}
+          </em>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 type PlanColumn = "name" | "weeks" | "sessions" | "load" | "updated";
 
 interface PlanSort {
@@ -764,6 +1018,23 @@ const PLAN_LAYOUT_PREFERENCES = {
   })
 } satisfies Record<PlanIndexNoun, unknown>;
 
+/** Goals on the "Build me a plan" tile, each a starting point for the generator. */
+const PLAN_GOAL_PRESETS = [
+  { id: "5k", label: "5K", goal: "Run a faster 5K", weeks: 8, sessionsPerWeek: 4 },
+  { id: "10k", label: "10K", goal: "Run a faster 10K", weeks: 10, sessionsPerWeek: 4 },
+  { id: "half", label: "Half", goal: "Race a half marathon", weeks: 12, sessionsPerWeek: 5 },
+  { id: "marathon", label: "Marathon", goal: "Race a marathon", weeks: 16, sessionsPerWeek: 5 },
+  { id: "trail", label: "Trail ultra", goal: "Finish a trail ultra strong", weeks: 16, sessionsPerWeek: 5 }
+] as const;
+
+type PlanGoalPresetId = (typeof PLAN_GOAL_PRESETS)[number]["id"];
+
+const DIFFICULTY_LABELS: Record<string, string> = {
+  beginner: "Beginner",
+  intermediate: "Intermediate",
+  advanced: "Advanced"
+};
+
 /**
  * Everything a tile, the hero and a row need, derived once so the layouts can
  * never drift apart on what a plan says.
@@ -797,6 +1068,8 @@ function planView(
     sports,
     sessions: summary?.workouts ?? 0,
     load: summary?.trainingLoad ? Math.round(summary.trainingLoad) : 0,
+    /** The heaviest week's load: what the tile leads with. */
+    peakLoad: hasLoad ? Math.round(Math.max(...loads)) : 0,
     profileNote: peakWeek ? t("Peak in week {{value1}}", { value1: String(peakWeek) }) : rhythm,
     dominant: dominantSport(summary?.sportDistribution, plan.sportMix),
     ridge: {
@@ -817,7 +1090,9 @@ interface PlanIndexProps {
   nativeOnCalendar?: NativePlansOnCalendar;
   collections: TrainingCollection[];
   onCreate: () => void;
-  onGenerate?: () => void;
+  onGenerate?: (preset?: TrainingPlanPreset) => void;
+  /** Plans: Blank plan and Generate plan live in the masthead, so the toolbar leaves them out. */
+  createInMasthead?: boolean;
   onCalendar?: (plan: TrainingPlanDocument, operation?: "install" | "remove") => void;
   offline?: boolean;
   onOpen: (plan: TrainingPlanDocument) => void;
@@ -836,6 +1111,7 @@ function PlanIndex({
   collections,
   onCreate,
   onGenerate,
+  createInMasthead = false,
   onCalendar,
   offline = false,
   onOpen,
@@ -856,6 +1132,8 @@ function PlanIndex({
     PLAN_LAYOUT_PREFERENCES[noun]
   );
   const [selected, setSelected] = useState<string[]>([]);
+  /** The goal picked on the "Build me a plan" tile. */
+  const [goalPreset, setGoalPreset] = useState<PlanGoalPresetId | null>(null);
 
   // A deleted plan leaves the selection.
   useEffect(() => {
@@ -1071,25 +1349,48 @@ function PlanIndex({
         style={sportAccentStyle(view.dominant)}
       >
         {selectMark(plan, isSelected)}
-        <button type="button" className="tl-plan-tile-open" onClick={() => onOpen(plan)}>
+        <button type="button" className="tl-plan-tile-open" title={plan.description || undefined} onClick={() => onOpen(plan)}>
           <span className="tl-plan-tile-head">
             <SportGlyph sport={view.dominant} />
             <span className="tl-plan-tile-title">
-              <span className="tl-plan-tile-name" title={plan.name}>{plan.name}</span>
+              <span className="tl-plan-tile-name-row">
+                <span className="tl-plan-tile-name" title={plan.name}>{plan.name}</span>
+                {plan.goal ? <span className="tl-plan-goal" title={plan.goal}>{plan.goal}</span> : null}
+              </span>
               <span className="tl-plan-meta">
                 {plan.favorite ? <Heart size={11} fill="currentColor" strokeWidth={0} aria-label={t("Favorite")} /> : null}
                 <PlanSourceBadge source={plan.source} />
                 {view.sports ? <em title={view.sports}>{view.sports}</em> : null}
+                {plan.difficulty && plan.difficulty !== "custom" ? <em>{t(DIFFICULTY_LABELS[plan.difficulty] ?? plan.difficulty)}</em> : null}
               </span>
             </span>
           </span>
-          {view.note ? <span className="tl-plan-tile-note" title={view.note}>{view.note}</span> : null}
-          <span className="tl-plan-well">
+          <span className="tl-plan-well" title={[view.ridge.variant === "load" ? t("Weekly load") : t("Sessions per week"), view.profileNote].filter(Boolean).join(" · ")}>
             <span className="tl-plan-caption">
               <span>{view.ridge.variant === "load" ? t("Weekly load") : t("Sessions per week")}</span>
               {view.profileNote ? <span>{view.profileNote}</span> : null}
             </span>
-            <WeekProfile {...view.ridge} currentWeek={calendarRun ? planCalendarWeek(plan, calendarRun.startDay) : undefined} />
+            <WeekProfile {...view.ridge} phases={plan.phases} currentWeek={calendarRun ? planCalendarWeek(plan, calendarRun.startDay) : undefined} />
+            {plan.phases.length ? (
+              <>
+                <span className="tl-phase-ribbon" aria-hidden="true">
+                  {plan.phases.map((phase) => (
+                    <span
+                      key={phase.id}
+                      data-phase={phase.kind ?? "custom"}
+                      style={{ flexGrow: Math.max(1, phase.endWeek - phase.startWeek + 1) }}
+                    >
+                      <i />
+                    </span>
+                  ))}
+                </span>
+                <span className="tl-phase-legend" aria-label={t("Phases: {{value1}}", { value1: plan.phases.map((phase) => `${phase.name} ${phase.endWeek - phase.startWeek + 1}w`).join(", ") })}>
+                  {plan.phases.map((phase) => (
+                    <small key={phase.id} data-phase={phase.kind ?? "custom"}>{phase.name} <b>{phase.endWeek - phase.startWeek + 1}w</b></small>
+                  ))}
+                </span>
+              </>
+            ) : null}
           </span>
           <span className="tl-plan-figs">
             <span>
@@ -1100,17 +1401,23 @@ function PlanIndex({
               <small>{t("Sessions")}</small>
               <b className={view.sessions ? "" : "is-nil"}>{view.sessions || "—"}</b>
             </span>
-            <span>
-              <small>{t("Load")}</small>
-              <b className={view.load ? "" : "is-nil"}>{view.load ? formatNumber(view.load) : "—"}</b>
+            <span className="is-load" title={view.load ? t("Total load {{value1}}", { value1: formatNumber(view.load) }) : undefined}>
+              <small>{view.peakLoad ? t("Peak load") : t("Load")}</small>
+              <b className={view.peakLoad ? "" : "is-nil"}>{view.peakLoad ? formatNumber(view.peakLoad) : "—"}</b>
             </span>
           </span>
         </button>
         <div className="tl-plan-tile-foot">
-          <span className={`tl-plan-status${calendarRun ? " is-live" : ""}`}>
-            {calendarRun ? <i aria-hidden="true" /> : <CalendarClock size={13} aria-hidden="true" />}
-            {planStatus(plan)}
-          </span>
+          {(() => {
+            /* Ready: a start date is set but the plan is not on the calendar yet. */
+            const ready = !calendarRun && planStartLabel(plan) !== t("Unscheduled");
+            return (
+              <span className={`tl-plan-status${calendarRun ? " is-live" : ready ? " is-ready" : ""}`}>
+                <i aria-hidden="true" />
+                {ready ? t("Ready · {{value1}}", { value1: planStatus(plan) }) : planStatus(plan)}
+              </span>
+            );
+          })()}
           {planFlags(plan)}
           <div className="tl-plan-actions">{planActions(plan)}</div>
         </div>
@@ -1168,12 +1475,12 @@ function PlanIndex({
               <List size={14} />
             </button>
           </div>
-          <div className="tl-plan-create">
+          {!createInMasthead ? <div className="tl-plan-create">
             <button type="button" className={noun === "plan" && onGenerate ? "ghost-button" : "primary-button"} onClick={onCreate}>
               <Plus size={15} /> {t("New")} {noun}
             </button>
-            {noun === "plan" && onGenerate ? <button type="button" className="primary-button tl-generate-button" onClick={onGenerate}><Sparkles size={15} /> {t("Generate plan")}</button> : null}
-          </div>
+            {noun === "plan" && onGenerate ? <button type="button" className="primary-button tl-generate-button" onClick={() => onGenerate()}><Sparkles size={15} /> {t("Generate plan")}</button> : null}
+          </div> : null}
         </div>
       </div>
 
@@ -1258,6 +1565,59 @@ function PlanIndex({
         <div className="tl-plan-board">
           <ul className={`tl-plan-grid${selected.length ? " is-selecting" : ""}`} role="list">
             {visible.map(renderTile)}
+            {noun === "plan" && onGenerate && scope === "all" && !query ? (
+              <li className="tl-plan-generate">
+                <div className="tl-plan-generate-card">
+                  <span className="tl-plan-generate-sparkles" aria-hidden="true"><i /><i /><i /></span>
+                  <span className="tl-plan-generate-head">
+                    <span className="tl-plan-generate-badge" aria-hidden="true"><Sparkles size={20} /></span>
+                    <span>
+                      <b>{t("Build me a plan")}</b>
+                      <small>{t("From your library, fitness and race date")}</small>
+                    </span>
+                  </span>
+                  <span className="tl-plan-generate-label" id="tl-plan-goal-label">{t("Goal")}</span>
+                  <span className="tl-plan-generate-goals" role="group" aria-labelledby="tl-plan-goal-label">
+                    {PLAN_GOAL_PRESETS.map((goal) => (
+                      <button
+                        type="button"
+                        key={goal.id}
+                        aria-pressed={goalPreset === goal.id}
+                        onClick={() => setGoalPreset(goalPreset === goal.id ? null : goal.id)}
+                      >
+                        {t(goal.label)}
+                      </button>
+                    ))}
+                  </span>
+                  {(() => {
+                    const preset = PLAN_GOAL_PRESETS.find((goal) => goal.id === goalPreset);
+                    if (!preset) return <span className="tl-plan-generate-facts">{t("Pick a goal, or start from scratch.")}</span>;
+                    const raceDay = new Date();
+                    raceDay.setDate(raceDay.getDate() + preset.weeks * 7 - 1);
+                    return (
+                      <span className="tl-plan-generate-facts">
+                        {t("Race day")} <b>{formatDate(raceDay, { weekday: "short", month: "short", day: "numeric" })}</b>
+                        <i aria-hidden="true">·</i>
+                        <b>{preset.sessionsPerWeek}</b> {t("sessions a week")}
+                      </span>
+                    );
+                  })()}
+                  <button
+                    type="button"
+                    className="tl-plan-generate-cta"
+                    onClick={() => {
+                      const preset = PLAN_GOAL_PRESETS.find((goal) => goal.id === goalPreset);
+                      onGenerate?.(preset ? { goal: t(preset.goal), weeks: preset.weeks, sessionsPerWeek: preset.sessionsPerWeek } : undefined);
+                    }}
+                  >
+                    {(() => {
+                      const preset = PLAN_GOAL_PRESETS.find((goal) => goal.id === goalPreset);
+                      return preset ? t("Generate {{value1}}-week plan", { value1: String(preset.weeks) }) : t("Generate plan");
+                    })()}
+                  </button>
+                </div>
+              </li>
+            ) : null}
           </ul>
         </div>
       ) : (

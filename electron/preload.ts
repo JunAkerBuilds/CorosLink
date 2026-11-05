@@ -1,7 +1,7 @@
 import type { CalendarEventTiming, CalendarWorkoutEventRef, CalendarWorkoutEventSaveResult } from "./calendarSyncTypes";
 import type { ChatGptModelInfo, ChatModelOption } from "./chatModels";
 import type { HealthInsightKind, HealthInsightResult } from "./healthInsightsTypes";
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { DataModeStatus, LocalOnlyActivationOptions, NetworkAccessReport } from "./privacy/dataModeTypes";
 import type { LocalBackupResult, LocalDataOverview, LocalImportResult, LocalRestoreResult, WatchSyncProbe, WatchSyncProgress } from "./localSync/localDataTypes";
 import type { CorosNativeBleSnapshot } from "./corosNativeBleTypes";
@@ -9,7 +9,7 @@ import type { DiagnosticsSnapshot, RendererDiagnosticError } from "./diagnostics
 import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "./watchfaceAutomationTypes";
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "./calendarSyncTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "./googleCalendarTypes";
-import type { ManualRaceInput, RaceEditInput, RaceOverview, StravaRaceImportResult } from "./raceTypes";
+import type { ManualRaceInput, RaceEditInput, RaceLookupProgress, RaceLookupRequest, RaceLookupResult, RaceLookupStatus, RaceOverview, RaceTarget, RaceTargetEditInput, RaceTargetInput, StravaRaceImportResult } from "./raceTypes";
 import type { AthleteFact, AthleteFactCategory, AthleteMemoryChange } from "./athleteMemoryModel";
 import type { WorkoutJournalEntry, WorkoutJournalSaveInput } from "./workoutJournalTypes";
 import type { CoachConfirmInput, CoachConfirmResult, CoachEventFrame, CoachSendInput, CoachSessionsChange, CoachSnapshot, CoachSubscribeResult } from "./coachHub/coachContract";
@@ -215,7 +215,7 @@ import type {
 } from "./types";
 
 const api = {
-  setLanguage: (language: "en" | "es" | "fr" | "pt" | "zh-CN"): Promise<void> => ipcRenderer.invoke("app:setLanguage", language),
+  setLanguage: (language: "en" | "de" | "es" | "fr" | "pt" | "zh-CN"): Promise<void> => ipcRenderer.invoke("app:setLanguage", language),
   getWorkoutAutomationStatus: () => ipcRenderer.invoke("workoutAutomation:status"),
   configureWorkoutAutomation: (input: { enabled: boolean; port?: number }) => ipcRenderer.invoke("workoutAutomation:configure", input),
   onWorkoutEditsChanged: (callback: () => void): (() => void) => {
@@ -329,12 +329,17 @@ const api = {
   exportCorosActivityScreenBackup: (input: { backupId: string }): Promise<{ saved: boolean }> => ipcRenderer.invoke("corosBle:activityScreenBackupExport", input),
   getCorosMusicInventory: (): Promise<import("./corosBleMusicTypes").CorosBleMusicInventory> => ipcRenderer.invoke("corosBle:musicInventory"),
   getCorosWifiMusicStatus: (): Promise<import("./corosWifiMusicTypes").CorosWifiMusicStatus> => ipcRenderer.invoke("corosBle:wifiMusicStatus"),
-  sendCorosMusicOverWifi: (): Promise<import("./corosWifiMusicTypes").CorosWifiMusicStatus> => ipcRenderer.invoke("corosBle:wifiMusicSend"),
-  sendCorosLibraryMusicOverWifi: (ids: string[]): Promise<import("./corosWifiMusicTypes").CorosWifiMusicStatus> => ipcRenderer.invoke("corosBle:wifiMusicLibrarySend", ids),
+  sendCorosMusicOverWifi: (options?: import("./corosWifiMusicTypes").CorosWifiMusicOptions): Promise<import("./corosWifiMusicTypes").CorosWifiMusicStatus> => ipcRenderer.invoke("corosBle:wifiMusicSend", options),
+  sendCorosLibraryMusicOverWifi: (ids: string[], options?: import("./corosWifiMusicTypes").CorosWifiMusicOptions): Promise<import("./corosWifiMusicTypes").CorosWifiMusicStatus> => ipcRenderer.invoke("corosBle:wifiMusicLibrarySend", ids, options),
   importCorosWifiMusicBackup: (): Promise<import("./corosWifiMusicTypes").CorosWifiMusicStatus> => ipcRenderer.invoke("corosBle:wifiMusicBackup"),
   cancelCorosWifiMusicSync: (): Promise<void> => ipcRenderer.invoke("corosBle:wifiMusicCancel"),
   restoreCorosWifiMusicSettings: (): Promise<import("./corosWifiMusicTypes").CorosWifiMusicStatus> => ipcRenderer.invoke("corosBle:wifiMusicRestore"),
+  getCorosNeteasePlaylists: (): Promise<import("./corosWifiMusicTypes").CorosNeteasePlaylistLabel[]> => ipcRenderer.invoke("corosBle:neteasePlaylists"),
+  renameCorosNeteasePlaylist: (id: string, name: string): Promise<import("./corosWifiMusicTypes").CorosNeteasePlaylistLabel[]> => ipcRenderer.invoke("corosBle:neteasePlaylistRename", id, name),
+  getCorosNeteaseToolbox: (): Promise<import("./corosWatchToolbox").NeteaseToolboxState> => ipcRenderer.invoke("corosBle:neteaseToolbox"),
+  showCorosNeteaseInToolbox: (): Promise<import("./corosWatchToolbox").NeteaseToolboxState> => ipcRenderer.invoke("corosBle:neteaseToolboxShow"),
   deleteCorosMusicTrack: (target: import("./corosBleMusicTypes").CorosBleMusicDeleteTarget): Promise<import("./corosBleMusicTypes").CorosBleMusicDeleteResult> => ipcRenderer.invoke("corosBle:deleteMusic", target),
+  deleteAllCorosMusic: (inventoryId: string): Promise<import("./corosBleMusicTypes").CorosBleMusicDeleteAllResult> => ipcRenderer.invoke("corosBle:deleteAllMusic", inventoryId),
   disconnectCorosNativeBle: (): Promise<CorosNativeBleSnapshot> => ipcRenderer.invoke("corosBle:disconnect"),
   createCorosPhonePairingCode: (): Promise<import("./corosNativeBleTypes").CorosPhonePairingCode> => ipcRenderer.invoke("corosBle:phonePairing"),
   startCorosWatchfacePhoneSend: (input: import("./watchfacePhoneSendTypes").WatchfacePhoneSendInput): Promise<import("./watchfacePhoneSendTypes").WatchfacePhoneSend> => ipcRenderer.invoke("watchfaces:phoneSendStart", input),
@@ -602,6 +607,11 @@ const api = {
   },
   listDownloads: (): Promise<LocalTrack[]> =>
     ipcRenderer.invoke("downloads:list"),
+  importDownloads: (files?: File[]): Promise<{ imported: number; tracks: LocalTrack[] } | null> =>
+    ipcRenderer.invoke(
+      "downloads:import",
+      files?.map((file) => webUtils.getPathForFile(file))
+    ),
   downloadAudio: (url: string): Promise<DownloadAudioResult> =>
     ipcRenderer.invoke("downloads:downloadAudio", url),
   deleteDownload: (id: string, removeFile: boolean): Promise<LocalTrack[]> =>
@@ -1093,8 +1103,22 @@ const api = {
     ipcRenderer.invoke("races:remove", raceId),
   addManualRace: (input: ManualRaceInput): Promise<RaceOverview> =>
     ipcRenderer.invoke("races:addManual", input),
+  addRaceTarget: (input: RaceTargetInput): Promise<RaceOverview> =>
+    ipcRenderer.invoke("races:addTarget", input),
+  updateRaceTarget: (input: RaceTargetEditInput): Promise<RaceOverview> =>
+    ipcRenderer.invoke("races:updateTarget", input),
+  listRaceTargets: (): Promise<RaceTarget[]> =>
+    ipcRenderer.invoke("races:listTargets"),
   removeRaceTarget: (targetId: string): Promise<RaceOverview> =>
     ipcRenderer.invoke("races:removeTarget", targetId),
+  getRaceLookupStatus: (): Promise<RaceLookupStatus> => ipcRenderer.invoke("races:lookupStatus"),
+  lookupRace: (request: RaceLookupRequest): Promise<RaceLookupResult> => ipcRenderer.invoke("races:lookup", request),
+  cancelRaceLookup: (requestId: string): Promise<void> => ipcRenderer.invoke("races:lookupCancel", requestId),
+  onRaceLookupProgress: (callback: (progress: RaceLookupProgress) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: RaceLookupProgress) => callback(progress);
+    ipcRenderer.on("races:lookupProgress", listener);
+    return () => ipcRenderer.removeListener("races:lookupProgress", listener);
+  },
   onRacesChanged: (callback: () => void): (() => void) => {
     const listener = () => callback();
     ipcRenderer.on("races:changed", listener);

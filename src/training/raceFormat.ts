@@ -90,3 +90,9 @@ export function fromDateInputValue(value: string): number | undefined {
   const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 9, 0, 0);
   return Number.isNaN(date.getTime()) ? undefined : Math.floor(date.getTime() / 1000);
 }
+
+/** A race's "HH:MM" start in the reader's clock style. */
+export function formatRaceStartTime(startTime: string): string {
+  const [hours, minutes] = startTime.split(":").map(Number);
+  return getDateTimeFormat({ hour: "numeric", minute: "2-digit" }).format(new Date(2000, 0, 1, hours, minutes));
+}

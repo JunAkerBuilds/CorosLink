@@ -365,8 +365,9 @@ export function duplicateTrainingPlanWeek(
   const shifted = plan.entries.map((entry) =>
     entry.weekIndex > weekIndex ? { ...entry, weekIndex: entry.weekIndex + 1 } : entry
   );
+  // The holding area belongs to no week, so its items are not part of a copy.
   const copies = plan.entries
-    .filter((entry) => entry.weekIndex === weekIndex)
+    .filter((entry) => entry.weekIndex === weekIndex && entry.dayIndex !== undefined)
     .map((entry) => ({
       ...structuredClone(entry),
       id: uniqueId("entry"),
@@ -395,18 +396,24 @@ function expandPhasesAfterWeek(
   }));
 }
 
+/** Adds an empty week after the given one; every existing workout stays. */
 export function insertRecoveryWeek(
   plan: TrainingPlanDocument,
   afterWeekIndex: number
 ): TrainingPlanDocument {
-  const next = duplicateTrainingPlanWeek(
-    { ...plan, entries: plan.entries.filter((entry) => entry.weekIndex !== afterWeekIndex) },
-    afterWeekIndex
-  );
+  if (afterWeekIndex < 0 || afterWeekIndex >= plan.weekCount) {
+    throw new Error("Week index is outside the plan.");
+  }
   return {
-    ...next,
+    ...plan,
+    weekCount: plan.weekCount + 1,
+    entries: plan.entries.map((entry) =>
+      entry.weekIndex > afterWeekIndex ? { ...entry, weekIndex: entry.weekIndex + 1 } : entry
+    ),
+    syncState: plan.source === "coros" ? "pending" : "local",
+    updatedAt: isoNow(),
     phases: [
-      ...next.phases,
+      ...expandPhasesAfterWeek(plan.phases, afterWeekIndex),
       {
         id: uniqueId("phase"),
         name: "Recovery",
@@ -415,6 +422,40 @@ export function insertRecoveryWeek(
         endWeek: afterWeekIndex + 2
       }
     ]
+  };
+}
+
+/**
+ * Removes a week and its scheduled workouts. Held items belong to no week, so
+ * they stay, and later weeks and phases move up to close the gap.
+ */
+export function removeTrainingPlanWeek(
+  plan: TrainingPlanDocument,
+  weekIndex: number
+): TrainingPlanDocument {
+  if (weekIndex < 0 || weekIndex >= plan.weekCount) {
+    throw new Error("Week index is outside the plan.");
+  }
+  if (plan.weekCount <= 1) throw new Error("A plan needs at least one week.");
+  const humanWeek = weekIndex + 1;
+  return {
+    ...plan,
+    weekCount: plan.weekCount - 1,
+    entries: plan.entries
+      .filter((entry) => entry.weekIndex !== weekIndex || entry.dayIndex === undefined)
+      .map((entry) => {
+        if (entry.weekIndex > weekIndex) return { ...entry, weekIndex: entry.weekIndex - 1 };
+        return entry.weekIndex === weekIndex ? { ...entry, weekIndex: 0 } : entry;
+      }),
+    phases: plan.phases
+      .map((phase) => ({
+        ...phase,
+        startWeek: phase.startWeek > humanWeek ? phase.startWeek - 1 : phase.startWeek,
+        endWeek: phase.endWeek >= humanWeek ? phase.endWeek - 1 : phase.endWeek
+      }))
+      .filter((phase) => phase.startWeek <= phase.endWeek),
+    syncState: plan.source === "coros" ? "pending" : "local",
+    updatedAt: isoNow()
   };
 }
 
@@ -535,6 +576,18 @@ export function validateTrainingPlan(
   return issues;
 }
 
+/** One entry's figures: its own steps first, then what the plan recorded for it. */
+export function trainingPlanEntryMetrics(entry: TrainingPlanEntry): ReturnType<typeof workoutMetrics> {
+  const calculated = workoutMetrics(entry.workout);
+  return {
+    ...calculated,
+    durationSeconds: calculated.durationSeconds || entry.plannedDurationSeconds || 0,
+    distanceMeters: calculated.distanceMeters || entry.plannedDistanceMeters || 0,
+    trainingLoad: calculated.trainingLoad || entry.plannedTrainingLoad || 0,
+    strengthSets: calculated.strengthSets || entry.plannedStrengthSets || 0
+  };
+}
+
 export function summarizeTrainingPlan(plan: TrainingPlanDocument): TrainingPlanSummary {
   const weekly: TrainingPlanWeekSummary[] = Array.from({ length: plan.weekCount }, (_, weekIndex) => ({
     weekIndex,
@@ -558,14 +611,7 @@ export function summarizeTrainingPlan(plan: TrainingPlanDocument): TrainingPlanS
   for (const entry of plan.entries) {
     if (entry.kind !== "workout") continue;
     workouts += 1;
-    const calculated = workoutMetrics(entry.workout);
-    const metrics = {
-      ...calculated,
-      durationSeconds: calculated.durationSeconds || entry.plannedDurationSeconds || 0,
-      distanceMeters: calculated.distanceMeters || entry.plannedDistanceMeters || 0,
-      trainingLoad: calculated.trainingLoad || entry.plannedTrainingLoad || 0,
-      strengthSets: calculated.strengthSets || entry.plannedStrengthSets || 0
-    };
+    const metrics = trainingPlanEntryMetrics(entry);
     durationSeconds += metrics.durationSeconds;
     distanceMeters += metrics.distanceMeters;
     trainingLoad += metrics.trainingLoad;

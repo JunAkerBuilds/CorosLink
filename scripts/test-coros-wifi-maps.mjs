@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { decodeWifiMapTasks, encodeWifiMapStart, requireWifiDownloadReady } = require('../dist-electron/corosBleWifiProtocol.js');
+const { decodeWifiMapTasks, encodeWifiMapStart, decodeWifiDownloadReadiness, requireWifiDownloadReady } = require('../dist-electron/corosBleWifiProtocol.js');
 const { previewWifiMap, createWifiMapTask, normalizeWifiMapTiles, signMapRequest } = require('../dist-electron/corosWifiMapService.js');
 const { corosMapTileAt, corosMapTileBounds, corosMapQuadkey } = require('../dist-electron/corosMapGrid.js');
 
@@ -18,9 +18,16 @@ const overflow = Buffer.from(payload); overflow.writeBigUInt64LE(2n ** 63n, 12);
 assert.throws(() => decodeWifiMapTasks(overflow), /sizes/);
 const failed = Buffer.from(payload); failed[35] = 9;
 assert.equal(decodeWifiMapTasks(failed)[0].state, 'failed');
+const firmwareFailure = Buffer.from(payload); firmwareFailure.writeUInt16LE(0x2001, 35);
+assert.equal(decodeWifiMapTasks(firmwareFailure)[0].errorCode, 0x2001, 'preserve both bytes of the watch error');
+firmwareFailure.writeUInt16LE(0x2000, 35);
+assert.equal(decodeWifiMapTasks(firmwareFailure)[0].state, 'failed', 'a nonzero high byte also indicates a failure');
 requireWifiDownloadReady(Buffer.from([1, ...Array(16).fill(0)]));
 assert.throws(() => requireWifiDownloadReady(Buffer.from([1, 8, 0, 0, 0])), /activity/);
 assert.throws(() => requireWifiDownloadReady(Buffer.from([1])), /readiness/);
+const screenBusy = Buffer.from([1, 0, 1, 0, 0]);
+assert.equal(decodeWifiDownloadReadiness(screenBusy), 0x100);
+assert.throws(() => requireWifiDownloadReady(screenBusy), /busy screen/);
 assert.throws(() => normalizeWifiMapTiles([{ x: -1, y: 90 }]), /invalid/);
 assert.deepEqual(normalizeWifiMapTiles([{ x: 64, y: 64 }, { x: 64, y: 64 }]), [{ x: 64, y: 64 }]);
 assert.deepEqual(corosMapTileAt(0, 0), { x: 64, y: 64 });

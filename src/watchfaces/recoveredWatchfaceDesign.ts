@@ -242,8 +242,8 @@ const isChartReadout = (id: string, studio: boolean) => NATIVE_CHART_SOURCES.som
  * them; `studio` adds readouts with CorosLink-only keys (chart_heart_rate).
  */
 function templateChartSources(config: Record<string, string>, source: (key: string) => CorosWatchfaceSpriteFile[], studio = false): string[] {
-  const plot = parseConfigRect(config.chart_rect);
-  if (!plot || plot.x1 <= plot.x0 || plot.y1 <= plot.y0) return [];
+  // No chart_rect is fine: SIMPLE declares daily and sun readouts with no
+  // graph, and the watch still pages through them (PACE Pro, 2026-11-01).
   return [...new Set([...CHART_SOURCE_ORDER, ...(studio ? NATIVE_CHART_STUDIO_READOUTS : [])])].filter(id => isChartReadout(id, studio) &&
     // A moon-phase group is a frame table; SATISFY's single blank sun/moon
     // icon is a placeholder, not a readout the watch cycles to.
@@ -278,6 +278,23 @@ export function recoveredChartSources(details: CorosWatchfaceTemplateDetails): s
 export function recoveredChartReadouts(details: CorosWatchfaceTemplateDetails): string[] {
   const template = templateSpriteSource(details);
   return template ? templateChartSources(template.config, template.source, true) : [];
+}
+
+/**
+ * The chart layer of a face whose template declares readouts but no graph
+ * (no chart_rect). Projects saved before such faces recovered a chart layer
+ * get it on open; faces with a graph already have theirs.
+ */
+export async function recoverGraphlessChart(details: CorosWatchfaceTemplateDetails,
+  loadAssets: (paths: string[]) => Promise<CorosWatchfaceTemplateAsset[]>): Promise<CorosWatchfaceNativeDataStyle | null> {
+  const template = templateSpriteSource(details);
+  if (!template || template.config.chart_rect?.trim()) return null;
+  const sources = templateChartSources(template.config, template.source);
+  // Start on the first daily page when the face has one: it shows the weather
+  // block with min/max, while the sun page hides it (firmware page rules).
+  const daily = NATIVE_CHART_DAILY_PAGES.find(page => page.every(source => sources.includes(source)))?.[0];
+  const first = daily ?? sources[0];
+  return first ? recoverChartGroup(details, loadAssets, first) : null;
 }
 
 /** Rebuild the chart layer on another of the face's own chart readouts. */
@@ -323,14 +340,17 @@ export async function recoverChartPageCompanions(details: CorosWatchfaceTemplate
 
 async function recoverChart(config: Record<string, string>, source: (key: string) => CorosWatchfaceSpriteFile[],
   sprites: (key: string) => Promise<Record<string, string>>, preferred?: string): Promise<CorosWatchfaceNativeDataStyle | null> {
-  const plot = parseConfigRect(config.chart_rect);
-  if (!plot || plot.x1 <= plot.x0 || plot.y1 <= plot.y0) return null;
+  const stored = parseConfigRect(config.chart_rect);
+  const plot = stored && stored.x1 > stored.x0 && stored.y1 > stored.y0 ? stored : null;
   const sources = templateChartSources(config, source);
+  // Readouts without a graph still make a chart layer, with the graph off.
+  if (!plot && !sources.length) return null;
   // A graph can hide every numeric/icon readout. The build snapshot supplies
   // its sample group in Send to COROS; standalone archives can still preview
   // a curve-only or bar plot without inventing a visible readout.
+  const daily = plot ? undefined : NATIVE_CHART_DAILY_PAGES.find(page => page.every(source => sources.includes(source)))?.[0];
   const chartSource = preferred && isChartReadout(preferred, true)
-    ? preferred : sources[0] ?? (storedWidth(config.chart_bar_width, 8) === 0 && storedWidth(config.chart_curves_width, 2) > 0 ? "chart_sunrise" : "chart_stress");
+    ? preferred : daily ?? sources[0] ?? (storedWidth(config.chart_bar_width, 8) === 0 && storedWidth(config.chart_curves_width, 2) > 0 ? "chart_sunrise" : "chart_stress");
   const rectKey = chartRectKey;
   const moon = chartSource === "chart_moon", isTime = ["chart_sunrise", "chart_moonrise"].includes(chartSource);
   // Studio exports a hidden number as 1x1 transparent frames so the watch
@@ -347,12 +367,16 @@ async function recoverChart(config: Record<string, string>, source: (key: string
     // Studio's invisible backdrop (1x1, written when the graph background is off) reopens as off.
     .flatMap(([role, [key, posKey]]) => { const file = source(key)[0], position = parseConfigPos(config[posKey]); return file && position && !(role === "background" && blank(file)) ? [{ role, key, file, position }] : []; });
   // Native parts use nonnegative offsets: anchor the layer at the upper-left of everything it draws.
-  const xs = [plot.x0, valueRect?.x0, iconPosition?.x, ...placed.map(p => p.position.x)].filter((n): n is number => n !== undefined && n !== null);
-  const ys = [plot.y0, valueRect?.y0, iconPosition?.y, ...placed.map(p => p.position.y)].filter((n): n is number => n !== undefined && n !== null);
+  const xs = [plot?.x0, valueRect?.x0, iconPosition?.x, ...placed.map(p => p.position.x)].filter((n): n is number => n !== undefined && n !== null);
+  const ys = [plot?.y0, valueRect?.y0, iconPosition?.y, ...placed.map(p => p.position.y)].filter((n): n is number => n !== undefined && n !== null);
+  if (!xs.length || !ys.length) return null;
   const origin = { x: Math.min(...xs), y: Math.min(...ys) };
+  // Without a graph the plot part stays off, sized like the readout, so
+  // hidden readouts and export fillers still have a place to sit.
+  const box = plot ?? valueRect ?? { x0: origin.x, y0: origin.y, x1: origin.x + 1, y1: origin.y + 1 };
   const assets: CorosWatchfaceNativeDataStyle["assets"] = {};
   const parts: NonNullable<CorosWatchfaceNativeDataStyle["parts"]> = {
-    plot: { enabled: true, x: plot.x0 - origin.x, y: plot.y0 - origin.y, width: plot.x1 - plot.x0, height: plot.y1 - plot.y0 },
+    plot: { enabled: Boolean(plot), x: box.x0 - origin.x, y: box.y0 - origin.y, width: box.x1 - box.x0, height: box.y1 - box.y0 },
     icon: { enabled: false }, value: { enabled: false }, states: { enabled: false }, symbols: { enabled: false }, decimal: { enabled: false },
     background: { enabled: false }, mask: { enabled: false }, noDataMask: { enabled: false }
   };
@@ -391,12 +415,13 @@ async function recoverChart(config: Record<string, string>, source: (key: string
   // The preview's curve marker uses the plot color; match it to the curve.
   parts.plot = { ...parts.plot, color: color("chart_curves_upper_color", "#ffffff") };
   return {
-    enabled: true, ...origin, scale: 1, color: "#ffffff", chartSource, chartWidth: plot.x1 - plot.x0, chartHeight: plot.y1 - plot.y0, parts, assets,
+    enabled: true, ...origin, scale: 1, color: "#ffffff", chartSource, chartWidth: box.x1 - box.x0, chartHeight: box.y1 - box.y0, parts, assets,
     chartStyle: {
       // Keep an explicit 0: official SATISFY 1/2 turn bars off (curve only)
       // and SATISFY 3 turns the curve off. A default would make the watch
       // draw that style on the groups that use it.
-      barWidth: storedWidth(config.chart_bar_width, 8), barGap: Number.isFinite(Number(config.chart_bar_interval)) && config.chart_bar_interval !== undefined ? Number(config.chart_bar_interval) : 4,
+      // No graph means no bars unless the face asks for them.
+      barWidth: storedWidth(config.chart_bar_width, plot ? 8 : 0), barGap: Number.isFinite(Number(config.chart_bar_interval)) && config.chart_bar_interval !== undefined ? Number(config.chart_bar_interval) : 4,
       selectedBarColor: color("chart_selected_bar_color", "#ffffff"), unselectedBarColor: color("chart_unselected_bar_color", "#555555"),
       upperColor: color("chart_curves_upper_color", "#ffffff"), lowerColor: color("chart_curves_lower_color", "#555555"),
       lineWidth: storedWidth(config.chart_curves_width, 2)

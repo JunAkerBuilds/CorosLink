@@ -331,3 +331,79 @@
   .activities-detail-sidebar.activities-detail-dialog { position: static; max-height: none; order: -1; }
   .activities-detail-sidebar .activity-dialog-surface { max-height: 70dvh; }
 }
+
+/* ── Activities redesign (2026-11) ────────────────────────────────────
+   Sport filters carry counts, totals sit on hue-washed cards with a bar
+   strip, cards lift on hover, and the list's inline detail gets the page's
+   large sport badge, insight card and dotted stat tiles. */
+.activities-sport-filters { flex-wrap: wrap; gap: 6px; }
+.activities-sport-filters button { gap: 7px; padding: 7px 10px 7px 14px; }
+.activities-sport-count { min-width: 18px; padding: 1px 6px; border-radius: 6px; background: color-mix(in srgb, var(--text-muted) 18%, transparent); color: var(--text-secondary); font-size: 10.5px; font-weight: 700; line-height: 15px; text-align: center; font-variant-numeric: tabular-nums; }
+.activities-sport-filters button[aria-pressed="true"] .activities-sport-count { background: #083c2924; color: inherit; }
+.activities-sport-filters button.is-empty:not([aria-pressed="true"]) { color: var(--text-secondary); }
+.activities-sport-filters button.is-empty:not([aria-pressed="true"]) svg { color: var(--text-muted); }
+
+.activities-stat { align-items: center; min-height: 86px; padding: 14px 14px 14px 16px; border-radius: 14px; border-color: color-mix(in srgb, var(--stat-color) 22%, var(--glass-border)); background: linear-gradient(155deg, color-mix(in srgb, var(--stat-color) 12%, transparent), color-mix(in srgb, var(--text-muted) 3%, transparent) 60%), var(--surface); }
+.activities-stat-icon { width: 40px; height: 40px; border-radius: 12px; background: color-mix(in srgb, var(--stat-color) 16%, transparent); }
+.activities-stat-icon svg { width: 19px; height: 19px; }
+.activities-stat-spark { width: 62px; height: 30px; right: 14px; bottom: 14px; opacity: .9; }
+
+.activity-card { border-radius: 16px; transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+.activity-card:hover, .activity-card:focus-within { border-color: color-mix(in srgb, var(--activity-color) 38%, transparent); box-shadow: 0 14px 34px #00000038, 0 0 0 1px color-mix(in srgb, var(--activity-color) 10%, transparent); }
+@media (prefers-reduced-motion: no-preference) {
+  .activity-card:hover { transform: translateY(-2px); }
+}
+.activity-card-heading { min-height: 60px; padding: 12px 12px 10px 14px; }
+.activity-card-sport-icon { width: 36px; height: 36px; border-radius: 10px; background: color-mix(in srgb, var(--activity-color) 14%, transparent); }
+.activity-card-badge { padding: 2px 8px; border: 0; border-radius: 6px; background: color-mix(in srgb, var(--activity-color) 13%, transparent); font-size: 9.5px; font-weight: 750; letter-spacing: .06em; }
+.activity-card-body { padding: 0 12px; }
+.activity-card-route { border-radius: 12px; }
+.activity-card-primary { gap: 6px; padding: 13px 4px 8px; }
+.activity-card-primary strong { font-weight: 700; }
+.activity-card-secondary { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 4px; padding: 9px 0 14px; border-top: 1px solid color-mix(in srgb, var(--text-muted) 14%, transparent); }
+.activity-card-secondary > span { display: inline-flex; align-items: center; gap: 5px; }
+.activity-card-secondary svg { margin-top: 0; }
+.activity-card-secondary strong { color: var(--text-secondary); font-size: 12px; font-weight: 550; }
+
+/* Detail tiles: a coloured dot names each figure. */
+.activity-detail-stat > span:not(.activity-detail-stat-icon) { display: inline-flex; align-items: center; gap: 7px; }
+.activity-detail-stat-dot { display: inline-block; width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: var(--stat-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--stat-color) 16%, transparent); }
+.activities-detail-dialog .activity-dialog-body .activity-detail-stat.has-dot { row-gap: 8px; padding: 12px 14px; }
+:root[data-theme="paper"] .activity-detail-stat-dot { filter: saturate(1.15) brightness(.82); }
+
+/* Inline detail beside the list: header, insight and tiles like the page. */
+.activities-detail-sidebar .activity-dialog-surface { background: linear-gradient(180deg, color-mix(in srgb, var(--activity-color) 6%, transparent), transparent 170px), var(--surface); }
+.activities-detail-sidebar .activity-dialog-header { padding: 14px 18px 16px; gap: 10px; }
+.activities-detail-sidebar .activity-dialog-hero { flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+.activities-detail-sidebar .activity-dialog-sport { width: 52px; height: 52px; border: 1px solid color-mix(in srgb, var(--activity-color) 30%, transparent); border-radius: 15px; background: color-mix(in srgb, var(--activity-color) 14%, transparent); box-shadow: 0 0 24px color-mix(in srgb, var(--activity-color) 18%, transparent); }
+.activities-detail-sidebar .activity-dialog-sport svg { width: 26px; height: 26px; }
+.activities-detail-sidebar .activity-dialog-title { flex: 1 1 240px; }
+.activities-detail-sidebar .activity-dialog-title h2 { font-size: 21px; }
+.activities-detail-sidebar .activity-dialog-meta { font-size: 12px; }
+.activities-detail-sidebar .activity-dialog-badge, .activities-detail-sidebar .activity-dialog-chip { padding: 4px 10px; border-radius: 999px; font-size: 11px; }
+.activities-detail-sidebar .activity-dialog-race-toggle { min-height: 26px; padding: 0 10px; font-size: 11.5px; }
+.activities-detail-sidebar .activity-dialog-insight { flex: 1 1 250px; width: auto; max-width: 340px; align-self: flex-start; gap: 10px; padding: 11px 13px; border-color: color-mix(in srgb, var(--activity-color) 24%, transparent); background: color-mix(in srgb, var(--activity-color) 7%, transparent); box-shadow: none; }
+.activities-detail-sidebar .activity-dialog-insight > span { width: 28px; height: 28px; border-radius: 8px; }
+.activities-detail-sidebar .activity-dialog-insight strong { font-size: 12.5px; font-weight: 600; }
+.activities-detail-sidebar .activity-dialog-insight small { font-size: 11.5px; }
+.activities-detail-sidebar .activity-dialog-body { padding: 14px 18px 0; }
+.activities-detail-sidebar .activity-dialog-body .activity-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 8px; padding-bottom: 0; border-bottom: 0; }
+.activities-detail-sidebar .activity-dialog-body .activity-detail-stat { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "label" "value"; align-items: start; row-gap: 5px; min-height: 0; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--text-muted) 16%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--text-muted) 5%, transparent); }
+.activities-detail-sidebar .activity-dialog-body .activity-detail-stat > span:not(.activity-detail-stat-icon) { font-size: 11px; font-weight: 500; color: var(--text-secondary); }
+.activities-detail-sidebar .activity-dialog-body .activity-detail-stat strong { font-size: 19px; font-weight: 700; letter-spacing: -.025em; }
+.activities-detail-sidebar .activity-dialog-body .activity-detail-stat small { font-size: 11px; }
+.activities-detail-sidebar .activity-detail-visual-panel, .activities-detail-sidebar .training-laps-section { padding: 12px 14px; gap: 10px; border: 1px solid color-mix(in srgb, var(--text-muted) 14%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--text-muted) 3%, transparent); }
+.activities-detail-sidebar .activity-detail-visual-heading h3, .activities-detail-sidebar .training-laps-section h3 { font-size: 13.5px; }
+.activities-detail-sidebar .activity-detail-visual-note { font-size: 11px; }
+.activities-detail-sidebar .activity-detail-visual-panel .activity-route-map-canvas { height: 260px; border-radius: 10px; }
+.activities-detail-sidebar .training-laps-section thead th, .activities-detail-sidebar .training-laps-section td { padding: 8px 10px; font-size: 11.5px; }
+:root[data-theme="paper"] .activities-detail-sidebar .activity-dialog-surface { background: linear-gradient(180deg, color-mix(in srgb, var(--activity-color) 7%, transparent), transparent 170px), #ffffff; }
+:root[data-theme="paper"] .activities-detail-sidebar .activity-dialog-body .activity-detail-stat { background: #f7f9f6; }
+
+/* Pace-coloured route: the colour scale's two ends beside start and finish. */
+.activity-route-pace-legend { display: inline-flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 12px; white-space: nowrap; }
+.activity-route-pace-ramp { display: inline-block; width: 72px; height: 6px; border-radius: 6px; }
+.activity-route-pace-end { display: inline-flex; align-items: baseline; gap: 5px; }
+.activity-route-pace-end small { color: var(--text-primary); font-size: 11.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.activity-route-footer.has-pace { flex-wrap: wrap; row-gap: 8px; }
+.activities-detail-sidebar .activity-route-pace-legend { font-size: 11px; }

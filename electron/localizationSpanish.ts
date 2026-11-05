@@ -1,5 +1,6 @@
 /** Spanish native menus and dialogs. Keep source keys stable. */
 export const nativeSpanish: Readonly<Record<string, string>> = {
+  "Import MP3s": "Importar MP3",
   "File": "Archivo",
   "Edit": "Edición",
   "View": "Ver",
@@ -35,6 +36,8 @@ export const nativeSpanish: Readonly<Record<string, string>> = {
   "Let your watch share its files over USB?": "¿Permitir que el reloj comparta sus archivos por USB?",
   "Your watch is plugged into a computer. Allow only if you trust that computer.": "Tu reloj está conectado a una computadora. Permítelo solo si confías en esa computadora.",
   "Remove the COROS watch key from this computer?": "¿Quitar la clave del reloj COROS de esta computadora?",
+  "This deletes all local MP3s, podcasts and NetEase playlists in the watch library, including those hidden by search. It cannot be undone. Your local library is kept.": "Se eliminarán todos los MP3 locales, podcasts y listas de NetEase del reloj, incluidos los ocultos por la búsqueda. No se puede deshacer. Tu biblioteca local se conserva.",
+  "This removes the audio from your watch over Bluetooth. It cannot be undone. Your local library is kept.": "El audio se eliminará del reloj por Bluetooth. No se puede deshacer. Tu biblioteca local se conserva.",
   "This removes the MP3 from your watch over Bluetooth. It cannot be undone. Your local library is kept.": "El MP3 se eliminará del reloj por Bluetooth. No se puede deshacer. Tu biblioteca local se conserva.",
   "CorosLink won't authenticate with your watch again until you sign in to COROS. A watch that's connected now stays connected until you disconnect it. C-LINK keeps its own copy on your iPhone.": "CorosLink no volverá a autenticarse con tu reloj hasta que inicies sesión en COROS. Un reloj conectado ahora sigue conectado hasta que lo desconectes. C-LINK guarda su propia copia en tu iPhone.",
   "Send MP3s to watch podcasts over Wi-Fi": "Enviar MP3 a los pódcasts del reloj por Wi-Fi",

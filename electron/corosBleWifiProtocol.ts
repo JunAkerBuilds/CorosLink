@@ -12,7 +12,8 @@ export function decodeWifiMapTasks(payload: Buffer): CorosWifiMapTask[] {
     if (downloaded > BigInt(Number.MAX_SAFE_INTEGER) || total > BigInt(Number.MAX_SAFE_INTEGER) || downloaded > total) {
       throw new Error("The watch returned invalid map-download sizes.");
     }
-    const status = row[0]!, error = row[33]!;
+    // Firmware writes a little-endian 16-bit error at offsets 33–34.
+    const status = row[0]!, error = row.readUInt16LE(33);
     return { id, statusCode: status, downloadedBytes: Number(downloaded), totalBytes: Number(total), errorCode: error,
       state: error !== 0 ? "failed" : status === 3 && downloaded === total ? "complete" : status === 2 ? "queued" : status === 0 ? "downloading" : "unknown" };
   });
@@ -40,13 +41,17 @@ export function requireWifiTaskRemoved(payload: Buffer): void {
   throw new Error(payload.length ? `The watch couldn't cancel the download (code ${payload[0]}).` : "The watch couldn't cancel the download.");
 }
 
-export function requireWifiDownloadReady(payload: Buffer): void {
+export function decodeWifiDownloadReadiness(payload: Buffer): number {
   if (![5, 17].includes(payload.length) || payload[0] !== 1) throw new Error("The watch could not check map-download readiness.");
-  const flags = payload.readUInt32LE(1);
+  return payload.readUInt32LE(1);
+}
+
+export function requireWifiDownloadReady(payload: Buffer): void {
+  const flags = decodeWifiDownloadReadiness(payload);
   if (!flags) return;
   const messages = ["Charge the watch before downloading maps.", "Stop music playback on the watch.",
     "Disconnect the watch's USB cable.", "Finish the current activity on the watch.", "Charge the watch before downloading maps.",
-    "Exit navigation on the watch.", "Finish the call on the watch.", "Wait for the watch to finish switching maps.", "Return to the watch face."];
+    "Exit navigation on the watch.", "Finish the call on the watch.", "Wait for the watch to finish switching maps.", "The watch is reporting a busy screen. Keep it awake and try again shortly."];
   const bit = messages.findIndex((_, bit) => flags & (1 << bit));
-  throw new Error(bit >= 0 ? messages[bit]! : "The watch is busy. Return to the watch face and try again.");
+  throw new Error(bit >= 0 ? messages[bit]! : "The watch is reporting that downloads are unavailable. Keep it awake and try again shortly.");
 }

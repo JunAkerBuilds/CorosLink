@@ -1,0 +1,252 @@
+/*
+ * WorkoutEditorModal, three columns: settings, steps, and a rail with the
+ * watch preview, load feel and checks.
+ */
+/* ------------------------------------------- Three-column builder layout */
+
+.workout-editor-modal {
+  width: min(1440px, 100%);
+}
+
+.workout-editor-layout {
+  display: grid;
+  grid-template-columns: minmax(250px, 290px) minmax(0, 1fr) minmax(260px, 300px);
+  align-items: start;
+  gap: 22px;
+}
+
+.workout-editor-side,
+.workout-editor-rail {
+  position: sticky;
+  top: 0;
+  min-width: 0;
+}
+
+.workout-editor-side .workout-editor-basics {
+  grid-template-columns: minmax(0, 1fr);
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.workout-editor-main {
+  min-width: 0;
+}
+
+.workout-editor-rail {
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 17%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface) 45%, transparent);
+}
+
+.workout-editor-rail-label {
+  margin: 0 0 10px;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.workout-editor-rail-hint {
+  margin: 12px 0 18px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  text-align: center;
+}
+
+/* The watch: a round face with a zone-coloured progress ring. */
+.workout-watch {
+  --watch-zone: var(--tlz-work, var(--accent));
+  position: relative;
+  display: grid;
+  width: 196px;
+  aspect-ratio: 1;
+  margin: 4px auto 0;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 35%, #1d2125, #08090a 70%);
+  box-shadow:
+    0 0 0 9px #23272b,
+    0 0 0 10px color-mix(in srgb, var(--text-muted) 22%, transparent),
+    0 26px 50px -20px rgba(0, 0, 0, 0.7),
+    0 0 50px -12px color-mix(in srgb, var(--watch-zone) 55%, transparent);
+}
+
+.workout-watch.is-warmup { --watch-zone: var(--tlz-warmup); }
+.workout-watch.is-z1 { --watch-zone: var(--tlz-z1); }
+.workout-watch.is-z2 { --watch-zone: var(--tlz-z2); }
+.workout-watch.is-z3 { --watch-zone: var(--tlz-z3); }
+.workout-watch.is-z4 { --watch-zone: var(--tlz-z4); }
+.workout-watch.is-z5 { --watch-zone: var(--tlz-z5); }
+.workout-watch.is-rest { --watch-zone: #8d959e; }
+.workout-watch.is-cooldown { --watch-zone: var(--tlz-cooldown); }
+
+.workout-watch-ring {
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: conic-gradient(var(--watch-zone) 0 250deg, #1f2427 250deg 360deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+  animation: workout-watch-sweep 1.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes workout-watch-sweep {
+  from { clip-path: polygon(50% 50%, 50% 0, 50% 0, 50% 0); opacity: 0.4; }
+  to { clip-path: polygon(50% 50%, 50% -60%, 160% -60%, 160% 160%, -60% 160%, -60% -60%, 50% -60%); opacity: 1; }
+}
+
+.workout-watch-face {
+  position: relative;
+  display: flex;
+  max-width: 150px;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  color: #eef1f3;
+  text-align: center;
+}
+
+.workout-watch-face small {
+  color: #b5bdc5;
+  font-size: 9.5px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workout-watch-face b {
+  font-size: 30px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 780;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.workout-watch-face em {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--watch-zone);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workout-watch-face span {
+  margin-top: 3px;
+  overflow: hidden;
+  max-width: 100%;
+  color: #b5bdc5;
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workout-load-feel {
+  margin-bottom: 18px;
+}
+
+.workout-load-track {
+  position: relative;
+  display: block;
+  height: 10px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--tlz-z1), var(--tlz-z2) 30%, var(--tlz-z3) 50%, var(--tlz-z4) 75%, var(--tlz-z5));
+}
+
+.workout-load-track i {
+  position: absolute;
+  top: -5px;
+  width: 20px;
+  height: 20px;
+  margin-left: -10px;
+  border: 3px solid var(--bg-base);
+  border-radius: 50%;
+  background: var(--text-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-muted) 40%, transparent), 0 4px 10px rgba(0, 0, 0, 0.4);
+  transition: left 350ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.workout-load-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.workout-load-feel p {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.workout-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workout-checks li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.workout-checks i {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.workout-checks .is-ok i {
+  color: var(--success-text);
+  background: color-mix(in srgb, var(--success-dot) 18%, transparent);
+}
+
+.workout-checks .is-todo i {
+  color: var(--warning-text);
+  background: color-mix(in srgb, var(--warning-text) 18%, transparent);
+}
+
+/* Narrower windows: the rail drops below the settings, then everything stacks. */
+@media (max-width: 1280px) {
+  .workout-editor-layout {
+    grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+  }
+
+  .workout-editor-rail {
+    position: static;
+    grid-column: 1;
+  }
+}
+
+@media (max-width: 900px) {
+  .workout-editor-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workout-editor-side {
+    position: static;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workout-watch-ring {
+    animation: none;
+  }
+}

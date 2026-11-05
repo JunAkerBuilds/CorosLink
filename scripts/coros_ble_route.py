@@ -27,7 +27,12 @@ def little(data, offset, size):
 
 def validate_file_block(header, block, file_index):
     # Imported lazily: the music module imports this one for `little`.
-    from coros_ble_music import valid_music_delete_file
+    from coros_ble_music import valid_music_delete_file, valid_netease_delete_block
+    # A NetEase delete has storage category 3 at +16 (local music 0), in the same 21-byte header.
+    if file_index == MUSIC_DELETE_FILE and len(header) == 21 and header[16] == 3:
+        if not (0 < len(block) <= 4096 and valid_netease_delete_block(header, block)):
+            raise ProtocolError('Invalid COROS ' + NAMES.get(file_index, 'file') + ' block.')
+        return
     limit = (0x320000 if file_index == WATCHFACE_FILE else SATELLITE_FILE_LIMIT if file_index in SATELLITE_FILES
              else DATA_FILE_LIMIT if file_index in DATA_FILES else 2_000_000)
     if (file_index not in NAMES or len(header) != 21 or header[:3] != bytes([0x78, 0, file_index]) or

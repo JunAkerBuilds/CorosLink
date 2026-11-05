@@ -321,3 +321,118 @@ export function workBuckets(
   }
   return { unit, buckets };
 }
+
+// --- Record stories -----------------------------------------------------------------
+
+/** A sparkline's worth of one record's metric, oldest first, from the sport's sessions. */
+export function activitySeries(
+  activities: TrainingHubActivity[],
+  sport: Exclude<HallSport, "run">,
+  kind: ActivityRecordKind,
+  limit = 14
+): number[] {
+  return activities
+    .filter((activity) => hallSport(activity) === sport)
+    .map((activity) => ({
+      time: activityTimestamp(activity.startTime),
+      value: recordValue(activity, kind)
+    }))
+    .filter((point): point is { time: number; value: number } => point.value !== undefined)
+    .sort((left, right) => left.time - right.time)
+    .slice(-limit)
+    .map((point) => point.value);
+}
+
+export interface RecordHistoryPoint {
+  /** Epoch ms of the day the time was set. */
+  time: number;
+  seconds: number;
+}
+
+function signatureDay(day: string): number | null {
+  if (!/^\d{8}$/.test(day)) return null;
+  return new Date(
+    Number(day.slice(0, 4)),
+    Number(day.slice(4, 6)) - 1,
+    Number(day.slice(6, 8))
+  ).getTime();
+}
+
+/**
+ * The best-time staircase for one record type, from the "type:happenDay:value"
+ * signatures the app has seen over time (the celebration's memory), plus the
+ * current record. Only times that beat every earlier one are kept, so period
+ * bests that never were all-time bests drop out.
+ */
+export function recordHistory(
+  signatures: readonly string[],
+  type: number,
+  current?: RecordHistoryPoint | null
+): RecordHistoryPoint[] {
+  const byDay = new Map<number, number>();
+  const add = (time: number, seconds: number) =>
+    byDay.set(time, Math.min(seconds, byDay.get(time) ?? Infinity));
+  for (const signature of signatures) {
+    const [typeText, day, valueText] = signature.split(":");
+    if (Number(typeText) !== type || !day || !valueText) continue;
+    const time = signatureDay(day);
+    const seconds = Number(valueText);
+    if (time === null || !Number.isFinite(seconds) || seconds <= 0) continue;
+    add(time, seconds);
+  }
+  if (current && current.seconds > 0) add(current.time, current.seconds);
+  const staircase: RecordHistoryPoint[] = [];
+  for (const [time, seconds] of [...byDay].sort((left, right) => left[0] - right[0])) {
+    const best = staircase.at(-1);
+    if (!best || seconds < best.seconds - 0.5) staircase.push({ time, seconds });
+  }
+  return staircase;
+}
+
+/** The best that stood on a given day, or null when the history starts later. */
+export function bestAsOf(history: RecordHistoryPoint[], time: number): RecordHistoryPoint | null {
+  let best: RecordHistoryPoint | null = null;
+  for (const point of history) {
+    if (point.time > time) break;
+    best = point;
+  }
+  return best;
+}
+
+/**
+ * How close a record sits to COROS's predicted time, 0–1: 1 when the record
+ * already matches or beats the prediction, falling to 0 at 15% slower.
+ */
+export function reachShare(recordSeconds: number, predictedSeconds: number): number {
+  if (!(recordSeconds > 0) || !(predictedSeconds > 0)) return 0;
+  const ratio = predictedSeconds / recordSeconds;
+  return ratio >= 1 ? 1 : Math.max(0, Math.min(1, (ratio - 0.85) / 0.15));
+}
+
+/**
+ * The run a COROS record was set in: by its activity id, or else the only run
+ * that day long enough to hold the distance. Never a pick between several.
+ */
+export function findRecordActivity(
+  activities: TrainingHubActivity[],
+  record: { activityId?: string; day: number | null; meters?: number }
+): TrainingHubActivity | null {
+  if (record.activityId) {
+    const exact = activities.find((activity) => activity.activityId === record.activityId);
+    if (exact) return exact;
+  }
+  const day = record.day;
+  if (day === null) return null;
+  const next = new Date(day);
+  next.setDate(next.getDate() + 1);
+  const candidates = activities.filter((activity) => {
+    const time = activityTimestamp(activity.startTime);
+    return (
+      hallSport(activity) === "run" &&
+      time >= day &&
+      time < next.getTime() &&
+      (!record.meters || (activity.distance ?? 0) >= record.meters * 0.98)
+    );
+  });
+  return candidates.length === 1 ? candidates[0]! : null;
+}
