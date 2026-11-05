@@ -2145,4 +2145,13 @@ export const watchfacesFrench: Record<string, string> = {
   "Follows the field": "Suit le champ",
   "Click one to edit it": "Cliquez sur une image pour la modifier",
   "Text for {{value1}}": "Texte pour {{value1}}",
+  "Change digits": "Changer les chiffres",
+  "Your own pictures for each digit": "Vos propres images pour chaque chiffre",
+  "Reading preview: {{value1}}": "Aperçu de la valeur : {{value1}}",
+  "More info": "Plus d’infos",
+  "About position": "À propos de la position",
+  "Placed by the watch": "Placé par la montre",
+  "Your image": "Votre image",
+  "Drawn in your font": "Dessiné avec votre police",
+  "Drawn from text": "Dessiné à partir du texte",
 };

@@ -3,6 +3,7 @@ import { createCollapsedWatchfaceLayerSections, watchfaceLayerMatchesSearch } fr
 import { batteryStateMeaning, batteryReplacementStateCount, COROS_BATTERY_STATE_ORDER } from "./watchfaceBatteryStates";
 import { announceStudioEditor } from "./studioEditorPresence";
 import { watchfaceLayerSampleValue } from "./watchfaceLayerValues";
+import { WatchfaceHint } from "./WatchfaceHint";
 import { collectWatchfaceFaceColors, recolorWatchfaceFace } from "./watchfaceFaceColors";
 import { loadWatchfaceGoogleFontsFor } from "./watchfaceGoogleFonts";
 import { WatchfaceAddMenu, type WatchfaceAddCategory, type WatchfaceAddFaceOption } from "./WatchfaceAddMenu";
@@ -13236,7 +13237,7 @@ export function WatchfaceEditor({
             "Typography",
             <div className="wf-property-stack">
               <WatchfaceNumberAlignControl value={style?.align} allowTemplateDefault onChange={(align) => setMetricStyle("battery", { align })} />
-              <LocalFontPicker api={api} label={t("Font")} value={style?.fontFamily ?? design.fontFamily} emptyLabel={t("Keep template font")} preview={renderFontPreview("battery", style)} onChange={(fontFamily) => setMetricStyle("battery", { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle("battery", typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle("battery", { letterSpacing })} />
+              <LocalFontPicker pngPanel={<CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel="Battery data" onActivate={() => setMetricStyle("battery", { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont })} />} api={api} label={t("Font")} value={style?.fontFamily ?? design.fontFamily} emptyLabel={t("Keep template font")} preview={renderFontPreview("battery", style)} onChange={(fontFamily) => setMetricStyle("battery", { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle("battery", typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle("battery", { letterSpacing })} />
               <div className="watchface-position-inputs">
                 {(() => {
                   const cell = previewResolution ? watchfaceFixedMetricDigitSize(previewResolution, "battery") : null;
@@ -13245,7 +13246,6 @@ export function WatchfaceEditor({
                 <label>{t("Rotation")}<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle("battery", { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               </div>
               {renderGlyphEdgesField(style?.solidAlpha, (solidAlpha) => setMetricStyle("battery", { solidAlpha }))}
-              <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel="Battery data" onActivate={() => setMetricStyle("battery", { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont })} />
             </div>,
             { disabled: isPositionLocked(layer.id) }
           )}
@@ -13275,7 +13275,7 @@ export function WatchfaceEditor({
                 <p className="watchface-studio-summary">{t("Added by Studio using the minute digits. This template has no seconds of its own.")}</p>
                 <div className="wf-config-asset-actions"><button className="secondary-button wf-danger-action" type="button" onClick={removeAddedSeconds}><Trash2 size={15} />{" "}{t("Remove seconds")}</button></div>
               </> : null}
-              <LocalFontPicker api={api} label={t("Font")} value={style?.fontFamily ?? design.fontFamily} emptyLabel={t("Keep template font")} preview={renderFontPreview(layer.timePartId!, style)} onChange={(fontFamily) => setTimeStyle(layer.timePartId!, { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setTimeStyle(layer.timePartId!, typography)} onLetterSpacingChange={(letterSpacing) => setTimeStyle(layer.timePartId!, { letterSpacing })} />
+              <LocalFontPicker pngPanel={<CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel={layer.label} onActivate={() => setTimeStyle(layer.timePartId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont })} />} api={api} label={t("Font")} value={style?.fontFamily ?? design.fontFamily} emptyLabel={t("Keep template font")} preview={renderFontPreview(layer.timePartId!, style)} onChange={(fontFamily) => setTimeStyle(layer.timePartId!, { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setTimeStyle(layer.timePartId!, typography)} onLetterSpacingChange={(letterSpacing) => setTimeStyle(layer.timePartId!, { letterSpacing })} />
               <div className="watchface-position-inputs">
                 {(() => {
                   const cell = previewResolution ? watchfaceTimeDigitSize(previewResolution, layer.timePartId!) : null;
@@ -13284,7 +13284,6 @@ export function WatchfaceEditor({
                 <label>{t("Rotation")}<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setTimeStyle(layer.timePartId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               </div>
               {renderGlyphEdgesField(style?.solidAlpha, (solidAlpha) => setTimeStyle(layer.timePartId!, { solidAlpha }))}
-              <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel={layer.label} onActivate={() => setTimeStyle(layer.timePartId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont })} />
             </div>,
             { disabled: isPositionLocked(layer.id) }
           )}
@@ -13415,7 +13414,7 @@ export function WatchfaceEditor({
               {templateDigitsOnly ? (
                 <p className="watchface-studio-summary">{t("On the watch this reading always uses the template’s own digits, tinted with its color, so a font, weight or font size can’t change it.")}</p>
               ) : (
-                <LocalFontPicker api={api} label={t("Font")} value={style?.fontFamily ?? design.fontFamily} emptyLabel={t("Keep template font")} preview={renderFontPreview(layer.metricId!, style)} onChange={(fontFamily) => setMetricStyle(layer.metricId!, { fontFamily })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle(layer.metricId!, typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle(layer.metricId!, { letterSpacing })} />
+                <LocalFontPicker pngPanel={<CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel={layer.label} onActivate={() => setMetricStyle(layer.metricId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont })} />} api={api} label={t("Font")} value={style?.fontFamily ?? design.fontFamily} emptyLabel={t("Keep template font")} preview={renderFontPreview(layer.metricId!, style)} onChange={(fontFamily) => setMetricStyle(layer.metricId!, { fontFamily })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle(layer.metricId!, typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle(layer.metricId!, { letterSpacing })} />
               )}
               <div className="watchface-position-inputs">
                 {metricFontSizeField
@@ -13424,9 +13423,6 @@ export function WatchfaceEditor({
                 {supportsWatchfaceSpriteRotation(layer.metricId) ? <label>{t("Rotation")}<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle(layer.metricId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label> : null}
               </div>
               {templateDigitsOnly ? null : renderGlyphEdgesField(style?.solidAlpha, (solidAlpha) => setMetricStyle(layer.metricId!, { solidAlpha }))}
-              {templateDigitsOnly ? null : (
-                <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel={layer.label} onActivate={() => setMetricStyle(layer.metricId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont })} />
-              )}
             </div>,
             { disabled: isPositionLocked(layer.id) }
           )}
@@ -13691,7 +13687,31 @@ export function WatchfaceEditor({
               </> : null}
               {showAs}
               <WatchfaceNumberAlignControl value={style?.align} allowTemplateDefault onChange={(align) => setDateStyle(partId, { align })} />
-              <LocalFontPicker
+              <LocalFontPicker pngPanel={<CustomPngFontPanel
+                api={api}
+                {...rasterFolderImportProps}
+                rasterFont={design.rasterFont}
+                componentRasterFont={style?.rasterFont}
+                previewedFont={
+                  // The picker previews the set only when it covers this part's labels.
+                  (() => {
+                    const font = style?.rasterFont ?? design.rasterFont;
+                    const required = partId === "weekday" ? "MON" : usesMonthLabels ? "JAN" : undefined;
+                    return font && (!required || rasterFontSupportsText(font, required)) ? font : undefined;
+                  })()
+                }
+                componentLabel={layer.label}
+                onActivate={() => setDateStyle(partId, { fontFamily: "" })}
+                onRasterFontChange={setRasterFont}
+                onComponentRasterFontChange={(rasterFont) => {
+                  if (!rasterFont) {
+                    restoreMonthDigitBox();
+                    restoreDateTemplateFont(partId);
+                    return;
+                  }
+                  setDateStyle(partId, { rasterFont, ...(supportsNativeSize ? { nativeSize: true } : {}), ...(partId === "dateMonth" ? { monthFormat: WATCHFACE_MONTH_LABELS.every((label) => rasterFontSupportsText(rasterFont, label)) ? "labels" : rasterFontSupportsText(rasterFont, "0123456789") ? "digits" : undefined } : {}) });
+                }}
+              />}
                 api={api}
                 label={t("Font")}
                 value={style?.fontFamily ?? design.fontFamily}
@@ -13771,31 +13791,6 @@ export function WatchfaceEditor({
               </>}
               <label className="watchface-inspector-field"><span>{t("Rotation")}</span><EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setDateStyle(partId, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               {renderGlyphEdgesField(style?.solidAlpha, (solidAlpha) => setDateStyle(partId, { solidAlpha }))}
-              <CustomPngFontPanel
-                api={api}
-                {...rasterFolderImportProps}
-                rasterFont={design.rasterFont}
-                componentRasterFont={style?.rasterFont}
-                previewedFont={
-                  // The picker previews the set only when it covers this part's labels.
-                  (() => {
-                    const font = style?.rasterFont ?? design.rasterFont;
-                    const required = partId === "weekday" ? "MON" : usesMonthLabels ? "JAN" : undefined;
-                    return font && (!required || rasterFontSupportsText(font, required)) ? font : undefined;
-                  })()
-                }
-                componentLabel={layer.label}
-                onActivate={() => setDateStyle(partId, { fontFamily: "" })}
-                onRasterFontChange={setRasterFont}
-                onComponentRasterFontChange={(rasterFont) => {
-                  if (!rasterFont) {
-                    restoreMonthDigitBox();
-                    restoreDateTemplateFont(partId);
-                    return;
-                  }
-                  setDateStyle(partId, { rasterFont, ...(supportsNativeSize ? { nativeSize: true } : {}), ...(partId === "dateMonth" ? { monthFormat: WATCHFACE_MONTH_LABELS.every((label) => rasterFontSupportsText(rasterFont, label)) ? "labels" : rasterFontSupportsText(rasterFont, "0123456789") ? "digits" : undefined } : {}) });
-                }}
-              />
             </div>,
             { disabled: isPositionLocked(layer.id) }
           )}
@@ -14208,7 +14203,24 @@ export function WatchfaceEditor({
             : null
         )}
         {renderSelectableSlotSharedAssets(selectedComplication)}
-        <LocalFontPicker
+        <LocalFontPicker pngPanel={<CustomPngFontPanel
+          api={api}
+          {...rasterFolderImportProps}
+          rasterFont={design.rasterFont}
+          componentRasterFont={design.selectableMetricStyle?.rasterFont}
+          previewedFont={design.selectableMetricStyle?.rasterFont ?? design.rasterFont}
+          componentLabel="Data chosen on watch"
+          onActivate={() =>
+            setSelectableMetricStyle({ fontFamily: "" })
+          }
+          onRasterFontChange={setRasterFont}
+          onComponentRasterFontChange={(rasterFont) =>
+            setSelectableMetricStyle({
+              rasterFont,
+              nativeSize: Boolean(rasterFont)
+            })
+          }
+        />}
           api={api}
           label={t("Font")}
           value={design.selectableMetricStyle?.fontFamily ?? design.fontFamily}
@@ -14244,24 +14256,6 @@ export function WatchfaceEditor({
           }
           onLetterSpacingChange={(letterSpacing) =>
             setSelectableMetricStyle({ letterSpacing })
-          }
-        />
-        <CustomPngFontPanel
-          api={api}
-          {...rasterFolderImportProps}
-          rasterFont={design.rasterFont}
-          componentRasterFont={design.selectableMetricStyle?.rasterFont}
-          previewedFont={design.selectableMetricStyle?.rasterFont ?? design.rasterFont}
-          componentLabel="Data chosen on watch"
-          onActivate={() =>
-            setSelectableMetricStyle({ fontFamily: "" })
-          }
-          onRasterFontChange={setRasterFont}
-          onComponentRasterFontChange={(rasterFont) =>
-            setSelectableMetricStyle({
-              rasterFont,
-              nativeSize: Boolean(rasterFont)
-            })
           }
         />
         <label className="field">{t("Selectable value tint")}<span className="watchface-color-control">
@@ -14680,15 +14674,13 @@ export function WatchfaceEditor({
       "transform",
       "Transform",
       <div className="watchface-inspector-position">
-        <div
-          className="wf-position-heading"
-          title={t("{{title}}. Coordinates use the selected watch display.", { title: t(title) })}
-        >
+        <div className="wf-position-heading">
           <span>{t("Position")}</span>
-          <Info
-            size={13}
-            aria-label={t("Coordinates use the selected watch display")}
-          />
+          {/* The coordinates note and the panel's helper share one tip. */}
+          <WatchfaceHint label={t("About position")}>
+            <span className="wf-hint-line">{t("Coordinates use the selected watch display")}</span>
+            {helper}
+          </WatchfaceHint>
         </div>
         <fieldset
           className="wf-position-controls"
@@ -14697,12 +14689,6 @@ export function WatchfaceEditor({
         >
           {children}
         </fieldset>
-        {helper ? (
-          <div className="wf-position-help">
-            <Info size={15} aria-hidden="true" />
-            <div>{helper}</div>
-          </div>
-        ) : null}
       </div>,
       { disabled: isMovementLockedForId(id) }
     );

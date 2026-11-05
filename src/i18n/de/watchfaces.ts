@@ -2181,4 +2181,13 @@ export const watchfacesGerman: Record<string, string> = {
   "Follows the field": "Folgt dem Feld",
   "Click one to edit it": "Zum Bearbeiten anklicken",
   "Text for {{value1}}": "Text für {{value1}}",
+  "Change digits": "Ziffern ändern",
+  "Your own pictures for each digit": "Eigene Bilder für jede Ziffer",
+  "Reading preview: {{value1}}": "Vorschau des Werts: {{value1}}",
+  "More info": "Mehr Infos",
+  "About position": "Zur Position",
+  "Placed by the watch": "Von der Uhr platziert",
+  "Your image": "Dein Bild",
+  "Drawn in your font": "In deiner Schrift gezeichnet",
+  "Drawn from text": "Aus Text gezeichnet",
 };

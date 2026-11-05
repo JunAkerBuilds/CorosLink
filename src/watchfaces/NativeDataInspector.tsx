@@ -11,6 +11,7 @@ import { chartReadoutHidden } from "./chartReadouts";
 import { loadStudioImage, resizeAndTintSprite, type WatchfaceTypography } from "./watchfaceStudio";
 import { LocalFontPicker } from "./LocalFontPicker";
 import { WatchfaceNumberAlignControl } from "./WatchfaceNumberAlignControl";
+import { WatchfaceHint } from "./WatchfaceHint";
 import type { WatchfaceInspectorSectionId } from "./watchfaceInspectorSections";
 
 const PART_LABELS: Record<Part, string> = {
@@ -425,8 +426,30 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
     </>)
   ];
 
+  // The reading as the watch builds it, from this field's own pictures:
+  // icon, minus, the sample digits, unit. Each piece opens its part below.
+  const previewValue = nativeDataPreviewValue(id, style);
+  const readingPieces: Array<{ part: Part; role: Role; index: number; key: string }> = [];
+  const shows = (part: Part) => available.includes(part) && nativePart(id, style, part).enabled;
+  if (definition.kind !== "chart" && definition.kind !== "state") {
+    if (shows("icon")) readingPieces.push({ part: "icon", role: "icon", index: 0, key: "icon" });
+    const chars = [...previewValue];
+    chars.forEach((char, position) => {
+      if ((char === "-" || char === "−") && shows("symbols")) readingPieces.push({ part: "symbols", role: "symbols", index: 0, key: `minus${position}` });
+      else if (/\d/.test(char) && shows("value")) readingPieces.push({ part: "value", role: "digits", index: Number(char), key: `digit${position}` });
+    });
+    if (shows("unit")) readingPieces.push({ part: "unit", role: "unit", index: 0, key: "unit" });
+  }
+  const openPart = (part: Part) => { setSelectedPart(part); setSelectedIndex(0); setPartOpen(true); };
+
   return <>
     {renderSection("appearance", "Look · all parts", <div className="wf-property-stack">
+      {readingPieces.length ? <div className="wf-native-reading" role="group" aria-label={t("Reading preview: {{value1}}", { value1: previewValue })}>
+        {readingPieces.map((piece) => <button key={piece.key} type="button" className={`wf-native-reading-piece${piece.part === partKey && partOpen ? " is-active" : ""}`}
+          title={t(PART_LABELS[piece.part])} aria-label={t("Open {{value1}}", { value1: t(PART_LABELS[piece.part]) })} onClick={() => openPart(piece.part)}>
+          <SpritePreview id={id} style={style} role={piece.role} index={piece.index} className="wf-native-reading-art" />
+        </button>)}
+      </div> : null}
       {notes}
       {colorControl("Color",style.color,color=>onPatch({color}))}
       <LocalFontPicker api={api} label={t("Font")} value={style.fontFamily ?? ""} emptyLabel={nativeHasGlyphArt(style) ? t("Keep template font") : t("Default")} disabled={locked} onChange={fontFamily=>onPatch(withNativeFont(style,fontFamily))}
@@ -473,7 +496,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
             </button>
           </div>
           {open ? <div className="wf-native-part-body">
-            {!nativePartHasPosition(partKey) && <p className="wf-native-part-note">{t("The watch places this beside the number; only its size and artwork change.")}</p>}
+            {!nativePartHasPosition(partKey) && <div className="wf-native-part-hint"><span>{t("Placed by the watch")}</span><WatchfaceHint>{t("The watch places this beside the number; only its size and artwork change.")}</WatchfaceHint></div>}
             <div className="watchface-position-inputs">
               {nativePartHasPosition(partKey) && <>
                 <ComponentOffsetInput key={`${id}:${partKey}:x`} label={t("Offset X")} value={component.x} coordinateScale={coordinateScale} onChange={x=>patchPart({x})} />
@@ -522,10 +545,9 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
 
             {role && <div className="wf-native-artwork">
               <div className="wf-native-artwork-head">
-                <span>{t("Pictures")}</span>
+                <span className="wf-native-part-hint">{t("Pictures")}{role === "unit" && id === "weather_temp" ? <WatchfaceHint>{t("The watch shows 00 in Celsius and 01 in Fahrenheit. Leave 01 untouched to show 00 in both, which suits a plain °.")}</WatchfaceHint> : null}</span>
                 {indices.length > 1 ? <small>{t("Click one to edit it")}</small> : null}
               </div>
-              {role === "unit" && id === "weather_temp" && <p className="wf-native-part-note">{t("The watch shows 00 in Celsius and 01 in Fahrenheit. Leave 01 untouched to show 00 in both, which suits a plain °.")}</p>}
               <div className={`wf-native-frames${indices.length > 5 ? " is-many" : ""}`} role="listbox" aria-label={t("Artwork state")}>
                 {indices.map(i => <button key={i} type="button" role="option" aria-selected={i === index} className={`wf-native-frame${i === index ? " is-selected" : ""}${style.assets?.[role]?.[String(i)] ? " is-custom" : ""}`}
                   title={`${String(i).padStart(2,"0")} · ${artworkStateLabel(i)}`} onClick={() => setSelectedIndex(i)}>
@@ -536,10 +558,13 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
               <div className="wf-native-artwork-row">
                 <div className="wf-native-artwork-copy">
                   <label className="field">{indices.length > 1 ? t("Text for {{value1}}", { value1: artworkStateLabel(index) }) : t("Text")}<input aria-label={t("Artwork text")} maxLength={32} value={nativeAssetText(id,style,role,index) ?? ""} placeholder={t("Generated artwork")} onChange={event=>onPatch({assetTexts:{...style.assetTexts,[role]:{...style.assetTexts?.[role],[index]:event.target.value}}})} /></label>
-                  <span className="wf-native-part-note">{replacement
-                    ? nativeFontRole(role) ? t("Image in use. Pick a font or remove the image to draw the text instead.") : t("Custom image in use. Remove it to draw the text again.")
-                    : setAside ? t("Drawn in the chosen font. Pick Keep template font to bring back the original image.")
-                    : t("Drawn from the text in the component color and font, or replaced by an image.")}</span>
+                  <span className="wf-native-part-hint wf-native-picture-state">
+                    <span>{replacement ? t("Your image") : setAside ? t("Drawn in your font") : t("Drawn from text")}</span>
+                    <WatchfaceHint>{replacement
+                      ? nativeFontRole(role) ? t("Image in use. Pick a font or remove the image to draw the text instead.") : t("Custom image in use. Remove it to draw the text again.")
+                      : setAside ? t("Drawn in the chosen font. Pick Keep template font to bring back the original image.")
+                      : t("Drawn from the text in the component color and font, or replaced by an image.")}</WatchfaceHint>
+                  </span>
                 </div>
               </div>
               <div className="wf-native-artwork-actions">

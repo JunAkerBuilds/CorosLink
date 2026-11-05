@@ -1,6 +1,6 @@
 import { t, useLanguage } from "../i18n/watchfaces";
 import { useWatchfaceStudioSimple } from "./watchfaceStudioMode";
-import { ArrowUpRight, Check, ChevronDown, Globe, Info, Loader2, Monitor, Search, TriangleAlert, Type, X } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, Globe, Images, Info, Loader2, Monitor, Search, TriangleAlert, Type, X } from "lucide-react";
 import { type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CorosWatchfaceRasterFont } from "../../electron/types";
@@ -54,6 +54,12 @@ interface LocalFontPickerProps {
   inheritedFamily?: string;
   /** False hides Sprite spacing, for single-glyph sprites. */
   showSpacing?: boolean;
+  /**
+   * The PNG set controls for this layer (Official, folder, sheet, files and
+   * which layers use them). Shown as the sheet's PNG set source, so every way
+   * to change the digits lives in one place.
+   */
+  pngPanel?: ReactNode;
 }
 
 interface FontPickerPopoverPosition {
@@ -88,7 +94,8 @@ export function LocalFontPicker({
   disabled = false,
   preview,
   inheritedFamily,
-  showSpacing = true
+  showSpacing = true,
+  pngPanel
 }: LocalFontPickerProps) {
   useLanguage();
   const simple = useWatchfaceStudioSimple();
@@ -98,7 +105,7 @@ export function LocalFontPicker({
   const [candidate, setCandidate] = useState(value);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [source, setSource] = useState<"google" | "local">("google");
+  const [source, setSource] = useState<"google" | "local" | "png">("google");
   const [googleCategory, setGoogleCategory] = useState<WatchfaceGoogleFontCategory | "All">("All");
   const [applying, setApplying] = useState(false);
   const [, setPreviewsReady] = useState(0);
@@ -142,6 +149,8 @@ export function LocalFontPicker({
         rasterFontSupportsText(rasterFont, rasterFontRequiredText))
   );
   const drawnFamily = value || inheritedFamily;
+  // Simple mode keeps PNG digit sets out of the way, as before.
+  const hasPngSource = Boolean(pngPanel) && !simple;
   const fontShapeControlsDisabled =
     disabled || (!drawnFamily && !rasterFontIsActive) || rasterFontIsActive;
   const fontIsMissing = !rasterFontIsActive && !isWatchfaceFontInstalled(value);
@@ -180,7 +189,7 @@ export function LocalFontPicker({
     setPopoverPosition(null);
     setError(null);
     // Open on the source the current font comes from.
-    const nextSource = value && !isWatchfaceGoogleFont(value) ? "local" : "google";
+    const nextSource = hasPngSource && rasterFontIsActive ? "png" : value && !isWatchfaceGoogleFont(value) ? "local" : "google";
     setSource(nextSource);
     setOpen(true);
     if (nextSource === "local") await loadLocalFamilies();
@@ -244,6 +253,9 @@ export function LocalFontPicker({
 
     function closeOnOutsidePress(event: PointerEvent) {
       const target = event.target;
+      // The PNG set source opens its own dialogs (the official browser); using
+      // them must not close the sheet that owns them.
+      if (target instanceof Element && target.closest(".wf-modal")) return;
       if (
         !(target instanceof Node) ||
         (!pickerRef.current?.contains(target) && !panelRef.current?.contains(target))
@@ -404,8 +416,8 @@ export function LocalFontPicker({
                 <Type size={16} />
               </div>
               <div>
-                <strong>{t("Choose font")}</strong>
-                <span>{source === "google" ? t("Free from Google Fonts · drawn into the face on export") : t("Installed on this computer")}</span>
+                <strong>{hasPngSource ? t("Change digits") : t("Choose font")}</strong>
+                <span>{source === "google" ? t("Free from Google Fonts · drawn into the face on export") : source === "png" ? t("Your own pictures for each digit") : t("Installed on this computer")}</span>
               </div>
               <button
                 className="watchface-font-picker-close"
@@ -428,7 +440,11 @@ export function LocalFontPicker({
                 <button type="button" role="tab" aria-selected={source === "local"} onClick={() => { setSource("local"); setError(null); void loadLocalFamilies(); }}>
                   <Monitor size={14} aria-hidden="true" />{t("This computer")}
                 </button>
+                {hasPngSource ? <button type="button" role="tab" aria-selected={source === "png"} onClick={() => { setSource("png"); setError(null); }}>
+                  <Images size={14} aria-hidden="true" />{t("PNG set")}
+                </button> : null}
               </div>
+              {source === "png" ? <div className="wf-font-png-source watchface-shell">{pngPanel}</div> : <>
               <div className="watchface-font-picker-search-overlay">
                 <div className="watchface-font-picker-search">
                   <Search size={15} aria-hidden="true" />
@@ -525,7 +541,8 @@ export function LocalFontPicker({
                 ) : null}
               </div>
 
-              <div className="watchface-font-picker-actions" role="group" aria-label={t("Font actions")}>
+              </>}
+              <div className="watchface-font-picker-actions" role="group" aria-label={t("Font actions")} hidden={source === "png"}>
                 <button className="secondary-button" type="button" onClick={restoreTemplate}>
                   {t(emptyLabel)}
                 </button>

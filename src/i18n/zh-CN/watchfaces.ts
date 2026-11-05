@@ -2182,4 +2182,13 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Follows the field": "跟随字段",
   "Click one to edit it": "点击一张进行编辑",
   "Text for {{value1}}": "{{value1}} 的文字",
+  "Change digits": "更换数字",
+  "Your own pictures for each digit": "为每个数字使用你自己的图片",
+  "Reading preview: {{value1}}": "读数预览：{{value1}}",
+  "More info": "更多信息",
+  "About position": "关于位置",
+  "Placed by the watch": "由手表放置",
+  "Your image": "你的图片",
+  "Drawn in your font": "使用你的字体绘制",
+  "Drawn from text": "由文字绘制",
 };
