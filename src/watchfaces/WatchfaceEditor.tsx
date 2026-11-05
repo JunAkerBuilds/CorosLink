@@ -4,6 +4,7 @@ import { batteryStateMeaning, batteryReplacementStateCount, COROS_BATTERY_STATE_
 import { announceStudioEditor } from "./studioEditorPresence";
 import { watchfaceLayerSampleValue } from "./watchfaceLayerValues";
 import { collectWatchfaceFaceColors, recolorWatchfaceFace } from "./watchfaceFaceColors";
+import { loadWatchfaceGoogleFontsFor } from "./watchfaceGoogleFonts";
 import { WatchfaceAddMenu, type WatchfaceAddCategory, type WatchfaceAddFaceOption } from "./WatchfaceAddMenu";
 import { recoverChartGroup, recoverChartPageCompanions, recoverGraphlessChart, recoveredChartReadouts, recoveredChartSources, recoverWatchfaceDesign, type ChartPageCompanions } from "./recoveredWatchfaceDesign";
 import { WATCHFACE_TARGETS } from "../../electron/watchfaceTargets";
@@ -684,7 +685,9 @@ import { WatchfacePointerController } from "./watchfacePointerController";
 import {
   WATCHFACE_FONT_DOWNLOAD_URL,
   attachWatchfaceFontSnapshots,
+  collectWatchfaceFontUses,
   findMissingWatchfaceFonts,
+  isWatchfaceFontInstalled,
   forgetWatchfaceFontAvailability,
   rememberWatchfaceFontSnapshots,
   type WatchfaceMissingFont
@@ -1843,7 +1846,11 @@ export function WatchfaceEditor({
       api.loadCorosWatchfaceTemplateConfigTexts(starterArchive.archiveId),
       // Decode saved font snapshots before the first preview renders, so a
       // face whose fonts are not installed never flashes fallback glyphs.
-      rememberWatchfaceFontSnapshots(initialDesign?.fontSnapshots)
+      rememberWatchfaceFontSnapshots(initialDesign?.fontSnapshots),
+      // Google Fonts the face uses load into the app before it first draws.
+      initialDesign
+        ? loadWatchfaceGoogleFontsFor(collectWatchfaceFontUses(initialDesign).map((use) => use.family), isWatchfaceFontInstalled)
+        : Promise.resolve()
     ])
       .then(async ([described, configTexts]) => {
         let templateArtwork: CorosWatchfaceTemplateAsset | undefined;

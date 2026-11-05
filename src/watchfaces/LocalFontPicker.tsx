@@ -1,6 +1,6 @@
 import { t, useLanguage } from "../i18n/watchfaces";
 import { useWatchfaceStudioSimple } from "./watchfaceStudioMode";
-import { ArrowUpRight, Check, ChevronDown, Info, Loader2, Search, TriangleAlert, Type, X } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, Globe, Info, Loader2, Monitor, Search, TriangleAlert, Type, X } from "lucide-react";
 import { type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CorosWatchfaceRasterFont } from "../../electron/types";
@@ -10,6 +10,17 @@ import {
   hasWatchfaceFontSnapshot,
   isWatchfaceFontInstalled
 } from "./watchfaceFontSnapshots";
+import {
+  WATCHFACE_GOOGLE_FONTS,
+  WATCHFACE_GOOGLE_FONT_CATEGORIES,
+  WATCHFACE_GOOGLE_FONT_SAMPLE,
+  isWatchfaceGoogleFont,
+  loadWatchfaceGoogleFont,
+  loadWatchfaceGoogleFontPreview,
+  rememberedWatchfaceGoogleFonts,
+  watchfaceGoogleFontPreviewFamily,
+  type WatchfaceGoogleFontCategory
+} from "./watchfaceGoogleFonts";
 import {
   rasterFontSupportsText,
   type WatchfaceTypography
@@ -87,6 +98,10 @@ export function LocalFontPicker({
   const [candidate, setCandidate] = useState(value);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [source, setSource] = useState<"google" | "local">("google");
+  const [googleCategory, setGoogleCategory] = useState<WatchfaceGoogleFontCategory | "All">("All");
+  const [applying, setApplying] = useState(false);
+  const [, setPreviewsReady] = useState(0);
   const [popoverPosition, setPopoverPosition] =
     useState<FontPickerPopoverPosition | null>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -103,7 +118,19 @@ export function LocalFontPicker({
       family.toLocaleLowerCase().includes(normalizedQuery)
     );
   }, [families, query]);
-  const exactMatch = matchingFamilies.some(
+  const googleFamilies = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    const catalog = WATCHFACE_GOOGLE_FONTS.filter((font) => googleCategory === "All" || font.category === googleCategory)
+      .map((font) => font.family);
+    // Fonts loaded by name earlier come first, so they are easy to reuse.
+    const recent = googleCategory === "All"
+      ? rememberedWatchfaceGoogleFonts().filter((family) => !catalog.some((item) => item.toLocaleLowerCase() === family.toLocaleLowerCase()))
+      : [];
+    return [...recent, ...catalog].filter((family) => !normalizedQuery || family.toLocaleLowerCase().includes(normalizedQuery));
+    // `open` refreshes the remembered list each time the picker opens.
+  }, [googleCategory, query, open]);
+  const shownFamilies = source === "google" ? googleFamilies : matchingFamilies;
+  const exactMatch = shownFamilies.some(
     (family) => family.localeCompare(query.trim(), undefined, { sensitivity: "accent" }) === 0
   );
   const fontWeight = typography?.fontWeight ?? 400;
@@ -151,7 +178,15 @@ export function LocalFontPicker({
     }
     setCandidate(value);
     setPopoverPosition(null);
+    setError(null);
+    // Open on the source the current font comes from.
+    const nextSource = value && !isWatchfaceGoogleFont(value) ? "local" : "google";
+    setSource(nextSource);
     setOpen(true);
+    if (nextSource === "local") await loadLocalFamilies();
+  }
+
+  async function loadLocalFamilies() {
     if (families !== null || loading) {
       return;
     }
@@ -177,9 +212,19 @@ export function LocalFontPicker({
     setQuery("");
   }
 
-  function applyCandidate() {
-    if (!candidate.trim()) {
+  async function applyCandidate() {
+    if (!candidate.trim() || applying) {
       return;
+    }
+    if (source === "google" || isWatchfaceGoogleFont(candidate)) {
+      setApplying(true);
+      setError(null);
+      const ok = await loadWatchfaceGoogleFont(candidate.trim());
+      setApplying(false);
+      if (!ok && source === "google") {
+        setError(t("Couldn’t load “{{family}}” from Google Fonts. Check the name and your connection.", { family: candidate.trim() }));
+        return;
+      }
     }
     onChange(candidate.trim());
     onRasterFontChange?.(undefined);
@@ -221,6 +266,17 @@ export function LocalFontPicker({
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [open]);
+
+  // Google rows preview with a tiny download of just their sample glyphs.
+  useEffect(() => {
+    if (!open || source !== "google") return;
+    let cancelled = false;
+    void Promise.all(googleFamilies.slice(0, FONT_PICKER_RESULT_LIMIT).map(async (family) => {
+      await loadWatchfaceGoogleFontPreview(family);
+      if (!cancelled) setPreviewsReady((count) => count + 1);
+    }));
+    return () => { cancelled = true; };
+  }, [googleFamilies, open, source]);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -294,7 +350,7 @@ export function LocalFontPicker({
       window.removeEventListener("resize", positionPopover);
       document.removeEventListener("scroll", positionPopover, true);
     };
-  }, [families, loading, open, query]);
+  }, [families, loading, open, query, source, googleCategory]);
 
   return (
     <div ref={pickerRef} className="field watchface-font-picker">
@@ -349,7 +405,7 @@ export function LocalFontPicker({
               </div>
               <div>
                 <strong>{t("Choose font")}</strong>
-                <span>{t("Installed on this computer")}</span>
+                <span>{source === "google" ? t("Free from Google Fonts · drawn into the face on export") : t("Installed on this computer")}</span>
               </div>
               <button
                 className="watchface-font-picker-close"
@@ -365,6 +421,14 @@ export function LocalFontPicker({
             </div>
 
             <div className="watchface-font-picker-browser">
+              <div className="wf-font-source" role="tablist" aria-label={t("Font source")}>
+                <button type="button" role="tab" aria-selected={source === "google"} onClick={() => { setSource("google"); setError(null); }}>
+                  <Globe size={14} aria-hidden="true" />{t("Google Fonts")}
+                </button>
+                <button type="button" role="tab" aria-selected={source === "local"} onClick={() => { setSource("local"); setError(null); void loadLocalFamilies(); }}>
+                  <Monitor size={14} aria-hidden="true" />{t("This computer")}
+                </button>
+              </div>
               <div className="watchface-font-picker-search-overlay">
                 <div className="watchface-font-picker-search">
                   <Search size={15} aria-hidden="true" />
@@ -373,7 +437,7 @@ export function LocalFontPicker({
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder={t("Search fonts")}
-                    aria-label={t("Search installed fonts")}
+                    aria-label={source === "google" ? t("Search Google Fonts") : t("Search installed fonts")}
                   />
                   {query ? (
                     <button
@@ -385,19 +449,29 @@ export function LocalFontPicker({
                     </button>
                   ) : null}
                 </div>
-                <div className="watchface-font-picker-meta">
-                  <span>{query.trim() ? t("Search results") : t("Local fonts")}</span>
-                  {!loading && families !== null ? (
-                    <span>
-                      {Math.min(matchingFamilies.length, FONT_PICKER_RESULT_LIMIT)}{" "}{t("of")}{" "}
-                      {matchingFamilies.length}
-                    </span>
-                  ) : null}
-                </div>
+                {source === "google" ? (
+                  <div className="wf-font-categories" role="group" aria-label={t("Font styles")}>
+                    {(["All", ...WATCHFACE_GOOGLE_FONT_CATEGORIES] as const).map((category) => (
+                      <button key={category} type="button" aria-pressed={googleCategory === category} onClick={() => setGoogleCategory(category)}>
+                        {t(category)}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="watchface-font-picker-meta">
+                    <span>{query.trim() ? t("Search results") : t("Local fonts")}</span>
+                    {!loading && families !== null ? (
+                      <span>
+                        {Math.min(matchingFamilies.length, FONT_PICKER_RESULT_LIMIT)}{" "}{t("of")}{" "}
+                        {matchingFamilies.length}
+                      </span>
+                    ) : null}
+                  </div>
+                )}
               </div>
 
               <div className="watchface-font-picker-browser-scroll">
-                {loading ? (
+                {loading && source === "local" ? (
                   <p className="watchface-font-picker-status">
                     <Loader2 className="spin" size={14} />{" "}{t("Loading your local font library…")}</p>
                 ) : null}
@@ -410,15 +484,18 @@ export function LocalFontPicker({
                   >
                     <Type size={15} aria-hidden="true" />
                     <span>
-                      <strong>{t("Use “")}{query.trim()}”</strong>
-                      <small>{t("Enter a family name that is not in the local list")}</small>
+                      <strong>{source === "google" ? t("Load “{{family}}” from Google Fonts", { family: query.trim() }) : <>{t("Use “")}{query.trim()}”</>}</strong>
+                      <small>{source === "google" ? t("Any family on fonts.google.com, spelled as it is there") : t("Enter a family name that is not in the local list")}</small>
                     </span>
                     {candidate === query.trim() ? <Check size={15} aria-hidden="true" /> : null}
                   </button>
                 ) : null}
 
-                <div className="watchface-font-picker-results" role="listbox" aria-label={t("Installed font families")}>
-                  {matchingFamilies.slice(0, FONT_PICKER_RESULT_LIMIT).map((family) => (
+                <div className={`watchface-font-picker-results${source === "google" ? " wf-font-results-google" : ""}`} role="listbox" aria-label={source === "google" ? t("Google Fonts families") : t("Installed font families")}>
+                  {shownFamilies.slice(0, FONT_PICKER_RESULT_LIMIT).map((family) => {
+                    const previewFamily = source === "google" ? `"${watchfaceGoogleFontPreviewFamily(family)}", "${family}", sans-serif` : family;
+                    const category = WATCHFACE_GOOGLE_FONTS.find((font) => font.family === family)?.category;
+                    return (
                     <button
                       key={family}
                       className={candidate === family ? "is-selected" : ""}
@@ -428,13 +505,14 @@ export function LocalFontPicker({
                       onClick={() => setCandidate(family)}
                     >
                       <span className="watchface-font-picker-result-copy">
-                        <strong style={{ fontFamily: family, ...pickerPreviewStyle }}>{family}</strong>
-                        <span style={{ fontFamily: family, ...pickerPreviewStyle }}>{t("Ag 0123456789")}</span>
+                        <span className="wf-font-result-name">{family}{source === "google" ? <small>{category ? t(category) : t("Loaded by name")}</small> : null}</span>
+                        <span className="wf-font-result-sample" style={{ fontFamily: previewFamily, ...pickerPreviewStyle }}>{source === "google" ? WATCHFACE_GOOGLE_FONT_SAMPLE : t("Ag 0123456789")}</span>
                       </span>
                       <Check className="watchface-font-picker-result-check" size={15} aria-hidden="true" />
                     </button>
-                  ))}
-                  {!loading && matchingFamilies.length === 0 ? (
+                    );
+                  })}
+                  {!(loading && source === "local") && shownFamilies.length === 0 ? (
                     <div className="watchface-font-picker-empty">
                       <Type size={18} aria-hidden="true" />
                       <strong>{t("No matching fonts")}</strong>
@@ -442,7 +520,7 @@ export function LocalFontPicker({
                     </div>
                   ) : null}
                 </div>
-                {matchingFamilies.length > FONT_PICKER_RESULT_LIMIT ? (
+                {shownFamilies.length > FONT_PICKER_RESULT_LIMIT ? (
                   <p className="watchface-font-picker-status">{t("Keep typing to narrow the list.")}</p>
                 ) : null}
               </div>
@@ -451,7 +529,7 @@ export function LocalFontPicker({
                 <button className="secondary-button" type="button" onClick={restoreTemplate}>
                   {t(emptyLabel)}
                 </button>
-                <button className="primary-button" type="button" disabled={!candidate.trim()} onClick={applyCandidate}>{t("Rasterize preview")}</button>
+                <button className="primary-button" type="button" disabled={!candidate.trim() || applying} onClick={() => void applyCandidate()}>{applying ? <><Loader2 className="spin" size={14} aria-hidden="true" />{t("Loading font…")}</> : t("Use this font")}</button>
               </div>
             </div>
           </div>,
