@@ -1,7 +1,7 @@
 import { t, useLanguage, getLocale, midSentence } from "../i18n/watchfaces";
 import { WatchfaceColorInput } from "./WatchfaceColorInput";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { FolderInput, ImagePlus, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronDown, Eye, EyeOff, FolderInput, ImagePlus, Plus, RotateCcw, Trash2 } from "lucide-react";
 import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceNativePartStyle } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { NATIVE_DATA_BY_ID, nativeDataAsset, nativeDataPreviewValue } from "./nativeData";
@@ -235,7 +235,7 @@ function ComponentOffsetInput({ label, value, coordinateScale, onChange }: {
   /></label>;
 }
 
-function SpritePreview({ id, style, role, index }: { id: string; style: Style; role: Role; index: number }) {
+function SpritePreview({ id, style, role, index, className = "wf-native-artwork-stage" }: { id: string; style: Style; role: Role; index: number; className?: string }) {
   useLanguage();
   const [url, setUrl] = useState("");
   useEffect(() => {
@@ -243,8 +243,11 @@ function SpritePreview({ id, style, role, index }: { id: string; style: Style; r
     void nativeDataAsset(id, style, role, index).then(image => { if (active) setUrl(image); }).catch(() => { if (active) setUrl(""); });
     return () => { active = false; };
   }, [id, style, role, index]);
-  return <span className="wf-native-artwork-stage">{url ? <img src={url} alt={t("Selected component artwork")} /> : null}</span>;
+  return <span className={className}>{url ? <img src={url} alt="" /> : null}</span>;
 }
+
+/** Look settings a part can set for itself instead of following the field. */
+const OWN_LOOK_KEYS = ["color", "fontFamily", "fontWeight", "fontStyle", "letterSpacing"] as const;
 
 type RenderSection = (
   sectionId: WatchfaceInspectorSectionId,
@@ -289,7 +292,11 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   useLanguage();
   const definition = NATIVE_DATA_BY_ID.get(id)!;
   const [busy, setBusy] = useState(false);
-  const [selectedPart, setSelectedPart] = useState<Part>("icon");
+  const [selectedPart, setSelectedPart] = useState<Part>("value");
+  // Parts open in place; null folds every part.
+  const [partOpen, setPartOpen] = useState(true);
+  // Own look switched on for a part that has no look of its own yet.
+  const [ownLookParts, setOwnLookParts] = useState<Part[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const importToken = useRef(0), latestStyle = useRef(style);
   latestStyle.current = style;
@@ -419,7 +426,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   ];
 
   return <>
-    {renderSection("appearance", "Appearance", <div className="wf-property-stack">
+    {renderSection("appearance", "Look · all parts", <div className="wf-property-stack">
       {notes}
       {colorControl("Color",style.color,color=>onPatch({color}))}
       <LocalFontPicker api={api} label={t("Font")} value={style.fontFamily ?? ""} emptyLabel={nativeHasGlyphArt(style) ? t("Keep template font") : t("Default")} disabled={locked} onChange={fontFamily=>onPatch(withNativeFont(style,fontFamily))}
@@ -434,83 +441,119 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
         onRestore={source=>onPatch({removedReadouts:(style.removedReadouts ?? []).filter(item=>item!==source)})} pageFields={pageFields} onSelectField={onSelectField} removedPages={removedPages} />}
       {onAddMinMaxPartner ? <MinMaxPartnerPanel id={id} onAdd={onAddMinMaxPartner} /> : null}
       {definition.kind !== "chart" && fieldPages ? <FieldPagesPanel id={id} pages={fieldPages.pages} onAddDailyPage={onAddDailyPage} /> : null}
-      <p className="watchface-studio-summary">{t("Every component uses this color and font unless it sets its own below.")}</p>
     </div>, { disabled: locked })}
 
-    {renderSection("specific", "Components", <div className="wf-property-stack wf-native-components">
-      <div className="wf-native-parts" role="tablist" aria-label={t("Component")}>
-        {available.map(part => {
-          const enabled = nativePart(id, style, part).enabled;
-          return <button key={part} type="button" role="tab" aria-selected={part === partKey} className={`wf-native-part${part === partKey ? " is-active" : ""}${enabled ? "" : " is-off"}`} title={enabled ? t(PART_LABELS[part]) : t("{{value1}} · hidden", { value1: t(PART_LABELS[part]) })} onClick={()=>{setSelectedPart(part);setSelectedIndex(0);}}>{t(PART_LABELS[part])}</button>;
-        })}
-      </div>
-      <section className="wf-native-part-card" aria-label={t("{{partLabel}} settings", { partLabel: t(partLabel) })}>
-        <div className="wf-native-part-head">
-          <strong>{t(partLabel)}</strong>
-          {customized ? <span className="wf-native-part-badge">{t("Custom")}</span> : null}
-          <label className="watchface-studio-toggle">
-            <input aria-label={t("Show {{partLabel}}", { partLabel: t(partLabel) })} type="checkbox" checked={component.enabled} onChange={event=>patchPart({enabled:event.target.checked})} />
-            <span>{t("Show")}</span>
-          </label>
-        </div>
-        {!nativePartHasPosition(partKey) && <p className="watchface-studio-summary">{t("The watch places this beside the number; only its size and artwork change.")}</p>}
-        <div className="watchface-position-inputs">
-          {nativePartHasPosition(partKey) && <>
-            <ComponentOffsetInput key={`${id}:${partKey}:x`} label={t("Offset X")} value={component.x} coordinateScale={coordinateScale} onChange={x=>patchPart({x})} />
-            <ComponentOffsetInput key={`${id}:${partKey}:y`} label={t("Offset Y")} value={component.y} coordinateScale={coordinateScale} onChange={y=>patchPart({y})} />
-          </>}
-          {numberControl("Width",component.width,width=>patchPart({width}),4,800,true)}
-          {numberControl("Height",component.height,height=>patchPart({height}),4,800,true)}
-          {partKey === "value" && numberControl(t("Digit width"),component.digitWidth,digitWidth=>patchPart({digitWidth}),1,800,true)}
-        </div>
-        {partKey === "value" && <WatchfaceNumberAlignControl value={component.align} disabled={locked} onChange={align=>patchPart({align:align ?? "left"})} />}
-        {colorControl("Color",component.color,color=>patchPart({color}))}
-        {role && <>
-          <LocalFontPicker api={api} label={t("Font")} value={style.parts?.[partKey]?.fontFamily ?? ""} emptyLabel={t("Layer font")} disabled={locked} onChange={fontFamily=>onPatch(withNativeFont(style,fontFamily,partKey))}
-            inheritedFamily={nativeRoleDrawsText(style, role) ? component.fontFamily : undefined}
-            typography={{ fontWeight: component.fontWeight, fontStyle: component.fontStyle, letterSpacing: component.letterSpacing }}
-            onTypographyChange={typography=>patchPart(shapePatch(typography))} onLetterSpacingChange={letterSpacing=>patchPart({letterSpacing})}
-            showSpacing={role === "icon" || role === "unit" || role === "states"} />
-          {fontSizeField(nativeComponentFontSize(id, style, partKey), fontSize=>patchPart(nativePartForFontSize(id, style, partKey, fontSize)))}
-        </>}
-
-        {partKey === "plot" && <>
-          <p className="watchface-studio-summary">
-            {graph === "curve"
-              ? t("The {{page}} page draws a line.", { page: chartSourceLabel(style.chartSource ?? "chart_stress") })
-              : graph === "bars"
-                ? t("The {{page}} page draws bars.", { page: chartSourceLabel(style.chartSource ?? "chart_stress") })
-                : t("The {{page}} page draws no graph.", { page: chartSourceLabel(style.chartSource ?? "chart_stress") })}{" "}
-            {t("Back on the watch switches chart pages, and each page uses one of these styles. Barometer and tide pages need data from the phone and stay empty until it syncs. A width of 0 hides that style's graph.")}
-          </p>
-          {graph === "curve" ? [graphStyles[1], graphStyles[0]] : graphStyles}
-        </>}
-
-        {role && <div className="wf-native-artwork">
-          <div className="wf-native-artwork-head">
-            <span>{t("Artwork")}</span>
-            {indices.length > 1 && <select aria-label={t("Artwork state")} value={index} onChange={event=>setSelectedIndex(Number(event.target.value))}>{indices.map(i=><option key={i} value={i}>{String(i).padStart(2,"0")} · {artworkStateLabel(i)}</option>)}</select>}
+    {renderSection("specific", "Parts", <div className="wf-property-stack wf-native-components">
+      <div className="wf-native-part-list">
+      {available.map(part => {
+        const partComponent = nativePart(id, style, part);
+        const partRole: Role | null = part === "plot" ? null : part === "value" ? "digits" : part;
+        const partIndices = partRole ? nativeRoleIndices(id, style, partRole) : [];
+        const replaced = partRole ? Object.keys(style.assets?.[partRole] ?? {}).length : 0;
+        const open = partOpen && part === partKey;
+        const status = !partComponent.enabled ? t("Hidden")
+          : partRole ? (partIndices.length === 1 ? t("1 picture") : t("{{value1}} pictures", { value1: partIndices.length })) + (replaced ? " · " + t("{{value1}} replaced", { value1: replaced }) : "")
+          : t("Graph");
+        const ownLook = OWN_LOOK_KEYS.some(key => style.parts?.[part]?.[key] !== undefined) || ownLookParts.includes(part);
+        return <section key={part} className={`wf-native-part-item${open ? " is-open" : ""}${partComponent.enabled ? "" : " is-off"}`} aria-label={t("{{partLabel}} settings", { partLabel: t(PART_LABELS[part]) })}>
+          <div className="wf-native-part-row">
+            <button type="button" className="wf-native-part-toggle" aria-expanded={open} onClick={() => { if (part === partKey) setPartOpen(!open); else { setSelectedPart(part); setSelectedIndex(0); setPartOpen(true); } }}>
+              {partRole ? <SpritePreview id={id} style={style} role={partRole} index={partIndices[0] ?? 0} className="wf-native-part-thumb" /> : <span className="wf-native-part-thumb is-graph" aria-hidden="true" />}
+              <span className="wf-native-part-copy">
+                <span className="wf-native-part-name">{t(PART_LABELS[part])}{(Boolean(style.parts?.[part]) || replaced > 0) ? <span className="wf-native-part-badge">{t("Custom")}</span> : null}</span>
+                <small>{status}</small>
+              </span>
+              <ChevronDown className="wf-native-part-chevron" size={15} aria-hidden="true" />
+            </button>
+            <button type="button" className="wf-native-part-eye" disabled={locked} aria-pressed={!partComponent.enabled}
+              aria-label={partComponent.enabled ? t("Hide {{value1}}", { value1: t(PART_LABELS[part]) }) : t("Show {{value1}}", { value1: t(PART_LABELS[part]) })}
+              title={partComponent.enabled ? t("Hide {{value1}}", { value1: t(PART_LABELS[part]) }) : t("Show {{value1}}", { value1: t(PART_LABELS[part]) })}
+              onClick={() => onPatch({parts:{...style.parts,[part]:{...style.parts?.[part],enabled:!partComponent.enabled}}})}>
+              {partComponent.enabled ? <Eye size={15} /> : <EyeOff size={15} />}
+            </button>
           </div>
-          {role === "unit" && id === "weather_temp" && <p className="watchface-studio-summary">{t("The watch shows 00 in Celsius and 01 in Fahrenheit. Leave 01 untouched to show 00 in both, which suits a plain °.")}</p>}
-          <div className="wf-native-artwork-row">
-            <SpritePreview id={id} style={style} role={role} index={index} />
-            <div className="wf-native-artwork-copy">
-              <label className="field">{t("Text")}<input aria-label={t("Artwork text")} maxLength={32} value={nativeAssetText(id,style,role,index) ?? ""} placeholder={t("Generated artwork")} onChange={event=>onPatch({assetTexts:{...style.assetTexts,[role]:{...style.assetTexts?.[role],[index]:event.target.value}}})} /></label>
-              <span className="watchface-studio-summary">{replacement
-                ? nativeFontRole(role) ? t("Image in use. Pick a font or remove the image to draw the text instead.") : t("Custom image in use. Remove it to draw the text again.")
-                : setAside ? t("Drawn in the chosen font. Pick Keep template font to bring back the original image.")
-                : t("Drawn from the text in the component color and font, or replaced by an image.")}</span>
+          {open ? <div className="wf-native-part-body">
+            {!nativePartHasPosition(partKey) && <p className="wf-native-part-note">{t("The watch places this beside the number; only its size and artwork change.")}</p>}
+            <div className="watchface-position-inputs">
+              {nativePartHasPosition(partKey) && <>
+                <ComponentOffsetInput key={`${id}:${partKey}:x`} label={t("Offset X")} value={component.x} coordinateScale={coordinateScale} onChange={x=>patchPart({x})} />
+                <ComponentOffsetInput key={`${id}:${partKey}:y`} label={t("Offset Y")} value={component.y} coordinateScale={coordinateScale} onChange={y=>patchPart({y})} />
+              </>}
+              {numberControl("Width",component.width,width=>patchPart({width}),4,800,true)}
+              {numberControl("Height",component.height,height=>patchPart({height}),4,800,true)}
+              {partKey === "value" && numberControl(t("Digit width"),component.digitWidth,digitWidth=>patchPart({digitWidth}),1,800,true)}
             </div>
-          </div>
-          <div className="wf-native-artwork-actions">
-            <button type="button" className="secondary-button" onClick={()=>void importArtwork(false)}><ImagePlus size={14} /> {replacement ? t("Replace image") : t("Use an image")}</button>
-            {indices.length > 1 && <button type="button" className="secondary-button" onClick={()=>void importArtwork(true)}><FolderInput size={14} />{" "}{t("Import numbered PNGs")}</button>}
-            {replacement && <button type="button" className="secondary-button wf-native-artwork-remove" onClick={removeImage}><Trash2 size={14} />{" "}{t("Remove image")}</button>}
-          </div>
-        </div>}
+            {partKey === "value" && <WatchfaceNumberAlignControl value={component.align} disabled={locked} onChange={align=>patchPart({align:align ?? "left"})} />}
+            {role && fontSizeField(nativeComponentFontSize(id, style, partKey), fontSize=>patchPart(nativePartForFontSize(id, style, partKey, fontSize)))}
+            {role || partKey === "plot" ? <label className="wf-native-own-look">
+              <span><strong>{t("Own look")}</strong><small>{ownLook ? t("Its own color and font") : t("Follows the field")}</small></span>
+              <input type="checkbox" role="switch" checked={ownLook} disabled={locked} onChange={event => {
+                if (event.target.checked) { setOwnLookParts(list => [...list, partKey]); return; }
+                setOwnLookParts(list => list.filter(item => item !== partKey));
+                // Back to the field's look: drop this part's color and font.
+                const fontReset = role ? withNativeFont(style, "", partKey) : {};
+                const parts = { ...(fontReset.parts ?? style.parts) };
+                const own = { ...parts[partKey] };
+                for (const key of OWN_LOOK_KEYS) delete own[key];
+                parts[partKey] = own;
+                onPatch({ ...fontReset, parts });
+              }} />
+            </label> : null}
+            {ownLook ? <>
+              {colorControl("Color",component.color,color=>patchPart({color}))}
+              {role && <LocalFontPicker api={api} label={t("Font")} value={style.parts?.[partKey]?.fontFamily ?? ""} emptyLabel={t("Layer font")} disabled={locked} onChange={fontFamily=>onPatch(withNativeFont(style,fontFamily,partKey))}
+                inheritedFamily={nativeRoleDrawsText(style, role) ? component.fontFamily : undefined}
+                typography={{ fontWeight: component.fontWeight, fontStyle: component.fontStyle, letterSpacing: component.letterSpacing }}
+                onTypographyChange={typography=>patchPart(shapePatch(typography))} onLetterSpacingChange={letterSpacing=>patchPart({letterSpacing})}
+                showSpacing={role === "icon" || role === "unit" || role === "states"} />}
+            </> : null}
 
-        <button type="button" className="wf-native-part-reset" disabled={!customized} onClick={restoreComponent}><RotateCcw size={13} />{" "}{t("Reset {{value1}}", { value1: midSentence(t(partLabel)) })}</button>
-      </section>
+            {partKey === "plot" && <>
+              <p className="watchface-studio-summary">
+                {graph === "curve"
+                  ? t("The {{page}} page draws a line.", { page: chartSourceLabel(style.chartSource ?? "chart_stress") })
+                  : graph === "bars"
+                    ? t("The {{page}} page draws bars.", { page: chartSourceLabel(style.chartSource ?? "chart_stress") })
+                    : t("The {{page}} page draws no graph.", { page: chartSourceLabel(style.chartSource ?? "chart_stress") })}{" "}
+                {t("Back on the watch switches chart pages, and each page uses one of these styles. Barometer and tide pages need data from the phone and stay empty until it syncs. A width of 0 hides that style's graph.")}
+              </p>
+              {graph === "curve" ? [graphStyles[1], graphStyles[0]] : graphStyles}
+            </>}
+
+            {role && <div className="wf-native-artwork">
+              <div className="wf-native-artwork-head">
+                <span>{t("Pictures")}</span>
+                {indices.length > 1 ? <small>{t("Click one to edit it")}</small> : null}
+              </div>
+              {role === "unit" && id === "weather_temp" && <p className="wf-native-part-note">{t("The watch shows 00 in Celsius and 01 in Fahrenheit. Leave 01 untouched to show 00 in both, which suits a plain °.")}</p>}
+              <div className={`wf-native-frames${indices.length > 5 ? " is-many" : ""}`} role="listbox" aria-label={t("Artwork state")}>
+                {indices.map(i => <button key={i} type="button" role="option" aria-selected={i === index} className={`wf-native-frame${i === index ? " is-selected" : ""}${style.assets?.[role]?.[String(i)] ? " is-custom" : ""}`}
+                  title={`${String(i).padStart(2,"0")} · ${artworkStateLabel(i)}`} onClick={() => setSelectedIndex(i)}>
+                  <SpritePreview id={id} style={style} role={role} index={i} className="wf-native-frame-art" />
+                  <small>{role === "digits" ? String(i) : artworkStateLabel(i)}</small>
+                </button>)}
+              </div>
+              <div className="wf-native-artwork-row">
+                <div className="wf-native-artwork-copy">
+                  <label className="field">{indices.length > 1 ? t("Text for {{value1}}", { value1: artworkStateLabel(index) }) : t("Text")}<input aria-label={t("Artwork text")} maxLength={32} value={nativeAssetText(id,style,role,index) ?? ""} placeholder={t("Generated artwork")} onChange={event=>onPatch({assetTexts:{...style.assetTexts,[role]:{...style.assetTexts?.[role],[index]:event.target.value}}})} /></label>
+                  <span className="wf-native-part-note">{replacement
+                    ? nativeFontRole(role) ? t("Image in use. Pick a font or remove the image to draw the text instead.") : t("Custom image in use. Remove it to draw the text again.")
+                    : setAside ? t("Drawn in the chosen font. Pick Keep template font to bring back the original image.")
+                    : t("Drawn from the text in the component color and font, or replaced by an image.")}</span>
+                </div>
+              </div>
+              <div className="wf-native-artwork-actions">
+                <button type="button" className="secondary-button" onClick={()=>void importArtwork(false)}><ImagePlus size={14} /> {replacement ? t("Replace image") : t("Use an image")}</button>
+                {indices.length > 1 && <button type="button" className="secondary-button" onClick={()=>void importArtwork(true)}><FolderInput size={14} />{" "}{t("Import numbered PNGs")}</button>}
+                {replacement && <button type="button" className="secondary-button wf-native-artwork-remove" onClick={removeImage}><Trash2 size={14} />{" "}{t("Remove image")}</button>}
+              </div>
+            </div>}
+
+            <button type="button" className="wf-native-part-reset" disabled={!customized} onClick={restoreComponent}><RotateCcw size={13} />{" "}{t("Reset {{value1}}", { value1: midSentence(t(partLabel)) })}</button>
+          </div> : null}
+        </section>;
+      })}
+      </div>
       {id.startsWith("weather_temp_") && <p className="watchface-studio-summary">{t("Minimum and maximum temperature share the separator, unit and minus artwork. When both are enabled, the minimum-temperature settings supply these shared assets.")}</p>}
     </div>, { disabled: locked, status: t("{{shown}} of {{total}} shown", { shown: available.filter(part => nativePart(id, style, part).enabled).length, total: available.length }) })}
 

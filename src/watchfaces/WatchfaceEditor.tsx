@@ -1335,7 +1335,7 @@ export function WatchfaceEditor({
     if (mode === "simple") setPropertiesTab((tab) => (tab === "project" ? "selection" : tab));
   }
   const [collapsedInspectorSections, setCollapsedInspectorSections] = useState(
-    () => new Set<WatchfaceInspectorSectionId>(["effects", "advanced", "archive"])
+    () => new Set<WatchfaceInspectorSectionId>(["stroke", "effects", "advanced", "archive"])
   );
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<
     Record<string, string>

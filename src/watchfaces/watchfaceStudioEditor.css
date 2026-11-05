@@ -904,3 +904,313 @@ body .watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-ac
   justify-self: start;
   font-size: 12px;
 }
+
+/* --- Data field parts: a stacked list that opens in place ------------------ */
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-list {
+  display: grid;
+  gap: 6px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-item {
+  overflow: hidden;
+  border: 1px solid var(--atl-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--atl-control) 60%, transparent);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-item.is-open {
+  border-color: var(--atl-lume-ring);
+  background: var(--atl-tray);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px 0 0;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 52px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 7px 4px 7px 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-thumb {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #000;
+  box-shadow: inset 0 0 0 1px var(--atl-line);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-thumb img {
+  max-width: 30px;
+  max-height: 30px;
+  object-fit: contain;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-copy {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-copy small {
+  overflow: hidden;
+  color: var(--atl-titanium-dim);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-item.is-off .wf-native-part-toggle {
+  opacity: 0.6;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-chevron {
+  flex: none;
+  color: var(--atl-titanium-dim);
+  transition: transform 140ms var(--atl-ease);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-item.is-open .wf-native-part-chevron {
+  transform: rotate(180deg);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-eye {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--atl-titanium-dim);
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-eye:hover:not(:disabled) {
+  background: var(--atl-control-hover);
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-body {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--atl-rule);
+  padding: 12px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-note {
+  margin: 0;
+  color: var(--atl-titanium-dim);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--atl-rule);
+  padding-top: 10px;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look > span {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look strong {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look small {
+  color: var(--atl-titanium-dim);
+  font-size: 11.5px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look input {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--atl-tray-hover);
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look input::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--atl-titanium);
+  content: "";
+  transition: left 140ms var(--atl-ease);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look input:checked {
+  background: var(--atl-lume);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look input:checked::after {
+  left: 17px;
+  background: var(--atl-lume-ink);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look input:focus-visible {
+  outline: 2px solid var(--wf-focus, var(--accent));
+  outline-offset: 2px;
+}
+
+/* Every picture of the part at once; template or custom at a glance. */
+:root .watchface-shell.watchface-shell--studio .wf-native-artwork-head small {
+  color: var(--atl-titanium-dim);
+  font-size: 11.5px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frames {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 6px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frames.is-many {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frame {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--atl-line);
+  border-radius: 9px;
+  background: #000;
+  color: var(--atl-titanium-dim);
+  padding: 6px 2px 4px;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frame:hover {
+  border-color: var(--atl-line-strong);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frame.is-selected {
+  border-color: var(--atl-lume);
+  box-shadow: 0 0 0 2px var(--atl-lume-wash);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frame.is-custom::after {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--atl-lume);
+  content: "";
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frame-art {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 34px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frame-art img {
+  max-width: 90%;
+  max-height: 34px;
+  object-fit: contain;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frame small {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Properties: one column ordered by how often each part is used ---------- */
+
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel {
+  display: flex;
+  flex-direction: column;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="specific"] { order: 1; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="appearance"] { order: 2; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="assets"] { order: 3; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="layer"] { order: 4; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="transform"] { order: 5; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="stroke"] { order: 6; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="effects"] { order: 7; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="advanced"] { order: 8; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="config"] { order: 9; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="archive"] { order: 10; }
+
+/* A data field sets its look once, then its parts. */
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel:has(.wf-native-components) > [data-section="appearance"] { order: 0; }
+
+/* Six equal cells: the old 3 + spacer + 3 template put Align top in the spacer. */
+:root .watchface-shell--studio .wf-properties-pane .wf-property-section .wf-align-icon-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+/* The picture grid replaces the single preview, so the text field takes the row. */
+:root .watchface-shell.watchface-shell--studio .wf-native-part-body .wf-native-artwork-row {
+  display: block;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-body .wf-native-artwork-copy {
+  display: grid;
+  gap: 6px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-body .wf-native-artwork-copy > .field {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-body .wf-native-artwork-copy > .field input {
+  width: 100%;
+  min-width: 0;
+}
