@@ -3065,6 +3065,37 @@ assert.equal(
   "{125,26}"
 );
 
+// Templates that declare the AM/PM keys but ship no am.png/pm.png still get
+// the layer; Studio draws the labels as text sized to the minute digits
+// (drawing the labels needs a canvas, so it is checked in a real export).
+{
+  const pictureless = {
+    ...details,
+    resolutions: details.resolutions.map((resolution) => ({
+      ...resolution,
+      icons: resolution.icons.filter((icon) => !/\/icon\/(am|pm)\.png$/i.test(icon.path)),
+      config: { ...resolution.config, am_icon: "", pm_icon: "", am_pm_icon_pos: "" }
+    }))
+  };
+  const capability = getAmPmCapability(pictureless);
+  assert.ok(capability, "declared AM/PM keys without pictures still offer the layer");
+  assert.equal(capability.active, false);
+  assert.ok(capability.icon.height >= 12 && capability.icon.width > capability.icon.height);
+  const style = { enabled: true, x: 240, y: 50, scale: 1, color: "#ffffff" };
+  assert.equal(buildAmPmOverrides(pictureless, style).find((entry) => entry.path.includes("416x416"))?.values.am_icon, "studio\\ampm\\00.png");
+  // Template 2609181 (Nixie Circuit) declares the keys only in its 416px tree.
+  const watchTreeOnly = {
+    ...pictureless,
+    resolutions: pictureless.resolutions.map((resolution) => resolution.width === 800
+      ? { ...resolution, config: Object.fromEntries(Object.entries(resolution.config).filter(([key]) => !["am_icon", "pm_icon", "am_pm_icon_pos"].includes(key))) }
+      : resolution)
+  };
+  assert.ok(getAmPmCapability(watchTreeOnly), "keys in a watch tree alone still offer the layer");
+  const watchTreeOverrides = buildAmPmOverrides(watchTreeOnly, style);
+  assert.equal(watchTreeOverrides.find((entry) => entry.path.includes("416x416"))?.values.am_icon, "studio\\ampm\\00.png");
+  assert.equal(watchTreeOverrides.some((entry) => entry.path.includes("800x800")), false, "no keys are added to a tree that lacks them");
+}
+
 assert.deepEqual(
   getFixedMetricCapabilities(details),
   [

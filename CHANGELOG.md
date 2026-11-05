@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **AM/PM on more templates.** Studio now offers the AM/PM indicator on templates that support it but ship no AM/PM pictures, such as the one behind Nixie Circuit, and draws the labels in your chosen font.
+
 - **Update checks cope with GitHub being busy.** When GitHub is overloaded, CorosLink now shows a short message instead of a raw server response, and tries an automatic check again after a minute and after five minutes.
 
 ## [0.1.74] - 2026-11-05

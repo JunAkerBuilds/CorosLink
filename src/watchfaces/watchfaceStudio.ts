@@ -2414,7 +2414,9 @@ const AMPM_CONFIG_VALUES = { am: "studio\\ampm\\00.png", pm: "studio\\ampm\\01.p
 
 function findAmPmIcons(
   resolution: CorosWatchfaceResolutionDetails,
-  compiled = false
+  compiled = false,
+  /** Whether the face can show AM/PM: this tree's keys, or another tree's for the 800px master. */
+  declared = configDeclaresAmPm(resolution.config)
 ): { am: CorosWatchfaceSpriteFile; pm: CorosWatchfaceSpriteFile } | null {
   if (compiled) {
     const files = [...resolution.icons, ...resolution.spriteFolders.flatMap((folder) => folder.files)];
@@ -2430,8 +2432,21 @@ function findAmPmIcons(
     ) ?? null;
   const am = lookup("am.png");
   const pm = lookup("pm.png");
-  return am && pm ? { am, pm } : null;
+  if (am && pm) return { am, pm };
+  // Some templates declare the AM/PM keys but ship no pictures. Studio draws
+  // the labels as text there, sized to the minute digits.
+  if (!declared) return null;
+  const minuteHeight = findSpriteFolder(resolution, resolution.config["time_minute_low_font"])?.files[0]?.height;
+  const height = Math.max(12, Math.round((minuteHeight ?? resolution.height * 0.25) * 0.3));
+  const generated = (label: string): CorosWatchfaceSpriteFile => ({ path: `${AMPM_GENERATED_PATH}/${resolution.directory}/${label}`, width: Math.round(height * 1.6), height });
+  return { am: generated("am"), pm: generated("pm") };
 }
+
+/** Marks AM/PM boxes Studio made up for templates without pictures; nothing is loaded from them. */
+const AMPM_GENERATED_PATH = "studio-generated-ampm";
+const isGeneratedAmPm = (file: CorosWatchfaceSpriteFile) => file.path.startsWith(`${AMPM_GENERATED_PATH}/`);
+/** Font for generated AM/PM labels when the design picks neither a font nor a PNG font. */
+const AMPM_FALLBACK_FONT = "Arial";
 
 function resolutionSupportsAmPm(
   resolution: CorosWatchfaceResolutionDetails
@@ -2454,10 +2469,13 @@ export function getAmPmCapability(
   details: CorosWatchfaceTemplateDetails
 ): WatchfaceAmPmCapability | null {
   const resolution = pickPreviewResolution(details);
-  if (!resolution || !resolutionSupportsAmPm(resolution)) {
+  // The 800px master tree may leave out keys that the watch trees declare
+  // (Nixie Circuit's template 2609181 has AM/PM only at 416px).
+  const declared = details.resolutions.some((tree) => configDeclaresAmPm(tree.config));
+  const icons = resolution && declared ? findAmPmIcons(resolution, false, true) : null;
+  if (!resolution || !icons) {
     return null;
   }
-  const icons = findAmPmIcons(resolution)!;
   let defaultPos = parseConfigPos(resolution.config["am_pm_icon_pos"]);
   if (!defaultPos) {
     const minutePos = parseConfigPos(resolution.config["time_minute_low_pos"]);
@@ -2559,7 +2577,7 @@ export async function buildAmPmSpriteReplacements(
   }
   const assets = style.fontFamily
     ? []
-    : await loadAssets([...new Set(jobs.filter(job => !rasterFontSupportsText(style.rasterFont, job.label)).map(job => job.source.path))]);
+    : await loadAssets([...new Set(jobs.filter(job => !isGeneratedAmPm(job.source) && !rasterFontSupportsText(style.rasterFont, job.label)).map(job => job.source.path))]);
   const assetsByPath = new Map(assets.map((asset) => [asset.path, asset]));
   const replacements: CorosWatchfaceAssetReplacement[] = [];
   for (const job of jobs) {
@@ -2567,17 +2585,17 @@ export async function buildAmPmSpriteReplacements(
     const height = Math.max(1, Math.round(job.source.height * normalizedScale));
     replacements.push({
       path: job.path,
-      dataUrl: style.fontFamily
-        ? renderDigitSprite(
+      dataUrl: style.rasterFont && !style.fontFamily && rasterFontSupportsText(style.rasterFont, job.label)
+        ? await renderRasterFontSprite(job.label, width, height, tintedForComponent(style.rasterFont, style.color), style.color ?? "#ffffff")
+        : style.fontFamily || isGeneratedAmPm(job.source)
+          ? renderDigitSprite(
             job.label,
             width,
             height,
-            style.fontFamily,
+            style.fontFamily || AMPM_FALLBACK_FONT,
             style.color ?? "#ffffff",
             amPmTypography(style)
           )
-        : style.rasterFont && rasterFontSupportsText(style.rasterFont, job.label)
-          ? await renderRasterFontSprite(job.label, width, height, tintedForComponent(style.rasterFont, style.color), style.color ?? "#ffffff")
           : await resizeAndTintSprite(
             assetsByPath.get(job.source.path)?.dataUrl ?? "",
             width,
@@ -9780,13 +9798,13 @@ export async function drawStudioPreview(
     wantedSprites.set(layer.source.path, { color: analogIconColor });
   }
 
-  const ampmIcons = options.ampmStyle?.enabled ? findAmPmIcons(resolution, options.compiledPixels) : null;
+  const ampmIcons = options.ampmStyle?.enabled ? findAmPmIcons(resolution, options.compiledPixels, true) : null;
   const ampmFile = ampmIcons
     ? now.getHours() < 12
       ? ampmIcons.am
       : ampmIcons.pm
     : null;
-  if (ampmFile && !wantedSprites.has(ampmFile.path)) {
+  if (ampmFile && !isGeneratedAmPm(ampmFile) && !wantedSprites.has(ampmFile.path)) {
     wantedSprites.set(ampmFile.path, { color: null });
   }
 
@@ -11407,18 +11425,20 @@ export async function drawStudioPreview(
     const width = Math.max(1, Math.round(ampmFile.width * ampmScale));
     const height = Math.max(1, Math.round(ampmFile.height * ampmScale));
     const sourceDataUrl = loadedAssets.get(ampmFile.path)?.dataUrl;
-    if (sourceDataUrl || ampmStyle.fontFamily || ampmStyle.rasterFont) {
-      const dataUrl = ampmStyle.fontFamily
-        ? renderDigitSprite(
-            now.getHours() < 12 ? "AM" : "PM",
+    const generated = isGeneratedAmPm(ampmFile);
+    if (sourceDataUrl || generated || ampmStyle.fontFamily || ampmStyle.rasterFont) {
+      const label = now.getHours() < 12 ? "AM" : "PM";
+      const dataUrl = ampmStyle.rasterFont && !ampmStyle.fontFamily && rasterFontSupportsText(ampmStyle.rasterFont, label)
+        ? await renderRasterFontSprite(label, width, height, tintedForComponent(ampmStyle.rasterFont, ampmStyle.color), ampmStyle.color ?? options.digitColor)
+        : ampmStyle.fontFamily || generated
+          ? renderDigitSprite(
+            label,
             width,
             height,
-            ampmStyle.fontFamily,
+            ampmStyle.fontFamily || AMPM_FALLBACK_FONT,
             ampmStyle.color ?? options.digitColor,
             amPmTypography(ampmStyle)
           )
-        : ampmStyle.rasterFont && rasterFontSupportsText(ampmStyle.rasterFont, now.getHours() < 12 ? "AM" : "PM")
-          ? await renderRasterFontSprite(now.getHours() < 12 ? "AM" : "PM", width, height, tintedForComponent(ampmStyle.rasterFont, ampmStyle.color), ampmStyle.color ?? options.digitColor)
           : await resizeAndTintSprite(
             sourceDataUrl!,
             width,
