@@ -11,10 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Separate °C and °F labels for the current temperature.** Give the temperature a second unit image in Studio and the watch shows the one that matches its setting. Faces with a plain ° stay as they are.
 - **Watchmaker checks below-zero and Fahrenheit readings.** It now keeps a minus sign on temperatures and uses a plain ° or both °C and °F, and Studio's validation warns when a minus or unit is missing or a single label would be wrong in the other unit.
+- **Strokes, SWOLF and lengths for your swims.** Swims synced from your watch now show the stroke, stroke count, SWOLF and stroke rate of every interval, with your rests in between and your fastest marked. **Lengths**, next to **Intervals**, lists each length of a pool swim. A **Swim** card adds pool length, strokes, average and best SWOLF, best pace, stroke rate, distance per stroke and water temperature. Pace is per 100 m, **Swim time** leaves out your rests, and the chart can show your stroke rate and the water temperature. A pool's distances read in its own unit, metres or yards. Coach reads all of it too, interval by interval and length by length. Exported FIT files include the lengths, strokes, stroke types, SWOLF and pool length.
 
 ### Fixed
 
 - **Update checks cope with GitHub being busy.** When GitHub is overloaded, CorosLink now shows a short message instead of a raw server response, and tries an automatic check again after a minute and after five minutes.
+- **Swims no longer show strokes as climb.** A swim's stroke count was listed as elevation gain, and its laps could mix up lengths, intervals and rests. Swims you already synced are corrected the next time CorosLink starts.
 
 ## [0.1.74] - 2026-11-05
 

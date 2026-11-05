@@ -29,6 +29,17 @@
   color: color-mix(in srgb, var(--activity-color, var(--accent)) 72%, #000);
 }
 .training-laps-section tr.is-fastest td { white-space: nowrap; }
+/* A swim's rests sit between its intervals, quieter than the lengths swum. */
+.training-laps-section tr.is-rest td { color: var(--text-muted); font-style: italic; }
+/* A narrow panel keeps a swim's essentials; strokes, stroke rate and max HR come back with room. */
+.training-swim-laps-frame { container-type: inline-size; }
+.training-swim-laps .training-swim-unit { text-transform: none; letter-spacing: 0; }
+@container (max-width: 1100px) {
+  .training-swim-laps .is-optional-wide { display: none; }
+}
+@container (max-width: 700px) {
+  .training-swim-laps .is-optional-narrow { display: none; }
+}
 .training-laps-section tr.is-fastest .training-lap-performance { color: var(--activity-color, var(--accent)); font-weight: 600; }
 
 .activities-detail-sidebar .training-laps-groups { padding: 2px; gap: 2px; }

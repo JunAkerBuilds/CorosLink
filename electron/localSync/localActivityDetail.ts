@@ -1,6 +1,15 @@
 import { corosSportName } from "../corosSportTypes";
-import type { FitActivity } from "../fitActivity";
-import type { TrainingHubActivityDetail, TrainingHubActivityLap, TrainingHubActivitySeriesPoint, TrainingHubTrackPoint, TrainingHubTrainingEffect } from "../types";
+import type { FitActivity, FitLap, FitLength } from "../fitActivity";
+import type {
+  TrainingHubActivityDetail,
+  TrainingHubActivityLap,
+  TrainingHubActivityLapGroup,
+  TrainingHubActivitySeriesPoint,
+  TrainingHubSwimStroke,
+  TrainingHubSwimSummary,
+  TrainingHubTrackPoint,
+  TrainingHubTrainingEffect
+} from "../types";
 import type { LocalActivityRecord } from "./localDataTypes";
 
 /**
@@ -102,6 +111,7 @@ function streamPayload(activity: FitActivity, sportType: number): Record<string,
     ...(record.verticalOscillation !== undefined ? { verticalVibration: record.verticalOscillation } : {}),
     ...(record.verticalRatio !== undefined ? { verticalStrideRatio: round(record.verticalRatio * 10) } : {}),
     ...(record.alt !== undefined ? { altitude: record.alt } : {}),
+    ...(record.temp !== undefined ? { temperature: record.temp } : {}),
     ...(record.lat !== undefined && record.lon !== undefined ? { gpsLat: Math.round(record.lat * 1e7), gpsLon: Math.round(record.lon * 1e7) } : {})
   }));
   const windows = activity.activeWindows;
@@ -194,11 +204,99 @@ function seriesPoints(activity: FitActivity): TrainingHubActivitySeriesPoint[] {
   return points;
 }
 
+/** FIT swim_stroke → stroke name. */
+const SWIM_STROKES: readonly TrainingHubSwimStroke[] = ["freestyle", "backstroke", "breaststroke", "butterfly", "drill", "mixed", "medley"];
+const swimStroke = (stroke: number | undefined) => (stroke === undefined ? undefined : SWIM_STROKES[stroke]);
+/** Seconds per 100 m. */
+const swimPace = (speed: number | undefined) => (speed !== undefined && speed > 0 ? round(100 / speed, 1) : undefined);
+
+/** A swim lap: its strokes, lengths and pace per 100 m (a rest has none). */
+function swimLapRow(lap: FitLap, row: TrainingHubActivityLap): TrainingHubActivityLap {
+  const swim = lap.swim;
+  if (swim?.rest) return { ...row, rest: true, avgCadence: undefined };
+  const fields: Partial<TrainingHubActivityLap> = {
+    stroke: swimStroke(swim?.stroke),
+    strokes: swim?.strokes,
+    strokeRate: lap.avgCadence && lap.avgCadence > 0 ? round(lap.avgCadence) : undefined,
+    swolf: swim?.swolf,
+    lengths: swim?.activeLengths,
+    swimPace: swimPace(lap.avgSpeed ?? (lap.distanceM && lap.timerSec ? lap.distanceM / lap.timerSec : undefined))
+  };
+  return { ...row, ...Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)) };
+}
+
+/** A pool swim's lengths, numbered like the watch: a rest is a row of its own. */
+function lengthRows(lengths: FitLength[], poolLength: number | undefined): TrainingHubActivityLap[] {
+  return lengths.map((length, index) => {
+    const duration = round(length.timerSec ?? length.elapsedSec);
+    const base: TrainingHubActivityLap = {
+      index: index + 1,
+      duration,
+      avgHr: length.avgHr,
+      maxHr: length.maxHr
+    };
+    if (!length.active) return { ...base, distance: 0, rest: true };
+    const fields: Partial<TrainingHubActivityLap> = {
+      distance: poolLength ?? (length.avgSpeed !== undefined && length.timerSec ? round(length.avgSpeed * length.timerSec, 1) : undefined),
+      stroke: swimStroke(length.stroke),
+      strokes: length.strokes,
+      strokeRate: length.strokeRate,
+      swolf: length.swolf,
+      lengths: 1,
+      swimPace: swimPace(length.avgSpeed)
+    };
+    return { ...base, ...Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)) };
+  });
+}
+
+function swimSummary(activity: FitActivity): TrainingHubSwimSummary | undefined {
+  const session = activity.session;
+  if (session?.sport !== FIT_SPORT_SWIM) return undefined;
+  const swim = session.swimTotals;
+  const strokes = swim?.strokes;
+  const swum = activity.lengths.filter((length) => length.active);
+  const summary: TrainingHubSwimSummary = {
+    poolLength: swim?.poolLengthM,
+    poolLengthUnit: swim?.poolLengthM === undefined ? undefined : swim.poolLengthUnit ?? "m",
+    lengths: swim?.activeLengths ?? (swum.length ? swum.length : undefined),
+    swimTime: swum.length ? round(swum.reduce((total, length) => total + (length.timerSec ?? 0), 0)) : undefined,
+    strokes: strokes && strokes > 0 ? strokes : undefined,
+    avgStrokeRate: session.avgCadence && session.avgCadence > 0 ? round(session.avgCadence) : undefined,
+    maxStrokeRate: session.maxCadence && session.maxCadence > 0 ? round(session.maxCadence) : undefined,
+    avgSwolf: swim?.avgSwolf,
+    bestSwolf: swim?.bestSwolf,
+    strokeDistance: strokes && session.distanceM ? round(session.distanceM / strokes, 2) : undefined,
+    avgPace: swimPace(session.avgSpeed),
+    bestPace: swimPace(session.maxSpeed),
+    waterTemperature: session.avgTemperature
+  };
+  const present = Object.entries(summary).filter(([, value]) => value !== undefined);
+  return present.length ? Object.fromEntries(present) as TrainingHubSwimSummary : undefined;
+}
+
+/** The row swum at the best pace, when one beats the others (a rest is never the fastest). */
+function fastestSwum(rows: TrainingHubActivityLap[]): number[] {
+  const swum = rows.flatMap((row, position) => (!row.rest && row.swimPace !== undefined ? [{ position, pace: row.swimPace }] : []));
+  if (swum.length < 2) return [];
+  const best = swum.reduce((fastest, row) => (row.pace < fastest.pace ? row : fastest));
+  return swum.some((row) => row.pace > best.pace) ? [best.position] : [];
+}
+
+/** A swim's laps, marked with the fastest; a pool swim can switch to its lengths. */
+function swimLapGroups(activity: FitActivity, lapRows: TrainingHubActivityLap[]): TrainingHubActivityLapGroup[] | undefined {
+  if (activity.session?.sport !== FIT_SPORT_SWIM) return undefined;
+  const laps: TrainingHubActivityLapGroup = { kind: "laps", laps: lapRows, fastestLaps: fastestSwum(lapRows) };
+  if (!activity.lengths.length) return laps.fastestLaps.length ? [laps] : undefined;
+  const lengths = lengthRows(activity.lengths, activity.session.swimTotals?.poolLengthM);
+  return [laps, { kind: "lengths", laps: lengths, fastestLaps: fastestSwum(lengths) }];
+}
+
 function laps(activity: FitActivity, sportType: number): TrainingHubActivityLap[] {
   const scale = cadenceScale(activity);
+  const swim = activity.session?.sport === FIT_SPORT_SWIM;
   return activity.laps.map((lap, index) => {
     const duration = lap.timerSec ?? lap.elapsedSec;
-    return {
+    const row: TrainingHubActivityLap = {
       index: index + 1,
       distance: round(lap.distanceM, 1),
       duration: round(duration),
@@ -210,6 +308,7 @@ function laps(activity: FitActivity, sportType: number): TrainingHubActivityLap[
       maxPower: lap.maxPower && lap.maxPower > 0 ? round(lap.maxPower) : undefined,
       avgCadence: lap.avgCadence && lap.avgCadence > 0 ? round(lap.avgCadence * scale) : undefined
     };
+    return swim ? swimLapRow(lap, row) : row;
   });
 }
 
@@ -236,6 +335,9 @@ export function localFitActivityDetail(activity: FitActivity, record: LocalActiv
   const scale = cadenceScale(activity);
   const effect = trainingEffect(activity);
   const dynamics = session?.dynamics;
+  const swim = swimSummary(activity);
+  const lapRows = laps(activity, record.sportType);
+  const lapGroups = swimLapGroups(activity, lapRows);
   return {
     activityId: record.activityId,
     name: record.name,
@@ -257,9 +359,11 @@ export function localFitActivityDetail(activity: FitActivity, record: LocalActiv
     ...(session?.training?.trainingLoad !== undefined ? { trainingLoad: session.training.trainingLoad } : {}),
     ...(effect ? { trainingEffect: effect } : {}),
     ...(dynamics ? { runningDynamics: { ...dynamics } } : {}),
+    ...(swim ? { swim } : {}),
     ...(session?.minHr !== undefined ? { minHr: session.minHr } : {}),
     ...(session?.avgTemperature !== undefined ? { avgTemperature: session.avgTemperature } : {}),
-    laps: laps(activity, record.sportType),
+    laps: lapRows,
+    ...(lapGroups ? { lapGroups } : {}),
     ...(track.length >= 2 ? { track: { points: track } } : {}),
     series: seriesPoints(activity),
     raw: {
