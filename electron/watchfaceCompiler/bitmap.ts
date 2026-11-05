@@ -660,8 +660,12 @@ function aggLerp(p: number, q: number, a: number): number { const t = (q - p) * 
  * 7. rounded like sprites.
  *
  * Measured against COROS 4.9.9's own code (emulated) with the 64-color palette its app sets.
+ *
+ * A background already on the screen's levels (see `onMipLevels`) has been through all this once, so
+ * it is only rounded: the treatment again would darken it (grey 85 drops toward black) and dither it.
  */
 export function mipBackground(image: RgbaImage, background = 0): Uint8Array {
+  if (onMipLevels(image)) return to2222(image);
   const { width, height } = image, count = width * height, pixels = Uint8Array.from(image.data.subarray(0, count * 4));
   for (let at = 0; at < count * 4; at += 4) {
     if (!pixels[at + 3]) continue;
@@ -713,6 +717,25 @@ export function mipBackground(image: RgbaImage, background = 0): Uint8Array {
     for (const [index, amount] of ring.again) cover(index, amount);
   }
   return to2222({ width, height, data: pixels });
+}
+
+/**
+ * Some pixel is visible, and every pixel that isn't fully transparent has its color and alpha on the
+ * four memory-in-pixel levels (0, 85, 170, 255): a background decoded from a compiled memory-in-pixel
+ * face (an official face opened in the editor, say). `to2222` turns it back into the very bytes it came
+ * from; it already has COROS's edge ring, which drawn again would change about 1,000 edge pixels. Art
+ * drawn for the face has anti-aliased edges and in-between colors, so it still gets the treatment, as
+ * does a fully transparent background (COROS gives it just the ring).
+ */
+export function onMipLevels(image: RgbaImage): boolean {
+  const data = image.data, end = image.width * image.height * 4;
+  let visible = false;
+  for (let at = 0; at < end; at += 4) {
+    if (data[at + 3] === 0) continue;
+    if (data[at]! % 85 || data[at + 1]! % 85 || data[at + 2]! % 85 || data[at + 3]! % 85) return false;
+    visible = true;
+  }
+  return visible;
 }
 
 /** RLE is chosen from the first frame and applied to all, as for LUT blocks. */

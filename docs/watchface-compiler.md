@@ -141,6 +141,24 @@ What this rests on:
 - The AMOLED exporter draws the same black ring before quantizing. CorosLink doesn't
   draw it there yet.
 
+### Already-processed backgrounds pass through (2026-11-05)
+
+An official memory-in-pixel face opened in the editor decodes to a background whose
+pixels are already on the four levels (0, 85, 170, 255). The photo treatment a
+second time darkened MONO's grey-85 dividers (the tone curve takes 85 to about 33)
+and dithered them into dotted, tinted lines, seen on a real APEX 4. `mipBackground`
+now only rounds a background when some pixel is visible and every visible pixel's
+color and alpha are on the levels (`onMipLevels`). The recovered MONO compiles back
+to COROS's exact background bytes (0 of 67,600 differ). Art drawn for a face has
+in-between values, so it is untouched; a fully transparent background still gets
+COROS's ring. The edge ring is not drawn again: it is already there, and drawing it
+twice changes about 1,000 edge pixels. Same rule in C-LINK's CorosKit and Android
+compilers.
+
+AMOLED art shrunk for a memory-in-pixel watch still loses thin grey lines (MONO's
+390 px dividers: 38% of line pixels lit, mostly tinted); that needs a flat-art path,
+not done yet.
+
 ### Smooth edges for memory-in-pixel sprites (2026-10-27, experimental)
 
 The PACE Pro firmware's `bitmap_convert_argb2222` (0x4bcc80) RLE-decodes a block,

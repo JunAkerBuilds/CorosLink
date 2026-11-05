@@ -101,6 +101,20 @@ for (const [size,hash] of Object.entries(corosMip)) {
   assert.deepEqual(encodeMipImageBlock(photo,2),encodeMipImageBlock(photo,0));
   assert.notDeepEqual(encodeMipImageBlock(photo,1),encodeMipImageBlock(photo,0));
 }
+{
+  // A background already on the four levels (decoded from a compiled face) comes back as the same bytes:
+  // the treatment again turned the official MONO's grey-85 dividers into dotted, tinted lines on an APEX 4.
+  const size=260,data=new Uint8Array(size*size*4),levels=[0,85,170,255];
+  for(let i=0;i<size*size;i++){const y=Math.floor(i/size),x=i%size,d=Math.hypot(x+0.5-130,y+0.5-130);
+    data.set(d>130?[255,255,255,0]:d>128?[0,0,0,levels[1+(i%2)]]:(y===64||y===65||x===99)?[85,85,85,255]:[levels[x%4],levels[y%4],levels[(x+y)%4],255],i*4);}
+  const decoded={width:size,height:size,data},once=to2222(decoded);
+  assert.deepEqual(mipBackground(decoded,0x557799),once,'an already-processed background passes through');
+  const back=new Uint8Array(size*size*4);once.forEach((v,i)=>back.set([(v>>4&3)*85,(v>>2&3)*85,(v&3)*85,(3-(v>>6))*85],i*4));
+  assert.deepEqual(mipBackground({width:size,height:size,data:back}),once,'compiling it twice changes nothing');
+  // One pixel off the levels and the face gets the full treatment again (grey 85 is darkened by the tone curve).
+  data.set([86,85,85,255],(140*size+140)*4);
+  assert.notDeepEqual(mipBackground(decoded),to2222(decoded),'one pixel off the levels: treated, not just rounded');
+}
 
 // --- Smooth edges (experimental): soft sprite edges encoded for the watch's k/3 alpha ---
 {
