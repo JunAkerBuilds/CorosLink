@@ -2507,6 +2507,9 @@ export interface TrainingHubRacePredictor {
   raw?: Record<string, unknown>;
 }
 
+/** A swim stroke as the watch detected it; "mixed" is a lap of several. */
+export type TrainingHubSwimStroke = "freestyle" | "backstroke" | "breaststroke" | "butterfly" | "drill" | "mixed" | "medley";
+
 export interface TrainingHubActivityLap {
   index: number;
   distance?: number;
@@ -2521,6 +2524,42 @@ export interface TrainingHubActivityLap {
   /** Steps per minute on foot, revolutions per minute on a bike. */
   avgCadence?: number;
   maxCadence?: number;
+  /** Swims: a rest between intervals (an idle length in the lengths view). */
+  rest?: boolean;
+  stroke?: TrainingHubSwimStroke;
+  strokes?: number;
+  /** Strokes per minute. */
+  strokeRate?: number;
+  swolf?: number;
+  /** Pool lengths swum in the lap. */
+  lengths?: number;
+  /** Seconds per 100 m, rests inside the lap left out. */
+  swimPace?: number;
+}
+
+/** A swim's totals as the watch recorded them. */
+export interface TrainingHubSwimSummary {
+  /** Metres; pool swims only. */
+  poolLength?: number;
+  /** The pool's own unit: a pool's distances read in it, whatever the app's units. */
+  poolLengthUnit?: "m" | "yd";
+  /** Lengths swum (rests not counted). */
+  lengths?: number;
+  /** Seconds spent swimming lengths: moving time without the rests. */
+  swimTime?: number;
+  strokes?: number;
+  /** Strokes per minute. */
+  avgStrokeRate?: number;
+  maxStrokeRate?: number;
+  avgSwolf?: number;
+  bestSwolf?: number;
+  /** Metres per stroke. */
+  strokeDistance?: number;
+  /** Seconds per 100 m, rests left out. */
+  avgPace?: number;
+  bestPace?: number;
+  /** °C. */
+  waterTemperature?: number;
 }
 
 /**
@@ -2530,7 +2569,8 @@ export interface TrainingHubActivityLap {
  * 10/11/12 = 1/5/10 km splits, -1 = the whole activity as one row.
  */
 export interface TrainingHubActivityLapGroup {
-  kind: "laps" | "split" | "whole";
+  /** "lengths": a pool swim's lengths, rests included. */
+  kind: "laps" | "split" | "whole" | "lengths";
   /** Split length in metres; split groups only. */
   splitDistance?: number;
   laps: TrainingHubActivityLap[];
@@ -2552,6 +2592,7 @@ export interface TrainingHubActivityTrack {
 export interface TrainingHubActivitySeriesPoint {
   distance?: number;
   hr?: number;
+  /** Seconds per km, swims included (the coach shows a swim's per 100 m). */
   pace?: number;
   power?: number;
   cadence?: number;
@@ -2795,6 +2836,7 @@ export interface TrainingHubActivityDetail {
   heartRateRecovery?: TrainingHubHeartRateRecovery;
   trainingEffect?: TrainingHubTrainingEffect;
   runningDynamics?: TrainingHubRunningDynamics;
+  swim?: TrainingHubSwimSummary;
   minHr?: number;
   /** °C. */
   avgTemperature?: number;

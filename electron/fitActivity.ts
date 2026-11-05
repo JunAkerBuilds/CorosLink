@@ -65,6 +65,51 @@ export interface FitTraining {
   fatigue?: number;
 }
 
+/** A swim lap's strokes. */
+export interface FitSwimLap {
+  /** A rest: no lengths swum. */
+  rest: boolean;
+  /** FIT swim_stroke (0 freestyle, 1 backstroke, 2 breaststroke, 3 butterfly, 4 drill, 5 mixed, 6 IM). */
+  stroke?: number;
+  strokes?: number;
+  swolf?: number;
+  /** Pool swims: the lap's range of `FitActivity.lengths`. */
+  firstLength?: number;
+  lengths?: number;
+  activeLengths?: number;
+}
+
+/** One pool length; an idle one is a rest. */
+export interface FitLength {
+  startTs: number;
+  endTs: number;
+  elapsedSec?: number;
+  timerSec?: number;
+  active: boolean;
+  strokes?: number;
+  /** m/s. */
+  avgSpeed?: number;
+  stroke?: number;
+  /** Strokes per minute. */
+  strokeRate?: number;
+  calories?: number;
+  swolf?: number;
+  avgHr?: number;
+  maxHr?: number;
+}
+
+/** A swim's totals. */
+export interface FitSwimSummary {
+  poolLengthM?: number;
+  /** The pool's own unit (FIT pool_length_unit). */
+  poolLengthUnit?: "m" | "yd";
+  lengths?: number;
+  activeLengths?: number;
+  strokes?: number;
+  avgSwolf?: number;
+  bestSwolf?: number;
+}
+
 export interface FitLap {
   index: number;
   startTs: number;
@@ -84,6 +129,7 @@ export interface FitLap {
   minHr?: number;
   avgTemperature?: number;
   dynamics?: FitDynamics;
+  swim?: FitSwimLap;
 }
 
 export interface FitSession {
@@ -112,11 +158,14 @@ export interface FitSession {
   totalStrides?: number;
   dynamics?: FitDynamics;
   training?: FitTraining;
+  swimTotals?: FitSwimSummary;
 }
 
 export interface FitActivity {
   session: FitSession | null;
   laps: FitLap[];
+  /** Pool swims. */
+  lengths: FitLength[];
   records: FitRecord[];
   /** Timer start/stop windows in unix seconds, derived from event messages. */
   activeWindows: Array<[number, number]>;
@@ -203,9 +252,34 @@ function pickAltitude(message: FitMessage, enhanced: number, basic: number) {
   return scaled(num(message, enhanced) ?? num(message, basic), 5, 500);
 }
 
+const FIT_SPORT_SWIMMING = 5;
+const INTENSITY_REST = 1;
+const LENGTH_ACTIVE = 1;
+
+/** Present values only; undefined when there are none. */
+function defined<T extends object>(value: T): T | undefined {
+  const entries = Object.entries(value).filter(([, entry]) => entry !== undefined);
+  return entries.length ? Object.fromEntries(entries) as T : undefined;
+}
+
+/** Session swim fields: total_cycles (strokes), num_lengths, pool_length and its unit, num_active_lengths, avg_swolf, and CorosLink's best SWOLF. */
+function swimSummaryOf(message: FitMessage): FitSwimSummary | undefined {
+  const unit = num(message, 46);
+  return defined({
+    poolLengthM: scaled(num(message, 44), 100),
+    poolLengthUnit: unit === 0 ? "m" as const : unit === 1 ? "yd" as const : undefined,
+    lengths: num(message, 33),
+    activeLengths: num(message, 47),
+    strokes: num(message, 10),
+    avgSwolf: num(message, 80),
+    bestSwolf: developerNumber(message, "Best SWOLF")
+  });
+}
+
 function parseSession(message: FitMessage): FitSession | null {
   const startTs = unixTs(message, 2) ?? unixTs(message, 253);
   if (startTs === undefined) return null;
+  const swim = num(message, 5) === FIT_SPORT_SWIMMING;
   return {
     startTs,
     sport: num(message, 5),
@@ -228,9 +302,70 @@ function parseSession(message: FitMessage): FitSession | null {
     trainingStressScore: scaled(num(message, 35), 10),
     minHr: num(message, 64),
     avgTemperature: num(message, 57),
-    totalStrides: num(message, 10),
+    // A swim's cycles are strokes.
+    totalStrides: swim ? undefined : num(message, 10),
     dynamics: dynamicsOf(message, { vo: 89, gct: 91, vr: 132, step: 134 }),
-    training: trainingOf(message)
+    training: trainingOf(message),
+    swimTotals: swim ? swimSummaryOf(message) : undefined
+  };
+}
+
+/** Lap swim fields, when the lap has any: strokes, stroke, lengths, intensity (rest). */
+function swimLapOf(message: FitMessage): FitSwimLap | undefined {
+  const fields = defined({
+    stroke: num(message, 38),
+    strokes: num(message, 10),
+    swolf: num(message, 73),
+    firstLength: num(message, 35),
+    lengths: num(message, 32),
+    activeLengths: num(message, 40)
+  });
+  const rest = num(message, 23) === INTENSITY_REST;
+  if (!fields && !rest) return undefined;
+  return { rest: rest || (fields?.activeLengths === 0 && !(num(message, 9) ?? 0)), ...fields };
+}
+
+/** Lap and session SWOLF a file leaves out: the mean of their lengths', as the watch averages them. */
+function fillSwolf(session: FitSession, laps: FitLap[], lengths: FitLength[]): void {
+  const mean = (from: FitLength[]) => {
+    const values = from.filter((length) => length.active && length.swolf !== undefined).map((length) => length.swolf!);
+    return values.length ? Math.round(values.reduce((total, value) => total + value, 0) / values.length) : undefined;
+  };
+  for (const lap of laps) {
+    const swim = lap.swim;
+    if (!swim || swim.swolf !== undefined || swim.firstLength === undefined || !swim.lengths) continue;
+    const swolf = mean(lengths.slice(swim.firstLength, swim.firstLength + swim.lengths));
+    if (swolf !== undefined) swim.swolf = swolf;
+  }
+  if (session.swimTotals && session.swimTotals.avgSwolf === undefined) {
+    const swolf = mean(lengths);
+    if (swolf !== undefined) session.swimTotals.avgSwolf = swolf;
+  }
+}
+
+function parseLength(message: FitMessage): FitLength | null {
+  const endTs = unixTs(message, 253);
+  const startTs = unixTs(message, 2) ?? endTs;
+  if (startTs === undefined || endTs === undefined) return null;
+  const active = num(message, 12) === LENGTH_ACTIVE;
+  return {
+    startTs,
+    endTs,
+    elapsedSec: scaled(num(message, 3), 1000),
+    timerSec: scaled(num(message, 4), 1000),
+    active,
+    ...defined({
+      strokes: active ? num(message, 5) : undefined,
+      avgSpeed: active ? scaled(num(message, 6), 1000) : undefined,
+      stroke: active ? num(message, 7) : undefined,
+      strokeRate: active ? num(message, 9) : undefined,
+      calories: num(message, 11),
+      // SWOLF is a length's seconds plus its strokes; files without CorosLink's field get it worked out.
+      swolf: developerNumber(message, "SWOLF") ?? (active && num(message, 5) !== undefined && num(message, 4) !== undefined
+        ? Math.round(num(message, 4)! / 1000 + num(message, 5)!) : undefined),
+      avgHr: developerNumber(message, "Avg Heart Rate"),
+      maxHr: developerNumber(message, "Max Heart Rate")
+    })
   };
 }
 
@@ -255,7 +390,8 @@ function parseLap(message: FitMessage, index: number): FitLap | null {
     descentM: num(message, 22),
     minHr: num(message, 63),
     avgTemperature: num(message, 50),
-    dynamics: dynamicsOf(message, { vo: 77, gct: 79, vr: 118, step: 120 })
+    dynamics: dynamicsOf(message, { vo: 77, gct: 79, vr: 118, step: 120 }),
+    swim: swimLapOf(message)
   };
 }
 
@@ -318,6 +454,7 @@ export function parseFitActivity(input: Uint8Array | ArrayBuffer): FitActivity {
   const decoded = decodeFit(input);
   let session: FitSession | null = null;
   const laps: FitLap[] = [];
+  const lengths: FitLength[] = [];
   const events: FitMessage[] = [];
   const rawRecords: FitMessage[] = [];
   let fileCreatedTs: number | undefined;
@@ -346,6 +483,11 @@ export function parseFitActivity(input: Uint8Array | ArrayBuffer): FitActivity {
       case FIT_MSG.LAP: {
         const lap = parseLap(message, laps.length + 1);
         if (lap) laps.push(lap);
+        break;
+      }
+      case FIT_MSG.LENGTH: {
+        const length = parseLength(message);
+        if (length) lengths.push(length);
         break;
       }
       case FIT_MSG.RECORD:
@@ -402,9 +544,14 @@ export function parseFitActivity(input: Uint8Array | ArrayBuffer): FitActivity {
     });
   }
 
+  // Strokes, rests and lengths are a swim's; another sport's cycles and recovery steps are not.
+  if (session?.sport !== FIT_SPORT_SWIMMING) for (const lap of laps) delete lap.swim;
+  else fillSwolf(session, laps, lengths);
+
   return {
     session,
     laps,
+    lengths,
     records,
     activeWindows,
     fileCreatedTs,

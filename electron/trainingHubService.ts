@@ -11,7 +11,9 @@ import {
   formatPaceValue,
   formatSpeedValue,
   formatWeightValue,
-  normalizeUnitSystem
+  normalizeUnitSystem,
+  swimPaceClock,
+  swimPaceUnit
 } from "./unitSystem.js";
 import {
   corosSportName,
@@ -6510,7 +6512,8 @@ export function formatActivitySeriesForChat(
   }
 
   const cadenceUnit = cycling ? "rpm" : "spm";
-  const header = `Distance | HR | ${cycling ? "Speed" : "Pace"} | Power | Cadence`;
+  // A swim's pace is per 100 m (or 100 yd) and its cadence is the stroke rate.
+  const header = `Distance | HR | ${cycling ? "Speed" : swim ? `Pace /${swimPaceUnit(unitSystem)}` : "Pace"} | Power | ${swim ? "Stroke rate" : "Cadence"}`;
   const rows = points.map((point) =>
     [
       point.distance !== undefined
@@ -6520,10 +6523,12 @@ export function formatActivitySeriesForChat(
       point.pace !== undefined
         ? cycling
           ? formatSpeedValue(3600 / point.pace, unitSystem)
-          : formatPaceValue(point.pace, unitSystem).replace(" /", "/")
+          : swim
+            ? swimPaceClock(point.pace / 10, unitSystem) ?? "—"
+            : formatPaceValue(point.pace, unitSystem).replace(" /", "/")
         : "—",
       point.power !== undefined ? `${point.power} W` : "—",
-      point.cadence !== undefined ? `${point.cadence} ${cadenceUnit}` : "—"
+      point.cadence !== undefined ? `${point.cadence} ${swim ? "/min" : cadenceUnit}` : "—"
     ].join(" | ")
   );
 

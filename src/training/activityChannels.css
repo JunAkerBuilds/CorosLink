@@ -176,6 +176,8 @@
 .activity-detail-effect-row .activity-zones-time strong { font-size: 14px; }
 .activity-detail-effect-row .activity-zones-range { grid-area: range; padding-left: 14px; font-size: 11px; }
 .activities-detail-sidebar .activity-detail-insights.activity-detail-effect-row { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+/* Ten figures don't fit half the aside: the swim card takes the whole row. */
+.activities-detail-sidebar .activity-detail-effect-row > .activity-swim-summary { grid-column: 1 / -1; }
 
 /* Training effect rings: filled to the value's share of COROS's 0–5 scale. */
 @property --ring-sweep { syntax: "<angle>"; inherits: false; initial-value: 0deg; }

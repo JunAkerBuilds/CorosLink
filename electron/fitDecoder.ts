@@ -78,7 +78,8 @@ export const FIT_MSG = {
   SESSION: 18,
   LAP: 19,
   RECORD: 20,
-  EVENT: 21
+  EVENT: 21,
+  LENGTH: 101
 } as const;
 
 const DEFAULT_WANTED = new Set<number>([
@@ -86,7 +87,8 @@ const DEFAULT_WANTED = new Set<number>([
   FIT_MSG.SESSION,
   FIT_MSG.LAP,
   FIT_MSG.RECORD,
-  FIT_MSG.EVENT
+  FIT_MSG.EVENT,
+  FIT_MSG.LENGTH
 ]);
 
 function readScalar(

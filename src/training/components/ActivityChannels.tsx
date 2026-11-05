@@ -195,7 +195,10 @@ function buildChannelSpecs(
     // COROS calls its grade-adjusted pace "effort pace".
     gap: runPace("gap", "Effort pace", "Effort"),
     hr: plain("hr", "Heart rate", "HR", "bpm", 12),
-    cadence: plain("cadence", cycling ? t("Cycling cadence") : t("Cadence"), "Cadence", cycling ? "rpm" : "spm", 10),
+    // A swim's cadence is the watch's stroke rate (strokes per minute).
+    cadence: streams.speedKind === "swimPace"
+      ? plain("cadence", t("Stroke rate"), "Stroke rate", "spm", 10)
+      : plain("cadence", cycling ? t("Cycling cadence") : t("Cadence"), "Cadence", cycling ? "rpm" : "spm", 10),
     power: plain("power", "Power", "Power", "W", 40),
     stride: plain("stride", "Stride length", "Stride", imperial ? "ft" : "m", imperial ? 0.3 : 0.1, 2, (value) =>
       imperial ? value * 3.28084 : value
@@ -208,7 +211,12 @@ function buildChannelSpecs(
     elevation: plain("elevation", "Elevation", "Elevation", elevationUnit(unitSystem), imperial ? 30 : 10, 0, (value) =>
       metersToElevation(value, unitSystem)
     ),
-    grade: plain("grade", "Grade", "Grade", "%", 4, 1)
+    grade: plain("grade", "Grade", "Grade", "%", 4, 1),
+    // In a swim, the watch measures the water. The sensor reads whole degrees: a wide axis keeps a 1° flicker small.
+    temperature: plain(
+      "temperature", streams.speedKind === "swimPace" ? t("Water temperature") : t("Temperature"), "Temp", imperial ? "°F" : "°C", imperial ? 14 : 8, 0,
+      (value) => (imperial ? (value * 9) / 5 + 32 : value)
+    )
   };
 }
 

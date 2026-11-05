@@ -93,7 +93,8 @@ export function seriesRecord(channel, interval, startUnix, packed, { corruptChec
   return record(8, Buffer.concat([Buffer.from([corruptChecksum ? (sum + 1) & 0xff : sum]), tail]));
 }
 
-export const startRecord = (unix, ms, deviceSport) => info(0, u32(device(unix)), Buffer.from([0x80, 0x1c]), u32(100_000), u16(0x0501), Buffer.from([0, deviceSport]), u16(ms), Buffer.alloc(15));
+/** Bytes 6-9 hold the pool length in cm in a pool swim (u16 @6). */
+export const startRecord = (unix, ms, deviceSport, { poolCm = 100_000 } = {}) => info(0, u32(device(unix)), Buffer.from([0x80, 0x1c]), u32(poolCm), u16(0x0501), Buffer.from([0, deviceSport]), u16(ms), Buffer.alloc(15));
 export const pauseRecord = (unix, ms) => info(1, u32(device(unix)), Buffer.from([0]), u32(ms), Buffer.alloc(16));
 export const resumeRecord = (unix) => info(2, u32(device(unix)), Buffer.from([2, 3]), Buffer.alloc(8));
 
@@ -240,4 +241,122 @@ export function syntheticRun({ startUnix = 1_767_247_200, deviceSport = 0, corru
       }
     }
   };
+}
+
+/**
+ * A swim's lap record (sport info 4): kind 0x00 length, 0x10 interval, 0x14
+ * rest at byte 30. Ends at endUnix + endMs; strokes u16 @32, rate u16 @34,
+ * SWOLF u16 @36, interval count @39.
+ */
+export function swimPartRecord(part) {
+  const body = Buffer.alloc(58);
+  body.writeUInt32LE(device(part.endUnix), 0);
+  body.writeUInt16LE(part.index, 4);
+  body.writeUInt32LE(part.timerCs, 6);
+  body.writeUInt32LE(part.distanceCm ?? 0, 10);
+  body.writeUInt32LE(part.pausedCs ?? 0, 14);
+  body.writeUInt32LE(part.smallCalories ?? 0, 18);
+  body.writeUInt16LE(part.avgPace ?? 0, 22); body.writeUInt16LE(part.bestPace ?? 0, 24);
+  body[26] = part.avgHr ?? 0; body[27] = part.maxHr ?? 0; body[28] = part.minHr ?? 0; body.writeInt8(part.temperature ?? 0, 29);
+  body[30] = part.kind;
+  body[31] = part.stroke ?? 0;
+  body.writeUInt16LE(part.strokes ?? 0, 32); body.writeUInt16LE(part.strokeRate ?? 0, 34); body.writeUInt16LE(part.swolf ?? 0, 36);
+  body[39] = part.interval ?? 0;
+  body.writeUInt16LE(part.endMs ?? 0, 40);
+  return info(4, body);
+}
+
+/** A swim's summary: active lengths u16 @8, average pace u16 @14 (s/100 m), strokes u16 @26, best / average SWOLF @30 / @32, stroke rate max @34 / average @35. */
+export function swimSummaryRecord(summary) {
+  const body = Buffer.alloc(58);
+  body.writeUInt32LE(summary.distanceCm, 0);
+  body.writeUInt32LE(summary.timerCs, 4);
+  body.writeUInt16LE(summary.activeLengths ?? 1, 8);
+  body.writeUInt32LE(summary.smallCalories, 10);
+  body.writeUInt16LE(summary.avgPace, 14); body.writeUInt16LE(summary.bestPace, 16);
+  body[22] = summary.avgHr; body[23] = summary.maxHr; body[24] = summary.minHr; body.writeInt8(summary.temperature, 25);
+  body.writeUInt16LE(summary.strokes, 26);
+  body.writeUInt16LE(summary.bestSwolf, 30); body.writeUInt16LE(summary.avgSwolf, 32);
+  body[34] = summary.maxStrokeRate; body[35] = summary.avgStrokeRate;
+  return info(5, body);
+}
+
+/**
+ * A 25 m pool swim, 150 s: an interval of two lengths (freestyle, then
+ * breaststroke), a 30 s rest, and an interval of one backstroke length the
+ * watch stamped 25 s after its interval closed. `unclosed` leaves out the
+ * last interval record, as when a swim stops mid-interval.
+ */
+export function syntheticPoolSwim({ startUnix = 1_767_340_800, unclosed = false } = {}) {
+  const t0 = startUnix;
+  const hr = Array.from({ length: 150 }, (_, i) => 100 + (i % 20));
+  const strokeRate = Array.from({ length: 75 }, (_, i) => (i >= 40 && i < 55 ? 0 : 20 + (i % 5)));
+  // Every 10 s: 29 → 30 between 10 and 20 s (30 from 15 s, halfway), 30 → 29 between 60 and 70 s (29 from 65 s).
+  const temperature = Array.from({ length: 15 }, (_, i) => (i >= 2 && i <= 6 ? 30 : 29));
+  const length = (index, endUnix, endMs, extra) => swimPartRecord({ kind: 0x00, index, endUnix, endMs, distanceCm: 2500, ...extra });
+  const records = [
+    startRecord(t0, 450, 3, { poolCm: 2500 }),
+    seriesRecord(0x02, 1, t0, encodeDeltaPack(hr, { variable: true })),
+    seriesRecord(0x00, 2, t0, encodeDeltaPack(strokeRate)),
+    seriesRecord(0x09, 10, t0, encodeDeltaPack(temperature)),
+    length(1, t0 + 40, 450, { timerCs: 4000, smallCalories: 6400, avgPace: 160, bestPace: 160, avgHr: 105, maxHr: 112, minHr: 100, temperature: 29, stroke: 1, strokes: 16, strokeRate: 24, swolf: 56, interval: 0 }),
+    length(2, t0 + 80, 450, { timerCs: 4000, smallCalories: 7600, avgPace: 160, bestPace: 160, avgHr: 110, maxHr: 119, minHr: 104, temperature: 30, stroke: 2, strokes: 18, strokeRate: 27, swolf: 58, interval: 0 }),
+    swimPartRecord({ kind: 0x10, index: 1, endUnix: t0 + 80, endMs: 450, timerCs: 8000, distanceCm: 5000, smallCalories: 14_000, avgPace: 160, bestPace: 160, avgHr: 108, maxHr: 119, minHr: 100, temperature: 29, stroke: 0xff, strokes: 34, strokeRate: 25, swolf: 57, interval: 1 }),
+    swimPartRecord({ kind: 0x14, index: 2, endUnix: t0 + 110, endMs: 450, timerCs: 3000, smallCalories: 2500, avgHr: 101, maxHr: 108, minHr: 96, temperature: 29, interval: 1 }),
+    length(3, t0 + 175, 200, { timerCs: 4000, smallCalories: 6600, avgPace: 160, bestPace: 160, avgHr: 112, maxHr: 118, minHr: 103, temperature: 29, stroke: 3, strokes: 20, strokeRate: 30, swolf: 60, interval: 1 }),
+    ...(unclosed ? [] : [swimPartRecord({ kind: 0x10, index: 3, endUnix: t0 + 150, endMs: 450, timerCs: 4000, distanceCm: 2500, smallCalories: 6600, avgPace: 160, bestPace: 160, avgHr: 112, maxHr: 118, minHr: 103, temperature: 29, stroke: 3, strokes: 20, strokeRate: 30, swolf: 60, interval: 2 })]),
+    pauseRecord(t0 + 150, 450),
+    swimSummaryRecord({ distanceCm: 7500, timerCs: 15_000, activeLengths: 3, smallCalories: 23_100, avgPace: 160, bestPace: 160, avgHr: 107, maxHr: 119, minHr: 96, temperature: 29, strokes: 54, bestSwolf: 56, avgSwolf: 58, maxStrokeRate: 30, avgStrokeRate: 26 })
+  ];
+  return { file: pages(records), expected: { t0, hr, strokeRate, temperature } };
+}
+
+/** A 60 m open-water swim, one lap of 70 s with 10 s paused: GPS-style distance and speed series, no lengths. */
+export function syntheticOpenWaterSwim({ startUnix = 1_767_427_200 } = {}) {
+  const t0 = startUnix;
+  const dist = Array.from({ length: 31 }, (_, i) => i * 2);
+  const speed = Array.from({ length: 31 }, () => 300);
+  return {
+    file: pages([
+      startRecord(t0, 0, 2, { poolCm: 50_000 }),
+      seriesRecord(0x02, 1, t0, encodeDeltaPack(Array.from({ length: 61 }, () => 120))),
+      seriesRecord(0x07, 2, t0, encodeDeltaPack(dist, { sizeShift: 2 })),
+      seriesRecord(0x06, 2, t0, encodeDeltaPack(speed, { sizeShift: 1 })),
+      seriesRecord(0x00, 2, t0, encodeDeltaPack(Array.from({ length: 31 }, () => 18))),
+      pauseRecord(t0 + 60, 0),
+      swimPartRecord({ kind: 0x00, index: 1, endUnix: t0 + 70, endMs: 0, timerCs: 6000, pausedCs: 1000, distanceCm: 6000, smallCalories: 9000, avgPace: 100, bestPace: 90, avgHr: 120, maxHr: 125, minHr: 115, temperature: 18, stroke: 1, strokes: 40, strokeRate: 40, swolf: 65, interval: 0 }),
+      swimSummaryRecord({ distanceCm: 6000, timerCs: 6000, smallCalories: 9000, avgPace: 100, bestPace: 90, avgHr: 120, maxHr: 125, minHr: 115, temperature: 18, strokes: 40, bestSwolf: 65, avgSwolf: 65, maxStrokeRate: 44, avgStrokeRate: 40 })
+    ]),
+    expected: { t0 }
+  };
+}
+
+/**
+ * A 25 yd pool swim recorded as one interval (kind 0x44), with what real swims
+ * show: the timer pauses between lengths (2 s at the wall stay on it), runs
+ * 20 s between lengths 2 and 3 (an idle stretch), the watch records the last
+ * length twice with one end time, a page is read twice, a lap record of a
+ * kind never seen (0x20) comes first, and the interval closes 8 s after the
+ * stop, when the swim was saved.
+ */
+export function syntheticPoolSwimAtTheWall({ startUnix = 1_767_513_600 } = {}) {
+  const t0 = startUnix;
+  const yard = 2286;
+  const length = (index, end, extra) => swimPartRecord({ kind: 0x00, index, endUnix: t0 + end, endMs: 0, timerCs: 3000, distanceCm: yard, smallCalories: 5000, avgPace: 120, bestPace: 120, avgHr: 110, maxHr: 115, stroke: 1, strokes: 15, strokeRate: 30, swolf: 45, interval: 0, ...extra });
+  const second = length(2, 91);
+  const records = [
+    startRecord(t0, 0, 3, { poolCm: yard }),
+    seriesRecord(0x02, 1, t0, encodeDeltaPack(Array.from({ length: 233 }, () => 110))),
+    swimPartRecord({ kind: 0x20, index: 0, endUnix: t0 + 5, timerCs: 500, interval: 0 }),
+    length(1, 30),
+    pauseRecord(t0 + 32, 0), resumeRecord(t0 + 60),
+    second, second,
+    length(3, 141, { stroke: 2, strokes: 12, swolf: 42 }),
+    pauseRecord(t0 + 142, 0), resumeRecord(t0 + 199),
+    length(4, 230), length(5, 230),
+    pauseRecord(t0 + 232, 0),
+    swimPartRecord({ kind: 0x44, index: 1, endUnix: t0 + 240, endMs: 0, timerCs: 14_500, pausedCs: 9500, distanceCm: 5 * yard, smallCalories: 25_000, avgPace: 120, bestPace: 120, avgHr: 110, maxHr: 115, stroke: 0xff, strokes: 72, strokeRate: 30, swolf: 44, interval: 1 }),
+    swimSummaryRecord({ distanceCm: 5 * yard, timerCs: 14_500, activeLengths: 5, smallCalories: 25_000, avgPace: 120, bestPace: 120, avgHr: 110, maxHr: 115, minHr: 105, temperature: 27, strokes: 72, bestSwolf: 42, avgSwolf: 44, maxStrokeRate: 32, avgStrokeRate: 30 })
+  ];
+  return { file: pages(records), expected: { t0 } };
 }
