@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Separate °C and °F labels for the current temperature.** Give the temperature a second unit image in Studio and the watch shows the one that matches its setting. Faces with a plain ° stay as they are.
+- **Separate °C and °F labels for the current temperature.** In Studio, select the temperature, open Units, and choose Celsius (°C) or Fahrenheit (°F) to give each its own label. The watch shows the one that matches its setting. Faces with a plain ° stay as they are.
 - **Watchmaker checks below-zero and Fahrenheit readings.** It now keeps a minus sign on temperatures and uses a plain ° or both °C and °F, and Studio's validation warns when a minus or unit is missing or a single label would be wrong in the other unit.
 
 ### Fixed

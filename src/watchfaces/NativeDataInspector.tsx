@@ -22,6 +22,8 @@ const SPRITE_LABELS: Partial<Record<Role, string[]>> = {
   icon: ["Main / rise icon", "Set icon"], unit: ["Primary / metric unit", "Alternate / imperial unit"], symbols: ["Minus", "Degree", "Percent", "Colon"], progress: ["Sunrise progress", "Sunset progress"],
   separator: ["Separator"]
 };
+/** The watch picks the temperature unit image by its own °C/°F setting (W332 3.2008.0, 0x454f76). */
+const TEMPERATURE_UNIT_LABELS = ["Celsius (°C)", "Fahrenheit (°F)"];
 
 const chartSourceLabel = (source: string) => t(nativeChartReadoutLabel(source));
 const nativeFieldLabel = (id: string) => t(NATIVE_DATA_BY_ID.get(id)?.label ?? id);
@@ -390,7 +392,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
     definition.note ? <p key="note" className="watchface-studio-summary" role="note">{t(definition.note)}</p> : null
   ].filter(Boolean);
 
-  const artworkStateLabel = (i: number) => { const label = SPRITE_LABELS[role!]?.[i]; return label ? t(label) : role === "digits" ? t("Digit {{i}}", { i }) : t("State {{i}}", { i }); };
+  const artworkStateLabel = (i: number) => { const label = role === "unit" && id.startsWith("weather_temp") ? TEMPERATURE_UNIT_LABELS[i] : SPRITE_LABELS[role!]?.[i]; return label ? t(label) : role === "digits" ? t("Digit {{i}}", { i }) : t("State {{i}}", { i }); };
 
   // The watch picks bars, a line or no graph per chart page; the face only styles both.
   const graph = nativeChartRepresentation(style.chartSource);
@@ -489,6 +491,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
             <span>{t("Artwork")}</span>
             {indices.length > 1 && <select aria-label={t("Artwork state")} value={index} onChange={event=>setSelectedIndex(Number(event.target.value))}>{indices.map(i=><option key={i} value={i}>{String(i).padStart(2,"0")} · {artworkStateLabel(i)}</option>)}</select>}
           </div>
+          {role === "unit" && id === "weather_temp" && <p className="watchface-studio-summary">{t("The watch shows 00 in Celsius and 01 in Fahrenheit. Leave 01 untouched to show 00 in both, which suits a plain °.")}</p>}
           <div className="wf-native-artwork-row">
             <SpritePreview id={id} style={style} role={role} index={index} />
             <div className="wf-native-artwork-copy">
