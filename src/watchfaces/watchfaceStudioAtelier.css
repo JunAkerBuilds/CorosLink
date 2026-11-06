@@ -902,6 +902,36 @@
   outline-offset: 2px;
 }
 
+/* "RobotoBold" and the like: one click moves the face onto the Google family. */
+:root .watchface-shell.watchface-shell--studio .wf-font-notice-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  margin-top: 6px;
+  border: 1px solid var(--atl-line-strong);
+  border-radius: 8px;
+  background: var(--atl-control);
+  padding: 0 10px;
+  color: var(--text-primary);
+  font: 600 12px var(--font-display);
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-font-notice-switch:hover:not(:disabled) {
+  background: var(--atl-control-hover);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-font-notice-switch:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-font-notice-switch:focus-visible {
+  outline: 2px solid var(--atl-lume-ring);
+  outline-offset: 2px;
+}
+
 /* Every family's glyphs are embedded in the project, so the face still
    previews and exports as designed: amber warning instead of red error. */
 :root .watchface-shell.watchface-shell--studio .wf-font-notice.is-embedded {

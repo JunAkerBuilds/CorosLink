@@ -5,7 +5,8 @@ import { announceStudioEditor } from "./studioEditorPresence";
 import { watchfaceLayerSampleValue } from "./watchfaceLayerValues";
 import { WatchfaceHint } from "./WatchfaceHint";
 import { collectWatchfaceFaceColors, recolorWatchfaceFace } from "./watchfaceFaceColors";
-import { loadWatchfaceGoogleFontsFor } from "./watchfaceGoogleFonts";
+import { loadWatchfaceGoogleFont, loadWatchfaceGoogleFontsFor, parseWatchfaceGoogleFontName } from "./watchfaceGoogleFonts";
+import { renameWatchfaceFontFamily } from "./watchfaceFontRename";
 import { WatchfaceAddMenu, type WatchfaceAddCategory, type WatchfaceAddFaceOption } from "./WatchfaceAddMenu";
 import { recoverChartGroup, recoverChartPageCompanions, recoverGraphlessChart, recoveredChartReadouts, recoveredChartSources, recoverWatchfaceDesign, type ChartPageCompanions } from "./recoveredWatchfaceDesign";
 import { WATCHFACE_TARGETS } from "../../electron/watchfaceTargets";
@@ -275,6 +276,7 @@ import {
   Layers,
   Link2,
   Lock,
+  Globe,
   Loader2,
   Magnet,
   Minus,
@@ -1446,6 +1448,28 @@ export function WatchfaceEditor({
         ? updateWatchfaceEditorHistoryTransaction(current, nextValue)
         : recordWatchfaceEditorHistory(current, nextValue)
     );
+  }
+
+  /**
+   * Moves every use of a missing single-weight font ("RobotoBold") onto the
+   * Google family it names, at the weight it named, in Current and Always-on.
+   */
+  const [fontSwitching, setFontSwitching] = useState<string | null>(null);
+  async function switchFontToGoogle(from: string) {
+    const match = parseWatchfaceGoogleFontName(from);
+    if (!match || fontSwitching) return;
+    setFontSwitching(from);
+    const ok = await loadWatchfaceGoogleFont(match.family).finally(() => setFontSwitching(null));
+    if (!ok) {
+      onError(t("Couldn’t load “{{family}}” from Google Fonts. Check the name and your connection.", { family: match.family }));
+      return;
+    }
+    const current = historyRef.current;
+    applyHistory(recordWatchfaceEditorHistory(current, {
+      ...current.present.value,
+      design: renameWatchfaceFontFamily(current.present.value.design, { from, to: match.family, weight: match.weight })
+    }));
+    showDeleteNotice(t("“{{from}}” now uses {{family}} from Google Fonts.", { from, family: match.family }));
   }
 
   function setProjectName(projectName: string) {
@@ -11270,6 +11294,15 @@ export function WatchfaceEditor({
                           places: new Intl.ListFormat(getLocale(), { style: "narrow" }).format(font.usedBy.map(missingFontPlaceLabel))
                         })}
                       </span>
+                      {(() => {
+                        const match = parseWatchfaceGoogleFontName(font.family);
+                        return match ? (
+                          <button type="button" className="wf-font-notice-switch" disabled={Boolean(fontSwitching)} onClick={() => void switchFontToGoogle(font.family)}>
+                            {fontSwitching === font.family ? <Loader2 className="spin" size={12} aria-hidden="true" /> : <Globe size={12} aria-hidden="true" />}
+                            {t("Use {{family}} {{weight}} from Google Fonts", { family: match.family, weight: match.weight })}
+                          </button>
+                        ) : null;
+                      })()}
                     </li>
                   ))}
                 </ul>

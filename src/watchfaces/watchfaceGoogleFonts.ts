@@ -1,4 +1,4 @@
-import { forgetWatchfaceFontAvailability, normalizeWatchfaceFontFamily } from "./watchfaceFontSnapshots";
+import { forgetWatchfaceFontAvailability, normalizeWatchfaceFontFamily } from "./watchfaceFontSnapshots.ts";
 
 /**
  * Google Fonts in Studio. A chosen family is loaded into the app from
@@ -56,6 +56,40 @@ export function isWatchfaceGoogleFont(family: string): boolean {
   const name = key(family);
   return WATCHFACE_GOOGLE_FONTS.some((font) => font.family.toLocaleLowerCase() === name) ||
     rememberedWatchfaceGoogleFonts().some((font) => font.toLocaleLowerCase() === name);
+}
+
+/** Weight words font files append to a family name, longest first. */
+const WEIGHT_WORDS: Array<[string, number]> = [
+  ["extralight", 200], ["ultralight", 200], ["extrabold", 800], ["ultrabold", 800], ["semibold", 600], ["demibold", 600],
+  ["hairline", 100], ["regular", 400], ["normal", 400], ["medium", 500], ["black", 900], ["heavy", 900],
+  ["light", 300], ["thin", 100], ["book", 400], ["bold", 700]
+];
+
+export interface WatchfaceGoogleFontName {
+  /** The Google family, spelled as the catalog spells it. */
+  family: string;
+  weight: number;
+  italic: boolean;
+}
+
+/**
+ * Reads a font name such as "RobotoBold", "Roboto-Black" or "roboto bold
+ * italic" as a Google family plus weight. Template fonts and font files often
+ * glue the weight onto the family; Google serves one family with every weight.
+ * Null when the base is not a family Studio knows from Google Fonts.
+ */
+export function parseWatchfaceGoogleFontName(name: string): WatchfaceGoogleFontName | null {
+  let rest = normalizeWatchfaceFontFamily(name).toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!rest) return null;
+  let italic = false, weight: number | undefined;
+  if (rest.endsWith("italic")) { italic = true; rest = rest.slice(0, -"italic".length); }
+  const word = WEIGHT_WORDS.find(([text]) => rest.endsWith(text) && rest.length > text.length);
+  if (word) { weight = word[1]; rest = rest.slice(0, -word[0].length); }
+  if (!italic && rest.endsWith("italic")) { italic = true; rest = rest.slice(0, -"italic".length); }
+  const compact = (family: string) => family.toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
+  const family = [...WATCHFACE_GOOGLE_FONTS.map(font => font.family), ...rememberedWatchfaceGoogleFonts()]
+    .find(candidate => compact(candidate) === rest);
+  return family ? { family, weight: weight ?? 400, italic } : null;
 }
 
 export function rememberedWatchfaceGoogleFonts(): string[] {
@@ -136,13 +170,16 @@ export function watchfaceGoogleFontPreviewFamily(family: string): string {
   return `wf-preview ${family}`;
 }
 
-/** Downloads just the sample glyphs, so a list of many families stays light. */
-export function loadWatchfaceGoogleFontPreview(family: string): Promise<void> {
-  const cacheKey = key(family);
+/**
+ * Downloads just the sample glyphs, so a list of many families stays light.
+ * `weight` adds that weight's subset (a row for "Roboto Bold" shows bold).
+ */
+export function loadWatchfaceGoogleFontPreview(family: string, weight?: number): Promise<void> {
+  const cacheKey = `${key(family)}${weight ? `-${weight}` : ""}`;
   const pending = previews.get(cacheKey);
   if (pending) return pending;
   const promise = (async () => {
-    const css = await fetchCss(cssUrl(family, undefined, `${WATCHFACE_GOOGLE_FONT_SAMPLE}${family}`));
+    const css = await fetchCss(cssUrl(family, weight ? `wght@${weight}` : undefined, `${WATCHFACE_GOOGLE_FONT_SAMPLE}${family}`));
     if (!css) return;
     // Renamed so the subset never stands in for the real family on the face.
     const alias = watchfaceGoogleFontPreviewFamily(family).replace(/'/g, "");

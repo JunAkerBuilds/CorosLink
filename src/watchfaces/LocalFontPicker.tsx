@@ -17,6 +17,7 @@ import {
   isWatchfaceGoogleFont,
   loadWatchfaceGoogleFont,
   loadWatchfaceGoogleFontPreview,
+  parseWatchfaceGoogleFontName,
   rememberedWatchfaceGoogleFonts,
   watchfaceGoogleFontPreviewFamily,
   type WatchfaceGoogleFontCategory
@@ -125,6 +126,13 @@ export function LocalFontPicker({
       family.toLocaleLowerCase().includes(normalizedQuery)
     );
   }, [families, query]);
+  // "roboto bold", or a face's own "RobotoBold": Google's Roboto at 700.
+  const nameMatch = useMemo(() => {
+    const typed = query.trim() ? parseWatchfaceGoogleFontName(query) : null;
+    if (typed) return typed;
+    const current = !query.trim() && value ? parseWatchfaceGoogleFontName(value) : null;
+    return current && current.family.toLocaleLowerCase() !== value.trim().toLocaleLowerCase() ? current : null;
+  }, [query, value]);
   const googleFamilies = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     const catalog = WATCHFACE_GOOGLE_FONTS.filter((font) => googleCategory === "All" || font.category === googleCategory)
@@ -133,11 +141,12 @@ export function LocalFontPicker({
     const recent = googleCategory === "All"
       ? rememberedWatchfaceGoogleFonts().filter((family) => !catalog.some((item) => item.toLocaleLowerCase() === family.toLocaleLowerCase()))
       : [];
-    return [...recent, ...catalog].filter((family) => !normalizedQuery || family.toLocaleLowerCase().includes(normalizedQuery));
+    const found = [...recent, ...catalog].filter((family) => !normalizedQuery || family.toLocaleLowerCase().includes(normalizedQuery));
+    return nameMatch ? [nameMatch.family, ...found.filter((family) => family !== nameMatch.family)] : found;
     // `open` refreshes the remembered list each time the picker opens.
-  }, [googleCategory, query, open]);
+  }, [googleCategory, query, open, nameMatch]);
   const shownFamilies = source === "google" ? googleFamilies : matchingFamilies;
-  const exactMatch = shownFamilies.some(
+  const exactMatch = Boolean(source === "google" && nameMatch) || shownFamilies.some(
     (family) => family.localeCompare(query.trim(), undefined, { sensitivity: "accent" }) === 0
   );
   const fontWeight = typography?.fontWeight ?? 400;
@@ -236,6 +245,10 @@ export function LocalFontPicker({
       }
     }
     onChange(candidate.trim());
+    // A weight read from the name ("Roboto Bold") comes along with the family.
+    if (source === "google" && nameMatch && candidate.trim() === nameMatch.family) {
+      updateTypography({ fontWeight: nameMatch.weight, ...(nameMatch.italic ? { fontStyle: "italic" as const } : {}) });
+    }
     onRasterFontChange?.(undefined);
     closePicker();
   }
@@ -284,11 +297,11 @@ export function LocalFontPicker({
     if (!open || source !== "google") return;
     let cancelled = false;
     void Promise.all(googleFamilies.slice(0, FONT_PICKER_RESULT_LIMIT).map(async (family) => {
-      await loadWatchfaceGoogleFontPreview(family);
+      await loadWatchfaceGoogleFontPreview(family, nameMatch?.family === family ? nameMatch.weight : undefined);
       if (!cancelled) setPreviewsReady((count) => count + 1);
     }));
     return () => { cancelled = true; };
-  }, [googleFamilies, open, source]);
+  }, [googleFamilies, open, source, nameMatch]);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -521,8 +534,10 @@ export function LocalFontPicker({
                       onClick={() => setCandidate(family)}
                     >
                       <span className="watchface-font-picker-result-copy">
-                        <span className="wf-font-result-name">{family}{source === "google" ? <small>{category ? t(category) : t("Loaded by name")}</small> : null}</span>
-                        <span className="wf-font-result-sample" style={{ fontFamily: previewFamily, ...pickerPreviewStyle }}>{source === "google" ? WATCHFACE_GOOGLE_FONT_SAMPLE : t("Ag 0123456789")}</span>
+                        <span className="wf-font-result-name">{family}{source === "google" ? <small>{nameMatch?.family === family
+                          ? t("Weight {{value}}", { value: nameMatch.weight }) + (nameMatch.italic ? ` · ${t("Italic")}` : "")
+                          : category ? t(category) : t("Loaded by name")}</small> : null}</span>
+                        <span className="wf-font-result-sample" style={{ fontFamily: previewFamily, ...pickerPreviewStyle, ...(source === "google" && nameMatch?.family === family ? { fontWeight: nameMatch.weight, fontStyle: nameMatch.italic ? "italic" : undefined } : {}) }}>{source === "google" ? WATCHFACE_GOOGLE_FONT_SAMPLE : t("Ag 0123456789")}</span>
                       </span>
                       <Check className="watchface-font-picker-result-check" size={15} aria-hidden="true" />
                     </button>

@@ -137,4 +137,39 @@ assert.equal(metrics.actualBoundingBoxAscent, 7);
   }
 }
 
+// Font names with the weight glued on read as the Google family plus weight,
+// and switching a face to it shifts every weight it drew with (2LoT_v4test).
+{
+  const { parseWatchfaceGoogleFontName } = await import("../src/watchfaces/watchfaceGoogleFonts.ts");
+  const { renameWatchfaceFontFamily } = await import("../src/watchfaces/watchfaceFontRename.ts");
+  assert.deepEqual(parseWatchfaceGoogleFontName("RobotoBold"), { family: "Roboto", weight: 700, italic: false });
+  assert.deepEqual(parseWatchfaceGoogleFontName("roboto bold"), { family: "Roboto", weight: 700, italic: false });
+  assert.deepEqual(parseWatchfaceGoogleFontName("Roboto-BlackItalic"), { family: "Roboto", weight: 900, italic: true });
+  assert.deepEqual(parseWatchfaceGoogleFontName("RobotoCondensed-Light"), { family: "Roboto Condensed", weight: 300, italic: false });
+  assert.deepEqual(parseWatchfaceGoogleFontName("Roboto"), { family: "Roboto", weight: 400, italic: false });
+  assert.equal(parseWatchfaceGoogleFontName("Bold"), null, "A weight word alone is no family");
+  assert.equal(parseWatchfaceGoogleFontName("HelveticaBold"), null, "Only families Studio knows from Google");
+
+  const design = {
+    ...baseDesign, fontFamily: "Impact", fontWeight: 400,
+    metricStyles: { steps: { scale: 1, fontFamily: "RobotoBlack" }, battery: { scale: 1, fontFamily: "RobotoBlack", fontWeight: 200 }, heartRate: { scale: 1 } },
+    nativeData: {
+      weather_rainfall: { enabled: true, x: 0, y: 0, scale: 1, fontFamily: "RobotoBlack", parts: { value: { fontFamily: "RobotoBlack" }, unit: { fontWeight: 600 } } },
+      chart: { enabled: true, x: 0, y: 0, scale: 1, fontFamily: "Impact", parts: { value: { fontFamily: "RobotoBlack" } } }
+    },
+    modeDesigns: { aod: { metricStyles: { steps: { scale: 1, fontFamily: "RobotoBlack", fontWeight: 500 } } } }
+  };
+  const next = renameWatchfaceFontFamily(design, { from: "RobotoBlack", to: "Roboto", weight: 900 });
+  assert.equal(next.fontFamily, "Impact", "Other families stay");
+  assert.deepEqual(next.metricStyles.steps, { scale: 1, fontFamily: "Roboto", fontWeight: 900 }, "Its regular becomes the named weight");
+  assert.deepEqual(next.metricStyles.battery, { scale: 1, fontFamily: "Roboto", fontWeight: 700 }, "A thinned 200 shifts with it");
+  assert.deepEqual(next.metricStyles.heartRate, { scale: 1 }, "Layers on other fonts are untouched");
+  assert.equal(next.nativeData.weather_rainfall.fontFamily, "Roboto");
+  assert.equal(next.nativeData.weather_rainfall.fontWeight, 900);
+  assert.deepEqual(next.nativeData.weather_rainfall.parts.value, { fontFamily: "Roboto" }, "A part inheriting the shifted weight stays inheriting");
+  assert.deepEqual(next.nativeData.weather_rainfall.parts.unit, { fontWeight: 900 }, "600 on the old family is past the scale: 900");
+  assert.deepEqual(next.nativeData.chart.parts.value, { fontFamily: "Roboto", fontWeight: 900 }, "A part on the old font under another family pins its weight");
+  assert.deepEqual(next.modeDesigns.aod.metricStyles.steps, { scale: 1, fontFamily: "Roboto", fontWeight: 900 }, "Always-on too");
+}
+
 console.log("Watchface font snapshot tests passed");
