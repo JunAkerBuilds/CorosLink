@@ -1649,7 +1649,8 @@ function registerIpcHandlers(): void {
 
   if (!app.isPackaged) {
     // Dev-only, read-only: what weather (pressure/tide) COROS's server returns.
-    ipcMain.handle("dev:probeCorosWeather", () => probeCorosWeather());
+    ipcMain.handle("dev:probeCorosWeather", (_event, input?: { lat?: number; lng?: number; label?: string }) =>
+      probeCorosWeather(input));
     ipcMain.handle("gear:query", () => queryCorosGear());
     ipcMain.handle(
       "gear:save",

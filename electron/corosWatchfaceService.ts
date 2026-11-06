@@ -1279,25 +1279,35 @@ export interface CorosWeatherProbeResult {
 
 /**
  * Dev-only, read-only diagnostic: asks COROS's mobile `weather/query` what it
- * returns for a fixed public coastal coordinate (San Francisco) and reports
+ * returns for a coordinate (default: San Francisco, or `{ lat, lng, label }`) and reports
  * whether hourly pressure / tide values and tide events are present. Writes a
  * decoded JSON report (no token, no YFHeader) to the user data folder.
  */
-export async function probeCorosWeather(): Promise<CorosWeatherProbeResult> {
+export async function probeCorosWeather(
+  input?: { lat?: number; lng?: number; label?: string }
+): Promise<CorosWeatherProbeResult> {
   const session = requireSession();
   const baseUrl = mobileApiBaseUrl(session.region);
-  const lat = 37.7749;
-  const lng = -122.4194;
+  const custom = typeof input?.lat === "number" && typeof input?.lng === "number";
+  if (custom && (!Number.isFinite(input!.lat) || Math.abs(input!.lat!) > 90 ||
+    !Number.isFinite(input!.lng) || Math.abs(input!.lng!) > 180)) {
+    throw new Error("Enter a valid latitude and longitude.");
+  }
+  const lat = custom ? input!.lat! : 37.7749;
+  const lng = custom ? input!.lng! : -122.4194;
+  const label = (input?.label ?? (custom ? "custom" : "sf")).replace(/[^a-z0-9-]/gi, "").slice(0, 32) || "custom";
   // The app's Retrofit call: POST form-urlencoded, header accessToken, field
   // `coord`, built from (lng/1e7, lat/1e7) doubles. The string format isn't in
   // the recovered code, so try the plausible shapes.
-  const shapes: Array<{ shape: string; coord: string }> = [
+  // Confirmed 2026-11-05: "lng,lat" decimal. Custom runs send only that one.
+  const allShapes: Array<{ shape: string; coord: string }> = [
     { shape: "lng,lat decimal", coord: `${lng},${lat}` },
     { shape: "lat,lng decimal", coord: `${lat},${lng}` },
     { shape: "JSON {lo,la}", coord: JSON.stringify({ lo: lng, la: lat }) },
     { shape: "JSON {lng,lat}", coord: JSON.stringify({ lng, lat }) },
     { shape: "lng,lat E7", coord: `${Math.round(lng * 1e7)},${Math.round(lat * 1e7)}` }
   ];
+  const shapes = custom ? allShapes.slice(0, 1) : allShapes;
 
   const attempts: CorosWeatherProbeResult["attempts"] = [];
   const decodedByShape: Record<string, unknown> = {};
@@ -1368,12 +1378,13 @@ export async function probeCorosWeather(): Promise<CorosWeatherProbeResult> {
     structReport = decodeWeatherStruct(Buffer.from(best.weatherStruct, "base64"));
   }
 
-  const outputPath = path.join(app.getPath("userData"), "coros-weather-probe.json");
+  const outputPath = path.join(app.getPath("userData"),
+    label === "sf" ? "coros-weather-probe.json" : `coros-weather-probe-${label}.json`);
   const report = {
     generatedAt: new Date().toISOString(),
     region: session.region ?? DEFAULT_WATCHFACE_REGION,
     endpoint: `${baseUrl}/weather/query`,
-    query: { lat, lng, note: "Public coordinate (San Francisco), not the user's location." },
+    query: { lat, lng, label },
     workingShape: best?.shape ?? null,
     attempts,
     summariesByShape: decodedByShape,

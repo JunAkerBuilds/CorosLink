@@ -393,7 +393,8 @@ const api = {
     input: CorosBatteryQueryInput
   ): Promise<CorosBatteryReport> => ipcRenderer.invoke("watchfaces:getBatteryReport", input),
   /** Dev builds only: decode COROS weather/query for a public coordinate. */
-  probeCorosWeather: (): Promise<unknown> => ipcRenderer.invoke("dev:probeCorosWeather"),
+  probeCorosWeather: (input?: { lat?: number; lng?: number; label?: string }): Promise<unknown> =>
+    ipcRenderer.invoke("dev:probeCorosWeather", input),
   queryCorosGear: (): Promise<CorosGearCatalog> =>
     ipcRenderer.invoke("gear:query"),
   saveCorosGear: (input: CorosGearSaveInput): Promise<CorosGearCatalog> =>
