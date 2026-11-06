@@ -128,6 +128,8 @@ export interface AppSidebarProps {
   onOverlayOpenChange: (open: boolean) => void;
   /** Opens the sidebar section of Settings. */
   onCustomize: () => void;
+  /** False while another view folds the sidebar, so a toggle there is not remembered. */
+  persistExpanded?: boolean;
 }
 
 interface NavMenuState {
@@ -147,6 +149,7 @@ export function AppSidebar({
   overlayOpen,
   onOverlayOpenChange,
   onCustomize,
+  persistExpanded = true,
 }: AppSidebarProps) {
   useLanguage();
   const overlayMode = useMediaQuery("(max-width: 720px)");
@@ -271,7 +274,7 @@ export function AppSidebar({
   const handleToggleExpanded = () => {
     const nextExpanded = !expanded;
     onExpandedChange(nextExpanded);
-    writeSidebarCollapsed(!nextExpanded);
+    if (persistExpanded) writeSidebarCollapsed(!nextExpanded);
   };
 
   const widthTransition = reducedMotion

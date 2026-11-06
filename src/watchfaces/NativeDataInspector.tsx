@@ -1,7 +1,7 @@
 import { t, useLanguage, getLocale, midSentence } from "../i18n/watchfaces";
 import { WatchfaceColorInput } from "./WatchfaceColorInput";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { FolderInput, ImagePlus, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronDown, Eye, EyeOff, FolderInput, ImagePlus, Pin, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceNativePartStyle } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { NATIVE_DATA_BY_ID, nativeDataAsset, nativeDataPreviewValue } from "./nativeData";
@@ -11,6 +11,7 @@ import { chartReadoutHidden } from "./chartReadouts";
 import { loadStudioImage, resizeAndTintSprite, type WatchfaceTypography } from "./watchfaceStudio";
 import { LocalFontPicker } from "./LocalFontPicker";
 import { WatchfaceNumberAlignControl } from "./WatchfaceNumberAlignControl";
+import { WatchfaceHint } from "./WatchfaceHint";
 import type { WatchfaceInspectorSectionId } from "./watchfaceInspectorSections";
 
 const PART_LABELS: Record<Part, string> = {
@@ -31,25 +32,32 @@ const listLabels = (labels: string[]) => labels.join(getLocale().startsWith("zh"
 
 /**
  * A field the watch draws only on some chart pages, wherever it sits
- * (nativeLayerChartPages). No face setting changes that, so the panel says
- * where it shows and, for weather the sun page skips, offers the way around.
+ * (nativeLayerChartPages). The face's pages show as numbered tiles in Back
+ * order, the same numbers as the stage's Screens strip: lit where the field
+ * shows, ringed on the page the canvas shows. Clicking one shows that page.
  */
-function FieldPagesPanel({ id, pages, onAddDailyPage }: { id: string; pages: string[]; onAddDailyPage?: () => void }) {
+function FieldPagesPanel({ onAddDailyPage }: {
+  pages: string[]; facePages: string[]; shownPage?: string; onShowPage?: (page: string) => void; onAddDailyPage?: () => void;
+}) {
   useLanguage();
-  const label = nativeFieldLabel(id);
-  // A face with chart pages but no daily one (min/max) never draws the field.
-  if (!pages.length) return <div className="wf-field-pages is-warning">
-    <p><strong>{t("Not shown on the watch.")}</strong> {t("This face has chart pages but no daily data page, and the watch draws {{label}} only on that one.", { label })}</p>
-    {onAddDailyPage ? <>
-      <p>{t("A hidden daily page shows nothing of its own, and {{label}} shows while the watch is on it. It's listed under Chart pages.", { label })}</p>
-      <button type="button" className="secondary-button" onClick={onAddDailyPage}><Plus size={13} aria-hidden="true" />{t("Add a hidden daily page")}</button>
-    </> : null}
-  </div>;
   return <div className="wf-field-pages">
-    <p><strong>{t("Shows on:")}</strong> {listLabels(pages.map(chartPageLabel))}</p>
-    <p>{t("The watch hides {{label}} on the other chart pages wherever it sits. No face setting changes that.", { label })}</p>
-    {id !== "chart_sun_angle" && !pages.includes("sun") ? <p>{t("To keep it on screen with sunrise and sunset times, use the Sunrise / sunset field instead of the chart's Sun page.")}</p> : null}
+    <p>{t("The watch draws it only on a daily page, and this face has none.")}</p>
+    {onAddDailyPage ? <button type="button" className="secondary-button" onClick={onAddDailyPage}>
+      <Plus size={13} aria-hidden="true" />{t("Add a Daily stats page")}
+    </button> : null}
   </div>;
+}
+/** The ⓘ beside "Watch pages": why the field skips some pages, and the way around. */
+function fieldPagesHint(id: string, pages: string[]) {
+  const label = nativeFieldLabel(id);
+  if (!pages.length) return <WatchfaceHint label={t("Why none")}>
+    {t("This face has chart pages but no daily data page, and the watch draws {{label}} only on that one.", { label })}{" "}
+    {t("A hidden daily page shows nothing of its own, and {{label}} shows while the watch is on it.", { label })}
+  </WatchfaceHint>;
+  return <WatchfaceHint label={t("Why some pages")}>
+    {t("The watch hides {{label}} on the other chart pages wherever it sits. No face setting changes that.", { label })}
+    {id !== "chart_sun_angle" && !pages.includes("sun") ? <>{" "}{t("To keep it on screen with sunrise and sunset times, use the Sunrise / sunset field instead of the chart's Sun page.")}</> : null}
+  </WatchfaceHint>;
 }
 /**
  * PACE Pro firmware draws minimum and maximum only together, as one reading
@@ -67,151 +75,123 @@ function MinMaxPartnerPanel({ id, onAdd }: { id: string; onAdd: () => void }) {
 }
 export const chartPageLabel = (id: string) => id === "daily-a" ? t("Daily stats") : id === "daily-b" ? t("Daily activity") : id === "sun" ? t("Sun") : id === "moon" ? t("Moon") : id === "barometer" ? t("Barometer") : t("Tide");
 
-type ChartPage = typeof NATIVE_CHART_PAGES[number];
 type ChartSlotState = "shown" | "hidden" | "missing" | "fixed";
+const isBarPage = (id: string) => (NATIVE_CHART_BAR_PAGES as readonly string[]).includes(id);
+const pageOfSource = (source: string) => NATIVE_CHART_PAGES.find(page => page.sources.includes(source));
+
+/** What the page the chart layer shows draws: bars, a line or numbers only. */
+export function chartPageGraphLabel(pageId: string) {
+  const graph = nativeChartRepresentation(NATIVE_CHART_PAGES.find(page => page.id === pageId)?.sources[0]);
+  return graph === "bars" ? t("Bars") : graph === "curve" ? t("Line graph") : t("No graph");
+}
+function chartPageHint(pageId: string) {
+  return <WatchfaceHint label={t("About this page")}>
+    {isBarPage(pageId)
+      ? t("The watch draws bars here. Barometer and tide numbers stay blank until the watch syncs that data from your phone; the graph shows either way.")
+      : pageId === "sun" || pageId === "moon"
+        ? t("The watch draws a line here, with the horizon and the dot that marks now in white, and skips the weather block for wind.")
+        : t("A page of numbers with no graph. The watch shows it only with all three readouts, so hidden ones stay on it invisibly.")}
+  </WatchfaceHint>;
+}
 
 /**
- * The chart as the watch shows it: the pages Back steps through, in firmware
- * order (NATIVE_CHART_PAGES), each with its fixed slots. A page in use always
- * carries its required slots, shown or hidden (export keeps hidden ones as
- * invisible readouts); optional slots are added and removed. Barometer and
- * tide come and go together with the bars. Clicking a readout edits it.
+ * The page the chart layer shows (the edited readout's page): its readouts,
+ * the weather fields the watch switches on it, and Remove page. Pages
+ * themselves are picked and added in the stage's Screens strip.
  */
-function ChartPageStrip({ current, readouts, editable, template, removed, hidden, taken = [], barsOn, disabled, pageFields = {}, onSelectField,
-  removedPages = [], onEdit, onAdd, onRemove, onShown, onAddPage, onRemovePage, onBars, onMakeFixed, onRestore }: {
+function ChartPagePanel({ current, readouts, editable, template, removed, hidden, taken = [], barsOn, disabled, pageFields = [], onSelectField,
+  removedPages = [], onEdit, onAdd, onRemove, onShown, onRemovePage, onBars, onMakeFixed, onRestore, onDelete, pageId }: {
   current: string; readouts: string[]; editable: string[]; removed: string[]; disabled: boolean;
-  /** Pages the design takes off the watch although the template declares them. */
-  removedPages?: string[];
-  /** Readouts the template declares; the others were added in Studio. */
-  template: string[];
-  /** Readouts the design keeps on their page but hides. */
-  hidden: string[];
-  /** Sources another layer already shows (NOMAD's solar angle), which can't be added. */
-  taken?: string[];
-  /** The watch keeps the barometer and tide pages only while the bar width is above 0. */
+  removedPages?: string[]; template: string[]; hidden: string[]; taken?: string[];
   barsOn: boolean; onBars: (on: boolean) => void;
-  /** Other layers the watch hides on each page (weather on the sun and moon pages), by page id. */
-  pageFields?: Record<string, string[]>; onSelectField?: (id: string) => void;
+  /** Page-switched fields on the face, and whether the watch draws each on this page. */
+  pageFields?: Array<{ id: string; shows: boolean }>; onSelectField?: (id: string) => void;
   onEdit?: (source: string) => void; onAdd?: (source: string) => void; onRemove?: (source: string) => void;
-  onShown?: (source: string, shown: boolean) => void; onAddPage?: (page: string) => void; onRemovePage?: (page: string) => void;
+  onShown?: (source: string, shown: boolean) => void; onRemovePage?: (page: string) => void;
   onMakeFixed?: (source: string) => void; onRestore: (source: string) => void;
+  /** Delete: removes a readout Studio added, hides a template one, or offers to remove the page. */
+  onDelete?: (source: string) => void;
+  /** A graph-only page the canvas shows instead of the edited readout's. */
+  pageId?: string;
 }) {
   useLanguage();
-  const [focused, setFocused] = useState(current);
-  useEffect(() => { setFocused(current); }, [current]);
+  const page = pageId ? NATIVE_CHART_PAGES.find(item => item.id === pageId) : pageOfSource(current);
+  if (!page) return null;
   const present = new Set([...readouts, current]);
   const live = [...present].filter(source => !removed.includes(source));
-  const isBarPage = (id: string) => (NATIVE_CHART_BAR_PAGES as readonly string[]).includes(id);
-  const pageOf = (source: string) => NATIVE_CHART_PAGES.find(page => page.sources.includes(source));
-  // A page is on while it has readouts, shown or hidden (export adds its
-  // missing required ones invisibly), until it is removed.
-  const pageOn = (page: ChartPage) => isBarPage(page.id) ? barsOn : !removedPages.includes(page.id) && page.sources.some(source => live.includes(source));
-  const pageEmpty = (page: ChartPage) => !isBarPage(page.id) && pageOn(page) && !page.sources.some(source => live.includes(source) && !hidden.includes(source));
-  const pages = NATIVE_CHART_PAGES.filter(page => pageOn(page) || page.sources.some(source => present.has(source)));
-  const addablePages = [...(barsOn ? [] : ["bars"]), ...NATIVE_CHART_PAGES.filter(page => !isBarPage(page.id) && !pageOn(page)).map(page => page.id)];
   const state = (source: string): ChartSlotState => removed.includes(source) ? "fixed" : !present.has(source) ? "missing" : hidden.includes(source) ? "hidden" : "shown";
-  // A required slot of a page in use can be focused before it exists.
-  const focusable = (source: string) => present.has(source) || Boolean(pageOf(source)?.required.includes(source) && pageOn(pageOf(source)!));
-  const focus = focusable(focused) ? focused : current;
-  const focusState = state(focus), focusPage = pageOf(focus);
-  const label = chartSourceLabel(focus);
-  const required = Boolean(focusPage?.required.includes(focus));
-  const equivalent = NATIVE_CHART_FIXED_EQUIVALENTS[focus];
-  // The chart layer edits one readout, so the last one can't leave.
-  const lastReadout = live.length <= 1 && (focusState === "shown" || focusState === "hidden");
-  const lastShownOnPage = focusState === "shown" && !!focusPage && !isBarPage(focusPage.id) && focusPage.sources.filter(source => state(source) === "shown").length <= 1;
-  const studioAdded = (source: string) => !template.includes(source);
-  const pagesInUse = NATIVE_CHART_PAGES.filter(page => !isBarPage(page.id) && pageOn(page));
-  const canRemovePage = (page: ChartPage) => !!onRemovePage && pagesInUse.length > 1;
-  let pageNumber = 0;
-  return <div className="wf-chart-pages">
-    <div className="wf-chart-pages-head"><span>{t("Watch pages")}</span></div>
-    <p className="wf-chart-pages-hint">{t("Back on the watch steps through these pages in this order.")}</p>
-    <ol className="wf-chart-page-list">
-      {pages.map(page => {
-        const isCurrent = page.sources.includes(current), on = pageOn(page);
-        const graphOnly = on && isBarPage(page.id) && !page.sources.some(source => present.has(source));
-        const someHidden = on && page.required.some(source => state(source) === "hidden" || state(source) === "missing");
-        const removable = on && (isBarPage(page.id) || canRemovePage(page));
-        return <li key={page.id} className={`wf-chart-page${isCurrent ? " is-current" : ""}${on ? "" : " is-off"}`} aria-current={isCurrent ? "true" : undefined}>
-          <span className="wf-chart-page-number" aria-hidden="true">{on ? ++pageNumber : "–"}</span>
-          <div className="wf-chart-page-body">
-            <div className="wf-chart-page-title">
-              <span>{chartPageLabel(page.id)}</span>
-              {isCurrent ? <small>{t("Shown in the preview")}</small> : graphOnly ? <small>{t("Graph only")}</small> : pageEmpty(page) ? <small>{t("Nothing visible")}</small> : null}
-              {removable ? <button type="button" className="wf-chart-page-remove" disabled={disabled}
-                aria-label={isBarPage(page.id) ? t("Turn bars off") : t("Remove page")}
-                title={isBarPage(page.id) ? t("Turn bars off. This removes both the barometer and tide pages.") : t("Remove page")}
-                onClick={() => isBarPage(page.id) ? onBars(false) : onRemovePage?.(page.id)}><Trash2 size={13} aria-hidden="true" /></button> : null}
-            </div>
-            <div className="wf-chart-slots" role="group" aria-label={chartPageLabel(page.id)}>
-              {page.sources.map(source => {
-                const slot = state(source), isRequired = page.required.includes(source);
-                if (slot === "missing") {
-                  if (isRequired ? !on : !on || taken.includes(source) || !onAdd) return null;
-                  if (!isRequired) return <button key={source} type="button" disabled={disabled} className="wf-chart-slot is-optional"
-                    title={t("Add {{label}} to this page", { label: chartSourceLabel(source) })}
-                    onClick={() => { setFocused(source); onAdd?.(source); }}><Plus size={12} aria-hidden="true" />{chartSourceLabel(source)}</button>;
-                }
-                const canEdit = (slot === "shown" || slot === "hidden") && (source === current || editable.includes(source));
-                return <button key={source} type="button" disabled={disabled}
-                  className={`wf-chart-slot${source === current && slot !== "fixed" ? " is-editing" : ""}${source === focus ? " is-focused" : ""}${slot === "fixed" ? " is-removed" : ""}${slot === "hidden" || slot === "missing" ? " is-hidden" : ""}`}
-                  aria-pressed={source === focus}
-                  title={slot === "fixed" ? t("Made fixed: it shows on every page now") : slot !== "shown" ? t("Hidden on the watch") : canEdit ? t("Edit this readout") : t("Kept from the official face")}
-                  onClick={() => { setFocused(source); if (canEdit && source !== current) onEdit?.(source); }}>
-                  {chartSourceLabel(source)}{slot === "fixed" ? <span aria-hidden="true">· {t("Fixed")}</span> : slot !== "shown" ? <span aria-hidden="true">· {t("Hidden")}</span> : null}
-                </button>;
-              })}
-            </div>
-            {pageEmpty(page) ? <p className="wf-chart-page-note">{t("Nothing on this page is visible, but the watch still stops here when you press Back. Remove the page to skip it.")}</p> : null}
-            {!on && removedPages.includes(page.id) ? <div className="wf-chart-page-off">
-              <p className="wf-chart-page-note">{t("Removed: the watch skips this page.")}</p>
-              {onAddPage ? <button type="button" className="secondary-button" disabled={disabled} onClick={() => onAddPage(page.id)}>{t("Put the page back")}</button> : null}
-            </div> : null}
-            {!on && isBarPage(page.id) ? <div className="wf-chart-page-off">
-              <p className="wf-chart-page-note">{t("The watch skips this page while the bar width is 0.")}</p>
-              <button type="button" className="secondary-button" disabled={disabled} onClick={() => onBars(true)}>{t("Turn bars on")}</button>
-            </div> : someHidden && !pageEmpty(page) && page.id.startsWith("daily-") ? <p className="wf-chart-page-note">{t("The watch shows this page only with all three readouts. Hide the ones you don't want.")}</p> : null}
-            {on && pageFields[page.id]?.length ? <div className="wf-chart-page-also"><span>{t("Hidden on this page:")}</span>
-              {pageFields[page.id]!.map(field => <button key={field} type="button" className="wf-chart-page-field" onClick={() => onSelectField?.(field)}>{nativeFieldLabel(field)}</button>)}
-            </div> : null}
-          </div>
-        </li>;
+  const pageOn = (item: typeof page) => isBarPage(item.id) ? barsOn : !removedPages.includes(item.id) && item.sources.some(source => live.includes(source));
+  const pagesInUse = NATIVE_CHART_PAGES.filter(item => !isBarPage(item.id) && pageOn(item));
+  const empty = !isBarPage(page.id) && !page.sources.some(source => state(source) === "shown");
+  const removable = isBarPage(page.id) ? barsOn : !!onRemovePage && pagesInUse.length > 1;
+  const lastReadout = live.length <= 1;
+  const pageLabel = chartPageLabel(page.id);
+  return <div className="wf-chart-page-panel">
+    <div className="wf-chart-readouts" role="list" aria-label={t("Readouts on this page")}>
+      {page.sources.map(source => {
+        const slot = state(source), label = chartSourceLabel(source), required = page.required.includes(source);
+        if (slot === "missing" && !required) {
+          if (taken.includes(source) || !onAdd) return null;
+          return <button key={source} type="button" role="listitem" className="wf-chart-readout is-add" disabled={disabled}
+            title={t("Add {{label}} to this page", { label })} onClick={() => onAdd(source)}>
+            <span className="wf-chart-readout-glyph" aria-hidden="true"><Plus size={14} /></span>
+            <span className="wf-chart-readout-copy"><strong>{label}</strong><small>{t("Optional")}</small></span>
+          </button>;
+        }
+        const editing = source === current && slot !== "fixed";
+        const canEdit = (slot === "shown" || slot === "hidden") && (source === current || editable.includes(source));
+        const equivalent = NATIVE_CHART_FIXED_EQUIVALENTS[source];
+        const status = editing ? t("Editing below") : slot === "fixed" ? t("Made fixed · shows on every page")
+          : slot === "shown" ? (canEdit ? t("Click to edit") : t("Kept from the official face"))
+          : required ? t("Hidden · kept invisibly") : t("Hidden");
+        const shownOnPage = page.sources.filter(item => state(item) === "shown").length;
+        return <div key={source} role="listitem" className={`wf-chart-readout${editing ? " is-editing" : ""}${slot === "shown" ? "" : " is-hidden"}`}>
+          <button type="button" className="wf-chart-readout-main" disabled={disabled || !canEdit || editing} aria-current={editing ? "true" : undefined}
+            onClick={() => onEdit?.(source)}>
+            <span className="wf-chart-readout-copy"><strong>{label}</strong><small>{status}</small></span>
+          </button>
+          {slot === "fixed" ? <button type="button" className="secondary-button wf-chart-readout-restore" disabled={disabled} onClick={() => onRestore(source)}>{t("Put back")}</button> : <>
+            {(slot === "hidden" || slot === "missing") && required ? <WatchfaceHint label={t("Why it stays")}>{t("{{label}} is hidden on the watch. This page needs it, so export keeps it there invisibly.", { label })}</WatchfaceHint> : null}
+            {equivalent && onMakeFixed && slot === "shown" ? <button type="button" className="wf-chart-readout-action" disabled={disabled || lastReadout}
+              aria-label={t("Make {{label}} fixed", { label })}
+              title={"metric" in equivalent ? t("Make fixed: moves {{label}} off its page into a field that always shows, using the same digits.", { label }) : t("Make fixed: moves {{label}} off its page into a field that always shows, with the same artwork.", { label })}
+              onClick={() => onMakeFixed(source)}><Pin size={14} aria-hidden="true" /></button> : null}
+            {onDelete ? <button type="button" className="wf-chart-readout-action" disabled={disabled || lastReadout}
+              aria-label={t("Delete {{label}}", { label })}
+              title={!template.includes(source) && !required ? t("Delete {{label}}", { label })
+                : required ? t("Delete: this page needs {{label}}, so the watch keeps it invisibly.", { label })
+                : t("Delete: the template's own readout is hidden on the watch.")}
+              onClick={() => onDelete(source)}><Trash2 size={14} aria-hidden="true" /></button>
+              : !required && onRemove && !template.includes(source) ? <button type="button" className="wf-chart-readout-action" disabled={disabled || lastReadout}
+              aria-label={t("Remove {{label}}", { label })} title={t("Remove {{label}}", { label })} onClick={() => onRemove(source)}><X size={14} aria-hidden="true" /></button> : null}
+            {onShown ? <button type="button" className="wf-chart-readout-action" disabled={disabled} aria-pressed={slot !== "shown"}
+              aria-label={slot === "shown" ? t("Hide {{label}}", { label }) : t("Show {{label}}", { label })}
+              title={slot === "shown" ? (shownOnPage <= 1 && !isBarPage(page.id) ? t("Hide. This is the last readout the page shows: the watch still stops here with nothing visible.") : t("Hide {{label}}", { label })) : t("Show {{label}}", { label })}
+              onClick={() => onShown(source, slot !== "shown")}>{slot === "shown" ? <Eye size={15} aria-hidden="true" /> : <EyeOff size={15} aria-hidden="true" />}</button> : null}
+          </>}
+        </div>;
       })}
-    </ol>
-    <div className="wf-chart-slot-actions">
-      {focusState === "fixed" ? <>
-        <p>{t("{{label}} was made fixed, so it shows on every page. Put it back to show it only on its page again.", { label })}</p>
-        <button type="button" className="secondary-button" disabled={disabled} onClick={() => onRestore(focus)}>{t("Put back on its page")}</button>
-      </> : focusState === "hidden" || focusState === "missing" ? <>
-        <p>{required ? t("{{label}} is hidden on the watch. This page needs it, so export keeps it there invisibly.", { label }) : t("{{label}} is hidden on the watch.", { label })}</p>
-        <div className="wf-chart-slot-buttons">
-          {onShown ? <button type="button" className="secondary-button" disabled={disabled} onClick={() => onShown(focus, true)}>{t("Show {{label}}", { label })}</button> : null}
-          {!required && onRemove && studioAdded(focus) ? <button type="button" className="secondary-button" disabled={disabled || lastReadout} onClick={() => onRemove(focus)}>{t("Remove {{label}}", { label })}</button> : null}
-        </div>
-      </> : <>
-        <p>{lastShownOnPage ? t("{{label}} is the last readout this page shows. Hiding it keeps the page on the watch with nothing visible; remove the page to skip it.", { label })
-          : equivalent && onMakeFixed ? ("metric" in equivalent ? t("Make fixed moves {{label}} off its page into a field that always shows, using the same digits. Its icon becomes an image layer.", { label })
-            : t("Make fixed moves {{label}} off its page into a field that always shows, with the same artwork.", { label }))
-          : t("{{label}} has no always-shown version on the watch, so it stays on its page.", { label })}</p>
-        <div className="wf-chart-slot-buttons">
-          {onShown ? <button type="button" className="secondary-button" disabled={disabled} onClick={() => onShown(focus, false)}>{t("Hide {{label}}", { label })}</button> : null}
-          {equivalent && onMakeFixed ? <button type="button" className="secondary-button" disabled={disabled || lastReadout} onClick={() => onMakeFixed(focus)}>{t("Make {{label}} fixed", { label })}</button> : null}
-          {!required && onRemove && studioAdded(focus) ? <button type="button" className="secondary-button" disabled={disabled || lastReadout} onClick={() => onRemove(focus)}>{t("Remove {{label}}", { label })}</button> : null}
-        </div>
-      </>}
     </div>
-    {onAddPage && addablePages.length ? <label className="field">{t("Add page")}
-      <select aria-label={t("Add a watch page")} value="" disabled={disabled} onChange={event => {
-        const page = event.target.value;
-        if (page === "bars") onBars(true); else if (page) onAddPage(page);
-      }}>
-        <option value="">{t("Choose a page…")}</option>
-        {addablePages.map(id => <option key={id} value={id}>{id === "bars" ? t("Barometer and tide") : chartPageLabel(id)}</option>)}
-      </select>
-    </label> : null}
+    {pageId && isBarPage(pageId) ? <p className="wf-chart-page-quiet">{t("Graph only: the watch draws the bars with no number. Add the reading to show one.")}</p> : null}
+    {empty ? <p className="wf-chart-page-quiet">{t("Nothing visible. The watch still stops here when you press Back; remove the page to skip it.")}</p> : null}
+    {pageFields.length ? <div className="wf-chart-page-fields" role="group" aria-label={t("Weather on this page")}>
+      <span className="wf-chart-page-fields-label">{t("Weather here")}</span>
+      {pageFields.map(field => <button key={field.id} type="button" className={`wf-chart-weather-chip${field.shows ? "" : " is-hidden"}`}
+        title={field.shows ? t("Shows on this page") : t("Hidden on this page")} onClick={() => onSelectField?.(field.id)}>
+        {field.shows ? null : <EyeOff size={12} aria-hidden="true" />}{nativeFieldLabel(field.id)}
+      </button>)}
+      <WatchfaceHint label={t("About weather on pages")}>{t("The watch hides temperature, rain, humidity, UV and AQI on Sun and Moon and shows wind instead; min and max show only on the daily pages. Wherever the fields sit.")}</WatchfaceHint>
+    </div> : null}
+    {removable ? <div className="wf-chart-page-foot">
+      <button type="button" className="wf-chart-page-remove-button" disabled={disabled}
+        title={isBarPage(page.id) ? t("Turns the bars off, which removes both the barometer and tide pages.") : t("The watch skips a removed page.")}
+        onClick={() => isBarPage(page.id) ? onBars(false) : onRemovePage?.(page.id)}>
+        <Trash2 size={14} aria-hidden="true" />{isBarPage(page.id) ? t("Remove Barometer and Tide") : t("Remove {{page}} page", { page: pageLabel })}
+      </button>
+    </div> : null}
   </div>;
 }
+
 
 /** Keep a draft so typing a minus sign or clearing the field is not reset. */
 function ComponentOffsetInput({ label, value, coordinateScale, onChange }: {
@@ -235,7 +215,7 @@ function ComponentOffsetInput({ label, value, coordinateScale, onChange }: {
   /></label>;
 }
 
-function SpritePreview({ id, style, role, index }: { id: string; style: Style; role: Role; index: number }) {
+function SpritePreview({ id, style, role, index, className = "wf-native-artwork-stage" }: { id: string; style: Style; role: Role; index: number; className?: string }) {
   useLanguage();
   const [url, setUrl] = useState("");
   useEffect(() => {
@@ -243,14 +223,17 @@ function SpritePreview({ id, style, role, index }: { id: string; style: Style; r
     void nativeDataAsset(id, style, role, index).then(image => { if (active) setUrl(image); }).catch(() => { if (active) setUrl(""); });
     return () => { active = false; };
   }, [id, style, role, index]);
-  return <span className="wf-native-artwork-stage">{url ? <img src={url} alt={t("Selected component artwork")} /> : null}</span>;
+  return <span className={className}>{url ? <img src={url} alt="" /> : null}</span>;
 }
+
+/** Look settings a part can set for itself instead of following the field. */
+const OWN_LOOK_KEYS = ["color", "fontFamily", "fontWeight", "fontStyle", "letterSpacing"] as const;
 
 type RenderSection = (
   sectionId: WatchfaceInspectorSectionId,
   title: string,
   children: ReactNode,
-  options?: { disabled?: boolean; status?: ReactNode }
+  options?: { disabled?: boolean; status?: ReactNode; actions?: ReactNode }
 ) => ReactNode;
 
 /**
@@ -260,7 +243,7 @@ type RenderSection = (
  * selected part, and Advanced for preview-only settings. The editor renders
  * the Transform section itself so it matches every other layer.
  */
-export function NativeDataInspector({ id, style, coordinateScale, api, disabled, renderSection, renderFontSizeField, onPatch, onError, onImportStart, onImportFinish, isImportCurrent, chartGroups = [], chartReadouts = chartGroups, onChartGroup, onAddReadout, onRemoveReadout, takenReadouts, onShowReadout, onAddPage, onRemovePage, onMakeFixed, pageFields, onSelectField, fieldPages, onAddDailyPage, removedPages, onAddMinMaxPartner }: {
+export function NativeDataInspector({ id, style, coordinateScale, api, disabled, renderSection, renderFontSizeField, onPatch, onError, onImportStart, onImportFinish, isImportCurrent, chartGroups = [], chartReadouts = chartGroups, onChartGroup, onAddReadout, onRemoveReadout, takenReadouts, onShowReadout, onAddPage, onRemovePage, onMakeFixed, onDeleteReadout, pageFields, onSelectField, fieldPages, facePages = [], shownPage, onShowPage, graphOnlyPage, onAddDailyPage, removedPages, onAddMinMaxPartner, pairPartner, embeddedParts, partLabels }: {
   id: string; style: Style; api: CorosLinkApi; disabled: boolean; coordinateScale: number;
   renderSection: RenderSection;
   /** The editor's shared Font size field, in master pixels. */
@@ -274,13 +257,28 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   /** Show or hide a readout on its page; add or remove whole pages. */
   onShowReadout?: (source: string, shown: boolean) => void; onAddPage?: (page: string) => void; onRemovePage?: (page: string) => void;
   onMakeFixed?: (source: string) => void;
-  /** Chart: layers the watch hides on each page. Other fields: the pages this one shows on. */
-  pageFields?: Record<string, string[]>; onSelectField?: (id: string) => void;
+  onDeleteReadout?: (source: string) => void;
+  /** Chart: the page-switched fields on the face, and whether each shows on the page the chart shows. */
+  pageFields?: Array<{ id: string; shows: boolean }>; onSelectField?: (id: string) => void;
+  /** Other fields: the pages this one shows on. */
   fieldPages?: { pages: string[] } | null;
+  /** The face's chart pages in Back order, and the one the canvas shows. */
+  facePages?: string[]; shownPage?: string; onShowPage?: (page: string) => void;
+  /** Chart: a graph-only page on screen, which has no readout to edit. */
+  graphOnlyPage?: string | null;
   /** Chart: pages the design removes although the template declares them. */
   removedPages?: string[];
   /** Min or max alone: adds the other, since the watch draws them as one reading. */
   onAddMinMaxPartner?: () => void;
+  /**
+   * Minimum temperature edited as "Min / max temperature": the maximum's
+   * number shows as a part of this panel, drawn by an embedded inspector.
+   */
+  pairPartner?: { id: string; style: Style; onPatch: (patch: Partial<Style>) => void };
+  /** Embedded: render only these parts' rows, without sections. */
+  embeddedParts?: Part[];
+  /** Part names that differ in this panel ("Min number", "Max number"). */
+  partLabels?: Partial<Record<Part, string>>;
   /** Adds a hidden daily page, for min/max on a face without one. */
   onAddDailyPage?: () => void;
   onPatch: (patch: Partial<Style>) => void; onError: (message: string) => void;
@@ -289,7 +287,11 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   useLanguage();
   const definition = NATIVE_DATA_BY_ID.get(id)!;
   const [busy, setBusy] = useState(false);
-  const [selectedPart, setSelectedPart] = useState<Part>("icon");
+  const [selectedPart, setSelectedPart] = useState<Part>("value");
+  // Parts open in place; null folds every part.
+  const [partOpen, setPartOpen] = useState(!embeddedParts);
+  // Own look switched on for a part that has no look of its own yet.
+  const [ownLookParts, setOwnLookParts] = useState<Part[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const importToken = useRef(0), latestStyle = useRef(style);
   latestStyle.current = style;
@@ -302,7 +304,8 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
     ...Object.entries(style.readouts ?? {}).filter(([source, readout]) => chartReadoutHidden({ ...readout, chartSource: source })).map(([source]) => source)
   ] : [];
   const partKey = available.includes(selectedPart) ? selectedPart : available[0];
-  const partLabel = PART_LABELS[partKey];
+  const labelOf = (part: Part) => partLabels?.[part] ?? PART_LABELS[part];
+  const partLabel = labelOf(partKey);
   const component = nativePart(id, style, partKey);
   const role: Role | null = partKey === "plot" ? null : partKey === "value" ? "digits" : partKey;
   const indices = role ? nativeRoleIndices(id, style, role) : [];
@@ -382,44 +385,176 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   const colorControl = (label: string, value: string, change: (color: string) => void) => <label className="field">{t(label)}<span className="watchface-color-control"><WatchfaceColorInput key={`${id}:${style.chartSource ?? ""}:${partKey}:${label}`} aria-label={t(label)} value={value} onValueChange={(color) => change(color)} /><code>{value}</code></span></label>;
 
   const notes = [
-    definition.kind === "chart" ? <p key="chart" className="watchface-studio-summary" role="note"><strong>{t("Experimental charts.")}</strong>{" "}{t("This preview uses sample data.")}</p> : null,
-    definition.kind === "chart" && new Set([...chartReadouts, ...stored, style.chartSource ?? "chart_stress"]).size > 1 ? <p key="chart-groups" className="watchface-studio-summary" role="note">{t("Edits apply to the readout you pick under Watch pages. Each readout keeps its own place and artwork; the graph is shared by every page.")}</p> : null,
-    definition.kind === "chart" && nativeChartRepresentation(style.chartSource) === "none" ? <p key="chart-readouts" className="watchface-studio-summary" role="note"><strong>{t("Readouts only.")}</strong>{" "}{t("The watch shows these as two pages of numbers with no graph: stress, stamina and elevation, then calories, heart rate and steps. Bar style applies to the barometer and tide pages.")}</p> : null,
-    definition.kind === "chart" && nativePart(id, style, "plot").enabled && !nativePart(id, style, style.chartSource === "chart_moon" ? "states" : "value").enabled
-      ? <p key="chart-hidden" className="watchface-studio-summary" role="note"><strong>{t("Graph without a number.")}</strong> {t("The watch only draws a graph when the face has a chart number, so the export adds an invisible one. Experimental: check the graph on your watch.")}</p> : null,
-    definition.kind === "chart" && (style.chartStyle?.barWidth ?? 8) > 0 ? <p key="chart-pace" className="watchface-studio-summary" role="note">{t("Barometer and tide numbers stay blank until the watch syncs that data from your phone; their pages show the graph either way.")}</p> : null,
     definition.availability ? <p key="availability" className="watchface-studio-summary" role="note"><strong>{t("AQI —")}{" "}{t(definition.availability.label)}.</strong> {t(definition.availability.message)}</p> : null,
-    definition.note ? <p key="note" className="watchface-studio-summary" role="note">{t(definition.note)}</p> : null
+    definition.note && !pairPartner ? <p key="note" className="watchface-studio-summary" role="note">{t(definition.note)}</p> : null
   ].filter(Boolean);
 
   const artworkStateLabel = (i: number) => { const label = role === "unit" && id.startsWith("weather_temp") ? TEMPERATURE_UNIT_LABELS[i] : SPRITE_LABELS[role!]?.[i]; return label ? t(label) : role === "digits" ? t("Digit {{i}}", { i }) : t("State {{i}}", { i }); };
 
   // The watch picks bars, a line or no graph per chart page; the face only styles both.
   const graph = nativeChartRepresentation(style.chartSource);
-  const graphStyle = (line: boolean, pages: string, controls: ReactNode) => <div key={line ? "line" : "bars"} className="wf-native-graph-style" role="group" aria-label={line ? t("Line style") : t("Bar style")}>
-    <div className="wf-native-graph-style-head"><span>{line ? t("Line") : t("Bars")} <small>· {pages}</small></span>{graph === (line ? "curve" : "bars") ? <span className="wf-native-part-badge">{t("This page")}</span> : null}</div>
-    {controls}
-  </div>;
-  const graphStyles = [
-    graphStyle(false, t("barometer, tide"), <>
-      <div className="watchface-position-inputs">
-        {numberControl("Bar width",style.chartStyle?.barWidth ?? 8,barWidth=>patchChart({barWidth}),0,80,true)}
-        {numberControl("Bar gap",style.chartStyle?.barGap ?? 4,barGap=>patchChart({barGap}),0,80,true)}
-      </div>
-      {colorControl("Selected bar",style.chartStyle?.selectedBarColor ?? component.color,selectedBarColor=>patchChart({selectedBarColor}))}
-      {colorControl("Other bars",style.chartStyle?.unselectedBarColor ?? "#555555",unselectedBarColor=>patchChart({unselectedBarColor}))}
-      <p className="watchface-studio-summary">{t("At width 0 the watch drops the barometer and tide pages.")}</p>
-    </>),
-    graphStyle(true, t("sun and moon"), <>
-      <div className="watchface-position-inputs">{numberControl("Line thickness",style.chartStyle?.lineWidth ?? 2,lineWidth=>patchChart({lineWidth}),0,40,true)}</div>
-      {colorControl("Upper curve",style.chartStyle?.upperColor ?? component.color,upperColor=>patchChart({upperColor}))}
-      {colorControl("Lower curve",style.chartStyle?.lowerColor ?? "#555555",lowerColor=>patchChart({lowerColor}))}
-      <p className="watchface-studio-summary">{t("The watch draws the horizon line and the dot that marks now in white. No face setting changes their color.")}</p>
-    </>)
-  ];
+  const [graphStyleTab, setGraphStyleTab] = useState<"line" | "bars">(graph === "curve" ? "line" : "bars");
+  useEffect(() => { setGraphStyleTab(graph === "curve" ? "line" : "bars"); }, [graph]);
+  const barControls = <>
+    <div className="watchface-position-inputs">
+      {numberControl("Bar width",style.chartStyle?.barWidth ?? 8,barWidth=>patchChart({barWidth}),0,80,true)}
+      {numberControl("Bar gap",style.chartStyle?.barGap ?? 4,barGap=>patchChart({barGap}),0,80,true)}
+    </div>
+    {colorControl("Selected bar",style.chartStyle?.selectedBarColor ?? component.color,selectedBarColor=>patchChart({selectedBarColor}))}
+    {colorControl("Other bars",style.chartStyle?.unselectedBarColor ?? "#555555",unselectedBarColor=>patchChart({unselectedBarColor}))}
+  </>;
+  const lineControls = <>
+    <div className="watchface-position-inputs">{numberControl("Line thickness",style.chartStyle?.lineWidth ?? 2,lineWidth=>patchChart({lineWidth}),0,40,true)}</div>
+    {colorControl("Upper curve",style.chartStyle?.upperColor ?? component.color,upperColor=>patchChart({upperColor}))}
+    {colorControl("Lower curve",style.chartStyle?.lowerColor ?? "#555555",lowerColor=>patchChart({lowerColor}))}
+  </>;
+  const graphWithoutNumber = definition.kind === "chart" && nativePart(id, style, "plot").enabled && !nativePart(id, style, style.chartSource === "chart_moon" ? "states" : "value").enabled;
 
+  // The reading as the watch builds it, from this field's own pictures:
+  // icon, minus, the sample digits, unit. Each piece opens its part below.
+  const previewValue = nativeDataPreviewValue(id, style);
+  const readingPieces: Array<{ part: Part; role: Role; index: number; key: string }> = [];
+  const shows = (part: Part) => available.includes(part) && nativePart(id, style, part).enabled;
+  if (definition.kind !== "chart" && definition.kind !== "state") {
+    if (shows("icon")) readingPieces.push({ part: "icon", role: "icon", index: 0, key: "icon" });
+    const chars = [...previewValue];
+    chars.forEach((char, position) => {
+      if ((char === "-" || char === "−") && shows("symbols")) readingPieces.push({ part: "symbols", role: "symbols", index: 0, key: `minus${position}` });
+      else if (/\d/.test(char) && shows("value")) readingPieces.push({ part: "value", role: "digits", index: Number(char), key: `digit${position}` });
+    });
+    if (shows("unit")) readingPieces.push({ part: "unit", role: "unit", index: 0, key: "unit" });
+  }
+  const partList = (parts: Part[]) => <div className="wf-native-part-list">
+      {parts.map(part => {
+        const partComponent = nativePart(id, style, part);
+        const partRole: Role | null = part === "plot" ? null : part === "value" ? "digits" : part;
+        const partIndices = partRole ? nativeRoleIndices(id, style, partRole) : [];
+        const replaced = partRole ? Object.keys(style.assets?.[partRole] ?? {}).length : 0;
+        const open = partOpen && part === partKey;
+        const status = !partComponent.enabled ? t("Hidden")
+          : partRole ? (partIndices.length === 1 ? t("1 picture") : t("{{value1}} pictures", { value1: partIndices.length })) + (replaced ? " · " + t("{{value1}} replaced", { value1: replaced }) : "")
+          : t("Graph");
+        const ownLook = OWN_LOOK_KEYS.some(key => style.parts?.[part]?.[key] !== undefined) || ownLookParts.includes(part);
+        return <section key={part} className={`wf-native-part-item${open ? " is-open" : ""}${partComponent.enabled ? "" : " is-off"}`} aria-label={t("{{partLabel}} settings", { partLabel: t(labelOf(part)) })}>
+          <div className="wf-native-part-row">
+            <button type="button" className="wf-native-part-toggle" aria-expanded={open} onClick={() => { if (part === partKey) setPartOpen(!open); else { setSelectedPart(part); setSelectedIndex(0); setPartOpen(true); } }}>
+              {partRole ? <SpritePreview id={id} style={style} role={partRole} index={partIndices[0] ?? 0} className="wf-native-part-thumb" /> : <span className="wf-native-part-thumb is-graph" aria-hidden="true" />}
+              <span className="wf-native-part-copy">
+                <span className="wf-native-part-name">{t(labelOf(part))}{(Boolean(style.parts?.[part]) || replaced > 0) ? <span className="wf-native-part-badge">{t("Custom")}</span> : null}</span>
+                <small>{status}</small>
+              </span>
+              <ChevronDown className="wf-native-part-chevron" size={15} aria-hidden="true" />
+            </button>
+            <button type="button" className="wf-native-part-eye" disabled={locked} aria-pressed={!partComponent.enabled}
+              aria-label={partComponent.enabled ? t("Hide {{value1}}", { value1: t(labelOf(part)) }) : t("Show {{value1}}", { value1: t(labelOf(part)) })}
+              title={partComponent.enabled ? t("Hide {{value1}}", { value1: t(labelOf(part)) }) : t("Show {{value1}}", { value1: t(labelOf(part)) })}
+              onClick={() => onPatch({parts:{...style.parts,[part]:{...style.parts?.[part],enabled:!partComponent.enabled}}})}>
+              {partComponent.enabled ? <Eye size={15} /> : <EyeOff size={15} />}
+            </button>
+          </div>
+          {open ? <div className="wf-native-part-body">
+            {!nativePartHasPosition(partKey) && <div className="wf-native-part-hint"><span>{t("Placed by the watch")}</span><WatchfaceHint>{t("The watch places this beside the number; only its size and artwork change.")}</WatchfaceHint></div>}
+            <div className="watchface-position-inputs">
+              {nativePartHasPosition(partKey) && <>
+                <ComponentOffsetInput key={`${id}:${partKey}:x`} label={t("Offset X")} value={component.x} coordinateScale={coordinateScale} onChange={x=>patchPart({x})} />
+                <ComponentOffsetInput key={`${id}:${partKey}:y`} label={t("Offset Y")} value={component.y} coordinateScale={coordinateScale} onChange={y=>patchPart({y})} />
+              </>}
+              {numberControl("Width",component.width,width=>patchPart({width}),4,800,true)}
+              {numberControl("Height",component.height,height=>patchPart({height}),4,800,true)}
+              {partKey === "value" && numberControl(t("Digit width"),component.digitWidth,digitWidth=>patchPart({digitWidth}),1,800,true)}
+            </div>
+            {partKey === "value" && <WatchfaceNumberAlignControl value={component.align} disabled={locked} onChange={align=>patchPart({align:align ?? "left"})} />}
+            {role && fontSizeField(nativeComponentFontSize(id, style, partKey), fontSize=>patchPart(nativePartForFontSize(id, style, partKey, fontSize)))}
+            {role || partKey === "plot" ? <label className="wf-native-own-look">
+              <span><strong>{t("Own look")}</strong><small>{ownLook ? t("Its own color and font") : t("Follows the field")}</small></span>
+              <input type="checkbox" role="switch" checked={ownLook} disabled={locked} onChange={event => {
+                if (event.target.checked) { setOwnLookParts(list => [...list, partKey]); return; }
+                setOwnLookParts(list => list.filter(item => item !== partKey));
+                // Back to the field's look: drop this part's color and font.
+                const fontReset = role ? withNativeFont(style, "", partKey) : {};
+                const parts = { ...(fontReset.parts ?? style.parts) };
+                const own = { ...parts[partKey] };
+                for (const key of OWN_LOOK_KEYS) delete own[key];
+                parts[partKey] = own;
+                onPatch({ ...fontReset, parts });
+              }} />
+            </label> : null}
+            {ownLook ? <>
+              {colorControl("Color",component.color,color=>patchPart({color}))}
+              {role && <LocalFontPicker api={api} label={t("Font")} value={style.parts?.[partKey]?.fontFamily ?? ""} emptyLabel={t("Layer font")} disabled={locked} onChange={fontFamily=>onPatch(withNativeFont(style,fontFamily,partKey))}
+                inheritedFamily={nativeRoleDrawsText(style, role) ? component.fontFamily : undefined}
+                typography={{ fontWeight: component.fontWeight, fontStyle: component.fontStyle, letterSpacing: component.letterSpacing }}
+                onTypographyChange={typography=>patchPart(shapePatch(typography))} onLetterSpacingChange={letterSpacing=>patchPart({letterSpacing})}
+                showSpacing={role === "icon" || role === "unit" || role === "states"} />}
+            </> : null}
+
+            {role && <div className="wf-native-artwork">
+              <div className="wf-native-artwork-head">
+                <span className="wf-native-part-hint">{t("Pictures")}{role === "unit" && id === "weather_temp" ? <WatchfaceHint>{t("The watch shows 00 in Celsius and 01 in Fahrenheit. Leave 01 untouched to show 00 in both, which suits a plain °.")}</WatchfaceHint> : null}</span>
+                {indices.length > 1 ? <small>{t("Click one to edit it")}</small> : null}
+              </div>
+              <div className={`wf-native-frames${indices.length > 5 ? " is-many" : ""}`} role="listbox" aria-label={t("Artwork state")}>
+                {indices.map(i => <button key={i} type="button" role="option" aria-selected={i === index} className={`wf-native-frame${i === index ? " is-selected" : ""}${style.assets?.[role]?.[String(i)] ? " is-custom" : ""}`}
+                  title={`${String(i).padStart(2,"0")} · ${artworkStateLabel(i)}`} onClick={() => setSelectedIndex(i)}>
+                  <SpritePreview id={id} style={style} role={role} index={i} className="wf-native-frame-art" />
+                  <small>{role === "digits" ? String(i) : artworkStateLabel(i)}</small>
+                </button>)}
+              </div>
+              <div className="wf-native-artwork-row">
+                <div className="wf-native-artwork-copy">
+                  <label className="field">{indices.length > 1 ? t("Text for {{value1}}", { value1: artworkStateLabel(index) }) : t("Text")}<input aria-label={t("Artwork text")} maxLength={32} value={nativeAssetText(id,style,role,index) ?? ""} placeholder={t("Generated artwork")} onChange={event=>onPatch({assetTexts:{...style.assetTexts,[role]:{...style.assetTexts?.[role],[index]:event.target.value}}})} /></label>
+                  <span className="wf-native-part-hint wf-native-picture-state">
+                    <span>{replacement ? t("Your image") : setAside ? t("Drawn in your font") : t("Drawn from text")}</span>
+                    <WatchfaceHint>{replacement
+                      ? nativeFontRole(role) ? t("Image in use. Pick a font or remove the image to draw the text instead.") : t("Custom image in use. Remove it to draw the text again.")
+                      : setAside ? t("Drawn in the chosen font. Pick Keep template font to bring back the original image.")
+                      : t("Drawn from the text in the component color and font, or replaced by an image.")}</WatchfaceHint>
+                  </span>
+                </div>
+              </div>
+              <div className="wf-native-artwork-actions">
+                <button type="button" className="secondary-button" onClick={()=>void importArtwork(false)}><ImagePlus size={14} /> {replacement ? t("Replace image") : t("Use an image")}</button>
+                {indices.length > 1 && <button type="button" className="secondary-button" onClick={()=>void importArtwork(true)}><FolderInput size={14} />{" "}{t("Import numbered PNGs")}</button>}
+                {replacement && <button type="button" className="secondary-button wf-native-artwork-remove" onClick={removeImage}><Trash2 size={14} />{" "}{t("Remove image")}</button>}
+              </div>
+            </div>}
+
+            <button type="button" className="wf-native-part-reset" disabled={!customized} onClick={restoreComponent}><RotateCcw size={13} />{" "}{t("Reset {{value1}}", { value1: midSentence(t(partLabel)) })}</button>
+          </div> : null}
+        </section>;
+      })}
+      </div>;
+  const openPart = (part: Part) => { setSelectedPart(part); setSelectedIndex(0); setPartOpen(true); };
+
+  const isChart = definition.kind === "chart";
+  const chartSource = style.chartSource ?? "chart_stress";
+  const chartPage = isChart ? NATIVE_CHART_PAGES.find(page => graphOnlyPage ? page.id === graphOnlyPage : page.sources.includes(chartSource)) : undefined;
+  // A chart layer splits its parts: the edited readout's own, then the graph every page shares.
+  const graphParts: Part[] = ["plot", "background", "mask", "noDataMask"];
+  const readoutParts = available.filter(part => !graphParts.includes(part));
+  const shownGraphParts = available.filter(part => graphParts.includes(part));
+  // Embedded in the pair's panel: just these parts' rows.
+  if (embeddedParts) return partList(embeddedParts.filter(part => available.includes(part)));
   return <>
-    {renderSection("appearance", "Appearance", <div className="wf-property-stack">
+    {isChart && chartPage ? renderSection("page", t("On the {{page}} page", { page: chartPageLabel(chartPage.id) }), <ChartPagePanel current={chartSource} readouts={[...chartReadouts, ...stored]} editable={[...chartGroups, ...stored]}
+      template={chartReadouts} hidden={hiddenReadouts} taken={takenReadouts} removed={style.removedReadouts ?? []} disabled={locked}
+      barsOn={(style.chartStyle?.barWidth ?? 8) > 0} onBars={on => patchChart(on ? { barWidth: 8, barGap: style.chartStyle?.barGap || 4 } : { barWidth: 0 })}
+      onEdit={onChartGroup} onAdd={onAddReadout} onRemove={onRemoveReadout} onShown={onShowReadout} onRemovePage={onRemovePage} onMakeFixed={onMakeFixed} onDelete={onDeleteReadout} pageId={graphOnlyPage ?? undefined}
+      onRestore={source=>onPatch({removedReadouts:(style.removedReadouts ?? []).filter(item=>item!==source)})} pageFields={pageFields} onSelectField={onSelectField} removedPages={removedPages} />,
+      { disabled: locked, status: chartPageGraphLabel(chartPage.id), actions: chartPageHint(chartPage.id) }) : null}
+    {/* Which pages show a field is a tag under its name and marks in the
+        Screens strip; only a field no page shows needs room here. */}
+    {!isChart && fieldPages && facePages.length && !fieldPages.pages.some(page => facePages.includes(page)) ? renderSection("page", "Not shown on the watch", <FieldPagesPanel pages={[]} facePages={facePages} onAddDailyPage={onAddDailyPage} />,
+      { actions: fieldPagesHint(id, []) }) : null}
+
+    {/* A graph-only page has no readout: only the graph below applies. */}
+    {isChart && graphOnlyPage ? null : renderSection("appearance", isChart ? chartSourceLabel(chartSource) : "Look · all parts", <div className={`wf-property-stack${isChart ? " wf-native-components" : ""}`}>
+      {readingPieces.length ? <div className="wf-native-reading" role="group" aria-label={t("Reading preview: {{value1}}", { value1: previewValue })}>
+        {readingPieces.map((piece) => <button key={piece.key} type="button" className={`wf-native-reading-piece${piece.part === partKey && partOpen ? " is-active" : ""}`}
+          title={t(labelOf(piece.part))} aria-label={t("Open {{value1}}", { value1: t(labelOf(piece.part)) })} onClick={() => openPart(piece.part)}>
+          <SpritePreview id={id} style={style} role={piece.role} index={piece.index} className="wf-native-reading-art" />
+        </button>)}
+      </div> : null}
       {notes}
       {colorControl("Color",style.color,color=>onPatch({color}))}
       <LocalFontPicker api={api} label={t("Font")} value={style.fontFamily ?? ""} emptyLabel={nativeHasGlyphArt(style) ? t("Keep template font") : t("Default")} disabled={locked} onChange={fontFamily=>onPatch(withNativeFont(style,fontFamily))}
@@ -427,92 +562,30 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
         typography={{ fontWeight: style.fontWeight ?? 400, fontStyle: style.fontStyle ?? "normal", letterSpacing: style.letterSpacing ?? 0 }}
         onTypographyChange={typography=>onPatch(shapePatch(typography))} onLetterSpacingChange={letterSpacing=>onPatch({letterSpacing})} />
       {fontSizeField(nativeComponentFontSize(id, style, nativeFontSizePart(id, style)), fontSize=>onPatch({scale:nativeScaleForFontSize(id, style, fontSize)}))}
-      {definition.kind === "chart" && <ChartPageStrip current={style.chartSource ?? "chart_stress"} readouts={[...chartReadouts, ...stored]} editable={[...chartGroups, ...stored]}
-        template={chartReadouts} hidden={hiddenReadouts} taken={takenReadouts} removed={style.removedReadouts ?? []} disabled={locked}
-        barsOn={(style.chartStyle?.barWidth ?? 8) > 0} onBars={on => patchChart(on ? { barWidth: 8, barGap: style.chartStyle?.barGap || 4 } : { barWidth: 0 })}
-        onEdit={onChartGroup} onAdd={onAddReadout} onRemove={onRemoveReadout} onShown={onShowReadout} onAddPage={onAddPage} onRemovePage={onRemovePage} onMakeFixed={onMakeFixed}
-        onRestore={source=>onPatch({removedReadouts:(style.removedReadouts ?? []).filter(item=>item!==source)})} pageFields={pageFields} onSelectField={onSelectField} removedPages={removedPages} />}
       {onAddMinMaxPartner ? <MinMaxPartnerPanel id={id} onAdd={onAddMinMaxPartner} /> : null}
-      {definition.kind !== "chart" && fieldPages ? <FieldPagesPanel id={id} pages={fieldPages.pages} onAddDailyPage={onAddDailyPage} /> : null}
-      <p className="watchface-studio-summary">{t("Every component uses this color and font unless it sets its own below.")}</p>
-    </div>, { disabled: locked })}
+      {isChart ? partList(readoutParts) : null}
+    </div>, { disabled: locked, ...(isChart ? { status: t("This readout") } : {}) })}
 
-    {renderSection("specific", "Components", <div className="wf-property-stack wf-native-components">
-      <div className="wf-native-parts" role="tablist" aria-label={t("Component")}>
-        {available.map(part => {
-          const enabled = nativePart(id, style, part).enabled;
-          return <button key={part} type="button" role="tab" aria-selected={part === partKey} className={`wf-native-part${part === partKey ? " is-active" : ""}${enabled ? "" : " is-off"}`} title={enabled ? t(PART_LABELS[part]) : t("{{value1}} · hidden", { value1: t(PART_LABELS[part]) })} onClick={()=>{setSelectedPart(part);setSelectedIndex(0);}}>{t(PART_LABELS[part])}</button>;
-        })}
+    {isChart ? renderSection("graph", "Graph", <div className="wf-property-stack wf-native-components">
+      <div className="wf-graph-style-switch" role="group" aria-label={t("Graph style")}>
+        <button type="button" aria-pressed={graphStyleTab === "line"} onClick={() => setGraphStyleTab("line")}>{t("Line · Sun, Moon")}</button>
+        <button type="button" aria-pressed={graphStyleTab === "bars"} onClick={() => setGraphStyleTab("bars")}>{t("Bars · Baro, Tide")}</button>
       </div>
-      <section className="wf-native-part-card" aria-label={t("{{partLabel}} settings", { partLabel: t(partLabel) })}>
-        <div className="wf-native-part-head">
-          <strong>{t(partLabel)}</strong>
-          {customized ? <span className="wf-native-part-badge">{t("Custom")}</span> : null}
-          <label className="watchface-studio-toggle">
-            <input aria-label={t("Show {{partLabel}}", { partLabel: t(partLabel) })} type="checkbox" checked={component.enabled} onChange={event=>patchPart({enabled:event.target.checked})} />
-            <span>{t("Show")}</span>
-          </label>
-        </div>
-        {!nativePartHasPosition(partKey) && <p className="watchface-studio-summary">{t("The watch places this beside the number; only its size and artwork change.")}</p>}
-        <div className="watchface-position-inputs">
-          {nativePartHasPosition(partKey) && <>
-            <ComponentOffsetInput key={`${id}:${partKey}:x`} label={t("Offset X")} value={component.x} coordinateScale={coordinateScale} onChange={x=>patchPart({x})} />
-            <ComponentOffsetInput key={`${id}:${partKey}:y`} label={t("Offset Y")} value={component.y} coordinateScale={coordinateScale} onChange={y=>patchPart({y})} />
-          </>}
-          {numberControl("Width",component.width,width=>patchPart({width}),4,800,true)}
-          {numberControl("Height",component.height,height=>patchPart({height}),4,800,true)}
-          {partKey === "value" && numberControl(t("Digit width"),component.digitWidth,digitWidth=>patchPart({digitWidth}),1,800,true)}
-        </div>
-        {partKey === "value" && <WatchfaceNumberAlignControl value={component.align} disabled={locked} onChange={align=>patchPart({align:align ?? "left"})} />}
-        {colorControl("Color",component.color,color=>patchPart({color}))}
-        {role && <>
-          <LocalFontPicker api={api} label={t("Font")} value={style.parts?.[partKey]?.fontFamily ?? ""} emptyLabel={t("Layer font")} disabled={locked} onChange={fontFamily=>onPatch(withNativeFont(style,fontFamily,partKey))}
-            inheritedFamily={nativeRoleDrawsText(style, role) ? component.fontFamily : undefined}
-            typography={{ fontWeight: component.fontWeight, fontStyle: component.fontStyle, letterSpacing: component.letterSpacing }}
-            onTypographyChange={typography=>patchPart(shapePatch(typography))} onLetterSpacingChange={letterSpacing=>patchPart({letterSpacing})}
-            showSpacing={role === "icon" || role === "unit" || role === "states"} />
-          {fontSizeField(nativeComponentFontSize(id, style, partKey), fontSize=>patchPart(nativePartForFontSize(id, style, partKey, fontSize)))}
-        </>}
-
-        {partKey === "plot" && <>
-          <p className="watchface-studio-summary">
-            {graph === "curve"
-              ? t("The {{page}} page draws a line.", { page: chartSourceLabel(style.chartSource ?? "chart_stress") })
-              : graph === "bars"
-                ? t("The {{page}} page draws bars.", { page: chartSourceLabel(style.chartSource ?? "chart_stress") })
-                : t("The {{page}} page draws no graph.", { page: chartSourceLabel(style.chartSource ?? "chart_stress") })}{" "}
-            {t("Back on the watch switches chart pages, and each page uses one of these styles. Barometer and tide pages need data from the phone and stay empty until it syncs. A width of 0 hides that style's graph.")}
-          </p>
-          {graph === "curve" ? [graphStyles[1], graphStyles[0]] : graphStyles}
-        </>}
-
-        {role && <div className="wf-native-artwork">
-          <div className="wf-native-artwork-head">
-            <span>{t("Artwork")}</span>
-            {indices.length > 1 && <select aria-label={t("Artwork state")} value={index} onChange={event=>setSelectedIndex(Number(event.target.value))}>{indices.map(i=><option key={i} value={i}>{String(i).padStart(2,"0")} · {artworkStateLabel(i)}</option>)}</select>}
-          </div>
-          {role === "unit" && id === "weather_temp" && <p className="watchface-studio-summary">{t("The watch shows 00 in Celsius and 01 in Fahrenheit. Leave 01 untouched to show 00 in both, which suits a plain °.")}</p>}
-          <div className="wf-native-artwork-row">
-            <SpritePreview id={id} style={style} role={role} index={index} />
-            <div className="wf-native-artwork-copy">
-              <label className="field">{t("Text")}<input aria-label={t("Artwork text")} maxLength={32} value={nativeAssetText(id,style,role,index) ?? ""} placeholder={t("Generated artwork")} onChange={event=>onPatch({assetTexts:{...style.assetTexts,[role]:{...style.assetTexts?.[role],[index]:event.target.value}}})} /></label>
-              <span className="watchface-studio-summary">{replacement
-                ? nativeFontRole(role) ? t("Image in use. Pick a font or remove the image to draw the text instead.") : t("Custom image in use. Remove it to draw the text again.")
-                : setAside ? t("Drawn in the chosen font. Pick Keep template font to bring back the original image.")
-                : t("Drawn from the text in the component color and font, or replaced by an image.")}</span>
-            </div>
-          </div>
-          <div className="wf-native-artwork-actions">
-            <button type="button" className="secondary-button" onClick={()=>void importArtwork(false)}><ImagePlus size={14} /> {replacement ? t("Replace image") : t("Use an image")}</button>
-            {indices.length > 1 && <button type="button" className="secondary-button" onClick={()=>void importArtwork(true)}><FolderInput size={14} />{" "}{t("Import numbered PNGs")}</button>}
-            {replacement && <button type="button" className="secondary-button wf-native-artwork-remove" onClick={removeImage}><Trash2 size={14} />{" "}{t("Remove image")}</button>}
-          </div>
-        </div>}
-
-        <button type="button" className="wf-native-part-reset" disabled={!customized} onClick={restoreComponent}><RotateCcw size={13} />{" "}{t("Reset {{value1}}", { value1: midSentence(t(partLabel)) })}</button>
-      </section>
-      {id.startsWith("weather_temp_") && <p className="watchface-studio-summary">{t("Minimum and maximum temperature share the separator, unit and minus artwork. When both are enabled, the minimum-temperature settings supply these shared assets.")}</p>}
-    </div>, { disabled: locked, status: t("{{shown}} of {{total}} shown", { shown: available.filter(part => nativePart(id, style, part).enabled).length, total: available.length }) })}
+      {graphStyleTab === "line" ? lineControls : barControls}
+      {graphWithoutNumber ? <p className="wf-graph-warning"><span>{t("Graph without a number")}</span><WatchfaceHint>{t("The watch only draws a graph when the face has a chart number, so the export adds an invisible one. Experimental: check the graph on your watch.")}</WatchfaceHint></p> : null}
+      {partList(shownGraphParts)}
+    </div>, { disabled: locked, status: t("Every page"), actions: <WatchfaceHint label={t("About the graph")}>{t("Experimental charts. This preview uses sample data.")} {t("Every page shares one graph area. The watch draws a line on Sun and Moon, bars on Barometer and Tide, and no graph on the daily pages. At bar width 0 it drops the barometer and tide pages.")}</WatchfaceHint> }) : renderSection("specific", "Parts", <div className="wf-property-stack wf-native-components">
+      {pairPartner ? <>
+        {/* One reading, in the order the watch draws it: min, separator, max, then the shared unit and minus. */}
+        {partList(available.filter(part => part === "value" || part === "separator"))}
+        <NativeDataInspector id={pairPartner.id} style={pairPartner.style} coordinateScale={coordinateScale} api={api} disabled={disabled}
+          renderSection={renderSection} renderFontSizeField={renderFontSizeField} onPatch={pairPartner.onPatch} onError={onError}
+          onImportStart={onImportStart} onImportFinish={onImportFinish} isImportCurrent={isImportCurrent}
+          embeddedParts={["value"]} partLabels={{ value: "Max number" }} />
+        {partList(available.filter(part => part !== "value" && part !== "separator"))}
+      </> : partList(available)}
+      {id.startsWith("weather_temp_") && !pairPartner && <p className="watchface-studio-summary">{t("Minimum and maximum temperature share the separator, unit and minus artwork. When both are enabled, the minimum-temperature settings supply these shared assets.")}</p>}
+    </div>, { disabled: locked, status: t("{{shown}} of {{total}} shown", { shown: available.filter(part => nativePart(id, style, part).enabled).length + (pairPartner && nativePart(pairPartner.id, pairPartner.style, "value").enabled ? 1 : 0), total: available.length + (pairPartner ? 1 : 0) }) })}
 
     {renderSection("advanced", "Advanced", <div className="wf-property-stack">
       {id !== "date_year" && <label className="field">{t("Preview sample")}<input aria-label={t("Preview sample")} value={nativeDataPreviewValue(id,style)} maxLength={6} onChange={event=>onPatch({previewValue:event.target.value.replace(/[^0-9.:%−-]/g,"")})} /></label>}

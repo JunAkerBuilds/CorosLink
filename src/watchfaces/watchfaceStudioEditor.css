@@ -1,0 +1,2345 @@
+/*
+ * Studio editor layout, 2026-11 redesign: Add rail, Screens strip, canvas
+ * corner controls, the on-face toolbar, layer values and the This face panel.
+ * Loads after watchfaceStudioAtelier.css and reuses its --atl-* tokens.
+ */
+
+/* --- Add rail ------------------------------------------------------------ */
+
+.watchface-shell .wf-add-rail {
+  display: none;
+}
+
+@media (min-width: 1180px) {
+  :root .watchface-shell.watchface-shell--studio .watchface-editor-grid.has-add-rail {
+    grid-template-columns: 68px minmax(224px, 248px) minmax(360px, 1fr) minmax(292px, 326px);
+  }
+
+  :root .watchface-shell.watchface-shell--studio .wf-add-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+    border: 1px solid var(--atl-line);
+    border-radius: var(--atl-radius);
+    background: var(--atl-tray);
+    box-shadow: var(--atl-shadow);
+    padding: 10px 0;
+  }
+
+  /* The rail replaces the pane's Add button on wide screens. */
+  :root .watchface-shell.watchface-shell--studio .watchface-editor-grid.has-add-rail .wf-layers-pane .wf-add-menu {
+    display: none;
+  }
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-heading {
+  padding: 0 0 6px;
+  color: var(--atl-titanium-dim);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-divider {
+  flex: none;
+  width: 28px;
+  height: 1px;
+  margin: 6px 0;
+  background: var(--atl-rule);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 56px;
+  min-height: 52px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--atl-titanium);
+  padding: 5px 2px;
+  font: 560 10.5px/1.15 var(--font-display);
+  text-align: center;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button > span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button:hover:not(:disabled) {
+  background: var(--atl-control-hover);
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button.is-active {
+  background: var(--atl-tray-hover);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--atl-line-strong);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button:focus-visible {
+  outline: 2px solid var(--wf-focus, var(--accent));
+  outline-offset: -2px;
+}
+
+/* --- Layer rows: the value the preview draws ---------------------------- */
+
+:root .watchface-shell.watchface-shell--studio .watchface-layer-row {
+  grid-template-columns: 18px minmax(0, 1fr);
+  grid-auto-columns: auto;
+  grid-auto-flow: column;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-value {
+  justify-self: end;
+  max-width: 76px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--atl-control);
+  color: var(--atl-titanium);
+  padding: 1px 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The lock and eye float over the row end on hover; let them, not the value. */
+:root .watchface-shell.watchface-shell--studio .wf-layer-item:is(:hover, :focus-within) .wf-layer-value {
+  visibility: hidden;
+}
+
+/* --- Header: Watchmaker button and the More menu ------------------------ */
+
+:root .watchface-shell.watchface-shell--studio .wf-watchmaker-button.is-active {
+  border-color: var(--atl-lume-ring);
+  background: var(--atl-lume-wash);
+  color: var(--atl-lume-strong);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-watchmaker-button svg {
+  color: var(--atl-lume);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-more-popover {
+  right: 0;
+  left: auto;
+  width: 300px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-more-popover > button {
+  position: relative;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-more-divider {
+  display: block;
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--atl-rule);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-more-check {
+  flex: none;
+  position: relative;
+  width: 32px;
+  height: 20px;
+  margin-left: auto;
+  align-self: center;
+  border-radius: 999px;
+  background: var(--atl-tray-hover);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-more-check::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--atl-titanium);
+  content: "";
+  transition: left 140ms var(--atl-ease);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-more-check.is-on {
+  background: var(--atl-lume);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-more-check.is-on::after {
+  left: 15px;
+  background: var(--atl-lume-ink);
+}
+
+/* --- Canvas corner: placement, zoom, full screen ------------------------ */
+
+:root .watchface-shell.watchface-shell--studio .wf-stage-toolbar--floating.wf-stage-corner {
+  top: 12px;
+  right: 12px;
+  bottom: auto;
+  left: auto;
+  flex-wrap: nowrap;
+  max-width: calc(100% - 24px);
+  min-height: 40px;
+  border-bottom: 1px solid var(--atl-line-strong);
+  transform: none;
+}
+
+/* --- Screens strip ------------------------------------------------------- */
+
+:root .watchface-shell.watchface-shell--studio .wf-stage-toolbar--floating.wf-screens-strip {
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  width: auto;
+  max-width: none;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: 8px;
+  border-bottom: 1px solid var(--atl-line-strong);
+  padding: 6px 8px 6px 14px;
+  transform: none;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-screens-label {
+  flex: none;
+  color: var(--atl-titanium-dim);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-screens-tiles {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-screen-tile {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  border: 1px solid var(--atl-line);
+  border-radius: 11px;
+  background: var(--atl-control);
+  color: var(--atl-titanium);
+  padding: 4px 12px 4px 5px;
+  font-family: var(--font-display);
+  text-align: left;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-screen-tile:hover {
+  background: var(--atl-control-hover);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-screen-tile[aria-pressed="true"] {
+  border-color: var(--atl-lume-ring);
+  background: var(--atl-tray-raised);
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-screen-tile-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #000;
+  box-shadow: inset 0 0 0 2px var(--atl-tray-hover);
+  color: var(--atl-titanium);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-screen-tile[aria-pressed="true"] .wf-screen-tile-icon {
+  color: var(--atl-lume-strong);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-screen-tile-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.2;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-screen-tile-copy strong {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-screen-tile-copy small {
+  color: var(--atl-titanium-dim);
+  font-size: 11px;
+}
+
+/* The status line now lives in the strip: it takes the free space and
+   shortens from its end. */
+:root .watchface-shell.watchface-shell--studio .wf-screens-strip > .wf-screens-status {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 0;
+  padding: 0 6px;
+}
+
+/* --- On-face toolbar ------------------------------------------------------ */
+
+:root .watchface-shell.watchface-shell--studio .wf-contextual-align-bar.wf-on-face-toolbar {
+  position: absolute;
+  z-index: 7;
+  grid-row: auto;
+  grid-column: auto;
+  white-space: nowrap;
+  transform: translate(-50%, calc(-100% - 12px));
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-contextual-align-bar.wf-on-face-toolbar.is-below {
+  transform: translate(-50%, 12px);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-on-face-toolbar-name {
+  padding: 0 8px 0 6px;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* --- This face panel ------------------------------------------------------ */
+
+:root .watchface-shell.watchface-shell--studio .wf-face-panel-head {
+  align-items: flex-start;
+  text-align: left;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-face-colors h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-face-colors h3 span {
+  color: var(--atl-titanium-dim);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-face-color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-face-color {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--wf-face-color);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 16%);
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-face-color:focus-within {
+  outline: 2px solid var(--wf-focus, var(--accent));
+  outline-offset: 2px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-face-color input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-face-colors-hint {
+  margin: 8px 0 0;
+  color: var(--atl-titanium-dim);
+  font-size: 12px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-welcome-shortcuts-disclosure > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-welcome-shortcuts-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-welcome-shortcuts-disclosure > summary h3 {
+  display: inline;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-welcome-shortcuts-disclosure > summary::after {
+  margin-left: 6px;
+  color: var(--atl-titanium-dim);
+  content: "›";
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-welcome-shortcuts-disclosure[open] > summary::after {
+  content: "⌄";
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-more-popover > button.wf-more-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-on-face-toolbar-name {
+  flex: 0 0 auto;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Notes at the top of the stage stay clear of the corner controls. */
+:root .watchface-shell.watchface-shell--studio .watchface-editor-stage > .watchface-studio-summary {
+  margin-right: 300px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-more-menu > .wf-more-button {
+  border-color: transparent;
+  background: transparent;
+  color: var(--atl-titanium);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-more-menu > .wf-more-button:hover,
+:root .watchface-shell.watchface-shell--studio .wf-more-menu > .wf-more-button[aria-expanded="true"] {
+  background: var(--atl-control-hover);
+  color: var(--text-primary);
+}
+
+/* The strip keeps only what helps while designing: the snap hint while
+   dragging, the font warning, and (Advanced) size and file name. The
+   selection's name is already in the Properties header. */
+:root .watchface-shell.watchface-shell--studio .wf-screens-status > span:first-child:not(.is-snap-status) {
+  display: none;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-screens-status > span:nth-child(2)::before {
+  display: none;
+}
+
+/* --- Sidebar polish (2026-11-05): rail and Layers read as one panel -------- */
+
+@media (min-width: 1180px) {
+  /* The rail tucks into the Layers tray: one panel with a tool strip. */
+  :root .watchface-shell.watchface-shell--studio .watchface-editor-grid.has-add-rail > .wf-add-rail {
+    position: relative;
+    z-index: 1;
+    margin-right: calc(var(--atl-gutter) * -1);
+    border-right: 0;
+    border-radius: var(--atl-radius) 0 0 var(--atl-radius);
+    background: color-mix(in srgb, var(--atl-bench) 55%, var(--atl-tray));
+    padding: 12px 0;
+    gap: 4px;
+  }
+
+  :root .watchface-shell.watchface-shell--studio .watchface-editor-grid.has-add-rail > .wf-layers-pane {
+    border-left-color: var(--atl-rule);
+    border-radius: 0 var(--atl-radius) var(--atl-radius) 0;
+  }
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-heading {
+  padding-bottom: 4px;
+  font-family: var(--font-display);
+  letter-spacing: 0.1em;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button {
+  gap: 5px;
+  width: 58px;
+  min-height: 60px;
+  border-radius: 12px;
+  color: var(--atl-titanium-dim);
+  padding: 4px 2px 6px;
+  font-size: 10.5px;
+  font-weight: 550;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button > svg {
+  box-sizing: content-box;
+  width: 18px;
+  height: 18px;
+  border-radius: 10px;
+  background: var(--atl-control);
+  box-shadow: inset 0 0 0 1px var(--atl-line);
+  color: var(--atl-ink);
+  padding: 8px;
+  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button:hover:not(:disabled),
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button.is-active {
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button:hover:not(:disabled) > svg {
+  background: var(--atl-tray-hover);
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-button.is-active > svg {
+  background: var(--atl-lume-wash);
+  box-shadow: inset 0 0 0 1px var(--atl-lume-ring);
+  color: var(--atl-lume-strong);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-add-rail-divider {
+  width: 32px;
+  margin: 8px 0;
+}
+
+/* Section headings: quiet small caps instead of wide engraved type. */
+:root .watchface-shell.watchface-shell--studio .wf-layer-group {
+  margin-top: 18px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-section-toggle {
+  min-height: 28px;
+  color: var(--atl-titanium-dim);
+  padding: 0 8px 0 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-stretch: 100%;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-section-toggle:hover {
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-section-count {
+  min-width: 20px;
+  border-radius: 999px;
+  background: var(--atl-control);
+  padding: 1px 6px;
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+/* Rows: a little taller, with the kind glyph on a small tile. */
+:root .watchface-shell.watchface-shell--studio .watchface-layer-row {
+  min-height: 36px;
+  gap: 10px;
+  border-radius: 10px;
+  padding: 0 8px 0 6px;
+  font-size: 13px;
+  grid-template-columns: 24px minmax(0, 1fr);
+}
+
+:root .watchface-shell.watchface-shell--studio .watchface-layer-row .wf-layer-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--atl-control);
+}
+
+:root .watchface-shell.watchface-shell--studio .watchface-layer-row .wf-layer-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+:root .watchface-shell.watchface-shell--studio .watchface-layer-row.is-selected .wf-layer-icon {
+  background: color-mix(in srgb, var(--atl-lume) 18%, transparent);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-value {
+  min-width: 18px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--atl-line);
+  color: var(--atl-titanium);
+  padding: 2px 7px;
+  font-size: 11.5px;
+  text-align: center;
+}
+
+/* Parts that are off: dim the row and keep only the eye; the lock comes back
+   on hover, or stays when it is actually locked. */
+:root .watchface-shell.watchface-shell--studio .watchface-layer-row:has(.is-hidden) {
+  opacity: 0.62;
+}
+
+:root .watchface-shell.watchface-shell--studio .watchface-layer-row:has(.is-hidden) .wf-layer-icon {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--atl-line);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-list > li.wf-layer-item:has(.watchface-layer-name.is-hidden):not(:hover, :focus-within) .watchface-layer-lock:not(.is-locked) {
+  display: none;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-list > li.wf-layer-item:has(.watchface-layer-name.is-hidden):not(:hover, :focus-within, :has(.is-selected), :has(.is-locked)) > .watchface-layer-row {
+  padding-right: 34px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-list > li.wf-layer-item:has(.watchface-layer-name.is-hidden):not(:hover, :focus-within) .watchface-layer-visibility {
+  opacity: 0.7;
+}
+
+/* --- Add picker opened from the rail ---------------------------------------- */
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-picker-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-picker-title-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--atl-lume-wash);
+  color: var(--atl-lume-strong);
+}
+
+/* The title already names the category. */
+:root .watchface-shell.watchface-shell--studio .wf-layer-picker.is-rail-data .wf-layer-picker-results section > h3 {
+  display: none;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-picker.is-rail-data .wf-layer-picker-search {
+  margin-top: 2px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-picker.is-rail-data .wf-layer-picker-results [data-add-option] {
+  min-height: 38px;
+  border-radius: 9px;
+  padding-inline: 10px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-picker.is-rail-artwork .wf-layer-picker-artwork {
+  padding-bottom: 12px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-picker.is-rail-data .wf-layer-picker-filters {
+  display: none;
+}
+
+/* --- Font picker (2026-11-05): source switch, styles, real column layout ---- */
+
+body .watchface-font-picker-panel.wf-font-picker-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 14px;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-panel-header {
+  padding: 12px 12px 12px 14px;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-panel-header span {
+  font-size: 11px;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-browser {
+  display: flex;
+  flex-direction: column;
+  height: min(560px, calc(100vh - 120px));
+  min-height: 360px;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .wf-font-source {
+  display: flex;
+  gap: 3px;
+  margin: 10px 12px 0;
+  border: 1px solid var(--wf-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--wf-surface) 80%, transparent);
+  padding: 3px;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .wf-font-source button {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: 600 12.5px var(--font-display);
+  cursor: pointer;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .wf-font-source button[aria-selected="true"] {
+  background: var(--wf-surface-hover);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
+  color: var(--text-primary);
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .wf-font-source button[aria-selected="true"] svg {
+  color: var(--accent-strong);
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-search-overlay {
+  position: static;
+  margin: 8px 12px 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  gap: 8px;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-search {
+  border: 1px solid var(--wf-border);
+  border-radius: 10px;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-meta {
+  padding: 0 2px;
+  font-size: 11px;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .wf-font-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .wf-font-categories button {
+  min-height: 26px;
+  border: 1px solid var(--wf-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0 10px;
+  font: 560 11.5px var(--font-display);
+  cursor: pointer;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .wf-font-categories button:hover {
+  background: var(--wf-surface-hover);
+  color: var(--text-primary);
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .wf-font-categories button[aria-pressed="true"] {
+  border-color: var(--wf-accent-border);
+  background: color-mix(in srgb, var(--accent-soft) 80%, transparent);
+  color: var(--accent-strong);
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-browser-scroll {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  margin-top: 10px;
+  border-top: 1px solid var(--wf-border);
+  padding: 8px 8px 10px;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-results {
+  gap: 2px;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-results button {
+  min-height: 56px;
+  border-radius: 10px;
+  padding: 7px 12px;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .wf-font-result-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--text-primary);
+  font: 560 12.5px var(--font-display);
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .wf-font-result-name small {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-result-copy > .wf-font-result-sample {
+  margin-top: 3px;
+  color: var(--text-primary);
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-actions {
+  position: static;
+  flex: none;
+  border-top: 1px solid var(--wf-border);
+  padding: 10px 12px 12px;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-actions :is(.secondary-button, .primary-button) {
+  flex: 1;
+  min-height: 40px;
+  border-radius: 10px;
+  gap: 7px;
+}
+
+/* The corner sits at the top of the stage, so its Placement menu opens
+   downward (the floating-pill rule opened it upward, off the canvas). */
+:root .watchface-shell.watchface-shell--studio .wf-stage-toolbar--floating.wf-stage-corner .wf-placement-popover {
+  top: calc(100% + 10px);
+  bottom: auto;
+  right: 0;
+  left: auto;
+  z-index: 20;
+}
+
+/* --- AM/PM pictures ---------------------------------------------------------- */
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-pictures {
+  display: grid;
+  gap: 8px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-pictures-label {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-picture-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-picture {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 52px;
+  border: 1px solid var(--atl-line);
+  border-radius: 11px;
+  background: var(--atl-control);
+  color: var(--atl-titanium);
+  padding: 6px 10px 6px 6px;
+  text-align: left;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-picture:hover:not(:disabled) {
+  border-color: var(--atl-line-strong);
+  background: var(--atl-control-hover);
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-picture-preview {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #000;
+  color: var(--atl-titanium);
+  font: 700 12px var(--font-display);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-picture-preview img {
+  max-width: 34px;
+  max-height: 34px;
+  object-fit: contain;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-picture-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-picture-copy strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-picture-copy small,
+:root .watchface-shell.watchface-shell--studio .wf-ampm-pictures-hint {
+  overflow: hidden;
+  color: var(--atl-titanium-dim);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-ampm-pictures-reset {
+  justify-self: start;
+  font-size: 12px;
+}
+
+/* --- Data field parts: a stacked list that opens in place ------------------ */
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-list {
+  display: grid;
+  gap: 6px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-item {
+  overflow: hidden;
+  border: 1px solid var(--atl-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--atl-control) 60%, transparent);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-item.is-open {
+  border-color: var(--atl-lume-ring);
+  background: var(--atl-tray);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px 0 0;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 52px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 7px 4px 7px 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-thumb {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #000;
+  box-shadow: inset 0 0 0 1px var(--atl-line);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-thumb img {
+  max-width: 30px;
+  max-height: 30px;
+  object-fit: contain;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-copy {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-copy small {
+  overflow: hidden;
+  color: var(--atl-titanium-dim);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-item.is-off .wf-native-part-toggle {
+  opacity: 0.6;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-chevron {
+  flex: none;
+  color: var(--atl-titanium-dim);
+  transition: transform 140ms var(--atl-ease);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-item.is-open .wf-native-part-chevron {
+  transform: rotate(180deg);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-eye {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--atl-titanium-dim);
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-eye:hover:not(:disabled) {
+  background: var(--atl-control-hover);
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-body {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--atl-rule);
+  padding: 12px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-note {
+  margin: 0;
+  color: var(--atl-titanium-dim);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--atl-rule);
+  padding-top: 10px;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look > span {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look strong {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look small {
+  color: var(--atl-titanium-dim);
+  font-size: 11.5px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look input {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--atl-tray-hover);
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look input::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--atl-titanium);
+  content: "";
+  transition: left 140ms var(--atl-ease);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look input:checked {
+  background: var(--atl-lume);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look input:checked::after {
+  left: 17px;
+  background: var(--atl-lume-ink);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-own-look input:focus-visible {
+  outline: 2px solid var(--wf-focus, var(--accent));
+  outline-offset: 2px;
+}
+
+/* Every picture of the part at once; template or custom at a glance. */
+:root .watchface-shell.watchface-shell--studio .wf-native-artwork-head small {
+  color: var(--atl-titanium-dim);
+  font-size: 11.5px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frames {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 6px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frames.is-many {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frame {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--atl-line);
+  border-radius: 9px;
+  background: #000;
+  color: var(--atl-titanium-dim);
+  padding: 6px 2px 4px;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frame:hover {
+  border-color: var(--atl-line-strong);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frame.is-selected {
+  border-color: var(--atl-lume);
+  box-shadow: 0 0 0 2px var(--atl-lume-wash);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frame.is-custom::after {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--atl-lume);
+  content: "";
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frame-art {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 34px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frame-art img {
+  max-width: 90%;
+  max-height: 34px;
+  object-fit: contain;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-frame small {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Properties: one column ordered by how often each part is used ---------- */
+
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel {
+  display: flex;
+  flex-direction: column;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="specific"] { order: 1; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="appearance"] { order: 2; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="assets"] { order: 3; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="layer"] { order: 4; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="transform"] { order: 5; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="stroke"] { order: 6; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="effects"] { order: 7; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="advanced"] { order: 8; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="config"] { order: 9; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="archive"] { order: 10; }
+
+/* A data field sets its look once, then its parts. */
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel:has(.wf-native-components) > [data-section="appearance"] { order: 0; }
+
+/* Six equal cells: the old 3 + spacer + 3 template put Align top in the spacer. */
+:root .watchface-shell--studio .wf-properties-pane .wf-property-section .wf-align-icon-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+/* The picture grid replaces the single preview, so the text field takes the row. */
+:root .watchface-shell.watchface-shell--studio .wf-native-part-body .wf-native-artwork-row {
+  display: block;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-body .wf-native-artwork-copy {
+  display: grid;
+  gap: 6px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-body .wf-native-artwork-copy > .field {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-body .wf-native-artwork-copy > .field input {
+  width: 100%;
+  min-width: 0;
+}
+
+/* The sheet's PNG set source: the PNG set controls, scrolling in the sheet body. */
+body .watchface-font-picker-panel.wf-font-picker-panel .wf-font-png-source {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin-top: 10px;
+  border-top: 1px solid var(--wf-border);
+  padding: 12px;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .wf-font-png-source .wf-png-font {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-actions[hidden] {
+  display: none;
+}
+
+/* A data field's reading, built from its own pictures; each piece opens its part. */
+:root .watchface-shell.watchface-shell--studio .wf-native-reading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  min-height: 64px;
+  border-radius: 12px;
+  background: #000;
+  box-shadow: inset 0 0 0 1px var(--atl-line);
+  padding: 12px 10px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-reading-piece {
+  display: grid;
+  place-items: end center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 3px;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-reading-piece:hover {
+  background: rgb(255 255 255 / 6%);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-reading-piece.is-active {
+  box-shadow: inset 0 0 0 1.5px var(--atl-lume);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-reading-art {
+  display: grid;
+  place-items: end center;
+  min-width: 8px;
+  height: 44px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-reading-art img {
+  max-height: 44px;
+  object-fit: contain;
+}
+
+/* --- ⓘ tips (help that used to be paragraphs) ------------------------------- */
+
+.watchface-shell .wf-hint {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.watchface-shell .wf-hint-button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--atl-titanium-dim, var(--text-secondary));
+  padding: 0;
+  cursor: help;
+}
+
+.watchface-shell .wf-hint-button:hover,
+.watchface-shell .wf-hint.is-open .wf-hint-button {
+  background: var(--atl-control-hover, rgb(255 255 255 / 8%));
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-hint-bubble {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 50%;
+  display: grid;
+  gap: 6px;
+  width: max-content;
+  max-width: 240px;
+  border: 1px solid var(--atl-line-strong, rgb(255 255 255 / 12%));
+  border-radius: 10px;
+  background: var(--atl-tray-raised, #22262b);
+  box-shadow: var(--atl-float-shadow, 0 18px 40px rgb(0 0 0 / 50%));
+  color: var(--text-primary);
+  padding: 9px 11px;
+  font-size: 12px;
+  font-weight: 450;
+  letter-spacing: 0;
+  line-height: 1.45;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+  transform: translateX(-50%);
+}
+
+.watchface-shell .wf-hint-bubble[hidden] {
+  display: none;
+}
+
+/* In the panel, tips open rightward from their ⓘ, which sit at a row's start. */
+.watchface-shell .wf-properties-pane .wf-hint-bubble {
+  left: -6px;
+  right: auto;
+  transform: none;
+}
+
+.watchface-shell .wf-hint-bubble p {
+  margin: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+.watchface-shell .wf-position-heading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-native-part-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--atl-titanium-dim);
+  font-size: 11.5px;
+}
+
+body .watchface-font-picker-panel.wf-font-picker-panel .wf-font-source button {
+  gap: 5px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+/* --- PNG set source of the Change digits sheet ----------------------------- */
+
+body .wf-font-picker-panel .wf-png-set {
+  display: grid;
+  gap: 14px;
+}
+
+body .wf-font-picker-panel .wf-png-set-lead {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+body .wf-font-picker-panel .wf-png-set-card {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--wf-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--wf-surface) 70%, transparent);
+}
+
+body .wf-font-picker-panel .wf-png-set-card .wf-sprite-strip,
+body .wf-font-picker-panel .wf-png-set-card > :first-child {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+body .wf-font-picker-panel .wf-png-set-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid var(--wf-border);
+  padding: 6px 6px 6px 10px;
+}
+
+body .wf-font-picker-panel .wf-png-set-name {
+  flex: 1;
+  min-width: 0;
+}
+
+body .wf-font-picker-panel .wf-png-set-name input {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0 6px;
+  font: 600 13px var(--font-display);
+}
+
+body .wf-font-picker-panel .wf-png-set-name input:hover {
+  border-color: var(--wf-border);
+}
+
+body .wf-font-picker-panel .wf-png-set-name input:focus-visible {
+  border-color: var(--wf-accent-border);
+  outline: none;
+  background: var(--wf-surface);
+}
+
+body .wf-font-picker-panel .wf-png-set-remove {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+body .wf-font-picker-panel .wf-png-set-remove:hover:not(:disabled) {
+  background: color-mix(in srgb, #e5484d 16%, transparent);
+  color: #ff8a8d;
+}
+
+body .wf-font-picker-panel .wf-png-set-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+body .wf-font-picker-panel .wf-png-set-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+body .wf-font-picker-panel .wf-png-set-row .wf-png-font-segmented {
+  min-width: 210px;
+}
+
+body .wf-font-picker-panel .wf-png-set-switch {
+  cursor: pointer;
+}
+
+body .wf-font-picker-panel .wf-png-set-switch input {
+  appearance: none;
+  position: relative;
+  width: 34px;
+  height: 20px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--wf-surface-hover);
+  cursor: pointer;
+}
+
+body .wf-font-picker-panel .wf-png-set-switch input::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  content: "";
+  transition: left 140ms ease;
+}
+
+body .wf-font-picker-panel .wf-png-set-switch input:checked {
+  background: var(--accent);
+}
+
+body .wf-font-picker-panel .wf-png-set-switch input:checked::after {
+  left: 17px;
+  background: #03140d;
+}
+
+body .wf-font-picker-panel .wf-png-set-switch input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout {
+  border: 1px solid var(--wf-border);
+  border-radius: 10px;
+  padding: 0 10px;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout > summary::-webkit-details-marker {
+  display: none;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout > summary::before {
+  color: var(--text-secondary);
+  content: "›";
+  transition: transform 140ms ease;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+body .wf-font-picker-panel .wf-png-set-layout > summary span {
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout-fields {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+  padding: 0 0 10px;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout-fields label {
+  display: grid;
+  gap: 5px;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout-fields label > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+body .wf-font-picker-panel .wf-png-set-layout-fields input {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid var(--wf-border);
+  border-radius: 8px;
+  background: var(--wf-surface);
+  color: var(--text-primary);
+  padding: 0 8px;
+  box-sizing: border-box;
+}
+
+body .wf-font-picker-panel .wf-png-set-sources {
+  display: grid;
+  gap: 8px;
+}
+
+/* Replacing: four full-name tiles in a 2 × 2 grid instead of truncated chips. */
+body .wf-font-picker-panel .wf-png-set .wf-png-font-sources.is-compact {
+  display: grid;
+  grid-auto-flow: row;
+  grid-auto-columns: auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+body .wf-font-picker-panel .wf-png-set .wf-png-font-sources.is-compact > * {
+  width: auto;
+  min-width: 0;
+}
+
+body .wf-font-picker-panel .wf-png-set .wf-png-font-sources.is-compact .wf-png-font-source {
+  justify-content: flex-start;
+  min-height: 42px;
+  border-radius: 10px;
+  padding: 0 10px;
+}
+
+body .wf-font-picker-panel .wf-png-set .wf-png-font-sources.is-compact .wf-png-font-source-copy strong {
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body .wf-font-picker-panel .wf-png-set .wf-png-font-rules {
+  border-top: 1px solid var(--wf-border);
+  padding-top: 10px;
+}
+
+/* --- Chart pages: screens of the face ----------------------------------- */
+/* The page a chart shows (or the pages a field shows on) opens the panel;
+   the graph every page shares follows the readout. */
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="page"] { order: -1; }
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabpanel > [data-section="graph"] { order: 1; }
+
+/* Screens strip: page tiles in Back order, attached to Current. */
+:root .watchface-shell.watchface-shell--studio .wf-screens-pages {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  margin-left: -2px;
+  padding: 0 5px;
+  border: 1px solid var(--atl-line);
+  border-radius: 11px;
+  background: var(--atl-tray);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 44px;
+  height: 36px;
+  padding: 0 8px 0 5px;
+  border: 1px solid var(--atl-line);
+  border-radius: 9px;
+  background: var(--atl-control);
+  color: var(--atl-titanium);
+  font-family: var(--font-display);
+  text-align: left;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tile:hover:not(:disabled) {
+  background: var(--atl-control-hover);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tile[aria-pressed="true"] {
+  border-color: var(--atl-lume-ring);
+  background: var(--atl-tray-raised);
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tile:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tile.is-empty {
+  border-style: dashed;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tile-number {
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  background: var(--atl-tray-hover);
+  color: var(--text-primary);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tile[aria-pressed="true"] .wf-page-tile-number {
+  background: var(--atl-lume);
+  color: var(--atl-lume-ink);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tile-glyph {
+  display: grid;
+  place-items: center;
+  color: var(--atl-titanium-dim);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tile[aria-pressed="true"] .wf-page-tile-glyph {
+  color: var(--atl-lume-strong);
+}
+
+/* Barometer and tide: blank on the watch until the phone syncs. */
+:root .watchface-shell.watchface-shell--studio .wf-page-tile-phone {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6fa8ff;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tile.is-add {
+  justify-content: center;
+  min-width: 36px;
+  padding: 0;
+  border-style: dashed;
+  background: transparent;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-add {
+  position: relative;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-add-menu {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: -6px;
+  z-index: 30;
+  display: grid;
+  gap: 2px;
+  width: 268px;
+  padding: 6px;
+  border: 1px solid var(--atl-line-strong);
+  border-radius: 12px;
+  background: var(--atl-tray-raised);
+  box-shadow: var(--atl-float-shadow);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-add-item {
+  display: grid;
+  gap: 2px;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font: 500 12.5px var(--font-display);
+  text-align: left;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-add-item:hover,
+:root .watchface-shell.watchface-shell--studio .wf-page-add-item:focus-visible {
+  background: var(--atl-control-hover);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-add-item small,
+:root .watchface-shell.watchface-shell--studio .wf-page-add-note {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-add-note {
+  margin: 2px 9px 4px;
+}
+
+/* Canvas: a field the shown page hides keeps a dashed outline. */
+:root .watchface-shell.watchface-shell--studio .wf-page-hidden-box {
+  fill: none;
+  stroke: var(--atl-titanium);
+  stroke-opacity: 0.7;
+  stroke-width: 1.2;
+  stroke-dasharray: 5 4;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-hidden-badge {
+  position: absolute;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  margin-top: 6px;
+  padding: 0 9px;
+  border: 1px solid var(--atl-line-strong);
+  border-radius: 7px;
+  background: var(--atl-tray-raised);
+  color: var(--text-primary);
+  font: 500 11.5px var(--font-display);
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* Panel header: "Page 3 of 4 · Sun". */
+:root .watchface-shell.watchface-shell--studio .wf-chart-page-badge {
+  color: var(--text-secondary);
+}
+
+/* "On the Sun page": its readouts as rows. */
+:root .watchface-shell.watchface-shell--studio .wf-chart-page-panel {
+  display: grid;
+  gap: 10px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-readouts {
+  display: grid;
+  gap: 6px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-readout {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 0 4px 0 0;
+  border: 1px solid var(--atl-line);
+  border-radius: 10px;
+  background: var(--atl-control);
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-readout.is-editing {
+  border-color: var(--atl-lume-ring);
+  background: var(--atl-lume-wash);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-readout-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding: 0 4px 0 11px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-readout-main:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-readout-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-readout-copy strong {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-readout-copy small {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-readout.is-editing .wf-chart-readout-copy small {
+  color: var(--atl-lume-strong);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-readout.is-hidden .wf-chart-readout-copy strong {
+  color: var(--text-secondary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-readout.is-add {
+  gap: 9px;
+  padding: 0 11px 0 9px;
+  border-style: dashed;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-readout.is-add:hover:not(:disabled) {
+  background: var(--atl-control-hover);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-readout-glyph {
+  display: grid;
+  place-items: center;
+  color: var(--atl-titanium-dim);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-readout-action {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--atl-titanium);
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-readout-action:hover:not(:disabled) {
+  background: var(--atl-control-hover);
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-readout-restore {
+  flex: none;
+  min-height: 30px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-page-quiet {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-page-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-page-fields-label {
+  margin-right: 2px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-weather-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--atl-line);
+  border-radius: 8px;
+  background: var(--atl-control);
+  color: var(--text-primary);
+  font: 500 11.5px var(--font-display);
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-weather-chip.is-hidden {
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-page-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-page-remove-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: 500 12px var(--font-display);
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-page-remove-button:hover:not(:disabled) {
+  background: var(--atl-control-hover);
+  color: var(--text-primary);
+}
+
+/* Graph: one switch picks which style's controls show. */
+:root .watchface-shell.watchface-shell--studio .wf-graph-style-switch {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--atl-line);
+  border-radius: 9px;
+  background: var(--atl-tray);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-graph-style-switch button {
+  flex: 1;
+  min-height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: 500 12px var(--font-display);
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-graph-style-switch button[aria-pressed="true"] {
+  background: var(--atl-tray-raised);
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-graph-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+/* Watch pages for a field: numbered tiles like the strip's. */
+:root .watchface-shell.watchface-shell--studio [data-section="page"] .wf-field-pages {
+  gap: 10px;
+  border: 0;
+  background: none;
+  padding: 0;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-tile {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1.5px dashed var(--atl-line-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: 700 11.5px var(--font-display);
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-tile.is-on {
+  border: 1px solid var(--atl-lume-ring);
+  background: var(--atl-lume-wash);
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-tile.is-shown {
+  box-shadow: 0 0 0 2px var(--atl-lume);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-tile:disabled {
+  cursor: default;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-tiles-state {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+/* --- Delete any layer ---------------------------------------------------- */
+/* The row's trash shows on hover, focus and the selected row, left of lock
+   and eye, so the eye keeps its place. */
+:root .watchface-shell.watchface-shell--studio .wf-layer-list > li.wf-layer-item:not(:hover, :focus-within, :has(.is-selected)) .watchface-layer-delete {
+  display: none;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-row-actions .watchface-layer-delete:hover {
+  color: var(--wf-danger);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-list > li.wf-layer-item:is(:hover, :focus-within, :has(.is-selected)):has(.wf-layer-row-actions > .watchface-layer-delete + * + *) > .watchface-layer-row {
+  padding-right: 90px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-property-delete:hover:not(:disabled),
+:root .watchface-shell.watchface-shell--studio .wf-toolbar-delete:hover:not(:disabled) {
+  color: var(--wf-danger);
+}
+
+/* Right after Delete: what happened, and Undo. */
+:root .watchface-shell.watchface-shell--studio .wf-delete-notice {
+  position: absolute;
+  left: 50%;
+  bottom: 84px;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: min(620px, calc(100% - 32px));
+  box-sizing: border-box;
+  padding: 8px 6px 8px 14px;
+  border: 1px solid var(--atl-line-strong);
+  border-radius: 12px;
+  background: var(--atl-tray-raised);
+  box-shadow: var(--atl-float-shadow);
+  color: var(--text-primary);
+  font: 500 12.5px var(--font-display);
+  transform: translateX(-50%);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-delete-notice .secondary-button {
+  flex: none;
+  min-height: 30px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-delete-notice-close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--atl-titanium);
+  cursor: pointer;
+}
+
+/* Removed from this face: deleted template parts, each with Put back. */
+:root .watchface-shell.watchface-shell--studio .wf-layer-list > li.wf-removed-group {
+  display: grid;
+  gap: 2px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--atl-line);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-removed-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--atl-titanium-dim);
+  font: 650 10.5px var(--font-display);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-removed-head span {
+  flex: 1;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-removed-head small {
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-removed-head svg.is-closed {
+  transform: rotate(-90deg);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-removed-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-removed-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 4px 0 30px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-removed-list li span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-removed-list .secondary-button {
+  flex: none;
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+/* Watch pages for a field, in words: one row per page in Back order. */
+:root .watchface-shell.watchface-shell--studio .wf-field-page-rows {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px 0 6px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: 500 12.5px var(--font-display);
+  text-align: left;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-row:hover:not(:disabled) {
+  background: var(--atl-control-hover);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-row:disabled {
+  cursor: default;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-row.is-shown {
+  border-color: var(--atl-lume-ring);
+  background: var(--atl-tray-raised);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-number {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--atl-tray-hover);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-name {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-row.is-on .wf-field-page-name {
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-name small {
+  color: var(--atl-lume-strong);
+  font-size: 11px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-row.is-on .wf-field-page-state {
+  color: var(--atl-lume-strong);
+}
+
+/* --- Fields the chart pages switch ---------------------------------------- */
+/* Under the field's name: where it shows, in two or three words. */
+:root .watchface-shell.watchface-shell--studio .wf-page-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-scope-tag {
+  padding: 1px 8px;
+  border: 1px solid var(--atl-lume-ring);
+  border-radius: 999px;
+  color: var(--atl-lume-strong);
+  font-size: 10.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-scope-tag.is-warning {
+  border-color: color-mix(in srgb, var(--wf-danger) 50%, transparent);
+  color: var(--wf-danger);
+}
+
+/* Screens strip: the selected field's pages underlined, the others faded. */
+:root .watchface-shell.watchface-shell--studio .wf-page-tile.is-field-on::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  bottom: -5px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--atl-lume);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tile.is-field-off:not([aria-pressed="true"]) {
+  opacity: 0.45;
+}
+
+/* Layer list: a switched field's scope in place of its sample value; rows
+   the page on screen hides read one step dimmer. */
+:root .watchface-shell.watchface-shell--studio .wf-layer-scope {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-scope.is-warning {
+  color: var(--wf-danger);
+}
+
+:root .watchface-shell.watchface-shell--studio .watchface-layer-row.is-off-page .watchface-layer-name {
+  color: var(--atl-titanium-dim);
+}
+
+/* The jump notice sits at the top of the stage, apart from Delete's. */
+:root .watchface-shell.watchface-shell--studio .wf-delete-notice.wf-page-jump-notice {
+  top: 64px;
+  bottom: auto;
+}

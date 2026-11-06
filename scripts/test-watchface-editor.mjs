@@ -266,6 +266,8 @@ for (const [
 
 assert.deepEqual(WATCHFACE_INSPECTOR_DEFAULT_OPEN, {
   layer: true,
+  page: true,
+  graph: true,
   transform: true,
   appearance: true,
   assets: true,

@@ -105,6 +105,7 @@ import {
   AppSidebar,
   createInitialSidebarExpanded,
 } from "./components/AppSidebar";
+import { useStudioEditorOpen } from "./watchfaces/studioEditorPresence";
 import { ResourcesMenu } from "./components/ResourcesMenu";
 import { CommunityInvite, hasSeenCommunityInvite, rememberCommunityInvite, type CommunityInviteMode } from "./community/CommunityInvite";
 import { StartupViewMenu } from "./components/StartupViewMenu";
@@ -382,6 +383,12 @@ export default function App() {
   const [sidebarExpanded, setSidebarExpanded] = useState(
     createInitialSidebarExpanded,
   );
+  // Studio's editor folds the sidebar to icons for the face; expanding it
+  // there lasts until the editor closes and never changes the saved choice.
+  const studioEditorOpen = useStudioEditorOpen();
+  const [studioSidebarPeek, setStudioSidebarPeek] = useState(false);
+  useEffect(() => setStudioSidebarPeek(false), [studioEditorOpen]);
+  const shownSidebarExpanded = studioEditorOpen ? studioSidebarPeek : sidebarExpanded;
   const [showDevelopmentTools, setShowDevelopmentTools] = useState(
     IS_DEVELOPMENT_BUILD,
   );
@@ -2736,8 +2743,9 @@ export default function App() {
           onChange={setActiveView}
           coachBusy={coachBusy}
           showDevelopmentItems={showDevelopmentTools}
-          expanded={sidebarExpanded}
-          onExpandedChange={setSidebarExpanded}
+          expanded={shownSidebarExpanded}
+          onExpandedChange={studioEditorOpen ? setStudioSidebarPeek : setSidebarExpanded}
+          persistExpanded={!studioEditorOpen}
           overlayOpen={sidebarOverlayOpen}
           onOverlayOpenChange={setSidebarOverlayOpen}
           onCustomize={openSidebarSettings}
