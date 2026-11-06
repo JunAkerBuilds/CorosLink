@@ -2306,4 +2306,6 @@ export const watchfacesGerman: Record<string, string> = {
   "Next page": "Nächste Seite",
   "Next page, as Back on the watch": "Nächste Seite, wie die Zurück-Taste an der Uhr",
   "Reset background: black, no photo. The watch always draws a background.": "Hintergrund zurücksetzen: Schwarz, kein Foto. Die Uhr zeichnet immer einen Hintergrund.",
+  "This template stacks the minutes under the hours, so the watch never shows this colon, even though the preview does. Use Colon instead: it is drawn into the background and shows on the watch.": "Diese Vorlage stellt die Minuten unter die Stunden, daher zeigt die Uhr diesen Doppelpunkt nie an, auch wenn die Vorschau ihn zeigt. Nutze stattdessen Doppelpunkt: Er wird in den Hintergrund gezeichnet und erscheint auf der Uhr.",
+  "Use Colon instead": "Stattdessen Doppelpunkt nutzen",
 };

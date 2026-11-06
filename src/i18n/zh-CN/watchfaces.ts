@@ -2307,4 +2307,6 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Next page": "下一页",
   "Next page, as Back on the watch": "下一页，与手表的返回键相同",
   "Reset background: black, no photo. The watch always draws a background.": "重置背景：黑色，无照片。手表始终会绘制背景。",
+  "This template stacks the minutes under the hours, so the watch never shows this colon, even though the preview does. Use Colon instead: it is drawn into the background and shows on the watch.": "此模板将分钟放在小时下方，因此手表从不显示这个冒号，尽管预览中会显示。请改用“冒号”：它会绘制到背景中，并在手表上显示。",
+  "Use Colon instead": "改用冒号",
 };

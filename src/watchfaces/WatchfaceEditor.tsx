@@ -396,6 +396,7 @@ import {
   virtualControlIconCanvasSize,
   isControlComplicationEnabled,
   isTemplateTimeColonEnabled,
+  watchfaceTemplateStacksTime,
   isVirtualStandaloneStatusIconKey,
   watchfaceControlStatusPosition,
   watchfaceArcCutIsDateSlash,
@@ -13332,6 +13333,16 @@ export function WatchfaceEditor({
           statusGroup ? "States" : "Asset",
           <>
             {statusGroup ? renderStatusStateSwitch(statusGroup, statusKey!, reference, layer.present) : null}
+            {reference.configKey === "colon_icon" && details && watchfaceTemplateStacksTime(details) ? (
+              <div className="wf-property-stack">
+                <p className="watchface-studio-summary">{t("This template stacks the minutes under the hours, so the watch never shows this colon, even though the preview does. Use Colon instead: it is drawn into the background and shows on the watch.")}</p>
+                <button type="button" className="secondary-button" onClick={() => {
+                  // Where the template colon sits now, between the hours and minutes as moved.
+                  const placed = inferStaticSeparators(previewDetails ?? details, design.timeStyles?.hours?.color ?? design.digitColor).colon;
+                  updateStaticSeparator("colon", { x: placed.x, y: placed.y, size: placed.size, color: placed.color, enabled: true });
+                }}><Plus size={15} /> {t("Use Colon instead")}</button>
+              </div>
+            ) : null}
             {statePresent ? renderConfigAssetControls(reference) : null}
           </>,
           { disabled: isPositionLocked(layer.id) }

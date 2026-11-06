@@ -2306,4 +2306,6 @@ export const watchfacesPortuguese: Record<string, string> = {
   "Next page": "Página seguinte",
   "Next page, as Back on the watch": "Página seguinte, como Voltar no relógio",
   "Reset background: black, no photo. The watch always draws a background.": "Repor fundo: preto, sem fotografia. O relógio desenha sempre um fundo.",
+  "This template stacks the minutes under the hours, so the watch never shows this colon, even though the preview does. Use Colon instead: it is drawn into the background and shows on the watch.": "Este modelo põe os minutos por baixo das horas, por isso o relógio nunca mostra estes dois pontos, embora a pré-visualização os mostre. Use antes Dois pontos: são desenhados no fundo e aparecem no relógio.",
+  "Use Colon instead": "Usar Dois pontos",
 };

@@ -2270,4 +2270,6 @@ export const watchfacesFrench: Record<string, string> = {
   "Next page": "Page suivante",
   "Next page, as Back on the watch": "Page suivante, comme Retour sur la montre",
   "Reset background: black, no photo. The watch always draws a background.": "Réinitialiser l’arrière-plan : noir, sans photo. La montre dessine toujours un arrière-plan.",
+  "This template stacks the minutes under the hours, so the watch never shows this colon, even though the preview does. Use Colon instead: it is drawn into the background and shows on the watch.": "Ce modèle place les minutes sous les heures : la montre n’affiche donc jamais ce deux-points, même si l’aperçu le montre. Utilisez plutôt Deux-points : il est dessiné dans l’arrière-plan et s’affiche sur la montre.",
+  "Use Colon instead": "Utiliser Deux-points à la place",
 };

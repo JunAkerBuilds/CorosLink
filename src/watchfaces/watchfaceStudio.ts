@@ -2332,6 +2332,27 @@ export function isTemplateTimeColonEnabled(
   return !separators.colon.enabled && override?.enabled === true;
 }
 
+/**
+ * True when the template's own layout puts the minutes under the hours (the
+ * minutes' first digit is not right of the hours' second). On those templates
+ * the watch never draws `colon_icon`, though the template lists one and the
+ * preview draws it once the time is set in a row: COROS's own previews of them
+ * show no colon, and a face on 14001 lost its colon on a real watch. Every
+ * official template with this layout and a colon (3006–3010, 14001, 120020,
+ * 120021, 120023, 120025, 140001, 140010, 150003, 250601) matches, and no
+ * row template does. The Studio colon is baked into the background, so it
+ * still shows.
+ */
+export function watchfaceTemplateStacksTime(
+  details: Pick<CorosWatchfaceTemplateDetails, "resolutions">
+): boolean {
+  return details.resolutions.some((resolution) => {
+    const hours = parseConfigPos(resolution.config.time_hour_low_pos);
+    const minutes = parseConfigPos(resolution.config.time_minute_high_pos);
+    return Boolean(hours && minutes && minutes.x <= hours.x);
+  });
+}
+
 /** Resolves template separators independently of whether a custom one was toggled. */
 export function buildStaticSeparatorOverrides(
   details: CorosWatchfaceTemplateDetails,
