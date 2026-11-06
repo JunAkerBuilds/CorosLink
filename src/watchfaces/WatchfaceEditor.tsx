@@ -1665,14 +1665,23 @@ export function WatchfaceEditor({
     if (!stage || !toolbar || !status || typeof ResizeObserver === "undefined") return;
     const resize = () => {
       const toolbarHeight = toolbar.getBoundingClientRect().height;
-      const availableHeight = stage.clientHeight - status.getBoundingClientRect().height - toolbarHeight - 56;
+      // The chart pages bar, when shown, is taller than the corner and the dial keeps clear of it.
+      const pagesBar = stage.querySelector<HTMLElement>(":scope > .wf-chart-pages-bar");
+      const topHeight = Math.max(status.getBoundingClientRect().height, pagesBar ? pagesBar.getBoundingClientRect().height + 14 : 0);
+      const availableHeight = stage.clientHeight - topHeight - toolbarHeight - 56;
       stage.style.setProperty("--wf-toolbar-h", `${toolbarHeight}px`);
       stage.style.setProperty("--wf-fit-size", `${Math.max(0, Math.min(stage.clientWidth - 48, availableHeight))}px`);
     };
     const observer = new ResizeObserver(resize);
     [stage, toolbar, status].forEach((element) => observer.observe(element));
+    // The pages bar comes and goes with the preview mode and the chart's pages.
+    const children = new MutationObserver(resize);
+    children.observe(stage, { childList: true });
     resize();
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      children.disconnect();
+    };
   }, []);
 
   useEffect(() => {
@@ -11247,6 +11256,53 @@ export function WatchfaceEditor({
               <button type="button" className="wf-delete-notice-close" aria-label={t("Dismiss")} onClick={() => setDeleteNotice(null)}><X size={14} aria-hidden="true" /></button>
             </div>
           ) : null}
+          {previewMode === "current" && stripChartPages.length ? (
+            <div className="wf-stage-toolbar--floating wf-chart-pages-bar" role="toolbar" aria-label={t("Chart pages")}>
+              <span className="wf-screens-label" aria-hidden="true">{t("Chart pages")}</span>
+              <div className="wf-screens-pages" role="group" aria-label={t("Chart pages, in the order Back steps through them")}>
+                {stripChartPages.map((page, index) => {
+                  const shown = page.page === shownChartPage;
+                  const bars = page.page === "barometer" || page.page === "tide";
+                  const empty = !bars && page.rows.every(row => row.hidden);
+                  const graph = chartPageGraphLabel(page.page);
+                  const label = templatePageLabel(page.page);
+                  const title = page.fromTemplate ? t("{{number}} · {{page}} · kept by the template, so the watch still stops here. The preview can't show it; remove it under Chart pages.", { number: index + 1, page: label })
+                    : !page.target ? t("{{number}} · {{page}} · graph only: bars with no number", { number: index + 1, page: label })
+                    : `${index + 1} · ${label} · ${graph}${bars ? ` · ${t("needs phone data")}` : ""}${empty ? ` · ${t("nothing visible, but Back still stops here")}` : ""}`;
+                  return (
+                    <button key={page.page} type="button" className={`wf-page-tile${empty ? " is-empty" : ""}${selectedFieldScope ? selectedFieldScope.rule(page.page) ? " is-field-on" : " is-field-off" : ""}`} aria-pressed={shown}
+                      disabled={page.fromTemplate || isPositionLocked("native:chart")} title={title} aria-label={title}
+                      onClick={() => showChartPage(page.page)}>
+                      <span className="wf-page-tile-number" aria-hidden="true">{index + 1}</span>
+                      <span className="wf-page-tile-glyph" aria-hidden="true">
+                        {bars ? <ChartColumn size={15} /> : page.page === "sun" || page.page === "moon" ? <ChartSpline size={15} /> : <Hash size={14} />}
+                      </span>
+                      {shown ? <span className="wf-screen-tile-copy"><strong>{label}</strong><small>{graph}</small></span> : null}
+                      {bars ? <span className="wf-page-tile-phone" aria-hidden="true" /> : null}
+                    </button>
+                  );
+                })}
+                {chartPageAddOptions.length && !isPositionLocked("native:chart") ? (
+                  <div className="wf-page-add" ref={chartPageMenuRef}>
+                    <button type="button" className="wf-page-tile is-add" aria-haspopup="menu" aria-expanded={chartPageMenuOpen}
+                      aria-label={t("Add a chart page")} title={t("Add a chart page")} onClick={() => setChartPageMenuOpen(open => !open)}>
+                      <Plus size={15} aria-hidden="true" />
+                    </button>
+                    {chartPageMenuOpen ? (
+                      <div className="wf-page-add-menu" role="menu" aria-label={t("Add a chart page")}>
+                        {chartPageAddOptions.map(option => (
+                          <button key={option.id} type="button" role="menuitem" className="wf-page-add-item" onClick={() => addChartPageFromStrip(option.id)}>
+                            <strong>{option.label}</strong><small>{option.detail}</small>
+                          </button>
+                        ))}
+                        <p className="wf-page-add-note">{t("Each page lands in its fixed place in the Back order.")}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <div className="wf-stage-toolbar wf-stage-toolbar--floating wf-screens-strip" role="toolbar" aria-label={t("Preview controls")}>
             <span className="wf-screens-label" aria-hidden="true">{t("Screens")}</span>
             <div className="wf-screens-tiles" role="group" aria-label={t("Watch display preview")}>
@@ -11257,52 +11313,8 @@ export function WatchfaceEditor({
                 onClick={() => setPreviewMode("current")}
               >
                 <span className="wf-screen-tile-icon" aria-hidden="true"><SunMedium size={16} /></span>
-                <span className="wf-screen-tile-copy"><strong>{t("Current")}</strong><small>{stripChartPages.length && previewMode === "current" ? t("Back steps ›") : t("Wrist raised")}</small></span>
+                <span className="wf-screen-tile-copy"><strong>{t("Current")}</strong><small>{t("Wrist raised")}</small></span>
               </button>
-              {previewMode === "current" && stripChartPages.length ? (
-                <div className="wf-screens-pages" role="group" aria-label={t("Chart pages, in the order Back steps through them")}>
-                  {stripChartPages.map((page, index) => {
-                    const shown = page.page === shownChartPage;
-                    const bars = page.page === "barometer" || page.page === "tide";
-                    const empty = !bars && page.rows.every(row => row.hidden);
-                    const graph = chartPageGraphLabel(page.page);
-                    const label = templatePageLabel(page.page);
-                    const title = page.fromTemplate ? t("{{number}} · {{page}} · kept by the template, so the watch still stops here. The preview can't show it; remove it under Chart pages.", { number: index + 1, page: label })
-                      : !page.target ? t("{{number}} · {{page}} · graph only: bars with no number", { number: index + 1, page: label })
-                      : `${index + 1} · ${label} · ${graph}${bars ? ` · ${t("needs phone data")}` : ""}${empty ? ` · ${t("nothing visible, but Back still stops here")}` : ""}`;
-                    return (
-                      <button key={page.page} type="button" className={`wf-page-tile${empty ? " is-empty" : ""}${selectedFieldScope ? selectedFieldScope.rule(page.page) ? " is-field-on" : " is-field-off" : ""}`} aria-pressed={shown}
-                        disabled={page.fromTemplate || isPositionLocked("native:chart")} title={title} aria-label={title}
-                        onClick={() => showChartPage(page.page)}>
-                        <span className="wf-page-tile-number" aria-hidden="true">{index + 1}</span>
-                        <span className="wf-page-tile-glyph" aria-hidden="true">
-                          {bars ? <ChartColumn size={15} /> : page.page === "sun" || page.page === "moon" ? <ChartSpline size={15} /> : <Hash size={14} />}
-                        </span>
-                        {shown ? <span className="wf-screen-tile-copy"><strong>{label}</strong><small>{graph}</small></span> : null}
-                        {bars ? <span className="wf-page-tile-phone" aria-hidden="true" /> : null}
-                      </button>
-                    );
-                  })}
-                  {chartPageAddOptions.length && !isPositionLocked("native:chart") ? (
-                    <div className="wf-page-add" ref={chartPageMenuRef}>
-                      <button type="button" className="wf-page-tile is-add" aria-haspopup="menu" aria-expanded={chartPageMenuOpen}
-                        aria-label={t("Add a chart page")} title={t("Add a chart page")} onClick={() => setChartPageMenuOpen(open => !open)}>
-                        <Plus size={15} aria-hidden="true" />
-                      </button>
-                      {chartPageMenuOpen ? (
-                        <div className="wf-page-add-menu" role="menu" aria-label={t("Add a chart page")}>
-                          {chartPageAddOptions.map(option => (
-                            <button key={option.id} type="button" role="menuitem" className="wf-page-add-item" onClick={() => addChartPageFromStrip(option.id)}>
-                              <strong>{option.label}</strong><small>{option.detail}</small>
-                            </button>
-                          ))}
-                          <p className="wf-page-add-note">{t("Each page lands in its fixed place in the Back order.")}</p>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
               <button
                 type="button"
                 className="wf-screen-tile"

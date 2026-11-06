@@ -289,6 +289,52 @@
   font-size: 11px;
 }
 
+/* --- Chart pages bar ------------------------------------------------------ */
+
+/* The Back-button pages float over the top of the stage, apart from the
+   Screens strip below; the canvas corner keeps the top right. */
+:root .watchface-shell.watchface-shell--studio .wf-stage-toolbar--floating.wf-chart-pages-bar {
+  top: 12px;
+  bottom: auto;
+  left: 12px;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-height: 0;
+  border-bottom: 1px solid var(--atl-line-strong);
+  padding: 4px 4px 4px 14px;
+  transform: none;
+}
+
+/* Keep the dial clear of the bar. */
+:root .watchface-shell.watchface-shell--studio .watchface-editor-stage:has(> .wf-chart-pages-bar) > .watchface-editor-device {
+  margin-top: 64px;
+}
+
+/* Narrow stage: drop the label first, then let the corner sit under the bar. */
+@container wf-atelier-stage (max-width: 900px) {
+  :root .watchface-shell.watchface-shell--studio .wf-chart-pages-bar > .wf-screens-label {
+    display: none;
+  }
+
+  :root .watchface-shell.watchface-shell--studio .wf-stage-toolbar--floating.wf-chart-pages-bar {
+    padding-left: 4px;
+  }
+}
+
+@container wf-atelier-stage (max-width: 704px) {
+  :root .watchface-shell.watchface-shell--studio .wf-stage:has(> .wf-chart-pages-bar) > .wf-stage-toolbar--floating.wf-stage-corner {
+    top: 70px;
+  }
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-chart-pages-bar > .wf-screens-pages {
+  min-height: 0;
+  margin-left: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
 /* The status line now lives in the strip: it takes the free space and
    shortens from its end. */
 :root .watchface-shell.watchface-shell--studio .wf-screens-strip > .wf-screens-status {
@@ -1727,7 +1773,7 @@ body .wf-font-picker-panel .wf-png-set .wf-png-font-rules {
 
 :root .watchface-shell.watchface-shell--studio .wf-page-add-menu {
   position: absolute;
-  bottom: calc(100% + 10px);
+  top: calc(100% + 10px);
   right: -6px;
   z-index: 30;
   display: grid;
@@ -2338,8 +2384,9 @@ body .wf-font-picker-panel .wf-png-set .wf-png-font-rules {
   color: var(--atl-titanium-dim);
 }
 
-/* The jump notice sits at the top of the stage, apart from Delete's. */
+/* The jump notice sits at the top of the stage, under the chart pages bar,
+   apart from Delete's. */
 :root .watchface-shell.watchface-shell--studio .wf-delete-notice.wf-page-jump-notice {
-  top: 64px;
+  top: 68px;
   bottom: auto;
 }
