@@ -1881,6 +1881,22 @@ export class CorosNativeBleService {
     });
   }
 
+  /**
+   * Dev diagnostic: sends a ready-made weather file (HF 80) as is, e.g. one
+   * wrapping the section-per-entry weatherStruct COROS's server returns, to
+   * compare with the forecast CorosLink builds itself.
+   */
+  pushWeatherFileToWatch(file: Buffer): Promise<{ bytes: number }> {
+    return this.pushOperation(async () => {
+      this.requireWatchFeature("weather");
+      if (file.length > 0x2000) throw new Error("The watch takes weather files up to 8 KB.");
+      await this.pushDataFile(WEATHER_FILE, file, 0);
+      this.state = { ...this.state, weatherSentAt: Date.now(), weatherFailedAt: undefined };
+      this.trace.add("weather sent (dev)", { bytes: file.length });
+      return { bytes: file.length };
+    });
+  }
+
   syncRoute(route: GeneratedRoute): Promise<CorosRouteSyncStatus> {
     const busy = this.busyWith();
     if (busy === "route") return Promise.reject(new Error("A route sync is already running."));

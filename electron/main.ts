@@ -30,6 +30,7 @@ import os from "node:os";
 import path from "node:path";
 import { listLocalFontFamilies } from "./fontService";
 import { corosNativeBle } from "./corosNativeBleService";
+import { encodeWatchFile, WEATHER_FILE } from "./corosBleTrainingProtocol";
 import { registerCorosActivityScreenIpc } from "./corosActivityScreenIpc";
 import { registerCorosWatchKeyBackupIpc } from "./corosWatchKeyBackupIpc";
 import { resolveWifiMusicLibraryFiles } from "./corosWifiMusicLibrary";
@@ -241,6 +242,7 @@ import {
   saveRestoredCorosWatchKey,
   getCorosBatteryReport,
   probeCorosWeather,
+  fetchCorosWeatherStruct,
   getCorosWatchfaceStatus,
   importCorosWatchfaceShareLink,
   listCorosPairedDevices,
@@ -1651,6 +1653,16 @@ function registerIpcHandlers(): void {
     // Dev-only, read-only: what weather (pressure/tide) COROS's server returns.
     ipcMain.handle("dev:probeCorosWeather", (_event, input?: { lat?: number; lng?: number; label?: string }) =>
       probeCorosWeather(input));
+    // Dev-only test: send COROS's own section-per-entry weather (with hourly
+    // pressure/tide) to the connected watch as file 80, replacing the forecast
+    // CorosLink pushes on connect until the next connection.
+    ipcMain.handle("dev:pushCorosWeatherToWatch", async (_event, input: { lat: number; lng: number }) => {
+      const { weatherStruct, summary } = await fetchCorosWeatherStruct(input);
+      const file = encodeWatchFile(weatherStruct, WEATHER_FILE);
+      const sent = await corosNativeBle.pushWeatherFileToWatch(file);
+      return { ...sent, structBytes: weatherStruct.length, city: summary?.city ?? null,
+        hourly: summary?.hourly ?? null, tideEvents: summary?.tideEvents ?? null };
+    });
     ipcMain.handle("gear:query", () => queryCorosGear());
     ipcMain.handle(
       "gear:save",

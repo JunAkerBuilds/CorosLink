@@ -1406,6 +1406,42 @@ export async function probeCorosWeather(
   };
 }
 
+/**
+ * Dev-only: COROS's own weather for a place, in the section-per-entry form
+ * (`weatherStruct`) the phone app forwards to the watch as file 80.
+ */
+export async function fetchCorosWeatherStruct(
+  input: { lat: number; lng: number }
+): Promise<{ weatherStruct: Buffer; summary: WeatherForecastSummary | null }> {
+  const session = requireSession();
+  const { lat, lng } = input ?? {};
+  if (typeof lat !== "number" || typeof lng !== "number" || !Number.isFinite(lat) || !Number.isFinite(lng) ||
+    Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    throw new Error("Enter a valid latitude and longitude.");
+  }
+  const response = await fetch(`${mobileApiBaseUrl(session.region)}/weather/query`, {
+    method: "POST",
+    headers: {
+      ...mobileHeaders(session.accessToken, session.userId),
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams({ coord: `${lng},${lat}` }).toString()
+  });
+  if (!response.ok) throw new Error(`COROS weather request failed (HTTP ${response.status}).`);
+  const payload = parseCorosMobileJson(await response.text()) as MobileApiEnvelope<{ weather?: string; weatherStruct?: string }>;
+  const result = mobileApiResult(payload);
+  if (result !== API_SUCCESS || typeof payload.data?.weatherStruct !== "string") {
+    throw new Error(`COROS returned no weather (${payload.message ?? "no message"}, COROS ${result || "unknown"}).`);
+  }
+  const weather = payload.data.weather;
+  return {
+    weatherStruct: Buffer.from(payload.data.weatherStruct, "base64"),
+    summary: typeof weather === "string"
+      ? summarizeForecast(decodeWeatherMessage("WeatherForecastUI", Buffer.from(weather, "base64")))
+      : null
+  };
+}
+
 /** Lists paired watches from the authenticated account's mobile profile. */
 export async function listCorosPairedDevices(): Promise<CorosPairedDevice[]> {
   const session = requireSession();

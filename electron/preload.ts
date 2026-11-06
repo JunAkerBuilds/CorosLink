@@ -395,6 +395,9 @@ const api = {
   /** Dev builds only: decode COROS weather/query for a public coordinate. */
   probeCorosWeather: (input?: { lat?: number; lng?: number; label?: string }): Promise<unknown> =>
     ipcRenderer.invoke("dev:probeCorosWeather", input),
+  /** Dev builds only: send COROS's own weather (with pressure/tide) to the connected watch. */
+  pushCorosWeatherToWatch: (input: { lat: number; lng: number }): Promise<unknown> =>
+    ipcRenderer.invoke("dev:pushCorosWeatherToWatch", input),
   queryCorosGear: (): Promise<CorosGearCatalog> =>
     ipcRenderer.invoke("gear:query"),
   saveCorosGear: (input: CorosGearSaveInput): Promise<CorosGearCatalog> =>
