@@ -23,7 +23,10 @@ const chartPageOptions = [
   }))
 ];
 const dataOptions: Array<{ id: string; label: string; category: WatchfaceAddCategory; keywords: string; availability?: { label: string }; chartPage?: typeof chartPageOptions[number] }> = [
-  ...NATIVE_DATA_FIELDS.filter(field => field.kind !== "chart").map(field => ({ id: field.id, label: field.label, category: field.category as WatchfaceAddCategory, keywords: field.id, availability: field.availability })),
+  // Minimum and maximum are one reading on the watch, so one entry adds both.
+  ...NATIVE_DATA_FIELDS.filter(field => field.kind !== "chart" && field.id !== "weather_temp_max").map(field => field.id === "weather_temp_min"
+    ? { id: field.id, label: "Min / max temperature", category: field.category as WatchfaceAddCategory, keywords: "weather_temp_min weather_temp_max minimum maximum low high", availability: field.availability }
+    : { id: field.id, label: field.label, category: field.category as WatchfaceAddCategory, keywords: field.id, availability: field.availability }),
   ...chartPageOptions.map(option => ({ id: `chartpage:${option.page}`, label: option.label, category: "Charts" as const,
     keywords: `chart page ${option.graph} ${[...option.required, ...option.optional].map(source => `${source} ${nativeChartReadoutLabel(source)}`).join(" ")}`, chartPage: option }))
 ];

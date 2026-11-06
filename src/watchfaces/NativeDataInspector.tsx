@@ -100,7 +100,7 @@ function chartPageHint(pageId: string) {
  * themselves are picked and added in the stage's Screens strip.
  */
 function ChartPagePanel({ current, readouts, editable, template, removed, hidden, taken = [], barsOn, disabled, pageFields = [], onSelectField,
-  removedPages = [], onEdit, onAdd, onRemove, onShown, onRemovePage, onBars, onMakeFixed, onRestore, onDelete }: {
+  removedPages = [], onEdit, onAdd, onRemove, onShown, onRemovePage, onBars, onMakeFixed, onRestore, onDelete, pageId }: {
   current: string; readouts: string[]; editable: string[]; removed: string[]; disabled: boolean;
   removedPages?: string[]; template: string[]; hidden: string[]; taken?: string[];
   barsOn: boolean; onBars: (on: boolean) => void;
@@ -111,9 +111,11 @@ function ChartPagePanel({ current, readouts, editable, template, removed, hidden
   onMakeFixed?: (source: string) => void; onRestore: (source: string) => void;
   /** Delete: removes a readout Studio added, hides a template one, or offers to remove the page. */
   onDelete?: (source: string) => void;
+  /** A graph-only page the canvas shows instead of the edited readout's. */
+  pageId?: string;
 }) {
   useLanguage();
-  const page = pageOfSource(current);
+  const page = pageId ? NATIVE_CHART_PAGES.find(item => item.id === pageId) : pageOfSource(current);
   if (!page) return null;
   const present = new Set([...readouts, current]);
   const live = [...present].filter(source => !removed.includes(source));
@@ -170,6 +172,7 @@ function ChartPagePanel({ current, readouts, editable, template, removed, hidden
         </div>;
       })}
     </div>
+    {pageId && isBarPage(pageId) ? <p className="wf-chart-page-quiet">{t("Graph only: the watch draws the bars with no number. Add the reading to show one.")}</p> : null}
     {empty ? <p className="wf-chart-page-quiet">{t("Nothing visible. The watch still stops here when you press Back; remove the page to skip it.")}</p> : null}
     {pageFields.length ? <div className="wf-chart-page-fields" role="group" aria-label={t("Weather on this page")}>
       <span className="wf-chart-page-fields-label">{t("Weather here")}</span>
@@ -240,7 +243,7 @@ type RenderSection = (
  * selected part, and Advanced for preview-only settings. The editor renders
  * the Transform section itself so it matches every other layer.
  */
-export function NativeDataInspector({ id, style, coordinateScale, api, disabled, renderSection, renderFontSizeField, onPatch, onError, onImportStart, onImportFinish, isImportCurrent, chartGroups = [], chartReadouts = chartGroups, onChartGroup, onAddReadout, onRemoveReadout, takenReadouts, onShowReadout, onAddPage, onRemovePage, onMakeFixed, onDeleteReadout, pageFields, onSelectField, fieldPages, facePages = [], shownPage, onShowPage, onAddDailyPage, removedPages, onAddMinMaxPartner }: {
+export function NativeDataInspector({ id, style, coordinateScale, api, disabled, renderSection, renderFontSizeField, onPatch, onError, onImportStart, onImportFinish, isImportCurrent, chartGroups = [], chartReadouts = chartGroups, onChartGroup, onAddReadout, onRemoveReadout, takenReadouts, onShowReadout, onAddPage, onRemovePage, onMakeFixed, onDeleteReadout, pageFields, onSelectField, fieldPages, facePages = [], shownPage, onShowPage, graphOnlyPage, onAddDailyPage, removedPages, onAddMinMaxPartner, pairPartner, embeddedParts, partLabels }: {
   id: string; style: Style; api: CorosLinkApi; disabled: boolean; coordinateScale: number;
   renderSection: RenderSection;
   /** The editor's shared Font size field, in master pixels. */
@@ -261,10 +264,21 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   fieldPages?: { pages: string[] } | null;
   /** The face's chart pages in Back order, and the one the canvas shows. */
   facePages?: string[]; shownPage?: string; onShowPage?: (page: string) => void;
+  /** Chart: a graph-only page on screen, which has no readout to edit. */
+  graphOnlyPage?: string | null;
   /** Chart: pages the design removes although the template declares them. */
   removedPages?: string[];
   /** Min or max alone: adds the other, since the watch draws them as one reading. */
   onAddMinMaxPartner?: () => void;
+  /**
+   * Minimum temperature edited as "Min / max temperature": the maximum's
+   * number shows as a part of this panel, drawn by an embedded inspector.
+   */
+  pairPartner?: { id: string; style: Style; onPatch: (patch: Partial<Style>) => void };
+  /** Embedded: render only these parts' rows, without sections. */
+  embeddedParts?: Part[];
+  /** Part names that differ in this panel ("Min number", "Max number"). */
+  partLabels?: Partial<Record<Part, string>>;
   /** Adds a hidden daily page, for min/max on a face without one. */
   onAddDailyPage?: () => void;
   onPatch: (patch: Partial<Style>) => void; onError: (message: string) => void;
@@ -275,7 +289,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   const [busy, setBusy] = useState(false);
   const [selectedPart, setSelectedPart] = useState<Part>("value");
   // Parts open in place; null folds every part.
-  const [partOpen, setPartOpen] = useState(true);
+  const [partOpen, setPartOpen] = useState(!embeddedParts);
   // Own look switched on for a part that has no look of its own yet.
   const [ownLookParts, setOwnLookParts] = useState<Part[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -290,7 +304,8 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
     ...Object.entries(style.readouts ?? {}).filter(([source, readout]) => chartReadoutHidden({ ...readout, chartSource: source })).map(([source]) => source)
   ] : [];
   const partKey = available.includes(selectedPart) ? selectedPart : available[0];
-  const partLabel = PART_LABELS[partKey];
+  const labelOf = (part: Part) => partLabels?.[part] ?? PART_LABELS[part];
+  const partLabel = labelOf(partKey);
   const component = nativePart(id, style, partKey);
   const role: Role | null = partKey === "plot" ? null : partKey === "value" ? "digits" : partKey;
   const indices = role ? nativeRoleIndices(id, style, role) : [];
@@ -371,7 +386,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
 
   const notes = [
     definition.availability ? <p key="availability" className="watchface-studio-summary" role="note"><strong>{t("AQI —")}{" "}{t(definition.availability.label)}.</strong> {t(definition.availability.message)}</p> : null,
-    definition.note ? <p key="note" className="watchface-studio-summary" role="note">{t(definition.note)}</p> : null
+    definition.note && !pairPartner ? <p key="note" className="watchface-studio-summary" role="note">{t(definition.note)}</p> : null
   ].filter(Boolean);
 
   const artworkStateLabel = (i: number) => { const label = role === "unit" && id.startsWith("weather_temp") ? TEMPERATURE_UNIT_LABELS[i] : SPRITE_LABELS[role!]?.[i]; return label ? t(label) : role === "digits" ? t("Digit {{i}}", { i }) : t("State {{i}}", { i }); };
@@ -420,19 +435,19 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
           : partRole ? (partIndices.length === 1 ? t("1 picture") : t("{{value1}} pictures", { value1: partIndices.length })) + (replaced ? " · " + t("{{value1}} replaced", { value1: replaced }) : "")
           : t("Graph");
         const ownLook = OWN_LOOK_KEYS.some(key => style.parts?.[part]?.[key] !== undefined) || ownLookParts.includes(part);
-        return <section key={part} className={`wf-native-part-item${open ? " is-open" : ""}${partComponent.enabled ? "" : " is-off"}`} aria-label={t("{{partLabel}} settings", { partLabel: t(PART_LABELS[part]) })}>
+        return <section key={part} className={`wf-native-part-item${open ? " is-open" : ""}${partComponent.enabled ? "" : " is-off"}`} aria-label={t("{{partLabel}} settings", { partLabel: t(labelOf(part)) })}>
           <div className="wf-native-part-row">
             <button type="button" className="wf-native-part-toggle" aria-expanded={open} onClick={() => { if (part === partKey) setPartOpen(!open); else { setSelectedPart(part); setSelectedIndex(0); setPartOpen(true); } }}>
               {partRole ? <SpritePreview id={id} style={style} role={partRole} index={partIndices[0] ?? 0} className="wf-native-part-thumb" /> : <span className="wf-native-part-thumb is-graph" aria-hidden="true" />}
               <span className="wf-native-part-copy">
-                <span className="wf-native-part-name">{t(PART_LABELS[part])}{(Boolean(style.parts?.[part]) || replaced > 0) ? <span className="wf-native-part-badge">{t("Custom")}</span> : null}</span>
+                <span className="wf-native-part-name">{t(labelOf(part))}{(Boolean(style.parts?.[part]) || replaced > 0) ? <span className="wf-native-part-badge">{t("Custom")}</span> : null}</span>
                 <small>{status}</small>
               </span>
               <ChevronDown className="wf-native-part-chevron" size={15} aria-hidden="true" />
             </button>
             <button type="button" className="wf-native-part-eye" disabled={locked} aria-pressed={!partComponent.enabled}
-              aria-label={partComponent.enabled ? t("Hide {{value1}}", { value1: t(PART_LABELS[part]) }) : t("Show {{value1}}", { value1: t(PART_LABELS[part]) })}
-              title={partComponent.enabled ? t("Hide {{value1}}", { value1: t(PART_LABELS[part]) }) : t("Show {{value1}}", { value1: t(PART_LABELS[part]) })}
+              aria-label={partComponent.enabled ? t("Hide {{value1}}", { value1: t(labelOf(part)) }) : t("Show {{value1}}", { value1: t(labelOf(part)) })}
+              title={partComponent.enabled ? t("Hide {{value1}}", { value1: t(labelOf(part)) }) : t("Show {{value1}}", { value1: t(labelOf(part)) })}
               onClick={() => onPatch({parts:{...style.parts,[part]:{...style.parts?.[part],enabled:!partComponent.enabled}}})}>
               {partComponent.enabled ? <Eye size={15} /> : <EyeOff size={15} />}
             </button>
@@ -513,16 +528,18 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
 
   const isChart = definition.kind === "chart";
   const chartSource = style.chartSource ?? "chart_stress";
-  const chartPage = isChart ? NATIVE_CHART_PAGES.find(page => page.sources.includes(chartSource)) : undefined;
+  const chartPage = isChart ? NATIVE_CHART_PAGES.find(page => graphOnlyPage ? page.id === graphOnlyPage : page.sources.includes(chartSource)) : undefined;
   // A chart layer splits its parts: the edited readout's own, then the graph every page shares.
   const graphParts: Part[] = ["plot", "background", "mask", "noDataMask"];
   const readoutParts = available.filter(part => !graphParts.includes(part));
   const shownGraphParts = available.filter(part => graphParts.includes(part));
+  // Embedded in the pair's panel: just these parts' rows.
+  if (embeddedParts) return partList(embeddedParts.filter(part => available.includes(part)));
   return <>
     {isChart && chartPage ? renderSection("page", t("On the {{page}} page", { page: chartPageLabel(chartPage.id) }), <ChartPagePanel current={chartSource} readouts={[...chartReadouts, ...stored]} editable={[...chartGroups, ...stored]}
       template={chartReadouts} hidden={hiddenReadouts} taken={takenReadouts} removed={style.removedReadouts ?? []} disabled={locked}
       barsOn={(style.chartStyle?.barWidth ?? 8) > 0} onBars={on => patchChart(on ? { barWidth: 8, barGap: style.chartStyle?.barGap || 4 } : { barWidth: 0 })}
-      onEdit={onChartGroup} onAdd={onAddReadout} onRemove={onRemoveReadout} onShown={onShowReadout} onRemovePage={onRemovePage} onMakeFixed={onMakeFixed} onDelete={onDeleteReadout}
+      onEdit={onChartGroup} onAdd={onAddReadout} onRemove={onRemoveReadout} onShown={onShowReadout} onRemovePage={onRemovePage} onMakeFixed={onMakeFixed} onDelete={onDeleteReadout} pageId={graphOnlyPage ?? undefined}
       onRestore={source=>onPatch({removedReadouts:(style.removedReadouts ?? []).filter(item=>item!==source)})} pageFields={pageFields} onSelectField={onSelectField} removedPages={removedPages} />,
       { disabled: locked, status: chartPageGraphLabel(chartPage.id), actions: chartPageHint(chartPage.id) }) : null}
     {/* Which pages show a field is a tag under its name and marks in the
@@ -530,10 +547,11 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
     {!isChart && fieldPages && facePages.length && !fieldPages.pages.some(page => facePages.includes(page)) ? renderSection("page", "Not shown on the watch", <FieldPagesPanel pages={[]} facePages={facePages} onAddDailyPage={onAddDailyPage} />,
       { actions: fieldPagesHint(id, []) }) : null}
 
-    {renderSection("appearance", isChart ? chartSourceLabel(chartSource) : "Look · all parts", <div className={`wf-property-stack${isChart ? " wf-native-components" : ""}`}>
+    {/* A graph-only page has no readout: only the graph below applies. */}
+    {isChart && graphOnlyPage ? null : renderSection("appearance", isChart ? chartSourceLabel(chartSource) : "Look · all parts", <div className={`wf-property-stack${isChart ? " wf-native-components" : ""}`}>
       {readingPieces.length ? <div className="wf-native-reading" role="group" aria-label={t("Reading preview: {{value1}}", { value1: previewValue })}>
         {readingPieces.map((piece) => <button key={piece.key} type="button" className={`wf-native-reading-piece${piece.part === partKey && partOpen ? " is-active" : ""}`}
-          title={t(PART_LABELS[piece.part])} aria-label={t("Open {{value1}}", { value1: t(PART_LABELS[piece.part]) })} onClick={() => openPart(piece.part)}>
+          title={t(labelOf(piece.part))} aria-label={t("Open {{value1}}", { value1: t(labelOf(piece.part)) })} onClick={() => openPart(piece.part)}>
           <SpritePreview id={id} style={style} role={piece.role} index={piece.index} className="wf-native-reading-art" />
         </button>)}
       </div> : null}
@@ -557,9 +575,17 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
       {graphWithoutNumber ? <p className="wf-graph-warning"><span>{t("Graph without a number")}</span><WatchfaceHint>{t("The watch only draws a graph when the face has a chart number, so the export adds an invisible one. Experimental: check the graph on your watch.")}</WatchfaceHint></p> : null}
       {partList(shownGraphParts)}
     </div>, { disabled: locked, status: t("Every page"), actions: <WatchfaceHint label={t("About the graph")}>{t("Experimental charts. This preview uses sample data.")} {t("Every page shares one graph area. The watch draws a line on Sun and Moon, bars on Barometer and Tide, and no graph on the daily pages. At bar width 0 it drops the barometer and tide pages.")}</WatchfaceHint> }) : renderSection("specific", "Parts", <div className="wf-property-stack wf-native-components">
-      {partList(available)}
-      {id.startsWith("weather_temp_") && <p className="watchface-studio-summary">{t("Minimum and maximum temperature share the separator, unit and minus artwork. When both are enabled, the minimum-temperature settings supply these shared assets.")}</p>}
-    </div>, { disabled: locked, status: t("{{shown}} of {{total}} shown", { shown: available.filter(part => nativePart(id, style, part).enabled).length, total: available.length }) })}
+      {pairPartner ? <>
+        {/* One reading, in the order the watch draws it: min, separator, max, then the shared unit and minus. */}
+        {partList(available.filter(part => part === "value" || part === "separator"))}
+        <NativeDataInspector id={pairPartner.id} style={pairPartner.style} coordinateScale={coordinateScale} api={api} disabled={disabled}
+          renderSection={renderSection} renderFontSizeField={renderFontSizeField} onPatch={pairPartner.onPatch} onError={onError}
+          onImportStart={onImportStart} onImportFinish={onImportFinish} isImportCurrent={isImportCurrent}
+          embeddedParts={["value"]} partLabels={{ value: "Max number" }} />
+        {partList(available.filter(part => part !== "value" && part !== "separator"))}
+      </> : partList(available)}
+      {id.startsWith("weather_temp_") && !pairPartner && <p className="watchface-studio-summary">{t("Minimum and maximum temperature share the separator, unit and minus artwork. When both are enabled, the minimum-temperature settings supply these shared assets.")}</p>}
+    </div>, { disabled: locked, status: t("{{shown}} of {{total}} shown", { shown: available.filter(part => nativePart(id, style, part).enabled).length + (pairPartner && nativePart(pairPartner.id, pairPartner.style, "value").enabled ? 1 : 0), total: available.length + (pairPartner ? 1 : 0) }) })}
 
     {renderSection("advanced", "Advanced", <div className="wf-property-stack">
       {id !== "date_year" && <label className="field">{t("Preview sample")}<input aria-label={t("Preview sample")} value={nativeDataPreviewValue(id,style)} maxLength={6} onChange={event=>onPatch({previewValue:event.target.value.replace(/[^0-9.:%−-]/g,"")})} /></label>}

@@ -111,7 +111,10 @@ export function nativeLayerStyle(id: string, data: NativeData, scenario?: Watchf
   return (id === "weather_temp_max" ? minMaxTemperatureRun(data, scenario)?.max : undefined) ?? data[id];
 }
 
-/** Editor bounds in master pixels; the minimum's box also covers the separator it draws. */
+/**
+ * Editor bounds in master pixels. With both shown, the minimum's box covers
+ * the whole reading (separator and maximum): Studio edits them as one layer.
+ */
 export function nativeDataBounds(id: string, data: NativeData) {
   const style = nativeLayerStyle(id, data);
   if (!style?.enabled) return null;
@@ -121,12 +124,15 @@ export function nativeDataBounds(id: string, data: NativeData) {
     return boxes.length ? { x0: Math.min(...boxes.map(box => box.x0)), y0: Math.min(...boxes.map(box => box.y0)), x1: Math.max(...boxes.map(box => box.x1)), y1: Math.max(...boxes.map(box => box.y1)) } : null;
   }
   const size = nativeDataSize(id, style);
-  const separator = id === "weather_temp_min" ? minMaxTemperatureRun(data)?.separator : undefined;
-  return {
-    x0: style.x, y0: Math.min(style.y, separator?.y ?? Infinity),
-    x1: Math.max(style.x + size.width, separator ? separator.x + separator.width : -Infinity),
-    y1: Math.max(style.y + size.height, separator ? separator.y + separator.height : -Infinity)
-  };
+  const run = id === "weather_temp_min" ? minMaxTemperatureRun(data) : null;
+  const separator = run?.separator;
+  const maxSize = run ? nativeDataSize("weather_temp_max", run.max) : null;
+  const boxes = [
+    { x0: style.x, y0: style.y, x1: style.x + size.width, y1: style.y + size.height },
+    ...(separator ? [{ x0: separator.x, y0: separator.y, x1: separator.x + separator.width, y1: separator.y + separator.height }] : []),
+    ...(run && maxSize ? [{ x0: run.max.x, y0: run.max.y, x1: run.max.x + maxSize.width, y1: run.max.y + maxSize.height }] : [])
+  ];
+  return { x0: Math.min(...boxes.map(box => box.x0)), y0: Math.min(...boxes.map(box => box.y0)), x1: Math.max(...boxes.map(box => box.x1)), y1: Math.max(...boxes.map(box => box.y1)) };
 }
 
 export function nativeDataSize(id: string, style: Style) {

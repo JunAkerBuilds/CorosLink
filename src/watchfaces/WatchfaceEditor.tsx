@@ -18,7 +18,7 @@ import { NativeDataInspector, chartPageGraphLabel, chartPageLabel as templatePag
 import { ChartPageRows, barPageChips, chartPageCount, hiddenFieldsNote, type ChartPageRow } from "./ChartPageRows";
 import { MetricKindNote, watchfaceMetricKind } from "./watchfaceMetricKinds";
 import { NATIVE_CHART_FIXED_EQUIVALENTS, NATIVE_CHART_PAGES, nativeChartReadoutLabel } from "../../electron/watchfaceNativeCatalog";
-import { nativePart, nativeParts } from "./nativeDataParts";
+import { nativePart, nativeParts, withNativeFont } from "./nativeDataParts";
 import { WATCHFACE_STATUS_GROUPS, watchfaceHiddenStatusKeys, watchfaceStatusActiveKey, watchfaceStatusGroupOf } from "./watchfaceStatusPairs";
 import { onChartPageIds, templateChartPages, withoutTurnedOffChart, type ChartPageMode } from "./templateChartPages";
 import { addChartPage, chartDragSplit, chartGraphBounds, chartReadoutBounds, chartReadoutHidden, chartReadoutPage, chartSourceOf, chartStoredReadout, dropChartReadout, hiddenChartReadout, moveChartGraph, moveChartReadout, newChartReadout, removeChartPage, setChartReadoutShown, storedChartReadouts, swapChartReadout } from "./chartReadouts";
@@ -2224,6 +2224,8 @@ export function WatchfaceEditor({
   // The template's other daily-data readouts and divider, drawn beside the
   // chart layer when it shows that page (see recoverChartPageCompanions).
   const [chartPage, setChartPage] = useState<ChartPageCompanions | null>(null);
+  // A graph-only chart page the canvas shows (see shownChartPage).
+  const [graphOnlyPage, setGraphOnlyPage] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     if (modeSourceDetails) void recoverChartPageCompanions(modeSourceDetails, loadAssets).then(page => { if (!cancelled) setChartPage(page); }, () => undefined);
@@ -2958,6 +2960,32 @@ export function WatchfaceEditor({
   }
 
   /**
+   * Minimum and maximum temperature are one reading on the watch (firmware
+   * 0x4cab94 needs both), so Studio edits them as one layer, "Min / max
+   * temperature": the minimum's row, box and panel stand for the pair while
+   * both are on the face and on or off together.
+   */
+  const minMaxPair = Boolean(design.nativeData?.weather_temp_min && design.nativeData?.weather_temp_max)
+    && Boolean(design.nativeData?.weather_temp_min?.enabled) === Boolean(design.nativeData?.weather_temp_max?.enabled);
+  const MIN_LAYER = "native:weather_temp_min", MAX_LAYER = "native:weather_temp_max";
+  /** Layers clicks can land on: the maximum answers through the pair's one box. */
+  const hitTestLayers = <T extends EditorLayer>(list: T[]) => minMaxPair ? list.filter((layer) => layer.id !== MAX_LAYER) : list;
+  /**
+   * The layer under a point. A field the chart page on screen hides (wind on
+   * a daily page, sharing min/max's slot) loses to one the page draws; it is
+   * picked only where nothing visible sits.
+   */
+  function editorHitAt<T extends EditorLayer>(list: T[], x: number, y: number): T | null {
+    const candidates = hitTestLayers(list);
+    const page = previewMode === "current" ? shownChartPage : undefined;
+    const onPage = page ? candidates.filter((layer) => { const rule = layerPageRule(layer); return !rule || rule(page); }) : candidates;
+    const hit = editorLayerAtPoint(onPage, x, y);
+    return hit && hit.kind !== "background" ? hit : editorLayerAtPoint(candidates, x, y);
+  }
+  /** Both halves of the reading, for actions on the pair. */
+  const withMinMaxPartner = (ids: string[]) => minMaxPair && (ids.includes(MIN_LAYER) || ids.includes(MAX_LAYER)) ? [...new Set([...ids, MIN_LAYER, MAX_LAYER])] : ids;
+
+  /**
    * The watch draws minimum and maximum temperature as one reading, the
    * maximum placed after the minimum, so moving either moves both.
    */
@@ -3013,8 +3041,9 @@ export function WatchfaceEditor({
       : selectionBoundsForId(id);
   }
 
-  function selectEditorItem(id: string, additive = false) {
+  function selectEditorItem(requestedId: string, additive = false) {
     setContextMenu(null);
+    const id = minMaxPair && requestedId === MAX_LAYER ? MIN_LAYER : requestedId;
     const members = linkedIdsFor(id);
     if (!additive) {
       setSelectedId(id);
@@ -4440,7 +4469,8 @@ export function WatchfaceEditor({
       options: previewStudioOptions,
       scenario: simulationScenario,
       weather: previewMode === "current" ? weatherForShownPage(design.weatherIndicator) : undefined,
-      nativeData: design.nativeData,
+      // Picking a graph-only page swaps the chart's page here, so this reruns.
+      nativeData: previewNativeData,
       chartPage,
       facePages: facePageIds,
       previewWidth,
@@ -4454,6 +4484,7 @@ export function WatchfaceEditor({
     simulationScenario,
     design.weatherIndicator,
     design.nativeData,
+    graphOnlyPage,
     chartPage,
     facePageIds,
     // Picking a page swaps design.nativeData.chart, which reruns this.
@@ -4741,7 +4772,7 @@ export function WatchfaceEditor({
     ) {
       return "complication";
     }
-    const liveHit = editorLayerAtPoint(
+    const liveHit = editorHitAt(
       layers.filter((layer) => !isMovementLockedForId(layer.id)),
       point.x,
       point.y
@@ -5106,7 +5137,7 @@ export function WatchfaceEditor({
 
     // When working on the background, clicks target the freeform shapes that
     // sit above it; otherwise the live firmware elements take priority.
-    const liveHit = editorLayerAtPoint(
+    const liveHit = editorHitAt(
       layers.filter((layer) => !isMovementLockedForId(layer.id)),
       point.x,
       point.y
@@ -5760,7 +5791,7 @@ export function WatchfaceEditor({
     }
     const drag = dragRef.current;
     if (!drag) {
-      const liveHit = editorLayerAtPoint(layers, point.x, point.y);
+      const liveHit = editorHitAt(layers, point.x, point.y);
       const backgroundHit = backgroundElementAtPoint(
         backgroundElements,
         point.x * (BACKGROUND_SPACE / previewWidth),
@@ -6710,7 +6741,13 @@ export function WatchfaceEditor({
   }, [design.nativeData, design.chartPageModes, chartReadouts]);
   // The page the canvas shows is the edited readout's page; the Screens strip
   // lists the pages Back steps through (Current screen only).
-  const shownChartPage = design.nativeData?.chart?.enabled ? chartReadoutPage(chartSourceOf(design.nativeData.chart)) : undefined;
+  const editedChartSource = design.nativeData?.chart?.enabled ? chartSourceOf(design.nativeData.chart) : undefined;
+  // A graph-only bar page (Tide with no number) has no readout to edit, so
+  // the canvas shows it on its own until another page or readout is picked.
+  useEffect(() => { setGraphOnlyPage(null); }, [editedChartSource]);
+  const barsOnForPages = (design.nativeData?.chart?.chartStyle?.barWidth ?? 8) > 0;
+  const shownGraphOnlyPage = graphOnlyPage && barsOnForPages ? graphOnlyPage : null;
+  const shownChartPage = shownGraphOnlyPage ?? (editedChartSource ? chartReadoutPage(editedChartSource) : undefined);
   const stripChartPages = useMemo(() => design.nativeData?.chart?.enabled
     ? chartLayerPages.filter(page => page.on).map(page => ({
       ...page,
@@ -6726,9 +6763,19 @@ export function WatchfaceEditor({
     })), [chartLayerPages, templatePages, design.nativeData?.chart?.enabled]);
   const showChartPage = (pageId: string) => {
     const page = stripChartPages.find(item => item.page === pageId);
-    if (!page?.target || page.page === shownChartPage) return;
-    void selectChartGroup(page.target);
+    if (!page || page.fromTemplate || page.page === shownChartPage) return;
+    if (!page.target) { setGraphOnlyPage(page.page); return; }
+    setGraphOnlyPage(null);
+    if (editedChartSource !== page.target) void selectChartGroup(page.target);
   };
+  /** The chart as a graph-only page draws: that page's bars, no number. Preview only. */
+  const previewNativeData = useMemo(() => {
+    const data = design.nativeData, chart = data?.chart;
+    if (!shownGraphOnlyPage || !chart || !data) return data;
+    const off = { enabled: false };
+    return { ...data, chart: { ...chart, chartSource: shownGraphOnlyPage === "tide" ? "chart_tide" : "chart_baro", readouts: undefined,
+      parts: { ...chart.parts, icon: { ...chart.parts?.icon, ...off }, value: { ...chart.parts?.value, ...off }, symbols: { ...chart.parts?.symbols, ...off }, decimal: { ...chart.parts?.decimal, ...off } } } };
+  }, [design.nativeData, shownGraphOnlyPage]);
   const chartPageAddOptions = useMemo(() => {
     const chart = design.nativeData?.chart;
     if (!chart?.enabled) return [];
@@ -6829,7 +6876,7 @@ export function WatchfaceEditor({
     const layer = layers.find(item => item.id === selectedIds[0]);
     const scope = layer ? layerPageScope(layer) : null;
     if (!layer || !scope || scope.rule(shownChartPage)) { setPageJump(null); return; }
-    const to = stripChartPages.find(page => page.target && scope.rule(page.page));
+    const to = stripChartPages.find(page => !page.fromTemplate && scope.rule(page.page));
     if (!to) { setPageJump(null); return; }
     setPageJump({ from: shownChartPage, to: to.page, label: t(layerDisplayLabel(layer)), scope: scope.label });
     showChartPage(to.page);
@@ -6842,7 +6889,7 @@ export function WatchfaceEditor({
   const pendingShownPage = useRef<string | null>(null);
   useEffect(() => {
     const pending = pendingShownPage.current;
-    if (!pending || !stripChartPages.some(page => page.page === pending && page.target)) return;
+    if (!pending || !stripChartPages.some(page => page.page === pending && !page.fromTemplate)) return;
     pendingShownPage.current = null;
     showChartPage(pending);
   }, [stripChartPages]);
@@ -7210,8 +7257,10 @@ export function WatchfaceEditor({
     const [id, chartSource] = value.split(":");
     if (!id) return;
     const existing = design.nativeData?.[id];
-    if (existing?.enabled && (!chartSource || (existing.chartSource ?? "chart_stress") === chartSource || existing.removedReadouts?.includes(chartSource))) {
-      selectQuickStartItem(`native:${id}`);
+    const pairComplete = id !== "weather_temp_min" && id !== "weather_temp_max"
+      || Boolean(design.nativeData?.weather_temp_min?.enabled && design.nativeData?.weather_temp_max?.enabled);
+    if (existing?.enabled && pairComplete && (!chartSource || (existing.chartSource ?? "chart_stress") === chartSource || existing.removedReadouts?.includes(chartSource))) {
+      selectQuickStartItem(id === "weather_temp_max" ? MIN_LAYER : `native:${id}`);
       return;
     }
     // More chart data joins the chart as another readout the watch pages to.
@@ -7222,17 +7271,22 @@ export function WatchfaceEditor({
       openQuickStartProperties();
       return;
     }
-    const initialStyle = defaultNativeDataStyle(id);
-    const size = nativeDataSize(id, initialStyle);
-    initialStyle.x = Math.max(0, Math.round((previewWidth - size.width) / 2));
-    initialStyle.y = Math.max(0, Math.round((previewHeight - size.height) / 2));
-    setDesign(prev => ({ ...prev,
-      ...(id === "weather_temp" && prev.weatherIndicator ? {weatherIndicator: {...prev.weatherIndicator, temperatureEnabled: false}} : {}),
-      nativeData: { ...prev.nativeData, [id]: { ...initialStyle, ...prev.nativeData?.[id], enabled: true, ...(chartSource ? {chartSource} : {}) } },
-      // A deleted layer is listed again once added back.
-      removedLayerIds: (prev.removedLayerIds ?? []).filter((layerId) => layerId !== `native:${id}`)
-    }));
-    selectEditorItem(`native:${id}`);
+    // Minimum and maximum come together: the watch draws neither alone.
+    const ids = id === "weather_temp_min" || id === "weather_temp_max" ? ["weather_temp_min", "weather_temp_max"] : [id];
+    for (const each of ids) {
+      if (each !== id && design.nativeData?.[each]?.enabled) continue;
+      const initialStyle = defaultNativeDataStyle(each);
+      const size = nativeDataSize(each, initialStyle);
+      initialStyle.x = Math.max(0, Math.round((previewWidth - size.width) / 2));
+      initialStyle.y = Math.max(0, Math.round((previewHeight - size.height) / 2));
+      setDesign(prev => ({ ...prev,
+        ...(each === "weather_temp" && prev.weatherIndicator ? {weatherIndicator: {...prev.weatherIndicator, temperatureEnabled: false}} : {}),
+        nativeData: { ...prev.nativeData, [each]: { ...initialStyle, ...prev.nativeData?.[each], enabled: true, ...(chartSource ? {chartSource} : {}) } },
+        // A deleted layer is listed again once added back.
+        removedLayerIds: (prev.removedLayerIds ?? []).filter((layerId) => layerId !== `native:${each}`)
+      }));
+    }
+    selectEditorItem(`native:${ids[0]}`);
     openQuickStartProperties();
   }
 
@@ -8528,7 +8582,7 @@ export function WatchfaceEditor({
     const ids = new Set(unlock ? requested : requested.filter((id) => !isMovementLockedForId(id)));
     if (ids.size === 0) return;
     const firmwareLayers = layers.filter((layer) => ids.has(layer.id) && isRemovableFirmwareLayer(layer));
-    const labels = [...ids].map(deleteLabelFor).filter(Boolean);
+    const labels = [...ids].filter((id) => !(minMaxPair && id === MAX_LAYER && ids.has(MIN_LAYER))).map(deleteLabelFor).filter(Boolean);
     setContextMenu(null);
     beginDesignTransaction();
     try {
@@ -8583,7 +8637,7 @@ export function WatchfaceEditor({
       return;
     }
     const slotPicture = requested.length === 1 && layers.find((layer) => layer.id === requested[0]);
-    const ids = [...new Set(requested.map(deleteTargetFor).filter((id): id is string => Boolean(id)))];
+    const ids = withMinMaxPartner([...new Set(requested.map(deleteTargetFor).filter((id): id is string => Boolean(id)))]);
     if (ids.length === 0) return;
     const locked = ids.filter(isMovementLockedForId);
     const chart = ids.includes("native:chart") && design.nativeData?.chart?.enabled;
@@ -8594,7 +8648,7 @@ export function WatchfaceEditor({
     } else if (slotPicture && layerIsSelectableSlotAsset(slotPicture)) {
       setDeleteRequest({ ids, unlock: false, title: t("Delete the whole slot?"),
         body: t("{{label}} belongs to the selectable data slot, so it goes with the slot and every picture the slot draws.", { label: deleteLabelFor(slotPicture.id) }), confirm: t("Delete the slot") });
-    } else if (ids.length > 1) {
+    } else if (ids.length > 1 && !(ids.length === 2 && ids.includes(MIN_LAYER) && ids.includes(MAX_LAYER))) {
       setDeleteRequest({ ids, unlock: false, title: t("Delete {{count}} layers?", { count: ids.length }),
         body: t("Template parts go under Removed from this face; your own artwork is removed. Undo brings everything back."), confirm: t("Delete {{count}} layers", { count: ids.length }) });
     } else if (chart) {
@@ -9917,11 +9971,13 @@ export function WatchfaceEditor({
     if (layer.id === NEGATIVE_SIGN_LAYER_ID && !layer.present) return [];
     const group = layerStatusGroup(layer);
     if (group && statusGroupMembers(layer)![0] !== layer) return [];
+    if (minMaxPair && layer.id === MAX_LAYER) return [];
     return [{
       id: layer.id,
       label: group ? t(group.label) : t(layerDisplayLabel(layer)),
       // The Add menu's own way back (battery icon defaults and the like), looked up when used.
       putBack: () => {
+        setDeleteNotice(null);
         if (layer.nativeDataId) { addNativeData(layer.nativeDataId); return; }
         const faceOption = faceAddOptions.find((option) => option.id === layer.id);
         if (faceOption) faceOption.onAdd(); else restoreFirmwareLayer(layer);
@@ -9930,6 +9986,9 @@ export function WatchfaceEditor({
   });
   const listedLayers = layers.flatMap((layer) => {
     if (!layer.visible && removedLayerIds.has(layer.id)) return [];
+    // Minimum and maximum list as one "Min / max temperature" row.
+    if (minMaxPair && layer.id === MAX_LAYER) return [];
+    if (minMaxPair && layer.id === MIN_LAYER) return [{ ...layer, label: "Min / max temperature" }];
     if (layer.id === NEGATIVE_SIGN_LAYER_ID && !layer.present) return [];
     const group = layerStatusGroup(layer);
     if (!group) return [layer];
@@ -11209,11 +11268,11 @@ export function WatchfaceEditor({
                     const graph = chartPageGraphLabel(page.page);
                     const label = templatePageLabel(page.page);
                     const title = page.fromTemplate ? t("{{number}} · {{page}} · kept by the template, so the watch still stops here. The preview can't show it; remove it under Chart pages.", { number: index + 1, page: label })
-                      : !page.target ? t("{{number}} · {{page}} · graph only, nothing to preview", { number: index + 1, page: label })
+                      : !page.target ? t("{{number}} · {{page}} · graph only: bars with no number", { number: index + 1, page: label })
                       : `${index + 1} · ${label} · ${graph}${bars ? ` · ${t("needs phone data")}` : ""}${empty ? ` · ${t("nothing visible, but Back still stops here")}` : ""}`;
                     return (
                       <button key={page.page} type="button" className={`wf-page-tile${empty ? " is-empty" : ""}${selectedFieldScope ? selectedFieldScope.rule(page.page) ? " is-field-on" : " is-field-off" : ""}`} aria-pressed={shown}
-                        disabled={!page.target || isPositionLocked("native:chart")} title={title} aria-label={title}
+                        disabled={page.fromTemplate || isPositionLocked("native:chart")} title={title} aria-label={title}
                         onClick={() => showChartPage(page.page)}>
                         <span className="wf-page-tile-number" aria-hidden="true">{index + 1}</span>
                         <span className="wf-page-tile-glyph" aria-hidden="true">
@@ -11837,6 +11896,7 @@ export function WatchfaceEditor({
     return members.length ? members : [layer];
   }
   function layerDisplayLabel(layer: EditorLayer): string {
+    if (minMaxPair && layer.id === MIN_LAYER) return "Min / max temperature";
     return layerStatusGroup(layer)?.label ?? layer.label;
   }
   /** The layer a Send check names: compiled sprites report a layer or its layout group. */
@@ -12304,7 +12364,7 @@ export function WatchfaceEditor({
     // A chart says which page it shows and steps through them in Back order.
     const chartPageIndex = layer.nativeDataId === "chart" && previewMode === "current" ? stripChartPages.findIndex(page => page.page === shownChartPage) : -1;
     const chartHeaderPage = chartPageIndex >= 0 ? { number: chartPageIndex + 1, page: stripChartPages[chartPageIndex]!.page } : null;
-    const chartStepTargets = stripChartPages.filter(page => page.target);
+    const chartStepTargets = stripChartPages.filter(page => !page.fromTemplate);
     const fieldScope = previewMode === "current" ? layerPageScope(layer) : null;
     const stepChartPage = (step: number) => {
       const at = chartStepTargets.findIndex(page => page.page === shownChartPage);
@@ -13101,7 +13161,11 @@ export function WatchfaceEditor({
 
   /** Turns a layer on or off through the design setting that owns it. */
   function setLayerOn(layer: EditorLayer, on: boolean) {
-    if (layer.nativeDataId) { updateNativeData(layer.nativeDataId, {enabled: on}); return; }
+    if (layer.nativeDataId) {
+      updateNativeData(layer.nativeDataId, {enabled: on});
+      if (minMaxPair && (layer.id === MIN_LAYER || layer.id === MAX_LAYER)) updateNativeData(layer.id === MIN_LAYER ? "weather_temp_max" : "weather_temp_min", {enabled: on});
+      return;
+    }
     // A status indicator's row switches every state the face has.
     const statusMembers = statusGroupMembers(layer);
     if (statusMembers) {
@@ -13510,7 +13574,22 @@ export function WatchfaceEditor({
     );
   }
 
+  /**
+   * The pair's look is one: color, font, weight, style, spacing and size set
+   * on "Min / max temperature" apply to the maximum too. A font change goes
+   * through the maximum's own glyph handling.
+   */
+  function syncMinMaxLook(patch: Partial<CorosWatchfaceNativeDataStyle>) {
+    const max = design.nativeData?.weather_temp_max;
+    if (!max) return;
+    const shared: Partial<CorosWatchfaceNativeDataStyle> = {};
+    for (const key of ["color", "fontWeight", "fontStyle", "letterSpacing", "scale"] as const) if (key in patch) (shared as Record<string, unknown>)[key] = patch[key];
+    if ("fontFamily" in patch) Object.assign(shared, withNativeFont(max, patch.fontFamily ?? ""));
+    if (Object.keys(shared).length) updateNativeData("weather_temp_max", shared);
+  }
+
   function renderInspectorBody(layer: EditorLayer) {
+    const pairPanel = minMaxPair && layer.id === MIN_LAYER && Boolean(design.nativeData?.weather_temp_max);
     if (layer.nativeDataId && design.nativeData?.[layer.nativeDataId]) {
       return (
         <>
@@ -13524,7 +13603,13 @@ export function WatchfaceEditor({
             disabled={isPositionLocked(layer.id) || spriteImportPending}
             renderSection={renderPropertySection}
             renderFontSizeField={renderFontSizeField}
-            onPatch={patch => updateNativeData(layer.nativeDataId!, patch)}
+            onPatch={patch => {
+              updateNativeData(layer.nativeDataId!, patch);
+              if (pairPanel) syncMinMaxLook(patch);
+            }}
+            pairPartner={pairPanel ? { id: "weather_temp_max", style: design.nativeData.weather_temp_max!,
+              onPatch: patch => updateNativeData("weather_temp_max", patch) } : undefined}
+            partLabels={pairPanel ? { value: "Min number", separator: "Separator" } : undefined}
             chartGroups={layer.nativeDataId === "chart" ? chartGroups : undefined}
             chartReadouts={layer.nativeDataId === "chart" ? chartReadouts : undefined}
             pageFields={layer.nativeDataId === "chart" ? shownPageFields : undefined}
@@ -13532,6 +13617,7 @@ export function WatchfaceEditor({
             fieldPages={layer.nativeDataId !== "chart" ? nativeLayerChartPages(layer.nativeDataId, design.nativeData, facePageIds) : undefined}
             facePages={design.nativeData?.chart?.enabled ? stripChartPages.map(page => page.page) : facePageIds ?? []}
             shownPage={shownChartPage}
+            graphOnlyPage={layer.nativeDataId === "chart" ? shownGraphOnlyPage : undefined}
             onShowPage={design.nativeData?.chart?.enabled && previewMode === "current" ? showChartPage : undefined}
             onAddDailyPage={design.nativeData?.chart?.enabled ? () => { pendingShownPage.current = "daily-a"; addChartPageToFace("daily-a"); } : facePageIds ? () => setChartPageMode("daily-a", "hidden") : undefined}
             onAddMinMaxPartner={(layer.nativeDataId === "weather_temp_min" || layer.nativeDataId === "weather_temp_max")
