@@ -66,6 +66,30 @@ function fields(buffer) {
   return out;
 }
 
+/**
+ * A weather file 80 (HF + weatherStruct sections: kind, index, u16 LE length, 0) read back as the fields of one
+ * WeatherForecastUI: the kind-0 header's fields, 2 = the forecast hours (kind 2 with a temperature), 3 = the days
+ * (kind 1). `past` holds the pressure-only past hours, `sections` every [kind, index, length].
+ */
+function weatherView(file) {
+  const body = file.subarray(16, 16 + file.readUInt32LE(8));
+  const view = new Map(); const past = []; const sections = []; let i = 0;
+  while (i < body.length) {
+    const [kind, index, length] = [body[i], body[i + 1], body.readUInt16LE(i + 2)];
+    assert.equal(body.readUInt16LE(i + 4), 0, "section header ends in 0");
+    assert.ok(kind <= 2 && length + 6 < 1024, "a section the watch takes");
+    const bytes = body.subarray(i + 6, i + 6 + length);
+    sections.push([kind, index, length]);
+    if (kind === 0) for (const [field, values] of fields(bytes)) view.set(field, values);
+    else if (kind === 1) view.set(3, [...(view.get(3) ?? []), bytes]);
+    else if (fields(bytes).has(3)) view.set(2, [...(view.get(2) ?? []), bytes]);
+    else past.push(bytes);
+    i += 6 + length;
+  }
+  assert.equal(i, body.length);
+  return Object.assign(view, { past, sections });
+}
+
 const program = {
   id: "1792390000000000", name: "Intervals 5 × 1 km with a long descriptive name", sportType: 1, subType: 65535, pbVersion: 2,
   estimatedTime: 1650, estimatedDistance: 500000, createTimestamp: 1792390000,
@@ -178,7 +202,7 @@ await test("training calendar: Monday-based window, records, then each workout a
   assert.equal(secondStart + 16 + file.readUInt32LE(secondStart + 8), file.length);
 });
 
-await test("weather: Open-Meteo forecast → the app's WeatherForecastUI in file 80", async () => {
+await test("weather: Open-Meteo forecast → a weatherStruct (with hourly pressure) in file 80", async () => {
   assert.deepEqual([0, 1, 2, 3, 45, 61, 65, 71, 95, 999].map(appleWeatherCode), [0, 5, 7, 1, 3, 14, 13, 25, 37, 255]);
   const hour0 = 1_792_400_400; // 2026-10-19 03:00:00 UTC, the hour under way
   const now = hour0 + 2700;
@@ -187,12 +211,12 @@ await test("weather: Open-Meteo forecast → the app's WeatherForecastUI in file
   const forecastJson = (overrides = {}) => ({
     utc_offset_seconds: 25_200,
     current: { time: now, temperature_2m: -2.44, apparent_temperature: -6.06, relative_humidity_2m: 81, weather_code: 3, wind_speed_10m: 12.46,
-      wind_direction_10m: 200, uv_index: 3.6, precipitation_probability: null },
+      wind_direction_10m: 200, uv_index: 3.6, precipitation_probability: null, pressure_msl: 1012.3 },
     hourly: {
       time: times, temperature_2m: series(hours + 1, (index) => index === 1 ? -2.4 : 10 + index / 10), apparent_temperature: series(hours + 1, (index) => index === 1 ? -6 : 9),
       relative_humidity_2m: series(hours + 1, (index) => index === 1 ? 80 : 55.5), precipitation_probability: series(hours + 1, (index) => index === 1 ? 35 : 100),
       weather_code: series(hours + 1, (index) => index === 1 ? 3 : 61), wind_speed_10m: series(hours + 1, () => 20), wind_direction_10m: series(hours + 1, (index) => index === 1 ? 350 : 22.5),
-      uv_index: series(hours + 1, (index) => index === 1 ? 4.4 : 11.6)
+      uv_index: series(hours + 1, (index) => index === 1 ? 4.4 : 11.6), pressure_msl: series(hours + 1, (index) => 1000 + index / 10)
     },
     daily: { time: series(14, (index) => hour0 - 36_000 + index * 86_400), weather_code: series(14, (index) => index ? 61 : 3),
       temperature_2m_max: series(14, (index) => index ? 4 : 1.55), temperature_2m_min: series(14, (index) => index ? -1 : -5), precipitation_probability_max: series(14, (index) => index ? 80 : 35) },
@@ -213,9 +237,10 @@ await test("weather: Open-Meteo forecast → the app's WeatherForecastUI in file
   const forecast = await fetchWatchForecast(10.7769, 106.7009, stub());
   const asked = requests.find((url) => url.hostname === "api.open-meteo.com");
   for (const part of ["current", "hourly"]) {
-    assert.deepEqual(asked.searchParams.get(part).split(",").sort(), ["apparent_temperature", "precipitation_probability", "relative_humidity_2m", "temperature_2m",
+    assert.deepEqual(asked.searchParams.get(part).split(",").sort(), ["apparent_temperature", "precipitation_probability", "pressure_msl", "relative_humidity_2m", "temperature_2m",
       "uv_index", "weather_code", "wind_direction_10m", "wind_speed_10m"], `${part} variables`);
   }
+  assert.equal(asked.searchParams.get("past_days"), "1", "yesterday's hours, for the barometer chart's past 6 hours");
   assert.deepEqual(asked.searchParams.get("daily").split(",").sort(), ["precipitation_probability_max", "temperature_2m_max", "temperature_2m_min", "weather_code"]);
   assert.deepEqual(requests.find((url) => url.hostname === "air-quality-api.open-meteo.com").searchParams.get("hourly"), "us_aqi");
   assert.equal(forecast.hourly[0].time, hour0, "from the hour under way: the watch shows it as now");
@@ -223,22 +248,31 @@ await test("weather: Open-Meteo forecast → the app's WeatherForecastUI in file
   assert.equal(forecast.daily.length, 14);
   assert.equal(forecast.current.precipitationProbability, 35, "a value Open-Meteo has no current reading for comes from the hour under way");
   assert.deepEqual(forecast.hourly[0], { ...forecast.current, time: hour0 }, "the hour under way carries the current readings");
+  assert.deepEqual(forecast.pastPressure, [{ time: hour0 - 3600, pressureHpa: 1000 }], "the hours before it, pressure only");
 
   const file = encodeWatchWeather(forecast, "Ho Chi Minh City", new Date(now * 1000));
   assert.deepEqual([file.subarray(0, 2).toString(), file[3]], ["HF", 80]);
   assert.ok(file.length <= 4096, `one transfer block (${file.length} bytes)`);
-  const ui = fields(file.subarray(16));
+  const ui = weatherView(file);
   const signed = (value) => BigInt.asIntN(64, value);
   const entry = (bytes) => { const map = fields(bytes); return Object.fromEntries([...map].map(([field, [value]]) => [field, typeof value === "bigint" ? signed(value) : value])); };
   const current = entry(ui.get(1)[0]);
   // Units the PACE 4 reads (see corosWatchWeather.ts): tenths of °C, tenths of %, %, tenths of km/h, sector 0–7, whole UV index, US AQI, Unix seconds.
-  assert.deepEqual(current, { 2: 1n, 3: -24n, 4: -61n, 5: 810n, 6: 4n, 8: 125n, 11: 35n, 12: 4n, 13: 57n, 14: BigInt(now) },
-    "current: cloudy, -2.4 °C, feels -6.1 °C, 81 %, wind from the south at 12.5 km/h, 35 % rain, UV 4, AQI 57");
+  const zig = (value) => BigInt(value < 0 ? -2 * value - 1 : 2 * value);
+  assert.deepEqual(current, { 2: 1n, 3: -24n, 4: -61n, 5: 810n, 6: 4n, 8: 125n, 11: 35n, 12: 4n, 13: 57n, 14: BigInt(now), 16: zig(101_230) },
+    "current: cloudy, -2.4 °C, feels -6.1 °C, 81 %, wind from the south at 12.5 km/h, 35 % rain, UV 4, AQI 57, 1012.3 hPa in pascals (sint32)");
   const hourly = ui.get(2).map(entry);
-  assert.equal(hourly.length, 96);
+  assert.equal(hourly.length, 95, "96 hourly entries with the past hour, as many as the watch keeps");
   assert.deepEqual(hourly[0], { ...current, 14: BigInt(hour0) }, "the hour the watch shows as now: every field, at the start of the hour");
   assert.equal(entry(ui.get(2)[2])[6], 1n, "22.5° rounds to north-east");
-  assert.deepEqual(hourly[1], { 2: 14n, 3: 102n, 4: 90n, 5: 555n, 6: 1n, 8: 200n, 11: 100n, 12: 12n, 13: 42n, 14: BigInt(hour0 + 3600) }, "rain, 10.2 °C, 55.5 %, NE, UV 12");
+  assert.deepEqual(hourly[1], { 2: 14n, 3: 102n, 4: 90n, 5: 555n, 6: 1n, 8: 200n, 11: 100n, 12: 12n, 13: 42n, 14: BigInt(hour0 + 3600), 16: zig(100_020) },
+    "rain, 10.2 °C, 55.5 %, NE, UV 12, 1000.2 hPa");
+  assert.deepEqual(ui.past.map(entry), [{ 2: 255n, 14: BigInt(hour0 - 3600), 16: zig(100_000) }], "a past hour: pressure only, weather_type 255 as COROS sends");
+  assert.deepEqual(ui.sections.slice(0, 2).map(([kind, index]) => [kind, index]), [[0, 0], [1, 0]], "the forecast header, then the days");
+  const hourSections = ui.sections.filter(([kind]) => kind === 2);
+  assert.deepEqual(hourSections.map(([, index]) => index), hourSections.map((_, index) => index), "hours indexed from 0, the past first");
+  assert.ok(hourSections.length <= 96);
+  assert.deepEqual([ui.get(11)[0], ui.get(12)[0]], [3600n, 259_200n], "refresh hourly, valid 72 hours");
   assert.equal(hourly[60][13], 0xffffn, "an hour without air quality hides the AQI (-1 on the watch)");
   for (const hour of hourly) assert.deepEqual([1, 7, 9, 10].filter((field) => field in hour), [], "fields the watch drops are not sent");
   const daily = ui.get(3).map(entry);
@@ -255,34 +289,35 @@ await test("weather: Open-Meteo forecast → the app's WeatherForecastUI in file
   assert.equal(unzig(ui.get(8)[0]), 107_769_000n, "latitude × 10⁷ (sint32)");
   assert.equal(unzig(ui.get(9)[0]), 1_067_009_000n);
   assert.equal(ui.get(10)[0].toString(), "Ho Chi Minh City");
-  assert.equal(ui.get(1)[0][0], 0x10, "starts with current (field 1), not a struct-per-entry header");
+  assert.deepEqual([...file.subarray(16, 18)], [0, 0], "section-per-entry (the decoder that keeps hourly pressure), not one WeatherForecastUI");
 
   // Air quality is optional: without it the forecast goes without AQI.
   for (const air of ["fail", 500]) {
     const plain = await fetchWatchForecast(10.7769, 106.7009, stub({ air }));
     assert.equal(plain.airQuality, false);
-    const plainUi = fields(encodeWatchWeather(plain, "", new Date(now * 1000)).subarray(16));
+    const plainUi = weatherView(encodeWatchWeather(plain, "", new Date(now * 1000)));
     assert.equal(plainUi.has(5), false, "no AQI provider");
     assert.equal([...plainUi.get(2), ...plainUi.get(1)].some((bytes) => fields(bytes).has(13)), false, "no AQI");
   }
-  // Days below freezing, where every temperature takes 10 bytes: all 96 hours still fit one block, the far ones without "feels like".
+  // Days below freezing, where every temperature takes 10 bytes: the far hours go without "feels like", then the furthest
+  // hours go, keeping one block (at least two days).
   const cold = forecastJson();
   Object.assign(cold.hourly, { temperature_2m: series(hours + 1, () => -12.3), apparent_temperature: series(hours + 1, () => -20.7) });
   const coldAir = { ...airJson, hourly: { time: times, us_aqi: series(hours + 1, () => 42) } };
   const coldStub = (forecastBody) => async (url) => ({ ok: true, json: async () => new URL(url).hostname.startsWith("air") ? coldAir : forecastBody });
   const frozen = await fetchWatchForecast(10.7769, 106.7009, coldStub(cold));
   const frozenFile = encodeWatchWeather(frozen, "Ho Chi Minh City", new Date(now * 1000));
-  const frozenHours = fields(frozenFile.subarray(16)).get(2).map(entry);
+  const frozenHours = weatherView(frozenFile).get(2).map(entry);
   assert.ok(frozenFile.length <= 4096, `${frozenFile.length} bytes`);
-  assert.equal(frozenHours.length, 96);
+  assert.ok(frozenHours.length >= 72 && frozenHours.length < 95, `${frozenHours.length} hours`);
   assert.equal(frozenHours[1][4], -207n, "the next hours keep it");
-  assert.equal(frozenHours[95][4], undefined);
-  assert.equal(frozenHours[95][3], -123n);
+  assert.equal(frozenHours.at(-1)[4], undefined);
+  assert.equal(frozenHours.at(-1)[3], -123n);
   // A whole week below freezing: the furthest hours go rather than the file growing past one block.
   Object.assign(cold.daily, { temperature_2m_max: series(14, () => -3), temperature_2m_min: series(14, () => -15) });
   const trimmed = encodeWatchWeather(await fetchWatchForecast(10.7769, 106.7009, coldStub(cold)), "Ho Chi Minh City", new Date(now * 1000));
-  const trimmedHours = fields(trimmed.subarray(16)).get(2).length;
-  assert.ok(trimmed.length <= 4096 && trimmedHours >= 84 && trimmedHours <= 96, `${trimmedHours} hours in ${trimmed.length} bytes`);
+  const trimmedHours = weatherView(trimmed).get(2).length;
+  assert.ok(trimmed.length <= 4096 && trimmedHours >= 48 && trimmedHours <= frozenHours.length, `${trimmedHours} hours in ${trimmed.length} bytes`);
   await assert.rejects(fetchWatchForecast(91, 0, stub()), /Invalid location/);
 });
 
@@ -318,7 +353,7 @@ await test("weather: each day keeps its name on the watch, whatever the place's 
       assert.deepEqual(forecast.daily.map((day) => day.date), days, `${zone} at ${nowIso}: the place's dates`);
       const clock = encodeSyncTime(now, false);
       const watchOffset = clock.readInt8(5) * 900;
-      const ui = fields(encodeWatchWeather(forecast, "", now).subarray(16));
+      const ui = weatherView(encodeWatchWeather(forecast, "", now));
       const named = ui.get(3).map((bytes) => new Date((Number(fields(bytes).get(14)[0]) - 3600 + watchOffset) * 1000).toISOString().slice(0, 10));
       assert.deepEqual(named, days, `${zone} at ${nowIso} under ${process.env.TZ}: every day named as at the place`);
       checked += 1;
