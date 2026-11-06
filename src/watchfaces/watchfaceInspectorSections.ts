@@ -3,6 +3,9 @@ import type { EditorLayerKind } from "./watchfaceEditorModel";
 
 export type WatchfaceInspectorSectionId =
   | "layer"
+  /** Chart pages: the page a chart shows, or the pages a field shows on. */
+  | "page"
+  | "graph"
   | "transform"
   | "appearance"
   | "assets"
@@ -34,6 +37,8 @@ export const WATCHFACE_INSPECTOR_DEFAULT_OPEN: Readonly<
   Record<WatchfaceInspectorSectionId, boolean>
 > = {
   layer: true,
+  page: true,
+  graph: true,
   transform: true,
   appearance: true,
   assets: true,

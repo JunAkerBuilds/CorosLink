@@ -14,7 +14,7 @@ import { useWatchfaceSimulation } from "./useWatchfaceSimulation";
 import { WATCHFACE_SIMULATION_CAPABILITIES, activeSimulationScenario, createWatchfaceSimulation, parseWatchfacePreviewScenario, patchWatchfaceSimulation, simulationStudioOptions, type WatchfacePreviewScenario } from "./watchfaceSimulation";
 import { WatchfaceColorInput, flushWatchfaceColorInputs } from "./WatchfaceColorInput";
 import { WatchfaceNumberAlignControl } from "./WatchfaceNumberAlignControl";
-import { NativeDataInspector, chartPageLabel as templatePageLabel } from "./NativeDataInspector";
+import { NativeDataInspector, chartPageGraphLabel, chartPageLabel as templatePageLabel } from "./NativeDataInspector";
 import { ChartPageRows, barPageChips, chartPageCount, hiddenFieldsNote, type ChartPageRow } from "./ChartPageRows";
 import { MetricKindNote, watchfaceMetricKind } from "./watchfaceMetricKinds";
 import { NATIVE_CHART_FIXED_EQUIVALENTS, NATIVE_CHART_PAGES, nativeChartReadoutLabel } from "../../electron/watchfaceNativeCatalog";
@@ -24,7 +24,7 @@ import { onChartPageIds, templateChartPages, withoutTurnedOffChart, type ChartPa
 import { addChartPage, chartDragSplit, chartGraphBounds, chartReadoutBounds, chartReadoutHidden, chartReadoutPage, chartSourceOf, chartStoredReadout, dropChartReadout, hiddenChartReadout, moveChartGraph, moveChartReadout, newChartReadout, removeChartPage, setChartReadoutShown, storedChartReadouts, swapChartReadout } from "./chartReadouts";
 import { describeNativeDataComponents } from "./nativeDataAutomation";
 import { watchfaceAutomationAssetContracts } from "./watchfaceAutomationAssetContracts";
-import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES, defaultNativeDataStyle, drawNativeDataPreview, keepNativeOwnedKeys, minMaxTemperatureRun, nativeDataSize, nativeLayerChartPages, nativeLayerStyle } from "./nativeData";
+import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES, defaultNativeDataStyle, drawNativeDataPreview, keepNativeOwnedKeys, minMaxTemperatureRun, nativeDataSize, nativeLayerChartPages, nativeLayerHiddenByChartGroup, nativeLayerStyle } from "./nativeData";
 import { glyphBaselineMovements, visibleInkBounds } from "./watchfaceGlyphLayout";
 import { finalizeWatchfaceStatusIcons } from "./watchfaceStatusExport.ts";
 import {
@@ -290,6 +290,11 @@ import {
   Send,
   SlidersHorizontal,
   SunMedium,
+  ChartColumn,
+  ChartSpline,
+  ChevronLeft,
+  ChevronRight,
+  Hash,
   Square,
   Trash2,
   Type,
@@ -2304,59 +2309,27 @@ export function WatchfaceEditor({
     </>;
   }
   /**
-   * The Chart layer's pages under its row: the pages Back stops on, numbered,
-   * with their readouts as chips. A chip or page edits that readout; pages the
-   * watch skips are in Add page.
+   * The chart's readouts under its layer row, in Back order, each with its
+   * page's number from the Screens strip. Pages themselves live in the strip.
    */
-  function renderChartLayerPageRows(layerId: string) {
-    const chart = design.nativeData?.chart;
-    if (!chart) return null;
-    const barsOn = (chart.chartStyle?.barWidth ?? 8) > 0;
-    const isBars = (page: string) => page === "barometer" || page === "tide";
-    const onPages = chartLayerPages.filter(page => page.on);
-    const removablePages = onPages.filter(page => !isBars(page.page)).length > 1;
-    const rows: ChartPageRow[] = onPages.map(({ page, rows: readouts }) => {
-      const label = templatePageLabel(page);
-      const first = readouts.find(row => !row.missing && !row.hidden) ?? readouts.find(row => !row.missing);
-      const current = readouts.some(row => row.editing);
-      const hiddenFields = hiddenFieldsNote(chartPageFields[page] ?? [], nativeFieldName);
-      const removable = isBars(page) || removablePages;
-      return {
-        id: `${layerId}:${page}`,
-        label,
-        current,
-        title: current ? t("Shown in the preview") : t("Show this page in the preview"),
-        onClick: () => {
-          selectEditorItem(layerId);
-          setPropertiesOpen(true);
-          if (first && !current) void selectChartGroup(first.source);
-        },
-        chips: barPageChips(isBars(page), readouts.map(row => ({
-          source: row.source, label: t(nativeChartReadoutLabel(row.source)), hidden: row.hidden, editing: row.editing,
-          onClick: row.missing ? undefined : () => {
+  function renderChartReadoutRows(layerId: string) {
+    return stripChartPages.flatMap((page, index) => page.rows.filter(row => !row.missing).map(row => (
+      <li key={`${layerId}:${row.source}`} className="wf-layer-item wf-layer-subitem">
+        <button type="button" className={`watchface-layer-row wf-layer-subrow${row.editing ? " is-editing" : ""}`}
+          aria-current={row.editing ? "true" : undefined}
+          title={row.editing ? t("Shown in the preview") : t("Edit this readout")}
+          onClick={() => {
             selectEditorItem(layerId);
             setPropertiesOpen(true);
             if (!row.editing) void selectChartGroup(row.source);
-          }
-        }))),
-        ...(readouts.length && readouts.every(row => row.hidden) && !isBars(page) ? { note: t("Nothing visible"), noteTitle: t("The watch still stops on this page, with nothing visible.") }
-          : hiddenFields ? { note: hiddenFields.note, noteTitle: hiddenFields.title } : {}),
-        actions: removable && !isPositionLocked(layerId) ? (
-          <button type="button" className="watchface-layer-visibility"
-            aria-label={isBars(page) ? t("Turn bars off") : t("Remove {{value1}}", { value1: label })}
-            title={isBars(page) ? t("Turn bars off. This removes both the barometer and tide pages.") : t("Remove the page from the watch")}
-            onClick={() => isBars(page) ? updateNativeData("chart", { chartStyle: { ...chart.chartStyle, barWidth: 0 } }) : void removeChartPageFromFace(page)}>
-            <Trash2 size={14} />
-          </button>
-        ) : undefined
-      };
-    });
-    const addOptions = [
-      ...(barsOn ? [] : [{ id: "bars", label: t("Barometer and tide") }]),
-      ...NATIVE_CHART_PAGES.filter(page => !isBars(page.id) && !onPages.some(on => on.page === page.id)).map(page => ({ id: page.id, label: templatePageLabel(page.id) }))
-    ];
-    return <ChartPageRows rows={rows} addOptions={isPositionLocked(layerId) ? [] : addOptions}
-      onAdd={id => id === "bars" ? updateNativeData("chart", { chartStyle: { ...chart.chartStyle, barWidth: 8, barGap: chart.chartStyle?.barGap || 4 } }) : addChartPageToFace(id)} />;
+          }}>
+          <span className={`watchface-layer-name${row.hidden ? " is-hidden" : ""}`}>
+            {t(nativeChartReadoutLabel(row.source))}{row.hidden ? ` · ${t("hidden")}` : ""}
+          </span>
+          <span className="wf-layer-subrow-page" title={templatePageLabel(page.page)}>{index + 1}</span>
+        </button>
+      </li>
+    )));
   }
   /** Keeps, hides or removes one of the template's chart pages (design.chartPageModes). */
   function setChartPageMode(pageId: string, mode: ChartPageMode | undefined) {
@@ -6711,7 +6684,8 @@ export function WatchfaceEditor({
   // shows its full set (NATIVE_CHART_PAGES).
   const chartLayerPages = useMemo(() => {
     const chart = design.nativeData?.chart;
-    if (!chart) return [];
+    // A deleted (turned-off) chart has no pages of its own on the watch.
+    if (!chart?.enabled) return [];
     const current = chartSourceOf(chart);
     const present = new Set([current, ...Object.keys(chart.readouts ?? {}), ...chartReadouts].filter(source => !chart.removedReadouts?.includes(source)));
     const barsOn = (chart.chartStyle?.barWidth ?? 8) > 0;
@@ -6731,6 +6705,73 @@ export function WatchfaceEditor({
       return [{ page: page.id, on, rows: on || bars ? rows.filter(row => !row.missing || on) : rows.filter(row => !row.missing) }];
     });
   }, [design.nativeData, design.chartPageModes, chartReadouts]);
+  // The page the canvas shows is the edited readout's page; the Screens strip
+  // lists the pages Back steps through (Current screen only).
+  const shownChartPage = design.nativeData?.chart?.enabled ? chartReadoutPage(chartSourceOf(design.nativeData.chart)) : undefined;
+  const stripChartPages = useMemo(() => design.nativeData?.chart?.enabled
+    ? chartLayerPages.filter(page => page.on).map(page => ({
+      ...page,
+      fromTemplate: false,
+      // Picking a page edits its first readout that shows, else its first hidden one.
+      target: (page.rows.find(row => !row.missing && !row.hidden) ?? page.rows.find(row => !row.missing))?.source as string | undefined
+    }))
+    // Without a chart layer the template's own pages still reach the watch
+    // (templateChartPages). They list in Back order but can't be previewed.
+    : (templatePages ?? []).filter(page => page.on).map(page => ({
+      page: page.id, on: true, fromTemplate: true, target: undefined as string | undefined,
+      rows: page.readouts.map(readout => ({ source: readout.source, editing: false, hidden: !readout.visible || page.mode === "hidden", missing: false }))
+    })), [chartLayerPages, templatePages, design.nativeData?.chart?.enabled]);
+  const showChartPage = (pageId: string) => {
+    const page = stripChartPages.find(item => item.page === pageId);
+    if (!page?.target || page.page === shownChartPage) return;
+    void selectChartGroup(page.target);
+  };
+  const chartPageAddOptions = useMemo(() => {
+    const chart = design.nativeData?.chart;
+    if (!chart?.enabled) return [];
+    const barsOn = (chart.chartStyle?.barWidth ?? 8) > 0;
+    const on = new Set(stripChartPages.map(page => page.page));
+    const readoutList = (sources: readonly string[]) => sources.map(source => t(nativeChartReadoutLabel(source))).join(", ");
+    return [
+      ...(barsOn ? [] : [{ id: "bars", label: t("Barometer and tide"), detail: t("Bars · adds two pages · needs phone data") }]),
+      ...NATIVE_CHART_PAGES.filter(page => page.id !== "barometer" && page.id !== "tide" && !on.has(page.id)).map(page => ({
+        id: page.id, label: templatePageLabel(page.id), detail: `${chartPageGraphLabel(page.id)} · ${readoutList(page.required.length ? page.required : page.sources)}`
+      }))
+    ];
+  }, [design.nativeData?.chart, stripChartPages]);
+  function addChartPageFromStrip(id: string) {
+    const chart = design.nativeData?.chart;
+    setChartPageMenuOpen(false);
+    if (!chart) return;
+    if (id === "bars") updateNativeData("chart", { chartStyle: { ...chart.chartStyle, barWidth: 8, barGap: chart.chartStyle?.barGap || 4 } });
+    else addChartPageToFace(id);
+  }
+  const [chartPageMenuOpen, setChartPageMenuOpen] = useState(false);
+  // Delete: a confirm for locked layers, several layers or the chart, and an Undo notice after.
+  const [deleteRequest, setDeleteRequest] = useState<{ ids: string[]; unlock: boolean; title: string; body: string; confirm: string; action?: () => void } | null>(null);
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
+  const [removedOpen, setRemovedOpen] = useState(false);
+  const deleteNoticeTimer = useRef<number | null>(null);
+  useEffect(() => () => { if (deleteNoticeTimer.current) window.clearTimeout(deleteNoticeTimer.current); }, []);
+  const chartPageMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!chartPageMenuOpen) return;
+    const close = (event: Event) => {
+      if (event instanceof KeyboardEvent ? event.key === "Escape" : !chartPageMenuRef.current?.contains(event.target as Node)) setChartPageMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", close);
+    return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", close); };
+  }, [chartPageMenuOpen]);
+  // Page-switched fields on the face, and whether each shows on the page the canvas shows.
+  const shownPageFields = useMemo(() => {
+    const data = design.nativeData;
+    if (!data?.chart?.enabled || !shownChartPage) return [];
+    return Object.keys(data).filter(id => id !== "chart" && id !== "chart_sun_angle" && data[id]?.enabled).flatMap(id => {
+      const pages = nativeLayerChartPages(id, data)?.pages;
+      return pages ? [{ id, shows: pages.includes(shownChartPage) }] : [];
+    });
+  }, [design.nativeData, shownChartPage]);
   // Fields the watch hides on some chart pages (weather on the sun and moon pages), by page.
   const chartPageFields = useMemo(() => {
     const byPage: Record<string, string[]> = {};
@@ -8378,28 +8419,134 @@ export function WatchfaceEditor({
       !layerIsSelectableSlotAsset(layer);
   }
 
-  function selectionIsDeletable(): boolean {
-    return selectedIds.some((id) => {
-      if (isMovementLockedForId(id)) return false;
-      if (id.startsWith("bgel:")) return true;
-      if (id === "seconds" && design.addSeconds && canAddSeconds) return true;
-      if (isAddedDatePart(id)) return true;
-      const layer = layers.find((candidate) => candidate.id === id);
-      return Boolean(layer && (layer.kind === "customSprite" || isRemovableFirmwareLayer(layer)));
-    });
-  }
-
-  function deleteSelected() {
-    const ids = new Set(selectedIds.filter((id) => !isMovementLockedForId(id)));
+  /**
+   * Deletes layers in one undo step. `unlock` deletes locked ones too (the
+   * user confirmed "Unlock and delete"); otherwise locked ones stay.
+   */
+  function deleteLayers(requested: string[], unlock = false) {
+    const ids = new Set(unlock ? requested : requested.filter((id) => !isMovementLockedForId(id)));
+    if (ids.size === 0) return;
     const firmwareLayers = layers.filter((layer) => ids.has(layer.id) && isRemovableFirmwareLayer(layer));
+    const labels = [...ids].map(deleteLabelFor).filter(Boolean);
     setContextMenu(null);
     beginDesignTransaction();
     try {
+      if (unlock) setDesign((current) => ({ ...current, lockedLayerIds: (current.lockedLayerIds ?? []).filter((id) => !ids.has(id)) }));
       removeFirmwareLayers(firmwareLayers);
-      deleteSelectedArtwork();
+      deleteSelectedArtwork(ids);
     } finally {
       endDesignTransaction();
     }
+    showDeleteNotice(labels.length === 1
+      ? firmwareLayers.length ? t("{{label}} deleted. It's under Removed from this face.", { label: labels[0] }) : t("{{label}} deleted.", { label: labels[0] })
+      : firmwareLayers.length ? t("{{count}} layers deleted. Template parts are under Removed from this face.", { count: labels.length }) : t("{{count}} layers deleted.", { count: labels.length }));
+  }
+
+  function deleteLabelFor(id: string): string {
+    if (id.startsWith("bgel:")) {
+      const element = backgroundElements.find((candidate) => `bgel:${candidate.id}` === id);
+      return element ? backgroundElementLabel(element) : "";
+    }
+    const layer = layers.find((candidate) => candidate.id === id);
+    return layer ? t(layerDisplayLabel(layer)) : "";
+  }
+
+  /** The layer Delete acts on: a slot's picture deletes the whole slot. */
+  function deleteTargetFor(id: string): string | null {
+    if (id.startsWith("bgel:")) return id;
+    const layer = layers.find((candidate) => candidate.id === id);
+    if (!layer || layer.kind === "background") return null;
+    if (layerIsSelectableSlotAsset(layer)) return layers.some((candidate) => candidate.id === "complication") ? "complication" : null;
+    if (id === "seconds" && design.addSeconds && canAddSeconds) return id;
+    if (isAddedDatePart(id)) return id;
+    return layer.kind === "customSprite" || isRemovableFirmwareLayer(layer) ? id : null;
+  }
+
+  /** What Delete says for a selection: Delete, Unlock and delete, or Reset background. */
+  function deleteActionLabel(ids: string[]): string {
+    if (ids.length === 1 && layers.find((layer) => layer.id === ids[0])?.kind === "background") return t("Reset background");
+    if (ids.length === 1 && layers.find((layer) => layer.id === ids[0]) && layerIsSelectableSlotAsset(layers.find((layer) => layer.id === ids[0])!)) return t("Delete the whole slot");
+    return ids.some(isMovementLockedForId) ? t("Unlock and delete") : t("Delete");
+  }
+
+  /**
+   * Every Delete goes through here: the layer row, the panel header, the
+   * canvas menu and floating bar, and the Delete key. Background resets;
+   * a locked layer, several layers or the chart ask first; one layer goes
+   * at once with an Undo notice.
+   */
+  function requestDeleteLayers(requested: string[]) {
+    setContextMenu(null);
+    if (requested.length === 1 && layers.find((layer) => layer.id === requested[0])?.kind === "background") {
+      resetBackground();
+      return;
+    }
+    const slotPicture = requested.length === 1 && layers.find((layer) => layer.id === requested[0]);
+    const ids = [...new Set(requested.map(deleteTargetFor).filter((id): id is string => Boolean(id)))];
+    if (ids.length === 0) return;
+    const locked = ids.filter(isMovementLockedForId);
+    const chart = ids.includes("native:chart") && design.nativeData?.chart?.enabled;
+    if (locked.length) {
+      setDeleteRequest({ ids, unlock: true,
+        title: locked.length === 1 ? t("{{label}} is locked", { label: deleteLabelFor(locked[0]!) }) : t("{{count}} layers are locked", { count: locked.length }),
+        body: t("Its position is locked so it isn't moved by accident. Unlock it and delete?"), confirm: t("Unlock and delete") });
+    } else if (slotPicture && layerIsSelectableSlotAsset(slotPicture)) {
+      setDeleteRequest({ ids, unlock: false, title: t("Delete the whole slot?"),
+        body: t("{{label}} belongs to the selectable data slot, so it goes with the slot and every picture the slot draws.", { label: deleteLabelFor(slotPicture.id) }), confirm: t("Delete the slot") });
+    } else if (ids.length > 1) {
+      setDeleteRequest({ ids, unlock: false, title: t("Delete {{count}} layers?", { count: ids.length }),
+        body: t("Template parts go under Removed from this face; your own artwork is removed. Undo brings everything back."), confirm: t("Delete {{count}} layers", { count: ids.length }) });
+    } else if (chart) {
+      const pages = stripChartPages.length;
+      setDeleteRequest({ ids, unlock: false, title: pages === 1 ? t("Delete the chart and its page?") : t("Delete the chart and its {{count}} pages?", { count: pages }),
+        body: t("Its pages leave the Back sequence. Pages the template declares on its own stay on the watch and list under Chart pages, where you can remove them. The chart waits under Removed from this face."), confirm: t("Delete chart") });
+    } else {
+      deleteLayers(ids);
+    }
+  }
+
+  /**
+   * Delete on a chart readout: one Studio added leaves the chart; the
+   * template's own is hidden (export keeps a page's required ones
+   * invisibly). The last readout a page shows offers to remove the page.
+   */
+  function deleteChartReadout(source: string) {
+    const chart = design.nativeData?.chart;
+    if (!chart) return;
+    const page = NATIVE_CHART_PAGES.find((item) => item.sources.includes(source));
+    const label = t(nativeChartReadoutLabel(source));
+    const onPage = chartLayerPages.find((item) => item.page === page?.id);
+    const shownOnPage = onPage?.rows.filter((row) => !row.missing && !row.hidden).length ?? 0;
+    const bars = page?.id === "barometer" || page?.id === "tide";
+    const otherPages = stripChartPages.filter((item) => item.page !== page?.id && item.page !== "barometer" && item.page !== "tide").length;
+    const lastOnPage = Boolean(page && !bars && shownOnPage <= 1 && !onPage?.rows.find((row) => row.source === source)?.hidden);
+    if (lastOnPage && otherPages > 0) {
+      const pageLabel = templatePageLabel(page!.id);
+      setDeleteRequest({ ids: [], unlock: false, title: t("Remove the {{page}} page?", { page: pageLabel }),
+        body: t("{{label}} is the last readout the {{page}} page shows. Without it the watch would still stop there with nothing visible.", { label, page: pageLabel }),
+        confirm: t("Remove page"), action: () => { void removeChartPageFromFace(page!.id); } });
+      return;
+    }
+    if (!chartReadouts.includes(source) && !page?.required.includes(source)) void removeChartReadout(source);
+    else void showChartReadout(source, false);
+    showDeleteNotice(t("{{label}} deleted from its page.", { label }));
+  }
+
+  function resetBackground() {
+    beginDesignTransaction();
+    try {
+      setBackgroundArtwork(null);
+      patchDesign({ backgroundColor: "#000000", zoom: 1 });
+    } finally {
+      endDesignTransaction();
+    }
+    showDeleteNotice(t("Background reset to black, photo off."));
+  }
+
+  function showDeleteNotice(text: string) {
+    if (deleteNoticeTimer.current) window.clearTimeout(deleteNoticeTimer.current);
+    setDeleteNotice(text);
+    deleteNoticeTimer.current = window.setTimeout(() => setDeleteNotice(null), 8000);
   }
 
   function removeFirmwareLayers(selected: EditorLayer[]) {
@@ -8520,8 +8667,7 @@ export function WatchfaceEditor({
     if (quickStartTimeLayer) selectQuickStartItem(quickStartTimeLayer.id);
   }
 
-  function deleteSelectedArtwork() {
-    const ids = new Set(selectedIds.filter((id) => !isMovementLockedForId(id)));
+  function deleteSelectedArtwork(ids: Set<string>) {
     const elementIds = new Set(
       [...ids].filter((id) => id.startsWith("bgel:")).map((id) => id.slice(5))
     );
@@ -8659,9 +8805,11 @@ export function WatchfaceEditor({
         return;
       }
       if (event.key === "Delete" || event.key === "Backspace") {
-        if (selectionIsDeletable()) {
+        // The background resets only from its own Reset button, never by a stray key.
+        const deletable = selectedIds.filter((id) => deleteTargetFor(id));
+        if (deletable.length) {
           event.preventDefault();
-          deleteSelected();
+          requestDeleteLayers(deletable);
         }
         return;
       }
@@ -9661,6 +9809,24 @@ export function WatchfaceEditor({
   // One row per status indicator, on the state the preview draws.
   const statusRowKeys = new Set(WATCHFACE_STATUS_GROUPS.map(group => watchfaceStatusActiveKey(group,
     key => layers.some(item => item.present && item.configAssetId === `config:${key}`), chosenStatusStates[group.id])));
+  // Template parts deleted from the face, each with a way back where it was.
+  const removedFaceLayers = layers.flatMap((layer) => {
+    if (layer.visible || !removedLayerIds.has(layer.id) || layer.kind === "background") return [];
+    if (layer.kind === "configAsset" && !layer.present) return [];
+    if (layer.id === NEGATIVE_SIGN_LAYER_ID && !layer.present) return [];
+    const group = layerStatusGroup(layer);
+    if (group && statusGroupMembers(layer)![0] !== layer) return [];
+    return [{
+      id: layer.id,
+      label: group ? t(group.label) : t(layerDisplayLabel(layer)),
+      // The Add menu's own way back (battery icon defaults and the like), looked up when used.
+      putBack: () => {
+        if (layer.nativeDataId) { addNativeData(layer.nativeDataId); return; }
+        const faceOption = faceAddOptions.find((option) => option.id === layer.id);
+        if (faceOption) faceOption.onAdd(); else restoreFirmwareLayer(layer);
+      }
+    }];
+  });
   const listedLayers = layers.flatMap((layer) => {
     if (!layer.visible && removedLayerIds.has(layer.id)) return [];
     if (layer.id === NEGATIVE_SIGN_LAYER_ID && !layer.present) return [];
@@ -9831,6 +9997,25 @@ export function WatchfaceEditor({
   };
 
   const faceColors = collectWatchfaceFaceColors(design);
+  // Fields the watch hides on the chart page the canvas shows: a dashed
+  // outline where they sit, and a badge while one is hovered or selected.
+  // Where pages share a slot (NOMAD: temperature and sun angle, min/max and
+  // wind), the field that shows there stands in, so no outline is drawn.
+  const pageHiddenAll = previewMode === "current" && shownChartPage
+    ? layers.filter((layer) => layer.nativeDataId && layer.nativeDataId !== "chart" && layer.visible && layer.bounds
+      && nativeLayerHiddenByChartGroup(layer.nativeDataId, design.nativeData ?? {}, facePageIds))
+    : [];
+  const pageHiddenLayers = (() => {
+    if (!pageHiddenAll.length) return [];
+    const nativeLayers = layers.filter((layer) => layer.nativeDataId && layer.nativeDataId !== "chart" && layer.visible && layer.bounds);
+    const hidden = pageHiddenAll;
+    const shown = nativeLayers.filter((layer) => !hidden.includes(layer));
+    const area = (box: WatchfaceEditorBounds) => Math.max(0, box.x1 - box.x0) * Math.max(0, box.y1 - box.y0);
+    const overlap = (a: WatchfaceEditorBounds, b: WatchfaceEditorBounds) =>
+      Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
+    return hidden.filter((layer) => !shown.some((other) => overlap(layer.bounds!, other.bounds!) > area(layer.bounds!) * 0.4));
+  })();
+  const pageHiddenBadge = pageHiddenAll.find((layer) => layer.id === hoveredId) ?? pageHiddenAll.find((layer) => selectedIds.includes(layer.id));
   // The align bar floats over the selection: above it, or below when the
   // selection sits at the top of the face.
   const selectionToolbarBox = (() => {
@@ -10334,6 +10519,14 @@ export function WatchfaceEditor({
                         ) : null}
                       </button>
                       <span className="wf-layer-row-actions">
+                        {deleteTargetFor(layer.id) ? (
+                          <button type="button" className="watchface-layer-delete"
+                            aria-label={t("Delete {{value1}}", { value1: t(layer.label) })}
+                            title={layerIsSelectableSlotAsset(layer) ? t("Delete the whole slot") : isMovementLockedForId(layer.id) ? t("Unlock and delete") : t("Delete")}
+                            onClick={() => requestDeleteLayers([layer.id])}>
+                            <Trash2 size={14} />
+                          </button>
+                        ) : null}
                         {/* A layer that's off has nothing to drag; Simple leaves just its eye. */}
                         {simpleMode && !layer.visible && !isPositionLocked(layer.id) ? null : renderLayerPositionLockButton(layer.id, layer.label)}
                         {layer.canHide ? (
@@ -10351,13 +10544,32 @@ export function WatchfaceEditor({
                       </span>
                     </li>
                     {layer.nativeDataId === "chart" && !design.nativeData?.chart?.enabled ? renderTemplateChartRows(false) : null}
-                    {layer.nativeDataId === "chart" && design.nativeData?.chart?.enabled ? renderChartLayerPageRows(layer.id) : null}
+                    {layer.nativeDataId === "chart" && design.nativeData?.chart?.enabled ? renderChartReadoutRows(layer.id) : null}
                     </Fragment>
                     );
                     })}
                   </Fragment>
                 );
               })}
+              {removedFaceLayers.length && !layerQuery.trim() ? (
+                <li className="wf-removed-group">
+                  <button type="button" className="wf-removed-head" aria-expanded={removedOpen} onClick={() => setRemovedOpen((open) => !open)}>
+                    <ChevronDown size={13} aria-hidden="true" className={removedOpen ? "" : "is-closed"} />
+                    <span>{t("Removed from this face")}</span>
+                    <small>{removedFaceLayers.length}</small>
+                  </button>
+                  {removedOpen ? (
+                    <ul className="wf-removed-list">
+                      {removedFaceLayers.map((item) => (
+                        <li key={item.id}>
+                          <span>{item.label}</span>
+                          <button type="button" className="secondary-button" onClick={item.putBack}>{t("Put back")}</button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </li>
+              ) : null}
               {layerSearchIsEmpty ? (
                 <li className="wf-layer-empty">
                   <Search size={18} aria-hidden="true" />
@@ -10591,6 +10803,10 @@ export function WatchfaceEditor({
               onPointerCancel={handlePointerEnd}
               onLostPointerCapture={handlePointerEnd}
             >
+              {pageHiddenLayers.map((layer) => (
+                <rect key={`page-hidden:${layer.id}`} data-layer={layer.id} className="wf-page-hidden-box" x={layer.bounds!.x0} y={layer.bounds!.y0}
+                  width={Math.max(1, layer.bounds!.x1 - layer.bounds!.x0)} height={Math.max(1, layer.bounds!.y1 - layer.bounds!.y0)} />
+              ))}
               {componentBoundsOutlines.map(
                 ({ id, bounds, active, draggable, selector }) => (
                   <Fragment key={id}>
@@ -10628,6 +10844,15 @@ export function WatchfaceEditor({
                 height="1"
               />
             </svg>
+            {pageHiddenBadge ? (
+              <span className="wf-page-hidden-badge" style={{
+                left: `${((pageHiddenBadge.bounds!.x0 + pageHiddenBadge.bounds!.x1) / 2 / previewWidth) * 100}%`,
+                top: `${(pageHiddenBadge.bounds!.y1 / previewHeight) * 100}%`
+              }}>
+                <EyeOff size={12} aria-hidden="true" />
+                {t("{{field}} · not on this page", { field: t(pageHiddenBadge.label) })}
+              </span>
+            ) : null}
             {canEditActiveMode && selectionToolbarBox && !dragVisualActive && selectedMovableIds.length > 1 && selectedMovableIds.some((id) => !isPositionLocked(id)) ? (
               <div
                 className={`wf-contextual-align-bar wf-on-face-toolbar${selectionToolbarBox.below ? " is-below" : ""}`}
@@ -10654,6 +10879,7 @@ export function WatchfaceEditor({
                 <span aria-hidden="true" />
                 <button type="button" title={t("Group selection")} aria-label={t("Group selection")} disabled={selectedLayoutItems().length < 2} onClick={linkSelectedLayers}><Group size={15} /></button>
                 <button type="button" title={t("Ungroup selection")} aria-label={t("Ungroup selection")} disabled={!selectionCanUnlink} onClick={unlinkSelectedLayers}><Ungroup size={15} /></button>
+                <button type="button" className="wf-toolbar-delete" title={deleteActionLabel(selectedIds)} aria-label={t("Delete selection")} disabled={!selectedIds.some((id) => deleteTargetFor(id))} onClick={() => requestDeleteLayers(selectedIds)}><Trash2 size={15} /></button>
               </div>
             ) : null}
             {spriteTransform && selectedSpriteCanTransform && canEditActiveMode ? (
@@ -10767,11 +10993,11 @@ export function WatchfaceEditor({
                   type="button"
                   role="menuitem"
                   className="wf-context-menu-danger"
-                  disabled={!selectionIsDeletable()}
-                  onClick={deleteSelected}
+                  disabled={selectedIds.length === 0 || (!selectedIds.some((id) => deleteTargetFor(id)) && !(selectedIds.length === 1 && layers.find((layer) => layer.id === selectedIds[0])?.kind === "background"))}
+                  onClick={() => requestDeleteLayers(selectedIds)}
                 >
-                  <Trash2 size={15} aria-hidden="true" />
-                  <span>{t("Delete")}</span>
+                  {deleteActionLabel(selectedIds) === t("Reset background") ? <RotateCcw size={15} aria-hidden="true" /> : <Trash2 size={15} aria-hidden="true" />}
+                  <span>{deleteActionLabel(selectedIds)}</span>
                 </button>
               </div>
               <p>
@@ -10835,6 +11061,13 @@ export function WatchfaceEditor({
               </button>
             </div>
           ) : null}
+          {deleteNotice ? (
+            <div className="wf-delete-notice" role="status">
+              <span>{deleteNotice}</span>
+              <button type="button" className="secondary-button" onClick={() => { undo(); setDeleteNotice(null); }}>{t("Undo")}</button>
+              <button type="button" className="wf-delete-notice-close" aria-label={t("Dismiss")} onClick={() => setDeleteNotice(null)}><X size={14} aria-hidden="true" /></button>
+            </div>
+          ) : null}
           <div className="wf-stage-toolbar wf-stage-toolbar--floating wf-screens-strip" role="toolbar" aria-label={t("Preview controls")}>
             <span className="wf-screens-label" aria-hidden="true">{t("Screens")}</span>
             <div className="wf-screens-tiles" role="group" aria-label={t("Watch display preview")}>
@@ -10845,8 +11078,52 @@ export function WatchfaceEditor({
                 onClick={() => setPreviewMode("current")}
               >
                 <span className="wf-screen-tile-icon" aria-hidden="true"><SunMedium size={16} /></span>
-                <span className="wf-screen-tile-copy"><strong>{t("Current")}</strong><small>{t("Wrist raised")}</small></span>
+                <span className="wf-screen-tile-copy"><strong>{t("Current")}</strong><small>{stripChartPages.length && previewMode === "current" ? t("Back steps ›") : t("Wrist raised")}</small></span>
               </button>
+              {previewMode === "current" && stripChartPages.length ? (
+                <div className="wf-screens-pages" role="group" aria-label={t("Chart pages, in the order Back steps through them")}>
+                  {stripChartPages.map((page, index) => {
+                    const shown = page.page === shownChartPage;
+                    const bars = page.page === "barometer" || page.page === "tide";
+                    const empty = !bars && page.rows.every(row => row.hidden);
+                    const graph = chartPageGraphLabel(page.page);
+                    const label = templatePageLabel(page.page);
+                    const title = page.fromTemplate ? t("{{number}} · {{page}} · kept by the template, so the watch still stops here. The preview can't show it; remove it under Chart pages.", { number: index + 1, page: label })
+                      : !page.target ? t("{{number}} · {{page}} · graph only, nothing to preview", { number: index + 1, page: label })
+                      : `${index + 1} · ${label} · ${graph}${bars ? ` · ${t("needs phone data")}` : ""}${empty ? ` · ${t("nothing visible, but Back still stops here")}` : ""}`;
+                    return (
+                      <button key={page.page} type="button" className={`wf-page-tile${empty ? " is-empty" : ""}`} aria-pressed={shown}
+                        disabled={!page.target || isPositionLocked("native:chart")} title={title} aria-label={title}
+                        onClick={() => showChartPage(page.page)}>
+                        <span className="wf-page-tile-number" aria-hidden="true">{index + 1}</span>
+                        <span className="wf-page-tile-glyph" aria-hidden="true">
+                          {bars ? <ChartColumn size={15} /> : page.page === "sun" || page.page === "moon" ? <ChartSpline size={15} /> : <Hash size={14} />}
+                        </span>
+                        {shown ? <span className="wf-screen-tile-copy"><strong>{label}</strong><small>{graph}</small></span> : null}
+                        {bars ? <span className="wf-page-tile-phone" aria-hidden="true" /> : null}
+                      </button>
+                    );
+                  })}
+                  {chartPageAddOptions.length && !isPositionLocked("native:chart") ? (
+                    <div className="wf-page-add" ref={chartPageMenuRef}>
+                      <button type="button" className="wf-page-tile is-add" aria-haspopup="menu" aria-expanded={chartPageMenuOpen}
+                        aria-label={t("Add a chart page")} title={t("Add a chart page")} onClick={() => setChartPageMenuOpen(open => !open)}>
+                        <Plus size={15} aria-hidden="true" />
+                      </button>
+                      {chartPageMenuOpen ? (
+                        <div className="wf-page-add-menu" role="menu" aria-label={t("Add a chart page")}>
+                          {chartPageAddOptions.map(option => (
+                            <button key={option.id} type="button" role="menuitem" className="wf-page-add-item" onClick={() => addChartPageFromStrip(option.id)}>
+                              <strong>{option.label}</strong><small>{option.detail}</small>
+                            </button>
+                          ))}
+                          <p className="wf-page-add-note">{t("Each page lands in its fixed place in the Back order.")}</p>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <button
                 type="button"
                 className="wf-screen-tile"
@@ -11367,6 +11644,22 @@ export function WatchfaceEditor({
           onClose={() => setOfficialBrowser(null)}
         />
       ) : null}
+      {deleteRequest ? (
+        <div className="wf-modal-backdrop" role="presentation" onKeyDown={(event) => { if (event.key === "Escape") setDeleteRequest(null); }}>
+          <section className="wf-modal" role="alertdialog" aria-modal="true" aria-labelledby="wf-delete-title" aria-describedby="wf-delete-body">
+            <h2 id="wf-delete-title">{deleteRequest.title}</h2>
+            <p id="wf-delete-body">{deleteRequest.body}</p>
+            <div className="wf-modal-actions">
+              <button className="secondary-button" type="button" autoFocus onClick={() => setDeleteRequest(null)}>{t("Cancel")}</button>
+              <button className="secondary-button danger-button" type="button" onClick={() => {
+                const request = deleteRequest;
+                setDeleteRequest(null);
+                if (request.action) request.action(); else deleteLayers(request.ids, request.unlock);
+              }}>{deleteRequest.confirm}</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {leaveOpen ? (
         <div className="wf-modal-backdrop" role="presentation">
           <section className="wf-modal" role="dialog" aria-modal="true" aria-labelledby="wf-unsaved-title">
@@ -11886,6 +12179,15 @@ export function WatchfaceEditor({
    * keeps the values you tune rather than repeating this identity.
    */
   function renderPropertiesIdentity(layer: EditorLayer) {
+    // A chart says which page it shows and steps through them in Back order.
+    const chartPageIndex = layer.nativeDataId === "chart" && previewMode === "current" ? stripChartPages.findIndex(page => page.page === shownChartPage) : -1;
+    const chartHeaderPage = chartPageIndex >= 0 ? { number: chartPageIndex + 1, page: stripChartPages[chartPageIndex]!.page } : null;
+    const chartStepTargets = stripChartPages.filter(page => page.target);
+    const stepChartPage = (step: number) => {
+      const at = chartStepTargets.findIndex(page => page.page === shownChartPage);
+      const next = chartStepTargets[(at + step + chartStepTargets.length) % chartStepTargets.length];
+      if (next) showChartPage(next.page);
+    };
     const sprite = layer.spriteId
       ? (design.designSprites ?? []).find(
           (candidate) => candidate.id === layer.spriteId
@@ -11929,7 +12231,9 @@ export function WatchfaceEditor({
                 {t(layerDisplayLabel(layer))}
               </strong>
             )}
-            {editorLayerTypeLabel(layer).toLowerCase() !== layer.label.toLowerCase() ? <span className="wf-layer-type-badge">
+            {chartHeaderPage ? <span className="wf-layer-type-badge wf-chart-page-badge">
+              {t("Page {{number}} of {{total}} · {{page}}", { number: chartHeaderPage.number, total: stripChartPages.length, page: templatePageLabel(chartHeaderPage.page) })}
+            </span> : editorLayerTypeLabel(layer).toLowerCase() !== layer.label.toLowerCase() ? <span className="wf-layer-type-badge">
               {typeIcon}
               {editorLayerTypeLabel(layer)}
             </span> : null}
@@ -11945,6 +12249,12 @@ export function WatchfaceEditor({
               {selectedIds.length}
             </span>
           ) : null}
+          {chartHeaderPage && chartStepTargets.length > 1 ? <>
+            <button type="button" className="wf-property-icon-button" disabled={locked} aria-label={t("Previous page")} title={t("Previous page")}
+              onClick={() => stepChartPage(-1)}><ChevronLeft size={16} /></button>
+            <button type="button" className="wf-property-icon-button" disabled={locked} aria-label={t("Next page")} title={t("Next page, as Back on the watch")}
+              onClick={() => stepChartPage(1)}><ChevronRight size={16} /></button>
+          </> : null}
           {layer.canHide ? (
             <button
               type="button"
@@ -11959,6 +12269,13 @@ export function WatchfaceEditor({
             </button>
           ) : null}
           {canLock ? renderLayerPositionLockButton(layer.id, layer.label) : null}
+          {layer.kind === "background" ? (
+            <button type="button" className="wf-property-icon-button" aria-label={t("Reset background")} title={t("Reset background: black, no photo. The watch always draws a background.")}
+              onClick={() => requestDeleteLayers([layer.id])}><RotateCcw size={15} /></button>
+          ) : deleteTargetFor(layer.id) ? (
+            <button type="button" className="wf-property-icon-button wf-property-delete" aria-label={t("Delete {{value1}}", { value1: t(layer.label) })}
+              title={deleteActionLabel([layer.id])} onClick={() => requestDeleteLayers([layer.id])}><Trash2 size={15} /></button>
+          ) : null}
         </div>
       </>
     );
@@ -13054,7 +13371,7 @@ export function WatchfaceEditor({
 
   function renderInspector(layer: EditorLayer) {
     const group = layerGroupLabel(layer);
-    const metricKind = group === "Fixed metrics" || group === "Selectable" || group === "Chart pages" ? watchfaceMetricKind(layer) : null;
+    const metricKind = layer.nativeDataId !== "chart" && (group === "Fixed metrics" || group === "Selectable" || group === "Chart pages") ? watchfaceMetricKind(layer) : null;
     return (
       <>
         {metricKind ? <MetricKindNote kind={metricKind} /> : null}
@@ -13081,10 +13398,13 @@ export function WatchfaceEditor({
             onPatch={patch => updateNativeData(layer.nativeDataId!, patch)}
             chartGroups={layer.nativeDataId === "chart" ? chartGroups : undefined}
             chartReadouts={layer.nativeDataId === "chart" ? chartReadouts : undefined}
-            pageFields={layer.nativeDataId === "chart" ? chartPageFields : undefined}
+            pageFields={layer.nativeDataId === "chart" ? shownPageFields : undefined}
             onSelectField={id => { selectEditorItem(`native:${id}`); }}
             fieldPages={layer.nativeDataId !== "chart" ? nativeLayerChartPages(layer.nativeDataId, design.nativeData, facePageIds) : undefined}
-            onAddDailyPage={facePageIds ? () => setChartPageMode("daily-a", "hidden") : undefined}
+            facePages={design.nativeData?.chart?.enabled ? stripChartPages.map(page => page.page) : facePageIds ?? []}
+            shownPage={shownChartPage}
+            onShowPage={design.nativeData?.chart?.enabled && previewMode === "current" ? showChartPage : undefined}
+            onAddDailyPage={design.nativeData?.chart?.enabled ? () => addChartPageToFace("daily-a") : facePageIds ? () => setChartPageMode("daily-a", "hidden") : undefined}
             onAddMinMaxPartner={(layer.nativeDataId === "weather_temp_min" || layer.nativeDataId === "weather_temp_max")
               && !design.nativeData?.[layer.nativeDataId === "weather_temp_min" ? "weather_temp_max" : "weather_temp_min"]?.enabled
               ? () => addNativeData(layer.nativeDataId === "weather_temp_min" ? "weather_temp_max" : "weather_temp_min") : undefined}
@@ -13097,6 +13417,7 @@ export function WatchfaceEditor({
             removedPages={layer.nativeDataId === "chart" ? NATIVE_CHART_PAGES.filter(page => design.chartPageModes?.[page.id] === "removed").map(page => page.id) : undefined}
             takenReadouts={layer.nativeDataId === "chart" ? NATIVE_CHART_SOURCES.filter(source => design.nativeData?.[source.id]?.enabled).map(source => source.id) : undefined}
             onMakeFixed={layer.nativeDataId === "chart" && previewMode === "current" ? source => { void makeChartReadoutFixed(source); } : undefined}
+            onDeleteReadout={layer.nativeDataId === "chart" ? deleteChartReadout : undefined}
             onError={onError}
             onImportStart={beginSpriteImport}
             onImportFinish={finishSpriteImport}
