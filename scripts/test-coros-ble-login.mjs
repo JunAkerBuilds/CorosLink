@@ -7,7 +7,7 @@ import vm from "node:vm";
 
 const require = createRequire(import.meta.url);
 const { decodeCorosBleLoginKey, createCorosLoginCredential, COROS_BLE_LOGIN_KEY_SETTING, COROS_WATCH_KEY_CHECK_SETTING,
-  maskCorosEmail, nextWatchKeyCheck, summarizeCorosBleLoginKey } = require("../dist-electron/corosBleLoginKey.js");
+  maskCorosEmail, nextWatchKeyCheck, summarizeCorosBleLoginKey, findCorosLoginKeys } = require("../dist-electron/corosBleLoginKey.js");
 const { CorosBleAccountAuth, corosWatchKeyId, formatCorosWatchKeyId } = require("../dist-electron/corosBleAuth.js");
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const userId = "123456789012345678";
@@ -109,6 +109,7 @@ let secureStorage = true, savedCredentials = null, responseData = fixture({ keyI
 let firstConflict = true;
 let releaseResponse;
 let expiredMobileSession = false;
+let rejectHosts = new Set();
 function loadService() {
 const exports = {};
 vm.runInNewContext(fs.readFileSync(filename, "utf8"), {
@@ -123,6 +124,7 @@ vm.runInNewContext(fs.readFileSync(filename, "utf8"), {
     assert.equal(body.appKey.length, 16);
     assert.equal(body.clientType, 1);
     if (rejected) return Response.json({ result: "1030", message: "Login rejected" });
+    if (rejectHosts.has(url.hostname)) return Response.json({ result: "1030", message: "Account is not registered" });
     if (firstConflict && body.checkStatus === 1) {firstConflict = false; return Response.json({result:"1115"});}
     if (releaseResponse === "hold") await new Promise(resolve => { releaseResponse = resolve; });
     const raw = JSON.stringify({result:"0000",data:{accessToken:"synthetic-token",...responseData}})
@@ -130,7 +132,7 @@ vm.runInNewContext(fs.readFileSync(filename, "utf8"), {
     return new Response(raw);
   },
   require(id) {
-    if (id === "electron") return { app: { getPath: () => "/unused" }, nativeImage: {}, safeStorage: {
+    if (id === "electron") return { app: { getPath: () => "/unused", getVersion: () => "0.0.0-test" }, nativeImage: {}, safeStorage: {
       isEncryptionAvailable: () => secureStorage,
       encryptString: text => Buffer.from(`encrypted:${text}`),
       decryptString: bytes => bytes.toString().slice(10)
@@ -269,6 +271,85 @@ assert.equal(unavailable.watchAuthenticationAvailable, false);
 assert.match(unavailable.watchAuthenticationError, /OS secure storage/);
 assert.equal(settings.has(COROS_BLE_LOGIN_KEY_SETTING), false, "keys never fall back to plaintext storage");
 console.log("COROS login key decryption, account identity, fresh signing, regional login, encrypted persistence, account switching, logout, expiry, and offline key restoration passed.");
+
+// ----- Read-only watch key check (issue 162): every key COROS sends, by key ID, against the watch's -----
+{
+  const other = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const otherPublic = other.publicKey.export({ format: "der", type: "spki" }).toString("base64");
+  const otherPrivate = other.privateKey.export({ format: "der", type: "pkcs1" }).toString("base64");
+  const otherId = formatCorosWatchKeyId(corosWatchKeyId(other.publicKey));
+  assert.notEqual(otherId, keyId);
+  // An older key in a second envelope, and a plain cached public key, as the official app keeps per watch.
+  const older = fixture({ keyInfo: { privateKey: wrap(otherPrivate), publicKey: wrap(otherPublic) } }).userKey;
+  const answer = { ...fixture({ keyInfo: { createTime: ISSUED } }), previousUserKey: older,
+    deviceList: [{ deviceId: "W541", cachedKey: { publicKey: wrap(otherPublic), userId: userId } }] };
+  const found = findCorosLoginKeys(answer, userId);
+  assert.deepEqual(found.keys.map(key => [key.field, key.keyId]), [
+    ["userKey", keyId], ["previousUserKey", otherId], ["deviceList[0].cachedKey.publicKey", otherId]]);
+  assert.equal(found.keys[0].accountId, "•••• 5678");
+  assert.equal(found.keys[0].issuedAt, ISSUED * 1000);
+  assert.ok(found.fields.includes("deviceList[0].deviceId") && found.fields.includes("appEncKey"));
+  const foundText = JSON.stringify(found);
+  for (const secret of [privateDer.slice(100, 140), otherPrivate.slice(100, 140), otherPublic.slice(100, 140), appEncKey, "W541"]) {
+    assert.equal(foundText.includes(secret), false, "the finder returns key IDs and field names only");
+  }
+  assert.deepEqual(findCorosLoginKeys({ ...answer, userKey: "bad" }, userId).keys[0], { field: "userKey", error: "COROS sent a key CorosLink couldn't read." });
+  assert.deepEqual(findCorosLoginKeys(null, userId), { keys: [], fields: [] });
+
+  // The watch's own key ID is kept with a mismatch, and only a well-formed one.
+  let mismatch = nextWatchKeyCheck(undefined, "mismatch", "COROS APEX 4 81D0", keyId, at, otherId);
+  assert.equal(summarizeCorosBleLoginKey(decoded, mismatch).problem.watchKeyId, otherId);
+  assert.equal(summarizeCorosBleLoginKey(decoded, nextWatchKeyCheck(undefined, "mismatch", "w", keyId, at, "cc8d")).problem.watchKeyId, undefined);
+  assert.equal(summarizeCorosBleLoginKey(decoded, nextWatchKeyCheck(undefined, "rejected", "w", keyId, at, otherId)).problem.watchKeyId, undefined);
+
+  secureStorage = true; rejected = false; firstConflict = false; releaseResponse = undefined;
+  const checker = loadService();
+  savedCredentials = null;
+  assert.equal(JSON.stringify(await checker.checkCorosWatchKey()), '{"needsPassword":true}', "no saved password asks for one");
+  savedCredentials = { account: "runner@example.com", pwdHash: "0123456789abcdef0123456789abcdef" };
+  const savedKey = Buffer.from("encrypted:" + JSON.stringify({ ...decoded, savedAt: at })).toString("base64");
+  settings.set(COROS_BLE_LOGIN_KEY_SETTING, savedKey);
+  settings.set(COROS_WATCH_KEY_CHECK_SETTING, mismatch);
+  settings.set("watchfaces.mobileSession", Buffer.from("encrypted:" + JSON.stringify({ accessToken: "old-token", userId, region: "cn" })).toString("base64"));
+  responseData = answer;
+  rejectHosts = new Set(["api.coros.com", "apieu.coros.com"]);
+  calls.length = 0;
+  const result = await checker.checkCorosWatchKey();
+  rejectHosts = new Set();
+  assert.deepEqual(calls.map(call => call.url.hostname), ["apicn.coros.com", "api.coros.com", "apieu.coros.com"], "the signed-in server first, then the others");
+  assert.ok(calls.every(call => call.url.pathname === "/coros/user/login"), "only sign-in requests");
+  assert.equal(result.watchKeyId, otherId); assert.equal(result.savedKeyId, keyId); assert.equal(result.watch, "COROS APEX 4 81D0");
+  assert.deepEqual({ ...result.match }, { region: "cn", field: "previousUserKey", keyId: otherId });
+  assert.deepEqual(JSON.parse(JSON.stringify(result.servers.map(server => [server.region, server.signedIn]))), [["cn", true], ["us", false], ["eu", false]]);
+  assert.match(result.servers[1].error, /Account is not registered/);
+  assert.equal(settings.get(COROS_BLE_LOGIN_KEY_SETTING), savedKey, "the check never replaces the saved key");
+  assert.equal(settings.get(COROS_WATCH_KEY_CHECK_SETTING), mismatch);
+  assert.equal(JSON.parse(Buffer.from(settings.get("watchfaces.mobileSession"), "base64").toString().slice(10)).accessToken, "synthetic-token",
+    "the signed-in server keeps the newer session token");
+  assert.match(result.report, new RegExp(`Key ID on the watch: ${otherId}`));
+  assert.match(result.report, new RegExp(`previousUserKey: ${otherId}.*<- matches the watch`));
+  assert.match(result.report, /Result: COROS's cn server sent the watch's key/);
+  for (const secret of [privateDer.slice(100, 140), otherPrivate.slice(100, 140), appEncKey, "runner@example.com", "synthetic-token", "old-token", userId]) {
+    assert.equal(JSON.stringify(result).includes(secret), false, `the check result must not contain ${secret.slice(0, 12)}…`);
+  }
+  // No match: says so; a busy check refuses a second one.
+  settings.set(COROS_WATCH_KEY_CHECK_SETTING, nextWatchKeyCheck(undefined, "mismatch", "COROS PACE 4", keyId, at, "CC8D"));
+  responseData = fixture();
+  const none = await checker.checkCorosWatchKey({ password: "typed-password" });
+  assert.equal(none.match, undefined);
+  assert.match(none.report, /none of the keys COROS sent match the watch's key \(CC8D\)/);
+  releaseResponse = "hold";
+  const pending = checker.checkCorosWatchKey();
+  await assert.rejects(checker.checkCorosWatchKey(), /already running/);
+  while (typeof releaseResponse !== "function") await new Promise(resolve => setTimeout(resolve, 1));
+  const release = releaseResponse; releaseResponse = undefined; release();
+  await pending;
+  settings.delete("watchfaces.mobileSession");
+  settings.delete(COROS_WATCH_KEY_CHECK_SETTING);
+  savedCredentials = null;
+  responseData = fixture({ keyInfo: { createTime: ISSUED } });
+  console.log("Watch key check: every key in a sign-in answer by ID, the watch's reported ID kept, all three servers, no saved key changed, session kept, no secrets in the report passed.");
+}
 
 // ----- Watch key backup: a passphrase-protected .coroswatchkey file, restored on this or another computer -----
 const os = await import("node:os");

@@ -32,7 +32,8 @@ export interface CorosBleLoginKey {
 /** The last watch sign-ins with a saved key, by its key ID. */
 export interface CorosWatchKeyCheck {
   lastUsed?: { at: number; watch: string; keyId: string };
-  problem?: { at: number; watch: string; keyId: string; result: "mismatch" | "rejected" };
+  /** `watchKeyId` is the key ID the watch reported on a mismatch. */
+  problem?: { at: number; watch: string; keyId: string; result: "mismatch" | "rejected"; watchKeyId?: string };
 }
 
 function accountId(value: unknown): string {
@@ -186,7 +187,7 @@ export function corosBleLoginKeyId(key: Pick<CorosBleLoginKey, "privateKeyDer">)
   return formatCorosWatchKeyId(corosWatchKeyId(createPrivateKey({ key: Buffer.from(key.privateKeyDer, "base64"), format: "der", type: "pkcs1" })));
 }
 
-function readWatchKeyCheck(value: unknown): CorosWatchKeyCheck {
+export function readWatchKeyCheck(value: unknown): CorosWatchKeyCheck {
   let parsed: unknown;
   try { parsed = typeof value === "string" ? JSON.parse(value) : value; } catch { return {}; }
   if (!parsed || typeof parsed !== "object") return {};
@@ -200,15 +201,17 @@ function readWatchKeyCheck(value: unknown): CorosWatchKeyCheck {
   return {
     ...(lastUsed ? { lastUsed: { at: lastUsed.at as number, watch: lastUsed.watch as string, keyId: lastUsed.keyId as string } } : {}),
     ...(problem && (problem.result === "mismatch" || problem.result === "rejected")
-      ? { problem: { at: problem.at as number, watch: problem.watch as string, keyId: problem.keyId as string, result: problem.result } } : {})
+      ? { problem: { at: problem.at as number, watch: problem.watch as string, keyId: problem.keyId as string, result: problem.result,
+        ...(typeof problem.watchKeyId === "string" && /^[0-9A-F]{4}$/.test(problem.watchKeyId) ? { watchKeyId: problem.watchKeyId } : {}) } } : {})
   };
 }
 
 /** The check record after a watch sign-in: a success clears the problem. */
-export function nextWatchKeyCheck(previous: unknown, outcome: "ok" | "mismatch" | "rejected", watch: string, keyId: string, at = Date.now()): string {
+export function nextWatchKeyCheck(previous: unknown, outcome: "ok" | "mismatch" | "rejected", watch: string, keyId: string, at = Date.now(), watchKeyId?: string): string {
   const check = readWatchKeyCheck(previous);
   const entry = { at, watch: watch.slice(0, 128), keyId };
-  return JSON.stringify(outcome === "ok" ? { lastUsed: entry } : { ...check, problem: { ...entry, result: outcome } });
+  const reported = outcome === "mismatch" && watchKeyId && /^[0-9A-F]{4}$/.test(watchKeyId) ? { watchKeyId } : {};
+  return JSON.stringify(outcome === "ok" ? { lastUsed: entry } : { ...check, problem: { ...entry, result: outcome, ...reported } });
 }
 
 /**
@@ -227,7 +230,8 @@ export function summarizeCorosBleLoginKey(key: CorosBleLoginKey, check: unknown)
     keyId, accountId: `•••• ${key.accountUserId.slice(-4)}`,
     ...(accountEmail ? { accountEmail } : {}), ...(savedAt ? { savedAt } : {}), ...(issuedAt ? { issuedAt } : {}),
     ...(used ? { lastUsed: used } : {}),
-    ...(current ? { problem: { at: current.at, watch: current.watch, result: current.result } } : {})
+    ...(current ? { problem: { at: current.at, watch: current.watch, result: current.result,
+      ...(current.watchKeyId ? { watchKeyId: current.watchKeyId } : {}) } } : {})
   };
 }
 
@@ -256,4 +260,87 @@ export function createCorosLoginCredential(key: CorosBleLoginKey, deviceName: st
   } catch {
     throw new Error("COROS watch authentication needs a COROS watch and a valid signed-in account.");
   }
+}
+
+/** A key found in a COROS sign-in answer, by where it was: never key material. */
+export interface CorosLoginKeyFinding {
+  /** Where the key was, as a field path ("userKey", "deviceList[0].userKey"). */
+  field: string;
+  /** Four hex digits, as a watch reports it; missing when the key couldn't be read. */
+  keyId?: string;
+  /** The masked account the key belongs to, "•••• 1234". */
+  accountId?: string;
+  /** When COROS issued the key (ms). */
+  issuedAt?: number;
+  /** Why the key couldn't be read; never quotes it. */
+  error?: string;
+}
+
+const FINDING_LIMIT = 24;
+const FIELD_NAME_LIMIT = 120;
+// Fields that hold secrets or session state rather than a watch key.
+const SKIPPED_FIELDS = new Set(["appEncKey", "accessToken", "refreshToken", "pwd", "password"]);
+
+function keyIdFromPublicDer(publicDer: Buffer): string {
+  return formatCorosWatchKeyId(corosWatchKeyId(createPublicKey({ key: publicDer, format: "der", type: "spki" })));
+}
+
+/** Base64 long and block-aligned enough to be an encrypted key envelope like `userKey`. */
+function looksLikeKeyEnvelope(value: string): boolean {
+  const compact = value.replace(/[\r\n]/g, "");
+  return compact.length >= 1_000 && compact.length <= 16_000 && /^[A-Za-z0-9+/]+={0,2}$/.test(compact) &&
+    Buffer.from(compact, "base64").length % 16 === 0;
+}
+
+/**
+ * Every watch key a COROS sign-in answer carries, with its key ID: the usual
+ * `userKey`, any other field shaped like it, and any plain public key. For
+ * finding which key a watch holds. Nothing here is saved, and no key material
+ * or field value leaves this function; `fields` lists field paths only.
+ */
+export function findCorosLoginKeys(data: unknown, expectedUserId: string): { keys: CorosLoginKeyFinding[]; fields: string[] } {
+  const keys: CorosLoginKeyFinding[] = [];
+  const fields: string[] = [];
+  if (!data || typeof data !== "object") return { keys, fields };
+  const login = data as Record<string, unknown>;
+  const masked = (id: string) => `•••• ${id.slice(-4)}`;
+  const envelope = (field: string, value: string) => {
+    try {
+      const key = decodeCorosBleLoginKey({ ...login, userKey: value }, expectedUserId);
+      keys.push({ field, keyId: corosBleLoginKeyId(key), accountId: masked(key.accountUserId), ...(key.issuedAt ? { issuedAt: key.issuedAt } : {}) });
+    } catch {
+      keys.push({ field, error: field === "userKey" ? "COROS sent a key CorosLink couldn't read." : "Not a readable watch key." });
+    }
+  };
+  const visit = (value: unknown, path: string, depth: number) => {
+    if (keys.length >= FINDING_LIMIT || depth > 4) return;
+    if (Array.isArray(value)) {
+      value.slice(0, 20).forEach((item, index) => visit(item, `${path}[${index}]`, depth + 1));
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    const record = value as Record<string, unknown>;
+    // A plain key pair, as the official app caches them per watch: the public half is enough.
+    if (typeof record.publicKey === "string") {
+      try {
+        const publicDer = base64(record.publicKey, 2_000);
+        const owner = typeof record.userId === "string" || typeof record.userId === "number" ? String(record.userId) : undefined;
+        keys.push({ field: path ? `${path}.publicKey` : "publicKey", keyId: keyIdFromPublicDer(publicDer),
+          ...(owner && /^\d{1,20}$/.test(owner) ? { accountId: masked(owner) } : {}) });
+      } catch {
+        keys.push({ field: path ? `${path}.publicKey` : "publicKey", error: "Not a readable public key." });
+      }
+    }
+    for (const [name, child] of Object.entries(record)) {
+      const field = path ? `${path}.${name}` : name;
+      if (fields.length < FIELD_NAME_LIMIT) fields.push(field);
+      if (SKIPPED_FIELDS.has(name) || name === "publicKey" || name === "privateKey") continue;
+      if (typeof child === "string") {
+        if (depth === 0 && name === "userKey") envelope(field, child);
+        else if (looksLikeKeyEnvelope(child)) envelope(field, child);
+      } else visit(child, field, depth + 1);
+    }
+  };
+  visit(login, "", 0);
+  return { keys, fields };
 }

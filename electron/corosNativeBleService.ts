@@ -662,9 +662,9 @@ export class CorosNativeBleService {
   }
 
   /** Remembers, for Connection details, which watch last accepted or refused the saved key. Best effort. */
-  private recordKeyCheck(outcome: "ok" | "mismatch" | "rejected", keyId: string, watch: string | undefined): void {
+  private recordKeyCheck(outcome: "ok" | "mismatch" | "rejected", keyId: string, watch: string | undefined, watchKeyId?: string): void {
     try {
-      setSetting(COROS_WATCH_KEY_CHECK_SETTING, nextWatchKeyCheck(getSetting(COROS_WATCH_KEY_CHECK_SETTING), outcome, watch || "COROS watch", keyId));
+      setSetting(COROS_WATCH_KEY_CHECK_SETTING, nextWatchKeyCheck(getSetting(COROS_WATCH_KEY_CHECK_SETTING), outcome, watch || "COROS watch", keyId, Date.now(), watchKeyId));
     } catch (error) {
       recordDiagnosticError("corosBle:keyCheck", error instanceof Error ? error : new Error(String(error)));
     }
@@ -694,7 +694,9 @@ export class CorosNativeBleService {
         authenticated = account.authenticatedPayload(base, challenge);
       } catch (error) {
         // Refused unsigned: the watch holds a different key, and signing would make it erase that one.
-        if (error instanceof CorosBindReplyError && error.keyMismatch) this.recordKeyCheck("mismatch", keyId, this.state.deviceName);
+        if (error instanceof CorosBindReplyError && error.keyMismatch) {
+          this.recordKeyCheck("mismatch", keyId, this.state.deviceName, formatCorosWatchKeyId(challenge.readUInt16LE(7)));
+        }
         throw error;
       }
       const bound = await exchange(authenticated, Math.min(240, this.state.maximumWriteBytes ?? 20));

@@ -718,6 +718,19 @@
 .watch-link-key-form input[aria-invalid="true"] { border-color: var(--error-border); }
 .watch-link-key-form .watch-link-key-actions { margin-top: 4px; }
 
+/* The read-only key check: a summary line and the plain-text report to copy into an issue. */
+.watch-link-key-check { display: grid; gap: 8px; }
+.watch-link-key-check textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--watch-link-rule);
+  border-radius: 8px;
+  background: var(--watch-link-control);
+  color: var(--text-primary);
+  font: 11.5px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  resize: vertical;
+}
+
 .watch-link-key p:not(.watch-link-note),
 .watch-link-events p,
 .watch-link-events li,

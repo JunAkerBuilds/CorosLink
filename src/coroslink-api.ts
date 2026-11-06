@@ -276,6 +276,8 @@ export interface CorosLinkApi {
   logoutCorosWatchfaces: () => Promise<CorosWatchfaceStatus>;
   /** Asks to confirm, then removes the saved watch key; resolves with the status either way. */
   forgetCorosWatchKey?: () => Promise<CorosWatchfaceStatus>;
+  /** Read-only: signs in on each COROS server and compares every key's ID with the watch's. Saves nothing. */
+  checkCorosWatchKey?: (input?: { email?: string; password?: string }) => Promise<import("../electron/types").CorosWatchKeyCheckResult>;
   /** Asks where to save, then writes the saved watch key encrypted with `passphrase`. */
   backupCorosWatchKey?: (passphrase: string) => Promise<import("../electron/types").CorosWatchKeyBackupResult>;
   /** Opens a native dialog to choose a watch key backup; the file stays in the main process. */

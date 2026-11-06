@@ -128,6 +128,22 @@ async function main() {
       assert.match(await js(`Array.from(document.querySelectorAll('.watch-link-details dd')).at(-1).textContent`), /^Valid until .+ [AP]Mas read at the last connection$/, 'satellite data from the last connection says so');
       assert.equal(await js(`document.querySelector('.watch-link-details > .watch-menu-hint')`), null, 'a saved watch key needs no sign-in hint');
       await shoot(`${theme}-details-offline`);
+      // Issue 162: the watch's own key ID is shown, and the read-only key check asks for a password, then shows a report to copy.
+      await show('key-mismatch');
+      await openPage('details');
+      const keyRows = await js(`Object.fromEntries(Array.from(document.querySelectorAll('.watch-link-key dl > div')).map(div => [div.querySelector('dt').textContent, div.querySelector('dd').textContent]))`);
+      assert.equal(keyRows['Key ID'], 'DCA2'); assert.equal(keyRows['Key ID on the watch'], 'CC8D');
+      await js(`window.mock.calls.length = 0; Array.from(document.querySelectorAll('.watch-link-key button')).find(button => button.textContent === 'Check watch key').click(); void 0`);
+      await until(`document.querySelector('.watch-link-key-form[aria-label="Check watch key"] input[type=password]') !== null`);
+      await js(`(() => { const input = document.querySelector('.watch-link-key-form[aria-label="Check watch key"] input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'synthetic'); input.dispatchEvent(new Event('input', { bubbles: true })); })(); void 0`);
+      await js(`document.querySelector('.watch-link-key-form[aria-label="Check watch key"] button[type=submit]').click(); void 0`);
+      await until(`document.querySelector('.watch-link-key-check textarea') !== null`);
+      assert.deepEqual(await js(`window.mock.calls`), ['checkKey', 'checkKey:password']);
+      assert.equal(await js(`document.querySelector('.watch-link-key-check p').textContent`), 'None of the keys COROS sent match your watch’s key (CC8D).');
+      assert.match(await js(`document.querySelector('.watch-link-key-check textarea').value`), /Key ID on the watch: CC8D/);
+      assert.equal(await js(`document.querySelector('.watch-link-key-form')`), null, 'the password form closes with the result');
+      await checkLayout(`${theme} key check`);
+      await shoot(`${theme}-details-key-check`);
 
       // Syncing: the button reports how much of the activity file has been read, without moving anything.
       await show('connected');

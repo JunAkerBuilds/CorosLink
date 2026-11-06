@@ -31,8 +31,9 @@ import { getWatchfaceTarget, watchfaceTargetsForMagic, type WatchfaceTarget } fr
 import { WATCHFACE_TEMPLATE_SNAPSHOT } from "./watchfaceCatalogSnapshot";
 import {
   COROS_BLE_LOGIN_KEY_SETTING, COROS_BLE_IMPORTED_KEY_SETTING, COROS_WATCH_KEY_CHECK_SETTING, corosBleLoginKeyId, decodeCorosBleLoginKey,
-  maskCorosEmail, sameCorosBleLoginKey, summarizeCorosBleLoginKey, type CorosBleLoginKey
+  findCorosLoginKeys, maskCorosEmail, readWatchKeyCheck, sameCorosBleLoginKey, summarizeCorosBleLoginKey, type CorosBleLoginKey
 } from "./corosBleLoginKey";
+import { formatWatchKeyCheckReport } from "./corosWatchKeyCheckReport";
 import { openWatchKeyBackup, sealWatchKeyBackup } from "./corosWatchKeyBackup";
 import type {
   CorosWatchfaceArchive,
@@ -58,6 +59,8 @@ import type {
   CorosWatchfaceSpriteFolder,
   CorosWatchfaceStatus,
   CorosWatchKeySummary,
+  CorosWatchKeyCheckResult,
+  CorosWatchKeyCheckServer,
   CorosWatchfaceTemplateAsset,
   CorosWatchfaceTemplateAssetOptions,
   CorosWatchfaceTemplateDetails,
@@ -374,15 +377,8 @@ export async function loginCorosWatchfacesWithSavedCredentials(
   );
 }
 
-async function establishCorosWatchfaceSession(
-  account: string,
-  pwdHash: string,
-  region?: CorosWatchfaceRegion
-): Promise<CorosWatchfaceStatus> {
-  const revision = ++mobileLoginRevision;
-  const resolvedRegion = normalizeWatchfaceRegion(region);
-  const baseUrl = mobileApiBaseUrl(resolvedRegion);
-
+/** The mobile `/user/login` request, as the official app makes it. Saves nothing. */
+async function mobileLogin(account: string, pwdHash: string, baseUrl: string) {
   let envelope = await mobileRequest<{ accessToken?: string }>(
     "/user/login",
     {
@@ -403,7 +399,69 @@ async function establishCorosWatchfaceSession(
       body: JSON.stringify(buildMobileLoginPayload(account, pwdHash, 0))
     });
   }
+  return envelope;
+}
 
+let watchKeyCheckRunning = false;
+
+/**
+ * The read-only watch key check (issue 162): signs in on each COROS server and
+ * lists every key COROS returns, by key ID, against the key ID the watch last
+ * reported. It never saves or replaces a key and never talks to the watch. On
+ * the server CorosLink is signed in to, it keeps the new session token, as
+ * signing in again would. Uses the saved account unless a password is given.
+ */
+export async function checkCorosWatchKey(input: { email?: string; password?: string } = {}): Promise<CorosWatchKeyCheckResult> {
+  const saved = getStoredCorosCredentials();
+  const account = (input.email?.trim() || saved?.account || "").trim();
+  const pwdHash = input.password ? hashCorosPassword(input.password) : saved && saved.account === account ? saved.pwdHash : undefined;
+  if (!account || !pwdHash) return { needsPassword: true };
+  if (watchKeyCheckRunning) throw new Error("The watch key check is already running.");
+  watchKeyCheckRunning = true;
+  try {
+    const session = readStoredSession();
+    const savedKey = savedWatchKeySummary();
+    const problem = readWatchKeyCheck(getSetting(COROS_WATCH_KEY_CHECK_SETTING)).problem;
+    const watchKeyId = problem?.result === "mismatch" ? problem.watchKeyId : undefined;
+    const first = session?.region ?? suggestWatchfaceRegion();
+    const regions = [first, ...(["cn", "us", "eu"] as const).filter(region => region !== first)];
+    const servers: CorosWatchKeyCheckServer[] = [];
+    for (const region of regions) {
+      const host = MOBILE_API_HOSTNAMES[region];
+      try {
+        const envelope = await mobileLogin(account, pwdHash, mobileApiBaseUrl(region));
+        const userId = extractDecimalProperty(envelope.raw, "userId") ?? "";
+        const accessToken = envelope.data?.accessToken?.trim();
+        // Same account and server as the saved session: keep it signed in with the newer token.
+        if (accessToken && session && session.region === region && session.userId && session.userId === userId) {
+          writeStoredSession({ ...session, accessToken });
+        }
+        const found = findCorosLoginKeys(envelope.data, userId);
+        servers.push({ region, host, signedIn: true, ...(userId ? { accountId: `•••• ${userId.slice(-4)}` } : {}),
+          keys: found.keys, fields: found.fields });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        servers.push({ region, host, signedIn: false, keys: [], error: message.replace(/\s+/g, " ").slice(0, 200) });
+      }
+    }
+    const match = watchKeyId ? servers.flatMap(server => server.keys.filter(key => key.keyId === watchKeyId)
+      .map(key => ({ region: server.region, field: key.field, keyId: watchKeyId })))[0] : undefined;
+    const result = { watchKeyId, savedKeyId: savedKey?.keyId, watch: problem?.watch, ...(match ? { match } : {}), servers };
+    return { ...result, report: formatWatchKeyCheckReport(result, {
+      version: app.getVersion(), platform: `${process.platform} ${process.arch}`, signedInRegion: session?.region, checkedAt: Date.now() }) };
+  } finally {
+    watchKeyCheckRunning = false;
+  }
+}
+
+async function establishCorosWatchfaceSession(
+  account: string,
+  pwdHash: string,
+  region?: CorosWatchfaceRegion
+): Promise<CorosWatchfaceStatus> {
+  const revision = ++mobileLoginRevision;
+  const resolvedRegion = normalizeWatchfaceRegion(region);
+  const envelope = await mobileLogin(account, pwdHash, mobileApiBaseUrl(resolvedRegion));
   const accessToken = envelope.data?.accessToken?.trim();
   if (!accessToken) {
     throw new Error("COROS login did not return a session token.");

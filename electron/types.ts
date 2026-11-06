@@ -121,8 +121,31 @@ export interface CorosWatchKeySummary {
   /** The last watch that accepted this key. */
   lastUsed?: { at: number; watch: string };
   /** A watch that held a different key, or rejected this one, since it was last accepted. */
-  problem?: { at: number; watch: string; result: "mismatch" | "rejected" };
+  problem?: { at: number; watch: string; result: "mismatch" | "rejected"; watchKeyId?: string };
 }
+
+/** One COROS server the watch key check signed in to. No key material, no email. */
+export interface CorosWatchKeyCheckServer {
+  region: CorosWatchfaceRegion;
+  host: string;
+  signedIn: boolean;
+  /** The masked account COROS signed in to, "•••• 1234". */
+  accountId?: string;
+  keys: Array<{ field: string; keyId?: string; accountId?: string; issuedAt?: number; error?: string }>;
+  /** Field paths in COROS's answer, names only. */
+  fields?: string[];
+  error?: string;
+}
+
+/**
+ * What the read-only watch key check found: every key COROS returns, by key ID,
+ * against the key the watch reported. `report` is plain text to paste in an issue.
+ */
+export type CorosWatchKeyCheckResult =
+  | { needsPassword: true }
+  | { needsPassword?: false; watchKeyId?: string; savedKeyId?: string; watch?: string;
+      match?: { region: CorosWatchfaceRegion; field: string; keyId: string };
+      servers: CorosWatchKeyCheckServer[]; report: string };
 
 /** A watch key backup export: whether a file was saved (no path, no key material). */
 export interface CorosWatchKeyBackupResult { saved: boolean }

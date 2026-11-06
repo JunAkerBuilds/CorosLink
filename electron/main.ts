@@ -237,6 +237,7 @@ import {
   exportCorosWatchfaceProject,
   exportCorosWatchfaceArchive,
   forgetCorosWatchKey,
+  checkCorosWatchKey,
   createCorosWatchKeyBackup,
   openCorosWatchKeyBackup,
   saveRestoredCorosWatchKey,
@@ -1613,6 +1614,14 @@ function registerIpcHandlers(): void {
       remember?: boolean
     ) => loginCorosWatchfaces(email, password, region, remember)
   );
+
+  // Read-only: signs in on each COROS server and lists key IDs; never saves a key or talks to the watch.
+  ipcMain.handle("watchfaces:checkWatchKey", (event, input?: { email?: unknown; password?: unknown }) => {
+    mainWindowSender(event, "watch key check");
+    const email = typeof input?.email === "string" && input.email.length <= 254 ? input.email : undefined;
+    const password = typeof input?.password === "string" && input.password.length <= 1024 ? input.password : undefined;
+    return checkCorosWatchKey({ email, password });
+  });
 
   ipcMain.handle(
     "watchfaces:loginSaved",

@@ -299,6 +299,8 @@ const api = {
     ipcRenderer.invoke("watchfaces:logout"),
   forgetCorosWatchKey: (): Promise<CorosWatchfaceStatus> =>
     ipcRenderer.invoke("watchfaces:forgetWatchKey"),
+  checkCorosWatchKey: (input?: { email?: string; password?: string }): Promise<import("./types").CorosWatchKeyCheckResult> =>
+    ipcRenderer.invoke("watchfaces:checkWatchKey", input ?? {}),
   // The passphrase goes to the main process once per operation; the key never comes back.
   backupCorosWatchKey: (passphrase: string): Promise<import("./types").CorosWatchKeyBackupResult> =>
     ipcRenderer.invoke("watchfaces:backupWatchKey", { passphrase }),

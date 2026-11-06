@@ -1,10 +1,10 @@
 import { t, useLanguage, getLocale, formatDate, formatNumber } from "../i18n/tools";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
-  AlertCircle, BatteryMedium, Bluetooth, ChevronDown, ChevronLeft, ChevronRight, Download, Info, KeyRound, LayoutGrid, Loader2,
-  MessageSquare, RefreshCw, RotateCw, Search, Send, Settings, Smartphone, Unplug, Upload, Usb, Watch, type LucideIcon
+  AlertCircle, BatteryMedium, Bluetooth, Check, ChevronDown, ChevronLeft, ChevronRight, Download, Info, KeyRound, LayoutGrid, Loader2,
+  Copy, MessageSquare, RefreshCw, RotateCw, Search, SearchCheck, Send, Settings, Smartphone, Unplug, Upload, Usb, Watch, type LucideIcon
 } from "lucide-react";
-import type { CorosWatchKeySummary, CorosWatchfaceStatus, WatchStatus } from "../../electron/types";
+import type { CorosWatchKeyCheckResult, CorosWatchKeySummary, CorosWatchfaceStatus, WatchStatus } from "../../electron/types";
 import type { CorosNativeBleDeviceChoice, CorosNativeBleSnapshot } from "../../electron/corosNativeBleTypes";
 import type { CorosLinkApi } from "../coroslink-api";
 import { formatBytes } from "../media/libraryUtils";
@@ -519,8 +519,11 @@ function WatchKeySection({ api, saved, info, onStatus, onSignIn }: {
 }) {
   useLanguage();
   const id = useId();
-  const [working, setWorking] = useState<"remove" | "backup" | "choose" | "restore" | null>(null);
-  const [form, setForm] = useState<"backup" | "restore" | null>(null);
+  const [working, setWorking] = useState<"remove" | "backup" | "choose" | "restore" | "check" | null>(null);
+  const [form, setForm] = useState<"backup" | "restore" | "check" | null>(null);
+  const [checkResult, setCheckResult] = useState<Extract<CorosWatchKeyCheckResult, { servers: unknown }> | null>(null);
+  const [copied, setCopied] = useState(false);
+  const canCheck = typeof api?.checkCorosWatchKey === "function";
   const [passphrase, setPassphrase] = useState("");
   const [repeat, setRepeat] = useState("");
   const [note, setNote] = useState<{ error: boolean; text: string } | null>(null);
@@ -548,6 +551,33 @@ function WatchKeySection({ api, saved, info, onStatus, onSignIn }: {
       setWorking(null);
     }
   }
+
+  // Read-only: the main process signs in on each COROS server and compares key IDs. A missing saved password asks for one.
+  const runCheck = (password?: string) => attempt("check", async () => {
+    setCheckResult(null); setCopied(false);
+    const result = await api!.checkCorosWatchKey!(password ? { password } : {});
+    if (result.needsPassword) { setForm("check"); return; }
+    setForm(null);
+    setCheckResult(result);
+  }, t("Could not check the watch key."));
+
+  const check = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!passphrase) return;
+    const secret = passphrase;
+    clearPassphrases();
+    void runCheck(secret);
+  };
+
+  const copyReport = async () => {
+    if (!checkResult) return;
+    try {
+      await navigator.clipboard.writeText(checkResult.report);
+      setCopied(true);
+    } catch {
+      setNote({ error: true, text: t("Could not copy the report.") });
+    }
+  };
 
   const remove = () => attempt("remove", async () => { onStatus(await api!.forgetCorosWatchKey!()); }, t("Could not remove the watch key."));
 
@@ -588,9 +618,15 @@ function WatchKeySection({ api, saved, info, onStatus, onSignIn }: {
     [t("Account"), info.accountEmail ?? t("COROS account {{p0}}", { p0: info.accountId })],
     [t("Saved", undefined, "watchKey"), info.savedAt ? when(info.savedAt) : t("Unknown")],
     [t("Last used"), info.lastUsed ? `${watchDisplayName(info.lastUsed.watch)} · ${when(info.lastUsed.at)}` : "—"],
-    [t("Key ID"), info.keyId]
+    [t("Key ID"), info.keyId],
+    ...(info.problem?.watchKeyId ? [[t("Key ID on the watch"), info.problem.watchKeyId] as [string, string]] : [])
   ] : [];
   const problem = info?.problem;
+  const checkSummary = checkResult ? checkResult.match
+    ? t("Found your watch’s key ({{p0}}) on the {{p1}} server.", { p0: checkResult.match.keyId, p1: checkResult.match.region.toUpperCase() })
+    : checkResult.watchKeyId
+      ? t("None of the keys COROS sent match your watch’s key ({{p0}}).", { p0: checkResult.watchKeyId })
+      : t("Connect your watch once so CorosLink can read its key ID, then check again.") : "";
   const icon = (kind: NonNullable<typeof working>, Icon: LucideIcon) => working === kind
     ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <Icon size={15} aria-hidden="true" />;
 
@@ -639,12 +675,34 @@ function WatchKeySection({ api, saved, info, onStatus, onSignIn }: {
           <button className="secondary-button watch-link-button" type="button" disabled={working !== null} onClick={closeForm}>{t("Cancel")}</button>
         </div>
       </form> : null}
+      {form === "check" ? <form className="watch-link-key-form" aria-label={t("Check watch key")} onSubmit={check}>
+        <label htmlFor={`${id}-check`}>{t("COROS password")}</label>
+        <input id={`${id}-check`} type="password" autoComplete="current-password" maxLength={1024} value={passphrase} disabled={working !== null}
+          onChange={event => { setPassphrase(event.target.value); setNote(null); }} />
+        <div className="watch-link-key-actions">
+          <button className="primary-button watch-link-button" type="submit" disabled={working !== null || !passphrase}>
+            {icon("check", SearchCheck)}{t("Check", undefined, "watchKey")}</button>
+          <button className="secondary-button watch-link-button" type="button" disabled={working !== null} onClick={closeForm}>{t("Cancel")}</button>
+        </div>
+      </form> : null}
+      {checkResult ? <div className="watch-link-key-check" role="status">
+        <p>{checkSummary}</p>
+        <textarea readOnly aria-label={t("Watch key check report")} value={checkResult.report} rows={8} />
+        <div className="watch-link-key-actions">
+          <button className="secondary-button watch-link-button" type="button" onClick={() => void copyReport()}>
+            {copied ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}{copied ? t("Report copied") : t("Copy report")}</button>
+        </div>
+      </div> : null}
       {saved !== null && form === null ? <div className="watch-link-key-actions">
         {saved && canBackUp ? <button className="secondary-button watch-link-button" type="button" disabled={working !== null}
           onClick={() => { setNote(null); clearPassphrases(); setForm("backup"); }}>
           <Download size={15} aria-hidden="true" />{t("Back up watch key")}</button> : null}
         {canRestore ? <button className="secondary-button watch-link-button" type="button" disabled={working !== null} onClick={() => void choose()}>
           {icon("choose", Upload)}{t("Restore watch key…")}</button> : null}
+        {canCheck && (problem || saved === false) ? <button className="secondary-button watch-link-button" type="button" disabled={working !== null}
+          title={t("Signs in to each COROS server and compares its keys with your watch’s. Nothing is saved or sent to the watch.")}
+          onClick={() => { setNote(null); clearPassphrases(); void runCheck(); }}>
+          {icon("check", SearchCheck)}{t("Check watch key")}</button> : null}
         {saved && canRemove ? <button className="secondary-button watch-link-button" type="button" disabled={working !== null} onClick={() => void remove()}>
           {icon("remove", KeyRound)}{t("Remove watch key")}</button> : null}
       </div> : null}

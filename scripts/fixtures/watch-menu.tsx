@@ -54,6 +54,9 @@ const scenarios: Record<string, { snapshot: CorosNativeBleSnapshot | null; usbWa
   'auto-paused': { snapshot: { ...base, phase: 'disconnected' }, watchKeySaved: true, localOnly: true, autoSync: { enabled: true, intervalHours: 3, paused: 'unpinned', pausedAt: now - 60_000 } },
   'auto-paused-mismatch': { snapshot: { ...base, phase: 'disconnected' }, watchKeySaved: true, watchKey: { keyId: '7A3F', accountId: '•••• 5678', lastUsed: { at: now - 3 * hour, watch: pace4.deviceName! } }, localOnly: true, autoSync: { enabled: true, intervalHours: 3, paused: 'mismatch', pausedAt: now - 60_000 } },
   // Two devices with the watch's name; the second is the remembered one.
+  // Issue 162: the watch holds another key than the saved one (key IDs as the PACE 4 reporter saw them).
+  'key-mismatch': { snapshot: { ...base, phase: 'disconnected', deviceName: pace4.deviceName }, watchKeySaved: true, localOnly: true,
+    watchKey: { keyId: 'DCA2', accountId: '•••• 5678', problem: { at: now - 60_000, watch: pace4.deviceName!, result: 'mismatch', watchKeyId: 'CC8D' } } },
   'same-name': { snapshot: { ...base, discoveredDevices: [{ deviceId: 'other', deviceName: 'COROS PACE 4 2F1A6C' }, { deviceId: 'pace4', deviceName: 'COROS PACE 4 2F1A6C', remembered: true }] }, watchKeySaved: true, localOnly: true }
 };
 
@@ -89,6 +92,13 @@ const api = {
   onWatchAutoSyncChange: (callback: (state: WatchAutoSyncState) => void) => { mock.autoSyncListeners.add(callback); return () => mock.autoSyncListeners.delete(callback); },
   sendCorosNotification: async () => ({ ok: true }),
   forgetCorosWatchKey: async () => ({ watchAuthenticationAvailable: false }),
+  // Read-only key check: asks for the password once, then answers with a report.
+  checkCorosWatchKey: async (input?: { password?: string }) => {
+    mock.calls.push(input?.password ? 'checkKey:password' : 'checkKey');
+    if (!input?.password) return { needsPassword: true };
+    return { watchKeyId: 'CC8D', savedKeyId: 'DCA2', watch: pace4.deviceName, servers: [],
+      report: 'CorosLink watch key check (read-only)\nKey ID on the watch: CC8D\nResult: none of the keys COROS sent match the watch\'s key (CC8D).' };
+  },
   createCorosPhonePairingCode: async () => { throw new Error('not used'); }
 } as unknown as CorosLinkApi;
 
