@@ -240,6 +240,7 @@ import {
   openCorosWatchKeyBackup,
   saveRestoredCorosWatchKey,
   getCorosBatteryReport,
+  probeCorosWeather,
   getCorosWatchfaceStatus,
   importCorosWatchfaceShareLink,
   listCorosPairedDevices,
@@ -1647,6 +1648,8 @@ function registerIpcHandlers(): void {
   );
 
   if (!app.isPackaged) {
+    // Dev-only, read-only: what weather (pressure/tide) COROS's server returns.
+    ipcMain.handle("dev:probeCorosWeather", () => probeCorosWeather());
     ipcMain.handle("gear:query", () => queryCorosGear());
     ipcMain.handle(
       "gear:save",

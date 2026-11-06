@@ -392,6 +392,8 @@ const api = {
   getCorosBatteryReport: (
     input: CorosBatteryQueryInput
   ): Promise<CorosBatteryReport> => ipcRenderer.invoke("watchfaces:getBatteryReport", input),
+  /** Dev builds only: decode COROS weather/query for a public coordinate. */
+  probeCorosWeather: (): Promise<unknown> => ipcRenderer.invoke("dev:probeCorosWeather"),
   queryCorosGear: (): Promise<CorosGearCatalog> =>
     ipcRenderer.invoke("gear:query"),
   saveCorosGear: (input: CorosGearSaveInput): Promise<CorosGearCatalog> =>

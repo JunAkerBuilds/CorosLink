@@ -12,6 +12,14 @@ import {
   storeCorosCredentials
 } from "./corosCredentialStore";
 import { createStoreZip } from "./zipStore";
+import {
+  decodeProtobufGeneric,
+  decodeWeatherMessage,
+  decodeWeatherStruct,
+  summarizeForecast,
+  type WeatherForecastSummary,
+  type WeatherStructReport
+} from "./corosWeatherDecode";
 import { recompressPngLossless } from "./pngRecompress";
 import { recoverCompiledCorosWatchface } from "./corosCompiledWatchface";
 import { parseCorosFaceMagic } from "./corosBinLayout";
@@ -1247,6 +1255,144 @@ export async function getCorosBatteryReport(
     body: JSON.stringify({ deviceId, firmwareType, uuid })
   });
   return normalizeCorosBatteryReport(response.data);
+}
+
+export interface CorosWeatherProbeResult {
+  outputPath: string;
+  workingShape: string | null;
+  attempts: Array<{
+    shape: string;
+    coord: string;
+    httpStatus: number | null;
+    result: string | null;
+    message: string | null;
+    hasWeather: boolean;
+    hasWeatherStruct: boolean;
+    city: string | null;
+    lat: number | null;
+    long: number | null;
+    error?: string;
+  }>;
+  forecastSummary: WeatherForecastSummary | null;
+  weatherStruct: Array<{ byte0: number; byte1: number; length: number; trailer: number; headerHex: string }>;
+}
+
+/**
+ * Dev-only, read-only diagnostic: asks COROS's mobile `weather/query` what it
+ * returns for a fixed public coastal coordinate (San Francisco) and reports
+ * whether hourly pressure / tide values and tide events are present. Writes a
+ * decoded JSON report (no token, no YFHeader) to the user data folder.
+ */
+export async function probeCorosWeather(): Promise<CorosWeatherProbeResult> {
+  const session = requireSession();
+  const baseUrl = mobileApiBaseUrl(session.region);
+  const lat = 37.7749;
+  const lng = -122.4194;
+  // The app's Retrofit call: POST form-urlencoded, header accessToken, field
+  // `coord`, built from (lng/1e7, lat/1e7) doubles. The string format isn't in
+  // the recovered code, so try the plausible shapes.
+  const shapes: Array<{ shape: string; coord: string }> = [
+    { shape: "lng,lat decimal", coord: `${lng},${lat}` },
+    { shape: "lat,lng decimal", coord: `${lat},${lng}` },
+    { shape: "JSON {lo,la}", coord: JSON.stringify({ lo: lng, la: lat }) },
+    { shape: "JSON {lng,lat}", coord: JSON.stringify({ lng, lat }) },
+    { shape: "lng,lat E7", coord: `${Math.round(lng * 1e7)},${Math.round(lat * 1e7)}` }
+  ];
+
+  const attempts: CorosWeatherProbeResult["attempts"] = [];
+  const decodedByShape: Record<string, unknown> = {};
+  let best: { shape: string; weather?: string; weatherStruct?: string; distance: number } | null = null;
+
+  for (const { shape, coord } of shapes) {
+    const attempt: CorosWeatherProbeResult["attempts"][number] = {
+      shape, coord, httpStatus: null, result: null, message: null,
+      hasWeather: false, hasWeatherStruct: false, city: null, lat: null, long: null
+    };
+    attempts.push(attempt);
+    try {
+      const headers: Record<string, string> = {
+        ...mobileHeaders(session.accessToken, session.userId),
+        "Content-Type": "application/x-www-form-urlencoded"
+      };
+      // Token goes only in the `accesstoken` header (never in the URL).
+      const response = await fetch(`${baseUrl}/weather/query`, {
+        method: "POST",
+        headers,
+        body: new URLSearchParams({ coord }).toString()
+      });
+      attempt.httpStatus = response.status;
+      const raw = await response.text();
+      let payload: MobileApiEnvelope<{ weather?: string; weatherStruct?: string }> | null = null;
+      try {
+        payload = parseCorosMobileJson(raw) as MobileApiEnvelope<{ weather?: string; weatherStruct?: string }>;
+      } catch {
+        attempt.error = `Unreadable response (${raw.length} bytes)`;
+      }
+      if (!payload) continue;
+      attempt.result = mobileApiResult(payload) || null;
+      attempt.message = payload.message ?? null;
+      const weather = typeof payload.data?.weather === "string" ? payload.data.weather : undefined;
+      const weatherStruct = typeof payload.data?.weatherStruct === "string" ? payload.data.weatherStruct : undefined;
+      attempt.hasWeather = Boolean(weather);
+      attempt.hasWeatherStruct = Boolean(weatherStruct);
+      if (!weather) continue;
+      const forecast = decodeWeatherMessage("WeatherForecastUI", Buffer.from(weather, "base64"));
+      const summary = summarizeForecast(forecast);
+      attempt.city = summary.city;
+      attempt.lat = summary.lat;
+      attempt.long = summary.long;
+      decodedByShape[shape] = summary;
+      // lat/long may be E7 or E5 etc.; pick the scale that lands nearest SF.
+      const distance = summary.lat !== null && summary.long !== null
+        ? Math.min(...[1, 1e5, 1e6, 1e7].map((scale) =>
+          Math.abs(summary.lat! / scale - lat) + Math.abs(summary.long! / scale - lng)))
+        : 1000;
+      if (!best || distance < best.distance) best = { shape, weather, weatherStruct, distance };
+    } catch (error) {
+      attempt.error = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  let forecast: unknown = null;
+  let forecastGeneric: unknown = null;
+  let forecastSummary: WeatherForecastSummary | null = null;
+  let structReport: WeatherStructReport | null = null;
+  if (best?.weather) {
+    const bytes = Buffer.from(best.weather, "base64");
+    const decoded = decodeWeatherMessage("WeatherForecastUI", bytes);
+    forecast = decoded;
+    forecastGeneric = decodeProtobufGeneric(bytes);
+    forecastSummary = summarizeForecast(decoded);
+  }
+  if (best?.weatherStruct) {
+    structReport = decodeWeatherStruct(Buffer.from(best.weatherStruct, "base64"));
+  }
+
+  const outputPath = path.join(app.getPath("userData"), "coros-weather-probe.json");
+  const report = {
+    generatedAt: new Date().toISOString(),
+    region: session.region ?? DEFAULT_WATCHFACE_REGION,
+    endpoint: `${baseUrl}/weather/query`,
+    query: { lat, lng, note: "Public coordinate (San Francisco), not the user's location." },
+    workingShape: best?.shape ?? null,
+    attempts,
+    summariesByShape: decodedByShape,
+    forecastSummary,
+    weatherStruct: structReport,
+    forecast,
+    forecastGeneric,
+    rawBase64: best ? { weather: best.weather ?? null, weatherStruct: best.weatherStruct ?? null } : null
+  };
+  fs.writeFileSync(outputPath, JSON.stringify(report, null, 2));
+
+  return {
+    outputPath,
+    workingShape: best?.shape ?? null,
+    attempts,
+    forecastSummary,
+    weatherStruct: (structReport?.sections ?? []).map(({ byte0, byte1, length, trailer, headerHex }) =>
+      ({ byte0, byte1, length, trailer, headerHex }))
+  };
 }
 
 /** Lists paired watches from the authenticated account's mobile profile. */
