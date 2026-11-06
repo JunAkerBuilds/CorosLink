@@ -2163,6 +2163,8 @@ export const watchfacesGerman: Record<string, string> = {
   "Google Fonts families": "Google-Fonts-Schriften",
   "Loaded by name": "Per Name geladen",
   "Couldn’t load “{{family}}” from Google Fonts. Check the name and your connection.": "„{{family}}“ konnte nicht von Google Fonts geladen werden. Prüfe den Namen und deine Verbindung.",
+  "Use {{family}} {{weight}} from Google Fonts": "{{family}} {{weight}} von Google Fonts verwenden",
+  "Use {{family}} {{weight}} Italic from Google Fonts": "{{family}} {{weight}} Kursiv von Google Fonts verwenden",
   "Loading font…": "Schrift wird geladen…",
   "AM and PM pictures": "AM- und PM-Bilder",
   "Pictures": "Bilder",

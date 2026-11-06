@@ -13,9 +13,11 @@ export interface WatchfaceFontRename {
   to: string;
   /** The weight the old family's regular (400) draws as in the new one. */
   weight: number;
+  /** The old family was an italic cut ("RobotoBoldItalic"): what drew with it becomes italic. */
+  italic?: boolean;
 }
 
-type Typed = { fontFamily?: string; fontWeight?: number };
+type Typed = { fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic" };
 
 export function renameWatchfaceFontFamily(design: CorosWatchfaceDesignState, rename: WatchfaceFontRename): CorosWatchfaceDesignState {
   const next = renameInMode(design, undefined, rename) as CorosWatchfaceDesignState;
@@ -40,14 +42,17 @@ function renameInMode<T extends CorosWatchfaceModeDesignState>(mode: T, base: Co
     if (item.fontWeight !== undefined) out.fontWeight = shift(item.fontWeight);
     // Its own old family with an inherited weight the parent does not shift.
     else if (!inheritsWeight || (item.fontFamily && !matches(parentFamily))) out.fontWeight = shift(parentWeight);
+    // Same rule for the style: set where it is the item's own, inherited otherwise.
+    if (rename.italic && (item.fontStyle !== undefined || !inheritsWeight || (item.fontFamily && !matches(parentFamily)))) out.fontStyle = "italic";
     return out;
   }
   const modeFamily = mode.fontFamily ?? base?.fontFamily;
   const modeWeight = mode.fontWeight ?? base?.fontWeight ?? 400;
   let out: T = { ...mode };
   if (mode.fontFamily !== undefined || mode.fontWeight !== undefined) {
-    const own = fix({ fontFamily: mode.fontFamily, fontWeight: mode.fontWeight }, base?.fontFamily, base?.fontWeight ?? 400, Boolean(base));
-    out = { ...out, ...(own.fontFamily !== undefined ? { fontFamily: own.fontFamily } : {}), ...(own.fontWeight !== undefined ? { fontWeight: own.fontWeight } : {}) };
+    const own = fix({ fontFamily: mode.fontFamily, fontWeight: mode.fontWeight, fontStyle: mode.fontStyle }, base?.fontFamily, base?.fontWeight ?? 400, Boolean(base));
+    out = { ...out, ...(own.fontFamily !== undefined ? { fontFamily: own.fontFamily } : {}), ...(own.fontWeight !== undefined ? { fontWeight: own.fontWeight } : {}),
+      ...(own.fontStyle !== undefined ? { fontStyle: own.fontStyle } : {}) };
   }
   const styles = <R extends Record<string, Typed | undefined> | undefined>(record: R): R => record
     ? Object.fromEntries(Object.entries(record).map(([id, item]) => [id, item ? fix(item, modeFamily, modeWeight) : item])) as R
@@ -62,13 +67,13 @@ function renameInMode<T extends CorosWatchfaceModeDesignState>(mode: T, base: Co
   }
   const exerciseFamily = (mode.metricStyles ?? base?.metricStyles)?.exercise?.fontFamily || modeFamily;
   if (mode.exerciseSeparator && !mode.exerciseSeparator.artwork && matches(exerciseFamily)) {
-    out = { ...out, exerciseSeparator: { ...mode.exerciseSeparator, fontWeight: shift(mode.exerciseSeparator.fontWeight ?? 700) } };
+    out = { ...out, exerciseSeparator: { ...mode.exerciseSeparator, fontWeight: shift(mode.exerciseSeparator.fontWeight ?? 700), ...(rename.italic ? { fontStyle: "italic" as const } : {}) } };
   }
   if (mode.ampmIndicator) out = { ...out, ampmIndicator: fix(mode.ampmIndicator, undefined, 400, false) };
   if (mode.backgroundElements) {
     out = { ...out, backgroundElements: mode.backgroundElements.map(element => {
       if (element.kind !== "text" || !matches(element.fontFamily)) return element;
-      return { ...element, fontFamily: rename.to, weight: shift(Number(element.weight ?? 400) || 400) };
+      return { ...element, fontFamily: rename.to, weight: shift(Number(element.weight ?? 400) || 400), ...(rename.italic ? { fontStyle: "italic" as const } : {}) };
     }) };
   }
   if (mode.nativeData) {

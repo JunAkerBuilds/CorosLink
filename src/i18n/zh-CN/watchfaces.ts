@@ -2164,6 +2164,8 @@ export const watchfacesChinese: Readonly<Record<string, string>> = {
   "Google Fonts families": "Google Fonts 字体",
   "Loaded by name": "按名称加载",
   "Couldn’t load “{{family}}” from Google Fonts. Check the name and your connection.": "无法从 Google Fonts 加载“{{family}}”。请检查名称和网络连接。",
+  "Use {{family}} {{weight}} from Google Fonts": "使用 Google Fonts 的 {{family}} {{weight}}",
+  "Use {{family}} {{weight}} Italic from Google Fonts": "使用 Google Fonts 的 {{family}} {{weight}} 斜体",
   "Loading font…": "正在加载字体…",
   "AM and PM pictures": "AM 和 PM 图片",
   "Pictures": "图片",

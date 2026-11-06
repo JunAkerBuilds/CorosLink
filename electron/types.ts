@@ -1189,6 +1189,8 @@ export interface CorosWatchfaceDesignState {
    * template declares without a Studio chart layer (templateChartPages.ts).
    */
   chartPageModes?: Partial<Record<string, "hidden" | "removed">>;
+  /** Pages the chart's own Delete set to "removed"; Put back on the chart restores only these. */
+  chartPagesRemovedWithChart?: string[];
   metricChanges: Record<string, boolean>;
   metricStyles: Record<string, { solidAlpha?: boolean; align?: "left" | "center" | "right"; color?: string; scale: number; fontSize?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Optional native calorie goal arc/bar configuration. */

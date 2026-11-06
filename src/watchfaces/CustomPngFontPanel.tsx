@@ -2,6 +2,7 @@ import { t, useLanguage } from "../i18n/watchfaces";
 import { useWatchfaceStudioSimple } from "./watchfaceStudioMode";
 import { CircleAlert, Files, FolderOpen, LayoutGrid, Sparkles, Trash2 } from "lucide-react";
 import { WatchfaceHint } from "./WatchfaceHint";
+import { EditableNumberInput } from "./EditableNumberInput";
 import { OfficialAssetBrowser, officialAssetToSpriteFolder } from "./OfficialAssetBrowser";
 import { useEffect, useRef, useState } from "react";
 import type {
@@ -560,15 +561,16 @@ function CustomPngFontPanelBody({
           <div className="wf-png-set-layout-fields">
             <label>
               <span>{t("Columns")}</span>
-              <input
+              <EditableNumberInput
                 className="wf-png-font-number"
                 disabled={controlsDisabled}
-                type="number"
                 min="1"
                 max="64"
+                step="1"
                 value={activeRasterFont.columns}
-                onChange={(event) =>
-                  updateRasterFont({ columns: Math.max(1, Math.min(64, Number(event.target.value) || 1)) })
+                fallback={activeRasterFont.columns}
+                onValueChange={(columns) =>
+                  updateRasterFont({ columns: Math.max(1, Math.min(64, Math.round(columns) || 1)) })
                 }
               />
             </label>

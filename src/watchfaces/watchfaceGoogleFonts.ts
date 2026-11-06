@@ -81,14 +81,18 @@ export interface WatchfaceGoogleFontName {
 export function parseWatchfaceGoogleFontName(name: string): WatchfaceGoogleFontName | null {
   let rest = normalizeWatchfaceFontFamily(name).toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
   if (!rest) return null;
+  const compact = (family: string) => family.toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
+  const known = [...WATCHFACE_GOOGLE_FONTS.map(font => font.family), ...rememberedWatchfaceGoogleFonts()];
+  // A family whose own name ends in a weight word ("Archivo Black") is that family, not a weight of another.
+  const exact = () => known.find(candidate => compact(candidate) === rest);
   let italic = false, weight: number | undefined;
+  if (exact()) return { family: exact()!, weight: 400, italic };
   if (rest.endsWith("italic")) { italic = true; rest = rest.slice(0, -"italic".length); }
+  if (exact()) return { family: exact()!, weight: 400, italic };
   const word = WEIGHT_WORDS.find(([text]) => rest.endsWith(text) && rest.length > text.length);
   if (word) { weight = word[1]; rest = rest.slice(0, -word[0].length); }
   if (!italic && rest.endsWith("italic")) { italic = true; rest = rest.slice(0, -"italic".length); }
-  const compact = (family: string) => family.toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
-  const family = [...WATCHFACE_GOOGLE_FONTS.map(font => font.family), ...rememberedWatchfaceGoogleFonts()]
-    .find(candidate => compact(candidate) === rest);
+  const family = exact();
   return family ? { family, weight: weight ?? 400, italic } : null;
 }
 

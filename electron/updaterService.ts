@@ -10,6 +10,14 @@ import type { AppUpdateSnapshot } from "./types";
 const AUTO_CHECK_KEY = "updater.autoCheck";
 const AUTO_DOWNLOAD_KEY = "updater.autoDownload";
 const STARTUP_CHECK_DELAY_MS = 5000;
+// The app only checks at startup, so without these one GitHub hiccup would
+// hide a new release until the next launch.
+const TRANSIENT_RETRY_DELAYS_MS = [60_000, 5 * 60_000];
+// electron-updater wraps these 404s, so they carry no HTTP status of their own.
+const RELEASE_NOT_FOUND_CODES = new Set([
+  "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND",
+  "ERR_UPDATER_LATEST_VERSION_NOT_FOUND"
+]);
 
 // electron-updater takes noticeable time to load, and development builds
 // never use it; load it the first time the updater actually runs.
@@ -101,15 +109,31 @@ function getReleasePageUrl(version?: string): string {
   return `https://github.com/JunAkerBuilds/CorosLink/releases/tag/v${version}`;
 }
 
-function formatUpdaterError(error: unknown): string {
-  const message =
-    error instanceof Error
-      ? error.message
-      : typeof error === "string"
-        ? error
-        : "Could not check for updates.";
+function readHttpStatus(error: unknown): number | undefined {
+  const status = (error as { statusCode?: unknown } | null | undefined)?.statusCode;
+  if (typeof status === "number") return status;
+  // ERR_UPDATER_LATEST_VERSION_NOT_FOUND wraps any failure of /releases/latest
+  // (a 503 included) and keeps only the cause's text: "…release exists: Error: 503 …".
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  const message = (error as { message?: unknown } | null | undefined)?.message;
+  if (code !== "ERR_UPDATER_LATEST_VERSION_NOT_FOUND" || typeof message !== "string") return undefined;
+  const wrapped = /release exists: (?:[A-Za-z]*Error: )?(\d{3})\s/.exec(message)?.[1];
+  return wrapped ? Number(wrapped) : undefined;
+}
 
-  if (message.includes("404")) {
+function isTransientUpdaterError(error: unknown): boolean {
+  const status = readHttpStatus(error);
+  return status !== undefined && (status === 429 || status >= 500);
+}
+
+function formatUpdaterError(error: unknown): string {
+  const status = readHttpStatus(error);
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+
+  if (
+    status === 404 ||
+    (status === undefined && typeof code === "string" && RELEASE_NOT_FOUND_CODES.has(code))
+  ) {
     const version = snapshot.availableVersion;
     const target = version
       ? `CorosLink ${version}`
@@ -117,7 +141,19 @@ function formatUpdaterError(error: unknown): string {
     return `Update download failed. Download ${target} from GitHub: ${getReleasePageUrl(version)}`;
   }
 
-  return message;
+  // An HttpError's message holds the URL and every response header, cookies
+  // included, so it is never shown as is.
+  if (isTransientUpdaterError(error)) {
+    return `GitHub is busy right now (HTTP ${status}). Try again in a few minutes.`;
+  }
+  if (status !== undefined) {
+    return `GitHub could not provide the update (HTTP ${status}). Try again later.`;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return typeof error === "string" ? error : "Could not check for updates.";
 }
 
 function resolveInstallDetails(
@@ -368,8 +404,37 @@ export function initializeAppUpdater(window: BrowserWindow): void {
   if (autoCheck) {
     startupCheckTimer = setTimeout(() => {
       startupCheckTimer = undefined;
-      void checkForAppUpdates();
+      void runAutomaticCheck();
     }, STARTUP_CHECK_DELAY_MS);
+  }
+}
+
+/** Resolves to the error when the check failed. */
+async function runUpdateCheck(): Promise<{ error: unknown } | undefined> {
+  try {
+    await electronUpdater().autoUpdater.checkForUpdates();
+    return undefined;
+  } catch (error) {
+    setSnapshot({ status: "error", error: formatUpdaterError(error) });
+    return { error };
+  }
+}
+
+async function runAutomaticCheck(retriesUsed = 0): Promise<void> {
+  const failure = await runUpdateCheck();
+  const retryDelay = TRANSIENT_RETRY_DELAYS_MS[retriesUsed];
+
+  if (
+    failure &&
+    isTransientUpdaterError(failure.error) &&
+    retryDelay !== undefined &&
+    snapshot.autoCheck &&
+    startupCheckTimer === undefined
+  ) {
+    startupCheckTimer = setTimeout(() => {
+      startupCheckTimer = undefined;
+      void runAutomaticCheck(retriesUsed + 1);
+    }, retryDelay);
   }
 }
 
@@ -378,12 +443,9 @@ export async function checkForAppUpdates(): Promise<AppUpdateSnapshot> {
     return getAppUpdateSnapshot();
   }
 
-  try {
-    await electronUpdater().autoUpdater.checkForUpdates();
-  } catch (error) {
-    setSnapshot({ status: "error", error: formatUpdaterError(error) });
-  }
-
+  // A check the user asked for replaces any retry still waiting.
+  clearScheduledUpdateCheck();
+  await runUpdateCheck();
   return getAppUpdateSnapshot();
 }
 

@@ -311,13 +311,13 @@ function forecastBody(forecast: WatchForecast, city: string, now: Date, hours: n
  * header, so hours after the first 48 (then 24) go without "feels like" when
  * needed (the watch shows it only for the hour under way, and CorosLink sends
  * a new forecast on every connection), and then the furthest hours are left
- * out; two days ahead always fit.
+ * out, down to a day ahead (the barometer chart needs 18 hours ahead).
  */
 export function encodeWatchWeather(forecast: WatchForecast, city: string, now: Date): Buffer {
   const encode = (hours: number, feelsLikeHours: number) => encodeWatchFile(forecastBody(forecast, city, now, hours, feelsLikeHours), WEATHER_FILE);
   let hours = Math.min(forecast.hourly.length, HOURS - Math.min(forecast.pastPressure.length, PAST_HOURS));
   let file = encode(hours, hours);
   for (const feelsLikeHours of [48, 24]) if (file.length > TRAINING_BLOCK_BYTES) file = encode(hours, feelsLikeHours);
-  while (file.length > TRAINING_BLOCK_BYTES && hours > 48) file = encode(--hours, 24);
+  while (file.length > TRAINING_BLOCK_BYTES && hours > 24) file = encode(--hours, 24);
   return file;
 }

@@ -1,5 +1,6 @@
 import { t, useLanguage, getLocale, midSentence } from "../i18n/watchfaces";
 import { WatchfaceColorInput } from "./WatchfaceColorInput";
+import { EditableNumberInput } from "./EditableNumberInput";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChevronDown, Eye, EyeOff, FolderInput, ImagePlus, Pin, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceNativePartStyle } from "../../electron/types";
@@ -377,9 +378,9 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
   }
   const numberControl = (label: string, value: number, change: (value: number) => void, min = 0, max = 1600, physical = false) => {
     const factor = physical ? coordinateScale : 1;
-    return <label>{t(label)}<input aria-label={t(label)} type="number" min={Math.ceil(min * factor)} max={Math.floor(max * factor)} step={physical ? 1 : 0.1} value={physical ? Math.round(value * factor) : Math.round(value * 100) / 100} onChange={event => {
-      if (event.target.value === "") return;
-      change(Math.max(min,Math.min(max,Number(event.target.value) / factor)));
+    const shown = physical ? Math.round(value * factor) : Math.round(value * 100) / 100;
+    return <label>{t(label)}<EditableNumberInput aria-label={t(label)} min={Math.ceil(min * factor)} max={Math.floor(max * factor)} step={physical ? 1 : 0.1} value={shown} fallback={shown} onValueChange={next => {
+      change(Math.max(min,Math.min(max,next / factor)));
     }} /></label>;
   };
   const colorControl = (label: string, value: string, change: (color: string) => void) => <label className="field">{t(label)}<span className="watchface-color-control"><WatchfaceColorInput key={`${id}:${style.chartSource ?? ""}:${partKey}:${label}`} aria-label={t(label)} value={value} onValueChange={(color) => change(color)} /><code>{value}</code></span></label>;

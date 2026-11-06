@@ -11,12 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Separate °C and °F labels for the current temperature.** In Studio, select the temperature, open Units, and choose Celsius (°C) or Fahrenheit (°F) to give each its own label. The watch shows the one that matches its setting. Faces with a plain ° stay as they are.
 - **Watchmaker checks below-zero and Fahrenheit readings.** It now keeps a minus sign on temperatures and uses a plain ° or both °C and °F, and Studio's validation warns when a minus or unit is missing or a single label would be wrong in the other unit.
+- **A redesigned Watch Face Studio editor.** Properties sit in one sidebar panel, grouped by what you use them for. An **Add** picker gathers everything you can put on the face, and a strip at the top of the stage holds the face's screens and chart pages. **Face colors** shows every color the face uses and recolors all the parts that share one.
+- **Google Fonts in Studio.** The font picker has a Google Fonts tab with families picked for big digits, and it can load any other Google family by name. A template font such as "RobotoBold" that this computer lacks gets a one-click switch to Google's Roboto at that weight, italic included.
+- **Chart pages as screens of the face.** Add a chart a page at a time, see pages in the order Back steps through them, and give fields that change with the page their own value per page. Pages that only show a graph now open in Studio.
+- **Minimum and maximum temperature as one layer**, moved and styled together.
+- **Change digits** sheet with a reading preview, a cleaner PNG set source and ⓘ tips. You can also replace the AM and PM pictures.
 - **Strokes, SWOLF and lengths for your swims.** Swims synced from your watch now show the stroke, stroke count, SWOLF and stroke rate of every interval, with your rests in between and your fastest marked. **Lengths**, next to **Intervals**, lists each length of a pool swim. A **Swim** card adds pool length, strokes, average and best SWOLF, best pace, stroke rate, distance per stroke and water temperature. Pace is per 100 m, **Swim time** leaves out your rests, and the chart can show your stroke rate and the water temperature. A pool's distances read in its own unit, metres or yards. Coach reads all of it too, interval by interval and length by length. Exported FIT files include the lengths, strokes, stroke types, SWOLF and pool length.
 
 ### Fixed
 
 - **AM/PM on more templates.** Studio now offers the AM/PM indicator on templates that support it but ship no AM/PM pictures, such as the one behind Nixie Circuit, and draws the labels in your chosen font.
-
+- **Barometer charts draw on the watch.** CorosLink now sends hourly pressure, including the past six hours, in the weather format COROS's own app uses, so barometer chart pages show their bars.
+- **Hiding or deleting the Chart takes its pages off the watch.** That includes the pages the template declares on its own. Pages you set to keep with nothing visible stay. Put back brings the chart and those pages back.
 - **Update checks cope with GitHub being busy.** When GitHub is overloaded, CorosLink now shows a short message instead of a raw server response, and tries an automatic check again after a minute and after five minutes.
 - **Antigravity failures appear in the error report.** When a Coach answer, connection check or web lookup through Antigravity fails, Settings → Error logs now lists it with the steps it reached, how long each took, whether the tools were reached, and the last lines Antigravity logged, so a report shows where it stopped.
 - **Swims no longer show strokes as climb.** A swim's stroke count was listed as elevation gain, and its laps could mix up lengths, intervals and rests. Swims you already synced are corrected the next time CorosLink starts.
