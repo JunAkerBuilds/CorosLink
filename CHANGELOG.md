@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.75] - 2026-11-06
+
 ### Added
 
 - **Separate °C and °F labels for the current temperature.** In Studio, select the temperature, open Units, and choose Celsius (°C) or Fahrenheit (°F) to give each its own label. The watch shows the one that matches its setting. Faces with a plain ° stay as they are.
