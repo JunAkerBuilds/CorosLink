@@ -290,6 +290,7 @@ import {
   toStudioOptions
 } from "./watchfaceCompose";
 import {
+  isTemplateBackgroundUntouched,
   makeDefaultDesign,
   MAX_DESIGN_SPRITES,
   renderDesignBackground
@@ -1279,6 +1280,27 @@ export function WatchfaceEditor({
     setHistoryState(next);
   }
 
+  /** The template's own background picture: what a new design starts from, and what export compares it with. */
+  async function loadTemplateBackgroundAsset(
+    templateDetails: CorosWatchfaceTemplateDetails
+  ): Promise<CorosWatchfaceTemplateAsset | undefined> {
+    for (const assetPath of getTemplateBackgroundAssetPaths(templateDetails)) {
+      try {
+        // Most templates have no COROS custom background, and older
+        // ones only one of the preview variants.
+        const [asset] = await api.loadCorosWatchfaceTemplateAssets(
+          starterArchive.archiveId,
+          [assetPath],
+          { skipMissing: true }
+        );
+        if (asset) return asset;
+      } catch {
+        // An undecodable candidate falls through to the next one.
+      }
+    }
+    return undefined;
+  }
+
   function setDesign(
     action:
       | CorosWatchfaceDesignState
@@ -1752,23 +1774,7 @@ export function WatchfaceEditor({
         let templateArtwork: CorosWatchfaceTemplateAsset | undefined;
         let aodArtwork: CorosWatchfaceTemplateAsset | undefined;
         if (!initialDesign) {
-          for (const assetPath of getTemplateBackgroundAssetPaths(described)) {
-            try {
-              // Most templates have no COROS custom background, and older
-              // ones only one of the preview variants.
-              const [asset] = await api.loadCorosWatchfaceTemplateAssets(
-                starterArchive.archiveId,
-                [assetPath],
-                { skipMissing: true }
-              );
-              if (asset) {
-                templateArtwork = asset;
-                break;
-              }
-            } catch {
-              // An undecodable candidate falls through to the next one.
-            }
-          }
+          templateArtwork = await loadTemplateBackgroundAsset(described);
         }
         if (hasWatchfaceAod(described) && !initialDesign?.modeDesigns?.aod) {
           const preferred = pickWatchPreviewResolution(described, targetWatchModel ?? targetFirmwareType);
@@ -8219,10 +8225,17 @@ export function WatchfaceEditor({
           aodComposition?.minWatchFaceVersion ?? 0
         ) || undefined
       };
-      const [exportPreview, exportBackground] = await Promise.all([
+      const [exportPreview, exportBackground, templateBackground] = await Promise.all([
         renderExportPreview(designSnapshot, "current", snapshotBackground),
-        renderExportBackground(snapshotBackground)
+        renderExportBackground(snapshotBackground),
+        loadTemplateBackgroundAsset(details).catch(() => undefined)
       ]);
+      // An untouched template background ships as its own files, not the
+      // 800 px render scaled back down (memory-in-pixel dividers stay as COROS drew them).
+      // Only when the artwork came from a background file: a template whose design started from its
+      // preview picture (watchface_customize.png) has background files that never showed in Studio.
+      const keepTemplateBackground = Boolean(templateBackground && /(?:^|\/)(?:background|custom_bg)\.png$/i.test(templateBackground.path)) &&
+        isTemplateBackgroundUntouched(currentDesign, templateBackground?.dataUrl);
       const {
         assetReplacements: composedAssetReplacements,
         configOverrides: composedConfigOverrides,
@@ -8261,6 +8274,7 @@ export function WatchfaceEditor({
       const archive = await api.createCorosWatchfaceArchive({
         sourceArchiveId: starterArchive.archiveId,
         backgroundDataUrl: exportBackground,
+        ...(keepTemplateBackground ? { keepTemplateBackground: true } : {}),
         previewDataUrl: exportPreview,
         ...(buildFirmwareType ? { firmwareType: buildFirmwareType } : {}),
         ...(buildWatchModel ? { watchModel: buildWatchModel } : {}),

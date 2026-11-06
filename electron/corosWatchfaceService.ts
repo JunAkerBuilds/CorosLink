@@ -2680,7 +2680,8 @@ export async function createCorosWatchfaceArchive(
     watchfaceIdOverride,
     configTextReplacements,
     input.stripBlankConfigKeys === true,
-    recoveredTarget ? undefined : exportTarget
+    recoveredTarget ? undefined : exportTarget,
+    input.keepTemplateBackground === true
   );
   if (recoveredTarget) zip = await prepareRecoveredExportZip(zip, recoveredTarget, preview);
   const outputDirectory = path.join(app.getPath("userData"), "watchface-archives");
@@ -4559,7 +4560,9 @@ async function rewriteTemplateArchive(
   watchfaceIdOverride?: string,
   configTextReplacements: Map<string, string> = new Map(),
   stripBlankConfigKeys = false,
-  exportTarget?: WatchfaceTarget
+  exportTarget?: WatchfaceTarget,
+  /** Keep the template's background.png / custom_bg.png as they are (unedited background). */
+  keepTemplateBackground = false
 ): Promise<Buffer> {
   const directory = await openTemplateArchive(sourcePath);
   const originalSourceFiles = directory.files.filter((entry) => entry.type === "File");
@@ -4645,7 +4648,10 @@ async function rewriteTemplateArchive(
   // 416px AMOLED layout used by PACE Pro.
   await Promise.all(
     sourceFiles
-      .filter((entry) => CREATOR_ARTWORK_ENTRY_PATTERN.test(entry.path))
+      .filter((entry) => CREATOR_ARTWORK_ENTRY_PATTERN.test(entry.path) &&
+        // An unedited background ships as the template wrote it: scaling the
+        // 800 px render back down would resample it (see keepTemplateBackground).
+        !(keepTemplateBackground && /\/background\.png$/i.test(entry.path)))
       .map(async (entry) => {
         const original = nativeImage.createFromBuffer(await entry.buffer());
         const { width, height } = original.getSize();
@@ -4690,7 +4696,7 @@ async function rewriteTemplateArchive(
   // different templates use different bitmap dimensions.
   await Promise.all(
     sourceFiles
-      .filter((entry) => entry.path.toLowerCase().endsWith("/custom_bg.png"))
+      .filter((entry) => !keepTemplateBackground && entry.path.toLowerCase().endsWith("/custom_bg.png"))
       .map(async (entry) => {
         const original = nativeImage.createFromBuffer(await entry.buffer());
         const { width, height } = original.getSize();

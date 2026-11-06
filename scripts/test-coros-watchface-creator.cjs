@@ -647,6 +647,27 @@ async function main() {
     "generated Studio sprites should support APEX 4 resolution trees"
   );
 
+  // An untouched template background ships as the template's own files: the
+  // 800 px render scaled down would knock a memory-in-pixel background off the
+  // screen's four levels (MONO's dividers came out thin and darkened).
+  const keptCreated = await watchfaces.createCorosWatchfaceArchive({
+    sourceArchiveId: apexStarter.archiveId,
+    backgroundDataUrl: pngDataUrl(icon),
+    keepTemplateBackground: true,
+    previewDataUrl: pngDataUrl(solidPng(800, 800, 0xff)),
+    firmwareType: "COROS W999",
+    watchModel: "apex-4"
+  });
+  const keptZip = await unzipper.Open.file((await findCreatorOutput(keptCreated)).path);
+  for (const size of [240, 260, 800]) {
+    const kept = keptZip.files.find((entry) => entry.type === "File" && entry.path === `watchface_${size}x${size}/background.png`);
+    assert.ok(kept, `the ${size}px background should exist`);
+    assert.deepEqual(await kept.buffer(), solidPng(size, size, 0x22), `the ${size}px background should be the template's own bytes`);
+    const thumbnail = keptZip.files.find((entry) => entry.type === "File" && entry.path === `watchface_${size}x${size}/thmb.png`);
+    assert.notDeepEqual(await thumbnail.buffer(), solidPng(size === 240 ? 182 : size === 260 ? 197 : 800, size === 240 ? 182 : size === 260 ? 197 : 800, 0x33),
+      "thumbnails still follow the rendered face");
+  }
+
   // --- PACE 4 class AMOLED bundles (390px + 800px master) -----------------
   await assert.rejects(
     watchfaces.createCorosWatchfaceArchive({

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Official memory-in-pixel faces keep their thin lines.** Exporting a face such as MONO no longer redraws its background: while you leave the background as it is, the watch gets the face's own picture, so its dividers come out as solid and as wide as on the original. Rebuild and send the face again to get the fix.
+
 ## [0.1.75] - 2026-11-06
 
 ### Added

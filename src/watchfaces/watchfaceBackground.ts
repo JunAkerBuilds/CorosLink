@@ -263,6 +263,32 @@ async function drawDesignSprite(
 }
 
 /**
+ * Whether the design still shows the template's own background exactly as it
+ * ships: its artwork is `templateBackgroundDataUrl`, nothing is drawn on it,
+ * and it is neither zoomed, faded, recolored behind nor decorated. Export then
+ * keeps the template's background files as they are instead of the 800 px
+ * render scaled back down, which on memory-in-pixel watches knocks the
+ * picture off the screen's four levels and gets it photo-treated a second
+ * time (thin, darkened divider lines on MONO).
+ */
+export function isTemplateBackgroundUntouched(
+  design: CorosWatchfaceDesignState,
+  templateBackgroundDataUrl: string | undefined
+): boolean {
+  if (!templateBackgroundDataUrl || design.artworkVisible === false) return false;
+  if (design.configAssetOverrides?.["config:background_icon"]?.replacement) return false;
+  if (design.artwork?.dataUrl !== templateBackgroundDataUrl || design.zoom !== 1) return false;
+  const fill = (design.backgroundColor ?? "#000000").toLowerCase();
+  if (fill !== "transparent" && fill !== "#000000" && fill !== "#000") return false;
+  if (resolveWatchfaceLayerOpacity(design, "background") !== 1) return false;
+  if (resolveWatchfaceLayerEffects(design, "background").length || resolveWatchfaceLayerStrokes(design, "background").length) return false;
+  if ((design.backgroundElements ?? []).some((element) => element.visible !== false)) return false;
+  if ((design.designSprites ?? []).some((sprite) => sprite.visible !== false)) return false;
+  if (design.exerciseSeparator?.enabled) return false;
+  return !design.staticSeparators.colon?.enabled && !design.staticSeparators.dateSlash?.enabled;
+}
+
+/**
  * Paints the watch-face background for both preview and export: artwork,
  * imported sprites, and static separators —
  * and returns the 800×800 PNG data URL used as the archive background.

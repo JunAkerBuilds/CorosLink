@@ -467,6 +467,13 @@ export interface CorosWatchfaceExistingShareInput {
 export interface CorosWatchfaceCreatorInput {
   sourceArchiveId: string;
   backgroundDataUrl: string;
+  /**
+   * The design shows the template's background untouched: keep each layout's
+   * own background.png (and custom_bg.png) byte for byte instead of
+   * `backgroundDataUrl` scaled to its size. Memory-in-pixel backgrounds stay on
+   * the screen's levels, so the compiler passes them through as COROS wrote them.
+   */
+  keepTemplateBackground?: boolean;
   /** Fully composed face preview written to the archive's root preview PNG. */
   previewDataUrl?: string;
   /** Target firmware used to validate that required device resolutions exist. */
