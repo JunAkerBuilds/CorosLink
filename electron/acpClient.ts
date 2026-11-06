@@ -248,6 +248,8 @@ export interface ToolBridgeCallbacks {
 export interface ToolBridge {
   url: string;
   token: string;
+  /** Requests that reached the bridge so far, authorized or not (for failure reports). */
+  requestCount(): number;
   close(): Promise<void>;
 }
 
@@ -387,7 +389,9 @@ export async function startToolBridge(
   });
 
   let transport: StreamableHTTPServerTransport | undefined;
+  let requests = 0;
   const httpServer = http.createServer((request, response) => {
+    requests += 1;
     // Compare bytes: a non-ASCII header can match the token's length in characters but not in bytes.
     const supplied = Buffer.from(request.headers.authorization?.match(/^Bearer (\S+)$/)?.[1] ?? "");
     const expected = Buffer.from(token);
@@ -420,6 +424,7 @@ export async function startToolBridge(
   return {
     url: `http://127.0.0.1:${port}${MCP_ENDPOINT}`,
     token,
+    requestCount: () => requests,
     close: async () => {
       await server.close().catch(() => undefined);
       httpServer.closeAllConnections();

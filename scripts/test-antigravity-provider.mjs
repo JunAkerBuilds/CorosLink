@@ -30,6 +30,7 @@ const {
   pendingAntigravitySignInUrl,
   recheckAntigravity,
   signInToAntigravity,
+  setAntigravityFailureRecorder,
   signOutOfAntigravity,
   streamAntigravityCompletion,
   waitForAntigravityInstall,
@@ -266,6 +267,34 @@ try {
   assert.deepEqual(await readdir(path.join(acpDir, "brain")), []);
   assert.deepEqual(await readdir(path.join(root, "tmp")), []);
 
+  // Failures reach the error report with the steps reached and the agent's log; cancellations don't.
+  const reports = [];
+  setAntigravityFailureRecorder((purpose, error) => reports.push({ purpose, error }));
+  await writeFile(path.join(acpDir, "stall-session"), "");
+  await assert.rejects(
+    streamAntigravityCompletion({
+      root,
+      instructions: "x",
+      messages: [{ role: "user", content: "hi" }],
+      tools: [{ name: "get_weekly_mileage", description: "d", inputSchema: { type: "object" } }],
+      signal: new AbortController().signal,
+      timeoutMs: 1_500,
+      onToken: () => undefined,
+      onToolCall: async () => ""
+    }),
+    (error) => error.kind === "timeout" && /did not start a session/.test(error.message)
+  );
+  await rm(path.join(acpDir, "stall-session"));
+  assert.equal(reports.length, 1);
+  assert.equal(reports[0].purpose, "coach");
+  const context = reports[0].error.context.join("\n");
+  assert.match(context, /^Runtime 1\.4\.3 on /);
+  assert.match(context, /Steps: home ready [\d.]+s → tool bridge listening [\d.]+s → agent launched [\d.]+s → initialize answered [\d.]+s → session\/new sent [\d.]+s\n/);
+  assert.match(context, /Timed out before a session started/);
+  assert.match(context, /Tools: 1 over stdio; bridge requests 0; tool calls 0/);
+  assert.match(context, /Agent log \(last lines\):\nI1106 agent\.py:225\] Starting connection and creating conversation\.\.\./);
+  reports.length = 0;
+
   await assert.rejects(
     streamAntigravityCompletion({
       root,
@@ -298,6 +327,10 @@ try {
     onToolCall: async () => ""
   });
   await assert.rejects(hung, (error) => error.kind === "cancelled");
+  // The model refusal above is the only report: the cancelled turn isn't one.
+  assert.deepEqual(reports.map((report) => [report.purpose, report.error.kind]), [["check", "connection"]]);
+  assert.match(reports[0].error.context.join("\n"), /session started [\d.]+s/);
+  setAntigravityFailureRecorder(undefined);
 
   // A refusal is remembered, so the saved sign-in looks lapsed until Check again asks Google.
   await writeFile(path.join(acpDir, "refuse-once"), "");
@@ -364,6 +397,8 @@ async function handle(message) {
     // Without a saved sign-in the real agent starts the browser flow and waits.
     if (!fs.existsSync(token)) { process.stderr.write(LINK + "\\n"); return; }
     if (fs.existsSync(path.join(acp, "refuse-once"))) { fs.rmSync(path.join(acp, "refuse-once")); process.stderr.write(LINK + "\\n"); return; }
+    // The Windows report: the session never opens, after the agent logs this far.
+    if (fs.existsSync(path.join(acp, "stall-session"))) { process.stderr.write("I1106 agent.py:225] Starting connection and creating conversation...\\n"); return; }
     if (process.env.GEMINI_API_KEY === undefined && process.env.BROWSER && process.env.ANTIGRAVITY_HARNESS_PATH && process.env.AGY_ACP_FORCE_FILE_STORAGE === "1") checks.push("env:ok");
     const meta = message.params._meta?.antigravity ?? {};
     if (Array.isArray(meta.enabledTools) && meta.enabledTools.length === 0 && meta.eagerMcpServers?.[0] === "coroslink" && meta.systemPrompt?.append === "COACH INSTRUCTIONS") checks.push("meta:ok");

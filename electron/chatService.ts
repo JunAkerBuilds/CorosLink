@@ -139,9 +139,11 @@ import {
   pendingAntigravitySignInUrl,
   recheckAntigravity,
   signOutOfAntigravity,
+  setAntigravityFailureRecorder,
   streamAntigravityCompletion,
   testAntigravityConnection as runAntigravityConnectionTest
 } from "./antigravityProvider";
+import { recordDiagnosticError } from "./diagnosticsService";
 import {
   CHAT_SETTINGS_KEYS,
   readChatSettingsFromStore,
@@ -220,6 +222,10 @@ import {
   formatRecentActivityMix,
   formatUpcomingWorkoutSport
 } from "./chatCoachContext";
+
+// Antigravity failures (with the steps reached and the agent's last log lines)
+// go to Settings → Error logs: they never pass through an IPC handler.
+setAntigravityFailureRecorder((purpose, error) => recordDiagnosticError(`coach:antigravity:${purpose}`, error));
 
 // =========================================================================
 // OpenAI "Sign in with ChatGPT" provider details.

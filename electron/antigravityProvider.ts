@@ -121,6 +121,8 @@ export type AntigravityFailureKind =
   | "connection";
 
 export class AntigravityProviderError extends Error {
+  /** How far the request got and what the agent last logged, for the error report. */
+  context?: string[];
   constructor(
     message: string,
     readonly kind: AntigravityFailureKind
@@ -129,6 +131,24 @@ export class AntigravityProviderError extends Error {
     this.name = "AntigravityProviderError";
   }
 }
+
+/** What a failed request was for, in the error report's source. */
+export type AntigravityRequestPurpose = "coach" | "web" | "check";
+
+let failureRecorder: ((purpose: AntigravityRequestPurpose, error: AntigravityProviderError) => void) | undefined;
+
+/**
+ * Receives every failed request (not cancellations) with its context lines.
+ * The app sends them to Settings → Error logs; this module never imports Electron.
+ */
+export function setAntigravityFailureRecorder(
+  recorder?: (purpose: AntigravityRequestPurpose, error: AntigravityProviderError) => void
+): void {
+  failureRecorder = recorder;
+}
+
+/** Agent log lines kept for a failure report. */
+const LOG_LINES_KEPT = 30;
 
 export interface StreamAntigravityOptions extends GeminiCliToolCallbacks {
   /** CorosLink's Antigravity folder (runtime, private home, workspace). */
@@ -788,6 +808,8 @@ interface Launch {
   agent: AcpAgent;
   /** This launch's own temporary folder, removed on close. */
   temp: string;
+  /** The agent's last log lines, oldest first. */
+  recentLog(): string[];
   signInRequired(): boolean;
   /** A session whose saved conversation is deleted on close. */
   trackSession(sessionId: string | undefined): Promise<void>;
@@ -811,6 +833,7 @@ async function launchAgent(
   const temp = path.join(dirs.temp, crypto.randomUUID());
   await mkdir(temp, { recursive: true, mode: 0o700 });
   let signInRequired = false;
+  const recentLog: string[] = [];
   let agent: AcpAgent;
   try {
     agent = AcpAgent.start(runtime.executablePath, process.platform === "linux" ? ["--uid="] : [], {
@@ -819,6 +842,11 @@ async function launchAgent(
       label: "Antigravity",
       onPermission: options.onPermission,
       onStderrLine: (line) => {
+        // The onboarding reply is long and names the account; it says nothing about a hang.
+        if (line.trim() && !line.includes("loadCodeAssist response")) {
+          recentLog.push(stripVTControlCharacters(line).slice(0, 400));
+          if (recentLog.length > LOG_LINES_KEPT) recentLog.shift();
+        }
         options.onLogLine?.(line);
         const url = parseAntigravitySignInUrl(line);
         if (!url) return;
@@ -839,6 +867,7 @@ async function launchAgent(
   return {
     agent,
     temp,
+    recentLog: () => [...recentLog],
     signInRequired: () => signInRequired,
     trackSession: async (sessionId) => {
       if (sessionId) sessions.add(sessionId);
@@ -966,19 +995,27 @@ export async function streamAntigravityCompletion(
   let fullText = "";
   let toolCalls = 0;
   let bridge: ToolBridge | undefined;
+  // Each step and when it finished, so a report says where a request stalled.
+  const startedAt = Date.now();
+  const timeline: string[] = [];
+  const reached = (step: string) => timeline.push(`${step} ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
+  let failure: AntigravityProviderError | undefined;
 
   try {
     await prepareHome(options.root);
+    reached("home ready");
     if (options.tools.length > 0) {
       bridge = await startToolBridge(MCP_SERVER_NAME, options.tools, {
         ...options,
         onActivity: () => armIdleTimeout()
       });
+      reached("tool bridge listening");
     }
     if (options.signal.aborted) throw new Error("cancelled");
     launch = await launchAgent(options.root, {
       onPermission: options.builtinTools?.length ? answerAntigravityWebPermission : answerAntigravityPermission
     });
+    reached("agent launched");
     const agent = launch.agent;
     if (options.signal.aborted) agent.close();
 
@@ -1005,11 +1042,13 @@ export async function streamAntigravityCompletion(
     };
 
     await agent.initialize(ACP_PROTOCOL_VERSION);
+    reached("initialize answered");
     const toolServer = bridge
       ? toolTransport() === "stdio"
         ? await toolBridgeStdioServer(bridge, MCP_SERVER_NAME, launch.temp)
         : toolBridgeServer(bridge, MCP_SERVER_NAME)
       : undefined;
+    reached("session/new sent");
     const session = (await agent.request(
       "session/new",
       sessionParams(options.root, toolServer, options.instructions, options.builtinTools)
@@ -1018,6 +1057,7 @@ export async function streamAntigravityCompletion(
     sessionId = session.sessionId;
     await launch.trackSession(sessionId);
     sessionStarted = true;
+    reached("session started");
     lastRefusal = undefined;
     rememberModels(session.configOptions);
 
@@ -1039,10 +1079,12 @@ export async function streamAntigravityCompletion(
     }
     armIdleTimeout();
 
+    reached("prompt sent");
     const result = (await agent.request("session/prompt", {
       sessionId,
       prompt: geminiPrompt(options.messages)
     })) as { stopReason?: string };
+    reached(`prompt answered (${result.stopReason ?? "no stop reason"})`);
 
     if (result.stopReason === "cancelled") {
       if (toolCalls > MAX_TOOL_CALLS && !externallyCancelled) {
@@ -1068,29 +1110,78 @@ export async function streamAntigravityCompletion(
   } catch (caught) {
     if (launch?.signInRequired()) {
       lastRefusal = "Your Antigravity sign-in has expired. Sign in again.";
-      throw new AntigravityProviderError(lastRefusal, "auth");
+      throw (failure = new AntigravityProviderError(lastRefusal, "auth"));
     }
-    if (caught instanceof AntigravityProviderError) throw caught;
+    if (caught instanceof AntigravityProviderError) throw (failure = caught);
     if (timedOut) {
-      throw new AntigravityProviderError(
+      throw (failure = new AntigravityProviderError(
         sessionStarted
           ? "Antigravity stopped responding. Try again."
           : "Antigravity did not start a session. Check your connection, then try again.",
         "timeout"
-      );
+      ));
     }
     if (externallyCancelled || options.signal.aborted) {
-      throw new AntigravityProviderError("Antigravity request cancelled.", "cancelled");
+      throw (failure = new AntigravityProviderError("Antigravity request cancelled.", "cancelled"));
     }
     const error = normalizeAntigravityError(caught);
     if (error.kind === "auth") lastRefusal = error.message;
-    throw error;
+    throw (failure = error);
   } finally {
     clearTimeout(timeout);
     options.signal.removeEventListener("abort", onAbort);
     await launch?.close();
+    // After close: the agent may hold its last log lines until it exits.
+    if (failure && failure.kind !== "cancelled") {
+      failure.context = antigravityFailureContext({
+        timeline,
+        sessionStarted,
+        timedOut,
+        toolCount: options.tools.length,
+        transport: bridge ? toolTransport() : undefined,
+        bridgeRequests: bridge?.requestCount(),
+        toolCalls,
+        log: launch?.recentLog() ?? []
+      });
+      try {
+        failureRecorder?.(options.builtinTools?.length ? "web" : options.tools.length > 0 ? "coach" : "check", failure);
+      } catch {
+        // Reporting is best effort.
+      }
+    }
     await bridge?.close();
   }
+}
+
+/** The error report's lines for a failed request: the steps it reached, the tool path, then the agent's log. */
+export function antigravityFailureContext(input: {
+  timeline: string[];
+  sessionStarted: boolean;
+  timedOut: boolean;
+  toolCount: number;
+  transport?: "stdio" | "http";
+  bridgeRequests?: number;
+  toolCalls: number;
+  log: string[];
+}): string[] {
+  const lines = [
+    `Runtime ${ANTIGRAVITY_RELEASE_VERSION} on ${process.platform}-${process.arch}`,
+    `Steps: ${input.timeline.join(" → ") || "none"}`,
+    input.timedOut
+      ? `Timed out ${input.sessionStarted ? "after the session started" : "before a session started"}`
+      : "Did not time out"
+  ];
+  if (input.toolCount > 0) {
+    lines.push(
+      `Tools: ${input.toolCount} over ${input.transport ?? "none"}; bridge requests ${input.bridgeRequests ?? 0}; tool calls ${input.toolCalls}`
+    );
+  }
+  if (input.log.length) {
+    lines.push("Agent log (last lines):", ...input.log);
+  } else {
+    lines.push("Agent log: nothing printed");
+  }
+  return lines;
 }
 
 export function normalizeAntigravityError(caught: unknown): AntigravityProviderError {
