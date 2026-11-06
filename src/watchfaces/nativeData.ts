@@ -645,6 +645,11 @@ const PAGE_DEPENDENT_FIELDS: Record<string, (page: string) => boolean> = {
   weather_direction: page => !page.startsWith("daily-")
 };
 
+/** The firmware's page rule for a field (which chart pages draw it), or undefined when every page does. */
+export function nativePageRule(id: string): ((page: string) => boolean) | undefined {
+  return PAGE_DEPENDENT_FIELDS[id];
+}
+
 /**
  * The chart pages a field shows on; null when the field shows whatever the
  * face does. `facePages` are the pages a face without a chart layer keeps from

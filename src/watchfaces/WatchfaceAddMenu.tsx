@@ -2,16 +2,36 @@ import { t, useLanguage, getLocale } from "../i18n/watchfaces";
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Activity, CalendarDays, ChartNoAxesCombined, Check, ChevronDown, Circle, Clock3, CloudSun, Image, Minus, MoonStar, Plus, Search, Smartphone, Sparkles, Square, Shapes, TrendingUp, Type, X } from "lucide-react";
 import type { CorosWatchfaceBackgroundElement, CorosWatchfaceDesignState } from "../../electron/types";
-import { NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_CHART_PAGES, NATIVE_DATA_FIELDS, nativeChartReadoutLabel } from "../../electron/watchfaceNativeCatalog";
 
 const categories = ["All", "Time", "Calendar", "Weather", "Health", "Training", "Device", "Astronomy", "Charts"] as const;
 type Category = typeof categories[number];
 export type WatchfaceAddCategory = Exclude<Category, "All">;
 const categoryIcons = { Time: Clock3, Calendar: CalendarDays, Weather: CloudSun, Health: Activity, Training: TrendingUp, Device: Smartphone, Astronomy: MoonStar, Charts: ChartNoAxesCombined };
-const dataOptions = [
-  ...NATIVE_DATA_FIELDS.filter(field => field.kind !== "chart").map(field => ({ id: field.id, label: field.label, category: field.category, keywords: field.id, availability: field.availability })),
-  ...NATIVE_CHART_SOURCES.map(source => ({ id: `chart:${source.id}`, label: source.label, category: "Charts" as const, keywords: `${source.id} ${source.category}`, availability: undefined }))
+/**
+ * Charts are added a page at a time: every chart readout lives on one page
+ * the watch's Back button steps to, and some pages need all their readouts.
+ * Barometer and tide come and go together (both need the bars).
+ */
+const CHART_PAGE_LABELS: Record<string, string> = { sun: "Sun", moon: "Moon", "daily-a": "Daily stats", "daily-b": "Daily activity" };
+const chartPageOptions = [
+  { page: "bars", label: "Barometer and tide", graph: "Bars", required: ["chart_baro", "chart_tide"], optional: [] as string[], note: "Adds two pages · needs phone data" },
+  ...NATIVE_CHART_PAGES.filter(page => page.id !== "barometer" && page.id !== "tide").map(page => ({
+    page: page.id, label: CHART_PAGE_LABELS[page.id] ?? page.label,
+    graph: page.id === "sun" || page.id === "moon" ? "Line" : "No graph",
+    required: [...page.required], optional: page.sources.filter(source => !page.required.includes(source)), note: ""
+  }))
 ];
+const dataOptions: Array<{ id: string; label: string; category: WatchfaceAddCategory; keywords: string; availability?: { label: string }; chartPage?: typeof chartPageOptions[number] }> = [
+  ...NATIVE_DATA_FIELDS.filter(field => field.kind !== "chart").map(field => ({ id: field.id, label: field.label, category: field.category as WatchfaceAddCategory, keywords: field.id, availability: field.availability })),
+  ...chartPageOptions.map(option => ({ id: `chartpage:${option.page}`, label: option.label, category: "Charts" as const,
+    keywords: `chart page ${option.graph} ${[...option.required, ...option.optional].map(source => `${source} ${nativeChartReadoutLabel(source)}`).join(" ")}`, chartPage: option }))
+];
+/** "Line · Sunrise / sunset · + Sun angle": what the page draws and holds. */
+function chartPageDetail(option: typeof chartPageOptions[number]) {
+  const labels = (sources: string[]) => sources.map(source => t(nativeChartReadoutLabel(source))).join(", ");
+  return [t(option.graph), labels(option.required), ...(option.optional.length ? [`+ ${labels(option.optional)}`] : []), ...(option.note ? [t(option.note)] : [])].join(" · ");
+}
 
 /**
  * A face component outside the native data catalog: template layers (time,
@@ -44,7 +64,7 @@ const railCategories: Array<{ category: WatchfaceAddCategory; label: string }> =
   { category: "Charts", label: "Chart" }
 ];
 
-export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOfficialImage, onAddElement, onAddData, faceOptions = [], variant = "button" }: {
+export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOfficialImage, onAddElement, onAddData, faceOptions = [], chartPagesOnFace = [], variant = "button" }: {
   design: CorosWatchfaceDesignState;
   imageDisabled: boolean;
   onAddImage: () => void;
@@ -53,6 +73,8 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
   onAddElement: (kind: CorosWatchfaceBackgroundElement["kind"]) => void;
   onAddData: (id: string) => void;
   faceOptions?: WatchfaceAddFaceOption[];
+  /** The chart layer's pages on the face, by page id; picking one of them opens it. */
+  chartPagesOnFace?: string[];
   /** "rail": a vertical strip of category buttons beside the layer list. */
   variant?: "button" | "rail";
 }) {
@@ -175,7 +197,7 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
   const railArtwork = rail && category === "All";
   const railItem = railCategories.find(item => item.category === category);
   const normalized = query.trim().toLocaleLowerCase();
-  const matches = (label: string, group: string, keywords: string) => (category === "All" || category === group) && `${label} ${t(label)} ${group} ${t(group)} ${keywords}`.toLocaleLowerCase(getLocale()).includes(normalized);
+  const matches = (label: string, group: string, keywords: string) => (category === "All" || category === group) && `${label} ${t(label)} ${group} ${t(group)} ${keywords} ${keywords.split(" ").map(word => t(word)).join(" ")}`.toLocaleLowerCase(getLocale()).includes(normalized);
   const visible = dataOptions.filter(option => matches(option.label, option.category, option.keywords));
   const visibleFace = faceOptions.filter(option => matches(option.label, option.category, `${option.category === "Time" ? t("time clock ") : ""}${option.id}`));
   const railButton = (label: string, Icon: typeof Clock3, onClick: (button: HTMLButtonElement) => void, options: { active?: boolean; disabled?: boolean; dialog?: Category } = {}) =>
@@ -222,11 +244,20 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
           if (!options.length && !faceRows.length) return null;
           const Icon = categoryIcons[group];
           return <section key={group} aria-label={t(group)}>
-            <h3><Icon size={13} aria-hidden="true" />{t(group)}{group === "Charts" && t(" · Experimental")}<span>{options.length + faceRows.length}</span></h3>
+            <h3><Icon size={13} aria-hidden="true" />{t(group)}{group === "Charts" && t(" · pages · Experimental")}<span>{options.length + faceRows.length}</span></h3>
             {faceRows.map(option => <button type="button" key={`face:${option.id}`} data-add-option data-face-option={option.id} aria-label={t("{{value1}} {{value2}}", { value1: t(option.added ? "Select" : "Add"), value2: t(option.label) })} onClick={() => choose(option.onAdd)}>
               <span className="wf-layer-picker-option-label">{t(option.label)}</span>{option.added ? <span className="wf-layer-picker-added"><Check size={12} />{t("On face")}</span> : <Plus size={13} className="wf-layer-picker-plus" aria-hidden="true" />}
             </button>)}
             {options.map(option => {
+              if (option.chartPage) {
+                const page = option.chartPage;
+                const added = page.page === "bars" ? chartPagesOnFace.includes("barometer") : chartPagesOnFace.includes(page.page);
+                return <button type="button" key={option.id} data-add-option data-native-data={option.id} className="wf-layer-picker-chart-page"
+                  aria-label={t("{{value1}} {{value2}}", { value1: t(added ? "Open" : "Add"), value2: t(option.label) })} onClick={() => choose(() => onAddData(option.id))}>
+                  <span className="wf-layer-picker-option-label">{t(option.label)}<small className="wf-layer-picker-availability">{chartPageDetail(page)}</small></span>
+                  {added ? <span className="wf-layer-picker-added"><Check size={12} />{t("On face")}</span> : <Plus size={13} className="wf-layer-picker-plus" aria-hidden="true" />}
+                </button>;
+              }
               const [field, source] = option.id.split(":");
               const existing = design.nativeData?.[field];
               const added = existing?.enabled && (!source || (existing.chartSource ?? "chart_stress") === source || Boolean(existing.readouts?.[source]));
@@ -238,7 +269,7 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
         })}
         {!visible.length && !visibleFace.length && <div className="wf-layer-picker-empty"><Search size={22} aria-hidden="true" /><strong>{t("No matching data fields")}</strong><span>{t("Try another name or category.")}</span><button type="button" onClick={() => { setQuery(""); setCategory("All"); search.current?.focus(); }}>{t("Clear filters")}</button></div>}
       </div>
-      <div className="wf-layer-picker-footer">{design.nativeData?.chart?.enabled && (category === "Charts" || normalized.includes("chart")) ? t("More chart data joins the current chart. The watch's Back button pages through it.") : t("Add a layer, then customize it in the inspector.")}</div>
+      <div className="wf-layer-picker-footer">{design.nativeData?.chart?.enabled && (category === "Charts" || normalized.includes("chart")) ? t("Each page is a screen the watch's Back button steps to. A page on the face opens it.") : t("Add a layer, then customize it in the inspector.")}</div>
       </>}
     </div>
   </div>;

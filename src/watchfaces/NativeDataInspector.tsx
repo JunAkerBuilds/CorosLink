@@ -36,26 +36,14 @@ const listLabels = (labels: string[]) => labels.join(getLocale().startsWith("zh"
  * order, the same numbers as the stage's Screens strip: lit where the field
  * shows, ringed on the page the canvas shows. Clicking one shows that page.
  */
-function FieldPagesPanel({ pages, facePages, shownPage, onShowPage, onAddDailyPage }: {
+function FieldPagesPanel({ onAddDailyPage }: {
   pages: string[]; facePages: string[]; shownPage?: string; onShowPage?: (page: string) => void; onAddDailyPage?: () => void;
 }) {
   useLanguage();
   return <div className="wf-field-pages">
-    <div className="wf-field-page-tiles" role="group" aria-label={t("Watch pages")}>
-      {facePages.map((page, index) => {
-        const on = pages.includes(page), shown = page === shownPage;
-        return <button key={page} type="button" className={`wf-field-page-tile${on ? " is-on" : ""}${shown ? " is-shown" : ""}`}
-          aria-pressed={shown} disabled={!onShowPage}
-          aria-label={`${index + 1} · ${chartPageLabel(page)} · ${on ? t("Shows here") : t("Hidden here")}`}
-          title={`${index + 1} · ${chartPageLabel(page)} · ${on ? t("Shows here") : t("Hidden here")}`}
-          onClick={() => onShowPage?.(page)}>{index + 1}</button>;
-      })}
-      {shownPage && facePages.includes(shownPage) ? <span className="wf-field-page-tiles-state">
-        {pages.includes(shownPage) ? t("Shows on this page") : t("Not on {{page}}", { page: chartPageLabel(shownPage) })}
-      </span> : null}
-    </div>
-    {!pages.length && onAddDailyPage ? <button type="button" className="secondary-button" onClick={onAddDailyPage}>
-      <Plus size={13} aria-hidden="true" />{t("Add a hidden Daily stats page")}
+    <p>{t("The watch draws it only on a daily page, and this face has none.")}</p>
+    {onAddDailyPage ? <button type="button" className="secondary-button" onClick={onAddDailyPage}>
+      <Plus size={13} aria-hidden="true" />{t("Add a Daily stats page")}
     </button> : null}
   </div>;
 }
@@ -537,8 +525,10 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
       onEdit={onChartGroup} onAdd={onAddReadout} onRemove={onRemoveReadout} onShown={onShowReadout} onRemovePage={onRemovePage} onMakeFixed={onMakeFixed} onDelete={onDeleteReadout}
       onRestore={source=>onPatch({removedReadouts:(style.removedReadouts ?? []).filter(item=>item!==source)})} pageFields={pageFields} onSelectField={onSelectField} removedPages={removedPages} />,
       { disabled: locked, status: chartPageGraphLabel(chartPage.id), actions: chartPageHint(chartPage.id) }) : null}
-    {!isChart && fieldPages && facePages.length ? renderSection("page", "Watch pages", <FieldPagesPanel pages={fieldPages.pages} facePages={facePages} shownPage={shownPage} onShowPage={onShowPage} onAddDailyPage={onAddDailyPage} />,
-      { status: fieldPages.pages.length ? t("On {{count}} of {{total}}", { count: fieldPages.pages.filter(page => facePages.includes(page)).length, total: facePages.length }) : t("On none"), actions: fieldPagesHint(id, fieldPages.pages) }) : null}
+    {/* Which pages show a field is a tag under its name and marks in the
+        Screens strip; only a field no page shows needs room here. */}
+    {!isChart && fieldPages && facePages.length && !fieldPages.pages.some(page => facePages.includes(page)) ? renderSection("page", "Not shown on the watch", <FieldPagesPanel pages={[]} facePages={facePages} onAddDailyPage={onAddDailyPage} />,
+      { actions: fieldPagesHint(id, []) }) : null}
 
     {renderSection("appearance", isChart ? chartSourceLabel(chartSource) : "Look · all parts", <div className={`wf-property-stack${isChart ? " wf-native-components" : ""}`}>
       {readingPieces.length ? <div className="wf-native-reading" role="group" aria-label={t("Reading preview: {{value1}}", { value1: previewValue })}>

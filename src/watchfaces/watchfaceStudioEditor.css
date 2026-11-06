@@ -2099,7 +2099,9 @@ body .wf-font-picker-panel .wf-png-set .wf-png-font-rules {
   display: flex;
   align-items: center;
   gap: 10px;
-  max-width: min(560px, calc(100% - 32px));
+  width: max-content;
+  max-width: min(620px, calc(100% - 32px));
+  box-sizing: border-box;
   padding: 8px 6px 8px 14px;
   border: 1px solid var(--atl-line-strong);
   border-radius: 12px;
@@ -2198,4 +2200,146 @@ body .wf-font-picker-panel .wf-png-set .wf-png-font-rules {
   min-height: 28px;
   padding: 0 10px;
   font-size: 12px;
+}
+
+/* Watch pages for a field, in words: one row per page in Back order. */
+:root .watchface-shell.watchface-shell--studio .wf-field-page-rows {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px 0 6px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: 500 12.5px var(--font-display);
+  text-align: left;
+  cursor: pointer;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-row:hover:not(:disabled) {
+  background: var(--atl-control-hover);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-row:disabled {
+  cursor: default;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-row.is-shown {
+  border-color: var(--atl-lume-ring);
+  background: var(--atl-tray-raised);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-number {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--atl-tray-hover);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-name {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-row.is-on .wf-field-page-name {
+  color: var(--text-primary);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-name small {
+  color: var(--atl-lume-strong);
+  font-size: 11px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-field-page-row.is-on .wf-field-page-state {
+  color: var(--atl-lume-strong);
+}
+
+/* --- Fields the chart pages switch ---------------------------------------- */
+/* Under the field's name: where it shows, in two or three words. */
+:root .watchface-shell.watchface-shell--studio .wf-page-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-scope-tag {
+  padding: 1px 8px;
+  border: 1px solid var(--atl-lume-ring);
+  border-radius: 999px;
+  color: var(--atl-lume-strong);
+  font-size: 10.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-scope-tag.is-warning {
+  border-color: color-mix(in srgb, var(--wf-danger) 50%, transparent);
+  color: var(--wf-danger);
+}
+
+/* Screens strip: the selected field's pages underlined, the others faded. */
+:root .watchface-shell.watchface-shell--studio .wf-page-tile.is-field-on::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  bottom: -5px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--atl-lume);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-page-tile.is-field-off:not([aria-pressed="true"]) {
+  opacity: 0.45;
+}
+
+/* Layer list: a switched field's scope in place of its sample value; rows
+   the page on screen hides read one step dimmer. */
+:root .watchface-shell.watchface-shell--studio .wf-layer-scope {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-layer-scope.is-warning {
+  color: var(--wf-danger);
+}
+
+:root .watchface-shell.watchface-shell--studio .watchface-layer-row.is-off-page .watchface-layer-name {
+  color: var(--atl-titanium-dim);
+}
+
+/* The jump notice sits at the top of the stage, apart from Delete's. */
+:root .watchface-shell.watchface-shell--studio .wf-delete-notice.wf-page-jump-notice {
+  top: 64px;
+  bottom: auto;
 }

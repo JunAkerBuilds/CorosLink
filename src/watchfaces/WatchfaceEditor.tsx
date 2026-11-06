@@ -24,7 +24,7 @@ import { onChartPageIds, templateChartPages, withoutTurnedOffChart, type ChartPa
 import { addChartPage, chartDragSplit, chartGraphBounds, chartReadoutBounds, chartReadoutHidden, chartReadoutPage, chartSourceOf, chartStoredReadout, dropChartReadout, hiddenChartReadout, moveChartGraph, moveChartReadout, newChartReadout, removeChartPage, setChartReadoutShown, storedChartReadouts, swapChartReadout } from "./chartReadouts";
 import { describeNativeDataComponents } from "./nativeDataAutomation";
 import { watchfaceAutomationAssetContracts } from "./watchfaceAutomationAssetContracts";
-import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES, defaultNativeDataStyle, drawNativeDataPreview, keepNativeOwnedKeys, minMaxTemperatureRun, nativeDataSize, nativeLayerChartPages, nativeLayerHiddenByChartGroup, nativeLayerStyle } from "./nativeData";
+import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES, defaultNativeDataStyle, drawNativeDataPreview, keepNativeOwnedKeys, minMaxTemperatureRun, nativeDataSize, nativeLayerChartPages, nativeLayerHiddenByChartGroup, nativeLayerStyle, nativePageRule } from "./nativeData";
 import { glyphBaselineMovements, visibleInkBounds } from "./watchfaceGlyphLayout";
 import { finalizeWatchfaceStatusIcons } from "./watchfaceStatusExport.ts";
 import {
@@ -503,6 +503,7 @@ import {
   mergeConfigOverrides,
   parseConfigPos,
   pickPreviewResolution,
+  COROS_CONFIG_DELETE_VALUE,
   parseConfigRect,
   templateHasDatePart,
   watchfaceFixedMetricDigitSize,
@@ -3689,12 +3690,13 @@ export function WatchfaceEditor({
       loadAssets
     );
     await drawNativeDataPreview(frame, previewWidth, frameDesign.nativeData, simulationScenario, chartPage, facePageIds);
-    if (frameDesign.weatherIndicator?.enabled) {
-      if (!frameDesign.nativeData?.weather_temp) await drawWeatherTemperaturePreview(frame, previewWidth, frameDesign.weatherIndicator, simulationScenario?.values?.weather_temp);
+    const frameWeather = previewMode === "current" ? weatherForShownPage(frameDesign.weatherIndicator) : frameDesign.weatherIndicator;
+    if (frameWeather?.enabled) {
+      if (!frameDesign.nativeData?.weather_temp) await drawWeatherTemperaturePreview(frame, previewWidth, frameWeather, simulationScenario?.values?.weather_temp);
       const url = await weatherPreviewDataUrl(
         previewWidth,
-        frameDesign.weatherIndicator.color,
-        frameDesign.weatherIndicator,
+        frameWeather.color,
+        frameWeather,
         simulationScenario?.weather
       );
       if (url) {
@@ -4437,7 +4439,7 @@ export function WatchfaceEditor({
       details: renderedPreviewDetails,
       options: previewStudioOptions,
       scenario: simulationScenario,
-      weather: previewMode === "current" ? design.weatherIndicator : undefined,
+      weather: previewMode === "current" ? weatherForShownPage(design.weatherIndicator) : undefined,
       nativeData: design.nativeData,
       chartPage,
       facePages: facePageIds,
@@ -4454,6 +4456,7 @@ export function WatchfaceEditor({
     design.nativeData,
     chartPage,
     facePageIds,
+    // Picking a page swaps design.nativeData.chart, which reruns this.
     previewMode,
     previewWidth,
     loadAssets,
@@ -6739,6 +6742,31 @@ export function WatchfaceEditor({
       }))
     ];
   }, [design.nativeData?.chart, stripChartPages]);
+  /**
+   * The Add rail's Chart list: a page on the face opens; a new one joins the
+   * chart in its Back place, or starts the chart with that page.
+   */
+  function addChartPageFromAddMenu(pageId: string) {
+    const chart = design.nativeData?.chart;
+    const pageIds = pageId === "bars" ? ["barometer", "tide"] : [pageId];
+    if (!chart?.enabled) {
+      const first = NATIVE_CHART_PAGES.find(page => page.id === pageIds[0])?.sources[0];
+      if (!first) return;
+      addNativeData(`chart:${first}`);
+      // A new chart draws bars, which brings Barometer and Tide pages with it;
+      // starting from another page gives that page alone.
+      if (pageId !== "bars") setDesign(prev => {
+        const chart = prev.nativeData?.chart;
+        return chart ? { ...prev, nativeData: { ...prev.nativeData, chart: { ...chart, chartStyle: { ...chart.chartStyle, barWidth: 0 } } } } : prev;
+      });
+      return;
+    }
+    selectEditorItem("native:chart");
+    setPropertiesOpen(true);
+    const onFace = stripChartPages.find(page => pageIds.includes(page.page) && page.target);
+    if (onFace) { showChartPage(onFace.page); return; }
+    addChartPageFromStrip(pageId);
+  }
   function addChartPageFromStrip(id: string) {
     const chart = design.nativeData?.chart;
     setChartPageMenuOpen(false);
@@ -6746,6 +6774,78 @@ export function WatchfaceEditor({
     if (id === "bars") updateNativeData("chart", { chartStyle: { ...chart.chartStyle, barWidth: 8, barGap: chart.chartStyle?.barGap || 4 } });
     else addChartPageToFace(id);
   }
+  // Which chart pages draw a layer (PACE Pro W332 3.2008.0, chart routine
+  // 0x4544a0–0x4550ff, re-read 2026-11-05). Sun and Moon skip the weather
+  // block, weather icon included, except that each draws the weather icon in
+  // place of its own icon (chart_sun_icon, chart_moon_icon) when the face has
+  // none. Export keeps the template's chart_sun_icon; chart_moon_icon comes
+  // with a moon-phase readout.
+  const facePageList = stripChartPages.map(page => page.page);
+  const masterChartConfig = useMemo(() => (modeSourceDetails ? pickPreviewResolution(modeSourceDetails)?.config : undefined) ?? {}, [modeSourceDetails]);
+  const chartConfigSet = (key: string) => Boolean(masterChartConfig[key]?.trim()) && masterChartConfig[key] !== COROS_CONFIG_DELETE_VALUE;
+  const pageHasOwnIcon = (page: string) => page === "sun" ? chartConfigSet("chart_sun_icon")
+    : page === "moon" ? chartConfigSet("chart_moon_icon") || Boolean(chartLayerPages.find(item => item.page === "moon")?.rows.some(row => row.source === "chart_moon" && !row.missing))
+    : true;
+  const weatherIconShowsOn = (page: string) => (page !== "sun" && page !== "moon") || !pageHasOwnIcon(page);
+  function layerPageRule(layer: EditorLayer): ((page: string) => boolean) | undefined {
+    if (!facePageList.length) return undefined;
+    if (layer.weatherIndicator) return weatherIconShowsOn;
+    if (layer.nativeDataId && layer.nativeDataId !== "chart") return nativePageRule(layer.nativeDataId);
+    return undefined;
+  }
+  /** Two or three words for where a field shows: "Daily pages", "Not on Sun, Moon"… */
+  function pageScopeLabel(rule: (page: string) => boolean): string {
+    const ids = NATIVE_CHART_PAGES.map(page => page.id);
+    const on = ids.filter(rule), off = ids.filter(id => !rule(id));
+    const same = (a: string[], b: string[]) => a.length === b.length && a.every(item => b.includes(item));
+    if (!off.length) return "";
+    if (same(on, ["daily-a", "daily-b"])) return t("Daily pages");
+    if (same(off, ["sun", "moon"])) return t("Not on Sun, Moon");
+    if (same(off, ["daily-a", "daily-b"])) return t("Not on daily pages");
+    if (same(on, ["sun"])) return t("Sun page");
+    if (off.length === 1) return t("Not on {{page}}", { page: templatePageLabel(off[0]!) });
+    return t("Some pages");
+  }
+  /** A layer the chart pages switch: its rule, label, and the face's pages it shows on. */
+  function layerPageScope(layer: EditorLayer) {
+    const rule = layerPageRule(layer);
+    if (!rule) return null;
+    const label = pageScopeLabel(rule);
+    if (!label) return null;
+    const onFace = facePageList.filter(rule);
+    return { rule, label, onFace, none: onFace.length === 0 };
+  }
+  /** The weather icon as the page on screen draws it (no temperature on Sun or Moon). */
+  function weatherForShownPage(indicator: CorosWatchfaceDesignState["weatherIndicator"]) {
+    if (!indicator || !shownChartPage || (shownChartPage !== "sun" && shownChartPage !== "moon")) return indicator;
+    return weatherIconShowsOn(shownChartPage) ? { ...indicator, temperatureEnabled: false } : undefined;
+  }
+  // Selecting a field the page on screen hides shows the face on the first
+  // page that draws it, with a notice and a way back.
+  const [pageJump, setPageJump] = useState<{ from: string; to: string; label: string; scope: string } | null>(null);
+  const selectionKey = selectedIds.join("|");
+  useEffect(() => {
+    if (previewMode !== "current" || !shownChartPage || selectedIds.length !== 1) { setPageJump(null); return; }
+    const layer = layers.find(item => item.id === selectedIds[0]);
+    const scope = layer ? layerPageScope(layer) : null;
+    if (!layer || !scope || scope.rule(shownChartPage)) { setPageJump(null); return; }
+    const to = stripChartPages.find(page => page.target && scope.rule(page.page));
+    if (!to) { setPageJump(null); return; }
+    setPageJump({ from: shownChartPage, to: to.page, label: t(layerDisplayLabel(layer)), scope: scope.label });
+    showChartPage(to.page);
+    // Only a new selection jumps; picking pages afterwards is the user's call.
+  }, [selectionKey]);
+  useEffect(() => {
+    if (pageJump && shownChartPage && shownChartPage !== pageJump.to && shownChartPage !== pageJump.from) setPageJump(null);
+  }, [shownChartPage]);
+  // A page added from a field's panel is shown once it exists.
+  const pendingShownPage = useRef<string | null>(null);
+  useEffect(() => {
+    const pending = pendingShownPage.current;
+    if (!pending || !stripChartPages.some(page => page.page === pending && page.target)) return;
+    pendingShownPage.current = null;
+    showChartPage(pending);
+  }, [stripChartPages]);
   const [chartPageMenuOpen, setChartPageMenuOpen] = useState(false);
   // Delete: a confirm for locked layers, several layers or the chart, and an Undo notice after.
   const [deleteRequest, setDeleteRequest] = useState<{ ids: string[]; unlock: boolean; title: string; body: string; confirm: string; action?: () => void } | null>(null);
@@ -7106,6 +7206,7 @@ export function WatchfaceEditor({
   }
 
   function addNativeData(value: string) {
+    if (value.startsWith("chartpage:")) { addChartPageFromAddMenu(value.slice("chartpage:".length)); return; }
     const [id, chartSource] = value.split(":");
     if (!id) return;
     const existing = design.nativeData?.[id];
@@ -10002,12 +10103,15 @@ export function WatchfaceEditor({
   // Where pages share a slot (NOMAD: temperature and sun angle, min/max and
   // wind), the field that shows there stands in, so no outline is drawn.
   const pageHiddenAll = previewMode === "current" && shownChartPage
-    ? layers.filter((layer) => layer.nativeDataId && layer.nativeDataId !== "chart" && layer.visible && layer.bounds
-      && nativeLayerHiddenByChartGroup(layer.nativeDataId, design.nativeData ?? {}, facePageIds))
+    ? layers.filter((layer) => layer.visible && layer.bounds && layer.nativeDataId !== "chart"
+      && (layer.nativeDataId || layer.weatherIndicator) && layerPageRule(layer) && !layerPageRule(layer)!(shownChartPage))
     : [];
+  // The selected field's pages, marked in the Screens strip.
+  const selectedFieldLayer = previewMode === "current" && selectedIds.length === 1 ? layers.find((layer) => layer.id === selectedIds[0]) : undefined;
+  const selectedFieldScope = selectedFieldLayer ? layerPageScope(selectedFieldLayer) : null;
   const pageHiddenLayers = (() => {
     if (!pageHiddenAll.length) return [];
-    const nativeLayers = layers.filter((layer) => layer.nativeDataId && layer.nativeDataId !== "chart" && layer.visible && layer.bounds);
+    const nativeLayers = layers.filter((layer) => (layer.nativeDataId || layer.weatherIndicator) && layer.nativeDataId !== "chart" && layer.visible && layer.bounds);
     const hidden = pageHiddenAll;
     const shown = nativeLayers.filter((layer) => !hidden.includes(layer));
     const area = (box: WatchfaceEditorBounds) => Math.max(0, box.x1 - box.x0) * Math.max(0, box.y1 - box.y0);
@@ -10209,6 +10313,7 @@ export function WatchfaceEditor({
           onAddElement={addElement}
           onAddData={addNativeData}
           faceOptions={faceAddOptions}
+          chartPagesOnFace={design.nativeData?.chart?.enabled ? stripChartPages.map(page => page.page) : []}
         /> : null}
         <aside className={`watchface-editor-layers wf-pane wf-layers-pane${layersOpen ? " is-open" : ""}`} aria-label={t("Layers")}>
           <div className="watchface-editor-pane-heading wf-pane-heading">
@@ -10243,6 +10348,7 @@ export function WatchfaceEditor({
               onAddElement={addElement}
               onAddData={addNativeData}
               faceOptions={faceAddOptions}
+              chartPagesOnFace={design.nativeData?.chart?.enabled ? stripChartPages.map(page => page.page) : []}
             /> : null}
           </div>
           {details ? (
@@ -10398,7 +10504,7 @@ export function WatchfaceEditor({
                           size={13}
                           aria-hidden="true"
                         />
-                        <span>{t(group)}</span>
+                        <span>{t(group === "Chart pages" ? "Changes with the page" : group)}</span>
                         <span className="wf-layer-section-count">
                           {groupedLayers.length + (templateChartHere ? 1 : 0)}
                         </span>
@@ -10486,7 +10592,7 @@ export function WatchfaceEditor({
                       <button
                         type="button"
                         aria-selected={layerRowSelected(layer)}
-                        className={`watchface-layer-row${layerRowSelected(layer) ? " is-selected" : ""}`}
+                        className={`watchface-layer-row${layerRowSelected(layer) ? " is-selected" : ""}${previewMode === "current" && shownChartPage && layer.visible && layerPageScope(layer) && !layerPageScope(layer)!.rule(shownChartPage) ? " is-off-page" : ""}`}
                         onMouseEnter={() => setHoveredId(layer.id)}
                         onMouseLeave={() => setHoveredId(null)}
                         onClick={(event) => {
@@ -10502,7 +10608,12 @@ export function WatchfaceEditor({
                           {layerIcon(layer)}
                         </span>
                         <span className={`watchface-layer-name${layer.visible ? "" : " is-hidden"}`} title={t(layer.label)}>{t(layer.label)}</span>
-                        {layer.visible ? (() => {
+                        {layer.visible && previewMode === "current" && layerPageScope(layer) ? (() => {
+                          const scope = layerPageScope(layer)!;
+                          const offPage = Boolean(shownChartPage && !scope.rule(shownChartPage));
+                          return <span className={`wf-layer-value wf-layer-scope${offPage ? " is-off-page" : ""}${scope.none ? " is-warning" : ""}`}
+                            title={offPage ? t("Not on the page on screen") : undefined}>{scope.none ? t("Not shown") : scope.label}</span>;
+                        })() : layer.visible ? (() => {
                           const value = watchfaceLayerSampleValue(layer, simulationScenario ?? { dateTime: simulation.dateTime, values: simulation.values }, new Date());
                           return value ? <span className="wf-layer-value" aria-label={t("Shows {{value1}}", { value1: value })}>{value}</span> : null;
                         })() : null}
@@ -11061,6 +11172,15 @@ export function WatchfaceEditor({
               </button>
             </div>
           ) : null}
+          {pageJump && shownChartPage === pageJump.to ? (
+            <div className="wf-delete-notice wf-page-jump-notice" role="status">
+              <span>{t("Showing {{page}}, where {{field}} appears. The {{from}} page hides it.", { page: templatePageLabel(pageJump.to), field: pageJump.label, from: templatePageLabel(pageJump.from) })}</span>
+              <button type="button" className="secondary-button" onClick={() => { const from = pageJump.from; setPageJump(null); showChartPage(from); }}>
+                {t("Back to {{page}}", { page: templatePageLabel(pageJump.from) })}
+              </button>
+              <button type="button" className="wf-delete-notice-close" aria-label={t("Dismiss")} onClick={() => setPageJump(null)}><X size={14} aria-hidden="true" /></button>
+            </div>
+          ) : null}
           {deleteNotice ? (
             <div className="wf-delete-notice" role="status">
               <span>{deleteNotice}</span>
@@ -11092,7 +11212,7 @@ export function WatchfaceEditor({
                       : !page.target ? t("{{number}} · {{page}} · graph only, nothing to preview", { number: index + 1, page: label })
                       : `${index + 1} · ${label} · ${graph}${bars ? ` · ${t("needs phone data")}` : ""}${empty ? ` · ${t("nothing visible, but Back still stops here")}` : ""}`;
                     return (
-                      <button key={page.page} type="button" className={`wf-page-tile${empty ? " is-empty" : ""}`} aria-pressed={shown}
+                      <button key={page.page} type="button" className={`wf-page-tile${empty ? " is-empty" : ""}${selectedFieldScope ? selectedFieldScope.rule(page.page) ? " is-field-on" : " is-field-off" : ""}`} aria-pressed={shown}
                         disabled={!page.target || isPositionLocked("native:chart")} title={title} aria-label={title}
                         onClick={() => showChartPage(page.page)}>
                         <span className="wf-page-tile-number" aria-hidden="true">{index + 1}</span>
@@ -11774,6 +11894,8 @@ export function WatchfaceEditor({
     }
     // Weather keeps its own section: on a face with a chart the watch hides
     // some of it on some pages, which each field's inspector explains.
+    // With chart pages, the fields the page switches sit with the Chart.
+    if (previewMode === "current" && layerPageScope(layer)) return "Chart pages";
     if (layer.kind === "weather" || layer.nativeDataId?.startsWith("weather_")) return "Weather";
     if (
       layer.kind === "batteryIcon" ||
@@ -12183,6 +12305,7 @@ export function WatchfaceEditor({
     const chartPageIndex = layer.nativeDataId === "chart" && previewMode === "current" ? stripChartPages.findIndex(page => page.page === shownChartPage) : -1;
     const chartHeaderPage = chartPageIndex >= 0 ? { number: chartPageIndex + 1, page: stripChartPages[chartPageIndex]!.page } : null;
     const chartStepTargets = stripChartPages.filter(page => page.target);
+    const fieldScope = previewMode === "current" ? layerPageScope(layer) : null;
     const stepChartPage = (step: number) => {
       const at = chartStepTargets.findIndex(page => page.page === shownChartPage);
       const next = chartStepTargets[(at + step + chartStepTargets.length) % chartStepTargets.length];
@@ -12231,7 +12354,12 @@ export function WatchfaceEditor({
                 {t(layerDisplayLabel(layer))}
               </strong>
             )}
-            {chartHeaderPage ? <span className="wf-layer-type-badge wf-chart-page-badge">
+            {fieldScope ? <span className="wf-page-scope">
+              <span className={`wf-page-scope-tag${fieldScope.none ? " is-warning" : ""}`}>{fieldScope.none ? t("Not shown") : fieldScope.label}</span>
+              <WatchfaceHint label={t("Which pages show it")}>{fieldScope.none
+                ? t("The watch draws it only on a daily page, and this face has none.")
+                : t("The watch draws it only on some chart pages, wherever it sits ({{scope}}). Selecting it shows the face on one of them; the Screens strip underlines the rest.", { scope: fieldScope.label })}</WatchfaceHint>
+            </span> : chartHeaderPage ? <span className="wf-layer-type-badge wf-chart-page-badge">
               {t("Page {{number}} of {{total}} · {{page}}", { number: chartHeaderPage.number, total: stripChartPages.length, page: templatePageLabel(chartHeaderPage.page) })}
             </span> : editorLayerTypeLabel(layer).toLowerCase() !== layer.label.toLowerCase() ? <span className="wf-layer-type-badge">
               {typeIcon}
@@ -13371,7 +13499,8 @@ export function WatchfaceEditor({
 
   function renderInspector(layer: EditorLayer) {
     const group = layerGroupLabel(layer);
-    const metricKind = layer.nativeDataId !== "chart" && (group === "Fixed metrics" || group === "Selectable" || group === "Chart pages") ? watchfaceMetricKind(layer) : null;
+    // Fields the chart pages switch say so with a tag under their name instead.
+    const metricKind = group === "Fixed metrics" || group === "Selectable" ? watchfaceMetricKind(layer) : null;
     return (
       <>
         {metricKind ? <MetricKindNote kind={metricKind} /> : null}
@@ -13404,7 +13533,7 @@ export function WatchfaceEditor({
             facePages={design.nativeData?.chart?.enabled ? stripChartPages.map(page => page.page) : facePageIds ?? []}
             shownPage={shownChartPage}
             onShowPage={design.nativeData?.chart?.enabled && previewMode === "current" ? showChartPage : undefined}
-            onAddDailyPage={design.nativeData?.chart?.enabled ? () => addChartPageToFace("daily-a") : facePageIds ? () => setChartPageMode("daily-a", "hidden") : undefined}
+            onAddDailyPage={design.nativeData?.chart?.enabled ? () => { pendingShownPage.current = "daily-a"; addChartPageToFace("daily-a"); } : facePageIds ? () => setChartPageMode("daily-a", "hidden") : undefined}
             onAddMinMaxPartner={(layer.nativeDataId === "weather_temp_min" || layer.nativeDataId === "weather_temp_max")
               && !design.nativeData?.[layer.nativeDataId === "weather_temp_min" ? "weather_temp_max" : "weather_temp_min"]?.enabled
               ? () => addNativeData(layer.nativeDataId === "weather_temp_min" ? "weather_temp_max" : "weather_temp_min") : undefined}

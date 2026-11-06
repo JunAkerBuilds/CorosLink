@@ -500,13 +500,15 @@ async function main() {
     document = await tool("get_document");
     assert.equal(document.view.selectedId, negativeSignLayer);
     assert.equal(document.capabilities.layers.find(layer => layer.id === negativeSignLayer)?.visible, true);
-    for (const value of ["weather_temp", "sleep_score", "week_tl", "sunriseset", "chart:chart_stress"]) {
+    // Charts are added a page at a time ("chartpage:<page>"), which starts the chart layer.
+    for (const value of ["weather_temp", "sleep_score", "week_tl", "sunriseset", "chartpage:daily-a"]) {
+      const field = value.startsWith("chartpage:") ? "chart" : value;
       await window.webContents.executeJavaScript("document.querySelector('.watchface-add-sprite').click()");
       await until(() => window.webContents.executeJavaScript("Boolean(document.querySelector('.wf-layer-picker:popover-open'))"), Boolean, "native data menu");
       await window.webContents.executeJavaScript(`document.querySelector('[data-native-data="${value}"]').click()`);
       document = await tool("get_document");
-      assert.equal(document.design.nativeData[value.split(":")[0]].enabled, true);
-      assert.equal(document.view.selectedId, `native:${value.split(":")[0]}`);
+      assert.equal(document.design.nativeData[field].enabled, true);
+      assert.equal(document.view.selectedId, `native:${field}`);
     }
     const beforeExistingField = document.revision;
     await window.webContents.executeJavaScript("document.querySelector('.watchface-add-sprite').click()");
