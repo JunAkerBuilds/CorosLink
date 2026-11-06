@@ -2244,7 +2244,8 @@ export function WatchfaceEditor({
   // layer (SIMPLE declares daily and sun readouts with no graph). Listed in
   // the layers panel so a page with nothing visible is still seen and removable.
   const templatePages = useMemo(() => {
-    // A turned-off chart layer counts as none: export clears only its own keys.
+    // A turned-off chart layer clears every chart key on export, so only pages
+    // the design keeps hidden on purpose remain.
     const master = modeSourceDetails && !design.nativeData?.chart?.enabled ? pickPreviewResolution(modeSourceDetails) : null;
     return master ? templateChartPages(withoutTurnedOffChart(master, design.nativeData?.chart), design.chartPageModes) : null;
   }, [modeSourceDetails, design.nativeData?.chart, design.chartPageModes]);
@@ -2266,8 +2267,8 @@ export function WatchfaceEditor({
     && (design.nativeData?.weather_temp_min?.enabled || design.nativeData?.weather_temp_max?.enabled));
   /**
    * The template's chart pages as chart rows. Under a turned-off Chart layer
-   * they replace its own page rows (`withParent` false): its readouts no
-   * longer reach the watch, but the template's other pages do.
+   * (`withParent` false) only pages kept hidden on purpose are left: turning
+   * the chart off takes the rest off the watch.
    */
   function renderTemplateChartRows(withParent = true) {
     if (!templatePages) return null;
@@ -2305,6 +2306,14 @@ export function WatchfaceEditor({
           <span className="wf-layer-icon" aria-hidden="true"><Layers size={14} /></span>
           <span className="watchface-layer-name">{t("Chart")}</span>
           <span className="wf-layer-subrow-page">{chartPageCount(onPages.length)}</span>
+          {onPages.length ? (
+            <span className="wf-layer-row-actions">
+              <button type="button" className="watchface-layer-delete" aria-label={t("Delete {{value1}}", { value1: t("Chart") })}
+                title={t("Delete")} onClick={() => requestRemoveTemplateChart()}>
+                <Trash2 size={14} />
+              </button>
+            </span>
+          ) : null}
         </div>
       </li> : null}
       <ChartPageRows rows={rows}
@@ -8650,6 +8659,9 @@ export function WatchfaceEditor({
     if (ids.length === 0) return;
     const locked = ids.filter(isMovementLockedForId);
     const chart = ids.includes("native:chart") && design.nativeData?.chart?.enabled;
+    // Pages a turned-off chart keeps on purpose (hidden) go with it on Delete,
+    // or the same pages would list straight back.
+    const offChartPages = ids.includes("native:chart") && !chart ? onTemplateChartPages() : [];
     if (locked.length) {
       setDeleteRequest({ ids, unlock: true,
         title: locked.length === 1 ? t("{{label}} is locked", { label: deleteLabelFor(locked[0]!) }) : t("{{count}} layers are locked", { count: locked.length }),
@@ -8664,9 +8676,39 @@ export function WatchfaceEditor({
       const pages = stripChartPages.length;
       setDeleteRequest({ ids, unlock: false, title: pages === 1 ? t("Delete the chart and its page?") : t("Delete the chart and its {{count}} pages?", { count: pages }),
         body: t("Its pages leave the Back sequence. Pages the template declares on its own stay on the watch and list under Chart pages, where you can remove them. The chart waits under Removed from this face."), confirm: t("Delete chart") });
+    } else if (offChartPages.length) {
+      requestRemoveTemplateChart(ids);
     } else {
       deleteLayers(ids);
     }
+  }
+
+  /** The template's chart pages the watch still steps through (no chart layer on). */
+  function onTemplateChartPages() {
+    return design.nativeData?.chart?.enabled ? [] : (templatePages ?? []).filter(page => page.on);
+  }
+
+  /**
+   * Deleting a chart that is off (or the template's Chart row): its layer, if
+   * any, and every template page left on the watch go in one undo step.
+   */
+  function requestRemoveTemplateChart(ids: string[] = []) {
+    const pages = onTemplateChartPages();
+    if (!pages.length) { if (ids.length) deleteLayers(ids); return; }
+    setDeleteRequest({ ids, unlock: false,
+      title: pages.length === 1 ? t("Delete the chart and its page?") : t("Delete the chart and its {{count}} pages?", { count: pages.length }),
+      body: t("The template's chart pages leave the Back sequence, so the watch no longer stops on them. Undo brings them back, and Add page puts one back on its own."),
+      confirm: t("Delete chart"),
+      action: () => {
+        beginDesignTransaction();
+        try {
+          setDesign(prev => ({ ...prev, chartPageModes: { ...prev.chartPageModes, ...Object.fromEntries(pages.map(page => [page.id, "removed" as const])) } }));
+          if (ids.length) deleteLayers(ids);
+        } finally {
+          endDesignTransaction();
+        }
+        if (!ids.length) showDeleteNotice(pages.length === 1 ? t("Chart page removed from the watch.") : t("{{count}} chart pages removed from the watch.", { count: pages.length }));
+      } });
   }
 
   /**
@@ -9987,6 +10029,20 @@ export function WatchfaceEditor({
       // The Add menu's own way back (battery icon defaults and the like), looked up when used.
       putBack: () => {
         setDeleteNotice(null);
+        if (layer.nativeDataId === "chart") {
+          // The chart comes back with the template pages its Delete removed.
+          beginDesignTransaction();
+          try {
+            setDesign(prev => {
+              const modes = Object.fromEntries(Object.entries(prev.chartPageModes ?? {}).filter(([, mode]) => mode !== "removed"));
+              return { ...prev, chartPageModes: Object.keys(modes).length ? modes : undefined };
+            });
+            addNativeData("chart");
+          } finally {
+            endDesignTransaction();
+          }
+          return;
+        }
         if (layer.nativeDataId) { addNativeData(layer.nativeDataId); return; }
         const faceOption = faceAddOptions.find((option) => option.id === layer.id);
         if (faceOption) faceOption.onAdd(); else restoreFirmwareLayer(layer);
@@ -10095,7 +10151,10 @@ export function WatchfaceEditor({
   // A listed (turned-off) Chart layer shows them under its own row instead;
   // a deleted one has no row, so they get their own.
   const chartLayerListed = searchedLayerSections.some(section => section.layers.some(layer => layer.nativeDataId === "chart"));
-  const showTemplateChart = Boolean(templatePages && !chartLayerListed && !layerSearch && (templatePages.length || minMaxNeedsDailyPage));
+  // Once the Chart layer and all its pages are deleted, Put back under
+  // Removed from this face brings them back; no empty Chart row lingers.
+  const showTemplateChart = Boolean(templatePages && !chartLayerListed && !layerSearch && (templatePages.some(page => page.on) || minMaxNeedsDailyPage
+    || (templatePages.length && !removedLayerIds.has("native:chart"))));
   const layerSectionsWithTemplateChart = !showTemplateChart || searchedLayerSections.some(section => section.label === "Chart pages")
     ? searchedLayerSections
     : (() => {

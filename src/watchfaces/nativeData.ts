@@ -242,7 +242,10 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
     for (const [id, style] of Object.entries(data)) {
       const field = NATIVE_DATA_BY_ID.get(id);
       if (!field) throw new Error(`Unknown native data field: ${id}`);
-      if (field.kind === "chart") {
+      // A turned-off chart takes every chart key with it, so no page of the
+      // template's own is left for Back to stop on (turnedOffChartKeys).
+      if (field.kind === "chart" && !style.enabled) for (const key of nativeFieldKeys(field)) values[key] = COROS_CONFIG_DELETE_VALUE;
+      else if (field.kind === "chart") {
         // The layer owns the shared graph and its selected readout. Readouts of
         // other chart groups already in the template (recovered official faces)
         // are alternatives the watch cycles through, so they stay; only this
@@ -496,9 +499,9 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
       }
     }
     if (chart?.enabled) for (const key of removedChartPageKeys(chartPageModes)) values[key] = COROS_CONFIG_DELETE_VALUE;
-    // Without a chart layer (or with it turned off) the template's own pages
-    // stay, as the design keeps or removes them. Keys the turned-off chart
-    // cleared above no longer count as the template's.
+    // Without a chart layer the template's own pages stay, as the design keeps
+    // or removes them. A turned-off chart cleared every chart key above, so
+    // only pages the design keeps hidden on purpose come back.
     else if (Object.keys(chartPageModes).length) {
       const config = Object.fromEntries(Object.entries(resolution.config).filter(([key]) => values[key] !== COROS_CONFIG_DELETE_VALUE));
       Object.assign(values, templateChartPageOverrides(config, chartPageModes, { icon: blankIcon, frames: blankFrames }));

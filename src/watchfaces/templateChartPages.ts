@@ -1,5 +1,5 @@
 import type { CorosWatchfaceNativeDataStyle, CorosWatchfaceResolutionDetails } from "../../electron/types";
-import { NATIVE_CHART_BAR_PAGES, NATIVE_CHART_PAGES, NATIVE_CHART_SHARED_KEYS, nativeChartSourceKeys } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_CHART_BAR_PAGES, NATIVE_CHART_PAGES, NATIVE_DATA_BY_ID, nativeChartSourceKeys, nativeFieldKeys } from "../../electron/watchfaceNativeCatalog";
 import { COROS_CONFIG_DELETE_VALUE } from "./watchfaceStudio";
 
 /**
@@ -63,13 +63,14 @@ export function templateChartPages(resolution: Pick<CorosWatchfaceResolutionDeta
 }
 
 /**
- * Keys a turned-off chart layer clears on export (composeNativeData): the
- * graph and its own readouts. The template's other readouts stay, so their
- * pages stay on the watch like a template without a chart layer.
+ * Keys a turned-off chart layer clears on export (composeNativeData): every
+ * chart key, the template's own readouts included. Hiding the chart takes all
+ * its pages off the watch, like hiding any other layer (2026-11-06); only
+ * pages the design keeps on purpose (chartPageModes "hidden") stay.
  */
 export function turnedOffChartKeys(chart: CorosWatchfaceNativeDataStyle | undefined): string[] {
   if (!chart || chart.enabled) return [];
-  return [...NATIVE_CHART_SHARED_KEYS, ...[chart.chartSource ?? "chart_stress", ...Object.keys(chart.readouts ?? {}), ...chart.removedReadouts ?? []].flatMap(nativeChartSourceKeys)];
+  return nativeFieldKeys(NATIVE_DATA_BY_ID.get("chart")!);
 }
 
 /** A resolution config without the keys a turned-off chart clears. */

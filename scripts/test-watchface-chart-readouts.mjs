@@ -190,8 +190,9 @@ console.log("watchface chart readouts: ok");
   assert.ok(removedChartPageKeys({ sun: "removed" }).includes("chart_sunrise_font"));
 }
 
-// A turned-off chart layer clears only its own keys: the template's other
-// readouts keep their pages (2LoT_v4test, chart off on chart_sun_angle).
+// A turned-off chart layer clears every chart key, the template's own
+// readouts too: hiding it takes all its pages off the watch (2LoT_v4test,
+// chart off on chart_sun_angle, kept Sun + Daily A until 2026-11-06).
 {
   const { templateChartPages, onChartPageIds, withoutTurnedOffChart, turnedOffChartKeys } = await import("../src/watchfaces/templateChartPages.ts");
   const config = { chart_rect: "{83,256,303,305,hcenter|vcenter}", chart_bar_width: "7", chart_sun_angle_font: "a", chart_sunrise_font: "b",
@@ -200,5 +201,7 @@ console.log("watchface chart readouts: ok");
   assert.deepEqual(turnedOffChartKeys({ enabled: true, chartSource: "chart_sun_angle" }), []);
   const off = withoutTurnedOffChart(resolution, { enabled: false, chartSource: "chart_sun_angle" });
   assert.equal(off.config.chart_bar_width, undefined, "Turning the chart off clears the bars");
-  assert.deepEqual(onChartPageIds(templateChartPages(off)), ["sun", "daily-a"], "Sun and daily A stay on the watch");
+  assert.deepEqual(onChartPageIds(templateChartPages(off)), [], "No page of the template's stays on the watch");
+  assert.equal(off.config.chart_stress_font, undefined, "The template's own readouts go too");
+  assert.deepEqual(onChartPageIds(templateChartPages(off, { "daily-a": "hidden" })), ["daily-a"], "A page kept hidden on purpose stays");
 }
