@@ -150,6 +150,8 @@ for (const line of [
   /Pace \/100m \| Power \| Stroke rate/, /2:40 \| — \| 24 \/min/
 ]) assert.match(poolSwimText, line);
 assert.doesNotMatch(poolSwimText, /Avg cadence/, "a swim's cadence is its stroke rate");
+// The coach is told a stroke is one cycle of the watch arm, so it doesn't compare it with counts of both arms.
+assert.match(poolSwimText, /Max stroke rate: 30 strokes\/min[\s\S]*\nStrokes and stroke rate count full cycles of the arm wearing the watch/);
 // A metre pool stays in metres when the app uses imperial units; the water temperature follows the app.
 const poolSwimImperial = formatActivityDetailForChat(poolSwim, false, "imperial");
 assert.match(poolSwimImperial, /Distance: 75 m/);
@@ -312,6 +314,7 @@ assert.doesNotMatch(powerRunText, /Duration: 51:50|7:24\/km/);
 assert.match(powerRunText, /Avg power: 204 W/);
 assert.match(powerRunText, /Max power: 306 W/);
 assert.match(powerRunText, /Avg cadence: 153 spm/);
+assert.doesNotMatch(powerRunText, /arm wearing the watch/, "only swims explain strokes");
 assert.match(powerRunText, /Max cadence: 169 spm/);
 assert.doesNotMatch(powerRunText, /Normalized power/);
 assert.match(

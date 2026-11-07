@@ -515,6 +515,7 @@ export function formatActivityDetailForChat(
 
   const sections = ["Activity detail", summaryParts.join("\n")];
   if (detail.swim) sections.push("", formatSwimSummary(detail.swim, swimUnits, unitSystem));
+  if (swim) sections.push(SWIM_STROKE_NOTE);
   const swimRows = swim && detail.laps.some((lap) => lap.rest || lap.stroke !== undefined || lap.strokes !== undefined || lap.swolf !== undefined);
 
   // A gym lap list mixes work sets, rests and per-exercise roll-ups, so a lap
@@ -564,6 +565,16 @@ function formatSwimPace(secondsPer100m: number, unitSystem: UnitSystem): string 
   const clock = swimPaceClock(secondsPer100m, unitSystem);
   return clock ? `${clock}/${swimPaceUnit(unitSystem)}` : "—";
 }
+
+/**
+ * What one stroke is on a COROS watch: a full cycle of the arm wearing it,
+ * never doubled. Spelled out so the coach doesn't compare it with stroke
+ * rates that count every hand entry.
+ */
+const SWIM_STROKE_NOTE =
+  "Strokes and stroke rate count full cycles of the arm wearing the watch, not single arm pulls. " +
+  "In freestyle and backstroke a count of both arms' pulls is about twice as high; " +
+  "in breaststroke and butterfly the arms move together, so the counts are the same.";
 
 /** The swim's totals as the watch recorded them; SWOLF is a length's seconds plus its strokes (lower is more efficient). */
 function formatSwimSummary(swim: TrainingHubSwimSummary, swimUnits: UnitSystem, unitSystem: UnitSystem): string {
