@@ -8279,6 +8279,7 @@ export function WatchfaceEditor({
         previewDataUrl: exportPreview,
         ...(buildFirmwareType ? { firmwareType: buildFirmwareType } : {}),
         ...(buildWatchModel ? { watchModel: buildWatchModel } : {}),
+        ...(action === "convert" && destination && convertsFromNativeLayout ? { convertNativeLayout: true } : {}),
         ...(designSnapshot.archiveWatchFaceVersion !== undefined
           ? { watchFaceVersion: designSnapshot.archiveWatchFaceVersion }
           : {}),
@@ -8329,6 +8330,11 @@ export function WatchfaceEditor({
    * be carried onto another watch's 800px master. Bake the scene into a final
    * archive built for the destination instead; it opens as a fresh starter.
    */
+  // A face with no 800px master (a COROS-app DIY face carries only its own
+  // watch's layout) can't move onto another watch's master either; it is baked
+  // the same way. Faces with a master keep the live-scene Convert.
+  const convertsFromNativeLayout = !starterArchive.recoveredFromCompiled &&
+    Boolean(details && details.resolutions.length > 0 && !details.resolutions.some(resolution => resolution.width === 800));
   const bakeForWatchRef = useRef<NonNullable<WatchfaceAutomationConversionInput["bakeForWatch"]>>(
     async () => { throw new Error(t("The editor is not ready to convert.")); }
   );
@@ -8340,7 +8346,7 @@ export function WatchfaceEditor({
   // The conversion dialog holds this while the editor is frozen; delegate
   // through the ref so it always builds from the latest editor state.
   const bakeForWatch: WatchfaceAutomationConversionInput["bakeForWatch"] =
-    starterArchive.recoveredFromCompiled
+    starterArchive.recoveredFromCompiled || convertsFromNativeLayout
       ? (target, name) => bakeForWatchRef.current(target, name)
       : undefined;
 
@@ -8351,7 +8357,7 @@ export function WatchfaceEditor({
    * new editor session (Convert), because the destination has its own layout.
    */
   async function exportForAllWatches() {
-    if (!bakeForWatch || allWatchesExport) return;
+    if (!bakeForWatch || !starterArchive.recoveredFromCompiled || allWatchesExport) return;
     let folder: Awaited<ReturnType<typeof api.chooseCorosWatchfaceExportFolder>>;
     try { folder = await api.chooseCorosWatchfaceExportFolder(); }
     catch (caught) { onError(caught instanceof Error ? caught.message : t("Could not open the folder picker.")); return; }
@@ -10238,7 +10244,7 @@ export function WatchfaceEditor({
           </div>
           <button className="secondary-button wf-save-button" type="button" title={t("Save")} disabled={saving || spriteImportPending || !isDirty} onClick={() => void saveProject()}>
             {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />}<span className="wf-command-label">{t("Save")}</span></button>
-          {showDevelopmentTools || bakeForWatch ? (
+          {showDevelopmentTools || (bakeForWatch && starterArchive.recoveredFromCompiled) ? (
             <div className="wf-export-menu" ref={downloadMenuRef}>
               <button
                 className="secondary-button wf-download-button"
@@ -10283,7 +10289,7 @@ export function WatchfaceEditor({
                       <small>{t("Development export")}</small>
                     </span>
                   </button> : null}
-                  {bakeForWatch ? <button
+                  {bakeForWatch && starterArchive.recoveredFromCompiled ? <button
                     type="button"
                     role="menuitem"
                     disabled={spriteImportPending || creating || exporting || Boolean(allWatchesExport) || !backgroundDataUrl}

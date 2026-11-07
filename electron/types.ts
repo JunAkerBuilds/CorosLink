@@ -503,6 +503,13 @@ export interface CorosWatchfaceCreatorInput {
   firmwareType?: string;
   /** Connected watch model, used when firmware identifiers change over time. */
   watchModel?: WatchModelId;
+  /**
+   * Convert a starter that has no 800px master (only its watch's own layout,
+   * like a COROS-app DIY face) onto `firmwareType`'s watch by scaling the
+   * finished build from that native layout, as recovered official faces do.
+   * Only honored when the destination is a different watch than the starter's.
+   */
+  convertNativeLayout?: boolean;
   /** Exact `o_wf_ver` to write. Omit to preserve/auto-raise the template value. */
   watchFaceVersion?: number;
   /**

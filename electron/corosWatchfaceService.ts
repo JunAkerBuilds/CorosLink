@@ -2640,13 +2640,26 @@ export async function createCorosWatchfaceArchive(
   }
 
   const requestedFirmwareType = normalizeOptionalFirmwareType(input.firmwareType);
+  // A face with no 800px master (a COROS-app DIY face has only its watch's own
+  // layout) converts like a recovered one when the editor asks for it: built
+  // as is, then scaled from that layout for the other watch. Exports to the
+  // face's own watch never take this path.
+  const requestedTarget = getWatchfaceTarget(input.watchModel ?? requestedFirmwareType);
+  const convertsNativeLayout = input.convertNativeLayout === true &&
+    !verifiedSource.recoveredFromCompiled &&
+    !verifiedSource.resolutionDirectories.includes("watchface_800x800") &&
+    Boolean(requestedFirmwareType && requestedTarget) &&
+    (source.firmwareType
+      ? requestedFirmwareType!.toUpperCase() !== source.firmwareType.toUpperCase()
+      : !verifiedSource.resolutionDirectories.includes(`watchface_${requestedTarget!.previewSize}x${requestedTarget!.previewSize}`));
+  const scalesFromNativeLayout = verifiedSource.recoveredFromCompiled === true || convertsNativeLayout;
   // A recovered official face is scaled from its native tree at export, so it
   // can be built for any supported watch, not only the one it was decoded from.
   if (
     requestedFirmwareType &&
     source.firmwareType &&
     requestedFirmwareType.toUpperCase() !== source.firmwareType.toUpperCase() &&
-    !verifiedSource.recoveredFromCompiled
+    !scalesFromNativeLayout
   ) {
     throw new Error(
       `This starter template was selected for ${source.firmwareType}, not ${requestedFirmwareType}. Browse templates again for the connected watch.`
@@ -2658,7 +2671,7 @@ export async function createCorosWatchfaceArchive(
   if (exportTarget && firmwareTarget && exportTarget.model !== firmwareTarget.model) {
     throw new Error("The selected watch and COROS firmware type do not match.");
   }
-  const recoveredTarget = verifiedSource.recoveredFromCompiled
+  const recoveredTarget = scalesFromNativeLayout
     ? getWatchfaceTarget(input.watchModel ?? firmwareType) : undefined;
   if (verifiedSource.recoveredFromCompiled && !recoveredTarget) {
     throw new Error("Choose a supported watch before exporting this recovered official face.");

@@ -123,7 +123,11 @@ function convertEntries(
     source.delete("custom/custom.pb");
     source.delete("custom/custom_bg.png");
   }
-  if (recoveredExport && JSON.parse(source.get("info.json")?.toString("utf8") ?? "{}").coroslinkRecovery?.partial !== true) {
+  // Native-resolution export scales from the face's own layout. That suits a
+  // recovered official face and any face that has no 800px master (a COROS-app
+  // DIY face carries only its watch's layout); a face with a master keeps it.
+  if (recoveredExport && JSON.parse(source.get("info.json")?.toString("utf8") ?? "{}").coroslinkRecovery?.partial !== true &&
+    source.has("watchface_800x800/config.txt")) {
     throw new Error("Only a recovered official face can use native-resolution export.");
   }
   if ([...source.keys()].some(name => {

@@ -142,6 +142,46 @@ async function main() {
     firmwareType: pace4.firmwareType, watchModel: pace4.model
   }), /was selected for COROS W332, not COROS W336/);
 
+  // The flag never moves a starter that has its 800px master.
+  await assert.rejects(service.createCorosWatchfaceArchive({
+    sourceArchiveId: diy.archiveId, backgroundDataUrl: dataUrl(416), previewDataUrl: dataUrl(416),
+    firmwareType: pace4.firmwareType, watchModel: pace4.model, convertNativeLayout: true
+  }), /was selected for COROS W332, not COROS W336/);
+
+  // A COROS-app DIY face carries only its own watch's layout (no 800px
+  // master). Asked to convert, it is built and scaled from that layout like a
+  // recovered face; unasked, or for its own watch, nothing changes.
+  const nativeOnly = [
+    { name: "info.json", data: Buffer.from('{"m_app":"watchface_390x390","m_name":"Native","m_preview":"watchface_customize.png","o_author":"someone","o_default_language":"en","o_diy_version":1,"o_template_id":0,"o_wf_ver":0}') },
+    { name: "watchface_customize.png", data: png(390) },
+    { name: "watchface_390x390/background.png", data: png(390) },
+    { name: "watchface_390x390/config.txt", data: Buffer.from("[watchface_id]=0x00000020\r\n[background_icon]=background.png\r\n[time_hour_high_pos]={100,120}\r\n") }
+  ];
+  const nativePath = path.join(temp, "native-only.dat");
+  await fs.writeFile(nativePath, createStoreZip(nativeOnly));
+  const native = await savedStarter(nativePath, "COROS W336");
+  assert.equal(native.recoveredFromCompiled, undefined);
+  assert.deepEqual(await sizesOf(native), [390]);
+  const pace4Pro = WATCHFACE_TARGETS.find(target => target.model === "pace-4-pro");
+  const nativeBuild = (target, extra = {}) => service.createCorosWatchfaceArchive({
+    sourceArchiveId: native.archiveId, backgroundDataUrl: dataUrl(390), previewDataUrl: dataUrl(390),
+    firmwareType: target.firmwareType, watchModel: target.model, ...extra
+  });
+  await assert.rejects(nativeBuild(pace4Pro), /was selected for COROS W336, not COROS W337/, "Without the flag a 390-only face still refuses another watch");
+  const ownWatch = async (extra) => nativeBuild(pace4, extra).then(() => "built", (error) => error.message);
+  assert.equal(await ownWatch({ convertNativeLayout: true }), await ownWatch({}), "The flag does nothing for the face's own watch");
+  const nativeConverted = await nativeBuild(pace4Pro, { convertNativeLayout: true });
+  assert.equal(nativeConverted.firmwareType, pace4Pro.firmwareType);
+  assert.deepEqual(await sizesOf(nativeConverted), [466, 800]);
+  const nativeArchive = await read(nativeConverted);
+  const nativeScaled = service.parseCorosWatchfaceConfig(await nativeArchive.text("watchface_466x466/config.txt"));
+  assert.equal(nativeScaled.time_hour_high_pos, `{${Math.round(100 * 466 / 390)},${Math.round(120 * 466 / 390)}}`, "390 coordinates scale to the destination size");
+  assert.equal(service.parseCorosWatchfaceConfig(await nativeArchive.text("watchface_800x800/config.txt")).time_hour_high_pos,
+    `{${Math.round(100 * 800 / 390)},${Math.round(120 * 800 / 390)}}`, "The new starter gets an 800px master");
+  assert.equal(PNG.sync.read(await nativeArchive.files.get("watchface_466x466/background.png").buffer()).width, 466);
+  assert.match(await nativeArchive.text("info.json"), /"m_name":"Native"/, "The face keeps its name");
+  assert.doesNotMatch(await nativeArchive.text("info.json"), /"o_template_id":0\b/, "Template identity comes from the destination carrier");
+
   console.log("Recovered watch-face conversion tests passed");
 }
 
