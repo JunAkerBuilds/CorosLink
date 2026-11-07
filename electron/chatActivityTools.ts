@@ -93,6 +93,9 @@ export function getChatActivityTools(): CorosMcpTool[] {
         "For swims synced from the watch it also returns pool length, strokes, SWOLF, stroke rate, " +
         "best pace and water temperature, and each interval and length with its stroke type, " +
         "strokes, SWOLF and stroke rate, rests included. " +
+        "A COROS stroke is one full cycle of the arm wearing the watch, not a single arm pull; stroke rate, SWOLF " +
+        "and distance per stroke use that count, so in freestyle and backstroke they differ from figures that count " +
+        "both arms. " +
         "Use activity_id and sport_type from " +
         "list_recent_activities or the training snapshot. Prefer this local tool over " +
         "COROS MCP for lap and split analysis.",
@@ -502,12 +505,13 @@ export function formatActivityDetailForChat(
     detail.avgPower ? `Avg power: ${detail.avgPower} W` : undefined,
     detail.maxPower ? `Max power: ${detail.maxPower} W` : undefined,
     detail.normalizedPower ? `Normalized power: ${detail.normalizedPower} W` : undefined,
-    // A swim's cadence is its stroke rate, listed with the swim's figures below.
+    // A swim's cadence is its stroke rate: listed with the swim's figures
+    // below when there are any, and named as stroke rate here otherwise.
     detail.avgCadence && !detail.swim
-      ? `Avg cadence: ${formatCadence(detail.avgCadence, cycling)}`
+      ? `${swim ? "Avg stroke rate" : "Avg cadence"}: ${formatCadence(detail.avgCadence, cycling, swim)}`
       : undefined,
     detail.maxCadence && !detail.swim
-      ? `Max cadence: ${formatCadence(detail.maxCadence, cycling)}`
+      ? `${swim ? "Max stroke rate" : "Max cadence"}: ${formatCadence(detail.maxCadence, cycling, swim)}`
       : undefined,
     detail.trainingLoad ? `Training load: ${detail.trainingLoad}` : undefined,
     detail.calories ? `Calories: ${Math.round(detail.calories)}` : undefined
@@ -515,6 +519,7 @@ export function formatActivityDetailForChat(
 
   const sections = ["Activity detail", summaryParts.join("\n")];
   if (detail.swim) sections.push("", formatSwimSummary(detail.swim, swimUnits, unitSystem));
+  if (swim && hasSwimStrokeFigures(detail, includeSeries)) sections.push("", SWIM_STROKE_NOTE);
   const swimRows = swim && detail.laps.some((lap) => lap.rest || lap.stroke !== undefined || lap.strokes !== undefined || lap.swolf !== undefined);
 
   // A gym lap list mixes work sets, rests and per-exercise roll-ups, so a lap
@@ -563,6 +568,31 @@ const SWIM_STROKE_NAMES: Record<TrainingHubSwimStroke, string> = {
 function formatSwimPace(secondsPer100m: number, unitSystem: UnitSystem): string {
   const clock = swimPaceClock(secondsPer100m, unitSystem);
   return clock ? `${clock}/${swimPaceUnit(unitSystem)}` : "—";
+}
+
+/**
+ * What one stroke is on a COROS watch: a full cycle of the arm wearing it,
+ * never doubled. Every figure built on the count (stroke rate, SWOLF,
+ * distance per stroke) follows it, so the coach doesn't compare them with
+ * figures that count every hand entry. The get_activity_detail description
+ * carries the same definition.
+ */
+const SWIM_STROKE_NOTE =
+  "Strokes: one stroke is a full cycle of the arm wearing the watch, not a single arm pull, and stroke rate, " +
+  "SWOLF and distance per stroke all use that count. In freestyle and backstroke, figures that count both arms' " +
+  "pulls show about twice the strokes and stroke rate, a higher SWOLF and about half the distance per stroke; " +
+  "in breaststroke and butterfly the arms move together, so they match.";
+
+/** Whether a swim's text shows any figure built on the stroke count. */
+function hasSwimStrokeFigures(detail: TrainingHubActivityDetail, includeSeries: boolean): boolean {
+  const summary = detail.swim;
+  if (summary && [summary.strokes, summary.avgStrokeRate, summary.maxStrokeRate, summary.strokeDistance, summary.avgSwolf, summary.bestSwolf]
+    .some((value) => value !== undefined)) return true;
+  if (!summary && (detail.avgCadence || detail.maxCadence)) return true;
+  const laps = [...detail.laps, ...(detail.lapGroups?.flatMap((group) => group.laps) ?? [])];
+  if (laps.some((lap) => lap.strokes !== undefined || lap.strokeRate !== undefined || lap.swolf !== undefined
+    || lap.avgCadence !== undefined || lap.maxCadence !== undefined)) return true;
+  return includeSeries && Boolean(detail.series?.some((point) => point.cadence !== undefined));
 }
 
 /** The swim's totals as the watch recorded them; SWOLF is a length's seconds plus its strokes (lower is more efficient). */
@@ -649,7 +679,8 @@ function formatLapTable(
   );
   const header = [
     `Lap | Distance | Duration | Avg HR | Max HR | ${cycling ? "Speed" : "Pace"}`,
-    ...optionalColumns.map((column) => column.label)
+    // A swim's cadence columns are its stroke rate.
+    ...optionalColumns.map((column) => swim && column.unit === "cadence" ? column.label.replace("Cadence", "Stroke Rate") : column.label)
   ].join(" | ");
   const rows = capped.map((lap) => {
     const cols = [
@@ -666,7 +697,7 @@ function formatLapTable(
         if (value === undefined) {
           return "—";
         }
-        return column.unit === "W" ? `${value} W` : formatCadence(value, cycling);
+        return column.unit === "W" ? `${value} W` : formatCadence(value, cycling, swim);
       })
     ];
     return cols.join(" | ");
@@ -690,8 +721,8 @@ const LAP_SENSOR_COLUMNS: ReadonlyArray<{
   { key: "maxCadence", label: "Max Cadence", unit: "cadence" }
 ];
 
-function formatCadence(value: number, cycling: boolean): string {
-  return `${value} ${cycling ? "rpm" : "spm"}`;
+function formatCadence(value: number, cycling: boolean, swim = false): string {
+  return `${value} ${swim ? "strokes/min" : cycling ? "rpm" : "spm"}`;
 }
 
 function formatIsoDate(epochSeconds: number): string {

@@ -150,6 +150,27 @@ for (const line of [
   /Pace \/100m \| Power \| Stroke rate/, /2:40 \| — \| 24 \/min/
 ]) assert.match(poolSwimText, line);
 assert.doesNotMatch(poolSwimText, /Avg cadence/, "a swim's cadence is its stroke rate");
+// The coach is told a stroke is one cycle of the watch arm, and that SWOLF and
+// distance per stroke follow it, so it doesn't compare them with counts of both arms.
+assert.match(poolSwimText, /^Strokes: one stroke is a full cycle of the arm wearing the watch/m);
+assert.match(poolSwimText, /stroke rate, SWOLF and distance per stroke all use that count/);
+// A swim with no swim summary (open water, an older sync): its cadence is named
+// as stroke rate, in the summary and the lap table, and the note still comes along.
+const openWaterText = formatActivityDetailForChat({
+  activityId: "swim-3", name: "Lake", sportType: 300, distance: 1000, duration: 1200, avgCadence: 27, maxCadence: 33,
+  laps: [{ index: 1, distance: 1000, duration: 1200, avgCadence: 27, maxCadence: 33 }], raw: {}
+}, false);
+assert.match(openWaterText, /Avg stroke rate: 27 strokes\/min/);
+assert.match(openWaterText, /Max stroke rate: 33 strokes\/min/);
+assert.match(openWaterText, /Avg Stroke Rate \| Max Stroke Rate/);
+assert.match(openWaterText, /27 strokes\/min \| 33 strokes\/min/);
+assert.doesNotMatch(openWaterText, /cadence|spm/i);
+assert.match(openWaterText, /^Strokes: one stroke is a full cycle/m);
+// A swim with no stroke figures at all gets no note.
+assert.doesNotMatch(formatActivityDetailForChat({
+  activityId: "swim-4", name: "Pool", sportType: 300, distance: 100, duration: 120,
+  laps: [{ index: 1, distance: 100, duration: 120 }], raw: {}
+}, false), /arm wearing the watch/);
 // A metre pool stays in metres when the app uses imperial units; the water temperature follows the app.
 const poolSwimImperial = formatActivityDetailForChat(poolSwim, false, "imperial");
 assert.match(poolSwimImperial, /Distance: 75 m/);
@@ -312,6 +333,7 @@ assert.doesNotMatch(powerRunText, /Duration: 51:50|7:24\/km/);
 assert.match(powerRunText, /Avg power: 204 W/);
 assert.match(powerRunText, /Max power: 306 W/);
 assert.match(powerRunText, /Avg cadence: 153 spm/);
+assert.doesNotMatch(powerRunText, /arm wearing the watch/, "only swims explain strokes");
 assert.match(powerRunText, /Max cadence: 169 spm/);
 assert.doesNotMatch(powerRunText, /Normalized power/);
 assert.match(
