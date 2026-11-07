@@ -1137,17 +1137,11 @@ export async function getTrainingHubActivityDetail(
   listActivity?: TrainingHubActivity
 ): Promise<TrainingHubActivityDetail> {
   const auth = getStoredAuth();
-  const raw = await trainingHubRequest<Record<string, unknown>>(
-    "/activity/detail/query",
-    {
-      method: "POST",
-      params: {
-        labelId: activityId,
-        sportType,
-        ...(auth?.userId ? { userId: auth.userId } : {})
-      }
-    }
-  );
+  const raw = await readActivityDetailWithRetry({
+    labelId: activityId,
+    sportType,
+    ...(auth?.userId ? { userId: auth.userId } : {})
+  });
 
   let detail = parseActivityDetail(raw);
   // Opportunistically cache the end-of-activity feeling and note while we have the detail.
@@ -1188,6 +1182,41 @@ export async function getTrainingHubActivityDetail(
   }
 
   return detail;
+}
+
+// Since 2026-11-06 /activity/detail/query answers 1001 "Service exceptions" at
+// random: the same request for the same activity succeeds a moment later
+// (some backends fail, others don't). The read is idempotent, so it is retried
+// with a short backoff; only the last failure reaches the error report.
+const ACTIVITY_DETAIL_RETRY_DELAYS_MS = [400, 1_200];
+
+async function readActivityDetailWithRetry(
+  params: Record<string, string | number>
+): Promise<Record<string, unknown>> {
+  for (let attempt = 0; ; attempt += 1) {
+    const last = attempt >= ACTIVITY_DETAIL_RETRY_DELAYS_MS.length;
+    try {
+      return await trainingHubRequest<Record<string, unknown>>("/activity/detail/query", {
+        method: "POST",
+        params,
+        unreported: !last
+      });
+    } catch (error) {
+      if (last) throw error;
+      const code = (error as { code?: unknown } | null)?.code;
+      if (code !== "1001") {
+        // Not the transient failure: report it as trainingHubRequest would have.
+        if (code !== SIGNED_OUT_CODE) {
+          recordDiagnosticError(
+            code === SESSION_EXPIRED_CODE ? "trainingHub:session" : "trainingHub:/activity/detail/query",
+            error
+          );
+        }
+        throw error;
+      }
+      await delay(ACTIVITY_DETAIL_RETRY_DELAYS_MS[attempt]);
+    }
+  }
 }
 
 function activityQueryDay(epochMs: number): string {
