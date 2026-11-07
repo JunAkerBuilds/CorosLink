@@ -846,9 +846,9 @@ export function WatchfacesView({
     setConversionBusy(true);
     try {
       if (bakeForWatch) {
-        // Recovered official faces are rebuilt from their native tree for the
-        // destination; the finished archive becomes the new project's starter.
-        if (targetArchive) throw new Error(t("Recovered official faces convert with the destination watch's own COROS template."));
+        // Recovered official faces, and faces with no 800px master, are rebuilt from their
+        // native tree for the destination; the finished archive becomes the new project's starter.
+        if (targetArchive) throw new Error(t("Faces rebuilt from their own layout convert with the destination watch's own COROS template."));
         const baked = await bakeForWatch({ firmwareType: target.firmwareType, watchModel: target.model }, name);
         const bakedName = convertedProjectName(name, target.firmwareType);
         clearWatchfaceAutomationEditor();
@@ -4536,7 +4536,7 @@ function WatchfaceConversionDialog({ name, sourceFirmwareType, bakes, busy, erro
         ) : (
           <>
             <p>{bakes
-              ? t("Bring “{{name}}” to another watch. This recovered official face is rebuilt from its native layout with your edits applied, then opens as a new starter you can keep editing.", { name: name })
+              ? t("Bring “{{name}}” to another watch. This face is rebuilt from its own layout with your edits applied, then opens as a new starter you can keep editing.", { name: name })
               : t("Bring “{{name}}” to another watch. Your layout, fonts, artwork and data fields stay editable.", { name: name })}</p>
             <label className="field">{t("Destination watch")}<select value={model} disabled={busy} onChange={event => setModel(event.target.value as WatchModelId)}>
                 {options.map(option => <option key={option.model} value={option.model}>{t(option.label)}</option>)}

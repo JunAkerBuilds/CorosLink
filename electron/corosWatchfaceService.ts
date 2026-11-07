@@ -2542,7 +2542,8 @@ async function localConversionCarrier(target: WatchfaceTarget): Promise<Selected
   return { ...(await inspectArchive(carrierPath)), firmwareType: target.firmwareType };
 }
 
-async function prepareRecoveredExportZip(bytes: Buffer, target: WatchfaceTarget, preview: Electron.NativeImage): Promise<Buffer> {
+async function prepareRecoveredExportZip(bytes: Buffer, target: WatchfaceTarget, preview: Electron.NativeImage,
+  masterBackground?: Buffer): Promise<Buffer> {
   const unzipper = require("unzipper") as UnzipperModule;
   const sourceKeys = configKeysOf(await Promise.all((await unzipper.Open.buffer(bytes)).files
     .filter(entry => entry.type === "File" && /config\.txt$/i.test(entry.path))
@@ -2561,7 +2562,7 @@ async function prepareRecoveredExportZip(bytes: Buffer, target: WatchfaceTarget,
   const previewEntry = sourceEntries.find(entry => entry.name === "watchface_customize.png");
   if (previewEntry) previewEntry.data = preview.toPNG();
   const entries = finalizeWatchfaceDeviceLayout(
-    fitGeneratedWatchfaceFontRects(prepareRecoveredWatchfaceExport(sourceEntries, carrierEntries, target))
+    fitGeneratedWatchfaceFontRects(prepareRecoveredWatchfaceExport(sourceEntries, carrierEntries, target, masterBackground))
   );
   validateArchiveInventory(entries.map(entry => ({ path: entry.name, type: "File", uncompressedSize: entry.data.length })),
     MAX_ARCHIVE_FILES, MAX_ARCHIVE_EXPANDED_BYTES, MAX_ARCHIVE_ENTRY_BYTES, 7, "exported watch-face archive");
@@ -2640,18 +2641,18 @@ export async function createCorosWatchfaceArchive(
   }
 
   const requestedFirmwareType = normalizeOptionalFirmwareType(input.firmwareType);
-  // A face with no 800px master (a COROS-app DIY face has only its watch's own
+  // A face with no 800px master (a phone-made face has only its watch's own
   // layout) converts like a recovered one when the editor asks for it: built
-  // as is, then scaled from that layout for the other watch. Exports to the
-  // face's own watch never take this path.
+  // as is, then scaled from that layout for the other watch. The editor asks
+  // only on Convert, which never offers the face's own watch; a starter that
+  // names its watch is also checked here. (MIP watches share 240/260/280, so
+  // folder sizes can't tell two watches apart.)
   const requestedTarget = getWatchfaceTarget(input.watchModel ?? requestedFirmwareType);
   const convertsNativeLayout = input.convertNativeLayout === true &&
     !verifiedSource.recoveredFromCompiled &&
     !verifiedSource.resolutionDirectories.includes("watchface_800x800") &&
     Boolean(requestedFirmwareType && requestedTarget) &&
-    (source.firmwareType
-      ? requestedFirmwareType!.toUpperCase() !== source.firmwareType.toUpperCase()
-      : !verifiedSource.resolutionDirectories.includes(`watchface_${requestedTarget!.previewSize}x${requestedTarget!.previewSize}`));
+    (!source.firmwareType || requestedFirmwareType!.toUpperCase() !== source.firmwareType.toUpperCase());
   const scalesFromNativeLayout = verifiedSource.recoveredFromCompiled === true || convertsNativeLayout;
   // A recovered official face is scaled from its native tree at export, so it
   // can be built for any supported watch, not only the one it was decoded from.
@@ -2735,7 +2736,7 @@ export async function createCorosWatchfaceArchive(
     );
   }
   if (recoveredTarget && (templateIdOverride || watchfaceIdOverride)) {
-    throw new Error("Recovered faces use a compatible COROS template identity. Clear the template/watch-face ID overrides before exporting.");
+    throw new Error("Faces rebuilt from their own layout use a compatible COROS template identity. Clear the template/watch-face ID overrides before exporting.");
   }
   let zip = await rewriteTemplateArchive(
     verifiedSource.path,
@@ -2754,7 +2755,10 @@ export async function createCorosWatchfaceArchive(
     recoveredTarget ? undefined : exportTarget,
     input.keepTemplateBackground === true
   );
-  if (recoveredTarget) zip = await prepareRecoveredExportZip(zip, recoveredTarget, preview);
+  // An edited background goes on at each size from the editor's 800px render; an untouched one stays
+  // the template's own, so it is scaled from the native tree like every other image.
+  if (recoveredTarget) zip = await prepareRecoveredExportZip(zip, recoveredTarget, preview,
+    input.keepTemplateBackground === true ? undefined : background.toPNG());
   const outputDirectory = path.join(app.getPath("userData"), "watchface-archives");
   await fs.promises.mkdir(outputDirectory, { recursive: true });
   const outputPath = path.join(outputDirectory, `${crypto.randomUUID()}.dat`);

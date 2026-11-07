@@ -87,12 +87,14 @@ export function convertWatchfaceEntries(
 export function prepareRecoveredWatchfaceExport(
   input: WatchfaceConversionEntry[],
   carrier: WatchfaceConversionEntry[],
-  target: WatchfaceTarget
+  target: WatchfaceTarget,
+  /** The editor's 800px background render: each size's background.png is drawn from it, not enlarged from the native tree. */
+  masterBackground?: Buffer
 ): WatchfaceConversionEntry[] {
   // Starters recovered before 2026-09-18 referenced `recovered/group-NN` with
   // forward slashes, which COROS compiles to blank elements on the watch. The
   // firmware convention is backslashes; rewrite saved projects on export.
-  return convertEntries(input, carrier, target, {}, true).entries.map(entry => {
+  return convertEntries(input, carrier, target, {}, true, masterBackground).entries.map(entry => {
     if (!/\/(?:AOD)?config\.txt$/i.test(entry.name)) return entry;
     const text = entry.data.toString("utf8");
     const fixed = text.replace(/^(\s*\[[^\]]+\]\s*=\s*)(recovered\/[^\r\n]*)$/gm, (_, prefix: string, value: string) => `${prefix}${value.replace(/\//g, "\\")}`);
@@ -105,7 +107,8 @@ function convertEntries(
   carrier: WatchfaceConversionEntry[],
   target: WatchfaceTarget,
   configTextEdits: Record<string, string>,
-  recoveredExport: boolean
+  recoveredExport: boolean,
+  masterBackground?: Buffer
 ): { entries: WatchfaceConversionEntry[]; appliedRawConfigEditCount: number; generatedAod: boolean } {
   const source = new Map<string, Buffer>();
   for (const entry of input) {
@@ -230,14 +233,19 @@ function convertEntries(
   if (!templateId) throw new Error("The destination has no template identity.");
   let info = sourceInfo.replace(/("o_template_id"\s*:)\s*(?:"\d+"|\d+)/, (_match, key: string) => key + templateId);
   if (recoveredExport) {
-    // The catalog watchFaceId is not a DIY srcWatchFaceTemplateId. Use the
-    // complete editable carrier manifest, including its DIY/app metadata.
-    info = carrierInfo;
-    const name = JSON.parse(sourceInfo).m_name;
-    if (typeof name === "string") {
-      info = /"m_name"\s*:/.test(info)
-        ? info.replace(/"m_name"\s*:\s*"(?:\\.|[^"\\])*"/, () => `"m_name":${JSON.stringify(name)}`)
-        : info.replace("{", () => `{"m_name":${JSON.stringify(name)},`);
+    if (JSON.parse(sourceInfo).coroslinkRecovery?.partial === true) {
+      // The catalog watchFaceId is not a DIY srcWatchFaceTemplateId. Use the
+      // complete editable carrier manifest, including its DIY/app metadata.
+      info = carrierInfo;
+      const name = JSON.parse(sourceInfo).m_name;
+      if (typeof name === "string") {
+        info = /"m_name"\s*:/.test(info)
+          ? info.replace(/"m_name"\s*:\s*"(?:\\.|[^"\\])*"/, () => `"m_name":${JSON.stringify(name)}`)
+          : info.replace("{", () => `{"m_name":${JSON.stringify(name)},`);
+      }
+    } else if (!/"o_template_id"\s*:/.test(info)) {
+      // A DIY face keeps its own manifest (author, style, language) under the destination's template.
+      info = info.replace("{", () => `{"o_template_id":${templateId},`);
     }
     if (!/"m_app"\s*:/.test(info)) info = info.replace("{", '{"m_app":"watchface_800x800",');
     if (!/"m_preview"\s*:/.test(info)) info = info.replace("{", '{"m_preview":"watchface_customize.png",');
@@ -251,11 +259,16 @@ function convertEntries(
   info = info.replace(/"m_app"\s*:\s*"[^"]*"/, '"m_app":"watchface_800x800"');
   info = /"o_wf_ver"\s*:/.test(info) ? info.replace(/("o_wf_ver"\s*:)\s*\d+/, `$1${version}`) : info.replace("{", `{"o_wf_ver":${version},`);
   const entries: WatchfaceConversionEntry[] = [{ name: "info.json", data: Buffer.from(info) }, { name: "watchface_customize.png", data: preview }];
+  const masterBackgroundWidth = masterBackground ? nativeImage.createFromBuffer(masterBackground).getSize().width : 0;
+  if (masterBackground && !masterBackgroundWidth) throw new Error("Cannot read the face's background render.");
   for (const size of target.sizes) {
     for (const [relative, data] of masterAssets) {
       if (/\.DS_Store$|\.pb$|\.bin$/i.test(relative)) continue;
       if (recoveredExport && relative === "thmb.png") continue;
-      entries.push({ name: `${dir(size)}/${relative}`, data: /\.png$/i.test(relative) ? resizePng(data, size / masterSize, relative) : data });
+      // The editor drew the background at 800px; shrinking that is sharper than enlarging the native tree's copy.
+      const fromRender = masterBackground && recoveredExport && relative.toLowerCase() === "background.png";
+      entries.push({ name: `${dir(size)}/${relative}`, data: fromRender ? resizePng(masterBackground, size / masterBackgroundWidth, relative)
+        : /\.png$/i.test(relative) ? resizePng(data, size / masterSize, relative) : data });
     }
     if (recoveredExport) {
       const thumbnail = destination.get(`${dir(size)}/thmb.png`);

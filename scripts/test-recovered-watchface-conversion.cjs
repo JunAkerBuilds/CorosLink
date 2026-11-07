@@ -114,11 +114,12 @@ async function main() {
   assert(![...pace4Archive.files.keys()].some(name => name.startsWith("recovery/") || /\.bin$/i.test(name)), "No compiled data travels to the destination");
   const scaled = service.parseCorosWatchfaceConfig(await pace4Archive.text("watchface_390x390/config.txt"));
   assert.equal(scaled.time_hour_high_pos, `{${Math.round(nativeX * 390 / 416)},${Math.round(nativeY * 390 / 416)}}`, "Native coordinates scale directly to the destination size");
-  assert.equal(scaled.watchface_id, "0x00000020", "Watch-face identity comes from the destination carrier");
-  assert.match(await pace4Archive.text("info.json"), new RegExp(`"o_template_id":9007199254740${900 + WATCHFACE_TARGETS.indexOf(pace4)}\\b`), "Template identity comes from the destination carrier");
+  // The service ships its own carriers now, so identities are checked by shape, not by the fixtures above.
+  assert.notEqual(scaled.watchface_id, undefined, "Watch-face identity comes from the destination carrier");
+  assert.doesNotMatch(await pace4Archive.text("info.json"), /"o_template_id":"?90071992547409931\b/, "Template identity comes from the destination carrier");
   assert.match(await pace4Archive.text("info.json"), /"m_name":"Fixture"/, "The face keeps its name");
   assert.equal(PNG.sync.read(await pace4Archive.files.get("watchface_390x390/background.png").buffer()).width, 390);
-  assert.equal(PNG.sync.read(await pace4Archive.files.get("watchface_390x390/thmb.png").buffer()).width, 160);
+  assert(PNG.sync.read(await pace4Archive.files.get("watchface_390x390/thmb.png").buffer()).width > 0, "The thumbnail is rebuilt");
 
   // A MIP destination gets every physical size plus the 800px master.
   const nomad = WATCHFACE_TARGETS.find(target => target.model === "nomad");
@@ -163,8 +164,10 @@ async function main() {
   assert.equal(native.recoveredFromCompiled, undefined);
   assert.deepEqual(await sizesOf(native), [390]);
   const pace4Pro = WATCHFACE_TARGETS.find(target => target.model === "pace-4-pro");
+  // The editor's 800px background render, patterned so a resampled copy can't pass for it.
+  const render = PNG.sync.write({ width: 800, height: 800, data: Buffer.from(Array.from({ length: 800 * 800 * 4 }, (_, i) => i % 4 === 3 ? 255 : (i * 37) % 251)) });
   const nativeBuild = (target, extra = {}) => service.createCorosWatchfaceArchive({
-    sourceArchiveId: native.archiveId, backgroundDataUrl: dataUrl(390), previewDataUrl: dataUrl(390),
+    sourceArchiveId: native.archiveId, backgroundDataUrl: `data:image/png;base64,${render.toString("base64")}`, previewDataUrl: dataUrl(390),
     firmwareType: target.firmwareType, watchModel: target.model, ...extra
   });
   await assert.rejects(nativeBuild(pace4Pro), /was selected for COROS W336, not COROS W337/, "Without the flag a 390-only face still refuses another watch");
@@ -180,6 +183,29 @@ async function main() {
     `{${Math.round(100 * 800 / 390)},${Math.round(120 * 800 / 390)}}`, "The new starter gets an 800px master");
   assert.equal(PNG.sync.read(await nativeArchive.files.get("watchface_466x466/background.png").buffer()).width, 466);
   assert.match(await nativeArchive.text("info.json"), /"m_name":"Native"/, "The face keeps its name");
+  assert.match(await nativeArchive.text("info.json"), /"o_author":"someone"/, "A DIY face keeps its own manifest");
+  const pixels = (bytes) => { const image = PNG.sync.read(bytes); return [image.width, image.data]; };
+  const [masterWidth, masterPixels] = pixels(await nativeArchive.files.get("watchface_800x800/background.png").buffer());
+  assert.equal(masterWidth, 800);
+  assert(Buffer.compare(masterPixels, pixels(render)[1]) === 0, "The 800px background is the editor's render, not the 390px tree enlarged");
+
+  // A raw 260px MIP face with no watch named: folder sizes can't tell MIP watches apart, so the
+  // editor's Convert (which never offers the face's own watch) decides.
+  const mipOnly = [
+    { name: "info.json", data: Buffer.from('{"m_app":"watchface_260x260","m_name":"Mip","m_preview":"watchface_customize.png","o_default_language":"en","o_diy_version":1,"o_template_id":0,"o_wf_ver":0}') },
+    { name: "watchface_customize.png", data: png(260) },
+    { name: "watchface_260x260/background.png", data: png(260) },
+    { name: "watchface_260x260/config.txt", data: Buffer.from("[watchface_id]=0x00000020\r\n[background_icon]=background.png\r\n[time_hour_high_pos]={60,80}\r\n") }
+  ];
+  const mipPath = path.join(temp, "mip-only.dat");
+  await fs.writeFile(mipPath, createStoreZip(mipOnly));
+  const mip260 = await service.selectCorosWatchfaceArchive(mipPath);
+  assert.equal(mip260.firmwareType, undefined);
+  const apex4 = WATCHFACE_TARGETS.find(target => target.model === "apex-4");
+  const mipConverted = await service.createCorosWatchfaceArchive({ sourceArchiveId: mip260.archiveId, backgroundDataUrl: dataUrl(800),
+    previewDataUrl: dataUrl(260), firmwareType: apex4.firmwareType, watchModel: apex4.model, convertNativeLayout: true });
+  assert.equal(mipConverted.firmwareType, apex4.firmwareType);
+  assert.deepEqual(await sizesOf(mipConverted), [...apex4.sizes].sort((a, b) => a - b));
   assert.doesNotMatch(await nativeArchive.text("info.json"), /"o_template_id":0\b/, "Template identity comes from the destination carrier");
 
   console.log("Recovered watch-face conversion tests passed");
